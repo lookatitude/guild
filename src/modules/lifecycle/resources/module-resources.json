@@ -78,7 +78,7 @@
       "id": "PostToolUse:gate-outcome-writer.js",
       "source_path": "hooks/dist/gate-outcome-writer.js",
       "resource_path": "resources/hooks/dist/gate-outcome-writer.js",
-      "sha256": "916ead39d184f23ed612c25013b47a769b3e48b7bd810299a201bf3a934f5c4d"
+      "sha256": "aa78fa8302512469f8f44c7a1ae13e1055acdef7225e978449acc6039d858dfa"
     },
     {
       "category": "scripts",
@@ -117,6 +117,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/run-record-validate",
+      "source_path": "scripts/lib/run-record-validate.ts",
+      "resource_path": "resources/scripts/lib/run-record-validate.ts",
+      "sha256": "cd5350c84fe4b41136b07ab6c5407f098e5aec27093b70451844065f113cb64b"
+    },
+    {
+      "category": "scripts",
       "id": "lib/runstart-preflight",
       "source_path": "scripts/lib/runstart-preflight.ts",
       "resource_path": "resources/scripts/lib/runstart-preflight.ts",
@@ -131,6 +138,1470 @@
     },
     {
       "category": "scripts",
+      "id": "projection:src/modules/capability/index.ts",
+      "source_path": "src/modules/capability/index.ts",
+      "resource_path": "resources/src/modules/capability/index.ts",
+      "sha256": "9855f16f84edb84c3fbaf4186566fb78c222782d10280c95f371ec5e82b9c400",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/catalog-cache.ts",
+      "source_path": "src/modules/capability/workflows/catalog-cache.ts",
+      "resource_path": "resources/src/modules/capability/workflows/catalog-cache.ts",
+      "sha256": "d78814bd91204f424b0e1f3e11b91d45775dc58f5abdb32eeba1427340dd8716",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/compatibility-catalog.ts",
+      "source_path": "src/modules/capability/workflows/compatibility-catalog.ts",
+      "resource_path": "resources/src/modules/capability/workflows/compatibility-catalog.ts",
+      "sha256": "eeb146f3b5a7a7f6ad4e0fdc9e13202c9d6a380233344bf0c2c1e8329f49bcad",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/compatibility-usage.ts",
+      "source_path": "src/modules/capability/workflows/compatibility-usage.ts",
+      "resource_path": "resources/src/modules/capability/workflows/compatibility-usage.ts",
+      "sha256": "a872a844f1062d6021483de09eab690679d5e43d5d88a2eeb58f20894c7720c3",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/confirmation-arbiter.ts",
+      "source_path": "src/modules/capability/workflows/confirmation-arbiter.ts",
+      "resource_path": "resources/src/modules/capability/workflows/confirmation-arbiter.ts",
+      "sha256": "4e653aa3ec3f62f23d9c7ac84363854271f7a6c7d5b40513db056456c8cd3915",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/independence-predicates.ts",
+      "source_path": "src/modules/capability/workflows/independence-predicates.ts",
+      "resource_path": "resources/src/modules/capability/workflows/independence-predicates.ts",
+      "sha256": "6ede78ad2453ce2f05df392b3084268b9bbac7e4824a50545f2c25da0bd9461e",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/independence-record.ts",
+      "source_path": "src/modules/capability/workflows/independence-record.ts",
+      "resource_path": "resources/src/modules/capability/workflows/independence-record.ts",
+      "sha256": "c7d238b322f04f6c2f09fdd2d6c52140e88f0c753da8c64c4f2735d4b8897c5f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/inspection-persist.ts",
+      "source_path": "src/modules/capability/workflows/inspection-persist.ts",
+      "resource_path": "resources/src/modules/capability/workflows/inspection-persist.ts",
+      "sha256": "7007f98e13c3f4a349d5a7da5f18a57593b38b33d771797b51b5ca15898f9f22",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/inspection-record.ts",
+      "source_path": "src/modules/capability/workflows/inspection-record.ts",
+      "resource_path": "resources/src/modules/capability/workflows/inspection-record.ts",
+      "sha256": "dcd3b12ff669b4c0b7fee0c4924b11c88c447ddb60ee92a2ad946110254c4d49",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/model-catalog.ts",
+      "source_path": "src/modules/capability/workflows/model-catalog.ts",
+      "resource_path": "resources/src/modules/capability/workflows/model-catalog.ts",
+      "sha256": "f5ff5e41234d528beaae0a24f3cdfdf0db100f06d11437e2a00a4a281876e6ad",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/model-inspect.ts",
+      "source_path": "src/modules/capability/workflows/model-inspect.ts",
+      "resource_path": "resources/src/modules/capability/workflows/model-inspect.ts",
+      "sha256": "64c560cd706789b823a2646d80ec92dd72c0e4f1ddc3b59ecfb467558971ab7a",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/model-policy.ts",
+      "source_path": "src/modules/capability/workflows/model-policy.ts",
+      "resource_path": "resources/src/modules/capability/workflows/model-policy.ts",
+      "sha256": "f1fcad1c19cbe5a65b401db29c6563f4cacd90e373daf428340ebae4a4bc615b",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/model-resolver.ts",
+      "source_path": "src/modules/capability/workflows/model-resolver.ts",
+      "resource_path": "resources/src/modules/capability/workflows/model-resolver.ts",
+      "sha256": "05ef9b676b8d672c3f864616733ecaacb5246797abb0a8fb6c4a10c95e4268c5",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/models-command.ts",
+      "source_path": "src/modules/capability/workflows/models-command.ts",
+      "resource_path": "resources/src/modules/capability/workflows/models-command.ts",
+      "sha256": "b095b65cb370cf3252360058372ccd8fc1f17e0cd853c659eec5fe3daa51e1de",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/policy-migration.ts",
+      "source_path": "src/modules/capability/workflows/policy-migration.ts",
+      "resource_path": "resources/src/modules/capability/workflows/policy-migration.ts",
+      "sha256": "1b5b93a28357a6893c61fbc308a9fed8fe8030eceac407498e3825a2c522c0c2",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/purpose-provenance.ts",
+      "source_path": "src/modules/capability/workflows/purpose-provenance.ts",
+      "resource_path": "resources/src/modules/capability/workflows/purpose-provenance.ts",
+      "sha256": "a1a01773ab676dd4b96681fc4cb2a0bf41a61f66ee19e817e3a557f5986eea5c",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/rank.ts",
+      "source_path": "src/modules/capability/workflows/rank.ts",
+      "resource_path": "resources/src/modules/capability/workflows/rank.ts",
+      "sha256": "71d9bf9e1f1b85f49306d4489099e50a84b6f742305e62387cd87d4da185c5bb",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/resolver-mode.ts",
+      "source_path": "src/modules/capability/workflows/resolver-mode.ts",
+      "resource_path": "resources/src/modules/capability/workflows/resolver-mode.ts",
+      "sha256": "c6e0712d290e96cf6700e7caea57a963a88f19d21fa8d1dcc2fa8145b389efa5",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/role-model-schema.ts",
+      "source_path": "src/modules/capability/workflows/role-model-schema.ts",
+      "resource_path": "resources/src/modules/capability/workflows/role-model-schema.ts",
+      "sha256": "d69cd1bf36a288ca207d96cc0073c922c53802f081e082afefe628f16192434e",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/role-resolver.ts",
+      "source_path": "src/modules/capability/workflows/role-resolver.ts",
+      "resource_path": "resources/src/modules/capability/workflows/role-resolver.ts",
+      "sha256": "17db21669ecb028c8395a5da4c593ace8853962de0c23f50bf679e74a4c91258",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/router.ts",
+      "source_path": "src/modules/capability/workflows/router.ts",
+      "resource_path": "resources/src/modules/capability/workflows/router.ts",
+      "sha256": "444b23999acfe87ee413f05a182f78cf6892b48de568efeecf3674ad3bca7530",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/routing-rollout.ts",
+      "source_path": "src/modules/capability/workflows/routing-rollout.ts",
+      "resource_path": "resources/src/modules/capability/workflows/routing-rollout.ts",
+      "sha256": "2459a1be82e7160cdcdaf0bdfb71f8fb30feff464e1016dfd96d7d81466a5eb3",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/tiebreak.ts",
+      "source_path": "src/modules/capability/workflows/tiebreak.ts",
+      "resource_path": "resources/src/modules/capability/workflows/tiebreak.ts",
+      "sha256": "b41e4bd70b71bfc183de1cbd733312a0d17ec919d0f0f6daad6a9fb585f2f316",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/capability/workflows/tier-defaults.ts",
+      "source_path": "src/modules/capability/workflows/tier-defaults.ts",
+      "resource_path": "resources/src/modules/capability/workflows/tier-defaults.ts",
+      "sha256": "a438e6bcb321e18b4f2eb0b51fa3eb88957161fac44202351f0ba6527ad501e4",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/communication/index.ts",
+      "source_path": "src/modules/communication/index.ts",
+      "resource_path": "resources/src/modules/communication/index.ts",
+      "sha256": "3be5906e02fc3220e42d81a32cc5b0fe724a85de399d80ecfbe844b503ee8e2f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/communication/resources/scripts/lib/artifact-bus.ts",
+      "source_path": "src/modules/communication/resources/scripts/lib/artifact-bus.ts",
+      "resource_path": "resources/src/modules/communication/resources/scripts/lib/artifact-bus.ts",
+      "sha256": "f3b76a0aa944d660338fbed3594d67b741c88e046f6264dd3ff68be97dbbf8a7",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/communication/workflows/artifact-bus.ts",
+      "source_path": "src/modules/communication/workflows/artifact-bus.ts",
+      "resource_path": "resources/src/modules/communication/workflows/artifact-bus.ts",
+      "sha256": "3f9ed3d39b557ba4beba82e946565ed97c4dbe071e64c621cc27ee7491ada162",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/communication/workflows/comms-format-lint.ts",
+      "source_path": "src/modules/communication/workflows/comms-format-lint.ts",
+      "resource_path": "resources/src/modules/communication/workflows/comms-format-lint.ts",
+      "sha256": "c3c29c8a5e50fbaed11603decadd872374478771d3d610e776382834df0fd22a",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/communication/workflows/no-accidental-write.ts",
+      "source_path": "src/modules/communication/workflows/no-accidental-write.ts",
+      "resource_path": "resources/src/modules/communication/workflows/no-accidental-write.ts",
+      "sha256": "9e604545c6daeaef95b8c8f776bd1d0853e27c5b10aa3efa66f6ea6f773d267f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/config/index.ts",
+      "source_path": "src/modules/config/index.ts",
+      "resource_path": "resources/src/modules/config/index.ts",
+      "sha256": "5f2e2eb8685b8d448aef50ba2cdbe2a54a72ccef558a46337b6371b6f3da2bf2",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/config/workflows/config-defaults.ts",
+      "source_path": "src/modules/config/workflows/config-defaults.ts",
+      "resource_path": "resources/src/modules/config/workflows/config-defaults.ts",
+      "sha256": "66e66d3a596dadaf2be7f9f80f97bb7d50765659300f151d8c59af058f9fe680",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/config/workflows/config-validation.ts",
+      "source_path": "src/modules/config/workflows/config-validation.ts",
+      "resource_path": "resources/src/modules/config/workflows/config-validation.ts",
+      "sha256": "7a014518165b9069d631600cc889076cfbde90bd078b936f7b2f106a407cc282",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/config/workflows/settings-reader.ts",
+      "source_path": "src/modules/config/workflows/settings-reader.ts",
+      "resource_path": "resources/src/modules/config/workflows/settings-reader.ts",
+      "sha256": "e5d848de4d2d65f4815b96a16f07006d890e7e0a5dae0b658dfed7d51e1fc0de",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/config/workflows/settings-resolver.ts",
+      "source_path": "src/modules/config/workflows/settings-resolver.ts",
+      "resource_path": "resources/src/modules/config/workflows/settings-resolver.ts",
+      "sha256": "d816101fe8e09a8acf21d530569a8923516dbc4db3a0eb86985f01ff1d661b4c",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/config/workflows/tier-model.ts",
+      "source_path": "src/modules/config/workflows/tier-model.ts",
+      "resource_path": "resources/src/modules/config/workflows/tier-model.ts",
+      "sha256": "90da7eb59f3db198e78a7ed1680359d723eddd51db3cf49a906a91b0f709d233",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/config/workflows/workspace-manifest.ts",
+      "source_path": "src/modules/config/workflows/workspace-manifest.ts",
+      "resource_path": "resources/src/modules/config/workflows/workspace-manifest.ts",
+      "sha256": "763d7f5c77fd6ba342fe181f7f5cae7d480d88138ddd2e209025e0181439b621",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/index.ts",
+      "source_path": "src/modules/dispatch/index.ts",
+      "resource_path": "resources/src/modules/dispatch/index.ts",
+      "sha256": "a001f69322d83f072171575b489980e12f249093ede3ec4c582ea9f29d0584e6",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
+      "source_path": "src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
+      "resource_path": "resources/src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
+      "sha256": "5ca11f770de019204f0ab93383702b362abe43256aa2190d13ed5a35458b4c27",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/confirmation-gate.ts",
+      "source_path": "src/modules/dispatch/workflows/confirmation-gate.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/confirmation-gate.ts",
+      "sha256": "6bf1001e65f5b42944a6724760e4fbd4e0750fc08988c159c0749c39ce6d21e0",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/execution-transport-adapters.ts",
+      "source_path": "src/modules/dispatch/workflows/execution-transport-adapters.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/execution-transport-adapters.ts",
+      "sha256": "7b6be5a167090ffd868e59b5104e29c8085e7d32b43e743c9d2e1d50217531c5",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/execution-transport-ports.ts",
+      "source_path": "src/modules/dispatch/workflows/execution-transport-ports.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/execution-transport-ports.ts",
+      "sha256": "2973ab867149ce79dd1e82079bdb3e2b12b01fd2583b8902abcb09afc22b1713",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/shadow-routing.ts",
+      "source_path": "src/modules/dispatch/workflows/shadow-routing.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/shadow-routing.ts",
+      "sha256": "eddb832349a35ea7f788dc39079ac08ab2add0eedb90743ebe450585bd95a3ec",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/specialist-contract.ts",
+      "source_path": "src/modules/dispatch/workflows/specialist-contract.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/specialist-contract.ts",
+      "sha256": "44dc90483b08dc01bb87971ac865276ec35ab28e07c66396ecb780b98067bfd9",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/task-assignment-v2.ts",
+      "source_path": "src/modules/dispatch/workflows/task-assignment-v2.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/task-assignment-v2.ts",
+      "sha256": "a662f11a57db06ff7a4dbe3c7be121de2c4a610974a984e2bc21b1ed1a8e7937",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/task-assignment.ts",
+      "source_path": "src/modules/dispatch/workflows/task-assignment.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/task-assignment.ts",
+      "sha256": "921ca91d2dcd79160ee7daae0d3a0a465206a838ca05beb52d1740ad1b4609e4",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/task-cell-acceptance.ts",
+      "source_path": "src/modules/dispatch/workflows/task-cell-acceptance.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/task-cell-acceptance.ts",
+      "sha256": "a7766335be5fa1d6d20a3823607e7c439bf05362d5d38b6c6a29289d5fd39265",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/task-cell-artifact-join.ts",
+      "source_path": "src/modules/dispatch/workflows/task-cell-artifact-join.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/task-cell-artifact-join.ts",
+      "sha256": "8a369f23d1da2aa97b545df4ce941edb6775454e9cc812252bc23e92641ac7e1",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/task-cell-contract.ts",
+      "source_path": "src/modules/dispatch/workflows/task-cell-contract.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/task-cell-contract.ts",
+      "sha256": "a6e4d5acb108e78c5d5f5d4278e2abf90cb23a7047346382240cf53c207d3e7d",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/task-cell-host-conformance.ts",
+      "source_path": "src/modules/dispatch/workflows/task-cell-host-conformance.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/task-cell-host-conformance.ts",
+      "sha256": "bb6d7956bb74ed281e0469066fc46347539379eb405a1ab976657b095fab7f83",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/task-cell-runtime.ts",
+      "source_path": "src/modules/dispatch/workflows/task-cell-runtime.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/task-cell-runtime.ts",
+      "sha256": "6f24202e2e9d0a336f3c231f368946517d92874fa95dbb631bc235408cc8222a",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/task-cell-scale-audit.ts",
+      "source_path": "src/modules/dispatch/workflows/task-cell-scale-audit.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/task-cell-scale-audit.ts",
+      "sha256": "164dacefde67dbd8fc611ec1ab52563ae731bf7b78b363d98b8b8aa1115f6f3f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/dispatch/workflows/task-cell-telemetry-reconcile.ts",
+      "source_path": "src/modules/dispatch/workflows/task-cell-telemetry-reconcile.ts",
+      "resource_path": "resources/src/modules/dispatch/workflows/task-cell-telemetry-reconcile.ts",
+      "sha256": "15265fb1580aa305f726bd8def603767feb24bd79cbceac58c9aec6a3fc6405a",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/index.ts",
+      "source_path": "src/modules/distribution/index.ts",
+      "resource_path": "resources/src/modules/distribution/index.ts",
+      "sha256": "9d33d0cf5e0426f332a80add577c74ef0c1fd0bc27df23fe2c202b97e59ab2c4",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/build-inventory.ts",
+      "source_path": "src/modules/distribution/workflows/build-inventory.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/build-inventory.ts",
+      "sha256": "1c4b6419011ca228b3f578bd028f963bf593b384b5e231549dd11f0116fdf38e",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/check-module-ownership.ts",
+      "source_path": "src/modules/distribution/workflows/check-module-ownership.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/check-module-ownership.ts",
+      "sha256": "19dc38646d45debab55e23aaf489fa0e58b913ce80bbb2987f09bc73b17f0fb0",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/equivalence-contract.ts",
+      "source_path": "src/modules/distribution/workflows/equivalence-contract.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/equivalence-contract.ts",
+      "sha256": "97e47c08202177779351f3e6a1f8440b57f79cb258a88ffe79abfa1e9e3d03ed",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/handoff-v2.ts",
+      "source_path": "src/modules/distribution/workflows/handoff-v2.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/handoff-v2.ts",
+      "sha256": "6f4e231b873e921ae16f139442ad701f639f266a7d9e627a55a20943ec70e619",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/inventory-schema.ts",
+      "source_path": "src/modules/distribution/workflows/inventory-schema.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/inventory-schema.ts",
+      "sha256": "b92aa046ad0dbf8ce141854b8534716abffd8737055af9e3a8a876c75c9bdeb9",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/module-resources.ts",
+      "source_path": "src/modules/distribution/workflows/module-resources.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/module-resources.ts",
+      "sha256": "981054de37b2fe05dc90ea692334ab1e9c3b3799556127f8e859b83bedcaf47a",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/parity-contract.ts",
+      "source_path": "src/modules/distribution/workflows/parity-contract.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/parity-contract.ts",
+      "sha256": "3706bbbaec23fcd28d26aa445472e81bca50803d934d0913e7e9d6f1aed7c90a",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/per-host-packaging.ts",
+      "source_path": "src/modules/distribution/workflows/per-host-packaging.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/per-host-packaging.ts",
+      "sha256": "7aa3f24694ab3376cb8e46e27f77b21631aa92aade72ca7ab396c08c7330408f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/release-conformance-evaluator.ts",
+      "source_path": "src/modules/distribution/workflows/release-conformance-evaluator.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/release-conformance-evaluator.ts",
+      "sha256": "6418ce96eb0db12f3f7b6cd2e404b886f33c09b8edd5219686f68f9a51e1c2c4",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/release-conformance-integration.ts",
+      "source_path": "src/modules/distribution/workflows/release-conformance-integration.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/release-conformance-integration.ts",
+      "sha256": "24b9d6ebdc3feb36437fec34bcfcf7c0ca1d4088eccc3f14c0f2d890a25ccdc2",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/release-distribution-contract.ts",
+      "source_path": "src/modules/distribution/workflows/release-distribution-contract.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/release-distribution-contract.ts",
+      "sha256": "ebe668778c60434010d73f2d546ddd891fb9dcabfa54ee2b20a85d4123cdd789",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/result-contracts-v2.ts",
+      "source_path": "src/modules/distribution/workflows/result-contracts-v2.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/result-contracts-v2.ts",
+      "sha256": "413dbe0832eed160777ef4f4d4c47153f0e3d9a710177979c07435195c6034db",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/result-contracts.ts",
+      "source_path": "src/modules/distribution/workflows/result-contracts.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/result-contracts.ts",
+      "sha256": "ab9485a3f9ec93f8b62b1e69f83280a72a1f5c4d164ca6962c24a8fed020ac5f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/review-result.ts",
+      "source_path": "src/modules/distribution/workflows/review-result.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/review-result.ts",
+      "sha256": "c390e27dc2d1bd93c9139bd2d846dc9c567e30359fa7a56a925e89ddbe5dfdf7",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/surface-manifest.ts",
+      "source_path": "src/modules/distribution/workflows/surface-manifest.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/surface-manifest.ts",
+      "sha256": "59ed0061ad757130b45b0c809c6d1707203125a07161409651ec834868ca43ed",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/verify-host-packages.ts",
+      "source_path": "src/modules/distribution/workflows/verify-host-packages.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/verify-host-packages.ts",
+      "sha256": "3e8e00123a195dd8edc6d28051482a2066e938b531b17433d5920fbed81d29d0",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/distribution/workflows/verify-installer.ts",
+      "source_path": "src/modules/distribution/workflows/verify-installer.ts",
+      "resource_path": "resources/src/modules/distribution/workflows/verify-installer.ts",
+      "sha256": "77746323e907dbf732fb9a1ca6ae62e528bd2b3d39902721cfbf8176bf920f19",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/documents/index.ts",
+      "source_path": "src/modules/documents/index.ts",
+      "resource_path": "resources/src/modules/documents/index.ts",
+      "sha256": "54d9800b9a6d7f06a151706dddb76c7b872b69408405d583c90cf9ab25a61ab5",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/documents/workflows/document-decisions.ts",
+      "source_path": "src/modules/documents/workflows/document-decisions.ts",
+      "resource_path": "resources/src/modules/documents/workflows/document-decisions.ts",
+      "sha256": "cf02a844143a7472459db7189eae9263bf8b8b86035f74f6960e7135d1bd6d3a",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/documents/workflows/document-hash.ts",
+      "source_path": "src/modules/documents/workflows/document-hash.ts",
+      "resource_path": "resources/src/modules/documents/workflows/document-hash.ts",
+      "sha256": "41af1d6633edab663710afe596df5dd5d8aa39058592a89627bc17c26367a271",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/documents/workflows/document-html.ts",
+      "source_path": "src/modules/documents/workflows/document-html.ts",
+      "resource_path": "resources/src/modules/documents/workflows/document-html.ts",
+      "sha256": "1152d7f0321327e0c9d72e2d696b53fafcfa3ed3bd2e89c7fd50ed512bff20ea",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/documents/workflows/document-legacy-import.ts",
+      "source_path": "src/modules/documents/workflows/document-legacy-import.ts",
+      "resource_path": "resources/src/modules/documents/workflows/document-legacy-import.ts",
+      "sha256": "374c4ef22a4425458de762a3183531bb515b6ab53dd044386f624ea316da2c9f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/documents/workflows/document-projection.ts",
+      "source_path": "src/modules/documents/workflows/document-projection.ts",
+      "resource_path": "resources/src/modules/documents/workflows/document-projection.ts",
+      "sha256": "49232c535565e7b2a88d513d47e25f099dd93f7e7428f4ccdf452c2702655245",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/documents/workflows/document-receipts.ts",
+      "source_path": "src/modules/documents/workflows/document-receipts.ts",
+      "resource_path": "resources/src/modules/documents/workflows/document-receipts.ts",
+      "sha256": "821191e8e2c803720924ac99d332e630cc3d89fd2c0efb142cb7b067c78a9ab5",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/documents/workflows/document-records.ts",
+      "source_path": "src/modules/documents/workflows/document-records.ts",
+      "resource_path": "resources/src/modules/documents/workflows/document-records.ts",
+      "sha256": "990e52d880cf621a2875529b414c75591ba313aa5c1930b555479c28e7290bd0",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/documents/workflows/document-safe.ts",
+      "source_path": "src/modules/documents/workflows/document-safe.ts",
+      "resource_path": "resources/src/modules/documents/workflows/document-safe.ts",
+      "sha256": "7c770b6d2ff664dcb65be6b1baecea1c6849028e988a761eed68ad1f94a8fa2d",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/documents/workflows/document-service-boundary.ts",
+      "source_path": "src/modules/documents/workflows/document-service-boundary.ts",
+      "resource_path": "resources/src/modules/documents/workflows/document-service-boundary.ts",
+      "sha256": "fe393eb34876ae145aa2682320ba341309c850883f3c8e965b8e1ae000059c20",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/documents/workflows/document-versioning.ts",
+      "source_path": "src/modules/documents/workflows/document-versioning.ts",
+      "resource_path": "resources/src/modules/documents/workflows/document-versioning.ts",
+      "sha256": "f3d30e4424e9c23e2adf1b320fa2270e5d34dbac603dbbfc916bccaa41db2fc7",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/index.ts",
+      "source_path": "src/modules/host-runtime/index.ts",
+      "resource_path": "resources/src/modules/host-runtime/index.ts",
+      "sha256": "c9ad4bc0aa946446522a035343e8334d82d457cce5bba51e19abe33ab66c4874",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/adapter-fallback-ladders.ts",
+      "source_path": "src/modules/host-runtime/workflows/adapter-fallback-ladders.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/adapter-fallback-ladders.ts",
+      "sha256": "53c72dbe26c2d1cc570586f88379cad3c0cf33d7cf150d9bfd4f52e4eae4b89a",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/host-adapter-boundary.ts",
+      "source_path": "src/modules/host-runtime/workflows/host-adapter-boundary.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/host-adapter-boundary.ts",
+      "sha256": "6a7eee26d040dad2c9c493513e501e11d227cc8367732f39a72be05edf32ff33",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/host-adapter-conformance-evaluator.ts",
+      "source_path": "src/modules/host-runtime/workflows/host-adapter-conformance-evaluator.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/host-adapter-conformance-evaluator.ts",
+      "sha256": "6ede7905aabbd6aa0f4f25a9bcc2a2be40f9f8ea3459abd235f3d3b1bf21f883",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/host-adapter-contract.ts",
+      "source_path": "src/modules/host-runtime/workflows/host-adapter-contract.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/host-adapter-contract.ts",
+      "sha256": "2ef92d78b123f9274be99208a9bd74e594682bf56e7fb244a7604af842ad7f98",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/host-capabilities-schema.ts",
+      "source_path": "src/modules/host-runtime/workflows/host-capabilities-schema.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/host-capabilities-schema.ts",
+      "sha256": "13929c4f00c2c8b50107e26c72b84b1ecfb63692c2eefafcae478081ee442332",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/host-capability-manifest.ts",
+      "source_path": "src/modules/host-runtime/workflows/host-capability-manifest.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/host-capability-manifest.ts",
+      "sha256": "85c3af581de87d5947c1c5e774cb4b547446722a452e8f9c89be70aa02399241",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/host-capability-snapshot.ts",
+      "source_path": "src/modules/host-runtime/workflows/host-capability-snapshot.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/host-capability-snapshot.ts",
+      "sha256": "4f6c7b1e6da25912ce758532d1f21b48ebd6d542ad52d625748cf501b580de0c",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/host-event-normalizer.ts",
+      "source_path": "src/modules/host-runtime/workflows/host-event-normalizer.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/host-event-normalizer.ts",
+      "sha256": "5bf223d1d8129a988ee59893970594af3d6b942df7e5c73e693d6a6e8d174a4e",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/host-id-namespace.ts",
+      "source_path": "src/modules/host-runtime/workflows/host-id-namespace.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/host-id-namespace.ts",
+      "sha256": "b7846809c5c3af3520ff7eeae906217f8fbc514ed9abec74c2791cbbcb6a0a05",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/host-profiles-validate.ts",
+      "source_path": "src/modules/host-runtime/workflows/host-profiles-validate.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/host-profiles-validate.ts",
+      "sha256": "39c8ba423cff2c2307f6b43264745aef0421821776281a8550676a520e49dc44",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/host-registry-schema.ts",
+      "source_path": "src/modules/host-runtime/workflows/host-registry-schema.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/host-registry-schema.ts",
+      "sha256": "69c21a8415ae9291b366d88bce0b2116afc66a72b07b5e3874a25ad070af43ea",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/host-registry.ts",
+      "source_path": "src/modules/host-runtime/workflows/host-registry.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/host-registry.ts",
+      "sha256": "4b53b016d8b3794ded0fc49cbe160f4b36af927f05b59b0b74103f28552ade9e",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/host-types.ts",
+      "source_path": "src/modules/host-runtime/workflows/host-types.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/host-types.ts",
+      "sha256": "d1d85c7d7bb684eb4766203d0eb64b85926069380c31c07caa1a3b7278a8ea30",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts",
+      "source_path": "src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts",
+      "sha256": "c643b0f979074ea49a21669750bcb281ae32c4fd538fa1f17a97e50cc8aee62b",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/model-discovery/claude-api.ts",
+      "source_path": "src/modules/host-runtime/workflows/model-discovery/claude-api.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/model-discovery/claude-api.ts",
+      "sha256": "289f2483946a20a25262c849185a136ea072cd290fa9f0f4e9354b3880cdcf7b",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts",
+      "source_path": "src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts",
+      "sha256": "af347d171ac2c92ab779f38ad6c2c1eb834c5855aba0a72b777aa81facc08e51",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts",
+      "source_path": "src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts",
+      "sha256": "823c1dabfe0edac05ec1acac279c9feccd6c0905752f5ae31c926729c1898b83",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts",
+      "source_path": "src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts",
+      "sha256": "637df2f2c98232203ef518b1d55a393e4b815d6e5d34b7fc22c165418c93e937",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/model-discovery/index.ts",
+      "source_path": "src/modules/host-runtime/workflows/model-discovery/index.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/model-discovery/index.ts",
+      "sha256": "2eb892772289f150e6ad52c10d2115bbbf10c593f568c8a5d40d02ff32f52760",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/model-discovery/openai-api.ts",
+      "source_path": "src/modules/host-runtime/workflows/model-discovery/openai-api.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/model-discovery/openai-api.ts",
+      "sha256": "c95398fe3f996f444090c7c0d4728c0868ab8d63687c9474b371b839517a5660",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/provider-detect.ts",
+      "source_path": "src/modules/host-runtime/workflows/provider-detect.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/provider-detect.ts",
+      "sha256": "7cd0b9587aa69be2737bf8867d9963386d77fccbdbda3ade1410c68237bf0b36",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/host-runtime/workflows/session-context.ts",
+      "source_path": "src/modules/host-runtime/workflows/session-context.ts",
+      "resource_path": "resources/src/modules/host-runtime/workflows/session-context.ts",
+      "sha256": "4b1359396f8171af42987b30b946fecb4e97901c37d324388e6ad45bb23522af",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/kernel/index.ts",
+      "source_path": "src/modules/kernel/index.ts",
+      "resource_path": "resources/src/modules/kernel/index.ts",
+      "sha256": "510fb37b48d2e357a1966c5750b040a868690de67b0984591b3c188f84566f52",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/kernel/workflows/identifier-tokenize.ts",
+      "source_path": "src/modules/kernel/workflows/identifier-tokenize.ts",
+      "resource_path": "resources/src/modules/kernel/workflows/identifier-tokenize.ts",
+      "sha256": "e26c0d6228da8529d10a124c2bee43c144c3d638e5470c00b95554439622ba42",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/kernel/workflows/module-manifest.ts",
+      "source_path": "src/modules/kernel/workflows/module-manifest.ts",
+      "resource_path": "resources/src/modules/kernel/workflows/module-manifest.ts",
+      "sha256": "402c930edd75d7f7e742d181ea72080da18fa6a420a44e41c8462e77b31d99f0",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/kernel/workflows/path-containment.ts",
+      "source_path": "src/modules/kernel/workflows/path-containment.ts",
+      "resource_path": "resources/src/modules/kernel/workflows/path-containment.ts",
+      "sha256": "94aa6f35e8c85099fa293e824d3eb38d3f57fdc14845dfca31ce8b09c0b38e6f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/kernel/workflows/sealed-collections.ts",
+      "source_path": "src/modules/kernel/workflows/sealed-collections.ts",
+      "resource_path": "resources/src/modules/kernel/workflows/sealed-collections.ts",
+      "sha256": "8fa9aa0b18e2d7cda69151d7eae0aecbd89f4a176e3f61f121b7d34e4d63ac1c",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/kernel/workflows/yaml-loader.ts",
+      "source_path": "src/modules/kernel/workflows/yaml-loader.ts",
+      "resource_path": "resources/src/modules/kernel/workflows/yaml-loader.ts",
+      "sha256": "3ad2751933f6dc47e95c3f8d9e2853bb21c3535e3270149212b4d2311fcedbb0",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/index.ts",
+      "source_path": "src/modules/lifecycle/index.ts",
+      "resource_path": "resources/src/modules/lifecycle/index.ts",
+      "sha256": "661a19fe0f0dd9a2ea5e374d020c870a78a2ba13437858f717aa50bbd36ac252",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/check-lane-liveness.ts",
+      "source_path": "src/modules/lifecycle/workflows/check-lane-liveness.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/check-lane-liveness.ts",
+      "sha256": "6427eb64484c24a6a4297f4bece420682e12fdff3af38b42bf0397903b28ef5f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/emit-loop-event.ts",
+      "source_path": "src/modules/lifecycle/workflows/emit-loop-event.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/emit-loop-event.ts",
+      "sha256": "9f5276e19b527d36623b3094117e45da569b0318699b388e54a3887610b17826",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/event-log-schema.ts",
+      "source_path": "src/modules/lifecycle/workflows/event-log-schema.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/event-log-schema.ts",
+      "sha256": "e967b74b4ee4934e567bf01660caa4ccf62106c679e284c8fe13ac132efb88bf",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/event-log-sidecar.ts",
+      "source_path": "src/modules/lifecycle/workflows/event-log-sidecar.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/event-log-sidecar.ts",
+      "sha256": "17e215c978e8d7b9331db9ef6a9d373468c527677fd209bc636fcd09c5b0e89f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/event-log-writer.ts",
+      "source_path": "src/modules/lifecycle/workflows/event-log-writer.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/event-log-writer.ts",
+      "sha256": "7cd91d0fae325c1b459096a9cab0eb066813426539a513c8e270c9256402046d",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/event-log.ts",
+      "source_path": "src/modules/lifecycle/workflows/event-log.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/event-log.ts",
+      "sha256": "ec0de67c0b548be5fb483e38b522fc4dc1ef360277b86c01a6ac8080a03eed86",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/mark-lane-dead.ts",
+      "source_path": "src/modules/lifecycle/workflows/mark-lane-dead.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/mark-lane-dead.ts",
+      "sha256": "d8d94c3b007839aaa3d2485d5f7218b220a2cd2d3f7f16186f15beace257bcf2",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/module-boundary-conformance-evaluator.ts",
+      "source_path": "src/modules/lifecycle/workflows/module-boundary-conformance-evaluator.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/module-boundary-conformance-evaluator.ts",
+      "sha256": "0e560c904374716a408e2f1a2d26c0273c387b763b9a0e017f14a0051c34becb",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/neutral-conformance-assembly.ts",
+      "source_path": "src/modules/lifecycle/workflows/neutral-conformance-assembly.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/neutral-conformance-assembly.ts",
+      "sha256": "2985be7ea60094141aa90752aab43212aa9b22e0549e80da3b60619926cc550e",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/neutral-conformance-core.ts",
+      "source_path": "src/modules/lifecycle/workflows/neutral-conformance-core.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/neutral-conformance-core.ts",
+      "sha256": "936151feb7c2a6f36c17600638217655e34192904e7c1eda3029f9e376652e0e",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/neutral-core-boundary.ts",
+      "source_path": "src/modules/lifecycle/workflows/neutral-core-boundary.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/neutral-core-boundary.ts",
+      "sha256": "abf988f2013164564e0d1359996ef8f561b94f1a9c193a2f6da8d2d7ee49a4e9",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/neutral-gate-policy.ts",
+      "source_path": "src/modules/lifecycle/workflows/neutral-gate-policy.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/neutral-gate-policy.ts",
+      "sha256": "91658bb19c1eaafda7c7d9fc9e202ba661fa6d55bcb22ca5227c52c3d4ad2658",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/neutral-lifecycle-machine.ts",
+      "source_path": "src/modules/lifecycle/workflows/neutral-lifecycle-machine.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/neutral-lifecycle-machine.ts",
+      "sha256": "dee56c051c7a0ea0d97b7feae5dd777b144480856909235cec067504ca9945a8",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
+      "source_path": "src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
+      "sha256": "4282d90ed121417f040900a5eeb1b2adcf9871fa4b18f07328710782f01cd41d",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/resume-lanes.ts",
+      "source_path": "src/modules/lifecycle/workflows/resume-lanes.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/resume-lanes.ts",
+      "sha256": "134efd8935655e4476e47ee753622ddcb00f948e91ffa1daad15cdf81869462b",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/retry-lane.ts",
+      "source_path": "src/modules/lifecycle/workflows/retry-lane.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/retry-lane.ts",
+      "sha256": "e149c263f0a6d2efe50be9aa6ff23c1d6e1d0b3d8420a1fcc961dd8cab1b5afb",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/run-binding.ts",
+      "source_path": "src/modules/lifecycle/workflows/run-binding.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/run-binding.ts",
+      "sha256": "e45fda88312848d858f54b2ef756afd4071e7fad7d11c61c0b580f28465664df",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/run-lifecycle.ts",
+      "source_path": "src/modules/lifecycle/workflows/run-lifecycle.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/run-lifecycle.ts",
+      "sha256": "ceed0491650edd46f047b1ecaa9484507807b679038df593bde5cb10c310bde1",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/run-manifest-wiring.ts",
+      "source_path": "src/modules/lifecycle/workflows/run-manifest-wiring.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/run-manifest-wiring.ts",
+      "sha256": "5436e097c97d588da2dacad0f33f976e6e1fb4300800b250d488d8529bfc4086",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/run-record-validate.ts",
+      "source_path": "src/modules/lifecycle/workflows/run-record-validate.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/run-record-validate.ts",
+      "sha256": "f564c52113744c1a64f0e6155f60454e846191de3687d9f22869e429e07b4a3b",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/run-state.ts",
+      "source_path": "src/modules/lifecycle/workflows/run-state.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/run-state.ts",
+      "sha256": "758d166317828e38ca2b777bd3c6f832b592f54a8563180bd36daeeea6b04d40",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/runstart-preflight.ts",
+      "source_path": "src/modules/lifecycle/workflows/runstart-preflight.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/runstart-preflight.ts",
+      "sha256": "fc0856a75a89ed6b163767f15754b4ec69fd205b2bea19ae3df401d7982f5b62",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/stable-lock.ts",
+      "source_path": "src/modules/lifecycle/workflows/stable-lock.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/stable-lock.ts",
+      "sha256": "be5b4b3f3e57230c7b4e60b4da53cb4ac63026b44defc5aeeff20024a4ff8bb8",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/trace-v2.ts",
+      "source_path": "src/modules/lifecycle/workflows/trace-v2.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/trace-v2.ts",
+      "sha256": "a728f83490649a1122b2a0684f9db6cf55a2e4f6eb60ff39cfa9b69f9156d77e",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/write-run-manifest.ts",
+      "source_path": "src/modules/lifecycle/workflows/write-run-manifest.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/write-run-manifest.ts",
+      "sha256": "67f99c0627316df71f1a6336e97b9a478e25898fbbd524db9b402b031fe8df98",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/write-task-run.ts",
+      "source_path": "src/modules/lifecycle/workflows/write-task-run.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/write-task-run.ts",
+      "sha256": "e36cc7d7af5275df73fb7f75159e1256b1e925ae6f0f00b8e1303ca61be51dae",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/migrations/index.ts",
+      "source_path": "src/modules/migrations/index.ts",
+      "resource_path": "resources/src/modules/migrations/index.ts",
+      "sha256": "fa6a5d9d834acbb2c0c3dcaeb23827bd89d9a44a28655d5b2a5d3bfe0bbfbfeb",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/migrations/workflows/host-cutover-controller.ts",
+      "source_path": "src/modules/migrations/workflows/host-cutover-controller.ts",
+      "resource_path": "resources/src/modules/migrations/workflows/host-cutover-controller.ts",
+      "sha256": "f93ce199075e6d736336a440b14dba267a4a6f0866190855ed116a9b678d6653",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/migrations/workflows/index-migrate.ts",
+      "source_path": "src/modules/migrations/workflows/index-migrate.ts",
+      "resource_path": "resources/src/modules/migrations/workflows/index-migrate.ts",
+      "sha256": "c13bdfeece2aeef092343afac52e7eda753d1666ea119de1006ec364c866aa5a",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/migrations/workflows/wiki-importance.ts",
+      "source_path": "src/modules/migrations/workflows/wiki-importance.ts",
+      "resource_path": "resources/src/modules/migrations/workflows/wiki-importance.ts",
+      "sha256": "d053a5ea511bbeef54030e473f5abe605f188f41614a6be9d82ed8a5fe0fc74d",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/review/index.ts",
+      "source_path": "src/modules/review/index.ts",
+      "resource_path": "resources/src/modules/review/index.ts",
+      "sha256": "0a0110ec3d5341d483775e2f5211471035cc7e9855b4fea72b3dda7fbebccfd0",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/review/resources/scripts/lib/advisory-record.ts",
+      "source_path": "src/modules/review/resources/scripts/lib/advisory-record.ts",
+      "resource_path": "resources/src/modules/review/resources/scripts/lib/advisory-record.ts",
+      "sha256": "779541d229d8e35db74f25cc800fc6f622d0137ed8702a834c36dc70aef507f1",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/review/workflows/advisory-contract.ts",
+      "source_path": "src/modules/review/workflows/advisory-contract.ts",
+      "resource_path": "resources/src/modules/review/workflows/advisory-contract.ts",
+      "sha256": "3c2b153e762d154ed72c310f0098c3994cacd26b5a691888792600e33f5928de",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/review/workflows/review-pairing.ts",
+      "source_path": "src/modules/review/workflows/review-pairing.ts",
+      "resource_path": "resources/src/modules/review/workflows/review-pairing.ts",
+      "sha256": "e4efd24fe141dd409bd3a46dfb8b7f7abd4aec281add5ddb8fd45d7f0d635caf",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/review/workflows/review-progress.ts",
+      "source_path": "src/modules/review/workflows/review-progress.ts",
+      "resource_path": "resources/src/modules/review/workflows/review-progress.ts",
+      "sha256": "96e739c61664f9b5af72e182133bc607c2ff1ac8d66100decf630705a4d5fad7",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/security/index.ts",
+      "source_path": "src/modules/security/index.ts",
+      "resource_path": "resources/src/modules/security/index.ts",
+      "sha256": "895964ce8a2b15e79245ac9b2a3a81dae8651d5e0915beeca1736ded1ef3707c",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/security/workflows/config.ts",
+      "source_path": "src/modules/security/workflows/config.ts",
+      "resource_path": "resources/src/modules/security/workflows/config.ts",
+      "sha256": "18eb128e69c0d7708b6bfa783fbd6ab768db7da033c0aaa06140d6f230b74e5b",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/security/workflows/events.ts",
+      "source_path": "src/modules/security/workflows/events.ts",
+      "resource_path": "resources/src/modules/security/workflows/events.ts",
+      "sha256": "d4c836f1a37637f4983d35968fabcbd22bf91ef11bdd9b9d37711fed7f6481c0",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/security/workflows/injection-guard.ts",
+      "source_path": "src/modules/security/workflows/injection-guard.ts",
+      "resource_path": "resources/src/modules/security/workflows/injection-guard.ts",
+      "sha256": "4780ba01793951d570effb03d8ff83fdfc789d08a65fcb8f950d70b6b5e5afb6",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/security/workflows/redact-log.ts",
+      "source_path": "src/modules/security/workflows/redact-log.ts",
+      "resource_path": "resources/src/modules/security/workflows/redact-log.ts",
+      "sha256": "85c6592a59b42690da5b121caf2da8e4ce23c32b189b8d92edf628fbed9b58ea",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/security/workflows/safe-object.ts",
+      "source_path": "src/modules/security/workflows/safe-object.ts",
+      "resource_path": "resources/src/modules/security/workflows/safe-object.ts",
+      "sha256": "96c1764df3df10c18cb3534f585c61081cc0ef1c10ca3e570d6a1c72c7626715",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/security/workflows/scrub-redact.ts",
+      "source_path": "src/modules/security/workflows/scrub-redact.ts",
+      "resource_path": "resources/src/modules/security/workflows/scrub-redact.ts",
+      "sha256": "56873e57db56d96cfe29fadb9aea82a36d99ca9ea6fe2fb3ebb64542bb25595d",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/security/workflows/scrubbed-write.ts",
+      "source_path": "src/modules/security/workflows/scrubbed-write.ts",
+      "resource_path": "resources/src/modules/security/workflows/scrubbed-write.ts",
+      "sha256": "623395058a240d0a557edd1b87240661c56ec72758a361d5a7a1c151b6af8fd7",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/security/workflows/secret-patterns.ts",
+      "source_path": "src/modules/security/workflows/secret-patterns.ts",
+      "resource_path": "resources/src/modules/security/workflows/secret-patterns.ts",
+      "sha256": "e53cc33f1a8b133b4a5ab546a9fba6795405ef8badf434cbb0b8b057db7fe944",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/security/workflows/secrets.ts",
+      "source_path": "src/modules/security/workflows/secrets.ts",
+      "resource_path": "resources/src/modules/security/workflows/secrets.ts",
+      "sha256": "b04b2b135c12bd3cede07142a4cf8169412f104ebef516be1ba608033d1445ad",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/security/workflows/share-set.ts",
+      "source_path": "src/modules/security/workflows/share-set.ts",
+      "resource_path": "resources/src/modules/security/workflows/share-set.ts",
+      "sha256": "b664aa1ddf9541a3e062f798e863ade8dfb71f24781a8a23b17fe6a7bf8e7616",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/specialists/index.ts",
+      "source_path": "src/modules/specialists/index.ts",
+      "resource_path": "resources/src/modules/specialists/index.ts",
+      "sha256": "0c4d8c43b7ed6771fe01cc078e0203f1004e8934545c946838c1b133af09056a",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/specialists/workflows/roster-contract.ts",
+      "source_path": "src/modules/specialists/workflows/roster-contract.ts",
+      "resource_path": "resources/src/modules/specialists/workflows/roster-contract.ts",
+      "sha256": "3749a96838712aed56450df799182862b265bc0005f9c994e0bce38863211afe",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/specialists/workflows/specialist-roster.ts",
+      "source_path": "src/modules/specialists/workflows/specialist-roster.ts",
+      "resource_path": "resources/src/modules/specialists/workflows/specialist-roster.ts",
+      "sha256": "a96dfeb0f9de64d9b7b1dce41f0790d7754dcfaeb78d40b411899dba1891413c",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/index.ts",
+      "source_path": "src/modules/state/index.ts",
+      "resource_path": "resources/src/modules/state/index.ts",
+      "sha256": "5fd3bde2898d8e9e36619c3154010effa9fc5f8c7ac6c16a9fc71b700c7c5bd8",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/atomic-write.ts",
+      "source_path": "src/modules/state/workflows/atomic-write.ts",
+      "resource_path": "resources/src/modules/state/workflows/atomic-write.ts",
+      "sha256": "ff651d78f5fb2e1d4cd0de9f86a4dd86e20215961bed335bb6684c792399e53f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/dependency-graph-reader.ts",
+      "source_path": "src/modules/state/workflows/dependency-graph-reader.ts",
+      "resource_path": "resources/src/modules/state/workflows/dependency-graph-reader.ts",
+      "sha256": "c2b60b2493ce635ed8370c71326f3e850bdb6a62024838012395049b038c6a68",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/dependency-graph-schema.ts",
+      "source_path": "src/modules/state/workflows/dependency-graph-schema.ts",
+      "resource_path": "resources/src/modules/state/workflows/dependency-graph-schema.ts",
+      "sha256": "2b9f0a5f24760a85b6caa7c6044010c3c9dafa38167d85d916b141c9458067f5",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/frontmatter.ts",
+      "source_path": "src/modules/state/workflows/frontmatter.ts",
+      "resource_path": "resources/src/modules/state/workflows/frontmatter.ts",
+      "sha256": "f63c55d9b67d1daa50c85e0c15b1129fad50abe7c39c83423c447280019b8136",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/guild-discovery.ts",
+      "source_path": "src/modules/state/workflows/guild-discovery.ts",
+      "resource_path": "resources/src/modules/state/workflows/guild-discovery.ts",
+      "sha256": "fc0a7cb0c84964fea246b81054d7153865cac08df6ad1cd830d0439cfd816cdb",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/guild-root.ts",
+      "source_path": "src/modules/state/workflows/guild-root.ts",
+      "resource_path": "resources/src/modules/state/workflows/guild-root.ts",
+      "sha256": "93204449d1a45108f09de1c1a852d37115a1ab4496f53e721dcede6343312044",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/index-cache.ts",
+      "source_path": "src/modules/state/workflows/index-cache.ts",
+      "resource_path": "resources/src/modules/state/workflows/index-cache.ts",
+      "sha256": "47999e77abab291f4744da552c69d59b0314164b6f88d6945d4a2b18e65af1ae",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/plugin-install-guard.ts",
+      "source_path": "src/modules/state/workflows/plugin-install-guard.ts",
+      "resource_path": "resources/src/modules/state/workflows/plugin-install-guard.ts",
+      "sha256": "f83a4ccecd8768886ccfa6d9474f75a8c7b89346724e906e2e7bbac8c306992e",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/teams/index.ts",
+      "source_path": "src/modules/teams/index.ts",
+      "resource_path": "resources/src/modules/teams/index.ts",
+      "sha256": "1ed6f448a9b34515ca2bda431a875db6e8eb55c1d0d65cca91479085a28b0e4f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/teams/workflows/canonical-hash.ts",
+      "source_path": "src/modules/teams/workflows/canonical-hash.ts",
+      "resource_path": "resources/src/modules/teams/workflows/canonical-hash.ts",
+      "sha256": "55e38bf95b5ba19628cb4c1d4bf84e6a76f8b45ba4c67c761ac0c5f84e0476c3",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/teams/workflows/station-composer.ts",
+      "source_path": "src/modules/teams/workflows/station-composer.ts",
+      "resource_path": "resources/src/modules/teams/workflows/station-composer.ts",
+      "sha256": "8b6c2c1933d96951a3c86d5804c12a3379a07b5ac4890c642657c3791dac801c",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/teams/workflows/station-signals.ts",
+      "source_path": "src/modules/teams/workflows/station-signals.ts",
+      "resource_path": "resources/src/modules/teams/workflows/station-signals.ts",
+      "sha256": "9956f14ed498db51f00bce504754fb18a65cb311673a8cbc7f1ef168e6c1c318",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/teams/workflows/team-file.ts",
+      "source_path": "src/modules/teams/workflows/team-file.ts",
+      "resource_path": "resources/src/modules/teams/workflows/team-file.ts",
+      "sha256": "38ed7a49c47052649189b895dffc002323bf1b79b2ce3f044ffd0f3632f141d1",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/telemetry/index.ts",
+      "source_path": "src/modules/telemetry/index.ts",
+      "resource_path": "resources/src/modules/telemetry/index.ts",
+      "sha256": "55e6ec12f9b3841c1b5f03b0b2f01f39aaf5609d327ef0d5e3ca16106d9a2b5d",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/telemetry/workflows/debug-bundle.ts",
+      "source_path": "src/modules/telemetry/workflows/debug-bundle.ts",
+      "resource_path": "resources/src/modules/telemetry/workflows/debug-bundle.ts",
+      "sha256": "7ee259ec8d9233304bcbaee2a32f08b89a434804a7178c45c5f14525abd9a9d2",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/telemetry/workflows/guild-trace-emit.ts",
+      "source_path": "src/modules/telemetry/workflows/guild-trace-emit.ts",
+      "resource_path": "resources/src/modules/telemetry/workflows/guild-trace-emit.ts",
+      "sha256": "027f1f6c37658c97c4e2060b2b1efa75965552631c3060a1293874f10a59021a",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/telemetry/workflows/guild-trace-events.ts",
+      "source_path": "src/modules/telemetry/workflows/guild-trace-events.ts",
+      "resource_path": "resources/src/modules/telemetry/workflows/guild-trace-events.ts",
+      "sha256": "44357181a969782beead8ba61a5b7b05713c418f8ec8ef3192c72d9d8a117b60",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/telemetry/workflows/receipt-journal-conformance-evaluator.ts",
+      "source_path": "src/modules/telemetry/workflows/receipt-journal-conformance-evaluator.ts",
+      "resource_path": "resources/src/modules/telemetry/workflows/receipt-journal-conformance-evaluator.ts",
+      "sha256": "69f3dd615f288a698f3f956ad05ffbe8d6f59440d19ca46049ec1e66117622f3",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/telemetry/workflows/receipt-journal.ts",
+      "source_path": "src/modules/telemetry/workflows/receipt-journal.ts",
+      "resource_path": "resources/src/modules/telemetry/workflows/receipt-journal.ts",
+      "sha256": "217002cc7ff6be3488c4d6559b9004856f5f4032b1dd75bcd17b6f5f2fbd2cc1",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/telemetry/workflows/receipt-reconcile.ts",
+      "source_path": "src/modules/telemetry/workflows/receipt-reconcile.ts",
+      "resource_path": "resources/src/modules/telemetry/workflows/receipt-reconcile.ts",
+      "sha256": "f9947d6f2c40beac404935ff5ab2bb31d0f15e6591a2d710fe5d10f0cddc7fe8",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/telemetry/workflows/run-analysis.ts",
+      "source_path": "src/modules/telemetry/workflows/run-analysis.ts",
+      "resource_path": "resources/src/modules/telemetry/workflows/run-analysis.ts",
+      "sha256": "e3d5b6180b77f5ebd536fe94d1578b0c5b8cce91da5cc897ce2b12c792414ed5",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/telemetry/workflows/task-cell-telemetry.ts",
+      "source_path": "src/modules/telemetry/workflows/task-cell-telemetry.ts",
+      "resource_path": "resources/src/modules/telemetry/workflows/task-cell-telemetry.ts",
+      "sha256": "c1bad3049fe8dc2baf2b0f5cebfc03e879769805ea2a571829f23ad9b8bc2f36",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
       "id": "resume-lanes",
       "source_path": "scripts/resume-lanes.ts",
       "resource_path": "resources/scripts/resume-lanes.ts",
@@ -142,6 +1613,13 @@
       "source_path": "scripts/retry-lane.ts",
       "resource_path": "resources/scripts/retry-lane.ts",
       "sha256": "ea24e018a111feef9bde91f08a462e107513e7f353c0ab1c229e3ce119ccd3ac"
+    },
+    {
+      "category": "scripts",
+      "id": "validate-run-record",
+      "source_path": "scripts/validate-run-record.ts",
+      "resource_path": "resources/scripts/validate-run-record.ts",
+      "sha256": "0e090b09fcc39c782c2d9baeac34a11828a828a65230e44ad4f5ffe000fad2ff"
     },
     {
       "category": "scripts",
@@ -169,14 +1647,14 @@
       "id": "guild-execute-plan",
       "source_path": "skills/meta/execute-plan/SKILL.md",
       "resource_path": "resources/skills/meta/execute-plan/SKILL.md",
-      "sha256": "4122cab9894e09aa269cec5c2fecb6b677a1e3d6433909237257dc3de2247f00"
+      "sha256": "85750138684a73ff36a1c4b5dcba1719b90a6ba4581930596c4eb74a61395c93"
     },
     {
       "category": "skills",
       "id": "guild-execute-plan/dispatch.md",
       "source_path": "skills/meta/execute-plan/dispatch.md",
       "resource_path": "resources/skills/meta/execute-plan/dispatch.md",
-      "sha256": "2904b6047f2aec25ec283dc0c6def57716517b72b944875dd3c257629615ab12"
+      "sha256": "78c44150d27803ed51b2ba41d310faec6c207c2ad3d0c2322aeb83ad33a16ba4"
     },
     {
       "category": "skills",
@@ -204,7 +1682,7 @@
       "id": "guild-verify-done",
       "source_path": "skills/meta/verify-done/SKILL.md",
       "resource_path": "resources/skills/meta/verify-done/SKILL.md",
-      "sha256": "58dc2be68df5c61d8d8203fc48d8f1f523477460e566857f9943bcc1e83933f9"
+      "sha256": "fcafbc8b9d203f7c4454b443599d1cd94498d0bc6f2d220afe4186b27721ca6f"
     },
     {
       "category": "skills",

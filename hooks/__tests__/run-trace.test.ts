@@ -27,6 +27,7 @@ import {
   recordPhase,
   recordStatusLightweight,
   resolvePreflightSnapshot,
+  resolveInstalledPluginIdentity,
   startAndCloseRun,
   startRunOnly,
   writeSkippedFiles,
@@ -56,6 +57,12 @@ import * as runstartPreflightOriginal from "../../src/modules/lifecycle/workflow
 // Shared js-yaml frontmatter parser (OD-3 compliant) — read run.yaml fields by
 // parsing the document instead of hand-rolled line-anchored regex assertions.
 import { parseYaml } from "../../scripts/lib/frontmatter";
+import {
+  compareCheckpointToJournal,
+  defaultJournalIo,
+  readCheckpointState,
+  scanReceiptJournal,
+} from "../../src/modules/telemetry/workflows/receipt-journal";
 
 /** Parse a run.yaml document to its top-level fields (fail-loud null on parse error). */
 const runYamlFields = (text: string) =>
@@ -120,11 +127,26 @@ describe("run-trace lib (Lane B3)", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
+  it("derives plugin identity from the installed package rather than the consuming project", () => {
+    const pluginRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-installed-plugin-"));
+    fs.mkdirSync(path.join(pluginRoot, ".codex-plugin"), { recursive: true });
+    fs.mkdirSync(path.join(pluginRoot, "command-src"), { recursive: true });
+    fs.writeFileSync(path.join(pluginRoot, ".codex-plugin", "plugin.json"), JSON.stringify({ version: "9.9.9" }));
+    fs.writeFileSync(path.join(pluginRoot, "command-src", "command-registry.json"), "{}\n");
+    const identity = resolveInstalledPluginIdentity({ GUILD_PLUGIN_ROOT: pluginRoot }, root);
+    expect(identity.version).toBe("9.9.9");
+    expect(identity.ref.startsWith("sha256:")).toBe(true);
+    expect(identity.command_surface_version.startsWith("sha256:")).toBe(true);
+    fs.rmSync(pluginRoot, { recursive: true, force: true });
+  });
+
   describe("emitRunStarted", () => {
     it("appends one run_started guild.trace_event.v1 line to logs/v1.4-events.jsonl", () => {
       const runId = startedRun(root, "full");
       emitRunStarted(root, runId, { now: "2026-05-29T09:00:00Z", binding_ref: refOf(root, runId) });
-      const lines = readJsonl(liveLog(root, runId));
+      const lines = readJsonl(liveLog(root, runId)).filter(
+        (event) => event["schema_version"] === "guild.trace_event.v1",
+      );
       expect(lines).toHaveLength(1);
       expect(lines[0]["schema_version"]).toBe("guild.trace_event.v1");
       expect(lines[0]["event_name"]).toBe("run_started");
@@ -135,8 +157,9 @@ describe("run-trace lib (Lane B3)", () => {
 
     it("REWORK F1: a run id alone writes NOTHING — the loadable open record is never recovered", () => {
       const runId = startedRun(root, "full"); // binding minted + OPEN on disk
+      const before = readJsonl(liveLog(root, runId));
       emitRunStarted(root, runId, { now: "2026-05-29T09:00:00Z" }); // no nonce presented
-      expect(readJsonl(liveLog(root, runId))).toHaveLength(0);
+      expect(readJsonl(liveLog(root, runId))).toEqual(before);
     });
 
     it("is idempotent — does not double-emit run_started for one run", () => {
@@ -287,6 +310,47 @@ describe("run-trace lib (Lane B3)", () => {
       expect(prov.run_class).toBe("full");
     });
 
+    it("recovers a journal-won start receipt before exposing the full run id", () => {
+      const checkpointWrite = jest.spyOn(defaultJournalIo, "writeCheckpoint")
+        .mockImplementationOnce(() => { throw new Error("planted start-checkpoint crash"); });
+      let runId: string | null = null;
+      try {
+        runId = startRunOnly(root, resolveHost, { command: "/guild:learn", run_class: "full" });
+      } finally {
+        checkpointWrite.mockRestore();
+      }
+      expect(runId).not.toBeNull();
+      expect(fs.readFileSync(path.join(root, ".guild", "runs", "current-run-id"), "utf8")).toBe(runId);
+      const receipts = path.join(root, ".guild", "runs", runId as string, "receipts");
+      const scan = scanReceiptJournal(path.join(receipts, "journal.jsonl"));
+      expect(scan.records).toHaveLength(1);
+      expect(scan.records[0]).toEqual(expect.objectContaining({
+        sequence: 1,
+        operation_id: `capability-start-snapshot:${runId}`,
+      }));
+      expect(compareCheckpointToJournal(
+        readCheckpointState(path.join(receipts, "checkpoint.json")),
+        scan,
+        runId as string,
+      )).toEqual([]);
+    });
+
+    it("removes the full run transaction when its start receipt cannot be appended", () => {
+      const acquire = jest.spyOn(defaultJournalIo, "acquireLock")
+        .mockImplementation(() => { throw new Error("planted non-recoverable lock failure"); });
+      let runId: string | null = "unexpected";
+      try {
+        runId = startRunOnly(root, resolveHost, { command: "/guild:learn", run_class: "full" });
+      } finally {
+        acquire.mockRestore();
+      }
+      expect(runId).toBeNull();
+      const runsRoot = path.join(root, ".guild", "runs");
+      const entries = fs.existsSync(runsRoot) ? fs.readdirSync(runsRoot) : [];
+      expect(entries.filter((entry) => entry.startsWith("run-"))).toEqual([]);
+      expect(fs.existsSync(path.join(runsRoot, "current-run-id"))).toBe(false);
+    });
+
     it("run_class=lightweight: writes runs/-only, never wiki/indexes/reflections/initiatives, checkpoint null", () => {
       const runId = startAndCloseRun(root, resolveHost, {
         command: "/guild:status",
@@ -302,6 +366,8 @@ describe("run-trace lib (Lane B3)", () => {
       );
       expect(prov.run_class).toBe("lightweight");
       expect(prov.final_learning_checkpoint).toBeNull();
+      expect(fs.existsSync(path.join(runDir, "capability"))).toBe(false);
+      expect(fs.existsSync(path.join(runDir, "receipts"))).toBe(false);
       // NEVER writes durable store dirs.
       for (const forbidden of ["wiki", "indexes", "reflections", "initiatives"]) {
         expect(fs.existsSync(path.join(root, ".guild", forbidden))).toBe(false);
@@ -546,6 +612,54 @@ describe("run-trace lib (Lane B3)", () => {
       expect(fs.existsSync(path.join(runDir, "provenance.json"))).toBe(false);
     });
 
+    it("production start persists the live Claude native-adapter identity in session-context.json", () => {
+      const { exitCode, stdout } = runCli(
+        ["start", "--command=/guild:build", `--cwd=${cliRoot}`],
+        { CLAUDECODE: "1", CLAUDE_PLUGIN_ROOT: "" },
+      );
+      expect(exitCode).toBe(0);
+      const runId = stdout.trim();
+      const sessionContext = JSON.parse(fs.readFileSync(
+        path.join(cliRoot, ".guild", "runs", runId, "session-context.json"),
+        "utf8",
+      ));
+      expect(sessionContext.host).toMatchObject({
+        family: "claude",
+        surface: "cli",
+        adapter_id: "claude-code-native",
+        adapter_version: "guild.host_adapter.v1.0.0",
+      });
+      expect(sessionContext.identity).toMatchObject({
+        source: "native_adapter",
+        trust: "verified",
+        confidence: "high",
+      });
+      expect(sessionContext.identity.evidence).toContain(
+        "adapter contract guild.host_adapter.v1.0.0",
+      );
+    });
+
+    it("production start without a live host marker preserves the honest unknown identity", () => {
+      const { exitCode, stdout } = runCli(
+        ["start", "--command=/guild:build", `--cwd=${cliRoot}`],
+        { CLAUDECODE: "0", CLAUDE_PLUGIN_ROOT: "" },
+      );
+      expect(exitCode).toBe(0);
+      const runId = stdout.trim();
+      const sessionContext = JSON.parse(fs.readFileSync(
+        path.join(cliRoot, ".guild", "runs", runId, "session-context.json"),
+        "utf8",
+      ));
+      expect(sessionContext.host).toMatchObject({
+        family: "unknown",
+        adapter_version: "unknown",
+      });
+      expect(sessionContext.identity).toMatchObject({
+        source: "none",
+        confidence: "low",
+      });
+    });
+
     it("start --initiative=foo records the attachment with NO initiatives/ dir created (P2b/NN#5)", () => {
       const { exitCode, stdout } = runCli([
         "start",
@@ -601,8 +715,11 @@ describe("run-trace lib (Lane B3)", () => {
       }
     });
 
-    it("status sub-command still works (OQ6 gate alias)", () => {
-      const { exitCode, stdout } = runCli(["status", `--cwd=${cliRoot}`]);
+    it("status sub-command preserves the live native-adapter identity (OQ6 gate alias)", () => {
+      const { exitCode, stdout } = runCli(
+        ["status", `--cwd=${cliRoot}`],
+        { CLAUDECODE: "1", CLAUDE_PLUGIN_ROOT: "" },
+      );
       expect(exitCode).toBe(0);
       const runId = stdout.trim();
       expect(runId.length).toBeGreaterThan(0);
@@ -613,6 +730,21 @@ describe("run-trace lib (Lane B3)", () => {
         ),
       );
       expect(prov.run_class).toBe("lightweight");
+      const sessionContext = JSON.parse(fs.readFileSync(
+        path.join(cliRoot, ".guild", "runs", runId, "session-context.json"),
+        "utf8",
+      ));
+      expect(sessionContext.host).toMatchObject({
+        family: "claude",
+        surface: "cli",
+        adapter_id: "claude-code-native",
+        adapter_version: "guild.host_adapter.v1.0.0",
+      });
+      expect(sessionContext.identity).toMatchObject({
+        source: "native_adapter",
+        trust: "verified",
+        confidence: "high",
+      });
     });
 
     it("status sub-command respects OQ6 gate (record_status_runs:false → empty stdout)", () => {

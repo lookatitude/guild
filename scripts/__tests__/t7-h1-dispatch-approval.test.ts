@@ -50,14 +50,26 @@ import { recordDecision, writeDecision } from "../../src/modules/teams/workflows
 // binding, so the fixture mints one — otherwise the POSITIVE CONTROL would fail
 // for a reason unrelated to approval and the anti-vacuity leg would be useless.
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
-const SCRIPT = path.resolve(__dirname, "../agent-team-launcher.ts");
-const RUN_ID = "run-t7h1-0001";
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+const SCRIPT = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
+const RUN_ID = "run-20260811-020000-t7h1-approval";
 const SLUG = "t7h1";
 const PHASE = "build";
 
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
+
 /** The three approved worker lanes the launcher is expected to spawn. */
 const APPROVED_WORKERS = ["backend", "frontend", "qa"];
+
+function seedLifecycleContexts(root: string): void {
+  const dir = path.join(root, ".guild", "context", RUN_ID);
+  fs.mkdirSync(dir, { recursive: true });
+  for (const role of APPROVED_WORKERS) {
+    fs.writeFileSync(path.join(dir, `${role}-${role}.md`), `# ${role} context\n`, "utf8");
+  }
+}
 
 interface LaunchResult {
   exitCode: number;
@@ -92,12 +104,22 @@ function makeRecordingTmux(root: string): { binDir: string; logPath: string } {
   return { binDir, logPath };
 }
 
-function teamYaml(specialists: string[]): string {
+function teamYaml(
+  specialists: string[],
+  capabilityScopes: Record<string, string[] | null> = {},
+): string {
   return [
     "backend: agent-team",
     `spec: ${SLUG}`,
     "specialists:",
-    ...specialists.flatMap((name) => [`  - name: ${name}`, `    scope: lane ${name}`]),
+    ...specialists.flatMap((name) => [
+      `  - name: ${name}`,
+      `    participant_id: ${name}`,
+      `    scope: lane ${name}`,
+      ...(capabilityScopes[name]
+        ? [`    capability_scope: [${capabilityScopes[name]!.join(", ")}]`]
+        : []),
+    ]),
     "",
   ].join("\n");
 }
@@ -108,10 +130,13 @@ function teamYaml(specialists: string[]): string {
  * decision persisted under `.guild/runs/<run>/team-plan/`, plus the per-phase
  * team file realizing the approved WORKER set.
  */
-function seedApprovedRepo(): { root: string; teamPath: string } {
+function seedApprovedRepo(
+  capabilityScopes: Record<string, string[] | null> = {},
+): { root: string; teamPath: string } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "t7-h1-"));
   fs.mkdirSync(path.join(root, ".guild", "runs", RUN_ID), { recursive: true });
   mintRunBinding({ root, run_id: RUN_ID });
+  seedLifecycleContexts(root);
 
   const participants = [
     ...APPROVED_WORKERS.map((id) => ({
@@ -123,7 +148,7 @@ function seedApprovedRepo(): { root: string; teamPath: string } {
       depends_on: [],
       tier: "mid",
       purpose: "implementation",
-      capability_scope: null,
+      capability_scope: capabilityScopes[id] ?? null,
       backend: "team",
     })),
     {
@@ -171,7 +196,7 @@ function seedApprovedRepo(): { root: string; teamPath: string } {
   const teamDir = path.join(root, ".guild", "team");
   fs.mkdirSync(teamDir, { recursive: true });
   const teamPath = path.join(teamDir, `${SLUG}.${PHASE}.yaml`);
-  fs.writeFileSync(teamPath, teamYaml(APPROVED_WORKERS), "utf8");
+  fs.writeFileSync(teamPath, teamYaml(APPROVED_WORKERS, capabilityScopes), "utf8");
   return { root, teamPath };
 }
 
@@ -201,6 +226,7 @@ function launchWith(
   delete env.GUILD_DISPATCH_APPROVAL_OVERRIDE;
   env.PATH = `${binDir}:${env.PATH ?? ""}`;
   env.GUILD_HOST_ID = "claude-code-cli";
+  env.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
   for (const [k, v] of Object.entries(opts.env ?? {})) env[k] = v;
 
   const runId = opts.runId === undefined ? RUN_ID : opts.runId;
@@ -271,6 +297,28 @@ describe("T7-H1 — the REAL launcher blocks on a post-approval-tampered team fi
     expect(run.stdout).not.toContain("REFUSED");
   });
 
+  it("POSITIVE CONTROL: an explicit non-default scope dispatches only when the proposal approved it", () => {
+    const scoped = seedApprovedRepo({ backend: ["Read", "WebSearch"] });
+    roots.push(scoped.root);
+    const run = launch(scoped.root, scoped.teamPath);
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout).toContain("approve-before-dispatch gate PASSED");
+  });
+
+  it("a scoped approved team refuses the direct-subagent rung with no dispatch signal", () => {
+    const { root, teamPath } = seed();
+    const run = launchWith(root, teamPath, {
+      dryRun: false,
+      extraArgs: ["--agent-mode=subagent"],
+    });
+    expect(run.exitCode).toBe(1);
+    expect(run.stdout).toContain("approve-before-dispatch gate PASSED");
+    expect(run.stderr).toContain("REFUSED (capability-scope carriage)");
+    expect(run.stderr).toContain("backend");
+    expect(run.stdout.split("\n").some((line) => line.startsWith("{"))).toBe(false);
+    expect(paneCreatingInvocations(run)).toEqual([]);
+  });
+
   // ── THE FINDING ───────────────────────────────────────────────────────────
   it("TAMPER (add a specialist after approval) ⇒ exit 1 and ZERO panes", () => {
     const { root, teamPath } = seed();
@@ -301,6 +349,60 @@ describe("T7-H1 — the REAL launcher blocks on a post-approval-tampered team fi
     expect(run.stderr).toContain("participant_set_mismatch");
     // "omission is never removal" — the dropped role is named.
     expect(run.stderr).toContain(APPROVED_WORKERS[2]);
+    expect(paneCreatingInvocations(run)).toEqual([]);
+    expect(sessionManifests(root)).toEqual([]);
+  });
+
+  it("TAMPER (add an unapproved capability scope) ⇒ exit 1 and ZERO panes", () => {
+    const { root, teamPath } = seed();
+    fs.writeFileSync(
+      teamPath,
+      teamYaml(APPROVED_WORKERS, { backend: ["Read", "WebSearch"] }),
+      "utf8",
+    );
+
+    const run = launchWith(root, teamPath, { dryRun: false });
+    expect(run.exitCode).toBe(1);
+    expect(run.stderr).toContain("participant_scope_mismatch");
+    expect(run.stderr).toContain("backend");
+    expect(paneCreatingInvocations(run)).toEqual([]);
+    expect(sessionManifests(root)).toEqual([]);
+  });
+
+  it("TAMPER (retain participant id but change its role) ⇒ exit 1 and ZERO panes", () => {
+    const { root, teamPath } = seed();
+    const original = fs.readFileSync(teamPath, "utf8");
+    fs.writeFileSync(
+      teamPath,
+      original.replace(
+        "  - name: backend\n    participant_id: backend",
+        "  - name: researcher\n    participant_id: backend",
+      ),
+      "utf8",
+    );
+
+    const run = launchWith(root, teamPath, { dryRun: false });
+    expect(run.exitCode).toBe(1);
+    expect(run.stderr).toContain("participant_role_mismatch");
+    expect(run.stderr).toContain("backend");
+    expect(paneCreatingInvocations(run)).toEqual([]);
+    expect(sessionManifests(root)).toEqual([]);
+  });
+
+  it("TAMPER (duplicate approved id before the legitimate entry) ⇒ exit 1 and ZERO panes", () => {
+    const { root, teamPath } = seed();
+    const original = fs.readFileSync(teamPath, "utf8");
+    const duplicate =
+      "  - name: researcher\n" +
+      "    participant_id: backend\n" +
+      "    scope: smuggled duplicate lane\n" +
+      "    capability_scope: [Read, WebSearch]\n";
+    fs.writeFileSync(teamPath, original.replace("specialists:\n", `specialists:\n${duplicate}`), "utf8");
+
+    const run = launchWith(root, teamPath, { dryRun: false });
+    expect(run.exitCode).toBe(1);
+    expect(run.stderr).toContain("duplicate_participant_id");
+    expect(run.stderr).toContain("backend");
     expect(paneCreatingInvocations(run)).toEqual([]);
     expect(sessionManifests(root)).toEqual([]);
   });
@@ -372,6 +474,7 @@ function seedUnapprovedRepo(): { root: string; teamPath: string } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "t7-h1-noapproval-"));
   fs.mkdirSync(path.join(root, ".guild", "runs", RUN_ID), { recursive: true });
   mintRunBinding({ root, run_id: RUN_ID });
+  seedLifecycleContexts(root);
   const teamDir = path.join(root, ".guild", "team");
   fs.mkdirSync(teamDir, { recursive: true });
   const teamPath = path.join(teamDir, `${SLUG}.${PHASE}.yaml`);
@@ -433,7 +536,7 @@ describe("T7R-R1-B1 — NO TRAIL AT ALL: the default path fails CLOSED (non-dry,
     const run = launchWith(root, teamPath, { dryRun: false, runId: null });
 
     expect(run.exitCode).not.toBe(0);
-    expect(run.stderr).toContain("no_run_id");
+    expect(run.stderr).toContain("lifecycle run id required");
     expect(run.tmuxInvocations).toEqual([]);
     expect(sessionManifests(root)).toEqual([]);
   });
@@ -482,6 +585,36 @@ describe("T7R-R1-B1 — the ONLY escape is an explicit, audited operator overrid
     expect(run.exitCode).not.toBe(0);
     expect(run.stderr).toContain("dispatch_approval_override_unreasoned");
     expect(run.tmuxInvocations).toEqual([]);
+    expect(overrideAuditRecords(root, RUN_ID)).toEqual([]);
+  });
+
+  it("FU08: preview validates but does not consume an override; the next real dispatch must re-present it", () => {
+    const { root, teamPath } = seedNone();
+    const reason = "preview only; real dispatch must ask again";
+    const preview = launchWith(root, teamPath, {
+      dryRun: true,
+      extraArgs: ["--approval-override", reason],
+    });
+    expect(preview.exitCode).toBe(0);
+    expect(preview.stderr).toMatch(/withheld.*real dispatch.*re-present/i);
+    expect(overrideAuditRecords(root, RUN_ID)).toEqual([]);
+
+    const real = launchWith(root, teamPath, { dryRun: false });
+    expect(real.exitCode).not.toBe(0);
+    expect(real.stderr).toContain("no_persisted_proposal");
+    expect(real.tmuxInvocations).toEqual([]);
+    expect(overrideAuditRecords(root, RUN_ID)).toEqual([]);
+  });
+
+  it("FU08: a boolean-shaped preview override is refused exactly like a real one", () => {
+    const { root, teamPath } = seedNone();
+    const preview = launchWith(root, teamPath, {
+      dryRun: true,
+      extraArgs: ["--approval-override", "1"],
+    });
+    expect(preview.exitCode).not.toBe(0);
+    expect(preview.stderr).toContain("dispatch_approval_override_unreasoned");
+    expect(preview.tmuxInvocations).toEqual([]);
     expect(overrideAuditRecords(root, RUN_ID)).toEqual([]);
   });
 

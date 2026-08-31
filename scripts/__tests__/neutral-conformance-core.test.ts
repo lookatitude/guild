@@ -2772,3 +2772,69 @@ describe("neutral conformance decision", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// FIC-110 B3 — the A21-S assembly spine belongs to the AUTHORITATIVE closure
+// ---------------------------------------------------------------------------
+
+/**
+ * `neutral-conformance-assembly.ts` declares itself a host-neutral core member in
+ * its own header, and its focused suite proves closure with a LOCAL regex/import
+ * allowlist. That is a second, private rail. The production rail is
+ * `NEUTRAL_CORE_MEMBERS` + `evaluateNeutralCoreBoundary`, and the assembler is
+ * absent from it — so the 298-test closure suite never scans the module, and any
+ * future boundary drift inside it passes the main rail untouched.
+ *
+ * These three assertions are the RED contract for that omission. They do NOT edit
+ * the membership list: they require it to name the file, require the production
+ * evaluator to consume the file's ACTUAL bytes, and require that membership to be
+ * load-bearing rather than nominal.
+ */
+const ASSEMBLY_CORE_MEMBER = "neutral-conformance-assembly.ts";
+
+describe("FIC-110 B3 — the assembly spine is inside the production closure rail", () => {
+  it("declares the assembly spine in the authoritative core membership", () => {
+    expect(fs.existsSync(path.join(CORE_DIR, ASSEMBLY_CORE_MEMBER))).toBe(true);
+    expect([...NEUTRAL_CORE_MEMBERS]).toContain(ASSEMBLY_CORE_MEMBER);
+  });
+
+  it("scans the spine's real bytes through the production evaluator, not a local allowlist", () => {
+    const files = readCoreFiles();
+    const scanned = files.find((file) => file.path === ASSEMBLY_CORE_MEMBER);
+    expect(scanned).toBeDefined();
+    // The bytes the rail reads are the bytes on disk — not a fixture, not a slice.
+    expect((scanned as { source: string }).source).toBe(
+      fs.readFileSync(path.join(CORE_DIR, ASSEMBLY_CORE_MEMBER), "utf8")
+    );
+
+    const outcome = evaluateNeutralCoreBoundary(files);
+    expect(outcome.disposition).toBe("succeeded");
+    expect(outcome.facts.declared_members).toContain(ASSEMBLY_CORE_MEMBER);
+    expect(outcome.facts.node_count).toBe(NEUTRAL_CORE_MEMBERS.length);
+
+    // The evaluator actually resolved the spine's own edges, so the file was read
+    // as a NODE of the closure rather than merely listed by it.
+    const spineEdges = (outcome.facts.intra_core_edges as Array<{ importer: string; specifier: string }>)
+      .filter((edge) => edge.importer === ASSEMBLY_CORE_MEMBER)
+      .map((edge) => edge.specifier)
+      .sort();
+    expect(spineEdges).toEqual(["./neutral-conformance-core", "./neutral-runtime-contracts"]);
+  });
+
+  /** NON-VACUITY: membership must be load-bearing, not a name on a list. */
+  it("fails the production rail when a forbidden edge is planted in the spine's slot", () => {
+    const files = readCoreFiles().map((file) =>
+      file.path === ASSEMBLY_CORE_MEMBER
+        ? { path: file.path, source: `${file.source}\nimport probe from "fs";` }
+        : file
+    );
+    const outcome = evaluateNeutralCoreBoundary(files);
+    expect(outcome.disposition).toBe("failed");
+    expect(outcome.reason_code).toBe("boundary_forbidden_edge");
+    expect(
+      (outcome.facts.forbidden_edges as Array<{ importer: string; specifier: string }>).some(
+        (edge) => edge.importer === ASSEMBLY_CORE_MEMBER && edge.specifier === "fs"
+      )
+    ).toBe(true);
+  });
+});

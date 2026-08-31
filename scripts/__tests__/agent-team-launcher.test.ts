@@ -2,7 +2,7 @@
  * scripts/__tests__/agent-team-launcher.test.ts
  *
  * Spawns the script via tsx with a temp consumer-repo layout, verifies:
- *  - --dry-run with agent-team yaml → writes session.json + prints tmux commands
+ *  - --dry-run with agent-team yaml → prints a pure preview, writes nothing,
  *    and does NOT invoke tmux (dry-run is always safe).
  *  - --dry-run with subagent yaml → exit 1 with clear error.
  *  - Missing --team arg → exit 1.
@@ -13,7 +13,8 @@
  *  - $TMUX unset → new-session + attach (unchanged legacy behavior).
  *  - Existing tmux session collision → exit 1 (refuse to clobber).
  */
-import { spawnSync } from "child_process";
+import { execFileSync, spawnSync } from "child_process";
+import { createHash } from "crypto";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
@@ -22,6 +23,7 @@ import {
   writeTaskCell,
   type TaskCellDispatchInput,
 } from "../../src/modules/dispatch/workflows/task-assignment-v2";
+import { taskCellPaths } from "../../src/modules/dispatch/workflows/task-cell-contract";
 // T3 F3: descriptor writers fail closed without the run's minted binding.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const launcherTestBinding = require("../../src/modules/lifecycle/workflows/run-binding") as
@@ -36,6 +38,7 @@ function launcherTestBindFor(cwd: string, runId: string): { binding_ref: string 
 import {
   buildAcceptance,
   markAttemptOrphaned,
+  readAssignmentForInstance,
   readAttemptForInstance,
   runDeterministicFloor,
   writeAcceptanceRecord,
@@ -43,13 +46,54 @@ import {
   findOrphanedAttempts,
   type TaskCellInstanceIds,
 } from "../../src/modules/dispatch/workflows/task-cell-acceptance";
+import { scanReceiptJournal } from "../../src/modules/telemetry";
+import {
+  reconcileTerminalSubstantiveOperations,
+  sealTerminalAttemptWithSubstantiveEvidence,
+  settleFailedCmuxTaskCells,
+} from "../agent-team-launcher";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
+// FU20 controls seed a genuinely COMMITTED adoption manifest so the launcher's
+// project-definition resolver returns a real `guild.project_definition_ref.v1`.
+import {
+  ADOPTION_MANIFEST_SCHEMA,
+  entryDigest,
+  type AdoptionManifestV1,
+} from "../lib/core/contracts/adoption-manifest";
+import {
+  PROJECT_DEFINITION_REF_SCHEMA,
+  type ProjectDefinitionRefV1,
+} from "../lib/core/contracts/project-definition-ref";
+import { commitAdoptionManifest } from "../lib/capability/adoption-migrate";
+import {
+  hashSpecialistProfile,
+  hashSpecialistType,
+  specialistProfileFromAgentFrontmatter,
+  specialistTypeFromTemplateFrontmatter,
+} from "../lib/core/contracts/specialist-identity";
+import { parseFrontmatter } from "../lib/frontmatter";
+import {
+  BENIGN_COMPATIBILITY_READ_REASONS,
+  COMPATIBILITY_USAGE_SCHEMA,
+  DEPENDENCE_COMPATIBILITY_READ_REASONS,
+} from "../../src/modules/capability/workflows/compatibility-usage";
+import {
+  NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE,
+  NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
+  computePhysicalNativeClaudePayloadDigest,
+} from "../../src/modules/distribution/workflows/release-package-identity";
 
-const SCRIPT = path.resolve(__dirname, "../agent-team-launcher.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
+const INHERITED_RUN_ID = "run-20260811-000000-launcher-test";
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+const SCRIPT = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 function runScript(
   args: string[],
-  env: Record<string, string | undefined> = {}
+  env: Record<string, string | undefined> = {},
+  seedLifecycleRun = true,
 ): { exitCode: number; stdout: string; stderr: string } {
   // Scrub TMUX from env unless the test wants it set, so host terminal state
   // does not accidentally trip the nested-tmux guard.
@@ -62,6 +106,43 @@ function runScript(
   // envelope path set these explicitly via the `env` param.
   delete baseEnv.GUILD_RUN_ID;
   delete baseEnv.GUILD_RUN_BINDING_REF;
+  // Cross-family reproducibility (independent-review blocker 4): scrub the
+  // ambient HOST IDENTITY as well. Under a Codex-shaped parent environment
+  // (GUILD_HOST=codex-cli etc.) the launcher resolves a codex orchestrator and
+  // this suite went 7-red while being green under Claude — a review gate must
+  // not change verdict with its parent host. Host-specific cases set these
+  // EXPLICITLY via the `env` param.
+  delete baseEnv.GUILD_HOST;
+  delete baseEnv.GUILD_HOST_ID;
+  delete baseEnv.GUILD_ORCHESTRATOR_HOST;
+  delete baseEnv.CMUX_WORKSPACE_ID;
+  baseEnv.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
+  // W1/W2: normal launcher fixtures represent execute-plan after lifecycle
+  // start. Seed the lifecycle-owned sentinel + binding when a dispatch caller
+  // intentionally omits --run-id; the production launcher must inherit this
+  // identity, never mint another one. Tests for the missing-sentinel refusal
+  // opt out with the third parameter.
+  const cwdIndex = args.indexOf("--cwd");
+  const hasExplicitRunId = args.includes("--run-id");
+  const isAdministrative = args.includes("--reap") || args.includes("--dismiss-completed");
+  if (seedLifecycleRun && cwdIndex >= 0 && !hasExplicitRunId && !isAdministrative) {
+    const cwd = args[cwdIndex + 1];
+    const runsRoot = path.join(cwd, ".guild", "runs");
+    fs.mkdirSync(runsRoot, { recursive: true });
+    fs.writeFileSync(path.join(runsRoot, "current-run-id"), `${INHERITED_RUN_ID}\n`, "utf8");
+    launcherTestBindFor(cwd, INHERITED_RUN_ID);
+    // Real (non-preview) launcher fixtures also represent execute-plan after
+    // context assembly. Supply the canonical default owner/task pairs used by
+    // the fixture teams so the test reaches the behavior it was written for.
+    writeRunContexts(cwd, INHERITED_RUN_ID, [
+      ["architect", "architect"],
+      ["backend", "backend"],
+      ["qa", "qa"],
+      ["security", "security"],
+      ["kb-viz-engineer", "kb-viz-engineer"],
+      ["cursor-reviewer", "cursor-reviewer"],
+    ]);
+  }
   // T7R-R1-B1: approve-before-dispatch verification is now MANDATORY on the real
   // launcher path, and these fixtures deliberately carry no proposal/decision
   // trail — they exercise routing, scoping, tiering and teardown, not approval.
@@ -111,6 +192,14 @@ function setupConsumerRepo(
   return { teamPath: dst };
 }
 
+function writeRunContexts(cwd: string, runId: string, lanes: Array<[string, string]>): void {
+  const dir = path.join(cwd, ".guild", "context", runId);
+  fs.mkdirSync(dir, { recursive: true });
+  for (const [role, taskId] of lanes) {
+    fs.writeFileSync(path.join(dir, `${role}-${taskId}.md`), `# ${role}/${taskId}\n`);
+  }
+}
+
 function findSessionJson(cwd: string): string | null {
   const runsDir = path.join(cwd, ".guild", "runs");
   if (!fs.existsSync(runsDir)) return null;
@@ -119,6 +208,58 @@ function findSessionJson(cwd: string): string | null {
     if (fs.existsSync(candidate)) return candidate;
   }
   return null;
+}
+
+type TreeSnapshot = Record<string, string>;
+
+/**
+ * Content-sensitive tree snapshot used by the FU08 planted write control.
+ * File type, mode, symlink target, and bytes are all bound so a dry-run cannot
+ * hide a mutation by rewriting an existing path or swapping its type.
+ */
+function snapshotTree(root: string): TreeSnapshot {
+  const snapshot: TreeSnapshot = {};
+  const visit = (relative: string): void => {
+    const absolute = relative === "." ? root : path.join(root, relative);
+    const stat = fs.lstatSync(absolute);
+    const mode = (stat.mode & 0o777).toString(8);
+    if (stat.isSymbolicLink()) {
+      snapshot[relative] = `symlink:${mode}:${fs.readlinkSync(absolute)}`;
+      return;
+    }
+    if (stat.isDirectory()) {
+      snapshot[relative] = `directory:${mode}`;
+      for (const entry of fs.readdirSync(absolute).sort()) {
+        visit(relative === "." ? entry : path.join(relative, entry));
+      }
+      return;
+    }
+    if (stat.isFile()) {
+      snapshot[relative] =
+        `file:${mode}:` + createHash("sha256").update(fs.readFileSync(absolute)).digest("hex");
+      return;
+    }
+    snapshot[relative] = `other:${mode}`;
+  };
+  visit(".");
+  return snapshot;
+}
+
+function treeDelta(before: TreeSnapshot, after: TreeSnapshot): string[] {
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((entry) => before[entry] !== after[entry])
+    .sort();
+}
+
+function manifestPreviewFromStdout(stdout: string): Record<string, unknown> {
+  const marker = "[agent-team-launcher] session manifest preview (not written):\n";
+  const start = stdout.indexOf(marker);
+  if (start < 0) throw new Error("session manifest preview marker missing");
+  const jsonStart = start + marker.length;
+  const endMarker = "\n[agent-team-launcher] dry-run complete — no state written.";
+  const end = stdout.indexOf(endMarker, jsonStart);
+  if (end < 0) throw new Error("session manifest preview terminator missing");
+  return JSON.parse(stdout.slice(jsonStart, end)) as Record<string, unknown>;
 }
 
 // Writes a stub `tmux` executable into a temp bin dir and returns that dir so
@@ -145,6 +286,82 @@ function makeFakeTmuxBin(tmpDir: string, existingWindows: string[]): string {
     { mode: 0o755 }
   );
   return binDir;
+}
+
+// Fix B: a fake tmux for REAL (non-dry) launch tests — reports available,
+// reports NO existing session (`has-session` exits 1, so the collision gate
+// passes), and no-ops every spawn/attach subcommand successfully.
+function makeLaunchableTmuxBin(tmpDir: string): string {
+  const binDir = path.join(tmpDir, "fakebin-launchable");
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(binDir, "tmux"),
+    [
+      "#!/bin/sh",
+      'case "$1" in',
+      '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
+      "  has-session) exit 1;;",
+      "  list-windows) exit 0;;",
+      "  *) exit 0;;",
+      "esac",
+      "",
+    ].join("\n"),
+    { mode: 0o755 }
+  );
+  // Real-path persistence tests may route one or more lanes remotely. This
+  // deterministic ssh stub satisfies connect/probe/hook/spawn/teardown without
+  // touching a host; the launcher still exercises its real write path.
+  fs.writeFileSync(
+    path.join(binDir, "ssh"),
+    [
+      "#!/bin/sh",
+      'printf "%s\\n" "PRESENT claude" "PRESENT codex" "PRESENT tmux"',
+      'printf "%s\\n" "GUILD_HOOKS_ENFORCING" "GONE"',
+      "exit 0",
+      "",
+    ].join("\n"),
+    { mode: 0o755 },
+  );
+  return binDir;
+}
+
+function seedPlanContextsForRealLaunch(cwd: string, runId: string): void {
+  const planDir = path.join(cwd, ".guild", "plan");
+  if (!fs.existsSync(planDir)) return;
+  const lanes: Array<[string, string]> = [];
+  for (const file of fs.readdirSync(planDir).filter((entry) => entry.endsWith(".md"))) {
+    let taskId: string | null = null;
+    for (const line of fs.readFileSync(path.join(planDir, file), "utf8").split(/\r?\n/)) {
+      const task = line.match(/^\s*-\s*task-id:\s*(\S+)/);
+      if (task) {
+        taskId = task[1];
+        continue;
+      }
+      const owner = line.match(/^\s*-\s*owner:\s*(\S+)/);
+      if (owner && taskId) {
+        lanes.push([owner[1], taskId]);
+        taskId = null;
+      }
+    }
+  }
+  if (lanes.length > 0) writeRunContexts(cwd, runId, lanes);
+}
+
+function runRealScript(
+  args: string[],
+  env: Record<string, string | undefined> = {},
+): { exitCode: number; stdout: string; stderr: string } {
+  const cwdIndex = args.indexOf("--cwd");
+  if (cwdIndex < 0) throw new Error("runRealScript requires --cwd");
+  const cwd = args[cwdIndex + 1];
+  const runIdIndex = args.indexOf("--run-id");
+  const runId = runIdIndex >= 0 ? args[runIdIndex + 1] : INHERITED_RUN_ID;
+  seedPlanContextsForRealLaunch(cwd, runId);
+  const binDir = makeLaunchableTmuxBin(cwd);
+  return runScript(
+    args.filter((arg) => arg !== "--dry-run"),
+    { ...env, PATH: `${binDir}:${env.PATH ?? process.env["PATH"] ?? ""}` },
+  );
 }
 
 // Fake bin dir with tmux + claude + codex stubs for mixed-host preflight tests.
@@ -244,9 +461,219 @@ describe("agent-team-launcher.ts", () => {
       expect(exitCode).toBe(0);
     });
 
-    it("writes session.json under .guild/runs/<run-id>/agent-team/", () => {
+    it("is a pure preview: the entire consumer tree stays byte-identical even with shadow routing and an approval override", () => {
+      const runId = "run-20260820-120000-fu08-pure-preview";
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
-      runScript([
+      launcherTestBindFor(tmpDir, runId);
+      fs.writeFileSync(
+        path.join(tmpDir, ".guild", "settings.json"),
+        JSON.stringify({ model_routing: { shadow: "on" } }, null, 2) + "\n",
+        "utf8",
+      );
+      const before = snapshotTree(tmpDir);
+
+      const result = runScript(
+        [
+          "--team",
+          teamPath,
+          "--session-name",
+          "guild-test-fu08",
+          "--cwd",
+          tmpDir,
+          "--run-id",
+          runId,
+          "--approval-override",
+          "FU08 planted control: a preview override must never write an audit record",
+          "--dry-run",
+        ],
+        {},
+        false,
+      );
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("dry-run");
+      expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+      expect(findSessionJson(tmpDir)).toBeNull();
+    });
+
+    it("CONTROL: the whole-tree detector catches a planted write outside the run tree", () => {
+      const before = snapshotTree(tmpDir);
+      fs.writeFileSync(path.join(tmpDir, "planted-unexpected-preview-write"), "mutation\n", "utf8");
+      expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([
+        "planted-unexpected-preview-write",
+      ]);
+    });
+
+    it.each(["--reap", "--dismiss-completed"])(
+      "keeps administrative %s pure and labels withheld liveness/termination effects",
+      (operation) => {
+        const runId = "run-20260820-122000-fu08-maintenance";
+        const sessionDir = path.join(tmpDir, ".guild", "runs", runId, "agent-team");
+        fs.mkdirSync(sessionDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(sessionDir, "session.json"),
+          JSON.stringify({
+            run_id: runId,
+            backend: "tmux",
+            teammate_panes: [{ specialist: "backend", task_id: "T1", pane_id: "%9" }],
+          }, null, 2) + "\n",
+        );
+        const before = snapshotTree(tmpDir);
+        const args = [operation, "--cwd", tmpDir, "--run-id", runId, "--dry-run"];
+        const result = runScript(args, {}, false);
+
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toMatch(/pure preview/i);
+        expect(result.stdout).toMatch(/liveness|termination/i);
+        expect(result.stdout).toMatch(/withheld/i);
+        expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+      },
+    );
+
+    it.each([
+      ["real", ["--reap", "--dismiss-completed"]],
+      ["dry-run", ["--dismiss-completed", "--reap", "--dry-run"]],
+    ] as const)(
+      "refuses mutually exclusive maintenance modes before any %s effects",
+      (_label, operations) => {
+        const before = snapshotTree(tmpDir);
+        const result = runScript([...operations, "--cwd", tmpDir], {}, false);
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toMatch(/--reap.*--dismiss-completed.*mutually exclusive/i);
+        expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+      },
+    );
+
+    it.each(["agent", "subagent"])(
+      "keeps the %s direct-dispatch preview byte-identical",
+      (agentMode) => {
+        const runId = `run-20260820-121000-fu08-${agentMode}`;
+        const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+        launcherTestBindFor(tmpDir, runId);
+        const before = snapshotTree(tmpDir);
+        const result = runScript(
+          [
+            "--team", teamPath,
+            "--cwd", tmpDir,
+            "--run-id", runId,
+            `--agent-mode=${agentMode}`,
+            "--dry-run",
+          ],
+          {},
+          false,
+        );
+        expect(result.exitCode).toBe(0);
+        expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+      },
+    );
+
+    it("keeps the cmux preview byte-identical while returning in-memory result and manifest previews", () => {
+      const runId = "run-20260820-122000-fu08-cmux";
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      launcherTestBindFor(tmpDir, runId);
+      const before = snapshotTree(tmpDir);
+      const result = runScript(
+        [
+          "--team", teamPath,
+          "--cwd", tmpDir,
+          "--run-id", runId,
+          "--agent-mode=team",
+          "--dry-run",
+        ],
+        { CMUX_WORKSPACE_ID: "fu08-preview-workspace" },
+        false,
+      );
+      expect(result.exitCode).toBe(0);
+      const signal = JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "{}") as {
+        teamResult: unknown;
+        manifest: unknown;
+        teamResultPreview?: unknown;
+        manifestPreview?: unknown;
+      };
+      expect(signal.teamResult).toBeNull();
+      expect(signal.manifest).toBeNull();
+      expect(signal.teamResultPreview).toBeDefined();
+      expect(signal.manifestPreview).toBeDefined();
+      expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+    });
+
+    it("keeps a remote-routing preview byte-identical", () => {
+      const runId = "run-20260820-123000-fu08-remote";
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
+      launcherTestBindFor(tmpDir, runId);
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      fs.writeFileSync(
+        path.join(tmpDir, ".guild", "settings.json"),
+        JSON.stringify({
+          defaults: {
+            cross_host: {
+              enabled: true,
+              hosts: { "codex-remote": { address: "preview.invalid", user: "ci" } },
+            },
+          },
+          model_routing: { shadow: "on" },
+        }, null, 2) + "\n",
+        "utf8",
+      );
+      const before = snapshotTree(tmpDir);
+      const result = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--run-id", runId, "--dry-run"],
+        { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" },
+        false,
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/dry-run.*remote dispatch/i);
+      expect(result.stdout).toMatch(/hook-install preflight not run/i);
+      expect(result.stdout).toMatch(/planned BARE/i);
+      expect(result.stdout).not.toMatch(/emitted .*remote guild\.task_assignment/i);
+      expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+    });
+
+    it("labels tmux availability and target-collision gates withheld by a pure preview", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const result = runScript([
+        "--team",
+        teamPath,
+        "--session-name",
+        "guild-withheld-gates",
+        "--cwd",
+        tmpDir,
+        "--dry-run",
+      ]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/availability.*collision.*withheld.*real dispatch/i);
+      expect(result.stdout).toMatch(/real dispatch may refuse.*before.*writ.*launch/i);
+    });
+
+    it.each(["--approval-override", "--session-name"])(
+      "refuses a flag-shaped value for %s before authorization or effects",
+      (option) => {
+        const runId = `run-20260820-124000-fu08-${option.slice(2)}`;
+        const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+        launcherTestBindFor(tmpDir, runId);
+        writeRunContexts(tmpDir, runId, [
+          ["architect", "architect"],
+          ["backend", "backend"],
+          ["qa", "qa"],
+        ]);
+        const before = snapshotTree(tmpDir);
+
+        const result = runScript(
+          ["--team", teamPath, "--cwd", tmpDir, "--run-id", runId, option, "--dry-run"],
+          { GUILD_DISPATCH_APPROVAL_OVERRIDE: undefined },
+          false,
+        );
+
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toMatch(new RegExp(`${option}.*requires.*value`, "i"));
+        expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+      },
+    );
+
+    it("does not write session.json and emits the same manifest as an in-memory preview", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { stdout } = runScript([
         "--team",
         teamPath,
         "--session-name",
@@ -255,13 +682,13 @@ describe("agent-team-launcher.ts", () => {
         tmpDir,
         "--dry-run",
       ]);
-      const sessionJson = findSessionJson(tmpDir);
-      expect(sessionJson).not.toBeNull();
+      expect(findSessionJson(tmpDir)).toBeNull();
+      expect(manifestPreviewFromStdout(stdout).session_name).toBe("guild-test-001");
     });
 
-    it("session.json contains session_name, env, teammate_panes for all specialists", () => {
+    it("manifest preview contains session_name, env, teammate_panes for all specialists", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
-      runScript([
+      const { stdout } = runScript([
         "--team",
         teamPath,
         "--session-name",
@@ -270,8 +697,11 @@ describe("agent-team-launcher.ts", () => {
         tmpDir,
         "--dry-run",
       ]);
-      const sessionJson = findSessionJson(tmpDir)!;
-      const manifest = JSON.parse(fs.readFileSync(sessionJson, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout) as {
+        session_name: string;
+        env: Record<string, string>;
+        teammate_panes: Array<{ specialist: string }>;
+      };
       expect(manifest.session_name).toBe("guild-test-002");
       expect(manifest.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).toBe("1");
       expect(Array.isArray(manifest.teammate_panes)).toBe(true);
@@ -281,10 +711,7 @@ describe("agent-team-launcher.ts", () => {
       expect(specialists).toContain("qa");
     });
 
-    it("writes guild.task_assignment.v1 for ALL specialists in the pre-routing block", () => {
-      // Locks the cross-host fix: assignments are written for the FULL team in the
-      // pre-routing block (before any dispatch / remote-filtering), so every
-      // specialist — including ones that would route remote — gets its file.
+    it("does not write the retired per-specialist v1 assignment shadow channel", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       runScript([
         "--team",
@@ -295,19 +722,15 @@ describe("agent-team-launcher.ts", () => {
         tmpDir,
         "--dry-run",
       ]);
-      const sessionJson = findSessionJson(tmpDir)!;
-      // .../runs/<id>/agent-team/session.json → .../runs/<id>
-      const runDir = path.dirname(path.dirname(sessionJson));
-      const tasksDir = path.join(runDir, "tasks");
-      expect(fs.existsSync(tasksDir)).toBe(true);
-      for (const spec of ["architect", "backend", "qa"]) {
-        const p = path.join(tasksDir, `${spec}.json`);
-        expect(fs.existsSync(p)).toBe(true);
-        const a = JSON.parse(fs.readFileSync(p, "utf8"));
-        expect(a.schema_version).toBe("guild.task_assignment.v1");
-        expect(a.specialist).toBe(spec);
-        expect(typeof a.written_at).toBe("string");
-      }
+      const runDir = path.join(tmpDir, ".guild", "runs", INHERITED_RUN_ID);
+      expect(fs.existsSync(path.join(runDir, "tasks"))).toBe(false);
+      // Fix B (run-identity-and-dispatch): a dry run persists NOTHING under
+      // task-cells/ — the records are immutable attempt-1 files whose presence
+      // poisoned the next real launch of the same run id.
+      expect(fs.existsSync(path.join(runDir, "task-cells"))).toBe(false);
+      expect(fs.existsSync(path.join(runDir, "task-runs"))).toBe(false);
+      expect(fs.existsSync(path.join(runDir, "team-result"))).toBe(false);
+      expect(fs.existsSync(path.join(runDir, "agent-team"))).toBe(false);
     });
 
     it("exports GUILD_TASK_ASSIGNMENT into each pane command", () => {
@@ -322,13 +745,16 @@ describe("agent-team-launcher.ts", () => {
         "--dry-run",
       ]);
       expect(stdout).toMatch(/GUILD_TASK_ASSIGNMENT=/);
-      expect(stdout).toMatch(/tasks\/(architect|backend|qa)\.json/);
+      expect(stdout).toMatch(/GUILD_TASK_CELL_INSTANCE_ID=/);
+      expect(stdout).toMatch(/task-cells\/(architect|backend|qa)\/attempts\/1\/instances\/.+\/assignment\.json/);
     });
 
     it("emits guild.task_assignment.v2 per TASK — a specialist owning 2 tasks → 2 cells, no overwrite (AT1)", () => {
       // task-cell-runtime G3: the authoritative v2 channel replaces the v1
       // representative-first-task collapse. Give `backend` TWO plan lanes so the
       // fan-out MUST write two distinct immutable cells (P0.3 / adversarial test 1).
+      // Fix B: cell emission is now REAL-RUN-ONLY (post-gates), so this pin runs
+      // a real launch against a launchable fake tmux instead of a dry run.
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const planDir = path.join(tmpDir, ".guild", "plan");
       fs.mkdirSync(planDir, { recursive: true });
@@ -349,22 +775,35 @@ describe("agent-team-launcher.ts", () => {
           "",
         ].join("\n"),
       );
-      runScript([
-        "--team",
-        teamPath,
-        "--session-name",
-        "guild-test-v2",
-        "--cwd",
-        tmpDir,
-        "--dry-run",
-      ]);
+      // Real-run cell emission computes strict per-task context hashes — seed
+      // the per-task bundles the plan lanes above resolve to.
+      const ctxDir = path.join(tmpDir, ".guild", "context", INHERITED_RUN_ID);
+      fs.mkdirSync(ctxDir, { recursive: true });
+      for (const bundle of ["backend-T1-backend", "backend-T2-backend", "architect-T0-architect"]) {
+        fs.writeFileSync(path.join(ctxDir, `${bundle}.md`), `# ${bundle}\n`);
+      }
+      runScript(
+        [
+          "--team",
+          teamPath,
+          "--session-name",
+          "guild-test-v2",
+          "--cwd",
+          tmpDir,
+        ],
+        { PATH: `${makeLaunchableTmuxBin(tmpDir)}:${process.env["PATH"] ?? ""}` }
+      );
       const sessionJson = findSessionJson(tmpDir)!;
       const runDir = path.dirname(path.dirname(sessionJson));
       const cellsRoot = path.join(runDir, "task-cells");
       expect(fs.existsSync(cellsRoot)).toBe(true);
 
-      const assignmentPath = (lt: string) =>
-        path.join(cellsRoot, lt, "attempts", "1", "instances", `${lt}.a1.i1`, "assignment.json");
+      const assignmentPath = (lt: string) => {
+        const instances = path.join(cellsRoot, lt, "attempts", "1", "instances");
+        const instanceIds = fs.readdirSync(instances);
+        expect(instanceIds).toHaveLength(1);
+        return path.join(instances, instanceIds[0], "assignment.json");
+      };
 
       // backend owns two logical tasks → two distinct, non-overwritten assignment files.
       for (const lt of ["T1-backend", "T2-backend", "T0-architect"]) {
@@ -372,6 +811,11 @@ describe("agent-team-launcher.ts", () => {
         const a = JSON.parse(fs.readFileSync(assignmentPath(lt), "utf8"));
         expect(a.schema_version).toBe("guild.task_assignment.v2");
         expect(a.logical_task_id).toBe(lt);
+        const instance = JSON.parse(
+          fs.readFileSync(path.join(path.dirname(assignmentPath(lt)), "instance.json"), "utf8"),
+        );
+        expect(instance.schema_version).toBe("guild.agent_instance.v1");
+        expect(instance.substrate).toBe("tmux");
         // The attempt companion sits ABOVE the instances (one immutable file per attempt).
         expect(
           fs.existsSync(path.join(cellsRoot, lt, "attempts", "1", "attempt.json"))
@@ -386,6 +830,38 @@ describe("agent-team-launcher.ts", () => {
       expect(c1.instance_id).not.toBe(c2.instance_id);
       expect(c1.context_bundle_id).not.toBe(c2.context_bundle_id);
       expect(c1.handoff_path).not.toBe(c2.handoff_path);
+      for (const assignment of [c1, c2]) {
+        expect(assignment.context_bundle_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
+        expect(assignment.host_capabilities_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
+        expect(assignment.specialist_type_hash).toMatch(/^[0-9a-f]{64}$/);
+        expect(assignment.specialist_profile_hash).toMatch(/^[0-9a-f]{64}$/);
+      }
+
+      // PCL-09: these identity hashes came from real shipped-template reads.
+      // Every concrete read must pass through the compatibility loader and
+      // leave a durable, non-synthetic usage receipt for the G5 window.
+      const compatibilityReceipts = scanReceiptJournal(
+        path.join(runDir, "receipts", "journal.jsonl"),
+      ).records.filter(
+        (record) =>
+          record.scenario_id === "PCL-09" &&
+          record.operation_id.startsWith("compatibility-read:task-cell-identity-"),
+      );
+      expect(compatibilityReceipts).toHaveLength(4);
+      expect(compatibilityReceipts.map((record) => record.operation_id).sort()).toEqual([
+        "compatibility-read:task-cell-identity-T0-architect-architect",
+        "compatibility-read:task-cell-identity-T1-backend-backend",
+        "compatibility-read:task-cell-identity-T2-backend-backend",
+        "compatibility-read:task-cell-identity-qa-qa",
+      ]);
+      expect(compatibilityReceipts.every((record) => record.observation_state === "checked_clean")).toBe(true);
+      for (const receipt of compatibilityReceipts) {
+        const logicalTaskId = receipt.operation_id
+          .replace("compatibility-read:task-cell-identity-", "")
+          .replace(/-(architect|backend|qa)$/, "");
+        const assignment = JSON.parse(fs.readFileSync(assignmentPath(logicalTaskId), "utf8"));
+        expect(Date.parse(receipt.recorded_at)).toBeLessThan(Date.parse(assignment.written_at));
+      }
     });
 
     it("prints tmux commands to stdout in dry-run mode", () => {
@@ -420,12 +896,17 @@ describe("agent-team-launcher.ts", () => {
       expect(exitCode).toBe(0);
       expect(stdout).toMatch(/tmux\s+new-session/);
       expect(stdout).toMatch(/codex exec/);
+      expect(stdout).toMatch(/bypass.*enforcement preflight.*withheld.*preview/is);
+      expect(stdout).toMatch(/planned Codex commands are bare/i);
       expect(stdout).toMatch(/agent-bus/);
       expect(stdout).not.toMatch(/TaskCreated/);
       expect(stdout).not.toMatch(/CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1/);
 
-      const sessionJson = findSessionJson(tmpDir)!;
-      const manifest = JSON.parse(fs.readFileSync(sessionJson, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout) as {
+        orchestrator_host_kind: string;
+        env: Record<string, string>;
+        teammate_panes: Array<{ host_kind: string }>;
+      };
       expect(manifest.orchestrator_host_kind).toBe("codex");
       expect(manifest.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS).toBeUndefined();
       const hosts = manifest.teammate_panes.map((p: { host_kind: string }) => p.host_kind);
@@ -525,11 +1006,10 @@ describe("agent-team-launcher.ts", () => {
 
     it("records mode=in-session + window_name in the manifest", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
-      runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"], {
+      const { stdout } = runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"], {
         TMUX: "/tmp/tmux-1000/default,12345,0",
       });
-      const sessionJson = findSessionJson(tmpDir)!;
-      const manifest = JSON.parse(fs.readFileSync(sessionJson, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout);
       expect(manifest.mode).toBe("in-session");
       expect(manifest.window_name).toBe("guild-test-slug");
     });
@@ -621,25 +1101,29 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).not.toMatch(/new-session/);
     });
 
-    // Step 2: --agent-mode=auto + $TMUX unset + tmux installed → team new-session
-    it("auto + TMUX unset + tmux available → team new-session (dry-run output)", () => {
+    // Step 2: a pure preview never executes `tmux -V`; it reports the safe floor.
+    it("auto + TMUX unset → probe-free subagent preview floor even when tmux is installed", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const fakeBin = makeFakeTmuxBin(tmpDir, []);
-      const { exitCode, stdout } = runScript(
+      const { exitCode, stdout, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=auto",
          "--session-name", "guild-ladder-test-001", "--dry-run"],
         { TMUX: undefined, PATH: `${fakeBin}:${process.env.PATH ?? ""}` }
       );
       expect(exitCode).toBe(0);
-      expect(stdout).toMatch(/new-session/);
-      expect(stdout).not.toMatch(/new-window/);
+      const signal = JSON.parse(stdout);
+      expect(signal.backend).toBe("subagent");
+      expect(signal.previewOnly).toBe(true);
+      expect(signal.reason).toMatch(/availability probe withheld/i);
+      expect(stderr).toMatch(/did not execute `tmux -V`/);
+      expect(stdout).not.toMatch(/new-session|new-window/);
     });
 
-    // Step 3: --agent-mode=auto + no tmux + GUILD_INDEPENDENT_AGENTS_SUPPORTED=1 → agent signal
-    it("auto + no tmux + independent agents supported → agent JSON signal", () => {
+    // Step 3: the host advertises independent agents but cannot prove child env carriage.
+    it("auto + no tmux + independent agents supported refuses scoped Agent dispatch", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const noTmuxBin = makeUnavailableTmuxBin(tmpDir);
-      const { exitCode, stdout } = runScript(
+      const { exitCode, stdout, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=auto"],
         {
           TMUX: undefined,
@@ -647,17 +1131,16 @@ describe("agent-team-launcher.ts", () => {
           GUILD_INDEPENDENT_AGENTS_SUPPORTED: "1",
         }
       );
-      expect(exitCode).toBe(0);
-      const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe("agent");
-      expect(signal.reason).toMatch(/agent|independent/i);
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
     });
 
-    // Step 4: --agent-mode=auto + no tmux + GUILD_INDEPENDENT_AGENTS_SUPPORTED=0 → subagent signal
-    it("auto + no tmux + no agent support → subagent JSON signal", () => {
+    // Step 4: direct subagent has the same unverified child-env boundary.
+    it("auto + no tmux + no agent support refuses scoped subagent dispatch", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const noTmuxBin = makeUnavailableTmuxBin(tmpDir);
-      const { exitCode, stdout } = runScript(
+      const { exitCode, stdout, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=auto"],
         {
           TMUX: undefined,
@@ -665,81 +1148,191 @@ describe("agent-team-launcher.ts", () => {
           GUILD_INDEPENDENT_AGENTS_SUPPORTED: "0",
         }
       );
-      expect(exitCode).toBe(0);
-      const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe("subagent");
-      expect(signal.reason).toMatch(/subagent|fallback/i);
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
     });
 
-    // Explicit --agent-mode=subagent → subagent signal regardless of tmux/env
-    it("explicit --agent-mode=subagent emits subagent signal and exits 0", () => {
+    it("explicit --agent-mode=subagent refuses a scoped canonical team", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
-      const { exitCode, stdout } = runScript(
+      const { exitCode, stdout, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=subagent"]
       );
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
+    });
+
+    it("explicit --agent-mode=subagent preserves the approval-bound legacy unscoped custom-role path", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "custom-slug", "team-subagent.yaml");
+      fs.writeFileSync(
+        teamPath,
+        [
+          "spec: .guild/spec/custom-slug.md",
+          "backend: subagent",
+          "specialists:",
+          "  - name: custom-role",
+          "    scope: approved project-specific work",
+          "    depends-on: []",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      const { exitCode, stdout } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=subagent"],
+      );
       expect(exitCode).toBe(0);
       const signal = JSON.parse(stdout);
       expect(signal.backend).toBe("subagent");
-      expect(signal.slug).toBe("test-slug");
+      expect(signal.dispatchAllowed).toBe(true);
+      expect(signal.previewOnly).toBe(false);
     });
 
-    // Explicit --agent-mode=agent → agent signal regardless of tmux/env
-    it("explicit --agent-mode=agent emits agent signal and exits 0", () => {
+    it.each(["agent", "subagent"] as const)(
+      "explicit --agent-mode=%s never authorizes an unscoped custom-role dry-run",
+      (backend) => {
+        const { teamPath } = setupConsumerRepo(tmpDir, "custom-slug", "team-subagent.yaml");
+        fs.writeFileSync(
+          teamPath,
+          [
+            "spec: .guild/spec/custom-slug.md",
+            "backend: subagent",
+            "specialists:",
+            "  - name: custom-role",
+            "    scope: approved project-specific work",
+            "    depends-on: []",
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+        const runId = `run-20260820-010000-custom-${backend}-dryrun`;
+        launcherTestBindFor(tmpDir, runId);
+        writeRunContexts(tmpDir, runId, [["custom-role", "custom-role"]]);
+        const { exitCode, stdout } = runScript([
+          "--team", teamPath,
+          "--cwd", tmpDir,
+          `--agent-mode=${backend}`,
+          "--run-id", runId,
+          "--dry-run",
+        ]);
+        expect(exitCode).toBe(0);
+        const signal = JSON.parse(stdout);
+        expect(signal.backend).toBe(backend);
+        expect(signal.dispatchAllowed).toBe(false);
+        expect(signal.previewOnly).toBe(true);
+      },
+    );
+
+    it("explicit --agent-mode=agent refuses a scoped canonical team", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
-      const { exitCode, stdout } = runScript(
+      const { exitCode, stdout, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent"]
       );
-      expect(exitCode).toBe(0);
-      const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe("agent");
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
     });
 
-    // D5 rung 3 (in-process) — the launcher must ACTUALLY construct
-    // InProcessTeamBackend and return its dispatchPlan (dispatch.md
-    // §"In-process dispatchPlan consumption" + SKILL.md §"Backend + routing"),
-    // not just emit {backend,reason,slug} and exit. Asserts the full agent-rung
-    // JSON signal shape execute-plan consumes.
-    it("agent-mode=agent: the JSON signal carries a real dispatchPlan (one descriptor per specialist)", () => {
+    // D5 rung 3 (in-process) resolves through the backend, but a scoped
+    // production launch must refuse before it emits descriptors or TaskCells.
+    it("agent-mode=agent: production emits no dispatchPlan for scoped specialists", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
-      const { exitCode, stdout } = runScript(
-        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--run-id", "run-agent-shape-test"]
+      launcherTestBindFor(tmpDir, "run-20260811-010000-agent-shape-test");
+      writeRunContexts(tmpDir, "run-20260811-010000-agent-shape-test", [["architect", "architect"], ["backend", "backend"], ["qa", "qa"]]);
+      const { exitCode, stdout, stderr } = runScript(
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--run-id", "run-20260811-010000-agent-shape-test"]
       );
-      expect(exitCode).toBe(0);
-      const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe("agent");
-      expect(signal.slug).toBe("test-slug");
-      expect(signal.ok).toBe(true);
-      // No tmux panes on this rung (mirrors RemoteTeamBackend §CH-4 — the
-      // orchestrator never gets a descriptor either).
-      expect(signal.orchestratorPaneId).toBeNull();
-      expect(signal.teammatePaneIds).toEqual({});
-      expect(Array.isArray(signal.dispatchPlan)).toBe(true);
-      expect(signal.dispatchPlan).toHaveLength(3); // architect, backend, qa
-      const names = signal.dispatchPlan.map((d: { name: string }) => d.name);
-      expect(names).toEqual(["architect", "backend", "qa"]);
-      for (const d of signal.dispatchPlan) {
-        expect(typeof d.subagentType).toBe("string");
-        expect(d.model).toBeNull(); // tiering is orthogonal — resolved at dispatch
-        expect(d.env.GUILD_RUN_ID).toBe("run-agent-shape-test");
-        expect(d.env.GUILD_SPECIALIST).toBe(d.name);
-        expect(typeof d.prompt).toBe("string");
-        expect(d.prompt.length).toBeGreaterThan(0);
-      }
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
+      expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", "run-20260811-010000-agent-shape-test", "task-cells"))).toBe(false);
     });
 
-    // dry-run on the agent rung is a semantic no-op (no subprocess to suppress)
-    // — same dispatchPlan, annotated notes, per dispatch.md.
-    it("agent-mode=agent --dry-run: still returns the full dispatchPlan (declarative, no side effects)", () => {
+    it("agent-mode=agent: production retains a lifecycle manifest and an accepted in-process TaskCell can terminate", () => {
+      const runId = "run-20260823-010000-agent-lifecycle";
+      const { teamPath } = setupConsumerRepo(tmpDir, "custom-agent-lifecycle", "team-subagent.yaml");
+      fs.writeFileSync(
+        teamPath,
+        [
+          "spec: .guild/spec/custom-agent-lifecycle.md",
+          "backend: subagent",
+          "specialists:",
+          "  - name: custom-role",
+          "    scope: approved project-specific work",
+          "    depends-on: []",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      launcherTestBindFor(tmpDir, runId);
+      writeRunContexts(tmpDir, runId, [["custom-role", "custom-role"]]);
+
+      const launched = runScript([
+        "--team", teamPath,
+        "--cwd", tmpDir,
+        "--agent-mode=agent",
+        "--run-id", runId,
+      ]);
+      expect(launched.exitCode).toBe(0);
+      const manifestPath = path.join(tmpDir, ".guild", "runs", runId, "agent-team", "session.json");
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      expect(manifest.backend).toBe("in-process");
+      expect(manifest.migration_observation_eligible).toBe(false);
+      expect(manifest.migration_observation_blocker).toMatch(/compatibility|scoped.*direct/i);
+      expect(manifest.teammate_panes).toEqual([
+        expect.objectContaining({ specialist: "custom-role", pane_id: "(unknown)" }),
+      ]);
+
+      const [cell] = findRunTaskCells(tmpDir, runId);
+      const assignment = readAssignmentForInstance(tmpDir, cell.ids);
+      expect(assignment).not.toBeNull();
+      const acceptedAt = new Date(Date.parse(assignment!.written_at) + 1_000).toISOString();
+      const validation = runDeterministicFloor({
+        assignment: assignment!,
+        submitted: {
+          receipt_id: "receipt-custom-role",
+          receipt_path: `.guild/runs/${runId}/handoffs/custom-role-custom-role.md`,
+          schema_valid: true,
+          claimed_changed_files: [],
+          acceptance_tests_passed: [],
+          submitted_at: acceptedAt,
+        },
+        validationResultId: "validation-custom-role",
+        now: () => acceptedAt,
+      });
+      writeAcceptanceRecord(tmpDir, buildAcceptance({
+        validation,
+        acceptancePolicyVersion: "1.0.0",
+        authoritiesRequired: ["deterministic_floor", "team_lead"],
+        authoritiesObserved: [
+          { authority: "deterministic_floor", decision: "accepted", at: acceptedAt, reason: null },
+          { authority: "team_lead", decision: "accepted", at: acceptedAt, reason: null },
+        ],
+        now: () => acceptedAt,
+      }));
+
+      const dismissed = runScript(["--dismiss-completed", "--run-id", runId, "--cwd", tmpDir]);
+      expect(dismissed.exitCode).toBe(0);
+      expect(dismissed.stdout).toMatch(/\[TERMINATED\].*custom-role/);
+      expect(readAttemptForInstance(tmpDir, cell.ids)?.terminal_state).toBe("terminated");
+      expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", runId, "receipts", "payloads"))).toBe(false);
+    });
+
+    // A dry run retains the descriptor for inspection but marks it non-dispatchable.
+    it("agent-mode=agent --dry-run: returns a preview-only dispatchPlan with no side effects", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      launcherTestBindFor(tmpDir, "run-20260811-010001-agent-dryrun-test");
       const { exitCode, stdout } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--dry-run",
-         "--run-id", "run-agent-dryrun-test"]
+         "--run-id", "run-20260811-010001-agent-dryrun-test"]
       );
       expect(exitCode).toBe(0);
       const signal = JSON.parse(stdout);
       expect(signal.ok).toBe(true);
       expect(signal.dispatchPlan).toHaveLength(3);
       expect(signal.notes.join(" ")).toMatch(/dry-run/i);
+      expect(signal.dispatchAllowed).toBe(false);
+      expect(signal.previewOnly).toBe(true);
     });
 
     // Explicit --agent-mode=team + TMUX set → in-session (dry-run)
@@ -767,30 +1360,27 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).toMatch(/new-session/);
     });
 
-    // Explicit --agent-mode=team + no TMUX + real run + no tmux → falls back to subagent
-    it("explicit --agent-mode=team + no tmux on real run → subagent fallback signal", () => {
+    it("explicit team + no tmux refuses the scoped direct fallback", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const noTmuxBin = makeUnavailableTmuxBin(tmpDir);
       const { exitCode, stdout, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=team"],
         { TMUX: undefined, PATH: `${noTmuxBin}:${process.env.PATH ?? ""}` }
       );
-      expect(exitCode).toBe(0); // fallback, not crash
-      const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe("subagent");
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
       expect(stderr).toMatch(/WARN.*agent_mode=team.*tmux/i);
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
     });
 
-    // --agent-mode with subagent.yaml (non-agent-team yaml) → still emits signal
-    // (agent_mode overrides team.yaml backend check)
-    it("--agent-mode=agent with subagent yaml → agent signal (no backend check error)", () => {
+    it("--agent-mode=agent with scoped subagent yaml refuses before a signal", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "subagent-slug", "team-subagent.yaml");
-      const { exitCode, stdout } = runScript(
+      const { exitCode, stdout, stderr } = runScript(
         ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent"]
       );
-      expect(exitCode).toBe(0);
-      const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe("agent");
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("REFUSED (capability-scope carriage)");
     });
 
     // MH-04 selector reach. Every assertion above is satisfied by BOTH the old
@@ -851,7 +1441,8 @@ describe("agent-team-launcher.ts", () => {
         }
       );
 
-      expect(exitCode).toBe(0);
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe("");
 
       // The port-authored selector actually RAN in the launcher process.
       expect(fs.existsSync(recordPath)).toBe(true);
@@ -870,10 +1461,7 @@ describe("agent-team-launcher.ts", () => {
       expect(selection.dispatch_mode).toBe("agent");
       expect(selection.transport_id).toBe("in-process");
 
-      // And the launcher PRINTED the port's decision rather than one of its own.
-      const signal = JSON.parse(stdout);
-      expect(signal.backend).toBe(selection.dispatch_mode);
-      expect(signal.reason).toBe(selection.reason);
+      // Selection still ran, but the scoped direct path refused before signal emission.
     });
   });
 
@@ -950,12 +1538,14 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).toMatch(/CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1/);
     });
 
-    it("dry-run: session.json records host_kind + adapter_version per pane (CH-5)", () => {
+    it("dry-run: manifest preview records host_kind + adapter_version per pane (CH-5)", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
-      runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
-      const manifest = JSON.parse(fs.readFileSync(findSessionJson(tmpDir)!, "utf8"));
+      const { stdout } = runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
+      const manifest = manifestPreviewFromStdout(stdout) as {
+        teammate_panes: Array<{ specialist: string; host_kind: string; adapter_version: string }>;
+      };
       const byName: Record<string, { host_kind: string; adapter_version: string }> =
-        Object.fromEntries(manifest.teammate_panes.map((p: { specialist: string }) => [p.specialist, p]));
+        Object.fromEntries(manifest.teammate_panes.map((p) => [p.specialist, p]));
       expect(byName.security.host_kind).toBe("codex");
       expect(byName.architect.host_kind).toBe("claude");
       expect(byName.security.adapter_version).toBe("1");
@@ -1192,7 +1782,7 @@ describe("agent-team-launcher.ts", () => {
 
     // ── local tmux backend ────────────────────────────────────────────────
     it("tmux: caller --run-id names the ONE run directory (session + tasks + task-cells under it)", () => {
-      const CALLER_ID = "run-g5-tmux-caller";
+      const CALLER_ID = "run-20260811-010010-g5-tmux-caller";
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       // T3 F2/F3: the caller (execute-plan) starts the run — which mints its
       // binding — BEFORE threading --run-id to the launcher. Descriptor writers
@@ -1214,27 +1804,46 @@ describe("agent-team-launcher.ts", () => {
           "",
         ].join("\n"),
       );
-      const { exitCode } = runScript([
-        "--team", teamPath,
-        "--session-name", "guild-g5-tmux",
-        "--cwd", tmpDir,
-        "--run-id", CALLER_ID,
-        "--dry-run",
-      ]);
+      const contextDir = path.join(tmpDir, ".guild", "context", CALLER_ID);
+      fs.mkdirSync(contextDir, { recursive: true });
+      const backendContext = "# backend context\ncontract-v1\n";
+      fs.writeFileSync(path.join(contextDir, "backend-T1-backend.md"), backendContext);
+      // Fix B: cells are emitted only on a REAL launch (post-gates) — run one
+      // against a launchable fake tmux; strict hashing needs every lane's bundle.
+      fs.writeFileSync(path.join(contextDir, "architect-T0-architect.md"), "# architect\n");
+      fs.writeFileSync(path.join(contextDir, "qa-qa.md"), "# qa\n");
+      const { exitCode } = runScript(
+        [
+          "--team", teamPath,
+          "--session-name", "guild-g5-tmux",
+          "--cwd", tmpDir,
+          "--run-id", CALLER_ID,
+        ],
+        { PATH: `${makeLaunchableTmuxBin(tmpDir)}:${process.env["PATH"] ?? ""}` }
+      );
       expect(exitCode).toBe(0);
 
       // Exactly ONE run directory, named by the caller's id.
       expect(listRunDirs(tmpDir)).toEqual([CALLER_ID]);
 
       const runDir = path.join(tmpDir, ".guild", "runs", CALLER_ID);
-      // session + assignment (tasks/) + task-cell (task-cells/) all under it.
+      // Session + authoritative task-cells all live under it; the retired v1
+      // per-specialist tasks/ shadow channel must not reappear.
       expect(fs.existsSync(path.join(runDir, "agent-team", "session.json"))).toBe(true);
-      expect(fs.existsSync(path.join(runDir, "tasks", "backend.json"))).toBe(true);
+      expect(fs.existsSync(path.join(runDir, "tasks"))).toBe(false);
       expect(
-        fs.existsSync(
-          path.join(runDir, "task-cells", "T1-backend", "attempts", "1", "instances", "T1-backend.a1.i1", "assignment.json")
-        )
+        fs.readdirSync(path.join(runDir, "task-cells", "T1-backend", "attempts", "1", "instances"))
+          .some((instanceId) => fs.existsSync(path.join(runDir, "task-cells", "T1-backend", "attempts", "1", "instances", instanceId, "assignment.json")))
       ).toBe(true);
+      const backendInstances = path.join(runDir, "task-cells", "T1-backend", "attempts", "1", "instances");
+      const backendInstance = fs.readdirSync(backendInstances)[0];
+      const backendAssignment = JSON.parse(fs.readFileSync(
+        path.join(backendInstances, backendInstance, "assignment.json"),
+        "utf8",
+      ));
+      expect(backendAssignment.context_bundle_hash).toBe(
+        `sha256:${createHash("sha256").update(backendContext).digest("hex")}`,
+      );
 
       // The session.json findable by the generic scanner resolves to the same id.
       const sessionJson = findSessionJson(tmpDir)!;
@@ -1242,28 +1851,37 @@ describe("agent-team-launcher.ts", () => {
     });
 
     // ── in-process backend ────────────────────────────────────────────────
-    it("in-process (--agent-mode=agent): caller --run-id threads into every dispatchPlan descriptor's GUILD_RUN_ID", () => {
-      const CALLER_ID = "run-g5-agent-caller";
+    it("in-process preview (--agent-mode=agent): caller --run-id threads into every dispatchPlan descriptor's GUILD_RUN_ID", () => {
+      const CALLER_ID = "run-20260811-010011-g5-agent-caller";
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      launcherTestBindFor(tmpDir, CALLER_ID);
+      writeRunContexts(tmpDir, CALLER_ID, [["architect", "architect"], ["backend", "backend"], ["qa", "qa"]]);
       const { exitCode, stdout } = runScript([
         "--team", teamPath,
         "--cwd", tmpDir,
         "--agent-mode=agent",
         "--run-id", CALLER_ID,
+        "--dry-run",
       ]);
       expect(exitCode).toBe(0);
       const signal = JSON.parse(stdout);
       expect(signal.backend).toBe("agent");
+      expect(signal.dispatchAllowed).toBe(false);
+      expect(signal.previewOnly).toBe(true);
       expect(signal.dispatchPlan.length).toBeGreaterThan(0);
       // Every descriptor converges on the caller's run id — never a minted one.
       for (const d of signal.dispatchPlan) {
         expect(d.env.GUILD_RUN_ID).toBe(CALLER_ID);
+        expect(d.env.GUILD_TASK_CELL_INSTANCE_ID).toMatch(/\.a1\.i-/);
       }
+      // Preview proves the exact identity carrier without mutating immutable
+      // task-cell state that a later real code-backed launch must own.
+      expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", CALLER_ID, "task-cells"))).toBe(false);
     });
 
     // ── remote backend (cross-host) ───────────────────────────────────────
     it("remote (cross-host): caller --run-id names the ONE run directory for both local + remote-routed lanes", () => {
-      const CALLER_ID = "run-g5-remote-caller";
+      const CALLER_ID = "run-20260811-010012-g5-remote-caller";
       // Mixed-host fixture: architect stays local (claude), security routes remote.
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-mixed-host.yaml");
       launcherTestBindFor(tmpDir, CALLER_ID); // T3 F2/F3 — caller-started run mints first
@@ -1291,25 +1909,61 @@ describe("agent-team-launcher.ts", () => {
       expect(listRunDirs(tmpDir)).toEqual([CALLER_ID]);
 
       const runDir = path.join(tmpDir, ".guild", "runs", CALLER_ID);
-      // Pre-routing assignments for BOTH the local and the remote-routed lane
-      // land under the same run id.
-      expect(fs.existsSync(path.join(runDir, "tasks", "architect.json"))).toBe(true);
-      expect(fs.existsSync(path.join(runDir, "tasks", "security.json"))).toBe(true);
+      // Fix B: a dry run persists NO task-cell records (immutable attempt-1
+      // files would poison the next real launch) and no v1 shadow channel.
+      expect(fs.existsSync(path.join(runDir, "task-cells"))).toBe(false);
+      expect(fs.existsSync(path.join(runDir, "tasks"))).toBe(false);
+      // Identity is still provable from the PLANNED commands: both the local
+      // (architect) and remote-routed (security) lanes carry canonical
+      // assignment paths under the caller's ONE run id. Real-path cell content
+      // (substrate/host_id per lane) is pinned by the real-launch AT1 test.
+      expect(stdout).toContain(
+        `.guild/runs/${CALLER_ID}/task-cells/architect/attempts/1/instances/`
+      );
+      expect(stdout).toContain(
+        `.guild/runs/${CALLER_ID}/task-cells/security/attempts/1/instances/`
+      );
     });
 
-    // ── no caller id → mint (preserve the fallback) ───────────────────────
-    it("no --run-id supplied → tmux path mints a fresh run-<...> id (fallback preserved)", () => {
+    // ── no caller id → inherit lifecycle sentinel, never mint ────────────
+    it("no --run-id supplied → inherits current-run-id without minting", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
-      const { exitCode } = runScript([
+      const { exitCode, stdout } = runScript([
         "--team", teamPath,
         "--session-name", "guild-g5-mint",
         "--cwd", tmpDir,
         "--dry-run",
       ]);
       expect(exitCode).toBe(0);
-      const dirs = listRunDirs(tmpDir);
-      expect(dirs).toHaveLength(1);
-      expect(dirs[0]).toMatch(/^run-/);
+      expect(listRunDirs(tmpDir)).toEqual([INHERITED_RUN_ID]);
+      const manifest = manifestPreviewFromStdout(stdout);
+      expect(manifest.run_id).toBe(INHERITED_RUN_ID);
+    });
+
+    it("refuses dispatch when neither --run-id nor the lifecycle sentinel exists", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      const { exitCode, stderr } = runScript([
+        "--team", teamPath,
+        "--cwd", tmpDir,
+        "--dry-run",
+      ], {}, false);
+      expect(exitCode).toBe(1);
+      expect(stderr).toMatch(/lifecycle run id|required|current-run-id/i);
+      expect(listRunDirs(tmpDir)).toEqual([]);
+    });
+
+    it("rejects a non-canonical caller run id before creating dispatch state", () => {
+      const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      launcherTestBindFor(tmpDir, "run-legacy-caller");
+      const { exitCode, stderr } = runScript([
+        "--team", teamPath,
+        "--cwd", tmpDir,
+        "--run-id", "run-legacy-caller",
+        "--dry-run",
+      ]);
+      expect(exitCode).toBe(1);
+      expect(stderr).toMatch(/canonical run id/i);
+      expect(fs.existsSync(path.join(tmpDir, ".guild", "runs", "run-legacy-caller", "agent-team"))).toBe(false);
     });
   });
 
@@ -1398,6 +2052,8 @@ describe("agent-team-launcher.ts", () => {
         hostId: "claude-code-cli",
         adapterId: "claude-code-cli@1",
         hostCapabilitiesHash: "sha256:caps",
+        substrate: "tmux",
+        modelTier: "mid",
         objective: `implement ${logicalTaskId}`,
         nonGoals: [],
         scopePaths: [],
@@ -1499,6 +2155,7 @@ describe("agent-team-launcher.ts", () => {
         specialistProfileId: workerRole, specialistProfileHash: "sha256:profile",
         contextBundleId: `.guild/context/${runId}/${logicalTaskId}.md`, contextBundleHash: "sha256:ctx",
         hostId: "claude-code-cli", adapterId: "claude-code-cli@1", hostCapabilitiesHash: "sha256:caps",
+        substrate: "tmux", modelTier: "mid",
         objective: `implement ${logicalTaskId}`, nonGoals: [], scopePaths: [],
         outputSchema: "guild.handoff_receipt.v1", acceptanceTests: [], dependencies: [],
         projection: { tools: ["read", "write"], permissions: [], recorded_losses: [] },
@@ -1510,6 +2167,41 @@ describe("agent-team-launcher.ts", () => {
     function seedCellOnly(cwd: string, runId: string, logicalTaskId: string, workerRole: string): void {
       writeTaskCell(cwd, buildTaskCell(makeDisp(runId, logicalTaskId, workerRole)), launcherTestBindFor(cwd, runId));
     }
+
+    it("W4: cmux launch failure seals confirmed rollbacks failed and parks only survivors orphaned", () => {
+      const runId = "run-20260812-000000-cmux-failure";
+      seedCellOnly(tmpDir, runId, "T1", "backend");
+      seedCellOnly(tmpDir, runId, "T2", "backend");
+      const lanes = [
+        {
+          name: "backend", scope: "T1", dependsOn: [], taskId: "T1",
+          dispatch_key: "backend--T1--a1", task_cell_instance_id: "T1.a1.i1",
+          task_cell_assignment_path: ".guild/runs/run/task-cells/T1/assignment.json",
+        },
+        {
+          name: "backend", scope: "T2", dependsOn: [], taskId: "T2",
+          dispatch_key: "backend--T2--a1", task_cell_instance_id: "T2.a1.i1",
+          task_cell_assignment_path: ".guild/runs/run/task-cells/T2/assignment.json",
+        },
+      ];
+
+      const settled = settleFailedCmuxTaskCells({
+        cwd: tmpDir,
+        runId,
+        lanes,
+        unconfirmedPaneIds: { "backend--T2--a1": "surface:2" },
+        reason: "cmux send failed",
+        now: SEED_NOW,
+      });
+
+      expect(settled).toEqual({ failed: 1, orphaned: 1, errors: [] });
+      expect(readAttemptForInstance(tmpDir, {
+        run_id: runId, logical_task_id: "T1", attempt: 1, instance_id: "T1.a1.i1",
+      })?.terminal_state).toBe("failed");
+      expect(readAttemptForInstance(tmpDir, {
+        run_id: runId, logical_task_id: "T2", attempt: 1, instance_id: "T2.a1.i1",
+      })).toMatchObject({ terminal_state: null, orphaned: true });
+    });
     function writeSessionJsonRealPane(cwd: string, runId: string, specialist: string, paneId: string): void {
       const dir = path.join(cwd, ".guild", "runs", runId, "agent-team");
       fs.mkdirSync(dir, { recursive: true });
@@ -1594,6 +2286,176 @@ describe("agent-team-launcher.ts", () => {
       expect(second.exitCode).toBe(0);
       expect(second.stdout).not.toMatch(/\[TERMINATED\]/);
       expect(second.stdout).toMatch(/no acceptance-authorized lanes to terminate/);
+    });
+
+    it("FU18: retries substantive evidence for an accepted attempt already sealed terminal", () => {
+      const ids: TaskCellInstanceIds = {
+        run_id: "run-reconcile-evidence-001",
+        logical_task_id: "lt-reconcile",
+        attempt: 1,
+        instance_id: "lt-reconcile.a1.i1",
+      };
+      const acceptance = {
+        ids,
+        acceptance: { downstream_release_at: SEED_NOW() },
+      } as never;
+      let calls = 0;
+      const deps = {
+        readAttempt: (() => ({ terminal_state: "terminated" })) as never,
+        readPending: (() => ({ state: "pending", task_id: ids.logical_task_id })) as never,
+        recover: (() => {
+          calls++;
+          if (calls === 1) throw new Error("planted append interruption");
+          return { emitted: 1 };
+        }) as never,
+      };
+
+      const first = reconcileTerminalSubstantiveOperations({
+        cwd: tmpDir,
+        runId: ids.run_id,
+        acceptances: [acceptance],
+      }, deps);
+      expect(first).toEqual({
+        attempted: 1,
+        emitted: 0,
+        errors: [expect.stringMatching(/planted append interruption/)],
+      });
+
+      const retry = reconcileTerminalSubstantiveOperations({
+        cwd: tmpDir,
+        runId: ids.run_id,
+        acceptances: [acceptance],
+      }, deps);
+      expect(retry).toEqual({ attempted: 1, emitted: 1, errors: [] });
+      expect(calls).toBe(2);
+    });
+
+    it("FU18: repairs instance and terminal artifacts before reconciling a partially sealed attempt", () => {
+      const runId = "run-reconcile-partial-terminal-001";
+      const ids: TaskCellInstanceIds = {
+        run_id: runId,
+        logical_task_id: "lt-partial",
+        attempt: 1,
+        instance_id: "lt-partial.a1.i1",
+      };
+      seedAcceptance(tmpDir, runId, ids.logical_task_id, "backend");
+      launcherTestBinding.stagePendingSubstantiveOperation({ root: tmpDir, run_id: runId, task_id: ids.logical_task_id });
+      const paths = taskCellPaths(ids);
+      const attemptPath = path.join(tmpDir, paths.attempt_path);
+      const attempt = JSON.parse(fs.readFileSync(attemptPath, "utf8"));
+      fs.writeFileSync(attemptPath, `${JSON.stringify({
+        ...attempt,
+        terminal_state: "terminated",
+        terminal_reason: "accepted",
+        terminated_at: SEED_NOW(),
+        immutable: true,
+      }, null, 2)}\n`, "utf8");
+
+      const result = reconcileTerminalSubstantiveOperations({
+        cwd: tmpDir,
+        runId,
+        acceptances: [{ ids, acceptance: { downstream_release_at: SEED_NOW() } } as never],
+      });
+
+      expect(result).toEqual({ attempted: 1, emitted: 0, errors: [] });
+      expect(JSON.parse(fs.readFileSync(path.join(tmpDir, paths.instance_path), "utf8"))).toMatchObject({
+        terminal_state: "terminated",
+        terminal_reason: "accepted",
+      });
+      expect(fs.existsSync(path.join(tmpDir, paths.terminal_path))).toBe(true);
+    });
+
+    it("FU18: does not replay terminal publications after the transaction marker is complete", () => {
+      const ids: TaskCellInstanceIds = {
+        run_id: "run-reconcile-complete-001",
+        logical_task_id: "lt-complete",
+        attempt: 1,
+        instance_id: "lt-complete.a1.i1",
+      };
+      let recoveries = 0;
+      const result = reconcileTerminalSubstantiveOperations({
+        cwd: tmpDir,
+        runId: ids.run_id,
+        acceptances: [{ ids, acceptance: { downstream_release_at: SEED_NOW() } } as never],
+      }, {
+        readAttempt: (() => ({ terminal_state: "terminated" })) as never,
+        readPending: (() => ({ state: "complete", task_id: ids.logical_task_id })) as never,
+        recover: (() => { recoveries++; return { emitted: 1 }; }) as never,
+      });
+      expect(result).toEqual({ attempted: 0, emitted: 0, errors: [] });
+      expect(recoveries).toBe(0);
+    });
+
+    it("FU18: holds one exclusion across terminal sealing and substantive evidence append", () => {
+      const events: string[] = [];
+      const ids: TaskCellInstanceIds = {
+        run_id: "run-atomic-terminal-001",
+        logical_task_id: "lt-atomic",
+        attempt: 1,
+        instance_id: "lt-atomic.a1.i1",
+      };
+      const result = sealTerminalAttemptWithSubstantiveEvidence({
+        cwd: tmpDir,
+        runId: ids.run_id,
+        ids,
+        terminalState: "terminated",
+        reason: null,
+        accepted: true,
+        now: SEED_NOW,
+      }, {
+        withExclusion: ((_root: string, _runId: string, fn: () => unknown) => {
+          events.push("lock");
+          const value = fn();
+          events.push("unlock");
+          return value;
+        }) as never,
+        readBinding: (() => {
+          events.push("binding-open");
+          return { status: "ok", record: { state: "open" } };
+        }) as never,
+        stage: (() => {
+          events.push("stage");
+        }) as never,
+        seal: (() => {
+          events.push("seal");
+          return {};
+        }) as never,
+        recordUnderExclusion: (() => {
+          events.push("record");
+          return [{}];
+        }) as never,
+        complete: (() => {
+          events.push("complete");
+        }) as never,
+      } as never);
+      expect(result).toEqual({ emitted: 1 });
+      expect(events).toEqual(["lock", "binding-open", "stage", "seal", "record", "complete", "unlock"]);
+    });
+
+    it("FU18: refuses a terminal mutation when lifecycle close already won", () => {
+      let sealed = false;
+      expect(() => sealTerminalAttemptWithSubstantiveEvidence({
+        cwd: tmpDir,
+        runId: "run-closed-terminal-001",
+        ids: {
+          run_id: "run-closed-terminal-001",
+          logical_task_id: "lt-closed",
+          attempt: 1,
+          instance_id: "lt-closed.a1.i1",
+        },
+        terminalState: "terminated",
+        reason: null,
+        accepted: true,
+        now: SEED_NOW,
+      }, {
+        withExclusion: ((_root: string, _runId: string, fn: () => unknown) => fn()) as never,
+        readBinding: (() => ({ status: "ok", record: { state: "closed" } })) as never,
+        stage: (() => { throw new Error("stage must not run"); }) as never,
+        seal: (() => { sealed = true; return {}; }) as never,
+        recordUnderExclusion: (() => [{}]) as never,
+        complete: (() => { throw new Error("complete must not run"); }) as never,
+      })).toThrow(/open run binding/i);
+      expect(sealed).toBe(false);
     });
 
     it("exits 0 with no crash when session.json does not exist", () => {
@@ -1701,7 +2563,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -1766,7 +2628,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com" } },
       });
 
-      runScript(
+      runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -1805,7 +2667,7 @@ describe("agent-team-launcher.ts", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, slug, "team-generated-shape.yaml");
       writePlanFile(tmpDir, slug);
 
-      const { exitCode } = runScript([
+      const { exitCode } = runRealScript([
         "--team", teamPath, "--cwd", tmpDir, "--dry-run",
       ]);
       expect(exitCode).toBe(0);
@@ -1867,7 +2729,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -1910,7 +2772,7 @@ describe("agent-team-launcher.ts", () => {
         "    default_tier: mid",
       ].join("\n"), "utf8");
 
-      const { exitCode } = runScript([
+      const { exitCode } = runRealScript([
         "--team", teamPath, "--cwd", tmpDir, "--dry-run",
       ]);
       expect(exitCode).toBe(0);
@@ -1976,7 +2838,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2024,7 +2886,7 @@ describe("agent-team-launcher.ts", () => {
       writeHostManifest(tmpDir, "claude", "claude");
       writeCrossHostSettingsArch6(tmpDir, { enabled: true, hosts: {} });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2066,7 +2928,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2161,7 +3023,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2253,7 +3115,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-w2a2": { address: "remote.example.com", user: "ci" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude-w2a2" }
       );
@@ -2336,7 +3198,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2373,7 +3235,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com", user: "ci" } },
       });
 
-      const { exitCode } = runScript(
+      const { exitCode } = runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2405,7 +3267,7 @@ describe("agent-team-launcher.ts", () => {
         hosts: { "codex-remote": { address: "gpu-box.example.com" } },
       });
 
-      runScript(
+      runRealScript(
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { GUILD_CROSS_HOST_ENABLED: "1", GUILD_HOST_ID: "claude" }
       );
@@ -2437,22 +3299,20 @@ describe("agent-team-launcher.ts", () => {
   // propagation spike. These tests cover the mechanism-INDEPENDENT threading step:
   //   1. Parse block list → Specialist.capability_scope (string[]).
   //   2. Thread onto session.json teammate_panes[*].capability_scope.
-  //   3. Absent field → undefined in manifest (no restrictions, backward-compat).
+  //   3. Absent canonical field → source-owned default in manifest and dispatch.
   // ─────────────────────────────────────────────────────────────
   describe("D-CAP: capability_scope block-list parsing (Wave-3)", () => {
-    it("parses capability_scope block lists from team.yaml into session.json teammate_panes", () => {
+    it("parses capability_scope block lists into manifest-preview teammate_panes", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
       );
-      runScript([
+      const { stdout } = runScript([
         "--team", teamPath,
         "--session-name", "guild-dcap-001",
         "--cwd", tmpDir,
         "--dry-run",
       ]);
-      const sessionJson = findSessionJson(tmpDir);
-      expect(sessionJson).not.toBeNull();
-      const manifest = JSON.parse(fs.readFileSync(sessionJson!, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout) as any;
 
       const arch = manifest.teammate_panes.find(
         (p: { specialist: string }) => p.specialist === "architect"
@@ -2467,41 +3327,37 @@ describe("agent-team-launcher.ts", () => {
       expect(back.capability_scope).toEqual(["Read", "Write", "Edit", "Bash"]);
     });
 
-    it("omits capability_scope from teammate_panes when not specified in team.yaml", () => {
+    it("materializes a canonical capability_scope when not specified in team.yaml", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
       );
-      runScript([
+      const { stdout } = runScript([
         "--team", teamPath,
         "--session-name", "guild-dcap-002",
         "--cwd", tmpDir,
         "--dry-run",
       ]);
-      const sessionJson = findSessionJson(tmpDir);
-      expect(sessionJson).not.toBeNull();
-      const manifest = JSON.parse(fs.readFileSync(sessionJson!, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout) as any;
 
-      // qa specialist in the fixture has NO capability_scope → field must be absent
+      // qa has no field in the fixture, so the source-owned canonical default wins.
       const qa = manifest.teammate_panes.find(
         (p: { specialist: string }) => p.specialist === "qa"
       );
       expect(qa).toBeDefined();
-      expect(qa.capability_scope).toBeUndefined();
+      expect(qa.capability_scope).toEqual(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]);
     });
 
     it("preserves other specialist fields (tier, depends-on) alongside capability_scope", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
       );
-      runScript([
+      const { stdout } = runScript([
         "--team", teamPath,
         "--session-name", "guild-dcap-003",
         "--cwd", tmpDir,
         "--dry-run",
       ]);
-      const sessionJson = findSessionJson(tmpDir);
-      expect(sessionJson).not.toBeNull();
-      const manifest = JSON.parse(fs.readFileSync(sessionJson!, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout) as any;
 
       // All 3 specialists must appear in the manifest
       const names = manifest.teammate_panes.map((p: { specialist: string }) => p.specialist);
@@ -2517,20 +3373,19 @@ describe("agent-team-launcher.ts", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "test-slug", "team-generated-shape.yaml"
       );
-      runScript([
+      const { stdout } = runScript([
         "--team", teamPath,
         "--session-name", "guild-dcap-004",
         "--cwd", tmpDir,
         "--dry-run",
       ]);
-      const sessionJson = findSessionJson(tmpDir);
-      expect(sessionJson).not.toBeNull();
-      const manifest = JSON.parse(fs.readFileSync(sessionJson!, "utf8"));
+      const manifest = manifestPreviewFromStdout(stdout) as any;
 
       expect(manifest.teammate_panes.length).toBe(3);
-      // No capability_scope field on any pane when not present in team.yaml
+      // Every canonical role receives its source-owned runtime default.
       for (const pane of manifest.teammate_panes as Array<{ capability_scope?: unknown }>) {
-        expect(pane.capability_scope).toBeUndefined();
+        expect(Array.isArray(pane.capability_scope)).toBe(true);
+        expect((pane.capability_scope as string[]).length).toBeGreaterThan(0);
       }
     });
 
@@ -2551,7 +3406,7 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).toContain(JSON.stringify(["Read", "Glob", "Grep"]));
     });
 
-    it("D-CAP inject: dry-run stdout omits GUILD_CAPABILITY_SCOPE for unscoped team", () => {
+    it("D-CAP inject: dry-run stdout materializes GUILD_CAPABILITY_SCOPE for canonical roles in an unscoped team", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "test-slug", "team-generated-shape.yaml"
       );
@@ -2561,20 +3416,19 @@ describe("agent-team-launcher.ts", () => {
         "--cwd", tmpDir,
         "--dry-run",
       ]);
-      // team-generated-shape.yaml has no capability_scope on any specialist
-      expect(stdout).not.toContain("GUILD_CAPABILITY_SCOPE");
+      // team-generated-shape.yaml has no explicit scope, but its roles are canonical.
+      expect(stdout).toContain("GUILD_CAPABILITY_SCOPE");
     });
 
-    // D-CAP scope-file writer: the launcher must write <runDir>/scope/<taskId>.json
-    // BEFORE any pane opens (even in dry-run).  This closes the "reader-without-writer"
-    // gap: pre-tool-use.ts:488 reads the file as the env-absent belt-and-suspenders
-    // fallback; absent ⇒ no file (additive no-scoping).
+    // FU09 scope carriage: launcher-owned code backends inject the scope in the
+    // spawned process environment and never write an attacker-swappable pathname
+    // backstop under the project-owned run tree.
 
-    it("D-CAP scope-file: writes scope/<taskId>.json for each scoped specialist", () => {
+    it("D-CAP scope carriage: explicit scopes stay in pane env and create no scope files", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
       );
-      runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
+      const { stdout } = runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
 
       const runsDir = path.join(tmpDir, ".guild", "runs");
       const runIds = fs
@@ -2582,27 +3436,16 @@ describe("agent-team-launcher.ts", () => {
         .filter((d) => fs.statSync(path.join(runsDir, d)).isDirectory());
       expect(runIds.length).toBe(1);
       const runDir = path.join(runsDir, runIds[0]);
-
-      // architect: capability_scope: ["Read","Glob","Grep"]
-      const archPath = path.join(runDir, "scope", "architect.json");
-      expect(fs.existsSync(archPath)).toBe(true);
-      expect(JSON.parse(fs.readFileSync(archPath, "utf8")).capability_scope).toEqual(
-        ["Read", "Glob", "Grep"],
-      );
-
-      // backend: capability_scope: ["Read","Write","Edit","Bash"]
-      const backPath = path.join(runDir, "scope", "backend.json");
-      expect(fs.existsSync(backPath)).toBe(true);
-      expect(JSON.parse(fs.readFileSync(backPath, "utf8")).capability_scope).toEqual(
-        ["Read", "Write", "Edit", "Bash"],
-      );
+      expect(stdout).toContain(JSON.stringify(["Read", "Glob", "Grep"]));
+      expect(stdout).toContain(JSON.stringify(["Read", "Write", "Edit", "Bash"]));
+      expect(fs.existsSync(path.join(runDir, "scope"))).toBe(false);
     });
 
-    it("D-CAP scope-file: does NOT write scope file for specialist without capability_scope", () => {
+    it("D-CAP scope carriage: canonical default stays in pane env and creates no scope file", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "scoped-slug", "team-generated-shape-scoped.yaml"
       );
-      runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
+      const { stdout } = runScript(["--team", teamPath, "--cwd", tmpDir, "--dry-run"]);
 
       const runsDir = path.join(tmpDir, ".guild", "runs");
       const runIds = fs
@@ -2610,9 +3453,9 @@ describe("agent-team-launcher.ts", () => {
         .filter((d) => fs.statSync(path.join(runsDir, d)).isDirectory());
       const runDir = path.join(runsDir, runIds[0]);
 
-      // qa specialist has NO capability_scope in the fixture → no scope file
-      const qaPath = path.join(runDir, "scope", "qa.json");
-      expect(fs.existsSync(qaPath)).toBe(false);
+      // qa has no explicit field in the fixture; runtime policy fills it.
+      expect(stdout).toContain(JSON.stringify(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]));
+      expect(fs.existsSync(path.join(runDir, "scope"))).toBe(false);
     });
 
     it("D-CAP GUILD_TASK_ID: dry-run tmux command contains GUILD_TASK_ID for each specialist", () => {
@@ -2629,11 +3472,11 @@ describe("agent-team-launcher.ts", () => {
       expect(stdout).toContain("GUILD_TASK_ID");
     });
 
-    it("D-CAP scope-file: writes no scope/ dir for an entirely unscoped team", () => {
+    it("D-CAP scope carriage: canonical roles in a legacy team create no scope directory", () => {
       const { teamPath } = setupConsumerRepo(
         tmpDir, "test-slug", "team-agent-team.yaml"
       );
-      runScript([
+      const { stdout } = runScript([
         "--team", teamPath,
         "--session-name", "guild-dcap-scope-003",
         "--cwd", tmpDir,
@@ -2644,9 +3487,10 @@ describe("agent-team-launcher.ts", () => {
       const runIds = fs
         .readdirSync(runsDir)
         .filter((d) => fs.statSync(path.join(runsDir, d)).isDirectory());
-      // There must be a run (session.json is written in dry-run)
+      // The lifecycle-owned binding directory remains, but preview adds no state.
       expect(runIds.length).toBe(1);
       const scopeDir = path.join(runsDir, runIds[0], "scope");
+      expect(stdout).toContain("GUILD_CAPABILITY_SCOPE");
       expect(fs.existsSync(scopeDir)).toBe(false);
     });
   });
@@ -2820,9 +3664,11 @@ describe("agent-team-launcher.ts", () => {
 
     it("agent rung: in-process dispatch resolves and executes through transportFor", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
+      launcherTestBindFor(tmpDir, "run-20260811-010020-bf2-agent");
+      writeRunContexts(tmpDir, "run-20260811-010020-bf2-agent", [["architect", "architect"], ["backend", "backend"], ["qa", "qa"]]);
       const { file, env } = probeEnv(tmpDir);
       const { exitCode, stdout } = runScript(
-        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--run-id", "run-bf2-agent"],
+        ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=agent", "--run-id", "run-20260811-010020-bf2-agent", "--dry-run"],
         env
       );
 
@@ -2833,9 +3679,11 @@ describe("agent-team-launcher.ts", () => {
       expect(signal.reason).toBe("explicit agent_mode=agent");
       expect(signal.slug).toBe("test-slug");
       expect(signal.ok).toBe(true);
+      expect(signal.dispatchAllowed).toBe(false);
+      expect(signal.previewOnly).toBe(true);
       expect(Array.isArray(signal.dispatchPlan)).toBe(true);
       expect(signal.dispatchPlan.length).toBeGreaterThanOrEqual(1);
-      expect(signal.dispatchPlan[0].env.GUILD_RUN_ID).toBe("run-bf2-agent");
+      expect(signal.dispatchPlan[0].env.GUILD_RUN_ID).toBe("run-20260811-010020-bf2-agent");
       expect(signal).toHaveProperty("orchestratorPaneId");
       expect(signal).toHaveProperty("teammatePaneIds");
       expect(signal).toHaveProperty("notes");
@@ -2885,7 +3733,8 @@ describe("agent-team-launcher.ts", () => {
       // T3b: mint the run binding so the launcher's binding-verified descriptor
       // writers (guild.task_assignment.v1/v2) resolve the run's minted record on
       // the REAL tmux dispatch path instead of failing closed (session_context §5).
-      launcherTestBindFor(tmpDir, "run-bf2-tmux");
+      launcherTestBindFor(tmpDir, "run-20260811-010021-bf2-tmux");
+      writeRunContexts(tmpDir, "run-20260811-010021-bf2-tmux", [["architect", "architect"], ["backend", "backend"], ["qa", "qa"]]);
       const { file, env } = probeEnv(tmpDir);
       const { exitCode, stdout } = runScript(
         [
@@ -2894,7 +3743,7 @@ describe("agent-team-launcher.ts", () => {
           "--cwd",
           tmpDir,
           "--run-id",
-          "run-bf2-tmux",
+          "run-20260811-010021-bf2-tmux",
           // T7 approve-before-dispatch is MANDATORY on a real dispatch; this test
           // focuses on the MH-04 transport wiring, so it uses the audited override
           // (gate enforcement itself is pinned in t7-h1-dispatch-approval.test.ts).
@@ -2916,7 +3765,7 @@ describe("agent-team-launcher.ts", () => {
         tmpDir,
         ".guild",
         "runs",
-        "run-bf2-tmux",
+        "run-20260811-010021-bf2-tmux",
         "agent-team",
         "session.json"
       );
@@ -2924,6 +3773,21 @@ describe("agent-team-launcher.ts", () => {
       const parsed = JSON.parse(fs.readFileSync(manifest, "utf8"));
       expect(parsed.mode).toBe("in-session");
       expect(parsed.window_name).toBe("guild-test-slug");
+
+      const lifecycleFile = path.join(
+        tmpDir,
+        ".guild",
+        "runs",
+        "run-20260811-010021-bf2-tmux",
+        "task-cell-telemetry",
+        "events.jsonl",
+      );
+      expect(fs.existsSync(lifecycleFile)).toBe(true);
+      const lifecycle = fs.readFileSync(lifecycleFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+      expect(new Set(lifecycle.map((event) => event.event_name))).toEqual(
+        new Set(["spawn_started", "spawned", "ready", "assignment_delivered"]),
+      );
+      expect(new Set(lifecycle.map((event) => event.instance_id)).size).toBe(3);
 
       const events = readProbe(file);
       assertResolvedThroughRuntime(events, "tmux");
@@ -2958,4 +3822,526 @@ describe("agent-team-launcher.ts", () => {
     });
   });
 
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PCL-FU-20 — observe-mode definition-ref compatibility repair (T1 red-first).
+//
+// Defect pinned here: `specialistIdentity` returns EARLY whenever the resolved
+// `definition_ref` already carries both `specialist_type_hash` and
+// `specialist_profile_hash`. Under a compatibility-enabled resolver mode
+// (`legacy` / `observe` / `shadow`) that early return happens BEFORE
+// `readSpecialistTemplateCompatibility` is ever called, so a lane whose name
+// matches a SHIPPED template emits no PCL-09 compatibility receipt. The FU19
+// observation window therefore records nothing for exactly the dispatch path it
+// exists to observe.
+//
+// These controls are authored RED on purpose. T2's production correction makes
+// them green — never a loosened assertion here.
+//
+// Scope note: the Guild dev-team lanes (eval-engineer / tooling-engineer /
+// docs-writer) are NOT FU19 observations — they are project-only roles with no
+// shipped template. The `researcher` fixture is the future FU19 path: a role
+// with BOTH a shipped catalog template AND a valid project definition ref.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("FU20 — compatibility read under a complete project definition ref", () => {
+  const FU20_SLUG = "fu20-observe";
+  const RESEARCHER_TEMPLATE = path.join(
+    EXACT_CLAUDE_PLUGIN_ROOT,
+    "templates",
+    "specialists",
+    "researcher.md",
+  );
+
+  function bareSha256(bytes: Buffer): string {
+    return createHash("sha256").update(bytes).digest("hex");
+  }
+
+  function shippedResearcherContentHash(): string {
+    return bareSha256(fs.readFileSync(RESEARCHER_TEMPLATE));
+  }
+
+  interface Fu20Lane {
+    readonly name: string;
+    readonly taskId: string;
+    /**
+     * Overrides the identity hashes recorded in the COMMITTED adoption manifest.
+     * A lane that supplies hashes which cannot be derived from the bytes the
+     * launcher actually reads is the divergent-ref control.
+     */
+    readonly divergentHashes?: { readonly typeHash: string; readonly profileHash: string };
+  }
+
+  /**
+   * The GENUINE identity for a lane: derived only from the bytes on disk — the
+   * shipped catalog template (type) and the project-local definition (profile).
+   * When a shipped template exists the production projection uses it directly,
+   * so this needs no launcher-internal fixture state to reproduce.
+   */
+  function derivedIdentity(
+    templatePath: string | null,
+    definitionBytes: Buffer,
+    laneName: string,
+  ): { typeHash: string; profileHash: string } | null {
+    if (templatePath === null || !fs.existsSync(templatePath)) return null;
+    const templateFm = parseFrontmatter(fs.readFileSync(templatePath, "utf8"));
+    const type = templateFm ? specialistTypeFromTemplateFrontmatter(templateFm) : null;
+    if (!type) return null;
+    const typeHash = hashSpecialistType(type);
+    const definitionFm = parseFrontmatter(definitionBytes.toString("utf8"));
+    const profile = definitionFm
+      ? specialistProfileFromAgentFrontmatter(definitionFm, {
+          type_id: type.type_id,
+          type_version: type.version,
+          type_hash: typeHash,
+        })
+      : null;
+    if (!profile) return null;
+    void laneName;
+    return { typeHash, profileHash: hashSpecialistProfile(profile) };
+  }
+
+  function shippedTemplatePathFor(laneName: string): string | null {
+    const candidate = path.join(
+      EXACT_CLAUDE_PLUGIN_ROOT, "templates", "specialists", `${laneName}.md`,
+    );
+    return fs.existsSync(candidate) ? candidate : null;
+  }
+
+  function seedFu20Repo(
+    dir: string,
+    lanes: readonly Fu20Lane[],
+    resolverMode: "observe" | "project-local" | "strict" | "legacy" | "shadow" | null,
+  ): { teamPath: string; refs: Record<string, ProjectDefinitionRefV1> } {
+    const guild = path.join(dir, ".guild");
+    fs.mkdirSync(path.join(guild, "team"), { recursive: true });
+    fs.mkdirSync(path.join(guild, "plan"), { recursive: true });
+    fs.mkdirSync(path.join(guild, "agents"), { recursive: true });
+    fs.mkdirSync(path.join(guild, "spec"), { recursive: true });
+    fs.writeFileSync(path.join(guild, "spec", `${FU20_SLUG}.md`), "# fu20 spec\n");
+
+    if (resolverMode !== null) {
+      fs.writeFileSync(
+        path.join(guild, "settings.json"),
+        `${JSON.stringify({ capability: { resolver_mode: resolverMode } }, null, 2)}\n`,
+      );
+    }
+
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    execFileSync("git", ["config", "user.email", "guild@example.invalid"], { cwd: dir });
+    execFileSync("git", ["config", "user.name", "Guild Test"], { cwd: dir });
+
+    const definitionBytesByLane = new Map<string, Buffer>();
+    for (const lane of lanes) {
+      const body = [
+        "---",
+        `name: ${lane.name}`,
+        "description: >-",
+        `  Project-local ${lane.name} lane definition used by the FU20 compatibility controls.`,
+        "model: opus",
+        "---",
+        "",
+        `# ${lane.name}`,
+        "",
+        `Project-local ${lane.name} role body.`,
+        "",
+      ].join("\n");
+      const relative = path.join(".guild", "agents", `${lane.name}.md`);
+      fs.writeFileSync(path.join(dir, relative), body);
+      definitionBytesByLane.set(lane.name, Buffer.from(body, "utf8"));
+      execFileSync("git", ["add", relative], { cwd: dir });
+    }
+    execFileSync("git", ["commit", "-qm", "fu20 project definitions"], { cwd: dir });
+    const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: dir, encoding: "utf8",
+    }).trim();
+
+    const refs: Record<string, ProjectDefinitionRefV1> = {};
+    const entries: AdoptionManifestV1["entries"] = [];
+    let sequence = 0;
+    for (const lane of lanes) {
+      const definitionBytes = definitionBytesByLane.get(lane.name) as Buffer;
+      const derived = derivedIdentity(
+        shippedTemplatePathFor(lane.name), definitionBytes, lane.name,
+      );
+      // A project-only lane has no shipped template; its committed identity is
+      // whatever the manifest recorded at adoption time.
+      const typeHash = lane.divergentHashes?.typeHash ?? derived?.typeHash ?? "c".repeat(64);
+      const profileHash =
+        lane.divergentHashes?.profileHash ?? derived?.profileHash ?? "d".repeat(64);
+      const ref: ProjectDefinitionRefV1 = {
+        schema_version: PROJECT_DEFINITION_REF_SCHEMA,
+        project_id: "fu20-fixture",
+        layer: "project-guild",
+        kind: "agent",
+        id: lane.name,
+        relative_path: `.guild/agents/${lane.name}.md`,
+        content_hash: `sha256:${bareSha256(definitionBytes)}`,
+        source_commit: sourceCommit,
+        specialist_profile_hash: profileHash,
+        specialist_type_hash: typeHash,
+        skills: [],
+      };
+      refs[lane.name] = ref;
+      sequence += 1;
+      // The manifest is APPEND-ONLY and chained: every entry after the first
+      // carries the digest of the entry before it. A broken chain makes the
+      // manifest uncommittable, so a multi-lane fixture must chain explicitly.
+      const previous = entries[entries.length - 1];
+      entries.push({
+        sequence,
+        kind: "agent",
+        from: {
+          project_id: "fu20-fixture",
+          id: `legacy-${lane.name}`,
+          historical_path: `/legacy/${lane.name}.md`,
+          content_hash: `sha256:${bareSha256(Buffer.from(`legacy-${lane.name}`))}`,
+          home: "plugin-shipped",
+        },
+        to: ref,
+        reason: "migrated",
+        detail: null,
+        reverses_sequence: null,
+        adopted_at: "2026-08-10T06:00:00Z",
+        run_id: "run-fu20-adoption",
+        authorized_by: "cap-loc-D09",
+        prev_digest: previous === undefined ? null : entryDigest(previous),
+      });
+    }
+    const manifest: AdoptionManifestV1 = {
+      schema_version: ADOPTION_MANIFEST_SCHEMA,
+      project_id: "fu20-fixture",
+      entries,
+    };
+    fs.writeFileSync(
+      path.join(guild, "adoption-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`,
+    );
+    const commitment = commitAdoptionManifest(dir, manifest, "migration.cutover");
+    expect(commitment?.durable).toBe(true);
+
+    const teamLines: string[] = [
+      `spec: .guild/spec/${FU20_SLUG}.md`,
+      "backend: agent-team",
+      "allow_larger: false",
+      "user_approved_agent_team: true",
+      "specialists:",
+    ];
+    for (const lane of lanes) {
+      teamLines.push(`  - name: ${lane.name}`);
+      teamLines.push(`    scope: "FU20 compatibility control lane for ${lane.name}."`);
+      teamLines.push("    depends-on: []");
+      teamLines.push(`    definition: .guild/agents/${lane.name}.md`);
+      teamLines.push("    definition_source: project");
+    }
+    const teamPath = path.join(guild, "team", `${FU20_SLUG}.yaml`);
+    fs.writeFileSync(teamPath, `${teamLines.join("\n")}\n`);
+
+    const planLines: string[] = [];
+    for (const lane of lanes) {
+      planLines.push(`## Lane: ${lane.name}`);
+      planLines.push(`- task-id: ${lane.taskId}`);
+      planLines.push(`- owner: ${lane.name}`);
+      planLines.push("");
+    }
+    fs.writeFileSync(path.join(guild, "plan", `${FU20_SLUG}.md`), planLines.join("\n"));
+
+    writeRunContexts(
+      dir,
+      INHERITED_RUN_ID,
+      lanes.map((lane) => [lane.name, lane.taskId] as [string, string]),
+    );
+    return { teamPath, refs };
+  }
+
+  function launchFu20(
+    dir: string,
+    teamPath: string,
+    sessionName: string,
+  ): { exitCode: number; stdout: string; stderr: string } {
+    return runScript(
+      ["--team", teamPath, "--session-name", sessionName, "--cwd", dir],
+      { PATH: `${makeLaunchableTmuxBin(dir)}:${process.env["PATH"] ?? ""}` },
+    );
+  }
+
+  function runDirOf(dir: string): string {
+    const sessionJson = findSessionJson(dir);
+    expect(sessionJson).not.toBeNull();
+    return path.dirname(path.dirname(sessionJson as string));
+  }
+
+  function compatibilityReceiptsIn(runDir: string) {
+    const journal = path.join(runDir, "receipts", "journal.jsonl");
+    if (!fs.existsSync(journal)) return [];
+    return scanReceiptJournal(journal).records.filter(
+      (record) =>
+        record.scenario_id === "PCL-09" &&
+        record.operation_id.startsWith("compatibility-read:task-cell-identity-"),
+    );
+  }
+
+  function assignmentFor(runDir: string, logicalTaskId: string): Record<string, unknown> {
+    const instances = path.join(runDir, "task-cells", logicalTaskId, "attempts", "1", "instances");
+    const instanceIds = fs.readdirSync(instances);
+    expect(instanceIds).toHaveLength(1);
+    return JSON.parse(
+      fs.readFileSync(path.join(instances, instanceIds[0], "assignment.json"), "utf8"),
+    ) as Record<string, unknown>;
+  }
+
+  /**
+   * Locates the RETAINED compatibility payload by content identity rather than a
+   * hard-coded path: the payload is the regular file under the run whose sha256
+   * equals the receipt `output_hash`. A telemetry-only or stubbed loader leaves
+   * no such file, so a fabricated receipt cannot satisfy this.
+   */
+  function retainedPayloadBytesFor(runDir: string, outputHash: string): Buffer | null {
+    const stack: string[] = [runDir];
+    while (stack.length > 0) {
+      const current = stack.pop() as string;
+      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+        const absolute = path.join(current, entry.name);
+        if (entry.isDirectory()) {
+          stack.push(absolute);
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        const bytes = fs.readFileSync(absolute);
+        if (bareSha256(bytes) === outputHash) return bytes;
+      }
+    }
+    return null;
+  }
+
+  // The materialized exact-Claude package is a `git archive HEAD` of a working
+  // checkout whose TRACKED identity file can be stale relative to the tracked
+  // payload. When it is, every real launch dies at CH-6 tmux preflight with
+  // "native Claude complete payload digest differs" and never reaches
+  // `specialistIdentity` — which would make these controls red for the wrong
+  // reason. Re-stamp the TEMPORARY package so its identity is self-consistent
+  // with the bytes it actually carries. The identity file is excluded from its
+  // own digest, so this is a fixed point. Production and the shared fixture
+  // helper are untouched; only this temp directory is re-stamped.
+  beforeAll(() => {
+    const version = JSON.parse(
+      fs.readFileSync(
+        path.join(EXACT_CLAUDE_PLUGIN_ROOT, ".claude-plugin", "plugin.json"), "utf8",
+      ),
+    ).version as string;
+    fs.writeFileSync(
+      path.join(EXACT_CLAUDE_PLUGIN_ROOT, NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE),
+      `${JSON.stringify({
+        schema_version: NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
+        release_version: version,
+        payload_digest: computePhysicalNativeClaudePayloadDigest(EXACT_CLAUDE_PLUGIN_ROOT),
+      }, null, 2)}\n`,
+      { mode: 0o644 },
+    );
+  });
+
+  let tmpDir: string;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-fu20-launcher-"));
+  });
+  afterEach(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  it("observe + complete researcher ref emits EXACTLY ONE PCL-09 receipt before assignment (RED)", () => {
+    const { teamPath, refs } = seedFu20Repo(
+      tmpDir,
+      [{ name: "researcher", taskId: "T0-researcher" }],
+      "observe",
+    );
+    const launched = launchFu20(tmpDir, teamPath, "guild-fu20-observe-one");
+    expect(launched.exitCode).toBe(0);
+
+    const runDir = runDirOf(tmpDir);
+    const receipts = compatibilityReceiptsIn(runDir);
+
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0].operation_id).toBe(
+      "compatibility-read:task-cell-identity-T0-researcher-researcher",
+    );
+    expect(receipts[0].observation_state).toBe("checked_clean");
+
+    const assignment = assignmentFor(runDir, "T0-researcher");
+    expect(assignment["specialist_profile_id"]).toBe("researcher");
+    expect(assignment["host_id"]).toBe("claude-code-cli");
+    // The identity computed from the bytes actually read must equal the approved ref.
+    expect(assignment["specialist_type_hash"]).toBe(refs["researcher"].specialist_type_hash);
+    expect(assignment["specialist_profile_hash"]).toBe(refs["researcher"].specialist_profile_hash);
+    expect(receipts[0].versions.host_id).toBe("claude-code-cli");
+    expect(Date.parse(receipts[0].recorded_at)).toBeLessThan(
+      Date.parse(assignment["written_at"] as string),
+    );
+  });
+
+  it("the observe read is GENUINE — hashes bind the exact shipped bytes and a retained payload (RED)", () => {
+    const { teamPath } = seedFu20Repo(
+      tmpDir,
+      [{ name: "researcher", taskId: "T0-researcher" }],
+      "observe",
+    );
+    expect(launchFu20(tmpDir, teamPath, "guild-fu20-observe-genuine").exitCode).toBe(0);
+
+    const runDir = runDirOf(tmpDir);
+    const receipts = compatibilityReceiptsIn(runDir);
+    expect(receipts).toHaveLength(1);
+    const receipt = receipts[0];
+
+    expect(receipt.input_hash).toBe(shippedResearcherContentHash());
+
+    const payloadBytes = retainedPayloadBytesFor(runDir, receipt.output_hash);
+    expect(payloadBytes).not.toBeNull();
+
+    // `guild.compatibility_usage.v1` records no `intent` field — the dispatch
+    // intent is carried as the read REASON, and a dispatch read is a genuine
+    // DEPENDENCE read (never one of the benign mint/shadow reasons). Assert the
+    // fields the shipped contract actually records.
+    const payload = JSON.parse((payloadBytes as Buffer).toString("utf8")) as Record<string, unknown>;
+    expect(payload["schema_version"]).toBe(COMPATIBILITY_USAGE_SCHEMA);
+    expect(payload["asset_kind"]).toBe("shipped_template");
+    expect(payload["asset_id"]).toBe("researcher");
+    expect(payload["asset_path"]).toBe("templates/specialists/researcher.md");
+    // The payload names the SAME bytes the receipt hashed — one read, not two.
+    expect(payload["content_hash"]).toBe(shippedResearcherContentHash());
+    expect(payload["content_hash"]).toBe(receipt.input_hash);
+    expect(payload["resolver_mode"]).toBe("observe");
+    expect(payload["synthetic"]).toBe(false);
+    expect(payload["specialist_id"]).toBe("researcher");
+    expect(DEPENDENCE_COMPATIBILITY_READ_REASONS).toContain(payload["reason"]);
+    expect(BENIGN_COMPATIBILITY_READ_REASONS).not.toContain(payload["reason"]);
+
+    // Task-bound and causally ordered: this payload belongs to THIS lane's read,
+    // and the read completed before the assignment it justifies was written.
+    expect(receipt.operation_id).toBe(
+      "compatibility-read:task-cell-identity-T0-researcher-researcher",
+    );
+    expect(receipt.output_hash).toBe(bareSha256(payloadBytes as Buffer));
+    const assignment = assignmentFor(runDir, "T0-researcher");
+    expect(assignment["specialist_profile_id"]).toBe("researcher");
+    expect(Date.parse(receipt.recorded_at)).toBeLessThan(
+      Date.parse(assignment["written_at"] as string),
+    );
+  });
+
+  it("a DIVERGENT committed ref refuses BEFORE assignment when the read bytes disagree (RED)", () => {
+    // The committed manifest records identity hashes that CANNOT be derived
+    // from the shipped template / project definition bytes the launcher reads.
+    // A telemetry-only or stubbed loader cannot detect this; only a real,
+    // load-bearing read followed by an identity-equality check can.
+    seedFu20Repo(
+      tmpDir,
+      [{
+        name: "researcher",
+        taskId: "T0-researcher",
+        divergentHashes: { typeHash: "1".repeat(64), profileHash: "2".repeat(64) },
+      }],
+      "observe",
+    );
+    const teamPath = path.join(tmpDir, ".guild", "team", `${FU20_SLUG}.yaml`);
+    const launched = launchFu20(tmpDir, teamPath, "guild-fu20-divergent");
+
+    expect(launched.exitCode).not.toBe(0);
+    // Refusal is BEFORE TaskCell assignment — no cell may exist.
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".guild", "runs", INHERITED_RUN_ID, "task-cells", "T0-researcher"),
+      ),
+    ).toBe(false);
+  });
+
+  it("project-local retains the valid ref and emits NO compatibility receipt", () => {
+    const { teamPath } = seedFu20Repo(
+      tmpDir,
+      [{ name: "researcher", taskId: "T0-researcher" }],
+      "project-local",
+    );
+    expect(launchFu20(tmpDir, teamPath, "guild-fu20-project-local").exitCode).toBe(0);
+    const runDir = runDirOf(tmpDir);
+    expect(compatibilityReceiptsIn(runDir)).toHaveLength(0);
+    const assignment = assignmentFor(runDir, "T0-researcher");
+    expect(assignment["specialist_type_hash"]).toMatch(/^[0-9a-f]{64}$/);
+    expect(assignment["specialist_profile_hash"]).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("strict retains the valid ref and emits NO compatibility receipt", () => {
+    const { teamPath } = seedFu20Repo(
+      tmpDir,
+      [{ name: "researcher", taskId: "T0-researcher" }],
+      "strict",
+    );
+    expect(launchFu20(tmpDir, teamPath, "guild-fu20-strict").exitCode).toBe(0);
+    const runDir = runDirOf(tmpDir);
+    expect(compatibilityReceiptsIn(runDir)).toHaveLength(0);
+    expect(assignmentFor(runDir, "T0-researcher")["specialist_profile_id"]).toBe("researcher");
+  });
+
+  it("a project-only role with NO shipped template emits no receipt in observe", () => {
+    const { teamPath } = seedFu20Repo(
+      tmpDir,
+      [{ name: "eval-engineer", taskId: "T9-eval-engineer" }],
+      "observe",
+    );
+    expect(launchFu20(tmpDir, teamPath, "guild-fu20-project-only").exitCode).toBe(0);
+    const runDir = runDirOf(tmpDir);
+    expect(compatibilityReceiptsIn(runDir)).toHaveLength(0);
+    expect(assignmentFor(runDir, "T9-eval-engineer")["worker_role"]).toBe("eval-engineer");
+  });
+
+  it("multi-lane observe: one receipt per matching shipped-template task, no cross-link (RED)", () => {
+    const { teamPath } = seedFu20Repo(
+      tmpDir,
+      [
+        { name: "researcher", taskId: "T0-researcher" },
+        { name: "architect", taskId: "T1-architect" },
+        { name: "eval-engineer", taskId: "T9-eval-engineer" },
+      ],
+      "observe",
+    );
+    expect(launchFu20(tmpDir, teamPath, "guild-fu20-multi").exitCode).toBe(0);
+
+    const runDir = runDirOf(tmpDir);
+    const receipts = compatibilityReceiptsIn(runDir);
+    expect(receipts.map((record) => record.operation_id).sort()).toEqual([
+      "compatibility-read:task-cell-identity-T0-researcher-researcher",
+      "compatibility-read:task-cell-identity-T1-architect-architect",
+    ]);
+    for (const receipt of receipts) {
+      const logicalTaskId = receipt.operation_id
+        .replace("compatibility-read:task-cell-identity-", "")
+        .replace(/-(researcher|architect)$/, "");
+      const assignment = assignmentFor(runDir, logicalTaskId);
+      expect(assignment["logical_task_id"]).toBe(logicalTaskId);
+      expect(Date.parse(receipt.recorded_at)).toBeLessThan(
+        Date.parse(assignment["written_at"] as string),
+      );
+    }
+  });
+
+  it("--dry-run invokes NO compatibility loader and writes nothing (recursive byte snapshot)", () => {
+    const { teamPath } = seedFu20Repo(
+      tmpDir,
+      [{ name: "researcher", taskId: "T0-researcher" }],
+      "observe",
+    );
+    // The first invocation absorbs the harness's own lifecycle seeding
+    // (current-run-id, run binding, default-role context bundles). The SECOND
+    // invocation is the control: a preflight that persists nothing leaves the
+    // recursive project bytes identical.
+    const primed = runScript([
+      "--team", teamPath, "--session-name", "guild-fu20-dry", "--cwd", tmpDir, "--dry-run",
+    ]);
+    expect(primed.exitCode).toBe(0);
+    const before = snapshotTree(tmpDir);
+    const launched = runScript([
+      "--team", teamPath, "--session-name", "guild-fu20-dry", "--cwd", tmpDir, "--dry-run",
+    ]);
+    expect(launched.exitCode).toBe(0);
+    expect(treeDelta(before, snapshotTree(tmpDir))).toEqual([]);
+    expect(
+      fs.existsSync(
+        path.join(tmpDir, ".guild", "runs", INHERITED_RUN_ID, "receipts", "journal.jsonl"),
+      ),
+    ).toBe(false);
+  });
 });

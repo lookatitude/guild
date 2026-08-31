@@ -1,0 +1,87 @@
+{
+  "schema_version": "guild.self_build_rollback_bundle.v1",
+  "project_id": "plugin",
+  "adoption_manifest_commitment": "9738f98024ce51bb1bd7c89d154af0d3a85822ab7ec733d63509a06e0abe276d",
+  "roles": [
+    {
+      "id": "command-builder",
+      "legacy_relative_path": ".claude/agents/command-builder.md",
+      "legacy_content_hash": "sha256:7099849188405094db7b8c7cc87c74dd1fb68dd2e2bec3bd654ba08340319bc8",
+      "snapshot_relative_path": ".guild/artifacts/capability/self-build-rollback-bundle/legacy/command-builder.md",
+      "local_relative_path": ".guild/agents/command-builder.md",
+      "local_content_hash": "sha256:7df257a7809d25fdc897c033deb188dfc4a492d0aff8fd367979b810f6b3b419"
+    },
+    {
+      "id": "docs-writer",
+      "legacy_relative_path": ".claude/agents/docs-writer.md",
+      "legacy_content_hash": "sha256:df6f23a8eb32fb75409a7680bc2ef72f012017ea455472cc174b66bef764be1a",
+      "snapshot_relative_path": ".guild/artifacts/capability/self-build-rollback-bundle/legacy/docs-writer.md",
+      "local_relative_path": ".guild/agents/docs-writer.md",
+      "local_content_hash": "sha256:8e3b838700877d44910231a350c5bac19be1f5d22bc3e4fe4fa8c36cca43e276"
+    },
+    {
+      "id": "eval-engineer",
+      "legacy_relative_path": ".claude/agents/eval-engineer.md",
+      "legacy_content_hash": "sha256:f72343faaf0b8678c3dae8f8efb6965a187032ea94e8fbffe5d9f51a17ba6efa",
+      "snapshot_relative_path": ".guild/artifacts/capability/self-build-rollback-bundle/legacy/eval-engineer.md",
+      "local_relative_path": ".guild/agents/eval-engineer.md",
+      "local_content_hash": "sha256:f8bbd75184a83e3c97404147502844b56b8f64547d62d3090ea7763ae87ba8d7"
+    },
+    {
+      "id": "hook-engineer",
+      "legacy_relative_path": ".claude/agents/hook-engineer.md",
+      "legacy_content_hash": "sha256:c1545a0926f9053694eb74fea33cc57d6d230a58dd7772b87508c44d37ba3be9",
+      "snapshot_relative_path": ".guild/artifacts/capability/self-build-rollback-bundle/legacy/hook-engineer.md",
+      "local_relative_path": ".guild/agents/hook-engineer.md",
+      "local_content_hash": "sha256:8dd5821fe7c52f5631eafc466e4824df257a0d0abdf8358c285e5059e33ca501"
+    },
+    {
+      "id": "plugin-architect",
+      "legacy_relative_path": ".claude/agents/plugin-architect.md",
+      "legacy_content_hash": "sha256:194e68193fed1eaffdfc1fc1618182474a4c32dcba5bdbc9b1732ec2d4a558e2",
+      "snapshot_relative_path": ".guild/artifacts/capability/self-build-rollback-bundle/legacy/plugin-architect.md",
+      "local_relative_path": ".guild/agents/plugin-architect.md",
+      "local_content_hash": "sha256:ac2869660ce99c8f28813c41bfe7193ce1799e550053a4c8b1888ed34c911d39"
+    },
+    {
+      "id": "research-digester",
+      "legacy_relative_path": ".claude/agents/research-digester.md",
+      "legacy_content_hash": "sha256:6daf11322a8145fa9c7070709810f3b22d812fc5054d5f8f6d73e4febfc0fe92",
+      "snapshot_relative_path": ".guild/artifacts/capability/self-build-rollback-bundle/legacy/research-digester.md",
+      "local_relative_path": ".guild/agents/research-digester.md",
+      "local_content_hash": "sha256:7123f5e20b021add0dc1900e974353a4d680a5e5a13dc3e9a5dd516c8d4089b4"
+    },
+    {
+      "id": "security-auditor",
+      "legacy_relative_path": ".claude/agents/security-auditor.md",
+      "legacy_content_hash": "sha256:c45e30dd5185b7aba6d0ba45e510fb9dd834ed26c79e928e705d7eba62967b24",
+      "snapshot_relative_path": ".guild/artifacts/capability/self-build-rollback-bundle/legacy/security-auditor.md",
+      "local_relative_path": ".guild/agents/security-auditor.md",
+      "local_content_hash": "sha256:9c53eb35de4f3e0661807d8794d6bdcb7e525c0537968ed40d0ee6a21b2db582"
+    },
+    {
+      "id": "skill-author",
+      "legacy_relative_path": ".claude/agents/skill-author.md",
+      "legacy_content_hash": "sha256:27f790467f115ed7de4a697b79b296218a5dda3ea04616bd42650b61516457bc",
+      "snapshot_relative_path": ".guild/artifacts/capability/self-build-rollback-bundle/legacy/skill-author.md",
+      "local_relative_path": ".guild/agents/skill-author.md",
+      "local_content_hash": "sha256:5d2435dfdd0220242853e00146461b38efb69f3f276b6c8bcd72326e1ac730dd"
+    },
+    {
+      "id": "specialist-agent-writer",
+      "legacy_relative_path": ".claude/agents/specialist-agent-writer.md",
+      "legacy_content_hash": "sha256:f7484471882cd72bbe305ebfce92833c6818435143b511ba15178fb05f9a57fb",
+      "snapshot_relative_path": ".guild/artifacts/capability/self-build-rollback-bundle/legacy/specialist-agent-writer.md",
+      "local_relative_path": ".guild/agents/specialist-agent-writer.md",
+      "local_content_hash": "sha256:a2b15ddd3301cc011456f63cd2c0c3c2882506ca1088ec7746672f5e92745b00"
+    },
+    {
+      "id": "tooling-engineer",
+      "legacy_relative_path": ".claude/agents/tooling-engineer.md",
+      "legacy_content_hash": "sha256:eb29dc9c948f93012c4b16089d1bcc026c1a56f2d7979a0c12962946b4a5e5a5",
+      "snapshot_relative_path": ".guild/artifacts/capability/self-build-rollback-bundle/legacy/tooling-engineer.md",
+      "local_relative_path": ".guild/agents/tooling-engineer.md",
+      "local_content_hash": "sha256:7275cbc08086c1ec2d5df510342bba5674fe8e37016175df5befd3adb067f2ef"
+    }
+  ]
+}

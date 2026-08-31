@@ -61,7 +61,7 @@ import {
   defaultResolveHost,
   recordStatusLightweight,
   recordPhase,
-  resolvePreflightSnapshot,
+  resolveRunStartPreflight,
   startAndCloseRun,
   startRunOnly,
   writeSkippedFiles,
@@ -126,12 +126,14 @@ async function main(): Promise<void> {
 
     // U3/U6 (audit fix): compute the resolved-settings snapshot deterministically
     // here — the CLI is the actual production caller of runStartPreflight now.
-    // Best-effort: resolvePreflightSnapshot never throws; a preflight failure
+    // Best-effort: resolveRunStartPreflight never throws; a preflight failure
     // degrades to `undefined` (this run starts snapshot-less) rather than
     // blocking run start. Uses `cwd` (not `root`) — same operand
     // runStartPreflight documents everywhere else (the settings inheritance
     // chain resolves from the invocation cwd; `root` is only the .guild/ write base).
-    const snapshot = resolvePreflightSnapshot(cwd);
+    const preflight = resolveRunStartPreflight(cwd);
+    const snapshot = preflight?.snapshot;
+    const session_identity = preflight?.session_identity;
 
     // Split by run-class:
     //   full (default) — start ONLY, leave run.yaml OPEN. The Stop hook
@@ -148,6 +150,7 @@ async function main(): Promise<void> {
             run_class: "lightweight",
             initiative,
             snapshot,
+            session_identity,
           })
         : startRunOnly(root, defaultResolveHost, {
             command,
@@ -156,6 +159,7 @@ async function main(): Promise<void> {
             initiative,
             phase, // T0: seed run.yaml phase: + first phases_log entry (canonical-validated downstream)
             snapshot,
+            session_identity,
           });
     if (runId) process.stdout.write(runId + "\n");
     process.exit(0);

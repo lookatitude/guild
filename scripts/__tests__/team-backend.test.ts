@@ -40,6 +40,40 @@ import {
   type Specialist,
   type TeamLaunchRequest,
 } from "../lib/team-backend";
+import { resolveClaudePluginActivation } from "../lib/host/tmux-backend";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import {
+  NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE,
+  NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
+  computePhysicalNativeClaudePayloadDigest,
+} from "../lib/release-package-identity";
+
+const TEST_PLUGIN_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "team-backend-native-plugin-"));
+fs.mkdirSync(path.join(TEST_PLUGIN_ROOT, ".claude-plugin"), { recursive: true });
+fs.writeFileSync(
+  path.join(TEST_PLUGIN_ROOT, ".claude-plugin", "plugin.json"),
+  JSON.stringify({ name: "guild", version: "2.7.0-beta.14" }),
+);
+fs.writeFileSync(
+  path.join(TEST_PLUGIN_ROOT, NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE),
+  `${JSON.stringify({
+    schema_version: NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
+    release_version: "2.7.0-beta.14",
+    payload_digest: computePhysicalNativeClaudePayloadDigest(TEST_PLUGIN_ROOT),
+  }, null, 2)}\n`,
+);
+
+afterAll(() => fs.rmSync(TEST_PLUGIN_ROOT, { recursive: true, force: true }));
+
+function tmuxBackend(run: RunFn = makeFakeRun().run): TmuxTeamBackend {
+  return new TmuxTeamBackend({
+    run,
+    env: { GUILD_PLUGIN_ROOT: TEST_PLUGIN_ROOT } as NodeJS.ProcessEnv,
+    pluginOwnerRoot: TEST_PLUGIN_ROOT,
+  });
+}
 
 const SPECIALISTS: Specialist[] = [
   { name: "architect", scope: "boundaries", dependsOn: [] },
@@ -90,7 +124,7 @@ function makeFakeRun(opts: {
 
 describe("TeamBackend seam — interface conformance (RE-4)", () => {
   const backends: TeamBackend[] = [
-    new TmuxTeamBackend({ run: makeFakeRun().run }),
+    tmuxBackend(),
     new InProcessTeamBackend(),
     new RemoteTeamBackend(),
     new SerialBackend(), // TE-08/ARCH-5: Rung 4, the serial floor
@@ -112,13 +146,13 @@ describe("TeamBackend seam — interface conformance (RE-4)", () => {
 describe("TmuxTeamBackend.plan() — pure composition", () => {
   it("does NOT invoke the runner (pure)", () => {
     const { run, calls } = makeFakeRun();
-    const backend = new TmuxTeamBackend({ run });
+    const backend = tmuxBackend(run);
     backend.plan(req({ mode: "new-session" }));
     expect(calls).toHaveLength(0);
   });
 
   it("new-session: emits new-session + a split per specialist + select-layout, no select-window", () => {
-    const backend = new TmuxTeamBackend({ run: makeFakeRun().run });
+    const backend = tmuxBackend();
     const { commands } = backend.plan(req({ mode: "new-session", targetName: "guild-demo" }));
     const displays = commands.map((c) => c.display);
     expect(displays.some((d) => /^tmux new-session -d -s guild-demo/.test(d))).toBe(true);
@@ -129,7 +163,7 @@ describe("TmuxTeamBackend.plan() — pure composition", () => {
   });
 
   it("in-session: emits new-window + splits + select-window, no new-session", () => {
-    const backend = new TmuxTeamBackend({ run: makeFakeRun().run });
+    const backend = tmuxBackend();
     const { commands } = backend.plan(req({ mode: "in-session", targetName: "guild-demo" }));
     const displays = commands.map((c) => c.display);
     expect(displays.some((d) => d.startsWith("tmux new-window -n guild-demo"))).toBe(true);
@@ -138,7 +172,7 @@ describe("TmuxTeamBackend.plan() — pure composition", () => {
   });
 
   it("every pane command exports the agent-team env gate + run-id", () => {
-    const backend = new TmuxTeamBackend({ run: makeFakeRun().run });
+    const backend = tmuxBackend();
     const { commands } = backend.plan(req());
     // The orchestrator + each specialist pane carries the env exports.
     const paneCmds = commands.filter(
@@ -154,23 +188,23 @@ describe("TmuxTeamBackend.plan() — pure composition", () => {
 
 describe("TmuxTeamBackend — probes via injected runner", () => {
   it("isAvailable reflects `tmux -V` status", () => {
-    expect(new TmuxTeamBackend({ run: makeFakeRun({ available: true }).run }).isAvailable()).toBe(true);
-    expect(new TmuxTeamBackend({ run: makeFakeRun({ available: false }).run }).isAvailable()).toBe(false);
+    expect(tmuxBackend(makeFakeRun({ available: true }).run).isAvailable()).toBe(true);
+    expect(tmuxBackend(makeFakeRun({ available: false }).run).isAvailable()).toBe(false);
   });
 
   it("sessionExists reflects has-session status", () => {
-    expect(new TmuxTeamBackend({ run: makeFakeRun({ hasSession: true }).run }).sessionExists("s")).toBe(true);
-    expect(new TmuxTeamBackend({ run: makeFakeRun({ hasSession: false }).run }).sessionExists("s")).toBe(false);
+    expect(tmuxBackend(makeFakeRun({ hasSession: true }).run).sessionExists("s")).toBe(true);
+    expect(tmuxBackend(makeFakeRun({ hasSession: false }).run).sessionExists("s")).toBe(false);
   });
 
   it("windowExists matches an exact window name from list-windows", () => {
-    const backend = new TmuxTeamBackend({ run: makeFakeRun({ windows: ["misc", "guild-demo"] }).run });
+    const backend = tmuxBackend(makeFakeRun({ windows: ["misc", "guild-demo"] }).run);
     expect(backend.windowExists("guild-demo")).toBe(true);
     expect(backend.windowExists("guild-other")).toBe(false);
   });
 
   it("currentSessionName returns the trimmed display-message output", () => {
-    const backend = new TmuxTeamBackend({ run: makeFakeRun({ sessionName: "main" }).run });
+    const backend = tmuxBackend(makeFakeRun({ sessionName: "main" }).run);
     expect(backend.currentSessionName()).toBe("main");
   });
 });
@@ -185,7 +219,7 @@ describe("TmuxTeamBackend.spawn() — execution + teardown", () => {
         ["3", "%3", "qa"],
       ],
     });
-    const backend = new TmuxTeamBackend({ run });
+    const backend = tmuxBackend(run);
     const plan = backend.plan(req({ mode: "new-session" }));
     const outcome = backend.spawn(plan);
     expect(outcome.ok).toBe(true);
@@ -206,7 +240,7 @@ describe("TmuxTeamBackend.spawn() — execution + teardown", () => {
 
   it("failure (new-session): tears down with kill-session and returns ok:false", () => {
     const { run, calls } = makeFakeRun({ failOn: (sub) => sub === "split-window" });
-    const backend = new TmuxTeamBackend({ run });
+    const backend = tmuxBackend(run);
     const plan = backend.plan(req({ mode: "new-session", targetName: "guild-demo" }));
     const outcome = backend.spawn(plan);
     expect(outcome.ok).toBe(false);
@@ -218,7 +252,7 @@ describe("TmuxTeamBackend.spawn() — execution + teardown", () => {
 
   it("failure (in-session): tears down with kill-window only (never the session)", () => {
     const { run, calls } = makeFakeRun({ failOn: (sub) => sub === "split-window" });
-    const backend = new TmuxTeamBackend({ run });
+    const backend = tmuxBackend(run);
     const plan = backend.plan(req({ mode: "in-session", targetName: "guild-demo" }));
     const outcome = backend.spawn(plan);
     expect(outcome.ok).toBe(false);
@@ -230,7 +264,7 @@ describe("TmuxTeamBackend.spawn() — execution + teardown", () => {
 describe("TmuxTeamBackend.launch() — seam-conformant entry", () => {
   it("dry-run: returns ok + planned commands without invoking the runner for spawn", () => {
     const { run, calls } = makeFakeRun();
-    const backend = new TmuxTeamBackend({ run });
+    const backend = tmuxBackend(run);
     const result = backend.launch(req({ dryRun: true }));
     expect(result.ok).toBe(true);
     expect(result.kind).toBe("tmux");
@@ -241,7 +275,7 @@ describe("TmuxTeamBackend.launch() — seam-conformant entry", () => {
 
   it("real run: spawns and reports teammate pane ids", () => {
     const { run } = makeFakeRun({ panes: [["1", "%1", "architect"]] });
-    const backend = new TmuxTeamBackend({ run });
+    const backend = tmuxBackend(run);
     const result = backend.launch(req({ dryRun: false }));
     expect(result.ok).toBe(true);
     expect(result.teammatePaneIds.architect).toBe("%1");
@@ -308,20 +342,42 @@ describe("InProcessTeamBackend — Agent-tool dispatch plan (RE-4 / VC-RE-4)", (
     const plan = composeInProcessDispatch(req({ specialists: scopedSpecialists }));
     const scopedDesc = plan.find((d) => d.name === "architect")!;
     expect(scopedDesc.env.GUILD_CAPABILITY_SCOPE).toBe(JSON.stringify(["Read", "Glob"]));
-    // Other specialists without capability_scope must NOT have the key
-    for (const d of plan.filter((d) => d.name !== "architect")) {
-      expect(d.env.GUILD_CAPABILITY_SCOPE).toBeUndefined();
-    }
+    expect(plan.find((d) => d.name === "backend")!.env.GUILD_CAPABILITY_SCOPE).toBe(
+      JSON.stringify(["Read", "Write", "Edit", "Bash", "Glob", "Grep"])
+    );
+    expect(plan.find((d) => d.name === "qa")!.env.GUILD_CAPABILITY_SCOPE).toBe(
+      JSON.stringify(["Read", "Write", "Edit", "Bash", "Glob", "Grep"])
+    );
   });
 
-  it("D-CAP: composeInProcessDispatch omits GUILD_CAPABILITY_SCOPE when capability_scope is absent", () => {
+  it("D-CAP: materializes canonical role defaults when capability_scope is absent", () => {
     const plan = composeInProcessDispatch(req());
-    for (const d of plan) {
-      expect(d.env.GUILD_CAPABILITY_SCOPE).toBeUndefined();
-    }
+    expect(JSON.parse(plan.find((d) => d.name === "architect")!.env.GUILD_CAPABILITY_SCOPE!)).toEqual([
+      "Read", "Write", "Edit", "Glob", "Grep",
+    ]);
+    expect(JSON.parse(plan.find((d) => d.name === "backend")!.env.GUILD_CAPABILITY_SCOPE!)).toEqual([
+      "Read", "Write", "Edit", "Bash", "Glob", "Grep",
+    ]);
   });
 
-  // D-CAP GUILD_TASK_ID in composeInProcessDispatch (scope-file locator)
+  it("D-CAP: keeps researcher as the sole canonical native-web default and honors an explicit scoped exception", () => {
+    const plan = composeInProcessDispatch(req({
+      specialists: [
+        { name: "researcher", scope: "sources", dependsOn: [] },
+        { name: "seo", scope: "provided exports", dependsOn: [] },
+        { name: "seo", dispatch_key: "seo-approved", scope: "fresh metrics", dependsOn: [], capability_scope: ["Read", "WebSearch"] },
+      ],
+    }));
+    expect(JSON.parse(plan.find((d) => d.name === "researcher")!.env.GUILD_CAPABILITY_SCOPE!)).toContain("WebSearch");
+    expect(JSON.parse(plan.find((d) => d.name === "seo")!.env.GUILD_CAPABILITY_SCOPE!)).toEqual([
+      "Read", "Write", "Edit", "Glob", "Grep",
+    ]);
+    expect(JSON.parse(plan.find((d) => d.name === "seo-approved")!.env.GUILD_CAPABILITY_SCOPE!)).toEqual([
+      "Read", "WebSearch",
+    ]);
+  });
+
+  // D-CAP GUILD_TASK_ID in composeInProcessDispatch (lane identity carrier)
   it("D-CAP: composeInProcessDispatch injects GUILD_TASK_ID for every specialist", () => {
     const specialists = SPECIALISTS.map((s, i) => ({ ...s, taskId: `T${i + 1}-${s.name}` }));
     const plan = composeInProcessDispatch(req({ specialists }));
@@ -380,7 +436,7 @@ describe("InProcessTeamBackend — Agent-tool dispatch plan (RE-4 / VC-RE-4)", (
     // plans an Agent() dispatch per specialist. Same team in → same lane owners
     // out, just a different execution substrate (D5 selects which).
     const inProcess = new InProcessTeamBackend().launch(req());
-    const tmuxPlan = new TmuxTeamBackend({ run: makeFakeRun().run }).plan(req());
+    const tmuxPlan = tmuxBackend().plan(req());
     // Exclude the orchestrator's own self-titling select-pane command (emitted
     // once, right after session/window creation, so spawn() can later identify
     // the orchestrator pane by title) — it isn't a specialist dispatch target.
@@ -575,7 +631,7 @@ describe("pure helpers", () => {
     expect(c).not.toContain("GUILD_CAPABILITY_SCOPE");
   });
 
-  // D-CAP GUILD_TASK_ID injection (scope-file locator for the hook file-fallback)
+  // D-CAP GUILD_TASK_ID injection (lane identity carrier)
   it("D-CAP: paneCommand injects GUILD_TASK_ID when taskId present", () => {
     const c = paneCommand("hello", "run-1", undefined, "T2-backend");
     expect(c).toContain("GUILD_TASK_ID=");
@@ -619,6 +675,10 @@ describe("pure helpers", () => {
   });
 
   it("composeTmuxCommands free function matches the backend plan output", () => {
+    const activation = resolveClaudePluginActivation(
+      { GUILD_PLUGIN_ROOT: TEST_PLUGIN_ROOT } as NodeJS.ProcessEnv,
+      TEST_PLUGIN_ROOT,
+    );
     const direct = composeTmuxCommands({
       mode: "new-session",
       targetName: "guild-demo",
@@ -626,8 +686,10 @@ describe("pure helpers", () => {
       slug: "demo",
       runId: "run-test-001",
       specialists: SPECIALISTS,
+      claudePluginActivationArgs: activation.args,
+      claudePluginRoot: activation.pluginRoot,
     });
-    const viaBackend = new TmuxTeamBackend({ run: makeFakeRun().run }).plan(req()).commands;
+    const viaBackend = tmuxBackend().plan(req()).commands;
     expect(viaBackend.map((c) => c.display)).toEqual(direct.map((c) => c.display));
   });
 

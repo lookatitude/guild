@@ -23,8 +23,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // maybe-reflect.ts
-var fs3 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
+var fs4 = __toESM(require("fs"));
+var path5 = __toESM(require("path"));
 var import_child_process = require("child_process");
 
 // lib/guild-root.ts
@@ -59,17 +59,268 @@ function resolveGuildRoot(startCwd) {
 
 // ../src/modules/lifecycle/workflows/run-binding.ts
 var fsReal = __toESM(require("fs"));
-var path2 = __toESM(require("path"));
+var path3 = __toESM(require("path"));
+
+// ../src/modules/kernel/workflows/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES = Object.freeze([
+  "commands",
+  "skills",
+  "agents",
+  "hooks",
+  "mcp_servers",
+  "scripts"
+]);
+
+// ../src/modules/kernel/workflows/path-containment.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+var CONTAINMENT_REFUSAL_CODES = Object.freeze([
+  "root-unresolvable",
+  "no-existing-ancestor",
+  "dangling-symlink",
+  "physical-symlink",
+  "outside-root",
+  "leaf-not-regular-file",
+  "mkdir-failed",
+  "parent-traversal",
+  "destination-moved"
+]);
+function isRefused(r) {
+  return "code" in r;
+}
+function escapes(rel) {
+  return rel === ".." || rel.startsWith(`..${path2.sep}`) || path2.isAbsolute(rel);
+}
+function refuse(code, detail) {
+  return Object.freeze({ contained: false, code, detail });
+}
+function hasParentSegment(p) {
+  return p.split(/[\\/]/).includes("..");
+}
+function lstatOrNull(p) {
+  try {
+    return fs2.lstatSync(p);
+  } catch {
+    return null;
+  }
+}
+function checkContained(root, target, options = {}) {
+  const policy = options.policy ?? "resolve";
+  let realRoot;
+  try {
+    realRoot = fs2.realpathSync(path2.resolve(root));
+  } catch {
+    return refuse("root-unresolvable", `project root ${root} does not resolve`);
+  }
+  if (hasParentSegment(target)) {
+    return refuse(
+      "parent-traversal",
+      `refusing a path spelled with a ".." segment (${target}) \u2014 parent traversal cannot be resolved before symlinks`
+    );
+  }
+  const abs = path2.isAbsolute(target) ? path2.resolve(target) : path2.resolve(realRoot, target);
+  let probe = abs;
+  let probeStat = null;
+  for (; ; ) {
+    probeStat = lstatOrNull(probe);
+    if (probeStat !== null) break;
+    const parent = path2.dirname(probe);
+    if (parent === probe) {
+      return refuse("no-existing-ancestor", `no existing ancestor of ${abs}`);
+    }
+    probe = parent;
+  }
+  if (options.requireRegularFileLeaf && probe === abs && !probeStat.isFile()) {
+    const what = probeStat.isSymbolicLink() ? "symlink" : probeStat.isDirectory() ? "directory" : "special file";
+    return refuse(
+      "leaf-not-regular-file",
+      `${abs} exists and is not a regular file (${what}); refusing to write through it`
+    );
+  }
+  let realProbe;
+  try {
+    realProbe = fs2.realpathSync(probe);
+  } catch {
+    return refuse(
+      "dangling-symlink",
+      `${probe} is a symlink that does not resolve; refusing to write through it`
+    );
+  }
+  const rel = path2.relative(realRoot, realProbe);
+  if (rel !== "" && escapes(rel)) {
+    return refuse("outside-root", `${abs} resolves outside the project root (${realProbe})`);
+  }
+  if (policy === "physical") {
+    const parsed = path2.parse(abs);
+    let walk = parsed.root;
+    for (const seg of abs.slice(parsed.root.length).split(path2.sep)) {
+      if (seg === "" || seg === ".") continue;
+      walk = path2.join(walk, seg);
+      const st = lstatOrNull(walk);
+      if (st === null || !st.isSymbolicLink()) continue;
+      let segReal;
+      try {
+        segReal = fs2.realpathSync(walk);
+      } catch {
+        return refuse("dangling-symlink", `${walk} is a symlink that does not resolve`);
+      }
+      const segRel = path2.relative(realRoot, segReal);
+      const strictlyInside = segRel !== "" && !escapes(segRel);
+      if (strictlyInside) {
+        return refuse("physical-symlink", `refusing \u2014 symlinked path segment: ${walk}`);
+      }
+    }
+  }
+  const tail = path2.relative(probe, abs);
+  const realPath = tail === "" ? realProbe : path2.join(realProbe, tail);
+  return Object.freeze({ contained: true, realRoot, realPath });
+}
+function prepareContainedWrite(root, target, options = {}) {
+  if (hasParentSegment(target)) {
+    return refuse(
+      "parent-traversal",
+      `refusing a path spelled with a ".." segment (${target}) \u2014 parent traversal cannot be resolved before symlinks`
+    );
+  }
+  let canonRoot;
+  try {
+    canonRoot = fs2.realpathSync(path2.resolve(root));
+  } catch {
+    return refuse("root-unresolvable", `project root ${root} does not resolve`);
+  }
+  const abs = path2.isAbsolute(target) ? path2.resolve(target) : path2.resolve(canonRoot, target);
+  const dir = path2.dirname(abs);
+  const pre = checkContained(root, dir, { policy: options.policy });
+  if (isRefused(pre)) return pre;
+  try {
+    fs2.mkdirSync(dir, { recursive: true });
+  } catch (err) {
+    return refuse("mkdir-failed", `could not create ${dir}: ${err?.message ?? "unknown"}`);
+  }
+  const post = checkContained(root, abs, options);
+  if (isRefused(post)) return post;
+  let realDir;
+  try {
+    realDir = fs2.realpathSync(dir);
+  } catch {
+    return refuse("dangling-symlink", `${dir} stopped resolving between the check and the write`);
+  }
+  return Object.freeze({
+    contained: true,
+    realRoot: post.realRoot,
+    realPath: post.realPath,
+    realDir
+  });
+}
+function writeContainedFile(root, target, bytes, options = {}) {
+  const prepared = prepareContainedWrite(root, target, {
+    ...options,
+    requireRegularFileLeaf: options.requireRegularFileLeaf ?? true
+  });
+  if (isRefused(prepared)) {
+    return { written: false, code: prepared.code, detail: prepared.detail };
+  }
+  const dest = prepared.realPath;
+  const tmp = `${dest}.tmp-${process.pid}`;
+  let provenDir;
+  try {
+    provenDir = fs2.statSync(prepared.realDir);
+  } catch (err) {
+    return { written: false, code: "write-failed", detail: err?.message ?? "unknown" };
+  }
+  let fd = null;
+  let created = false;
+  try {
+    fd = fs2.openSync(
+      tmp,
+      fs2.constants.O_WRONLY | fs2.constants.O_CREAT | fs2.constants.O_EXCL | fs2.constants.O_NOFOLLOW,
+      384
+    );
+    created = true;
+    const nowDir = fs2.statSync(prepared.realDir);
+    if (nowDir.dev !== provenDir.dev || nowDir.ino !== provenDir.ino) {
+      return {
+        written: false,
+        code: "destination-moved",
+        detail: "the destination directory was replaced between the containment proof and the write"
+      };
+    }
+    let off = 0;
+    while (off < bytes.length) {
+      const n = fs2.writeSync(fd, bytes, off, bytes.length - off);
+      if (n <= 0) return { written: false, code: "write-failed", detail: "no progress on write" };
+      off += n;
+    }
+    const writtenId = fs2.fstatSync(fd);
+    fs2.fsyncSync(fd);
+    fs2.closeSync(fd);
+    fd = null;
+    fs2.renameSync(tmp, dest);
+    created = false;
+    let landedId = null;
+    try {
+      landedId = fs2.lstatSync(dest);
+    } catch {
+      landedId = null;
+    }
+    const after = checkContained(root, dest, { policy: options.policy });
+    if (isRefused(after) || landedId === null || landedId.dev !== writtenId.dev || landedId.ino !== writtenId.ino) {
+      try {
+        fs2.rmSync(dest, { force: true });
+      } catch {
+      }
+      return {
+        written: false,
+        code: "destination-moved",
+        detail: isRefused(after) ? `the written file resolved outside the root after the rename [${after.code}]` : "the file at the destination is not the file this call wrote"
+      };
+    }
+    return { written: true, realPath: dest };
+  } catch (err) {
+    return { written: false, code: "write-failed", detail: err?.message ?? "unknown" };
+  } finally {
+    if (fd !== null) {
+      try {
+        fs2.closeSync(fd);
+      } catch {
+      }
+    }
+    if (created) {
+      try {
+        fs2.rmSync(tmp, { force: true });
+      } catch {
+      }
+    }
+  }
+}
+
+// ../src/modules/lifecycle/workflows/run-binding.ts
 function realBindingFs() {
   return {
     mkdirp: (p) => fsReal.mkdirSync(p, { recursive: true }),
     writeFile: (p, c) => fsReal.writeFileSync(p, c, "utf8"),
+    writeFileAtomicContained: (root, p, c) => {
+      const result = writeContainedFile(root, p, Buffer.from(c, "utf8"), { policy: "physical" });
+      if (!result.written) {
+        throw new Error(`pending substantive operation marker write refused [${result.code}]: ${result.detail}`);
+      }
+    },
+    writeFileExclusive: (p, c) => {
+      fsReal.mkdirSync(path3.dirname(p), { recursive: true });
+      try {
+        fsReal.writeFileSync(p, c, { encoding: "utf8", flag: "wx" });
+        return true;
+      } catch (error) {
+        if (error.code === "EEXIST") return false;
+        throw error;
+      }
+    },
     readFile: (p) => fsReal.existsSync(p) ? fsReal.readFileSync(p, "utf8") : null,
     exists: (p) => fsReal.existsSync(p)
   };
 }
 function runBindingPath(root, runId) {
-  return path2.join(root, ".guild", "runs", runId, "binding.json");
+  return path3.join(root, ".guild", "runs", runId, "binding.json");
 }
 function validateRunBindingRecord(parsed, expectedRunId) {
   if (parsed === null || typeof parsed !== "object") return null;
@@ -87,8 +338,8 @@ function validateRunBindingRecord(parsed, expectedRunId) {
   };
 }
 function readRunBindingRecord(opts) {
-  const fs4 = opts.fs ?? realBindingFs();
-  const raw = fs4.readFile(runBindingPath(opts.root, opts.run_id));
+  const fs5 = opts.fs ?? realBindingFs();
+  const raw = fs5.readFile(runBindingPath(opts.root, opts.run_id));
   if (raw === null) return { status: "absent" };
   let parsed;
   try {
@@ -152,37 +403,37 @@ function formatBindingRejected(hook, auth) {
 }
 
 // lib/self-build.ts
-var fs2 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
+var fs3 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
 var SELF_BUILD_MARKER = "Guild \u2014 repo orientation";
 function fileContainsMarker(p) {
   try {
-    if (!fs2.existsSync(p)) return false;
-    return fs2.readFileSync(p, "utf8").includes(SELF_BUILD_MARKER);
+    if (!fs3.existsSync(p)) return false;
+    return fs3.readFileSync(p, "utf8").includes(SELF_BUILD_MARKER);
   } catch {
     return false;
   }
 }
 function detectSelfBuild(root) {
-  const directPath = path3.join(root, "AGENTS.md");
+  const directPath = path4.join(root, "AGENTS.md");
   if (fileContainsMarker(directPath)) return { armed: true, path: directPath };
-  const nestedPath = path3.join(root, "plugin", "AGENTS.md");
+  const nestedPath = path4.join(root, "plugin", "AGENTS.md");
   if (fileContainsMarker(nestedPath)) return { armed: true, path: nestedPath };
   return { armed: false, path: null };
 }
 
 // maybe-reflect.ts
 async function readStdin() {
-  return new Promise((resolve2) => {
+  return new Promise((resolve3) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve2(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve2(""));
+    process.stdin.on("end", () => resolve3(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve3(""));
   });
 }
 function loadEvents(eventsFile) {
-  if (!fs3.existsSync(eventsFile)) return [];
-  const content = fs3.readFileSync(eventsFile, "utf8");
+  if (!fs4.existsSync(eventsFile)) return [];
+  const content = fs4.readFileSync(eventsFile, "utf8");
   const events = [];
   for (const line of content.split("\n")) {
     const trimmed = line.trim();
@@ -217,20 +468,20 @@ function devteamSubagentGateCheck(events, cwd) {
       reason: `dispatch count ${dispatchCount} < 3`
     };
   }
-  const specDir = path4.join(resolveGuildRoot(cwd), ".guild", "spec");
+  const specDir = path5.join(resolveGuildRoot(cwd), ".guild", "spec");
   const slug = process.env["GUILD_SPEC_SLUG"];
   if (slug && slug.trim().length > 0) {
-    const specPath = path4.join(specDir, `${slug}.md`);
-    if (!fs3.existsSync(specPath)) {
+    const specPath = path5.join(specDir, `${slug}.md`);
+    if (!fs4.existsSync(specPath)) {
       return { passed: false, reason: `spec not found: ${specPath}` };
     }
   } else {
-    if (!fs3.existsSync(specDir)) {
+    if (!fs4.existsSync(specDir)) {
       return { passed: false, reason: `spec dir not found: ${specDir}` };
     }
     let anySpec = false;
     try {
-      const entries = fs3.readdirSync(specDir);
+      const entries = fs4.readdirSync(specDir);
       anySpec = entries.some((name) => name.endsWith(".md"));
     } catch {
       anySpec = false;
@@ -269,14 +520,14 @@ function writeStubSummary(runDir, runId, events) {
     "",
     "<!-- fallback summary from maybe-reflect.ts \u2014 scripts/trace-summarize.ts was unavailable at this cwd. Install/restore scripts/trace-summarize.ts for the richer summary that guild:reflect prefers. -->"
   ];
-  const summaryPath = path4.join(runDir, "summary.md");
-  fs3.writeFileSync(summaryPath, lines.join("\n") + "\n", "utf8");
+  const summaryPath = path5.join(runDir, "summary.md");
+  fs4.writeFileSync(summaryPath, lines.join("\n") + "\n", "utf8");
   process.stderr.write(`[maybe-reflect] wrote fallback summary to ${summaryPath}
 `);
 }
 function tryRealSummarizer(cwd, runId) {
-  const summarizerPath = path4.join(cwd, "scripts", "trace-summarize.ts");
-  if (!fs3.existsSync(summarizerPath)) return false;
+  const summarizerPath = path5.join(cwd, "scripts", "trace-summarize.ts");
+  if (!fs4.existsSync(summarizerPath)) return false;
   const result = (0, import_child_process.spawnSync)(
     "npx",
     ["tsx", summarizerPath, "--run-id", runId, "--cwd", cwd],
@@ -309,12 +560,12 @@ function evaluateCodexSkipGuard(guildRoot) {
   try {
     const { armed } = detectSelfBuild(guildRoot);
     if (!armed) return { armed: false, streak: 0 };
-    const reflectionsDir = path4.join(guildRoot, ".guild", "reflections");
-    if (!fs3.existsSync(reflectionsDir)) return { armed: true, streak: 0 };
-    const files = fs3.readdirSync(reflectionsDir).filter((f) => f.endsWith(".md")).map((f) => path4.join(reflectionsDir, f)).map((p) => {
+    const reflectionsDir = path5.join(guildRoot, ".guild", "reflections");
+    if (!fs4.existsSync(reflectionsDir)) return { armed: true, streak: 0 };
+    const files = fs4.readdirSync(reflectionsDir).filter((f) => f.endsWith(".md")).map((f) => path5.join(reflectionsDir, f)).map((p) => {
       let mtime = 0;
       try {
-        mtime = fs3.statSync(p).mtimeMs;
+        mtime = fs4.statSync(p).mtimeMs;
       } catch {
         mtime = 0;
       }
@@ -324,7 +575,7 @@ function evaluateCodexSkipGuard(guildRoot) {
     for (const { path: p } of files) {
       let content = "";
       try {
-        content = fs3.readFileSync(p, "utf8");
+        content = fs4.readFileSync(p, "utf8");
       } catch {
         break;
       }
@@ -341,9 +592,9 @@ function evaluateCodexSkipGuard(guildRoot) {
 }
 function clearCodexSkipSentinel(guildRoot) {
   try {
-    const sentinel = path4.join(guildRoot, ".guild", "codex-skip-streak.json");
-    if (!fs3.existsSync(sentinel)) return;
-    fs3.rmSync(sentinel);
+    const sentinel = path5.join(guildRoot, ".guild", "codex-skip-streak.json");
+    if (!fs4.existsSync(sentinel)) return;
+    fs4.rmSync(sentinel);
     process.stderr.write(
       `[maybe-reflect] codex-skip streak broken \u2014 cleared stale sentinel: ${sentinel}
 `
@@ -357,9 +608,9 @@ function clearCodexSkipSentinel(guildRoot) {
 }
 function writeCodexSkipSentinel(guildRoot, streak) {
   try {
-    const guildDir = path4.join(guildRoot, ".guild");
-    fs3.mkdirSync(guildDir, { recursive: true });
-    const sentinel = path4.join(guildDir, "codex-skip-streak.json");
+    const guildDir = path5.join(guildRoot, ".guild");
+    fs4.mkdirSync(guildDir, { recursive: true });
+    const sentinel = path5.join(guildDir, "codex-skip-streak.json");
     const data = {
       schema_version: "guild.codex_skip_streak.v1",
       streak,
@@ -369,7 +620,7 @@ function writeCodexSkipSentinel(guildRoot, streak) {
       reason: "codex adversarial review skipped on >= 3 consecutive self-build reflections (FU-E)",
       clear_by: "run guild:codex-review at the next gate, OR record a reflection without a codex_review: SKIPPED marker, OR delete this file after an explicit operator override"
     };
-    fs3.writeFileSync(sentinel, JSON.stringify(data, null, 2) + "\n", "utf8");
+    fs4.writeFileSync(sentinel, JSON.stringify(data, null, 2) + "\n", "utf8");
     process.stderr.write(
       `[maybe-reflect] wrote codex-skip sentinel: ${sentinel}
 `
@@ -425,10 +676,10 @@ async function main() {
     process.exit(0);
   }
   const runId = reflectAuth.run_id;
-  const eventsRunDir = path4.join(guildRoot, ".guild", "runs", runId);
-  const canonicalEventsFile = path4.join(eventsRunDir, "logs", "v1.4-events.jsonl");
-  const legacyEventsFile = path4.join(eventsRunDir, "events.ndjson");
-  const eventsFile = fs3.existsSync(canonicalEventsFile) ? canonicalEventsFile : legacyEventsFile;
+  const eventsRunDir = path5.join(guildRoot, ".guild", "runs", runId);
+  const canonicalEventsFile = path5.join(eventsRunDir, "logs", "v1.4-events.jsonl");
+  const legacyEventsFile = path5.join(eventsRunDir, "events.ndjson");
+  const eventsFile = fs4.existsSync(canonicalEventsFile) ? canonicalEventsFile : legacyEventsFile;
   const events = loadEvents(eventsFile);
   const hookEvent = payload.hook_event_name ?? "Stop";
   if (hookEvent === "SubagentStop") {
@@ -449,7 +700,7 @@ async function main() {
       process.exit(0);
     }
   }
-  const runDir = path4.join(guildRoot, ".guild", "runs", runId);
+  const runDir = path5.join(guildRoot, ".guild", "runs", runId);
   const usedRealSummarizer = tryRealSummarizer(cwd, runId);
   if (!usedRealSummarizer) {
     writeStubSummary(runDir, runId, events);

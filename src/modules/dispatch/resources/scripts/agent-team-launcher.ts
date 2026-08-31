@@ -28,7 +28,7 @@
  *   --team <path>          (required) Path to .guild/team/<slug>.yaml.
  *   --session-name <name>  (optional, default: guild-<slug>-<timestamp>)
  *   --cwd <path>           (optional, default ".") Consuming repo root.
- *   --dry-run              (optional) Print tmux commands without executing.
+ *   --dry-run              (optional) Print a pure preview; execute and write nothing.
  *
  * Exit codes:
  *   0  Success.
@@ -42,12 +42,13 @@
  *     of the current session (never a nested session) and refuse to clobber an
  *     existing team window of the same name.
  *   - Only auto-runs when team.yaml explicitly declares backend: agent-team.
- *   - All writes stay under <cwd>/.guild/runs/<run-id>/agent-team/.
- *   - --dry-run is always safe: it prints tmux commands + writes session.json
- *     but never invokes tmux.
+ *   - All real-launch writes stay inside the bound run tree.
+ *   - --dry-run is a pure preview: it prints the resolved plan but never invokes
+ *     a substrate or writes session, task, receipt, evidence, or run-tree state.
  */
 
 import { spawnSync } from "child_process";
+import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 // RE-4: the tmux spawn logic now lives behind the TeamBackend seam. The
@@ -59,6 +60,7 @@ import {
   RemoteTeamBackend,
   SshRemoteTransport,
   InProcessTeamBackend,
+  CmuxTeamBackend,
   probeTmuxAvailable,
   shellQuote,
   type Specialist,
@@ -66,6 +68,43 @@ import {
   type HostKind,
   type RemoteHostTarget,
 } from "./lib/team-backend";
+import {
+  resolvedSpecialistCapabilityScope,
+  specialistDispatchKey,
+} from "./lib/core/contracts/team-backend";
+import {
+  buildStationTaskCellResult,
+  expandTaskCellLaunchLanes,
+  type TaskCellLaunchLane,
+} from "./lib/task-cell-launch-plan";
+import { writeTeamResult } from "../src/modules/teams/workflows/station-signals";
+import type { TaskCellSubstrate } from "./lib/core/contracts/task-cell-backend";
+import { validateProjectDefinitionRefV1 } from "./lib/core/contracts/project-definition-ref";
+import {
+  SPECIALIST_PROFILE_SCHEMA,
+  SPECIALIST_TYPE_SCHEMA,
+  hashSpecialistProfile,
+  hashSpecialistType,
+  specialistProfileFromAgentFrontmatter,
+  specialistTypeFromTemplateFrontmatter,
+  type SpecialistProfileV1,
+  type SpecialistTypeV2,
+} from "./lib/core/contracts/specialist-identity";
+import { parseFrontmatter } from "./lib/frontmatter";
+import { definitionRefForDispatch } from "./lib/capability/definition-ref-for-dispatch";
+import { buildCompatibilityCatalog, type CompatibilityCatalog } from "./lib/capability/compatibility-catalog";
+import { readCompatibilityAsset } from "./lib/capability/compatibility-loader";
+import {
+  recordMigrationSubstantiveTaskOperationUnderExclusion,
+} from "./lib/capability/migration-evidence";
+import {
+  completePendingSubstantiveOperation,
+  readPendingSubstantiveOperation,
+  readRunBindingRecord,
+  stagePendingSubstantiveOperation,
+  withRunBindingExclusion,
+} from "../src/modules/lifecycle/workflows/run-binding";
+import type { CapabilityResolverMode } from "../src/modules/config";
 // P1-3 A2b: force-reap of dead panes. (Receipt-based `detectDismissible` is
 // retired from the dismiss path — dismissal is acceptance-gated in G4, below.)
 import {
@@ -76,6 +115,7 @@ import {
 // task-cell-runtime G4: real, confirmed pane termination (replaces signal-only
 // [DISMISS]) + the acceptance gate that authorizes it.
 import { terminatePane } from "./lib/host/tmux-backend";
+import { cmuxLaneStatusKey, terminateCmuxSurface } from "./lib/host/cmux-backend";
 // #76 — pane-path dispatch receipts into the orchestrating run's trace.
 import { emitPaneDispatchEvents } from "./lib/host/pane-dispatch-trace";
 // rf-wi-04 item 2 — durable sink for orphaned remote lanes (Q2a).
@@ -92,6 +132,8 @@ import {
   type RunAcceptance,
   type TaskCellInstanceIds,
 } from "../src/modules/dispatch/workflows/task-cell-acceptance";
+
+import { reconcileTaskCellLifecycleTelemetry } from "../src/modules/dispatch/workflows/task-cell-telemetry-reconcile";
 // CH-1/CH-2: mixed-host pane adapters (claude + codex) for a mixed `host:` team.
 import { resolveAdapter } from "./lib/pane-adapter";
 // CH-1: route each specialist to its backend (local tmux vs remote) via the
@@ -102,10 +144,6 @@ import { normalizeHostId, registryIdToCanonicalHostKind, hostKindToRegistryId } 
 import { isClaudeCli } from "./lib/capability/rank";
 // U5: typed settings projection via the resolver (replaces direct settings slice reads)
 import { resolveSettings, isPlainObject } from "./lib/settings-resolver";
-import {
-  buildTaskAssignment,
-  writeTaskAssignment,
-} from "../src/modules/dispatch/workflows/task-assignment";
 // T3 rework F3 (session_context §5): descriptor writers fail closed without the
 // run's minted binding. The launcher resolves the nonce explicitly (env envelope
 // from the orchestrator → the addressed run's own minted record → mint, ONLY
@@ -113,9 +151,9 @@ import {
 // into every v1/v2 descriptor write. A sentinel value never participates.
 import {
   loadRunBinding,
-  mintRunBinding,
   readHookBindingEnvelope,
 } from "../src/modules/lifecycle/workflows/run-binding";
+import { assertCanonicalRunId } from "../src/modules/lifecycle/workflows/run-lifecycle";
 // MH-04: the substrate DECISION lives behind the versioned execution port
 // (`guild.execution.transports.v1`), never in this launcher. The launcher reads
 // host FACTS through the capability probe below and reports what the port decided.
@@ -124,6 +162,7 @@ import {
 // the resolved port. See the composition seam below (§MH-04 transport wiring).
 import {
   isTeamDispatchPort,
+  resolveInjectionSupport,
   selectExecutionSubstrate,
   type ExecutionCapabilityProbe,
   type ExecutionDispatchMode,
@@ -145,12 +184,14 @@ import {
   writeTaskCell,
   type ProductionDispatchModelOutcome,
 } from "../src/modules/dispatch/workflows/task-assignment-v2";
+import { createPreviewConfirmationSession } from "../src/modules/dispatch/workflows/confirmation-gate";
 // T8R F3: the PRODUCTION writer for M0 inspection evidence. `persistInspectionReport`
 // previously had no production caller at all — `guild models inspect` is read-only by
 // contract — so the M2 gate's evidence dir was always empty in a real run and the
 // derived resolver inputs were always null. Recording happens HERE, once per run on the
 // real dispatch path, and is inert at the ADR defaults (v2 flags off ⇒ no write).
 import { recordRunInspectionEvidence } from "../src/modules/capability/workflows/inspection-record";
+import { readRoutingFlags } from "../src/modules/capability/workflows/routing-rollout";
 // T6 rework F5: the legacy tier→model label for the shadow comparison comes
 // from the SAME unpack point the legacy path uses (models.tiers), never a
 // parallel implementation.
@@ -172,11 +213,144 @@ import { slugFromTeamPath, phaseFromTeamPath, readActivePhase, resolveDeadLaneKe
 // The gate itself (dispatchGate → preDispatchGate) was correct and unreachable;
 // this is the join. It runs BEFORE the D5 ladder so every rung — tmux team,
 // in-process agent, and the subagent signal execute-plan acts on — is covered.
-import { assertDispatchApproved } from "../src/modules/teams/workflows/dispatch-approval";
+import {
+  assertDispatchApproved,
+  resolveApprovalOverride,
+} from "../src/modules/teams/workflows/dispatch-approval";
 // TE-01 CONSOLIDATED (cluster-a-rev2-CONSOLIDATED.md): launcher owns EDIT-3 (tmux/remote);
 // execute-plan SKILL owns EDIT-4 (subagent/in-process) — mutually exclusive, no double-write.
 import { writeTaskRun, readTaskRunCapReqs } from "./write-task-run";
 import { emitReadbackDegradation } from "./lib/emit-readback-degradation"; // W2-A2(d)
+import { captureHostCapabilitySnapshot } from "../src/modules/host-runtime";
+
+export interface TerminalSubstantiveReconciliation {
+  readonly attempted: number;
+  readonly emitted: number;
+  readonly errors: readonly string[];
+}
+
+export interface AtomicTerminalSubstantiveResult {
+  readonly emitted: number;
+}
+
+/**
+ * Linearize an accepted terminal transition and its substantive receipt against
+ * lifecycle close. A close that wins the exclusion is refused before any
+ * terminal mutation; a terminal transition that wins retains the open binding
+ * through the evidence append, so close cannot strand the operation between the
+ * two durable writes.
+ */
+export function sealTerminalAttemptWithSubstantiveEvidence(
+  input: {
+    readonly cwd: string;
+    readonly runId: string;
+    readonly ids: TaskCellInstanceIds;
+    readonly terminalState: "terminated" | "rejected";
+    readonly reason: string | null;
+    readonly accepted: boolean;
+    readonly orphaned?: boolean;
+    readonly now: () => string;
+  },
+  deps: {
+    readonly withExclusion: typeof withRunBindingExclusion;
+    readonly readBinding: typeof readRunBindingRecord;
+    readonly stage: typeof stagePendingSubstantiveOperation;
+    readonly seal: typeof sealTerminalAttempt;
+    readonly recordUnderExclusion: typeof recordMigrationSubstantiveTaskOperationUnderExclusion;
+    readonly complete: typeof completePendingSubstantiveOperation;
+  } = {
+    withExclusion: withRunBindingExclusion,
+    readBinding: readRunBindingRecord,
+    stage: stagePendingSubstantiveOperation,
+    seal: sealTerminalAttempt,
+    recordUnderExclusion: recordMigrationSubstantiveTaskOperationUnderExclusion,
+    complete: completePendingSubstantiveOperation,
+  },
+): AtomicTerminalSubstantiveResult {
+  return deps.withExclusion(input.cwd, input.runId, () => {
+    const binding = deps.readBinding({ root: input.cwd, run_id: input.runId });
+    if (binding.status !== "ok" || binding.record.state !== "open") {
+      throw new Error("terminal TaskCell transition requires an open run binding");
+    }
+    if (input.accepted) {
+      deps.stage({ root: input.cwd, run_id: input.runId, task_id: input.ids.logical_task_id });
+    }
+    deps.seal({
+      cwd: input.cwd,
+      ids: input.ids,
+      terminal_state: input.terminalState,
+      reason: input.reason,
+      ...(input.orphaned === undefined ? {} : { orphaned: input.orphaned }),
+      now: input.now,
+    });
+    const emitted = input.accepted
+      ? deps.recordUnderExclusion({
+          projectRoot: input.cwd,
+          runId: input.runId,
+          taskId: input.ids.logical_task_id,
+        }).length
+      : 0;
+    if (input.accepted) {
+      deps.complete({ root: input.cwd, run_id: input.runId, task_id: input.ids.logical_task_id });
+    }
+    return Object.freeze({ emitted });
+  });
+}
+
+/**
+ * Repair the crash boundary anywhere inside terminal-attempt sealing and
+ * substantive migration evidence recording. Re-running the complete idempotent
+ * terminal transaction repairs the sibling instance/terminal artifacts before
+ * evidence is admitted; a terminal attempt alone is not proof that the whole
+ * transition landed. Rejected/non-terminal attempts never qualify. The default
+ * dependencies are injectable only for the planted recovery control in the
+ * launcher suite.
+ */
+export function reconcileTerminalSubstantiveOperations(
+  input: {
+    readonly cwd: string;
+    readonly runId: string;
+    readonly acceptances: readonly RunAcceptance[];
+  },
+  deps: {
+    readonly readAttempt: typeof readAttemptForInstance;
+    readonly readPending: typeof readPendingSubstantiveOperation;
+    readonly recover: typeof sealTerminalAttemptWithSubstantiveEvidence;
+  } = {
+    readAttempt: readAttemptForInstance,
+    readPending: readPendingSubstantiveOperation,
+    recover: sealTerminalAttemptWithSubstantiveEvidence,
+  },
+): TerminalSubstantiveReconciliation {
+  let attempted = 0;
+  let emitted = 0;
+  const errors: string[] = [];
+  for (const ra of input.acceptances) {
+    if (ra.acceptance.downstream_release_at === null) continue;
+    const attempt = deps.readAttempt(input.cwd, ra.ids);
+    if (attempt?.terminal_state !== "terminated") continue;
+    const pending = deps.readPending(input.cwd, input.runId);
+    if (pending?.state !== "pending" || pending.task_id !== ra.ids.logical_task_id) continue;
+    attempted++;
+    try {
+      emitted += deps.recover({
+        cwd: input.cwd,
+        runId: input.runId,
+        ids: ra.ids,
+        terminalState: "terminated",
+        reason: attempt.terminal_reason,
+        accepted: true,
+        orphaned: attempt.orphaned,
+        now: () => attempt.terminated_at ?? new Date().toISOString(),
+      }).emitted;
+    } catch (error) {
+      errors.push(
+        `${ra.ids.logical_task_id}/${ra.ids.instance_id}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  return Object.freeze({ attempted, emitted, errors: Object.freeze(errors) });
+}
 
 const ADAPTER_VERSION = "1"; // CH-5 — PaneAdapter version recorded per pane.
 
@@ -235,6 +409,14 @@ interface CliArgs {
 
 const VALID_AGENT_MODE_VALUES = new Set(["team", "agent", "subagent", "auto"]);
 
+function requiredOptionValue(argv: string[], index: number, option: string): string {
+  const value = argv[index + 1];
+  if (value === undefined || value.length === 0 || value.startsWith("--")) {
+    throw new Error(`${option} requires a non-flag value`);
+  }
+  return value;
+}
+
 function parseArgs(argv: string[]): CliArgs {
   const out: CliArgs = {
     team: null,
@@ -250,22 +432,25 @@ function parseArgs(argv: string[]): CliArgs {
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--team" && i + 1 < argv.length) out.team = argv[++i];
-    else if (a === "--session-name" && i + 1 < argv.length) out.sessionName = argv[++i];
-    else if (a === "--cwd" && i + 1 < argv.length) out.cwd = argv[++i];
+    if (a === "--team") out.team = requiredOptionValue(argv, i++, a);
+    else if (a === "--session-name") out.sessionName = requiredOptionValue(argv, i++, a);
+    else if (a === "--cwd") out.cwd = requiredOptionValue(argv, i++, a);
     else if (a === "--dry-run") out.dryRun = true;
     else if (a === "--reap") out.reap = true;
     else if (a === "--dismiss-completed") out.dismissCompleted = true;
     else if (a === "--require-approval") out.requireApproval = true;
-    else if (a === "--approval-override" && i + 1 < argv.length) out.approvalOverride = argv[++i];
+    else if (a === "--approval-override") out.approvalOverride = requiredOptionValue(argv, i++, a);
     else if (a.startsWith("--approval-override=")) {
       out.approvalOverride = a.slice("--approval-override=".length);
     }
-    else if (a === "--run-id" && i + 1 < argv.length) out.runId = argv[++i];
+    else if (a === "--run-id") out.runId = requiredOptionValue(argv, i++, a);
     else if (a.startsWith("--agent-mode=")) {
       const v = a.slice("--agent-mode=".length);
       if (VALID_AGENT_MODE_VALUES.has(v)) out.agentMode = v as CliArgs["agentMode"];
     }
+  }
+  if (out.reap && out.dismissCompleted) {
+    throw new Error("--reap and --dismiss-completed are mutually exclusive maintenance modes");
   }
   return out;
 }
@@ -278,7 +463,7 @@ function parseArgs(argv: string[]): CliArgs {
 // than pull in js-yaml as a direct dep, we parse the narrow schema by hand
 // and reject anything surprising.
 
-function parseYaml(raw: string): TeamYaml {
+export function parseYaml(raw: string): TeamYaml {
   const lines = raw.split(/\r?\n/);
   let backend = "";
   const specialists: Specialist[] = [];
@@ -287,8 +472,15 @@ function parseYaml(raw: string): TeamYaml {
 
   const flush = () => {
     if (cur && cur.name) {
+      if (cur.definition_ref && cur.definition_ref.id !== cur.name) {
+        throw new Error(`team.yaml definition_ref id ${cur.definition_ref.id} disagrees with specialist ${cur.name}`);
+      }
+      if (cur.definition_ref && cur.definition && cur.definition_ref.relative_path !== cur.definition) {
+        throw new Error(`team.yaml definition_ref path ${cur.definition_ref.relative_path} disagrees with definition ${cur.definition}`);
+      }
       specialists.push({
         name: cur.name,
+        participant_id: cur.participant_id,
         scope: cur.scope ?? "",
         dependsOn: cur.dependsOn ?? [],
         backend: cur.backend,
@@ -302,14 +494,23 @@ function parseYaml(raw: string): TeamYaml {
         // on the dispatch env (audit-only). Undefined until a producer writes it.
         score: cur.score,
         capabilityRequirements: cur.capabilityRequirements, // GAP-A1/ARCH-2 (may be undefined)
-        // D-CAP: thread capability_scope onto the Specialist — undefined when absent
-        // (no restrictions). Populated by applyMapEntry + block-list interceptor above.
-        capability_scope: cur.capability_scope,
+        // FU09: explicit approved scopes win; canonical roles otherwise receive
+        // their source-owned runtime default. Unknown/project roles retain the
+        // legacy optional behavior until their approved team record supplies one.
+        declared_capability_scope:
+          cur.capability_scope === undefined ? undefined : [...cur.capability_scope],
+        capability_scope: resolvedSpecialistCapabilityScope({
+          name: cur.name,
+          scope: cur.scope ?? "",
+          dependsOn: cur.dependsOn ?? [],
+          capability_scope: cur.capability_scope,
+        }),
         // Agent-definition path + source (team-compose writes them; load-bearing
         // for project-local specialists — buildPrompt embeds the adoption
         // instruction and in-process dispatch swaps to the generic subagent type).
         definition: cur.definition,
         definition_source: cur.definition_source,
+        definition_ref: cur.definition_ref,
       });
     }
     cur = null;
@@ -393,6 +594,9 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
   const key = m[1];
   const value = m[2].trim();
   if (key === "name") target.name = stripQuotes(value);
+  else if (key === "participant_id" || key === "participant-id") {
+    target.participant_id = stripQuotes(value);
+  }
   else if (key === "scope") target.scope = stripQuotes(value);
   else if (key === "depends-on" || key === "depends_on" || key === "dependsOn") {
     target.dependsOn = parseFlowList(value);
@@ -404,6 +608,23 @@ function applyMapEntry(target: Partial<Specialist>, raw: string): void {
   // is common provenance metadata and must never silently change dispatch
   // semantics (codex G-lane finding).
   else if (key === "definition") target.definition = stripQuotes(value);
+  else if (key === "definition_ref") {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(stripQuotes(value));
+    } catch {
+      throw new Error("team.yaml definition_ref must be single-line JSON");
+    }
+    const ref = validateProjectDefinitionRefV1(parsed);
+    if (!ref) throw new Error("team.yaml definition_ref is invalid");
+    if (target.name && target.name !== ref.id) {
+      throw new Error(`team.yaml definition_ref id ${ref.id} disagrees with specialist ${target.name}`);
+    }
+    if (target.definition && target.definition !== ref.relative_path) {
+      throw new Error(`team.yaml definition_ref path ${ref.relative_path} disagrees with definition ${target.definition}`);
+    }
+    target.definition_ref = ref;
+  }
   else if (key === "definition_source") {
     const v = stripQuotes(value).trim().toLowerCase();
     if (v === "shipped" || v === "project") {
@@ -602,6 +823,7 @@ function parseFlowList(value: string): string[] {
 
 interface Manifest {
   run_id: string;
+  backend: "tmux" | "cmux" | "in-process";
   mode: LaunchMode;
   session_name: string;
   // Non-null only in in-session mode: the window we created in the current
@@ -614,19 +836,21 @@ interface Manifest {
   // under the lenient-reader rule (no schema_version bump). Existing readers
   // ignore them; resume/telemetry read host_kind from here rather than
   // re-inferring the CLI brand.
-  // D-CAP: `capability_scope` is additive + optional (same lenient-reader rule).
-  // Absent ⇒ no tool restrictions. Populated from Specialist.capability_scope
-  // (parsed from team.yaml's `capability_scope:` block list). Used by the
-  // injection half (paneCommand / composeInProcessDispatch) pending the
-  // env-propagation spike (Wave-3 Step 2).
+  // D-CAP/FU09: `capability_scope` remains additive for unknown/project roles,
+  // but canonical role omissions are materialized from source-owned defaults
+  // before this manifest or any dispatch carrier is emitted.
   teammate_panes: Array<{
     specialist: string;
+    task_id?: string;
+    dispatch_key?: string;
     pane_id: string;
     host_kind: HostKind;
     adapter_version: string;
     capability_scope?: string[];
   }>;
   env: Record<string, string>;
+  migration_observation_eligible?: boolean;
+  migration_observation_blocker?: string;
 }
 
 function buildManifest(opts: {
@@ -640,6 +864,7 @@ function buildManifest(opts: {
   dryRun: boolean;
   realPaneIds: { orchestrator: string; teammates: Record<string, string> } | null;
   orchestratorHostKind?: HostKind;
+  backend?: "tmux" | "cmux" | "in-process";
 }): Manifest {
   const {
     runId,
@@ -650,6 +875,7 @@ function buildManifest(opts: {
     dryRun,
     realPaneIds,
     orchestratorHostKind = "claude",
+    backend = "tmux",
   } = opts;
   const paneHosts = [
     orchestratorHostKind,
@@ -659,6 +885,7 @@ function buildManifest(opts: {
   const hasClaudePane = paneHosts.some((h) => isClaudeCli(h));
   return {
     run_id: runId,
+    backend,
     mode,
     session_name: sessionName,
     window_name: windowName,
@@ -669,9 +896,11 @@ function buildManifest(opts: {
       : realPaneIds?.orchestrator ?? "(unknown)",
     teammate_panes: specialists.map((s) => ({
       specialist: s.name,
+      task_id: s.taskId,
+      dispatch_key: specialistDispatchKey(s),
       pane_id: dryRun
         ? "(dry-run: not spawned)"
-        : realPaneIds?.teammates?.[s.name] ?? "(unknown)",
+        : realPaneIds?.teammates?.[specialistDispatchKey(s)] ?? "(unknown)",
       host_kind: s.host_kind ?? orchestratorHostKind,
       adapter_version: ADAPTER_VERSION,
       // D-CAP: capability_scope is additive+optional — undefined is omitted by JSON.stringify.
@@ -686,13 +915,6 @@ function buildManifest(opts: {
   };
 }
 
-function makeRunId(): string {
-  // Launcher has no session_id — use compact ISO timestamp with "run-" prefix
-  // to match the hooks' convention (run-<session_id> / run-<timestamp>).
-  // Kept sortable for filesystem listing.
-  return `run-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-}
-
 function writeManifest(cwd: string, manifest: Manifest): string {
   const runId = manifest.run_id;
   const dir = path.join(cwd, ".guild", "runs", runId, "agent-team");
@@ -700,69 +922,6 @@ function writeManifest(cwd: string, manifest: Manifest): string {
   const out = path.join(dir, "session.json");
   fs.writeFileSync(out, JSON.stringify(manifest, null, 2) + "\n", "utf8");
   return out;
-}
-
-/**
- * Write the cross-host work-assignment channel: one `guild.task_assignment.v1`
- * per specialist at `.guild/runs/<run-id>/tasks/<specialist>.json` (launcher writes,
- * specialist pane reads via `readTaskAssignment`; docs/v2 §08).
- *
- * MUST run in the pre-routing block over the FULL specialist list, BEFORE any
- * local/remote dispatch — so (a) remote/cross-host specialists (the whole point of
- * the channel) get their file even though they are later filtered out of the local
- * tmux pool, and (b) every pane's file exists on disk before its process spawns and
- * tries to read it. `ownerMap` resolves the plan task-id (and thus the context-bundle
- * pointer). Best-effort + non-throwing — a write failure is logged, never aborts.
- */
-function writeTaskAssignments(
-  cwd: string,
-  runId: string,
-  specialists: Specialist[],
-  ownerMap: Map<string, string[]>,
-  orchestratorHostKind: string,
-  bindingRef: string | null,
-): number {
-  // §5 fail-closed: no verifiable binding → no descriptor writes at all.
-  if (bindingRef === null) {
-    process.stderr.write(
-      `[agent-team-launcher] WARN: binding_rejected — refusing to write ` +
-        `guild.task_assignment.v1 descriptors for ${runId}: no minted run binding ` +
-        `is resolvable (env envelope/binding.json). No files written.\n`,
-    );
-    return 0;
-  }
-  const runDir = path.join(cwd, ".guild", "runs", runId);
-  let written = 0;
-  for (const s of specialists) {
-    const taskIds = ownerMap.get(s.name);
-    const repTaskId = taskIds && taskIds.length > 0 ? taskIds[0] : null;
-    // Context-bundle pointer: the conventional per-specialist bundle path
-    // (.guild/context/<run-id>/<specialist>-<task-id>.md) when a plan task-id exists.
-    const contextRef = repTaskId
-      ? path.join(".guild", "context", runId, `${s.name}-${repTaskId}.md`)
-      : null;
-    try {
-      const assignment = buildTaskAssignment({
-        runId,
-        specialist: s.name,
-        taskId: repTaskId,
-        scope: s.scope ?? "",
-        dependsOn: s.dependsOn ?? [],
-        contextRef,
-        hostKind: s.host_kind ?? orchestratorHostKind,
-        adapterVersion: ADAPTER_VERSION,
-        now: () => new Date().toISOString(),
-      });
-      if (writeTaskAssignment(runDir, assignment, { binding_ref: bindingRef })) written += 1;
-    } catch (err) {
-      process.stderr.write(
-        `[agent-team-launcher] WARN: task-assignment write for ${s.name} failed: ${
-          err instanceof Error ? err.message : String(err)
-        }\n`,
-      );
-    }
-  }
-  return written;
 }
 
 /**
@@ -779,21 +938,6 @@ function writeTaskAssignments(
  * out of `main()` to a non-zero exit. This deliberately drops the v1 writer's
  * "warn and keep going" behavior for the v2 production path.
  */
-/** True when the repo opted into a model_routing leg that could change dispatch. */
-function routingOptedIn(cwd: string): boolean {
-  try {
-    const raw: unknown = JSON.parse(
-      fs.readFileSync(path.join(cwd, ".guild", "settings.json"), "utf8"),
-    );
-    const mr = isPlainObject(raw) ? (raw as Record<string, unknown>)["model_routing"] : undefined;
-    if (!isPlainObject(mr)) return false;
-    const block = mr as Record<string, unknown>;
-    return block["shadow"] === "on" || block["enabled"] === "on";
-  } catch {
-    return false;
-  }
-}
-
 /**
  * T6 F5: the ONE lane model-routing step, shared by every dispatch rung.
  *
@@ -812,10 +956,14 @@ function makeLaneModelPlanner(
   runId: string,
   orchestratorHostKind: string,
   bindingRef: string,
+  preview: boolean,
 ): (
   s: Specialist,
   logicalTaskId: string,
 ) => { outcome: ProductionDispatchModelOutcome; laneTier: "cheap" | "mid" | "powerful" } {
+  const previewConfirmationSession = preview
+    ? createPreviewConfirmationSession(cwd, runId)
+    : undefined;
   let rawSettings: unknown;
   try {
     rawSettings = JSON.parse(
@@ -825,9 +973,11 @@ function makeLaneModelPlanner(
     rawSettings = undefined;
   }
   const settingsObj = isPlainObject(rawSettings) ? (rawSettings as Record<string, unknown>) : {};
+  const { flags: routingFlags } = readRoutingFlags(rawSettings);
   const modelsBlock = isPlainObject(settingsObj["models"])
     ? (settingsObj["models"] as Record<string, unknown>)
     : {};
+  let previewStageEvolutionNoticeEmitted = false;
   // ── T8R F3: record this run's M0 inspection evidence ONCE, before any lane
   // plans a model. This is the production write that was missing: without it
   // `.guild/runs/<id>/inspection/` stays empty in every real run, so
@@ -840,15 +990,17 @@ function makeLaneModelPlanner(
   // THROWS out of the binding-verified writer rather than dispatching on
   // unbound evidence; absence (no session context, no usable report) is
   // reported honestly and never fabricated.
-  const inspection = recordRunInspectionEvidence({
-    root: cwd,
-    binding: { run_id: runId, binding_ref: bindingRef },
-    now: new Date().toISOString(),
-  });
-  if (inspection.recorded) {
-    process.stdout.write(
-      `[agent-team-launcher] M0 inspection evidence recorded for ${runId} → ${inspection.ref}\n`,
-    );
+  if (!preview) {
+    const inspection = recordRunInspectionEvidence({
+      root: cwd,
+      binding: { run_id: runId, binding_ref: bindingRef },
+      now: new Date().toISOString(),
+    });
+    if (inspection.recorded) {
+      process.stdout.write(
+        `[agent-team-launcher] M0 inspection evidence recorded for ${runId} → ${inspection.ref}\n`,
+      );
+    }
   }
   return (s, logicalTaskId) => {
     const hostKind = s.host_kind ?? orchestratorHostKind;
@@ -869,7 +1021,30 @@ function makeLaneModelPlanner(
       legacy,
       settings: rawSettings,
       request: { purpose: "implementation" },
+      preview,
+      previewConfirmationSession,
     });
+    // A pure preview cannot persist the M0 inspection + M1 comparison that a
+    // fresh real run creates between lane plans. With both staged legs opted
+    // in, a later real lane can therefore reach M2 (and §6 confirmation) even
+    // while every preview lane honestly remains legacy against the unchanged
+    // tree. Make that unresolved transition operator-visible once; exit 0 is
+    // never presented as proof that the real run is confirmation-ready.
+    if (
+      preview &&
+      !previewStageEvolutionNoticeEmitted &&
+      routingFlags["model_routing.shadow"] === "on" &&
+      routingFlags["model_routing.enabled"] === "on" &&
+      outcome.selection.source === "legacy" &&
+      /M[01] not evidenced/.test(outcome.selection.reason)
+    ) {
+      previewStageEvolutionNoticeEmitted = true;
+      process.stdout.write(
+        `[agent-team-launcher] BLOCKED PREVIEW: this pure preview cannot persist the fresh-run ` +
+          `M0/M1 evidence that real dispatch creates between lanes; a later-lane M2 selection ` +
+          `may therefore require §6 confirmation. Do not treat preview exit 0 as dispatch-ready.\n`,
+      );
+    }
     // The specialist dispatch contract carries the provenance on the real path
     // — this is the object every backend reads the selected model from.
     s.modelProvenance = outcome.provenance;
@@ -892,7 +1067,7 @@ function makeLaneModelPlanner(
     // target / purpose / policy / catalog / fallback shape is a DIFFERENT key
     // and therefore no approval at all (the arbiter enforces that, exactly).
     // Inert at M0/M1: legacy selections degrade nothing, so nothing is claimed.
-    if (outcome.confirmation.required && !outcome.confirmation.decided) {
+    if (!preview && outcome.confirmation.required && !outcome.confirmation.decided) {
       throw new Error(
         `confirmation_required: refusing to dispatch ${logicalTaskId} — ${outcome.confirmation.reason}`,
       );
@@ -900,28 +1075,260 @@ function makeLaneModelPlanner(
     if (outcome.confirmation.required) {
       process.stdout.write(
         `[agent-team-launcher] §6 confirmation prompt ${outcome.confirmation.prompt_id} for ` +
-          `${logicalTaskId} already decided "${outcome.confirmation.decision}"\n`,
+          `${logicalTaskId} ${preview ? "previewed" : `already decided "${outcome.confirmation.decision}"`}\n`,
       );
+      if (preview && !outcome.confirmation.decided) {
+        process.stdout.write(
+          `[agent-team-launcher] BLOCKED PREVIEW: a real dispatch of ${logicalTaskId} will refuse ` +
+            `until §6 prompt ${outcome.confirmation.prompt_id} receives a user decision.\n`,
+        );
+      }
     }
     return { outcome, laneTier };
   };
+}
+
+function sha256Prefixed(content: string | Buffer): string {
+  return `sha256:${createHash("sha256").update(content).digest("hex")}`;
+}
+
+function readRegularFile(file: string): Buffer | null {
+  try {
+    const stat = fs.lstatSync(file);
+    return stat.isFile() && !stat.isSymbolicLink() ? fs.readFileSync(file) : null;
+  } catch {
+    return null;
+  }
+}
+
+const compatibilityCatalogCache = new Map<string, CompatibilityCatalog>();
+
+function compatibilityResolverMode(cwd: string): CapabilityResolverMode {
+  try {
+    return resolveSettings({ cwd }).config.capability.resolver_mode;
+  } catch {
+    // The shared default is observe. A settings read failure must not silently
+    // turn an instrumented legacy read back into an unmeasured direct read.
+    return "observe";
+  }
+}
+
+function readSpecialistTemplateCompatibility(
+  cwd: string,
+  runId: string,
+  bindingRef: string,
+  logicalTaskId: string,
+  specialist: TaskCellLaunchLane,
+  runtimeRoot: string,
+): { readonly bytes: Buffer; readonly receiptRecordedAt: string } | null {
+  const mode = compatibilityResolverMode(cwd);
+  if (mode === "project-local" || mode === "strict") return null;
+
+  let catalog = compatibilityCatalogCache.get(runtimeRoot);
+  if (!catalog) {
+    catalog = buildCompatibilityCatalog({
+      pluginRoot: runtimeRoot,
+      deprecation: "deprecated",
+      deprecatedBy: "cap-loc-D03",
+    });
+    compatibilityCatalogCache.set(runtimeRoot, catalog);
+  }
+  const entry = catalog.entries.find(
+    (candidate) => candidate.kind === "shipped_template" && candidate.id === specialist.name,
+  );
+  if (!entry) return null;
+
+  const loaded = readCompatibilityAsset({
+    pluginRoot: runtimeRoot,
+    projectRoot: cwd,
+    entry,
+    mode,
+    intent: "dispatch",
+    synthetic: false,
+    specialistId: specialist.name,
+    runId,
+    bindingRef,
+    operationId: `task-cell-identity-${safeSegment(logicalTaskId)}-${safeSegment(specialist.name)}`,
+  });
+  if (loaded.status !== "loaded") {
+    throw new Error(
+      `compatibility_read_refused: ${specialist.name}/${logicalTaskId} — ${loaded.detail}`,
+    );
+  }
+  return { bytes: loaded.bytes, receiptRecordedAt: loaded.receipt_recorded_at };
+}
+
+function specialistIdentity(
+  cwd: string,
+  runId: string,
+  bindingRef: string,
+  logicalTaskId: string,
+  specialist: TaskCellLaunchLane,
+): {
+  typeId: string;
+  typeVersion: string;
+  typeHash: string;
+  profileId: string;
+  profileHash: string;
+  compatibilityRecordedAt: string | null;
+} {
+  const ref = specialist.definition_ref;
+  const refTypeHash = ref?.specialist_type_hash ?? null;
+  const refProfileHash = ref?.specialist_profile_hash ?? null;
+  const refIsComplete = refTypeHash !== null && refProfileHash !== null;
+
+  const runtimeRoot = process.env["GUILD_PLUGIN_ROOT"] ??
+    process.env["CLAUDE_PLUGIN_ROOT"] ?? path.resolve(__dirname, "..");
+
+  // PCL-FU-20: the shipped-template compatibility read is LOAD-BEARING and must
+  // run BEFORE the complete-ref shortcut. Pre-fix, a lane whose committed
+  // definition ref already carried both identity hashes returned here without
+  // ever touching the catalog, so the FU19 observation window recorded nothing
+  // for exactly the dispatch path it exists to observe — and a divergent
+  // committed ref was never contradicted by the bytes on disk.
+  //
+  // The read itself is unchanged and stays self-gating: it returns null in
+  // `project-local` / `strict`, and null for a role with no matching shipped
+  // catalog template. Those cases keep the original shortcut semantics.
+  const templateRead = readSpecialistTemplateCompatibility(
+    cwd,
+    runId,
+    bindingRef,
+    logicalTaskId,
+    specialist,
+    runtimeRoot,
+  );
+
+  if (refIsComplete && templateRead === null) {
+    return {
+      typeId: specialist.name,
+      typeVersion: "1",
+      typeHash: refTypeHash,
+      profileId: specialist.name,
+      profileHash: refProfileHash,
+      compatibilityRecordedAt: null,
+    };
+  }
+
+  const definitionRoot = specialist.definition_source === "project" ? cwd : runtimeRoot;
+  const definitionPath = specialist.definition
+    ? path.resolve(definitionRoot, specialist.definition)
+    : null;
+  const definitionBytes = definitionPath ? readRegularFile(definitionPath) : null;
+  const templateBytes = templateRead?.bytes ?? null;
+  const templateFm = templateBytes ? parseFrontmatter(templateBytes.toString("utf8")) : null;
+  const projectedType = templateFm
+    ? specialistTypeFromTemplateFrontmatter(templateFm)
+    : null;
+  const pinnedSkillIds = (ref?.skills ?? []).map((skill) => skill.id);
+  const inlineType: SpecialistTypeV2 = projectedType ?? {
+    schema_version: SPECIALIST_TYPE_SCHEMA,
+    type_id: specialist.name,
+    version: "inline-team-v1",
+    role: specialist.name,
+    capability_tags: [],
+    compatible_skill_refs: pinnedSkillIds,
+    semantic_tool_requirements: specialist.capability_scope ?? [],
+    default_model_tier: specialist.tier ?? specialist.default_tier ?? "mid",
+    constraints: {
+      definition_source: specialist.definition_source ?? "inline-team",
+      definition_path: specialist.definition ?? null,
+      definition_content_hash: definitionBytes ? sha256Prefixed(definitionBytes) : null,
+    },
+    eval_fixture_refs: [],
+  };
+  const typeHash = hashSpecialistType(inlineType);
+  const definitionFm = definitionBytes ? parseFrontmatter(definitionBytes.toString("utf8")) : null;
+  const projectedProfile = definitionFm
+    ? specialistProfileFromAgentFrontmatter(definitionFm, {
+        type_id: inlineType.type_id,
+        type_version: inlineType.version,
+        type_hash: typeHash,
+      })
+    : null;
+  const profile: SpecialistProfileV1 = projectedProfile ?? {
+    schema_version: SPECIALIST_PROFILE_SCHEMA,
+    profile_id: specialist.name,
+    version: "inline-team-v1",
+    derived_from: {
+      type_id: inlineType.type_id,
+      type_version: inlineType.version,
+      type_hash: typeHash,
+    },
+    project_instructions: definitionBytes
+      ? `definition_content_hash=${sha256Prefixed(definitionBytes)}`
+      : `inline_team_contract=${sha256Prefixed(JSON.stringify({
+          name: specialist.name,
+          scope: specialist.scope,
+          dependsOn: specialist.dependsOn,
+          capability_scope: specialist.capability_scope ?? [],
+        }))}`,
+    local_skill_refs: pinnedSkillIds,
+  };
+  const profileHash = hashSpecialistProfile(profile);
+
+  // PCL-FU-20: when the lane carries a complete committed ref AND the shipped
+  // template was really read, the identity derived from those bytes is the
+  // authority. Fail CLOSED on any disagreement — this runs before TaskCell
+  // assignment, so a divergent ref never reaches a cell.
+  if (refIsComplete) {
+    if (inlineType.type_id !== specialist.name || profile.profile_id !== specialist.name) {
+      throw new Error(
+        `compatibility_read_refused: ${specialist.name}/${logicalTaskId} — ` +
+          `identity read from the shipped template resolves to ` +
+          `type_id=${inlineType.type_id} profile_id=${profile.profile_id}, ` +
+          `which does not match the lane name`,
+      );
+    }
+    if (typeHash !== refTypeHash || profileHash !== refProfileHash) {
+      throw new Error(
+        `compatibility_read_refused: ${specialist.name}/${logicalTaskId} — ` +
+          `identity derived from the bytes actually read diverges from the ` +
+          `committed definition ref (type_hash read=${typeHash} ref=${refTypeHash}; ` +
+          `profile_hash read=${profileHash} ref=${refProfileHash})`,
+      );
+    }
+  }
+
+  return {
+    typeId: inlineType.type_id,
+    typeVersion: inlineType.version,
+    typeHash,
+    profileId: profile.profile_id,
+    profileHash,
+    compatibilityRecordedAt: templateRead?.receiptRecordedAt ?? null,
+  };
+}
+
+function contextBundleHash(cwd: string, relativePath: string, dryRun: boolean): string {
+  const bytes = readRegularFile(path.resolve(cwd, relativePath));
+  if (bytes) return sha256Prefixed(bytes);
+  if (dryRun) return sha256Prefixed(`dry-run-missing-context:${relativePath}`);
+  throw new Error(`missing regular TaskCell context bundle: ${relativePath}`);
+}
+
+function hostCapabilitiesHash(cwd: string, runId: string, hostId: string, dryRun: boolean): string {
+  const manifest = readRegularFile(path.join(cwd, ".guild", "hosts", hostId, "capability.json"));
+  if (manifest) return sha256Prefixed(manifest);
+  const captured = captureHostCapabilitySnapshot({ host: hostId, runId });
+  if (captured.disposition === "succeeded" && captured.snapshot) {
+    return captured.snapshot.snapshot_hash;
+  }
+  if (dryRun) return sha256Prefixed(`dry-run-host-capabilities:${hostId}`);
+  throw new Error(`no capability manifest or registry snapshot for selected host: ${hostId}`);
 }
 
 function emitTaskCellsV2(
   cwd: string,
   runId: string,
   slug: string,
-  specialists: Specialist[],
-  ownerMap: Map<string, string[]>,
-  orchestratorHostKind: string,
+  specialists: readonly TaskCellLaunchLane[],
+  phaseId: string,
+  substrate: TaskCellSubstrate,
+  hostIdFor: (specialist: TaskCellLaunchLane) => string,
   bindingRef: string | null,
-): {
-  written: number;
-  modelOutcomes: Map<
-    string,
-    { outcome: ProductionDispatchModelOutcome; laneTier: "cheap" | "mid" | "powerful" }
-  >;
-} {
+  dryRun: boolean,
+): number {
   // §5 + D6: the v2 channel is HARD fail-closed — a run with no verifiable
   // binding cannot dispatch. Throw (propagates to a non-zero exit).
   if (bindingRef === null) {
@@ -930,50 +1337,60 @@ function emitTaskCellsV2(
         `${runId} — no minted run binding is resolvable (session_context §5)`,
     );
   }
+  // Fix B (run-identity-and-dispatch): a DRY preflight persists NOTHING. The
+  // records this function writes are immutable attempt-1 files whose overwrite
+  // guard fails closed — a dry run that wrote them poisoned the run id for the
+  // next real launch. Pre-fix, this flag only relaxed hash computation while
+  // the writes below still ran unconditionally.
+  if (dryRun) return 0;
   let written = 0;
-  // T6 F5: model-routing plan per DISPATCH ATTEMPT, on the real path. Keyed by
-  // logical task id so the routing block below can consume v2 selections.
-  const modelOutcomes = new Map<
-    string,
-    { outcome: ProductionDispatchModelOutcome; laneTier: "cheap" | "mid" | "powerful" }
-  >();
-  const planLaneModel = makeLaneModelPlanner(cwd, runId, orchestratorHostKind, bindingRef);
   // Resolved decision 2: the launcher reuses the parent orchestrator as lead, so
   // every cell carries a `lead_binding_id` (no distinct Team Lead instance minted).
   const leadBindingId = `lead-binding-${safeSegment(slug)}`;
   for (const s of specialists) {
-    const taskIds = ownerMap.get(s.name);
-    const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [s.name];
-    const hostKind = s.host_kind ?? orchestratorHostKind;
-    const hostId = hostKindToRegistryId(hostKind as HostKind) || String(hostKind);
+    const hostId = hostIdFor(s);
+    const logicalTaskId = s.taskId;
+    const identity = specialistIdentity(cwd, runId, bindingRef, logicalTaskId, s);
+    const compatibilityRecordedAtMillis = identity.compatibilityRecordedAt === null
+      ? Number.NEGATIVE_INFINITY
+      : Date.parse(identity.compatibilityRecordedAt);
+    if (identity.compatibilityRecordedAt !== null && !Number.isFinite(compatibilityRecordedAtMillis)) {
+      throw new Error(`compatibility_read_refused: ${s.name}/${logicalTaskId} — receipt time is invalid`);
+    }
+    // The compatibility read occurs before TaskCell construction. Preserve that
+    // causal order even when both operations fall in the same wall-clock
+    // millisecond, so later evidence can prove the asset was available before
+    // assignment rather than merely before acceptance.
+    const assignmentWrittenAt = new Date(Math.max(Date.now(), compatibilityRecordedAtMillis + 1)).toISOString();
     const tools = s.capability_scope ?? [];
-    for (const taskId of effectiveTaskIds) {
-      const logicalTaskId = safeSegment(taskId);
-      // Fresh, per-TASK context pointer — never shared across a specialist's tasks (D3).
-      const contextRef = path.join(".guild", "context", runId, `${s.name}-${taskId}.md`);
-      const cell = buildTaskCell({
+    // Fresh, per-TASK context pointer — never shared across a specialist's tasks (D3).
+    const contextRef = path.join(".guild", "context", runId, `${s.name}-${logicalTaskId}.md`);
+    const cell = buildTaskCell({
         runId,
         logicalTaskId,
         taskRunId: `${logicalTaskId}.tr1`,
         attempt: 1,
         attemptId: `${logicalTaskId}.att1`,
-        instanceId: `${logicalTaskId}.a1.i1`,
+        instanceId: s.task_cell_instance_id,
         cellId: `cell-${logicalTaskId}`,
         goalId: `goal-${safeSegment(slug)}`,
-        phaseId: "build",
+        phaseId,
         stepId: logicalTaskId,
         teamId: safeSegment(slug),
         workerRole: s.name,
-        specialistTypeId: s.name,
-        specialistTypeVersion: "1",
-        specialistTypeHash: `sha256:type-${safeSegment(s.name)}`,
-        specialistProfileId: s.name,
-        specialistProfileHash: `sha256:profile-${safeSegment(s.name)}`,
+        specialistTypeId: identity.typeId,
+        specialistTypeVersion: identity.typeVersion,
+        specialistTypeHash: identity.typeHash,
+        specialistProfileId: identity.profileId,
+        specialistProfileHash: identity.profileHash,
         contextBundleId: contextRef,
-        contextBundleHash: `sha256:ctx-${logicalTaskId}`,
+        contextBundleHash: contextBundleHash(cwd, contextRef, dryRun),
         hostId,
         adapterId: `${hostId}@${ADAPTER_VERSION}`,
-        hostCapabilitiesHash: "sha256:caps",
+        hostCapabilitiesHash: hostCapabilitiesHash(cwd, runId, hostId, dryRun),
+        substrate,
+        modelTier: s.tier ?? s.default_tier ?? "mid",
+        modelId: s.modelProvenance?.selected_model ?? null,
         // objective must be non-empty (D6 fail-closed); fall back for a degenerate
         // team file rather than dropping the lane silently.
         objective: s.scope && s.scope.length > 0 ? s.scope : `implement ${logicalTaskId}`,
@@ -990,20 +1407,66 @@ function emitTaskCellsV2(
         budgets: { tokens: null, wall_clock_ms: null, cost_usd: null },
         deadline: null,
         leadBindingId,
-        now: () => new Date().toISOString(),
-      });
-      writeTaskCell(cwd, cell, { binding_ref: bindingRef });
-      written += 1;
-      // T6 F5: the PRODUCTION model-routing step for this dispatch attempt.
-      // M0/M1: selection stays the legacy label (no routing change); when
-      // model_routing.shadow is on, the shadow receipt + comparison persist
-      // run-local through the binding-verified writer. M2 (opt-in + verified
-      // evidence) stamps the v2 selection onto s.modelProvenance, which the
-      // tmux pane spec below (and the routing block) then dispatch with.
-      modelOutcomes.set(logicalTaskId, planLaneModel(s, logicalTaskId));
+        now: () => assignmentWrittenAt,
+    });
+    writeTaskCell(cwd, cell, { binding_ref: bindingRef });
+    written += 1;
+  }
+  return written;
+}
+
+/**
+ * Settle immutable cmux TaskCell attempts after a launch failure.
+ *
+ * The backend returns only rollback survivors in `unconfirmedPaneIds`. Those
+ * exact instances remain non-terminal and orphaned for the reaper. Every other
+ * written attempt is sealed `failed`; no launch failure may strand a normal
+ * attempt in an unexplained open state.
+ */
+export function settleFailedCmuxTaskCells(input: {
+  cwd: string;
+  runId: string;
+  lanes: readonly TaskCellLaunchLane[];
+  unconfirmedPaneIds: Readonly<Record<string, string>>;
+  reason: string;
+  now?: () => string;
+}): { failed: number; orphaned: number; errors: string[] } {
+  const now = input.now ?? (() => new Date().toISOString());
+  let failed = 0;
+  let orphaned = 0;
+  const errors: string[] = [];
+  for (const lane of input.lanes) {
+    const logicalTaskId = lane.taskId ?? lane.name;
+    const instanceId = lane.task_cell_instance_id;
+    if (!instanceId) {
+      errors.push(`${logicalTaskId}: missing task_cell_instance_id`);
+      continue;
+    }
+    const ids: TaskCellInstanceIds = {
+      run_id: input.runId,
+      logical_task_id: logicalTaskId,
+      attempt: 1,
+      instance_id: instanceId,
+    };
+    try {
+      if (input.unconfirmedPaneIds[specialistDispatchKey(lane)]) {
+        markAttemptOrphaned(input.cwd, ids);
+        orphaned += 1;
+      } else {
+        sealTerminalAttempt({
+          cwd: input.cwd,
+          ids,
+          terminal_state: "failed",
+          reason: input.reason,
+          now,
+        });
+        failed += 1;
+      }
+    } catch (error) {
+      errors.push(`${logicalTaskId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  return { written, modelOutcomes };
+  return { failed, orphaned, errors };
 }
 
 /**
@@ -1013,6 +1476,25 @@ function emitTaskCellsV2(
  */
 function safeSegment(s: string): string {
   return s.replace(/[^A-Za-z0-9_.-]/g, "_");
+}
+
+function writeLaunchTeamResult(
+  cwd: string,
+  runId: string,
+  teamPath: string,
+  lanes: readonly TaskCellLaunchLane[],
+): string {
+  return writeTeamResult(cwd, runId, buildLaunchTeamResult(runId, teamPath, lanes));
+}
+
+function buildLaunchTeamResult(
+  runId: string,
+  teamPath: string,
+  lanes: readonly TaskCellLaunchLane[],
+): ReturnType<typeof buildStationTaskCellResult> {
+  const station = phaseFromTeamPath(teamPath) ?? "build";
+  const planRef = path.join(".guild", "runs", runId, "team-plan", `${station}.json`);
+  return buildStationTaskCellResult(station, planRef, lanes);
 }
 
 /**
@@ -1028,19 +1510,41 @@ function safeSegment(s: string): string {
  * Returns null when a caller-supplied run has no verifiable binding — the
  * descriptor writers then fail closed (`binding_rejected`), never fail open.
  */
-function resolveLaunchBindingRef(
-  cwd: string,
-  runId: string,
-  launcherMintedRunId: boolean,
-): string | null {
+function resolveLaunchBindingRef(cwd: string, runId: string): string | null {
   const envelope = readHookBindingEnvelope(process.env);
   if (envelope && envelope.run_id === runId) return envelope.binding_ref;
   const record = loadRunBinding({ root: cwd, run_id: runId });
   if (record) return record.binding_ref;
-  if (launcherMintedRunId) {
-    return mintRunBinding({ root: cwd, run_id: runId }).binding_ref;
-  }
   return null;
+}
+
+/**
+ * W1/W2: consume the lifecycle-owned identity. The launcher is a dispatch
+ * consumer, never a run-starting actor: an explicit caller id wins, otherwise
+ * the lifecycle sentinel is inherited. Both paths are strict and binding-
+ * backed before any dispatch state can be created.
+ */
+function resolveLifecycleRunId(cwd: string, callerRunId: string | null): string {
+  let source = "--run-id";
+  let candidate = callerRunId;
+  if (!candidate) {
+    source = ".guild/runs/current-run-id";
+    const sentinel = path.join(cwd, ".guild", "runs", "current-run-id");
+    try {
+      candidate = fs.readFileSync(sentinel, "utf8").trim();
+    } catch {
+      throw new Error(
+        "lifecycle run id required: pass --run-id or start the Guild lifecycle so .guild/runs/current-run-id exists",
+      );
+    }
+  }
+  assertCanonicalRunId(candidate);
+  if (!loadRunBinding({ root: cwd, run_id: candidate })) {
+    throw new Error(
+      `binding_rejected: lifecycle run id ${candidate} from ${source} has no minted run binding`,
+    );
+  }
+  return candidate;
 }
 
 // ── Cross-host routing inputs (CH-1) ─────────────────────────────────────────
@@ -1183,6 +1687,12 @@ type AgentModeExplicit = "team" | "agent" | "subagent" | "auto";
 interface ResolvedMode {
   mode: ExecutionDispatchMode;
   reason: string;
+  /**
+   * W4: the transport the selection named ("cmux" | "tmux" | "in-process" |
+   * null). Carried so the launcher can hand a cmux-selected team back to the
+   * lead (visible cmux surfaces) instead of disguising it as a tmux launch.
+   */
+  transport: string | null;
 }
 
 /**
@@ -1210,6 +1720,9 @@ function hostSupportsIndependentAgents(): boolean {
  * agents. The port calls only the ones its ladder needs.
  */
 const executionCapabilityProbe: ExecutionCapabilityProbe = {
+  // W4: the cmux workspace fact — rung 0 of `team` in the ladder, checked
+  // before any tmux probe. A cheap env read, no subprocess.
+  insideCmuxWorkspace: () => (process.env["CMUX_WORKSPACE_ID"] ?? "").trim().length > 0,
   insideMultiplexer: () => !!process.env["TMUX"],
   multiplexerAvailable: () => probeTmuxAvailable(),
   independentAgents: () => hostSupportsIndependentAgents(),
@@ -1228,6 +1741,7 @@ function inProcessTransportPort(): ExecutionTransportPort {
   return new TeamDispatchExecutionTransport({
     transport_id: "in-process",
     backend: new InProcessTeamBackend(),
+    supports_definition_injection: true,
   });
 }
 
@@ -1261,6 +1775,26 @@ function tmuxTransportPort(adapterBacked: boolean): ExecutionTransportPort {
     transport_id: "tmux",
     backend,
     session: backend,
+    // Fix A (run-identity-and-dispatch): the tmux substrate now demonstrably
+    // carries the exact ref — paneCommand exports GUILD_DEFINITION_REF on the
+    // claude branch, and both the backend launch and the session path expose
+    // the per-specialist forwarding proof on dispatch_plan, which reportLaunch
+    // verifies via portHonoredInjection before claiming success. Declaring
+    // without that proof was refused by contract ("opt-in only after this
+    // substrate demonstrably carries the exact ref").
+    supports_definition_injection: true,
+  });
+}
+
+/** First-class cmux surface substrate behind the same run-scoped port. */
+function cmuxTransportPort(workspaceId: string, adapterBacked: boolean): ExecutionTransportPort {
+  return new TeamDispatchExecutionTransport({
+    transport_id: "cmux",
+    backend: new CmuxTeamBackend({
+      workspaceId,
+      ...(adapterBacked ? { resolveAdapter: resolveAdapter() } : {}),
+    }),
+    supports_definition_injection: true,
   });
 }
 
@@ -1300,8 +1834,101 @@ function resolveDispatchPort(
   return { port: bound.value, detail: "" };
 }
 
+// ── W4: the frozen run-start backend decision (independent-review blocker 1) ─
+
+interface FrozenDispatchResolution {
+  backend: "cmux" | "tmux" | "agent" | "subagent";
+  reason: string;
+}
+
+/**
+ * Read the run's frozen `snapshot.dispatch` block from
+ * `.guild/runs/<run-id>/resolved-settings.json` (written once by
+ * runStartPreflight/U6 at intake). A genuinely absent file is a legacy run and
+ * keeps the ambient ladder. A present malformed file is a broken authority
+ * record and fails closed; it must never authorize an ambient backend switch.
+ */
+function readFrozenDispatchResolution(
+  cwd: string,
+  runId: string | null
+): FrozenDispatchResolution | null {
+  if (runId === null || runId.length === 0) return null;
+  const snapshotPath = path.join(cwd, ".guild", "runs", runId, "resolved-settings.json");
+  if (!fs.existsSync(snapshotPath)) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(snapshotPath, "utf8"));
+  } catch {
+    throw new Error(`frozen dispatch authority is unreadable: ${snapshotPath}`);
+  }
+  if (parsed === null || typeof parsed !== "object") {
+    throw new Error(`frozen dispatch authority is not an object: ${snapshotPath}`);
+  }
+  const snapshot = parsed as Record<string, unknown>;
+  if (snapshot["schema_version"] !== "guild.resolved_settings.v1") {
+    throw new Error(`frozen dispatch authority has the wrong schema: ${snapshotPath}`);
+  }
+  const dispatch = snapshot["dispatch"];
+  if (dispatch === null || typeof dispatch !== "object") {
+    throw new Error(`frozen dispatch authority has no valid dispatch block: ${snapshotPath}`);
+  }
+  const d = dispatch as Record<string, unknown>;
+  const backend = d["backend"];
+  if (backend !== "cmux" && backend !== "tmux" && backend !== "agent" && backend !== "subagent") {
+    throw new Error(`frozen dispatch authority has an invalid backend: ${snapshotPath}`);
+  }
+  return {
+    backend,
+    reason:
+      typeof d["reason"] === "string" && d["reason"].length > 0
+        ? d["reason"]
+        : "run-start snapshot.dispatch",
+  };
+}
+
+/** Map a frozen backend value onto the launcher's resolved-mode vocabulary. */
+function resolvedModeFromFrozen(frozen: FrozenDispatchResolution): ResolvedMode {
+  const reason = `frozen at run start (snapshot.dispatch): ${frozen.reason}`;
+  switch (frozen.backend) {
+    case "cmux":
+      return { mode: "team", transport: "cmux", reason };
+    case "tmux":
+      return { mode: "team", transport: "tmux", reason };
+    case "agent":
+      return { mode: "agent", transport: "in-process", reason };
+    case "subagent":
+      return { mode: "subagent", transport: null, reason };
+  }
+}
+
+/** Resolved scopes that cannot safely cross the current direct-Agent boundary. */
+function scopedDirectRoles(team: TeamYaml): string[] {
+  return team.specialists
+    .filter((specialist) => specialist.capability_scope !== undefined)
+    .map((specialist) => specialist.name)
+    .sort();
+}
+
+/** Emit the shared fail-closed diagnostic for every direct-Agent selection path. */
+function writeScopedDirectRefusal(backend: "agent" | "subagent", roles: string[]): void {
+  process.stderr.write(
+    `[agent-team-launcher] REFUSED (capability-scope carriage): backend "${backend}" ` +
+      `dispatches through Agent(), but the host capability contract cannot prove that ` +
+      `GUILD_CAPABILITY_SCOPE reaches the child hook. Scoped role(s): ` +
+      `[${roles.join(", ")}]. Use a code-backed cmux/tmux/remote backend, or ` +
+      `ship and verify an explicit child-env-carriage capability before enabling this rung.\n`,
+  );
+}
+
 /**
  * Ask the execution port which substrate this dispatch gets, then report it.
+ *
+ * W4 AUTHORITY ORDER (blocker 1): when the run carries a frozen
+ * `snapshot.dispatch` decision, that decision IS the answer — no ambient
+ * CMUX/tmux re-probe happens and a mid-run environment change cannot select a
+ * different backend than the run-start freeze (RID-D-CONSTRAINT). Only a run
+ * with no frozen block (legacy snapshot predating W4) falls through to the
+ * ambient ladder, byte-identical to the shipped behavior.
  *
  * `dryRun=true` reports intent: the port leaves a pinned `team` alone rather than
  * degrading it, exactly as the shipped ladder did. The degradation WARNING is
@@ -1311,20 +1938,66 @@ function resolveDispatchPort(
 function resolveAgentMode(
   explicit: AgentModeExplicit | null,
   dryRun: boolean,
+  frozen: FrozenDispatchResolution | null,
   probe: ExecutionCapabilityProbe = executionCapabilityProbe
 ): ResolvedMode {
+  if (frozen !== null) {
+    const resolved = resolvedModeFromFrozen(frozen);
+    process.stderr.write(
+      `[agent-team-launcher] dispatch backend ${resolved.transport ?? resolved.mode} — ${resolved.reason}\n`,
+    );
+    return resolved;
+  }
   const selection = selectExecutionSubstrate(
     { requested_mode: explicit, dry_run: dryRun },
     probe
   );
   if (selection.warning) process.stderr.write(selection.warning);
-  return { mode: selection.dispatch_mode, reason: selection.reason };
+  return {
+    mode: selection.dispatch_mode,
+    reason: selection.reason,
+    transport: selection.transport_id,
+  };
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+
+  // FU08: maintenance modes are side-effecting launch-surface operations too.
+  // Their previews deliberately stop before liveness probes, pane termination,
+  // attempt sealing, or session rewrites and report the candidates readable
+  // from disk. A real invocation recomputes every effect from current state.
+  if (args.dryRun && (args.reap || args.dismissCompleted)) {
+    const cwd = path.resolve(args.cwd);
+    if (args.dismissCompleted && !args.runId) {
+      process.stdout.write(
+        "[agent-team-launcher] --dismiss-completed pure preview: --run-id <id> is required; " +
+          "liveness probes, termination, attempt sealing, and session writes were withheld.\n",
+      );
+      return;
+    }
+    const runIds = args.runId ? [args.runId] : listRunnableRunIds(cwd);
+    const operation = args.reap ? "--reap" : "--dismiss-completed";
+    const candidates = runIds.flatMap((runId) => {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(sessionJsonPath(cwd, runId), "utf8")) as {
+          teammate_panes?: unknown[];
+        };
+        return [{ runId, panes: parsed.teammate_panes?.length ?? 0 }];
+      } catch {
+        return [];
+      }
+    });
+    process.stdout.write(
+      `[agent-team-launcher] ${operation} pure preview: ${candidates.length} run session(s), ` +
+        `${candidates.reduce((sum, candidate) => sum + candidate.panes, 0)} pane candidate(s). ` +
+        `Liveness probes, termination, attempt sealing, and session writes were withheld. ` +
+        `A real ${operation} recomputes authorization/liveness before applying effects.\n`,
+    );
+    return;
+  }
 
   // ── P1-3 A2b: --reap path ──────────────────────────────────────────────────
   // When --reap is passed, skip the normal launch flow and force-reap dead
@@ -1385,24 +2058,39 @@ async function main(): Promise<void> {
       // parked (adversarial test 6). This is the production end-to-end retry.
       const orphans = findOrphanedAttempts(cwd, runId);
       if (orphans.length > 0) {
+        const acceptedKeys = new Set(
+          findRunAcceptances(cwd, runId)
+            .filter((ra) => ra.acceptance.downstream_release_at !== null)
+            .map((ra) => `${ra.ids.logical_task_id}/${ra.ids.attempt}/${ra.ids.instance_id}`),
+        );
         const paneBySpec = new Map<string, string>();
+        const paneByTask = new Map<string, string>();
+        let manifestBackend: "tmux" | "cmux" | "in-process" = "tmux";
         try {
           const sj = JSON.parse(fs.readFileSync(sjPath, "utf8")) as {
-            teammate_panes?: Array<{ specialist?: string; pane_id?: string }>;
+            backend?: "tmux" | "cmux" | "in-process";
+            teammate_panes?: Array<{ specialist?: string; task_id?: string; pane_id?: string }>;
           };
+          manifestBackend = sj.backend === "cmux" ? "cmux" : sj.backend === "in-process" ? "in-process" : "tmux";
           for (const p of sj.teammate_panes ?? []) {
             if (p.specialist && p.pane_id) paneBySpec.set(p.specialist, p.pane_id);
+            if (p.task_id && p.pane_id) paneByTask.set(p.task_id, p.pane_id);
           }
         } catch { /* session.json unreadable — orphans stay parked */ }
         const nowIso = () => new Date().toISOString();
         for (const ids of orphans) {
           const specialist = readAssignmentForInstance(cwd, ids)?.worker_role ?? null;
-          const paneId = specialist ? paneBySpec.get(specialist) : undefined;
+          const paneId = paneByTask.get(ids.logical_task_id) ?? (specialist ? paneBySpec.get(specialist) : undefined);
           const hasRealPane = !!paneId && !paneId.startsWith("(");
           // No live pane (pruned/gone) → the pane died; confirm the orphan terminal.
           if (!hasRealPane) {
             try {
-              sealTerminalAttempt({ cwd, ids, terminal_state: "terminated", reason: "reaper: pane already gone", orphaned: true, now: nowIso });
+              sealTerminalAttemptWithSubstantiveEvidence({
+                cwd, runId, ids, terminalState: "terminated", reason: "reaper: pane already gone",
+                orphaned: true,
+                accepted: acceptedKeys.has(`${ids.logical_task_id}/${ids.attempt}/${ids.instance_id}`),
+                now: nowIso,
+              });
               totalOrphansReaped++;
               process.stdout.write(
                 `[REAPED] run "${runId}" specialist="${specialist ?? "unknown"}" ` +
@@ -1412,10 +2100,17 @@ async function main(): Promise<void> {
             } catch { /* best-effort */ }
             continue;
           }
-          const outcome = terminatePane(paneId as string);
+          const outcome = manifestBackend === "cmux"
+            ? terminateCmuxSurface(paneId as string)
+            : terminatePane(paneId as string);
           if (outcome.ok && outcome.confirmed) {
             try {
-              sealTerminalAttempt({ cwd, ids, terminal_state: "terminated", reason: "reaper retry confirmed pane death", orphaned: true, now: nowIso });
+              sealTerminalAttemptWithSubstantiveEvidence({
+                cwd, runId, ids, terminalState: "terminated", reason: "reaper: retry confirmed pane death",
+                orphaned: true,
+                accepted: acceptedKeys.has(`${ids.logical_task_id}/${ids.attempt}/${ids.instance_id}`),
+                now: nowIso,
+              });
               totalOrphansReaped++;
               process.stdout.write(
                 `[REAPED] run "${runId}" specialist="${specialist}" ` +
@@ -1432,6 +2127,25 @@ async function main(): Promise<void> {
           }
           // outcome.degraded (tmux unavailable) → leave parked, no bump; retried next --reap.
         }
+      }
+
+      // Reaping is a supported accepted-terminal transition too. Reconcile
+      // after every sweep (also covering a crash after the seal) so an accepted
+      // orphan that just reached `terminated` receives the same substantive
+      // evidence as the normal dismiss path. Without an active migration window
+      // the recorder is intentionally inert.
+      const reconciled = reconcileTerminalSubstantiveOperations({
+        cwd,
+        runId,
+        acceptances: findRunAcceptances(cwd, runId).filter((ra) =>
+          isTerminationAuthorized(ra.acceptance)
+        ),
+      });
+      for (const error of reconciled.errors) {
+        process.stderr.write(
+          `[agent-team-launcher] --reap: substantive evidence remains pending for ${error}; ` +
+            `retry --reap while the run is open\n`,
+        );
       }
     }
 
@@ -1480,7 +2194,16 @@ async function main(): Promise<void> {
       process.exit(0);
     }
 
-    let sessionManifest: { teammate_panes?: Array<{ specialist: string; pane_id?: string }> };
+    let sessionManifest: {
+      backend?: "tmux" | "cmux" | "in-process";
+      session_name?: string;
+      teammate_panes?: Array<{
+        specialist: string;
+        task_id?: string;
+        dispatch_key?: string;
+        pane_id?: string;
+      }>;
+    };
     try {
       sessionManifest = JSON.parse(fs.readFileSync(sjPath, "utf8")) as typeof sessionManifest;
     } catch {
@@ -1520,6 +2243,8 @@ async function main(): Promise<void> {
     let terminatedCount = 0;
     let orphanedCount = 0;
     let deferredCount = 0;
+    let substantiveEvidenceCount = 0;
+    let substantiveEvidencePendingCount = 0;
     const now = () => new Date().toISOString();
     const keyOf = (i: TaskCellInstanceIds) =>
       `${i.logical_task_id}/${i.attempt}/${i.instance_id}`;
@@ -1549,6 +2274,24 @@ async function main(): Promise<void> {
       authBySpecialist.set(specialist, arr);
     }
 
+    // Crash recovery: terminal attempts are immutable and are intentionally
+    // skipped by the teardown loops below. Revisit accepted terminal attempts
+    // here so a prior process stop between terminal sealing and evidence append
+    // converges on the next --dismiss-completed pass.
+    const recovered = reconcileTerminalSubstantiveOperations({
+      cwd,
+      runId,
+      acceptances: authorized,
+    });
+    substantiveEvidenceCount += recovered.emitted;
+    substantiveEvidencePendingCount += recovered.errors.length;
+    for (const error of recovered.errors) {
+      process.stderr.write(
+        `[agent-team-launcher] --dismiss-completed: substantive evidence remains pending for ${error}; ` +
+          `retry --dismiss-completed while the run is open\n`,
+      );
+    }
+
     // A rejected acceptance still authorizes teardown, but writes a rejection
     // terminal event — never a silent kill (D5). Accepted → `terminated`.
     const sealOne = (specialist: string, ra: RunAcceptance, mechanism: string, paneLabel: string): void => {
@@ -1556,12 +2299,21 @@ async function main(): Promise<void> {
       const terminalState = rejected ? "rejected" : "terminated";
       const terminalReason = rejected ? "handoff rejected by acceptance authority" : null;
       try {
-        sealTerminalAttempt({ cwd, ids: ra.ids, terminal_state: terminalState, reason: terminalReason, now });
+        const terminal = sealTerminalAttemptWithSubstantiveEvidence({
+          cwd,
+          runId,
+          ids: ra.ids,
+          terminalState,
+          reason: terminalReason,
+          accepted: !rejected,
+          now,
+        });
         terminatedCount++;
         process.stdout.write(
           `[TERMINATED] specialist="${specialist}" logical_task="${ra.ids.logical_task_id}" ` +
             `instance="${ra.ids.instance_id}" pane="${paneLabel}" state=${terminalState} mechanism="${mechanism}"\n`
         );
+        substantiveEvidenceCount += terminal.emitted;
       } catch (err) {
         process.stderr.write(
           `[agent-team-launcher] --dismiss-completed: could not seal terminal record for ` +
@@ -1570,7 +2322,52 @@ async function main(): Promise<void> {
       }
     };
 
-    for (const [specialist, accs] of authBySpecialist) {
+    if (sessionManifest.backend === "cmux") {
+      // cmux owns one surface per concrete task lane, so terminate by the
+      // immutable logical task id rather than collapsing multiple tasks onto a
+      // role-level handle. This is the lifecycle counterpart to W4's per-lane
+      // launch contract.
+      for (const [specialist, accs] of authBySpecialist) {
+        for (const ra of accs.filter((candidate) => !isAttemptTerminal(candidate.ids))) {
+          const pane = panes.find(
+            (candidate) =>
+              candidate.task_id === ra.ids.logical_task_id ||
+              candidate.dispatch_key === ra.ids.logical_task_id,
+          );
+          const surfaceId = pane?.pane_id;
+          if (!surfaceId || surfaceId.startsWith("(")) {
+            sealOne(specialist, ra, "none (no live cmux surface)", "(none)");
+            continue;
+          }
+          const outcome = terminateCmuxSurface(surfaceId);
+          if (outcome.ok && outcome.confirmed) {
+            sealOne(specialist, ra, outcome.mechanism, surfaceId);
+            if (pane?.dispatch_key && sessionManifest.session_name) {
+              spawnSync("cmux", [
+                "clear-status",
+                cmuxLaneStatusKey(runId, pane.dispatch_key),
+                "--workspace",
+                sessionManifest.session_name,
+              ]);
+            }
+          } else if (outcome.degraded) {
+            deferredCount++;
+            process.stdout.write(
+              `[DEGRADED] specialist="${specialist}" surface="${surfaceId}" ` +
+                `reason="${outcome.error ?? "cmux unavailable"}" — termination deferred\n`,
+            );
+          } else {
+            try { markAttemptOrphaned(cwd, ra.ids); } catch { /* best effort */ }
+            orphanedCount++;
+            process.stdout.write(
+              `[ORPHAN] specialist="${specialist}" logical_task="${ra.ids.logical_task_id}" ` +
+                `instance="${ra.ids.instance_id}" surface="${surfaceId}" ` +
+                `reason="${outcome.error ?? "surface survived close"}"\n`,
+            );
+          }
+        }
+      }
+    } else for (const [specialist, accs] of authBySpecialist) {
       const owned = ownedBySpecialist.get(specialist) ?? accs.map((a) => a.ids);
       const authKeys = new Set(accs.map((a) => keyOf(a.ids)));
       // A cell counts as terminal when it is authorized THIS pass OR was already
@@ -1626,7 +2423,7 @@ async function main(): Promise<void> {
       }
     }
 
-    if (terminatedCount === 0 && orphanedCount === 0 && deferredCount === 0) {
+    if (terminatedCount === 0 && orphanedCount === 0 && deferredCount === 0 && substantiveEvidenceCount === 0 && substantiveEvidencePendingCount === 0) {
       process.stdout.write(
         `[agent-team-launcher] --dismiss-completed: no acceptance-authorized lanes to ` +
           `terminate for run "${runId}" (a receipt on disk does NOT authorize dismissal — ` +
@@ -1636,8 +2433,19 @@ async function main(): Promise<void> {
       process.stdout.write(
         `[agent-team-launcher] --dismiss-completed: run "${runId}" — terminated ` +
           `${terminatedCount} lane(s), ${orphanedCount} orphaned (reaper will retry), ` +
-          `${deferredCount} deferred (shared pane kept alive until all its task-cells are terminal — G4 M2).\n`
+          `${deferredCount} deferred (shared pane kept alive until all its task-cells are terminal — G4 M2), ` +
+          `${substantiveEvidenceCount} substantive evidence record(s), ${substantiveEvidencePendingCount} pending retry.\n`
       );
+    }
+
+    if (
+      sessionManifest.backend === "cmux" &&
+      terminatedCount > 0 &&
+      orphanedCount === 0 &&
+      deferredCount === 0 &&
+      sessionManifest.session_name
+    ) {
+      spawnSync("cmux", ["clear-progress", "--workspace", sessionManifest.session_name]);
     }
 
     // Fall-through: reap any panes that are already dead (registry hygiene).
@@ -1661,11 +2469,38 @@ async function main(): Promise<void> {
   }
 
   let team: TeamYaml;
+  let teamRaw: string;
   try {
-    team = parseYaml(fs.readFileSync(args.team, "utf8"));
+    teamRaw = fs.readFileSync(args.team, "utf8");
+    team = parseYaml(teamRaw);
   } catch (err) {
     process.stderr.write(
       `[agent-team-launcher] ERROR: could not parse ${args.team}: ${(err as Error).message}\n`
+    );
+    process.exit(1);
+  }
+
+  for (const specialist of team.specialists) {
+    if (specialist.definition_source !== "project") continue;
+    const resolved = definitionRefForDispatch(path.resolve(args.cwd), specialist);
+    if (resolved.status !== "resolved") {
+      process.stderr.write(
+        `[agent-team-launcher] REFUSED (project definition): ${specialist.name}: ${resolved.detail}\n` +
+          `  NO pane was created and NO dispatch plan was emitted.\n`,
+      );
+      process.exit(1);
+    }
+    specialist.definition_ref = resolved.ref;
+  }
+
+  // Resolve once, before approval lookup or backend selection, then thread the
+  // same lifecycle identity through every dispatch rung.
+  try {
+    args.runId = resolveLifecycleRunId(path.resolve(args.cwd), args.runId);
+  } catch (err) {
+    process.stderr.write(
+      `[agent-team-launcher] REFUSED (run identity): ${(err as Error).message}\n` +
+        "  NO pane was created and NO dispatch plan was emitted.\n",
     );
     process.exit(1);
   }
@@ -1692,7 +2527,34 @@ async function main(): Promise<void> {
       phaseFromTeamPath(args.team) ??
       (gateRunId ? readActivePhase(gateCwd, gateRunId) : null) ??
       "build";
-    const scheduled = team.specialists.map((s) => s.name);
+    const scheduled = team.specialists.map((s) => s.participant_id ?? s.name);
+    const scheduledRoleRefs = Object.fromEntries(
+      team.specialists.map((s) => [s.participant_id ?? s.name, s.name]),
+    );
+    const scheduledCapabilityScopes = Object.fromEntries(
+      team.specialists.map((s) => [
+        s.participant_id ?? s.name,
+        s.declared_capability_scope ?? null,
+      ]),
+    );
+    let previewOverrideReason: string | null = null;
+    if (args.dryRun) {
+      try {
+        previewOverrideReason = resolveApprovalOverride({
+          env: process.env,
+          overrideReason: args.approvalOverride,
+        });
+      } catch (err) {
+        process.stderr.write(
+          `[agent-team-launcher] REFUSED (approve-before-dispatch gate): ${(err as Error).message}\n` +
+            `  NO pane was created and NO dispatch plan was emitted.\n`,
+        );
+        process.exit(1);
+      }
+    }
+    const approvalEnv = args.dryRun
+      ? { ...process.env, GUILD_DISPATCH_APPROVAL_OVERRIDE: undefined }
+      : process.env;
     // T7R-R1-B1: verification is MANDATORY here — including the standalone /
     // no-run-id call, which the gate refuses outright (`no_run_id`) because a
     // dispatch whose approval cannot even be looked up is never approved.
@@ -1706,7 +2568,12 @@ async function main(): Promise<void> {
         phase: gatePhase,
         teamPath: args.team,
         scheduledParticipants: scheduled,
-        overrideReason: args.approvalOverride,
+        scheduledRoleRefs,
+        scheduledCapabilityScopes,
+        env: approvalEnv,
+        // A preview never consumes or records an override. The real dispatch
+        // must re-present it so the durable degradation audit stays truthful.
+        overrideReason: args.dryRun ? null : args.approvalOverride,
         forced: args.requireApproval,
       });
     } catch (err) {
@@ -1746,6 +2613,12 @@ async function main(): Promise<void> {
           `dispatch, NO run-tree write. A real dispatch still requires a persisted ` +
           `guild.team_proposal.v2 + a current approve decision.\n`,
       );
+      if (previewOverrideReason !== null) {
+        process.stderr.write(
+          `[agent-team-launcher] NOTICE (--dry-run preview): approval override validated but withheld. ` +
+            `A real dispatch must re-present the reason; preview created no override audit record.\n`,
+        );
+      }
     } else if (verdict.degradation) {
       // Loud, non-silent, and explicitly a degradation — not a pass.
       process.stderr.write(
@@ -1769,8 +2642,226 @@ async function main(): Promise<void> {
   // JSON signal so the caller (guild:execute-plan) can route accordingly.
   // When --agent-mode is absent, fall through to the legacy team.backend check
   // for backward compatibility with existing callers.
-  if (args.agentMode !== null) {
-    const { mode: resolvedMode, reason } = resolveAgentMode(args.agentMode, args.dryRun);
+  // Blocker 1 (W4): the frozen run-start decision is read ONCE, after the
+  // lifecycle identity gate resolved args.runId, and is authoritative for
+  // BOTH the --agent-mode branch and the legacy fallthrough below.
+  const frozenDispatch = readFrozenDispatchResolution(path.resolve(args.cwd), args.runId);
+
+  // A frozen cmux authority uses the one full cmux implementation even when a
+  // legacy caller omits the now-redundant --agent-mode flag. Keeping a separate
+  // handoff-only branch made dry and real invocations indistinguishable and
+  // skipped the preview's withheld-check/artifact disclosures.
+  if (args.agentMode !== null || frozenDispatch?.backend === "cmux") {
+    const { mode: resolvedMode, reason, transport } = resolveAgentMode(
+      args.agentMode ?? "team",
+      args.dryRun,
+      frozenDispatch,
+    );
+
+    // W4 (run-identity-and-dispatch): cmux is a real run-scoped transport. It
+    // owns one non-focus-stealing visible surface per concrete task lane and
+    // the same TaskCell/scope/trace/manifest obligations as tmux.
+    if (resolvedMode === "team" && transport === "cmux") {
+      const cwd = path.resolve(args.cwd);
+      const runId = args.runId;
+      const slug = slugFromTeamPath(args.team);
+      const ambientWorkspaceId = (process.env["CMUX_WORKSPACE_ID"] ?? "").trim();
+      if (!ambientWorkspaceId && !args.dryRun) {
+        process.stderr.write(
+          `[agent-team-launcher] ERROR: run is frozen to cmux but CMUX_WORKSPACE_ID is absent; ` +
+            `refusing to redirect the run to another substrate.\n`,
+        );
+        process.exit(1);
+      }
+      const workspaceId = ambientWorkspaceId || "(frozen-cmux-workspace-dry-run)";
+      if (team.specialists.length === 0) {
+        process.stderr.write("[agent-team-launcher] ERROR: team.yaml has no specialists; nothing to spawn.\n");
+        process.exit(1);
+      }
+      const orchestratorHostKind = resolveOrchestratorHostKind(process.env) ?? "claude";
+      const ownerMap = readPlanOwnerTaskIds(cwd, slug);
+      const lanes = expandTaskCellLaunchLanes(runId, team.specialists, ownerMap);
+      const adapterBacked = lanes.some(
+        (lane) => (lane.host_kind ?? orchestratorHostKind) !== "claude",
+      );
+      const runtime = createHostExecutionRuntime({
+        transports: { cmux: cmuxTransportPort(workspaceId, adapterBacked) },
+      });
+      const resolved = resolveDispatchPort(runtime, "cmux");
+      if (!resolved.port) {
+        process.stderr.write(`[agent-team-launcher] ERROR: cmux dispatch unavailable — ${resolved.detail}\n`);
+        process.exit(1);
+      }
+      const port = resolved.port;
+      if (!args.dryRun && port.available().status !== "succeeded") {
+        process.stderr.write("[agent-team-launcher] ERROR: `cmux` is unavailable for the frozen cmux run.\n");
+        process.exit(1);
+      }
+
+      const bindingRef = resolveLaunchBindingRef(cwd, runId);
+      if (bindingRef === null) {
+        throw new Error(`binding_rejected: cmux TaskCell dispatch ${runId} has no minted run binding`);
+      }
+      const planLaneModel = makeLaneModelPlanner(
+        cwd,
+        runId,
+        orchestratorHostKind,
+        bindingRef,
+        args.dryRun,
+      );
+      for (const lane of lanes) planLaneModel(lane, lane.taskId);
+      const phaseId = phaseFromTeamPath(args.team) ?? "build";
+      const launchRequest = {
+        slug,
+        runId,
+        cwd,
+        specialists: lanes,
+        targetName: workspaceId,
+        mode: "in-session" as LaunchMode,
+        dryRun: true,
+        // A real dispatch first runs the adapter-only preflight while keeping
+        // cmux surfaces closed. An operator dry-run suppresses even that
+        // subprocess and remains a pure preview.
+        preflightOnly: !args.dryRun,
+        orchestratorHostKind,
+        teamPath: args.team,
+      };
+      // Plan first: adapter preflights and definition-ref carriage must pass
+      // before immutable attempt-1 records exist.
+      const preview = port.launch(launchRequest);
+      if (preview.status !== "succeeded" || !preview.value) {
+        process.stderr.write(`[agent-team-launcher] ERROR: cmux preflight refused — ${preview.detail ?? preview.status}\n`);
+        process.exit(1);
+      }
+
+      if (!args.dryRun) {
+        for (const spec of team.specialists) {
+          const taskIds = ownerMap.get(spec.name) ?? [spec.name];
+          for (const taskId of taskIds) {
+            writeTaskRun(cwd, runId, taskId, {
+              specialist: spec.name,
+              host: spec.capabilityRequirements
+                ? {
+                    capabilityRequirements: {
+                      needsPr: spec.capabilityRequirements.needs_pr,
+                      needsParallel: spec.capabilityRequirements.needs_parallel,
+                      needsNetwork: spec.capabilityRequirements.needs_network,
+                      isolation: spec.capabilityRequirements.isolation,
+                    },
+                  }
+                : undefined,
+            });
+          }
+        }
+      }
+      const cellCount = emitTaskCellsV2(
+        cwd,
+        runId,
+        slug,
+        lanes,
+        phaseId,
+        "cmux",
+        (lane) =>
+          hostKindToRegistryId(lane.host_kind ?? orchestratorHostKind) ||
+          String(lane.host_kind ?? orchestratorHostKind),
+        bindingRef,
+        args.dryRun,
+      );
+      const launched = args.dryRun
+        ? preview
+        : port.launch({ ...launchRequest, dryRun: false, preflightOnly: false });
+      const result = launched.value;
+      if (launched.status !== "succeeded" || !result || !result.ok) {
+        const detail = launched.detail ?? launched.status;
+        if (!args.dryRun) {
+          const settled = settleFailedCmuxTaskCells({
+            cwd,
+            runId,
+            lanes,
+            unconfirmedPaneIds: result?.teammate_pane_ids ?? {},
+            reason: `cmux dispatch failed: ${detail}`,
+          });
+          process.stderr.write(
+            `[agent-team-launcher] cmux failure lifecycle: ${settled.failed} failed, ` +
+              `${settled.orphaned} orphaned${settled.errors.length ? `; errors: ${settled.errors.join("; ")}` : ""}\n`,
+          );
+        }
+        process.stderr.write(`[agent-team-launcher] ERROR: cmux dispatch failed — ${detail}\n`);
+        process.exit(2);
+      }
+
+      if (!args.dryRun) {
+        const lifecycle = reconcileTaskCellLifecycleTelemetry({
+          cwd,
+          runId,
+          instanceIds: lanes
+            .map((lane) => lane.task_cell_instance_id)
+            .filter((id): id is string => typeof id === "string"),
+          launchConfirmedAt: new Date().toISOString(),
+        });
+        if (!lifecycle.ok) {
+          process.stderr.write(
+            `[agent-team-launcher] WARN: cmux TaskCell lifecycle telemetry incomplete — ${lifecycle.findings.join("; ")}\n`,
+          );
+        }
+        const emitted = emitPaneDispatchEvents({
+          cwd,
+          runId,
+          target: workspaceId,
+          surface: "cmux",
+          lanes: lanes.map((lane) => ({
+            specialist: lane.name,
+            taskId: lane.taskId,
+            paneId: result.teammate_pane_ids[specialistDispatchKey(lane)],
+          })),
+        });
+        if (emitted < lanes.length) {
+          process.stderr.write(`[agent-team-launcher] WARN: recorded ${emitted}/${lanes.length} cmux dispatch receipt(s).\n`);
+        }
+      }
+      const teamResultPreview = buildLaunchTeamResult(runId, args.team, lanes);
+      const manifestPreview = buildManifest({
+          runId,
+          mode: "in-session",
+          sessionName: workspaceId,
+          windowName: null,
+          specialists: lanes,
+          dryRun: args.dryRun,
+          realPaneIds: args.dryRun
+            ? null
+            : { orchestrator: "", teammates: result.teammate_pane_ids },
+          orchestratorHostKind,
+          backend: "cmux",
+        });
+      const resultPath = args.dryRun
+        ? null
+        : writeTeamResult(cwd, runId, teamResultPreview);
+      const manifestPath = args.dryRun ? null : writeManifest(cwd, manifestPreview);
+      const signal = {
+        backend: "cmux",
+        reason,
+        slug,
+        ok: result.ok,
+        taskCellsWritten: cellCount,
+        teammatePaneIds: result.teammate_pane_ids,
+        plannedCommands: result.planned_commands,
+        notes: result.notes,
+        teamResult: resultPath,
+        manifest: manifestPath,
+        ...(args.dryRun ? { teamResultPreview, manifestPreview } : {}),
+      };
+      process.stdout.write(JSON.stringify(signal) + "\n");
+      process.exit(0);
+    }
+
+    let directScopedRoles: string[] = [];
+    if (resolvedMode !== "team") {
+      directScopedRoles = scopedDirectRoles(team);
+      if (directScopedRoles.length > 0 && !args.dryRun) {
+        writeScopedDirectRefusal(resolvedMode, directScopedRoles);
+        process.exit(1);
+      }
+    }
 
     if (resolvedMode === "agent") {
       // D5 rung 3 (in-process / independent agents, no tmux). dispatch.md
@@ -1778,50 +2869,46 @@ async function main(): Promise<void> {
       // both document that this rung returns the backend's declarative
       // dispatchPlan. MH-04 BF-2: it no longer constructs the backend — it
       // resolves the in-process transport through HostExecutionRuntime and
-      // launches through the resolved port. The emitted signal is unchanged.
+      // launches through the resolved port. Scoped dry-run descriptors are
+      // explicitly labeled preview-only; production scoped dispatch is refused
+      // above before this backend can write TaskCells.
       const slug = slugFromTeamPath(args.team);
-      // Reuse the caller's run-id when supplied (--run-id) so GUILD_RUN_ID inside
-      // each dispatchPlan descriptor's env matches the run directory the caller
-      // already created (guild:execute-plan §Input 4). Only mint a fresh one
-      // (e.g. for a standalone `--dry-run` preview with no caller-supplied id).
-      const runId = args.runId ?? makeRunId();
+      // W1: the lifecycle id was resolved once above; this rung cannot mint.
+      const runId = args.runId;
       const cwd = path.resolve(args.cwd);
       const orchestratorHostKind = resolveOrchestratorHostKind(process.env) ?? undefined;
-      // T6 F5: the in-process rung routes models through the SAME production
-      // step the tmux rung uses, so a gated-on M2 selection reaches the
-      // Agent()-dispatch descriptors too (composeInProcessDispatch reads the
-      // stamped provenance). No verifiable binding ⇒ no planning at all: the
-      // rung stays exactly as it is today rather than dispatching unbound.
-      // (Runs BEFORE next's MH-04 port resolution: model provenance is stamped
-      // onto the specialists the resolved port then dispatches.)
-      {
-        // `false`: this rung never MINTS a binding — it only reads one that
-        // already exists (env envelope / the run's own record), so a standalone
-        // in-process preview keeps writing nothing at all.
-        const bindingRef = resolveLaunchBindingRef(cwd, runId, false);
-        if (bindingRef !== null) {
-          const planLaneModel = makeLaneModelPlanner(
-            cwd,
-            runId,
-            orchestratorHostKind ?? "claude",
-            bindingRef,
-          );
-          const ownerMap = readPlanOwnerTaskIds(cwd, slug);
-          for (const s of team.specialists) {
-            const taskIds = ownerMap.get(s.name);
-            const repTaskId = taskIds && taskIds.length > 0 ? taskIds[0] : s.name;
-            planLaneModel(s, safeSegment(repTaskId));
-          }
-        } else if (routingOptedIn(cwd)) {
-          // Silent only when NOTHING was opted into; an operator who turned a
-          // model_routing leg on is told why it did not run (never a silent
-          // degradation, never a warning on the untouched legacy path).
-          process.stderr.write(
-            `[agent-team-launcher] WARN: no minted run binding for ${runId} — ` +
-              `skipping the model-routing step for the in-process rung ` +
-              `(legacy model resolution retained).\n`,
-          );
-        }
+      const ownerMap = readPlanOwnerTaskIds(cwd, slug);
+      const launchLanes = expandTaskCellLaunchLanes(runId, team.specialists, ownerMap);
+      const bindingRef = resolveLaunchBindingRef(cwd, runId);
+      if (bindingRef === null) {
+        throw new Error(`binding_rejected: in-process TaskCell dispatch ${runId} has no minted run binding`);
+      }
+      const planLaneModel = makeLaneModelPlanner(
+        cwd,
+        runId,
+        orchestratorHostKind ?? "claude",
+        bindingRef,
+        args.dryRun,
+      );
+      for (const lane of launchLanes) planLaneModel(lane, lane.taskId);
+      if (!args.dryRun) {
+        const phaseId = phaseFromTeamPath(args.team) ?? "build";
+        const hostId = hostKindToRegistryId(orchestratorHostKind ?? "claude") || String(orchestratorHostKind ?? "claude");
+        const written = emitTaskCellsV2(
+          cwd,
+          runId,
+          slug,
+          launchLanes,
+          phaseId,
+          "in-process",
+          () => hostId,
+          bindingRef,
+          args.dryRun,
+        );
+        process.stderr.write(
+          `[agent-team-launcher] emitted ${written} in-process guild.task_assignment.v2 cell(s) → ` +
+            `.guild/runs/${runId}/task-cells/\n`,
+        );
       }
       const runtime = createHostExecutionRuntime({
         transports: { "in-process": inProcessTransportPort() },
@@ -1837,7 +2924,7 @@ async function main(): Promise<void> {
         slug,
         runId,
         cwd,
-        specialists: team.specialists,
+        specialists: launchLanes,
         targetName: args.sessionName ?? `guild-${slug}`,
         mode: process.env["TMUX"] ? "in-session" : "new-session",
         dryRun: args.dryRun,
@@ -1852,6 +2939,36 @@ async function main(): Promise<void> {
         );
         process.exit(1);
       }
+      if (!args.dryRun) {
+        const resultPath = writeLaunchTeamResult(cwd, runId, args.team, launchLanes);
+        // In-process dispatch has no tmux pane, but it still needs a durable
+        // lifecycle registry so --dismiss-completed can seal an accepted
+        // TaskCell. Substantive migration evidence is recorded only when a
+        // qualifying compatibility read exists; this custom-role path is
+        // explicitly ineligible below. Placeholder pane ids deliberately
+        // select the existing no-live-pane terminal path.
+        const manifestPath = writeManifest(cwd, {
+          ...buildManifest({
+          runId,
+          mode: process.env["TMUX"] ? "in-session" : "new-session",
+          sessionName: args.sessionName ?? `guild-${slug}`,
+          windowName: null,
+          specialists: launchLanes,
+          dryRun: false,
+          realPaneIds: null,
+          orchestratorHostKind,
+          backend: "in-process",
+          }),
+          // The approval-bound custom-role path has no shipped compatibility
+          // read, while scoped canonical direct dispatch remains refused until
+          // FU17 proves child-environment carriage. It can exercise TaskCell
+          // lifecycle, but it must never be counted as a migration observation.
+          migration_observation_eligible: false,
+          migration_observation_blocker: "no shipped compatibility read; scoped direct dispatch remains refused pending FU17",
+        });
+        process.stderr.write(`[agent-team-launcher] wrote TaskCell team_result → ${resultPath}\n`);
+        process.stderr.write(`[agent-team-launcher] wrote in-process lifecycle manifest → ${manifestPath}\n`);
+      }
       const signal = {
         backend: resolvedMode,
         reason,
@@ -1861,6 +2978,10 @@ async function main(): Promise<void> {
         orchestratorPaneId: result.orchestrator_pane_id,
         teammatePaneIds: result.teammate_pane_ids,
         notes: result.notes,
+        dispatchAllowed: !args.dryRun && directScopedRoles.length === 0,
+        previewOnly: args.dryRun || directScopedRoles.length > 0,
+        teamPath: path.resolve(args.team),
+        teamSha256: sha256Prefixed(teamRaw),
       };
       process.stdout.write(JSON.stringify(signal) + "\n");
       process.exit(0);
@@ -1870,11 +2991,16 @@ async function main(): Promise<void> {
       // subagent: execute-plan constructs the Agent() call itself directly
       // from team.yaml + the plan (SKILL.md §"Capability-scope env injection")
       // — there is no launcher-side descriptor to compute for this rung, so the
-      // signal stays the plain {backend, reason, slug} shape.
+      // signal stays declarative and carries an explicit dispatchAllowed /
+      // previewOnly decision in addition to its approval-bound team identity.
       const signal = {
         backend: resolvedMode,
         reason,
         slug: slugFromTeamPath(args.team),
+        dispatchAllowed: !args.dryRun && directScopedRoles.length === 0,
+        previewOnly: args.dryRun || directScopedRoles.length > 0,
+        teamPath: path.resolve(args.team),
+        teamSha256: sha256Prefixed(teamRaw),
       };
       process.stdout.write(JSON.stringify(signal) + "\n");
       process.exit(0);
@@ -1891,6 +3017,31 @@ async function main(): Promise<void> {
           `  (it invokes specialists via the Agent tool, not tmux).\n`
       );
       process.exit(1);
+    }
+    // Blocker 1 (W4): frozen cmux already took the full implementation above;
+    // a legacy run frozen to agent/subagent is not a tmux launch at all.
+    if (frozenDispatch !== null && frozenDispatch.backend !== "tmux") {
+      const resolved = resolvedModeFromFrozen(frozenDispatch);
+      const directScopedRoles = resolved.mode === "team" ? [] : scopedDirectRoles(team);
+      if (resolved.mode !== "team" && directScopedRoles.length > 0 && !args.dryRun) {
+        writeScopedDirectRefusal(resolved.mode, directScopedRoles);
+        process.exit(1);
+      }
+      const signal = {
+        backend: resolved.transport === "cmux" ? "cmux" : resolved.mode,
+        reason: resolved.reason,
+        slug: slugFromTeamPath(args.team),
+        ...(resolved.mode === "team"
+          ? {}
+          : {
+              dispatchAllowed: !args.dryRun && directScopedRoles.length === 0,
+              previewOnly: args.dryRun || directScopedRoles.length > 0,
+              teamPath: path.resolve(args.team),
+              teamSha256: sha256Prefixed(teamRaw),
+            }),
+      };
+      process.stdout.write(JSON.stringify(signal) + "\n");
+      process.exit(0);
     }
   }
 
@@ -1945,15 +3096,10 @@ async function main(): Promise<void> {
   // converge on the same `.guild/runs/<run-id>/` path. Defined here (before the
   // cross-host block) so both remote + local tmux paths share the same run ID.
   //
-  // task-cell-runtime P0.5 (G5): HONOR the caller's `--run-id` on the tmux AND
-  // remote paths, exactly as the in-process rung already does (§D5 rung 3
-  // above). guild:execute-plan creates the run directory and threads `--run-id`
-  // so caller-staged context, task-runs, assignments, traces, handoffs, and
-  // session.json all land under ONE `.guild/runs/<run_id>/` tree regardless of
-  // backend. Minting unconditionally here forked run identity by backend (the
-  // same fixture split across different run dirs). Mint a fresh id ONLY when the
-  // caller supplied none (e.g. a standalone launch or a `--dry-run` preview).
-  const runId = args.runId ?? makeRunId();
+  // task-cell-runtime P0.5 + RID W1: the lifecycle id resolved above is the
+  // only identity every tmux/remote artifact receives. This launcher has no
+  // fallback minter.
+  const runId = args.runId;
 
   // T6 F5: per-task v2 (M2 gated-on) model selections from the production
   // dispatch-model step — consumed by run-state persistence and cross-host
@@ -1962,113 +3108,73 @@ async function main(): Promise<void> {
     string,
     { model: string; effort: string | null; tier: "cheap" | "mid" | "powerful" }
   >();
+  const preRoutingOwnerMap = readPlanOwnerTaskIds(cwd, slug);
+  // Validate global one-task/one-owner identity before routing partitions the
+  // team; otherwise a duplicate split across local/remote subsets could evade
+  // each subset's collision check.
+  const globalLaunchLanes = expandTaskCellLaunchLanes(runId, team.specialists, preRoutingOwnerMap);
+  let launchBindingRef: string | null = null;
+  const routedHostByRole = new Map<string, string>();
+  const modelProvenanceByTask = new Map<string, Specialist["modelProvenance"]>();
 
-  // ── W2-A2: pre-routing task_run writes (single-source for capability routing) ─
-  // Write ALL task_runs for ALL specialists BEFORE any routing decision. After
-  // writing, read back capability_requirements from disk and update each
-  // specialist in-place so planTeamRouting reads EXACTLY what was written.
-  // This makes the written task_run file the single source of truth:
-  //   team.yaml → parser → writer → disk → reader → planTeamRouting
-  // Any future drift between writer and router is a compile-time shape error,
-  // not a silent runtime divergence.
+  // ── W2-A2/FU08: production writes; preview plans from identical inputs ────
+  // A real dispatch writes task_runs before routing and reads them back as the
+  // single source of truth. A dry-run keeps the same in-memory input and model/
+  // routing computation but MUST NOT materialize that channel or any evidence.
   {
-    const preRoutingOwnerMap = readPlanOwnerTaskIds(cwd, slug);
-    for (const spec of team.specialists) {
-      const taskIds = preRoutingOwnerMap.get(spec.name);
-      const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [spec.name];
-      const cr = spec.capabilityRequirements;
-      for (const taskId of effectiveTaskIds) {
-        writeTaskRun(cwd, runId, taskId, {
-          specialist: spec.name,
-          host: cr ? {
-            capabilityRequirements: {
-              needsPr: cr.needs_pr,
-              needsParallel: cr.needs_parallel,
-              needsNetwork: cr.needs_network,
-              isolation: cr.isolation,
-            },
-          } : undefined,
-        });
-      }
-    }
-    // ── D-CAP scope-file writer: write per-task-id scope files BEFORE spawn ──
-    // Closes the "reader-without-writer" gap in the PreToolUse hook file-fallback:
-    // pre-tool-use.ts:488 reads <runDir>/scope/<taskId>.json when GUILD_CAPABILITY_SCOPE
-    // is absent from env (e.g. cross-host SSH or any env where injection is unreliable),
-    // but nothing previously wrote that file. Writing here (inside the pre-routing block,
-    // same task-id resolution as writeTaskRun) guarantees the file is on disk BEFORE any
-    // pane opens via tmux or SSH.  Absent capability_scope → no file (additive,
-    // byte-identical to unscoped behavior — the gate only fires if the file is present).
-    {
-      const runDir = path.join(cwd, ".guild", "runs", runId);
+    if (!args.dryRun) {
       for (const spec of team.specialists) {
-        if (spec.capability_scope === undefined) continue;
         const taskIds = preRoutingOwnerMap.get(spec.name);
         const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [spec.name];
+        const cr = spec.capabilityRequirements;
         for (const taskId of effectiveTaskIds) {
-          const scopeDir = path.join(runDir, "scope");
-          fs.mkdirSync(scopeDir, { recursive: true });
-          fs.writeFileSync(
-            path.join(scopeDir, `${taskId}.json`),
-            JSON.stringify({ capability_scope: spec.capability_scope, autonomy_contract: null }),
-            "utf8",
-          );
+          writeTaskRun(cwd, runId, taskId, {
+            specialist: spec.name,
+            host: cr ? {
+              capabilityRequirements: {
+                needsPr: cr.needs_pr,
+                needsParallel: cr.needs_parallel,
+                needsNetwork: cr.needs_network,
+                isolation: cr.isolation,
+              },
+            } : undefined,
+          });
         }
       }
     }
+    // Scope enforcement is carried by the backend's real process environment.
+    // Do not write a pathname fallback: the shared writer cannot close a
+    // same-user concurrent ancestor swap, and raw writes can follow a planted
+    // scope symlink outside the project.
     // ── T3 F3: resolve the run's minted binding ONCE for both descriptor channels ──
-    // (env envelope → the run's own minted record → mint iff this launcher minted
-    // the fresh standalone run-id). null ⇒ the writers fail closed below.
-    const launchBindingRef = resolveLaunchBindingRef(cwd, runId, args.runId == null);
+    // (env envelope → the run's own minted record). null ⇒ dispatch and preview
+    // both fail closed; preview may read the binding but never consumes it.
+    launchBindingRef = resolveLaunchBindingRef(cwd, runId);
 
-    // ── guild.task_assignment.v1: cross-host work-assignment channel (docs/v2 §08) ──
-    // Write ALL assignments here — full pre-routing list, BEFORE any local/remote
-    // dispatch — so remote specialists (later filtered out of the local tmux pool)
-    // still get their file, and every file is on disk before its pane spawns.
-    {
-      const taWritten = writeTaskAssignments(
-        cwd,
-        runId,
-        team.specialists,
-        preRoutingOwnerMap,
-        orchestratorHostKind,
-        launchBindingRef,
-      );
-      if (taWritten > 0) {
-        process.stdout.write(
-          `[agent-team-launcher] wrote ${taWritten} task assignment(s) → .guild/runs/${runId}/tasks/\n`,
-        );
-      }
+    // Resolve models before routing, but DO NOT persist TaskCell identity yet.
+    // Host/substrate are routing outcomes and immutable v2 records must bind the
+    // selected facts rather than the pre-routing guess.
+    if (launchBindingRef === null) {
+      throw new Error(`binding_rejected: TaskCell dispatch ${runId} has no minted run binding`);
     }
-
-    // ── guild.task_assignment.v2: authoritative per-attempt production channel (ADR D6) ──
-    // Emit ONE immutable assignment + attempt companion per TASK a specialist owns,
-    // at the canonical `.guild/runs/<run-id>/task-cells/<logical_task_id>/attempts/
-    // <attempt>/instances/<instance_id>/` tree — never per specialist name, never
-    // collapsed to a representative first task. A specialist owning ≥2 tasks lands
-    // ≥2 distinct files, none overwritten (P0.3 / AT1). Fail-closed: a malformed
-    // assignment or an overwrite THROWS → non-zero exit (hard dispatch failure, D6),
-    // never the v1 path's warn-and-continue.
     {
-      const { written: cellsWritten, modelOutcomes } = emitTaskCellsV2(
+      const planLaneModel = makeLaneModelPlanner(
         cwd,
         runId,
-        slug,
-        team.specialists,
-        preRoutingOwnerMap,
         orchestratorHostKind,
         launchBindingRef,
+        args.dryRun,
       );
-      if (cellsWritten > 0) {
-        process.stdout.write(
-          `[agent-team-launcher] emitted ${cellsWritten} guild.task_assignment.v2 cell(s) → ` +
-            `.guild/runs/${runId}/task-cells/\n`,
-        );
-      }
-      // T6 F5: expose the per-task v2 selections to the routing block below
-      // (cross-host onDecision consumes them so a gated-on M2 selection is the
-      // model that actually rides the lane's persisted routing decision).
-      for (const [taskId, { outcome, laneTier }] of modelOutcomes) {
+      for (const specialist of team.specialists) {
+        const taskIds = preRoutingOwnerMap.get(specialist.name);
+        const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [specialist.name];
+        for (const rawTaskId of effectiveTaskIds) {
+          const taskId = safeSegment(rawTaskId);
+          const { outcome, laneTier } = planLaneModel(specialist, taskId);
+          modelProvenanceByTask.set(
+            taskId,
+            specialist.modelProvenance ? { ...specialist.modelProvenance } : undefined,
+          );
         if (outcome.selection.source !== "v2") continue;
         v2ModelByTask.set(taskId, {
           model: outcome.selection.model,
@@ -2076,26 +3182,29 @@ async function main(): Promise<void> {
           tier: laneTier,
         });
       }
+      }
       // Single-host path (the cross-host block below may not run at all):
       // persist a gated-on v2 selection into run-state per lane NOW, so the
       // selection is consumed, not just logged. M0/M1 (source legacy) writes
       // nothing — byte-identical legacy behavior.
-      for (const [taskId, sel] of v2ModelByTask) {
-        upsertLane(
-          path.join(cwd, ".guild", "runs", runId),
-          { runId, planSlug: slug, programId: null },
-          taskId,
-          {
-            host: {
-              selected: hostKindToRegistryId(orchestratorHostKind) || String(orchestratorHostKind),
-              degraded: false,
-              independence: "weak",
-              tier: sel.tier,
-              model: sel.model,
-              modelParams: { model: sel.model, ...(sel.effort ? { effort: sel.effort } : {}) },
+      if (!args.dryRun) {
+        for (const [taskId, sel] of v2ModelByTask) {
+          upsertLane(
+            path.join(cwd, ".guild", "runs", runId),
+            { runId, planSlug: slug, programId: null },
+            taskId,
+            {
+              host: {
+                selected: hostKindToRegistryId(orchestratorHostKind) || String(orchestratorHostKind),
+                degraded: false,
+                independence: "weak",
+                tier: sel.tier,
+                model: sel.model,
+                modelParams: { model: sel.model, ...(sel.effort ? { effort: sel.effort } : {}) },
+              },
             },
-          },
-        );
+          );
+        }
       }
     }
 
@@ -2113,16 +3222,18 @@ async function main(): Promise<void> {
       // All task-ids for this specialist share the same specialist-level CR.
       // Use the first one as the representative file.
       const repTaskId = (taskIds && taskIds.length > 0) ? taskIds[0] : spec.name;
-      const fromDisk = readTaskRunCapReqs(cwd, runId, repTaskId);
-      if (fromDisk !== undefined) {
-        spec.capabilityRequirements = fromDisk;
-      } else {
-        // W2-A2(d): observable benign fallback — emit degradation signal.
-        emitReadbackDegradation(cwd, runId, repTaskId, spec.name);
+      if (!args.dryRun) {
+        const fromDisk = readTaskRunCapReqs(cwd, runId, repTaskId);
+        if (fromDisk !== undefined) {
+          spec.capabilityRequirements = fromDisk;
+        } else {
+          // W2-A2(d): observable benign fallback — emit degradation signal.
+          emitReadbackDegradation(cwd, runId, repTaskId, spec.name);
+        }
       }
       // D-CAP: populate spec.taskId with the representative plan task-id so
       // composeTmuxCommands / composeInProcessDispatch / RemoteTeamBackend can inject
-      // GUILD_TASK_ID into every spawn env (scope-file locator for the hook fallback).
+      // GUILD_TASK_ID into every spawn env as the lane's runtime identity carrier.
       spec.taskId = repTaskId;
     }
   }
@@ -2178,6 +3289,7 @@ async function main(): Promise<void> {
           // path already uses (L~1032). Skip when no plan task-ids are found (plan absent
           // or specialist not in plan) — NO name-key fallback (that's the contract violation).
           onDecision: (d) => {
+            if (args.dryRun) return;
             // d.taskId is the specialist NAME (planTeamRouting sets taskId = s.name).
             // RunStateV1.lanes is TASK-ID keyed. Map name → plan task-id(s) via the
             // block-scoped plan parse (same join the SSH dead-lane path uses, minus the
@@ -2212,6 +3324,7 @@ async function main(): Promise<void> {
             }
           },
         });
+        for (const route of routes) routedHostByRole.set(route.specialist, route.decision.host);
         // EDIT-2: surface degraded routes in stderr — never silent (mirrors the
         // remote-no-endpoint surfacing pattern above).
         const degradedRoutes = routes.filter((r) => r.decision.degraded);
@@ -2255,6 +3368,36 @@ async function main(): Promise<void> {
           const remoteSpecialists = withEndpoint.map(
             (r) => team.specialists.find((s) => s.name === r.specialist)!
           );
+          const remoteLaunchLanes = expandTaskCellLaunchLanes(
+            runId,
+            remoteSpecialists,
+            preRoutingOwnerMap,
+          ).map((lane) => ({
+            ...lane,
+            modelProvenance: modelProvenanceByTask.get(lane.taskId),
+          }));
+          const phaseId = phaseFromTeamPath(args.team) ?? "build";
+          const remoteCellsWritten = emitTaskCellsV2(
+            cwd,
+            runId,
+            slug,
+            remoteLaunchLanes,
+            phaseId,
+            "remote",
+            (lane) => {
+              const route = routes.find((candidate) => candidate.specialist === lane.name);
+              if (!route) throw new Error(`missing selected remote host for ${lane.name}`);
+              return route.decision.host;
+            },
+            launchBindingRef,
+            args.dryRun || args.runId === null,
+          );
+          if (!args.dryRun) {
+            process.stdout.write(
+              `[agent-team-launcher] emitted ${remoteCellsWritten} remote guild.task_assignment.v2 cell(s) → ` +
+                `.guild/runs/${runId}/task-cells/\n`,
+            );
+          }
 
           const resolveHostTarget = (spec: Specialist): RemoteHostTarget => {
             const r = routes.find((rt) => rt.specialist === spec.name)!;
@@ -2288,7 +3431,9 @@ async function main(): Promise<void> {
                 // bounded retry below; a later successful attempt discards the
                 // failed attempt's envelope, so the orphan must be persisted at
                 // detection time (NDJSON events log + trace), not left on stderr.
-                warn: (msg) => emitRemoteOrphan(cwd, runId, msg),
+                warn: args.dryRun
+                  ? (msg) => process.stderr.write(`[agent-team-launcher] dry-run remote warning: ${msg}\n`)
+                  : (msg) => emitRemoteOrphan(cwd, runId, msg),
               }),
             },
           });
@@ -2323,7 +3468,7 @@ async function main(): Promise<void> {
                   slug,
                   runId,
                   cwd,
-                  specialists: remoteSpecialists,
+                  specialists: remoteLaunchLanes,
                   targetName,
                   mode,
                   dryRun: args.dryRun,
@@ -2342,6 +3487,7 @@ async function main(): Promise<void> {
               {
                 ...retryOpts,
                 onExhausted: (signal) => {
+                  if (args.dryRun) return;
                   // Mark every remote lane dead + write resume.json (resume.enabled honored
                   // inside markLaneDead). One writer for both SSH + prose paths (R-016 bridge).
                   //
@@ -2352,7 +3498,7 @@ async function main(): Promise<void> {
                   // identical to the resume-lanes.ts read key + execute-plan re-entry key
                   // (run-state lanes are task-id-keyed). A specialist that owns several
                   // lanes dead-letters each (an undispatchable specialist runs none of them).
-                  for (const spec of remoteSpecialists) {
+          for (const spec of remoteLaunchLanes) {
                     const laneKeys = resolveDeadLaneKeys(cwd, slug, spec.name);
                     // Fallback (no plan task-id) → keyed by spec.name; warn so a
                     // name-keyed checkpoint that resume can't map is never silent.
@@ -2393,12 +3539,29 @@ async function main(): Promise<void> {
 
           if (args.dryRun) {
             process.stdout.write(
-              `[agent-team-launcher] dry-run — remote dispatch (${remoteSpecialists.length} specialist(s)):\n`
+              `[agent-team-launcher] dry-run — remote dispatch (${remoteLaunchLanes.length} task cell(s)):\n`
             );
             for (const cmd of remoteResult.planned_commands ?? []) {
               process.stdout.write(`  ${cmd}\n`);
             }
+            for (const note of remoteResult.notes ?? []) {
+              process.stdout.write(`[agent-team-launcher] NOTE: ${note}\n`);
+            }
           } else {
+            const lifecycle = reconcileTaskCellLifecycleTelemetry({
+              cwd,
+              runId,
+              instanceIds: remoteLaunchLanes
+                .map((lane) => lane.task_cell_instance_id)
+                .filter((id): id is string => typeof id === "string"),
+              launchConfirmedAt: new Date().toISOString(),
+            });
+            if (!lifecycle.ok) {
+              process.stderr.write(
+                `[agent-team-launcher] WARN: remote TaskCell lifecycle telemetry incomplete — ` +
+                  `${lifecycle.findings.join("; ")}\n`,
+              );
+            }
             // ── #76: remote lanes are pane-dispatched too ────────────────────
             // A remote lane opens a pane on the FAR host, so its hooks write
             // into that host's context — exactly the same blind spot as a local
@@ -2418,10 +3581,10 @@ async function main(): Promise<void> {
               // the real remote handle.
               target: "",
               surface: "remote",
-              lanes: remoteSpecialists.map((s) => ({
+              lanes: remoteLaunchLanes.map((s) => ({
                 specialist: s.name,
                 taskId: s.taskId,
-                paneId: remoteResult.teammate_pane_ids?.[s.name],
+                paneId: remoteResult.teammate_pane_ids?.[specialistDispatchKey(s)],
               })),
             });
             if (emittedRemote > 0) {
@@ -2430,10 +3593,10 @@ async function main(): Promise<void> {
                   `.guild/runs/${runId}/logs/v1.4-events.jsonl\n`,
               );
             }
-            if (emittedRemote < remoteSpecialists.length) {
+            if (emittedRemote < remoteLaunchLanes.length) {
               process.stderr.write(
-                `[agent-team-launcher] WARN: recorded ${emittedRemote}/${remoteSpecialists.length} remote ` +
-                  `dispatch receipt(s) — this run's trace under-reports its specialists (#76).\n`,
+                `[agent-team-launcher] WARN: recorded ${emittedRemote}/${remoteLaunchLanes.length} remote ` +
+                  `dispatch receipt(s) — this run's trace under-reports its task cells (#76).\n`,
               );
             }
           }
@@ -2446,9 +3609,11 @@ async function main(): Promise<void> {
             // All specialists dispatched remotely — no local tmux session needed.
             if (args.dryRun) {
               process.stdout.write(
-                "[agent-team-launcher] dry-run: all specialists remote; no local tmux session.\n"
+                "[agent-team-launcher] dry-run: all specialists remote; no local tmux session and no state written.\n"
               );
             } else {
+              const resultPath = writeLaunchTeamResult(cwd, runId, args.team, globalLaunchLanes);
+              process.stdout.write(`[agent-team-launcher] wrote TaskCell team_result → ${resultPath}\n`);
               process.stdout.write(
                 "[agent-team-launcher] all specialists dispatched remotely.\n"
               );
@@ -2466,6 +3631,23 @@ async function main(): Promise<void> {
         throw err;
       }
     }
+  }
+
+  // Route selection is now complete. Expand each remaining local specialist
+  // into one concrete worker per owned task, then bind immutable TaskCell
+  // identity to the actual local tmux substrate and selected host.
+  {
+    const localLaunchLanes = expandTaskCellLaunchLanes(runId, team.specialists, preRoutingOwnerMap)
+      .map((lane) => ({
+        ...lane,
+        modelProvenance: modelProvenanceByTask.get(lane.taskId),
+      }));
+    // Fix B (run-identity-and-dispatch): identity is EXPANDED here, but the
+    // immutable attempt-1 records are NOT persisted yet — emitTaskCellsV2 now
+    // runs after the pre-pane gates (availability, collision, mixed-host
+    // preflight, definition-injection support), so a refused launch exits with
+    // zero task-cell records instead of poisoning attempt 1 for the next try.
+    team.specialists = localLaunchLanes;
   }
 
   // CH-1/R8: wire pane adapters whenever any actual pane host is not Claude.
@@ -2560,31 +3742,73 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
-    // CH-6/R8: fail-fast preflight for adapter-backed teams. Probe every
-    // actually-present pane host BEFORE any pane
-    // spawns; on failure abort naming the specialist + host + missing
-    // dependency, with ZERO panes opened (no partial spawn). No-op for a
-    // pure-claude team (no resolver wired → preflight returns ok).
-    if (adapterBacked) {
-      const probed = tmuxPort.preflight(launchRequest);
-      if (probed.status !== "succeeded" || !probed.value) {
-        process.stderr.write(
-          `[agent-team-launcher] ERROR: mixed-host preflight could not run — ` +
-            `${probed.detail ?? probed.status}\n`
-        );
-        process.exit(1);
-      }
-      const pf = probed.value;
-      if (!pf.ok) {
-        const lines = pf.failures
-          .map((f) => `    - ${f.specialist} [${f.host_kind}]: ${f.message}`)
-          .join("\n");
-        process.stderr.write(
-          `[agent-team-launcher] ERROR: mixed-host preflight failed ` +
-            `(CH-6 fail-fast — zero panes opened):\n${lines}\n`
-        );
-        process.exit(1);
-      }
+    // CH-6/R8 plus exact-package activation: probe every actually-present pane
+    // host BEFORE immutable TaskCells are written. Pure-Claude teams have no
+    // adapter dependency, but still validate the exact Guild package that each
+    // pane will activate. Any refusal therefore leaves zero poisoned attempts.
+    const probed = tmuxPort.preflight(launchRequest);
+    if (probed.status !== "succeeded" || !probed.value) {
+      process.stderr.write(
+        `[agent-team-launcher] ERROR: tmux preflight could not run — ` +
+          `${probed.detail ?? probed.status}\n`
+      );
+      process.exit(1);
+    }
+    const pf = probed.value;
+    if (!pf.ok) {
+      const lines = pf.failures
+        .map((f) => `    - ${f.specialist} [${f.host_kind}]: ${f.message}`)
+        .join("\n");
+      process.stderr.write(
+        `[agent-team-launcher] ERROR: tmux preflight failed ` +
+          `(CH-6 fail-fast — zero panes opened):\n${lines}\n`
+      );
+      process.exit(1);
+    }
+  }
+
+  // Fix B (run-identity-and-dispatch): definition-injection support is checked
+  // BEFORE any immutable record is written. A lane carrying a pinned
+  // definition_ref on a port that has not declared (or cannot honor) injection
+  // would be refused inside launch() — after the pre-fix code had already
+  // persisted attempt-1 records. Refuse HERE, with zero records on disk.
+  for (const lane of team.specialists) {
+    if (lane.definition_ref === undefined) continue;
+    const verdict = resolveInjectionSupport({ definition_ref: lane.definition_ref }, tmuxPort);
+    if (verdict.kind === "refuse") {
+      process.stderr.write(
+        `[agent-team-launcher] ERROR: transport "tmux" refuses definition_ref injection for ` +
+          `${lane.name} (${verdict.reason_code}) — refusing BEFORE any attempt-1 record is written.\n`,
+      );
+      process.exit(1);
+    }
+  }
+
+  // Fix B: the immutable guild.task_assignment.v2 + guild.task_attempt.v1
+  // records are persisted ONLY now — after availability, collision, mixed-host
+  // preflight and injection-support gates all passed. A dry run persists
+  // nothing (emitTaskCellsV2 returns before any write).
+  {
+    const phaseId = phaseFromTeamPath(args.team) ?? "build";
+    const localCellsWritten = emitTaskCellsV2(
+      cwd,
+      runId,
+      slug,
+      team.specialists as TaskCellLaunchLane[],
+      phaseId,
+      "tmux",
+      (lane) =>
+        routedHostByRole.get(lane.name) ??
+        hostKindToRegistryId(lane.host_kind ?? orchestratorHostKind) ??
+        String(lane.host_kind ?? orchestratorHostKind),
+      launchBindingRef,
+      args.dryRun || args.runId === null,
+    );
+    if (!args.dryRun) {
+      process.stdout.write(
+        `[agent-team-launcher] emitted ${localCellsWritten} tmux guild.task_assignment.v2 cell(s) → ` +
+          `.guild/runs/${runId}/task-cells/\n`,
+      );
     }
   }
 
@@ -2595,8 +3819,45 @@ async function main(): Promise<void> {
   const launched = tmuxPort.launch(launchRequest);
   const launchResult = launched.value;
   if (!launchResult) {
+    if (!args.dryRun) {
+      const settled = settleFailedCmuxTaskCells({
+        cwd,
+        runId,
+        lanes: team.specialists as TaskCellLaunchLane[],
+        unconfirmedPaneIds: {},
+        reason: `tmux final plan refused before pane spawn: ${launched.detail ?? launched.status}`,
+      });
+      process.stderr.write(
+        `[agent-team-launcher] tmux no-pane failure lifecycle: ${settled.failed} failed, ` +
+          `${settled.orphaned} orphaned${settled.errors.length ? `; errors: ${settled.errors.join("; ")}` : ""}\n`,
+      );
+    }
     process.stderr.write(
       `[agent-team-launcher] tmux dispatch failed: ${launched.detail ?? launched.status}\n`
+    );
+    process.exit(2);
+  }
+
+  // A failed plan is a failed dispatch even in preview mode. Check this before
+  // the dry-run success path so invalid exact-package activation cannot be
+  // presented as a completed preview with an empty command list.
+  if (!launchResult.ok) {
+    if (!args.dryRun && launchResult.planned_commands.length === 0) {
+      const settled = settleFailedCmuxTaskCells({
+        cwd,
+        runId,
+        lanes: team.specialists as TaskCellLaunchLane[],
+        unconfirmedPaneIds: {},
+        reason: `tmux final plan refused before pane spawn: ${launchResult.failure_detail ?? launchResult.notes.join(" | ")}`,
+      });
+      process.stderr.write(
+        `[agent-team-launcher] tmux no-pane failure lifecycle: ${settled.failed} failed, ` +
+          `${settled.orphaned} orphaned${settled.errors.length ? `; errors: ${settled.errors.join("; ")}` : ""}\n`,
+      );
+    }
+    process.stderr.write(
+      `[agent-team-launcher] tmux command failed: ${launchResult.failed_command ?? "(unknown)"}\n` +
+        `  stderr: ${launchResult.failure_detail ?? launchResult.notes.join(" | ")}\n`
     );
     process.exit(2);
   }
@@ -2611,6 +3872,9 @@ async function main(): Promise<void> {
       "[agent-team-launcher] dry-run — would execute the following tmux commands:\n"
     );
     for (const c of launchResult.planned_commands) process.stdout.write(`  ${c}\n`);
+    for (const note of launchResult.notes ?? []) {
+      process.stdout.write(`[agent-team-launcher] NOTE: ${note}\n`);
+    }
     // new-session mode finishes by attaching the terminal; in-session mode does
     // NOT attach (the select-window above already surfaced the team window).
     if (mode === "new-session") {
@@ -2619,9 +3883,7 @@ async function main(): Promise<void> {
       );
     }
 
-    const manifestPath = writeManifest(
-      cwd,
-      buildManifest({
+    const manifestPreview = buildManifest({
         runId,
         mode,
         sessionName: mode === "in-session" ? "(dry-run: current tmux session)" : targetName,
@@ -2630,25 +3892,32 @@ async function main(): Promise<void> {
         dryRun: true,
         realPaneIds: null,
         orchestratorHostKind,
-      })
-    );
+      });
     process.stdout.write(
-      `[agent-team-launcher] wrote session manifest → ${manifestPath}\n`
+      "[agent-team-launcher] session manifest preview (not written):\n" +
+        JSON.stringify(manifestPreview, null, 2) +
+        "\n[agent-team-launcher] dry-run complete — no state written.\n",
     );
     process.exit(0);
   }
 
-  // Real run: the port executed the plan through the substrate, tearing down the
-  // partial target on first failure (kill-window in-session / kill-session
-  // new-session) and collecting teammate pane ids. The exact failed command and
-  // its stderr survive as typed fields, so this message is unchanged.
-  if (!launchResult.ok) {
+  const lifecycle = reconcileTaskCellLifecycleTelemetry({
+    cwd,
+    runId,
+    instanceIds: team.specialists
+      .map((lane) => lane.task_cell_instance_id)
+      .filter((id): id is string => typeof id === "string"),
+    launchConfirmedAt: new Date().toISOString(),
+  });
+  if (!lifecycle.ok) {
     process.stderr.write(
-      `[agent-team-launcher] tmux command failed: ${launchResult.failed_command ?? "(unknown)"}\n` +
-        `  stderr: ${launchResult.failure_detail ?? ""}\n`
+      `[agent-team-launcher] WARN: tmux TaskCell lifecycle telemetry incomplete — ` +
+        `${lifecycle.findings.join("; ")}\n`,
     );
-    process.exit(2);
   }
+
+  const teamResultPath = writeLaunchTeamResult(cwd, runId, args.team, globalLaunchLanes);
+  process.stdout.write(`[agent-team-launcher] wrote TaskCell team_result → ${teamResultPath}\n`);
 
   const currentSessionName = (): string | null => {
     const identity = tmuxPort.sessionIdentity();
@@ -2672,7 +3941,7 @@ async function main(): Promise<void> {
       lanes: team.specialists.map((s) => ({
         specialist: s.name,
         taskId: s.taskId,
-        paneId: launchResult.teammate_pane_ids[s.name],
+        paneId: launchResult.teammate_pane_ids[specialistDispatchKey(s)],
       })),
     });
     if (emitted > 0) {
@@ -2734,7 +4003,9 @@ async function main(): Promise<void> {
   process.exit(attach.status ?? 0);
 }
 
-main().catch((err) => {
-  process.stderr.write(`[agent-team-launcher] FATAL: ${(err as Error).message}\n`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    process.stderr.write(`[agent-team-launcher] FATAL: ${(err as Error).message}\n`);
+    process.exit(1);
+  });
+}

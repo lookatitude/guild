@@ -50,14 +50,14 @@
       "id": "lint-context-bundle",
       "source_path": "scripts/lint-context-bundle.ts",
       "resource_path": "resources/scripts/lint-context-bundle.ts",
-      "sha256": "931616e7490ae068fdb6a2ff64fc8994509d56cf45e2130cff6ca786792d6d9f"
+      "sha256": "88697d8276736bd6fec6d9cb94d93727ee79f9d53fb949e3c7055d6c1b187bc1"
     },
     {
       "category": "skills",
       "id": "guild-context-assemble",
       "source_path": "skills/meta/context-assemble/SKILL.md",
       "resource_path": "resources/skills/meta/context-assemble/SKILL.md",
-      "sha256": "b9cbf2a0cc9ecc4ac36cce5d188dd121910474de9c6e17ca487a7a2f02f492b5"
+      "sha256": "3842140c9742ad6b187f10ca07eb41b6e871d37c796762656351cb0d74d6bb46"
     },
     {
       "category": "skills",

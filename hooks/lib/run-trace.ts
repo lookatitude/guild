@@ -58,18 +58,21 @@ import * as crypto from "crypto";
 import {
   createRunLifecycle,
   createRealEnv,
+  CAPABILITY_RUN_START_SNAPSHOT_SCHEMA,
   readRecordStatusRuns,
   appendPhase,
   isCanonicalPhase,
   type RunLifecycleEnv,
+  type StartRunOpts,
+  type CapabilityBaselineCaptureEvidence,
   type TargetKind,
 } from "../../scripts/lib/run-lifecycle.js";
 // U3/U6 wiring (audit fix, plugin-audit-remediation G3c): the run-start
 // preflight pipeline (settings resolve + validate + tmux probe + provider
 // detect) previously had ZERO production callers — resolved-settings.json
-// never landed on disk in a real run. resolvePreflightSnapshot() below is the
+// never landed on disk in a real run. resolveRunStartPreflight() below is the
 // deterministic caller; the CLI (hooks/run-trace.ts `start`) invokes it and
-// threads the result into startRunOnly/startAndCloseRun via StartAndCloseOpts.snapshot.
+// threads both the snapshot and adapter identity into startRunOnly/startAndCloseRun.
 import {
   runStartPreflight,
   type PreflightProbe,
@@ -91,6 +94,15 @@ import {
 // authorization-recovery import: authorizeHookWrite never touches it.
 import { loadRunBinding } from "../../scripts/lib/run-binding.js";
 import type { HostKind } from "../../src/modules/host-runtime/workflows/host-types.js";
+import { baselineBinding, snapshotTreeHashes } from "../../scripts/lib/capability/profile-emit.js";
+import {
+  appendReceipt,
+  compareCheckpointToJournal,
+  makeReceiptInput,
+  readCheckpointState,
+  scanReceiptJournal,
+} from "../../src/modules/telemetry/workflows/receipt-journal.js";
+import { reconcileReceiptJournal } from "../../src/modules/telemetry/workflows/receipt-reconcile.js";
 
 import { writeCheckpoint } from "../emit-learning-checkpoint.js";
 import { PHASE_TOKEN_TO_CHECKPOINT } from "./learning-backstop.js";
@@ -100,6 +112,86 @@ import { resolveHeartbeatTimeoutMs } from "./heartbeat.js";
 // carries a REAL verdict (not all-none) WITHOUT depending on the model running a CLI.
 import { classifyPhase, type ArtifactSet, type HandoffV2Block } from "../../scripts/lib/learning-signatures.js";
 import { extractHandoffEnvelope } from "./handoff-v2.js";
+
+function captureCapabilityBaseline(root: string, runId: string) {
+  const hashes = snapshotTreeHashes(root);
+  const boundRoot = baselineBinding(root);
+  if (!hashes || !boundRoot) return null;
+  return Object.freeze({ ...hashes, bound_root: boundRoot, bound_run_id: runId });
+}
+
+function recordCapabilityBaselineCapture(root: string, evidence: CapabilityBaselineCaptureEvidence): boolean {
+  const operationId = `capability-start-snapshot:${evidence.run_id}`;
+  const outputHash = `sha256:${evidence.snapshot_sha256}`;
+  const paths = {
+    journal: path.join(root, ".guild", "runs", evidence.run_id, "receipts", "journal.jsonl"),
+    checkpoint: path.join(root, ".guild", "runs", evidence.run_id, "receipts", "checkpoint.json"),
+  };
+  const input = makeReceiptInput({
+    run_id: evidence.run_id,
+    operation_id: operationId,
+    correlation_id: operationId,
+    event_id: `${operationId}:${evidence.snapshot_sha256.slice(0, 12)}`,
+    causation_id: null,
+    scenario_id: "PCL-09",
+    event_name: "receipt.append",
+    outcome_type: "guild.capability_outcome.v1",
+    disposition: "succeeded",
+    observation_state: "checked_clean",
+    input_hash: evidence.start_identity_hash,
+    output_hash: outputHash,
+    terminal: false,
+    recorded_at: evidence.run_started_at,
+    observed_at: evidence.run_started_at,
+    versions: {
+      host_id: "guild-lifecycle",
+      host_version: "unknown",
+      runtime_version: CAPABILITY_RUN_START_SNAPSHOT_SCHEMA,
+      source_version: evidence.start_identity_hash,
+      contract_version: "guild.observability.v1",
+    },
+    affected_event_range: null,
+  });
+  const matches = (record: ReturnType<typeof scanReceiptJournal>["records"][number]): boolean =>
+    record.sequence === 1 &&
+    record.run_id === evidence.run_id &&
+    record.operation_id === operationId &&
+    record.correlation_id === operationId &&
+    record.event_id === input.event_id &&
+    record.scenario_id === "PCL-09" &&
+    record.event_name === "receipt.append" &&
+    record.disposition === "succeeded" &&
+    record.observation_state === "checked_clean" &&
+    record.input_hash === evidence.start_identity_hash &&
+    record.output_hash === outputHash &&
+    record.terminal === false &&
+    record.recorded_at === evidence.run_started_at &&
+    record.observed_at === evidence.run_started_at;
+
+  const appended = appendReceipt(paths, input);
+  if (appended.durable && appended.sequence === 1 && appended.record && matches(appended.record)) return true;
+
+  // appendReceipt can lose only the checkpoint half after the journal line has
+  // already reached durable storage. Recover that exact, sole sequence-1 start
+  // receipt before startRun decides whether it may expose the run id. A lock or
+  // validation refusal that wrote no matching line still fails closed.
+  let scan = scanReceiptJournal(paths.journal);
+  if (scan.integrity !== "intact" || scan.blocks_clean_close || scan.records.length !== 1 || !matches(scan.records[0])) return false;
+  const repaired = reconcileReceiptJournal({
+    journalPath: paths.journal,
+    checkpointPath: paths.checkpoint,
+    run_id: evidence.run_id,
+    producerCheckpoint: { last_sequence: 1, record_count: 1 },
+    reconciled_at: evidence.run_started_at,
+    repair_checkpoint: true,
+  });
+  if (!repaired.checkpoint_repair.verified || repaired.blocks_clean_close) return false;
+  scan = scanReceiptJournal(paths.journal);
+  return scan.integrity === "intact" &&
+    scan.records.length === 1 &&
+    matches(scan.records[0]) &&
+    compareCheckpointToJournal(readCheckpointState(paths.checkpoint), scan, evidence.run_id).length === 0;
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -317,7 +409,7 @@ export function emitRunClosed(
       process.stderr.write(formatBindingRejected("run-trace", auth));
       return;
     }
-    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost as ResolveHost));
+    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost as ResolveHost, captureCapabilityBaseline, recordCapabilityBaselineCapture));
     lifecycle.closeRun(runId, {
       status: opts.status ?? "closed",
       binding_ref: auth.binding_ref,
@@ -397,6 +489,11 @@ export interface StartAndCloseOpts {
    * behavior unchanged) — e.g. when the preflight computation degraded.
    */
   snapshot?: ResolvedSettingsSnapshot;
+  /**
+   * T3: identity resolved by the same run-start preflight that produced the
+   * snapshot. Threaded into session-context.json; absent records `unknown`.
+   */
+  session_identity?: StartRunOpts["session_identity"];
 }
 
 /**
@@ -583,7 +680,7 @@ export function startRunOnly(
 ): string | null {
   try {
     closeStalePriorOpenRun(root, resolveHost);
-    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost as ResolveHost));
+    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost as ResolveHost, captureCapabilityBaseline, recordCapabilityBaselineCapture));
     return lifecycle.startRun(buildStartRunOpts(root, opts));
   } catch (err) {
     process.stderr.write(
@@ -591,6 +688,64 @@ export function startRunOnly(
     );
     return null;
   }
+}
+
+function hashFile(file: string): string | null {
+  try {
+    return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+/** Resolve immutable identity from the installed Guild package, never the consumer repo. */
+export function resolveInstalledPluginIdentity(
+  env: Record<string, string | undefined> = process.env,
+  fallbackRoot = path.resolve(__dirname, "../.."),
+): { version: string; ref: string; command_surface_version: string } {
+  const pluginRoot = env["GUILD_PLUGIN_ROOT"] ?? env["PLUGIN_ROOT"] ??
+    env["CLAUDE_PLUGIN_ROOT"] ?? env["CODEX_PLUGIN_ROOT"] ?? fallbackRoot;
+  const manifestCandidates = [
+    ".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "plugin.json", "antigravity-manifest.json",
+    "cursor-manifest.json", "github-copilot-manifest.json", "opencode-manifest.json", "pi-manifest.json", "rovo-dev-manifest.json",
+  ];
+  let version: string | null = null;
+  let identityFile: string | null = null;
+  for (const rel of manifestCandidates) {
+    const candidate = path.join(pluginRoot, rel);
+    try {
+      const parsed = JSON.parse(fs.readFileSync(candidate, "utf8")) as Record<string, unknown>;
+      if (typeof parsed["version"] === "string" && parsed["version"] !== "") {
+        version = parsed["version"];
+        identityFile = candidate;
+        break;
+      }
+    } catch { /* try the next host manifest */ }
+  }
+  if (version === null) {
+    try {
+      const agents = fs.readFileSync(path.join(pluginRoot, "AGENTS.md"), "utf8");
+      version = /source_version:\s*([0-9A-Za-z.+-]+)/.exec(agents)?.[1] ?? null;
+      if (version) identityFile = path.join(pluginRoot, "AGENTS.md");
+    } catch { /* version remains unknown */ }
+  }
+  const refHash = identityFile ? hashFile(identityFile) : hashFile(path.join(pluginRoot, "scripts", "run-analysis.ts"));
+  const commandRegistry = hashFile(path.join(pluginRoot, "command-src", "command-registry.json"));
+  const claudeCommands = (() => {
+    const dir = path.join(pluginRoot, "commands");
+    try {
+      const material = fs.readdirSync(dir).filter((name) => name.endsWith(".md")).sort()
+        .map((name) => `${name}\0${fs.readFileSync(path.join(dir, name), "utf8")}`).join("\0");
+      return material ? crypto.createHash("sha256").update(material).digest("hex") : null;
+    } catch { return null; }
+  })();
+  return {
+    version: version ?? "unknown",
+    ref: refHash ? `sha256:${refHash}` : "unknown",
+    command_surface_version: commandRegistry
+      ? `sha256:${commandRegistry}`
+      : claudeCommands ? `sha256:${claudeCommands}` : "not-applicable",
+  };
 }
 
 /**
@@ -638,9 +793,11 @@ function buildStartRunOpts(
     initiative: opts.initiative ?? null, // NN#5: scalar record ONLY, never a dir
     phase,
     run_class: runClass,
+    plugin_identity: resolveInstalledPluginIdentity(),
     // U6: thread the resolved-settings snapshot straight through. Undefined
     // when the caller passed none (back-compat: startRun skips the write).
     snapshot: opts.snapshot,
+    session_identity: opts.session_identity,
   };
 }
 
@@ -667,10 +824,20 @@ function buildStartRunOpts(
  * of prompting" contract) and emits a one-line stderr note so the operator can
  * still see that tmux team-mode was available but not auto-enabled.
  */
-export function resolvePreflightSnapshot(
+export interface ResolvedRunStartPreflight {
+  snapshot: ResolvedSettingsSnapshot;
+  session_identity: StartRunOpts["session_identity"];
+}
+
+/**
+ * Resolve the complete production preflight payload. Keeping snapshot and
+ * identity together prevents the adapter identity from being computed and
+ * then accidentally discarded before startRun writes session-context.json.
+ */
+export function resolveRunStartPreflight(
   cwd: string,
   probe?: PreflightProbe,
-): ResolvedSettingsSnapshot | undefined {
+): ResolvedRunStartPreflight | undefined {
   try {
     const result = runStartPreflight({ cwd, probe });
     if (result.needsTmuxPrompt) {
@@ -681,7 +848,10 @@ export function resolvePreflightSnapshot(
           `Run \`guild:config role\` / \`config set agent_mode team\` to pin it.\n`,
       );
     }
-    return result.snapshot;
+    return {
+      snapshot: result.snapshot,
+      session_identity: result.session_identity,
+    };
   } catch (err) {
     process.stderr.write(
       `[run-trace] WARN: run-start preflight failed; starting the run WITHOUT ` +
@@ -690,6 +860,14 @@ export function resolvePreflightSnapshot(
     );
     return undefined;
   }
+}
+
+/** Back-compatible snapshot-only view for library callers. */
+export function resolvePreflightSnapshot(
+  cwd: string,
+  probe?: PreflightProbe,
+): ResolvedSettingsSnapshot | undefined {
+  return resolveRunStartPreflight(cwd, probe)?.snapshot;
 }
 
 /**
@@ -824,7 +1002,7 @@ export function recordPhase(
       process.stderr.write(formatBindingRejected("run-trace", auth));
       return null;
     }
-    const lifecycleEnv = createRealEnv(root, defaultResolveHost as ResolveHost);
+    const lifecycleEnv = createRealEnv(root, defaultResolveHost as ResolveHost, captureCapabilityBaseline, recordCapabilityBaselineCapture);
     if (!appendPhase(lifecycleEnv, root, runId, phase)) return null;
     // METRIC 2: deterministic emit — a healthy phase close always produces its
     // real checkpoint without the model running a CLI (deterministic-code-not-prose).
@@ -862,7 +1040,7 @@ export function startAndCloseRun(
 ): string | null {
   try {
     closeStalePriorOpenRun(root, resolveHost); // #13: self-heal a stale orphan before claiming the sentinel
-    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost as ResolveHost));
+    const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost as ResolveHost, captureCapabilityBaseline, recordCapabilityBaselineCapture));
     const runId = lifecycle.startRun(buildStartRunOpts(root, opts));
     // Close via emitRunClosed so the run_closed JSONL line is appended with the
     // event_id matching the provenance pointer (P2a). For lightweight runs B2
@@ -900,11 +1078,17 @@ export function recordStatusLightweight(
 ): string | null {
   // OQ6 rollback gate — false reverts /guild:status to pure-read (no run).
   if (!readRecordStatusRuns(root)) return null;
+  // The status alias is a distinct production start path. Resolve the same
+  // preflight payload as `run-trace start` so its immutable session context
+  // never drops a live native-adapter identity.
+  const preflight = resolveRunStartPreflight(opts.cwd ?? root);
   return startAndCloseRun(root, resolveHost, {
     command: "/guild:status",
     cwd: opts.cwd,
     target_kind: opts.target_kind,
     run_class: "lightweight",
+    snapshot: preflight?.snapshot,
+    session_identity: preflight?.session_identity,
   });
 }
 

@@ -21,7 +21,7 @@ import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
 
-const SCRIPT = path.resolve(__dirname, "../post-tool-use.ts");
+const SCRIPT = path.resolve(__dirname, "../dist/post-tool-use.js");
 const RUN = "run-ptu-scrub-test";
 
 // T3b (session_context §5): run-dir writes are binding-gated; fixtures mint
@@ -73,7 +73,7 @@ function spawnHook(
     cwd: tmp,
   };
 
-  const result = spawnSync("npx", ["tsx", SCRIPT], {
+  const result = spawnSync(process.execPath, [SCRIPT], {
     input: JSON.stringify(payload),
     encoding: "utf8",
     env: {
@@ -143,6 +143,34 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
       spawnHook(tmp, "Write", wikiPath);
 
       const onDisk = fs.readFileSync(wikiPath, "utf8");
+      expect(onDisk).toMatch(/\[REDACTED(?:_TOKEN)?\]/);
+    });
+
+    it("preserves multiple legitimate .guild paths on the real wiki write path while still redacting secrets", () => {
+      const wikiPath = path.join(tmp, ".guild", "wiki", "path-preservation.md");
+      const expectedPaths = [
+        ".guild/wiki/decisions/workspace-knowledge-flow.md",
+        ".guild/runs/run-20260812-010000-hook-output/handoffs/security-W4.md",
+        ".guild/initiatives/active/hook-output-hygiene/initiative.yaml",
+        ".guild/artifacts/audits/hook-output-budget.json",
+      ];
+      const content = [
+        "# Durable references",
+        "",
+        ...expectedPaths.map((ref) => `- ${ref}`),
+        "",
+        `api_key: ${FAKE_SECRET}`,
+        "",
+      ].join("\n");
+      fs.mkdirSync(path.dirname(wikiPath), { recursive: true });
+      fs.writeFileSync(wikiPath, content, "utf8");
+
+      const { exitCode } = spawnHook(tmp, "Write", wikiPath);
+      expect(exitCode).toBe(0);
+
+      const onDisk = fs.readFileSync(wikiPath, "utf8");
+      for (const ref of expectedPaths) expect(onDisk).toContain(ref);
+      expect(onDisk).not.toContain(FAKE_SECRET);
       expect(onDisk).toMatch(/\[REDACTED(?:_TOKEN)?\]/);
     });
 

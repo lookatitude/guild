@@ -50,9 +50,18 @@ import {
 } from "../../host-runtime";
 import { resolveSettings } from "../../config";
 import { parseYaml, replaceTopLevelLine, resolveGuildRoot } from "../../state";
-import { assertWritableBinding, closeRunBinding, mintRunBinding } from "./run-binding";
+import {
+  assertNoPendingSubstantiveOperation,
+  assertWritableBinding,
+  closeRunBinding,
+  initializeRunBindingExclusion,
+  mintRunBinding,
+  readRunBindingRecord,
+  withRunBindingExclusion,
+} from "./run-binding";
 import type { ResolvedSettingsSnapshot } from "./runstart-preflight";
 import { scrubbedWrite, type ScrubbedWriteResult, type ScrubSurface } from "../../security";
+import { emitTraceEvent, makeAnalysisTraceEvent, type GuildTraceAnalysisV2 } from "../../telemetry";
 
 // ── Injected seams (B1 §4) ───────────────────────────────────────────────────
 
@@ -64,8 +73,12 @@ export interface RunLifecycleEnv {
   fs: {
     mkdirp(absPath: string): void;
     writeFile(absPath: string, contents: string): void;
+    /** Atomic create used to establish unique run ownership. */
+    writeFileExclusive?(absPath: string, contents: string): boolean;
     readFile(absPath: string): string | null;
     exists(absPath: string): boolean;
+    /** Remove one run-start transaction tree after a pre-exposure failure. */
+    removeTree(absPath: string): void;
     /**
      * HK-06: scrub-then-write for the provenance.json durable surface.
      * When present, `closeRun` uses this INSTEAD of `writeFile` for provenance.
@@ -82,6 +95,10 @@ export interface RunLifecycleEnv {
       runId: string,
     ): ScrubbedWriteResult;
   };
+  /** Shared per-run exclusion for lifecycle transitions and receipt writers. */
+  withRunBindingExclusion<T>(root: string, runId: string, fn: () => T): T;
+  /** Create the permanent per-run lock inode during a successful start. */
+  initializeRunBindingExclusion?(root: string, runId: string): void;
   /**
    * Resolves the host via the host-adapter contract — NEVER Claude-pinned.
    * Returns the requested + resolved HostKind and an optional capabilities ref.
@@ -93,6 +110,51 @@ export interface RunLifecycleEnv {
     resolved: HostKind;
     capabilities_ref?: string;
   };
+  /** Optional behavior-neutral semantic trace seam; the real adapter appends to the canonical log. */
+  emitAnalysisEvent?(event: GuildTraceAnalysisV2, runDir: string): boolean;
+  /**
+   * Optional production-owned capability snapshot seam. When supplied, startRun
+   * captures and persists the baseline inside the same start transaction. The
+   * later migration CLI may publish that immutable fact, but may not re-snapshot
+   * mutable project trees and call the result a run-start baseline.
+   */
+  captureCapabilityBaseline?(root: string, runId: string): {
+    readonly agents: string;
+    readonly skills: string;
+    readonly registries: string;
+    readonly bound_root: string;
+    readonly bound_run_id: string;
+  } | null;
+  /**
+   * Append-only producer binding for the snapshot captured above. Production
+   * supplies this alongside `captureCapabilityBaseline`; a snapshot without
+   * this lifecycle-owned receipt is not eligible for whole-run evidence.
+   */
+  recordCapabilityBaselineCapture?(root: string, evidence: CapabilityBaselineCaptureEvidence): boolean;
+}
+
+export const CAPABILITY_RUN_START_SNAPSHOT_SCHEMA = "guild.capability_run_start_snapshot.v1" as const;
+
+export interface CapabilityBaselineCaptureEvidence {
+  readonly run_id: string;
+  readonly run_started_at: string;
+  readonly snapshot_sha256: string;
+  readonly start_identity_hash: string;
+}
+
+function canonicalRecord(value: Record<string, unknown>): string {
+  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${JSON.stringify(value[key])}`).join(",")}}`;
+}
+
+/** Shared producer/verifier identity for the lifecycle-captured snapshot. */
+export function capabilityRunStartIdentityHash(runId: string, startedAt: string, snapshotHash: string): string {
+  const body = canonicalRecord({
+    schema_version: "guild.run.v1",
+    run_id: runId,
+    started_at: startedAt,
+    capability_start_snapshot_sha256: snapshotHash,
+  });
+  return `sha256:${crypto.createHash("sha256").update(body).digest("hex")}`;
 }
 
 // ── Public types (B1 §4) ─────────────────────────────────────────────────────
@@ -105,6 +167,9 @@ export type TargetKind =
   | "mixed_or_uncertain";
 
 export type RunClass = "full" | "lightweight";
+export type RunScope = "initiative" | "independent";
+export type AttachmentSource = "user_selected" | "inferred" | "resumed" | "independent" | "command_created";
+export type AttachmentConfidence = "low" | "medium" | "high";
 
 export type RunStatus = "open" | "closed" | "resumable" | "failed";
 export type TerminalStatus = "closed" | "failed" | "resumable";
@@ -141,6 +206,20 @@ export interface StartRunOpts {
    * NN#5: recording a slug MUST NOT create any .guild/initiatives/ dir.
    */
   initiative: string | null;
+  /** Minimal grouping key for a non-initiative run; defaults to the derived run slug. */
+  independent_run_group?: string | null;
+  /** Run-relative pointer to the redacted/frozen entry prompt payload, when retained. */
+  entry_prompt_ref?: string | null;
+  /** Why the initiative/independent attachment was selected. */
+  attachment_source?: AttachmentSource;
+  /** Confidence of an inferred attachment; explicit selections default high. */
+  attachment_confidence?: AttachmentConfidence;
+  /** Immutable plugin build identity supplied by the invoking adapter. */
+  plugin_identity?: {
+    version: string;
+    ref: string;
+    command_surface_version?: string;
+  };
   /** Entry phase, or null. */
   phase?: string | null;
   /** "full" (default) or "lightweight" (OQ6 status variant — §5). */
@@ -282,6 +361,12 @@ function logsDir(root: string, runId: string): string {
 function resolvedSettingsPath(root: string, runId: string): string {
   return path.join(runDir(root, runId), "resolved-settings.json");
 }
+function pluginConfigSnapshotPath(root: string, runId: string): string {
+  return path.join(runDir(root, runId), "plugin-config-snapshot.json");
+}
+function capabilityRunStartSnapshotPath(root: string, runId: string): string {
+  return path.join(runDir(root, runId), "capability", "run-start-snapshot.json");
+}
 function sentinelPath(root: string): string {
   // Canonical sentinel location: .guild/runs/current-run-id.
   // startRun is the SOLE writer (new-run-id.ts deleted in SC-8 W2B-4).
@@ -310,9 +395,72 @@ function utcCompact(nowIso: string): string {
   return `${digits.slice(0, 8)}-${digits.slice(8, 14)}`;
 }
 
-function makeRunId(initiative: string | null, nowIso: string): string {
-  if (initiative) return `run-${initiative}-${utcCompact(nowIso)}`;
-  return `run-${crypto.randomUUID()}`;
+/**
+ * The one creation-time run-id contract. A canonical id is date-first so
+ * lexical directory order is chronological and always carries a non-empty
+ * semantic slug.
+ */
+const CANONICAL_RUN_ID_RE = /^run-(\d{8})-(\d{6})-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$/;
+
+export function isCanonicalRunId(runId: string): boolean {
+  const match = CANONICAL_RUN_ID_RE.exec(runId);
+  if (!match) return false;
+  const [, date, time] = match;
+  const year = Number(date.slice(0, 4));
+  const month = Number(date.slice(4, 6));
+  const day = Number(date.slice(6, 8));
+  const hour = Number(time.slice(0, 2));
+  const minute = Number(time.slice(2, 4));
+  const second = Number(time.slice(4, 6));
+  const stamp = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  return stamp.getUTCFullYear() === year
+    && stamp.getUTCMonth() === month - 1
+    && stamp.getUTCDate() === day
+    && stamp.getUTCHours() === hour
+    && stamp.getUTCMinutes() === minute
+    && stamp.getUTCSeconds() === second;
+}
+
+export function assertCanonicalRunId(runId: string): string {
+  if (!isCanonicalRunId(runId)) {
+    throw new Error(
+      `canonical run id required (run-<yyyymmdd-hhmmss>-<slug>); received ${JSON.stringify(runId)}`,
+    );
+  }
+  return runId;
+}
+
+function runSlug(value: string): string {
+  return value
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80)
+    .replace(/-+$/g, "");
+}
+
+function deriveRunSlug(opts: StartRunOpts): string {
+  const brief = typeof opts.arguments["brief"] === "string"
+    ? opts.arguments["brief"] as string
+    : "";
+  const command = opts.command.replace(/^\/?guild:/, "");
+  for (const candidate of [opts.initiative ?? "", brief, command, opts.project]) {
+    const slug = runSlug(candidate);
+    if (slug) return slug;
+  }
+  // A UUID is deliberately the final semantic fallback, never the whole id.
+  return crypto.randomUUID();
+}
+
+/** Shared formatter for lifecycle creation and degraded read-only hook lookup. */
+export function makeCanonicalRunId(nowIso: string, slugSource: string): string {
+  const slug = runSlug(slugSource) || crypto.randomUUID();
+  return assertCanonicalRunId(`run-${utcCompact(nowIso)}-${slug}`);
+}
+
+function makeRunId(opts: StartRunOpts, nowIso: string): string {
+  return makeCanonicalRunId(nowIso, deriveRunSlug(opts));
 }
 
 // ── YAML serialization (hand-rolled — start manifest is a fixed, simple shape) ─
@@ -373,9 +521,21 @@ function serializeRunYaml(rec: Record<string, unknown>): string {
 
 // ── startRun ──────────────────────────────────────────────────────────────────
 
-function buildRunManifest(opts: StartRunOpts, runId: string, env: RunLifecycleEnv): Record<string, unknown> {
+function buildRunManifest(
+  opts: StartRunOpts,
+  runId: string,
+  env: RunLifecycleEnv,
+  startedAt: string,
+  written: { resolvedSettings: boolean; pluginConfig: boolean; capabilityBaselineHash: string | null },
+): Record<string, unknown> {
   const host = env.resolveHost(opts.host_requested);
   const runClass: RunClass = opts.run_class ?? "full";
+  const runScope: RunScope = opts.initiative ? "initiative" : "independent";
+  const independentGroup = runScope === "independent"
+    ? (opts.independent_run_group?.trim() || deriveRunSlug(opts))
+    : null;
+  const attachmentSource: AttachmentSource = opts.attachment_source ??
+    (runScope === "initiative" ? "user_selected" : "independent");
 
   const workspace: Record<string, unknown> = {
     is_workspace: opts.workspace.is_workspace,
@@ -404,23 +564,37 @@ function buildRunManifest(opts: StartRunOpts, runId: string, env: RunLifecycleEn
     project: opts.project,
     host: hostBlock,
     model_tier_policy: opts.model_tier_policy,
-    started_at: env.now(),
+    started_at: startedAt,
     ignore_policy: opts.ignore_policy,
     scan_policy: opts.scan_policy,
+    run_scope: runScope,
     initiative_attachment: opts.initiative, // NN#5: scalar record ONLY
+    independent_run_group: independentGroup,
+    entry_prompt_ref: opts.entry_prompt_ref ?? null,
+    config_snapshot_ref: written.pluginConfig ? "plugin-config-snapshot.json" : null,
+    capability_start_snapshot_ref: written.capabilityBaselineHash
+      ? { path: "capability/run-start-snapshot.json", sha256: written.capabilityBaselineHash }
+      : null,
+    attachment_resolution: {
+      scope: runScope,
+      initiative_id: opts.initiative,
+      independent_group_id: independentGroup,
+      source: attachmentSource,
+      confidence: opts.attachment_confidence ?? (attachmentSource === "inferred" ? "medium" : "high"),
+    },
     phase,
     run_class: runClass,
     gates: {},
     status: "open" as RunStatus,
     phases_log: phase
-      ? [{ phase, at: env.now() }]
+      ? [{ phase, at: startedAt }]
       : [],
   };
 
   // U6: compact settings_ref when snapshot is provided. This is an audit pointer
   // to the resolved-settings.json written alongside run.yaml. Mid-run consumers
   // read the full JSON; this block gives a quick at-a-glance summary.
-  if (opts.snapshot) {
+  if (opts.snapshot && written.resolvedSettings) {
     manifest["settings_ref"] = {
       path: "resolved-settings.json",
       schema_version: opts.snapshot.schema_version,
@@ -591,21 +765,96 @@ function appendToPhasesLog(raw: string, phase: string, at: string): string {
 export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
   return {
     startRun(opts: StartRunOpts): string {
-      const runId = makeRunId(opts.initiative, env.now());
+      const nowIso = env.now();
+      const preferredRunId = makeRunId(opts, nowIso);
       const root = opts.root;
+      // Canonical IDs are second-granularity by contract. Concurrent/repeated
+      // starts with the same semantic slug must never collide or rebind an
+      // existing run, so a UUID tail is used only for this last-resort case.
+      const runId = env.fs.exists(runDir(root, preferredRunId))
+        ? makeCanonicalRunId(nowIso, `${deriveRunSlug(opts)}-${crypto.randomUUID()}`)
+        : preferredRunId;
+      const runClass: RunClass = opts.run_class ?? "full";
+
+      // Full runs capture before the first run write. Lightweight status runs
+      // deliberately retain their small lifecycle surface and never mint PCL-09
+      // capability evidence. A configured production seam is fail-closed for a
+      // full run: an incomplete tree walk must abort the start rather than create
+      // a run that can never produce honest whole-run evidence.
+      const capabilityBaseline = runClass === "full"
+        ? (env.captureCapabilityBaseline?.(root, runId) ?? null)
+        : null;
+      if (runClass === "full" && env.captureCapabilityBaseline && (!capabilityBaseline || capabilityBaseline.bound_run_id !== runId)) {
+        throw new Error(`[run-lifecycle] capability run-start baseline capture failed for ${runId}`);
+      }
+
+      let ownsBaselineRunTransaction = false;
+      let ownedBindingRef: string | null = null;
+      const rollbackBaselineRunTransaction = (cause: unknown): never => {
+        const reason = cause instanceof Error ? cause.message : String(cause);
+        const rollbackFailures: string[] = [];
+        const persistedBinding = readRunBindingRecord({ root, run_id: runId, fs: env.fs });
+        const stillOwnsRun = ownedBindingRef !== null
+          && persistedBinding.status === "ok"
+          && persistedBinding.record.binding_ref === ownedBindingRef
+          && persistedBinding.record.state === "open";
+        if (!stillOwnsRun) {
+          throw new Error(
+            `${reason}; rollback of ${runId} refused because this transaction no longer ` +
+              `owns the open run binding`,
+          );
+        }
+        // The sentinel is outside the run tree. Remove it only when it still
+        // names this failed transaction; a later concurrent start wins.
+        try {
+          if (env.fs.readFile(sentinelPath(root))?.trim() === runId) {
+            env.fs.removeTree(sentinelPath(root));
+          }
+        } catch (error) {
+          rollbackFailures.push(`sentinel cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        try {
+          env.fs.removeTree(runDir(root, runId));
+        } catch (error) {
+          rollbackFailures.push(`run cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        throw new Error(rollbackFailures.length === 0
+          ? reason
+          : `${reason}; rollback of ${runId} also failed: ${rollbackFailures.join("; ")}`);
+      };
+
+      try {
 
       // guild.session_context.v1 §5 (rework F2): mint the run's binding FIRST —
       // before ANY other write lands under the run dir. Run start mints the
       // binding before any write; there is no window in which run records
       // exist without a verifiable binding. The nonce is revoked at close.
       const binding = mintRunBinding({ root, run_id: runId, fs: env.fs });
+      ownedBindingRef = binding.binding_ref;
+      ownsBaselineRunTransaction = capabilityBaseline !== null;
+      env.initializeRunBindingExclusion?.(root, runId);
 
       // logs/ dir (mkdirp also ensures runs/<id>/ exists). NN#5: we touch ONLY
       // .guild/runs/<id>/ — never .guild/initiatives/.
       env.fs.mkdirp(logsDir(root, runId));
 
+      let capabilityBaselineHash: string | null = null;
+      if (capabilityBaseline) {
+        const snapshotBytes = `${JSON.stringify({
+          schema_version: CAPABILITY_RUN_START_SNAPSHOT_SCHEMA,
+          run_id: runId,
+          run_started_at: nowIso,
+          captured_at: nowIso,
+          ...capabilityBaseline,
+        }, null, 2)}\n`;
+        capabilityBaselineHash = crypto.createHash("sha256").update(snapshotBytes).digest("hex");
+        env.fs.writeFile(capabilityRunStartSnapshotPath(root, runId), snapshotBytes);
+      }
+
       // U6: write resolved-settings.json BEFORE run.yaml so the file is on disk
       // before any consumer might read it. When no snapshot, skip (back-compat).
+      let resolvedSettingsWritten = false;
+      let pluginConfigWritten = false;
       if (opts.snapshot) {
         writeResolvedSettingsSnapshot(runId, opts.snapshot, {
           cwd: root,
@@ -613,11 +862,42 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
           // Use the run-id as the resolved_at_ref (deterministic, no Date.now).
           resolvedAtRef: runId,
         });
+        resolvedSettingsWritten = env.fs.exists(resolvedSettingsPath(root, runId));
+        writePluginConfigSnapshot(runId, opts.snapshot, opts, env);
+        pluginConfigWritten = env.fs.exists(pluginConfigSnapshotPath(root, runId));
       }
 
       // run.yaml (guild.run.v1) — the single start manifest.
-      const manifest = buildRunManifest(opts, runId, env);
+      const manifest = buildRunManifest(opts, runId, env, nowIso, {
+        resolvedSettings: resolvedSettingsWritten,
+        pluginConfig: pluginConfigWritten,
+        capabilityBaselineHash,
+      });
       env.fs.writeFile(runYamlPath(root, runId), serializeRunYaml(manifest));
+
+      if (capabilityBaselineHash) {
+        const failAndRollback = (reason: string): never => {
+          throw new Error(reason);
+        };
+        const recordCapabilityBaselineCapture = env.recordCapabilityBaselineCapture;
+        if (!recordCapabilityBaselineCapture) {
+          throw new Error(`[run-lifecycle] capability run-start receipt recorder is unavailable for ${runId}`);
+        }
+        let recorded = false;
+        try {
+          recorded = recordCapabilityBaselineCapture(root, {
+            run_id: runId,
+            run_started_at: nowIso,
+            snapshot_sha256: capabilityBaselineHash,
+            start_identity_hash: capabilityRunStartIdentityHash(runId, nowIso, capabilityBaselineHash),
+          });
+        } catch (error) {
+          failAndRollback(`[run-lifecycle] capability run-start receipt capture threw for ${runId}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        if (!recorded) {
+          failAndRollback(`[run-lifecycle] capability run-start receipt capture failed for ${runId}`);
+        }
+      }
 
       // §1: the immutable session context — written once at start, restored
       // verbatim on resume. Identity comes from the adapter-injected inputs;
@@ -628,7 +908,7 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
         root,
         buildSessionContext({
           run_id: runId,
-          started_at: env.now(),
+          started_at: nowIso,
           envelope_host: identity.envelope_host,
           env: identity.env,
           native_adapter: identity.native_adapter,
@@ -640,12 +920,58 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
         env.fs
       );
 
+      // RTE P2: semantic lifecycle identity events are additive and
+      // behavior-neutral. Test/embedded adapters may omit the seam; the real
+      // adapter appends validated events to the canonical v1.4 log.
+      if (env.emitAnalysisEvent) {
+        const runScope: RunScope = opts.initiative ? "initiative" : "independent";
+        const independentGroup = runScope === "independent"
+          ? (opts.independent_run_group?.trim() || deriveRunSlug(opts))
+          : null;
+        const eventBase = {
+          ts: nowIso,
+          run_id: runId,
+          lane_id: "",
+          actor_type: "system" as const,
+          actor_id: "run-lifecycle",
+          status: "ok" as const,
+          initiative_id: opts.initiative ?? undefined,
+          run_scope: runScope,
+          config_snapshot_ref: pluginConfigWritten ? "plugin-config-snapshot.json" : undefined,
+        };
+        env.emitAnalysisEvent(makeAnalysisTraceEvent({ ...eventBase, event_class: "run_started" }), runDir(root, runId));
+        env.emitAnalysisEvent(
+          makeAnalysisTraceEvent({
+            ...eventBase,
+            event_class: "run_attachment_resolved",
+            signature: `${runScope}:${opts.initiative ?? independentGroup}`,
+          }),
+          runDir(root, runId),
+        );
+        if (pluginConfigWritten) {
+          env.emitAnalysisEvent(
+            makeAnalysisTraceEvent({
+              ...eventBase,
+              event_class: "config_snapshot_written",
+              payload_ref: "plugin-config-snapshot.json",
+              redaction: "redacted",
+            }),
+            runDir(root, runId),
+          );
+        }
+      }
+
       // current-run-id sentinel — interactive command intake ONLY (§5): it may
       // locate a candidate run for a user-typed command; it never authorizes a
-      // write and never serves as a fallback binding.
+      // write and never serves as a fallback binding. It is the final start
+      // write, after all receipt-backed transaction work has succeeded.
       env.fs.writeFile(sentinelPath(root), runId);
 
       return runId;
+      } catch (error) {
+        if (ownsBaselineRunTransaction) rollbackBaselineRunTransaction(error);
+        throw error;
+      }
     },
 
     closeRun(runId: string, opts: CloseRunOpts): void {
@@ -655,12 +981,15 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       // caller's env.fs sees; the real adapter is rooted at the project root.
       const root = resolveCloseRoot(env);
 
+      env.withRunBindingExclusion(root, runId, () => {
+
       // §5 fail-closed gate (rework F2): the caller-threaded nonce is ALWAYS
       // fully verified — absent, malformed, not-minted, closed, or mismatched
       // bindings all throw BindingRejectedError before any mutation. No
       // migration posture (fresh-run, open-unreferenced, legacy) authorizes a
       // close: a legacy run is migrated (mint via run start tooling) or refused.
       assertWritableBinding({ root, run_id: runId, binding_ref: opts.binding_ref, fs: env.fs });
+      assertNoPendingSubstantiveOperation({ root, run_id: runId, fs: env.fs });
 
       const facts = readStartFacts(env, root, runId);
       const runClass = facts.run_class;
@@ -737,6 +1066,23 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       if (currentSentinel !== null && currentSentinel.trim() === runId) {
         env.fs.writeFile(sp, "");
       }
+      if (env.emitAnalysisEvent) {
+        env.emitAnalysisEvent(
+          makeAnalysisTraceEvent({
+            ts: now,
+            run_id: runId,
+            lane_id: "",
+            event_class: "run_closed",
+            actor_type: "system",
+            actor_id: "run-lifecycle",
+            run_scope: facts.initiative ? "initiative" : "independent",
+            initiative_id: facts.initiative ?? undefined,
+            status: opts.status === "closed" ? "ok" : "incomplete",
+          }),
+          runDir(root, runId),
+        );
+      }
+      });
     },
   };
 }
@@ -782,10 +1128,12 @@ function resolveCloseRoot(env: RunLifecycleEnv): string {
  */
 export function createRealEnv(
   root: string,
-  resolveHost: RunLifecycleEnv["resolveHost"]
+  resolveHost: RunLifecycleEnv["resolveHost"],
+  captureCapabilityBaseline?: RunLifecycleEnv["captureCapabilityBaseline"],
+  recordCapabilityBaselineCapture?: RunLifecycleEnv["recordCapabilityBaselineCapture"],
 ): RunLifecycleEnv {
   const env: RunLifecycleEnv & { __rootHint?: string } = {
-    now: () => new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+    now: () => new Date().toISOString(),
     fs: {
       mkdirp(absPath: string): void {
         fsNode.mkdirSync(absPath, { recursive: true });
@@ -793,6 +1141,16 @@ export function createRealEnv(
       writeFile(absPath: string, contents: string): void {
         fsNode.mkdirSync(path.dirname(absPath), { recursive: true });
         fsNode.writeFileSync(absPath, contents, "utf8");
+      },
+      writeFileExclusive(absPath: string, contents: string): boolean {
+        fsNode.mkdirSync(path.dirname(absPath), { recursive: true });
+        try {
+          fsNode.writeFileSync(absPath, contents, { encoding: "utf8", flag: "wx" });
+          return true;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+          throw error;
+        }
       },
       readFile(absPath: string): string | null {
         try {
@@ -803,6 +1161,9 @@ export function createRealEnv(
       },
       exists(absPath: string): boolean {
         return fsNode.existsSync(absPath);
+      },
+      removeTree(absPath: string): void {
+        fsNode.rmSync(absPath, { recursive: true, force: true });
       },
       // HK-06: real scrubbedWrite wired for provenance.json (fail-CLOSED).
       scrubbedWriteDurable(
@@ -815,7 +1176,12 @@ export function createRealEnv(
         return scrubbedWrite(outPath, contents, { surface, runDir, runId });
       },
     },
+    withRunBindingExclusion,
+    initializeRunBindingExclusion,
     resolveHost,
+    ...(captureCapabilityBaseline ? { captureCapabilityBaseline } : {}),
+    ...(recordCapabilityBaselineCapture ? { recordCapabilityBaselineCapture } : {}),
+    emitAnalysisEvent: (event, activeRunDir) => emitTraceEvent(event, activeRunDir),
     __rootHint: root,
   };
   return env;
@@ -1023,6 +1389,119 @@ export function writeResolvedSettingsSnapshot(
     }
   } else {
     fs.writeFile(outPath, serialized);
+  }
+  return outPath;
+}
+
+function hashOptionalFile(env: RunLifecycleEnv, file: string): string | null {
+  const raw = env.fs.readFile(file);
+  return raw === null ? null : crypto.createHash("sha256").update(raw).digest("hex");
+}
+
+function derivePluginIdentity(start: StartRunOpts, env: RunLifecycleEnv): {
+  version: string;
+  ref: string;
+  commandSurfaceVersion: string | null;
+} {
+  const pluginManifestPath = path.join(start.root, ".claude-plugin", "plugin.json");
+  const pluginManifest = env.fs.readFile(pluginManifestPath);
+  let manifestVersion: string | null = null;
+  if (pluginManifest !== null) {
+    try {
+      const parsed = JSON.parse(pluginManifest) as Record<string, unknown>;
+      manifestVersion = typeof parsed["version"] === "string" ? parsed["version"] : null;
+    } catch {
+      // A malformed manifest must not make run start fail; the immutable hash
+      // remains useful while the version truthfully degrades to unknown.
+    }
+  }
+  const manifestHash = pluginManifest === null
+    ? null
+    : crypto.createHash("sha256").update(pluginManifest).digest("hex");
+  const commandSurfaceHash = hashOptionalFile(env, path.join(start.root, "command-src", "command-registry.json"));
+  return {
+    version: start.plugin_identity?.version ?? manifestVersion ?? "unknown",
+    ref: start.plugin_identity?.ref ?? (manifestHash ? `sha256:${manifestHash}` : "unknown"),
+    commandSurfaceVersion: start.plugin_identity?.command_surface_version ??
+      (commandSurfaceHash ? `sha256:${commandSurfaceHash}` : null),
+  };
+}
+
+/**
+ * Freeze the analysis-facing plugin/config identity alongside resolved settings.
+ * The record intentionally contains only the closed-key resolved snapshot,
+ * hashes, and capability categories; it is scrubbed through the same fail-closed
+ * config surface as resolved-settings.json.
+ */
+export function writePluginConfigSnapshot(
+  runId: string,
+  snapshot: ResolvedSettingsSnapshot,
+  start: StartRunOpts,
+  env: RunLifecycleEnv,
+): string {
+  if (!validateRunId(runId)) {
+    throw new Error(`[run-lifecycle] writePluginConfigSnapshot: invalid runId ${JSON.stringify(runId)}`);
+  }
+  const outPath = pluginConfigSnapshotPath(start.root, runId);
+  assertContained(outPath, start.root, "writePluginConfigSnapshot");
+  const host = env.resolveHost(start.host_requested);
+  const identity = start.session_identity ?? {};
+  const pluginIdentity = derivePluginIdentity(start, env);
+  const record = {
+    schema_version: "guild.plugin_config_snapshot.v1",
+    run_id: runId,
+    captured_at: env.now(),
+    effective: snapshot.effective,
+    config_source_layers: snapshot.source_chain,
+    plugin: {
+      version: pluginIdentity.version,
+      ref: pluginIdentity.ref,
+    },
+    host_adapter: {
+      requested: host.requested,
+      resolved: host.resolved,
+      capabilities_ref: host.capabilities_ref ?? null,
+    },
+    registry_hashes: {
+      skills: hashOptionalFile(env, path.join(start.root, ".guild", "skills", "registry.yaml")),
+      agents: hashOptionalFile(env, path.join(start.root, ".guild", "agents", "registry.yaml")),
+    },
+    command_surface_version: pluginIdentity.commandSurfaceVersion,
+    redaction_policy: "scrubbed-config-v1",
+    environment_capabilities: {
+      dispatch: snapshot.dispatch,
+      execution_target: identity.execution_target ?? null,
+      native_adapter: identity.native_adapter
+        ? {
+            family: identity.native_adapter.family,
+            surface: identity.native_adapter.surface,
+            adapter_id: identity.native_adapter.adapter_id,
+            adapter_version: identity.native_adapter.adapter_version,
+          }
+        : null,
+      handshake: identity.handshake
+        ? { family: identity.handshake.family, surface: identity.handshake.surface ?? null }
+        : null,
+      active_model: identity.active_model ?? null,
+    },
+  };
+  const serialized = JSON.stringify(record, null, 2) + "\n";
+  if (env.fs.scrubbedWriteDurable) {
+    const result = env.fs.scrubbedWriteDurable(
+      outPath,
+      serialized,
+      "config",
+      runDir(start.root, runId),
+      runId,
+    );
+    if (result.blocked) {
+      process.stderr.write(
+        `[run-lifecycle] WARN: plugin-config-snapshot.json write BLOCKED by secret scrub ` +
+          `(fail-CLOSED) for run ${runId}. Analysis eligibility will remain false.\n`,
+      );
+    }
+  } else {
+    env.fs.writeFile(outPath, serialized);
   }
   return outPath;
 }

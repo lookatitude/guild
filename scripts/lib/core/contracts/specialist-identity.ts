@@ -26,6 +26,12 @@
  *                                            `specialist_profile_hash` — the outputs
  *                                            of THIS file's hashing.
  *
+ * ┌───────────────────────────────────────────────────────────────────────────┐
+ * │ IDENTITY IS ANSWERED BY THIS FILE AND ONLY BY IT.                         │
+ * │ `project-definition-ref.ts` LOCATES BYTES and CARRIES these identity      │
+ * │ hashes AS OPAQUE DATA; it never recomputes or redefines identity.         │
+ * └───────────────────────────────────────────────────────────────────────────┘
+ *
  * The "replace provider model names with tiers" requirement lives here: a v2 type
  * carries a `default_model_tier` (`ModelTier` — cheap|mid|powerful), never `opus`
  * / `sonnet` / `haiku`. The projection maps a template's PROVIDER `model:` to a

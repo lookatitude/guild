@@ -1,7 +1,7 @@
 # scripts/
 
 TypeScript/Node tooling for the Guild plugin. Owned by `tooling-engineer`
-(`.claude/agents/tooling-engineer.md`). See `https://guildstack.dev/docs` for
+(`.guild/agents/tooling-engineer.md`). See `https://guildstack.dev/docs` for
 architecture scope and how these scripts wire into the evolve + rollback pipelines.
 
 All scripts use the `tsx` loader (`#!/usr/bin/env -S npx tsx`) and depend

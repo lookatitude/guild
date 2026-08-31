@@ -22,6 +22,7 @@
  * every method returns a closed `ExecutionOutcome` and never throws.
  */
 
+import { types as nodeTypes } from "node:util";
 import {
   EXECUTION_TRANSPORT_CONTRACT_VERSION,
   EXECUTION_TRANSPORT_SCHEMA_VERSION,
@@ -31,6 +32,7 @@ import {
   isExecutionTransportId,
   isTeamDispatchScope,
   isTeamLaunchRequestLike,
+  portHonoredInjection,
   redactExecutionDetail,
   resolveInjectionSupport,
   selectExecutionSubstrate,
@@ -51,6 +53,7 @@ import {
   type ExecutionWaitOptions,
   type HostExecutionRuntime,
   type PaneAdapterLike,
+  type DefinitionRefLike,
   type PaneSpecLike,
   type RemoteExecutionTargetLike,
   type RemoteProbeFacts,
@@ -1142,12 +1145,664 @@ export class RemoteExecutionTransport extends BaseExecutionTransport {
 /** One composed substrate command, as the caller would display it. */
 export interface TeamSessionCommandLike {
   readonly display: string;
+  /** Structured argv from the session planner; required for exact ref proof. */
+  readonly argv?: readonly string[];
+}
+
+function shellQuoteForDefinitionEvidence(value: string): string {
+  if (value === "") return "''";
+  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function carriesPreSpawnDefinitionProof(
+  command: string,
+  exported: string,
+  consumed: string,
+  prefixMatchesLane: (prefix: string) => boolean,
+): boolean {
+  const guard =
+    `${exported} ${consumed} { ` +
+    `echo '[GUILD_DEFINITION_REF] exact-carriage check failed' >&2; exit 66; }; `;
+  const guardIndex = command.indexOf(guard);
+  if (guardIndex < 0 || command.indexOf(guard, guardIndex + guard.length) >= 0) return false;
+  const launchIndex = guardIndex + guard.length;
+  if (!command.startsWith("command claude ", launchIndex)) return false;
+  const prefix = command.slice(0, guardIndex);
+  return isGeneratedPreGuardExportPrefix(prefix) && prefixMatchesLane(prefix);
+}
+
+const GENERATED_PRE_GUARD_EXPORTS = Object.freeze([
+  "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
+  "GUILD_DISPATCH_PRODUCER",
+  "GUILD_RUN_ID",
+  "GUILD_TASK_ID",
+  "GUILD_SPECIALIST",
+  "GUILD_TASK_ASSIGNMENT",
+  "GUILD_TASK_CELL_INSTANCE_ID",
+  "GUILD_STATUSLINE",
+  "GUILD_CAPABILITY_SCOPE",
+  "GUILD_MODEL",
+  "GUILD_PLUGIN_ROOT",
+] as const);
+
+function consumeGeneratedShellWord(input: string, start: number): number {
+  if (input[start] === "'") {
+    let cursor = start + 1;
+    while (cursor < input.length) {
+      if (input[cursor] !== "'") {
+        cursor++;
+        continue;
+      }
+      if (input.slice(cursor, cursor + 4) === "'\\''") {
+        cursor += 4;
+        continue;
+      }
+      return cursor + 1;
+    }
+    return -1;
+  }
+  let cursor = start;
+  while (cursor < input.length && /[A-Za-z0-9_@%+=:,./-]/.test(input[cursor])) cursor++;
+  return cursor === start ? -1 : cursor;
+}
+
+function isGeneratedPreGuardExportPrefix(prefix: string): boolean {
+  let cursor = 0;
+  let previousRank = -1;
+  const seen = new Set<string>();
+  while (cursor < prefix.length) {
+    if (!prefix.startsWith("export ", cursor)) return false;
+    cursor += "export ".length;
+    const equals = prefix.indexOf("=", cursor);
+    if (equals < 0) return false;
+    const key = prefix.slice(cursor, equals);
+    if (!/^[A-Z][A-Z0-9_]*$/.test(key) || seen.has(key)) return false;
+    const rank = GENERATED_PRE_GUARD_EXPORTS.indexOf(key as typeof GENERATED_PRE_GUARD_EXPORTS[number]);
+    if (rank < 0 || rank <= previousRank) return false;
+    const wordEnd = consumeGeneratedShellWord(prefix, equals + 1);
+    if (wordEnd < 0 || !prefix.startsWith("; ", wordEnd)) return false;
+    seen.add(key);
+    previousRank = rank;
+    cursor = wordEnd + 2;
+  }
+  return (
+    seen.has("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS") &&
+    seen.has("GUILD_DISPATCH_PRODUCER") &&
+    seen.has("GUILD_RUN_ID")
+  );
+}
+
+/** The sole executable payload slot in the generated specialist split command. */
+function tmuxSpecialistPayload(argv: readonly string[]): string | null {
+  return (
+    argv.length === 7 &&
+    argv[0] === "tmux" &&
+    argv[1] === "split-window" &&
+    argv[2] === "-t" &&
+    argv[4] === "-c"
+  )
+    ? argv[6]
+    : null;
+}
+
+interface DefinitionLaneIdentityLike {
+  readonly name: string;
+  readonly taskId?: string;
+  readonly task_cell_assignment_path?: string;
+  readonly task_cell_instance_id?: string;
+}
+
+function generatedPrefixCarriesLaneIdentity(
+  prefix: string,
+  spec: DefinitionLaneIdentityLike,
+  runId: string,
+): boolean {
+  const hasExport = (key: string): boolean => prefix.includes(`export ${key}=`);
+  const hasExactExport = (key: string, value: string): boolean =>
+    prefix.includes(`export ${key}=${shellQuoteForDefinitionEvidence(value)}; `);
+  if (!hasExactExport("GUILD_RUN_ID", runId)) return false;
+  if (!hasExactExport("GUILD_SPECIALIST", spec.name)) return false;
+  if (spec.taskId !== undefined && spec.taskId.length > 0) {
+    if (!hasExactExport("GUILD_TASK_ID", spec.taskId)) return false;
+  } else if (hasExport("GUILD_TASK_ID")) {
+    return false;
+  }
+  const assignment =
+    spec.task_cell_assignment_path ?? `.guild/runs/${runId}/tasks/${spec.name}.json`;
+  if (!hasExactExport("GUILD_TASK_ASSIGNMENT", assignment)) return false;
+  if (spec.task_cell_instance_id !== undefined && spec.task_cell_instance_id.length > 0) {
+    if (!hasExactExport("GUILD_TASK_CELL_INSTANCE_ID", spec.task_cell_instance_id)) return false;
+  } else if (hasExport("GUILD_TASK_CELL_INSTANCE_ID")) {
+    return false;
+  }
+  return true;
+}
+
+function commandCarriesAndConsumesDefinitionRef(
+  command: TeamSessionCommandLike | undefined,
+  ref: DefinitionRefLike,
+  spec: DefinitionLaneIdentityLike,
+  runId: string,
+): boolean {
+  if (command?.argv === undefined) return false;
+  try {
+    const payload = tmuxSpecialistPayload(command.argv);
+    if (payload === null) return false;
+    const quoted = shellQuoteForDefinitionEvidence(JSON.stringify(ref));
+    const exported = `export GUILD_DEFINITION_REF=${quoted};`;
+    const consumed = `test "$GUILD_DEFINITION_REF" = ${quoted} ||`;
+    return carriesPreSpawnDefinitionProof(
+      payload,
+      exported,
+      consumed,
+      (prefix) => generatedPrefixCarriesLaneIdentity(prefix, spec, runId),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fix A (run-identity-and-dispatch): the session path's per-specialist
+ * definition-forwarding proof, derived from the COMPOSED PLAN rather than
+ * echoed from the request.
+ *
+ * A specialist's `definition_ref` appears on its plan entry ONLY when its own
+ * pane command (the command immediately preceding that lane's
+ * `select-pane -T <dispatch-key>` title) demonstrably carries the ref bytes —
+ * the GUILD_DEFINITION_REF export including the exact `content_hash`. This is
+ * what `reportLaunch`'s `portHonoredInjection` loop verifies on a DECLARING
+ * port: a session backend that drops the ref yields an entry without it, and
+ * the launch fails `invalid_request` instead of silently stripping the lane.
+ */
+interface TeamLaunchSpecialistLike {
+  readonly name: string;
+  readonly dispatch_key?: string;
+  readonly taskId?: string;
+  readonly task_cell_assignment_path?: string;
+  readonly task_cell_instance_id?: string;
+  readonly definition_ref?: DefinitionRefLike;
+}
+
+function isTeamLaunchSpecialistLike(value: unknown): value is TeamLaunchSpecialistLike {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    typeof (value as Record<string, unknown>)["name"] === "string"
+  );
+}
+
+interface TeamLaunchSpecialistValidation {
+  readonly specialists: readonly TeamLaunchSpecialistLike[];
+  readonly request: TeamLaunchRequestLike | null;
+  readonly error: string | null;
+}
+
+const DEFINITION_REF_KEYS = Object.freeze([
+  "schema_version", "project_id", "layer", "kind", "id", "relative_path",
+  "content_hash", "source_commit", "specialist_profile_hash",
+  "specialist_type_hash", "skills",
+] as const);
+const PINNED_SKILL_KEYS = Object.freeze(["id", "relative_path", "content_hash"] as const);
+const DEFINITION_LAYERS = new Set([
+  "plugin-shipped", "dot-claude-agents", "project-guild", "umbrella-guild",
+]);
+const DEFINITION_KINDS = new Set(["agent", "skill"]);
+const IDENTITY_TOKEN_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const CONTENT_HASH_RE = /^sha256:[0-9a-f]{64}$/;
+const SOURCE_COMMIT_RE = /^[0-9a-f]{7,64}$/;
+const IDENTITY_HASH_RE = /^[0-9a-f]{64}$/;
+// eslint-disable-next-line no-control-regex
+const DEFINITION_CONTROL_RE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+
+function isPlainDefinitionData(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  if (nodeTypes.isProxy(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function exactDataRecord(
+  value: unknown,
+  keys: readonly string[],
+): Record<string, unknown> | null {
+  if (!isPlainDefinitionData(value)) return null;
+  if (Object.getOwnPropertySymbols(value).length > 0) return null;
+  const names = Object.getOwnPropertyNames(value);
+  if (names.length !== keys.length || keys.some((key) => !names.includes(key))) return null;
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !("value" in descriptor)) return null;
+    out[key] = descriptor.value;
+  }
+  return out;
+}
+
+function boundedDefinitionScalar(value: unknown, maxBytes: number): value is string {
+  return typeof value === "string" && value.length > 0 &&
+    !DEFINITION_CONTROL_RE.test(value) && Buffer.byteLength(value, "utf8") <= maxBytes;
+}
+
+function definitionIdentity(value: unknown, maxBytes = 128): value is string {
+  return boundedDefinitionScalar(value, maxBytes) && IDENTITY_TOKEN_RE.test(value);
+}
+
+function definitionRelativePath(value: unknown): value is string {
+  if (!boundedDefinitionScalar(value, 1024)) return false;
+  if (value.includes("\\") || value.startsWith("/") || /^[A-Za-z]:/.test(value) || value.endsWith("/")) {
+    return false;
+  }
+  return value.split("/").every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
+}
+
+function layerMatchesDefinitionPath(layer: string, relativePath: string): boolean {
+  const segments = relativePath.split("/");
+  const hasClaude = segments.includes(".claude");
+  const hasGuild = segments.includes(".guild");
+  if (hasClaude && hasGuild) return false;
+  if (hasClaude) return layer === "dot-claude-agents";
+  if (hasGuild) return layer === "project-guild" || layer === "umbrella-guild";
+  return true;
+}
+
+function snapshotPinnedSkill(value: unknown): DefinitionRefLike["skills"][number] | null {
+  const skill = exactDataRecord(value, PINNED_SKILL_KEYS);
+  if (skill === null || !definitionIdentity(skill["id"]) ||
+      !definitionRelativePath(skill["relative_path"]) ||
+      typeof skill["content_hash"] !== "string" || !CONTENT_HASH_RE.test(skill["content_hash"])) {
+    return null;
+  }
+  const segments = skill["relative_path"].split("/");
+  const end = segments.length - 1;
+  const underProjectSkills = segments[0] === ".guild" && segments[1] === "skills";
+  const underPluginSkills = segments[0] === "skills";
+  if (end < 1 || segments[end] !== "SKILL.md" || segments[end - 1] !== skill["id"] ||
+      (!underProjectSkills && !underPluginSkills)) return null;
+  return Object.freeze({
+    id: skill["id"],
+    relative_path: skill["relative_path"],
+    content_hash: skill["content_hash"],
+  });
+}
+
+function snapshotPinnedSkills(value: unknown): readonly DefinitionRefLike["skills"][number][] | null {
+  if (!Array.isArray(value) || nodeTypes.isProxy(value) || Object.getPrototypeOf(value) !== Array.prototype) {
+    return null;
+  }
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+  if (lengthDescriptor === undefined || !("value" in lengthDescriptor) ||
+      typeof lengthDescriptor.value !== "number" || !Number.isInteger(lengthDescriptor.value) ||
+      lengthDescriptor.value < 0 || lengthDescriptor.value > 256) return null;
+  if (Object.getOwnPropertySymbols(value).length > 0) return null;
+  const names = Object.getOwnPropertyNames(value);
+  if (names.length !== lengthDescriptor.value + 1) return null;
+  const skills: DefinitionRefLike["skills"][number][] = [];
+  const ids = new Set<string>();
+  for (let index = 0; index < lengthDescriptor.value; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, index);
+    if (descriptor === undefined || !("value" in descriptor)) return null;
+    const skill = snapshotPinnedSkill(descriptor.value);
+    if (skill === null || ids.has(skill.id)) return null;
+    ids.add(skill.id);
+    skills.push(skill);
+  }
+  return Object.freeze(skills);
+}
+
+/** Canonical-equivalent, fresh validation at the untrusted transport boundary. */
+function snapshotDefinitionRef(value: unknown): DefinitionRefLike | null {
+  try {
+    const ref = exactDataRecord(value, DEFINITION_REF_KEYS);
+    if (ref === null || ref["schema_version"] !== "guild.project_definition_ref.v1") return null;
+    if (!definitionIdentity(ref["project_id"]) || !definitionIdentity(ref["id"]) ||
+        typeof ref["layer"] !== "string" || !DEFINITION_LAYERS.has(ref["layer"]) ||
+        typeof ref["kind"] !== "string" || !DEFINITION_KINDS.has(ref["kind"]) ||
+        !definitionRelativePath(ref["relative_path"]) ||
+        typeof ref["content_hash"] !== "string" || !CONTENT_HASH_RE.test(ref["content_hash"])) {
+      return null;
+    }
+    if (ref["source_commit"] !== null &&
+        (typeof ref["source_commit"] !== "string" || !SOURCE_COMMIT_RE.test(ref["source_commit"]))) {
+      return null;
+    }
+    if (ref["kind"] === "agent") {
+      if (typeof ref["specialist_profile_hash"] !== "string" ||
+          !IDENTITY_HASH_RE.test(ref["specialist_profile_hash"]) ||
+          typeof ref["specialist_type_hash"] !== "string" ||
+          !IDENTITY_HASH_RE.test(ref["specialist_type_hash"])) return null;
+    } else if (ref["specialist_profile_hash"] !== null || ref["specialist_type_hash"] !== null) {
+      return null;
+    }
+    if (!layerMatchesDefinitionPath(ref["layer"], ref["relative_path"])) return null;
+    const skills = snapshotPinnedSkills(ref["skills"]);
+    if (skills === null) return null;
+    return Object.freeze({
+      schema_version: ref["schema_version"],
+      project_id: ref["project_id"],
+      layer: ref["layer"],
+      kind: ref["kind"],
+      id: ref["id"],
+      relative_path: ref["relative_path"],
+      content_hash: ref["content_hash"],
+      source_commit: ref["source_commit"] as string | null,
+      specialist_profile_hash: ref["specialist_profile_hash"] as string | null,
+      specialist_type_hash: ref["specialist_type_hash"] as string | null,
+      skills,
+    });
+  } catch {
+    return null;
+  }
+}
+
+function snapshotTeamLaunchRequest(value: unknown): TeamLaunchRequestLike | null {
+  try {
+    if (value === null || typeof value !== "object" || nodeTypes.isProxy(value)) return null;
+    if (Object.getOwnPropertySymbols(value).length > 0) return null;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const names = Object.getOwnPropertyNames(value);
+    if (names.some((name) => !("value" in descriptors[name]))) return null;
+    const data = Object.fromEntries(
+      names.map((name) => [name, (descriptors[name] as PropertyDescriptor & { value: unknown }).value]),
+    ) as Record<string, unknown>;
+    if (
+      typeof data["slug"] !== "string" ||
+      typeof data["runId"] !== "string" ||
+      typeof data["cwd"] !== "string" ||
+      typeof data["targetName"] !== "string" ||
+      typeof data["mode"] !== "string" ||
+      typeof data["dryRun"] !== "boolean" ||
+      !Array.isArray(data["specialists"]) ||
+      nodeTypes.isProxy(data["specialists"])
+    ) return null;
+    const list = data["specialists"];
+    if (Object.getPrototypeOf(list) !== Array.prototype || Object.getOwnPropertySymbols(list).length > 0) {
+      return null;
+    }
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(list, "length");
+    if (lengthDescriptor === undefined || !("value" in lengthDescriptor) ||
+        typeof lengthDescriptor.value !== "number" || !Number.isInteger(lengthDescriptor.value) ||
+        lengthDescriptor.value < 0) return null;
+    const specialists: unknown[] = [];
+    for (let index = 0; index < lengthDescriptor.value; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(list, index);
+      if (descriptor === undefined || !("value" in descriptor)) return null;
+      specialists.push(descriptor.value);
+    }
+    return Object.freeze({
+      ...data,
+      specialists: Object.freeze(specialists),
+    }) as TeamLaunchRequestLike;
+  } catch {
+    return null;
+  }
+}
+
+function validateTeamLaunchSpecialists(
+  request: TeamLaunchRequestLike,
+): TeamLaunchSpecialistValidation {
+  try {
+    const specialists: TeamLaunchSpecialistLike[] = [];
+    const launchSpecialists: unknown[] = [];
+    const seen = new Set<string>();
+    for (const candidate of request.specialists) {
+      if (candidate === null || typeof candidate !== "object") {
+        launchSpecialists.push(candidate);
+        continue;
+      }
+      if (nodeTypes.isProxy(candidate)) {
+        return {
+          specialists: [],
+          request: null,
+          error: "a specialist proxy cannot cross the dispatch boundary",
+        };
+      }
+      const candidatePrototype = Object.getPrototypeOf(candidate);
+      if (candidatePrototype !== Object.prototype && candidatePrototype !== null) {
+        return {
+          specialists: [],
+          request: null,
+          error: "a specialist object requires a plain data prototype",
+        };
+      }
+      const descriptors = Object.getOwnPropertyDescriptors(candidate);
+      const names = Object.getOwnPropertyNames(candidate);
+      if (Object.getOwnPropertySymbols(candidate).length > 0 ||
+          names.some((name) => !("value" in descriptors[name]))) {
+        return {
+          specialists: [],
+          request: null,
+          error: "a specialist requires own data properties, not accessors or symbols",
+        };
+      }
+      const data = Object.fromEntries(
+        names.map((name) => [name, (descriptors[name] as PropertyDescriptor & { value: unknown }).value]),
+      ) as Record<string, unknown>;
+      if (typeof data["name"] !== "string") {
+        if (data["definition_ref"] !== undefined) {
+          return {
+            specialists: [],
+            request: null,
+            error: "a definition-bearing specialist requires a string name",
+          };
+        }
+        launchSpecialists.push(candidate);
+        continue;
+      }
+      const name = data["name"];
+      const dispatchKeyValue = data["dispatch_key"];
+      if (name.length === 0) {
+        return { specialists: [], request: null, error: "a named specialist requires a non-empty name" };
+      }
+      if (
+        dispatchKeyValue !== undefined &&
+        (typeof dispatchKeyValue !== "string" || dispatchKeyValue.length === 0)
+      ) {
+        return {
+          specialists: [],
+          request: null,
+          error: `specialist ${name} has an invalid dispatch_key`,
+        };
+      }
+      const key = dispatchKeyValue === undefined ? name : dispatchKeyValue as string;
+      if (seen.has(key)) {
+        return {
+          specialists: [],
+          request: null,
+          error: `duplicate specialist dispatch identity ${key}`,
+        };
+      }
+      seen.add(key);
+      const rawDefinitionRef = data["definition_ref"];
+      const definitionRef = rawDefinitionRef === undefined
+        ? undefined
+        : snapshotDefinitionRef(rawDefinitionRef);
+      if (rawDefinitionRef !== undefined && definitionRef === null) {
+        return {
+          specialists: [],
+          request: null,
+          error: `specialist ${name} has an invalid definition_ref`,
+        };
+      }
+      const snapshot = Object.freeze({
+        ...data,
+        name,
+        ...(dispatchKeyValue === undefined ? {} : { dispatch_key: dispatchKeyValue }),
+        ...(data["taskId"] === undefined ? {} : { taskId: data["taskId"] }),
+        ...(data["task_cell_assignment_path"] === undefined
+          ? {}
+          : { task_cell_assignment_path: data["task_cell_assignment_path"] }),
+        ...(data["task_cell_instance_id"] === undefined
+          ? {}
+          : { task_cell_instance_id: data["task_cell_instance_id"] }),
+        ...(definitionRef === undefined ? {} : { definition_ref: definitionRef }),
+      }) as TeamLaunchSpecialistLike;
+      specialists.push(snapshot);
+      launchSpecialists.push(snapshot);
+    }
+    const launchRequest = Object.freeze({
+      ...request,
+      specialists: Object.freeze(launchSpecialists),
+    }) as TeamLaunchRequestLike;
+    return { specialists: Object.freeze(specialists), request: launchRequest, error: null };
+  } catch {
+    return {
+      specialists: [],
+      request: null,
+      error: "the team launch request could not be snapshotted safely",
+    };
+  }
+}
+
+function teamSpecialistDispatchKey(specialist: TeamLaunchSpecialistLike): string {
+  return specialist.dispatch_key === undefined ? specialist.name : specialist.dispatch_key;
+}
+
+function uniqueDispatchPlanEntry(
+  plan: readonly unknown[] | null,
+  dispatchKey: string,
+): Record<string, unknown> | undefined {
+  try {
+    if (plan === null || nodeTypes.isProxy(plan)) return undefined;
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(plan, "length");
+    if (lengthDescriptor === undefined || !("value" in lengthDescriptor) ||
+        typeof lengthDescriptor.value !== "number" || !Number.isInteger(lengthDescriptor.value) ||
+        lengthDescriptor.value < 0) return undefined;
+    let match: Record<string, unknown> | undefined;
+    for (let index = 0; index < lengthDescriptor.value; index += 1) {
+      const itemDescriptor = Object.getOwnPropertyDescriptor(plan, index);
+      if (itemDescriptor === undefined || !("value" in itemDescriptor)) return undefined;
+      const entry = itemDescriptor.value;
+      if (entry === null || typeof entry !== "object") continue;
+      if (nodeTypes.isProxy(entry) || Object.getOwnPropertySymbols(entry).length > 0) return undefined;
+      const descriptors = Object.getOwnPropertyDescriptors(entry);
+      const names = Object.getOwnPropertyNames(entry);
+      if (names.some((name) => !("value" in descriptors[name]))) return undefined;
+      const data = Object.fromEntries(
+        names.map((name) => [name, (descriptors[name] as PropertyDescriptor & { value: unknown }).value]),
+      ) as Record<string, unknown>;
+      if (data["name"] !== dispatchKey) continue;
+      if (match !== undefined) return undefined;
+      match = data;
+    }
+    return match;
+  } catch {
+    return undefined;
+  }
+}
+
+function sessionDefinitionPlan(
+  specialists: readonly unknown[],
+  commands: readonly TeamSessionCommandLike[],
+  runId: string,
+): readonly unknown[] {
+  return specialists.filter(isTeamLaunchSpecialistLike).map((s) => {
+    const key = teamSpecialistDispatchKey(s);
+    const titleLikeIndexes: number[] = [];
+    const titleIndexes: number[] = [];
+    for (let i = 0; i < commands.length; i++) {
+      const argv = commands[i]?.argv;
+      if (
+        argv !== undefined &&
+        argv.length >= 4 &&
+        argv[0] === "tmux" &&
+        argv[1] === "select-pane" &&
+        argv[2] === "-T" &&
+        argv[3] === key
+      ) {
+        titleLikeIndexes.push(i);
+        if (argv.length === 4) titleIndexes.push(i);
+      }
+    }
+    const titleIndex =
+      titleLikeIndexes.length === 1 && titleIndexes.length === 1
+        ? titleIndexes[0]
+        : -1;
+    const paneCommand = titleIndex > 0 ? commands[titleIndex - 1] : undefined;
+    const carried =
+      s.definition_ref !== undefined &&
+      commandCarriesAndConsumesDefinitionRef(paneCommand, s.definition_ref, s, runId);
+    return {
+      name: key,
+      ...(carried ? { definition_ref: s.definition_ref } : {}),
+    };
+  });
 }
 
 export interface TeamSessionPlanLike {
   readonly mode: string;
   readonly targetName: string;
   readonly commands: readonly TeamSessionCommandLike[];
+}
+
+function snapshotSessionPlan(value: unknown): TeamSessionPlanLike | null {
+  try {
+    if (!isPlainDefinitionData(value)) return null;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const names = Object.getOwnPropertyNames(value);
+    if (Object.getOwnPropertySymbols(value).length > 0 ||
+        names.some((name) => !("value" in descriptors[name]))) return null;
+    const data = Object.fromEntries(
+      names.map((name) => [name, (descriptors[name] as PropertyDescriptor & { value: unknown }).value]),
+    ) as Record<string, unknown>;
+    if (typeof data["mode"] !== "string" || typeof data["targetName"] !== "string" ||
+        !Array.isArray(data["commands"]) || nodeTypes.isProxy(data["commands"]) ||
+        Object.getPrototypeOf(data["commands"]) !== Array.prototype) return null;
+    const commandsValue = data["commands"];
+    const lengthDescriptor = Object.getOwnPropertyDescriptor(commandsValue, "length");
+    if (lengthDescriptor === undefined || !("value" in lengthDescriptor) ||
+        typeof lengthDescriptor.value !== "number" || !Number.isInteger(lengthDescriptor.value) ||
+        lengthDescriptor.value < 0) return null;
+    const commands: TeamSessionCommandLike[] = [];
+    for (let index = 0; index < lengthDescriptor.value; index += 1) {
+      const itemDescriptor = Object.getOwnPropertyDescriptor(commandsValue, index);
+      if (itemDescriptor === undefined || !("value" in itemDescriptor) ||
+          !isPlainDefinitionData(itemDescriptor.value)) return null;
+      const commandDescriptors = Object.getOwnPropertyDescriptors(itemDescriptor.value);
+      const commandNames = Object.getOwnPropertyNames(itemDescriptor.value);
+      if (Object.getOwnPropertySymbols(itemDescriptor.value).length > 0 ||
+          commandNames.some((name) => !("value" in commandDescriptors[name]))) return null;
+      const command = Object.fromEntries(
+        commandNames.map((name) => [
+          name,
+          (commandDescriptors[name] as PropertyDescriptor & { value: unknown }).value,
+        ]),
+      ) as Record<string, unknown>;
+      if (typeof command["display"] !== "string") return null;
+      let argv: readonly string[] | undefined;
+      if (command["argv"] !== undefined) {
+        if (!Array.isArray(command["argv"]) || nodeTypes.isProxy(command["argv"]) ||
+            Object.getPrototypeOf(command["argv"]) !== Array.prototype) return null;
+        const argvValue = command["argv"];
+        const argvLength = Object.getOwnPropertyDescriptor(argvValue, "length");
+        if (argvLength === undefined || !("value" in argvLength) ||
+            typeof argvLength.value !== "number" || !Number.isInteger(argvLength.value) ||
+            argvLength.value < 0) return null;
+        const copiedArgv: string[] = [];
+        for (let argIndex = 0; argIndex < argvLength.value; argIndex += 1) {
+          const argDescriptor = Object.getOwnPropertyDescriptor(argvValue, argIndex);
+          if (argDescriptor === undefined || !("value" in argDescriptor) ||
+              typeof argDescriptor.value !== "string") return null;
+          copiedArgv.push(argDescriptor.value);
+        }
+        argv = Object.freeze(copiedArgv);
+      }
+      commands.push(Object.freeze({
+        ...command,
+        ...(argv === undefined ? {} : { argv }),
+        display: command["display"],
+      }) as TeamSessionCommandLike);
+    }
+    return Object.freeze({
+      ...data,
+      mode: data["mode"],
+      targetName: data["targetName"],
+      commands: Object.freeze(commands),
+    }) as TeamSessionPlanLike;
+  } catch {
+    return null;
+  }
 }
 
 export interface TeamSessionSpawnOutcomeLike {
@@ -1191,11 +1846,13 @@ export interface TeamDispatchExecutionTransportOpts {
   readonly backend: TeamBackendLike;
   readonly transport_id: Extract<
     ExecutionTransportId,
-    "in-process" | "serial" | "tmux" | "remote"
+    "in-process" | "serial" | "tmux" | "cmux" | "remote"
   >;
   /** Present only for substrates that own an addressable session (tmux). */
   readonly session?: TeamSessionSeamLike;
   readonly sink?: ExecutionObservationSink;
+  /** Opt-in only after this substrate demonstrably carries the exact ref. */
+  readonly supports_definition_injection?: boolean;
 }
 
 /**
@@ -1217,6 +1874,7 @@ export class TeamDispatchExecutionTransport
 {
   readonly transport_id: ExecutionTransportId;
   readonly dispatch_kind: string;
+  override readonly supports_definition_injection: true | undefined = undefined;
   /**
    * The seven generic operations this substrate performs. The dispatch surface
    * below reports under the SAME closed vocabulary — a read is a `probe`, the
@@ -1234,6 +1892,7 @@ export class TeamDispatchExecutionTransport
     super(opts.sink);
     this.backend = opts.backend;
     this.transport_id = opts.transport_id;
+    this.supports_definition_injection = opts.supports_definition_injection === true ? true : undefined;
     this.session = opts.session === undefined ? null : opts.session;
     let kind: unknown;
     try {
@@ -1460,7 +2119,8 @@ export class TeamDispatchExecutionTransport
   }
 
   launch(request: TeamLaunchRequestLike): ExecutionOutcome<TeamDispatchLaunch> {
-    if (!isTeamLaunchRequestLike(request)) {
+    const requestSnapshot = snapshotTeamLaunchRequest(request);
+    if (requestSnapshot === null) {
       return this.observed(
         executionOutcome<TeamDispatchLaunch>({
           operation: "spawn",
@@ -1471,17 +2131,57 @@ export class TeamDispatchExecutionTransport
         })
       );
     }
+    const specialistValidation = validateTeamLaunchSpecialists(requestSnapshot);
+    if (specialistValidation.error !== null || specialistValidation.request === null) {
+      return this.observed(
+        executionOutcome<TeamDispatchLaunch>({
+          operation: "spawn",
+          transport_id: this.transport_id,
+          status: "failed",
+          reason_code: "invalid_request",
+          detail: specialistValidation.error ?? "the team launch request could not be snapshotted safely",
+          facts: { dispatch_kind: this.dispatch_kind, substrate_spawned: false },
+        })
+      );
+    }
+    for (const specialist of specialistValidation.specialists) {
+      if (specialist.definition_ref === undefined) continue;
+      const verdict = resolveInjectionSupport(
+        { definition_ref: specialist.definition_ref },
+        this
+      );
+      if (verdict.kind === "refuse") {
+        return this.observed(
+          executionOutcome<TeamDispatchLaunch>({
+            operation: "spawn",
+            transport_id: this.transport_id,
+            status: verdict.status,
+            reason_code: verdict.reason_code,
+            detail: `transport ${this.transport_id} does not declare definition injection for ${specialist.name}`,
+            facts: { dispatch_kind: this.dispatch_kind, specialist: specialist.name },
+          })
+        );
+      }
+    }
     // Deliberately NO implicit availability probe: a dry run must never touch the
     // substrate, and the caller owns when — and whether — availability is probed.
-    if (this.session !== null && request.dryRun !== true) {
-      return this.launchThroughSession(this.session, request);
+    if (this.session !== null && requestSnapshot.dryRun !== true) {
+      return this.launchThroughSession(
+        this.session,
+        specialistValidation.request,
+        specialistValidation.specialists,
+      );
     }
-    return this.launchThroughBackend(request);
+    return this.launchThroughBackend(
+      specialistValidation.request,
+      specialistValidation.specialists,
+    );
   }
 
   /** The generic path: the backend performs the whole run-scoped launch. */
   private launchThroughBackend(
-    request: TeamLaunchRequestLike
+    request: TeamLaunchRequestLike,
+    specialists: readonly TeamLaunchSpecialistLike[],
   ): ExecutionOutcome<TeamDispatchLaunch> {
     let result: TeamLaunchResultLike;
     try {
@@ -1511,7 +2211,7 @@ export class TeamDispatchExecutionTransport
         )
       );
     }
-    return this.reportLaunch(value, request);
+    return this.reportLaunch(value, request, specialists);
   }
 
   /**
@@ -1522,11 +2222,12 @@ export class TeamDispatchExecutionTransport
    */
   private launchThroughSession(
     session: TeamSessionSeamLike,
-    request: TeamLaunchRequestLike
+    request: TeamLaunchRequestLike,
+    specialists: readonly TeamLaunchSpecialistLike[],
   ): ExecutionOutcome<TeamDispatchLaunch> {
-    let plan: TeamSessionPlanLike;
+    let rawPlan: TeamSessionPlanLike;
     try {
-      plan = session.plan(request);
+      rawPlan = session.plan(request);
     } catch (err) {
       return this.observed(
         failedExecutionOutcome<TeamDispatchLaunch>(
@@ -1536,6 +2237,19 @@ export class TeamDispatchExecutionTransport
           "spawn_failed",
           { dispatch_kind: this.dispatch_kind }
         )
+      );
+    }
+    const plan = snapshotSessionPlan(rawPlan);
+    if (plan === null) {
+      return this.observed(
+        executionOutcome<TeamDispatchLaunch>({
+          operation: "spawn",
+          transport_id: this.transport_id,
+          status: "failed",
+          reason_code: "invalid_request",
+          detail: "the session plan could not be snapshotted safely",
+          facts: { dispatch_kind: this.dispatch_kind, substrate_spawned: false },
+        })
       );
     }
     const planned: string[] = [];
@@ -1556,6 +2270,49 @@ export class TeamDispatchExecutionTransport
           err,
           "invalid_request",
           { dispatch_kind: this.dispatch_kind }
+        )
+      );
+    }
+
+    let definitionPlan: readonly unknown[];
+    try {
+      definitionPlan = sessionDefinitionPlan(specialists, plan.commands, request.runId);
+      if (this.supports_definition_injection === true) {
+        for (const specialist of specialists) {
+          if (specialist.definition_ref === undefined) continue;
+          const dispatchKey = teamSpecialistDispatchKey(specialist);
+          const forwarded = uniqueDispatchPlanEntry(definitionPlan, dispatchKey);
+          if (!portHonoredInjection(
+            { definition_ref: specialist.definition_ref },
+            forwarded === undefined
+              ? undefined
+              : { definition_ref: forwarded["definition_ref"] as typeof specialist.definition_ref }
+          )) {
+            return this.observed(
+              executionOutcome<TeamDispatchLaunch>({
+                operation: "spawn",
+                transport_id: this.transport_id,
+                status: "failed",
+                reason_code: "invalid_request",
+                detail: `declaring transport would drop or change definition_ref for ${dispatchKey}`,
+                facts: {
+                  dispatch_kind: this.dispatch_kind,
+                  planned_command_count: planned.length,
+                  substrate_spawned: false,
+                },
+              })
+            );
+          }
+        }
+      }
+    } catch (err) {
+      return this.observed(
+        failedExecutionOutcome<TeamDispatchLaunch>(
+          this.transport_id,
+          "spawn",
+          err,
+          "invalid_request",
+          { dispatch_kind: this.dispatch_kind, substrate_spawned: false }
         )
       );
     }
@@ -1618,7 +2375,10 @@ export class TeamDispatchExecutionTransport
           : [`tmux command failed: ${failedCommand ?? "(unknown)"}`, stderr].filter(
               (note) => note.length > 0
             ),
-        dispatch_plan: null,
+        // Fix A: the forwarding proof for declaring ports (see
+        // sessionDefinitionPlan) — previously null, which made definition
+        // carriage unverifiable (and hence undeclarable) on this substrate.
+        dispatch_plan: definitionPlan,
         parallelism: null,
         failed_command: failedCommand,
         failure_detail: failureDetail,
@@ -1634,13 +2394,14 @@ export class TeamDispatchExecutionTransport
         )
       );
     }
-    return this.reportLaunch(value, request);
+    return this.reportLaunch(value, request, specialists);
   }
 
   /** Map an already-normalized launch onto the closed outcome vocabulary. */
   private reportLaunch(
     value: TeamDispatchLaunch,
-    request: TeamLaunchRequestLike
+    request: TeamLaunchRequestLike,
+    specialists: readonly TeamLaunchSpecialistLike[],
   ): ExecutionOutcome<TeamDispatchLaunch> {
     const facts = {
       dispatch_kind: this.dispatch_kind,
@@ -1665,6 +2426,29 @@ export class TeamDispatchExecutionTransport
           facts,
         })
       );
+    }
+    if (this.supports_definition_injection === true) {
+      for (const specialist of specialists) {
+        if (specialist.definition_ref === undefined) continue;
+        const dispatchKey = teamSpecialistDispatchKey(specialist);
+        const forwarded = uniqueDispatchPlanEntry(value.dispatch_plan, dispatchKey);
+        if (!portHonoredInjection(
+          { definition_ref: specialist.definition_ref },
+          forwarded === undefined ? undefined : { definition_ref: forwarded["definition_ref"] as typeof specialist.definition_ref }
+        )) {
+          return this.observed(
+            executionOutcome<TeamDispatchLaunch>({
+              operation: "spawn",
+              transport_id: this.transport_id,
+              status: "failed",
+              reason_code: "invalid_request",
+              detail: `declaring transport dropped or changed definition_ref for ${dispatchKey}`,
+              value,
+              facts,
+            })
+          );
+        }
+      }
     }
     return this.observed(
       executionOutcome<TeamDispatchLaunch>({

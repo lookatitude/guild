@@ -4,3 +4,5 @@ export * from "./workflows/team-file";
 // provenance). It is published here so capability/dispatch consume it through
 // the public module entrypoint instead of a private cross-module import.
 export * from "./workflows/canonical-hash";
+export * from "./workflows/station-composer";
+export * from "./workflows/station-signals";

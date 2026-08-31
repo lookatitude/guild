@@ -24,6 +24,8 @@
 import * as crypto from "crypto";
 import * as fsReal from "fs";
 import * as path from "path";
+import { writeContainedFile } from "../../kernel";
+import { initStableLockfile, withStableLock } from "./stable-lock";
 
 // ── Schema ───────────────────────────────────────────────────────────────────
 
@@ -65,6 +67,10 @@ export class BindingRejectedError extends Error {
 export interface BindingFs {
   mkdirp(absPath: string): void;
   writeFile(absPath: string, contents: string): void;
+  /** Atomically replace one physically-contained file. Production always supplies this. */
+  writeFileAtomicContained?(root: string, absPath: string, contents: string): void;
+  /** Create a new file without replacing an existing inode. */
+  writeFileExclusive?(absPath: string, contents: string): boolean;
   readFile(absPath: string): string | null;
   exists(absPath: string): boolean;
 }
@@ -73,6 +79,22 @@ function realBindingFs(): BindingFs {
   return {
     mkdirp: (p) => fsReal.mkdirSync(p, { recursive: true }),
     writeFile: (p, c) => fsReal.writeFileSync(p, c, "utf8"),
+    writeFileAtomicContained: (root, p, c) => {
+      const result = writeContainedFile(root, p, Buffer.from(c, "utf8"), { policy: "physical" });
+      if (!result.written) {
+        throw new Error(`pending substantive operation marker write refused [${result.code}]: ${result.detail}`);
+      }
+    },
+    writeFileExclusive: (p, c) => {
+      fsReal.mkdirSync(path.dirname(p), { recursive: true });
+      try {
+        fsReal.writeFileSync(p, c, { encoding: "utf8", flag: "wx" });
+        return true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+        throw error;
+      }
+    },
     readFile: (p) => (fsReal.existsSync(p) ? fsReal.readFileSync(p, "utf8") : null),
     exists: (p) => fsReal.existsSync(p),
   };
@@ -80,6 +102,111 @@ function realBindingFs(): BindingFs {
 
 export function runBindingPath(root: string, runId: string): string {
   return path.join(root, ".guild", "runs", runId, "binding.json");
+}
+
+export const PENDING_SUBSTANTIVE_OPERATION_SCHEMA = "guild.pending_substantive_operation.v1" as const;
+
+export interface PendingSubstantiveOperationRecord {
+  readonly schema_version: typeof PENDING_SUBSTANTIVE_OPERATION_SCHEMA;
+  readonly state: "pending" | "complete";
+  readonly run_id: string;
+  readonly task_id: string;
+}
+
+export function pendingSubstantiveOperationPath(root: string, runId: string): string {
+  return path.join(root, ".guild", "runs", runId, "capability", "pending-substantive-operation.json");
+}
+
+export function readPendingSubstantiveOperation(root: string, runId: string, fs: BindingFs = realBindingFs()): PendingSubstantiveOperationRecord | null {
+  const raw = fs.readFile(pendingSubstantiveOperationPath(root, runId));
+  if (raw === null) return null;
+  let value: unknown;
+  try { value = JSON.parse(raw); } catch { throw new Error("pending substantive operation marker is malformed"); }
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("pending substantive operation marker is malformed");
+  const record = value as Record<string, unknown>;
+  if (record.schema_version !== PENDING_SUBSTANTIVE_OPERATION_SCHEMA
+    || (record.state !== "pending" && record.state !== "complete")
+    || record.run_id !== runId
+    || typeof record.task_id !== "string" || record.task_id.length === 0 || record.task_id.length > 192) {
+    throw new Error("pending substantive operation marker is malformed");
+  }
+  return record as unknown as PendingSubstantiveOperationRecord;
+}
+
+function writePendingSubstantiveOperation(root: string, record: PendingSubstantiveOperationRecord, fs: BindingFs): void {
+  const target = pendingSubstantiveOperationPath(root, record.run_id);
+  const serialized = `${JSON.stringify(record, null, 2)}\n`;
+  if (fs.writeFileAtomicContained) {
+    fs.writeFileAtomicContained(root, target, serialized);
+    return;
+  }
+  // Deterministic in-memory lifecycle tests use the minimal BindingFs seam.
+  // Production always takes the physically-contained atomic branch above.
+  fs.mkdirp(path.dirname(target));
+  fs.writeFile(target, serialized);
+}
+
+/** Caller must already hold withRunBindingExclusion for this run. */
+export function stagePendingSubstantiveOperation(opts: RunBindingLocator & { readonly task_id: string }): void {
+  const fs = opts.fs ?? realBindingFs();
+  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs);
+  if (prior?.state === "pending" && prior.task_id !== opts.task_id) {
+    throw new Error(`pending substantive operation for ${prior.task_id} must be recovered before ${opts.task_id}`);
+  }
+  if (prior?.state === "pending") return;
+  writePendingSubstantiveOperation(opts.root, {
+    schema_version: PENDING_SUBSTANTIVE_OPERATION_SCHEMA,
+    state: "pending",
+    run_id: opts.run_id,
+    task_id: opts.task_id,
+  }, fs);
+}
+
+/** Caller must already hold withRunBindingExclusion for this run. */
+export function completePendingSubstantiveOperation(opts: RunBindingLocator & { readonly task_id: string }): void {
+  const fs = opts.fs ?? realBindingFs();
+  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs);
+  if (!prior || prior.task_id !== opts.task_id) throw new Error("pending substantive operation completion has no matching transaction");
+  if (prior.state === "complete") return;
+  writePendingSubstantiveOperation(opts.root, { ...prior, state: "complete" }, fs);
+}
+
+/** Close-time fail-closed barrier; call while holding withRunBindingExclusion. */
+export function assertNoPendingSubstantiveOperation(opts: RunBindingLocator): void {
+  const record = readPendingSubstantiveOperation(opts.root, opts.run_id, opts.fs ?? realBindingFs());
+  if (record?.state === "pending") {
+    throw new Error(`pending substantive operation for ${record.task_id} must be recovered before lifecycle close`);
+  }
+}
+
+/**
+ * Serialize a lifecycle-state transition with every receipt-producing runtime
+ * write for the same run. Both close and compatibility reads use this exact
+ * exclusion domain, so a receipt linearizes wholly before close or is refused
+ * wholly after it; there is no post-hoc journal cleanup path.
+ */
+export function withRunBindingExclusion<T>(
+  root: string,
+  runId: string,
+  fn: () => T,
+): T {
+  if (!/^run-[A-Za-z0-9][A-Za-z0-9._-]{0,191}$/.test(runId)) {
+    throw new Error(`run-binding exclusion: invalid run id ${JSON.stringify(runId)}`);
+  }
+  // Fail before withStableLock initializes logs/.lock. A refused operation for
+  // a nonexistent or malformed run must not manufacture a phantom run tree.
+  const persisted = readRunBindingRecord({ root, run_id: runId });
+  if (persisted.status === "absent") throw new BindingRejectedError("binding_not_minted", runId);
+  if (persisted.status === "malformed") throw new BindingRejectedError("binding_malformed", runId);
+  return withStableLock(path.join(root, ".guild", "runs", runId), fn);
+}
+
+/** Initialize the permanent exclusion inode as part of a successful run start. */
+export function initializeRunBindingExclusion(root: string, runId: string): void {
+  if (!/^run-[A-Za-z0-9][A-Za-z0-9._-]{0,191}$/.test(runId)) {
+    throw new Error(`run-binding exclusion: invalid run id ${JSON.stringify(runId)}`);
+  }
+  initStableLockfile(path.join(root, ".guild", "runs", runId));
 }
 
 // ── Mint / load / close ──────────────────────────────────────────────────────
@@ -113,7 +240,19 @@ export function mintRunBinding(opts: RunBindingLocator): RunBindingRecord {
     state: "open",
   };
   fs.mkdirp(path.dirname(p));
-  fs.writeFile(p, JSON.stringify(record, null, 2) + "\n");
+  const contents = JSON.stringify(record, null, 2) + "\n";
+  // Production adapters publish the binding with O_EXCL. The preliminary
+  // exists check above improves the normal diagnostic but is not the race
+  // control: only this exclusive create makes one same-ID starter the owner.
+  const created = fs.writeFileExclusive
+    ? fs.writeFileExclusive(p, contents)
+    : !fs.exists(p) && (fs.writeFile(p, contents), true);
+  if (!created) {
+    throw new Error(
+      `run-binding: a binding for ${opts.run_id} is already minted — ` +
+        `resume restores it (loadRunBinding); it is never re-minted`
+    );
+  }
   return record;
 }
 
@@ -214,6 +353,14 @@ export function closeRunBinding(opts: RunBindingLocator): void {
  * Idempotent when the record is already open.
  */
 export function reopenRunBinding(opts: RunBindingLocator, binding_ref: string): RunBindingRecord {
+  return withRunBindingExclusion(opts.root, opts.run_id, () =>
+    reopenRunBindingUnderExclusion(opts, binding_ref));
+}
+
+function reopenRunBindingUnderExclusion(
+  opts: RunBindingLocator,
+  binding_ref: string,
+): RunBindingRecord {
   const fs = opts.fs ?? realBindingFs();
   const read = readRunBindingRecord(opts);
   if (read.status === "absent") throw new BindingRejectedError("binding_not_minted", opts.run_id);

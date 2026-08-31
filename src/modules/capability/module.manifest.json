@@ -13,17 +13,24 @@
     "lifecycle",
     "review",
     "security",
+    "state",
+    "telemetry",
     "teams"
   ],
   "owns": {
     "commands": [
+      "adopt",
       "models"
     ],
     "scripts": [
       "score-tier",
       "models-cmd",
       "capability-adopt",
+      "capability-migration-boundary",
       "capability-profile",
+      "definition-ref-for-dispatch",
+      "self-build-canonicalize",
+      "workspace-role-localize",
       "lib/core/contracts/project-capability-profile",
       "lib/role-model-schema",
       "lib/role-resolver",

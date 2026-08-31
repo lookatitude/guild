@@ -57,6 +57,7 @@ import * as path from "path";
 import * as readline from "readline";
 import { resolveGuildRoot } from "../lib/guild-root.js";
 import { resolveRunIdForTrace } from "../lib/run-trace.js";
+import { makeCanonicalRunId } from "../../scripts/lib/run-lifecycle.js";
 import { validateHandoffV2, extractHandoffEnvelope } from "../lib/handoff-v2.js";
 import {
   assessLiveness,
@@ -128,20 +129,32 @@ interface AcceptedLane {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function deriveRunId(sessionId: string, guildRoot: string): string {
-  // GUILD_RUN_ID honored when the agent-team launcher sets it per pane; falls
-  // back to "run-<session_id>" when the env is absent. T3b (session_context
-  // §5): the sentinel leg is retired (resolveRunIdForTrace is env-only) — a
-  // moved current-run-id can never redirect this hook.
+  // GUILD_RUN_ID is honored when the launcher sets it per pane. An existing
+  // legacy run-<session_id> directory remains readable for compatibility;
+  // otherwise the shared lifecycle formatter provides a canonical, warned
+  // read-only lookup identity.
   //
   // Rework F3: this derived id feeds READ-ONLY work ONLY — receipt/liveness
   // assessment and the stdout nudge text. It is NEVER a writer identity: the
   // idle bus event authorizes separately through authorizeHookWrite (verified
   // GUILD_RUN_ID + GUILD_RUN_BINDING_REF envelope), so the run-<session_id>
   // fallback can never name a write target.
-  return (
-    resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ??
-    `run-${sessionId}`
+  const bound = resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] });
+  if (bound) return bound;
+  const legacy = `run-${sessionId}`;
+  if (fs.existsSync(path.join(guildRoot, ".guild", "runs", legacy))) {
+    process.stderr.write(
+      `[teammate-idle] WARN: legacy read-only fallback run id used: ${legacy}; ` +
+        "start/inherit the lifecycle run id to remove this compatibility read.\n",
+    );
+    return legacy;
+  }
+  const fallback = makeCanonicalRunId(new Date().toISOString(), sessionId);
+  process.stderr.write(
+    `[teammate-idle] WARN: read-only fallback run id used: ${fallback}; ` +
+      "no run-record write is authorized without the lifecycle binding envelope.\n",
   );
+  return fallback;
 }
 
 /** Per-receipt validity verdict used to build the nudge context. */

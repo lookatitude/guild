@@ -135,6 +135,16 @@ export const FIXED_GATES = Object.freeze(["gate-1-spec", "gate-2-team", "gate-3-
 // ISO-8601 timestamp with millisecond precision (Z-suffixed). The schema
 // example: "2026-04-27T07:35:00.123Z".
 const ISO_TS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const LIFECYCLE_UUID_RE = /^evt-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const LIFECYCLE_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+
+function isCanonicalLifecycleInstant(value: unknown): value is string {
+  if (!isString(value) || !LIFECYCLE_UTC_RE.test(value)) return false;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return false;
+  const canonical = new Date(parsed).toISOString();
+  return canonical === (value.includes(".") ? value : value.replace("Z", ".000Z"));
+}
 
 // gate_decision.gate slug grammar — schema doc §9.
 // (NOT a YAML reader — validates a JSONL event-token grammar. The literal is
@@ -452,6 +462,21 @@ export function validateEvent(parsed: unknown): ValidationResult {
     return { ok: false, errors: ["event must be a JSON object"] };
   }
   const o = parsed as Record<string, unknown>;
+
+  // Family 0 — the two frozen lifecycle markers emitted by hooks/lib/run-trace.ts
+  // into this exact mixed log. Keep the member set closed: a marker that grows an
+  // unreviewed field is not silently admitted to the public run record.
+  if (o.schema_version === "guild.trace_event.v1") {
+    const keys = Object.keys(o).sort();
+    const expected = ["at", "event_id", "event_name", "run_id", "schema_version"].sort();
+    const errors: string[] = [];
+    if (keys.join("|") !== expected.join("|")) errors.push("guild.trace_event.v1: invalid or open member shape");
+    if (!isString(o.event_id) || !LIFECYCLE_UUID_RE.test(o.event_id)) errors.push("event_id: expected evt-<canonical-uuid>");
+    if (o.event_name !== "run_started" && o.event_name !== "run_closed") errors.push("event_name: expected run_started or run_closed");
+    if (!isString(o.run_id) || o.run_id.length === 0) errors.push("run_id: expected non-empty string");
+    if (!isCanonicalLifecycleInstant(o.at)) errors.push("at: expected canonical UTC instant");
+    return { ok: errors.length === 0, errors };
+  }
 
   // Family 1 — guild.trace.*.v1 (R-TRACE): carries `schema_version` instead
   // of `event`. Delegate entirely; this validator does not re-implement that

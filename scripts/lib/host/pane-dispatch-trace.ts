@@ -31,11 +31,8 @@
  * NOTHING to it: it reuses `guild.trace.dispatch.v1`, the R-TRACE family that
  * v1.4-log-validator.ts already accepts as its own line family (`schema_version`
  * instead of `event`) and that write-task-run.ts already emits on the
- * pre-routing path. ONLY optional fields were added to that contract
- * (attribution_specialist / pane_id / pane_target / pane_backend — see
- * guild-trace-events.ts); the `backend` enum is byte-identical to pre-#76, so
- * an OLDER validator reading the same schema token still accepts every line
- * this version writes. Reusing the in-log family rather than opening a
+ * pre-routing path. W4 promotes cmux into that contract's backend enum; the
+ * attribution and pane fields remain additive. Reusing the in-log family rather than opening a
  * dedicated sink (the guild.backend_degradation.v1 / guild.tier_dispatch.v1
  * shape) is deliberate: those two carry PreToolUse hook decisions the v1.4
  * validator would reject, whereas a dispatch receipt belongs in the run log
@@ -84,20 +81,13 @@ export const DEFAULT_PANE_DISPATCH_PHASE = "execute";
 const EVENTS_RELPATH = path.join("logs", "v1.4-events.jsonl");
 
 /**
- * Concrete pane surface → the CLOSED `backend` enum value it reports as.
- *
- * `DispatchBackend` is closed: adding "cmux" to it would make events this
- * version writes fail an OLDER validator reading the same
- * `guild.trace.dispatch.v1` token. cmux therefore maps to "unknown" — literally
- * true (the enum cannot name it) — and identifies itself in the additive
- * `pane_backend` field. It deliberately does NOT borrow "tmux", whose contract
- * is "tmux pane send-keys": a consumer filtering `backend === "tmux"` for local
- * panes must not silently collect cmux surfaces. Retiring this mapping is the
- * job of a `guild.trace.dispatch.v2` that opens the enum.
+ * Concrete pane surface → the dispatch backend enum value it reports as.
+ * cmux is first-class under run-identity-and-dispatch W4; `unknown` plus the
+ * additive `pane_backend` field remains the extension route for other surfaces.
  */
 const SURFACE_TO_BACKEND: Readonly<Record<string, DispatchBackend>> = {
   tmux: "tmux",
-  cmux: "unknown",
+  cmux: "cmux",
   remote: "remote",
   agent: "agent",
 };

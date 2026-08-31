@@ -1,0 +1,69 @@
+schema_version: guild.team.v1
+initiative: project-capability-localization
+slug: pcl-fu20-observe-definition-ref-compatibility-repair
+spec: .guild/spec/pcl-fu20-observe-definition-ref-compatibility-repair.md
+phase: plan
+backend: agent-team
+proposal_ref: .guild/runs/run-20260823-165747-project-capability-localization/team-plan/plan.proposal.v2.yaml
+decision_ref: .guild/runs/run-20260823-165747-project-capability-localization/team-plan/plan.decision.f694c2504425.yaml
+posture:
+  review: cross
+  rigor: deep
+  agents_never_commit: true
+specialists:
+  - name: tooling-engineer
+    participant_id: tooling-engineer-plan
+    participation_kind: worker
+    purpose: planning
+    scope: "Plan the minimal resolver-mode-aware launcher correction and the read-only production observation verifier CLI; do not edit source in plan phase."
+    necessity_rationale: "Owns the bounded launcher and capability-adopt CLI implementation plan across the two authored script surfaces."
+    owned_obligations: [FU20-observe-definition-ref-ordering, FU20-production-verifier-cli]
+    depends-on: []
+    definition: .guild/agents/tooling-engineer.md
+    definition_source: project
+    definition_ref: {"schema_version":"guild.project_definition_ref.v1","project_id":"plugin","layer":"project-guild","kind":"agent","id":"tooling-engineer","relative_path":".guild/agents/tooling-engineer.md","content_hash":"sha256:7275cbc08086c1ec2d5df510342bba5674fe8e37016175df5befd3adb067f2ef","source_commit":null,"specialist_profile_hash":"621b611addae42be5086295fedf37eae5cd4ca006d9718d6517f29ca53f49910","specialist_type_hash":"a953b202609e7a09d4e8fe6e1c8ea4e39ef78c477578466c756a658b3ae5f4a3","skills":[]}
+    default_tier: mid
+    capability_scope: [Read, Write, Glob, Grep]
+  - name: eval-engineer
+    participant_id: eval-engineer-plan
+    participation_kind: worker
+    purpose: planning
+    scope: "Plan adversarial regression coverage and the exact convergence rails; do not edit source or tests in plan phase."
+    necessity_rationale: "Owns adversarial regression design for compatibility receipt ordering, mode refusals, project-only roles, and verifier write-freedom."
+    owned_obligations: [FU20-adversarial-regressions, FU20-convergence-rails]
+    depends-on: []
+    definition: .guild/agents/eval-engineer.md
+    definition_source: project
+    definition_ref: {"schema_version":"guild.project_definition_ref.v1","project_id":"plugin","layer":"project-guild","kind":"agent","id":"eval-engineer","relative_path":".guild/agents/eval-engineer.md","content_hash":"sha256:f8bbd75184a83e3c97404147502844b56b8f64547d62d3090ea7763ae87ba8d7","source_commit":null,"specialist_profile_hash":"f056be190a2372ff26808b272b2d95c3041e2b4c235ea2b35bfd5d772d74121c","specialist_type_hash":"9fe1f1b6502d4c9c355be9c9d70aa9463ec2ab58bc916bc9b54d06a30179754b","skills":[]}
+    default_tier: powerful
+    capability_scope: [Read, Write, Glob, Grep]
+  - name: docs-writer
+    participant_id: docs-writer-plan
+    participation_kind: worker
+    purpose: planning
+    scope: "Plan the mandatory docs/v2 reconciliation and portable wording; do not edit documentation in plan phase."
+    necessity_rationale: "Owns the mandatory same-rollout docs/v2 reconciliation and portable public wording for resolver-mode and verifier behavior."
+    owned_obligations: [FU20-docs-v2]
+    depends-on: []
+    definition: .guild/agents/docs-writer.md
+    definition_source: project
+    definition_ref: {"schema_version":"guild.project_definition_ref.v1","project_id":"plugin","layer":"project-guild","kind":"agent","id":"docs-writer","relative_path":".guild/agents/docs-writer.md","content_hash":"sha256:8e3b838700877d44910231a350c5bac19be1f5d22bc3e4fe4fa8c36cca43e276","source_commit":null,"specialist_profile_hash":"5f4d7d3fac2d6ac9f717c27d1a3875325bc4ecfadcefd1cc7b62c0d7af9bec0b","specialist_type_hash":"1950cc0d571b1d90ac267d81ac388cf6b224689aa6b2665376845e90c4c0108d","skills":[]}
+    default_tier: powerful
+    capability_scope: [Read, Write, Glob, Grep]
+excluded_roles:
+  - role_ref: plugin-architect
+    why_unnecessary: "The repair restores the already-ratified resolver ladder and adds no architecture decision or new contract schema."
+  - role_ref: command-builder
+    why_unnecessary: "The new verb is an internal capability-adopt script action, not a user-facing /guild command definition."
+  - role_ref: hook-engineer
+    why_unnecessary: "No authored hook behavior changes; compiled workers are regenerated from changed script sources and verified by the eval lane."
+  - role_ref: security-auditor
+    why_unnecessary: "Fail-closed privacy and write-freedom are explicit eval and cross-host review obligations; no offensive or new trust-boundary design is introduced."
+  - role_ref: skill-author
+    why_unnecessary: "No skill contract changes."
+  - role_ref: specialist-agent-writer
+    why_unnecessary: "No agent definition changes."
+  - role_ref: research-digester
+    why_unnecessary: "The defect is reproduced in current source and needs no external research."
+gaps_resolved: []
+coverage_flags: []

@@ -279,11 +279,49 @@ describe("update-check mints a package-local receipt for host-native installs", 
     expect(r["channel_confidence"]).toBe("assumed-default");
   });
 
+  it("defers receipt minting for an ambiguous candidate when no host registry identity exists", () => {
+    fs.writeFileSync(
+      path.join(pkg, ".codex-plugin", "plugin.json"),
+      '{\n  "name": "guild",\n  "version": "2.7.0-beta.4"\n}\n'
+    );
+
+    runHook();
+    expect(fs.existsSync(path.join(pkg, "guild-install-receipt.json"))).toBe(false);
+  });
+
+  it("does not convert an ambiguous published candidate into a permanent stable receipt", () => {
+    fs.writeFileSync(
+      path.join(pkg, ".codex-plugin", "plugin.json"),
+      '{\n  "name": "guild",\n  "version": "2.7.0-beta.20"\n}\n'
+    );
+    fs.writeFileSync(
+      path.join(home, ".guild", "update-check.json"),
+      JSON.stringify({
+        schema_version: "guild.update_check_cache.v1",
+        checked_at: "2099-01-01T00:00:00Z",
+        source_repo: "fixture",
+        remote: { latest_tag: "v2.7.0", next_head_sha: null, main_head_sha: null },
+      })
+    );
+
+    runHook();
+    expect(fs.existsSync(path.join(pkg, "guild-install-receipt.json"))).toBe(false);
+  });
+
   it("does NOT clobber an existing receipt on later sessions", () => {
     runHook();
     const first = fs.readFileSync(path.join(pkg, "guild-install-receipt.json"), "utf8");
     runHook();
     expect(fs.readFileSync(path.join(pkg, "guild-install-receipt.json"), "utf8")).toBe(first);
+  });
+
+  it("does not follow a dangling receipt symlink", () => {
+    const target = path.join(base, "outside-receipt.json");
+    fs.symlinkSync(target, path.join(pkg, "guild-install-receipt.json"));
+    const out = runHook();
+    expect(out).toContain("2.3.2 → 9.9.9");
+    expect(fs.existsSync(target)).toBe(false);
+    expect(fs.lstatSync(path.join(pkg, "guild-install-receipt.json")).isSymbolicLink()).toBe(true);
   });
 
   it("fail-open: an unwritable package root still emits the signal, no receipt, no crash", () => {

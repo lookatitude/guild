@@ -45,10 +45,10 @@
  * Stdout:  Silent (Claude Code may consume stdout).
  * Stderr:  Human-readable reason if blocking.
  *
- * Run ID derivation: GUILD_RUN_ID env var (set by launcher) →
- * "run-<session_id>" fallback (T3b: the sentinel leg is retired — sentinels
- * are intake-only). Run-record WRITES additionally require a verified run
- * binding (authorizeHookWrite); validation reads do not. See deriveRunId().
+ * Run ID derivation: GUILD_RUN_ID env var (set by launcher) → a warned,
+ * canonical date-first fallback for receipt VALIDATION reads only. Run-record
+ * WRITES additionally require a verified run binding (authorizeHookWrite) and
+ * never use the fallback. See deriveRunId().
  *
  * Manual usage:
  *   echo '{"hook_event_name":"TaskCompleted","task_id":"task-001","session_id":"sess-abc123",
@@ -84,11 +84,18 @@ import { applySecretsPolicy } from "../lib/security/secrets.js";
 import { readSecurityConfig } from "../lib/security/config.js";
 import { emitBusEvent } from "../lib/bus-emit.js";
 import { resolveRunIdForTrace } from "../lib/run-trace.js";
+import { makeCanonicalRunId } from "../../scripts/lib/run-lifecycle.js";
 import { processFanout } from "../../scripts/lib/artifact-bus";
 import {
   evaluateContextCompliance,
   recordContextCompliance,
 } from "../lib/context-compliance.js";
+import { readTaskAssignmentV2 } from "../../src/modules/dispatch/workflows/task-assignment-v2.js";
+import {
+  readTaskAssignment,
+  taskAssignmentPath,
+} from "../../src/modules/dispatch/workflows/task-assignment.js";
+import { publishSubmittedHandoffPointer } from "../../src/modules/dispatch/workflows/task-cell-acceptance.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -131,18 +138,29 @@ function die(reason: string): never {
 /**
  * Derive run ID for the receipt-VALIDATION legs (reads + the die/ok gate).
  * Honors GUILD_RUN_ID env (the agent-team launcher exports the binding
- * envelope per pane); falls back to "run-<session_id>" only when the env is
- * absent. T3b (session_context §5): the sentinel leg is retired —
- * resolveRunIdForTrace is env-only now, so a moved current-run-id can never
- * redirect this hook. Run-record WRITES (learnings, injection audit, security
- * events) are additionally binding-gated in main() via authorizeHookWrite;
- * this derived id alone never authorizes them.
+ * envelope per pane). When absent, an existing legacy run-<session_id>
+ * directory remains readable for compatibility; otherwise the shared
+ * lifecycle formatter produces a canonical, visibly-warned read-only lookup
+ * id. Run-record WRITES are separately binding-gated in main(); this derived
+ * id alone never authorizes them.
  */
 function deriveRunId(sessionId: string, guildRoot: string): string {
-  return (
-    resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] }) ??
-    `run-${sessionId}`
+  const bound = resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] });
+  if (bound) return bound;
+  const legacy = `run-${sessionId}`;
+  if (fs.existsSync(path.join(guildRoot, ".guild", "runs", legacy))) {
+    process.stderr.write(
+      `[task-completed] WARN: legacy read-only fallback run id used: ${legacy}; ` +
+        "start/inherit the lifecycle run id to remove this compatibility read.\n",
+    );
+    return legacy;
+  }
+  const fallback = makeCanonicalRunId(new Date().toISOString(), sessionId);
+  process.stderr.write(
+    `[task-completed] WARN: read-only fallback run id used: ${fallback}; ` +
+      "no run-record write is authorized without the lifecycle binding envelope.\n",
   );
+  return fallback;
 }
 
 /**
@@ -307,6 +325,129 @@ function persistRunState(
 
 function runStatePathHint(runDir: string): string {
   return path.join(runDir, "run-state.json");
+}
+
+type TaskCellAssignment = NonNullable<ReturnType<typeof readTaskAssignmentV2>>;
+
+function portableAssignmentRef(value: string): string {
+  return value.replace(/\\/g, "/");
+}
+
+function nativeTaskCellAssignments(input: {
+  guildRoot: string;
+  runId: string;
+  taskId: string;
+  specialist: string;
+}): TaskCellAssignment[] {
+  const root = path.join(input.guildRoot, ".guild", "runs", input.runId, "task-cells");
+  const files: string[] = [];
+  const walk = (dir: string): void => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const absolute = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(absolute);
+      else if (entry.isFile() && entry.name === "assignment.json") files.push(absolute);
+    }
+  };
+  walk(root);
+
+  return files.sort().flatMap((absolute) => {
+    const assignmentRef = portableAssignmentRef(path.relative(input.guildRoot, absolute));
+    const assignment = readTaskAssignmentV2(input.guildRoot, assignmentRef);
+    if (
+      assignment === null ||
+      assignment.assignment_path !== assignmentRef ||
+      assignment.run_id !== input.runId ||
+      assignment.logical_task_id !== input.taskId ||
+      assignment.worker_role !== input.specialist
+    ) return [];
+    try {
+      fs.lstatSync(path.join(path.dirname(absolute), "terminal.json"));
+      return [];
+    } catch {
+      return [assignment];
+    }
+  });
+}
+
+function publishTaskCellSubmission(input: {
+  guildRoot: string;
+  runId: string;
+  taskId: string;
+  specialist: string;
+  writeAuthorized: boolean;
+}): void {
+  const rawAssignmentRef = process.env["GUILD_TASK_ASSIGNMENT"];
+  const assignmentRef = rawAssignmentRef === undefined
+    ? undefined
+    : portableAssignmentRef(rawAssignmentRef);
+  let assignment: TaskCellAssignment | null = null;
+  if (assignmentRef) {
+    const legacyRunDir = path.join(input.guildRoot, ".guild", "runs", input.runId);
+    const legacyRef = portableAssignmentRef(
+      path.relative(
+        input.guildRoot,
+        taskAssignmentPath(legacyRunDir, input.specialist),
+      ),
+    );
+    const legacyAssignment = readTaskAssignment(legacyRunDir, input.specialist);
+    if (
+      assignmentRef === legacyRef &&
+      legacyAssignment !== null &&
+      legacyAssignment.run_id === input.runId &&
+      legacyAssignment.specialist === input.specialist &&
+      (legacyAssignment.task_id === null || legacyAssignment.task_id === input.taskId)
+    ) return;
+    assignment = readTaskAssignmentV2(input.guildRoot, assignmentRef);
+  } else {
+    const nativeAssignments = nativeTaskCellAssignments(input);
+    if (nativeAssignments.length === 0) return;
+    if (nativeAssignments.length !== 1) {
+      die(
+        `TaskCell submitted-handoff pointer refused for task "${input.taskId}" — ` +
+          `native assignment discovery is ambiguous (${nativeAssignments.length} active matches).`,
+      );
+    }
+    assignment = nativeAssignments[0];
+  }
+  if (!input.writeAuthorized) {
+    die(
+      `TaskCell submitted-handoff pointer refused for task "${input.taskId}" — ` +
+        `the run binding did not authorize this TaskCompleted write.`,
+    );
+  }
+  if (
+    assignment === null ||
+    (assignmentRef !== undefined && assignment.assignment_path !== assignmentRef) ||
+    assignment.run_id !== input.runId ||
+    assignment.logical_task_id !== input.taskId ||
+    assignment.worker_role !== input.specialist
+  ) {
+    die(
+      `TaskCell submitted-handoff pointer refused for task "${input.taskId}" — ` +
+        `GUILD_TASK_ASSIGNMENT is missing, malformed, or does not bind this run/task/worker.`,
+    );
+  }
+  const submitted = publishSubmittedHandoffPointer({
+    cwd: input.guildRoot,
+    assignment,
+    submittedAt: new Date().toISOString(),
+  });
+  if (submitted === null) {
+    die(
+      `TaskCell submitted-handoff pointer refused for task "${input.taskId}" — ` +
+        `the canonical frozen receipt could not be validated or the immutable pointer could not be written.`,
+    );
+  }
+  process.stderr.write(
+    `[task-completed] OK: submitted-handoff pointer published at ` +
+      `"${assignment.handoff_path}" (${submitted.receipt_id}).\n`,
+  );
 }
 
 /**
@@ -684,6 +825,17 @@ async function main(): Promise<void> {
       );
     }
   }
+
+  // TaskCell D5/D7: the worker authors the canonical markdown receipt, while
+  // this code-owned boundary publishes the immutable six-field pointer from the
+  // final scrubbed bytes. A receipt on disk still grants no acceptance.
+  publishTaskCellSubmission({
+    guildRoot,
+    runId,
+    taskId,
+    specialist,
+    writeAuthorized: writeAuth.ok,
+  });
 
   // ── Persist run-state checkpoint (ADR-RE-1) — lane has terminated ─────────
   // Non-fatal: run-state is a rebuildable cache, the receipt is authoritative.

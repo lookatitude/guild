@@ -32,6 +32,7 @@ const REF_SHARED_NAMES = new Set([
 ]);
 function refInShareSet(rel: string, hasFlag: boolean, payloadsAlwaysShared = false): boolean {
   if (REF_SHARED_NAMES.has(path.basename(rel))) return true;
+  if (rel === ["logs", "v1.4-events.jsonl"].join(sep)) return true;
   if (rel.startsWith("handoffs" + sep) && rel.endsWith(".md")) return true;
   const isPayload = path.basename(rel) === "events.ndjson"
     || rel.startsWith("logs" + sep + "payloads" + sep);
@@ -52,7 +53,7 @@ const PATHS = [
   ["handoffs", "notes.txt"].join(sep),     // handoffs but not .md → not shared
   "events.ndjson",
   ["logs", "payloads", "p1.json"].join(sep),
-  ["logs", "v1.4-events.jsonl"].join(sep), // logs but not payloads → not shared
+  ["logs", "v1.4-events.jsonl"].join(sep), // canonical minimum-set log → always shared
   "random.txt",
   ["context", "bundle.md"].join(sep),
 ];

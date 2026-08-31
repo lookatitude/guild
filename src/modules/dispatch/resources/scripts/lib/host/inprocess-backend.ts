@@ -21,6 +21,8 @@ import {
   dispatchModelParamsForSpecialist,
   DISPATCH_PRODUCER_ENV,
   DISPATCH_PRODUCER_TOKEN,
+  resolvedSpecialistCapabilityScope,
+  specialistDispatchKey,
 } from "../core/contracts/team-backend";
 import { buildPrompt, shellQuote } from "./tmux-backend";
 
@@ -92,14 +94,21 @@ export function composeInProcessDispatch(
     // holds and the guard records `model_present`, exactly as before.
     const resolvedTier = spec.tier ?? spec.default_tier;
     const hasScore = typeof spec.score === "number" && Number.isFinite(spec.score);
+    const capabilityScope = resolvedSpecialistCapabilityScope(spec);
     return {
-      name: spec.name,
+      name: specialistDispatchKey(spec),
       subagentType: isProjectLocal ? GENERIC_SUBAGENT_TYPE : spec.name,
       model,
       env: {
         GUILD_RUN_ID: req.runId,
         GUILD_SPECIALIST: spec.name,
         GUILD_TASK_ID: spec.taskId ?? spec.name,
+        ...(spec.task_cell_assignment_path
+          ? { GUILD_TASK_ASSIGNMENT: spec.task_cell_assignment_path }
+          : {}),
+        ...(spec.task_cell_instance_id
+          ? { GUILD_TASK_CELL_INSTANCE_ID: spec.task_cell_instance_id }
+          : {}),
         ...(model !== null ? { GUILD_MODEL: model } : {}),
         ...(modelParams !== undefined
           ? { GUILD_MODEL_PARAMS: JSON.stringify(modelParams) }
@@ -111,8 +120,8 @@ export function composeInProcessDispatch(
         [DISPATCH_PRODUCER_ENV]: DISPATCH_PRODUCER_TOKEN,
         ...(resolvedTier !== undefined ? { GUILD_TIER: resolvedTier } : {}),
         ...(hasScore ? { GUILD_TIER_SCORE: String(spec.score) } : {}),
-        ...(spec.capability_scope !== undefined
-          ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
+        ...(capabilityScope !== undefined
+          ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(capabilityScope) }
           : {}),
         ...(isProjectLocal
           ? { GUILD_AGENT_DEFINITION: `.guild/agents/${spec.name}.md` }
@@ -130,6 +139,7 @@ export function composeInProcessDispatch(
         spec.host_kind ?? req.orchestratorHostKind ?? "claude",
       ),
       definitionPath: isProjectLocal ? `.guild/agents/${spec.name}.md` : null,
+      ...(spec.definition_ref ? { definition_ref: spec.definition_ref } : {}),
     };
   });
 }

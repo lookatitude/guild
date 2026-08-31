@@ -1,0 +1,16 @@
+{
+  "schema_version": "guild.release_external_review.v1",
+  "version": "2.7.0",
+  "source_commit": "c283029ef8a74999f3b60c90bff5bf4807c7b657",
+  "reviewed_tree": "2c222ff312ac66e838ec9f6aa82250e89656a11e",
+  "author_host": "codex",
+  "reviewer_host": "claude-code",
+  "reviewer_model": "claude-opus-5",
+  "reviewer_cli_version": "2.1.247",
+  "independence": "cross_family_co_located",
+  "review_mode": "read_only_adversarial",
+  "verdict": "satisfied",
+  "blocking_findings": [],
+  "authorizes_cryptographic_conformance": false,
+  "note": "Claude reviewed the exact merged next source and found no release-blocking issue; this advisory review is not a custody or cryptographic conformance attestation."
+}

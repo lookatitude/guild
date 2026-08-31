@@ -39,11 +39,15 @@ import * as fs from "fs";
 import * as os from "os";
 import * as yaml from "js-yaml";
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
-const LAUNCHER = path.resolve(__dirname, "../agent-team-launcher.ts");
 const SUMMARIZER = path.resolve(__dirname, "../trace-summarize.ts");
 const PANE_TRACE_CLI = path.resolve(__dirname, "../lib/host/pane-dispatch-trace.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+const LAUNCHER = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 function runScript(
   script: string,
@@ -52,6 +56,15 @@ function runScript(
 ): { exitCode: number; stdout: string; stderr: string } {
   const baseEnv: Record<string, string | undefined> = { ...process.env };
   delete baseEnv.TMUX;
+  // Cross-family reproducibility (independent-review blocker 4): scrub ambient
+  // host identity + cmux workspace; host-specific cases set them via `env`.
+  delete baseEnv.GUILD_RUN_ID;
+  delete baseEnv.GUILD_RUN_BINDING_REF;
+  delete baseEnv.GUILD_HOST;
+  delete baseEnv.GUILD_HOST_ID;
+  delete baseEnv.GUILD_ORCHESTRATOR_HOST;
+  delete baseEnv.CMUX_WORKSPACE_ID;
+  baseEnv.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
   const finalEnv: Record<string, string> = {};
   for (const [k, v] of Object.entries({ ...baseEnv, ...env })) {
     if (v !== undefined) finalEnv[k] = v;
@@ -86,6 +99,14 @@ function setupConsumerRepo(
   // t7-h1-dispatch-approval.test.ts; these launcher tests use --approval-override
   // to focus on the trace-emission wiring).
   mintRunBinding({ root: tmpDir, run_id: runId });
+  // Fix B (run-identity-and-dispatch): real (non-dry) launches emit their
+  // immutable task-cells post-gates with STRICT per-task context hashing —
+  // seed the default <role>-<role>.md bundles for every fixture role.
+  const ctxDir = path.join(tmpDir, ".guild", "context", runId);
+  fs.mkdirSync(ctxDir, { recursive: true });
+  for (const role of ["architect", "backend", "qa", "security"]) {
+    fs.writeFileSync(path.join(ctxDir, `${role}-${role}.md`), `# ${role}\n`);
+  }
   return dst;
 }
 
@@ -137,7 +158,9 @@ function makeFakeTmuxBin(tmpDir: string): string {
       'case "$1" in',
       '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
       "  list-windows) printf 'other-window\\n'; exit 0;;",
-      "  list-panes) printf '0\\t%%0\\torchestrator\\n1\\t%%1\\tarchitect\\n2\\t%%2\\tbackend\\n3\\t%%3\\tqa\\n'; exit 0;;",
+      // Pane titles are TaskCell DISPATCH KEYS (role--task--a1) since the
+      // per-task expansion — not bare role names.
+      "  list-panes) printf '0\\t%%0\\torchestrator\\n1\\t%%1\\tarchitect--architect--a1\\n2\\t%%2\\tbackend--backend--a1\\n3\\t%%3\\tqa--qa--a1\\n'; exit 0;;",
       '  display-message) echo "fake-session"; exit 0;;',
       "  *) exit 0;;",
       "esac",
@@ -160,7 +183,25 @@ function makeFakeRemoteBin(tmpDir: string): string {
   const binDir = makeFakeTmuxBin(tmpDir);
   fs.writeFileSync(
     path.join(binDir, "ssh"),
-    ['#!/bin/sh', 'for a in "$@"; do last="$a"; done', 'exec sh -c "$last"', ""].join("\n"),
+    [
+      "#!/bin/sh",
+      'for a in "$@"; do last="$a"; done',
+      'case "$last" in',
+      '  *"tmux new-session"*)',
+      '    if [ -n "${GUILD_ASSERT_TASKCELL_RUN_DIR:-}" ]; then',
+      '      set -- "$GUILD_ASSERT_TASKCELL_RUN_DIR/task-cells/security/attempts/1/instances/"*/assignment.json',
+      '      if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then',
+      '        echo "remote spawn observed no durable security assignment" >&2',
+      "        exit 91",
+      "      fi",
+      '      if [ -z "${GUILD_ASSERT_TASKCELL_MARKER:-}" ]; then exit 92; fi',
+      '      printf "assignment-before-spawn\\n" > "$GUILD_ASSERT_TASKCELL_MARKER"',
+      "    fi",
+      "    ;;",
+      "esac",
+      'exec sh -c "$last"',
+      "",
+    ].join("\n"),
     { mode: 0o755 },
   );
   for (const bin of ["claude", "codex"]) {
@@ -245,7 +286,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
   // 1. The launcher's pane path writes dispatch events into the PARENT run
   // ───────────────────────────────────────────────────────────────────────────
   describe("agent-team-launcher tmux pane path", () => {
-    const RUN_ID = "run-pane-76";
+    const RUN_ID = "run-20260811-000701-pane";
 
     it("appends one guild.trace.dispatch.v1 per specialist to the orchestrating run", () => {
       const teamPath = setupConsumerRepo(tmpDir, "test-slug", RUN_ID);
@@ -575,7 +616,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
       expect(stdout).toMatch(/recorded 2\/2 cmux dispatch receipt\(s\)/);
 
       const events = readCanonicalLog(tmpDir, RUN_ID).filter(
-        (l) => l.schema_version === "guild.trace.dispatch.v1" && l.pane_backend === "cmux",
+        (l) => l.schema_version === "guild.trace.dispatch.v1" && l.backend === "cmux",
       );
       expect(events.map((e) => e.specialist).sort()).toEqual(["backend", "qa"]);
       const be = events.find((e) => e.specialist === "backend")!;
@@ -583,13 +624,10 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
       expect(be.attribution_specialist).toBe("backend");
       expect(be.pane_id).toBe("surface-7");
       expect(be.pane_target).toBe("ws-abc123");
-      // The CLOSED `backend` enum is untouched, so an OLDER validator reading
-      // the same guild.trace.dispatch.v1 token still accepts the line. cmux
-      // reports "unknown" (literally true — the enum cannot name it) rather
-      // than borrowing "tmux", whose contract is "tmux pane send-keys": a
-      // consumer filtering backend==="tmux" for LOCAL panes must not silently
-      // collect cmux surfaces.
-      expect(be.backend).toBe("unknown");
+      // W4 promotes cmux from the former additive pane_backend escape hatch to
+      // a first-class backend value in the dispatch contract.
+      expect(be.backend).toBe("cmux");
+      expect(be.pane_backend).toBeUndefined();
       // A lane with no pane id still gets a receipt — absence is valid.
       expect(events.find((e) => e.specialist === "qa")!.pane_id).toBeUndefined();
     });
@@ -640,7 +678,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
       }
       // Both attempts really are on the log…
       expect(
-        readCanonicalLog(tmpDir, RUN_ID).filter((l) => l.pane_backend === "cmux"),
+        readCanonicalLog(tmpDir, RUN_ID).filter((l) => l.backend === "cmux"),
       ).toHaveLength(4);
 
       runScript(SUMMARIZER, ["--run-id", RUN_ID, "--cwd", tmpDir]);
@@ -729,12 +767,11 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
       }
     });
 
-    it("keeps the backend enum closed (no cmux value)", () => {
-      // Adding a value would break an OLDER validator on the SAME schema token.
-      expect(events.validateDispatchEvent({ ...valid(), backend: "cmux" }).ok).toBe(false);
-      for (const b of ["agent", "tmux", "remote", "unknown"]) {
+    it("accepts cmux as W4's first-class backend and keeps unknown values closed", () => {
+      for (const b of ["agent", "cmux", "tmux", "remote", "unknown"]) {
         expect(events.validateDispatchEvent({ ...valid(), backend: b }).ok).toBe(true);
       }
+      expect(events.validateDispatchEvent({ ...valid(), backend: "screen" }).ok).toBe(false);
     });
 
     // pane_backend is read as `pane_backend ?? backend`, so the two shapes that
@@ -773,7 +810,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
   //     all-remote team, process.exit(0)s) before the local tmux emit.
   // ───────────────────────────────────────────────────────────────────────────
   describe("remote rung", () => {
-    const RUN_ID = "run-remote-76";
+    const RUN_ID = "run-20260811-000702-remote";
 
     it("records an SSH-dispatched lane in the orchestrating run", () => {
       // team-mixed-host.yaml: architect stays local, security routes to codex.
@@ -821,6 +858,34 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
       expect(local.map((l) => l.specialist)).toEqual(["architect"]);
     });
 
+    it("persists the authoritative assignment before the real SSH pane spawn", () => {
+      const teamPath = setupConsumerRepo(tmpDir, "test-slug", RUN_ID, "team-mixed-host.yaml");
+      writeHostManifest(tmpDir, "claude", "claude");
+      writeHostManifest(tmpDir, "codex-remote", "codex");
+      writeSettingsCrossHost(tmpDir, {
+        "codex-remote": { address: "gpu-box.example.com", user: "ci" },
+      });
+      const fakeBin = makeFakeRemoteBin(tmpDir);
+      const marker = path.join(tmpDir, "remote-spawn-observation.txt");
+
+      const { exitCode, stderr } = runScript(
+        LAUNCHER,
+        ["--team", teamPath, "--cwd", tmpDir, "--run-id", RUN_ID, "--approval-override", "test: pre-spawn TaskCell ordering proof"],
+        {
+          TMUX: "/tmp/tmux-1000/default,12345,0",
+          PATH: `${fakeBin}:${process.env.PATH ?? ""}`,
+          GUILD_CROSS_HOST_ENABLED: "1",
+          GUILD_HOST_ID: "claude",
+          GUILD_ASSERT_TASKCELL_RUN_DIR: path.join(tmpDir, ".guild", "runs", RUN_ID),
+          GUILD_ASSERT_TASKCELL_MARKER: marker,
+        },
+      );
+
+      expect(exitCode).toBe(0);
+      expect(stderr).not.toContain("remote spawn observed no durable security assignment");
+      expect(fs.readFileSync(marker, "utf8")).toBe("assignment-before-spawn\n");
+    });
+
     it("emits nothing on a remote --dry-run (nothing was dispatched)", () => {
       const teamPath = setupConsumerRepo(tmpDir, "test-slug", RUN_ID, "team-mixed-host.yaml");
       writeHostManifest(tmpDir, "claude", "claude");
@@ -847,7 +912,7 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
   // ───────────────────────────────────────────────────────────────────────────
   describe("launcher → summarizer, one run dir", () => {
     it("a real pane launch summarizes with its real specialist count", () => {
-      const RUN_ID = "run-e2e-76";
+      const RUN_ID = "run-20260811-000703-e2e";
       const teamPath = setupConsumerRepo(tmpDir, "test-slug", RUN_ID);
       const fakeBin = makeFakeTmuxBin(tmpDir);
 

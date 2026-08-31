@@ -1,35 +1,42 @@
 name: channel-integrity
 
-# Mechanizes release-discipline rule 8's sync-back clause.
+# Mechanizes the release-discipline channel-convergence invariant.
 # (initiative cross-host-release-distribution, work item xhrd-wi-06 / G6.)
 #
 # Branches ARE distribution channels: main = STABLE (default marketplace
-# installs), next = BETA (`@next` followers). After a release merges to main,
-# next must be advanced to the release point. When that does not happen, the
-# beta channel serves OLDER code than stable — the inverse of what a beta
-# channel is for.
+# installs), next = BETA (`@next` followers). The short-path release tags the
+# reviewed next -> main merge without rewriting either protected branch, so an
+# exact shared beta candidate version is valid immediately after release.
+# Any other state where beta serves OLDER code than stable remains invalid.
 #
 # That failure is invisible to every other gate: per-PR checks all stay green
 # because nothing is wrong with any individual PR. It happened for real —
-# v2.3.2 merged to main on 2026-07-25 and the sync-back never landed, leaving
-# next at 2.3.1 with nothing reporting it. Rule 8's sync-back clause was prose; prose does not
-# enforce process.
+# v2.3.2 merged to main on 2026-07-25 and the then-manual sync-back never
+# landed, leaving next at 2.3.1 with nothing reporting it. The current direct
+# release path replaces that manual step, while this standing detector
+# continues to report any stale or externally altered channel state.
 #
 # WHY THESE TRIGGERS:
-#   push to main      — a release just landed, so the sync-back is now DUE. This
-#                       is the earliest honest moment to start asking.
-#   push to next      — confirms a sync-back actually cleared the debt.
+#   push to main      — checks the reviewed release state immediately.
+#   push to next      — checks ordinary beta advancement and the quiescent release point.
 #   schedule (daily)  — catches the window between those two: a release that
 #                       merged and was then left alone. Without this, a repo
 #                       with no pushes stays silently broken.
 #   workflow_dispatch — manual re-check after an operator fixes it.
 #
-# Deliberately NOT `pull_request`: an unrelated contributor's PR must not fail
-# for a channel-state problem they neither caused nor can fix.
+# Pull requests to `next` validate GitHub's prospective merge commit so the
+# same-commit quiescent exception cannot be satisfied by the head alone while
+# the merge result would diverge. Push/schedule checks retain the standing
+# channel-debt signal.
 
 on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+    branches: [next]
   push:
-    branches: [main, next]
+    # `main` publication is verified inside release.yml after its stable tag is
+    # present, avoiding a race between the merge push and tag creation.
+    branches: [next]
   schedule:
     # 07:00 UTC daily — a stale beta channel is a "notice within a day" problem,
     # not a "notice within a minute" one.
@@ -44,14 +51,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (full history — the gate reads both channel refs)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Set up Node 20
-        uses: actions/setup-node@v4
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Fetch both channel refs
         run: git fetch origin main next --quiet
@@ -62,12 +69,14 @@ jobs:
             cd scripts && npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
           fi
 
-      # Exit 2 = beta trails stable. The script prints the exact rule-8 remedy,
-      # including the diverged-branches case where --ff-only is impossible.
+      # Exit 2 = beta trails stable. The script points operators to the release
+      # workflow's idempotent recovery path rather than a manual sync-back.
       #
       # Run through `npm --prefix scripts` rather than a bare `npx tsx` at the repo
       # root: tsx is installed in scripts/node_modules by the step above, and a
       # root-level `npx` would not find it and would silently fetch another copy
       # from the network (slower, and unpinned relative to the lockfile).
-      - name: Beta channel must not trail stable (release-discipline rule 8)
-        run: npm --prefix scripts run check:channel-integrity -- --json
+      - name: Beta channel must not trail stable
+        env:
+          BETA_REF: ${{ github.event_name == 'pull_request' && github.sha || 'origin/next' }}
+        run: npm --prefix scripts run check:channel-integrity -- --stable origin/main --beta "$BETA_REF" --json

@@ -57,7 +57,12 @@ function listDirs(dir: string): string[] {
 /** Map initiative-id → { run_ids[], last_run_id } from each run's provenance.json. */
 function collectRuns(guildDir: string): Map<string, { runs: { id: string; at: string }[] }> {
   const map = new Map<string, { runs: { id: string; at: string }[] }>();
-  for (const runDir of listDirs(path.join(guildDir, "runs"))) {
+  const runsRoot = path.join(guildDir, "runs");
+  const runDirs = [
+    ...listDirs(runsRoot).filter((d) => path.basename(d) !== "_archive"),
+    ...listDirs(path.join(runsRoot, "_archive")),
+  ];
+  for (const runDir of runDirs) {
     const prov = path.join(runDir, "provenance.json");
     if (!fs.existsSync(prov)) continue;
     try {
@@ -93,8 +98,9 @@ function notesToScalar(v: unknown): string | undefined {
 
 /**
  * Load the existing on-disk registry entries (top-level `initiatives[]`) so a
- * rebuild PRESERVES hand-curated content (title, notes, final_status, and the
- * entries that have no manifest). Returns a Map id → full entry object.
+ * rebuild PRESERVES cached fields that are not supplied by a validated
+ * manifest, retained run linkage, and entries that have no manifest. Returns
+ * a Map id → full entry object.
  */
 function loadExistingEntries(guildDir: string): Map<string, RegistryEntry> {
   const out = new Map<string, RegistryEntry>();
@@ -127,12 +133,11 @@ function loadExistingEntries(guildDir: string): Map<string, RegistryEntry> {
  * settings-reader + dashboard projector consume (previously it nested the list
  * under `initiatives_registry:` with a 4-field schema the readers never read).
  *
- * Rebuild is LOSSLESS by merge: the existing on-disk registry is the base (every
- * curated entry + field is preserved, including entries that have no manifest),
- * the manifests + run provenance are the authoritative sources for NEW
- * initiatives and for run linkage (`run_ids`/`last_run_id`) and any reader-
- * required field a curated entry is missing. A field already present on the
- * curated entry wins (so hand-fixed title/notes/final_status survive).
+ * Rebuild is LOSSLESS by authority: a validated manifest supplies identity,
+ * axes, derived status, title, scope, dates, and notes; the filesystem bucket
+ * supplies path and archived closure; live provenance replaces run linkage
+ * only when it finds runs. Cached fields absent from those authorities survive,
+ * including retained run linkage and manifest-less entries.
  */
 export function buildInitiativesRegistry(guildDir: string): InitiativesRegistry {
   const runs = collectRuns(guildDir);
@@ -146,11 +151,18 @@ export function buildInitiativesRegistry(guildDir: string): InitiativesRegistry 
       let m: Record<string, unknown> = {};
       try { m = unwrapManifest(yaml.load(fs.readFileSync(manifestPath, "utf8"))); } catch { /* skip */ }
       const id = (typeof m["id"] === "string" && m["id"]) || path.basename(initDir);
+      const existing = byId.get(id);
 
+      const manifestValid = validateInitiativeManifest(m).valid;
       // Prefer a validated 4-axis derivation; fall back to a present status field.
       let status: DerivedStatus | string;
-      if (validateInitiativeManifest(m).valid) {
-        status = deriveInitiativeStatus(m as unknown as InitiativeAxes, { archived });
+      if (manifestValid) {
+        status = deriveInitiativeStatus(m as unknown as InitiativeAxes, {
+          archived,
+          cancelled: m["status"] === "cancelled"
+            || existing?.status === "cancelled"
+            || existing?.final_status === "cancelled",
+        });
       } else if (typeof m["status"] === "string" && (DERIVED_STATUS as readonly string[]).includes(m["status"] as string)) {
         status = m["status"] as DerivedStatus;
       } else {
@@ -158,8 +170,14 @@ export function buildInitiativesRegistry(guildDir: string): InitiativesRegistry 
       }
 
       const runRec = runs.get(id)?.runs ?? [];
-      const run_ids = [...runRec].sort((a, b) => a.id.localeCompare(b.id)).map((r) => r.id);
-      const last = [...runRec].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id.localeCompare(b.id))).at(-1);
+      const runsById = new Map<string, { id: string; at: string }>();
+      for (const run of runRec) {
+        const prior = runsById.get(run.id);
+        if (!prior || run.at > prior.at) runsById.set(run.id, run);
+      }
+      const uniqueRuns = [...runsById.values()];
+      const run_ids = [...uniqueRuns].sort((a, b) => a.id.localeCompare(b.id)).map((r) => r.id);
+      const last = [...uniqueRuns].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id.localeCompare(b.id))).at(-1);
       const last_run_id = last?.id ?? null;
 
       const str = (k: string): string | undefined => (typeof m[k] === "string" ? (m[k] as string) : undefined);
@@ -172,7 +190,7 @@ export function buildInitiativesRegistry(guildDir: string): InitiativesRegistry 
         execution_status: str("execution_status"),
         release_status: str("release_status"),
         documentation_status: str("documentation_status"),
-        final_status: archived ? "closed" : "open",
+        final_status: status === "cancelled" ? "cancelled" : (archived ? "closed" : "open"),
         scope: str("scope"),
         path: `.guild/initiatives/${bucket}/${id}/`,
         run_ids,
@@ -186,13 +204,34 @@ export function buildInitiativesRegistry(guildDir: string): InitiativesRegistry 
         if (fromManifest[k] === undefined) delete fromManifest[k];
       }
 
-      const existing = byId.get(id);
       if (existing) {
-        // Curated entry wins for shared keys; manifest fills only what's missing.
-        // Run linkage is authoritative when provenance found runs (else keep curated).
-        const merged: RegistryEntry = { ...fromManifest, ...existing };
-        if (run_ids.length > 0) { merged.run_ids = run_ids; merged.last_run_id = last_run_id; }
-        if (merged.path === undefined) merged.path = fromManifest.path;
+        // Only a VALID manifest gets field authority. An invalid legacy body
+        // may seed a new entry, but cannot roll a trusted cached entry backward.
+        const authoritative = { ...fromManifest };
+        delete authoritative.run_ids;
+        delete authoritative.last_run_id;
+        delete authoritative.final_status; // bucket-derived, not manifest-supplied
+        const merged: RegistryEntry = manifestValid
+          ? { ...existing, ...authoritative }
+          : { ...fromManifest, ...existing };
+
+        // Filesystem location is authoritative even when the manifest is bad.
+        merged.id = id;
+        merged.path = `.guild/initiatives/${bucket}/${id}/`;
+        // Archiving is terminal; an active bucket preserves curated dispositions
+        // such as cancelled/superseded rather than synthesizing "open" over them.
+        const cancelled = merged.status === "cancelled"
+          || existing.status === "cancelled"
+          || existing.final_status === "cancelled";
+        merged.final_status = cancelled ? "cancelled" : (archived ? "closed" : (existing.final_status ?? "open"));
+        if (cancelled) merged.status = "cancelled";
+        else if (archived) merged.status = "closed";
+        // Live provenance is authoritative when present. When retention has
+        // rotated all runs away, preserve the cached historical linkage.
+        if (run_ids.length > 0) {
+          merged.run_ids = run_ids;
+          merged.last_run_id = last_run_id;
+        }
         byId.set(id, merged);
       } else {
         byId.set(id, fromManifest); // NEW initiative — fully manifest-sourced.

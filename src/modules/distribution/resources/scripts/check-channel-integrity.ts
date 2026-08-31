@@ -2,27 +2,26 @@
 /**
  * scripts/check-channel-integrity.ts
  *
- * CHANNEL-INTEGRITY GATE — release-discipline rule 8 (sync-back), mechanized.
+ * CHANNEL-INTEGRITY GATE — release-discipline channel ordering, mechanized.
  * (initiative cross-host-release-distribution, work item xhrd-wi-06 / G6.)
  *
  * THE RULE IT ENFORCES.
- * `.guild/wiki/standards/release-discipline.md` rule 8: after a release merges
- * to `main`, `next` must be advanced to the release point. Branches ARE
- * distribution channels — `main` = stable, `next` = beta — so a `next` whose
+ * Branches ARE distribution channels — `main` = stable, `next` = beta — so a `next` whose
  * version trails `main`'s means BETA USERS ARE RUNNING OLDER CODE THAN STABLE.
  * That inverts the whole point of a beta channel and is invisible without a
  * check: every per-PR gate stays green while the channel silently rots.
  *
  * WHY IT WAS NEEDED.
- * Rule 8's sync-back clause was prose only. v2.3.2 merged to `main` on 2026-07-25; the sync-back
+ * The former sync-back clause was prose only. v2.3.2 merged to `main` on 2026-07-25; the sync-back
  * never happened. `next` sat at 2.3.1 while `main` shipped 2.3.2 and nothing
  * anywhere reported it. Prose does not enforce process — CI does.
  *
  * WHAT IT CHECKS.
  * Reads `.claude-plugin/plugin.json`'s `version` from both channel refs and
- * fails when next < main. Version, not commit identity, is deliberate: `next`
- * legitimately carries commits `main` lacks (that is what an integration branch
- * IS), so "next is behind main" can only be judged on the released version.
+ * fails when next < main. In the short path, `main` retains the reviewed
+ * `X.Y.Z-beta.N` candidate while the bare identity lives in `vX.Y.Z`; the gate
+ * therefore binds that tag to main and proves next history contains main's
+ * exact release tree before accepting later beta development.
  *
  * PRERELEASE HANDLING — full SemVer §11 precedence, NOT a bare triple compare.
  * A naive "ignore the suffix" comparison produces a FALSE PASS on exactly the
@@ -33,29 +32,112 @@
  * identifiers numerically and below alphanumerics). `next` at `2.4.0-rc1` is
  * still correctly ahead of `main` at `2.3.2`.
  *
- * DETECTION, NOT PREVENTION — stated plainly so nobody over-trusts this.
- * `release.yml` tags and publishes on the merged-PR event; a workflow triggered
- * by `push` runs concurrently and CANNOT block that publication. This gate
- * reports that the sync-back debt exists; it does not stop a release from being
- * cut while the debt is outstanding. Closing that gap means adding the check to
- * the release path itself — a followup, not this lane.
+ * DETECTION, NOT PREVENTION — stated plainly so nobody over-trusts this mode.
+ * The release workflow owns prevention: it verifies promotion and tags the
+ * exact reviewed merge without rewriting either protected branch. This
+ * ordinary channel mode detects debt left by an interrupted or manually
+ * altered channel; it is not the publication authority by itself.
  *
- * NOT A MERGE-SHAPE CHECK. Rule 8 also constrains HOW the sync-back lands (a
- * fast-forward when ancestry allows, otherwise a delta-copy PR). That is a
- * property of the fix, not of the resulting state, and is left to review. This
- * gate answers exactly one question: is beta behind stable?
+ * NOT A WRITE-AUTHORITY CHECK. This gate observes channel versions; branch
+ * protection and the release workflow constrain writes. This mode answers
+ * exactly one question: is beta behind the published stable release or missing
+ * the release-tree binding that makes the short-path exception safe?
  *
  * Usage:
  *   npx tsx scripts/check-channel-integrity.ts [--stable <ref>] [--beta <ref>] [--json]
+ *   npx tsx scripts/check-channel-integrity.ts promotion --source-branch next \
+ *       [--head <ref>] [--stable-ref <ref>] [--root <dir>] [--json]
  *
  * Exit: 0 ok (beta >= stable) · 2 gate failure (beta trails stable) · 1 IO/usage error.
+ * Promotion mode keeps the same convention: 0 promotable · 2 gate refusal · 1 usage/IO.
+ *
+ * PROMOTION MODE — the direct next-to-main invariant (FIC-91 / REL-P0, FIC-74 §0/B1+B5).
+ * The gate governs the exact same-repository `next -> main` promotion before
+ * CI tags the reviewed merge commit. `checkStablePromotion` validates
+ * hash-bound `guild.release_promotion.v1` /
+ * `guild.release_conformance.v1` evidence, a production-evaluator RE-RUN over
+ * the transported evidence+authority, one source-commit binding, ancestry, and
+ * an EXACT allowed diff. It fails closed on every malformed or missing input.
  *
  * Owned by tooling-engineer. Read-only: it runs `git show` and nothing else.
  */
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+
+import { evaluateTransportedReleaseConformance } from "../src/modules/distribution/workflows/release-conformance-integration";
 
 export const MANIFEST_PATH = ".claude-plugin/plugin.json";
+export const MARKETPLACE_PATH = ".claude-plugin/marketplace.json";
+
+/** Schema identifiers for the two hash-bound release-evidence records. */
+export const RELEASE_PROMOTION_SCHEMA = "guild.release_promotion.v1";
+export const RELEASE_CONFORMANCE_SCHEMA = "guild.release_conformance.v1";
+export const V270_RELEASE_BASIS_SCHEMA = "guild.release_basis.v1";
+export const V270_SCENARIO_DOCUMENTATION_SCHEMA = "guild.release_scenario_documentation.v1";
+export const V270_EXTERNAL_REVIEW_SCHEMA = "guild.release_external_review.v1";
+
+/**
+ * The frozen 31-scenario conformance contract, pinned by content hash.
+ *
+ * The canonical file lives in the umbrella workspace
+ * (`.guild/artifacts/generated/multi-host-runtime-convergence/conformance-scenarios.v1.json`);
+ * this gate binds to its BYTES, not its location, so a plugin-only checkout can
+ * still verify that a conformance record names the exact frozen contract.
+ */
+export const FROZEN_SCENARIO_CONTRACT_SHA256 =
+  "09d2b6f4c9d98245dd13da4f834fb193e1b21f76625471538e12533d70fa165e";
+export const FROZEN_SCENARIO_CONTRACT_COUNT = 31;
+/** Compatibility names retained for callers of the original channel gate. */
+export const FROZEN_CONFORMANCE_SCENARIOS = FROZEN_SCENARIO_CONTRACT_COUNT;
+
+/**
+ * The complete frozen scenario set, in canonical contract order.
+ *
+ * FIC-74 requires a conformance record to NAME all 31 frozen scenario ids —
+ * a count plus a hash alone can be asserted by a hand-authored record without
+ * proving the canonical set. This tuple is pinned against the hash-verified
+ * contract bytes by the focused suite; the gate requires exact ordered
+ * equality with it.
+ */
+export const FROZEN_SCENARIO_CONTRACT_IDS: readonly string[] = Object.freeze([
+  "MHRC-LIF-001",
+  "MHRC-LIF-002",
+  "MHRC-LIF-003",
+  "MHRC-LIF-004",
+  "MHRC-EVT-001",
+  "MHRC-EVT-002",
+  "MHRC-SUP-001",
+  "MHRC-SUP-002",
+  "MHRC-SUP-003",
+  "MHRC-SUP-004",
+  "MHRC-SUP-005",
+  "MHRC-SUP-006",
+  "MHRC-UNS-001",
+  "MHRC-UNS-002",
+  "MHRC-UNS-003",
+  "MHRC-RCT-001",
+  "MHRC-RCT-002",
+  "MHRC-RCT-003",
+  "MHRC-RCT-004",
+  "MHRC-RCT-005",
+  "MHRC-MOD-001",
+  "MHRC-MOD-002",
+  "MHRC-MOD-003",
+  "MHRC-MOD-004",
+  "MHRC-STR-001",
+  "MHRC-STR-002",
+  "MHRC-STR-003",
+  "MHRC-STR-004",
+  "MHRC-VER-001",
+  "MHRC-VER-002",
+  "MHRC-VER-003",
+]);
+/** Compatibility alias for the canonical frozen tuple. */
+export const FROZEN_SCENARIO_IDS = FROZEN_SCENARIO_CONTRACT_IDS;
+
+const BARE_CHANNEL_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const BETA_CHANNEL_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
 
 export interface ParsedVersion {
   /** Raw MAJOR/MINOR/PATCH digit strings — compared without a precision ceiling. */
@@ -67,6 +149,7 @@ export interface ParsedVersion {
 
 export interface ChannelState {
   ref: string;
+  commit: string;
   version: string;
   core: [string, string, string];
   triple: [number, number, number];
@@ -194,39 +277,128 @@ function gitShowManifest(ref: string): string {
   });
 }
 
+function gitResolveRef(ref: string): string {
+  return execFileSync("git", ["rev-parse", "--verify", `${ref}^{commit}`], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
+function gitBetaContainsStableTree(stableCommit: string, betaCommit: string): boolean {
+  try {
+    const stableTree = execFileSync("git", ["rev-parse", "--verify", `${stableCommit}^{tree}`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+    const betaHistoryTrees = execFileSync("git", ["log", "--format=%T", betaCommit], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+      .split("\n")
+      .filter(Boolean);
+    return betaHistoryTrees.includes(stableTree);
+  } catch {
+    return false;
+  }
+}
+
 export function checkChannelIntegrity(
   stableRef: string,
   betaRef: string,
-  read: (r: string) => string = gitShowManifest
+  read: (r: string) => string = gitShowManifest,
+  resolveRef: (r: string) => string = read === gitShowManifest ? gitResolveRef : (r) => r,
+  betaContainsStableTree: (stableCommit: string, betaCommit: string) => boolean =
+    read === gitShowManifest ? gitBetaContainsStableTree : (stableCommit, betaCommit) => stableCommit === betaCommit
 ): IntegrityResult {
   const sv = versionAtRef(stableRef, read);
   const bv = versionAtRef(betaRef, read);
   const sp = parseVersion(sv);
   const bp = parseVersion(bv);
-  const stable: ChannelState = { ref: stableRef, version: sv, ...sp };
-  const beta: ChannelState = { ref: betaRef, version: bv, ...bp };
+  const stable: ChannelState = { ref: stableRef, commit: resolveRef(stableRef), version: sv, ...sp };
+  const beta: ChannelState = { ref: betaRef, commit: resolveRef(betaRef), version: bv, ...bp };
   const cmp = compareVersions(bp, sp);
-  return cmp < 0
-    ? {
+  const coreCmp = compareVersions({ ...bp, prerelease: [] }, { ...sp, prerelease: [] });
+
+  // In the short path, main retains the reviewed beta identifier and the
+  // immutable vX.Y.Z tag is the stable identity. Bind that exception to the
+  // tag at main AND prove next history still contains the exact stable tree.
+  // That supports merge, squash, and rebase PR merges while preventing a
+  // reset to older bytes to hide behind a reused candidate version.
+  if (BETA_CHANNEL_VERSION.test(sv)) {
+    const publishedVersion = sp.core.join(".");
+    const stableTag = `refs/tags/v${publishedVersion}`;
+    let taggedCommit: string;
+    try {
+      taggedCommit = resolveRef(stableTag);
+    } catch {
+      return { stable, beta, ok: false, reason: `stable candidate ${sv} has no published ${stableTag} tag.` };
+    }
+    if (taggedCommit !== stable.commit) {
+      return {
         stable,
         beta,
         ok: false,
-        reason:
-          `beta channel (${betaRef}) is at ${bv} while stable (${stableRef}) is at ${sv} — ` +
-          `beta users are running OLDER code than stable. The release-discipline rule-8 sync-back did not land.`,
-      }
-    : {
+        reason: `${stableTag} resolves to ${taggedCommit}, not stable commit ${stable.commit}.`,
+      };
+    }
+    if (!BETA_CHANNEL_VERSION.test(bv)) {
+      return { stable, beta, ok: false, reason: `next must use MAJOR.MINOR.PATCH-beta.N after a short-path release; found ${bv}.` };
+    }
+    if (!betaContainsStableTree(stable.commit, beta.commit)) {
+      return {
         stable,
         beta,
-        ok: true,
-        reason:
-          cmp === 0
-            ? `both channels at ${bv} — in sync.`
-            : `beta (${bv}) is ahead of stable (${sv}) — normal for an integration branch.`,
+        ok: false,
+        reason: `beta history at ${beta.commit} does not contain the exact stable release tree from ${stable.commit}.`,
       };
+    }
+    if (coreCmp < 0 || (coreCmp === 0 && cmp < 0)) {
+      return {
+        stable,
+        beta,
+        ok: false,
+        reason: `beta channel (${betaRef}) is at ${bv} while published stable v${publishedVersion} came from ${sv} — beta users are running OLDER code than stable.`,
+      };
+    }
+    return {
+      stable,
+      beta,
+      ok: true,
+      reason: sv === bv
+        ? `both channels carry reviewed release candidate ${sv}; published stable v${publishedVersion} is bound to main and next contains the same release tree.`
+        : `beta (${bv}) is ahead of published stable v${publishedVersion} and its history contains the exact stable release tree.`,
+    };
+  }
+
+  if (!BARE_CHANNEL_VERSION.test(sv)) {
+    return { stable, beta, ok: false, reason: `stable channel (${stableRef}) must use exact MAJOR.MINOR.PATCH; found ${sv}.` };
+  }
+  if (stable.commit === beta.commit) {
+    return sv === bv
+      ? { stable, beta, ok: true, reason: `both channels at ${bv} on the same commit — in sync at a quiescent release point.` }
+      : { stable, beta, ok: false, reason: `the same commit reports different channel versions (${sv} vs ${bv}).` };
+  }
+  if (cmp <= 0) {
+    return {
+      stable,
+      beta,
+      ok: false,
+      reason: cmp < 0
+        ? `beta channel (${betaRef}) is at ${bv} while stable (${stableRef}) is at ${sv} — beta users are running OLDER code than stable. The protected release transaction did not converge.`
+        : `diverged channels may not share bare version ${bv}; next must identify the newer beta runtime.`,
+    };
+  }
+  if (!BETA_CHANNEL_VERSION.test(bv)) {
+    return { stable, beta, ok: false, reason: `diverged next must use MAJOR.MINOR.PATCH-beta.N; found ${bv}.` };
+  }
+  if (coreCmp <= 0) {
+    return { stable, beta, ok: false, reason: `next beta core ${bp.core.join(".")} must be newer than stable ${sp.core.join(".")}.` };
+  }
+  return { stable, beta, ok: true, reason: `beta (${bv}) is ahead of stable (${sv}) and identifies the divergent runtime.` };
 }
 
 export function main(argv: string[] = process.argv.slice(2)): number {
+  if (argv[0] === "promotion") return promotionMain(argv.slice(1));
   let stableRef = "origin/main";
   let betaRef = "origin/next";
   let json = false;
@@ -264,17 +436,9 @@ export function main(argv: string[] = process.argv.slice(2)): number {
   if (!result.ok) {
     process.stderr.write(`check-channel-integrity: GATE FAILURE — ${result.reason}\n`);
     process.stderr.write(
-      "\nFix (release-discipline rule 8) — advance next to the release point WITHOUT a looping merge commit:\n" +
-        "  # 1. Decide by ANCESTRY, not by dates: is the release point a descendant of next?\n" +
-        "  git merge-base --is-ancestor origin/next <release-tag> && echo ff-possible || echo diverged\n" +
-        "  # 2a. ff-possible -> fast-forward:\n" +
-        "  git checkout next && git merge --ff-only <release-tag>\n" +
-        "  # 2b. diverged -> sync-back PR carrying the release delta (version bump + changelog\n" +
-        "  #      + regenerated inventory). Ancestry is already lost, so the merge style no\n" +
-        "  #      longer matters; the channels will agree on content + version, not on SHA.\n" +
-        "  # NOTE: only a MERGE COMMIT preserves ancestry. Squash AND rebase both rewrite\n" +
-        "  #       SHAs, so either forces 2b every time. Use a merge commit for release PRs\n" +
-        "  #       whenever you want the fast-forward sync-back in 2a to stay possible.\n"
+      "\nFix — inspect and re-run the failed `Publish stable release after next merges to main` workflow.\n" +
+        "  Do not hand-push a sync-back or move the published tag. Follow the failure and\n" +
+        "  re-run procedure in .guild/wiki/standards/release-discipline.md.\n"
     );
     return 2;
   }
@@ -283,6 +447,827 @@ export function main(argv: string[] = process.argv.slice(2)): number {
   return 0;
 }
 
+// ---------------------------------------------------------------------------
+// PROMOTION MODE — the hash-bound stable-promotion gate (FIC-91 / REL-P0)
+// ---------------------------------------------------------------------------
+
+const BARE_TRIPLE_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const COMMIT_SHA_RE = /^[0-9a-f]{40}$/;
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+
+/**
+ * The EXACT set of paths `next` may change after the evidence source commit:
+ * only the two hash-bound evidence records. Stable manifests, inventory, and
+ * changelog are generated after merge by the protected release job, never on a
+ * human-authored release branch.
+ */
+export function promotionAllowedPaths(version: string): string[] {
+  return [
+    `.guild/artifacts/release/v${version}/promotion.json`,
+    `.guild/artifacts/release/v${version}/conformance.json`,
+  ];
+}
+
+/**
+ * One-release evidence paths for the v2.7.0 provenance-only release basis.
+ *
+ * This is deliberately a differently named, mechanically version-pinned path:
+ * it does not claim `guild.release_conformance.v1`, and it cannot authorize a
+ * later release. The existing conformance path remains the only path returned
+ * by `promotionAllowedPaths`.
+ */
+export function v270ProvenanceAllowedPaths(version: string): string[] {
+  if (version !== "2.7.0") return [];
+  const evidenceDir = `.guild/artifacts/release/v${version}`;
+  return [
+    `${evidenceDir}/release-basis.json`,
+    `${evidenceDir}/scenario-documentation.json`,
+    `${evidenceDir}/external-review.json`,
+  ];
+}
+
+/**
+ * The four git facts the gate needs, as an interface so tests can exercise the
+ * full decision path against an in-memory repository. The green path is only
+ * reachable that way HONESTLY: the sole conformant evidence in this repository
+ * is the signed fixture bundle, whose identity names a source commit no test
+ * repository can mint. Everything else — hashing, schema validation, and the
+ * production evaluator re-run — always runs for real.
+ */
+export interface PromotionGitOps {
+  /** Resolve a ref to a commit sha, or null when it names no commit. */
+  resolveCommit(ref: string): string | null;
+  /** The exact bytes of `<ref>:<path>`, or null when absent at that ref. */
+  showBytes(ref: string, filePath: string): Buffer | null;
+  isAncestor(ancestor: string, descendant: string): boolean;
+  changedPaths(from: string, to: string): string[];
+}
+
+export function realPromotionGitOps(cwd: string = "."): PromotionGitOps {
+  const run = (args: string[]): Buffer | null => {
+    try {
+      return execFileSync("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    } catch {
+      return null;
+    }
+  };
+  return {
+    resolveCommit: (ref) => {
+      const out = run(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+      const sha = out?.toString("utf8").trim() ?? "";
+      return COMMIT_SHA_RE.test(sha) ? sha : null;
+    },
+    showBytes: (ref, filePath) => run(["show", `${ref}:${filePath}`]),
+    isAncestor: (ancestor, descendant) =>
+      run(["merge-base", "--is-ancestor", ancestor, descendant]) !== null,
+    changedPaths: (from, to) => {
+      const out = run(["diff", "--name-only", `${from}..${to}`]);
+      if (out === null) throw new Error(`git diff --name-only ${from}..${to} failed`);
+      return out
+        .toString("utf8")
+        .split("\n")
+        .filter((line) => line.length > 0);
+    },
+  };
+}
+
+export interface PromotionResult {
+  ok: boolean;
+  /** `promotable`, or the specific refusal cause. Every refusal fails closed. */
+  code: string;
+  reason: string;
+}
+
+function refusePromotion(code: string, reason: string): PromotionResult {
+  return { ok: false, code, reason };
+}
+
+function sha256Hex(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+function parseJsonRecord(bytes: Buffer): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(bytes.toString("utf8"));
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function exactStringArray(value: unknown, expected: readonly string[]): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === expected.length &&
+    expected.every((item, index) => value[index] === item)
+  );
+}
+
+/**
+ * Validate the explicit v2.7.0-only provenance release basis.
+ *
+ * GitHub OIDC verification is intentionally performed by the protected
+ * workflows, because an offline repository check cannot prove a GitHub-issued
+ * attestation. This function proves the attested subject is a truthful,
+ * hash-bound, non-conformance record and that only its three evidence files
+ * changed after the named source commit.
+ */
+function checkV270ProvenanceRelease(
+  version: string,
+  headSha: string,
+  git: PromotionGitOps
+): PromotionResult {
+  if (version !== "2.7.0") {
+    return refusePromotion(
+      "v270_exception_scope_mismatch",
+      `the provenance release basis is mechanically restricted to 2.7.0, not ${version}.`
+    );
+  }
+  const [basisPath, scenarioPath, reviewPath] = v270ProvenanceAllowedPaths(version);
+  const basisBytes = git.showBytes(headSha, basisPath);
+  if (basisBytes === null) {
+    return refusePromotion("v270_release_basis_missing", `${basisPath} is absent at ${headSha}.`);
+  }
+  const scenarioBytes = git.showBytes(headSha, scenarioPath);
+  if (scenarioBytes === null) {
+    return refusePromotion("v270_scenario_documentation_missing", `${scenarioPath} is absent at ${headSha}.`);
+  }
+  const reviewBytes = git.showBytes(headSha, reviewPath);
+  if (reviewBytes === null) {
+    return refusePromotion("v270_external_review_missing", `${reviewPath} is absent at ${headSha}.`);
+  }
+
+  const basis = parseJsonRecord(basisBytes);
+  if (basis === null || basis.schema_version !== V270_RELEASE_BASIS_SCHEMA) {
+    return refusePromotion(
+      "v270_release_basis_malformed",
+      `${basisPath} must be a ${V270_RELEASE_BASIS_SCHEMA} JSON object.`
+    );
+  }
+  if (basis.version !== "2.7.0" || basis.exception_scope !== "v2.7.0_only") {
+    return refusePromotion(
+      "v270_exception_scope_mismatch",
+      `the release basis must name version 2.7.0 and exception_scope "v2.7.0_only".`
+    );
+  }
+  if (
+    basis.decision !== "provenance_release_only" ||
+    basis.conformance_authority !== "not_established" ||
+    basis.may_promote_conformant !== false
+  ) {
+    return refusePromotion(
+      "v270_conformance_authority_claimed",
+      `the v2.7.0 basis may authorize provenance-only publication; it may not claim conformance authority.`
+    );
+  }
+  if (basis.migration_window_status !== "post_release_observe") {
+    return refusePromotion(
+      "v270_migration_status_misrepresented",
+      `migration_window_status must remain "post_release_observe" until the observation windows actually close.`
+    );
+  }
+  if (basis.github_oidc_attestation_required !== true) {
+    return refusePromotion(
+      "v270_oidc_attestation_not_required",
+      `the release basis must require GitHub OIDC attestation; local authorship alone is insufficient.`
+    );
+  }
+  if (typeof basis.source_commit !== "string" || !COMMIT_SHA_RE.test(basis.source_commit)) {
+    return refusePromotion(
+      "v270_source_commit_malformed",
+      `release-basis.source_commit must be a 40-hex commit sha.`
+    );
+  }
+
+  // Bind bytes before interpreting their contents. A tampered or truncated
+  // attachment must report hash drift rather than being mistaken for a fresh
+  // malformed authoring attempt.
+  if (
+    typeof basis.scenario_documentation_sha256 !== "string" ||
+    !SHA256_HEX_RE.test(basis.scenario_documentation_sha256) ||
+    basis.scenario_documentation_sha256 !== sha256Hex(scenarioBytes)
+  ) {
+    return refusePromotion(
+      "v270_scenario_documentation_hash_mismatch",
+      `release-basis does not bind the exact scenario-documentation.json bytes.`
+    );
+  }
+  if (
+    typeof basis.external_review_sha256 !== "string" ||
+    !SHA256_HEX_RE.test(basis.external_review_sha256) ||
+    basis.external_review_sha256 !== sha256Hex(reviewBytes)
+  ) {
+    return refusePromotion(
+      "v270_external_review_hash_mismatch",
+      `release-basis does not bind the exact external-review.json bytes.`
+    );
+  }
+
+  const scenario = parseJsonRecord(scenarioBytes);
+  if (
+    scenario === null ||
+    scenario.schema_version !== V270_SCENARIO_DOCUMENTATION_SCHEMA ||
+    scenario.version !== version ||
+    scenario.source_commit !== basis.source_commit ||
+    scenario.scenario_contract_sha256 !== FROZEN_SCENARIO_CONTRACT_SHA256 ||
+    !exactStringArray(scenario.scenario_ids, FROZEN_SCENARIO_CONTRACT_IDS) ||
+    scenario.documented_scenario_count !== FROZEN_SCENARIO_CONTRACT_COUNT ||
+    scenario.evidence_status !== "unattested_documentation"
+  ) {
+    return refusePromotion(
+      "v270_scenario_documentation_malformed",
+      `scenario documentation must name the exact 31-scenario contract and identify itself as unattested documentation; it makes no execution claim.`
+    );
+  }
+  if (
+    scenario.external_attestation_verified !== false ||
+    scenario.authorizes_promotion !== false ||
+    scenario.may_promote_conformant !== false
+  ) {
+    return refusePromotion(
+      "v270_scenario_authority_claimed",
+      `scenario documentation is non-authorizing and may not claim external attestation or conformance promotion authority.`
+    );
+  }
+
+  const review = parseJsonRecord(reviewBytes);
+  if (
+    review === null ||
+    review.schema_version !== V270_EXTERNAL_REVIEW_SCHEMA ||
+    review.version !== version ||
+    review.source_commit !== basis.source_commit ||
+    review.author_host !== "codex" ||
+    review.reviewer_host !== "claude-code" ||
+    review.independence !== "cross_family_co_located"
+  ) {
+    return refusePromotion(
+      "v270_external_review_malformed",
+      `external review must bind the same source and truthfully identify the cross-family co-located Claude review.`
+    );
+  }
+  if (review.authorizes_cryptographic_conformance !== false) {
+    return refusePromotion(
+      "v270_review_authority_claimed",
+      `the Claude review is advisory and may not claim cryptographic conformance authority.`
+    );
+  }
+  if (
+    review.verdict !== "satisfied" ||
+    !Array.isArray(review.blocking_findings) ||
+    review.blocking_findings.length !== 0
+  ) {
+    return refusePromotion(
+      "v270_external_review_not_satisfied",
+      `the bound Claude review must be satisfied with no blocking findings.`
+    );
+  }
+
+  const sourceCommit = basis.source_commit as string;
+  if (git.resolveCommit(sourceCommit) === null) {
+    return refusePromotion(
+      "source_commit_unknown",
+      `release-basis source commit ${sourceCommit} is not a commit in this repository.`
+    );
+  }
+  const sourceManifestBytes = git.showBytes(sourceCommit, MANIFEST_PATH);
+  const sourceManifest = sourceManifestBytes === null ? null : parseJsonRecord(sourceManifestBytes);
+  if (sourceManifest === null || typeof sourceManifest.version !== "string") {
+    return refusePromotion(
+      "source_manifest_malformed",
+      `${MANIFEST_PATH} at release-basis source commit ${sourceCommit} has no usable version.`
+    );
+  }
+  let sourceCore: string;
+  try {
+    sourceCore = parseVersion(sourceManifest.version).core.join(".");
+  } catch {
+    return refusePromotion(
+      "source_manifest_malformed",
+      `${MANIFEST_PATH} at release-basis source commit ${sourceCommit} carries an unparseable version.`
+    );
+  }
+  if (sourceCore !== version) {
+    return refusePromotion(
+      "source_version_core_mismatch",
+      `release-basis source ${sourceCommit} builds ${sourceManifest.version}, not release core ${version}.`
+    );
+  }
+  if (!git.isAncestor(sourceCommit, headSha)) {
+    return refusePromotion(
+      "source_commit_not_ancestor",
+      `release-basis source commit ${sourceCommit} is not an ancestor of ${headSha}.`
+    );
+  }
+  const allowed = new Set(v270ProvenanceAllowedPaths(version));
+  const disallowed = git.changedPaths(sourceCommit, headSha).filter((candidate) => !allowed.has(candidate));
+  if (disallowed.length > 0) {
+    return refusePromotion(
+      "disallowed_path_changed",
+      `paths changed outside the v2.7.0 provenance evidence set: ${disallowed.join(", ")}.`
+    );
+  }
+
+  return {
+    ok: true,
+    code: "provenance_exception_promotable_v2_7_0",
+    reason:
+      `v2.7.0 carries a GitHub-OIDC-required, hash-bound provenance release basis for source ${sourceCommit}; ` +
+      `it explicitly does not establish cryptographic conformance authority, and migration windows remain post-release observe.`,
+  };
+}
+
+/**
+ * The direct next-to-main invariant, exactly as `branch-policy.yml` enforces it
+ * on a PR into `main`. Every gate refuses with a SPECIFIC code; nothing downgrades
+ * to a warning, and a missing or malformed input is always a refusal.
+ */
+export function checkStablePromotion(
+  opts: { sourceBranch: string; headRef: string; stableRef?: string },
+  git: PromotionGitOps = realPromotionGitOps()
+): PromotionResult {
+  // 1 — only the integration channel may be promoted to stable.
+  if (opts.sourceBranch !== "next") {
+    return refusePromotion(
+      "source_branch_not_next",
+      `source branch ${JSON.stringify(opts.sourceBranch)} is not exact "next" — stable promotion is only next -> main.`
+    );
+  }
+
+  // 2 — the checked head must resolve.
+  const headSha = git.resolveCommit(opts.headRef);
+  if (headSha === null) {
+    return refusePromotion("head_unresolvable", `head ref "${opts.headRef}" does not resolve to a commit.`);
+  }
+
+  // 3 — next must carry an exact beta version. The stable triple comes from
+  //     the reviewed manifest bytes, never from a branch name.
+  const manifestBytes = git.showBytes(headSha, MANIFEST_PATH);
+  if (manifestBytes === null) {
+    return refusePromotion("manifest_missing", `${MANIFEST_PATH} is absent at ${opts.headRef}.`);
+  }
+  const manifest = parseJsonRecord(manifestBytes);
+  if (manifest === null || typeof manifest.version !== "string") {
+    return refusePromotion("manifest_malformed", `${MANIFEST_PATH} at ${opts.headRef} has no usable version field.`);
+  }
+  if (!BETA_CHANNEL_VERSION.test(manifest.version)) {
+    return refusePromotion(
+      "manifest_version_not_beta",
+      `${MANIFEST_PATH} carries ${manifest.version}; direct stable promotion requires exact MAJOR.MINOR.PATCH-beta.N on next.`
+    );
+  }
+  const version = parseVersion(manifest.version).core.join(".");
+  if (!BARE_TRIPLE_RE.test(version)) {
+    return refusePromotion("manifest_version_not_beta", `${MANIFEST_PATH} did not yield a stable SemVer core.`);
+  }
+
+  // 3b — stable versions only move forward. This runs in the pre-merge gate
+  // against origin/main and again post-merge against the PR's captured base
+  // SHA, so a stale or mis-keyed beta triple cannot regress default installs.
+  const stableRef = opts.stableRef ?? "origin/main";
+  const stableSha = git.resolveCommit(stableRef);
+  if (stableSha === null) {
+    return refusePromotion("stable_ref_unresolvable", `stable ref "${stableRef}" does not resolve to a commit.`);
+  }
+  const stableManifestBytes = git.showBytes(stableSha, MANIFEST_PATH);
+  if (stableManifestBytes === null) {
+    return refusePromotion("stable_manifest_missing", `${MANIFEST_PATH} is absent at ${stableRef}.`);
+  }
+  const stableManifest = parseJsonRecord(stableManifestBytes);
+  if (stableManifest === null || typeof stableManifest.version !== "string") {
+    return refusePromotion(
+      "stable_manifest_malformed",
+      `${MANIFEST_PATH} at ${stableRef} has no usable version field.`
+    );
+  }
+  let publishedStableVersion: string;
+  if (BARE_CHANNEL_VERSION.test(stableManifest.version)) {
+    publishedStableVersion = stableManifest.version;
+  } else if (BETA_CHANNEL_VERSION.test(stableManifest.version)) {
+    publishedStableVersion = parseVersion(stableManifest.version).core.join(".");
+    const stableTag = `refs/tags/v${publishedStableVersion}`;
+    const taggedStableSha = git.resolveCommit(stableTag);
+    if (taggedStableSha === null) {
+      return refusePromotion(
+        "stable_tag_missing",
+        `${MANIFEST_PATH} at ${stableRef} retains ${stableManifest.version}, but published stable tag ${stableTag} is absent.`
+      );
+    }
+    if (taggedStableSha !== stableSha) {
+      return refusePromotion(
+        "stable_tag_mismatch",
+        `published stable tag ${stableTag} resolves to ${taggedStableSha}, not ${stableSha} at ${stableRef}.`
+      );
+    }
+  } else {
+    return refusePromotion(
+      "stable_manifest_malformed",
+      `${MANIFEST_PATH} at ${stableRef} must carry exact MAJOR.MINOR.PATCH or MAJOR.MINOR.PATCH-beta.N bound to its stable tag.`
+    );
+  }
+  if (compareVersions(parseVersion(version), parseVersion(publishedStableVersion)) <= 0) {
+    return refusePromotion(
+      "stable_version_not_advanced",
+      `derived stable version ${version} must be strictly newer than published stable ${publishedStableVersion} at ${stableRef}.`
+    );
+  }
+
+  // 4 — the GENERATED marketplace manifest must agree with the canonical field.
+  //     (The byte-level generation invariant is separately enforced by
+  //     `check:claude-install`; this catches version drift inside the gate.)
+  const marketplaceBytes = git.showBytes(headSha, MARKETPLACE_PATH);
+  if (marketplaceBytes === null) {
+    return refusePromotion("marketplace_missing", `${MARKETPLACE_PATH} is absent at ${opts.headRef}.`);
+  }
+  const marketplace = parseJsonRecord(marketplaceBytes);
+  const marketplaceEntry = Array.isArray(marketplace?.plugins)
+    ? (marketplace!.plugins as Array<Record<string, unknown>>).find((p) => p?.name === manifest.name)
+    : undefined;
+  if (marketplaceEntry === undefined) {
+    return refusePromotion(
+      "marketplace_malformed",
+      `${MARKETPLACE_PATH} at ${opts.headRef} has no plugins[] entry named ${JSON.stringify(manifest.name)}.`
+    );
+  }
+  if (marketplaceEntry.version !== manifest.version) {
+    return refusePromotion(
+      "marketplace_version_drift",
+      `generated ${MARKETPLACE_PATH} carries ${JSON.stringify(marketplaceEntry.version)} while the canonical ` +
+        `${MANIFEST_PATH} carries ${manifest.version}; regenerate it (npm run sync:claude-install).`
+    );
+  }
+
+  // 4b — exact v2.7.0 may use the separately named provenance-only basis.
+  // Protected workflows additionally verify the GitHub OIDC attestation over
+  // release-basis.json with exact repository, workflow, ref, and source digest.
+  // No later release can enter this path.
+  if (version === "2.7.0") {
+    return checkV270ProvenanceRelease(version, headSha, git);
+  }
+
+  // 5 — the guild.release_promotion.v1 record.
+  const evidenceDir = `.guild/artifacts/release/v${version}`;
+  const promotionBytes = git.showBytes(headSha, `${evidenceDir}/promotion.json`);
+  if (promotionBytes === null) {
+    return refusePromotion(
+      "promotion_record_missing",
+      `${evidenceDir}/promotion.json is absent at ${opts.headRef} — next may not reach main without it.`
+    );
+  }
+  const promotion = parseJsonRecord(promotionBytes);
+  if (promotion === null) {
+    return refusePromotion("promotion_record_malformed", `${evidenceDir}/promotion.json is not a JSON object.`);
+  }
+  if (promotion.schema_version !== RELEASE_PROMOTION_SCHEMA) {
+    return refusePromotion(
+      "promotion_schema_unrecognized",
+      `promotion record declares ${JSON.stringify(promotion.schema_version)}; this gate implements ${RELEASE_PROMOTION_SCHEMA}.`
+    );
+  }
+  if (promotion.version !== version) {
+    return refusePromotion(
+      "promotion_version_mismatch",
+      `promotion record names version ${JSON.stringify(promotion.version)} but next derives stable version ${version}.`
+    );
+  }
+  if (typeof promotion.source_commit !== "string" || !COMMIT_SHA_RE.test(promotion.source_commit)) {
+    return refusePromotion(
+      "promotion_source_commit_malformed",
+      `promotion.source_commit ${JSON.stringify(promotion.source_commit)} is not a 40-hex commit sha.`
+    );
+  }
+  if (typeof promotion.evidence_sha256 !== "string" || !SHA256_HEX_RE.test(promotion.evidence_sha256)) {
+    return refusePromotion(
+      "promotion_evidence_hash_malformed",
+      `promotion.evidence_sha256 ${JSON.stringify(promotion.evidence_sha256)} is not a 64-hex SHA-256.`
+    );
+  }
+  if (promotion.decision !== "conformance_pass") {
+    // No override path exists in this gate. An "accepted_override" record is
+    // named specifically so the refusal explains the posture rather than
+    // reading as a typo; a conformant decision is the ONLY promotion path.
+    return promotion.decision === "accepted_override"
+      ? refusePromotion(
+          "promotion_override_unsupported",
+          `promotion.decision "accepted_override" is not accepted — this gate has no override path; ` +
+            `only decision "conformance_pass" backed by verifiable conformance evidence promotes.`
+        )
+      : refusePromotion(
+          "promotion_decision_unrecognized",
+          `promotion.decision ${JSON.stringify(promotion.decision)} is not "conformance_pass".`
+        );
+  }
+
+  // 6 — the guild.release_conformance.v1 record, bound by EXACT bytes.
+  const conformanceBytes = git.showBytes(headSha, `${evidenceDir}/conformance.json`);
+  if (conformanceBytes === null) {
+    return refusePromotion(
+      "conformance_record_missing",
+      `${evidenceDir}/conformance.json is absent at ${opts.headRef}.`
+    );
+  }
+  const conformanceSha = sha256Hex(conformanceBytes);
+  if (conformanceSha !== promotion.evidence_sha256) {
+    return refusePromotion(
+      "evidence_hash_mismatch",
+      `conformance.json hashes to ${conformanceSha} but the promotion record binds ${promotion.evidence_sha256} — ` +
+        `the evidence bytes are not the bytes the promotion decision was taken over.`
+    );
+  }
+  const conformance = parseJsonRecord(conformanceBytes);
+  if (conformance === null) {
+    return refusePromotion("conformance_record_malformed", `${evidenceDir}/conformance.json is not a JSON object.`);
+  }
+  if (conformance.schema_version !== RELEASE_CONFORMANCE_SCHEMA) {
+    return refusePromotion(
+      "conformance_schema_unrecognized",
+      `conformance record declares ${JSON.stringify(conformance.schema_version)}; this gate implements ${RELEASE_CONFORMANCE_SCHEMA}.`
+    );
+  }
+  const contract = conformance.scenario_contract as Record<string, unknown> | undefined;
+  if (
+    conformance.scenario_contract_sha256 !== FROZEN_SCENARIO_CONTRACT_SHA256 ||
+    contract?.sha256 !== FROZEN_SCENARIO_CONTRACT_SHA256
+  ) {
+    return refusePromotion(
+      "scenario_contract_hash_mismatch",
+      `conformance record names scenario contract ${JSON.stringify(conformance.scenario_contract_sha256)}; ` +
+        `the frozen 31-scenario contract is ${FROZEN_SCENARIO_CONTRACT_SHA256}.`
+    );
+  }
+  // 6b — the HONEST 5/31 distinction. The record must name the complete frozen
+  //      contract while claiming execution of exactly the evaluator's five
+  //      implemented scenarios; a record claiming more executed than the
+  //      production evaluator owns is dishonest and refuses.
+  //      NAMING the contract means carrying all 31 frozen scenario ids in
+  //      canonical order — count + hash alone can be asserted without proving
+  //      the canonical set (FIC-74 contract-completeness).
+  const contractIds = Array.isArray(contract?.scenario_ids) ? (contract!.scenario_ids as unknown[]) : null;
+  const contractIdsCanonical =
+    contractIds !== null &&
+    contractIds.length === FROZEN_SCENARIO_CONTRACT_IDS.length &&
+    FROZEN_SCENARIO_CONTRACT_IDS.every((id, index) => contractIds[index] === id);
+  if (!contractIdsCanonical) {
+    return refusePromotion(
+      "scenario_contract_ids_mismatch",
+      `scenario_contract.scenario_ids must name ALL ${FROZEN_SCENARIO_CONTRACT_IDS.length} frozen scenario ids in ` +
+        `canonical contract order — an omitted, substituted, duplicated, reordered, or absent id set does not ` +
+        `name the frozen contract, whatever count and hash the record asserts.`
+    );
+  }
+  // 6b — FULL-SUITE COVERAGE (A21-X). Production owns all 31 scenarios through
+  //      the release-conformance integration, so the only promotable coverage
+  //      statement is the COMPLETE canonical tuple: all 31 ids, in order,
+  //      31 evaluated / 0 unevaluated. An honest-but-incomplete claim (the
+  //      pre-A21-X 5/31 shape) can no longer back a promotion — and the count
+  //      is never trusted on its own say-so: the decision re-run below is what
+  //      substantiates it.
+  const coverage = conformance.scenario_coverage as Record<string, unknown> | undefined;
+  const evaluatedIds = Array.isArray(coverage?.evaluated_scenario_ids)
+    ? (coverage!.evaluated_scenario_ids as unknown[])
+    : null;
+  const coverageComplete =
+    contract?.scenario_count === FROZEN_SCENARIO_CONTRACT_COUNT &&
+    evaluatedIds !== null &&
+    evaluatedIds.length === FROZEN_SCENARIO_CONTRACT_IDS.length &&
+    FROZEN_SCENARIO_CONTRACT_IDS.every((id, index) => evaluatedIds[index] === id) &&
+    coverage?.evaluated_scenario_count === FROZEN_SCENARIO_CONTRACT_COUNT &&
+    coverage?.unevaluated_scenario_count === 0;
+  if (!coverageComplete) {
+    return refusePromotion(
+      "scenario_coverage_incomplete",
+      `scenario_coverage must state that ALL ${FROZEN_SCENARIO_CONTRACT_COUNT} frozen scenarios were evaluated ` +
+        `and assembled, naming the complete canonical id tuple in order — a record covering fewer scenarios ` +
+        `(including the historical honest 5/31 shape) cannot back a stable promotion.`
+    );
+  }
+  const recordedDecision = conformance.decision as Record<string, unknown> | undefined;
+  if (recordedDecision?.disposition !== "succeeded" || recordedDecision?.may_promote_conformant !== true) {
+    return refusePromotion(
+      "conformance_record_decision_mismatch",
+      `the conformance record's own decision is not a promotable success ` +
+        `(disposition=${JSON.stringify(recordedDecision?.disposition)}, ` +
+        `may_promote_conformant=${JSON.stringify(recordedDecision?.may_promote_conformant)}).`
+    );
+  }
+  const evidence = conformance.evidence as Record<string, unknown> | undefined;
+  const authority = conformance.authority as Record<string, unknown> | undefined;
+  if (evidence === undefined || authority === undefined) {
+    return refusePromotion(
+      "conformance_record_malformed",
+      `the conformance record must transport its full evaluator inputs (evidence + authority) so this gate can ` +
+        `re-run the production evaluator instead of trusting the emitted verdict.`
+    );
+  }
+
+  // 6c′ — NO SPLIT VIEW. The top-level activated_runtime is a SUMMARY of the
+  //       evaluator input; every downstream check reads the evaluator input,
+  //       and the summary must equal it exactly — otherwise a record could
+  //       show one runtime to readers of the summary while transporting
+  //       evaluator-green evidence for a different one.
+  const evidenceActivated = (evidence.activated_runtime ?? {}) as Record<string, unknown>;
+  const summaryActivated = (conformance.activated_runtime ?? {}) as Record<string, unknown>;
+  const identityKeys = [...new Set([...Object.keys(evidenceActivated), ...Object.keys(summaryActivated)])].sort();
+  const summaryDrift = identityKeys.filter((key) => summaryActivated[key] !== evidenceActivated[key]);
+  if (summaryDrift.length > 0) {
+    return refusePromotion(
+      "activated_runtime_summary_mismatch",
+      `the top-level activated_runtime summary diverges from the transported evaluator input on ` +
+        `${summaryDrift.join(", ")} — a summary that disagrees with the evidence the evaluator judges is a ` +
+        `split view, not a summary.`
+    );
+  }
+
+  // 7 — ONE source-commit binding across all four records.
+  const activatedRuntime = (evidence.activated_runtime ?? {}) as Record<string, unknown>;
+  const authorityIdentity = (authority.identity ?? {}) as Record<string, unknown>;
+  const bindings: Array<[string, unknown]> = [
+    ["promotion.source_commit", promotion.source_commit],
+    ["conformance.source_commit", conformance.source_commit],
+    ["evidence.activated_runtime.source_commit", activatedRuntime.source_commit],
+    ["authority.identity.source_commit", authorityIdentity.source_commit],
+  ];
+  const sourceCommit = promotion.source_commit;
+  const unbound = bindings.filter(([, value]) => value !== sourceCommit);
+  if (unbound.length > 0) {
+    return refusePromotion(
+      "source_commit_binding_mismatch",
+      `every record must bind the SAME evidence source commit; ` +
+        unbound.map(([name, value]) => `${name}=${JSON.stringify(value)}`).join(", ") +
+        ` disagree with ${sourceCommit}.`
+    );
+  }
+
+  // 8/9 — the evidence source commit must exist here and be an ancestor of head.
+  if (git.resolveCommit(sourceCommit) === null) {
+    return refusePromotion(
+      "source_commit_unknown",
+      `evidence source commit ${sourceCommit} is not a commit in this repository — the checkout cannot verify ` +
+        `what the evidence was produced from.`
+    );
+  }
+  // 8b — the evidence runtime must be the runtime the SOURCE COMMIT builds:
+  //      `guild-<plugin.json version at source_commit>`. FIC-74 emits evidence
+  //      at the `next` tip (SHA-T), whose manifest carries the beta shape
+  //      (e.g. 2.7.0-beta.N); the protected workflow later changes ONLY metadata.
+  //      Binding to the release version would make that real sequence
+  //      impossible, and binding to nothing would admit evidence for a runtime
+  //      the source never built — this is the truthful middle.
+  const sourceManifestBytes = git.showBytes(sourceCommit, MANIFEST_PATH);
+  if (sourceManifestBytes === null) {
+    return refusePromotion(
+      "source_manifest_missing",
+      `${MANIFEST_PATH} is absent at evidence source commit ${sourceCommit} — the runtime the evidence names ` +
+        `cannot be verified against what that commit builds.`
+    );
+  }
+  const sourceManifest = parseJsonRecord(sourceManifestBytes);
+  if (sourceManifest === null || typeof sourceManifest.version !== "string") {
+    return refusePromotion(
+      "source_manifest_malformed",
+      `${MANIFEST_PATH} at evidence source commit ${sourceCommit} has no usable version field.`
+    );
+  }
+  // Read the EVALUATOR INPUT, never the top-level summary (the summary is
+  // separately required to equal it, but the binding must hold against what
+  // the production evaluator actually judged).
+  const expectedRuntime = `guild-${sourceManifest.version}`;
+  if (activatedRuntime.runtime_version !== expectedRuntime) {
+    return refusePromotion(
+      "runtime_version_source_mismatch",
+      `evidence names runtime ${JSON.stringify(activatedRuntime.runtime_version)} but source commit ` +
+        `${sourceCommit} builds ${expectedRuntime} — evidence must name the exact runtime its source commit ` +
+        `produces.`
+    );
+  }
+  // 8c — RELEASE IDENTITY: the source manifest's SemVer CORE must equal the
+  //      derived stable triple. The finalizer may only drop a prerelease identifier
+  //      (2.7.0-beta.N -> 2.7.0); without this, valid
+  //      evidence for an old source (e.g. 2.6.0) could authorize a
+  //      metadata-only jump to any unrelated stable version.
+  let sourceCore: [string, string, string];
+  try {
+    sourceCore = parseVersion(sourceManifest.version).core;
+  } catch {
+    return refusePromotion(
+      "source_manifest_malformed",
+      `${MANIFEST_PATH} at evidence source commit ${sourceCommit} carries unparseable version ` +
+        `${JSON.stringify(sourceManifest.version)}.`
+    );
+  }
+  if (sourceCore.join(".") !== version) {
+    return refusePromotion(
+      "source_version_core_mismatch",
+      `evidence source commit ${sourceCommit} builds version ${sourceManifest.version} (core ` +
+        `${sourceCore.join(".")}) but next derives stable version ${version} — a release may only drop the source's ` +
+        `prerelease identifier, never change its core triple.`
+    );
+  }
+  if (!git.isAncestor(sourceCommit, headSha)) {
+    return refusePromotion(
+      "source_commit_not_ancestor",
+      `evidence source commit ${sourceCommit} is not an ancestor of ${opts.headRef} (${headSha}) — the promotion ` +
+        `head does not descend from the verified source.`
+    );
+  }
+
+  // 10 — the EXACT allowed diff. Anything else after the source invalidates the
+  //      evidence (a runtime-path change after verification is unverified code).
+  const allowed = new Set(promotionAllowedPaths(version));
+  const disallowed = git.changedPaths(sourceCommit, headSha).filter((p) => !allowed.has(p));
+  if (disallowed.length > 0) {
+    return refusePromotion(
+      "disallowed_path_changed",
+      `paths changed outside the allowed promotion set: ${disallowed.join(", ")} — re-run the evidence emitter ` +
+        `against the new tip instead of promoting unverified changes.`
+    );
+  }
+
+  // 11 — LAST, the substance: RE-RUN the full integration/assembly decision
+  //      over the transported inputs (A21-X). The gate never trusts a claimed
+  //      verdict or a claimed count: the six owner packets are re-derived from
+  //      source-owned slices, the REAL assembler re-joins them, and the same
+  //      import-closed production decision that owns conformance semantics —
+  //      including the trust-root signature verification a claimant cannot
+  //      satisfy by construction — takes the only promotion decision. Running
+  //      it after the structural/binding gates keeps every earlier refusal
+  //      specific; the verdict is conjunctive either way, and `promotable`
+  //      is unreachable without this step passing.
+  const transported = evaluateTransportedReleaseConformance(evidence, authority);
+  if (!transported.promotable) {
+    return refusePromotion(
+      "conformance_decision_not_promotable",
+      `the full integration/assembly decision refused the transported evidence (stage=${transported.stage}): ` +
+        `${transported.detail}.`
+    );
+  }
+
+  return {
+    ok: true,
+    code: "promotable",
+    reason:
+      `next carries hash-bound full-suite conformance evidence for source ${sourceCommit} and stable ${version}, ` +
+      `the integration/assembly decision re-run promotes, and the diff stays inside the allowed release set.`,
+  };
+}
+
+function promotionMain(argv: string[]): number {
+  let sourceBranch: string | undefined;
+  let headRef = "HEAD";
+  let stableRef = "origin/main";
+  let root = ".";
+  let json = false;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--source-branch" && argv[i + 1] !== undefined) sourceBranch = argv[++i];
+    else if (a.startsWith("--source-branch=")) sourceBranch = a.slice("--source-branch=".length);
+    else if (a === "--head" && argv[i + 1] !== undefined) headRef = argv[++i];
+    else if (a.startsWith("--head=")) headRef = a.slice("--head=".length);
+    else if (a === "--stable-ref" && argv[i + 1] !== undefined) stableRef = argv[++i];
+    else if (a.startsWith("--stable-ref=")) stableRef = a.slice("--stable-ref=".length);
+    else if (a === "--root" && argv[i + 1] !== undefined) root = argv[++i];
+    else if (a.startsWith("--root=")) root = a.slice("--root=".length);
+    else if (a === "--json") json = true;
+    else {
+      process.stderr.write(
+        `unknown argument: ${a}\n` +
+          "usage: check-channel-integrity.ts promotion --source-branch next [--head <ref>] [--stable-ref <ref>] [--root <dir>] [--json]\n"
+      );
+      return 1;
+    }
+  }
+  if (sourceBranch === undefined) {
+    process.stderr.write(
+      "promotion mode requires --source-branch next\n" +
+        "usage: check-channel-integrity.ts promotion --source-branch next [--head <ref>] [--stable-ref <ref>] [--root <dir>] [--json]\n"
+    );
+    return 1;
+  }
+
+  let result: PromotionResult;
+  try {
+    result = checkStablePromotion({ sourceBranch, headRef, stableRef }, realPromotionGitOps(root));
+  } catch (err) {
+    process.stderr.write(
+      `check-channel-integrity promotion: ${String(err instanceof Error ? err.message : err)}\n`
+    );
+    return 1;
+  }
+
+  if (json) {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  }
+  if (!result.ok) {
+    process.stderr.write(`check-channel-integrity promotion: GATE FAILURE — [${result.code}] ${result.reason}\n`);
+    return 2;
+  }
+  process.stdout.write(`check-channel-integrity promotion: OK — ${result.reason}\n`);
+  return 0;
+}
+
+// Kept LAST: the CLI dispatch must run only after every promotion-mode const
+// above is initialized (a guard placed earlier would hit the temporal dead
+// zone when the script is executed directly in promotion mode).
 if (require.main === module) {
   process.exit(main());
 }

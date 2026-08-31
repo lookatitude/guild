@@ -88,7 +88,7 @@ import {
 } from "../../knowledge";
 // R-TRACE (Wave 6): additive trace emit — NEVER changes return value
 import { emitTraceEvent } from "../../telemetry";
-import { makeRecallEvent, makeRecallDecisionEvent } from "../../telemetry";
+import { makeAnalysisTraceEvent, makeRecallEvent, makeRecallDecisionEvent } from "../../telemetry";
 
 // Re-export so existing importers (`recall.ts` was the original home of the scorer)
 // keep resolving `ingestImportanceScore` from here; canonical impl now in ingest-importance.ts.
@@ -1013,6 +1013,49 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
     : source === "combined" ? "combined" as const
     : source === "structural" ? "structural" as const
     : source as "sqlite" | "file-bm25" | "fs-scan" | "kg-query";
+
+  // RTE P2 semantic pair. The query is represented only by a hash and the
+  // established recall record retains its bounded preview; raw query payloads
+  // never land in the analysis event.
+  try {
+    const _analysisTs = new Date().toISOString();
+    const _spanId = crypto.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
+    emitTraceEvent(
+      makeAnalysisTraceEvent({
+        ts: new Date(_traceStart).toISOString(),
+        run_id: runId ?? "",
+        lane_id: _laneId,
+        event_class: "knowledge_lookup_started",
+        actor_type: "agent",
+        actor_id: _laneId || "main",
+        span_id: _spanId,
+        prompt_hash: hashQuery(query),
+        redaction: "omitted",
+        status: "ok",
+      }),
+      runDir ?? null,
+    );
+    emitTraceEvent(
+      makeAnalysisTraceEvent({
+        ts: _analysisTs,
+        run_id: runId ?? "",
+        lane_id: _laneId,
+        event_class: "knowledge_lookup_result",
+        actor_type: "system",
+        actor_id: "guild-recall",
+        span_id: `${_spanId}-result`,
+        parent_span_id: _spanId,
+        prompt_hash: hashQuery(query),
+        redaction: "omitted",
+        status: allChunks.length > 0 ? "ok" : "incomplete",
+        duration_ms: Date.now() - _traceStart,
+        signature: `${_traceBranch}:${allChunks.length}`,
+      }),
+      runDir ?? null,
+    );
+  } catch {
+    // Trace must never affect recall result.
+  }
 
   // R-TRACE emit — additive, try/catch, never changes result (guild.trace.recall.v1)
   // emit-point: recall.ts, after result is fully assembled

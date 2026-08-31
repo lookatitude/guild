@@ -24,6 +24,7 @@ import {
   MockTransport,
   SshRemoteTransport,
   buildPrompt,
+  shellQuote,
   type RemoteHostTarget,
   type RemoteTransport,
   type RunFn,
@@ -242,7 +243,9 @@ describe("RemoteTeamBackend.launch — real (MockTransport)", () => {
     backend(t).launch(req());
     const securitySpawn = t.spawns.find((s) => s.spec.name === "security")!;
     const expectedPrompt = buildPrompt("demo", "run-remote-001", SPECIALISTS[1], undefined, "codex");
-    expect(securitySpawn.command).toContain(expectedPrompt);
+    // The prompt is a shell argv value; assert the exact encoded carrier rather
+    // than raw text (apostrophes are necessarily escaped by shellQuote).
+    expect(securitySpawn.command).toContain(shellQuote(expectedPrompt));
   });
 
   it("a claude-only remote team works without an injected adapter resolver", () => {

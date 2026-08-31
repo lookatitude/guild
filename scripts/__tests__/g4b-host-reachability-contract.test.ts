@@ -46,6 +46,12 @@ import { buildAdapters } from "../lib/pane-adapter";
 import { createAgentsFileAdapter } from "../lib/host-adapters/agents-file";
 import { DERIVED_HOST_CAPABILITY_ROWS } from "../lib/host-registry";
 import type { HostKind } from "../lib/host-types";
+import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
+
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 // "agents-file" WAS this file's one documented dispatch_selectable:true exception,
 // carved out rather than flipped because the row is the ABSTRACT universal package
@@ -179,21 +185,24 @@ describe("G4b contract — every dispatch_selectable:false row is an honest app/
 // generic-adapter pane command (no seam, no reimplementation) ─────────────────
 
 describe("G4b contract — real end-to-end: team.yaml host:cursor dispatches through the REAL launcher CLI", () => {
-  const SCRIPT = path.resolve(__dirname, "../agent-team-launcher.ts");
+  const SCRIPT = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
   const FIXTURE = path.resolve(__dirname, "../fixtures/team-wrapped-cli-host.yaml");
 
-  it("dry-run prints a cursor-agent pane command and records host_kind:\"cursor\" in the session manifest", () => {
+  it("dry-run prints a cursor-agent pane command and previews host_kind:\"cursor\" without a manifest write", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "g4b-e2e-"));
     try {
       const teamDir = path.join(tmpDir, ".guild", "team");
       fs.mkdirSync(teamDir, { recursive: true });
       const teamPath = path.join(teamDir, "test-slug.yaml");
       fs.copyFileSync(FIXTURE, teamPath);
+      const runId = "run-20260812-071100-g4b-host-reachability";
+      mintRunBinding({ root: tmpDir, run_id: runId });
 
       const env: Record<string, string> = {};
       for (const [k, v] of Object.entries(process.env)) {
         if (v !== undefined && k !== "TMUX") env[k] = v;
       }
+      env.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
       // T7R-R1-B1: this fixture is about host reachability, not approval, and
       // carries no team-plan trail. Opt into the ONE audited escape hatch; the
       // gate's own pins live in t7-h1-dispatch-approval.test.ts.
@@ -202,7 +211,7 @@ describe("G4b contract — real end-to-end: team.yaml host:cursor dispatches thr
 
       const result = spawnSync(
         "npx",
-        ["tsx", SCRIPT, "--team", teamPath, "--session-name", "guild-g4b-contract", "--cwd", tmpDir, "--dry-run"],
+        ["tsx", SCRIPT, "--team", teamPath, "--session-name", "guild-g4b-contract", "--cwd", tmpDir, "--run-id", runId, "--dry-run"],
         { encoding: "utf8", env, timeout: 120_000 }
       );
 
@@ -212,9 +221,17 @@ describe("G4b contract — real end-to-end: team.yaml host:cursor dispatches thr
       expect(stdout).toMatch(/cursor-agent -p/);
 
       const runsDir = path.join(tmpDir, ".guild", "runs");
-      const runId = fs.readdirSync(runsDir)[0];
       const manifestPath = path.join(runsDir, runId, "agent-team", "session.json");
-      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      expect(fs.existsSync(manifestPath)).toBe(false);
+      const marker = "[agent-team-launcher] session manifest preview (not written):\n";
+      const start = stdout.indexOf(marker);
+      const end = stdout.indexOf(
+        "\n[agent-team-launcher] dry-run complete — no state written.",
+        start + marker.length,
+      );
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(end).toBeGreaterThan(start);
+      const manifest = JSON.parse(stdout.slice(start + marker.length, end));
       const hostKinds = manifest.teammate_panes.map((p: { host_kind: string }) => p.host_kind);
       expect(hostKinds).toContain("cursor");
     } finally {

@@ -143,6 +143,30 @@ export interface RosterResolution {
   warnings: string[];
 }
 
+export interface WorkspaceRosterScopeIssue {
+  code:
+    | "WORKSPACE_MANIFEST_INVALID"
+    | "DUPLICATE_MULTIPLE_HOMES"
+    | "DUPLICATE_HOME_PAIR_INVALID"
+    | "DUPLICATE_SCOPE_MISSING"
+    | "DUPLICATE_SCOPE_INVALID"
+    | "DUPLICATE_COUNTERPART_MISSING"
+    | "DUPLICATE_COUNTERPART_MISMATCH";
+  name: string;
+  root_id: string;
+  path: string;
+  message: string;
+}
+
+export interface WorkspaceRosterScopeCheck {
+  schema_version: "guild.workspace_roster_scope_check.v1";
+  workspace_root: string;
+  roots: string[];
+  duplicate_names: string[];
+  issues: WorkspaceRosterScopeIssue[];
+  pass: boolean;
+}
+
 // ── Frontmatter ────────────────────────────────────────────────────────────
 // Parsing is delegated to the shared reader (scripts/lib/frontmatter.ts):
 // parseFrontmatter(content) → object | null (no block / empty / non-object).
@@ -236,6 +260,189 @@ function readAgentEntry(
     consistency_source: asString(fm["consistency_source"]),
     overrides_shipped: false,
     augmenting: AUGMENTING_AGENT_IDS.has(name),
+  };
+}
+
+/**
+ * Enforce the D10 duplicate-roster differentiation contract across an umbrella
+ * workspace and its immediate children. A duplicate name is legal only in
+ * exactly two homes, with `scope: workspace` at the umbrella,
+ * `scope: project` at the child, and reciprocal `counterpart:` root ids.
+ *
+ * This is intentionally read-only. It never infers a placement or rewrites a
+ * definition; migration/adoption machinery owns those decisions and writes.
+ */
+export function checkWorkspaceRosterScopes(workspaceRootInput: string): WorkspaceRosterScopeCheck {
+  const workspaceRoot = path.resolve(workspaceRootInput);
+  const manifestPath = path.join(workspaceRoot, ".guild", "workspace.json");
+  const issues: WorkspaceRosterScopeIssue[] = [];
+  let manifest: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not an object");
+    manifest = parsed as Record<string, unknown>;
+  } catch (error) {
+    issues.push({
+      code: "WORKSPACE_MANIFEST_INVALID",
+      name: "",
+      root_id: "umbrella",
+      path: manifestPath,
+      message: `.guild/workspace.json is missing or invalid: ${error instanceof Error ? error.message : String(error)}`,
+    });
+    return {
+      schema_version: "guild.workspace_roster_scope_check.v1",
+      workspace_root: workspaceRoot,
+      roots: [],
+      duplicate_names: [],
+      issues,
+      pass: false,
+    };
+  }
+
+  const roots: Array<{ id: string; root: string }> = [{ id: "umbrella", root: workspaceRoot }];
+  const children = manifest["sub_guilds"];
+  if (!Array.isArray(children)) {
+    issues.push({
+      code: "WORKSPACE_MANIFEST_INVALID",
+      name: "",
+      root_id: "umbrella",
+      path: manifestPath,
+      message: ".guild/workspace.json sub_guilds must be an array",
+    });
+  } else {
+    for (const child of children) {
+      if (!child || typeof child !== "object" || Array.isArray(child)) continue;
+      const row = child as Record<string, unknown>;
+      const id = asString(row["name"]);
+      const rel = asString(row["path"]);
+      if (!id || !rel || path.isAbsolute(rel) || rel.split(/[\\/]+/).includes("..")) {
+        issues.push({
+          code: "WORKSPACE_MANIFEST_INVALID",
+          name: "",
+          root_id: id ?? "unknown",
+          path: manifestPath,
+          message: `invalid sub_guild entry: ${JSON.stringify(child)}`,
+        });
+        continue;
+      }
+      const root = path.resolve(workspaceRoot, rel);
+      const containment = checkContained(workspaceRoot, root);
+      if (isRefused(containment)) {
+        issues.push({
+          code: "WORKSPACE_MANIFEST_INVALID",
+          name: "",
+          root_id: id,
+          path: root,
+          message: `sub_guild root escapes workspace [${containment.code}]`,
+        });
+        continue;
+      }
+      roots.push({ id, root });
+    }
+  }
+
+  const byName = new Map<
+    string,
+    Array<{ root_id: string; path: string; scope: string | null; counterpart: string | null }>
+  >();
+  for (const root of roots) {
+    const dir = path.join(root.root, ".guild", "agents");
+    for (const filename of listAgentFiles(dir)) {
+      if (filename === "registry.yaml") continue;
+      const file = path.join(dir, filename);
+      const fm = parseFrontmatter(fs.readFileSync(file, "utf8"));
+      if (!fm) continue;
+      const name = asString(fm["name"]) ?? path.basename(filename, ".md");
+      const rows = byName.get(name) ?? [];
+      rows.push({
+        root_id: root.id,
+        path: file,
+        scope: asString(fm["scope"]),
+        counterpart: asString(fm["counterpart"]),
+      });
+      byName.set(name, rows);
+    }
+  }
+
+  const duplicateNames = [...byName.entries()]
+    .filter(([, rows]) => rows.length > 1)
+    .map(([name]) => name)
+    .sort();
+  for (const name of duplicateNames) {
+    const rows = byName.get(name)!;
+    if (rows.length !== 2) {
+      for (const row of rows) {
+        issues.push({
+          code: "DUPLICATE_MULTIPLE_HOMES",
+          name,
+          root_id: row.root_id,
+          path: row.path,
+          message: `${name} exists in ${rows.length} roots; differentiated variants are limited to exactly two homes`,
+        });
+      }
+      continue;
+    }
+    const umbrellaRows = rows.filter((row) => row.root_id === "umbrella");
+    if (umbrellaRows.length !== 1) {
+      for (const row of rows) {
+        issues.push({
+          code: "DUPLICATE_HOME_PAIR_INVALID",
+          name,
+          root_id: row.root_id,
+          path: row.path,
+          message: `${name} duplicates must pair one umbrella definition with one immediate-child definition`,
+        });
+      }
+      continue;
+    }
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const other = rows[1 - i];
+      const expectedScope = row.root_id === "umbrella" ? "workspace" : "project";
+      if (!row.scope) {
+        issues.push({
+          code: "DUPLICATE_SCOPE_MISSING",
+          name,
+          root_id: row.root_id,
+          path: row.path,
+          message: `${name} duplicate in ${row.root_id} lacks scope: ${expectedScope}`,
+        });
+      } else if (row.scope !== expectedScope) {
+        issues.push({
+          code: "DUPLICATE_SCOPE_INVALID",
+          name,
+          root_id: row.root_id,
+          path: row.path,
+          message: `${name} duplicate in ${row.root_id} has scope: ${row.scope}; expected ${expectedScope}`,
+        });
+      }
+      if (!row.counterpart) {
+        issues.push({
+          code: "DUPLICATE_COUNTERPART_MISSING",
+          name,
+          root_id: row.root_id,
+          path: row.path,
+          message: `${name} duplicate in ${row.root_id} lacks counterpart: ${other.root_id}`,
+        });
+      } else if (row.counterpart !== other.root_id) {
+        issues.push({
+          code: "DUPLICATE_COUNTERPART_MISMATCH",
+          name,
+          root_id: row.root_id,
+          path: row.path,
+          message: `${name} duplicate in ${row.root_id} names counterpart ${row.counterpart}; expected ${other.root_id}`,
+        });
+      }
+    }
+  }
+
+  return {
+    schema_version: "guild.workspace_roster_scope_check.v1",
+    workspace_root: workspaceRoot,
+    roots: roots.map((root) => root.id),
+    duplicate_names: duplicateNames,
+    issues,
+    pass: issues.length === 0,
   };
 }
 

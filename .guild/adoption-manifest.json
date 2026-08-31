@@ -1,0 +1,626 @@
+{
+  "schema_version": "guild.adoption_manifest.v1",
+  "project_id": "plugin",
+  "entries": [
+    {
+      "sequence": 1,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "command-builder",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.claude/agents/command-builder.md",
+        "content_hash": "sha256:7099849188405094db7b8c7cc87c74dd1fb68dd2e2bec3bd654ba08340319bc8",
+        "home": "dot-claude-agents"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "command-builder",
+        "relative_path": ".guild/agents/command-builder.md",
+        "content_hash": "sha256:8139acb516b74a5ab9138e650f2973bdfead0a3de26f931877a56742cdf6d52c",
+        "source_commit": null,
+        "specialist_profile_hash": "92b27bb6bcb8f6204019554acd93cd82187ac306e4c5da58ae5a8ea9b30f4aaf",
+        "specialist_type_hash": "8d8e875a2fcfc41cc4146f7dc7cbb150b89732d32756456c4a3f041e6cc8c74d",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T12:00:00Z",
+      "run_id": "run-20260810-pcl15-self-build-canonicalize",
+      "authorized_by": "cap-loc-D09",
+      "prev_digest": null
+    },
+    {
+      "sequence": 2,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "docs-writer",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.claude/agents/docs-writer.md",
+        "content_hash": "sha256:df6f23a8eb32fb75409a7680bc2ef72f012017ea455472cc174b66bef764be1a",
+        "home": "dot-claude-agents"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "docs-writer",
+        "relative_path": ".guild/agents/docs-writer.md",
+        "content_hash": "sha256:2b86687cc2fffca94ceb28bde6f405e3e5e3106834173cb16cbb6bc4595adc36",
+        "source_commit": null,
+        "specialist_profile_hash": "5f4d7d3fac2d6ac9f717c27d1a3875325bc4ecfadcefd1cc7b62c0d7af9bec0b",
+        "specialist_type_hash": "1950cc0d571b1d90ac267d81ac388cf6b224689aa6b2665376845e90c4c0108d",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T12:00:00Z",
+      "run_id": "run-20260810-pcl15-self-build-canonicalize",
+      "authorized_by": "cap-loc-D09",
+      "prev_digest": "d21b285a58be95ed90e69c5ecce3bb20e61ec16f3b430a04e308e98eaa26105a"
+    },
+    {
+      "sequence": 3,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "eval-engineer",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.claude/agents/eval-engineer.md",
+        "content_hash": "sha256:f72343faaf0b8678c3dae8f8efb6965a187032ea94e8fbffe5d9f51a17ba6efa",
+        "home": "dot-claude-agents"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "eval-engineer",
+        "relative_path": ".guild/agents/eval-engineer.md",
+        "content_hash": "sha256:ea7289b0d0e1f516a8f50c64d699236e88cd92331104479e769107aec7122199",
+        "source_commit": null,
+        "specialist_profile_hash": "f056be190a2372ff26808b272b2d95c3041e2b4c235ea2b35bfd5d772d74121c",
+        "specialist_type_hash": "9fe1f1b6502d4c9c355be9c9d70aa9463ec2ab58bc916bc9b54d06a30179754b",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T12:00:00Z",
+      "run_id": "run-20260810-pcl15-self-build-canonicalize",
+      "authorized_by": "cap-loc-D09",
+      "prev_digest": "0444bf682336316f18512201f679e646e2ba6fa182a457ffe8316c93fed2e45f"
+    },
+    {
+      "sequence": 4,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "hook-engineer",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.claude/agents/hook-engineer.md",
+        "content_hash": "sha256:c1545a0926f9053694eb74fea33cc57d6d230a58dd7772b87508c44d37ba3be9",
+        "home": "dot-claude-agents"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "hook-engineer",
+        "relative_path": ".guild/agents/hook-engineer.md",
+        "content_hash": "sha256:1da93534f8131d007efda3ea331c04e6b800bbba4998d3ca54c9a687b0e1404b",
+        "source_commit": null,
+        "specialist_profile_hash": "c1c1d9df1503390c820e1b3c6c2e27fbcc4740bc01e056aa027b7757e0036595",
+        "specialist_type_hash": "30898565757c75d7b96c82408a3954510cb90f24eb2d29660a1faf88436b6437",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T12:00:00Z",
+      "run_id": "run-20260810-pcl15-self-build-canonicalize",
+      "authorized_by": "cap-loc-D09",
+      "prev_digest": "b6a149e8681c02a0f9995443c47c8cbd79924ac6c873899b99386f51b5c7b513"
+    },
+    {
+      "sequence": 5,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "plugin-architect",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.claude/agents/plugin-architect.md",
+        "content_hash": "sha256:194e68193fed1eaffdfc1fc1618182474a4c32dcba5bdbc9b1732ec2d4a558e2",
+        "home": "dot-claude-agents"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "plugin-architect",
+        "relative_path": ".guild/agents/plugin-architect.md",
+        "content_hash": "sha256:1b7ffaab78120d1dfba3b58d6bff70ac72dfe6555ee6e0e74d25ecb5ad94707f",
+        "source_commit": null,
+        "specialist_profile_hash": "f7e6d1119e4b966d1aa2504da685902c631e27d74a147b4a63c1edaa2fae09e3",
+        "specialist_type_hash": "087f8c93fb65c74da61265c105da78da3a8442cb274197e42cb253e6333a04d1",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T12:00:00Z",
+      "run_id": "run-20260810-pcl15-self-build-canonicalize",
+      "authorized_by": "cap-loc-D09",
+      "prev_digest": "08451eb0aaab58bcca22e8412fbdc5913b5fff7ab8f42c61ce34586b1c6692a0"
+    },
+    {
+      "sequence": 6,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "research-digester",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.claude/agents/research-digester.md",
+        "content_hash": "sha256:6daf11322a8145fa9c7070709810f3b22d812fc5054d5f8f6d73e4febfc0fe92",
+        "home": "dot-claude-agents"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "research-digester",
+        "relative_path": ".guild/agents/research-digester.md",
+        "content_hash": "sha256:9d248fd43fe00bd408f8c8692fdbbff161ddad8bfbd486b73975520829fd038c",
+        "source_commit": null,
+        "specialist_profile_hash": "f0ddbf5a20ad7e2da955d6dfaaf95d04b53a90f8a88c898a84a21a12597702f4",
+        "specialist_type_hash": "3f26bb4749cce18b8ec73fdc187dce20d33b82b12e1244e409eebd3386041e52",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T12:00:00Z",
+      "run_id": "run-20260810-pcl15-self-build-canonicalize",
+      "authorized_by": "cap-loc-D09",
+      "prev_digest": "b2e05d0efad58185c45335540d967902b1cd014215fde5db8044b1b269cd3596"
+    },
+    {
+      "sequence": 7,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "security-auditor",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.claude/agents/security-auditor.md",
+        "content_hash": "sha256:c45e30dd5185b7aba6d0ba45e510fb9dd834ed26c79e928e705d7eba62967b24",
+        "home": "dot-claude-agents"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "security-auditor",
+        "relative_path": ".guild/agents/security-auditor.md",
+        "content_hash": "sha256:be220079185d535a1c70b7d9b7a924cf88da7570c54ad54ad30f0e0247923d4e",
+        "source_commit": null,
+        "specialist_profile_hash": "502d5708366ae2e7664df1dfb0fad9a787b1314edd55d698faa533c4622817d3",
+        "specialist_type_hash": "a5b494b3f5b08a82dd1fe1b1801107808ac785b81076c6bc27838710d2c54e21",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T12:00:00Z",
+      "run_id": "run-20260810-pcl15-self-build-canonicalize",
+      "authorized_by": "cap-loc-D09",
+      "prev_digest": "d4d8d83c86f7c70d60d6d1b505e329df550c83a2e7594871ced13b844123a9bf"
+    },
+    {
+      "sequence": 8,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "skill-author",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.claude/agents/skill-author.md",
+        "content_hash": "sha256:27f790467f115ed7de4a697b79b296218a5dda3ea04616bd42650b61516457bc",
+        "home": "dot-claude-agents"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "skill-author",
+        "relative_path": ".guild/agents/skill-author.md",
+        "content_hash": "sha256:3cc06f788d8cd708ababf97946ea32b5df5cef2b1839936d7eee445917bb18c8",
+        "source_commit": null,
+        "specialist_profile_hash": "d3aa305374e25a773ed2046c9045f6b2a5bf00a667a3cbe3e75f1a6d07e1fd51",
+        "specialist_type_hash": "5458c0ec6e1a9ae28e2cb3885d53e20a06a2a19e6fb8b948e35b3822fe567637",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T12:00:00Z",
+      "run_id": "run-20260810-pcl15-self-build-canonicalize",
+      "authorized_by": "cap-loc-D09",
+      "prev_digest": "444ecfcb97ea8f093f57f6c531bc0229bc0a95f9730b2d7e688981a309a490f3"
+    },
+    {
+      "sequence": 9,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "specialist-agent-writer",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.claude/agents/specialist-agent-writer.md",
+        "content_hash": "sha256:f7484471882cd72bbe305ebfce92833c6818435143b511ba15178fb05f9a57fb",
+        "home": "dot-claude-agents"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "specialist-agent-writer",
+        "relative_path": ".guild/agents/specialist-agent-writer.md",
+        "content_hash": "sha256:fa76a8ebc88f44d8ee082c93e89068be0c3b910a6c2945f4070b84ec77693219",
+        "source_commit": null,
+        "specialist_profile_hash": "a8941fbe96cd44ecdff11c63959dbc91d031f4afefa2270684fa5a282390a955",
+        "specialist_type_hash": "466a6690c29239e3d4b1de27a188710294d43e800068ebca2ca58de29d2a5831",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T12:00:00Z",
+      "run_id": "run-20260810-pcl15-self-build-canonicalize",
+      "authorized_by": "cap-loc-D09",
+      "prev_digest": "86e277d6e5cf30a5793bd36f3d416d486b4ec63bf3f2284b13b71f9fa6cc171e"
+    },
+    {
+      "sequence": 10,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "tooling-engineer",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.claude/agents/tooling-engineer.md",
+        "content_hash": "sha256:eb29dc9c948f93012c4b16089d1bcc026c1a56f2d7979a0c12962946b4a5e5a5",
+        "home": "dot-claude-agents"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "tooling-engineer",
+        "relative_path": ".guild/agents/tooling-engineer.md",
+        "content_hash": "sha256:11545adef63693dc76e64a2f134041e925c37626352331842dd696260d09bfbf",
+        "source_commit": null,
+        "specialist_profile_hash": "621b611addae42be5086295fedf37eae5cd4ca006d9718d6517f29ca53f49910",
+        "specialist_type_hash": "a953b202609e7a09d4e8fe6e1c8ea4e39ef78c477578466c756a658b3ae5f4a3",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T12:00:00Z",
+      "run_id": "run-20260810-pcl15-self-build-canonicalize",
+      "authorized_by": "cap-loc-D09",
+      "prev_digest": "286080277a9a242425997aedfec4075047373dcfa2c59391f4166559865b5e0c"
+    },
+    {
+      "sequence": 11,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "command-builder",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.guild/agents/command-builder.md",
+        "content_hash": "sha256:8139acb516b74a5ab9138e650f2973bdfead0a3de26f931877a56742cdf6d52c",
+        "home": "project-guild"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "command-builder",
+        "relative_path": ".guild/agents/command-builder.md",
+        "content_hash": "sha256:7df257a7809d25fdc897c033deb188dfc4a492d0aff8fd367979b810f6b3b419",
+        "source_commit": null,
+        "specialist_profile_hash": "92b27bb6bcb8f6204019554acd93cd82187ac306e4c5da58ae5a8ea9b30f4aaf",
+        "specialist_type_hash": "8d8e875a2fcfc41cc4146f7dc7cbb150b89732d32756456c4a3f041e6cc8c74d",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T14:30:00Z",
+      "run_id": "run-20260810-pcl15-final-ref-repin",
+      "authorized_by": "cap-loc-D09-review-round-2",
+      "prev_digest": "395351ff3297a3d5ed60770bb401ac2cf6950444c3e3ed4ce3a2dfd766184369"
+    },
+    {
+      "sequence": 12,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "docs-writer",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.guild/agents/docs-writer.md",
+        "content_hash": "sha256:2b86687cc2fffca94ceb28bde6f405e3e5e3106834173cb16cbb6bc4595adc36",
+        "home": "project-guild"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "docs-writer",
+        "relative_path": ".guild/agents/docs-writer.md",
+        "content_hash": "sha256:8e3b838700877d44910231a350c5bac19be1f5d22bc3e4fe4fa8c36cca43e276",
+        "source_commit": null,
+        "specialist_profile_hash": "5f4d7d3fac2d6ac9f717c27d1a3875325bc4ecfadcefd1cc7b62c0d7af9bec0b",
+        "specialist_type_hash": "1950cc0d571b1d90ac267d81ac388cf6b224689aa6b2665376845e90c4c0108d",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T14:30:00Z",
+      "run_id": "run-20260810-pcl15-final-ref-repin",
+      "authorized_by": "cap-loc-D09-review-round-2",
+      "prev_digest": "80025c41c8c78277ef2eafb9b87d1e776afec1014ba6e3e3778a16d0b406b777"
+    },
+    {
+      "sequence": 13,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "eval-engineer",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.guild/agents/eval-engineer.md",
+        "content_hash": "sha256:ea7289b0d0e1f516a8f50c64d699236e88cd92331104479e769107aec7122199",
+        "home": "project-guild"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "eval-engineer",
+        "relative_path": ".guild/agents/eval-engineer.md",
+        "content_hash": "sha256:f8bbd75184a83e3c97404147502844b56b8f64547d62d3090ea7763ae87ba8d7",
+        "source_commit": null,
+        "specialist_profile_hash": "f056be190a2372ff26808b272b2d95c3041e2b4c235ea2b35bfd5d772d74121c",
+        "specialist_type_hash": "9fe1f1b6502d4c9c355be9c9d70aa9463ec2ab58bc916bc9b54d06a30179754b",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T14:30:00Z",
+      "run_id": "run-20260810-pcl15-final-ref-repin",
+      "authorized_by": "cap-loc-D09-review-round-2",
+      "prev_digest": "4df166f9578a6542d7f8d3c8f19b7768486287cf0e2391457fbd28b595410f13"
+    },
+    {
+      "sequence": 14,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "hook-engineer",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.guild/agents/hook-engineer.md",
+        "content_hash": "sha256:1da93534f8131d007efda3ea331c04e6b800bbba4998d3ca54c9a687b0e1404b",
+        "home": "project-guild"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "hook-engineer",
+        "relative_path": ".guild/agents/hook-engineer.md",
+        "content_hash": "sha256:8dd5821fe7c52f5631eafc466e4824df257a0d0abdf8358c285e5059e33ca501",
+        "source_commit": null,
+        "specialist_profile_hash": "c1c1d9df1503390c820e1b3c6c2e27fbcc4740bc01e056aa027b7757e0036595",
+        "specialist_type_hash": "30898565757c75d7b96c82408a3954510cb90f24eb2d29660a1faf88436b6437",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T14:30:00Z",
+      "run_id": "run-20260810-pcl15-final-ref-repin",
+      "authorized_by": "cap-loc-D09-review-round-2",
+      "prev_digest": "5746259042420016bc63bfc6ea2b0eee2d431168bbbb1e088bfa4b1c807673d5"
+    },
+    {
+      "sequence": 15,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "plugin-architect",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.guild/agents/plugin-architect.md",
+        "content_hash": "sha256:1b7ffaab78120d1dfba3b58d6bff70ac72dfe6555ee6e0e74d25ecb5ad94707f",
+        "home": "project-guild"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "plugin-architect",
+        "relative_path": ".guild/agents/plugin-architect.md",
+        "content_hash": "sha256:ac2869660ce99c8f28813c41bfe7193ce1799e550053a4c8b1888ed34c911d39",
+        "source_commit": null,
+        "specialist_profile_hash": "f7e6d1119e4b966d1aa2504da685902c631e27d74a147b4a63c1edaa2fae09e3",
+        "specialist_type_hash": "087f8c93fb65c74da61265c105da78da3a8442cb274197e42cb253e6333a04d1",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T14:30:00Z",
+      "run_id": "run-20260810-pcl15-final-ref-repin",
+      "authorized_by": "cap-loc-D09-review-round-2",
+      "prev_digest": "560102b648b68d8ae616c62f11da46c5f9089f1de5b693d1846c36b25cddfe37"
+    },
+    {
+      "sequence": 16,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "research-digester",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.guild/agents/research-digester.md",
+        "content_hash": "sha256:9d248fd43fe00bd408f8c8692fdbbff161ddad8bfbd486b73975520829fd038c",
+        "home": "project-guild"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "research-digester",
+        "relative_path": ".guild/agents/research-digester.md",
+        "content_hash": "sha256:7123f5e20b021add0dc1900e974353a4d680a5e5a13dc3e9a5dd516c8d4089b4",
+        "source_commit": null,
+        "specialist_profile_hash": "f0ddbf5a20ad7e2da955d6dfaaf95d04b53a90f8a88c898a84a21a12597702f4",
+        "specialist_type_hash": "3f26bb4749cce18b8ec73fdc187dce20d33b82b12e1244e409eebd3386041e52",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T14:30:00Z",
+      "run_id": "run-20260810-pcl15-final-ref-repin",
+      "authorized_by": "cap-loc-D09-review-round-2",
+      "prev_digest": "048f7a308056bc2819eeb127da85f5b33fb2332971bc6568f97e5940b4eea7de"
+    },
+    {
+      "sequence": 17,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "security-auditor",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.guild/agents/security-auditor.md",
+        "content_hash": "sha256:be220079185d535a1c70b7d9b7a924cf88da7570c54ad54ad30f0e0247923d4e",
+        "home": "project-guild"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "security-auditor",
+        "relative_path": ".guild/agents/security-auditor.md",
+        "content_hash": "sha256:9c53eb35de4f3e0661807d8794d6bdcb7e525c0537968ed40d0ee6a21b2db582",
+        "source_commit": null,
+        "specialist_profile_hash": "502d5708366ae2e7664df1dfb0fad9a787b1314edd55d698faa533c4622817d3",
+        "specialist_type_hash": "a5b494b3f5b08a82dd1fe1b1801107808ac785b81076c6bc27838710d2c54e21",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T14:30:00Z",
+      "run_id": "run-20260810-pcl15-final-ref-repin",
+      "authorized_by": "cap-loc-D09-review-round-2",
+      "prev_digest": "88157975ffbd57bdb67355e607d1189f9bad1c6c90034227d7de1638220496e6"
+    },
+    {
+      "sequence": 18,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "skill-author",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.guild/agents/skill-author.md",
+        "content_hash": "sha256:3cc06f788d8cd708ababf97946ea32b5df5cef2b1839936d7eee445917bb18c8",
+        "home": "project-guild"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "skill-author",
+        "relative_path": ".guild/agents/skill-author.md",
+        "content_hash": "sha256:5d2435dfdd0220242853e00146461b38efb69f3f276b6c8bcd72326e1ac730dd",
+        "source_commit": null,
+        "specialist_profile_hash": "d3aa305374e25a773ed2046c9045f6b2a5bf00a667a3cbe3e75f1a6d07e1fd51",
+        "specialist_type_hash": "5458c0ec6e1a9ae28e2cb3885d53e20a06a2a19e6fb8b948e35b3822fe567637",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T14:30:00Z",
+      "run_id": "run-20260810-pcl15-final-ref-repin",
+      "authorized_by": "cap-loc-D09-review-round-2",
+      "prev_digest": "2175d0a3b9e22675ae5d574154ee73878d2228667af24508b5f70e321b948bad"
+    },
+    {
+      "sequence": 19,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "specialist-agent-writer",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.guild/agents/specialist-agent-writer.md",
+        "content_hash": "sha256:fa76a8ebc88f44d8ee082c93e89068be0c3b910a6c2945f4070b84ec77693219",
+        "home": "project-guild"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "specialist-agent-writer",
+        "relative_path": ".guild/agents/specialist-agent-writer.md",
+        "content_hash": "sha256:a2b15ddd3301cc011456f63cd2c0c3c2882506ca1088ec7746672f5e92745b00",
+        "source_commit": null,
+        "specialist_profile_hash": "a8941fbe96cd44ecdff11c63959dbc91d031f4afefa2270684fa5a282390a955",
+        "specialist_type_hash": "466a6690c29239e3d4b1de27a188710294d43e800068ebca2ca58de29d2a5831",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T14:30:00Z",
+      "run_id": "run-20260810-pcl15-final-ref-repin",
+      "authorized_by": "cap-loc-D09-review-round-2",
+      "prev_digest": "41ed079a371239868580292d1a2066fbe4592d66f708628e0930fda8a90bbdb9"
+    },
+    {
+      "sequence": 20,
+      "kind": "agent",
+      "from": {
+        "project_id": "plugin",
+        "id": "tooling-engineer",
+        "historical_path": "/Users/miguelp/Projects/guild/plugin/.worktrees/full-implementation-convergence/.guild/agents/tooling-engineer.md",
+        "content_hash": "sha256:11545adef63693dc76e64a2f134041e925c37626352331842dd696260d09bfbf",
+        "home": "project-guild"
+      },
+      "to": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "tooling-engineer",
+        "relative_path": ".guild/agents/tooling-engineer.md",
+        "content_hash": "sha256:7275cbc08086c1ec2d5df510342bba5674fe8e37016175df5befd3adb067f2ef",
+        "source_commit": null,
+        "specialist_profile_hash": "621b611addae42be5086295fedf37eae5cd4ca006d9718d6517f29ca53f49910",
+        "specialist_type_hash": "a953b202609e7a09d4e8fe6e1c8ea4e39ef78c477578466c756a658b3ae5f4a3",
+        "skills": []
+      },
+      "reason": "migrated",
+      "detail": null,
+      "reverses_sequence": null,
+      "adopted_at": "2026-08-10T14:30:00Z",
+      "run_id": "run-20260810-pcl15-final-ref-repin",
+      "authorized_by": "cap-loc-D09-review-round-2",
+      "prev_digest": "8c344374e6bdb6f185162062a021290d9b39f56958bf147129cd2555364e2c14"
+    }
+  ]
+}

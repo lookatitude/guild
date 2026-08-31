@@ -19,7 +19,8 @@
  *     cross-host routing block calls planTeamRouting() → onDecision persists
  *     {host, tier, model} into run-state.json keyed by the plan task-id.
  *     The launcher is spawned as a real subprocess (its hooks-heavy import
- *     chain cannot be imported under ts-jest) with --dry-run, and the test
+ *     chain cannot be imported under ts-jest) against a deterministic tmux
+ *     double, and the test
  *     reads the run-state file the production onDecision wrote. If the caller
  *     dropped the scored tier, lanes[task].host.tier would be "mid".
  *
@@ -37,12 +38,16 @@ import { scoreTier } from "../score-tier";
 import { planTeamRouting, type RoutableHost } from "../lib/host-router";
 import { buildCapability, writeHostCapability } from "../write-host-capability";
 import { writeBackScoredTier } from "../lib/write-back-scored-tier";
+import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
-const LAUNCHER = path.resolve(__dirname, "..", "agent-team-launcher.ts");
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+const LAUNCHER = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
 
 const TEMP_DIRS: string[] = [];
 afterAll(() => {
   for (const d of TEMP_DIRS) fs.rmSync(d, { recursive: true, force: true });
+  fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true });
 });
 function mkRepo(): string {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), "guild-tier-thread-"));
@@ -157,21 +162,45 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
     });
     expect(fs.existsSync(manifestPath)).toBe(true);
 
-    // 4. Run the REAL launcher (dry-run: no tmux spawned; the routing block +
-    //    run-state persistence run before any spawn). Cross-host enabled via env
-    //    so the planTeamRouting block engages.
+    // 4. Run the REAL launcher against a deterministic tmux double. FU08 makes
+    //    dry-run a pure preview, so persistence coverage must exercise the real
+    //    launch path while preventing any actual pane/session creation.
     const env = { ...process.env, NODE_NO_WARNINGS: "1" } as NodeJS.ProcessEnv;
     delete env["TMUX"]; // force new-session mode regardless of the test runner's env
     env["GUILD_HOST_ID"] = "claude";
     env["GUILD_HOST"] = "claude";
     env["GUILD_CROSS_HOST_ENABLED"] = "1";
     env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "1";
+    env["GUILD_PLUGIN_ROOT"] = EXACT_CLAUDE_PLUGIN_ROOT;
     // T7R-R1-B1: this fixture is about tier threading, not approval, and carries
     // no team-plan trail. Opt into the ONE audited escape hatch; the gate's own
     // pins live in t7-h1-dispatch-approval.test.ts.
     env["GUILD_DISPATCH_APPROVAL_OVERRIDE"] =
       "tier-threading fixture: no team-plan trail; approval verification is pinned separately";
 
+    const runId = "run-20260812-071100-tier-threading";
+    mintRunBinding({ root: repo, run_id: runId });
+    const contextDir = path.join(repo, ".guild", "context", runId);
+    fs.mkdirSync(contextDir, { recursive: true });
+    fs.writeFileSync(path.join(contextDir, "sec-arch-T1-route.md"), "# security context\n");
+    fs.writeFileSync(path.join(contextDir, "doc-check-T2-check.md"), "# docs context\n");
+    const fakeBin = path.join(repo, "fakebin");
+    fs.mkdirSync(fakeBin, { recursive: true });
+    fs.writeFileSync(
+      path.join(fakeBin, "tmux"),
+      [
+        "#!/bin/sh",
+        'case "$1" in',
+        '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
+        "  has-session) exit 1;;",
+        "  list-windows) exit 0;;",
+        "  *) exit 0;;",
+        "esac",
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    env["PATH"] = `${fakeBin}:${env["PATH"] ?? ""}`;
     const r = spawnSync(
       "npx",
       [
@@ -181,8 +210,9 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
         teamPath,
         "--cwd",
         repo,
+        "--run-id",
+        runId,
         "--agent-mode=team",
-        "--dry-run",
         "--session-name",
         "guild-tierthread-test",
       ],
@@ -195,10 +225,8 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
     // 5. Read the run-state the production onDecision wrote. If the launcher
     //    dropped the scored tier, T1-route would carry "mid" here.
     const runsDir = path.join(repo, ".guild", "runs");
-    const runDirs = fs
-      .readdirSync(runsDir)
-      .filter((d) => fs.existsSync(path.join(runsDir, d, "run-state.json")));
-    expect(runDirs.length).toBe(1);
+    const runDirs = [runId].filter((d) => fs.existsSync(path.join(runsDir, d, "run-state.json")));
+    expect(runDirs).toEqual([runId]);
     const state = JSON.parse(
       fs.readFileSync(path.join(runsDir, runDirs[0], "run-state.json"), "utf8")
     ) as { lanes: Record<string, { host?: { tier?: string; model?: string; selected?: string } }> };

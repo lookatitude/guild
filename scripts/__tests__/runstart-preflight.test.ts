@@ -34,6 +34,7 @@ import * as os from "os";
 import * as fs from "fs";
 import * as path from "path";
 import {
+  detectClaudeNativeAdapterIdentity,
   runStartPreflight,
   persistTmuxTeamArgv,
   type PreflightProbe,
@@ -56,6 +57,29 @@ function writeSettings(dir: string, content: Record<string, unknown>): void {
   fs.mkdirSync(guildDir, { recursive: true });
   fs.writeFileSync(path.join(guildDir, "settings.json"), JSON.stringify(content, null, 2));
 }
+
+describe("detectClaudeNativeAdapterIdentity", () => {
+  it("never promotes an unmarked process into verified Claude identity", () => {
+    expect(detectClaudeNativeAdapterIdentity({})).toBeNull();
+  });
+
+  it("binds the Guild adapter-contract version when the live host marker is present", () => {
+    expect(detectClaudeNativeAdapterIdentity(
+      { CLAUDECODE: "1" },
+    )).toMatchObject({
+      family: "claude",
+      adapter_id: "claude-code-native",
+      adapter_version: "guild.host_adapter.v1.0.0",
+    });
+  });
+
+  it("does not let an environment host-version claim redefine the adapter contract", () => {
+    expect(detectClaudeNativeAdapterIdentity({
+      CLAUDECODE: "1",
+      CLAUDE_CODE_VERSION: "../../spoof",
+    })?.adapter_version).toBe("guild.host_adapter.v1.0.0");
+  });
+});
 
 /** Create a project directory that is a child of a workspace root. */
 function makeWorkspaceWithChild(

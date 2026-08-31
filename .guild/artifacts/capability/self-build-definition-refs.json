@@ -1,0 +1,297 @@
+{
+  "schema_version": "guild.self_build_definition_refs.v1",
+  "project_id": "plugin",
+  "first_run_executes_different_bytes": true,
+  "roles": [
+    {
+      "id": "command-builder",
+      "profile": {
+        "schema_version": "guild.specialist_profile.v1",
+        "profile_id": "command-builder",
+        "version": "1",
+        "derived_from": {
+          "type_id": "command-builder",
+          "type_version": "1",
+          "type_hash": "8d8e875a2fcfc41cc4146f7dc7cbb150b89732d32756456c4a3f041e6cc8c74d"
+        },
+        "project_instructions": null,
+        "local_skill_refs": []
+      },
+      "definition_ref": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "command-builder",
+        "relative_path": ".guild/agents/command-builder.md",
+        "content_hash": "sha256:7df257a7809d25fdc897c033deb188dfc4a492d0aff8fd367979b810f6b3b419",
+        "source_commit": null,
+        "specialist_profile_hash": "92b27bb6bcb8f6204019554acd93cd82187ac306e4c5da58ae5a8ea9b30f4aaf",
+        "specialist_type_hash": "8d8e875a2fcfc41cc4146f7dc7cbb150b89732d32756456c4a3f041e6cc8c74d",
+        "skills": []
+      },
+      "bytes_changed": true
+    },
+    {
+      "id": "docs-writer",
+      "profile": {
+        "schema_version": "guild.specialist_profile.v1",
+        "profile_id": "docs-writer",
+        "version": "1",
+        "derived_from": {
+          "type_id": "docs-writer",
+          "type_version": "1",
+          "type_hash": "1950cc0d571b1d90ac267d81ac388cf6b224689aa6b2665376845e90c4c0108d"
+        },
+        "project_instructions": null,
+        "local_skill_refs": []
+      },
+      "definition_ref": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "docs-writer",
+        "relative_path": ".guild/agents/docs-writer.md",
+        "content_hash": "sha256:8e3b838700877d44910231a350c5bac19be1f5d22bc3e4fe4fa8c36cca43e276",
+        "source_commit": null,
+        "specialist_profile_hash": "5f4d7d3fac2d6ac9f717c27d1a3875325bc4ecfadcefd1cc7b62c0d7af9bec0b",
+        "specialist_type_hash": "1950cc0d571b1d90ac267d81ac388cf6b224689aa6b2665376845e90c4c0108d",
+        "skills": []
+      },
+      "bytes_changed": true
+    },
+    {
+      "id": "eval-engineer",
+      "profile": {
+        "schema_version": "guild.specialist_profile.v1",
+        "profile_id": "eval-engineer",
+        "version": "1",
+        "derived_from": {
+          "type_id": "eval-engineer",
+          "type_version": "1",
+          "type_hash": "9fe1f1b6502d4c9c355be9c9d70aa9463ec2ab58bc916bc9b54d06a30179754b"
+        },
+        "project_instructions": null,
+        "local_skill_refs": []
+      },
+      "definition_ref": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "eval-engineer",
+        "relative_path": ".guild/agents/eval-engineer.md",
+        "content_hash": "sha256:f8bbd75184a83e3c97404147502844b56b8f64547d62d3090ea7763ae87ba8d7",
+        "source_commit": null,
+        "specialist_profile_hash": "f056be190a2372ff26808b272b2d95c3041e2b4c235ea2b35bfd5d772d74121c",
+        "specialist_type_hash": "9fe1f1b6502d4c9c355be9c9d70aa9463ec2ab58bc916bc9b54d06a30179754b",
+        "skills": []
+      },
+      "bytes_changed": true
+    },
+    {
+      "id": "hook-engineer",
+      "profile": {
+        "schema_version": "guild.specialist_profile.v1",
+        "profile_id": "hook-engineer",
+        "version": "1",
+        "derived_from": {
+          "type_id": "hook-engineer",
+          "type_version": "1",
+          "type_hash": "30898565757c75d7b96c82408a3954510cb90f24eb2d29660a1faf88436b6437"
+        },
+        "project_instructions": null,
+        "local_skill_refs": []
+      },
+      "definition_ref": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "hook-engineer",
+        "relative_path": ".guild/agents/hook-engineer.md",
+        "content_hash": "sha256:8dd5821fe7c52f5631eafc466e4824df257a0d0abdf8358c285e5059e33ca501",
+        "source_commit": null,
+        "specialist_profile_hash": "c1c1d9df1503390c820e1b3c6c2e27fbcc4740bc01e056aa027b7757e0036595",
+        "specialist_type_hash": "30898565757c75d7b96c82408a3954510cb90f24eb2d29660a1faf88436b6437",
+        "skills": []
+      },
+      "bytes_changed": true
+    },
+    {
+      "id": "plugin-architect",
+      "profile": {
+        "schema_version": "guild.specialist_profile.v1",
+        "profile_id": "plugin-architect",
+        "version": "1",
+        "derived_from": {
+          "type_id": "plugin-architect",
+          "type_version": "1",
+          "type_hash": "087f8c93fb65c74da61265c105da78da3a8442cb274197e42cb253e6333a04d1"
+        },
+        "project_instructions": null,
+        "local_skill_refs": []
+      },
+      "definition_ref": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "plugin-architect",
+        "relative_path": ".guild/agents/plugin-architect.md",
+        "content_hash": "sha256:ac2869660ce99c8f28813c41bfe7193ce1799e550053a4c8b1888ed34c911d39",
+        "source_commit": null,
+        "specialist_profile_hash": "f7e6d1119e4b966d1aa2504da685902c631e27d74a147b4a63c1edaa2fae09e3",
+        "specialist_type_hash": "087f8c93fb65c74da61265c105da78da3a8442cb274197e42cb253e6333a04d1",
+        "skills": []
+      },
+      "bytes_changed": true
+    },
+    {
+      "id": "research-digester",
+      "profile": {
+        "schema_version": "guild.specialist_profile.v1",
+        "profile_id": "research-digester",
+        "version": "1",
+        "derived_from": {
+          "type_id": "research-digester",
+          "type_version": "1",
+          "type_hash": "3f26bb4749cce18b8ec73fdc187dce20d33b82b12e1244e409eebd3386041e52"
+        },
+        "project_instructions": null,
+        "local_skill_refs": []
+      },
+      "definition_ref": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "research-digester",
+        "relative_path": ".guild/agents/research-digester.md",
+        "content_hash": "sha256:7123f5e20b021add0dc1900e974353a4d680a5e5a13dc3e9a5dd516c8d4089b4",
+        "source_commit": null,
+        "specialist_profile_hash": "f0ddbf5a20ad7e2da955d6dfaaf95d04b53a90f8a88c898a84a21a12597702f4",
+        "specialist_type_hash": "3f26bb4749cce18b8ec73fdc187dce20d33b82b12e1244e409eebd3386041e52",
+        "skills": []
+      },
+      "bytes_changed": true
+    },
+    {
+      "id": "security-auditor",
+      "profile": {
+        "schema_version": "guild.specialist_profile.v1",
+        "profile_id": "security-auditor",
+        "version": "1",
+        "derived_from": {
+          "type_id": "security-auditor",
+          "type_version": "1",
+          "type_hash": "a5b494b3f5b08a82dd1fe1b1801107808ac785b81076c6bc27838710d2c54e21"
+        },
+        "project_instructions": null,
+        "local_skill_refs": []
+      },
+      "definition_ref": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "security-auditor",
+        "relative_path": ".guild/agents/security-auditor.md",
+        "content_hash": "sha256:9c53eb35de4f3e0661807d8794d6bdcb7e525c0537968ed40d0ee6a21b2db582",
+        "source_commit": null,
+        "specialist_profile_hash": "502d5708366ae2e7664df1dfb0fad9a787b1314edd55d698faa533c4622817d3",
+        "specialist_type_hash": "a5b494b3f5b08a82dd1fe1b1801107808ac785b81076c6bc27838710d2c54e21",
+        "skills": []
+      },
+      "bytes_changed": true
+    },
+    {
+      "id": "skill-author",
+      "profile": {
+        "schema_version": "guild.specialist_profile.v1",
+        "profile_id": "skill-author",
+        "version": "1",
+        "derived_from": {
+          "type_id": "skill-author",
+          "type_version": "1",
+          "type_hash": "5458c0ec6e1a9ae28e2cb3885d53e20a06a2a19e6fb8b948e35b3822fe567637"
+        },
+        "project_instructions": null,
+        "local_skill_refs": []
+      },
+      "definition_ref": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "skill-author",
+        "relative_path": ".guild/agents/skill-author.md",
+        "content_hash": "sha256:5d2435dfdd0220242853e00146461b38efb69f3f276b6c8bcd72326e1ac730dd",
+        "source_commit": null,
+        "specialist_profile_hash": "d3aa305374e25a773ed2046c9045f6b2a5bf00a667a3cbe3e75f1a6d07e1fd51",
+        "specialist_type_hash": "5458c0ec6e1a9ae28e2cb3885d53e20a06a2a19e6fb8b948e35b3822fe567637",
+        "skills": []
+      },
+      "bytes_changed": true
+    },
+    {
+      "id": "specialist-agent-writer",
+      "profile": {
+        "schema_version": "guild.specialist_profile.v1",
+        "profile_id": "specialist-agent-writer",
+        "version": "1",
+        "derived_from": {
+          "type_id": "specialist-agent-writer",
+          "type_version": "1",
+          "type_hash": "466a6690c29239e3d4b1de27a188710294d43e800068ebca2ca58de29d2a5831"
+        },
+        "project_instructions": null,
+        "local_skill_refs": []
+      },
+      "definition_ref": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "specialist-agent-writer",
+        "relative_path": ".guild/agents/specialist-agent-writer.md",
+        "content_hash": "sha256:a2b15ddd3301cc011456f63cd2c0c3c2882506ca1088ec7746672f5e92745b00",
+        "source_commit": null,
+        "specialist_profile_hash": "a8941fbe96cd44ecdff11c63959dbc91d031f4afefa2270684fa5a282390a955",
+        "specialist_type_hash": "466a6690c29239e3d4b1de27a188710294d43e800068ebca2ca58de29d2a5831",
+        "skills": []
+      },
+      "bytes_changed": true
+    },
+    {
+      "id": "tooling-engineer",
+      "profile": {
+        "schema_version": "guild.specialist_profile.v1",
+        "profile_id": "tooling-engineer",
+        "version": "1",
+        "derived_from": {
+          "type_id": "tooling-engineer",
+          "type_version": "1",
+          "type_hash": "a953b202609e7a09d4e8fe6e1c8ea4e39ef78c477578466c756a658b3ae5f4a3"
+        },
+        "project_instructions": null,
+        "local_skill_refs": []
+      },
+      "definition_ref": {
+        "schema_version": "guild.project_definition_ref.v1",
+        "project_id": "plugin",
+        "layer": "project-guild",
+        "kind": "agent",
+        "id": "tooling-engineer",
+        "relative_path": ".guild/agents/tooling-engineer.md",
+        "content_hash": "sha256:7275cbc08086c1ec2d5df510342bba5674fe8e37016175df5befd3adb067f2ef",
+        "source_commit": null,
+        "specialist_profile_hash": "621b611addae42be5086295fedf37eae5cd4ca006d9718d6517f29ca53f49910",
+        "specialist_type_hash": "a953b202609e7a09d4e8fe6e1c8ea4e39ef78c477578466c756a658b3ae5f4a3",
+        "skills": []
+      },
+      "bytes_changed": true
+    }
+  ]
+}

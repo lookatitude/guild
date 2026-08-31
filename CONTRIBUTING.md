@@ -102,7 +102,8 @@ the same spirit:
    build` first if you touched a hook — the tests run source, the host runs dist).
 5. **Target `next`, not `main`.** All feature/fix PRs go to the `next`
    integration branch (`gh pr create --base next`) — `main` is the stable
-   release channel and only accepts `release/vX.Y.Z` PRs (enforced by the
+   release channel and only accepts the repository's exact `next` branch
+   (enforced by the
    `branch-policy` CI gate; full rules in
    `.guild/wiki/standards/release-discipline.md`).
 6. **Explain the "why" in the commit message**, not the "what"
@@ -157,20 +158,27 @@ gates (see `plugin/AGENTS.md §Codex adversarial review`).
 
 - Branches are channels: `main` = stable (always green, always releasable),
   `next` = beta/integration (all merged PRs collect and get tested here).
-- Releases are cut **from `next`** as a `release/vX.Y.Z` branch → PR into
-  `main` → on merge, CI tags and publishes the GitHub Release automatically
-  (PR body = release notes). Then `main` is merged back into `next`.
-- Tags are `vMAJOR.MINOR.PATCH` (SemVer) with optional `-beta<N>`
-  pre-release suffix.
-- Update `CHANGELOG.md` as part of the release PR — generate the section with
-  `npx tsx scripts/release-changelog.ts --version vX.Y.Z --write` (groups the
-  PRs merged since the last tag; `--notes` seeds the PR body), then polish.
-- Bump `.claude-plugin/plugin.json` `version` to match the tag — that file is
-  the **single canonical version field**. Then propagate it:
-  `cd scripts && npm run sync:claude-install && npm run build:inventory`.
-  **Do not hand-edit `.claude-plugin/marketplace.json`** — it is generated from
-  `plugin.json`, and CI (`check:claude-install`) fails any hand edit that
-  disagrees with the canonical field.
+- Stable promotion is a direct same-repository `next -> main` PR. No release
+  branch and no manual merge-back or sync-back is used.
+- Before that PR, an operator freezes the code tip, produces the applicable
+  hash-bound release evidence for that exact SHA, and merges an evidence-only
+  PR into `next`. The normal path requires independently authorized full-suite
+  conformance. Exact v2.7.0 instead uses a separately named, GitHub-OIDC-attested
+  provenance-only basis that explicitly does not claim conformance authority;
+  its gate is unavailable to every later version. The canonical runbook records
+  its three-file allowed diff and the still-open custody/migration follow-ups.
+- `next` carries exact `MAJOR.MINOR.PATCH-beta.N`. After the direct PR merges,
+  CI derives `vMAJOR.MINOR.PATCH`, tags the exact reviewed merge commit, and
+  publishes the PR body as release notes with the built-in repository token.
+- CI does not rewrite `main` or `next`, and contributors do not hand-edit
+  generated manifests for the release. A dedicated App and generated
+  bare-version metadata convergence are deferred hardening, not release
+  prerequisites. Stable update detection compares the installed commit with
+  remote `main`; Claude and Codex native caches recover that identity from the
+  host's existing registry. Commit-less stable signals suppress only the exact
+  same-core candidate/tag false positive, and ambiguous native receipt minting
+  is deferred rather than guessing a channel. The retained candidate label
+  therefore does not produce a permanent false update prompt or channel switch.
 - Full ruleset: `.guild/wiki/standards/release-discipline.md`.
 
 ## Reporting issues
@@ -186,4 +194,5 @@ See [SECURITY.md](SECURITY.md) for the trust model and the process
 for reporting security-relevant issues. Short version: use
 `/guild audit` before installing a Guild fork; don't open PRs that
 add network access to meta-skills or non-researcher specialists
-without an explicit `§15.1 #12` discussion.
+without explicit operator approval recorded before dispatch for a
+task-scoped exception, or explicit shipping approval for a changed default.

@@ -148,6 +148,56 @@ const ENTRY_ALLOWLIST = new Set<string>([
   "hooks/dist/pre-compact.js",
   "hooks/dist/gate-outcome-writer.js",
   "hooks/dist/session-reanchor.js",
+  // full-implementation-convergence landing (run-6f94bea1 FIC-51/A7, 2026-08-17):
+  // the A6C-accepted convergence delta's entry-path files, enumerated EXPLICITLY
+  // (named files, never a wildcard) from `git diff --name-status HEAD` + the
+  // untracked porcelain over commands/hooks/.claude-plugin on the settled tree.
+  // Command + manifest surface (both also re-ratified in live-surface-anchor.ts
+  // in this same commit — see its dated 2026-08-17 note for intent/reachability):
+  ".claude-plugin/plugin.json", // exactly one line: commands[] gains ./commands/adopt.md
+  "commands/adopt.md", // NEW /guild:adopt page — closes the filed capability-adopt gap
+  "commands/initiative.md", // D8 close-gate: evidence/evidence_refs existence check prose
+  // Hook sources + their recompiled esbuild bundles (scratch parity 21/21
+  // byte-identical was verified BEFORE the pins were computed):
+  "hooks/agent-team/task-completed.ts",
+  "hooks/agent-team/teammate-idle.ts",
+  "hooks/bootstrap.sh",
+  "hooks/capture-telemetry.ts",
+  "hooks/dist/capture-telemetry.js",
+  "hooks/dist/comms-format-lint.js",
+  "hooks/lib/run-trace.ts",
+  "hooks/lib/compatibility-skill-guard.ts",
+  "hooks/maybe-reflect.ts",
+  "hooks/post-tool-use.ts",
+  "hooks/run-trace-close.ts",
+  // Hook test files carrying the convergence suites' new/updated coverage:
+  "hooks/__tests__/bundle-cli-leak.test.ts",
+  "hooks/__tests__/capture-telemetry-v14.test.ts",
+  "hooks/__tests__/check-skill-coverage.test.ts",
+  "hooks/__tests__/dist-binding-probes.test.ts",
+  "hooks/__tests__/hook-output-budget.test.ts",
+  "hooks/__tests__/post-tool-use-attribution.test.ts",
+  "hooks/__tests__/post-tool-use-scrub.test.ts",
+  "hooks/__tests__/pre-tool-use-compatibility-skill.test.ts",
+  "hooks/__tests__/reanchor.test.ts",
+  "hooks/__tests__/redact-log-path-exemption.test.ts",
+  "hooks/__tests__/run-trace.test.ts",
+  "hooks/__tests__/run-trace-close-active-guard.test.ts",
+  "hooks/__tests__/teammate-idle.test.ts",
+  "hooks/agent-team/__tests__/task-completed.test.ts",
+  "hooks/agent-team/__tests__/teammate-idle.test.ts",
+  // PCL-FU-07 dependency-security remediation (2026-08-19): the two lockfiles
+  // move every audited hook dependency to a non-vulnerable version. Rebuilding
+  // the committed hooks with js-yaml 4.3.1 and esbuild 0.28.2 changes the
+  // detect-guild-version bundle even though its TypeScript source is unchanged;
+  // the hook suites and bundle determinism gate re-prove the generated surface.
+  "hooks/package-lock.json",
+  "hooks/agent-team/package-lock.json",
+  "hooks/dist/detect-guild-version.js",
+  // PCL-FU-06 beta.8 CI repair: the release manifest advances to the fresh
+  // boundary and the close/reopen regression fixture adopts a canonical run id.
+  ".claude-plugin/marketplace.json",
+  "hooks/__tests__/run-trace-close-reopen.test.ts",
 ]);
 
 function gitLines(args: string[]): string[] {
@@ -181,12 +231,14 @@ describe("SC-W1-9 — command/hook/package entry paths byte-identical vs HEAD (A
   });
 
   it("ANTI-VACUITY: the allowlist is TIGHT — a non-migration entry-path change would still fail", () => {
-    // The allowlist names ONLY the host-adapter migration's verified deltas. Prove it did
-    // not get widened to a wildcard: representative entry paths that are NOT part of the
-    // migration must be absent, so the offending-filter above would still flag them.
+    // The allowlist names ONLY verified migration/convergence deltas. Prove it did
+    // not get widened to a wildcard: representative entry paths that are NOT part of
+    // any admitted delta must be absent, so the offending-filter above would still
+    // flag them. Versioned manifests are legitimate release deltas, so the
+    // controls remain ordinary command/hook entry paths with no admitted change.
     for (const notAllowed of [
       "commands/guild-build.md",
-      ".claude-plugin/plugin.json",
+      "commands/status.md",
       "hooks/hooks.json",
     ]) {
       expect(ENTRY_ALLOWLIST.has(notAllowed)).toBe(false);

@@ -28,6 +28,7 @@ import {
   hasDroppedForBudgetLine,
   lintBundle,
   readFrontmatterTokenEstimate,
+  readDefinitionRef,
 } from "../lint-context-bundle";
 
 const CLI = path.resolve(__dirname, "..", "lint-context-bundle.ts");
@@ -42,11 +43,25 @@ function makeBundle(opts: {
   fillerChars?: number;
   droppedForBudget?: boolean;
 }): string {
+  const definitionRef = JSON.stringify({
+    schema_version: "guild.project_definition_ref.v1",
+    project_id: "plugin",
+    layer: "project-guild",
+    kind: "agent",
+    id: "tooling-engineer",
+    relative_path: ".guild/agents/tooling-engineer.md",
+    content_hash: `sha256:${"a".repeat(64)}`,
+    source_commit: null,
+    specialist_profile_hash: "b".repeat(64),
+    specialist_type_hash: "c".repeat(64),
+    skills: [],
+  });
   const fm = [
     "---",
     "run_id: run-85d27757-f47b-4ccd-adaf-f91c749a4e8f",
     "specialist: tooling-engineer",
     "task_id: P1-enforcement",
+    `definition_ref: ${definitionRef}`,
     "spec: .guild/spec/v2-gap-closure.md",
     "plan: .guild/plan/v2-gap-closure.md",
     "source_paths:",
@@ -149,6 +164,29 @@ describe("readFrontmatterTokenEstimate", () => {
   it("does not read token_estimate from the body", () => {
     const content = makeBundle({}) + "\ntoken_estimate: 99999\n";
     expect(readFrontmatterTokenEstimate(content)).toBeNull();
+  });
+});
+
+describe("definition-ref gate", () => {
+  it("accepts one valid relative definition ref", () => {
+    const parsed = readDefinitionRef(makeBundle({}));
+    expect(parsed.count).toBe(1);
+    expect(parsed.ref?.relative_path).toBe(".guild/agents/tooling-engineer.md");
+    expect(lintBundle(makeBundle({})).pass).toBe(true);
+  });
+
+  it("rejects missing, malformed, and absolute definition refs", () => {
+    const valid = makeBundle({});
+    const definitionLine = valid.split("\n").find((entry) => entry.startsWith("definition_ref:"));
+    expect(definitionLine).toBeDefined();
+    expect(lintBundle(valid.replace(`${definitionLine}\n`, "")).pass).toBe(false);
+    expect(lintBundle(valid.replace(definitionLine!, "definition_ref: {bad}" )).pass).toBe(false);
+    expect(lintBundle(valid.replace(".guild/agents/tooling-engineer.md", "/tmp/.guild/agents/tooling-engineer.md")).pass).toBe(false);
+  });
+
+  it("rejects an absolute agent definition carrier but permits ordinary absolute provenance", () => {
+    expect(lintBundle(makeBundle({}) + "\ndefinition: /Users/a/project/.guild/agents/tooling-engineer.md\n").pass).toBe(false);
+    expect(lintBundle(makeBundle({}) + "\nsource_input: /Users/a/project/src/index.ts\n").pass).toBe(true);
   });
 });
 

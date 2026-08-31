@@ -430,15 +430,171 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * SC-W3-6(B) each named those three skills files and NOTHING else. (The
  * 310323f6 pin from the pre-rebase derivation was superseded by this rebase;
  * the repair content is identical, re-hashed over the #91 skill tree.)
+ *
+ * ── 2026-08-17 re-ratification (full-implementation-convergence landing,
+ *    run-6f94bea1 FIC-51/A7) — all three moving anchors move DELIBERATELY ────────
+ * `commands` moves c32076fa → b4695c3f; `skills` moves 1521571d → 2d3c295c;
+ * `plugin.json` moves 969bb277 → ca3931c3. `marketplace.json` does NOT move
+ * (verified equal, not assumed) and the `.claude-plugin/**` FILE SET is unchanged
+ * (still exactly the two manifests). The enumeration below — checked per-file for
+ * intent AND reachability against the A6C-accepted convergence delta — is the
+ * ratification; the hash bump merely records it.
+ *
+ * ADDED ENTRIES — exactly ONE across the whole pinned surface:
+ *   (A1) `commands/adopt.md` — the `/guild:adopt` command page (project capability
+ *        localization: report | catalog | adopt | rollback | status | window | g5).
+ *        INTENDED: closes the gap FILED in the 2026-08-02 re-ratification above —
+ *        `scripts/capability-adopt.ts` shipped "reachable only by hand-typed
+ *        `npx tsx`" with nothing in commands/ documenting it. This page is that
+ *        missing surface, shipped through the reviewed convergence programme
+ *        rather than invented inside a re-ratification commit.
+ *        REACHABLE: registered in `.claude-plugin/plugin.json` `commands[]` in
+ *        the SAME delta (see below), present in `command-src/command-registry.json`
+ *        (re-extracted by the producer; the pre-bump RED run reported ZERO
+ *        `registry_stale` findings — round-trip byte-identical), and carried in
+ *        the regenerated `guild.inventory.json` (23 commands).
+ *
+ * MODIFIED ENTRIES — no deletions, no renames, in either tree:
+ *   commands/ (1 file):
+ *   (M1) `commands/initiative.md` — the D8 close-gate paragraph now states that
+ *        `initiative-gate.ts close-check` also verifies every path under
+ *        `close_gate.evidence` and every work-item `evidence_refs` entry exists —
+ *        a cited-but-absent artifact cannot pass close. Prose matching the
+ *        shipped gate behavior; no dispatch change.
+ *   skills/ (6 files, the A6C-accepted convergence delta):
+ *   (M2) `skills/meta/context-assemble/SKILL.md`, `skills/meta/execute-plan/SKILL.md`,
+ *        `skills/meta/execute-plan/dispatch.md`, `skills/meta/initiative/SKILL.md`,
+ *        `skills/meta/team-compose/SKILL.md`, `skills/meta/verify-done/SKILL.md` —
+ *        the settled convergence implementation reviewed and accepted by
+ *        FIC-50/A6C on direct settled-byte evidence (composite 550a7327…).
+ *        `skill-src/skill-registry.json` was re-extracted by the producers in the
+ *        same delta; the pre-bump RED run reported ZERO `registry_stale` findings.
+ *
+ * MANIFESTS: `plugin.json`'s full delta is exactly ONE inserted line —
+ * `commands[]` gains `"./commands/adopt.md"`. NO version change (the version
+ * tolerance is not why the hash moves), no agent/skill declaration change.
+ * `marketplace.json` is byte-untouched; its anchor is carried forward unchanged.
+ *
+ * Pins were computed AFTER the full pre-pin stability gate and re-verified
+ * identical afterwards (a moving tree is never ratified): scratch esbuild parity
+ * 21/21 hook bundles byte-identical to committed dist; `sync-module-resources
+ * --check` + `sync-live-resources --check` clean (886 resources / 31 modules);
+ * `guild.inventory.json` regeneration byte-identical + `check:claude-install`
+ * PASS (SC-2 + SC-7b).
+ *
+ * ANTI-VACUITY: all FOUR pin suites (p2-w1-sc9, p2-w2-sc5, p2-w3-sc6,
+ * check-surface-pins) were observed RED against the OLD pins on this exact tree
+ * before this bump — exactly 8 failures, whose tree-delta diagnostics named
+ * exactly the files enumerated above and NOTHING else (log preserved at the
+ * umbrella run `artifacts/FIC-51-LANDING-RATIFICATION-A7/logs/red-before.log`).
+ *
+ * ── 2026-08-19 re-ratification (PCL-FU-09 researcher-only network defaults) ──
+ * `skills` moves 2d3c295c → c69658a9. Exactly three deliberate skill files
+ * change: `audit/SKILL.md` corrects the researcher template path;
+ * `team-compose/SKILL.md` makes researcher the only default native-web role,
+ * binds any exception to a recorded operator decision, and states that the 15
+ * canonical scopes are runtime-materialized rather than fail-open prose; and
+ * `team-compose/gap-handling.md` removes the stale architect/security web-tool
+ * grants from the worked example. Their module-resource mirrors were generated
+ * from these source files and verified byte-identical. Commands and both
+ * manifests are unchanged. ANTI-VACUITY: SC-W2-5, SC-W3-6, and
+ * check-surface-pins were observed RED against the old skills pin and named only
+ * these three files before this bump.
+ *
+ * Re-ratified 2026-08-19 (PCL-FU-09 direct-subagent fail-closed follow-up) —
+ * `skills` moves c69658a9 → d84cd87d. Independent review found the D5 bare
+ * `subagent` rung still interpreted an omitted scope from prose even though the
+ * typed backends materialized canonical defaults. `execute-plan/SKILL.md` and
+ * `execute-plan/dispatch.md` now require the shipped deterministic resolver,
+ * while `team-compose/gap-handling.md` removes the last "absent means no
+ * scoping" claim. Round 3 then required the launcher-emitted, approval-checked
+ * team path + digest and approval-bound capability-scope equality. Round 4
+ * additionally binds participant id to role_ref, refuses duplicate ids,
+ * rejects a symlinked .guild/team root, and makes the direct Agent rung env-only
+ * rather than claiming the shared pathname writer closes its documented
+ * concurrent ancestor-swap race.
+ * `skill-src/skill-registry.json` was re-extracted and all module-resource
+ * mirrors were generated from source. ANTI-VACUITY: check-surface-pins was
+ * observed RED before each re-ratification. The Round-4 check reported exactly
+ * `tree_pin_stale skills/skills` at d84cd87d and computed 9ccfd177.
+ *
+ * Re-ratified 2026-08-20 (PCL-FU-09 Round-5 carriage enforcement) — `skills`
+ * moves 9ccfd177 → 5914b654. Independent review proved the direct Agent host
+ * contract does not declare child-env carriage and that launcher-owned scope
+ * files remained vulnerable to same-user pathname races. The deliberate surface
+ * delta is exactly `execute-plan/SKILL.md` + `execute-plan/dispatch.md`: scoped
+ * `agent`/`subagent` production dispatch now refuses until a verified host
+ * capability exists; scoped dry runs are labeled non-dispatchable previews; and
+ * cmux/tmux/remote carry scope only in the spawned process environment, never a
+ * pathname backstop. Registry and module-resource mirrors were regenerated from
+ * those sources. ANTI-VACUITY: check-surface-pins was observed RED against the
+ * Round-4 pin and named only `tree_pin_stale skills/skills`, computing 5914b654.
+ *
+ * Re-ratified 2026-08-20 (PCL-FU-09 Round-6 frozen/direct consumer gate) —
+ * `skills` moves 5914b654 → c1040a8a. Independent review found that the legacy
+ * frozen `agent`/`subagent` launcher branch did not apply Round-5's refusal and
+ * that the model-driven skill did not consume the launcher's allow/preview
+ * decision before `Agent()`. The launcher now evaluates explicit and frozen
+ * direct selections identically, and execute-plan requires the exact
+ * `dispatchAllowed:true` / `previewOnly:false` tuple before any lane work.
+ * Registry and module-resource mirrors were regenerated. ANTI-VACUITY:
+ * check-surface-pins was observed RED against the Round-5 pin and named only
+ * `tree_pin_stale skills/skills`, computing c1040a8a.
+ *
+ * Re-ratified 2026-08-20 (PCL-FU-09 Round-7 universal preview refusal) —
+ * `skills` moves c1040a8a → 3096e445. Independent review reproduced an
+ * unscoped custom-role `--dry-run` carrying the production authorization tuple.
+ * Execute-plan and dispatch.md now state the invariant across all roles: every
+ * direct preview is `dispatchAllowed:false` / `previewOnly:true`; only an
+ * unscoped production signal can be `true` / `false`. Registry and mirrors were
+ * regenerated. ANTI-VACUITY: check-surface-pins was observed RED against the
+ * Round-6 pin and named only `tree_pin_stale skills/skills`, computing 3096e445.
+ *
+ * Re-ratified 2026-08-20 (PCL-FU-08 pure launcher previews) — `skills` moves
+ * 3096e445 → 28af180d. Execute-plan now states the launcher-wide invariant:
+ * every dry run is write-free, consumes no approval override, and must
+ * re-present approval for a real dispatch. `skill-src/skill-registry.json` and
+ * module-resource mirrors were regenerated. ANTI-VACUITY: the full cross-
+ * cutting suite was observed RED against the Round-7 pin and named both the
+ * stale execute-plan registry and `tree_pin_stale skills/skills`, computing
+ * 28af180d.
+ *
+ * Re-ratified 2026-08-21 (PCL-FU-06 evidence-bound migration windows) —
+ * `commands` moves b4695c3f → 8d443082. `commands/adopt.md` now documents the
+ * attested beta-boundary, package-bound observation, and machine-derived
+ * advance-conformance contracts instead of caller-supplied releases, times,
+ * and booleans. `command-src/command-registry.json` was re-extracted in the
+ * same commit. ANTI-VACUITY: the full cross-cutting suite was observed RED
+ * against the prior pin and named only `commands/adopt.md`, the stale registry,
+ * and `tree_pin_stale commands/commands`, computing 8d443082.
+ *
+ * Re-ratified 2026-08-21 after exact-head defensive review. `commands` moves
+ * 8d443082 → c100f261 because `adopt.md` now states the online fail-closed
+ * provenance dependency and the beta-only v4 migration boundary. The registry
+ * was re-extracted byte-for-byte. This accompanies executable repairs for the
+ * review's fail-open producer, GitHub-host pinning, persisted soak validation,
+ * and transition recovery findings; it does not weaken any guard predicate.
+ *
+ * Re-ratified 2026-08-22 (PCL-FU-06 lifecycle-bound evidence completion) —
+ * `commands` moves c100f261 → 9f85a488 and `skills` moves 28af180d →
+ * 3dce0439. These are the deliberate beta.7 surfaces: `/guild:adopt` documents
+ * v2 observation sealing/restart and `guild:learn` publishes the immutable
+ * lifecycle-owned run-start baseline before compatibility work. The adopt
+ * registry was re-extracted byte-for-byte; module mirrors were regenerated.
+ * The beta.8 CI repair also narrows the legacy bare-restart detector to the
+ * closed `capability-adopt window restart` vocabulary and makes its legacy-close
+ * fixture use a production-valid run id. ANTI-VACUITY: PR #166 CI was RED
+ * against the prior pins and named exactly `commands/adopt.md` and
+ * `skills/knowledge/learn/SKILL.md` before these values were ratified.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
-  commands: "c32076fa811c45d181314e3b2664663b5bce5dd2",
-  skills: "1521571d8db27b878c439b67557cfd1e4f8ec98c",
+  commands: "9f85a4882d919db6195b7a93d4c4290510309ab4",
+  skills: "3dce04393e1538edbd0b9bf7b6a1460cb272bc77",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
 export const RATIFIED_MANIFESTS: Readonly<Record<string, string>> = Object.freeze({
-  ".claude-plugin/plugin.json": "969bb2779e081266c436a29b53f6b2fc8d5a16c550c8364df502e2ef1eba7a39",
+  ".claude-plugin/plugin.json": "ca3931c342966d58472b83f72861786c119ec393df5f1748ddc0e33c7bced8ae",
   ".claude-plugin/marketplace.json": "ad288b80dee07f85a94eee8b9c3e92b18705a94f98e104277a92b4d2e770e2af",
 });
 
@@ -487,6 +643,66 @@ export function worktreeTreeHash(p: string): string {
     return git(["write-tree", `--prefix=${p}`], env);
   } finally {
     fs.rmSync(path.dirname(tmpIndex), { recursive: true, force: true });
+  }
+}
+
+/**
+ * Cross-worker mutual exclusion for LIVE-TREE windows (FIC-48).
+ *
+ * SC-W2-5 and SC-W3-6 run in PARALLEL jest workers but share ONE live plugin
+ * tree. An anti-vacuity control that perturbs-and-restores a tracked file races
+ * every sibling that hashes (or perturbs) the same tree in that window: the
+ * sibling's `before` hash captures the probe, the restore-time assertion then
+ * sees a "moved" hash, and the guard false-fails with no residue on disk.
+ * Each suite therefore perturbs its OWN victim tree (W2-5: commands, W3-6:
+ * skills/.claude-plugin), and — because the strict zero-delta readers still
+ * hash EVERY pinned tree — both the perturbation windows and those readers
+ * take this exclusive lock, making the interleaving impossible rather than
+ * merely unlikely.
+ *
+ * Mechanics: `mkdirSync` of one lock dir (atomic on POSIX + win32), keyed on
+ * the resolved PLUGIN_ROOT so unrelated checkouts never contend. The wait spin
+ * uses `Atomics.wait` (synchronous sleep, no busy loop). Wall-clock appears
+ * ONLY in lock plumbing (stale-steal + timeout), never in an assertion.
+ */
+const LIVE_SURFACE_LOCK_DIR = path.join(
+  os.tmpdir(),
+  `guild-live-surface-${crypto.createHash("sha256").update(PLUGIN_ROOT).digest("hex").slice(0, 12)}.lockdir`
+);
+
+export function withLiveSurfaceLock<T>(fn: () => T): T {
+  const deadline = Date.now() + 120_000;
+  for (;;) {
+    try {
+      fs.mkdirSync(LIVE_SURFACE_LOCK_DIR);
+      break; // acquired
+    } catch {
+      // Stale-steal: a worker killed mid-window leaves the dir behind; a lock
+      // older than 60s cannot be a live perturbation window (each is sub-second).
+      try {
+        if (Date.now() - fs.statSync(LIVE_SURFACE_LOCK_DIR).mtimeMs > 60_000) {
+          fs.rmdirSync(LIVE_SURFACE_LOCK_DIR);
+          continue;
+        }
+      } catch {
+        continue; // vanished between mkdir and stat — retry immediately
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `live-surface lock: timed out waiting on ${LIVE_SURFACE_LOCK_DIR} — a sibling worker held its perturbation window > 120s`
+        );
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    try {
+      fs.rmdirSync(LIVE_SURFACE_LOCK_DIR);
+    } catch {
+      // already reclaimed by a stale-steal — nothing to release
+    }
   }
 }
 

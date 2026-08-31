@@ -1,2 +1,5 @@
 # schema_version: guild.skills_registry.v1
+# generated_by: guild.roster_resolve.v1
+# DERIVED INDEX of .guild/skills/*/SKILL.md — the SKILL.md files are the source of truth (D4).
+# Regenerate with: roster-resolve.ts --cwd <root> --write-registry. Do not hand-edit.
 skills: []

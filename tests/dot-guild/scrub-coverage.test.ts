@@ -38,6 +38,8 @@ const RUN_GITIGNORE = [
   "!.guild/runs/*/verify.md",
   "!.guild/runs/*/review.md",
   "!.guild/runs/*/provenance.json",
+  "!.guild/runs/*/logs/",
+  "!.guild/runs/*/logs/v1.4-events.jsonl",
   "!.guild/runs/*/summary.md",
   "!.guild/runs/*/share-payloads.flag",
   "",
@@ -122,6 +124,16 @@ describe("scrub-coverage guard (SC-7 blind spot): git-trackable but uncovered ru
     const { dir, cleanup } = setupRepo(true);
     try {
       mkRunFile(dir, "run-E", "run.yaml", "cwd: /Users/op/Projects/x\nroot: /Users/op/Projects/x\n");
+      const r = runAudit(dir);
+      expect(r.stdout).not.toMatch(/scrub-uncovered/);
+    } finally { cleanup(); }
+  });
+
+  test("canonical lifecycle log is trackable and covered without share-payloads.flag", () => {
+    const { dir, cleanup } = setupRepo(false);
+    try {
+      mkRunFile(dir, "run-F", "logs/v1.4-events.jsonl", "{}\n");
+      expect(spawnSync("git", ["-C", dir, "check-ignore", "-q", ".guild/runs/run-F/logs/v1.4-events.jsonl"]).status).toBe(1);
       const r = runAudit(dir);
       expect(r.stdout).not.toMatch(/scrub-uncovered/);
     } finally { cleanup(); }

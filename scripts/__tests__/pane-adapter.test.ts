@@ -16,8 +16,8 @@
  *       (d) codex --version failing → refuse regardless of auth
  *   - preflightTeam fail-fast: orchestrator uses the starting host; specialist
  *     host picked from host_kind or inherited from the orchestrator; failures collected.
- *   - TmuxTeamBackend.preflight() no-ops without a resolver (regression) and
- *     reports failures with one.
+ *   - TmuxTeamBackend.preflight() skips adapter probes without a resolver while
+ *     still enforcing exact Claude package activation, and reports adapter failures with one.
  *   - composeTmuxCommands with an all-claude resolver === the no-resolver path
  *     (byte-for-byte — issue #54's local Claude launch flags apply to BOTH,
  *     since composeTmuxCommands intercepts every claude host_kind before it
@@ -25,6 +25,8 @@
  *     codex specialist (unaffected by issue #54 — the resolver is still
  *     consulted for any non-claude host_kind).
  */
+
+import * as fs from "fs";
 
 import {
   buildAdapters,
@@ -44,6 +46,11 @@ import {
   type RunResult,
   type Specialist,
 } from "../lib/team-backend";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
+
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 const OK: RunResult = { status: 0, stdout: "ok", stderr: "" };
 const FAIL: RunResult = { status: 127, stdout: "", stderr: "not found" };
@@ -163,9 +170,8 @@ describe("ClaudePaneAdapter", () => {
     expect(bad.message).toMatch(/claude/);
   });
 
-  // D-CAP (Wave-3 security): GUILD_TASK_ID locates the scope file written by the launcher.
-  // The hook (pre-tool-use.ts:487-494) reads <runDir>/scope/<taskId>.json when
-  // GUILD_CAPABILITY_SCOPE is absent from env — it needs GUILD_TASK_ID to find the file.
+  // D-CAP (Wave-3 security): GUILD_TASK_ID binds the spawned process to its lane;
+  // GUILD_CAPABILITY_SCOPE is carried independently in that process environment.
   it("D-CAP: command exports GUILD_TASK_ID when taskId is present", () => {
     const c = adapter.command(spec({ taskId: "task-arch-001" }));
     expect(c).toContain("export GUILD_TASK_ID=task-arch-001");
@@ -178,7 +184,7 @@ describe("ClaudePaneAdapter", () => {
     expect(c).not.toContain("GUILD_TASK_ID");
   });
 
-  it("D-CAP: env includes GUILD_TASK_ID when taskId is present (scope-file locatable)", () => {
+  it("D-CAP: env includes GUILD_TASK_ID when taskId is present (lane-attributable)", () => {
     const e = adapter.env(spec({ taskId: "task-arch-001" }));
     expect(e["GUILD_TASK_ID"]).toBe("task-arch-001");
   });
@@ -335,7 +341,7 @@ describe("CodexPaneAdapter", () => {
     expect(c).not.toContain("GUILD_TASK_ID");
   });
 
-  it("D-CAP: env includes GUILD_TASK_ID when taskId is present (scope-file locatable)", () => {
+  it("D-CAP: env includes GUILD_TASK_ID when taskId is present (lane-attributable)", () => {
     const adapter = new CodexPaneAdapter({ env: {} });
     const e = adapter.env(spec({ hostKind: "codex", taskId: "task-sec-001" }));
     expect(e["GUILD_TASK_ID"]).toBe("task-sec-001");
@@ -493,8 +499,64 @@ describe("TmuxTeamBackend integration (regression-preserving)", () => {
     expect(inline.some((c) => c.includes("TaskCreated"))).toBe(false);
   });
 
-  it("TmuxTeamBackend.preflight() no-ops without a resolver (regression)", () => {
-    const backend = new TmuxTeamBackend({ run: runner({}) });
+  it("FU08: a scoped Codex tmux preview composes bare without any enforcement or substrate process", () => {
+    const run = jest.fn<ReturnType<RunFn>, Parameters<RunFn>>(() => OK);
+    const codex = new CodexPaneAdapter({
+      run,
+      env: { OPENAI_API_KEY: "sk-test" },
+      fs: AUTH_JSON_ABSENT,
+    });
+    const withLaunchArgs = jest.spyOn(codex, "withLaunchArgs").mockImplementation(() => {
+      run("node", ["planted-enforcement-probe"]);
+      return codex;
+    });
+    const backend = new TmuxTeamBackend({
+      run,
+      resolveAdapter: () => codex,
+    });
+    const result = backend.launch({
+      slug: "fu08-codex-preview",
+      runId: "run-fu08-codex-preview",
+      cwd: "/tmp/fu08-preview-project",
+      specialists: [{
+        name: "security",
+        scope: "audit",
+        dependsOn: [],
+        host_kind: "codex",
+        capability_scope: ["Read"],
+      }, {
+        name: "backend",
+        scope: "implement",
+        dependsOn: [],
+        host_kind: "pi",
+        capability_scope: ["Read"],
+      }],
+      targetName: "guild-fu08-preview",
+      mode: "new-session",
+      dryRun: true,
+      orchestratorHostKind: "codex",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(withLaunchArgs).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+    expect(result.plannedCommands.join("\n")).toContain("codex exec");
+    expect(result.plannedCommands.join("\n")).not.toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(result.notes.join(" ")).toMatch(/availability.*collision.*withheld.*real dispatch/i);
+    expect(result.notes.join(" ")).toMatch(/real dispatch may refuse.*before.*writ.*launch/i);
+    expect(result.notes.join(" ")).toMatch(/bypass.*withheld.*preview/i);
+    expect(result.notes.join(" ")).toMatch(/mixed-host adapter preflight withheld/i);
+  });
+
+  it("TmuxTeamBackend.preflight() skips adapter probes but still accepts exact activation without a resolver", () => {
+    const backend = new TmuxTeamBackend({
+      run: runner({}),
+      pluginOwnerRoot: EXACT_CLAUDE_PLUGIN_ROOT,
+      env: {
+        GUILD_PLUGIN_ROOT: EXACT_CLAUDE_PLUGIN_ROOT,
+        HOME: EXACT_CLAUDE_PLUGIN_ROOT,
+      } as NodeJS.ProcessEnv,
+    });
     expect(backend.preflight(SPECIALISTS)).toEqual({ ok: true, failures: [] });
   });
 

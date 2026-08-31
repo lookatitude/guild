@@ -190,6 +190,17 @@ required. **Frozen required fields:**
 - **Channels:** `assignment_path`, `handoff_path`, `heartbeat_path`,
   `cancel_channel`.
 
+**Receipt/pointer separation.** `handoff_path` is the immutable six-field
+`SubmittedHandoff` JSON pointer; it is not the worker-authored receipt. The worker
+writes the frozen `guild.handoff_receipt.v1` markdown document to
+`.guild/runs/<run_id>/handoffs/<worker_role>-<logical_task_id>.md`. On Claude's
+agent-team path, `TaskCompleted` validates and scrubs that canonical document,
+then the code-owned TaskCell boundary hashes the final bytes and publishes
+`handoff_path`. Its `claimed_changed_files` comes from frozen frontmatter, and
+`acceptance_tests_passed` includes only exact assignment test commands represented
+by passing `test` or `command` evidence. Neither artifact authorizes acceptance,
+dependency release, or termination by itself (D5).
+
 **Run-tree containment (resolved P0.5 invariant).** The assignment and every
 sibling record (task-run/attempt, context, trace, handoff, validation, acceptance,
 terminal) MUST live under the **same** `run_id` tree. Canonical path:
@@ -211,9 +222,10 @@ chat history (audit §Context and artifacts; consolidated under G10).
 ### D8 — Naming: "Team Lead" is the user-facing coordinator name
 
 Standardize the visible coordinator role on **"Team Lead"**. `team-prompt.ts`
-currently renders "Guild orchestrator"; reconcile under G13, or record the
-deliberate three-way distinction (product-level orchestrator / phase lead /
-task-cell lead) if one is chosen.
+renders "Team Lead" for the visible phase coordinator. Internal identifiers may
+still use `orchestrator` where they name the parent control-plane binding rather
+than a user-facing role; product orchestration, phase leadership, and task-cell
+lead binding remain separate identity layers.
 
 ## Consequences
 

@@ -74,10 +74,21 @@ fi
 # deletes or replaces a fresh same-session file — true idempotent at write time.
 # Failure is non-fatal: the router reads a degraded/absent manifest gracefully.
 _WRITE_CAPABILITY="${PLUGIN_ROOT}/scripts/write-host-capability.ts"
-if [[ -f "${_WRITE_CAPABILITY}" ]] && command -v npx &>/dev/null; then
-  npx --yes tsx "${_WRITE_CAPABILITY}" \
-    --cwd "${PWD}" \
-    --source "session-start" >/dev/null 2>&1 || true
+_PINNED_TSX="${PLUGIN_ROOT}/scripts/node_modules/.bin/tsx"
+if [[ -f "${_WRITE_CAPABILITY}" ]]; then
+  if [[ -x "${_PINNED_TSX}" ]]; then
+    "${_PINNED_TSX}" "${_WRITE_CAPABILITY}" \
+      --cwd "${PWD}" \
+      --source "session-start" >/dev/null 2>&1 || true
+  elif command -v npx &>/dev/null; then
+    # Installed packages may omit the development-only local tsx binary. Keep
+    # the historical fallback for that surface, but self-builds and tests use
+    # the pinned workspace runtime above and never depend on ambient npm cache
+    # or network state.
+    npx --yes tsx "${_WRITE_CAPABILITY}" \
+      --cwd "${PWD}" \
+      --source "session-start" >/dev/null 2>&1 || true
+  fi
 fi
 
 # ── Print status block ─────────────────────────────────────────────────────
@@ -191,6 +202,17 @@ SELFBUILD_FAIL
   # standing display turns the scan into a continuous-feedback hook without
   # adding wall-clock cost to every session start.
   SCAN_FILE="${PLUGIN_ROOT}/scripts/docs-hygiene/.last-scan.md"
+  # Hermetic W3 branch control: the real registration-budget test must prove
+  # the no-scan panel itself without mutating an operator's standing scan.
+if [[ "${GUILD_HOOK_TEST:-}" == "1" && "${GUILD_HOOK_TEST_NO_SCAN:-}" == "1" ]]; then
+  # The test supplies an isolated, known-absent path. Never assume that a
+  # fixed filename inside the live plugin checkout stays absent forever.
+  SCAN_FILE="${GUILD_HOOK_TEST_SCAN_FILE:-}"
+  if [[ -z "${SCAN_FILE}" ]]; then
+    echo "[Guild] hook test error: GUILD_HOOK_TEST_SCAN_FILE is required" >&2
+    exit 2
+  fi
+fi
   if [[ -f "${SCAN_FILE}" ]]; then
     # Extract counts from the scan output's summary markdown table.
     # Table shape: "| <Label> | <count> |". Use awk to take the 3rd pipe column

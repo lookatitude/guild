@@ -13,7 +13,7 @@
  * is preserved.
  */
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { appendFileSync, copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -89,14 +89,11 @@ describe("hook bundles never fire bundled CLI entry points", () => {
     }
   });
 
-  test("anti-vacuity: the marker list detects the real fixture string", () => {
-    // Guards the test itself: if the fixture is ever renamed, this fails loudly
-    // instead of the leak assertions passing vacuously.
-    const grep = execFileSync(
-      "grep",
-      ["-rl", "advisory-example-001", DIST],
-      { encoding: "utf8" },
-    );
-    expect(grep.trim().length).toBeGreaterThan(0);
+  test("anti-vacuity: a planted marker emitted by a copied real bundle is detected", () => {
+    const planted = join(scratch, "planted-cli-leak.js");
+    copyFileSync(join(DIST, "run-trace-start.js"), planted);
+    appendFileSync(planted, '\nprocess.stdout.write("advisory-example-001");\n', "utf8");
+    const out = runBundle(planted);
+    expect(LEAK_MARKERS.some((marker) => out.includes(marker))).toBe(true);
   });
 });

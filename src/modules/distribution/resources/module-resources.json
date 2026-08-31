@@ -5,10 +5,17 @@
   "entries": [
     {
       "category": "scripts",
+      "id": "activated-host-conformance",
+      "source_path": "scripts/activated-host-conformance.ts",
+      "resource_path": "resources/scripts/activated-host-conformance.ts",
+      "sha256": "ae97634d718b08848785068f660ebd355a009adfe1cad3889fcbce97fb099393"
+    },
+    {
+      "category": "scripts",
       "id": "build-host-packages",
       "source_path": "scripts/build-host-packages.ts",
       "resource_path": "resources/scripts/build-host-packages.ts",
-      "sha256": "7f20e4f7b50216d354f951ba65e0883e354d604f7e6dbb1ef6a8189d9a78d495"
+      "sha256": "3f7dbbc864960800263a4d9ae9e3fe3741edec00533934c1aa19fe3dc02fdfba"
     },
     {
       "category": "scripts",
@@ -43,7 +50,7 @@
       "id": "check-channel-integrity",
       "source_path": "scripts/check-channel-integrity.ts",
       "resource_path": "resources/scripts/check-channel-integrity.ts",
-      "sha256": "0378d766689d0eab6f3dc40ea34253e353ffc3ea10397960c82c96f1b8a6bffe"
+      "sha256": "ee5393cd79169008d5dddf80d5f147cbb3268289287d11eb4f2f055e665b24cc"
     },
     {
       "category": "scripts",
@@ -86,6 +93,20 @@
       "source_path": "scripts/description-optimizer.ts",
       "resource_path": "resources/scripts/description-optimizer.ts",
       "sha256": "4c13c7446d5c45ce50f9c809a7b545860ee1eca0eba1fa30754e480ba467fd53"
+    },
+    {
+      "category": "scripts",
+      "id": "emit-release-conformance",
+      "source_path": "scripts/emit-release-conformance.ts",
+      "resource_path": "resources/scripts/emit-release-conformance.ts",
+      "sha256": "e83be2200b89b2e9af41628750aa0a6444650ca02fbcf74cd35f305e365cc555"
+    },
+    {
+      "category": "scripts",
+      "id": "finalize-stable-release",
+      "source_path": "scripts/finalize-stable-release.ts",
+      "resource_path": "resources/scripts/finalize-stable-release.ts",
+      "sha256": "1e53903704c4651a17aaa48eda865fb42d26219ee8c91fc74857c3cc17fb6a70"
     },
     {
       "category": "scripts",
@@ -138,6 +159,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/release-package-identity",
+      "source_path": "scripts/lib/release-package-identity.ts",
+      "resource_path": "resources/scripts/lib/release-package-identity.ts",
+      "sha256": "a12f312b7f87f1a5e44b12ff61f385def7cb7a001eb9363cf758ad7e3df23667"
+    },
+    {
+      "category": "scripts",
       "id": "lib/result-contracts",
       "source_path": "scripts/lib/result-contracts.ts",
       "resource_path": "resources/scripts/lib/result-contracts.ts",
@@ -169,7 +197,7 @@
       "id": "lib/update-check",
       "source_path": "scripts/lib/update-check.ts",
       "resource_path": "resources/scripts/lib/update-check.ts",
-      "sha256": "9179ac56a28d7725706280b20488fc78c21a7ace7dd19475796d619d6ada0226"
+      "sha256": "0ecdefc7bf0432e74727287bee490412a51756ab7a3cd40f05e1d87769f37d99"
     },
     {
       "category": "scripts",
@@ -184,14 +212,21 @@
       "id": "registry-rollup",
       "source_path": "scripts/registry-rollup.ts",
       "resource_path": "resources/scripts/registry-rollup.ts",
-      "sha256": "2663c774fc4d2d43762d23d5d50b2321c2363e2aded53630ea61e8cc6a8e09f2"
+      "sha256": "53186f6b751d17a964246f126f9c409c8d729b47fa895c26d060e101f09d452b"
     },
     {
       "category": "scripts",
       "id": "release-changelog",
       "source_path": "scripts/release-changelog.ts",
       "resource_path": "resources/scripts/release-changelog.ts",
-      "sha256": "ef9f4bb21aee390e46b9baaaa2b8cfe84452f5af8489a9d45d072304ea7b8c76"
+      "sha256": "cbd3128a8c1bdbda2503864eb49bb496b90c37ad7468769d37604c36c5558b83"
+    },
+    {
+      "category": "scripts",
+      "id": "sign-release-attestation",
+      "source_path": "scripts/sign-release-attestation.ts",
+      "resource_path": "resources/scripts/sign-release-attestation.ts",
+      "sha256": "1d0c2d8cd010c55e2fc25cc8db9bed1c36f82546e161b655706dc0f377349883"
     },
     {
       "category": "scripts",

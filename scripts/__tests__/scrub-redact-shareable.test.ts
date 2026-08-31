@@ -1,0 +1,235 @@
+import { createHash } from "node:crypto";
+
+import { redactShareableFile } from "../../src/modules/security/workflows/scrub-redact";
+
+const SHA = "0123456789abcdef".repeat(4);
+const digest = (label: string): string => createHash("sha256").update(label).digest("hex");
+
+describe("shareable-file schema-bound SHA-256 redaction", () => {
+  it("preserves only the guild.run.v1 start-snapshot SHA while redacting paths and credentials", () => {
+    const input = [
+      "schema_version: guild.run.v1",
+      "run_id: run-20260822-080000-public-projection",
+      "cwd: /Users/operator/Projects/private",
+      "capability_start_snapshot_ref:",
+      "  path: capability/run-start-snapshot.json",
+      `  sha256: ${SHA}`,
+      `operator_note: api_key=sk-abcdefghijklmnop`,
+      `arbitrary_entropy: ${"f".repeat(64)}`,
+      "",
+    ].join("\n");
+    const result = redactShareableFile(input, "run.yaml");
+    expect(result.out).toContain(`sha256: ${SHA}`);
+    expect(result.out).not.toContain("/Users/operator");
+    expect(result.out).not.toContain("sk-abcdefghijklmnop");
+    expect(result.out).not.toContain("f".repeat(64));
+    expect(result.opPaths).toBe(1);
+    expect(result.secrets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "api_key-assignment" }),
+      expect.objectContaining({ category: "high-entropy hex string (potential secret)" }),
+    ]));
+  });
+
+  it("fails closed when the reviewed guild.run.v1 SHA value is duplicated elsewhere", () => {
+    const input = [
+      "schema_version: guild.run.v1",
+      "run_id: run-20260822-080000-duplicate-hash",
+      "capability_start_snapshot_ref:",
+      "  path: capability/run-start-snapshot.json",
+      `  sha256: ${SHA}`,
+      `operator_note: ${SHA}`,
+      "",
+    ].join("\n");
+    const result = redactShareableFile(input, "run.yaml");
+    expect(result.out).not.toContain(SHA);
+    expect(result.secrets).toHaveLength(2);
+  });
+
+  it("preserves a reviewed SHA-256 field while redacting paths and credentials", () => {
+    const input = `${JSON.stringify({
+      schema_version: "guild.activated_host_public_evidence.v1",
+      public_evidence_sha256: SHA,
+      note: "/Users/operator/Projects/private",
+      token: "sk-abcdefghijklmnop",
+    }, null, 2)}\n`;
+    const result = redactShareableFile(input, "provenance.json");
+    expect(result.out).toContain(SHA);
+    expect(result.out).not.toContain("/Users/operator");
+    expect(result.out).not.toContain("sk-abcdefghijklmnop");
+    expect(result.opPaths).toBe(1);
+    expect(result.secrets.length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ["unknown schema", { schema_version: "attacker.v1", manifest_sha256: SHA }],
+    ["unreviewed field", { schema_version: "guild.activated_host_public_evidence.v1", arbitrary_entropy: SHA }],
+  ])("redacts 64-hex from %s", (_label, value) => {
+    const result = redactShareableFile(`${JSON.stringify(value)}\n`, "provenance.json");
+    expect(result.out).not.toContain(SHA);
+    expect(result.secrets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "high-entropy hex string (potential secret)" }),
+    ]));
+  });
+
+  it("does not preserve an unreviewed occurrence that equals a reviewed hash", () => {
+    const input = `${JSON.stringify({
+      schema_version: "guild.activated_host_public_manifest.v1",
+      manifest_sha256: SHA,
+      token: SHA,
+    }, null, 2)}\n`;
+    const result = redactShareableFile(input, "provenance.json");
+    const output = JSON.parse(result.out) as Record<string, unknown>;
+    expect(output.manifest_sha256).toBe(SHA);
+    expect(output.token).not.toBe(SHA);
+    expect(result.secrets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "high-entropy hex string (potential secret)" }),
+    ]));
+  });
+
+  it("does not preserve a reviewed field name at an unapproved structural path", () => {
+    const input = `${JSON.stringify({
+      schema_version: "guild.activated_host_public_manifest.v1",
+      manifest_sha256: SHA,
+      unreviewed: { sha256: "f".repeat(64) },
+    }, null, 2)}\n`;
+    const result = redactShareableFile(input, "provenance.json");
+    expect(result.out).toContain(SHA);
+    expect(result.out).not.toContain("f".repeat(64));
+    expect(result.secrets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "high-entropy hex string (potential secret)" }),
+    ]));
+  });
+
+  it("preserves only reviewed hash fields in canonical JSONL lines", () => {
+    const input = `${JSON.stringify({
+      schema_version: "guild.trace.dispatch.v1",
+      tree_sha256: SHA,
+      arbitrary_entropy: "f".repeat(64),
+    })}\n`;
+    const result = redactShareableFile(input, "logs/v1.4-events.jsonl");
+    expect(result.out).toContain(SHA);
+    expect(result.out).not.toContain("f".repeat(64));
+  });
+
+  it("preserves only the reviewed substantive-operation bindings", () => {
+    const input = `${JSON.stringify({
+      schema_version: "guild.capability_substantive_operation.v1",
+      compatibility_payload_sha256: SHA,
+      assignment_sha256: "1".repeat(64),
+      handoff_sha256: "2".repeat(64),
+      handoff_receipt_sha256: "3".repeat(64),
+      validation_sha256: "4".repeat(64),
+      attempt_sha256: "5".repeat(64),
+      acceptance_sha256: "6".repeat(64),
+      arbitrary_entropy: "f".repeat(64),
+    }, null, 2)}\n`;
+    const result = redactShareableFile(input, "substantive-operation.json");
+    expect(result.out).toContain(SHA);
+    expect(result.out).toContain("1".repeat(64));
+    expect(result.out).toContain("2".repeat(64));
+    expect(result.out).toContain("3".repeat(64));
+    expect(result.out).not.toContain("f".repeat(64));
+  });
+
+  it("preserves only contract hash fields in a retained task assignment", () => {
+    const input = `${JSON.stringify({
+      schema_version: "guild.task_assignment.v2",
+      specialist_type_hash: SHA,
+      specialist_profile_hash: "1".repeat(64),
+      context_bundle_hash: `sha256:${"2".repeat(64)}`,
+      host_capabilities_hash: `sha256:${"3".repeat(64)}`,
+      arbitrary_entropy: "f".repeat(64),
+    }, null, 2)}\n`;
+    const result = redactShareableFile(input, "assignment.json");
+    expect(result.out).toContain(SHA);
+    expect(result.out).toContain("1".repeat(64));
+    expect(result.out).toContain(`sha256:${"2".repeat(64)}`);
+    expect(result.out).toContain(`sha256:${"3".repeat(64)}`);
+    expect(result.out).not.toContain("f".repeat(64));
+  });
+
+  it("redacts personal and customer identifiers from retained task evidence", () => {
+    const input = `${JSON.stringify({
+      schema_version: "guild.task_assignment.v2",
+      objective: "Contact alice@example.com about account acct_12345 and customer_id=cust-7788",
+    }, null, 2)}\n`;
+    const result = redactShareableFile(input, "assignment.json");
+    expect(result.out).not.toContain("alice@example.com");
+    expect(result.out).not.toContain("acct_12345");
+    expect(result.out).not.toContain("cust-7788");
+    expect(result.secrets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "email-address" }),
+      expect.objectContaining({ category: "customer-identifier" }),
+    ]));
+  });
+
+  it.each([
+    ["assignment.json", JSON.stringify({
+      schema_version: "guild.task_assignment.v2",
+      specialist_type_hash: `sha256:${digest("type")}`,
+      specialist_profile_hash: `sha256:${digest("profile")}`,
+      context_bundle_hash: `sha256:${digest("context")}`,
+      host_capabilities_hash: `sha256:${digest("capabilities")}`,
+      objective: digest("planted-assignment-entropy"),
+    }, null, 2), [digest("type"), digest("profile"), digest("context"), digest("capabilities")], digest("planted-assignment-entropy")],
+    ["handoff.json", JSON.stringify({
+      receipt_id: `handoff-sha256:${digest("receipt-bytes")}`,
+      receipt_path: ".guild/runs/run-20260825-120000-projection/handoffs/backend-T1.md",
+      schema_valid: true,
+      claimed_changed_files: [digest("planted-handoff-entropy")],
+      acceptance_tests_passed: [],
+      submitted_at: "2026-08-25T12:00:00.000Z",
+    }, null, 2), [digest("receipt-bytes")], digest("planted-handoff-entropy")],
+    ["handoff.json", JSON.stringify({
+      receipt_id: `handoff-sha256:${digest("retained-receipt-bytes")}`,
+      receipt_path: ".guild/runs/run-20260825-120000-projection/task-cells/T1/attempts/2/instances/T1.a2.i-codex/handoff-receipt.md",
+      schema_valid: true,
+      claimed_changed_files: [digest("planted-retained-handoff-entropy")],
+      acceptance_tests_passed: [],
+      submitted_at: "2026-08-25T12:00:00.000Z",
+    }, null, 2), [digest("retained-receipt-bytes")], digest("planted-retained-handoff-entropy")],
+    ["handoff-receipt.md", [
+      "---",
+      "schema_version: guild.handoff_receipt.v1",
+      "ids: { initiative_id: null, run_id: run-20260825-120000-projection, task_id: T1, task_run_id: T1.tr1 }",
+      "specialist: backend",
+      "host: { selected: codex-local, degraded: false, native_ref: null, independence: strong }",
+      "scope: { objective: test, in_scope: [src/a.ts], out_of_scope_touched: [] }",
+      "status: completed",
+      `changed_files: [{ path: src/a.ts, change: modified, sha256_after: ${digest("changed-file")} }]`,
+      "evidence: []",
+      "assumptions: []",
+      "open_risks: []",
+      "followups: []",
+      "produced_at: 2026-08-25T12:00:00.000Z",
+      "---",
+      "",
+      `planted prose ${digest("planted-receipt-entropy")}`,
+      "",
+      "```guild.handoff.v2",
+      JSON.stringify({ schema_version: "guild.handoff.v2", task_id: "T1", tier: "mid", status: "done", summary: "done", artifacts: [], issues: [] }),
+      "```",
+    ].join("\n"), [digest("changed-file")], digest("planted-receipt-entropy")],
+    ["handoff-validation.json", JSON.stringify({
+      schema_version: "guild.handoff_validation.v1",
+      receipt_id: `handoff-sha256:${digest("receipt-bytes")}`,
+      reason: digest("planted-validation-entropy"),
+    }, null, 2), [digest("receipt-bytes")], digest("planted-validation-entropy")],
+    ["attempt.json", JSON.stringify({
+      schema_version: "guild.task_attempt.v1",
+      terminal_reason: digest("planted-attempt-entropy"),
+    }, null, 2), [], digest("planted-attempt-entropy")],
+    ["handoff-acceptance.json", JSON.stringify({
+      schema_version: "guild.handoff_acceptance.v1",
+      receipt_id: `handoff-sha256:${digest("receipt-bytes")}`,
+      authorities_observed: [{ authority: "team_lead", decision: "accepted", reason: digest("planted-acceptance-entropy") }],
+    }, null, 2), [digest("receipt-bytes")], digest("planted-acceptance-entropy")],
+  ])("preserves only contract identities in projected TaskCell artifact %s", (rel, body, preserved, planted) => {
+    const result = redactShareableFile(`${body}\n`, rel as string);
+    for (const hash of preserved as string[]) expect(result.out).toContain(hash);
+    expect(result.out).not.toContain(planted as string);
+    expect(result.secrets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: "high-entropy hex string (potential secret)" }),
+    ]));
+  });
+});

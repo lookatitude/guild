@@ -5,8 +5,9 @@
   "kind": "capability",
   "implementation_mode": "workflow-backed",
   "description": "Owns the user-visible phase command spine and phase producer skills.",
-  "depends_on": ["capability", "config", "context", "dispatch", "documents", "host-runtime", "kernel", "review", "security", "state", "teams", "telemetry"],
+  "depends_on": ["capability", "config", "context", "dispatch", "distribution", "documents", "host-runtime", "kernel", "review", "security", "state", "teams", "telemetry"],
   "lifecycle_slots": ["init", "ideate", "plan", "build", "qa", "ops"],
+  "resource_projection_entrypoints": ["lib/run-record-validate"],
   "owns": {
     "commands": ["build", "goal", "guild", "ideate", "init", "ops", "plan", "qa", "resume", "status"],
     "skills": [
@@ -23,11 +24,13 @@
       "mark-lane-dead",
       "resume-lanes",
       "retry-lane",
+      "validate-run-record",
       "write-run-manifest",
       "write-task-run",
       "lib/run-binding",
       "lib/run-lifecycle",
       "lib/run-manifest-wiring",
+      "lib/run-record-validate",
       "lib/runstart-preflight"
     ]
   }

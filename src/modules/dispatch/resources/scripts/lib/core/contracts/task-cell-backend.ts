@@ -166,7 +166,7 @@ export type CellFanout = "lead_only" | "lead_plus_one" | "lead_plus_many";
  * `TeamBackendKind` 1:1 so the G3/G4 rewire is a straight mapping — deliberately
  * re-declared rather than imported, to keep this contract free of the host graph.
  */
-export type TaskCellSubstrate = "tmux" | "in-process" | "serial" | "remote";
+export type TaskCellSubstrate = "tmux" | "cmux" | "in-process" | "serial" | "remote";
 
 // ── D3 · Identity ────────────────────────────────────────────────────────────
 
@@ -428,10 +428,14 @@ export interface TaskCellPaths {
   cell_dir: string;
   attempt_dir: string;
   instance_dir: string;
+  /** `guild.agent_instance.v1` — the concrete host/substrate identity for this attempt. */
+  instance_path: string;
   /** `guild.task_attempt.v1` — one immutable file per attempt (above the instances). */
   attempt_path: string;
   assignment_path: string;
   handoff_path: string;
+  /** Immutable receipt bytes retained for this exact attempt + instance. */
+  receipt_path: string;
   heartbeat_path: string;
   cancel_channel: string;
   validation_path: string;
@@ -471,9 +475,11 @@ export function taskCellPaths(
     cell_dir,
     attempt_dir,
     instance_dir,
+    instance_path: path.join(instance_dir, "instance.json"),
     attempt_path: path.join(attempt_dir, "attempt.json"),
     assignment_path: path.join(instance_dir, "assignment.json"),
     handoff_path: path.join(instance_dir, "handoff.json"),
+    receipt_path: path.join(instance_dir, "handoff-receipt.md"),
     heartbeat_path: path.join(instance_dir, "heartbeat.json"),
     cancel_channel: path.join(instance_dir, "cancel"),
     validation_path: path.join(instance_dir, "handoff-validation.json"),
@@ -660,6 +666,56 @@ export function validateTaskAssignmentV2(obj: unknown): TaskAssignmentV2 | null 
   }
 
   return { ...(o as unknown as TaskAssignmentV2Base), ...lineage, ...lead } as TaskAssignmentV2;
+}
+
+/**
+ * Fail-closed validator for the production `guild.agent_instance.v1` record.
+ * The type alone cannot protect the on-disk boundary, so every enum, nullable
+ * terminal field, budget, and projection is checked before a runtime identity
+ * is accepted or reconstructed.
+ */
+export function validateAgentInstanceV1(obj: unknown): AgentInstanceV1 | null {
+  if (obj === null || typeof obj !== "object") return null;
+  const o = obj as Record<string, unknown>;
+  if (o["schema_version"] !== AGENT_INSTANCE_SCHEMA) return null;
+  const requiredStrings = [
+    "instance_id",
+    "run_id",
+    "cell_id",
+    "logical_task_id",
+    "task_run_id",
+    "attempt_id",
+    "worker_role",
+    "specialist_type_id",
+    "specialist_type_version",
+    "specialist_type_hash",
+    "specialist_profile_id",
+    "specialist_profile_hash",
+    "host_id",
+    "adapter_id",
+    "host_capabilities_hash",
+    "context_bundle_id",
+    "context_bundle_hash",
+    "created_at",
+  ] as const;
+  for (const key of requiredStrings) {
+    if (!isStr(o[key])) return null;
+  }
+  if (!Number.isInteger(o["attempt"]) || (o["attempt"] as number) < 1) return null;
+  if (!(["tmux", "in-process", "serial", "remote"] as readonly string[]).includes(o["substrate"] as string)) {
+    return null;
+  }
+  if (!(o["model_tier"] === "cheap" || o["model_tier"] === "mid" || o["model_tier"] === "powerful")) {
+    return null;
+  }
+  if (!(o["model_id"] === null || typeof o["model_id"] === "string")) return null;
+  if (!isProjection(o["projection"]) || !isBudgets(o["budgets"])) return null;
+  if (!(o["started_at"] === null || typeof o["started_at"] === "string")) return null;
+  if (!(o["terminated_at"] === null || typeof o["terminated_at"] === "string")) return null;
+  const terminal = o["terminal_state"];
+  if (!(terminal === null || (typeof terminal === "string" && TERMINAL_SET.has(terminal)))) return null;
+  if (!(o["terminal_reason"] === null || typeof o["terminal_reason"] === "string")) return null;
+  return o as unknown as AgentInstanceV1;
 }
 
 /**

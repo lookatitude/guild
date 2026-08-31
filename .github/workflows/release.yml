@@ -1,117 +1,172 @@
-name: Tag + GitHub Release on release/v*.* PR merge
+name: Publish stable release after next merges to main
 
-# Fires when a PR from a `release/v*` branch merges into `main`.
-# Creates an annotated tag at the merge commit and opens a GitHub Release
-# whose notes are the PR body verbatim.
-#
-# Why on `pull_request: closed` (with `merged == true`) rather than
-# `push: branches: [main]`: the PR event has the head ref + body
-# directly available via `${{ github.event.pull_request }}`, with no
-# need to parse merge-commit-message conventions. The push event
-# would require regex on the merge commit's message ("Merge pull
-# request #N from <owner>/release/vX.Y.Z") — fragile if a future
-# repo changes its merge commit format.
-#
-# Idempotent: the action checks whether the tag already exists before
-# pushing, so a re-run (e.g. after a workflow re-trigger) does not
-# fail. Manual operator-side tags (the v1.0/1.0.1 backfilled era)
-# are preserved unchanged.
-#
-# Codifies `.guild/wiki/standards/release-discipline.md` rule 7.
+# The reviewed release unit is the exact same-repository `next -> main` PR.
+# After merge, CI re-runs the promotion gate, derives the bare stable tag from
+# the reviewed beta manifest, tags that merge commit, and publishes the GitHub
+# Release. It does not create a release branch or rewrite protected branches.
 
 on:
   pull_request:
     types: [closed]
     branches: [main]
 
-permissions:
-  contents: write   # required for tag push + release create
+concurrency:
+  group: stable-release
+  cancel-in-progress: false
 
 jobs:
   release:
     if: |
       github.event.pull_request.merged == true &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      startsWith(github.event.pull_request.head.ref, 'release/v')
+      github.event.pull_request.head.ref == 'next'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      attestations: read
     steps:
-      - name: Checkout main at the merge commit
-        uses: actions/checkout@v4
+      - name: Checkout the reviewed merge commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Derive version tag from branch name
-        id: ver
-        run: |
-          set -euo pipefail
-          # head.ref is e.g. "release/v1.4.0" → tag is "v1.4.0"
-          BRANCH="${{ github.event.pull_request.head.ref }}"
-          TAG="${BRANCH#release/}"
-          # Defensive shape check — only allow vX.Y.Z[-prerelease].
-          # Prerelease segment supports "-rc1", "-beta2", etc. so we
-          # don't paint ourselves into a corner if a future release
-          # cuts an RC.
-          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-            echo "release.yml refusing tag '$TAG' from branch '$BRANCH' — does not match v[major].[minor].[patch][-prerelease]" >&2
-            exit 1
-          fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - name: Set up Node 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
 
-      - name: Check what already exists (idempotent re-runs)
-        id: tag_check
+      - name: Install scripts dependencies
+        run: npm --prefix scripts ci --prefer-offline
+
+      - name: Fetch protected channels and release tags
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.ver.outputs.tag }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          # Tag and GitHub Release are checked SEPARATELY: a failed run may have
-          # pushed the tag but died before `gh release create` — the rerun must
-          # still create the missing Release (release-discipline rule 7).
-          if gh api "repos/${{ github.repository }}/git/ref/tags/$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists — will not re-create it. (Idempotent re-run.)"
-            echo "exists=true" >> "$GITHUB_OUTPUT"
+          git fetch origin main next --tags --force
+          test "$(git rev-parse "$MERGE_SHA^{tree}")" = "$(git rev-parse "$PR_HEAD_SHA^{tree}")"
+          git merge-base --is-ancestor "$MERGE_SHA" origin/main
+
+      - name: Verify the v2.7.0 GitHub OIDC provenance attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./.claude-plugin/plugin.json').version")"
+          if [[ "$VERSION" == 2.7.0-beta.* ]]; then
+            gh attestation verify .guild/artifacts/release/v2.7.0/release-basis.json \
+              --repo "$GITHUB_REPOSITORY" \
+              --cert-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release-evidence-attestation.yml@refs/heads/next" \
+              --source-ref refs/heads/next \
+              --source-digest "$PR_HEAD_SHA" \
+              --deny-self-hosted-runners
+          fi
+
+      - name: Re-verify hash-bound promotion evidence
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          MERGE_HEAD: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain)"
+          npm --prefix scripts run check:channel-integrity -- promotion \
+            --source-branch next \
+            --head "$MERGE_HEAD" \
+            --stable-ref "$BASE_SHA" \
+            --root ..
+
+      - name: Derive stable identity from the reviewed beta manifest
+        id: version
+        run: |
+          set -euo pipefail
+          npm --prefix scripts run finalize:stable-release -- inspect \
+            --root .. \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Check tag and release independently for idempotent re-runs
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if git rev-parse --verify --quiet "refs/tags/$TAG^{commit}" >/dev/null; then
+            TAG_SHA="$(git rev-parse "refs/tags/$TAG^{commit}")"
+            if [ "$TAG_SHA" != "$MERGE_SHA" ]; then
+              echo "::error::Immutable $TAG points to $TAG_SHA, expected reviewed merge $MERGE_SHA."
+              exit 1
+            fi
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists — will not re-create it. (Idempotent re-run.)"
             echo "release_exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "release_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create + push annotated tag at the merge commit
-        if: steps.tag_check.outputs.exists == 'false'
+      - name: Tag the reviewed merge commit
+        if: steps.existing.outputs.tag_exists == 'false'
         env:
-          TAG: ${{ steps.ver.outputs.tag }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
+          GH_TOKEN: ${{ github.token }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" "$MERGE_SHA" -m "$PR_TITLE"
-          git push origin "$TAG"
+          TAG_OBJECT_SHA="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/git/tags" \
+            -f tag="$TAG" \
+            -f message="$PR_TITLE" \
+            -f object="$MERGE_SHA" \
+            -f type=commit \
+            --jq .sha)"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/tags/$TAG" \
+            -f sha="$TAG_OBJECT_SHA" >/dev/null
 
-      - name: Create GitHub Release with PR body as notes
-        if: steps.tag_check.outputs.release_exists == 'false'
+      - name: Verify published channel state
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.ver.outputs.tag }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch origin main next "refs/tags/$TAG:refs/tags/$TAG" --force
+          npm --prefix scripts run check:channel-integrity -- \
+            --stable origin/main \
+            --beta origin/next
+
+      - name: Decide whether this version may become Latest
+        if: steps.existing.outputs.release_exists == 'false'
+        id: release-order
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.stable_version }}
+        run: |
+          set -euo pipefail
+          CURRENT_TAG="$(gh release view --json tagName --jq .tagName)"
+          npm --prefix scripts run finalize:stable-release -- latest \
+            --root .. \
+            --candidate-version "$VERSION" \
+            --current-tag "$CURRENT_TAG" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Create the GitHub Release if it is missing
+        if: steps.existing.outputs.release_exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
-          # Write the body to a temp file so multiline content survives
-          # without escape gymnastics. `gh release create` handles
-          # `--notes-file -` from stdin too, but a temp file makes the
-          # workflow easier to debug if the body has unusual chars.
           BODY_FILE="$(mktemp)"
+          trap 'rm -f "$BODY_FILE"' EXIT
           printf '%s' "$PR_BODY" > "$BODY_FILE"
-          # Belt-and-braces: if the PR body (usually seeded by
-          # scripts/release-changelog.ts --notes, which includes the link)
-          # lacks a Full Changelog compare line, append one.
           if ! grep -q "Full Changelog" "$BODY_FILE"; then
             PREV_TAG="$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || true)"
             if [ -n "$PREV_TAG" ]; then
@@ -119,15 +174,8 @@ jobs:
                 "${{ github.repository }}" "$PREV_TAG" "$TAG" >> "$BODY_FILE"
             fi
           fi
-          # A -suffixed tag (v2.1.0-rc1) is a PRERELEASE: published as such and
-          # never marked latest — stable-channel followers see only full releases.
-          if [[ "$TAG" == *-* ]]; then
-            RELEASE_FLAGS="--prerelease"
+          if [ "${{ steps.release-order.outputs.latest }}" = "true" ]; then
+            gh release create "$TAG" --title "$PR_TITLE" --notes-file "$BODY_FILE" --latest
           else
-            RELEASE_FLAGS="--latest"
+            gh release create "$TAG" --title "$PR_TITLE" --notes-file "$BODY_FILE" --latest=false
           fi
-          gh release create "$TAG" \
-            --title "$PR_TITLE" \
-            --notes-file "$BODY_FILE" \
-            $RELEASE_FLAGS
-          rm -f "$BODY_FILE"

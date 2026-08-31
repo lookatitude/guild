@@ -5,6 +5,13 @@
   "entries": [
     {
       "category": "commands",
+      "id": "adopt",
+      "source_path": "commands/adopt.md",
+      "resource_path": "resources/commands/adopt.md",
+      "sha256": "dbc7275a67287e43659aeba7705b92687716194c10546c0cbac92c3f2e3d9a43"
+    },
+    {
+      "category": "commands",
       "id": "models",
       "source_path": "commands/models.md",
       "resource_path": "resources/commands/models.md",
@@ -15,21 +22,35 @@
       "id": "capability-adopt",
       "source_path": "scripts/capability-adopt.ts",
       "resource_path": "resources/scripts/capability-adopt.ts",
-      "sha256": "a1ea07faafdbdde215dcd2f55cae7063000805f4505c8fff7acbe0e452eae0c5"
+      "sha256": "99be5da0952b53a530e6e498c12e258232fec2b9d5e2fd3574b3ee123e974a7b"
+    },
+    {
+      "category": "scripts",
+      "id": "capability-migration-boundary",
+      "source_path": "scripts/capability-migration-boundary.ts",
+      "resource_path": "resources/scripts/capability-migration-boundary.ts",
+      "sha256": "ff090a69aab8ebbfce4788cc9c13b6aa782fc9cab4cb2a4652b2b15106d4b45b"
     },
     {
       "category": "scripts",
       "id": "capability-profile",
       "source_path": "scripts/capability-profile.ts",
       "resource_path": "resources/scripts/capability-profile.ts",
-      "sha256": "55674fc362817e1f3c24c8a1cf8d47a588086985300b9ad2c529a65418860b6d"
+      "sha256": "5b5be6c1666e0349e8dc431d7deb691908831db93a0761924f8ea0abb51060e8"
+    },
+    {
+      "category": "scripts",
+      "id": "definition-ref-for-dispatch",
+      "source_path": "scripts/definition-ref-for-dispatch.ts",
+      "resource_path": "resources/scripts/definition-ref-for-dispatch.ts",
+      "sha256": "f1092578e78d1f4c2af78fb95a5fabc974d35294aaf7d0bebb3a6c2f75ea1e9b"
     },
     {
       "category": "scripts",
       "id": "lib/capability/adoption-migrate",
       "source_path": "scripts/lib/capability/adoption-migrate.ts",
       "resource_path": "resources/scripts/lib/capability/adoption-migrate.ts",
-      "sha256": "eccc409014da3e0365677f2c1a05d1dffbd663199469ac4de4b75ed535afe0bd"
+      "sha256": "12d9136288cad0f05e49933a8888d826292c3c7b42ce4fe6422883a8f42d851d"
     },
     {
       "category": "scripts",
@@ -54,6 +75,13 @@
     },
     {
       "category": "scripts",
+      "id": "lib/capability/compatibility-loader",
+      "source_path": "scripts/lib/capability/compatibility-loader.ts",
+      "resource_path": "resources/scripts/lib/capability/compatibility-loader.ts",
+      "sha256": "e6b897a1eb11a937aae7c072077c301196fb5407798625208e805a3928a1dc70"
+    },
+    {
+      "category": "scripts",
       "id": "lib/capability/compatibility-usage",
       "source_path": "scripts/lib/capability/compatibility-usage.ts",
       "resource_path": "resources/scripts/lib/capability/compatibility-usage.ts",
@@ -68,10 +96,31 @@
     },
     {
       "category": "scripts",
+      "id": "lib/capability/definition-ref-for-dispatch",
+      "source_path": "scripts/lib/capability/definition-ref-for-dispatch.ts",
+      "resource_path": "resources/scripts/lib/capability/definition-ref-for-dispatch.ts",
+      "sha256": "5c2bdec0467dee52eaa2b17ded40c7b36836d0b1bbd3292d2b5e3680c953a93a"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/migration-evidence",
+      "source_path": "scripts/lib/capability/migration-evidence.ts",
+      "resource_path": "resources/scripts/lib/capability/migration-evidence.ts",
+      "sha256": "9e26f3ac6b8a031691619bab8e29c7d405520a98120fda668d387cfe76cbe8b3"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/migration-window",
+      "source_path": "scripts/lib/capability/migration-window.ts",
+      "resource_path": "resources/scripts/lib/capability/migration-window.ts",
+      "sha256": "479b49a3c1653464f8aa171e758258316c740040bf8b7091326344442e2549eb"
+    },
+    {
+      "category": "scripts",
       "id": "lib/capability/profile-emit",
       "source_path": "scripts/lib/capability/profile-emit.ts",
       "resource_path": "resources/scripts/lib/capability/profile-emit.ts",
-      "sha256": "89bb86ac54543dddfc97cc73002df138acc694e0a24197c1d2048e1e2af283ec"
+      "sha256": "8c4aa1e12e1950645542f4f7e6a541d84984f2c47fe589dd3e46a82b1b15cec4"
     },
     {
       "category": "scripts",
@@ -96,6 +145,20 @@
     },
     {
       "category": "scripts",
+      "id": "lib/capability/self-build-canonicalize",
+      "source_path": "scripts/lib/capability/self-build-canonicalize.ts",
+      "resource_path": "resources/scripts/lib/capability/self-build-canonicalize.ts",
+      "sha256": "1aba47d3a4116db18ddb4409cda4aa86c50bb27226ffe684e902fb3ac7ca29be"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/strangler-control",
+      "source_path": "scripts/lib/capability/strangler-control.ts",
+      "resource_path": "resources/scripts/lib/capability/strangler-control.ts",
+      "sha256": "40f65ce9752b8a16e7996f219e749aaa027e308a67c542ff213e5f0e81870f8b"
+    },
+    {
+      "category": "scripts",
       "id": "lib/capability/tiebreak",
       "source_path": "scripts/lib/capability/tiebreak.ts",
       "resource_path": "resources/scripts/lib/capability/tiebreak.ts",
@@ -107,6 +170,13 @@
       "source_path": "scripts/lib/capability/tier-defaults.ts",
       "resource_path": "resources/scripts/lib/capability/tier-defaults.ts",
       "sha256": "5ef101edf750f81174430e4a3d0ab1f865494e3153cdee0cc3ffadab5234b6be"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/workspace-role-localize",
+      "source_path": "scripts/lib/capability/workspace-role-localize.ts",
+      "resource_path": "resources/scripts/lib/capability/workspace-role-localize.ts",
+      "sha256": "6d7509549ded5edbdbd727ea21e004dab5c80ebe072f1715bf7a29903c7c312e"
     },
     {
       "category": "scripts",
@@ -142,6 +212,20 @@
       "source_path": "scripts/score-tier.ts",
       "resource_path": "resources/scripts/score-tier.ts",
       "sha256": "af7cddc5cc413564da75cdacab432f4255519c0e880af176893cf1bf300fddf9"
+    },
+    {
+      "category": "scripts",
+      "id": "self-build-canonicalize",
+      "source_path": "scripts/self-build-canonicalize.ts",
+      "resource_path": "resources/scripts/self-build-canonicalize.ts",
+      "sha256": "83c46523b5f85e042bfff6644f4e5b82190b8f0d504d5280f51a31464eff388c"
+    },
+    {
+      "category": "scripts",
+      "id": "workspace-role-localize",
+      "source_path": "scripts/workspace-role-localize.ts",
+      "resource_path": "resources/scripts/workspace-role-localize.ts",
+      "sha256": "c860036f66641eba8d1392dc0357f9d630bd6993f4f1cf119dec3038284635de"
     }
   ]
 }

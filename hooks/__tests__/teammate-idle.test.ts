@@ -150,6 +150,8 @@ function seedAcceptance(cwd: string, runId: string, logicalTaskId: string, worke
     hostId: "claude-code-cli",
     adapterId: "claude-code-cli@1",
     hostCapabilitiesHash: "sha256:caps",
+    substrate: "tmux",
+    modelTier: "mid",
     objective: `implement ${logicalTaskId}`,
     nonGoals: [],
     scopePaths: [],

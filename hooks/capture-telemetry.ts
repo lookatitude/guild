@@ -115,6 +115,11 @@ import { authorizeHookWrite, formatBindingRejected } from "./lib/hook-binding.js
 import { readSecurityConfig } from "./lib/security/config.js";
 import { applySecretsPolicy, resolveTelemetryField } from "./lib/security/secrets.js";
 import { appendSecurityEvent, buildSecurityEvent, resolveRunDir } from "./lib/security/events.js";
+import {
+  emitTraceEvent,
+  makeAnalysisTraceEvent,
+  type AnalysisEventClass,
+} from "../src/modules/telemetry/index.js";
 
 // ── v2 observability ADR (D-OBS-1/2/6): guild.trace_event.v2 additive fields,
 // deterministic hook-side span ids, and the redacted guild.trace_payload.v1
@@ -376,6 +381,48 @@ async function main(): Promise<void> {
       );
       // Still exit 0 — telemetry failures must not block tool execution
     }
+  }
+
+  // RTE P2: emit the host-neutral semantic twin after the legacy hook mirror.
+  // This record never carries raw prompt/tool bodies; payload_ref names the
+  // already-redacted sidecar when one was safely written.
+  const semanticClass: AnalysisEventClass | null =
+    eventName === "UserPromptSubmit" ? "prompt_received" :
+    eventName === "SubagentStop" ? "agent_response_received" :
+    eventName === "loop_round_start" ? "loop_entered" :
+    eventName === "loop_round_end" ? "loop_exited" :
+    eventName === "codex_review_round" ? "gate_concluded" :
+    null;
+  if (semanticClass) {
+    emitTraceEvent(
+      makeAnalysisTraceEvent({
+        ts,
+        run_id: runId,
+        lane_id: process.env["GUILD_LANE_ID"] ?? "",
+        event_class: semanticClass,
+        actor_type: eventName === "UserPromptSubmit" ? "user" : eventName === "SubagentStop" ? "agent" : "system",
+        actor_id: actorId,
+        span_id: spanId,
+        parent_span_id: process.env["GUILD_PARENT_SPAN_ID"] || undefined,
+        phase: process.env["GUILD_PHASE"] || undefined,
+        task_id: process.env["GUILD_TASK_ID"] || undefined,
+        prompt_hash: eventName === "UserPromptSubmit" ? payloadDigest : undefined,
+        payload_ref: payloadRef,
+        redaction: payloadRef ? "redacted" : "omitted",
+        status: ok ? "ok" : "error",
+        duration_ms: ms,
+        tokens,
+        config_snapshot_ref: fs.existsSync(path.join(runsDir, "plugin-config-snapshot.json"))
+          ? "plugin-config-snapshot.json"
+          : undefined,
+        signature: eventName.startsWith("loop_")
+          ? `${event.loop_layer ?? "unknown"}:${event.loop_round ?? 0}`
+          : eventName === "codex_review_round"
+            ? `${event.loop_gate ?? "review"}:${event.loop_round ?? 0}`
+            : undefined,
+      }),
+      runsDir,
+    );
   }
 
   // Legacy mirror — best-effort; a mirror failure is informational only.

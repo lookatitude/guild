@@ -1,0 +1,118 @@
+{
+  "run_id": "run-20260823-165747-project-capability-localization",
+  "phase": "plan",
+  "proposal_version": 2,
+  "parent_proposal_hash": "3a6fc1d8d23339af63294383f966bcf5663ba845a6a120f911fd7bcc267c961d",
+  "participants": [
+    {
+      "participant_id": "tooling-engineer-plan",
+      "participation_kind": "worker",
+      "role_ref": "tooling-engineer",
+      "necessity_rationale": "Owns the bounded launcher and capability-adopt CLI implementation plan across the two authored script surfaces.",
+      "owned_obligations": ["FU20-observe-definition-ref-ordering", "FU20-production-verifier-cli"],
+      "depends_on": [],
+      "tier": "mid",
+      "purpose": "planning",
+      "capability_scope": ["Read", "Write", "Glob", "Grep"],
+      "backend": "team"
+    },
+    {
+      "participant_id": "eval-engineer-plan",
+      "participation_kind": "worker",
+      "role_ref": "eval-engineer",
+      "necessity_rationale": "Owns adversarial regression design for compatibility receipt ordering, mode refusals, project-only roles, and verifier write-freedom.",
+      "owned_obligations": ["FU20-adversarial-regressions", "FU20-convergence-rails"],
+      "depends_on": [],
+      "tier": "powerful",
+      "purpose": "planning",
+      "capability_scope": ["Read", "Write", "Glob", "Grep"],
+      "backend": "team"
+    },
+    {
+      "participant_id": "docs-writer-plan",
+      "participation_kind": "worker",
+      "role_ref": "docs-writer",
+      "necessity_rationale": "Owns the mandatory same-rollout docs/v2 reconciliation and portable public wording for resolver-mode and verifier behavior.",
+      "owned_obligations": ["FU20-docs-v2"],
+      "depends_on": [],
+      "tier": "powerful",
+      "purpose": "planning",
+      "capability_scope": ["Read", "Write", "Glob", "Grep"],
+      "backend": "team"
+    },
+    {
+      "participant_id": "codex-plan-reviewer",
+      "participation_kind": "reviewer_cross_host",
+      "role_ref": "codex-reviewer",
+      "necessity_rationale": "Provides the required cross-family G-plan review of the repair contract before any source edit.",
+      "owned_obligations": ["FU20-G-plan-review"],
+      "depends_on": [],
+      "tier": "powerful",
+      "purpose": "adversarial",
+      "capability_scope": null,
+      "backend": "team"
+    }
+  ],
+  "obligations": [
+    {
+      "obligation_id": "FU20-observe-definition-ref-ordering",
+      "source": "success_criterion",
+      "text": "Plan the smallest resolver-mode-aware change that retains project definition-ref identity while producing a real pre-assignment compatibility receipt only where the ladder permits it.",
+      "disposition": {"owners": ["tooling-engineer-plan"]}
+    },
+    {
+      "obligation_id": "FU20-production-verifier-cli",
+      "source": "success_criterion",
+      "text": "Plan a read-only window verify CLI over the production substantive-observation verifier with explicit exit semantics and no project mutation.",
+      "disposition": {"owners": ["tooling-engineer-plan"]}
+    },
+    {
+      "obligation_id": "FU20-adversarial-regressions",
+      "source": "success_criterion",
+      "text": "Specify positive and negative tests for resolved refs, permitted and forbidden modes, project-only roles, invalid observations, and verifier write-freedom.",
+      "disposition": {"owners": ["eval-engineer-plan"]}
+    },
+    {
+      "obligation_id": "FU20-convergence-rails",
+      "source": "plan_item",
+      "text": "Specify mirror, digest, compiled-worker, generated-host, package-integrity, focused, and full-suite verification before landing.",
+      "disposition": {"owners": ["eval-engineer-plan"]}
+    },
+    {
+      "obligation_id": "FU20-docs-v2",
+      "source": "implied_rule",
+      "text": "Reconcile docs/v2 to exact shipped resolver and verifier behavior in the same rollout.",
+      "disposition": {"owners": ["docs-writer-plan"]}
+    },
+    {
+      "obligation_id": "FU20-G-plan-review",
+      "source": "review_gate",
+      "text": "Adversarially review the executable repair plan and exact source boundaries before approval.",
+      "disposition": {"owners": ["codex-plan-reviewer"]}
+    }
+  ],
+  "excluded_roles": [
+    {"role_ref": "plugin-architect", "why_unnecessary": "The repair restores the already-ratified resolver ladder and adds no architecture decision or new contract schema."},
+    {"role_ref": "command-builder", "why_unnecessary": "The new verb is an internal capability-adopt script action, not a user-facing /guild command definition."},
+    {"role_ref": "hook-engineer", "why_unnecessary": "No authored hook behavior changes; compiled workers are regenerated from changed script sources and verified by the eval lane."},
+    {"role_ref": "security-auditor", "why_unnecessary": "Fail-closed privacy and write-freedom are explicit eval and cross-host review obligations; no offensive or new trust-boundary design is introduced."},
+    {"role_ref": "skill-author", "why_unnecessary": "No skill contract changes."},
+    {"role_ref": "specialist-agent-writer", "why_unnecessary": "No agent definition changes."},
+    {"role_ref": "research-digester", "why_unnecessary": "The defect is reproduced in current source and needs no external research."}
+  ],
+  "spec_ref": {
+    "path": ".guild/spec/pcl-fu20-observe-definition-ref-compatibility-repair.md",
+    "sha256": "d80ed23e060e4122740e6fb3a5fea4a8d11e174cf5a5672aadcfe4baf8fe8360"
+  },
+  "plan_ref": {
+    "path": ".guild/spec/pcl-fu20-observe-definition-ref-compatibility-repair.md",
+    "sha256": "d80ed23e060e4122740e6fb3a5fea4a8d11e174cf5a5672aadcfe4baf8fe8360"
+  },
+  "provenance": "Supersedes proposal v1 after the mandatory guild:plan completeness gate found missing Audience and Risks sections. Those sections were added without changing participants, obligations, scopes, backend, schedule, cost posture, or review independence. No source edit is authorized until this exact revised spec and proposal are approved.",
+  "backend_capacity_evidence": {
+    "backend": "team",
+    "verified_capacity": 8,
+    "method": "run-start resolved settings selected agent-team; roster width is four and below the configured host capacity",
+    "as_of": "2026-08-23T16:57:47.659Z"
+  }
+}

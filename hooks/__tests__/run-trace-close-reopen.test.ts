@@ -99,7 +99,7 @@ describe("run-trace-close.ts — reopen-on-activity", () => {
   let tmpDir: string;
   let bindingRef: string;
   const stopPayload = fs.readFileSync(path.join(FIXTURES, "stop.json"), "utf8").toString();
-  const RUN_ID = "test-run-reopen";
+  const RUN_ID = "run-20260101-000000-test-reopen";
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-rtc-reopen-"));

@@ -13,11 +13,26 @@
 import { spawnSync } from "child_process";
 import type { HostKind } from "../../host-types";
 import type { SpecialistDispatchContract } from "../../../../src/modules/dispatch/workflows/specialist-contract";
+import type { ProjectDefinitionRefV1 } from "./project-definition-ref";
 export type { HostKind };
 
 // ── Shared types ──────────────────────────────────────────────────────────────
 
 export interface Specialist extends SpecialistDispatchContract {
+  /** Stable approved-proposal identity; falls back to `name` for legacy teams. */
+  participant_id?: string;
+  /** Raw team-file override before canonical role defaults are materialized. */
+  declared_capability_scope?: string[];
+  /**
+   * Unique transport-handle key for this concrete task attempt. `name` remains
+   * the semantic specialist role; backends use this key for pane titles/result
+   * maps so two tasks owned by one role never collapse onto one handle.
+   */
+  dispatch_key?: string;
+  /** Fresh runtime identity bound to this concrete task-attempt launch lane. */
+  task_cell_instance_id?: string;
+  /** Exact immutable guild.task_assignment.v2 pointer for this launch lane. */
+  task_cell_assignment_path?: string;
   backend?: string;
   host_kind?: HostKind;
   tier?: "cheap" | "mid" | "powerful";
@@ -47,6 +62,45 @@ export interface Specialist extends SpecialistDispatchContract {
   definition?: string;
   /** Where the definition lives: plugin-shipped roster or project .guild/agents/. */
   definition_source?: "shipped" | "project";
+  /** Integrity-bound project definition selected from the adoption manifest. */
+  definition_ref?: ProjectDefinitionRefV1;
+}
+
+/**
+ * Source-owned capability defaults for the canonical domain roles. These are
+ * runtime policy, not merely team-compose prose: an omitted scope on a known
+ * role is materialized before dispatch, so an old or hand-authored team file
+ * cannot silently recover the host's broader tool surface. An explicit scope
+ * remains authoritative because the approved team decision hash-binds it.
+ */
+export const CANONICAL_ROLE_CAPABILITY_SCOPES: Readonly<Record<string, readonly string[]>> =
+  Object.freeze({
+    architect: Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+    researcher: Object.freeze(["Read", "Glob", "Grep", "WebSearch", "WebFetch"]),
+    backend: Object.freeze(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]),
+    frontend: Object.freeze(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]),
+    mobile: Object.freeze(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]),
+    devops: Object.freeze(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]),
+    qa: Object.freeze(["Read", "Write", "Edit", "Bash", "Glob", "Grep"]),
+    security: Object.freeze(["Read", "Glob", "Grep"]),
+    "doc-writer": Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+    copywriter: Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+    "technical-writer": Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+    seo: Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+    "social-media": Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+    marketing: Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+    sales: Object.freeze(["Read", "Write", "Edit", "Glob", "Grep"]),
+  });
+
+export function resolvedSpecialistCapabilityScope(spec: Specialist): string[] | undefined {
+  if (spec.capability_scope !== undefined) return [...spec.capability_scope];
+  const canonical = CANONICAL_ROLE_CAPABILITY_SCOPES[spec.name];
+  return canonical === undefined ? undefined : [...canonical];
+}
+
+/** Concrete launch-handle key; legacy one-lane-per-role callers keep `name`. */
+export function specialistDispatchKey(spec: Specialist): string {
+  return spec.dispatch_key ?? spec.name;
 }
 
 /**
@@ -91,6 +145,12 @@ export interface PaneSpec {
   taskId?: string;
   capability_scope?: string[];
   specialist?: string;
+  /** Exact v2 assignment pointer; absent keeps the legacy v1 carrier. */
+  assignmentPath?: string;
+  /** Exact TaskCell runtime identity for trace/usage attribution. */
+  taskCellInstanceId?: string;
+  /** Carried unchanged; a transport must explicitly negotiate before consumption. */
+  definition_ref?: ProjectDefinitionRefV1;
   /**
    * T6-R2-F5: the model this pane must actually run at, when the evidenced M2
    * gate selected one. Absent (the M0/M1 default) ⇒ the adapter emits its
@@ -151,7 +211,7 @@ export interface ParsedTmuxCommand {
 }
 
 // TE-08/ARCH-5: extend union with the serial floor (Rung 4 of the D5 substrate ladder).
-export type TeamBackendKind = "tmux" | "in-process" | "remote" | "serial";
+export type TeamBackendKind = "tmux" | "cmux" | "in-process" | "remote" | "serial";
 
 export interface TeamLaunchRequest {
   slug: string;
@@ -161,6 +221,11 @@ export interface TeamLaunchRequest {
   targetName: string;
   mode: LaunchMode;
   dryRun: boolean;
+  /**
+   * Internal real-dispatch planning pass: run adapter preflights while keeping
+   * the substrate closed. Never set for an operator dry-run.
+   */
+  preflightOnly?: boolean;
   orchestratorHostKind?: HostKind;
   teamPath?: string;
 }
@@ -177,6 +242,8 @@ export interface GuildDispatchDescriptor {
    * generic type, not the specialist name).
    */
   definitionPath?: string | null;
+  /** Integrity-bound definition carrier; definitionPath remains compatibility metadata only. */
+  definition_ref?: ProjectDefinitionRefV1 | null;
 }
 
 export interface TeamLaunchResult {

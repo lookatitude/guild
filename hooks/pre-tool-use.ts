@@ -128,6 +128,7 @@ import {
   readHookStdin,
   type GuildHookEvent,
 } from "./lib/guild-hook-event.js";
+import { evaluateCompatibilitySkillUse } from "./lib/compatibility-skill-guard.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1281,6 +1282,32 @@ export async function main(): Promise<void> {
     return;
   }
 
+  const runId = resolveRunId(cwd);
+  const validRunId =
+    typeof runId === "string" && runId.length > 0 && isSafeRunId(runId) ? runId : null;
+
+  // PCL-09 must run before any approvable security gate and before the legacy
+  // no/invalid-run early returns below. Otherwise capability enforcement could
+  // turn a hard missing-receipt refusal into an `ask` which a user may approve.
+  const compatibilitySkill = evaluateCompatibilitySkillUse({
+    payload,
+    projectRoot: resolveGuildRoot(cwd),
+    runId: validRunId,
+    env: process.env,
+  });
+  if (compatibilitySkill.status === "denied") {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: compatibilitySkill.reason,
+        },
+      }),
+    );
+    return;
+  }
+
   // v2 security ADR — capability-scope enforcement + MCP description hash-pin.
   // Runs BEFORE the boundary guard so a security gate owns stdout for this
   // event. If it emits a permission decision, skip everything else and return.
@@ -1317,7 +1344,6 @@ export async function main(): Promise<void> {
       return;
   }
 
-  const runId = resolveRunId(cwd);
   if (typeof runId !== "string" || runId.length === 0) {
     process.stderr.write(
       "warn: [pre-tool-use] GUILD_RUN_ID unset and current-run-id missing — falling through (no sidecar write).\n",

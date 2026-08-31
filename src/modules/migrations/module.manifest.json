@@ -5,7 +5,7 @@
   "kind": "operator",
   "implementation_mode": "workflow-backed",
   "description": "Owns .guild conversion and migration tooling. sync-migration.ts is parameterized (--canonical/--target; defaults still assume this umbrella workspace's own MIGRATION.md pointer-stub layout) but remains operator-workspace-specific self-build tooling — every real script must have exactly one module owner (validateModuleOwnership), so it stays listed here; there is no per-resource ship/no-ship flag in the module-resources packaging system today (a real gap, not fixed by this pass — see the plugin-audit-remediation ledger).",
-  "depends_on": ["kernel", "security", "state"],
+  "depends_on": ["kernel", "lifecycle", "security", "state"],
   "owns": {
     "commands": ["migrate"],
     "scripts": [

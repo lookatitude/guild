@@ -26,6 +26,7 @@ function memIO(seed: Record<string, string> = {}): { io: ReconcileIO; store: Map
   const io: ReconcileIO = {
     readFileText: (p) => (store.has(p) ? (store.get(p) as string) : null),
     writeFileText: (p, text) => void store.set(p, text),
+    removeFile: (p) => void store.delete(p),
     ensureDir: () => {},
   };
   return { io, store };

@@ -18,13 +18,18 @@ import {
   BindingRejectedError,
   assertWritableBinding,
   closeRunBinding,
+  completePendingSubstantiveOperation,
   loadRunBinding,
   locateCandidateRunId,
   mintRunBinding,
+  pendingSubstantiveOperationPath,
   readHookBindingEnvelope,
+  readPendingSubstantiveOperation,
   readRunBindingRecord,
   runBindingPath,
+  stagePendingSubstantiveOperation,
   verifyRunBinding,
+  withRunBindingExclusion,
 } from "../lib/run-binding";
 import {
   buildSessionContext,
@@ -52,6 +57,31 @@ const BINDING = { binding_ref: "rb-test", state: "open" as const };
 // ── run-binding: mint / verify / close ───────────────────────────────────────
 
 describe("run-binding — mint/verify/fail-closed (§5)", () => {
+  it("refuses a pending-operation marker through a symlinked capability directory", () => {
+    const root = tmpRoot();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "guild-t3-outside-"));
+    const runId = "run-symlink-marker";
+    mintRunBinding({ root, run_id: runId });
+    const runDir = path.join(root, ".guild", "runs", runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.symlinkSync(outside, path.join(runDir, "capability"));
+
+    expect(() => stagePendingSubstantiveOperation({ root, run_id: runId, task_id: "lt-escape" }))
+      .toThrow(/write refused|symlink|contain/i);
+    expect(fs.existsSync(path.join(outside, "pending-substantive-operation.json"))).toBe(false);
+  });
+
+  it("publishes a complete pending-operation marker as valid atomic replacement bytes", () => {
+    const root = tmpRoot();
+    const runId = "run-atomic-marker";
+    mintRunBinding({ root, run_id: runId });
+    stagePendingSubstantiveOperation({ root, run_id: runId, task_id: "lt-atomic" });
+    completePendingSubstantiveOperation({ root, run_id: runId, task_id: "lt-atomic" });
+    const pending = readPendingSubstantiveOperation(root, runId);
+    expect(pending).toMatchObject({ state: "complete", task_id: "lt-atomic" });
+    expect(() => JSON.parse(fs.readFileSync(pendingSubstantiveOperationPath(root, runId), "utf8"))).not.toThrow();
+  });
+
   it("mint → verify round-trips ok; the record persists on disk", () => {
     const root = tmpRoot();
     const b = mintRunBinding({ root, run_id: "run-x" });
@@ -68,6 +98,25 @@ describe("run-binding — mint/verify/fail-closed (§5)", () => {
     expect(() => mintRunBinding({ root, run_id: "run-x" })).toThrow(/already minted/);
     closeRunBinding({ root, run_id: "run-x" });
     expect(() => mintRunBinding({ root, run_id: "run-x" })).toThrow(/already minted/);
+  });
+
+  it("loses an atomic same-ID mint race without replacing the winner", () => {
+    const root = tmpRoot();
+    const winner = mintRunBinding({ root, run_id: "run-x" });
+    const writes: string[] = [];
+    expect(() => mintRunBinding({
+      root,
+      run_id: "run-x",
+      fs: {
+        mkdirp: () => undefined,
+        writeFile: (_p, contents) => { writes.push(contents); },
+        writeFileExclusive: () => false,
+        readFile: () => null,
+        exists: () => false,
+      },
+    })).toThrow(/already minted/);
+    expect(writes).toEqual([]);
+    expect(loadRunBinding({ root, run_id: "run-x" })).toEqual(winner);
   });
 
   it("verify rejects each §5 failure class with diagnostic binding_rejected", () => {
@@ -102,6 +151,14 @@ describe("run-binding — mint/verify/fail-closed (§5)", () => {
       expect((e as BindingRejectedError).diagnostic).toBe("binding_rejected");
       expect((e as BindingRejectedError).reason).toBe("binding_not_minted");
     }
+  });
+
+  it("refuses missing run exclusion without creating a phantom run tree", () => {
+    const root = tmpRoot();
+    const missingRun = "run-missing";
+    expect(() => withRunBindingExclusion(root, missingRun, () => undefined))
+      .toThrow(BindingRejectedError);
+    expect(fs.existsSync(path.join(root, ".guild", "runs", missingRun))).toBe(false);
   });
 
   it("F2: there is NO migration posture — an absent binding_ref is refused even for a minted OPEN run", () => {
@@ -338,6 +395,11 @@ function memFs(): MemFs {
     writeFile: (p, c) => { files.set(p, c); },
     readFile: (p) => (files.has(p) ? (files.get(p) as string) : null),
     exists: (p) => files.has(p) || dirs.has(p),
+    removeTree: (p) => {
+      const prefix = `${p}${path.sep}`;
+      for (const key of [...files.keys()]) if (key === p || key.startsWith(prefix)) files.delete(key);
+      for (const key of [...dirs]) if (key === p || key.startsWith(prefix)) dirs.delete(key);
+    },
   };
   return { files, env };
 }
@@ -348,6 +410,7 @@ function makeEnv(mem: MemFs): RunLifecycleEnv {
   const env: RunLifecycleEnv = {
     now: () => "2026-07-30T12:00:00Z",
     fs: mem.env,
+    withRunBindingExclusion: <T>(_root: string, _runId: string, fn: () => T): T => fn(),
     resolveHost: (requested) => ({ requested, resolved: "claude" }),
   };
   (env as RunLifecycleEnv & { __rootHint?: string }).__rootHint = ROOT;

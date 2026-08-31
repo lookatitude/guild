@@ -308,6 +308,23 @@ describe("MHRC-RCT-001 — receipt journal preserves total logical order", () =>
     expect(scanReceiptJournal(p.journal).records).toHaveLength(1);
   });
 
+  it("enforces single-shot operation identity inside the retained append lock", () => {
+    const root = mkRoot();
+    const p = paths(root);
+    const first = appendReceipt(p, input({ event_id: "e1", operation_id: "single-op" }), defaultJournalIo, {}, { uniqueOperation: true });
+    expect(first.durable).toBe(true);
+    const racedRetry = appendReceipt(
+      p,
+      input({ event_id: "e2", operation_id: "single-op", output_hash: "different-output" }),
+      defaultJournalIo,
+      {},
+      { uniqueOperation: true },
+    );
+    expect(racedRetry.disposition).toBe("refused");
+    expect(racedRetry.failure?.code).toBe("duplicate_operation_id");
+    expect(scanReceiptJournal(p.journal).records).toHaveLength(1);
+  });
+
   it("keeps the checkpoint in agreement with the journal after each append", () => {
     const root = mkRoot();
     const p = paths(root);

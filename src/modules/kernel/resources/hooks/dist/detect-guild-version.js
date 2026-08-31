@@ -6,7 +6,11 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -879,7 +883,7 @@ var require_omap = __commonJS({
     var _toString = Object.prototype.toString;
     function resolveYamlOmap(data) {
       if (data === null) return true;
-      const objectKeys = [];
+      const objectKeys = {};
       const object = data;
       for (let index = 0, length = object.length; index < length; index += 1) {
         const pair = object[index];
@@ -893,8 +897,8 @@ var require_omap = __commonJS({
           }
         }
         if (!pairHasKey) return false;
-        if (objectKeys.indexOf(pairKey) === -1) objectKeys.push(pairKey);
-        else return false;
+        if (_hasOwnProperty.call(objectKeys, pairKey)) return false;
+        Object.defineProperty(objectKeys, pairKey, { value: true });
       }
       return true;
     }

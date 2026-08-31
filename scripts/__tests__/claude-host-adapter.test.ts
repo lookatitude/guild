@@ -561,6 +561,23 @@ describe("Claude HostAdapter concrete parity", () => {
     }
   });
 
+  it("generated Codex marketplace exposes every Guild skill through the native plugin skill root", () => {
+    const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), "guild-codex-native-skills-"));
+    try {
+      const inv = buildInventory(PLUGIN_ROOT);
+      const codexDir = writeCodexTree(PLUGIN_ROOT, inv, tmpDist, UNSTAMPED_GENERATED_AT);
+      const marketplaceDir = writeCodexMarketplaceTree(codexDir, tmpDist);
+      const pluginDir = path.join(marketplaceDir, "plugins", "guild");
+      for (const skill of inv.skills) {
+        expect(fs.readFileSync(path.join(pluginDir, skill.source_path))).toEqual(
+          fs.readFileSync(path.join(PLUGIN_ROOT, skill.source_path))
+        );
+      }
+    } finally {
+      fs.rmSync(tmpDist, { recursive: true, force: true });
+    }
+  });
+
   it("generated non-Claude packages execute bundled guild-run wrappers in dry-run mode", () => {
     const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), "guild-generated-wrapper-smoke-"));
     const tmpCwd = fs.mkdtempSync(path.join(os.tmpdir(), "guild-wrapper-cwd-"));

@@ -39,8 +39,10 @@
  * trail, delegates every verdict to the EXISTING canonical gates (nothing is
  * re-implemented here — `preDispatchGate` → `dispatchGate` → `validateProposal`
  * / `validateDecision` do the work), and then asserts SET EQUALITY between the
- * approved worker set and the participants the launcher is about to spawn.
- * Set equality, never counts: a count can lie, a set cannot (§5).
+ * approved worker set and the participants the launcher is about to spawn,
+ * then binds each unique participant id to its approved role_ref and explicit
+ * capability scope. Set equality alone is insufficient when duplicate ids or
+ * a role substitution can preserve the set while changing what launches.
  *
  * ── WHEN IT BLOCKS: ALWAYS, UNLESS APPROVAL VERIFIES ────────────────────────
  * Approval verification is MANDATORY and UNCONDITIONAL before every launcher
@@ -129,6 +131,12 @@ export interface DispatchApprovalVerdict {
   scheduled_not_approved: string[];
   /** Approved worker participants the launcher would silently NOT spawn. */
   approved_not_scheduled: string[];
+  /** Repeated participant ids in the team file; authorization is one id to one lane. */
+  duplicate_scheduled_participants: string[];
+  /** Approved worker identities whose role_ref no longer matches the scheduled role. */
+  role_ref_mismatches: string[];
+  /** Approved worker contracts whose explicit capability scope was changed. */
+  capability_scope_mismatches: string[];
   /** The delegated surface verdict, for the caller's log (null when unreached). */
   gate: PreDispatchVerdict | null;
 }
@@ -300,8 +308,9 @@ function selectCurrentProposal(
  * one-to-one onto plan lanes. Advisors, challengers, and reviewer slots are
  * approved by the SAME decision but dispatch at their own gate points
  * (advisor escalation, panels, brokers), so they are not expected in a
- * launcher roster; a scheduled name matching ANY approved participant is
- * accepted, and only names matching NO approved participant are smuggled.
+ * launcher roster; only approved workers may appear in this launcher roster.
+ * Reviewer/advisor identities dispatch through their own gates and cannot be
+ * repurposed as worker authorization.
  *
  * There is no mode in which a missing or refused trail returns `allowed: true`
  * on its own. The ONLY way `allowed` is true alongside a non-null `refusal` is
@@ -314,6 +323,10 @@ export function assertDispatchApproved(input: {
   phase: string;
   teamPath: string;
   scheduledParticipants: string[];
+  /** Scheduled semantic role, keyed by stable participant id. */
+  scheduledRoleRefs: Record<string, string>;
+  /** Raw explicit team-file scopes, keyed by stable participant id; null means omitted. */
+  scheduledCapabilityScopes: Record<string, string[] | null>;
   guildDir?: string;
   env?: NodeJS.ProcessEnv;
   /** Explicit CLI override (`--approval-override "<reason>"`). */
@@ -338,6 +351,9 @@ export function assertDispatchApproved(input: {
     decision_hash: null,
     scheduled_not_approved: [],
     approved_not_scheduled: [],
+    duplicate_scheduled_participants: [],
+    role_ref_mismatches: [],
+    capability_scope_mismatches: [],
     gate: null,
   };
 
@@ -433,16 +449,44 @@ export function assertDispatchApproved(input: {
 
   // ── §5 set equality between APPROVED and ABOUT-TO-DISPATCH ────────────────
   const participants = chosen.proposal.participants ?? [];
-  const approvedAll = new Set(participants.map((p) => p.participant_id));
   const approvedWorkers = new Set(
     participants.filter((p) => p.participation_kind === "worker").map((p) => p.participant_id),
   );
+  const scheduledCounts = new Map<string, number>();
+  for (const id of input.scheduledParticipants) {
+    scheduledCounts.set(id, (scheduledCounts.get(id) ?? 0) + 1);
+  }
+  const duplicate_scheduled_participants = [...scheduledCounts.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([id]) => id)
+    .sort();
   const scheduled = new Set(input.scheduledParticipants);
 
-  // Smuggled: a pane the user never approved in ANY role.
-  const scheduled_not_approved = [...scheduled].filter((id) => !approvedAll.has(id)).sort();
+  // Smuggled: a pane that is not an approved WORKER. Review/advisor identities
+  // dispatch through their own gates and can never authorize a launcher lane.
+  const scheduled_not_approved = [...scheduled].filter((id) => !approvedWorkers.has(id)).sort();
   // Silently removed: an approved WORKER that would never be dispatched.
   const approved_not_scheduled = [...approvedWorkers].filter((id) => !scheduled.has(id)).sort();
+  const approvedWorkerById = new Map(
+    participants
+      .filter((p) => p.participation_kind === "worker")
+      .map((p) => [p.participant_id, p] as const),
+  );
+  const role_ref_mismatches = [...scheduled]
+    .filter((id) => {
+      const approved = approvedWorkerById.get(id);
+      if (!approved) return false;
+      return input.scheduledRoleRefs[id] !== approved.role_ref;
+    })
+    .sort();
+  const capability_scope_mismatches = [...scheduled]
+    .filter((id) => {
+      const approved = approvedWorkerById.get(id);
+      if (!approved) return false;
+      const scheduledScope = input.scheduledCapabilityScopes[id] ?? null;
+      return JSON.stringify(scheduledScope) !== JSON.stringify(approved.capability_scope ?? null);
+    })
+    .sort();
 
   const withSets: DispatchApprovalVerdict = {
     ...base,
@@ -451,7 +495,21 @@ export function assertDispatchApproved(input: {
     decision_hash: gate.approved_by?.decision_hash ?? null,
     scheduled_not_approved,
     approved_not_scheduled,
+    duplicate_scheduled_participants,
+    role_ref_mismatches,
+    capability_scope_mismatches,
   };
+
+  if (duplicate_scheduled_participants.length > 0) {
+    return settle({
+      ...withSets,
+      refusal: "duplicate_participant_id",
+      reason:
+        `team file repeats approved participant id(s) ` +
+        `[${duplicate_scheduled_participants.join(", ")}] — one approved identity may produce ` +
+        `exactly one scheduled specialist; duplicates require a new proposal+decision cycle.`,
+    });
+  }
 
   if (scheduled_not_approved.length > 0 || approved_not_scheduled.length > 0) {
     const parts: string[] = [];
@@ -474,6 +532,28 @@ export function assertDispatchApproved(input: {
       reason:
         `scheduled-participant set != approved participant set (§5 set equality): ${parts.join("; ")}. ` +
         `Approved proposal hash ${proposalHashOf(chosen.proposal).slice(0, 12)}… — renewed user approval is required.`,
+    });
+  }
+
+  if (capability_scope_mismatches.length > 0) {
+    return settle({
+      ...withSets,
+      refusal: "participant_scope_mismatch",
+      reason:
+        `scheduled capability_scope differs from the approved proposal for participant(s) ` +
+        `[${capability_scope_mismatches.join(", ")}] — an explicit non-default tool grant is ` +
+        `an approval-bound contract change and requires a new proposal+decision cycle.`,
+    });
+  }
+
+  if (role_ref_mismatches.length > 0) {
+    return settle({
+      ...withSets,
+      refusal: "participant_role_mismatch",
+      reason:
+        `scheduled role differs from the approved role_ref for participant(s) ` +
+        `[${role_ref_mismatches.join(", ")}] — role identity selects runtime capability defaults ` +
+        `and is an approval-bound contract change requiring a new proposal+decision cycle.`,
     });
   }
 

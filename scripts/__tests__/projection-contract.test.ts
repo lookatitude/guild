@@ -83,6 +83,25 @@ it("keeps generated TypeScript projection bytes free of diff-check whitespace de
   }
 });
 
+it("strictly compiles lifecycle workflow projections in every owning module", () => {
+  const plans = buildModuleResourcePlan(PLUGIN_ROOT);
+  const projectionId = "projection:src/modules/lifecycle/workflows/run-lifecycle.ts";
+  const inputs = ["lifecycle", "host-runtime"].map((moduleId) => {
+    const plan = plans.find((candidate) => candidate.module_id === moduleId);
+    expect(plan).toBeDefined();
+    const entry = plan!.entries.find((candidate) => candidate.id === projectionId);
+    expect(entry).toBeDefined();
+    return path.join("src", "modules", moduleId, entry!.resource_path);
+  });
+
+  const compiled = compileStrict(PLUGIN_ROOT, inputs);
+  expect({
+    status: compiled.status,
+    stdout: compiled.stdout,
+    stderr: compiled.stderr,
+  }).toEqual({ status: 0, stdout: "", stderr: "" });
+});
+
 it("projects the Claude, Codex, and Pi adapter dependency graph for source-tree and installed layouts", () => {
   const plans = buildModuleResourcePlan(PLUGIN_ROOT);
   const hostRuntime = plans.find((plan) => plan.module_id === "host-runtime");

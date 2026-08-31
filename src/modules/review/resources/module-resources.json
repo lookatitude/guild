@@ -19,6 +19,13 @@
     },
     {
       "category": "scripts",
+      "id": "advisory-record-example",
+      "source_path": "scripts/advisory-record-example.ts",
+      "resource_path": "resources/scripts/advisory-record-example.ts",
+      "sha256": "c5e6d9f3560fd5d970428ddb1b195ddcff7deecac24444a86dd7f8ba98386c42"
+    },
+    {
+      "category": "scripts",
       "id": "flip-report",
       "source_path": "scripts/flip-report.ts",
       "resource_path": "resources/scripts/flip-report.ts",
@@ -29,7 +36,7 @@
       "id": "lib/advisory-record",
       "source_path": "scripts/lib/advisory-record.ts",
       "resource_path": "resources/scripts/lib/advisory-record.ts",
-      "sha256": "f8f5db946463285a634eee9105604790c1f8b075f27ab797a82f0daae3801688"
+      "sha256": "779541d229d8e35db74f25cc800fc6f622d0137ed8702a834c36dc70aef507f1"
     },
     {
       "category": "scripts",
@@ -71,7 +78,7 @@
       "id": "guild-audit",
       "source_path": "skills/meta/audit/SKILL.md",
       "resource_path": "resources/skills/meta/audit/SKILL.md",
-      "sha256": "0b70ec33e99c8381bf3aed6d723c78af69ea631487d6707da475314a42b4eac1"
+      "sha256": "5015c9b1bf6a05c108072af87ab96764cad2b34286b299d19ee6ce5f142a74d0"
     },
     {
       "category": "skills",

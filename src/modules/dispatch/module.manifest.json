@@ -8,11 +8,14 @@
   "depends_on": [
     "capability",
     "communication",
+    "documents",
     "host-runtime",
+    "kernel",
     "lifecycle",
     "prompting",
     "review",
     "state",
+    "telemetry",
     "teams"
   ],
   "owns": {
@@ -21,13 +24,21 @@
     ],
     "scripts": [
       "agent-team-launcher",
+      "resolve-specialist-capability-scope",
+      "task-cell-audit",
+      "task-cell-scale-audit",
+      "task-cell-team-result",
+      "task-cell-host-conformance",
       "lib/core/contracts/team-backend",
       "lib/core/contracts/task-cell-backend",
       "lib/core/contracts/specialist-identity",
       "lib/core/contracts/project-definition-ref",
       "lib/core/contracts/adoption-manifest",
+      "lib/core/contracts/context-bundle-definition-ref",
+      "lib/core/contracts/federation-definition-manifest-ref",
       "lib/emit-remote-orphan",
-      "lib/team-backend"
+      "lib/team-backend",
+      "lib/task-cell-launch-plan"
     ],
     "script_id_prefixes": [
       "lib/host/"

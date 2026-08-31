@@ -593,8 +593,12 @@ export function detectDismissible(
  */
 export interface SessionManifest {
   run_id: string;
+  backend?: "tmux" | "cmux" | "in-process";
+  session_name?: string;
   teammate_panes: Array<{
     specialist: string;
+    task_id?: string;
+    dispatch_key?: string;
     pane_id: string;
     host_kind: string;
     adapter_version: string;
@@ -664,12 +668,13 @@ export function reapDeadMembers(
 
   // Fetch the set of live pane IDs from tmux (best-effort).
   // If tmux is unavailable or fails, the safe default is to skip all (no data loss).
-  const livePaneIds = getLivePaneIds(run);
+  const livePaneIds = getLivePaneIds(run, manifest);
   const tmuxAvailable = livePaneIds !== null;
 
   const reaped: string[] = [];
   const live: string[] = [];
   const skipped: string[] = [];
+  const deadPaneIds = new Set<string>();
 
   for (const pane of panes) {
     const id = (pane.pane_id ?? "").trim();
@@ -687,6 +692,7 @@ export function reapDeadMembers(
       live.push(pane.specialist);
     } else {
       reaped.push(pane.specialist);
+      deadPaneIds.add(id);
     }
   }
 
@@ -695,10 +701,11 @@ export function reapDeadMembers(
   }
 
   // Prune dead panes and write back atomically via temp-then-rename.
-  const reapedSet = new Set(reaped);
   const updated: SessionManifest = {
     ...manifest,
-    teammate_panes: panes.filter((p) => !reapedSet.has(p.specialist)),
+    // One specialist may own several concrete task lanes. Prune by the surface
+    // identity proven dead, never by the non-unique specialist role label.
+    teammate_panes: panes.filter((p) => !deadPaneIds.has((p.pane_id ?? "").trim())),
   };
   const tmp = sessionJsonPath + ".reap.tmp";
   try {
@@ -720,7 +727,14 @@ export function reapDeadMembers(
  * Returns the set of live tmux pane IDs via `tmux list-panes -a`, or null if
  * tmux is unavailable / returns a non-zero exit code.
  */
-function getLivePaneIds(run: RunFn): Set<string> | null {
+function getLivePaneIds(run: RunFn, manifest: SessionManifest): Set<string> | null {
+  if (manifest.backend === "cmux") {
+    const workspace = typeof manifest.session_name === "string" ? manifest.session_name : "";
+    const args = ["list-pane-surfaces", ...(workspace ? ["--workspace", workspace] : []), "--json"];
+    const r = run("cmux", args);
+    if (r.status !== 0) return null;
+    return new Set(r.stdout.match(/surface:[A-Za-z0-9_.-]+/g) ?? []);
+  }
   const r = run("tmux", ["list-panes", "-a", "-F", "#{pane_id}"]);
   if (r.status !== 0) return null;
   const ids = r.stdout

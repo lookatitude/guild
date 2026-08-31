@@ -7,6 +7,7 @@
  *                             [--write-registry] [--check] [--force] [--quiet]
  *   npx tsx roster-resolve.ts mint <name> [--host-native] --cwd <projectRoot> [--plugin-root <dir>]
  *   npx tsx roster-resolve.ts migrate-team-roster --cwd <projectRoot> [--plugin-root <dir>] [--dry-run]
+ *   npx tsx roster-resolve.ts --check-workspace-scopes --cwd <workspaceRoot>
  *
  * Default: print the guild.roster.v1 resolution as JSON on stdout
  * (guild:team-compose consumes this instead of hand-globbing directories).
@@ -43,6 +44,7 @@
 
 import * as path from "path";
 import {
+  checkWorkspaceRosterScopes,
   deriveAgentsRegistry,
   deriveSkillsRegistry,
   migrateTeamRoster,
@@ -63,11 +65,13 @@ function main(): void {
   let hostNative = false;
   let migrateTeams = false;
   let dryRun = false;
+  let checkWorkspaceScopes = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "mint" && mintName === null && i + 1 < argv.length && !argv[i + 1].startsWith("--")) {
       mintName = argv[++i];
     } else if (a === "migrate-team-roster") migrateTeams = true;
+    else if (a === "--check-workspace-scopes") checkWorkspaceScopes = true;
     else if (a === "--host-native") hostNative = true;
     else if (a === "--dry-run") dryRun = true;
     else if (a === "--cwd" && i + 1 < argv.length) cwd = argv[++i];
@@ -87,6 +91,16 @@ function main(): void {
     process.env["GUILD_PLUGIN_ROOT"] ??
     process.env["CLAUDE_PLUGIN_ROOT"] ??
     path.resolve(__dirname, "..");
+
+  if (checkWorkspaceScopes) {
+    if (mintName !== null || migrateTeams || writeRegistry || check || force || hostNative || dryRun) {
+      process.stderr.write("[roster-resolve] --check-workspace-scopes cannot be combined with mutation modes\n");
+      process.exit(1);
+    }
+    const result = checkWorkspaceRosterScopes(path.resolve(cwd));
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    process.exit(result.pass ? 0 : 2);
+  }
 
   if (migrateTeams) {
     const results = migrateTeamRoster({

@@ -23,8 +23,10 @@
 
 import * as fs from "fs";
 import * as os from "os";
+import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 import * as path from "path";
 import { spawnSync } from "child_process";
+import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 
 const DETECT_SCRIPT = path.resolve(__dirname, "../workspace/detect.ts");
 const NODE_ENV = {
@@ -466,14 +468,18 @@ describe("U5/score-tier — models resolver projection (pinning + inheritance)",
  * no remote specialist → cross-host routing block is bypassed when disabled).
  */
 
-const LAUNCHER_SCRIPT = path.resolve(__dirname, "../agent-team-launcher.ts");
 const FIXTURES_DIR = path.resolve(__dirname, "../fixtures");
+const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
+const LAUNCHER_SCRIPT = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
+
+afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
 
 function runLauncher(
   args: string[],
   env: Record<string, string | undefined> = {}
 ): { exitCode: number; stdout: string; stderr: string } {
   const baseEnv: Record<string, string | undefined> = { ...process.env };
+  baseEnv.GUILD_PLUGIN_ROOT = EXACT_CLAUDE_PLUGIN_ROOT;
   delete baseEnv.TMUX; // prevent host terminal state from tripping tests
   // T7R-R1-B1: these fixtures carry no team-plan trail and are about consumer
   // migration, not approval. Opt into the ONE audited escape hatch with a stated
@@ -511,9 +517,11 @@ function setupLauncherRepo(
 
 describe("U5/agent-team-launcher — cross_host malformed-value guard (subprocess, MAJOR fix)", () => {
   let tmpDir: string;
+  const runId = "run-20260812-010000-u5-consumer-migration";
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guild-u5-atl-"));
+    mintRunBinding({ root: tmpDir, run_id: runId });
   });
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -545,7 +553,7 @@ describe("U5/agent-team-launcher — cross_host malformed-value guard (subproces
       }, null, 2)
     );
     const { exitCode, stderr } = runLauncher(
-      ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+      ["--team", teamPath, "--cwd", tmpDir, "--run-id", runId, "--dry-run"],
       { GUILD_CROSS_HOST_ENABLED: undefined }
     );
     // Cross-host must be off → no "route to a REMOTE host" error
@@ -567,7 +575,7 @@ describe("U5/agent-team-launcher — cross_host malformed-value guard (subproces
       `{"defaults":{"cross_host":{"enabled":1,"hosts":{}}}}`
     );
     const { exitCode, stderr } = runLauncher(
-      ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+      ["--team", teamPath, "--cwd", tmpDir, "--run-id", runId, "--dry-run"],
       { GUILD_CROSS_HOST_ENABLED: undefined }
     );
     expect(stderr).not.toMatch(/route to a REMOTE host/i);
@@ -598,7 +606,7 @@ describe("U5/agent-team-launcher — cross_host malformed-value guard (subproces
       }, null, 2)
     );
     const { exitCode } = runLauncher(
-      ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
+      ["--team", teamPath, "--cwd", tmpDir, "--run-id", runId, "--dry-run"],
       { GUILD_CROSS_HOST_ENABLED: undefined }
     );
     // Should not crash trying to iterate a string as hosts map

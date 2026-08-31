@@ -8,10 +8,14 @@
   "depends_on": [
     "host-runtime",
     "kernel",
-    "state"
+    "lifecycle",
+    "migrations",
+    "state",
+    "telemetry"
   ],
   "owns": {
     "scripts": [
+      "activated-host-conformance",
       "build-host-packages",
       "build-inventory",
       "build-release-candidate",
@@ -24,6 +28,8 @@
       "check-roster-consistency",
       "codex-guild-prompt-bridge",
       "description-optimizer",
+      "emit-release-conformance",
+      "finalize-stable-release",
       "lib/command-registry",
       "lib/equivalence-contract",
       "lib/inventory-schema",
@@ -31,6 +37,7 @@
       "lib/parity-contract",
       "lib/per-host-packaging",
       "lib/release-distribution-contract",
+      "lib/release-package-identity",
       "lib/result-contracts",
       "lib/self-update",
       "lib/skill-source-transform",
@@ -38,6 +45,7 @@
       "lib/update-check",
       "registry-rollup",
       "release-changelog",
+      "sign-release-attestation",
       "sync-live-resources",
       "sync-module-resources",
       "verify-host-packages",

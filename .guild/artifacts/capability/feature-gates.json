@@ -1,0 +1,79 @@
+{
+  "schema_version": "guild.capability_feature_gates.v1",
+  "resolver_mode": "shadow",
+  "revision": 10,
+  "updated_at": "2026-08-19T14:06:00Z",
+  "updated_by": "codex-pcl-fu03",
+  "history": [
+    {
+      "from": "shadow",
+      "to": "legacy",
+      "reason": "S05-RD-01 self-build rollback drill",
+      "recorded_at": "2026-08-10T15:01:00Z",
+      "actor": "quality"
+    },
+    {
+      "from": "legacy",
+      "to": "shadow",
+      "reason": "S05-RD-01 drill roll-forward",
+      "recorded_at": "2026-08-10T15:02:00Z",
+      "actor": "quality"
+    },
+    {
+      "from": "shadow",
+      "to": "legacy",
+      "reason": "S05-RD-01 self-build rollback drill",
+      "recorded_at": "2026-08-10T15:05:00Z",
+      "actor": "quality"
+    },
+    {
+      "from": "legacy",
+      "to": "shadow",
+      "reason": "S05-RD-01 drill roll-forward",
+      "recorded_at": "2026-08-10T15:06:00Z",
+      "actor": "quality"
+    },
+    {
+      "from": "shadow",
+      "to": "legacy",
+      "reason": "S05-RD-01 self-build rollback drill",
+      "recorded_at": "2026-08-11T20:31:00Z",
+      "actor": "codex-full-implementation"
+    },
+    {
+      "from": "legacy",
+      "to": "shadow",
+      "reason": "S05-RD-01 drill roll-forward",
+      "recorded_at": "2026-08-11T20:32:00Z",
+      "actor": "codex-full-implementation"
+    },
+    {
+      "from": "shadow",
+      "to": "legacy",
+      "reason": "S05-RD-01 self-build rollback drill",
+      "recorded_at": "2026-08-19T13:35:00Z",
+      "actor": "codex-pcl-fu03"
+    },
+    {
+      "from": "legacy",
+      "to": "shadow",
+      "reason": "S05-RD-01 drill roll-forward",
+      "recorded_at": "2026-08-19T13:36:00Z",
+      "actor": "codex-pcl-fu03"
+    },
+    {
+      "from": "shadow",
+      "to": "legacy",
+      "reason": "S05-RD-01 self-build rollback drill",
+      "recorded_at": "2026-08-19T14:05:00Z",
+      "actor": "codex-pcl-fu03"
+    },
+    {
+      "from": "legacy",
+      "to": "shadow",
+      "reason": "S05-RD-01 drill roll-forward",
+      "recorded_at": "2026-08-19T14:06:00Z",
+      "actor": "codex-pcl-fu03"
+    }
+  ]
+}

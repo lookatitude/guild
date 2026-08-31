@@ -21,6 +21,7 @@ import {
   acknowledgeAssignment,
   assignmentAckPath,
   buildTaskCell,
+  readAgentInstanceV1,
   readAssignmentAck,
   readTaskAssignmentV2,
   writeTaskAssignmentV2,
@@ -31,6 +32,7 @@ import {
 import {
   assignmentId,
   taskCellPaths,
+  validateAgentInstanceV1,
   validateTaskAssignmentV2,
   validateTaskAttemptV1,
 } from "../lib/core/contracts/task-cell-backend";
@@ -42,6 +44,10 @@ import {
   mintRunBinding,
   runBindingPath,
 } from "../../src/modules/lifecycle/workflows/run-binding";
+import {
+  createPreviewConfirmationSession,
+  previewConfirmation,
+} from "../../src/modules/dispatch/workflows/confirmation-gate";
 
 /** T3 F3: mint-or-load the run's binding under this test root (writers verify it). */
 function bindFor(cwd: string, runId: string): { binding_ref: string } {
@@ -94,14 +100,19 @@ function dispatch(over: Partial<TaskCellDispatchInput> = {}): TaskCellDispatchIn
     leadBindingId: "lead-binding-demo",
     now: FIXED_NOW,
     ...over,
+    substrate: over.substrate ?? "tmux",
+    modelTier: over.modelTier ?? "mid",
   };
 }
 
 describe("buildTaskCell", () => {
   it("builds a self-contained, canonical, validate-clean assignment + attempt", () => {
-    const { assignment, attempt } = buildTaskCell(dispatch());
+    const { assignment, attempt, instance } = buildTaskCell(dispatch());
     expect(validateTaskAssignmentV2(assignment)).not.toBeNull();
     expect(validateTaskAttemptV1(attempt)).not.toBeNull();
+    expect(validateAgentInstanceV1(instance)).not.toBeNull();
+    expect(instance.instance_id).toBe(assignment.instance_id);
+    expect(instance.specialist_profile_hash).toBe(assignment.specialist_profile_hash);
     // Channels are derived onto the canonical run-tree, keyed on the instance.
     const paths = taskCellPaths({
       run_id: "run-g3",
@@ -145,6 +156,8 @@ describe("AT1 — one specialist owning two ready tasks (no overwrite)", () => {
     expect(fs.existsSync(a.assignmentPath)).toBe(true);
     expect(fs.existsSync(b.assignmentPath)).toBe(true);
     expect(a.attemptPath).not.toBe(b.attemptPath);
+    expect(a.instancePath).not.toBe(b.instancePath);
+    expect(readAgentInstanceV1(cwd, cellA.assignment)).toEqual(cellA.instance);
 
     // Distinct instance identity + assignment id.
     expect(cellA.assignment.instance_id).not.toBe(cellB.assignment.instance_id);
@@ -354,5 +367,42 @@ describe("T3 F3 — v2 descriptor writers fail closed on the run binding", () =>
     // And the hijacked run id (no minted binding) cannot authorize anything.
     const hijacked = buildTaskCell(dispatch({ runId: "run-hijack", logicalTaskId: "T9-x" }));
     expect(() => writeTaskCell(cwd, hijacked, bind)).toThrow(BindingRejectedError);
+  });
+});
+
+describe("FU08 — one preview session allocates faithful run-local confirmation ids", () => {
+  const key = (target: string) => ({
+    run_id: "run-fu08-confirmations",
+    purpose: "implementation",
+    target_id: target,
+    policy_hash: "sha256:policy",
+    catalog_hash: "sha256:catalog",
+    fallback_hash: "sha256:fallback",
+  });
+
+  it("shares the in-memory arbiter so distinct lane keys cannot collide", () => {
+    const cwd = tmpCwd();
+    const session = createPreviewConfirmationSession(cwd, "run-fu08-confirmations");
+    const first = previewConfirmation({
+      root: cwd,
+      runId: "run-fu08-confirmations",
+      key: key("model-a"),
+      session,
+    });
+    const second = previewConfirmation({
+      root: cwd,
+      runId: "run-fu08-confirmations",
+      key: key("model-b"),
+      session,
+    });
+    const repeat = previewConfirmation({
+      root: cwd,
+      runId: "run-fu08-confirmations",
+      key: key("model-a"),
+      session,
+    });
+
+    expect([first.prompt_id, second.prompt_id, repeat.prompt_id]).toEqual([0, 1, 0]);
+    expect(fs.existsSync(first.statePath)).toBe(false);
   });
 });

@@ -23,6 +23,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { createHash } from "node:crypto";
 
 import {
   buildTaskCell,
@@ -40,9 +41,11 @@ import {
   readAcceptanceForInstance,
   readAssignmentForInstance,
   readAttemptForInstance,
+  retainSubmittedHandoffReceipt,
   releasedLogicalTasks,
   runDeterministicFloor,
   sealTerminalAttempt,
+  validateSubmittedHandoffReceipt,
   writeAcceptanceRecord,
   writeValidationRecord,
   type TaskCellInstanceIds,
@@ -98,6 +101,8 @@ function dispatch(over: Partial<TaskCellDispatchInput> = {}): TaskCellDispatchIn
     hostId: "claude-code-cli",
     adapterId: "claude-code-cli@1",
     hostCapabilitiesHash: "sha256:caps",
+    substrate: "tmux",
+    modelTier: "mid",
     objective: `implement ${logicalTaskId}`,
     nonGoals: [],
     scopePaths: ["src/api"],
@@ -143,9 +148,229 @@ const OBSERVED_ACCEPT = AUTHORITIES.map((authority) => ({
   reason: null,
 }));
 
+function canonicalFrozenReceipt(assignment: TaskAssignmentV2): string {
+  return [
+    "---", "schema_version: guild.handoff_receipt.v1", "ids:", "  initiative_id: null",
+    `  run_id: ${assignment.run_id}`, `  task_id: ${assignment.logical_task_id}`, `  task_run_id: ${assignment.task_run_id}`,
+    `specialist: ${assignment.worker_role}`, "host:", `  selected: ${assignment.host_id}`, "  degraded: false",
+    "  native_ref: null", "  independence: strong", "scope:", `  objective: ${JSON.stringify(assignment.objective)}`,
+    `  in_scope: ${JSON.stringify(assignment.scope_paths)}`, "  out_of_scope_touched: []", "status: completed",
+    "changed_files:", "  - path: src/api/routes.ts", "    change: modified", `    sha256_after: ${"c".repeat(64)}`,
+    "evidence:", "  - kind: command", `    ref: ${JSON.stringify(assignment.acceptance_tests[0])}`, "    result: pass",
+    "assumptions: []", "open_risks: []", "followups: []", `produced_at: ${FIXED_NOW()}`,
+    "---", "", "## changed_files", "- src/api/routes.ts", "", "## opens_for", "- lead", "",
+    "## assumptions", "- none", "", "## evidence", `- ${assignment.acceptance_tests[0]}`, "",
+    "## followups", "- none", "", "```guild.handoff.v2", JSON.stringify({
+      schema_version: "guild.handoff.v2", task_id: assignment.logical_task_id, tier: "mid", status: "done",
+      summary: "implemented and tested", artifacts: ["src/api/routes.ts"], issues: [],
+    }), "```", "",
+  ].join("\n");
+}
+
 // ── deterministic floor ──────────────────────────────────────────────────────
 
 describe("runDeterministicFloor", () => {
+  it("publishes an immutable submitted-handoff pointer from a canonical frozen receipt", () => {
+    const cwd = tmpCwd();
+    const { assignment } = buildTaskCell(dispatch());
+    const receiptPath = `.guild/runs/${assignment.run_id}/handoffs/${assignment.worker_role}-${assignment.logical_task_id}.md`;
+    fs.mkdirSync(path.dirname(path.join(cwd, receiptPath)), { recursive: true });
+    fs.writeFileSync(path.join(cwd, receiptPath), canonicalFrozenReceipt(assignment));
+
+    const acceptanceModule = require("../../src/modules/dispatch/workflows/task-cell-acceptance") as {
+      publishSubmittedHandoffPointer?: (input: {
+        cwd: string;
+        assignment: TaskAssignmentV2;
+        submittedAt: string;
+      }) => SubmittedHandoff | null;
+    };
+    expect(typeof acceptanceModule.publishSubmittedHandoffPointer).toBe("function");
+    if (!acceptanceModule.publishSubmittedHandoffPointer) return;
+
+    const submitted = acceptanceModule.publishSubmittedHandoffPointer({
+      cwd,
+      assignment,
+      submittedAt: FIXED_NOW(),
+    });
+    expect(submitted).not.toBeNull();
+    expect(submitted).toMatchObject({
+      receipt_path: receiptPath,
+      schema_valid: true,
+      claimed_changed_files: ["src/api/routes.ts"],
+      acceptance_tests_passed: assignment.acceptance_tests,
+      submitted_at: FIXED_NOW(),
+    });
+    expect(submitted?.receipt_id.startsWith("handoff-sha256:")).toBe(true);
+    expect(submitted?.receipt_id.slice("handoff-sha256:".length)).toMatch(/^[a-f0-9]{64}$/);
+    expect(validateSubmittedHandoffReceipt({ cwd, assignment, submitted: submitted! })).toBe(true);
+    expect(JSON.parse(fs.readFileSync(path.join(cwd, assignment.handoff_path), "utf8"))).toEqual(submitted);
+
+    expect(acceptanceModule.publishSubmittedHandoffPointer({
+      cwd,
+      assignment,
+      submittedAt: "2026-07-15T00:00:01.000Z",
+    })).toEqual(submitted);
+  });
+
+  it("refuses a canonical-looking receipt reached through an escaping symlink ancestor", () => {
+    const cwd = tmpCwd();
+    const outside = tmpCwd();
+    const { assignment } = buildTaskCell(dispatch());
+    const handoffsDir = path.join(cwd, ".guild", "runs", assignment.run_id, "handoffs");
+    const receiptName = `${assignment.worker_role}-${assignment.logical_task_id}.md`;
+    fs.mkdirSync(path.dirname(handoffsDir), { recursive: true });
+    fs.writeFileSync(path.join(outside, receiptName), canonicalFrozenReceipt(assignment));
+    fs.symlinkSync(outside, handoffsDir, "dir");
+
+    const acceptanceModule = require("../../src/modules/dispatch/workflows/task-cell-acceptance") as {
+      publishSubmittedHandoffPointer: (input: {
+        cwd: string;
+        assignment: TaskAssignmentV2;
+        submittedAt: string;
+      }) => SubmittedHandoff | null;
+    };
+    expect(acceptanceModule.publishSubmittedHandoffPointer({
+      cwd,
+      assignment,
+      submittedAt: FIXED_NOW(),
+    })).toBeNull();
+    expect(fs.existsSync(path.join(cwd, assignment.handoff_path))).toBe(false);
+  });
+
+  it("rejects a preexisting pointer that forges passing tests absent from receipt evidence", () => {
+    const cwd = tmpCwd();
+    const { assignment } = buildTaskCell(dispatch());
+    const receiptPath = `.guild/runs/${assignment.run_id}/handoffs/${assignment.worker_role}-${assignment.logical_task_id}.md`;
+    const receipt = canonicalFrozenReceipt(assignment).replace("    result: pass", "    result: fail");
+    fs.mkdirSync(path.dirname(path.join(cwd, receiptPath)), { recursive: true });
+    fs.writeFileSync(path.join(cwd, receiptPath), receipt);
+
+    const forged: SubmittedHandoff = {
+      receipt_id: `handoff-sha256:${createHash("sha256").update(receipt).digest("hex")}`,
+      receipt_path: receiptPath,
+      schema_valid: true,
+      claimed_changed_files: ["src/api/routes.ts"],
+      acceptance_tests_passed: [...assignment.acceptance_tests],
+      submitted_at: FIXED_NOW(),
+    };
+    fs.mkdirSync(path.dirname(path.join(cwd, assignment.handoff_path)), { recursive: true });
+    fs.writeFileSync(path.join(cwd, assignment.handoff_path), JSON.stringify(forged, null, 2) + "\n");
+
+    const acceptanceModule = require("../../src/modules/dispatch/workflows/task-cell-acceptance") as {
+      publishSubmittedHandoffPointer: (input: {
+        cwd: string;
+        assignment: TaskAssignmentV2;
+        submittedAt: string;
+      }) => SubmittedHandoff | null;
+    };
+    expect(acceptanceModule.publishSubmittedHandoffPointer({
+      cwd,
+      assignment,
+      submittedAt: FIXED_NOW(),
+    })).toBeNull();
+  });
+
+  it("derives schema validity from the frozen receipt bytes, never the worker claim", () => {
+    const cwd = tmpCwd();
+    const { assignment } = buildTaskCell(dispatch());
+    const receiptPath = `.guild/runs/${assignment.run_id}/handoffs/${assignment.worker_role}-${assignment.logical_task_id}.md`;
+    fs.mkdirSync(path.dirname(path.join(cwd, receiptPath)), { recursive: true });
+    fs.writeFileSync(path.join(cwd, receiptPath), [
+      "---",
+      "schema_version: guild.handoff_receipt.v1",
+      `task_id: ${assignment.logical_task_id}`,
+      `specialist: ${assignment.worker_role}`,
+      "model_family: claude",
+      "host: claude-code-cli",
+      `generated_at: ${FIXED_NOW()}`,
+      "---",
+      "",
+      "```guild.handoff.v2",
+      JSON.stringify({ schema_version: "guild.handoff.v2", task_id: assignment.logical_task_id, tier: "mid", status: "done", summary: "legacy receipt", artifacts: [], issues: [] }),
+      "```",
+      "",
+    ].join("\n"));
+    const submitted = validReceipt({ receipt_path: receiptPath, schema_valid: true });
+
+    expect(validateSubmittedHandoffReceipt({ cwd, assignment, submitted })).toBe(false);
+  });
+
+  it("fails closed instead of throwing on malformed claimed-file arrays", () => {
+    const cwd = tmpCwd();
+    const { assignment } = buildTaskCell(dispatch());
+    const submitted = {
+      ...validReceipt(),
+      claimed_changed_files: null,
+      acceptance_tests_passed: "npm test -- api",
+    } as unknown as ReturnType<typeof validReceipt>;
+
+    expect(() => validateSubmittedHandoffReceipt({ cwd, assignment, submitted })).not.toThrow();
+    expect(validateSubmittedHandoffReceipt({ cwd, assignment, submitted })).toBe(false);
+  });
+
+  it("binds receipt_id to raw file bytes even when ignored prose is not valid UTF-8", () => {
+    const cwd = tmpCwd();
+    const { assignment } = buildTaskCell(dispatch());
+    const receiptPath = `.guild/runs/${assignment.run_id}/handoffs/${assignment.worker_role}-${assignment.logical_task_id}.md`;
+    const prefix = [
+      "---", "schema_version: guild.handoff_receipt.v1", "ids:", "  initiative_id: null",
+      `  run_id: ${assignment.run_id}`, `  task_id: ${assignment.logical_task_id}`, `  task_run_id: ${assignment.task_run_id}`,
+      `specialist: ${assignment.worker_role}`, "host:", `  selected: ${assignment.host_id}`, "  degraded: false",
+      "  native_ref: null", "  independence: strong", "scope:", `  objective: ${JSON.stringify(assignment.objective)}`,
+      `  in_scope: ${JSON.stringify(assignment.scope_paths)}`, "  out_of_scope_touched: []", "status: completed",
+      "changed_files:", "  - path: src/api/routes.ts", "    change: modified", `    sha256_after: ${"b".repeat(64)}`,
+      "evidence:", "  - kind: command", `    ref: ${JSON.stringify(assignment.acceptance_tests[0])}`, "    result: pass",
+      "assumptions: []", "open_risks: []", "followups: []", `produced_at: ${FIXED_NOW()}`,
+      "---", "",
+      "## changed_files", "- src/api/routes.ts", "",
+      "## opens_for", "- lead", "",
+      "## assumptions", "- none", "",
+      "## evidence", "- raw-byte binding", "",
+      "## followups", "- none", "",
+      "ignored prose ",
+    ].join("\n");
+    const suffix = ["", "```guild.handoff.v2", JSON.stringify({
+      schema_version: "guild.handoff.v2", task_id: assignment.logical_task_id, tier: "mid", status: "done",
+      summary: "done", artifacts: ["src/api/routes.ts"], issues: [],
+    }), "```", ""].join("\n");
+    const bytes = Buffer.concat([Buffer.from(prefix), Buffer.from([0xff]), Buffer.from(suffix)]);
+    fs.mkdirSync(path.dirname(path.join(cwd, receiptPath)), { recursive: true });
+    fs.writeFileSync(path.join(cwd, receiptPath), bytes);
+    const submitted = validReceipt({
+      receipt_path: receiptPath,
+      receipt_id: `handoff-sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+    });
+
+    expect(validateSubmittedHandoffReceipt({ cwd, assignment, submitted })).toBe(true);
+
+    const incompleteWrapperBytes = Buffer.from(
+      bytes.toString("latin1").replace("## followups\n- none\n", ""),
+      "latin1"
+    );
+    fs.writeFileSync(path.join(cwd, receiptPath), incompleteWrapperBytes);
+    expect(validateSubmittedHandoffReceipt({
+      cwd,
+      assignment,
+      submitted: {
+        ...submitted,
+        receipt_id: `handoff-sha256:${createHash("sha256").update(incompleteWrapperBytes).digest("hex")}`,
+      },
+    })).toBe(false);
+    fs.writeFileSync(path.join(cwd, receiptPath), bytes);
+
+    const retainedPath = taskCellPaths(assignment).receipt_path;
+    fs.mkdirSync(path.dirname(path.join(cwd, retainedPath)), { recursive: true });
+    fs.writeFileSync(path.join(cwd, retainedPath), "planted conflicting receipt");
+    expect(() => retainSubmittedHandoffReceipt({ cwd, assignment, submitted })).not.toThrow();
+    expect(retainSubmittedHandoffReceipt({ cwd, assignment, submitted })).toBeNull();
+
+    const retainedParent = path.dirname(path.join(cwd, retainedPath));
+    fs.rmSync(retainedParent, { recursive: true });
+    fs.writeFileSync(retainedParent, "planted parent-path collision");
+    expect(() => retainSubmittedHandoffReceipt({ cwd, assignment, submitted })).not.toThrow();
+    expect(retainSubmittedHandoffReceipt({ cwd, assignment, submitted })).toBeNull();
+  });
+
   it("passes a schema-valid, in-scope, tests-passed receipt", () => {
     const { assignment } = buildTaskCell(dispatch());
     const v = runDeterministicFloor({

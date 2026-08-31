@@ -128,7 +128,7 @@ export interface AdapterOpts {
  * Antigravity / Pi panes too (the Claude adapter gets it via `paneCommand`). docs/v2 §08.
  */
 function taskAssignmentPathFor(spec: PaneSpec): string {
-  return `.guild/runs/${spec.runId}/tasks/${spec.specialist}.json`;
+  return spec.assignmentPath ?? `.guild/runs/${spec.runId}/tasks/${spec.specialist}.json`;
 }
 /** `export GUILD_TASK_ASSIGNMENT=…; ` fragment, or "" when no specialist is set. */
 function taskAssignmentExport(spec: PaneSpec): string {
@@ -139,6 +139,14 @@ function taskAssignmentExport(spec: PaneSpec): string {
 /** The `GUILD_TASK_ASSIGNMENT` entry for an adapter's env map, or {} when no specialist. */
 function taskAssignmentEnv(spec: PaneSpec): Record<string, string> {
   return spec.specialist ? { GUILD_TASK_ASSIGNMENT: taskAssignmentPathFor(spec) } : {};
+}
+function taskCellInstanceExport(spec: PaneSpec): string {
+  return spec.taskCellInstanceId
+    ? `export GUILD_TASK_CELL_INSTANCE_ID=${shellQuote(spec.taskCellInstanceId)}; `
+    : "";
+}
+function taskCellInstanceEnv(spec: PaneSpec): Record<string, string> {
+  return spec.taskCellInstanceId ? { GUILD_TASK_CELL_INSTANCE_ID: spec.taskCellInstanceId } : {};
 }
 
 // ── T6-R2-F5: the selected model reaches the real pane process ───────────────
@@ -224,8 +232,8 @@ export class ClaudePaneAdapter implements PaneAdapter {
   }
 
   command(spec: PaneSpec): string {
-    // D-CAP: pass taskId + capability_scope so paneCommand injects GUILD_TASK_ID
-    // (scope-file locator) and optionally GUILD_CAPABILITY_SCOPE (env fast-path).
+    // D-CAP: pass taskId + capability_scope so paneCommand injects the lane
+    // identity and its environment-only capability scope.
     // G-9 / C2-D1: pass specialist so lane panes export GUILD_SPECIALIST
     // (the PostToolUse heartbeat writer's trigger).
     // T6-R2-F5: `spec.model` (evidenced M2 selection) becomes `claude --model`.
@@ -254,7 +262,7 @@ export class ClaudePaneAdapter implements PaneAdapter {
       ...producerMarkerEnv(),
       // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer.
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
-      // D-CAP: GUILD_TASK_ID locates the scope file; GUILD_CAPABILITY_SCOPE is the fast-path.
+      // D-CAP: carry lane identity and the environment-only capability scope.
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
@@ -1012,8 +1020,8 @@ export class CodexPaneAdapter implements PaneAdapter {
     // Self-contained: export the run id, run `codex exec` with the staging
     // prompt, then keep the pane alive so the operator can inspect handoffs.
     // NO CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS — Codex is not on the Claude bus.
-    // D-CAP: export GUILD_TASK_ID (scope-file locator) and optionally
-    // GUILD_CAPABILITY_SCOPE (env fast-path) so D-CAP enforces on Codex panes.
+    // D-CAP: export lane identity and the environment-only capability scope so
+    // D-CAP enforces on Codex panes.
     //
     // ISSUE #94 — CODEX-SIDE PreToolUse ENFORCEMENT IS NOW WIRED, and the pane
     // bypass flag is gated on PROVEN enforcement. This closes the rf-wi-04 (G4)
@@ -1092,7 +1100,7 @@ export class CodexPaneAdapter implements PaneAdapter {
       producerMarkerExport() +
       taskFragment +
       specialistFragment +
-      taskAssignmentExport(spec) +
+      taskAssignmentExport(spec) + taskCellInstanceExport(spec) +
       scopeFragment +
       modelExport(spec) +
       `codex exec ${bypassFragment}${modelArg(spec, "-m")}${shellQuote(spec.prompt)}; ` +
@@ -1111,12 +1119,12 @@ export class CodexPaneAdapter implements PaneAdapter {
       ...producerMarkerEnv(),
       // G-9 / C2-D1: GUILD_SPECIALIST arms the PostToolUse heartbeat writer.
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
-      // D-CAP: GUILD_TASK_ID locates the scope file; GUILD_CAPABILITY_SCOPE is the fast-path.
+      // D-CAP: carry lane identity and the environment-only capability scope.
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
         : {}),
-      ...taskAssignmentEnv(spec),
+      ...taskAssignmentEnv(spec), ...taskCellInstanceEnv(spec),
     };
   }
 
@@ -1175,7 +1183,7 @@ export class AntigravityPaneAdapter implements PaneAdapter {
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
       producerMarkerExport() +
-      taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
+      taskFragment + specialistFragment + taskAssignmentExport(spec) + taskCellInstanceExport(spec) + scopeFragment +
       modelExport(spec) +
       `agy ${modelArg(spec, "--model")}${AGY_PROMPT_FLAG} ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
@@ -1191,7 +1199,7 @@ export class AntigravityPaneAdapter implements PaneAdapter {
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) } : {}),
-      ...taskAssignmentEnv(spec),
+      ...taskAssignmentEnv(spec), ...taskCellInstanceEnv(spec),
     };
   }
 
@@ -1248,7 +1256,7 @@ export class PiPaneAdapter implements PaneAdapter {
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
       producerMarkerExport() +
-      taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
+      taskFragment + specialistFragment + taskAssignmentExport(spec) + taskCellInstanceExport(spec) + scopeFragment +
       modelExport(spec) +
       `pi ${modelArg(spec, "--model")}-p ${shellQuote(spec.prompt)}; ` +
       `exec $SHELL`
@@ -1264,7 +1272,7 @@ export class PiPaneAdapter implements PaneAdapter {
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) } : {}),
-      ...taskAssignmentEnv(spec),
+      ...taskAssignmentEnv(spec), ...taskCellInstanceEnv(spec),
     };
   }
 
@@ -1376,7 +1384,7 @@ export class WrappedCliPaneAdapter implements PaneAdapter {
     return (
       `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` +
       producerMarkerExport() +
-      taskFragment + specialistFragment + taskAssignmentExport(spec) + scopeFragment +
+      taskFragment + specialistFragment + taskAssignmentExport(spec) + taskCellInstanceExport(spec) + scopeFragment +
       modelExport(spec) +
       `${argv}; ` +
       `exec $SHELL`
@@ -1392,7 +1400,7 @@ export class WrappedCliPaneAdapter implements PaneAdapter {
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) } : {}),
-      ...taskAssignmentEnv(spec),
+      ...taskAssignmentEnv(spec), ...taskCellInstanceEnv(spec),
     };
   }
 

@@ -139,15 +139,21 @@ axes (mapping known legacy manifest spellings onto the frozen enum — see the
 script's own header — and treating anything unrecognized as **unresolved**,
 never guessed toward "resolved"), calls the real `d8CloseGate`
 (`scripts/lib/initiative.ts` — this skill NEVER re-implements the three-leg
-check), and prints `{ pass, result: { canClose, legs, blockers }, warnings }`
-to stdout. **Exit 0 = pass, exit 1 = fail (unmet criteria), exit 2 = usage/
-read error.**
+check), and deterministically verifies every repository-relative path cited by
+`close_gate.evidence` plus every work-item `evidence_refs` list. HTML fragments
+bind to the cited file bytes; missing, malformed, absolute, prose, or escaping
+refs fail closed. It prints
+`{ pass, result: { canClose, legs, blockers }, evidence: { valid, checked, missing, invalid }, warnings }`
+to stdout. **Exit 0 = all three axes AND evidence valid, exit 1 = fail (unmet
+criteria or invalid/missing evidence), exit 2 = usage/read error.**
 
 **Refuse to close on any non-zero exit.** On exit `1`, do not move
 `active/<id>/` → `archived/<id>/` — instead:
 
 1. Print `result.blockers` to the operator verbatim (do not paraphrase which
-   leg failed).
+   leg failed), then print `evidence.missing` and `evidence.invalid` verbatim.
+   Axis blockers may be empty when all three axes resolve but a cited artifact
+   does not exist; that is still a close failure.
 2. Run the companion sub-command to populate the concrete work the operator
    still owes:
 

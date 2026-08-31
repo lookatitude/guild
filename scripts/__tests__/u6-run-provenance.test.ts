@@ -60,6 +60,11 @@ function memFs(): MemFs {
     exists(absPath: string): boolean {
       return files.has(absPath) || dirs.has(absPath);
     },
+    removeTree(absPath: string): void {
+      const prefix = `${absPath}${path.sep}`;
+      for (const key of [...files.keys()]) if (key === absPath || key.startsWith(prefix)) files.delete(key);
+      for (const key of [...dirs]) if (key === absPath || key.startsWith(prefix)) dirs.delete(key);
+    },
   };
   return { files, dirs, env };
 }
@@ -72,6 +77,7 @@ function makeEnv(
   return {
     now: () => clock,
     fs: mem.env,
+    withRunBindingExclusion: <T>(_root: string, _runId: string, fn: () => T): T => fn(),
     resolveHost: (requested: string) => ({
       requested,
       resolved: opts.resolved ?? ("claude" as HostKind),
@@ -187,6 +193,11 @@ function makeSnapshot(over: Partial<ResolvedSettingsSnapshot> = {}): ResolvedSet
       host: { role: "host", substrate: "claude-code-cli", strength: "strong", reason: "author host" },
       advisory: { role: "advisory", substrate: "claude-code-cli", strength: "weak", reason: "same-family fallback" },
       adversarial: { role: "adversarial", substrate: "codex-cli", strength: "strong", reason: "cross-family" },
+    },
+    dispatch: {
+      backend: "subagent",
+      reason: "test fixture",
+      facts: { cmux_workspace_present: false, tmux_on_path: false, agent_mode: "team" },
     },
     resolved_at_ref: null,
     ...over,
@@ -343,6 +354,35 @@ describe("u6 — startRun with snapshot (settings_ref in run.yaml)", () => {
 
     const expectedPath = path.join(ROOT, ".guild", "runs", runId, "resolved-settings.json");
     expect(mem.files.has(expectedPath)).toBe(true);
+  });
+
+  it("writes the analysis-safe plugin config snapshot and records its run.yaml ref", () => {
+    const mem = memFs();
+    const lc = createRunLifecycle(makeEnv(mem));
+    const snapshot = makeSnapshot();
+    const runId = lc.startRun(baseStartOpts({ snapshot }));
+
+    const configPath = path.join(ROOT, ".guild", "runs", runId, "plugin-config-snapshot.json");
+    const parsed = JSON.parse(mem.files.get(configPath) as string);
+    const raw = mem.files.get(path.join(ROOT, ".guild", "runs", runId, "run.yaml")) as string;
+    expect(parsed.schema_version).toBe("guild.plugin_config_snapshot.v1");
+    expect(parsed.run_id).toBe(runId);
+    expect(parsed.effective).toEqual(snapshot.effective);
+    expect(parsed.config_source_layers).toEqual(snapshot.source_chain);
+    expect(parsed.redaction_policy).toBe("scrubbed-config-v1");
+    expect(raw).toContain("config_snapshot_ref: plugin-config-snapshot.json");
+  });
+
+  it("freezes plugin config independently from settings changed after run start", () => {
+    const mem = memFs();
+    const lc = createRunLifecycle(makeEnv(mem));
+    const snapshot = makeSnapshot();
+    const runId = lc.startRun(baseStartOpts({ snapshot }));
+    const configPath = path.join(ROOT, ".guild", "runs", runId, "plugin-config-snapshot.json");
+    const before = mem.files.get(configPath);
+    mem.files.set(path.join(ROOT, ".guild", "settings.json"), JSON.stringify({ agent_mode: "inline" }));
+    expect(mem.files.get(configPath)).toBe(before);
+    expect(JSON.parse(before as string).effective.agent_mode).toBe("team");
   });
 
   it("run.yaml gains settings_ref block when snapshot is provided", () => {
@@ -606,6 +646,26 @@ describe("u6 — HK-06 resolved-settings.json scrubbed-write coverage", () => {
     expect(mem.files.has(expectedPath)).toBe(true);
     const parsed = JSON.parse(mem.files.get(expectedPath) as string);
     expect(parsed.schema_version).toBe("guild.resolved_settings.v1");
+  });
+
+  it("does not claim blocked snapshots in run.yaml or semantic trace events", () => {
+    const mem = memFsWithScrubWriteDurable({ written: false, blocked: true });
+    const events: Array<Record<string, unknown>> = [];
+    const env = makeEnv(mem);
+    env.emitAnalysisEvent = (event) => {
+      events.push(event as unknown as Record<string, unknown>);
+      return true;
+    };
+    const runId = createRunLifecycle(env).startRun(baseStartOpts({ snapshot: makeSnapshot() }));
+    const runDir = path.join(ROOT, ".guild", "runs", runId);
+    const manifest = mem.files.get(path.join(runDir, "run.yaml")) as string;
+
+    expect(mem.files.has(path.join(runDir, "resolved-settings.json"))).toBe(false);
+    expect(mem.files.has(path.join(runDir, "plugin-config-snapshot.json"))).toBe(false);
+    expect(manifest).toContain("config_snapshot_ref: null");
+    expect(manifest).not.toContain("settings_ref:");
+    expect(events.some((event) => event.event_class === "config_snapshot_written")).toBe(false);
+    expect(events.find((event) => event.event_class === "run_started")?.config_snapshot_ref).toBeUndefined();
   });
 });
 

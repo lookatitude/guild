@@ -131,6 +131,7 @@ export const EXECUTION_TRANSPORT_IDS = Object.freeze([
   "in-process",
   "serial",
   "tmux",
+  "cmux",
   "remote",
   "runtime",
 ] as const);
@@ -492,6 +493,10 @@ export interface DefinitionRefLike {
   readonly relative_path: string;
   readonly content_hash: string;
   readonly source_commit: string | null;
+  /** Opaque identity binding from `specialist_profile.v1`; never recomputed here. */
+  readonly specialist_profile_hash: string | null;
+  /** Opaque identity binding from `specialist_type.v2`; never recomputed here. */
+  readonly specialist_type_hash: string | null;
   readonly skills: readonly {
     readonly id: string;
     readonly relative_path: string;
@@ -785,10 +790,17 @@ export interface TeamLaunchRequestLike {
   readonly slug: string;
   readonly runId: string;
   readonly cwd: string;
+  /**
+   * Preserve the original structural seam: substrate-specific launchers may
+   * carry opaque specialist records. Injection-aware adapters narrow the
+   * entries they inspect instead of making this versioned request stricter.
+   */
   readonly specialists: readonly unknown[];
   readonly targetName: string;
   readonly mode: string;
   readonly dryRun: boolean;
+  /** Adapter-only preflight pass owned by a pending real dispatch. */
+  readonly preflightOnly?: boolean;
   /**
    * Optional run-scoping the shipped backends already accept. Declared here so a
    * RUN-SCOPED launch fits the versioned request without the caller reaching past
@@ -946,17 +958,21 @@ export function isTeamDispatchPort(value: unknown): value is TeamDispatchPort {
 
 /** Fail-closed structural check for an in-process/serial launch payload. */
 export function isTeamLaunchRequestLike(value: unknown): value is TeamLaunchRequestLike {
-  if (value === null || typeof value !== "object") return false;
-  const o = value as Record<string, unknown>;
-  return (
-    typeof o["slug"] === "string" &&
-    typeof o["runId"] === "string" &&
-    typeof o["cwd"] === "string" &&
-    typeof o["targetName"] === "string" &&
-    typeof o["mode"] === "string" &&
-    typeof o["dryRun"] === "boolean" &&
-    Array.isArray(o["specialists"])
-  );
+  try {
+    if (value === null || typeof value !== "object") return false;
+    const o = value as Record<string, unknown>;
+    return (
+      typeof o["slug"] === "string" &&
+      typeof o["runId"] === "string" &&
+      typeof o["cwd"] === "string" &&
+      typeof o["targetName"] === "string" &&
+      typeof o["mode"] === "string" &&
+      typeof o["dryRun"] === "boolean" &&
+      Array.isArray(o["specialists"])
+    );
+  } catch {
+    return false;
+  }
 }
 
 // ── Substrate selection: the launcher seam ───────────────────────────────────
@@ -976,6 +992,13 @@ export type ExecutionDispatchMode = (typeof EXECUTION_DISPATCH_MODES)[number];
  * did — an explicit pin still spawns no `tmux -V` subprocess.
  */
 export interface ExecutionCapabilityProbe {
+  /**
+   * W4 (run-identity-and-dispatch): is this process running inside a cmux
+   * workspace (CMUX_WORKSPACE_ID present)? OPTIONAL and additive: an
+   * implementor that predates the cmux rung simply never selects it — the
+   * ladder reads an absent member as `false`, never as a fabricated fact.
+   */
+  insideCmuxWorkspace?(): boolean;
   insideMultiplexer(): boolean;
   multiplexerAvailable(): boolean;
   independentAgents(): boolean;
@@ -1041,7 +1064,29 @@ export function selectExecutionSubstrate(
 ): ExecutionSubstrateSelection {
   const requested = request.requested_mode ?? "auto";
 
+  // W4 (run-identity-and-dispatch): the cmux rung — rung 0 of `team`, probed
+  // BEFORE any tmux fact for both explicit team and auto. First-class value:
+  // the selection names the honest "cmux" transport instead of disguising the
+  // workspace as a tmux branch. cmux dispatch is LEAD-DRIVEN (visible
+  // `cmux new-pane / new-surface --focus false` surfaces in the caller
+  // workspace); a launcher seeing this selection hands dispatch back to the
+  // lead rather than launching tmux panes.
+  const insideCmux = (): boolean => {
+    try {
+      return probe.insideCmuxWorkspace?.() === true;
+    } catch {
+      return false;
+    }
+  };
+
   if (requested === "team") {
+    if (insideCmux()) {
+      return selection(
+        "team",
+        "cmux",
+        "agent_mode=team + CMUX_WORKSPACE_ID set → team via visible cmux surfaces (lead-driven)"
+      );
+    }
     // A dry run reports intent; only a real run degrades on a missing multiplexer.
     if (!request.dry_run && !probe.multiplexerAvailable()) {
       return selection(
@@ -1063,8 +1108,28 @@ export function selectExecutionSubstrate(
     return selection("subagent", null, "explicit agent_mode=subagent");
   }
 
+  if (insideCmux()) {
+    return selection(
+      "team",
+      "cmux",
+      "auto: CMUX_WORKSPACE_ID set → team via visible cmux surfaces (lead-driven)"
+    );
+  }
+
   if (probe.insideMultiplexer()) {
     return selection("team", "tmux", "auto: $TMUX set → team in-session");
+  }
+  // FU08: auto preview may read ambient environment facts, but it must not
+  // execute `tmux -V` (or any other substrate probe). Use the closed serial
+  // floor and say exactly what the later real dispatch will re-evaluate.
+  if (request.dry_run) {
+    return selection(
+      "subagent",
+      null,
+      "auto preview: tmux availability probe withheld → subagent preview floor",
+      null,
+      "[agent-team-launcher] NOTICE: pure preview did not execute `tmux -V`; a real dispatch will probe again and may select tmux.\n",
+    );
   }
   if (probe.multiplexerAvailable()) {
     return selection("team", "tmux", "auto: tmux installed → team new-session");
@@ -1157,6 +1222,8 @@ function refsConflict(a?: DefinitionRefLike, b?: DefinitionRefLike): boolean {
     a.relative_path !== b.relative_path ||
     a.content_hash !== b.content_hash ||
     a.source_commit !== b.source_commit ||
+    a.specialist_profile_hash !== b.specialist_profile_hash ||
+    a.specialist_type_hash !== b.specialist_type_hash ||
     a.skills.length !== b.skills.length ||
     a.skills.some((s, i) => {
       const o = b.skills[i];

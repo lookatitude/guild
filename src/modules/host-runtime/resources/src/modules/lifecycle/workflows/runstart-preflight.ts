@@ -45,6 +45,7 @@ import {
   type Source,
 } from "../../config";
 import {
+  HOST_ADAPTER_CONTRACT_VERSION,
   detectProviders,
   defaultProbeEnv,
   recommendProvider,
@@ -83,6 +84,15 @@ export interface PreflightProbe {
   /** Is `tmux` on PATH? */
   tmuxOnPath(): boolean;
   /**
+   * W4 (run-identity-and-dispatch): is CMUX_WORKSPACE_ID present — i.e. is
+   * this run starting inside a cmux workspace? OPTIONAL and additive: a probe
+   * that predates the cmux rung yields the honest `false` fact, never a
+   * fabricated one. Read once here and FROZEN into the snapshot; later phases
+   * consume the snapshot instead of re-probing (RID-D-CONSTRAINT: backend
+   * resolution is frozen at intake).
+   */
+  cmuxWorkspacePresent?(): boolean;
+  /**
    * The provider-detect ProbeEnv for detectProviders / recommendProvider.
    * Injected separately so provider tests can be reused across U3+U4.
    */
@@ -102,6 +112,35 @@ export interface PreflightProbe {
    * and an `auto` host resolves the honest `unknown` (§3) — never claude.
    */
   hostIdentity?(): NativeAdapterIdentity | null;
+}
+
+/**
+ * Version of Guild's native Claude host-adapter contract. This is deliberately
+ * independent of the Claude Code executable version: session-context has a
+ * separate `execution_target.tool_version` field for the running host binary.
+ */
+export const CLAUDE_CODE_NATIVE_ADAPTER_VERSION = HOST_ADAPTER_CONTRACT_VERSION;
+
+/**
+ * Resolve the native Claude adapter only after a host-set marker is present.
+ * The host marker is the identity proof. The adapter version names Guild's
+ * stable adapter contract, not whichever `claude` executable PATH happens to
+ * resolve after the session has already started.
+ */
+export function detectClaudeNativeAdapterIdentity(
+  env: Record<string, string | undefined>,
+): NativeAdapterIdentity | null {
+  if (env["CLAUDECODE"] !== "1" && !env["CLAUDE_PLUGIN_ROOT"]) return null;
+  return {
+    family: "claude",
+    surface: "cli",
+    adapter_id: "claude-code-native",
+    adapter_version: CLAUDE_CODE_NATIVE_ADAPTER_VERSION,
+    evidence:
+      "host-set process env marker (CLAUDECODE / CLAUDE_PLUGIN_ROOT) " +
+      "injected by the Claude Code host at spawn; interpreted by Guild " +
+      `adapter contract ${CLAUDE_CODE_NATIVE_ADAPTER_VERSION}`,
+  };
 }
 
 /** Options for runStartPreflight. */
@@ -182,6 +221,14 @@ export interface ResolvedSettingsSnapshot {
    */
   roles: RoleResolutionSet;
   /**
+   * W4 (run-identity-and-dispatch): the dispatch backend RESOLVED AND FROZEN at
+   * intake, with the raw capability facts it was resolved from. cmux is a
+   * first-class value here (preferred over tmux when the workspace fact is
+   * present) — not a hooks-only degradation branch. Later phases read this
+   * snapshot; they never re-probe and never re-decide.
+   */
+  dispatch: RunStartDispatchResolution;
+  /**
    * The review communication contract version. UNCHANGED per AC-9.
    * All providers communicate through packet/result/trail under
    * .guild/runs/<id>/review/<gate>/ using this schema.
@@ -192,6 +239,76 @@ export interface ResolvedSettingsSnapshot {
    * null here — U6 fills it in.
    */
   resolved_at_ref: null;
+}
+
+// ---------------------------------------------------------------------------
+// W4 — run-start dispatch-backend resolution (frozen at intake)
+// ---------------------------------------------------------------------------
+
+/** The first-class backend values the intake freeze can resolve. */
+export type RunStartDispatchBackend = "cmux" | "tmux" | "agent" | "subagent";
+
+/** The raw capability facts the backend was resolved from — persisted verbatim. */
+export interface RunStartDispatchFacts {
+  cmux_workspace_present: boolean;
+  tmux_on_path: boolean;
+  agent_mode: string;
+}
+
+export interface RunStartDispatchResolution {
+  backend: RunStartDispatchBackend;
+  reason: string;
+  facts: RunStartDispatchFacts;
+}
+
+/**
+ * The PURE intake ladder for the frozen backend value. Mirrors the substrate
+ * ladders in `selectExecutionSubstrate` (dispatch module) and the hooks'
+ * `resolveTeamSubstrate` — restated here because lifecycle may not import the
+ * dispatch module (the dependency points the other way); the pinned tests in
+ * cmux-backend-selection.test.ts keep the three ladders in step.
+ *
+ *   team/auto : cmux workspace → "cmux"  (rung 0 — BEFORE any tmux fact)
+ *               tmux on PATH  → "tmux"
+ *               otherwise     → "subagent" (honest floor)
+ *   agent     : "agent"    (explicit pin, never hijacked)
+ *   subagent  : "subagent" (explicit pin, never hijacked)
+ */
+export function resolveRunStartDispatchBackend(
+  agentMode: string,
+  facts: { cmuxWorkspacePresent: boolean; tmuxOnPath: boolean }
+): RunStartDispatchResolution {
+  const base: RunStartDispatchFacts = {
+    cmux_workspace_present: facts.cmuxWorkspacePresent,
+    tmux_on_path: facts.tmuxOnPath,
+    agent_mode: agentMode,
+  };
+  if (agentMode === "agent") {
+    return { backend: "agent", reason: "explicit agent_mode=agent", facts: base };
+  }
+  if (agentMode === "subagent") {
+    return { backend: "subagent", reason: "explicit agent_mode=subagent", facts: base };
+  }
+  // team / auto (and any unrecognized value, resolved conservatively team-ward)
+  if (facts.cmuxWorkspacePresent) {
+    return {
+      backend: "cmux",
+      reason: `agent_mode=${agentMode} + CMUX_WORKSPACE_ID present → visible cmux surfaces (lead-driven)`,
+      facts: base,
+    };
+  }
+  if (facts.tmuxOnPath) {
+    return {
+      backend: "tmux",
+      reason: `agent_mode=${agentMode} + tmux on PATH → tmux team panes`,
+      facts: base,
+    };
+  }
+  return {
+    backend: "subagent",
+    reason: `agent_mode=${agentMode} with no team substrate (no cmux workspace, no tmux) → subagent floor`,
+    facts: base,
+  };
 }
 
 /** The structured result runStartPreflight returns. */
@@ -392,6 +509,17 @@ export function runStartPreflight(opts: PreflightOptions): PreflightResult {
     inEffect: agentModeIsTeam,
   };
 
+  // W4: read the cmux workspace fact ONCE and resolve the dispatch backend the
+  // run is frozen to. An absent optional probe member is the honest `false`.
+  const cmuxWorkspacePresent = safeProbe(
+    () => probe.cmuxWorkspacePresent?.() === true,
+    false
+  );
+  const dispatch = resolveRunStartDispatchBackend(String(config.agent_mode), {
+    cmuxWorkspacePresent,
+    tmuxOnPath: tmuxAvailable,
+  });
+
   // ------------------------------------------------------------------
   // Step 4 — Compute needsTmuxPrompt (OD-3, operator-confirmed)
   // Prompt fires when tmux is available AND effective agent_mode !== "team".
@@ -531,6 +659,7 @@ export function runStartPreflight(opts: PreflightOptions): PreflightResult {
       ...(selectedProvider !== undefined ? { selected: selectedProvider } : {}),
     },
     roles,
+    dispatch,
     communication_contract: "review_result.v1",
     resolved_at_ref: null,
   };
@@ -583,6 +712,9 @@ export function defaultPreflightProbe(cwd: string): PreflightProbe {
         execSync("command -v tmux", { stdio: "ignore" });
         return true;
       }, false),
+    // W4: the cmux workspace fact — a cheap host-set env marker, no subprocess.
+    cmuxWorkspacePresent: () =>
+      safeProbe(() => (process.env["CMUX_WORKSPACE_ID"] ?? "").trim().length > 0, false),
     providerProbe: defaultProbeEnv(cwd),
     incompleteRun: () =>
       safeProbe(() => {
@@ -601,19 +733,7 @@ export function defaultPreflightProbe(cwd: string): PreflightProbe {
     // caller then records the honest "unknown", never a defaulted family.
     hostIdentity: () =>
       safeProbe<NativeAdapterIdentity | null>(() => {
-        const env = process.env;
-        if (env["CLAUDECODE"] === "1" || env["CLAUDE_PLUGIN_ROOT"]) {
-          return {
-            family: "claude",
-            surface: "cli",
-            adapter_id: "claude-code-native",
-            adapter_version: env["CLAUDE_CODE_VERSION"] ?? "unknown",
-            evidence:
-              "host-set process env marker (CLAUDECODE / CLAUDE_PLUGIN_ROOT) " +
-              "injected by the Claude Code host at spawn",
-          };
-        }
-        return null;
+        return detectClaudeNativeAdapterIdentity(process.env);
       }, null),
   };
 }
