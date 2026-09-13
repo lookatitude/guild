@@ -35,7 +35,8 @@
     "build:verify": "npx tsx build-verify.ts",
     "build:verify:refresh": "npx tsx build-verify.ts --refresh-receipts",
     "desktop-app-smoke": "npx tsx desktop-app-smoke.ts",
-    "verify:desktop-app-smoke": "npx tsx verify-desktop-app-smoke.ts"
+    "verify:desktop-app-smoke": "npx tsx verify-desktop-app-smoke.ts",
+    "lint:layout": "npx tsx lint/layout-laws.ts"
   },
   "dependencies": {
     "js-yaml": "^4.3.0"

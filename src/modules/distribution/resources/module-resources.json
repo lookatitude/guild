@@ -201,6 +201,20 @@
     },
     {
       "category": "scripts",
+      "id": "lint/build-coverage-draft",
+      "source_path": "scripts/lint/build-coverage-draft.ts",
+      "resource_path": "resources/scripts/lint/build-coverage-draft.ts",
+      "sha256": "b68fc4e1fed1c1ebdbe8a83f6cc074af3c300ee5373844d63d10d37d67243131"
+    },
+    {
+      "category": "scripts",
+      "id": "lint/layout-laws",
+      "source_path": "scripts/lint/layout-laws.ts",
+      "resource_path": "resources/scripts/lint/layout-laws.ts",
+      "sha256": "ee79544de15c69bf840b7f3a1ff3e80d546467dc5f29f24e9bdbce20983b49c3"
+    },
+    {
+      "category": "scripts",
       "id": "projection:src/modules/distribution/workflows/release-distribution-contract.ts",
       "source_path": "src/modules/distribution/workflows/release-distribution-contract.ts",
       "resource_path": "resources/src/modules/distribution/workflows/release-distribution-contract.ts",
