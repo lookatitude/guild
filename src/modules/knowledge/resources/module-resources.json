@@ -22,7 +22,7 @@
       "id": "guild-memory",
       "source_path": ".mcp.json",
       "resource_path": "resources/mcp_servers/.mcp.json",
-      "sha256": "e010b6a05b3ad25f76623be8c4578c03420127ad665a53205190059ab70a7cfb"
+      "sha256": "c50e88cd8475cc177c0e62d4006adc18e725f7ddcdc0a9b8e597edf79e92bf49"
     },
     {
       "category": "scripts",

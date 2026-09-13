@@ -688,7 +688,7 @@ function summaryHasDispatchFrontmatter(summary: string): boolean {
 
 // ─── MCP server ──────────────────────────────────────────────────────────
 
-function buildServer(): McpServer {
+export function buildServer(): McpServer {
   const server = new McpServer(
     { name: "guild-telemetry", version: "0.1.0" },
     {
@@ -966,7 +966,13 @@ async function main(): Promise<void> {
   process.stderr.write("[guild-telemetry] ready\n");
 }
 
-main().catch((err) => {
-  process.stderr.write(`[guild-telemetry] fatal: ${err?.stack ?? err}\n`);
-  process.exit(1);
-});
+// KTD3: this module is a LIBRARY for the single compiled binary
+// (`runtime/guild-mcp.js`), which selects one D-MCP id per process and calls
+// `runAsEntry()`. It never self-starts on import — `--describe` builds the
+// server to read its tool descriptions without opening a transport.
+export function runAsEntry(): void {
+  main().catch((err) => {
+    process.stderr.write(`[guild-telemetry] fatal: ${err?.stack ?? err}\n`);
+    process.exit(1);
+  });
+}

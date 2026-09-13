@@ -1,4 +1,4 @@
-#!/usr/bin/env -S npx tsx
+#!/usr/bin/env node
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -27,7 +27,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// emit-learning-checkpoint.ts
+// hooks/emit-learning-checkpoint.ts
 var emit_learning_checkpoint_exports = {};
 __export(emit_learning_checkpoint_exports, {
   ALLOWED_NODE_PREFIXES: () => ALLOWED_NODE_PREFIXES,
@@ -43,7 +43,7 @@ module.exports = __toCommonJS(emit_learning_checkpoint_exports);
 var fs = __toESM(require("fs"));
 var path = __toESM(require("path"));
 
-// ../src/modules/initiatives/workflows/classify-proposal.ts
+// src/modules/initiatives/workflows/classify-proposal.ts
 function classifyProposal(input) {
   const target = input.target ?? "skill";
   const subject = input.subject ?? "<skill>";
@@ -85,7 +85,7 @@ if (require.main === module && /^classify-proposal\.[cm]?[jt]s$/.test((process.a
   runClassifyProposalCli();
 }
 
-// ../src/modules/initiatives/workflows/initiative.ts
+// src/modules/initiatives/workflows/initiative.ts
 var DEFINITION_STATUS = Object.freeze(["incomplete", "assumed", "complete"]);
 var EXECUTION_STATUS = Object.freeze(["not_started", "active", "blocked", "done"]);
 var RELEASE_STATUS = Object.freeze(["not_released", "release_candidate", "released", "rollback_required"]);
@@ -116,7 +116,7 @@ var DEFINITION_CATEGORIES = Object.freeze([
 ]);
 var DEFINITION_ITEM_STATUS = Object.freeze(["defined", "needs_definition", "assumed", "superseded"]);
 
-// ../src/modules/initiatives/workflows/initiative-activity.ts
+// src/modules/initiatives/workflows/initiative-activity.ts
 var ACTIVITY_EVENTS = Object.freeze([
   "created",
   "status_change",
@@ -132,7 +132,7 @@ var ACTIVITY_EVENTS = Object.freeze([
 ]);
 var SET = new Set(ACTIVITY_EVENTS);
 
-// ../src/modules/initiatives/workflows/initiative-workitems.ts
+// src/modules/initiatives/workflows/initiative-workitems.ts
 var WORK_ITEM_TYPES = Object.freeze([
   "research",
   "design",
@@ -155,7 +155,7 @@ var WORK_ITEM_STATUS = Object.freeze([
 var TYPES = new Set(WORK_ITEM_TYPES);
 var STATUS = new Set(WORK_ITEM_STATUS);
 
-// ../src/modules/evolution/workflows/learning-signatures.ts
+// src/modules/evolution/workflows/learning-signatures.ts
 function allLearnings(artifacts) {
   const out = [];
   for (const block of artifacts.handoffBlocks ?? []) {
@@ -442,7 +442,7 @@ function classifyPhase(artifacts) {
   };
 }
 
-// emit-learning-checkpoint.ts
+// hooks/emit-learning-checkpoint.ts
 var SCHEMA_VERSION = "guild.learning_checkpoint.v1";
 var VALID_PHASES = Object.freeze([
   "init",

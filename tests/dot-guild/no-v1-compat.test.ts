@@ -40,7 +40,7 @@
  *   (A) SOURCE tree: scripts/**, hooks/** (.ts), commands/**, skills/**,
  *       templates/**, agents/**, plus scaffold/fixture .json/.yaml.
  *   (B) SHIPPED DIST bundles: hooks/dist, hooks/agent-team/dist,
- *       mcp-servers/<name>/dist — the COMPILED code that actually ships and
+ *       runtime/ — the COMPILED code that actually ships and
  *       runs. The stale-bundle-with-metadata.json bug (source fixed, bundle
  *       stale) lives precisely here, so the gate MUST scan compiled output.
  *       Exempts the allowlisted converter-wiring bundle
@@ -81,6 +81,13 @@ function walk(
     if (entry.isDirectory()) {
       if (entry.name === "node_modules") continue;
       if (entry.name === "dist" && !opts.includeDist) continue;
+      // SCAN-SCOPE (T02): `runtime/` is COMPILED OUTPUT, the same class as `dist/`
+      // — the single MCP binary plus the CLIs the command surface spawns. It is a
+      // DIST surface, scanned deliberately through SHIPPED_DIST_DIRS below; walking
+      // it as SOURCE too would read vendored SDK text and the compiled converter as
+      // Guild source. Gate the top-level tree only, so a `runtime/` directory
+      // nested inside real source is still scanned.
+      if (entry.name === "runtime" && dir === PLUGIN_ROOT && !opts.includeDist) continue;
       // SCAN-SCOPE: `.guild/` is project-local RUNTIME state (run traces, payloads,
       // context bundles, reflections) — or runtime-shaped fixture data — never shipped
       // plugin source. Skip every `.guild/` subtree wherever it nests (e.g. the
@@ -159,7 +166,7 @@ function scanForPattern(
 // The non-node_modules dist directories that ship compiled, runnable code:
 //   hooks/dist/                  — native hook bundles
 //   hooks/agent-team/dist/       — agent-team hook bundles
-//   mcp-servers/*/dist/          — MCP server bundles
+//   runtime/                     — the single MCP binary + compiled CLIs (KTD3)
 //
 // detect-guild-version.js is the compiled CONVERTER WIRING — allowlisted.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -167,13 +174,28 @@ function scanForPattern(
 const SHIPPED_DIST_DIRS = [
   path.join(PLUGIN_ROOT, "hooks/dist"),
   path.join(PLUGIN_ROOT, "hooks/agent-team/dist"),
-  path.join(PLUGIN_ROOT, "mcp-servers/guild-memory/dist"),
-  path.join(PLUGIN_ROOT, "mcp-servers/guild-telemetry/dist"),
+  // T02/KTD3: the two per-server MCP bundles collapsed into ONE committed binary
+  // (runtime/guild-mcp.js) plus the compiled CLIs the command surface spawns.
+  path.join(PLUGIN_ROOT, "runtime"),
 ];
 
-// The single dist file exempt from the scan: the compiled converter wiring.
+// Dist files exempt from the scan. The rule is the same one the SOURCE scan
+// already applies: the v1 converter is ALLOWED to name v1 shapes — it is the
+// thing that reads them — and third-party code vendored into a bundle is not
+// Guild source. Each entry names why, and nothing else is exempt.
 const DIST_ALLOWLIST = [
+  // Compiled converter wiring (pre-existing).
   path.join(PLUGIN_ROOT, "hooks/dist/detect-guild-version.js"),
+  // T02: the compiled v1→v2 converter itself. Its SOURCE
+  // (scripts/dot-guild/migrate-guild.ts) is already allowlisted above; the
+  // bundle is the same program and must carry the same exemption, or shipping
+  // a compiled converter would fail the gate the converter is exempt from.
+  path.join(PLUGIN_ROOT, "runtime/scripts/migrate-guild.js"),
+  // T02: the single MCP binary statically bundles the MCP SDK and zod. Their
+  // JSDoc carries `@deprecated` on THEIR symbols, not on a live Guild symbol,
+  // so Marker 10 reads vendored text as a Guild violation. Guild's own MCP
+  // source stays in scope through mcp-servers/*/src in the SOURCE scan.
+  path.join(PLUGIN_ROOT, "runtime/guild-mcp.js"),
 ];
 
 /** Collect all shipped .js dist bundles, excluding the allowlisted wiring bundle. */

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S npx tsx
+#!/usr/bin/env node
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -42,7 +42,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// ../src/modules/kernel/workflows/sealed-collections.ts
+// src/modules/kernel/workflows/sealed-collections.ts
 function regExpWritesLastIndex(re) {
   return re.global || re.sticky;
 }
@@ -127,14 +127,14 @@ function deepFreeze(value, options = {}) {
 }
 var SEALED_BRAND;
 var init_sealed_collections = __esm({
-  "../src/modules/kernel/workflows/sealed-collections.ts"() {
+  "src/modules/kernel/workflows/sealed-collections.ts"() {
     SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
   }
 });
 
-// node_modules/js-yaml/lib/common.js
+// hooks/node_modules/js-yaml/lib/common.js
 var require_common = __commonJS({
-  "node_modules/js-yaml/lib/common.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/common.js"(exports2, module2) {
     "use strict";
     function isNothing(subject) {
       return typeof subject === "undefined" || subject === null;
@@ -176,9 +176,9 @@ var require_common = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/exception.js
+// hooks/node_modules/js-yaml/lib/exception.js
 var require_exception = __commonJS({
-  "node_modules/js-yaml/lib/exception.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/exception.js"(exports2, module2) {
     "use strict";
     function formatError(exception, compact) {
       let where = "";
@@ -214,9 +214,9 @@ var require_exception = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/snippet.js
+// hooks/node_modules/js-yaml/lib/snippet.js
 var require_snippet = __commonJS({
-  "node_modules/js-yaml/lib/snippet.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/snippet.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     function getLine(buffer, lineStart, lineEnd, position, maxLineLength) {
@@ -294,9 +294,9 @@ var require_snippet = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type.js
+// hooks/node_modules/js-yaml/lib/type.js
 var require_type = __commonJS({
-  "node_modules/js-yaml/lib/type.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/type.js"(exports2, module2) {
     "use strict";
     var YAMLException = require_exception();
     var TYPE_CONSTRUCTOR_OPTIONS = [
@@ -358,9 +358,9 @@ var require_type = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema.js
+// hooks/node_modules/js-yaml/lib/schema.js
 var require_schema = __commonJS({
-  "node_modules/js-yaml/lib/schema.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/schema.js"(exports2, module2) {
     "use strict";
     var YAMLException = require_exception();
     var Type = require_type();
@@ -447,9 +447,9 @@ var require_schema = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/str.js
+// hooks/node_modules/js-yaml/lib/type/str.js
 var require_str = __commonJS({
-  "node_modules/js-yaml/lib/type/str.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/type/str.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     module2.exports = new Type("tag:yaml.org,2002:str", {
@@ -461,9 +461,9 @@ var require_str = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/seq.js
+// hooks/node_modules/js-yaml/lib/type/seq.js
 var require_seq = __commonJS({
-  "node_modules/js-yaml/lib/type/seq.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/type/seq.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     module2.exports = new Type("tag:yaml.org,2002:seq", {
@@ -475,9 +475,9 @@ var require_seq = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/map.js
+// hooks/node_modules/js-yaml/lib/type/map.js
 var require_map = __commonJS({
-  "node_modules/js-yaml/lib/type/map.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/type/map.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     module2.exports = new Type("tag:yaml.org,2002:map", {
@@ -489,9 +489,9 @@ var require_map = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema/failsafe.js
+// hooks/node_modules/js-yaml/lib/schema/failsafe.js
 var require_failsafe = __commonJS({
-  "node_modules/js-yaml/lib/schema/failsafe.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/schema/failsafe.js"(exports2, module2) {
     "use strict";
     var Schema = require_schema();
     module2.exports = new Schema({
@@ -504,9 +504,9 @@ var require_failsafe = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/null.js
+// hooks/node_modules/js-yaml/lib/type/null.js
 var require_null = __commonJS({
-  "node_modules/js-yaml/lib/type/null.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/type/null.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     function resolveYamlNull(data) {
@@ -547,9 +547,9 @@ var require_null = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/bool.js
+// hooks/node_modules/js-yaml/lib/type/bool.js
 var require_bool = __commonJS({
-  "node_modules/js-yaml/lib/type/bool.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/type/bool.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     function resolveYamlBoolean(data) {
@@ -584,9 +584,9 @@ var require_bool = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/int.js
+// hooks/node_modules/js-yaml/lib/type/int.js
 var require_int = __commonJS({
-  "node_modules/js-yaml/lib/type/int.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/type/int.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     var Type = require_type();
@@ -700,9 +700,9 @@ var require_int = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/float.js
+// hooks/node_modules/js-yaml/lib/type/float.js
 var require_float = __commonJS({
-  "node_modules/js-yaml/lib/type/float.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/type/float.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     var Type = require_type();
@@ -785,9 +785,9 @@ var require_float = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema/json.js
+// hooks/node_modules/js-yaml/lib/schema/json.js
 var require_json = __commonJS({
-  "node_modules/js-yaml/lib/schema/json.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/schema/json.js"(exports2, module2) {
     "use strict";
     module2.exports = require_failsafe().extend({
       implicit: [
@@ -800,17 +800,17 @@ var require_json = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema/core.js
+// hooks/node_modules/js-yaml/lib/schema/core.js
 var require_core = __commonJS({
-  "node_modules/js-yaml/lib/schema/core.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/schema/core.js"(exports2, module2) {
     "use strict";
     module2.exports = require_json();
   }
 });
 
-// node_modules/js-yaml/lib/type/timestamp.js
+// hooks/node_modules/js-yaml/lib/type/timestamp.js
 var require_timestamp = __commonJS({
-  "node_modules/js-yaml/lib/type/timestamp.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/type/timestamp.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var YAML_DATE_REGEXP = new RegExp(
@@ -870,9 +870,9 @@ var require_timestamp = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/merge.js
+// hooks/node_modules/js-yaml/lib/type/merge.js
 var require_merge = __commonJS({
-  "node_modules/js-yaml/lib/type/merge.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/type/merge.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     function resolveYamlMerge(data) {
@@ -885,9 +885,9 @@ var require_merge = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/binary.js
+// hooks/node_modules/js-yaml/lib/type/binary.js
 var require_binary = __commonJS({
-  "node_modules/js-yaml/lib/type/binary.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/type/binary.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var BASE64_MAP = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r";
@@ -977,9 +977,9 @@ var require_binary = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/omap.js
+// hooks/node_modules/js-yaml/lib/type/omap.js
 var require_omap = __commonJS({
-  "node_modules/js-yaml/lib/type/omap.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/type/omap.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var _hasOwnProperty = Object.prototype.hasOwnProperty;
@@ -1016,9 +1016,9 @@ var require_omap = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/pairs.js
+// hooks/node_modules/js-yaml/lib/type/pairs.js
 var require_pairs = __commonJS({
-  "node_modules/js-yaml/lib/type/pairs.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/type/pairs.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var _toString = Object.prototype.toString;
@@ -1054,9 +1054,9 @@ var require_pairs = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/type/set.js
+// hooks/node_modules/js-yaml/lib/type/set.js
 var require_set = __commonJS({
-  "node_modules/js-yaml/lib/type/set.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/type/set.js"(exports2, module2) {
     "use strict";
     var Type = require_type();
     var _hasOwnProperty = Object.prototype.hasOwnProperty;
@@ -1081,9 +1081,9 @@ var require_set = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/schema/default.js
+// hooks/node_modules/js-yaml/lib/schema/default.js
 var require_default = __commonJS({
-  "node_modules/js-yaml/lib/schema/default.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/schema/default.js"(exports2, module2) {
     "use strict";
     module2.exports = require_core().extend({
       implicit: [
@@ -1100,9 +1100,9 @@ var require_default = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/loader.js
+// hooks/node_modules/js-yaml/lib/loader.js
 var require_loader = __commonJS({
-  "node_modules/js-yaml/lib/loader.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/loader.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     var YAMLException = require_exception();
@@ -2472,9 +2472,9 @@ var require_loader = __commonJS({
   }
 });
 
-// node_modules/js-yaml/lib/dumper.js
+// hooks/node_modules/js-yaml/lib/dumper.js
 var require_dumper = __commonJS({
-  "node_modules/js-yaml/lib/dumper.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/lib/dumper.js"(exports2, module2) {
     "use strict";
     var common = require_common();
     var YAMLException = require_exception();
@@ -3125,9 +3125,9 @@ var require_dumper = __commonJS({
   }
 });
 
-// node_modules/js-yaml/index.js
+// hooks/node_modules/js-yaml/index.js
 var require_js_yaml = __commonJS({
-  "node_modules/js-yaml/index.js"(exports2, module2) {
+  "hooks/node_modules/js-yaml/index.js"(exports2, module2) {
     "use strict";
     var loader = require_loader();
     var dumper = require_dumper();
@@ -3167,7 +3167,7 @@ var require_js_yaml = __commonJS({
   }
 });
 
-// ../src/modules/kernel/workflows/module-manifest.ts
+// src/modules/kernel/workflows/module-manifest.ts
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -3648,7 +3648,7 @@ function validateModuleBoundaries(root, manifests) {
 }
 var fs2, path2, MODULE_MANIFEST_SCHEMA_VERSION, OWNED_INVENTORY_CATEGORIES, CATEGORY_KEYS, HOST_FACING_ROOTS;
 var init_module_manifest = __esm({
-  "../src/modules/kernel/workflows/module-manifest.ts"() {
+  "src/modules/kernel/workflows/module-manifest.ts"() {
     fs2 = __toESM(require("node:fs"));
     path2 = __toESM(require("node:path"));
     MODULE_MANIFEST_SCHEMA_VERSION = "guild.module_manifest.v1";
@@ -3672,7 +3672,7 @@ var init_module_manifest = __esm({
   }
 });
 
-// ../src/modules/kernel/workflows/yaml-loader.ts
+// src/modules/kernel/workflows/yaml-loader.ts
 function pluginLocalScriptsRoots() {
   return [
     // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
@@ -3711,18 +3711,18 @@ function loadYamlApi() {
 }
 var path3;
 var init_yaml_loader = __esm({
-  "../src/modules/kernel/workflows/yaml-loader.ts"() {
+  "src/modules/kernel/workflows/yaml-loader.ts"() {
     path3 = __toESM(require("node:path"));
   }
 });
 
-// ../src/modules/kernel/workflows/identifier-tokenize.ts
+// src/modules/kernel/workflows/identifier-tokenize.ts
 var init_identifier_tokenize = __esm({
-  "../src/modules/kernel/workflows/identifier-tokenize.ts"() {
+  "src/modules/kernel/workflows/identifier-tokenize.ts"() {
   }
 });
 
-// ../src/modules/kernel/workflows/path-containment.ts
+// src/modules/kernel/workflows/path-containment.ts
 function isRefused(r) {
   return "code" in r;
 }
@@ -3819,7 +3819,7 @@ function checkContained(root, target, options = {}) {
 }
 var fs3, path4, CONTAINMENT_REFUSAL_CODES;
 var init_path_containment = __esm({
-  "../src/modules/kernel/workflows/path-containment.ts"() {
+  "src/modules/kernel/workflows/path-containment.ts"() {
     fs3 = __toESM(require("node:fs"));
     path4 = __toESM(require("node:path"));
     CONTAINMENT_REFUSAL_CODES = Object.freeze([
@@ -3836,9 +3836,9 @@ var init_path_containment = __esm({
   }
 });
 
-// ../src/modules/kernel/index.ts
+// src/modules/kernel/index.ts
 var init_kernel = __esm({
-  "../src/modules/kernel/index.ts"() {
+  "src/modules/kernel/index.ts"() {
     init_module_manifest();
     init_yaml_loader();
     init_identifier_tokenize();
@@ -3847,10 +3847,10 @@ var init_kernel = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/host-capabilities-schema.ts
+// src/modules/host-runtime/workflows/host-capabilities-schema.ts
 var UPDATE_COMMANDS, INJECTION_SUPPORT, INJECTION_SUPPORT_SET, CLAUDE_CAPABILITIES, CODEX_CAPABILITIES, NO_HOOKS, AGENTS_FILE_CAPABILITIES, REQUIRED_HOOK_EVENTS;
 var init_host_capabilities_schema = __esm({
-  "../src/modules/host-runtime/workflows/host-capabilities-schema.ts"() {
+  "src/modules/host-runtime/workflows/host-capabilities-schema.ts"() {
     UPDATE_COMMANDS = {
       marketplace_cli: "claude plugin marketplace update guild && claude plugin update guild@guild",
       self_update: "guild-run update",
@@ -4255,7 +4255,7 @@ var init_host_capabilities_schema = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/host-registry-schema.ts
+// src/modules/host-runtime/workflows/host-registry-schema.ts
 function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectable = surface_kind === "cli") {
   return {
     schema_version: "guild.host_capabilities.v1",
@@ -4365,7 +4365,7 @@ function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectab
 }
 var HOST_IDS, HOST_FAMILIES, AUTH_PROBES, CLAUDE_ENTRY, CODEX_ENTRY, AGENTS_FILE_ENTRY, PI_ENTRY, ANTIGRAVITY_ENTRY, CLAUDE_APP_ENTRY, CLAUDE_WEB_ENTRY, CODEX_APP_ENTRY, CLAUDE_AI_CONNECTOR_ENTRY, CURSOR_ENTRY, GITHUB_COPILOT_ENTRY, OPENCODE_ENTRY, ROVO_DEV_ENTRY, KIRO_ENTRY, QODER_ENTRY, TRAE_ENTRY, HOST_REGISTRY_ROWS, HOST_ID_SET, FAMILY_SET, AUTH_PROBE_SET;
 var init_host_registry_schema = __esm({
-  "../src/modules/host-runtime/workflows/host-registry-schema.ts"() {
+  "src/modules/host-runtime/workflows/host-registry-schema.ts"() {
     init_kernel();
     init_host_capabilities_schema();
     HOST_IDS = Object.freeze([
@@ -4762,7 +4762,7 @@ var init_host_registry_schema = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/host-id-namespace.ts
+// src/modules/host-runtime/workflows/host-id-namespace.ts
 function normalizeHostId(value) {
   const s = value.trim();
   if (HOST_ID_SET2.has(s)) return s;
@@ -4770,7 +4770,7 @@ function normalizeHostId(value) {
 }
 var HOST_ID_SET2, LEGACY_HOST_ALIASES;
 var init_host_id_namespace = __esm({
-  "../src/modules/host-runtime/workflows/host-id-namespace.ts"() {
+  "src/modules/host-runtime/workflows/host-id-namespace.ts"() {
     init_host_registry_schema();
     HOST_ID_SET2 = new Set(HOST_IDS);
     LEGACY_HOST_ALIASES = {
@@ -4787,10 +4787,10 @@ var init_host_id_namespace = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts
+// src/modules/host-runtime/workflows/adapter-fallback-ladders.ts
 var RUNGS, ADAPTER_SURFACES, INFERRED_HOSTS, RUNG_SET, SURFACE_SET;
 var init_adapter_fallback_ladders = __esm({
-  "../src/modules/host-runtime/workflows/adapter-fallback-ladders.ts"() {
+  "src/modules/host-runtime/workflows/adapter-fallback-ladders.ts"() {
     init_host_registry_schema();
     init_kernel();
     RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"]);
@@ -4817,10 +4817,10 @@ var init_adapter_fallback_ladders = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/host-profiles-validate.ts
+// src/modules/host-runtime/workflows/host-profiles-validate.ts
 var KNOWN_HOST_IDS, VALID_HOST_PROFILE_ENTRY_KEYS, VALID_HOST_PROFILE_MODEL_KEYS;
 var init_host_profiles_validate = __esm({
-  "../src/modules/host-runtime/workflows/host-profiles-validate.ts"() {
+  "src/modules/host-runtime/workflows/host-profiles-validate.ts"() {
     init_host_registry_schema();
     init_kernel();
     init_host_id_namespace();
@@ -4830,7 +4830,7 @@ var init_host_profiles_validate = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/host-registry.ts
+// src/modules/host-runtime/workflows/host-registry.ts
 function deriveCapabilityRow(row) {
   return row.capabilities;
 }
@@ -4839,7 +4839,7 @@ function resultAdapterForFamily(family) {
 }
 var DERIVED_HOST_CAPABILITY_ROWS, FAMILY_TO_ROW;
 var init_host_registry = __esm({
-  "../src/modules/host-runtime/workflows/host-registry.ts"() {
+  "src/modules/host-runtime/workflows/host-registry.ts"() {
     init_host_registry_schema();
     init_host_id_namespace();
     DERIVED_HOST_CAPABILITY_ROWS = (() => {
@@ -4868,10 +4868,10 @@ var init_host_registry = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/provider-detect.ts
+// src/modules/host-runtime/workflows/provider-detect.ts
 var PROVIDER_REGISTRY;
 var init_provider_detect = __esm({
-  "../src/modules/host-runtime/workflows/provider-detect.ts"() {
+  "src/modules/host-runtime/workflows/provider-detect.ts"() {
     init_host_registry();
     PROVIDER_REGISTRY = [
       // The author host itself — always "detected on the host", never a cross reviewer
@@ -4889,14 +4889,14 @@ var init_provider_detect = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/session-context.ts
+// src/modules/host-runtime/workflows/session-context.ts
 var init_session_context = __esm({
-  "../src/modules/host-runtime/workflows/session-context.ts"() {
+  "src/modules/host-runtime/workflows/session-context.ts"() {
     init_provider_detect();
   }
 });
 
-// ../src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts
+// src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts
 function isFailureReason(value) {
   return typeof value === "string" && FAILURE_REASONS.includes(value);
 }
@@ -4916,7 +4916,7 @@ function failureResult(adapter, status, failureReason, latencyMs, sourceRef) {
 }
 var FAILURE_REASONS, DiscoveryParseRejected;
 var init_adapter_contract = __esm({
-  "../src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts"() {
+  "src/modules/host-runtime/workflows/model-discovery/adapter-contract.ts"() {
     init_session_context();
     FAILURE_REASONS = Object.freeze([
       "timeout_budget_exceeded",
@@ -4937,7 +4937,7 @@ var init_adapter_contract = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/model-discovery/claude-api.ts
+// src/modules/host-runtime/workflows/model-discovery/claude-api.ts
 function isRecord(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -4987,7 +4987,7 @@ function normalizeClaudeApiModels(models) {
 }
 var CLAUDE_API_ADAPTER_ID, CLAUDE_API_ADAPTER_VERSION, CLAUDE_API_MODELS_URL, CLAUDE_API_VERSION_HEADER, CLAUDE_API_MAX_PAGES, CLAUDE_EFFORT_LEVELS, claudeApiAdapter;
 var init_claude_api = __esm({
-  "../src/modules/host-runtime/workflows/model-discovery/claude-api.ts"() {
+  "src/modules/host-runtime/workflows/model-discovery/claude-api.ts"() {
     init_adapter_contract();
     CLAUDE_API_ADAPTER_ID = "claude-api-models";
     CLAUDE_API_ADAPTER_VERSION = "1.0.0";
@@ -5045,7 +5045,7 @@ var init_claude_api = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts
+// src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts
 function isRecord2(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -5105,7 +5105,7 @@ function normalizeAppServerModels(models) {
 }
 var CODEX_APP_SERVER_ADAPTER_ID, CODEX_APP_SERVER_ADAPTER_VERSION, CODEX_APP_SERVER_TOOL_VERSIONS, codexAppServerAdapter;
 var init_codex_app_server = __esm({
-  "../src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts"() {
+  "src/modules/host-runtime/workflows/model-discovery/codex-app-server.ts"() {
     init_adapter_contract();
     CODEX_APP_SERVER_ADAPTER_ID = "codex-app-server-model-list";
     CODEX_APP_SERVER_ADAPTER_VERSION = "1.0.0";
@@ -5141,7 +5141,7 @@ var init_codex_app_server = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts
+// src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts
 function isRecord3(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -5199,7 +5199,7 @@ function normalizeDebugModels(entries) {
 }
 var CODEX_DEBUG_MODELS_ADAPTER_ID, CODEX_DEBUG_MODELS_ADAPTER_VERSION, CODEX_DEBUG_MODELS_TOOL_VERSIONS, codexDebugModelsAdapter;
 var init_codex_debug_models = __esm({
-  "../src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts"() {
+  "src/modules/host-runtime/workflows/model-discovery/codex-debug-models.ts"() {
     init_adapter_contract();
     CODEX_DEBUG_MODELS_ADAPTER_ID = "codex-debug-models";
     CODEX_DEBUG_MODELS_ADAPTER_VERSION = "1.0.0";
@@ -5234,7 +5234,7 @@ var init_codex_debug_models = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/model-discovery/openai-api.ts
+// src/modules/host-runtime/workflows/model-discovery/openai-api.ts
 function isRecord4(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -5274,7 +5274,7 @@ function normalizeOpenAiModels(models) {
 }
 var OPENAI_API_ADAPTER_ID, OPENAI_API_ADAPTER_VERSION, OPENAI_API_MODELS_URL, openAiApiAdapter;
 var init_openai_api = __esm({
-  "../src/modules/host-runtime/workflows/model-discovery/openai-api.ts"() {
+  "src/modules/host-runtime/workflows/model-discovery/openai-api.ts"() {
     init_adapter_contract();
     OPENAI_API_ADAPTER_ID = "openai-api-models";
     OPENAI_API_ADAPTER_VERSION = "1.0.0";
@@ -5309,7 +5309,7 @@ var init_openai_api = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts
+// src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts
 function staticHintEntries(hints) {
   return hints.map((h) => ({
     canonical_id: h.canonical_id,
@@ -5357,7 +5357,7 @@ function makeHonestUnknownAdapter(targetId, opts = {}) {
 }
 var HONEST_UNKNOWN_ADAPTER_VERSION, claudeCliSubscriptionAdapter, claudeAppAdapter, claudeWebAdapter, claudeGatewayBedrockAdapter, claudeGatewayVertexAdapter, claudeGatewayFoundryAdapter, codexCliApiKeyAdapter;
 var init_honest_unknown = __esm({
-  "../src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts"() {
+  "src/modules/host-runtime/workflows/model-discovery/honest-unknown.ts"() {
     HONEST_UNKNOWN_ADAPTER_VERSION = "1.0.0";
     claudeCliSubscriptionAdapter = makeHonestUnknownAdapter("claude-cli-subscription", {
       surfaceNote: "picker is interactive-only; headless entitlement unprovable pre-dispatch"
@@ -5383,10 +5383,10 @@ var init_honest_unknown = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/model-discovery/index.ts
+// src/modules/host-runtime/workflows/model-discovery/index.ts
 var DISCOVERY_ADAPTER_REGISTRY, CODEX_SEAM_PREFERENCE, CODEX_SEAM_ADAPTERS;
 var init_model_discovery = __esm({
-  "../src/modules/host-runtime/workflows/model-discovery/index.ts"() {
+  "src/modules/host-runtime/workflows/model-discovery/index.ts"() {
     init_adapter_contract();
     init_claude_api();
     init_codex_app_server();
@@ -5420,10 +5420,10 @@ var init_model_discovery = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/host-adapter-contract.ts
+// src/modules/host-runtime/workflows/host-adapter-contract.ts
 var HOST_ADAPTER_OPERATIONS;
 var init_host_adapter_contract = __esm({
-  "../src/modules/host-runtime/workflows/host-adapter-contract.ts"() {
+  "src/modules/host-runtime/workflows/host-adapter-contract.ts"() {
     init_host_registry_schema();
     init_host_id_namespace();
     init_adapter_fallback_ladders();
@@ -5442,7 +5442,7 @@ var init_host_adapter_contract = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/host-capability-snapshot.ts
+// src/modules/host-runtime/workflows/host-capability-snapshot.ts
 function canonicalJson(value) {
   if (value === null) return "null";
   const kind = typeof value;
@@ -5580,7 +5580,7 @@ function createHostCapabilitySnapshotStore() {
 }
 var import_node_crypto, HOST_CAPABILITY_SNAPSHOT_SCHEMA, HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA, HOST_CAPABILITY_IDS, CAPABILITY_READERS, UNKNOWN_HOST_VERSION, DEFAULT_STORE;
 var init_host_capability_snapshot = __esm({
-  "../src/modules/host-runtime/workflows/host-capability-snapshot.ts"() {
+  "src/modules/host-runtime/workflows/host-capability-snapshot.ts"() {
     import_node_crypto = require("node:crypto");
     init_kernel();
     init_host_id_namespace();
@@ -5666,7 +5666,7 @@ var init_host_capability_snapshot = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/host-event-normalizer.ts
+// src/modules/host-runtime/workflows/host-event-normalizer.ts
 function advertisesNativeHooks(entry) {
   return Object.values(entry.capabilities.hooks).some(Boolean);
 }
@@ -5774,7 +5774,7 @@ function normalizeHostEvent(host, nativeEvent) {
 }
 var HOST_EVENT_NORMALIZATION_SCHEMA, HOST_EVENT_NORMALIZATION_RESULT_SCHEMA, NORMALIZED_HOST_EVENT_SCHEMA, NORMALIZED_EVENT_VOCABULARY_VERSION, CLAUDE_NATIVE_EVENT_BINDINGS, WRAPPER_NATIVE_EVENT_BINDINGS, NATIVE_BINDINGS_BY_FAMILY, NO_SOURCE;
 var init_host_event_normalizer = __esm({
-  "../src/modules/host-runtime/workflows/host-event-normalizer.ts"() {
+  "src/modules/host-runtime/workflows/host-event-normalizer.ts"() {
     init_host_id_namespace();
     init_host_registry_schema();
     HOST_EVENT_NORMALIZATION_SCHEMA = "guild.host_event_normalization.v1";
@@ -5892,7 +5892,7 @@ var init_host_event_normalizer = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/host-adapter-boundary.ts
+// src/modules/host-runtime/workflows/host-adapter-boundary.ts
 function entryPointFor(hostId) {
   const row = HOST_REGISTRY_ROWS[hostId];
   const subcommand = row.detection.subcommand ?? null;
@@ -6094,7 +6094,7 @@ function bindHostRuntimeAdapter(request) {
 }
 var HOST_ADAPTER_BOUNDARY_SCHEMA, HOST_ADAPTER_CONTRACT_VERSION, HOST_ENTRY_POINT_SCHEMA, HOST_RUNTIME_BINDING_SCHEMA, HOST_RUNTIME_BINDING_RESULT_SCHEMA, HOST_ADAPTER_OWNERSHIP_SCHEMA, HOST_ADAPTER_REASON_CODES, HOST_ADAPTER_OWNED_CONCERNS, HOST_ADAPTER_NOT_OWNED_CONCERNS, CONCERN_OWNERS, OWNERSHIP, DEFAULT_INSTRUCTION_FILE, HOST_ENTRY_POINTS, BOUNDARY_STORE, SHAPE_NOT_AN_OBJECT, SHAPE_UNINSPECTABLE;
 var init_host_adapter_boundary = __esm({
-  "../src/modules/host-runtime/workflows/host-adapter-boundary.ts"() {
+  "src/modules/host-runtime/workflows/host-adapter-boundary.ts"() {
     init_host_adapter_contract();
     init_host_id_namespace();
     init_host_registry_schema();
@@ -6160,7 +6160,7 @@ var init_host_adapter_boundary = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/neutral-runtime-contracts.ts
+// src/modules/lifecycle/workflows/neutral-runtime-contracts.ts
 function includes(list, value) {
   return typeof value === "string" && list.indexOf(value) !== -1;
 }
@@ -6451,7 +6451,7 @@ function mapLegacyNeutralEventName(name) {
 }
 var NEUTRAL_CONTRACTS_SCHEMA_VERSION, NEUTRAL_CONTRACT_VERSION, NEUTRAL_LIFECYCLE_PHASES, NEUTRAL_DISPOSITIONS, NEUTRAL_OBSERVATION_STATES, NEUTRAL_OUTCOME_TYPES, NEUTRAL_EVENT_NAMES, NEUTRAL_SUPPORT_STATES, NEUTRAL_SUPPORT_STATUS_VALUES, NEUTRAL_SCENARIO_CATEGORIES, NEUTRAL_REASON_CODES, NEUTRAL_SHA256_K, NEUTRAL_SHA256_INIT, NEUTRAL_EVENT_COMPATIBILITY_KINDS, NEUTRAL_EVENT_COMPATIBILITY_RULES, NEUTRAL_SUPERSEDED_EVENT_NAMES_V1, NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2, NEUTRAL_NORMALIZED_EVENT_VOCABULARY;
 var init_neutral_runtime_contracts = __esm({
-  "../src/modules/lifecycle/workflows/neutral-runtime-contracts.ts"() {
+  "src/modules/lifecycle/workflows/neutral-runtime-contracts.ts"() {
     NEUTRAL_CONTRACTS_SCHEMA_VERSION = "guild.runtime.contracts.v1";
     NEUTRAL_CONTRACT_VERSION = 1;
     NEUTRAL_LIFECYCLE_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"]);
@@ -6794,7 +6794,7 @@ var init_neutral_runtime_contracts = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/neutral-gate-policy.ts
+// src/modules/lifecycle/workflows/neutral-gate-policy.ts
 function freezeNeutralCapabilitySnapshot(input) {
   if (!input.snapshot_hash) throw new Error("capability snapshot requires a snapshot_hash");
   if (!input.host_id) throw new Error("capability snapshot requires a host_id");
@@ -6992,12 +6992,12 @@ function evaluateNeutralAdmission(input) {
   return evaluateNeutralGate(input.gate, input.request, input.snapshot);
 }
 var init_neutral_gate_policy = __esm({
-  "../src/modules/lifecycle/workflows/neutral-gate-policy.ts"() {
+  "src/modules/lifecycle/workflows/neutral-gate-policy.ts"() {
     init_neutral_runtime_contracts();
   }
 });
 
-// ../src/modules/lifecycle/workflows/neutral-lifecycle-machine.ts
+// src/modules/lifecycle/workflows/neutral-lifecycle-machine.ts
 function neutralAdmissionContextSnapshotHash(context) {
   const carried = context?.snapshot?.snapshot_hash;
   return typeof carried === "string" && carried.length > 0 ? carried : void 0;
@@ -7631,7 +7631,7 @@ function applyNeutralLifecycleEvent(state, event) {
 }
 var NEUTRAL_RUN_STATUSES, NEUTRAL_TERMINAL_RUN_STATUSES;
 var init_neutral_lifecycle_machine = __esm({
-  "../src/modules/lifecycle/workflows/neutral-lifecycle-machine.ts"() {
+  "src/modules/lifecycle/workflows/neutral-lifecycle-machine.ts"() {
     init_neutral_runtime_contracts();
     init_neutral_gate_policy();
     NEUTRAL_RUN_STATUSES = Object.freeze(["open", "completed", "aborted"]);
@@ -7639,7 +7639,7 @@ var init_neutral_lifecycle_machine = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/neutral-conformance-core.ts
+// src/modules/lifecycle/workflows/neutral-conformance-core.ts
 function applyNeutralSupportTransition(record, operation, result) {
   const rule = NEUTRAL_SUPPORT_TRANSITIONS.find((candidate) => candidate.operation === operation);
   if (rule === void 0) {
@@ -8634,7 +8634,7 @@ function evaluateNeutralConformanceDecision(evidence, authority) {
 }
 var NEUTRAL_SCENARIO_SUITE_ID, NEUTRAL_SCENARIO_SUITE_VERSION, NEUTRAL_CORE_WAVE_OWNER, NEUTRAL_EVIDENCE_PROFILES, NEUTRAL_CORE_SCENARIOS, NEUTRAL_UNEVALUATED_SUPPORT, NEUTRAL_SUPPORT_TRANSITIONS, NEUTRAL_REQUIRED_CORE_SCENARIO_IDS, NEUTRAL_RECEIPT_REF_SCHEMA, NEUTRAL_RECEIPT_REF_PATTERN, NEUTRAL_RUNTIME_VERSION_PATTERN, NEUTRAL_RECOGNIZED_RUNTIME_MAJOR, NEUTRAL_RECOGNIZED_PLATFORMS, NEUTRAL_RECOGNIZED_HOST_IDS, NEUTRAL_SOURCE_COMMIT_PATTERN, NEUTRAL_PACKAGE_HASH_PATTERN, NEUTRAL_ADAPTER_VERSION_PATTERN, NEUTRAL_RECOGNIZED_ADAPTER_MAJOR, NEUTRAL_RELEASE_ID_PATTERN, NEUTRAL_SEMVER_PATTERN, NEUTRAL_JOURNAL_ID_PATTERN, NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS, NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA, NEUTRAL_ATTESTATION_REF_SCHEMA, NEUTRAL_ATTESTATION_SCHEME, NEUTRAL_ATTESTATION_CHAIN_LENGTH, NEUTRAL_ATTESTATION_MESSAGE_CHAINS, NEUTRAL_ATTESTATION_CHECKSUM_CHAINS, NEUTRAL_ATTESTATION_CHAINS, NEUTRAL_ATTESTATION_TREE_HEIGHT, NEUTRAL_ATTESTOR_TRUST_ROOT, NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS, NEUTRAL_MINIMUM_ATTESTOR_QUORUM, NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN, NEUTRAL_ATTESTATION_REF_PATTERN, NEUTRAL_ATTESTATION_SIGNATURE_PATTERN, NEUTRAL_COMMITMENT_PATTERN, NEUTRAL_CLAIMANT_ID_PATTERN, NEUTRAL_EVIDENCE_IDENTITY_FIELDS, NEUTRAL_HEX_ALPHABET, NEUTRAL_SHA256_HEX_PATTERN;
 var init_neutral_conformance_core = __esm({
-  "../src/modules/lifecycle/workflows/neutral-conformance-core.ts"() {
+  "src/modules/lifecycle/workflows/neutral-conformance-core.ts"() {
     init_neutral_runtime_contracts();
     NEUTRAL_SCENARIO_SUITE_ID = "guild.conformance_scenarios.v1";
     NEUTRAL_SCENARIO_SUITE_VERSION = "1.0.0";
@@ -8990,7 +8990,7 @@ var init_neutral_conformance_core = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/neutral-core-boundary.ts
+// src/modules/lifecycle/workflows/neutral-core-boundary.ts
 function isIdentStart(ch) {
   return ch >= "a" && ch <= "z" || ch >= "A" && ch <= "Z" || ch === "_" || ch === "$";
 }
@@ -10069,7 +10069,7 @@ function evaluateNeutralCoreBoundary(files) {
 }
 var NEUTRAL_CORE_MEMBERS, NEUTRAL_FORBIDDEN_BOUNDARY_MATCHERS, DEPENDENCY_WORD, OPENERS, CLOSERS, OPTIONAL_CALL, NEUTRAL_PURE_INTRINSIC_ROOTS, NEUTRAL_LANGUAGE_WORDS, NEUTRAL_VALUE_START_PUNCT, NEUTRAL_NON_CALLEE_WORDS, NEUTRAL_PROTOTYPE_CHAIN_PROPERTIES, NEUTRAL_REFLECTION_METHOD_NAMES;
 var init_neutral_core_boundary = __esm({
-  "../src/modules/lifecycle/workflows/neutral-core-boundary.ts"() {
+  "src/modules/lifecycle/workflows/neutral-core-boundary.ts"() {
     init_neutral_runtime_contracts();
     NEUTRAL_CORE_MEMBERS = Object.freeze([
       "neutral-runtime-contracts.ts",
@@ -10294,7 +10294,7 @@ var init_neutral_core_boundary = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/neutral-conformance-assembly.ts
+// src/modules/lifecycle/workflows/neutral-conformance-assembly.ts
 function ownerKeyOfScenario(stableId) {
   if (typeof stableId !== "string") return void 0;
   const at = NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS.indexOf(stableId);
@@ -10951,7 +10951,7 @@ function sameIdList(actual, expected) {
 }
 var OWNER_MH02, OWNER_MH03, OWNER_MH06, OWNER_MH07, OWNER_MH08, OWNER_MH09, NEUTRAL_SUITE_SCENARIO_OWNERSHIP, NEUTRAL_REQUIRED_SUITE_SCENARIO_COUNT, NEUTRAL_CONFORMANCE_OWNER_KEYS, NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS, OWNER_KEY_OF_SCENARIO, ownerScenarioIds, NEUTRAL_OWNER_SCENARIO_IDS, ownerScenarioCounts, NEUTRAL_CONFORMANCE_OWNER_SCENARIO_COUNTS, NEUTRAL_ASSEMBLY_PACKET_SCHEMA, NEUTRAL_ASSEMBLY_REQUEST_MEMBERS, CONTROL_OWNER_MISSING, CONTROL_OWNER_DUPLICATED, CONTROL_OWNER_COUNT, CONTROL_ID_DUPLICATED, CONTROL_ID_FOREIGN, CONTROL_ID_OWNER_MISMATCH, CONTROL_RESULT_ORDER, CONTROL_SUITE_DRIFT, CONTROL_IDENTITY_MISMATCH, CONTROL_CALLER_REQUIRED_SET, CONTROL_PACKET_SCHEMA, CONTROL_IDENTITY_INCOMPLETE, CONTROL_RESULT_CONTRACT, CONTROL_REQUEST_NOT_TEXT, NEUTRAL_ASSEMBLY_REFUSAL_CONTROLS, FIELD_ABSENT, OUTCOME_TYPE_VOCABULARY, DISPOSITION_VOCABULARY, REASON_CODE_VOCABULARY, FRESHNESS_VOCABULARY, CONTROL_IDENTITY, CONTROL_OTHER_IDENTITY, CONTROL_CLAIMANT_ID, CONTROL_FORGED_OWNER_KEYS, CONTROL_CLAIM, NEUTRAL_ASSEMBLY_CONTROL_BATTERY, NEUTRAL_ASSEMBLY_CONTROLS;
 var init_neutral_conformance_assembly = __esm({
-  "../src/modules/lifecycle/workflows/neutral-conformance-assembly.ts"() {
+  "src/modules/lifecycle/workflows/neutral-conformance-assembly.ts"() {
     init_neutral_runtime_contracts();
     init_neutral_conformance_core();
     OWNER_MH02 = NEUTRAL_CORE_WAVE_OWNER.key;
@@ -11488,7 +11488,7 @@ var init_neutral_conformance_assembly = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/module-boundary-conformance-evaluator.ts
+// src/modules/lifecycle/workflows/module-boundary-conformance-evaluator.ts
 function mh07RequiredConsumerRoots(pluginRoot) {
   const workspace = path5.dirname(path5.resolve(pluginRoot));
   const roots = {};
@@ -12100,7 +12100,7 @@ function evaluateNeutralModuleBoundaries(request) {
 }
 var fs4, path5, MH07_OWNER_KEY, MH07_SCENARIO_IDS, MH07_PACKET_SCHEMA, MH07_EVIDENCE_PROFILE_ID, MH07_EVALUATOR_VERSION, MH07_SCANNER_VERSION, MH07_GRAPH_SCOPE, MH07_ROLES, MH07_DESTINATION_CLASSES, MH07_EDGE_FORMS, MH07_LIFECYCLE_DECISION_SYMBOLS, MH07_NATIVE_EVENT_BINDING_SYMBOLS, MH07_NODE_BUILTINS, MH07_HOST_FACING_ROOTS, MODULE_PUBLIC_API_DECLARATION, MH07_HOST_FACING_CONTRACT_ROLES, MH07_MODULE_ROLES, MH07_WAVE_OWNER, MH07_SCENARIOS, MH07_EXPECTED_OUTCOME, MH07_PRODUCTION_SCANNER, MH07_REFUSAL_CONTROLS, MH07_REQUIRED_CONSUMERS, MH07_CONSUMER_SCAN_EXCLUDED_DIRECTORIES, DECLARATION_HEADS;
 var init_module_boundary_conformance_evaluator = __esm({
-  "../src/modules/lifecycle/workflows/module-boundary-conformance-evaluator.ts"() {
+  "src/modules/lifecycle/workflows/module-boundary-conformance-evaluator.ts"() {
     fs4 = __toESM(require("node:fs"));
     path5 = __toESM(require("node:path"));
     init_kernel();
@@ -12384,7 +12384,7 @@ var init_module_boundary_conformance_evaluator = __esm({
   }
 });
 
-// ../src/modules/documents/workflows/document-safe.ts
+// src/modules/documents/workflows/document-safe.ts
 function safeGet(target, key) {
   try {
     return { ok: true, value: target[key] };
@@ -12425,12 +12425,12 @@ function safeArrayLength(value) {
 function isObjectLike(value) {
   return typeof value === "object" && value !== null && !safeIsArray(value);
 }
-function issue(path31, code, message) {
-  return { path: path31, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
+function issue(path30, code, message) {
+  return { path: path30, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
 }
-function pushIssue(issues, path31, code, message) {
+function pushIssue(issues, path30, code, message) {
   if (issues.length >= MAX_ISSUES) return;
-  issues.push(issue(path31, code, message));
+  issues.push(issue(path30, code, message));
 }
 function sortIssues(issues) {
   return [...issues].sort(
@@ -12441,15 +12441,15 @@ function canonicalDocumentJson(value) {
   const errors = [];
   const active = /* @__PURE__ */ new Set();
   let nodes = 0;
-  const walk = (node, path31, depth) => {
+  const walk = (node, path30, depth) => {
     if (errors.length >= MAX_ISSUES) return null;
     if (depth > MAX_CANONICAL_DEPTH) {
-      pushIssue(errors, path31, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
+      pushIssue(errors, path30, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
       return null;
     }
     nodes += 1;
     if (nodes > MAX_CANONICAL_NODES) {
-      pushIssue(errors, path31, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
+      pushIssue(errors, path30, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
       return null;
     }
     if (node === null) return "null";
@@ -12458,7 +12458,7 @@ function canonicalDocumentJson(value) {
     if (kind === "string") {
       const text = node;
       if (text.length > MAX_STRING_LENGTH) {
-        pushIssue(errors, path31, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
+        pushIssue(errors, path30, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
         return null;
       }
       return JSON.stringify(text);
@@ -12466,17 +12466,17 @@ function canonicalDocumentJson(value) {
     if (kind === "number") {
       const num = node;
       if (!Number.isFinite(num)) {
-        pushIssue(errors, path31, "non_finite_number", "numbers must be finite");
+        pushIssue(errors, path30, "non_finite_number", "numbers must be finite");
         return null;
       }
       return Object.is(num, -0) ? "0" : String(num);
     }
     if (kind !== "object") {
-      pushIssue(errors, path31, "unsupported_type", `${kind} has no canonical JSON form`);
+      pushIssue(errors, path30, "unsupported_type", `${kind} has no canonical JSON form`);
       return null;
     }
     if (active.has(node)) {
-      pushIssue(errors, path31, "cycle_detected", "value contains a cycle");
+      pushIssue(errors, path30, "cycle_detected", "value contains a cycle");
       return null;
     }
     active.add(node);
@@ -12484,26 +12484,26 @@ function canonicalDocumentJson(value) {
       if (safeIsArray(node)) {
         const length = safeArrayLength(node);
         if (length.ok === false) {
-          pushIssue(errors, path31, "array_length_unreadable", length.reason);
+          pushIssue(errors, path30, "array_length_unreadable", length.reason);
           return null;
         }
         if (length.length > MAX_ARRAY_ITEMS) {
-          pushIssue(errors, path31, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
+          pushIssue(errors, path30, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
           return null;
         }
         const parts2 = [];
         for (let index = 0; index < length.length; index += 1) {
           const key = String(index);
           if (!safeHasOwn(node, key)) {
-            pushIssue(errors, `${path31}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
+            pushIssue(errors, `${path30}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
             return null;
           }
           const read = safeGet(node, key);
           if (read.ok === false) {
-            pushIssue(errors, `${path31}[${index}]`, "property_read_threw", read.reason);
+            pushIssue(errors, `${path30}[${index}]`, "property_read_threw", read.reason);
             return null;
           }
-          const encoded = walk(read.value, `${path31}[${index}]`, depth + 1);
+          const encoded = walk(read.value, `${path30}[${index}]`, depth + 1);
           if (encoded === null) return null;
           parts2.push(encoded);
         }
@@ -12511,11 +12511,11 @@ function canonicalDocumentJson(value) {
       }
       const keys = safeOwnKeys(node);
       if (keys.ok === false) {
-        pushIssue(errors, path31, "own_keys_threw", keys.reason);
+        pushIssue(errors, path30, "own_keys_threw", keys.reason);
         return null;
       }
       if (keys.keys.length > MAX_OBJECT_KEYS) {
-        pushIssue(errors, path31, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
+        pushIssue(errors, path30, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
         return null;
       }
       const sorted = [...keys.keys].sort();
@@ -12523,14 +12523,14 @@ function canonicalDocumentJson(value) {
       for (const key of sorted) {
         const read = safeGet(node, key);
         if (read.ok === false) {
-          pushIssue(errors, `${path31}.${key}`, "property_read_threw", read.reason);
+          pushIssue(errors, `${path30}.${key}`, "property_read_threw", read.reason);
           return null;
         }
         if (read.value === void 0) {
-          pushIssue(errors, `${path31}.${key}`, "undefined_value", "undefined has no canonical JSON form");
+          pushIssue(errors, `${path30}.${key}`, "undefined_value", "undefined has no canonical JSON form");
           return null;
         }
-        const encoded = walk(read.value, `${path31}.${key}`, depth + 1);
+        const encoded = walk(read.value, `${path30}.${key}`, depth + 1);
         if (encoded === null) return null;
         parts.push(`${JSON.stringify(key)}:${encoded}`);
       }
@@ -12573,7 +12573,7 @@ function deepFreeze2(value) {
 }
 var import_node_crypto2, DOCUMENTS_ERROR_NAMESPACE, MAX_CANONICAL_DEPTH, MAX_CANONICAL_NODES, MAX_ARRAY_ITEMS, MAX_OBJECT_KEYS, MAX_STRING_LENGTH, MAX_ISSUES;
 var init_document_safe = __esm({
-  "../src/modules/documents/workflows/document-safe.ts"() {
+  "src/modules/documents/workflows/document-safe.ts"() {
     import_node_crypto2 = require("node:crypto");
     DOCUMENTS_ERROR_NAMESPACE = "guild.documents";
     MAX_CANONICAL_DEPTH = 32;
@@ -12585,39 +12585,39 @@ var init_document_safe = __esm({
   }
 });
 
-// ../src/modules/documents/workflows/document-records.ts
-function readShape(issues, value, path31, allowed) {
+// src/modules/documents/workflows/document-records.ts
+function readShape(issues, value, path30, allowed) {
   if (value === null || typeof value !== "object") {
-    pushIssue(issues, path31, "not_an_object", `${path31} must be an object`);
+    pushIssue(issues, path30, "not_an_object", `${path30} must be an object`);
     return false;
   }
   if (safeIsArray(value)) {
-    pushIssue(issues, path31, "not_an_object", `${path31} must be an object, not an array`);
+    pushIssue(issues, path30, "not_an_object", `${path30} must be an object, not an array`);
     return false;
   }
   const keys = safeOwnKeys(value);
   if (keys.ok === false) {
-    pushIssue(issues, path31, "own_keys_threw", `${path31}: ${keys.reason}`);
+    pushIssue(issues, path30, "own_keys_threw", `${path30}: ${keys.reason}`);
     return false;
   }
   const allowedSet = new Set(allowed);
   let ok = true;
   for (const key of [...keys.keys].sort()) {
     if (!allowedSet.has(key)) {
-      pushIssue(issues, `${path31}.${key}`, "unexpected_key", `${path31}.${key} is not part of the closed schema`);
+      pushIssue(issues, `${path30}.${key}`, "unexpected_key", `${path30}.${key} is not part of the closed schema`);
       ok = false;
     }
   }
   for (const key of allowed) {
     if (!safeHasOwn(value, key)) {
-      pushIssue(issues, `${path31}.${key}`, "missing_field", `${path31}.${key} is required`);
+      pushIssue(issues, `${path30}.${key}`, "missing_field", `${path30}.${key} is required`);
       ok = false;
     }
   }
   return ok;
 }
-function readString(issues, parent, path31, key, options = {}) {
-  const fieldPath = `${path31}.${key}`;
+function readString(issues, parent, path30, key, options = {}) {
+  const fieldPath = `${path30}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -12652,8 +12652,8 @@ function readString(issues, parent, path31, key, options = {}) {
   }
   return value;
 }
-function readArray(issues, parent, path31, key, options = {}) {
-  const fieldPath = `${path31}.${key}`;
+function readArray(issues, parent, path30, key, options = {}) {
+  const fieldPath = `${path30}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -12696,10 +12696,10 @@ function readArray(issues, parent, path31, key, options = {}) {
   }
   return ok ? items : null;
 }
-function readStringArray(issues, parent, path31, key, options = {}) {
-  const items = readArray(issues, parent, path31, key, options);
+function readStringArray(issues, parent, path30, key, options = {}) {
+  const items = readArray(issues, parent, path30, key, options);
   if (items === null) return null;
-  const fieldPath = `${path31}.${key}`;
+  const fieldPath = `${path30}.${key}`;
   const out = [];
   let ok = true;
   for (let index = 0; index < items.length; index += 1) {
@@ -12725,10 +12725,10 @@ function readStringArray(issues, parent, path31, key, options = {}) {
   }
   return ok ? out : null;
 }
-function readItemArray(issues, parent, path31, key, options, readItem) {
-  const items = readArray(issues, parent, path31, key, options);
+function readItemArray(issues, parent, path30, key, options, readItem) {
+  const items = readArray(issues, parent, path30, key, options);
   if (items === null) return null;
-  const fieldPath = `${path31}.${key}`;
+  const fieldPath = `${path30}.${key}`;
   const out = [];
   const firstIndexById = /* @__PURE__ */ new Map();
   let ok = true;
@@ -12755,13 +12755,13 @@ function readItemArray(issues, parent, path31, key, options, readItem) {
   }
   return ok ? out : null;
 }
-function readProvenance(issues, parent, path31) {
+function readProvenance(issues, parent, path30) {
   const read = safeGet(parent, "provenance");
   if (read.ok === false) {
-    pushIssue(issues, `${path31}.provenance`, "property_read_threw", `${path31}.provenance: property read threw`);
+    pushIssue(issues, `${path30}.provenance`, "property_read_threw", `${path30}.provenance: property read threw`);
     return null;
   }
-  const provenancePath = `${path31}.provenance`;
+  const provenancePath = `${path30}.provenance`;
   if (!readShape(issues, read.value, provenancePath, PROVENANCE_KEYS)) return null;
   const source = read.value;
   const authorId = readString(issues, source, provenancePath, "author_id", {
@@ -12802,10 +12802,10 @@ function readProvenance(issues, parent, path31) {
     source: provenanceSource
   };
 }
-function readPlanBody(issues, body, path31) {
-  if (!readShape(issues, body, path31, ["objectives", "steps"])) return null;
-  const objectives = readStringArray(issues, body, path31, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
-  const steps = readItemArray(issues, body, path31, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
+function readPlanBody(issues, body, path30) {
+  if (!readShape(issues, body, path30, ["objectives", "steps"])) return null;
+  const objectives = readStringArray(issues, body, path30, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
+  const steps = readItemArray(issues, body, path30, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
     if (!readShape(itemIssues, item, itemPath, ["id", "title", "status"])) return null;
     const id = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
     const title = readString(itemIssues, item, itemPath, "title", { maxLength: 500 });
@@ -12816,12 +12816,12 @@ function readPlanBody(issues, body, path31) {
   if (objectives === null || steps === null) return null;
   return { objectives, steps };
 }
-function readSpecBody(issues, body, path31) {
-  if (!readShape(issues, body, path31, ["requirements"])) return null;
+function readSpecBody(issues, body, path30) {
+  if (!readShape(issues, body, path30, ["requirements"])) return null;
   const requirements = readItemArray(
     issues,
     body,
-    path31,
+    path30,
     "requirements",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -12838,22 +12838,22 @@ function readSpecBody(issues, body, path31) {
   if (requirements === null) return null;
   return { requirements };
 }
-function readHandoffBody(issues, body, path31) {
-  if (!readShape(issues, body, path31, ["task_id", "status", "artifacts", "issues"])) return null;
-  const taskId = readString(issues, body, path31, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
-  const status = readString(issues, body, path31, "status", { enumOf: HANDOFF_STATUSES });
-  const artifacts = readStringArray(issues, body, path31, "artifacts", { max: 256, itemMaxLength: 1e3 });
-  const handoffIssues = readStringArray(issues, body, path31, "issues", { max: 256, itemMaxLength: 1e3 });
+function readHandoffBody(issues, body, path30) {
+  if (!readShape(issues, body, path30, ["task_id", "status", "artifacts", "issues"])) return null;
+  const taskId = readString(issues, body, path30, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+  const status = readString(issues, body, path30, "status", { enumOf: HANDOFF_STATUSES });
+  const artifacts = readStringArray(issues, body, path30, "artifacts", { max: 256, itemMaxLength: 1e3 });
+  const handoffIssues = readStringArray(issues, body, path30, "issues", { max: 256, itemMaxLength: 1e3 });
   if (taskId === null || status === null || artifacts === null || handoffIssues === null) return null;
   return { task_id: taskId, status, artifacts, issues: handoffIssues };
 }
-function readReviewBody(issues, body, path31) {
-  if (!readShape(issues, body, path31, ["verdict", "findings"])) return null;
-  const verdict = readString(issues, body, path31, "verdict", { enumOf: REVIEW_VERDICTS });
+function readReviewBody(issues, body, path30) {
+  if (!readShape(issues, body, path30, ["verdict", "findings"])) return null;
+  const verdict = readString(issues, body, path30, "verdict", { enumOf: REVIEW_VERDICTS });
   const findings = readItemArray(
     issues,
     body,
-    path31,
+    path30,
     "findings",
     { max: 256 },
     (itemIssues, item, itemPath) => {
@@ -12868,13 +12868,13 @@ function readReviewBody(issues, body, path31) {
   if (verdict === null || findings === null) return null;
   return { verdict, findings };
 }
-function readVerifyBody(issues, body, path31) {
-  if (!readShape(issues, body, path31, ["outcome", "checks"])) return null;
-  const outcome = readString(issues, body, path31, "outcome", { enumOf: VERIFY_OUTCOMES });
+function readVerifyBody(issues, body, path30) {
+  if (!readShape(issues, body, path30, ["outcome", "checks"])) return null;
+  const outcome = readString(issues, body, path30, "outcome", { enumOf: VERIFY_OUTCOMES });
   const checks = readItemArray(
     issues,
     body,
-    path31,
+    path30,
     "checks",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -12942,7 +12942,7 @@ function validateDocumentRecord(input) {
 }
 var DOCUMENT_SCHEMA_VERSION, DOCUMENT_KINDS, DOCUMENT_PROVENANCE_SOURCES, PLAN_STEP_STATUSES, SPEC_REQUIREMENT_PRIORITIES, HANDOFF_STATUSES, REVIEW_VERDICTS, REVIEW_SEVERITIES, VERIFY_OUTCOMES, VERIFY_CHECK_RESULTS, DOCUMENT_ID_PATTERN, DOCUMENT_ITEM_ID_PATTERN, DOCUMENT_TIMESTAMP_PATTERN, TOP_LEVEL_KEYS, PROVENANCE_KEYS;
 var init_document_records = __esm({
-  "../src/modules/documents/workflows/document-records.ts"() {
+  "src/modules/documents/workflows/document-records.ts"() {
     init_document_safe();
     DOCUMENT_SCHEMA_VERSION = "guild.document.v1";
     DOCUMENT_KINDS = Object.freeze([
@@ -13000,20 +13000,20 @@ var init_document_records = __esm({
   }
 });
 
-// ../src/modules/documents/workflows/document-hash.ts
+// src/modules/documents/workflows/document-hash.ts
 function hashDocumentRecord(record) {
   const hashed = hashCanonicalValue(record);
   if (hashed.ok) return hashed.hash;
   return "sha256:unhashable";
 }
 var init_document_hash = __esm({
-  "../src/modules/documents/workflows/document-hash.ts"() {
+  "src/modules/documents/workflows/document-hash.ts"() {
     init_document_safe();
     init_document_records();
   }
 });
 
-// ../src/modules/documents/workflows/document-projection.ts
+// src/modules/documents/workflows/document-projection.ts
 function deriveDisposition(record) {
   if (record.kind === "verify") {
     const failed2 = record.body.checks.filter((check) => check.result === "fail").map((check) => check.id);
@@ -13138,7 +13138,7 @@ function verifyProjectionAgainstRecord(claimed, record) {
 }
 var DOCUMENT_PROJECTION_SCHEMA_VERSION, DOCUMENT_DISPOSITIONS, PROJECTION_KEYS;
 var init_document_projection = __esm({
-  "../src/modules/documents/workflows/document-projection.ts"() {
+  "src/modules/documents/workflows/document-projection.ts"() {
     init_document_safe();
     init_document_hash();
     init_document_records();
@@ -13164,10 +13164,10 @@ var init_document_projection = __esm({
   }
 });
 
-// ../src/modules/documents/workflows/document-html.ts
+// src/modules/documents/workflows/document-html.ts
 var ALLOWED_ELEMENTS, ALLOWED_ATTRIBUTES, ENTITY_VALUES, META_KEYS;
 var init_document_html = __esm({
-  "../src/modules/documents/workflows/document-html.ts"() {
+  "src/modules/documents/workflows/document-html.ts"() {
     init_document_safe();
     init_kernel();
     init_document_hash();
@@ -13216,10 +13216,10 @@ var init_document_html = __esm({
   }
 });
 
-// ../src/modules/documents/workflows/document-legacy-import.ts
+// src/modules/documents/workflows/document-legacy-import.ts
 var LEGACY_IMPORT_BOUNDS, KIND_HINTS;
 var init_document_legacy_import = __esm({
-  "../src/modules/documents/workflows/document-legacy-import.ts"() {
+  "src/modules/documents/workflows/document-legacy-import.ts"() {
     init_document_safe();
     init_kernel();
     init_document_records();
@@ -13239,10 +13239,10 @@ var init_document_legacy_import = __esm({
   }
 });
 
-// ../src/modules/documents/workflows/document-versioning.ts
+// src/modules/documents/workflows/document-versioning.ts
 var SUPPORTED_DOCUMENT_SCHEMA_VERSIONS, MIGRATABLE_DOCUMENT_SCHEMA_VERSIONS;
 var init_document_versioning = __esm({
-  "../src/modules/documents/workflows/document-versioning.ts"() {
+  "src/modules/documents/workflows/document-versioning.ts"() {
     init_document_safe();
     init_document_hash();
     init_document_records();
@@ -13258,7 +13258,7 @@ var init_document_versioning = __esm({
   }
 });
 
-// ../src/modules/documents/workflows/document-decisions.ts
+// src/modules/documents/workflows/document-decisions.ts
 function present(value) {
   return value !== void 0 && value !== null;
 }
@@ -13357,7 +13357,7 @@ function decideFromDocumentSources(sources) {
 }
 var SOURCE_KEYS, REFUSED;
 var init_document_decisions = __esm({
-  "../src/modules/documents/workflows/document-decisions.ts"() {
+  "src/modules/documents/workflows/document-decisions.ts"() {
     init_document_safe();
     init_document_hash();
     init_document_records();
@@ -13378,24 +13378,7 @@ var init_document_decisions = __esm({
   }
 });
 
-// ../src/modules/documents/workflows/document-receipts.ts
-function validateReceiptMachineBlock(block, errors) {
-  for (const key of Object.keys(block)) {
-    if (!RECEIPT_MACHINE_KEYS.has(key)) pushIssue(errors, `$.machine_block.${key}`, "unknown_key", `guild.handoff.v2 rejects unknown key ${key}`);
-  }
-  if (typeof block.task_id !== "string" || block.task_id.trim() === "") pushIssue(errors, "$.machine_block.task_id", "missing_field", "task_id must be a non-empty string");
-  if (block.tier !== "cheap" && block.tier !== "mid" && block.tier !== "powerful") pushIssue(errors, "$.machine_block.tier", "unknown_value", "tier must be cheap, mid, or powerful");
-  if (block.status !== "done" && block.status !== "blocked" && block.status !== "escalate") pushIssue(errors, "$.machine_block.status", "unknown_receipt_status", "status must be done, blocked, or escalate");
-  if (typeof block.summary !== "string" || block.summary.trim() === "" || block.summary.length > 600) pushIssue(errors, "$.machine_block.summary", "invalid_summary", "summary must be a non-empty string of at most 600 characters");
-  for (const key of ["artifacts", "issues"]) {
-    if (!Array.isArray(block[key]) || !block[key].every((value) => typeof value === "string")) pushIssue(errors, `$.machine_block.${key}`, "wrong_type", `${key} must be an array of strings`);
-  }
-  if (block.learnings !== void 0 && (!Array.isArray(block.learnings) || !block.learnings.every((value) => typeof value === "string"))) pushIssue(errors, "$.machine_block.learnings", "wrong_type", "learnings must be an array of strings when provided");
-  if (block.status === "escalate" && (typeof block.escalate_reason !== "string" || block.escalate_reason.trim() === "")) pushIssue(errors, "$.machine_block.escalate_reason", "missing_field", "escalate_reason is required for escalate status");
-  if (block.escalate_reason !== void 0 && typeof block.escalate_reason !== "string") pushIssue(errors, "$.machine_block.escalate_reason", "wrong_type", "escalate_reason must be a string when provided");
-  if (block.notes !== void 0 && (typeof block.notes !== "string" || block.notes.length > 200)) pushIssue(errors, "$.machine_block.notes", "wrong_type", "notes must be a string of at most 200 characters");
-  if (block.injection_clean !== void 0 && !["clean", "flagged", "unverified"].includes(String(block.injection_clean))) pushIssue(errors, "$.machine_block.injection_clean", "unknown_value", "injection_clean must be clean, flagged, or unverified");
-}
+// src/modules/documents/workflows/document-receipts.ts
 function readReceiptFrontmatter(text) {
   const match = RECEIPT_FRONTMATTER_BLOCK.exec(text);
   if (match === null) {
@@ -13423,7 +13406,7 @@ function readReceiptFrontmatter(text) {
     const scalar = String(value);
     if (scalar !== "") fields[key] = scalar;
   }
-  return { ok: true, fields, document: parsed };
+  return { ok: true, fields };
 }
 function readReceiptMachineBlock(text) {
   const fence = /^```([^\n]*)\n([\s\S]*?)\n```[ \t]*$/gm;
@@ -13468,189 +13451,7 @@ function aliasesAgree(fields, keys) {
   const declared = keys.map((key) => fields[key]).filter((value) => typeof value === "string" && value !== "");
   return new Set(declared).size <= 1;
 }
-function plainRecord(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
-}
-function requiredRecord(errors, parent, key) {
-  const value = plainRecord(parent[key]);
-  if (value === null) {
-    pushIssue(errors, `$.frontmatter.${key}`, "missing_field", `${key} must be a mapping`);
-  }
-  return value;
-}
-function requiredString(errors, parent, path31, key) {
-  const value = parent[key];
-  if (typeof value !== "string" || value.length === 0) {
-    pushIssue(errors, `${path31}.${key}`, "missing_field", `${key} must be a non-empty string`);
-    return null;
-  }
-  return value;
-}
-function requiredArray(errors, parent, key) {
-  const value = parent[key];
-  if (!Array.isArray(value)) {
-    pushIssue(errors, `$.frontmatter.${key}`, "missing_field", `${key} must be an array`);
-    return null;
-  }
-  return value;
-}
-function validateStringArray(errors, values, path31) {
-  if (values === null) return;
-  values.forEach((value, index) => {
-    if (typeof value !== "string" || value.length === 0) {
-      pushIssue(errors, `${path31}[${index}]`, "wrong_type", `${path31} entries must be non-empty strings`);
-    }
-  });
-}
-function canonicalReceiptInstant(errors, value, path31) {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
-    pushIssue(errors, path31, "invalid_timestamp", `${path31} must be an ISO-8601 timestamp`);
-    return null;
-  }
-  const parsed = Date.parse(value);
-  const expectedCanonical = value.includes(".") ? value : value.replace(/Z$/, ".000Z");
-  if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== expectedCanonical) {
-    pushIssue(errors, path31, "invalid_timestamp", `${path31} must name a real UTC calendar instant`);
-    return null;
-  }
-  return expectedCanonical;
-}
-function receiptProvenance(document, fields, errors) {
-  if (plainRecord(document.host) === null) {
-    const authorId2 = firstField(fields, ["agent", "specialist"]);
-    const authorFamily = firstField(fields, ["model_family", "family"]);
-    const hostId2 = firstField(fields, ["host"]);
-    const createdAt2 = firstField(fields, ["generated_at"]);
-    if (!aliasesAgree(fields, ["agent", "specialist"])) {
-      pushIssue(errors, "$.frontmatter.agent", "conflicting_provenance", "frontmatter agent and specialist must agree when both are present");
-    }
-    if (!aliasesAgree(fields, ["model_family", "family"])) {
-      pushIssue(errors, "$.frontmatter.model_family", "conflicting_provenance", "frontmatter model_family and family must agree when both are present");
-    }
-    if (authorId2 === null) pushIssue(errors, "$.frontmatter.agent", "missing_provenance", "frontmatter agent/specialist is required");
-    if (authorFamily === null) pushIssue(errors, "$.frontmatter.model_family", "missing_provenance", "frontmatter model_family/family is required");
-    if (hostId2 === null) pushIssue(errors, "$.frontmatter.host", "missing_provenance", "frontmatter legacy scalar host is required");
-    if (createdAt2 === null) pushIssue(errors, "$.frontmatter.generated_at", "missing_provenance", "frontmatter generated_at is required for a legacy receipt");
-    return {
-      shape: "legacy",
-      authorId: authorId2,
-      authorFamily,
-      hostId: hostId2,
-      createdAt: createdAt2,
-      taskId: firstField(fields, ["task_id"]),
-      title: firstField(fields, ["task", "title"]),
-      status: null
-    };
-  }
-  const ids = requiredRecord(errors, document, "ids");
-  const host = requiredRecord(errors, document, "host");
-  const scope = requiredRecord(errors, document, "scope");
-  const authorId = requiredString(errors, document, "$.frontmatter", "specialist");
-  const taskId = ids === null ? null : requiredString(errors, ids, "$.frontmatter.ids", "task_id");
-  if (ids !== null) {
-    requiredString(errors, ids, "$.frontmatter.ids", "run_id");
-    requiredString(errors, ids, "$.frontmatter.ids", "task_run_id");
-    if (!Object.prototype.hasOwnProperty.call(ids, "initiative_id")) {
-      pushIssue(errors, "$.frontmatter.ids.initiative_id", "missing_field", "initiative_id is required and may be null");
-    } else if (ids.initiative_id !== null && (typeof ids.initiative_id !== "string" || ids.initiative_id.length === 0)) {
-      pushIssue(errors, "$.frontmatter.ids.initiative_id", "wrong_type", "initiative_id must be null or a non-empty string");
-    }
-  }
-  const hostId = host === null ? null : requiredString(errors, host, "$.frontmatter.host", "selected");
-  if (host !== null) {
-    if (typeof host.degraded !== "boolean") pushIssue(errors, "$.frontmatter.host.degraded", "wrong_type", "degraded must be boolean");
-    if (host.native_ref !== null && typeof host.native_ref !== "string") pushIssue(errors, "$.frontmatter.host.native_ref", "wrong_type", "native_ref must be null or a string");
-    if (host.independence !== "strong" && host.independence !== "weak") {
-      pushIssue(errors, "$.frontmatter.host.independence", "unknown_value", "independence must be strong or weak");
-    }
-  }
-  const title = scope === null ? null : requiredString(errors, scope, "$.frontmatter.scope", "objective");
-  if (scope !== null) {
-    validateStringArray(errors, Array.isArray(scope.in_scope) ? scope.in_scope : null, "$.frontmatter.scope.in_scope");
-    validateStringArray(errors, Array.isArray(scope.out_of_scope_touched) ? scope.out_of_scope_touched : null, "$.frontmatter.scope.out_of_scope_touched");
-    if (!Array.isArray(scope.in_scope)) pushIssue(errors, "$.frontmatter.scope.in_scope", "missing_field", "in_scope must be an array");
-    if (!Array.isArray(scope.out_of_scope_touched)) pushIssue(errors, "$.frontmatter.scope.out_of_scope_touched", "missing_field", "out_of_scope_touched must be an array");
-  }
-  const statusValue = document.status;
-  const status = typeof statusValue === "string" && ["completed", "partial", "blocked", "failed"].includes(statusValue) ? statusValue : null;
-  if (status === null) pushIssue(errors, "$.frontmatter.status", "unknown_receipt_status", "status must be completed, partial, blocked, or failed");
-  const changedFiles = requiredArray(errors, document, "changed_files");
-  changedFiles?.forEach((value, index) => {
-    const entry = plainRecord(value);
-    const base = `$.frontmatter.changed_files[${index}]`;
-    if (entry === null) {
-      pushIssue(errors, base, "wrong_type", "changed_files entries must be mappings");
-      return;
-    }
-    requiredString(errors, entry, base, "path");
-    if (!["created", "modified", "deleted", "renamed"].includes(String(entry.change))) {
-      pushIssue(errors, `${base}.change`, "unknown_value", "change must be created, modified, deleted, or renamed");
-    }
-    if (entry.sha256_after !== null && (typeof entry.sha256_after !== "string" || !/^(?:sha256:)?[a-f0-9]{64}$/i.test(entry.sha256_after))) {
-      pushIssue(errors, `${base}.sha256_after`, "invalid_hash", "sha256_after must be null or a SHA-256 digest");
-    }
-  });
-  const evidence = requiredArray(errors, document, "evidence");
-  evidence?.forEach((value, index) => {
-    const entry = plainRecord(value);
-    const base = `$.frontmatter.evidence[${index}]`;
-    if (entry === null) {
-      pushIssue(errors, base, "wrong_type", "evidence entries must be mappings");
-      return;
-    }
-    if (!["test", "command", "log", "artifact", "screenshot", "url"].includes(String(entry.kind))) pushIssue(errors, `${base}.kind`, "unknown_value", "evidence kind is invalid");
-    requiredString(errors, entry, base, "ref");
-    if (!["pass", "fail", "n/a"].includes(String(entry.result))) pushIssue(errors, `${base}.result`, "unknown_value", "evidence result is invalid");
-  });
-  const assumptions = requiredArray(errors, document, "assumptions");
-  assumptions?.forEach((value, index) => {
-    const entry = plainRecord(value);
-    const base = `$.frontmatter.assumptions[${index}]`;
-    if (entry === null) {
-      pushIssue(errors, base, "wrong_type", "assumption entries must be mappings");
-      return;
-    }
-    requiredString(errors, entry, base, "statement");
-    if (!["low", "medium", "high"].includes(String(entry.risk_if_wrong))) pushIssue(errors, `${base}.risk_if_wrong`, "unknown_value", "risk_if_wrong is invalid");
-  });
-  const openRisks = requiredArray(errors, document, "open_risks");
-  openRisks?.forEach((value, index) => {
-    const entry = plainRecord(value);
-    const base = `$.frontmatter.open_risks[${index}]`;
-    if (entry === null) {
-      pushIssue(errors, base, "wrong_type", "open_risks entries must be mappings");
-      return;
-    }
-    requiredString(errors, entry, base, "statement");
-    if (!["low", "medium", "high", "critical"].includes(String(entry.severity))) pushIssue(errors, `${base}.severity`, "unknown_value", "severity is invalid");
-    if (typeof entry.owner_accepted !== "boolean") pushIssue(errors, `${base}.owner_accepted`, "wrong_type", "owner_accepted must be boolean");
-  });
-  const followups = requiredArray(errors, document, "followups");
-  followups?.forEach((value, index) => {
-    const entry = plainRecord(value);
-    const base = `$.frontmatter.followups[${index}]`;
-    if (entry === null) {
-      pushIssue(errors, base, "wrong_type", "followup entries must be mappings");
-      return;
-    }
-    requiredString(errors, entry, base, "statement");
-    if (typeof entry.blocking !== "boolean") pushIssue(errors, `${base}.blocking`, "wrong_type", "blocking must be boolean");
-    if (entry.ref !== null && entry.ref !== void 0 && typeof entry.ref !== "string") pushIssue(errors, `${base}.ref`, "wrong_type", "ref must be null or a string");
-    if (status === "completed" && entry.blocking === true) pushIssue(errors, `${base}.blocking`, "blocking_followup", "a completed receipt cannot retain a blocking followup");
-  });
-  const createdAt = canonicalReceiptInstant(errors, document.produced_at, "$.frontmatter.produced_at");
-  return {
-    shape: "frozen",
-    authorId,
-    authorFamily: firstField(fields, ["model_family", "family"]) ?? hostId,
-    hostId,
-    createdAt,
-    taskId,
-    title,
-    status
-  };
-}
-function parseReceiptDocumentInternal(input, requireFrozen) {
+function parseReceiptDocument(input) {
   const errors = [];
   try {
     if (typeof input !== "string") {
@@ -13688,16 +13489,38 @@ function parseReceiptDocumentInternal(input, requireFrozen) {
         `frontmatter schema_version must be ${RECEIPT_FRONTMATTER_SCHEMA_VERSION}`
       );
     }
-    const provenance = receiptProvenance(frontmatter.document, fields, errors);
-    if (requireFrozen && provenance.shape !== "frozen") {
+    const authorId = firstField(fields, ["agent", "specialist"]);
+    const authorFamily = firstField(fields, ["model_family", "family"]);
+    const hostId = firstField(fields, ["host"]);
+    const createdAt = firstField(fields, ["generated_at"]);
+    if (!aliasesAgree(fields, ["agent", "specialist"])) {
       pushIssue(
         errors,
-        "$.frontmatter.host",
-        "legacy_receipt_transition",
-        "a frozen-contract gate requires the structured host mapping"
+        "$.frontmatter.agent",
+        "conflicting_provenance",
+        "frontmatter agent and specialist must agree when both are present"
       );
     }
-    if (provenance.shape === "frozen") validateReceiptMachineBlock(block.block, errors);
+    if (!aliasesAgree(fields, ["model_family", "family"])) {
+      pushIssue(
+        errors,
+        "$.frontmatter.model_family",
+        "conflicting_provenance",
+        "frontmatter model_family and family must agree when both are present"
+      );
+    }
+    if (authorId === null) {
+      pushIssue(errors, "$.frontmatter.agent", "missing_provenance", "frontmatter agent/specialist is required");
+    }
+    if (authorFamily === null) {
+      pushIssue(errors, "$.frontmatter.model_family", "missing_provenance", "frontmatter model_family/family is required");
+    }
+    if (hostId === null) {
+      pushIssue(errors, "$.frontmatter.host", "missing_provenance", "frontmatter host is required");
+    }
+    if (createdAt === null) {
+      pushIssue(errors, "$.frontmatter.generated_at", "missing_provenance", "frontmatter generated_at is required");
+    }
     const taskIdRead = safeGet(block.block, "task_id");
     const taskId = taskIdRead.ok && typeof taskIdRead.value === "string" ? taskIdRead.value : null;
     if (taskId === null) {
@@ -13705,21 +13528,14 @@ function parseReceiptDocumentInternal(input, requireFrozen) {
     }
     const statusRead = safeGet(block.block, "status");
     const rawStatus = statusRead.ok && typeof statusRead.value === "string" ? statusRead.value : null;
-    const statusMap = provenance.shape === "frozen" ? FROZEN_RECEIPT_STATUS_MAP : LEGACY_RECEIPT_STATUS_MAP;
-    const mappedStatus = rawStatus !== null && Object.prototype.hasOwnProperty.call(statusMap, rawStatus) ? statusMap[rawStatus] : void 0;
+    const mappedStatus = rawStatus !== null && Object.prototype.hasOwnProperty.call(RECEIPT_STATUS_MAP, rawStatus) ? RECEIPT_STATUS_MAP[rawStatus] : void 0;
     if (mappedStatus === void 0) {
       pushIssue(
         errors,
         "$.machine_block.status",
         "unknown_receipt_status",
-        `status must be one of ${Object.keys(statusMap).sort().join("|")}`
+        `status must be one of ${Object.keys(RECEIPT_STATUS_MAP).sort().join("|")}`
       );
-    }
-    if (provenance.shape === "frozen" && provenance.taskId !== taskId) {
-      pushIssue(errors, "$.frontmatter.ids.task_id", "conflicting_identity", "ids.task_id must match the embedded handoff task_id");
-    }
-    if (provenance.shape === "frozen" && mappedStatus !== void 0 && provenance.status !== mappedStatus) {
-      pushIssue(errors, "$.frontmatter.status", "conflicting_status", "frontmatter status must match the embedded handoff status");
     }
     if (errors.length > 0 || taskId === null) {
       return { status: "unparsable", record: null, errors: sortIssues(errors) };
@@ -13736,17 +13552,17 @@ function parseReceiptDocumentInternal(input, requireFrozen) {
     }
     const artifactsRead = safeGet(block.block, "artifacts");
     const issuesRead = safeGet(block.block, "issues");
-    const titleField = provenance.title;
+    const titleField = firstField(fields, ["task", "title"]);
     const candidate = {
       schema_version: DOCUMENT_SCHEMA_VERSION,
       kind: "handoff",
       id: recordId,
       title: titleField ?? taskId,
       provenance: {
-        author_id: provenance.authorId,
-        author_family: provenance.authorFamily,
-        host_id: provenance.hostId,
-        created_at: provenance.createdAt,
+        author_id: authorId,
+        author_family: authorFamily,
+        host_id: hostId,
+        created_at: createdAt,
         // The record is derived from a receipt document, not authored as a
         // canonical record — say so rather than claiming authorship.
         source: "imported"
@@ -13767,9 +13583,6 @@ function parseReceiptDocumentInternal(input, requireFrozen) {
     pushIssue(errors, "$", "internal_guard", "receipt parse was interrupted");
     return { status: "unparsable", record: null, errors: sortIssues(errors) };
   }
-}
-function parseReceiptDocument(input) {
-  return parseReceiptDocumentInternal(input, false);
 }
 function decideFromReceiptDocument(input) {
   const parsed = parseReceiptDocument(input);
@@ -13792,9 +13605,9 @@ function decideFromReceiptDocument(input) {
   }
   return decideFromDocumentSources({ record: parsed.record });
 }
-var RECEIPT_MACHINE_SCHEMA_VERSION, RECEIPT_FRONTMATTER_SCHEMA_VERSION, RECEIPT_PARSE_BOUNDS, RECEIPT_FRONTMATTER_BLOCK, FROZEN_RECEIPT_STATUS_MAP, LEGACY_RECEIPT_STATUS_MAP, RECEIPT_MACHINE_KEYS, CANONICAL_RECEIPT_SECTIONS, RECEIPT_REFUSAL_BY_ERROR_CODE;
+var RECEIPT_MACHINE_SCHEMA_VERSION, RECEIPT_FRONTMATTER_SCHEMA_VERSION, RECEIPT_PARSE_BOUNDS, RECEIPT_FRONTMATTER_BLOCK, RECEIPT_STATUS_MAP, RECEIPT_REFUSAL_BY_ERROR_CODE;
 var init_document_receipts = __esm({
-  "../src/modules/documents/workflows/document-receipts.ts"() {
+  "src/modules/documents/workflows/document-receipts.ts"() {
     init_kernel();
     init_document_safe();
     init_document_records();
@@ -13807,12 +13620,7 @@ var init_document_receipts = __esm({
       max_json_blocks: 20
     });
     RECEIPT_FRONTMATTER_BLOCK = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
-    FROZEN_RECEIPT_STATUS_MAP = Object.freeze({
-      done: "completed",
-      blocked: "blocked",
-      escalate: "blocked"
-    });
-    LEGACY_RECEIPT_STATUS_MAP = Object.freeze({
+    RECEIPT_STATUS_MAP = Object.freeze({
       complete: "completed",
       completed: "completed",
       done: "completed",
@@ -13820,26 +13628,6 @@ var init_document_receipts = __esm({
       blocked: "blocked",
       failed: "failed"
     });
-    RECEIPT_MACHINE_KEYS = /* @__PURE__ */ new Set([
-      "schema_version",
-      "task_id",
-      "tier",
-      "status",
-      "summary",
-      "artifacts",
-      "issues",
-      "escalate_reason",
-      "learnings",
-      "notes",
-      "injection_clean"
-    ]);
-    CANONICAL_RECEIPT_SECTIONS = Object.freeze([
-      "changed_files",
-      "opens_for",
-      "assumptions",
-      "evidence",
-      "followups"
-    ]);
     RECEIPT_REFUSAL_BY_ERROR_CODE = Object.freeze({
       missing_frontmatter_schema: "receipt_envelope_schema_unsupported",
       wrong_frontmatter_schema: "receipt_envelope_schema_unsupported"
@@ -13847,10 +13635,10 @@ var init_document_receipts = __esm({
   }
 });
 
-// ../src/modules/documents/workflows/document-service-boundary.ts
+// src/modules/documents/workflows/document-service-boundary.ts
 var DOCUMENTS_ALLOWED_MODULE_DEPENDENCIES, DOCUMENTS_ALLOWED_EXTERNAL_PACKAGES, REGEX_PRECEDING, DOCUMENTS_MODULE_SOURCE_FILES;
 var init_document_service_boundary = __esm({
-  "../src/modules/documents/workflows/document-service-boundary.ts"() {
+  "src/modules/documents/workflows/document-service-boundary.ts"() {
     DOCUMENTS_ALLOWED_MODULE_DEPENDENCIES = Object.freeze([
       "kernel",
       "lifecycle",
@@ -13874,9 +13662,9 @@ var init_document_service_boundary = __esm({
   }
 });
 
-// ../src/modules/documents/index.ts
+// src/modules/documents/index.ts
 var init_documents = __esm({
-  "../src/modules/documents/index.ts"() {
+  "src/modules/documents/index.ts"() {
     init_document_safe();
     init_document_records();
     init_document_hash();
@@ -13890,7 +13678,7 @@ var init_documents = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/check-lane-liveness.ts
+// src/modules/lifecycle/workflows/check-lane-liveness.ts
 function readJsonObject(p) {
   let raw;
   try {
@@ -14104,7 +13892,7 @@ ${USAGE}
 }
 var fs5, path6, DEFAULT_HEARTBEAT_TIMEOUT_MS, TERMINAL_STATUSES, MAX_RECEIPT_BYTES, NO_RECEIPT, USAGE;
 var init_check_lane_liveness = __esm({
-  "../src/modules/lifecycle/workflows/check-lane-liveness.ts"() {
+  "src/modules/lifecycle/workflows/check-lane-liveness.ts"() {
     fs5 = __toESM(require("node:fs"));
     path6 = __toESM(require("node:path"));
     init_documents();
@@ -14124,7 +13912,7 @@ var init_check_lane_liveness = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/event-log-schema.ts
+// src/modules/lifecycle/workflows/event-log-schema.ts
 function isSafeRunId(id) {
   return RUN_ID_RE.test(id) && id !== "." && id !== "..";
 }
@@ -14149,7 +13937,7 @@ function validateEventIds(event) {
 }
 var TOOL_CALL_TOOL_VALUES, HOOK_EVENT_NAMES, EVENT_TYPES, RUN_ID_RE, LANE_ID_RE;
 var init_event_log_schema = __esm({
-  "../src/modules/lifecycle/workflows/event-log-schema.ts"() {
+  "src/modules/lifecycle/workflows/event-log-schema.ts"() {
     init_kernel();
     TOOL_CALL_TOOL_VALUES = Object.freeze([
       "Read",
@@ -14203,22 +13991,22 @@ var init_event_log_schema = __esm({
   }
 });
 
-// ../src/modules/security/workflows/safe-object.ts
+// src/modules/security/workflows/safe-object.ts
 var PROTO_POISON_KEYS;
 var init_safe_object = __esm({
-  "../src/modules/security/workflows/safe-object.ts"() {
+  "src/modules/security/workflows/safe-object.ts"() {
     init_kernel();
     PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
   }
 });
 
-// ../src/modules/security/workflows/injection-guard.ts
+// src/modules/security/workflows/injection-guard.ts
 var init_injection_guard = __esm({
-  "../src/modules/security/workflows/injection-guard.ts"() {
+  "src/modules/security/workflows/injection-guard.ts"() {
   }
 });
 
-// ../src/modules/security/workflows/redact-log.ts
+// src/modules/security/workflows/redact-log.ts
 function redactTokenShapes(input) {
   let out = input;
   for (const re of TOKEN_SHAPE_PATTERNS) {
@@ -14234,7 +14022,7 @@ function redactHomeDirPaths(input) {
 function redactKeyValueSecrets(input) {
   return input.replace(
     KV_SECRET_PATTERN,
-    (_match, key, sep8) => `${key}${sep8}${KV_REDACTED}`
+    (_match, key, sep7) => `${key}${sep7}${KV_REDACTED}`
   );
 }
 function allWordsWordish(words) {
@@ -14362,7 +14150,7 @@ function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
 }
 var TOKEN_REDACTED, PATH_REDACTED, KV_REDACTED, HIGH_ENTROPY_REDACTED, TRUNCATION_SUFFIX, FIELD_SIZE_CAP_BYTES, TOKEN_SHAPE_PATTERNS, SENSITIVE_HOME_DIRS, HOME_DIR_PATTERN, KV_SECRET_PATTERN, PATH_TOKEN_CHAR, PATH_SHAPE, DOT_GUILD_PATH_SHAPE, DOT_GUILD_ROOTS, PATH_EXTENSION, MAX_PATH_TOKEN_LEN, HIGH_ENTROPY_PATTERN, REDACTABLE_FIELD_NAMES, REDACTABLE_FIELDS;
 var init_redact_log = __esm({
-  "../src/modules/security/workflows/redact-log.ts"() {
+  "src/modules/security/workflows/redact-log.ts"() {
     init_kernel();
     TOKEN_REDACTED = "[REDACTED_TOKEN]";
     PATH_REDACTED = "[REDACTED]";
@@ -14433,7 +14221,7 @@ var init_redact_log = __esm({
   }
 });
 
-// ../src/modules/security/workflows/secrets.ts
+// src/modules/security/workflows/secrets.ts
 function applySecretsPolicy(value, policy, opts) {
   if (typeof value !== "string") {
     return { value: typeof value === "string" ? value : String(value ?? ""), ok: true, failures: [] };
@@ -14457,12 +14245,12 @@ function applySecretsPolicy(value, policy, opts) {
   return { value: out, ok: failures.length === 0, failures };
 }
 var init_secrets = __esm({
-  "../src/modules/security/workflows/secrets.ts"() {
+  "src/modules/security/workflows/secrets.ts"() {
     init_redact_log();
   }
 });
 
-// ../src/modules/state/workflows/plugin-install-guard.ts
+// src/modules/state/workflows/plugin-install-guard.ts
 function assertNotUnderPluginInstall(absPath, pluginInstallRoot) {
   const root = pluginInstallRoot ?? process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"] ?? process.env["CODEX_PLUGIN_ROOT"];
   if (!root) return;
@@ -14476,13 +14264,13 @@ function assertNotUnderPluginInstall(absPath, pluginInstallRoot) {
 }
 var fs6, path7;
 var init_plugin_install_guard = __esm({
-  "../src/modules/state/workflows/plugin-install-guard.ts"() {
+  "src/modules/state/workflows/plugin-install-guard.ts"() {
     fs6 = __toESM(require("node:fs"));
     path7 = __toESM(require("node:path"));
   }
 });
 
-// ../src/modules/state/workflows/atomic-write.ts
+// src/modules/state/workflows/atomic-write.ts
 function atomicWrite(targetPath, content, pluginInstallRoot) {
   assertNotUnderPluginInstall(targetPath, pluginInstallRoot);
   const dir = path8.dirname(targetPath);
@@ -14502,7 +14290,7 @@ function atomicWrite(targetPath, content, pluginInstallRoot) {
 }
 var fs7, path8, crypto;
 var init_atomic_write = __esm({
-  "../src/modules/state/workflows/atomic-write.ts"() {
+  "src/modules/state/workflows/atomic-write.ts"() {
     fs7 = __toESM(require("fs"));
     path8 = __toESM(require("path"));
     crypto = __toESM(require("crypto"));
@@ -14510,10 +14298,10 @@ var init_atomic_write = __esm({
   }
 });
 
-// ../src/modules/state/workflows/dependency-graph-schema.ts
+// src/modules/state/workflows/dependency-graph-schema.ts
 var DEPENDENCY_GRAPH_SCHEMA_VERSION, DEPENDENCY_GRAPH_V1_EXAMPLE;
 var init_dependency_graph_schema = __esm({
-  "../src/modules/state/workflows/dependency-graph-schema.ts"() {
+  "src/modules/state/workflows/dependency-graph-schema.ts"() {
     init_kernel();
     DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
     DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
@@ -14531,21 +14319,21 @@ var init_dependency_graph_schema = __esm({
   }
 });
 
-// ../src/modules/state/workflows/dependency-graph-reader.ts
+// src/modules/state/workflows/dependency-graph-reader.ts
 var init_dependency_graph_reader = __esm({
-  "../src/modules/state/workflows/dependency-graph-reader.ts"() {
+  "src/modules/state/workflows/dependency-graph-reader.ts"() {
     init_dependency_graph_schema();
   }
 });
 
-// ../src/modules/state/workflows/frontmatter.ts
+// src/modules/state/workflows/frontmatter.ts
 var init_frontmatter = __esm({
-  "../src/modules/state/workflows/frontmatter.ts"() {
+  "src/modules/state/workflows/frontmatter.ts"() {
     init_kernel();
   }
 });
 
-// ../src/modules/state/workflows/guild-root.ts
+// src/modules/state/workflows/guild-root.ts
 function resolveGuildRoot2(startDir) {
   const resolvedStart = path9.resolve(startDir);
   let current = resolvedStart;
@@ -14566,20 +14354,20 @@ function resolveGuildRoot2(startDir) {
 }
 var fs8, path9;
 var init_guild_root = __esm({
-  "../src/modules/state/workflows/guild-root.ts"() {
+  "src/modules/state/workflows/guild-root.ts"() {
     fs8 = __toESM(require("node:fs"));
     path9 = __toESM(require("node:path"));
   }
 });
 
-// ../src/modules/state/workflows/guild-discovery.ts
+// src/modules/state/workflows/guild-discovery.ts
 var init_guild_discovery = __esm({
-  "../src/modules/state/workflows/guild-discovery.ts"() {
+  "src/modules/state/workflows/guild-discovery.ts"() {
     init_guild_root();
   }
 });
 
-// ../src/modules/migrations/workflows/index-migrate.ts
+// src/modules/migrations/workflows/index-migrate.ts
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
   const db = new DatabaseSync(dbPath);
@@ -14685,7 +14473,7 @@ function runIndexMigrateCli() {
 }
 var import_node_child_process, fs9, path10, CURRENT_SCHEMA_VERSION, MIGRATIONS;
 var init_index_migrate = __esm({
-  "../src/modules/migrations/workflows/index-migrate.ts"() {
+  "src/modules/migrations/workflows/index-migrate.ts"() {
     import_node_child_process = require("node:child_process");
     fs9 = __toESM(require("node:fs"));
     path10 = __toESM(require("node:path"));
@@ -14858,10 +14646,10 @@ var init_index_migrate = __esm({
   }
 });
 
-// ../src/modules/migrations/workflows/wiki-importance.ts
+// src/modules/migrations/workflows/wiki-importance.ts
 var STRUCTURAL_BASENAMES;
 var init_wiki_importance = __esm({
-  "../src/modules/migrations/workflows/wiki-importance.ts"() {
+  "src/modules/migrations/workflows/wiki-importance.ts"() {
     init_kernel();
     init_state();
     STRUCTURAL_BASENAMES = sealSet([
@@ -14874,7 +14662,7 @@ var init_wiki_importance = __esm({
   }
 });
 
-// ../src/modules/migrations/workflows/host-cutover-controller.ts
+// src/modules/migrations/workflows/host-cutover-controller.ts
 function authenticateJournalHandle(handle) {
   if (handle === null || typeof handle !== "object" && typeof handle !== "function" || !AUTHENTICATED_JOURNAL_HANDLES.has(handle)) {
     throw new Error(
@@ -15421,7 +15209,7 @@ function evaluateHostCutoverConformance(request) {
 }
 var crypto2, fs10, os, path11, MH08_OWNER_KEY, MH08_SCENARIO_IDS, MH08_DECISION_SCHEMA, MH08_DIVERGENCE_REASON_CODE, MH08_MODES, MH08_SCOPE_FIELDS, AUTHENTICATED_JOURNAL_HANDLES, MH08_PROVENANCE_ALLOWLIST, MH08_DEFAULT_SCOPE, MH08_COMPARISON_MAX_TEXT_LENGTH, MH08_COMPARISON_MAX_DEPTH, MH08_EVIDENCE_INCOMPLETE_REASON_CODE, MH08_RESULT_MISMATCH_REASON_CODE;
 var init_host_cutover_controller = __esm({
-  "../src/modules/migrations/workflows/host-cutover-controller.ts"() {
+  "src/modules/migrations/workflows/host-cutover-controller.ts"() {
     crypto2 = __toESM(require("node:crypto"));
     fs10 = __toESM(require("node:fs"));
     os = __toESM(require("node:os"));
@@ -15456,26 +15244,26 @@ var init_host_cutover_controller = __esm({
   }
 });
 
-// ../src/modules/migrations/index.ts
+// src/modules/migrations/index.ts
 var init_migrations = __esm({
-  "../src/modules/migrations/index.ts"() {
+  "src/modules/migrations/index.ts"() {
     init_index_migrate();
     init_wiki_importance();
     init_host_cutover_controller();
   }
 });
 
-// ../src/modules/state/workflows/index-cache.ts
+// src/modules/state/workflows/index-cache.ts
 var init_index_cache = __esm({
-  "../src/modules/state/workflows/index-cache.ts"() {
+  "src/modules/state/workflows/index-cache.ts"() {
     init_migrations();
     init_kernel();
   }
 });
 
-// ../src/modules/state/index.ts
+// src/modules/state/index.ts
 var init_state = __esm({
-  "../src/modules/state/index.ts"() {
+  "src/modules/state/index.ts"() {
     init_atomic_write();
     init_dependency_graph_reader();
     init_dependency_graph_schema();
@@ -15486,7 +15274,7 @@ var init_state = __esm({
   }
 });
 
-// ../src/modules/security/workflows/config.ts
+// src/modules/security/workflows/config.ts
 function securityDefaults() {
   return {
     bypass_permissions_policy: "audit",
@@ -15578,14 +15366,14 @@ function readSecurityConfig(cwd) {
 }
 var fs11, path12;
 var init_config = __esm({
-  "../src/modules/security/workflows/config.ts"() {
+  "src/modules/security/workflows/config.ts"() {
     fs11 = __toESM(require("node:fs"));
     path12 = __toESM(require("node:path"));
     init_state();
   }
 });
 
-// ../src/modules/security/workflows/events.ts
+// src/modules/security/workflows/events.ts
 function normalizeSecurityHostId(value) {
   const s = value.trim();
   if (KNOWN_GUILD_HOST_ID_SET.has(s)) return s;
@@ -15640,7 +15428,7 @@ function appendSecurityEvent(runDir3, record) {
 }
 var fs12, path13, SECURITY_EVENT_SCHEMA_VERSION, KNOWN_GUILD_HOST_KINDS, KNOWN_GUILD_HOST_ID_SET, LEGACY_HOST_ALIASES2;
 var init_events = __esm({
-  "../src/modules/security/workflows/events.ts"() {
+  "src/modules/security/workflows/events.ts"() {
     fs12 = __toESM(require("node:fs"));
     path13 = __toESM(require("node:path"));
     init_state();
@@ -15672,7 +15460,7 @@ var init_events = __esm({
   }
 });
 
-// ../src/modules/security/workflows/scrubbed-write.ts
+// src/modules/security/workflows/scrubbed-write.ts
 function guildRootFromRunDir(runDir3) {
   return path14.resolve(runDir3, "../../..");
 }
@@ -15794,7 +15582,7 @@ function scrubbedWrite(outPath, content, opts) {
 }
 var fs13, path14, crypto3;
 var init_scrubbed_write = __esm({
-  "../src/modules/security/workflows/scrubbed-write.ts"() {
+  "src/modules/security/workflows/scrubbed-write.ts"() {
     fs13 = __toESM(require("node:fs"));
     path14 = __toESM(require("node:path"));
     crypto3 = __toESM(require("node:crypto"));
@@ -15804,11 +15592,10 @@ var init_scrubbed_write = __esm({
   }
 });
 
-// ../src/modules/security/workflows/share-set.ts
-var path15, SHARED_SCRUBBED_NAMES, CANONICAL_RUN_LOG;
+// src/modules/security/workflows/share-set.ts
+var SHARED_SCRUBBED_NAMES;
 var init_share_set = __esm({
-  "../src/modules/security/workflows/share-set.ts"() {
-    path15 = __toESM(require("path"));
+  "src/modules/security/workflows/share-set.ts"() {
     init_kernel();
     SHARED_SCRUBBED_NAMES = sealSet([
       "verify.md",
@@ -15818,14 +15605,13 @@ var init_share_set = __esm({
       "run.yaml",
       "run-state.json"
     ], "SHARED_SCRUBBED_NAMES");
-    CANONICAL_RUN_LOG = path15.join("logs", "v1.4-events.jsonl");
   }
 });
 
-// ../src/modules/security/workflows/secret-patterns.ts
+// src/modules/security/workflows/secret-patterns.ts
 var SECRET_PATTERNS;
 var init_secret_patterns = __esm({
-  "../src/modules/security/workflows/secret-patterns.ts"() {
+  "src/modules/security/workflows/secret-patterns.ts"() {
     SECRET_PATTERNS = Object.freeze([
       // NOTE: labels deliberately drop the `=` so the redaction replacement
       // (e.g. `<REDACTED:password-assignment>`) cannot itself re-match the pattern
@@ -15860,32 +15646,22 @@ var init_secret_patterns = __esm({
       Object.freeze([Object.freeze(/\bglpat-[0-9A-Za-z_-]{20}/), "GitLab personal access token"]),
       Object.freeze([Object.freeze(/\bnpm_[0-9A-Za-z]{36}/), "npm token"]),
       Object.freeze([Object.freeze(/\bhf_[0-9A-Za-z]{34}/), "HuggingFace token"]),
-      // ── Personally identifying forms retained by public evidence projections ─
-      // Task objectives and handoff prose are operator-authored and can contain
-      // direct contact details or tenant identifiers. Those artifacts are copied
-      // into migration evidence, so the share scrubber must recognize them before
-      // publication. Keep the patterns prefix-shaped and their labels inert so the
-      // redaction remains deterministic and idempotent.
-      Object.freeze([Object.freeze(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i), "email-address"]),
-      Object.freeze([Object.freeze(/\b(?:acct|cus|cust|usr)_[A-Za-z0-9][A-Za-z0-9_-]{4,}\b/i), "customer-identifier"]),
-      Object.freeze([Object.freeze(/\b(?:customer|account|user)[_-]?id\s*[:=]\s*["']?[A-Za-z0-9][A-Za-z0-9._-]{3,}/i), "customer-identifier"]),
       // High-entropy string heuristic: 40+ hex chars (SHA-like)
       Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
     ]);
   }
 });
 
-// ../src/modules/security/workflows/scrub-redact.ts
+// src/modules/security/workflows/scrub-redact.ts
 var init_scrub_redact = __esm({
-  "../src/modules/security/workflows/scrub-redact.ts"() {
+  "src/modules/security/workflows/scrub-redact.ts"() {
     init_secret_patterns();
-    init_state();
   }
 });
 
-// ../src/modules/security/index.ts
+// src/modules/security/index.ts
 var init_security = __esm({
-  "../src/modules/security/index.ts"() {
+  "src/modules/security/index.ts"() {
     init_safe_object();
     init_injection_guard();
     init_scrubbed_write();
@@ -15896,7 +15672,7 @@ var init_security = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/stable-lock.ts
+// src/modules/lifecycle/workflows/stable-lock.ts
 function stableLockPath(runDir3) {
   return (0, import_node_path.join)(runDir3, "logs", ".lock");
 }
@@ -15904,11 +15680,11 @@ function exclusionSentinelPath(runDir3) {
   return (0, import_node_path.join)(runDir3, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir3) {
-  const path31 = stableLockPath(runDir3);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path31), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path31)) return;
+  const path30 = stableLockPath(runDir3);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path30), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path30)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path31, "wx");
+    const fd = (0, import_node_fs.openSync)(path30, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -15959,7 +15735,7 @@ function withStableLock(runDir3, fn, opts = {}) {
 }
 var import_node_fs, import_node_path, DEFAULT_BACKOFF_MS, DEFAULT_TIMEOUT_MS;
 var init_stable_lock = __esm({
-  "../src/modules/lifecycle/workflows/stable-lock.ts"() {
+  "src/modules/lifecycle/workflows/stable-lock.ts"() {
     import_node_fs = require("node:fs");
     import_node_path = require("node:path");
     DEFAULT_BACKOFF_MS = [2, 5, 10, 25, 50, 100, 200];
@@ -15967,7 +15743,7 @@ var init_stable_lock = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/trace-v2.ts
+// src/modules/lifecycle/workflows/trace-v2.ts
 function genSpanId(runId, eventType, ts, actorId) {
   const material = `${runId}|${eventType}|${ts}|${actorId || "main"}`;
   return crypto4.createHash("sha256").update(material).digest("hex").slice(0, 16);
@@ -16004,13 +15780,13 @@ function pruneUndefined(obj) {
 }
 var crypto4, SIDECAR_MAX_BYTES;
 var init_trace_v2 = __esm({
-  "../src/modules/lifecycle/workflows/trace-v2.ts"() {
+  "src/modules/lifecycle/workflows/trace-v2.ts"() {
     crypto4 = __toESM(require("crypto"));
     SIDECAR_MAX_BYTES = 16 * 1024;
   }
 });
 
-// ../src/modules/lifecycle/workflows/event-log-writer.ts
+// src/modules/lifecycle/workflows/event-log-writer.ts
 function liveLogPath(runDir3) {
   return (0, import_node_path2.join)(runDir3, "logs", "v1.4-events.jsonl");
 }
@@ -16034,9 +15810,9 @@ function appendEvent(runDir3, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId2 = opts.laneId ?? "global";
-    const path31 = laneFallbackPath(runDir3, laneId2);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path31), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path31, "a");
+    const path30 = laneFallbackPath(runDir3, laneId2);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path30), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path30, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -16108,7 +15884,7 @@ function rotateLocked(runDir3) {
 }
 var import_node_fs2, import_node_path2, import_node_zlib, ROTATION_THRESHOLD_BYTES;
 var init_event_log_writer = __esm({
-  "../src/modules/lifecycle/workflows/event-log-writer.ts"() {
+  "src/modules/lifecycle/workflows/event-log-writer.ts"() {
     import_node_fs2 = require("node:fs");
     import_node_path2 = require("node:path");
     import_node_zlib = require("node:zlib");
@@ -16120,10 +15896,10 @@ var init_event_log_writer = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/event-log-sidecar.ts
+// src/modules/lifecycle/workflows/event-log-sidecar.ts
 var SIDECAR_MAX_BYTES2;
 var init_event_log_sidecar = __esm({
-  "../src/modules/lifecycle/workflows/event-log-sidecar.ts"() {
+  "src/modules/lifecycle/workflows/event-log-sidecar.ts"() {
     init_security();
     init_stable_lock();
     init_event_log_schema();
@@ -16132,16 +15908,16 @@ var init_event_log_sidecar = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/event-log.ts
+// src/modules/lifecycle/workflows/event-log.ts
 var init_event_log = __esm({
-  "../src/modules/lifecycle/workflows/event-log.ts"() {
+  "src/modules/lifecycle/workflows/event-log.ts"() {
     init_event_log_schema();
     init_event_log_writer();
     init_event_log_sidecar();
   }
 });
 
-// ../src/modules/lifecycle/workflows/emit-loop-event.ts
+// src/modules/lifecycle/workflows/emit-loop-event.ts
 function parseArgs(argv) {
   const result = {};
   for (let i = 0; i < argv.length; i++) {
@@ -16160,7 +15936,7 @@ function parseArgs(argv) {
   return result;
 }
 function readSentinel(cwd) {
-  const sentinelPath = path16.join(cwd, ".guild", "runs", "current-run-id");
+  const sentinelPath = path15.join(cwd, ".guild", "runs", "current-run-id");
   try {
     const value = fs14.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
@@ -16253,7 +16029,7 @@ function runEmitLoopEventCli() {
     };
   }
   try {
-    appendEvent(path16.join(cwd, ".guild", "runs", runId), event);
+    appendEvent(path15.join(cwd, ".guild", "runs", runId), event);
   } catch (err) {
     process.stderr.write(
       `[emit-loop-event] ERROR: could not write event: ${err instanceof Error ? err.message : String(err)}
@@ -16261,11 +16037,11 @@ function runEmitLoopEventCli() {
     );
   }
 }
-var fs14, path16, VALID_EVENTS, VALID_LAYERS, VALID_TERMINATED;
+var fs14, path15, VALID_EVENTS, VALID_LAYERS, VALID_TERMINATED;
 var init_emit_loop_event = __esm({
-  "../src/modules/lifecycle/workflows/emit-loop-event.ts"() {
+  "src/modules/lifecycle/workflows/emit-loop-event.ts"() {
     fs14 = __toESM(require("fs"));
-    path16 = __toESM(require("path"));
+    path15 = __toESM(require("path"));
     init_event_log();
     init_state();
     VALID_EVENTS = /* @__PURE__ */ new Set(["loop_round_start", "loop_round_end", "codex_review_round"]);
@@ -16283,9 +16059,9 @@ var init_emit_loop_event = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/run-state.ts
+// src/modules/lifecycle/workflows/run-state.ts
 function runStatePath(runDir3) {
-  return path17.join(runDir3, "run-state.json");
+  return path16.join(runDir3, "run-state.json");
 }
 function loadRunState(runDir3) {
   let raw;
@@ -16375,10 +16151,10 @@ function markLaneInProgress(runDir3, init2, laneId2, opts = {}) {
   });
 }
 function laneResumeCheckpointPath(runDir3, laneId2) {
-  return path17.join(runDir3, "lanes", laneId2, "resume.json");
+  return path16.join(runDir3, "lanes", laneId2, "resume.json");
 }
 function readResumeEnabled(cwd) {
-  const settingsPath = path17.join(resolveGuildRoot2(cwd), ".guild", "settings.json");
+  const settingsPath = path16.join(resolveGuildRoot2(cwd), ".guild", "settings.json");
   try {
     const raw = fs15.readFileSync(settingsPath, "utf8");
     const parsed = JSON.parse(raw);
@@ -16420,16 +16196,16 @@ function markLaneDead(runDir3, init2, laneId2, signal, cwd) {
       ...typeof signal.lastError === "string" ? { last_error: signal.lastError } : {}
     };
     const checkpointPath = laneResumeCheckpointPath(runDir3, laneId2);
-    fs15.mkdirSync(path17.dirname(checkpointPath), { recursive: true });
+    fs15.mkdirSync(path16.dirname(checkpointPath), { recursive: true });
     fs15.writeFileSync(checkpointPath, JSON.stringify(checkpoint, null, 2) + "\n", "utf8");
   }
   return state;
 }
-var fs15, path17, RUN_STATE_SCHEMA_VERSION, LANE_RESUME_SCHEMA_VERSION;
+var fs15, path16, RUN_STATE_SCHEMA_VERSION, LANE_RESUME_SCHEMA_VERSION;
 var init_run_state = __esm({
-  "../src/modules/lifecycle/workflows/run-state.ts"() {
+  "src/modules/lifecycle/workflows/run-state.ts"() {
     fs15 = __toESM(require("node:fs"));
-    path17 = __toESM(require("node:path"));
+    path16 = __toESM(require("node:path"));
     init_stable_lock();
     init_state();
     RUN_STATE_SCHEMA_VERSION = "guild.run_state.v1";
@@ -16437,7 +16213,7 @@ var init_run_state = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/mark-lane-dead.ts
+// src/modules/lifecycle/workflows/mark-lane-dead.ts
 function parseMarkLaneDeadArgs(argv) {
   const positionals = [];
   let attempts;
@@ -16503,11 +16279,11 @@ function parseMarkLaneDeadArgs(argv) {
   };
 }
 function repoRootFromRunDir(runDir3) {
-  return path18.resolve(runDir3, "..", "..", "..");
+  return path17.resolve(runDir3, "..", "..", "..");
 }
 function markLaneDeadFromArgs(args) {
   const cwd = args.cwd ?? repoRootFromRunDir(args.runDir);
-  const runId = args.runId ?? path18.basename(args.runDir);
+  const runId = args.runId ?? path17.basename(args.runDir);
   const init2 = {
     runId,
     planSlug: args.planSlug,
@@ -16544,10 +16320,10 @@ function runMarkLaneDeadCli() {
   }
   process.exit(code);
 }
-var path18;
+var path17;
 var init_mark_lane_dead = __esm({
-  "../src/modules/lifecycle/workflows/mark-lane-dead.ts"() {
-    path18 = __toESM(require("path"));
+  "src/modules/lifecycle/workflows/mark-lane-dead.ts"() {
+    path17 = __toESM(require("path"));
     init_run_state();
     if (require.main === module && new RegExp("[\\\\/]mark-lane-dead\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
       runMarkLaneDeadCli();
@@ -16555,12 +16331,12 @@ var init_mark_lane_dead = __esm({
   }
 });
 
-// ../src/modules/teams/workflows/team-file.ts
+// src/modules/teams/workflows/team-file.ts
 function readPlanOwnerTaskIds(guildRoot, slug) {
   const map = /* @__PURE__ */ new Map();
   let raw;
   try {
-    raw = fs16.readFileSync(path19.join(guildRoot, ".guild", "plan", `${slug}.md`), "utf8");
+    raw = fs16.readFileSync(path18.join(guildRoot, ".guild", "plan", `${slug}.md`), "utf8");
   } catch {
     return map;
   }
@@ -16610,26 +16386,26 @@ function readPlanTaskIdSet(guildRoot, slug) {
   }
   return ids;
 }
-var fs16, path19;
+var fs16, path18;
 var init_team_file = __esm({
-  "../src/modules/teams/workflows/team-file.ts"() {
+  "src/modules/teams/workflows/team-file.ts"() {
     fs16 = __toESM(require("fs"));
-    path19 = __toESM(require("path"));
+    path18 = __toESM(require("path"));
     init_lifecycle();
     init_state();
   }
 });
 
-// ../src/modules/teams/workflows/canonical-hash.ts
+// src/modules/teams/workflows/canonical-hash.ts
 var init_canonical_hash = __esm({
-  "../src/modules/teams/workflows/canonical-hash.ts"() {
+  "src/modules/teams/workflows/canonical-hash.ts"() {
   }
 });
 
-// ../src/modules/teams/workflows/station-composer.ts
+// src/modules/teams/workflows/station-composer.ts
 var STATIONS, STATION_SET, DISCIPLINE_SIGNALS, FANOUT_RANK, DOC, IMPLIED_RULES, DEFAULTS_ANCHOR, EMPTY_ADVISORY_PANEL, QA_ADVISORY_PANEL, OPS_ADVISORY_PANEL, STATION_POLICY, IMPLIED_RULE_IDS;
 var init_station_composer = __esm({
-  "../src/modules/teams/workflows/station-composer.ts"() {
+  "src/modules/teams/workflows/station-composer.ts"() {
     init_kernel();
     STATIONS = Object.freeze([
       "init",
@@ -16842,10 +16618,10 @@ var init_station_composer = __esm({
   }
 });
 
-// ../src/modules/distribution/workflows/inventory-schema.ts
+// src/modules/distribution/workflows/inventory-schema.ts
 var INVENTORY_CATEGORIES, ALLOWED_INVENTORY_KEYS;
 var init_inventory_schema = __esm({
-  "../src/modules/distribution/workflows/inventory-schema.ts"() {
+  "src/modules/distribution/workflows/inventory-schema.ts"() {
     init_kernel();
     INVENTORY_CATEGORIES = Object.freeze([
       "commands",
@@ -16867,10 +16643,10 @@ var init_inventory_schema = __esm({
   }
 });
 
-// ../src/modules/distribution/workflows/parity-contract.ts
+// src/modules/distribution/workflows/parity-contract.ts
 var DISCOVERY_RULES, COVERAGE_ENFORCED_CATEGORIES;
 var init_parity_contract = __esm({
-  "../src/modules/distribution/workflows/parity-contract.ts"() {
+  "src/modules/distribution/workflows/parity-contract.ts"() {
     init_kernel();
     init_inventory_schema();
     DISCOVERY_RULES = deepFreeze([
@@ -16935,10 +16711,10 @@ var init_parity_contract = __esm({
   }
 });
 
-// ../src/modules/distribution/workflows/handoff-v2.ts
+// src/modules/distribution/workflows/handoff-v2.ts
 var ALLOWED_INJECTION_CLEAN_VALUES, ALLOWED_TOP_LEVEL_KEYS;
 var init_handoff_v2 = __esm({
-  "../src/modules/distribution/workflows/handoff-v2.ts"() {
+  "src/modules/distribution/workflows/handoff-v2.ts"() {
     init_kernel();
     ALLOWED_INJECTION_CLEAN_VALUES = sealSet(["clean", "flagged", "unverified"], "ALLOWED_INJECTION_CLEAN_VALUES");
     ALLOWED_TOP_LEVEL_KEYS = sealSet([
@@ -16957,22 +16733,22 @@ var init_handoff_v2 = __esm({
   }
 });
 
-// ../src/modules/distribution/workflows/review-result.ts
+// src/modules/distribution/workflows/review-result.ts
 var init_review_result = __esm({
-  "../src/modules/distribution/workflows/review-result.ts"() {
+  "src/modules/distribution/workflows/review-result.ts"() {
   }
 });
 
-// ../src/modules/distribution/workflows/result-contracts-v2.ts
+// src/modules/distribution/workflows/result-contracts-v2.ts
 var init_result_contracts_v2 = __esm({
-  "../src/modules/distribution/workflows/result-contracts-v2.ts"() {
+  "src/modules/distribution/workflows/result-contracts-v2.ts"() {
   }
 });
 
-// ../src/modules/distribution/workflows/result-contracts.ts
+// src/modules/distribution/workflows/result-contracts.ts
 var EXISTING_CONTRACTS, DEFERRED_CONTRACTS, RESULT_CONTRACTS, PHASE1_NORMALIZER_TARGETS;
 var init_result_contracts = __esm({
-  "../src/modules/distribution/workflows/result-contracts.ts"() {
+  "src/modules/distribution/workflows/result-contracts.ts"() {
     init_handoff_v2();
     init_kernel();
     init_review_result();
@@ -17032,31 +16808,31 @@ var init_result_contracts = __esm({
   }
 });
 
-// ../src/modules/distribution/workflows/build-inventory.ts
-var path20, PLUGIN_ROOT;
+// src/modules/distribution/workflows/build-inventory.ts
+var path19, PLUGIN_ROOT;
 var init_build_inventory = __esm({
-  "../src/modules/distribution/workflows/build-inventory.ts"() {
-    path20 = __toESM(require("node:path"));
+  "src/modules/distribution/workflows/build-inventory.ts"() {
+    path19 = __toESM(require("node:path"));
     init_inventory_schema();
     init_state();
     init_parity_contract();
     init_result_contracts();
-    PLUGIN_ROOT = path20.resolve(__dirname, "../../../..");
+    PLUGIN_ROOT = path19.resolve(__dirname, "../../../..");
   }
 });
 
-// ../src/modules/distribution/workflows/check-module-ownership.ts
+// src/modules/distribution/workflows/check-module-ownership.ts
 var init_check_module_ownership = __esm({
-  "../src/modules/distribution/workflows/check-module-ownership.ts"() {
+  "src/modules/distribution/workflows/check-module-ownership.ts"() {
     init_build_inventory();
     init_kernel();
   }
 });
 
-// ../src/modules/distribution/workflows/equivalence-contract.ts
+// src/modules/distribution/workflows/equivalence-contract.ts
 var EQUIVALENCE_SURFACES, INTENTIONAL_EXCLUSIONS, PROVENANCE_FIELDS, SORTED_MANIFEST_ARRAYS;
 var init_equivalence_contract = __esm({
-  "../src/modules/distribution/workflows/equivalence-contract.ts"() {
+  "src/modules/distribution/workflows/equivalence-contract.ts"() {
     init_kernel();
     EQUIVALENCE_SURFACES = Object.freeze([
       "manifest",
@@ -17094,21 +16870,21 @@ var init_equivalence_contract = __esm({
   }
 });
 
-// ../src/modules/distribution/workflows/module-resources.ts
+// src/modules/distribution/workflows/module-resources.ts
 var init_module_resources = __esm({
-  "../src/modules/distribution/workflows/module-resources.ts"() {
+  "src/modules/distribution/workflows/module-resources.ts"() {
     init_build_inventory();
     init_kernel();
   }
 });
 
-// ../src/modules/distribution/workflows/per-host-packaging.ts
+// src/modules/distribution/workflows/per-host-packaging.ts
 var init_per_host_packaging = __esm({
-  "../src/modules/distribution/workflows/per-host-packaging.ts"() {
+  "src/modules/distribution/workflows/per-host-packaging.ts"() {
   }
 });
 
-// ../src/modules/distribution/workflows/release-distribution-contract.ts
+// src/modules/distribution/workflows/release-distribution-contract.ts
 function sha256(value) {
   return crypto5.createHash("sha256").update(value).digest("hex");
 }
@@ -17154,7 +16930,7 @@ function verifyReleaseClaim(claim, archive) {
 }
 var crypto5, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
 var init_release_distribution_contract = __esm({
-  "../src/modules/distribution/workflows/release-distribution-contract.ts"() {
+  "src/modules/distribution/workflows/release-distribution-contract.ts"() {
     crypto5 = __toESM(require("node:crypto"));
     RELEASE_CLAIM_SCHEMA = "guild.release_claim.v1";
     OPERATION_KINDS = Object.freeze(["render", "install", "activate", "update", "uninstall", "verify"]);
@@ -17167,7 +16943,7 @@ var init_release_distribution_contract = __esm({
   }
 });
 
-// ../src/modules/distribution/workflows/release-conformance-evaluator.ts
+// src/modules/distribution/workflows/release-conformance-evaluator.ts
 function refuseAdmission(detail) {
   throw new Error(`release-conformance-evaluator: ${detail}`);
 }
@@ -17611,7 +17387,7 @@ function evaluateReleaseConformance(requestText) {
 }
 var import_node_buffer, MH09_OWNER_KEY, MH09_STABLE_IDS, MH09_MODES, MH09_REQUEST_MEMBERS, MH09_EVALUATOR_VERSION, MH09_MAX_REQUEST_CHARS, MH09_MAX_REQUEST_DEPTH, MH09_EXPECTED, EVIDENCE_MISSING;
 var init_release_conformance_evaluator = __esm({
-  "../src/modules/distribution/workflows/release-conformance-evaluator.ts"() {
+  "src/modules/distribution/workflows/release-conformance-evaluator.ts"() {
     import_node_buffer = require("node:buffer");
     init_lifecycle();
     init_release_distribution_contract();
@@ -17652,7 +17428,7 @@ var init_release_conformance_evaluator = __esm({
   }
 });
 
-// ../src/modules/telemetry/workflows/receipt-journal.ts
+// src/modules/telemetry/workflows/receipt-journal.ts
 function makeReceiptInput(input) {
   return {
     run_id: input.run_id,
@@ -17812,20 +17588,20 @@ function readlinkOrNull(target) {
   }
 }
 function canonicalJournalPath(journalPath2) {
-  let current = path21.resolve(journalPath2);
+  let current = path20.resolve(journalPath2);
   for (let hop = 0; hop < CANONICAL_PATH_MAX_LINK_HOPS; hop += 1) {
     const real = realpathOrNull(current);
     if (real !== null) return real;
     const link = readlinkOrNull(current);
     if (link !== null) {
-      const next = path21.resolve(path21.dirname(current), link);
+      const next = path20.resolve(path20.dirname(current), link);
       if (next === current) return current;
       current = next;
       continue;
     }
-    const parent = path21.dirname(current);
+    const parent = path20.dirname(current);
     if (parent === current) return current;
-    return path21.join(canonicalJournalPath(parent), path21.basename(current));
+    return path20.join(canonicalJournalPath(parent), path20.basename(current));
   }
   return current;
 }
@@ -18006,12 +17782,12 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
   const acquisition = acquireJournalLockHeld(identity.lock, io, lockOptions);
   if (acquisition.failure !== null) return { ok: false, authority: null, identity, failure: acquisition.failure };
   const grant = acquisition.grant;
-  const journalParent = path21.dirname(identity.path);
+  const journalParent = path20.dirname(identity.path);
   const parentStat = statOrNull(journalParent);
   const parentDevice = parentStat !== null ? parentStat.dev : null;
   const parentInode = parentStat !== null ? parentStat.ino : null;
-  const checkpointParentPath = checkpointPath === null ? null : canonicalJournalPath(path21.dirname(checkpointPath));
-  const checkpointCanonical = checkpointParentPath === null || checkpointPath === null ? null : path21.join(checkpointParentPath, path21.basename(checkpointPath));
+  const checkpointParentPath = checkpointPath === null ? null : canonicalJournalPath(path20.dirname(checkpointPath));
+  const checkpointCanonical = checkpointParentPath === null || checkpointPath === null ? null : path20.join(checkpointParentPath, path20.basename(checkpointPath));
   const checkpointParent = checkpointParentPath === null || checkpointParentPath === journalParent ? null : checkpointParentPath;
   let checkpointParentPin = null;
   let handle = null;
@@ -18111,7 +17887,7 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
       }
     }
     if (parentInode !== null && parentDevice !== null) {
-      const parentNow = statOrNull(path21.dirname(identity.path));
+      const parentNow = statOrNull(path20.dirname(identity.path));
       if (parentNow === null || parentNow.dev !== parentDevice || parentNow.ino !== parentInode) {
         return unstable(
           `the directory holding "${identity.path}" and its lock was replaced ${stage} \u2014 this writer's exclusion moved with the old directory and no longer covers this path`
@@ -18155,7 +17931,7 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
           );
         }
       }
-      const parentNamedNow = canonicalJournalPath(path21.dirname(checkpointPath));
+      const parentNamedNow = canonicalJournalPath(path20.dirname(checkpointPath));
       if (parentNamedNow !== checkpointParentPath) {
         return unstable(
           `the checkpoint "${checkpointPath}" now resolves into "${parentNamedNow}" rather than "${checkpointParentPath}" ${stage} \u2014 this writer holds the directory it was granted, not that one`
@@ -18440,19 +18216,19 @@ function failed(input, code, message, disposition = "failed") {
     failure: { code, message }
   };
 }
-function appendReceipt(paths, input, io = defaultJournalIo, lockOptions = {}, options = {}) {
+function appendReceipt(paths, input, io = defaultJournalIo, lockOptions = {}) {
   const invalid = validateInput(input);
   if (invalid) return failed(input, "invalid_record", invalid);
   const acquired = acquireJournalAuthority(paths.journal, io, lockOptions, "append", paths.checkpoint);
   if (!acquired.ok) return failed(input, acquired.failure.code, acquired.failure.message);
   const authority = acquired.authority;
   try {
-    return appendLocked({ journal: authority.identity.path, checkpoint: paths.checkpoint }, input, io, authority, options);
+    return appendLocked({ journal: authority.identity.path, checkpoint: paths.checkpoint }, input, io, authority);
   } finally {
     authority.release();
   }
 }
-function appendLocked(paths, input, io, authority, options) {
+function appendLocked(paths, input, io, authority) {
   const bound = authority.bind(io);
   const scan = scanReceiptJournal(paths.journal, bound);
   if (scan.integrity !== "intact" && scan.integrity !== "absent") {
@@ -18465,13 +18241,6 @@ function appendLocked(paths, input, io, authority, options) {
   if (scan.records.some((r) => r.event_id === input.event_id)) {
     return {
       ...failed(input, "duplicate_event_id", `event_id already present: ${input.event_id}`, "refused"),
-      observation_state: input.observation_state,
-      blocks_dependent_completion: false
-    };
-  }
-  if (options.uniqueOperation && scan.records.some((r) => r.operation_id === input.operation_id)) {
-    return {
-      ...failed(input, "duplicate_operation_id", `operation_id already present: ${input.operation_id}`, "refused"),
       observation_state: input.observation_state,
       blocks_dependent_completion: false
     };
@@ -18573,11 +18342,11 @@ function appendLocked(paths, input, io, authority, options) {
     failure: null
   };
 }
-var fs17, path21, crypto6, RECEIPT_CONTRACT_VERSION, RECEIPT_DISPOSITIONS, OBSERVATION_STATES, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES, UNPINNED_FD, JournalAuthorityDetachedError, ACTIVE_LOCK_PUBLICATION, defaultJournalIo, CANONICAL_PATH_MAX_LINK_HOPS, JournalIdentityError, JOURNAL_LOCK_MAX_ATTEMPTS, JOURNAL_LOCK_WAIT_MS, JOURNAL_ACCESS_FLAGS, REQUIRED_STRING_FIELDS;
+var fs17, path20, crypto6, RECEIPT_CONTRACT_VERSION, RECEIPT_DISPOSITIONS, OBSERVATION_STATES, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES, UNPINNED_FD, JournalAuthorityDetachedError, ACTIVE_LOCK_PUBLICATION, defaultJournalIo, CANONICAL_PATH_MAX_LINK_HOPS, JournalIdentityError, JOURNAL_LOCK_MAX_ATTEMPTS, JOURNAL_LOCK_WAIT_MS, JOURNAL_ACCESS_FLAGS, REQUIRED_STRING_FIELDS;
 var init_receipt_journal = __esm({
-  "../src/modules/telemetry/workflows/receipt-journal.ts"() {
+  "src/modules/telemetry/workflows/receipt-journal.ts"() {
     fs17 = __toESM(require("node:fs"));
-    path21 = __toESM(require("node:path"));
+    path20 = __toESM(require("node:path"));
     crypto6 = __toESM(require("node:crypto"));
     init_state();
     RECEIPT_CONTRACT_VERSION = "guild.observability.v1";
@@ -18645,7 +18414,7 @@ var init_receipt_journal = __esm({
           fs17.fsyncSync(bound.fd);
           return;
         }
-        fs17.mkdirSync(path21.dirname(journalPath2), { recursive: true });
+        fs17.mkdirSync(path20.dirname(journalPath2), { recursive: true });
         const fd = fs17.openSync(journalPath2, "a");
         try {
           fs17.writeSync(fd, text, null, "utf8");
@@ -18685,7 +18454,7 @@ var init_receipt_journal = __esm({
       // has the same guarantee locally but is famously unreliable over NFS, and
       // Guild journals can live on a shared volume.
       acquireLock(lockPath2) {
-        fs17.mkdirSync(path21.dirname(lockPath2), { recursive: true });
+        fs17.mkdirSync(path20.dirname(lockPath2), { recursive: true });
         try {
           fs17.mkdirSync(lockPath2);
         } catch (err) {
@@ -18741,7 +18510,7 @@ var init_receipt_journal = __esm({
   }
 });
 
-// ../src/modules/telemetry/workflows/receipt-reconcile.ts
+// src/modules/telemetry/workflows/receipt-reconcile.ts
 function payloadHash(record) {
   return `${record.input_hash}|${record.output_hash ?? "null"}`;
 }
@@ -19137,7 +18906,7 @@ function reconcileWithin(opts, io, denial, journalPath2, authority) {
 }
 var INVALID_RECOVERY_REASONS, REPAIR_ACCESS_DENIALS, highest;
 var init_receipt_reconcile = __esm({
-  "../src/modules/telemetry/workflows/receipt-reconcile.ts"() {
+  "src/modules/telemetry/workflows/receipt-reconcile.ts"() {
     init_receipt_journal();
     INVALID_RECOVERY_REASONS = /* @__PURE__ */ new Set([
       "schema_invalid",
@@ -19159,10 +18928,10 @@ var init_receipt_reconcile = __esm({
   }
 });
 
-// ../src/modules/telemetry/workflows/debug-bundle.ts
+// src/modules/telemetry/workflows/debug-bundle.ts
 var DEBUG_BUNDLE_SECTION_KINDS;
 var init_debug_bundle = __esm({
-  "../src/modules/telemetry/workflows/debug-bundle.ts"() {
+  "src/modules/telemetry/workflows/debug-bundle.ts"() {
     init_receipt_journal();
     DEBUG_BUNDLE_SECTION_KINDS = Object.freeze([
       "capability_snapshot",
@@ -19175,7 +18944,7 @@ var init_debug_bundle = __esm({
   }
 });
 
-// ../src/modules/telemetry/workflows/receipt-journal-conformance-evaluator.ts
+// src/modules/telemetry/workflows/receipt-journal-conformance-evaluator.ts
 function freezeDeep(value) {
   const seen = /* @__PURE__ */ new Set();
   const walk = (node) => {
@@ -19226,9 +18995,9 @@ function defineScenario(stableId, title, eventName, preconditions, outcomeAssert
   };
 }
 function makeProbePaths(parent, name) {
-  const dir = path22.join(parent, name);
+  const dir = path21.join(parent, name);
   fs18.mkdirSync(dir, { recursive: true });
-  return { dir, journal: path22.join(dir, JOURNAL_LEAF), checkpoint: path22.join(dir, CHECKPOINT_LEAF) };
+  return { dir, journal: path21.join(dir, JOURNAL_LEAF), checkpoint: path21.join(dir, CHECKPOINT_LEAF) };
 }
 function probeInput(identity, runId, over) {
   const base = makeReceiptInput({
@@ -19771,7 +19540,7 @@ function evaluateReceiptJournalConformance(request) {
     }
   }
   const root = request.journal_root;
-  const usableRoot = typeof root === "string" && root.length > 0 && path22.isAbsolute(root) && isExistingDirectory(root);
+  const usableRoot = typeof root === "string" && root.length > 0 && path21.isAbsolute(root) && isExistingDirectory(root);
   if (!usableRoot) {
     return refuseEvaluation(MH06_REFUSAL_CONTROLS.journalRootUnusable, "scenario_evidence_incomplete", [
       "conformance evaluation writes journals, so it requires an absolute, existing, disposable root",
@@ -19780,7 +19549,7 @@ function evaluateReceiptJournalConformance(request) {
   }
   const port = request.journal === void 0 ? MH06_PRODUCTION_JOURNAL : request.journal;
   const identity = request.evidence_identity;
-  const workspace = fs18.mkdtempSync(path22.join(root, PROBE_WORKSPACE_PREFIX));
+  const workspace = fs18.mkdtempSync(path21.join(root, PROBE_WORKSPACE_PREFIX));
   const verdicts = {};
   try {
     for (const stableId of MH06_SCENARIO_IDS) {
@@ -19839,11 +19608,11 @@ function evaluateReceiptJournalConformance(request) {
     packet: freezeDeep(packet)
   };
 }
-var fs18, path22, OUTCOME_ENVELOPE_SCHEMA, OUTCOME_CONTRACT_VERSION, MH06_SUITE_ID, MH06_SUITE_VERSION, MH06_OWNER_KEY, MH06_PACKET_SCHEMA, MH06_SCENARIO_IDS, MH06_CATEGORY, MH06_EVIDENCE_PROFILE, MH06_EXPECTED_OUTCOMES, SCENARIO_RESULT_MISMATCH, EVIDENCE_FRESHNESS_VERDICTS, EVIDENCE_IDENTITY_FIELDS, MH06_WAVE_OWNER, MH06_SCENARIOS, MH06_PRODUCTION_JOURNAL, MH06_REFUSAL_CONTROLS, MH06_SOURCE_VERSION, PROBE_RECORDED_AT, PROBE_RECONCILED_AT, PROBE_WORKSPACE_PREFIX, TORN_APPEND_CUT_BYTES, PROBE_DIRS, JOURNAL_LEAF, CHECKPOINT_LEAF, CHECKPOINT_SCHEMA, PROBES;
+var fs18, path21, OUTCOME_ENVELOPE_SCHEMA, OUTCOME_CONTRACT_VERSION, MH06_SUITE_ID, MH06_SUITE_VERSION, MH06_OWNER_KEY, MH06_PACKET_SCHEMA, MH06_SCENARIO_IDS, MH06_CATEGORY, MH06_EVIDENCE_PROFILE, MH06_EXPECTED_OUTCOMES, SCENARIO_RESULT_MISMATCH, EVIDENCE_FRESHNESS_VERDICTS, EVIDENCE_IDENTITY_FIELDS, MH06_WAVE_OWNER, MH06_SCENARIOS, MH06_PRODUCTION_JOURNAL, MH06_REFUSAL_CONTROLS, MH06_SOURCE_VERSION, PROBE_RECORDED_AT, PROBE_RECONCILED_AT, PROBE_WORKSPACE_PREFIX, TORN_APPEND_CUT_BYTES, PROBE_DIRS, JOURNAL_LEAF, CHECKPOINT_LEAF, CHECKPOINT_SCHEMA, PROBES;
 var init_receipt_journal_conformance_evaluator = __esm({
-  "../src/modules/telemetry/workflows/receipt-journal-conformance-evaluator.ts"() {
+  "src/modules/telemetry/workflows/receipt-journal-conformance-evaluator.ts"() {
     fs18 = __toESM(require("node:fs"));
-    path22 = __toESM(require("node:path"));
+    path21 = __toESM(require("node:path"));
     init_receipt_journal();
     init_receipt_reconcile();
     OUTCOME_ENVELOPE_SCHEMA = "guild.runtime.contracts.v1";
@@ -20023,7 +19792,7 @@ var init_receipt_journal_conformance_evaluator = __esm({
   }
 });
 
-// ../src/modules/telemetry/workflows/guild-trace-events.ts
+// src/modules/telemetry/workflows/guild-trace-events.ts
 function validateBase(ev) {
   if (typeof ev !== "object" || ev === null) {
     return { ok: false, reason: "event must be a non-null object" };
@@ -20418,7 +20187,7 @@ function makeDispatchEvent(fields) {
 }
 var ANALYSIS_EVENT_CLASSES, GUILD_TRACE_SCHEMA_VERSIONS, DISPATCH_BACKENDS, RECALL_BRANCHES, SECURITY_OUTCOMES, DEGRADATION_SURFACES, LANE_OUTCOMES;
 var init_guild_trace_events = __esm({
-  "../src/modules/telemetry/workflows/guild-trace-events.ts"() {
+  "src/modules/telemetry/workflows/guild-trace-events.ts"() {
     ANALYSIS_EVENT_CLASSES = Object.freeze([
       "run_started",
       "run_closed",
@@ -20474,9 +20243,9 @@ var init_guild_trace_events = __esm({
   }
 });
 
-// ../src/modules/telemetry/workflows/guild-trace-emit.ts
+// src/modules/telemetry/workflows/guild-trace-emit.ts
 function liveLogPath2(runDir3) {
-  return path23.join(runDir3, "logs", "v1.4-events.jsonl");
+  return path22.join(runDir3, "logs", "v1.4-events.jsonl");
 }
 function emitTraceEvent(event, runDir3) {
   if (!runDir3) return false;
@@ -20492,7 +20261,7 @@ function emitTraceEvent(event, runDir3) {
   }
   try {
     const live = liveLogPath2(runDir3);
-    const dir = path23.dirname(live);
+    const dir = path22.dirname(live);
     fs19.mkdirSync(dir, { recursive: true });
     const line = JSON.stringify(event) + "\n";
     fs19.appendFileSync(live, line, "utf8");
@@ -20505,19 +20274,19 @@ function emitTraceEvent(event, runDir3) {
     return false;
   }
 }
-var fs19, path23;
+var fs19, path22;
 var init_guild_trace_emit = __esm({
-  "../src/modules/telemetry/workflows/guild-trace-emit.ts"() {
+  "src/modules/telemetry/workflows/guild-trace-emit.ts"() {
     fs19 = __toESM(require("node:fs"));
-    path23 = __toESM(require("node:path"));
+    path22 = __toESM(require("node:path"));
     init_guild_trace_events();
   }
 });
 
-// ../src/modules/telemetry/workflows/task-cell-telemetry.ts
+// src/modules/telemetry/workflows/task-cell-telemetry.ts
 var TASK_CELL_LIFECYCLE_EVENTS, EVENT_NAMES;
 var init_task_cell_telemetry = __esm({
-  "../src/modules/telemetry/workflows/task-cell-telemetry.ts"() {
+  "src/modules/telemetry/workflows/task-cell-telemetry.ts"() {
     init_kernel();
     TASK_CELL_LIFECYCLE_EVENTS = Object.freeze([
       "spawn_started",
@@ -20542,10 +20311,10 @@ var init_task_cell_telemetry = __esm({
   }
 });
 
-// ../src/modules/telemetry/workflows/run-analysis.ts
+// src/modules/telemetry/workflows/run-analysis.ts
 var REQUIRED_COVERAGE, COMPLETENESS_REQUIREMENTS, EVENT_CLASS_CATEGORY;
 var init_run_analysis = __esm({
-  "../src/modules/telemetry/workflows/run-analysis.ts"() {
+  "src/modules/telemetry/workflows/run-analysis.ts"() {
     init_state();
     init_guild_trace_events();
     REQUIRED_COVERAGE = Object.freeze(["prompt", "agent", "tool", "phase", "loop", "gate", "close"]);
@@ -20590,9 +20359,9 @@ var init_run_analysis = __esm({
   }
 });
 
-// ../src/modules/telemetry/index.ts
+// src/modules/telemetry/index.ts
 var init_telemetry = __esm({
-  "../src/modules/telemetry/index.ts"() {
+  "src/modules/telemetry/index.ts"() {
     init_receipt_journal();
     init_receipt_reconcile();
     init_debug_bundle();
@@ -20604,7 +20373,7 @@ var init_telemetry = __esm({
   }
 });
 
-// ../src/modules/distribution/workflows/release-conformance-integration.ts
+// src/modules/distribution/workflows/release-conformance-integration.ts
 function isRecord6(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -21100,10 +20869,10 @@ function buildBatteryModuleWorkspace(base) {
     2
   )}
 `;
-  const coreDir = path24.resolve(__dirname, "../../lifecycle/workflows");
+  const coreDir = path23.resolve(__dirname, "../../lifecycle/workflows");
   const coreWorkflows = {};
   for (const member of NEUTRAL_CORE_MEMBERS) {
-    coreWorkflows[member] = fs20.readFileSync(path24.join(coreDir, member), "utf8");
+    coreWorkflows[member] = fs20.readFileSync(path23.join(coreDir, member), "utf8");
   }
   coreWorkflows["lifecycle-ports.ts"] = [
     'export const LIFECYCLE_PORT_VERSION = "guild.lifecycle.ports.v1" as const;',
@@ -21213,27 +20982,27 @@ function buildBatteryModuleWorkspace(base) {
     ""
   ].join("\n");
   for (const [rel, content] of Object.entries(files)) {
-    const target = path24.join(base, rel);
-    fs20.mkdirSync(path24.dirname(target), { recursive: true });
+    const target = path23.join(base, rel);
+    fs20.mkdirSync(path23.dirname(target), { recursive: true });
     fs20.writeFileSync(target, content);
   }
 }
 function batteryWorkspace() {
   if (batteryWorkspaceSingleton !== null) return batteryWorkspaceSingleton;
-  const base = fs20.mkdtempSync(path24.join(os2.tmpdir(), "a21x-integration-battery-"));
-  const journalRoot = path24.join(base, "journal-root");
-  const migrationJournalRoot = path24.join(base, "migration-journal-root");
+  const base = fs20.mkdtempSync(path23.join(os2.tmpdir(), "a21x-integration-battery-"));
+  const journalRoot = path23.join(base, "journal-root");
+  const migrationJournalRoot = path23.join(base, "migration-journal-root");
   fs20.mkdirSync(journalRoot, { recursive: true });
   fs20.mkdirSync(migrationJournalRoot, { recursive: true });
-  const moduleBase = path24.join(base, "module-workspace");
+  const moduleBase = path23.join(base, "module-workspace");
   buildBatteryModuleWorkspace(moduleBase);
   batteryWorkspaceSingleton = {
     journalRoot,
     migrationJournalRoot,
-    pluginRoot: path24.join(moduleBase, "plugin"),
+    pluginRoot: path23.join(moduleBase, "plugin"),
     consumerRoots: {
-      website: path24.join(moduleBase, "website"),
-      benchmark: path24.join(moduleBase, "benchmark")
+      website: path23.join(moduleBase, "website"),
+      benchmark: path23.join(moduleBase, "benchmark")
     }
   };
   return batteryWorkspaceSingleton;
@@ -21405,12 +21174,12 @@ function refusesWithControl(implementation, request, control) {
   if (!isRecord6(result.outcome) || result.outcome.disposition !== "refused") return false;
   return ownField(result.outcome.facts, "refusal_control") === control;
 }
-var fs20, os2, path24, RELEASE_INTEGRATION_REQUEST_MEMBERS, RELEASE_INTEGRATION_OWNER_BOUNDARIES, CONTROL_NOT_TEXT, CONTROL_CALLER_PACKETS, CONTROL_CALLER_REQUIRED_SET2, CONTROL_CALLER_OUTCOMES, CONTROL_OWNER_FAILED, CONTROL_CLAIM_INCOMPLETE, CONTROL_ASSEMBLY_REFUSED, RELEASE_INTEGRATION_REFUSAL_CONTROLS, RELEASE_INTEGRATION_OWNER_INPUT_MEMBERS, FORBIDDEN_OWNER_INPUT_KEYS, MH02_SNAPSHOT_HASH, MH02_SUPPORTED_CAPABILITY, MH02_ABSENT_CAPABILITY, MH02_DENIED_OPERATION, MH02_ALLOWED_OPERATION, MH02_CONDITION_GATE, MH02_OPEN_GATE, MH02_OBSERVATION, MH02_POLICY, MH02_GATES, MH02_HOST_PROBES, MH02_PROBES, batteryWorkspaceSingleton, BATTERY_MODULE_PUBLIC_API, BATTERY_IDENTITY, BATTERY_CLAIMANT, BATTERY_RUN_ID, BATTERY_CLAIM, batteryRecomputedPacketsSingleton, RELEASE_INTEGRATION_CONTROL_BATTERY, RELEASE_INTEGRATION_CONTROLS;
+var fs20, os2, path23, RELEASE_INTEGRATION_REQUEST_MEMBERS, RELEASE_INTEGRATION_OWNER_BOUNDARIES, CONTROL_NOT_TEXT, CONTROL_CALLER_PACKETS, CONTROL_CALLER_REQUIRED_SET2, CONTROL_CALLER_OUTCOMES, CONTROL_OWNER_FAILED, CONTROL_CLAIM_INCOMPLETE, CONTROL_ASSEMBLY_REFUSED, RELEASE_INTEGRATION_REFUSAL_CONTROLS, RELEASE_INTEGRATION_OWNER_INPUT_MEMBERS, FORBIDDEN_OWNER_INPUT_KEYS, MH02_SNAPSHOT_HASH, MH02_SUPPORTED_CAPABILITY, MH02_ABSENT_CAPABILITY, MH02_DENIED_OPERATION, MH02_ALLOWED_OPERATION, MH02_CONDITION_GATE, MH02_OPEN_GATE, MH02_OBSERVATION, MH02_POLICY, MH02_GATES, MH02_HOST_PROBES, MH02_PROBES, batteryWorkspaceSingleton, BATTERY_MODULE_PUBLIC_API, BATTERY_IDENTITY, BATTERY_CLAIMANT, BATTERY_RUN_ID, BATTERY_CLAIM, batteryRecomputedPacketsSingleton, RELEASE_INTEGRATION_CONTROL_BATTERY, RELEASE_INTEGRATION_CONTROLS;
 var init_release_conformance_integration = __esm({
-  "../src/modules/distribution/workflows/release-conformance-integration.ts"() {
+  "src/modules/distribution/workflows/release-conformance-integration.ts"() {
     fs20 = __toESM(require("node:fs"));
     os2 = __toESM(require("node:os"));
-    path24 = __toESM(require("node:path"));
+    path23 = __toESM(require("node:path"));
     init_lifecycle();
     init_host_runtime();
     init_telemetry();
@@ -21838,26 +21607,26 @@ var init_release_conformance_integration = __esm({
   }
 });
 
-// ../src/modules/distribution/workflows/surface-manifest.ts
+// src/modules/distribution/workflows/surface-manifest.ts
 var SURFACE_KINDS;
 var init_surface_manifest = __esm({
-  "../src/modules/distribution/workflows/surface-manifest.ts"() {
+  "src/modules/distribution/workflows/surface-manifest.ts"() {
     SURFACE_KINDS = Object.freeze(["skill", "command", "agent"]);
   }
 });
 
-// ../src/modules/distribution/workflows/verify-host-packages.ts
+// src/modules/distribution/workflows/verify-host-packages.ts
 var init_verify_host_packages = __esm({
-  "../src/modules/distribution/workflows/verify-host-packages.ts"() {
+  "src/modules/distribution/workflows/verify-host-packages.ts"() {
     init_build_inventory();
     init_host_runtime();
   }
 });
 
-// ../src/modules/distribution/workflows/verify-installer.ts
+// src/modules/distribution/workflows/verify-installer.ts
 var BUILD_ONCE_SNIPPET, INSTALLER_HOST_EXPECTATIONS;
 var init_verify_installer = __esm({
-  "../src/modules/distribution/workflows/verify-installer.ts"() {
+  "src/modules/distribution/workflows/verify-installer.ts"() {
     init_kernel();
     init_build_inventory();
     BUILD_ONCE_SNIPPET = "would run: npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at <generated-at>";
@@ -22006,9 +21775,9 @@ var init_verify_installer = __esm({
   }
 });
 
-// ../src/modules/distribution/index.ts
+// src/modules/distribution/index.ts
 var init_distribution = __esm({
-  "../src/modules/distribution/index.ts"() {
+  "src/modules/distribution/index.ts"() {
     init_build_inventory();
     init_check_module_ownership();
     init_equivalence_contract();
@@ -22028,10 +21797,10 @@ var init_distribution = __esm({
   }
 });
 
-// ../src/modules/communication/workflows/comms-format-lint.ts
+// src/modules/communication/workflows/comms-format-lint.ts
 var yaml, HAND_ROLLED_PATTERN_SOURCES, HAND_ROLLED_PATTERNS;
 var init_comms_format_lint = __esm({
-  "../src/modules/communication/workflows/comms-format-lint.ts"() {
+  "src/modules/communication/workflows/comms-format-lint.ts"() {
     init_distribution();
     init_kernel();
     yaml = loadYamlApi();
@@ -22120,10 +21889,10 @@ var init_comms_format_lint = __esm({
   }
 });
 
-// ../src/modules/communication/workflows/no-accidental-write.ts
+// src/modules/communication/workflows/no-accidental-write.ts
 var yaml2, SETTINGS_JSON_REQUIRED_KEYS, SETTINGS_JSON_KNOWN_KEYS, WORKSPACE_JSON_REQUIRED_KEYS, PROVENANCE_JSON_REQUIRED_KEYS, TRACE_JSONL_REQUIRED_KEYS, DOCS_KNOWLEDGE_FRONTMATTER_REQUIRED_KEYS;
 var init_no_accidental_write = __esm({
-  "../src/modules/communication/workflows/no-accidental-write.ts"() {
+  "src/modules/communication/workflows/no-accidental-write.ts"() {
     init_kernel();
     yaml2 = loadYamlApi();
     SETTINGS_JSON_REQUIRED_KEYS = Object.freeze([
@@ -22139,9 +21908,6 @@ var init_no_accidental_write = __esm({
       "auto_approve",
       "review",
       "host",
-      "host_mode",
-      "roles",
-      "host_profiles",
       "initiative_default",
       "index",
       "record_status_runs",
@@ -22152,14 +21918,10 @@ var init_no_accidental_write = __esm({
       "security",
       "secrets_policy",
       "mcp",
-      "capability",
-      "statusline",
-      "adversarial_review_provider",
       "loops",
       "loop_cap",
       "codex_cap",
-      "defaults",
-      "model_policy"
+      "defaults"
     ], "SETTINGS_JSON_KNOWN_KEYS");
     WORKSPACE_JSON_REQUIRED_KEYS = Object.freeze([
       "schema_version"
@@ -22182,10 +21944,10 @@ var init_no_accidental_write = __esm({
   }
 });
 
-// ../src/modules/communication/resources/scripts/lib/artifact-bus.ts
+// src/modules/communication/resources/scripts/lib/artifact-bus.ts
 var TOPIC_TYPES, BUS_EVENT_KINDS;
 var init_artifact_bus = __esm({
-  "../src/modules/communication/resources/scripts/lib/artifact-bus.ts"() {
+  "src/modules/communication/resources/scripts/lib/artifact-bus.ts"() {
     TOPIC_TYPES = Object.freeze([
       "handoff",
       "status",
@@ -22203,26 +21965,26 @@ var init_artifact_bus = __esm({
   }
 });
 
-// ../src/modules/communication/workflows/artifact-bus.ts
+// src/modules/communication/workflows/artifact-bus.ts
 var init_artifact_bus2 = __esm({
-  "../src/modules/communication/workflows/artifact-bus.ts"() {
+  "src/modules/communication/workflows/artifact-bus.ts"() {
     init_artifact_bus();
   }
 });
 
-// ../src/modules/communication/index.ts
+// src/modules/communication/index.ts
 var init_communication = __esm({
-  "../src/modules/communication/index.ts"() {
+  "src/modules/communication/index.ts"() {
     init_comms_format_lint();
     init_no_accidental_write();
     init_artifact_bus2();
   }
 });
 
-// ../src/modules/teams/workflows/station-signals.ts
+// src/modules/teams/workflows/station-signals.ts
 var STATION_SIGNAL_KEYS, SIGNAL_KEY_SET;
 var init_station_signals = __esm({
-  "../src/modules/teams/workflows/station-signals.ts"() {
+  "src/modules/teams/workflows/station-signals.ts"() {
     init_communication();
     init_kernel();
     init_station_composer();
@@ -22238,9 +22000,9 @@ var init_station_signals = __esm({
   }
 });
 
-// ../src/modules/teams/index.ts
+// src/modules/teams/index.ts
 var init_teams = __esm({
-  "../src/modules/teams/index.ts"() {
+  "src/modules/teams/index.ts"() {
     init_team_file();
     init_canonical_hash();
     init_station_composer();
@@ -22248,7 +22010,7 @@ var init_teams = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/resume-lanes.ts
+// src/modules/lifecycle/workflows/resume-lanes.ts
 function parseResumeLanesArgs(argv) {
   const positionals = [];
   let json = false;
@@ -22270,14 +22032,14 @@ function parseResumeLanesArgs(argv) {
   return { runDir: runDir3, json, cwd, slug };
 }
 function repoRootFromRunDir2(runDir3) {
-  return path25.resolve(runDir3, "..", "..", "..");
+  return path24.resolve(runDir3, "..", "..", "..");
 }
 function scanResumableLanes(runDir3, cwd, slug) {
   const repoRoot = cwd ?? repoRootFromRunDir2(runDir3);
   if (!readResumeEnabled(repoRoot)) {
     return [];
   }
-  const lanesDir = path25.join(runDir3, "lanes");
+  const lanesDir = path24.join(runDir3, "lanes");
   let entries;
   try {
     entries = fs21.readdirSync(lanesDir, { withFileTypes: true });
@@ -22344,11 +22106,11 @@ function runResumeLanesCli() {
   }
   process.exit(0);
 }
-var fs21, path25;
+var fs21, path24;
 var init_resume_lanes = __esm({
-  "../src/modules/lifecycle/workflows/resume-lanes.ts"() {
+  "src/modules/lifecycle/workflows/resume-lanes.ts"() {
     fs21 = __toESM(require("fs"));
-    path25 = __toESM(require("path"));
+    path24 = __toESM(require("path"));
     init_run_state();
     init_teams();
     if (require.main === module && new RegExp("[\\\\/]resume-lanes\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
@@ -22357,10 +22119,10 @@ var init_resume_lanes = __esm({
   }
 });
 
-// ../src/modules/config/workflows/config-defaults.ts
+// src/modules/config/workflows/config-defaults.ts
 var DEFAULT_ESCALATION_MARKERS, NON_INHERITABLE_KEYS, LOG_ROTATION_THRESHOLD_BYTES, SIDECAR_MAX_BYTES3, CAPABILITY_RESOLVER_MODES, CAPABILITY_AUTO_CREATE_POLICIES, CAPABILITY_RESOLVER_MODE_AFTER_F7, CAPABILITY_RESOLVER_MODE_DEFAULT, DEFAULTS;
 var init_config_defaults = __esm({
-  "../src/modules/config/workflows/config-defaults.ts"() {
+  "src/modules/config/workflows/config-defaults.ts"() {
     init_kernel();
     DEFAULT_ESCALATION_MARKERS = Object.freeze([
       "I'm not sure",
@@ -22599,23 +22361,23 @@ var init_config_defaults = __esm({
   }
 });
 
-// ../src/modules/config/workflows/config-validation.ts
+// src/modules/config/workflows/config-validation.ts
 var init_config_validation = __esm({
-  "../src/modules/config/workflows/config-validation.ts"() {
+  "src/modules/config/workflows/config-validation.ts"() {
     init_host_runtime();
   }
 });
 
-// ../src/modules/config/workflows/workspace-manifest.ts
+// src/modules/config/workflows/workspace-manifest.ts
 var init_workspace_manifest = __esm({
-  "../src/modules/config/workflows/workspace-manifest.ts"() {
+  "src/modules/config/workflows/workspace-manifest.ts"() {
   }
 });
 
-// ../src/modules/config/workflows/settings-reader.ts
+// src/modules/config/workflows/settings-reader.ts
 var yaml3, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, DISPATCH_HOST_IDS, RESOLVER_TIER1_KEYS;
 var init_settings_reader = __esm({
-  "../src/modules/config/workflows/settings-reader.ts"() {
+  "src/modules/config/workflows/settings-reader.ts"() {
     init_host_runtime();
     init_host_runtime();
     init_host_runtime();
@@ -22663,9 +22425,9 @@ var init_settings_reader = __esm({
   }
 });
 
-// ../src/modules/config/workflows/settings-resolver.ts
+// src/modules/config/workflows/settings-resolver.ts
 var init_settings_resolver = __esm({
-  "../src/modules/config/workflows/settings-resolver.ts"() {
+  "src/modules/config/workflows/settings-resolver.ts"() {
     init_settings_reader();
     init_settings_reader();
     init_telemetry();
@@ -22673,16 +22435,16 @@ var init_settings_resolver = __esm({
   }
 });
 
-// ../src/modules/config/workflows/tier-model.ts
+// src/modules/config/workflows/tier-model.ts
 var init_tier_model = __esm({
-  "../src/modules/config/workflows/tier-model.ts"() {
+  "src/modules/config/workflows/tier-model.ts"() {
     init_host_runtime();
   }
 });
 
-// ../src/modules/config/index.ts
+// src/modules/config/index.ts
 var init_config2 = __esm({
-  "../src/modules/config/index.ts"() {
+  "src/modules/config/index.ts"() {
     init_config_defaults();
     init_config_validation();
     init_settings_resolver();
@@ -22690,24 +22452,22 @@ var init_config2 = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/retry-lane.ts
+// src/modules/lifecycle/workflows/retry-lane.ts
 var init_retry_lane = __esm({
-  "../src/modules/lifecycle/workflows/retry-lane.ts"() {
+  "src/modules/lifecycle/workflows/retry-lane.ts"() {
     init_config2();
   }
 });
 
-// ../src/modules/lifecycle/workflows/run-binding.ts
+// src/modules/lifecycle/workflows/run-binding.ts
 var init_run_binding = __esm({
-  "../src/modules/lifecycle/workflows/run-binding.ts"() {
-    init_kernel();
-    init_stable_lock();
+  "src/modules/lifecycle/workflows/run-binding.ts"() {
   }
 });
 
-// ../src/modules/lifecycle/workflows/write-run-manifest.ts
+// src/modules/lifecycle/workflows/write-run-manifest.ts
 function manifestPathFor(cwd, slug) {
-  return path26.join(cwd, ".guild", "programs", slug, "manifest.json");
+  return path25.join(cwd, ".guild", "programs", slug, "manifest.json");
 }
 function readRunManifest(cwd, slug) {
   try {
@@ -22865,11 +22625,11 @@ function runWriteRunManifestCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var fs22, path26, WAVE_STATUSES, PROGRAM_STATUSES;
+var fs22, path25, WAVE_STATUSES, PROGRAM_STATUSES;
 var init_write_run_manifest = __esm({
-  "../src/modules/lifecycle/workflows/write-run-manifest.ts"() {
+  "src/modules/lifecycle/workflows/write-run-manifest.ts"() {
     fs22 = __toESM(require("fs"));
-    path26 = __toESM(require("path"));
+    path25 = __toESM(require("path"));
     init_state();
     WAVE_STATUSES = /* @__PURE__ */ new Set(["pending", "active", "completed", "failed"]);
     PROGRAM_STATUSES = /* @__PURE__ */ new Set(["active", "completed", "paused", "aborted"]);
@@ -22879,7 +22639,7 @@ var init_write_run_manifest = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/run-manifest-wiring.ts
+// src/modules/lifecycle/workflows/run-manifest-wiring.ts
 function validateRunManifest(raw) {
   const errors = [];
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
@@ -23044,7 +22804,7 @@ function runRunManifestWiringCli(args = process.argv.slice(2)) {
 }
 var PROGRAM_STATUSES2, WAVE_STATUSES2, MANIFEST_REQUIRED_KEYS, WAVE_REQUIRED_KEYS;
 var init_run_manifest_wiring = __esm({
-  "../src/modules/lifecycle/workflows/run-manifest-wiring.ts"() {
+  "src/modules/lifecycle/workflows/run-manifest-wiring.ts"() {
     init_write_run_manifest();
     PROGRAM_STATUSES2 = Object.freeze(["active", "completed", "paused", "aborted"]);
     WAVE_STATUSES2 = Object.freeze(["pending", "active", "completed", "failed"]);
@@ -23070,10 +22830,10 @@ var init_run_manifest_wiring = __esm({
   }
 });
 
-// ../src/modules/capability/workflows/catalog-cache.ts
+// src/modules/capability/workflows/catalog-cache.ts
 var MODEL_CATALOG_CACHE_DIRNAME, MODEL_CATALOG_CACHE_REL_SEGMENTS, MODEL_CATALOG_CACHE_REL, CACHE_KEY_COMPONENTS;
 var init_catalog_cache = __esm({
-  "../src/modules/capability/workflows/catalog-cache.ts"() {
+  "src/modules/capability/workflows/catalog-cache.ts"() {
     MODEL_CATALOG_CACHE_DIRNAME = "model-catalog";
     MODEL_CATALOG_CACHE_REL_SEGMENTS = Object.freeze([".guild", "indexes", MODEL_CATALOG_CACHE_DIRNAME]);
     MODEL_CATALOG_CACHE_REL = MODEL_CATALOG_CACHE_REL_SEGMENTS.join("/");
@@ -23094,10 +22854,10 @@ var init_catalog_cache = __esm({
   }
 });
 
-// ../src/modules/capability/workflows/compatibility-usage.ts
+// src/modules/capability/workflows/compatibility-usage.ts
 var COMPATIBILITY_ASSET_KINDS, COMPATIBILITY_READ_REASONS, BENIGN_COMPATIBILITY_READ_REASONS, DEPENDENCE_COMPATIBILITY_READ_REASONS, BENIGN_REASON_SET, READ_REASON_SET, ASSET_KIND_SET, RESOLVER_MODE_SET;
 var init_compatibility_usage = __esm({
-  "../src/modules/capability/workflows/compatibility-usage.ts"() {
+  "src/modules/capability/workflows/compatibility-usage.ts"() {
     init_config2();
     COMPATIBILITY_ASSET_KINDS = Object.freeze([
       "shipped_template",
@@ -23123,10 +22883,10 @@ var init_compatibility_usage = __esm({
   }
 });
 
-// ../src/modules/capability/workflows/resolver-mode.ts
+// src/modules/capability/workflows/resolver-mode.ts
 var RESOLVER_AUTHORITIES, CAPABILITY_RESOLUTION_INTENTS, MODE_POLICIES, RESOLVER_MODE_POLICIES, MODE_RANK, RESOLVER_MODE_FAILURES, RESOLVER_MODE_FAILURE_SET, MODE_TRANSITION_DIRECTIONS;
 var init_resolver_mode = __esm({
-  "../src/modules/capability/workflows/resolver-mode.ts"() {
+  "src/modules/capability/workflows/resolver-mode.ts"() {
     init_compatibility_usage();
     RESOLVER_AUTHORITIES = Object.freeze(["legacy", "project-local"]);
     CAPABILITY_RESOLUTION_INTENTS = Object.freeze([
@@ -23277,10 +23037,10 @@ var init_resolver_mode = __esm({
   }
 });
 
-// ../src/modules/capability/workflows/compatibility-catalog.ts
+// src/modules/capability/workflows/compatibility-catalog.ts
 var SHIPPED_TEMPLATE_COUNT, SHIPPED_DOMAIN_SKILL_IDS, SHIPPED_DOMAIN_SKILL_COUNT, SHIPPED_COMPATIBILITY_ASSET_COUNT, COMPATIBILITY_ASSET_ROOTS, COMPATIBILITY_DEPRECATION_STATES, DEPRECATION_STATE_SET;
 var init_compatibility_catalog = __esm({
-  "../src/modules/capability/workflows/compatibility-catalog.ts"() {
+  "src/modules/capability/workflows/compatibility-catalog.ts"() {
     init_compatibility_usage();
     init_resolver_mode();
     SHIPPED_TEMPLATE_COUNT = 15;
@@ -23359,10 +23119,10 @@ var init_compatibility_catalog = __esm({
   }
 });
 
-// ../src/modules/capability/workflows/confirmation-arbiter.ts
+// src/modules/capability/workflows/confirmation-arbiter.ts
 var CONFIRMATION_KEY_COMPONENTS;
 var init_confirmation_arbiter = __esm({
-  "../src/modules/capability/workflows/confirmation-arbiter.ts"() {
+  "src/modules/capability/workflows/confirmation-arbiter.ts"() {
     CONFIRMATION_KEY_COMPONENTS = Object.freeze([
       "run_id",
       "purpose",
@@ -23374,23 +23134,23 @@ var init_confirmation_arbiter = __esm({
   }
 });
 
-// ../src/modules/capability/workflows/independence-predicates.ts
+// src/modules/capability/workflows/independence-predicates.ts
 var init_independence_predicates = __esm({
-  "../src/modules/capability/workflows/independence-predicates.ts"() {
+  "src/modules/capability/workflows/independence-predicates.ts"() {
   }
 });
 
-// ../src/modules/capability/workflows/independence-record.ts
+// src/modules/capability/workflows/independence-record.ts
 var init_independence_record = __esm({
-  "../src/modules/capability/workflows/independence-record.ts"() {
+  "src/modules/capability/workflows/independence-record.ts"() {
     init_independence_predicates();
   }
 });
 
-// ../src/modules/capability/workflows/model-catalog.ts
+// src/modules/capability/workflows/model-catalog.ts
 var EVIDENCE_STATES, NO_LISTING_GROUNDING, LISTING_AUTHORITY, LEGAL_EVIDENCE_TRANSITIONS;
 var init_model_catalog = __esm({
-  "../src/modules/capability/workflows/model-catalog.ts"() {
+  "src/modules/capability/workflows/model-catalog.ts"() {
     init_catalog_cache();
     init_kernel();
     EVIDENCE_STATES = Object.freeze(["available", "advertised", "unknown", "unavailable"]);
@@ -23432,10 +23192,10 @@ var init_model_catalog = __esm({
   }
 });
 
-// ../src/modules/capability/workflows/model-policy.ts
+// src/modules/capability/workflows/model-policy.ts
 var POLICY_PURPOSES, REVIEW_CLASS_PURPOSES, COMPLEXITIES, CONDITION_KINDS, INDEPENDENCE_LEVELS, POLICY_TIERS, OPERATOR_BASELINE_POLICY;
 var init_model_policy = __esm({
-  "../src/modules/capability/workflows/model-policy.ts"() {
+  "src/modules/capability/workflows/model-policy.ts"() {
     init_kernel();
     POLICY_PURPOSES = Object.freeze([
       "general",
@@ -23653,10 +23413,10 @@ var init_model_policy = __esm({
   }
 });
 
-// ../src/modules/capability/workflows/model-resolver.ts
+// src/modules/capability/workflows/model-resolver.ts
 var FALLBACK_FAILURE_TAXONOMY, RESOLUTION_STATUSES;
 var init_model_resolver = __esm({
-  "../src/modules/capability/workflows/model-resolver.ts"() {
+  "src/modules/capability/workflows/model-resolver.ts"() {
     init_teams();
     init_model_catalog();
     init_model_policy();
@@ -23682,25 +23442,25 @@ var init_model_resolver = __esm({
   }
 });
 
-// ../src/modules/capability/workflows/model-inspect.ts
+// src/modules/capability/workflows/model-inspect.ts
 var init_model_inspect = __esm({
-  "../src/modules/capability/workflows/model-inspect.ts"() {
+  "src/modules/capability/workflows/model-inspect.ts"() {
     init_model_resolver();
     init_independence_predicates();
   }
 });
 
-// ../src/modules/capability/workflows/inspection-persist.ts
+// src/modules/capability/workflows/inspection-persist.ts
 var init_inspection_persist = __esm({
-  "../src/modules/capability/workflows/inspection-persist.ts"() {
+  "src/modules/capability/workflows/inspection-persist.ts"() {
     init_model_inspect();
   }
 });
 
-// ../src/modules/capability/workflows/routing-rollout.ts
+// src/modules/capability/workflows/routing-rollout.ts
 var ROUTING_FLAG_KEYS, ROUTING_FLAG_DEFAULTS, FLAG_GROUPS;
 var init_routing_rollout = __esm({
-  "../src/modules/capability/workflows/routing-rollout.ts"() {
+  "src/modules/capability/workflows/routing-rollout.ts"() {
     init_teams();
     ROUTING_FLAG_KEYS = Object.freeze([
       "model_routing.identity_v2",
@@ -23734,10 +23494,10 @@ var init_routing_rollout = __esm({
   }
 });
 
-// ../src/modules/capability/workflows/models-command.ts
+// src/modules/capability/workflows/models-command.ts
 var MODELS_COMMAND_USAGE;
 var init_models_command = __esm({
-  "../src/modules/capability/workflows/models-command.ts"() {
+  "src/modules/capability/workflows/models-command.ts"() {
     init_host_runtime();
     init_security();
     init_catalog_cache();
@@ -23757,28 +23517,28 @@ var init_models_command = __esm({
   }
 });
 
-// ../src/modules/capability/workflows/inspection-record.ts
+// src/modules/capability/workflows/inspection-record.ts
 var init_inspection_record = __esm({
-  "../src/modules/capability/workflows/inspection-record.ts"() {
+  "src/modules/capability/workflows/inspection-record.ts"() {
     init_model_inspect();
     init_inspection_persist();
     init_models_command();
   }
 });
 
-// ../src/modules/capability/workflows/policy-migration.ts
+// src/modules/capability/workflows/policy-migration.ts
 var LEGACY_FILLABLE_PURPOSES;
 var init_policy_migration = __esm({
-  "../src/modules/capability/workflows/policy-migration.ts"() {
+  "src/modules/capability/workflows/policy-migration.ts"() {
     init_model_policy();
     LEGACY_FILLABLE_PURPOSES = Object.freeze(["general", "implementation"]);
   }
 });
 
-// ../src/modules/capability/workflows/purpose-provenance.ts
+// src/modules/capability/workflows/purpose-provenance.ts
 var AUTHORITATIVE_PURPOSE_SOURCES;
 var init_purpose_provenance = __esm({
-  "../src/modules/capability/workflows/purpose-provenance.ts"() {
+  "src/modules/capability/workflows/purpose-provenance.ts"() {
     init_model_policy();
     AUTHORITATIVE_PURPOSE_SOURCES = Object.freeze([
       "skill_metadata",
@@ -23789,26 +23549,26 @@ var init_purpose_provenance = __esm({
   }
 });
 
-// ../src/modules/capability/workflows/tier-defaults.ts
+// src/modules/capability/workflows/tier-defaults.ts
 var init_tier_defaults = __esm({
-  "../src/modules/capability/workflows/tier-defaults.ts"() {
+  "src/modules/capability/workflows/tier-defaults.ts"() {
     init_host_runtime();
     init_host_runtime();
   }
 });
 
-// ../src/modules/capability/workflows/rank.ts
+// src/modules/capability/workflows/rank.ts
 var init_rank = __esm({
-  "../src/modules/capability/workflows/rank.ts"() {
+  "src/modules/capability/workflows/rank.ts"() {
     init_host_runtime();
     init_tier_defaults();
   }
 });
 
-// ../src/modules/capability/workflows/role-model-schema.ts
+// src/modules/capability/workflows/role-model-schema.ts
 var ROLES, ROLE_STRENGTHS, ROLE_SET, STRENGTH_SET, HOST_ID_SET3;
 var init_role_model_schema = __esm({
-  "../src/modules/capability/workflows/role-model-schema.ts"() {
+  "src/modules/capability/workflows/role-model-schema.ts"() {
     init_host_runtime();
     ROLES = Object.freeze(["host", "advisory", "adversarial"]);
     ROLE_STRENGTHS = Object.freeze(["strong", "weak"]);
@@ -23818,10 +23578,10 @@ var init_role_model_schema = __esm({
   }
 });
 
-// ../src/modules/review/workflows/review-progress.ts
+// src/modules/review/workflows/review-progress.ts
 var REVIEW_PROGRESS_STATES, STATE_SET;
 var init_review_progress = __esm({
-  "../src/modules/review/workflows/review-progress.ts"() {
+  "src/modules/review/workflows/review-progress.ts"() {
     REVIEW_PROGRESS_STATES = Object.freeze([
       "launched",
       "running",
@@ -23838,19 +23598,19 @@ var init_review_progress = __esm({
   }
 });
 
-// ../src/modules/review/workflows/review-pairing.ts
+// src/modules/review/workflows/review-pairing.ts
 var init_review_pairing = __esm({
-  "../src/modules/review/workflows/review-pairing.ts"() {
+  "src/modules/review/workflows/review-pairing.ts"() {
     init_capability();
     init_host_runtime();
     init_review_progress();
   }
 });
 
-// ../src/modules/review/resources/scripts/lib/advisory-record.ts
+// src/modules/review/resources/scripts/lib/advisory-record.ts
 var ADVISORY_BACKENDS, ADVISORY_SUBSTRATES, ADVISORY_CONFIDENCE, ADVISORY_PHASES, BACKEND_SET, CONFIDENCE_SET, SUBSTRATE_SET;
 var init_advisory_record = __esm({
-  "../src/modules/review/resources/scripts/lib/advisory-record.ts"() {
+  "src/modules/review/resources/scripts/lib/advisory-record.ts"() {
     ADVISORY_BACKENDS = Object.freeze([
       "tmux_team",
       "host_subagents",
@@ -23889,50 +23649,50 @@ var init_advisory_record = __esm({
   }
 });
 
-// ../src/modules/review/workflows/advisory-contract.ts
+// src/modules/review/workflows/advisory-contract.ts
 var init_advisory_contract = __esm({
-  "../src/modules/review/workflows/advisory-contract.ts"() {
+  "src/modules/review/workflows/advisory-contract.ts"() {
     init_advisory_record();
   }
 });
 
-// ../src/modules/review/index.ts
+// src/modules/review/index.ts
 var init_review = __esm({
-  "../src/modules/review/index.ts"() {
+  "src/modules/review/index.ts"() {
     init_review_pairing();
     init_review_progress();
     init_advisory_contract();
   }
 });
 
-// ../src/modules/capability/workflows/role-resolver.ts
+// src/modules/capability/workflows/role-resolver.ts
 var init_role_resolver = __esm({
-  "../src/modules/capability/workflows/role-resolver.ts"() {
+  "src/modules/capability/workflows/role-resolver.ts"() {
     init_host_runtime();
     init_role_model_schema();
     init_review();
   }
 });
 
-// ../src/modules/capability/workflows/tiebreak.ts
+// src/modules/capability/workflows/tiebreak.ts
 var init_tiebreak = __esm({
-  "../src/modules/capability/workflows/tiebreak.ts"() {
+  "src/modules/capability/workflows/tiebreak.ts"() {
     init_rank();
   }
 });
 
-// ../src/modules/capability/workflows/router.ts
+// src/modules/capability/workflows/router.ts
 var init_router = __esm({
-  "../src/modules/capability/workflows/router.ts"() {
+  "src/modules/capability/workflows/router.ts"() {
     init_config2();
     init_rank();
     init_tiebreak();
   }
 });
 
-// ../src/modules/capability/index.ts
+// src/modules/capability/index.ts
 var init_capability = __esm({
-  "../src/modules/capability/index.ts"() {
+  "src/modules/capability/index.ts"() {
     init_catalog_cache();
     init_compatibility_catalog();
     init_compatibility_usage();
@@ -23958,9 +23718,9 @@ var init_capability = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/runstart-preflight.ts
+// src/modules/lifecycle/workflows/runstart-preflight.ts
 var init_runstart_preflight = __esm({
-  "../src/modules/lifecycle/workflows/runstart-preflight.ts"() {
+  "src/modules/lifecycle/workflows/runstart-preflight.ts"() {
     init_config2();
     init_host_runtime();
     init_capability();
@@ -23968,9 +23728,9 @@ var init_runstart_preflight = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/write-task-run.ts
+// src/modules/lifecycle/workflows/write-task-run.ts
 function taskRunPath(cwd, runId, taskId) {
-  return path27.join(cwd, ".guild", "runs", runId, "task-runs", `${taskId}.yaml`);
+  return path26.join(cwd, ".guild", "runs", runId, "task-runs", `${taskId}.yaml`);
 }
 function writeTaskRun(cwd, runId, taskId, params) {
   const {
@@ -24044,7 +23804,7 @@ function writeTaskRun(cwd, runId, taskId, params) {
   });
   atomicWrite(outPath, yamlStr);
   try {
-    const _traceRunDir = path27.join(cwd, ".guild", "runs", runId);
+    const _traceRunDir = path26.join(cwd, ".guild", "runs", runId);
     const _traceTs = (/* @__PURE__ */ new Date()).toISOString();
     const _traceBackend = "unknown";
     emitTraceEvent(
@@ -24222,10 +23982,10 @@ function runWriteTaskRunCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var path27;
+var path26;
 var init_write_task_run = __esm({
-  "../src/modules/lifecycle/workflows/write-task-run.ts"() {
-    path27 = __toESM(require("path"));
+  "src/modules/lifecycle/workflows/write-task-run.ts"() {
+    path26 = __toESM(require("path"));
     init_telemetry();
     init_kernel();
     init_state();
@@ -24235,9 +23995,9 @@ var init_write_task_run = __esm({
   }
 });
 
-// ../src/modules/lifecycle/index.ts
+// src/modules/lifecycle/index.ts
 var init_lifecycle = __esm({
-  "../src/modules/lifecycle/index.ts"() {
+  "src/modules/lifecycle/index.ts"() {
     init_neutral_runtime_contracts();
     init_neutral_gate_policy();
     init_neutral_lifecycle_machine();
@@ -24259,7 +24019,7 @@ var init_lifecycle = __esm({
   }
 });
 
-// ../src/modules/host-runtime/workflows/host-adapter-conformance-evaluator.ts
+// src/modules/host-runtime/workflows/host-adapter-conformance-evaluator.ts
 function declaresCallerScenarioSet(request) {
   if (request === null || typeof request !== "object") return false;
   if (!("stable_ids" in request)) return false;
@@ -24509,7 +24269,7 @@ function evaluateMh03HostAdapterConformance(request) {
 }
 var MH03_CONFORMANCE_OWNER_KEY, MH03_CONFORMANCE_PACKET_SCHEMA, MH03_AUTHENTICATION_FAILURE_REASON_CODE, MH03_UNSATISFIED_REASON_CODE, MH03_REFUSAL_CONTROL_CALLER_SUPPLIED_IDS, MH03_REFUSAL_CONTROL_IDENTITY_INCOMPLETE, MH03_REFUSAL_CONTROL_EVIDENCE_BINDING_MISSING, MH03_WAVE_OWNER, MH03_CONFORMANCE_SCENARIOS, MH03_CONFORMANCE_SCENARIO_IDS, MH03_SATISFIED_REASON_CODES, MH03_PRODUCTION_BOUNDARY, MH03_PROBE_HOST_VERSION, MH03_NATIVE_HOOK_PROBE, MH03_WRAPPER_PROBE, MH03_SHARED_SEMANTIC_EVENT, MH03_EVENT_BINDING_PROBES, MH03_UNREGISTERED_NATIVE_EVENT, MH03_ABSENT_CAPABILITY_ID, MH03_CREDENTIALED_CAPABILITY_ID;
 var init_host_adapter_conformance_evaluator = __esm({
-  "../src/modules/host-runtime/workflows/host-adapter-conformance-evaluator.ts"() {
+  "src/modules/host-runtime/workflows/host-adapter-conformance-evaluator.ts"() {
     init_host_adapter_boundary();
     init_host_capability_snapshot();
     init_host_event_normalizer();
@@ -24672,9 +24432,9 @@ var init_host_adapter_conformance_evaluator = __esm({
   }
 });
 
-// ../src/modules/host-runtime/index.ts
+// src/modules/host-runtime/index.ts
 var init_host_runtime = __esm({
-  "../src/modules/host-runtime/index.ts"() {
+  "src/modules/host-runtime/index.ts"() {
     init_host_id_namespace();
     init_adapter_fallback_ladders();
     init_host_profiles_validate();
@@ -24691,12 +24451,12 @@ var init_host_runtime = __esm({
   }
 });
 
-// ../src/modules/lifecycle/workflows/run-lifecycle.ts
+// src/modules/lifecycle/workflows/run-lifecycle.ts
 function runDir2(root, runId) {
-  return path28.join(root, ".guild", "runs", runId);
+  return path27.join(root, ".guild", "runs", runId);
 }
 function resolvedSettingsPath(root, runId) {
-  return path28.join(runDir2(root, runId), "resolved-settings.json");
+  return path27.join(runDir2(root, runId), "resolved-settings.json");
 }
 function validateRunId(runId) {
   if (!runId || !runId.trim()) return false;
@@ -24712,11 +24472,11 @@ function assertContained(target, cwd, label) {
   const r = checkContained(cwd, target, { policy: "physical" });
   if (isRefused(r)) {
     throw new Error(
-      `[run-lifecycle] ${label}: resolved path "${path28.resolve(target)}" escapes the project root "${path28.resolve(cwd)}" [${r.code}] \u2014 ${r.detail}`
+      `[run-lifecycle] ${label}: resolved path "${path27.resolve(target)}" escapes the project root "${path27.resolve(cwd)}" [${r.code}] \u2014 ${r.detail}`
     );
   }
-  const runsBase = path28.resolve(cwd, ".guild", "runs");
-  const resolvedTarget = path28.resolve(target);
+  const runsBase = path27.resolve(cwd, ".guild", "runs");
+  const resolvedTarget = path27.resolve(target);
   if (resolvedTarget === runsBase || !isWithin(resolvedTarget, runsBase)) {
     throw new Error(
       `[run-lifecycle] ${label}: resolved path "${resolvedTarget}" is not a strict subdirectory of the runs base "${runsBase}"`
@@ -24726,7 +24486,7 @@ function assertContained(target, cwd, label) {
 function realProvenanceFsSeam() {
   return {
     writeFile(absPath, contents) {
-      fsNode.mkdirSync(path28.dirname(absPath), { recursive: true });
+      fsNode.mkdirSync(path27.dirname(absPath), { recursive: true });
       fsNode.writeFileSync(absPath, contents, "utf8");
     },
     readFile(absPath) {
@@ -24747,7 +24507,7 @@ function readResolvedSettingsSnapshot(runId, opts) {
   const { cwd, fs: fsSeam } = opts;
   const fs25 = fsSeam ?? realProvenanceFsSeam();
   const filePath = resolvedSettingsPath(cwd, runId);
-  const runsBase = path28.resolve(cwd, ".guild", "runs");
+  const runsBase = path27.resolve(cwd, ".guild", "runs");
   try {
     assertContained(filePath, cwd, "readResolvedSettingsSnapshot");
   } catch {
@@ -24761,11 +24521,11 @@ function readResolvedSettingsSnapshot(runId, opts) {
     return null;
   }
 }
-var fsNode, path28, CANONICAL_PHASES;
+var fsNode, path27, CANONICAL_PHASES;
 var init_run_lifecycle = __esm({
-  "../src/modules/lifecycle/workflows/run-lifecycle.ts"() {
+  "src/modules/lifecycle/workflows/run-lifecycle.ts"() {
     fsNode = __toESM(require("fs"));
-    path28 = __toESM(require("path"));
+    path27 = __toESM(require("path"));
     init_kernel();
     init_host_runtime();
     init_config2();
@@ -24777,16 +24537,16 @@ var init_run_lifecycle = __esm({
   }
 });
 
-// pre-compact.ts
+// hooks/pre-compact.ts
 var pre_compact_exports = {};
 __export(pre_compact_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(pre_compact_exports);
 var fs24 = __toESM(require("node:fs"));
-var path30 = __toESM(require("node:path"));
+var path29 = __toESM(require("node:path"));
 
-// lib/guild-root.ts
+// hooks/lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
 function resolveGuildRoot(startCwd) {
@@ -24816,16 +24576,16 @@ function resolveGuildRoot(startCwd) {
   }
 }
 
-// lib/reanchor.ts
+// hooks/lib/reanchor.ts
 var fs23 = __toESM(require("node:fs"));
 init_sealed_collections();
-var path29 = __toESM(require("node:path"));
+var path28 = __toESM(require("node:path"));
 var yaml4 = __toESM(require_js_yaml());
 
-// ../scripts/lib/run-lifecycle.ts
+// scripts/lib/run-lifecycle.ts
 init_run_lifecycle();
 
-// lib/reanchor.ts
+// hooks/lib/reanchor.ts
 var SAFE_IDENT = /^[A-Za-z0-9._-]{1,120}$/;
 var KNOWN_AGENT_MODES = /* @__PURE__ */ new Set(["team", "agent", "subagent", "auto"]);
 function safeIdent(value) {
@@ -24877,7 +24637,7 @@ function resolveActiveRunId(guildRoot) {
   if (typeof envRunId === "string" && envRunId.trim().length > 0) {
     return envRunId.trim();
   }
-  const sentinel = path29.join(guildRoot, ".guild", "runs", "current-run-id");
+  const sentinel = path28.join(guildRoot, ".guild", "runs", "current-run-id");
   try {
     const value = fs23.readFileSync(sentinel, "utf8").trim();
     return value.length > 0 ? value : void 0;
@@ -24886,7 +24646,7 @@ function resolveActiveRunId(guildRoot) {
   }
 }
 function readRunYamlFacts(guildRoot, runId) {
-  const runYamlPath = path29.join(guildRoot, ".guild", "runs", runId, "run.yaml");
+  const runYamlPath = path28.join(guildRoot, ".guild", "runs", runId, "run.yaml");
   let raw;
   try {
     raw = fs23.readFileSync(runYamlPath, "utf8");
@@ -24950,16 +24710,16 @@ function reanchorGraceMs() {
   return DEFAULT_REANCHOR_GRACE_MS;
 }
 function newestRunSignalMs(guildRoot, runId) {
-  const dir = path29.join(guildRoot, ".guild", "runs", runId);
+  const dir = path28.join(guildRoot, ".guild", "runs", runId);
   const candidates = [
-    path29.join(dir, "run.yaml"),
-    path29.join(dir, "events.ndjson"),
-    path29.join(dir, "provenance.json")
+    path28.join(dir, "run.yaml"),
+    path28.join(dir, "events.ndjson"),
+    path28.join(dir, "provenance.json")
   ];
   for (const sub of ["logs", "handoffs", "in-progress"]) {
     try {
-      for (const name of fs23.readdirSync(path29.join(dir, sub))) {
-        candidates.push(path29.join(dir, sub, name));
+      for (const name of fs23.readdirSync(path28.join(dir, sub))) {
+        candidates.push(path28.join(dir, sub, name));
       }
     } catch {
     }
@@ -25021,13 +24781,13 @@ function buildCompactSummaryInstructions(guildRoot) {
   return facts === null ? null : renderCompactSummaryInstructions(facts);
 }
 
-// lib/v1.4/log-jsonl.ts
+// hooks/lib/v1.4/log-jsonl.ts
 init_event_log();
 
-// lib/trace-v2.ts
+// hooks/lib/trace-v2.ts
 init_trace_v2();
 
-// lib/lane-attribution.ts
+// hooks/lib/lane-attribution.ts
 var UNATTRIBUTED_WORKER_LANE_ID = "unattributed-worker";
 function isWorkerInvocation(env = process.env) {
   const laneId2 = env["GUILD_LANE_ID"];
@@ -25043,7 +24803,7 @@ function resolveLaneAttribution(env = process.env) {
   return isWorkerInvocation(env) ? UNATTRIBUTED_WORKER_LANE_ID : void 0;
 }
 
-// pre-compact.ts
+// hooks/pre-compact.ts
 async function readStdin() {
   return new Promise((resolve17) => {
     const chunks = [];
@@ -25062,7 +24822,7 @@ function payloadExcerpt(payload) {
   }
 }
 function readCurrentRunId(guildRoot) {
-  const sentinelPath = path30.join(guildRoot, ".guild", "runs", "current-run-id");
+  const sentinelPath = path29.join(guildRoot, ".guild", "runs", "current-run-id");
   try {
     const value = fs24.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : void 0;
@@ -25112,7 +24872,7 @@ async function main() {
     );
     return;
   }
-  const runDir3 = process.env["GUILD_RUN_DIR"] ?? path30.join(guildRoot, ".guild", "runs", runId);
+  const runDir3 = process.env["GUILD_RUN_DIR"] ?? path29.join(guildRoot, ".guild", "runs", runId);
   const ts = (/* @__PURE__ */ new Date()).toISOString();
   const event = {
     ts,

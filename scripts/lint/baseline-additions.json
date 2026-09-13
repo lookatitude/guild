@@ -1,0 +1,121 @@
+{
+  "schema": "guild.layout_baseline_additions.v1",
+  "note": "PR-SCOPED declarations for entries ADDED to layout-baseline.json. Every added key must appear here with a reason and the owning lane, or baseline-shrink-gate fails. A key listed here but absent from the baseline is a stale declaration and also fails. This file must be EMPTY on next/main: declarations live only for the life of a PR, so the gate fails a push to a channel branch while it is non-empty.",
+  "additions": [
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/context/workflows/recall-protect.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): src/modules/context/workflows/recall-protect.ts writes under a Guild root and names the wiki without a scrubbedWrite call site. Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/dispatch/resources/scripts/agent-team-launcher.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): scripts/agent-team-launcher.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/distribution/resources/scripts/lib/skill-source-transform.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): scripts/lib/skill-source-transform.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/evolution/resources/scripts/lib/reaping.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): scripts/lib/reaping.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/evolution/resources/scripts/shadow-mode.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): scripts/shadow-mode.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/host-runtime/resources/scripts/lib/pane-adapter.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): scripts/lib/pane-adapter.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/host-runtime/resources/scripts/write-host-capability.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): scripts/write-host-capability.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/host-runtime/resources/src/modules/context/workflows/recall-protect.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): src/modules/context/workflows/recall-protect.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/host-runtime/resources/src/modules/lifecycle/workflows/run-state.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): src/modules/lifecycle/workflows/run-state.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/host-runtime/resources/src/modules/migrations/workflows/index-migrate.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): src/modules/migrations/workflows/index-migrate.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/host-runtime/resources/src/modules/security/workflows/events.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): src/modules/security/workflows/events.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/knowledge/resources/scripts/lib/kb-snapshot.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): scripts/lib/kb-snapshot.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/lifecycle/resources/src/modules/lifecycle/workflows/run-state.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): src/modules/lifecycle/workflows/run-state.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/lifecycle/resources/src/modules/migrations/workflows/index-migrate.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): src/modules/migrations/workflows/index-migrate.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/lifecycle/resources/src/modules/security/workflows/events.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): src/modules/security/workflows/events.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/lifecycle/workflows/run-state.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): src/modules/lifecycle/workflows/run-state.ts writes under a Guild root and names the wiki without a scrubbedWrite call site. Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/migrations/resources/scripts/dot-guild/audit.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): scripts/dot-guild/audit.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/migrations/resources/scripts/dot-guild/convert/index.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): scripts/dot-guild/convert/index.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/migrations/workflows/index-migrate.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): src/modules/migrations/workflows/index-migrate.ts writes under a Guild root and names the wiki without a scrubbedWrite call site. Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/review/resources/scripts/flip-report.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): scripts/flip-report.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/security/workflows/events.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): src/modules/security/workflows/events.ts writes under a Guild root and names the wiki without a scrubbedWrite call site. Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/state/resources/scripts/lib/retention.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): scripts/lib/retention.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    },
+    {
+      "key": "harvest-writer-calls-scrubbed-write::src/modules/telemetry/resources/scripts/trace-summarize.ts::writes the wiki without a call to scrubbedWrite",
+      "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): scripts/trace-summarize.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
+      "lane": "T02"
+    }
+  ]
+}

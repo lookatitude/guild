@@ -140,12 +140,36 @@ const MODULE_HEADER = /^\/\/ (\S+)$/gm;
  * first-party TypeScript across packages is intended and fully deterministic — it is
  * version-controlled. Only third-party resolution is environment-coupled.
  */
+/**
+ * Prefixes that mean "inside a package this build is allowed to resolve from",
+ * expressed as esbuild records them in the `// <path>` module header.
+ *
+ * The header is relative to the build's working directory. That used to be
+ * `hooks/`, so a legitimate dependency read `node_modules/js-yaml/…`. The compile
+ * step pins `absWorkingDir` to the PLUGIN ROOT — which is what makes the committed
+ * bytes identical across checkouts — so the same dependency now reads
+ * `hooks/node_modules/js-yaml/…`. Same file, same alias pin, new spelling; reading
+ * it as "outside the hooks package" was a false positive on all 18 bundles that
+ * bundle js-yaml (codex G-lane r1).
+ *
+ * The property still enforced is unchanged: a module resolved from a SIBLING
+ * package (`../scripts/node_modules/…`, `/abs/other-checkout/node_modules/…`) makes
+ * the bytes depend on what happened to be installed (issue #75) and is a violation.
+ */
+const OWN_PACKAGE_NODE_MODULES = [
+  "node_modules/",                  // build cwd === hooks/ (historical)
+  "hooks/node_modules/",            // build cwd === plugin root (compile step)
+  "mcp-servers/guild-memory/node_modules/",
+  "mcp-servers/guild-telemetry/node_modules/",
+  "scripts/node_modules/",          // runtime/scripts/* bundles resolve from scripts/
+];
+
 export function findForeignModulePaths(bundle: string): string[] {
   const found = new Set<string>();
   for (const m of bundle.matchAll(MODULE_HEADER)) {
     const modulePath = m[1];
     if (!modulePath.includes("node_modules/")) continue;
-    if (modulePath.startsWith("node_modules/")) continue; // hooks-local: correct
+    if (OWN_PACKAGE_NODE_MODULES.some((p) => modulePath.startsWith(p))) continue;
     found.add(modulePath);
   }
   return [...found].sort();
@@ -445,6 +469,40 @@ export function checkBuildScript(buildScript: string, runtimeDeps: string[]): Vi
   return out;
 }
 
+// ── Compile-step delegation (KTD6/KTD7) ───────────────────────────────────
+
+/**
+ * The hooks build is no longer N hand-written esbuild command lines in
+ * `hooks/package.json`; it is `scripts/compile.ts`'s target table, and
+ * `compile --check` rebuilds EVERY target into a scratch dir and byte-compares it
+ * with the committed copy — the same property this rail was written to guard, over
+ * a strictly larger surface (it also catches a missing output and a stray bundle no
+ * target produces, which the parse-and-replay design could not see).
+ *
+ * Teaching the text parser to model `bun scripts/compile.ts --only=<group>` would
+ * mean re-deriving the target table in a regex — two sources of truth for what
+ * ships, which is precisely the drift KTD7 exists to remove. So the replay half of
+ * this rail delegates instead (codex G-lane r1 finding: the rail was RED with 43
+ * violations after the build moved).
+ *
+ * The static half — symlinked `hooks/node_modules`, out-of-package module paths
+ * recorded in the committed bytes (issue #75) — is NOT superseded and still runs.
+ */
+export function delegatesToCompileStep(buildScript: string): boolean {
+  return /\bscripts\/compile\.ts\b/.test(buildScript);
+}
+
+export function runCompileCheck(root: string): { ok: boolean; detail: string } {
+  const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
+  const tsxCli = path.join(root, "scripts", "node_modules", "tsx", "dist", "cli.mjs");
+  const args = fs.existsSync(tsxCli)
+    ? [tsxCli, path.join(root, "scripts", "compile.ts"), "--check"]
+    : [path.join(root, "scripts", "compile.ts"), "--check"];
+  const r = spawnSync(process.execPath, args, { cwd: root, encoding: "utf8", timeout: 600000 });
+  const detail = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().split("\n").slice(-3).join(" | ");
+  return { ok: r.status === 0, detail: detail || `exit ${r.status}` };
+}
+
 // ── Driver ────────────────────────────────────────────────────────────────
 
 export function findViolations(root: string): Violation[] {
@@ -499,7 +557,19 @@ export function findViolations(root: string): Violation[] {
 
   const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
   const runtimeDeps = Object.keys(pkg.dependencies ?? {}).sort();
-  out.push(...checkBuildScript(String(pkg.scripts?.build ?? ""), runtimeDeps));
+  const buildScript = String(pkg.scripts?.build ?? "");
+  if (delegatesToCompileStep(buildScript)) {
+    // Replay is the compile step's job now (see delegatesToCompileStep).
+    const r = runCompileCheck(root);
+    if (!r.ok) {
+      out.push({
+        file: "scripts/compile.ts",
+        detail: `\`compile --check\` is not green, so the committed bundles are not a pure function of their sources: ${r.detail}`,
+      });
+    }
+  } else {
+    out.push(...checkBuildScript(buildScript, runtimeDeps));
+  }
 
   const bundles = committedBundles(hooksDir);
   if (bundles.length === 0) {
@@ -518,7 +588,13 @@ export function findViolations(root: string): Violation[] {
   );
   // Multiplicity is preserved deliberately: two invocations writing the SAME outfile is a
   // last-writer-wins race, not a duplicate to be deduped away.
-  const producedList = parseEsbuildInvocations(String(pkg.scripts?.build ?? "")).map((i) => i.outfile);
+  // Under the compile step every committed bundle has a producing target by
+  // construction — `compile --check` above fails on a missing output AND on a
+  // stray file under a compile-owned directory, so the producer bookkeeping below
+  // has nothing left to add and its empty parse would flag every bundle as stale.
+  const producedList = delegatesToCompileStep(buildScript)
+    ? [...scanned]
+    : parseEsbuildInvocations(buildScript).map((i) => i.outfile);
   const produced = new Set(producedList);
   const producerCount = new Map<string, number>();
   for (const outfile of producedList) {

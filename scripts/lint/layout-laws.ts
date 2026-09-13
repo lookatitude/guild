@@ -91,8 +91,44 @@ function walkDirs(root: string, rel = "", out: string[] = []): string[] {
 
 /** Lint fixtures live under scripts/lint/__tests__/fixtures and are never linted. */
 function isFixturePath(f: string): boolean {
-  return f.includes("__tests__/fixtures/") || f.includes("__fixtures__/") ||
-    f.includes("/fixtures/");
+  const live = liveOf(f);
+  return live.includes("__tests__/fixtures/") || live.includes("__fixtures__/") ||
+    live.includes("/fixtures/");
+}
+
+/**
+ * A module-resource mirror: `src/modules/<mod>/resources/<live path>`, written by
+ * `sync:module-resources` from the live file and never hand-edited (AGENTS.md).
+ */
+const MODULE_RESOURCE_MIRROR_RE = /^src\/modules\/[^/]+\/resources\//;
+
+function isModuleResourceMirror(f: string): boolean {
+  return MODULE_RESOURCE_MIRROR_RE.test(f);
+}
+
+/**
+ * The LIVE path a file is classified as. A mirror is byte-identical to its live
+ * file, so every text-reading check must reach the same verdict for both — a rule
+ * that holds for `scripts/foo.ts` and not for its mirror is a lint bug, not a
+ * finding. Non-mirror paths are returned unchanged.
+ *
+ * Use this for EXEMPTION and CLASSIFICATION only. It deliberately does NOT change
+ * which prefixes a check scans: violations stay reported at the path they were
+ * found, so the baseline keys stay stable.
+ */
+function liveOf(f: string): string {
+  return f.replace(MODULE_RESOURCE_MIRROR_RE, "");
+}
+
+/**
+ * The lint tooling's own source names every forbidden pattern it greps for, so it
+ * must never be its own subject. Resolved through `liveOf` so the live file and
+ * every mirror of it get the identical verdict, at any mirror depth or future
+ * mirror home. (T02: without this, `lint:layout` is red on a clean tree for the
+ * lint's own text — 12 open, all mirror-only.)
+ */
+function isLayoutLawsSource(f: string): boolean {
+  return liveOf(f).startsWith("scripts/lint/");
 }
 
 function under(files: string[], ...prefixes: string[]): string[] {
@@ -880,6 +916,32 @@ const SURFACE_PREFIXES = [
 /** Every TypeScript tree that is domain (business) code, pre- and post-fold. */
 const DOMAIN_PREFIXES = ["src/modules/", "src/domains/"];
 
+/**
+ * Does this file target the wiki? RAW TEXT, FAIL CLOSED.
+ *
+ * Path-assembly analysis was tried and rejected (codex G-lane r2). Every AST rule
+ * has a shape it cannot see: a literal-only predicate missed
+ * `path.join(cwd, ".guild", "wiki")`; adding join/template handling still missed
+ * `[".guild", "wiki", page].join("/")`, `reduce`, a segment held in a const, a
+ * path built in a helper two files away. Each miss is a real wiki writer shipping
+ * without `scrubbedWrite`, which is a KTD37 security guard, not a style rule.
+ *
+ * So the rule is deliberately over-inclusive and syntax-free: a file that
+ * mentions BOTH the `.guild` and `wiki` tokens ANYWHERE in its raw text —
+ * literals, template pieces, array elements, comments — and touches an fs write
+ * API is treated as a wiki writer. The one escape is a real `scrubbedWrite` call
+ * site. False positives cost one `scrubbedWrite` call or one baseline line; false
+ * negatives cost an unscrubbed write to the knowledge base.
+ *
+ * A `wiki` token is the word on an identifier/path boundary (`"wiki"`, `wikiDir`,
+ * `wiki/decisions`), not a substring of an unrelated word.
+ */
+function targetsWikiRawText(root: string, rel: string): boolean {
+  const body = read(path.join(root, rel));
+  if (!body.includes(".guild")) return false;
+  return /(^|[^A-Za-z0-9_])wiki([^A-Za-z0-9_]|$)/i.test(body) || /\bwiki[A-Z]/.test(body);
+}
+
 function tsFiles(ctx: Ctx, prefixes: string[]): string[] {
   return under(ctx.files, ...prefixes).filter(
     (f) => (f.endsWith(".ts") || f.endsWith(".tsx")) &&
@@ -1074,6 +1136,91 @@ function singleFileProgram(root: string, rel: string): ts.Program | null {
   return program;
 }
 
+/**
+ * Is this symbol an import/require binding of a real fs module?
+ *
+ * Resolved through the CHECKER, never by binding name (codex G-lane r3). A file can
+ * write `const fs = { readFileSync: () => "" }` and any name-keyed rule sees a
+ * namespace called `fs` calling `readFileSync`. Only a symbol whose declaration is
+ * an import or `require()` of `fs` / `node:fs` / `fs/promises` / `node:fs/promises`
+ * counts, so a shadowing local object resolves to its own declaration and fails.
+ *
+ * `wantNamespace` distinguishes `fs.readFileSync(...)` (the base identifier must be
+ * a namespace binding) from a destructured `readFileSync(...)` (the identifier must
+ * be the named import itself).
+ */
+function declaresFsModuleBinding(
+  sym: ts.Symbol | undefined,
+  wantNamespace: boolean,
+  checker: ts.TypeChecker,
+): boolean {
+  /**
+   * Is this `require` the AMBIENT one? A file can declare
+   * `function require(_: string) { return { readFileSync: () => "" }; }` and every
+   * name-keyed rule reads `require("node:fs")` as a real module load (codex G-lane
+   * r4). The global has no declaration in this source file, so a resolved symbol
+   * whose declarations live HERE is a local shadow and disqualifies the call.
+   */
+  const isGlobalRequire = (id: ts.Identifier): boolean => {
+    const rsym = checker.getSymbolAtLocation(id);
+    const decls = rsym?.declarations ?? [];
+    if (decls.length === 0) return true; // unresolved => the ambient require
+    return !decls.some((d) => d.getSourceFile() === id.getSourceFile());
+  };
+
+  const specOf = (e: ts.Expression | undefined): string | null => {
+    if (!e) return null;
+    let cur: ts.Expression = e;
+    while (ts.isPropertyAccessExpression(cur)) cur = cur.expression;
+    if (ts.isAwaitExpression(cur)) cur = cur.expression;
+    if (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+    while (ts.isPropertyAccessExpression(cur)) cur = cur.expression;
+    if (!ts.isCallExpression(cur)) return null;
+    const isReq = ts.isIdentifier(cur.expression) &&
+      cur.expression.text === "require" && isGlobalRequire(cur.expression);
+    const isDyn = cur.expression.kind === ts.SyntaxKind.ImportKeyword;
+    if (!isReq && !isDyn) return null;
+    const a = cur.arguments[0];
+    return a && ts.isStringLiteralLike(a) ? a.text : null;
+  };
+  const isFsSpec = (spec: string | null | undefined): boolean => !!spec && FS_MODULES.has(spec);
+
+  for (const d of sym?.declarations ?? []) {
+    if (ts.isImportSpecifier(d)) {
+      if (wantNamespace) continue;
+      const decl = d.parent.parent.parent;
+      if (!ts.isImportDeclaration(decl) || !ts.isStringLiteralLike(decl.moduleSpecifier)) continue;
+      if (!isFsSpec(decl.moduleSpecifier.text)) continue;
+      if (MARKER_READ_CALLS.includes((d.propertyName ?? d.name).text)) return true;
+      continue;
+    }
+    if (ts.isNamespaceImport(d) || ts.isImportClause(d)) {
+      if (!wantNamespace) continue;
+      const decl = ts.isImportClause(d) ? d.parent : d.parent.parent;
+      if (!ts.isImportDeclaration(decl) || !ts.isStringLiteralLike(decl.moduleSpecifier)) continue;
+      if (isFsSpec(decl.moduleSpecifier.text)) return true;
+      continue;
+    }
+    if (ts.isBindingElement(d)) {
+      if (wantNamespace) continue;
+      const varDecl = d.parent.parent;
+      if (!ts.isVariableDeclaration(varDecl) || !varDecl.initializer) continue;
+      if (!isFsSpec(specOf(varDecl.initializer))) continue;
+      const original = d.propertyName && ts.isIdentifier(d.propertyName)
+        ? d.propertyName.text
+        : (ts.isIdentifier(d.name) ? d.name.text : "");
+      if (MARKER_READ_CALLS.includes(original)) return true;
+      continue;
+    }
+    if (ts.isVariableDeclaration(d) && d.initializer) {
+      // `const fs = require("node:fs")` is a namespace binding. An object literal,
+      // a call to anything else, or a parameter resolves here and is NOT fs.
+      if (wantNamespace && isFsSpec(specOf(d.initializer))) return true;
+    }
+  }
+  return false;
+}
+
 /** Is this symbol declared by an import/require binding of `ensureStorageLayout`? */
 function declaresImportedEnsure(sym: ts.Symbol | undefined, wantNamespace: boolean): boolean {
   for (const d of sym?.declarations ?? []) {
@@ -1104,6 +1251,228 @@ function declaresImportedEnsure(sym: ts.Symbol | undefined, wantNamespace: boole
   return false;
 }
 
+/** The one file allowed to BE the scrubbing writer rather than call it. */
+const CANONICAL_SCRUBBED_WRITE = "src/modules/security/workflows/scrubbed-write.ts";
+
+/** True when `rel` exports a function declaration named `name` with a real body. */
+function exportsNamed(root: string, rel: string, name: string): boolean {
+  const sf = parse(root, rel);
+  if (!sf) return false;
+  let found = false;
+  eachNode(sf, (n) => {
+    if (
+      ts.isFunctionDeclaration(n) &&
+      n.name?.text === name &&
+      n.body !== undefined &&
+      n.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+    ) found = true;
+  });
+  return found;
+}
+
+/** The one file allowed to BE the layout bootstrap rather than call it. */
+const CANONICAL_ENSURE_STORAGE_LAYOUT = "scripts/lib/state/ensure-storage-layout.ts";
+
+/** fs read/stat APIs that constitute "performs the marker read". */
+const MARKER_READ_CALLS = [
+  "readFileSync", "readFile", "statSync", "stat", "existsSync", "access", "accessSync", "openSync",
+];
+
+/**
+ * fs READ bindings, resolved the same way `fsWriteBindings` resolves writes:
+ * `direct` are names destructured off an fs module (`import { readFileSync } from "fs"`),
+ * `ns` are namespace handles (`import * as fs`, `const fs = require("node:fs")`).
+ *
+ * Resolving through the IMPORT is the point (codex G-lane r2): a file can declare its
+ * own `function readFileSync() {}` and satisfy a name-only check without touching the
+ * filesystem. A read only counts when it reaches a real fs module.
+ */
+function fsReadBindings(root: string, rel: string): { direct: Set<string>; ns: Set<string> } {
+  const direct = new Set<string>();
+  const ns = new Set<string>();
+  const sf = parse(root, rel);
+  if (!sf) return { direct, ns };
+
+  const fromFsModule = (e: ts.Expression | undefined): boolean =>
+    !!e && ts.isStringLiteralLike(e) && FS_MODULES.has(e.text);
+  const requireOfFs = (e: ts.Expression | undefined): boolean => {
+    if (!e) return false;
+    let cur: ts.Expression = e;
+    while (ts.isPropertyAccessExpression(cur)) cur = cur.expression;
+    if (ts.isAwaitExpression(cur)) cur = cur.expression;
+    if (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+    while (ts.isPropertyAccessExpression(cur)) cur = cur.expression;
+    if (!ts.isCallExpression(cur)) return false;
+    const isReq = ts.isIdentifier(cur.expression) && cur.expression.text === "require";
+    const isDyn = cur.expression.kind === ts.SyntaxKind.ImportKeyword;
+    return (isReq || isDyn) && fromFsModule(cur.arguments[0]);
+  };
+
+  eachNode(sf, (n) => {
+    if (ts.isImportDeclaration(n) && fromFsModule(n.moduleSpecifier as ts.Expression)) {
+      const c = n.importClause;
+      if (!c) return;
+      if (c.name) ns.add(c.name.text);
+      if (c.namedBindings && ts.isNamespaceImport(c.namedBindings)) ns.add(c.namedBindings.name.text);
+      if (c.namedBindings && ts.isNamedImports(c.namedBindings)) {
+        for (const el of c.namedBindings.elements) {
+          const original = (el.propertyName ?? el.name).text;
+          if (MARKER_READ_CALLS.includes(original)) direct.add(el.name.text);
+          else ns.add(el.name.text);
+        }
+      }
+      return;
+    }
+    if (ts.isVariableDeclaration(n) && n.initializer && requireOfFs(n.initializer)) {
+      if (ts.isIdentifier(n.name)) ns.add(n.name.text);
+      if (ts.isObjectBindingPattern(n.name)) {
+        for (const el of n.name.elements) {
+          if (!ts.isIdentifier(el.name)) continue;
+          const original = el.propertyName && ts.isIdentifier(el.propertyName)
+            ? el.propertyName.text : el.name.text;
+          if (MARKER_READ_CALLS.includes(original)) direct.add(el.name.text);
+          else ns.add(el.name.text);
+        }
+      }
+    }
+  });
+  return { direct, ns };
+}
+
+/**
+ * Walk only the statements a function body actually REACHES: its own statements plus
+ * the bodies of same-file functions it calls. Nested function declarations and
+ * function/arrow expressions are NOT descended into unless something in the reachable
+ * set invokes them — a reader defined inside the body but never called does not make
+ * the body perform a read (codex G-lane r2).
+ */
+function reachableCalls(
+  body: ts.Node,
+  visit: (call: ts.CallExpression) => void,
+  invoked: (callee: ts.Identifier) => void,
+): void {
+  const walkExpr = (n: ts.Node): void => {
+    // Do not descend into a nested function's BODY; its call sites are only
+    // reachable if the enclosing body invokes it, which the caller resolves.
+    if (
+      ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n) ||
+      ts.isArrowFunction(n) || ts.isMethodDeclaration(n)
+    ) return;
+    if (ts.isBlock(n)) { walkBlock(n); return; }
+    if (ts.isCallExpression(n)) {
+      visit(n);
+      if (ts.isIdentifier(n.expression)) invoked(n.expression);
+    }
+    ts.forEachChild(n, walkExpr);
+  };
+
+  /**
+   * Statements after an unconditional `return` / `throw` at the SAME block level are
+   * dead code: a read parked there never executes, so it must not satisfy the law
+   * (codex G-lane r3). The terminator's own expression is still walked — `return
+   * fs.readFileSync(...)` is a real read.
+   */
+  const walkBlock = (block: ts.Block): void => {
+    for (const st of block.statements) {
+      walkExpr(st);
+      if (ts.isReturnStatement(st) || ts.isThrowStatement(st)) return;
+    }
+  };
+
+  if (ts.isBlock(body)) walkBlock(body);
+  else ts.forEachChild(body, walkExpr);
+}
+
+/**
+ * True when `rel` exports `function ensureStorageLayout` whose REACHABLE body performs
+ * a real fs read — directly, or through a same-file function it calls.
+ *
+ * Three independent conditions, all required (codex G-lane r1 + r2):
+ *   1. the caller has already checked this is the canonical implementation path;
+ *   2. `ensureStorageLayout` is an EXPORTED function declaration with a body;
+ *   3. that body reaches a call whose callee resolves through the file's fs IMPORT
+ *      bindings — not merely a call to something *named* `readFileSync`, and not a
+ *      reader defined inside the body that nothing invokes.
+ */
+function exportsRealBootstrap(root: string, rel: string, sf: ts.SourceFile): boolean {
+  // The exported top-level declaration, taken from the source file directly (not a
+  // name map that a nested declaration could overwrite).
+  let entry: ts.FunctionDeclaration | undefined;
+  for (const st of sf.statements) {
+    if (ts.isFunctionDeclaration(st) && st.name?.text === "ensureStorageLayout" &&
+        st.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)) {
+      entry = st;
+    }
+  }
+  if (!entry?.body) return false;
+
+  // Resolve the callee through the CHECKER. A name-keyed lookup accepts a locally
+  // declared `readFileSync`, or a local object literal named `fs` — both of which
+  // read nothing (codex G-lane r3). Unresolvable => not a read => fail closed.
+  const program = singleFileProgram(root, rel);
+  if (!program) return false;
+  const checker = program.getTypeChecker();
+  const isFsRead = (call: ts.CallExpression): boolean => {
+    const e = call.expression;
+    // `readFileSync(...)` destructured off an fs module.
+    if (ts.isIdentifier(e)) {
+      return declaresFsModuleBinding(checker.getSymbolAtLocation(e), false, checker);
+    }
+    // `fs.readFileSync(...)` / `fs.promises.readFile(...)` on an fs namespace handle.
+    if (ts.isPropertyAccessExpression(e) && ts.isIdentifier(e.name)) {
+      if (!MARKER_READ_CALLS.includes(e.name.text)) return false;
+      let base: ts.Expression = e.expression;
+      while (ts.isPropertyAccessExpression(base)) base = base.expression;
+      if (!ts.isIdentifier(base)) return false;
+      return declaresFsModuleBinding(checker.getSymbolAtLocation(base), true, checker);
+    }
+    return false;
+  };
+
+  /**
+   * The function-like declaration a callee identifier actually resolves to.
+   *
+   * Resolving a helper by NAME picks whichever declaration the lint happened to
+   * index, so a local `const detect = () => null;` shadowing an outer reading
+   * `detect()` still credited the outer one (codex G-lane r4). The checker resolves
+   * to the binding in scope at the call site, which is the shadow.
+   */
+  const declarationOf = (id: ts.Identifier): ts.FunctionLikeDeclaration | null => {
+    const sym = checker.getSymbolAtLocation(id);
+    for (const d of sym?.declarations ?? []) {
+      if (ts.isFunctionDeclaration(d) || ts.isFunctionExpression(d) || ts.isArrowFunction(d)) {
+        return d;
+      }
+      // `const detect = () => …` / `const detect = function () {…}`
+      if (ts.isVariableDeclaration(d) && d.initializer &&
+          (ts.isArrowFunction(d.initializer) || ts.isFunctionExpression(d.initializer))) {
+        return d.initializer;
+      }
+    }
+    return null;
+  };
+
+  // Cycle guard keyed on the DECLARATION node, not a name: two different functions
+  // can share a name across scopes, and one function can be reached by two paths.
+  const seen = new Set<ts.Node>([entry]);
+  const reaches = (fn: ts.FunctionLikeDeclaration): boolean => {
+    const body = fn.body;
+    if (!body) return false;
+    let hit = false;
+    const callees: ts.Identifier[] = [];
+    reachableCalls(body, (c) => { if (isFsRead(c)) hit = true; }, (id) => callees.push(id));
+    if (hit) return true;
+    for (const id of callees) {
+      const next = declarationOf(id);
+      if (!next || seen.has(next)) continue;
+      seen.add(next);
+      if (reaches(next)) return true;
+    }
+    return false;
+  };
+  return reaches(entry);
+}
+
 function callsImportedEnsureStorageLayout(root: string, rel: string): boolean {
   const program = singleFileProgram(root, rel);
   if (!program) return false; // unresolvable => fail closed
@@ -1112,6 +1481,16 @@ function callsImportedEnsureStorageLayout(root: string, rel: string): boolean {
   if (!sf) return false;
   const checker = program.getTypeChecker();
   let found = false;
+  // The canonical IMPLEMENTATION satisfies the law by definition — it is the
+  // bootstrap, not a caller that forgot to import it. Three conditions, all
+  // required, because "exports a function with the right name" is a hole an
+  // empty stub walks through (codex G-lane r1):
+  //   1. the file IS the canonical implementation path, and
+  //   2. it exports `function ensureStorageLayout`, and
+  //   3. that function's BODY actually performs the marker read (an fs read/stat
+  //      call reachable inside it, directly or through a helper it calls).
+  // A stub that exports the name and returns is NOT exempt and is flagged.
+  if (liveOf(rel) === CANONICAL_ENSURE_STORAGE_LAYOUT && exportsRealBootstrap(root, rel, sf)) return true;
   eachNode(sf, (n) => {
     if (found || !ts.isCallExpression(n)) return;
     const e = n.expression;
@@ -1165,17 +1544,29 @@ function writeCapableEntries(ctx: Ctx): Array<{ kind: string; source: string }> 
     f.includes("__tests__/") ||
     f.includes("node_modules/") ||
     /\.test\.(ts|js)$/.test(f);
+  // Membership stays on the RAW path: `liveOf` governs exemption and classification,
+  // never which prefixes a check scans. Widening scope here would pull ~150 mirror
+  // files in as fresh findings and force the baseline to grow — the opposite of the
+  // shrink-only rule. A mirror already in scope is CLASSIFIED by its live path below.
   const cliCandidates = [...ctx.files, ...compiledOutputs(ctx.root)].filter(
     (f) => !excluded(f) && ENTRY_ROOTS.some((p) => f.startsWith(p)) &&
       (/\.(ts|js|mjs|cjs)$/.test(f) || isShellEntry(ctx.root, f)),
   );
   for (const f of [...new Set(cliCandidates)].sort()) {
-    if (f.startsWith("scripts/lint/")) continue; // this lint writes only its own baseline
+    if (isLayoutLawsSource(f)) continue; // this lint writes only its own baseline
+    // `runtime/**` is COMPILED from an entry that is itself in this candidate set
+    // (scripts/compile.ts owns the table). A bundle can only carry the violation its
+    // source carries, so flagging both double-counts one program and would force a
+    // baseline to GROW when a lane merely starts shipping a compiled copy. Fix the
+    // source and the bundle follows. `hooks/**/dist` stays in scope: those bundles
+    // predate the compile step and can be stale relative to their .ts.
+    if (liveOf(f).startsWith("runtime/")) continue;
     const shell = isShellEntry(ctx.root, f);
-    const kind = f.startsWith("mcp-servers/") ? "MCP binary"
-      : f.startsWith(".githooks/") ? "git hook script"
-      : f.startsWith("src/runtime/") || f.startsWith("runtime/") ? "runtime graph entry"
-      : f.startsWith("hooks/") ? (shell ? "hook script" : "hook module")
+    const live = liveOf(f);
+    const kind = live.startsWith("mcp-servers/") ? "MCP binary"
+      : live.startsWith(".githooks/") ? "git hook script"
+      : live.startsWith("src/runtime/") || live.startsWith("runtime/") ? "runtime graph entry"
+      : live.startsWith("hooks/") ? (shell ? "hook script" : "hook module")
       : shell ? "scripts shell entrypoint"
       : "scripts CLI entrypoint";
     out.push({ kind, source: f });
@@ -1237,7 +1628,7 @@ const CHECKS: Check[] = [
     run(ctx) {
       const v: Violation[] = [];
       for (const f of under(ctx.files, ...SURFACE_PREFIXES, "hooks/", ...DOMAIN_PREFIXES)) {
-        if (isFixturePath(f)) continue;
+        if (isFixturePath(f) || isLayoutLawsSource(f)) continue;
         const body = read(path.join(ctx.root, f));
         if (!body.includes(".claude/agents")) continue;
         v.push({ check: "no-dispatched-claude-agents", path: f, detail: "shipped surface references .claude/agents" });
@@ -1447,11 +1838,14 @@ const CHECKS: Check[] = [
     run(ctx) {
       const v: Violation[] = [];
       for (const f of tsFiles(ctx, DOMAIN_PREFIXES)) {
-        if (f.endsWith(".test.ts")) continue;
+        if (f.endsWith(".test.ts") || isLayoutLawsSource(f)) continue;
+        // The canonical IMPLEMENTATION of scrubbedWrite cannot call scrubbedWrite;
+        // it IS the scrubbing write. Same three conditions as the layout-bootstrap
+        // exemption: canonical path, exported by that name, real body. Anything
+        // else that merely exports the name is still flagged.
+        if (liveOf(f) === CANONICAL_SCRUBBED_WRITE && exportsNamed(ctx.root, f, "scrubbedWrite")) continue;
         if (!performsWrite(ctx.root, f)) continue;
-        const literals = stringLiterals(ctx.root, f);
-        const targetsWiki = literals.some((s) => s.includes(".guild/wiki") || /(^|\/)wiki(\/|$)/.test(s));
-        if (!targetsWiki) continue;
+        if (!targetsWikiRawText(ctx.root, f)) continue;
         // A comment or a string saying "scrubbedWrite" is not a call site.
         if (hasCallTo(ctx.root, f, "scrubbedWrite")) continue;
         v.push({ check: "harvest-writer-calls-scrubbed-write", path: f, detail: "writes the wiki without a call to scrubbedWrite" });
@@ -1522,7 +1916,7 @@ const CHECKS: Check[] = [
     run(ctx) {
       const v: Violation[] = [];
       for (const f of under(ctx.files, ...DOMAIN_PREFIXES, "hooks/", ...SURFACE_PREFIXES)) {
-        if (isFixturePath(f) || f.endsWith(".test.ts")) continue;
+        if (isFixturePath(f) || f.endsWith(".test.ts") || isLayoutLawsSource(f)) continue;
         const lines = read(path.join(ctx.root, f)).split("\n");
         lines.forEach((line, i) => {
           if (line.includes("skill-versions")) {
@@ -1540,7 +1934,7 @@ const CHECKS: Check[] = [
     run(ctx) {
       const v: Violation[] = [];
       for (const f of under(ctx.files, ...DOMAIN_PREFIXES, "hooks/", ...SURFACE_PREFIXES)) {
-        if (isFixturePath(f) || f.endsWith(".test.ts")) continue;
+        if (isFixturePath(f) || f.endsWith(".test.ts") || isLayoutLawsSource(f)) continue;
         const lines = read(path.join(ctx.root, f)).split("\n");
         lines.forEach((line, i) => {
           if (/\.guild\/raw\b/.test(line)) {
@@ -1558,6 +1952,7 @@ const CHECKS: Check[] = [
     run(ctx) {
       const v: Violation[] = [];
       for (const f of tsFiles(ctx, DOMAIN_PREFIXES)) {
+        if (isLayoutLawsSource(f)) continue;
         const body = read(path.join(ctx.root, f));
         if (!body.includes("refreshTouched")) continue;
         for (const forbidden of ["knowledge-recall.json", "knowledge-graph.json", "validate-graph"]) {

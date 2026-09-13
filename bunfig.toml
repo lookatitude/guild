@@ -1,0 +1,13 @@
+# bunfig.toml — Bun is the AUTHOR plane (P1) and the CI compile plane (P2).
+# It is never on a user's PATH (KTD10): users run plain `node` on the committed
+# outputs under runtime/ and hooks/dist/.
+#
+# TRAP: `bun test` currently walks the Jest suites too, which is why the CI leg
+# is advisory (compile-gates.yml, `bun test (ADVISORY until T13)`). T13 owns the
+# migration and sets the real test roots here; do not narrow them before then or
+# the flip will silently test nothing.
+
+[install]
+# No package registry writes from the author plane; every dependency is pinned in
+# the per-directory package-lock.json files the compile resolves from.
+frozenLockfile = true

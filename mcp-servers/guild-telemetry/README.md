@@ -121,7 +121,7 @@ server inside the consuming project, where step 3 is correct.
 ## Wiring
 
 See `.mcp.json` at the repo root — the server is registered via
-`node ${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-telemetry/dist/index.js`, stdio
+`node ${CLAUDE_PLUGIN_ROOT}/runtime/guild-mcp.js`, stdio
 transport. `npm run build` (esbuild, bundled/self-contained) produces that
 `dist/index.js`; `npx tsx src/index.ts` is only for local development.
 

@@ -1,0 +1,25 @@
+{
+  "schema_version": "guild.mcp_description_pins.v2",
+  "generated_by": "scripts/compile.ts",
+  "binary": "runtime/guild-mcp.js",
+  "binary_sha256": "ce4f08cbc30faca91d47e81b42d6f3edf1f1c61c246d6b649e6f55744dc9ded2",
+  "servers": {
+    "guild-telemetry": {
+      "mcp_id": "trace",
+      "tools": {
+        "trace_cost_rollup": "c85ab25c8503aa348e61783c243c0d10f65982048dffc2a79ba4f69e12800e5c",
+        "trace_list_runs": "e063de9bb48c2c688309477f5b72e98b46ab6ccfcc76f5dac4c9e468688a59ea",
+        "trace_query": "f7dbbb2b44808ab487615f0dd5c34abe5fff5274d138281be3369df1796e2de0",
+        "trace_summary": "1740a2ecab7bae19553a330466868e5f4dbdd9683764de2569f992530585c25e"
+      }
+    },
+    "guild-memory": {
+      "mcp_id": "wiki",
+      "tools": {
+        "wiki_get": "8acb911e7acf724abbf2d5f7761c8fe4ada6f775a97c402af21356b31609b93f",
+        "wiki_list": "1131bfd599fb489a26336ebe479c09b0cafb3ee81c79b6d2f440192468369969",
+        "wiki_search": "d2ba9f451946fac300227793f5ffc32f7265561158f3bd5ee7539d698c40ae81"
+      }
+    }
+  }
+}
