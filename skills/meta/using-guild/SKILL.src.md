@@ -45,10 +45,10 @@ Engage when the task is non-trivial — even if the user never typed `/guild`:
 - **Planning / scoping / design** — "plan this feature", "what are we building".
 - **Multi-agent / specialist work** — "build this with a team", "use specialists",
   any job spanning several files or domains.
-- **Review** — "review this plan/PR", "find the holes in this design".
+- **Review** — "review this plan/PR adversarially", "find the holes in this design".
 - **Debugging a system** — a failing build, flaky test, or behaviour you must
   root-cause (not a one-line fix).
-- **Release / ops** — "deploy", "roll back", "cut a release", incident work.
+- **Release / ops** — "deploy", "roll back", "cut a release", "monitor", incident work.
 - **Knowledge / recall** — "ingest these docs", "what did we decide about X".
 
 When one fits, **invoke the matching Guild skill via the Skill tool** — skills are
@@ -66,8 +66,9 @@ Guild has typed **commands** (`/guild:<verb>`, run by the user) and model-invoke
 **skills** (`guild:<name>`, called by you) — distinct surfaces sharing a stem. Do
 not enumerate or guess them. Orient through these pointers instead:
 
-- **Bare `/guild` is T0** — the orchestrator session. With no verb it runs intake
-  and classifies the work; `--class=` or a typed sub-verb binds the class directly.
+- **Bare `/guild` is T0** — the orchestrator session. With no verb it runs intake,
+  classifies the work, and proposes the next step; `--class=` or a typed sub-verb binds
+  the class directly.
   A verb is an option, not a requirement.
 - The lifecycle spine is **init → ideate → plan → build → qa → ops**; reach for the
   skill(s) of the phase you are actually in.
