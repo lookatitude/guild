@@ -8,7 +8,7 @@
       "id": "migrate",
       "source_path": "commands/migrate.md",
       "resource_path": "resources/commands/migrate.md",
-      "sha256": "c45c2fdc337f81ce805aeb3e9056faea2f63568116fc775f8590e0791d097423"
+      "sha256": "fce52a251a66ca24708a949c8fa879df2bd9c915629608ffb198c7320c4a3fe3"
     },
     {
       "category": "scripts",

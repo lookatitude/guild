@@ -8,14 +8,21 @@
       "id": "evolve",
       "source_path": "commands/evolve.md",
       "resource_path": "resources/commands/evolve.md",
-      "sha256": "88cd4ed085538b2cb720c5a075ca036ac4fb6a683d478fe92d04042288536b7a"
+      "sha256": "b0648bb407327b115647cd964ae619e88c92861e4841163fe114445882a97ba9"
+    },
+    {
+      "category": "commands",
+      "id": "maintain",
+      "source_path": "commands/maintain.md",
+      "resource_path": "resources/commands/maintain.md",
+      "sha256": "746bc42aaca44048f678c00802f246809840fff8e1961800b737bc67eb55fc68"
     },
     {
       "category": "commands",
       "id": "rollback",
       "source_path": "commands/rollback.md",
       "resource_path": "resources/commands/rollback.md",
-      "sha256": "d59679a84b3b3b8b22f7e37430ef2b0da8e3d9adb59afaf7e2fd4023aa08101d"
+      "sha256": "bb40b424102d91ceedc3437cd5f2951a71dedf304298fccf92b995d2fec3cd67"
     },
     {
       "category": "hooks",
@@ -103,28 +110,28 @@
     },
     {
       "category": "skills",
-      "id": "guild-evolve-skill",
+      "id": "guild-evolve",
       "source_path": "skills/meta/evolve/SKILL.md",
       "resource_path": "resources/skills/meta/evolve/SKILL.md",
-      "sha256": "2a2c630d732be714f0919f5a9348a319748db7aa139052066aaca599b325a754"
+      "sha256": "130a909504db2770c21f41b49d89de8fe0a652eb947529c4834b30612c62c923"
     },
     {
       "category": "skills",
-      "id": "guild-evolve-skill/references/audit.md",
+      "id": "guild-evolve/references/audit.md",
       "source_path": "skills/meta/evolve/references/audit.md",
       "resource_path": "resources/skills/meta/evolve/references/audit.md",
       "sha256": "5015c9b1bf6a05c108072af87ab96764cad2b34286b299d19ee6ce5f142a74d0"
     },
     {
       "category": "skills",
-      "id": "guild-evolve-skill/references/rollback-skill.md",
+      "id": "guild-evolve/references/rollback-skill.md",
       "source_path": "skills/meta/evolve/references/rollback-skill.md",
       "resource_path": "resources/skills/meta/evolve/references/rollback-skill.md",
       "sha256": "692896ebfc9191407a5d11476d6cb6f6fd0f43bdcf96eb4770080081cb663210"
     },
     {
       "category": "skills",
-      "id": "guild-evolve-skill/scenarios.json",
+      "id": "guild-evolve/scenarios.json",
       "source_path": "skills/meta/evolve/scenarios.json",
       "resource_path": "resources/skills/meta/evolve/scenarios.json",
       "sha256": "5c9130fb90504e2cf460a5b8aa1a103a744da092c556109d8abbb1998b7ff702"

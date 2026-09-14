@@ -10,6 +10,22 @@ indexed: true
 
 Implements the task lifecycle plan step. Runs after `guild:team-compose` has written the per-phase team file (`.guild/team/<slug>.<phase>.yaml`, resolved via `resolveTeamFile`) and before `guild:context-assemble`. Output is an approved per-specialist lane plan that downstream context assembly and execute-plan dispatch consume verbatim.
 
+## Sub-verbs
+
+`/guild:plan goal [new|list|show|from-spec] [slug]` folds the former `/guild:goal` command into this assembler (T04, 22 -> 13 command fold). It is a planning-surface read/write over the SAME approved spec this skill already consumes, so it lives here rather than in a second assembler. It runs BEFORE the ordinary planning prerequisites below and never writes a plan.
+
+| Token | What it does | Route |
+|---|---|---|
+| `goal new` | emit a `guild.goal.v1` from the approved spec's success criteria | `src/modules/evals/workflows/goal-task-schema.ts` |
+| `goal from-spec` | same, driven end-to-end from `.guild/spec/<slug>.md` | `src/modules/evals/workflows/goal-task-schema.ts` |
+| `goal list` / `goal show <slug>` | read back the emitted goals / task groups; never writes | `src/modules/evals/workflows/goal-task-schema.ts` |
+
+When the product loop produced a `guild.define.v1` nucleus, its acceptance criteria are the source instead of the spec's success criteria — that artifact and its stable ids are the `references/product-define.md` chapter's output.
+
+Rules: validate the source spec (or `guild.define.v1` acceptance criteria) BEFORE emitting; emit `guild.task_group.v1` instead of `guild.goal.v1` when the host has no goal surface or the user asks for the portable fallback; preserve every acceptance-criterion id so plan lanes, build receipts, QA checks and the release gate resolve the same ids (AC32). Ask for approval before continuing into `/guild:plan` proper or `/guild:build`.
+
+Both contracts are frozen domain functions, not prompt text: `src/modules/evals/workflows/goal-task-schema.ts` (`GOAL_SCHEMA_VERSION`, `TASK_GROUP_SCHEMA_VERSION` and their validators, exported through `src/modules/evals/index.ts`). Plan writing itself stays this skill's; the sub-verb only produces the goal artifact.
+
 ## Input
 
 Two files, both required:

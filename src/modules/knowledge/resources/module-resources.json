@@ -8,14 +8,14 @@
       "id": "learn",
       "source_path": "commands/learn.md",
       "resource_path": "resources/commands/learn.md",
-      "sha256": "020bd834d9de5508b07c9215139cb94ed1cf5cd5a71f7e79f83c6140cafd5242"
+      "sha256": "06ea0ffb896a8477d720f70b174952ec19dba4866dfbf9d6429b921944e2d5e0"
     },
     {
       "category": "commands",
       "id": "wiki",
       "source_path": "commands/wiki.md",
       "resource_path": "resources/commands/wiki.md",
-      "sha256": "a9af511080568d587003e1300d8969126aff312a11c010de41f42b63830968ee"
+      "sha256": "0b2044139b94ffbcdbf82fdb153ac25c17a725e9ed40c6873b0ec005f5a7f915"
     },
     {
       "category": "mcp_servers",

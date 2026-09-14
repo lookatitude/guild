@@ -29,117 +29,122 @@
     {
       "id": "adopt",
       "source_path": "commands/adopt.md",
-      "description": "Project capability localization — report shipped role/skill dependencies, freeze the deprecated compatibility catalog, apply or roll back an approved adoption manifest, operate the D03 migration window, and evaluate the journal-derived G5 removal gate. This is distinct from /guild:migrate, which remains the v1-to-v2 layout converter."
+      "description": "Print-only alias (KTD14) — /guild:adopt is now `/guild:init adopt`. Prints the new spelling and exits; dispatches nothing, writes nothing."
     },
     {
       "id": "audit",
       "source_path": "commands/audit.md",
-      "description": "Self-maintenance — static security audit of installed Guild scripts (SHA-256 hashes, network/filesystem flags) + the static boundary-check section. Read-only static analysis. Dispatches to guild:audit."
+      "description": "Print-only alias (KTD14) — /guild:audit is now `/guild:maintain audit`. Prints the new spelling and exits; dispatches nothing, writes nothing."
     },
     {
       "id": "build",
       "source_path": "commands/build.md",
-      "description": "Development — context-assemble + dispatch lanes. Backend (agent_mode/tmux) is resolved once at intake via the run-start preflight snapshot — not selected per-phase. Snapshot effective.agent_mode drives lane dispatch (team / agent / subagent)."
+      "description": "Development — per lane: assemble the specialist context bundle, dispatch the lane on the backend locked in at intake (snapshot effective.agent_mode), collect the handoff receipt, then run the G-lane review gate. Dispatches to guild:execute-plan."
     },
     {
       "id": "config",
       "source_path": "commands/config.md",
-      "description": "Manage the project config surface .guild/settings.json — the single JSON file holding every Guild option (rigor, review/adversarial, host, agent_mode/tmux dispatch ladder, auto-approve gates, loops, quality budgets, wiki, per-run role pins). `config init` (= `reconcile sync`) scaffolds it fully-documented and never-clobbers on re-run; `config reconcile check|sync|repair` reconciles `.guild/settings.json` against the typed config-schema SoT (provenance-aware, never overwrites user values, security keys fail closed); `config show` prints the resolved config; `config show --sources` annotates each key AND each phase-permission decision (host_mode/guild_gates/bypass) with its inheritance layer; `config show --render` renders the resolved config into each of the 16 registered host config shapes (fail-closed on local/secret leaks); `config set` performs a scoped hard-set write; `config role <host|advisory|adversarial> <host_id|null>` pins a per-run role to a registry host (scoped, provenance-stamped, never-clobber); `config ui list|get|sources|set` is the native CLI/agents-file settings render/edit surface — driven by CONFIG_UI_METADATA it lists config groups/keys/values/sources and edits any key, honoring the metadata's confirmation-strength (a danger/strongest key needs `--confirm`), routing every write through the config API; app/connector hosts report blocked; `config validate` / `config validate --effective` runs closed-key checks on the raw or post-inheritance resolved config; `config providers detect` probes available cross-review providers and prints a detection table; `config update-mcp-hashes` re-pins the SHA-256 MCP tool-description hashes (D-MCP). CLI flags always override settings.json (7-source precedence: builtin < workspace < workspace-local < project < project-local < rigor < CLI). Full schema: https://guildstack.dev/docs/configuration"
+      "description": "Project config surface — resolve, render, validate and edit .guild/ policy config, pin per-run roles, detect providers, re-pin MCP hashes, and reconcile against the typed schema. Sub-verbs `models` (READ-ONLY session-binding evidence) and `migrate` (v1->v2 layout inspect / dry-run / retry) route to their own CLIs, not to config-cmd."
     },
     {
       "id": "dashboard",
       "source_path": "commands/dashboard.md",
-      "description": "Launch the local benchmark web dashboard over this project's runs + knowledge (runs table, knowledge-graph explorer, wiki browser). Resolves the benchmark checkout, serves on a free local port, bulk-imports the project's run logs, prints the URL. No network I/O without explicit confirmation (--install). Dispatches to guild:dashboard."
+      "description": "Print-only alias (KTD14) — /guild:dashboard is now `/guild:status dashboard`. Prints the new spelling and exits; dispatches nothing, writes nothing."
     },
     {
       "id": "evolve",
       "source_path": "commands/evolve.md",
-      "description": "Self-maintenance — run the evolve pipeline on one skill/instance. --auto runs unattended (promotion gate still respected). Dispatches to guild:evolve-skill."
+      "description": "Print-only alias (KTD14) — /guild:evolve is now `/guild:maintain evolve`. Prints the new spelling and exits; dispatches nothing, writes nothing."
     },
     {
       "id": "fix",
       "source_path": "commands/fix.md",
-      "description": "Maintenance — diagnose a failed/suspicious Guild run, produce a fix plan, and optionally apply approved fixes. The v2 surface of the v1 diagnose command (verb rename diagnose→fix; --codex-review→--review=cross). Requires an explicit edit-approval gate."
+      "description": "Print-only alias (KTD14) — /guild:fix is now `/guild:maintain fix`. Prints the new spelling and exits; dispatches nothing, writes nothing."
     },
     {
       "id": "goal",
       "source_path": "commands/goal.md",
-      "description": "Planning - create or inspect P.O.V.E.R. goals and host-portable task groups from an approved spec. Uses host-native /goal when available, /guild:goal as the portable surface, and guild.task_group.v1 as the fallback when goals are unavailable."
+      "description": "Print-only alias (KTD14) — /guild:goal is now `/guild:plan goal`. Prints the new spelling and exits; dispatches nothing, writes nothing."
     },
     {
       "id": "guild",
       "source_path": "commands/guild.md",
-      "description": "Bare Guild entry — smart phase detection. /guild:guild [brief] inspects .guild/ state and surfaces the proposed lifecycle phase (init · ideate · plan · build · qa · ops), always confirmed never silent. Named phase verbs, nouns (wiki, initiative), maintenance verbs (evolve, rollback, stats, audit, fix), and observability (dashboard) are separate commands. v1→v2: https://guildstack.dev/docs/migration-v1-to-v2"
+      "description": "Bare Guild entry (T0) — no verb runs six-way intake; `research` / `debug` / `--class=` bind the workflow class directly. Surfaces the proposed phase and class for confirmation, never silently. Dispatches to guild:using-guild."
     },
     {
       "id": "ideate",
       "source_path": "commands/ideate.md",
-      "description": "Ideation — Socratic spec; the L1 clarify loop runs whenever the resolved loops include spec (default --rigor=standard and deep; quick skips it)"
+      "description": "Ideation — Socratic spec; the L1 clarify loop runs whenever the resolved loops include spec (default --rigor=standard and deep; quick skips it). Dispatches to guild:brainstorm."
     },
     {
       "id": "init",
       "source_path": "commands/init.md",
-      "description": "Init — onboard an existing repo or scaffold new-product knowledge; builds wiki + (brownfield) cheap-scan CodebaseMap + architecture-map stub (cheap by default). Full learn-* pipeline runs only under --learn or defaults.auto_learn: true (D3); --learn folds in the former --deep-scan."
+      "description": "Init — onboard an existing repo or scaffold new-product knowledge; builds wiki + (brownfield) cheap-scan CodebaseMap + architecture-map stub (cheap by default). The full learn-* pipeline runs only under --learn or defaults.auto_learn (D3). Sub-verb `adopt` localizes shipped capability into this project. Dispatches to guild:init."
     },
     {
       "id": "initiative",
       "source_path": "commands/initiative.md",
-      "description": "Durable work — opt-in noun. Sub-verbs new|status|list|resume|update|archive|restore|close. A one-off /guild:guild run never creates an initiative; attachment is explicit only."
+      "description": "Durable work — opt-in noun with sub-verbs new|status|list|resume|update|archive|restore|close. A one-off /guild run never creates an initiative; attachment is explicit only. Dispatches to guild:initiative."
     },
     {
       "id": "learn",
       "source_path": "commands/learn.md",
-      "description": "Understand-everything — smart full learn-all when no sub-verb is given (detects target shape, starts a run, runs the full learn pipeline, updates indexes, emits knowledge candidates, leaves replayable evidence). With a sub-verb: map (CodebaseMap + architecture overview), graph (deep KnowledgeGraph), onboard (guided tour), diff (change analysis), explain (file/module deep-dive). One command, one implementation — same learn-* skills as init --learn. Dispatches to guild:learn (no-arg smart mode) or guild:learn-map / learn-graph / learn-onboard / learn-diff / learn-explain."
+      "description": "Understand-everything — no sub-verb runs the smart full learn-all (detect target, run the pipeline, update indexes, emit knowledge candidates). Sub-verbs map | graph | knowledge | onboard | diff | explain scope it. Dispatches to guild:learn."
+    },
+    {
+      "id": "maintain",
+      "source_path": "commands/maintain.md",
+      "description": "Self-heal + RSI — sub-verbs evolve | rollback | audit | fix | gc | wiki revert. ONE assembler: every sub-verb dispatches guild:evolve, which routes the token to its own chapter (`guild:evolve §Sub-verbs`). Nothing auto-promotes: the promotion gate is always respected."
     },
     {
       "id": "migrate",
       "source_path": "commands/migrate.md",
-      "description": "v1→v2 .guild converter — detect, snapshot, and convert a v1 .guild/ directory to v2 layout. Default mode is dry-run (safe: prints the plan; writes nothing except the migration report file — CF-W1c-1). Dispatches to the migrate-guild.ts CLI."
+      "description": "Print-only alias (KTD14) — /guild:migrate is now `/guild:config migrate`. Prints the new spelling and exits; dispatches nothing, writes nothing."
     },
     {
       "id": "models",
       "source_path": "commands/models.md",
-      "description": "Routing inspection — `models inspect` prints this run's model-routing evidence: identity trust, target evidence, catalog age + per-model evidence_state, policy rule path, selected model/effort, frozen fallbacks, actual model, review independence, and degradation. READ-ONLY (writes nothing) with honest unknowns: an unbindable field prints as `unknown`, never a guess. Delegates every judgement to the canonical inspection service; the rendered output is scrubbed through Guild's canonical redaction applier and the command fails closed rather than print a secret."
+      "description": "Print-only alias (KTD14) — /guild:models is now `/guild:config models`. Prints the new spelling and exits; dispatches nothing, writes nothing."
     },
     {
       "id": "ops",
       "source_path": "commands/ops.md",
-      "description": "Operations — full guild:operations skill [v2]: five runbook classes (release / monitoring / incident / rollback / maintenance) selected by the positional [runbook] else by surfaced detection (always confirmed, overridable), under a split autonomy posture + four non-negotiable safety rails (incident/rollback never autonomous; first run always interactive; always-ask hard set unconditional; mandatory pre-flight dry-run); devops-* producer vs security+architect G-operations challenger; consumes Quality, feeds the D8 release leg"
+      "description": "Operations — five runbook classes (release / monitoring / incident / rollback / maintenance) selected by the positional [runbook] or surfaced detection, each behind a mandatory pre-flight dry-run. Dispatches to guild:operations."
     },
     {
       "id": "plan",
       "source_path": "commands/plan.md",
-      "description": "Planning — team-compose + PRD + per-specialist lane plan + autonomy contract. Backend (agent_mode/tmux) is resolved once at intake from the run-start preflight snapshot — not selected per-phase."
+      "description": "Planning — team compose + PRD + per-specialist lane plan + autonomy contract. Backend (agent_mode/tmux) is resolved once at intake from the run-start preflight snapshot, not per-phase. Sub-verb `goal` emits P.O.V.E.R. goals / task groups from the approved spec. Dispatches to guild:plan."
     },
     {
       "id": "qa",
       "source_path": "commands/qa.md",
-      "description": "Quality — full guild:quality skill [v2]: auto-selects E2E/smoke/a11y/perf/integration from CodebaseMap + plan signals (selection matrix surfaced before execution as [proceed] / [edit-selection] / [explain-signals], overridable, never silent — there is no --classes= flag), executes discovered harnesses under the run sandbox + budgets; qa-test-strategy producer vs security+architect G-quality challenger; opt-in phase, never auto-entered"
+      "description": "Quality — the one user-facing review gate: SignalScan, a surfaced selection matrix, checks under the run sandbox and budget, then the computed ReleaseGate recommendation. Opt-in phase; never auto-entered, never silently skipped. Dispatches to guild:quality."
     },
     {
       "id": "resume",
       "source_path": "commands/resume.md",
-      "description": "Orchestrator — continue the active run from the next pending gate. --restart clears run state and re-runs from Init/Ideation (confirm-before-clear)."
+      "description": "Print-only alias (KTD14) — /guild:resume is now `/guild:status resume`. Prints the new spelling and exits; dispatches nothing, writes nothing."
     },
     {
       "id": "rollback",
       "source_path": "commands/rollback.md",
-      "description": "Self-maintenance — revert a skill to a previous version by snapshotting current state as vN+1 and restoring vN (or vN-n). Non-destructive. Dispatches to guild:rollback-skill."
+      "description": "Print-only alias (KTD14) — /guild:rollback is now `/guild:maintain rollback`. Prints the new spelling and exits; dispatches nothing, writes nothing."
     },
     {
       "id": "stats",
       "source_path": "commands/stats.md",
-      "description": "Self-maintenance — show usage + telemetry dashboard. Pure read; never writes. --rebuild-index drops + rebuilds the optional cache; --no-index forces a one-shot filesystem scan."
+      "description": "Print-only alias (KTD14) — /guild:stats is now `/guild:status stats`. Prints the new spelling and exits; dispatches nothing, writes nothing."
     },
     {
       "id": "status",
       "source_path": "commands/status.md",
-      "description": "Orchestrator — read current run state, furthest phase, next gate, blockers. Read-only; never writes."
+      "description": "Orchestrator read — current run state, furthest phase, next gate, blockers, layout version, and the per-phase active team. Sub-verbs `resume` (continue from the next pending gate), `stats` (telemetry dashboard) and `dashboard` (launch the benchmark UI). Read-only except where `resume` advances the run."
     },
     {
       "id": "wiki",
       "source_path": "commands/wiki.md",
-      "description": "Wiki operations — ingest a source, query the wiki, or run lint. Dispatches to guild:wiki-ingest / guild:wiki-query / guild:wiki-lint."
+      "description": "Wiki operations — ingest a source, query the wiki, or run the health lint. An unknown sub-verb prints usage and invokes nothing. Dispatches to guild:wiki."
     }
   ],
   "skills": [
@@ -316,7 +321,7 @@
       "indexed": true
     },
     {
-      "id": "guild-evolve-skill",
+      "id": "guild-evolve",
       "source_path": "skills/meta/evolve/SKILL.md",
       "tier": "meta",
       "description": "Runs the §11.2 10-step evolve pipeline on one named skill — snapshot, load evals, dispatch paired subagents (A=current, B=proposed), drafter writes assertions, grader evaluates, benchmark + flip report, shadow mode, promotion gate, description optimizer, commit or archive. NEVER auto-edits a skill without passing the promotion gate; rejected attempts are archived, not deleted. TRIGGER for \"evolve guild:<skill-name>\", \"run the evolve loop on <skill>\", \"re-tune this skill's description\", \"promote this reflection into a skill edit\". DO NOT TRIGGER for creating/minting a NEW skill from a capability gap (use guild:create-skill), creating a new specialist (use guild:create-specialist), rolling back a skill version (guild:rollback-skill), reviewing runs (guild:review), composing a team (guild:team-compose), or ingesting wiki sources (guild:wiki-ingest).",

@@ -1,5 +1,5 @@
 ---
-name: guild-evolve-skill
+name: guild-evolve
 description: Runs the §11.2 10-step evolve pipeline on one named skill — snapshot, load evals, dispatch paired subagents (A=current, B=proposed), drafter writes assertions, grader evaluates, benchmark + flip report, shadow mode, promotion gate, description optimizer, commit or archive. NEVER auto-edits a skill without passing the promotion gate; rejected attempts are archived, not deleted. TRIGGER for "evolve guild:<skill-name>", "run the evolve loop on <skill>", "re-tune this skill's description", "promote this reflection into a skill edit". DO NOT TRIGGER for creating/minting a NEW skill from a capability gap (use guild:create-skill), creating a new specialist (use guild:create-specialist), rolling back a skill version (guild:rollback-skill), reviewing runs (guild:review), composing a team (guild:team-compose), or ingesting wiki sources (guild:wiki-ingest).
 when_to_use: Explicit user request /guild:evolve <skill> OR automatic threshold when ≥3 reflection-proposals accumulate for one skill (per §11.1 automatic trigger).
 type: meta
@@ -113,3 +113,18 @@ as "load this file and run it in place"; never try to dispatch it as a skill.
 | `guild:context-assemble` | `execute-plan` | `../execute-plan/references/context-assemble.md` |
 | `guild:rollback-skill` | this assembler | `references/rollback-skill.md` |
 | `guild:wiki-ingest` | `wiki` | `../../knowledge/wiki/references/wiki-ingest.md` |
+
+## Sub-verbs
+
+`/guild:maintain <token> …` dispatches this assembler and nothing else (ONE assembler per command file). The first token of `$ARGUMENTS` selects the route below; read the named chapter and run it in place, then treat the remaining arguments as that chapter's own. Forward the arguments as received — the command never re-inserts the token, so `wiki revert harvest-123` arrives with `revert` exactly once.
+
+| Token | Route |
+|---|---|
+| `evolve <id> [--auto]` | this assembler's pipeline, `## Pipeline (§11.2 10 steps)` below |
+| `rollback <skill> [n]` | `references/rollback-skill.md` |
+| `audit` | `references/audit.md` |
+| `fix [run-id\|symptom]` | `../diagnose/references/systematic-debug.md` |
+| `wiki revert <harvest_id>` | the `guild.harvest_journal.v1` inverse (R54/KTD39) owned by U-LOOP · U-STOR; no handler ships yet — report that the harvest journal is pending and stop (never ingest) |
+| `gc` | the durable-state sweep + scratch janitor owned by the storage domain (U-STOR); no chapter to load yet — report that and stop |
+
+An unrecognized first token is not a route: print the table above as usage and invoke nothing. The promotion gate applies to `evolve` and `rollback` exactly as `## Non-destructive rule` states — routing through this section never bypasses it.
