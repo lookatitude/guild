@@ -43,6 +43,8 @@
       "lib/skill-source-transform",
       "lib/surface-manifest",
       "lib/update-check",
+      "lint/build-coverage-draft",
+      "lint/layout-laws",
       "registry-rollup",
       "release-changelog",
       "sign-release-attestation",

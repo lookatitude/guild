@@ -589,7 +589,9 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "9f85a4882d919db6195b7a93d4c4290510309ab4",
-  skills: "3dce04393e1538edbd0b9bf7b6a1460cb272bc77",
+  // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
+  // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
+  skills: "199e75b169c3987e227d1aa08cb4eac63deea169",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

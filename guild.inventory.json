@@ -801,7 +801,7 @@
       "id": "using-guild",
       "source_path": "skills/meta/using-guild/SKILL.src.md",
       "tier": "meta",
-      "description": "Mandatory first-read gateway to Guild — the self-evolving specialist-team workflow engine installed in this repo. Consult BEFORE starting any non-trivial software task to decide whether Guild's lifecycle (plan → build → qa → ops), specialist agents, adversarial code review, structured debugging, or knowledge ingestion fits. TRIGGER on requests like \"plan/scope/design this feature\", \"review this implementation plan or PR adversarially\", \"build/implement this with a team\", \"use specialists\", \"debug this failing system\", \"release/deploy/roll back this\", \"ingest these docs into the wiki\", or any multi-step / multi-file / multi-agent job — even when the user never types a /guild command. It tells you WHEN to reach for a Guild skill and WHERE the command menu lives; it does NOT list every command. DO NOT TRIGGER when you are a narrow subagent handed one fully-scoped task with full context (single-file edit, typo fix, rename, value lookup): skip this and just do the work."
+      "description": "Mandatory first-read gateway to Guild — the specialist-team workflow engine installed in this repo. Read BEFORE any non-trivial software task to decide whether Guild's lifecycle (plan → build → qa → ops), specialist teams, review gate, structured debugging, or knowledge recall fits. It also carries Guild's five operating principles, which every specialist follows. TRIGGER on \"plan/scope/design this feature\", \"review this plan or PR\", \"build this with a team\", \"use specialists\", \"debug this failing system\", \"release/deploy/roll back this\", \"ingest these docs into the wiki\", \"what are Guild's principles\", or any multi-step / multi-file / multi-agent job — even when the user never types a /guild command. It says WHEN to reach for Guild and WHERE the surface lives; it does NOT list every command. DO NOT TRIGGER when you are a narrow subagent handed one fully-scoped task with full context (single-file edit, typo fix, rename, value lookup) — just do the work."
     },
     {
       "id": "writing-skills",
@@ -2317,6 +2317,16 @@
     {
       "id": "lint-context-bundle",
       "source_path": "scripts/lint-context-bundle.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "lint/build-coverage-draft",
+      "source_path": "scripts/lint/build-coverage-draft.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "lint/layout-laws",
+      "source_path": "scripts/lint/layout-laws.ts",
       "kind": "cli"
     },
     {
