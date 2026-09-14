@@ -588,7 +588,7 @@
       "id": "projection:src/modules/communication/workflows/comms-format-lint.ts",
       "source_path": "src/modules/communication/workflows/comms-format-lint.ts",
       "resource_path": "resources/src/modules/communication/workflows/comms-format-lint.ts",
-      "sha256": "c3c29c8a5e50fbaed11603decadd872374478771d3d610e776382834df0fd22a",
+      "sha256": "ec451aaf5e88c66706351526fad6d718d03a82c299fb49cd909a03a35d92f1d3",
       "projection_dependency": true
     },
     {

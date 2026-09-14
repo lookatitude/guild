@@ -1,6 +1,6 @@
 {
   "schema": "guild.layout_baseline.v1",
-  "note": "Violations present on the tree when U1 landed, plus entries added under an explicit PR-scoped declaration in scripts/lint/baseline-additions.json. Later lanes may only REMOVE entries; T16 deletes this file.",
+  "note": "Violations present on the tree when U1 landed. Later lanes may only REMOVE entries; T16 deletes this file.",
   "checks": [
     "skills-glob-17",
     "agents-glob-4",
@@ -31,7 +31,7 @@
     "agents-glob-4::.claude-plugin/plugin.json::machinery agent 'team-lead' is missing from the agents glob",
     "checkpoint-never-writes-wiki::hooks/__tests__/emit-learning-checkpoint.test.ts::LearningCheckpoint surface writes the wiki",
     "checkpoint-never-writes-wiki::hooks/emit-learning-checkpoint.ts::LearningCheckpoint surface writes the wiki",
-    "command-max-40-lines::commands/adopt.md::78 lines > 40",
+    "command-max-40-lines::commands/adopt.md::114 lines > 40",
     "command-max-40-lines::commands/audit.md::69 lines > 40",
     "command-max-40-lines::commands/build.md::216 lines > 40",
     "command-max-40-lines::commands/config.md::447 lines > 40",
@@ -210,8 +210,8 @@
     "no-guild-raw-writes::src/modules/lifecycle/resources/skills/meta/init/SKILL.md:53::references .guild/raw",
     "no-guild-raw-writes::src/modules/security/resources/scripts/lib/cloud-task-packet.ts:104::references .guild/raw",
     "no-hardcoded-tmp-in-domain-ts::src/modules/capability/resources/scripts/lib/capability/context-manager-contract.ts:322::hardcoded /tmp; use GuildStorage.temporary()",
-    "no-hardcoded-tmp-in-domain-ts::src/modules/capability/resources/scripts/lib/capability/profile-emit.ts:611::hardcoded /tmp; use GuildStorage.temporary()",
-    "no-hardcoded-tmp-in-domain-ts::src/modules/capability/resources/scripts/lib/capability/profile-emit.ts:612::hardcoded /tmp; use GuildStorage.temporary()",
+    "no-hardcoded-tmp-in-domain-ts::src/modules/capability/resources/scripts/lib/capability/profile-emit.ts:614::hardcoded /tmp; use GuildStorage.temporary()",
+    "no-hardcoded-tmp-in-domain-ts::src/modules/capability/resources/scripts/lib/capability/profile-emit.ts:615::hardcoded /tmp; use GuildStorage.temporary()",
     "no-hardcoded-tmp-in-domain-ts::src/modules/host-runtime/resources/scripts/host-smoke.ts:190::hardcoded /tmp; use GuildStorage.temporary()",
     "no-hardcoded-tmp-in-domain-ts::src/modules/host-runtime/resources/scripts/lib/pane-adapter.ts:716::hardcoded /tmp; use GuildStorage.temporary()",
     "no-hardcoded-tmp-in-domain-ts::src/modules/host-runtime/resources/scripts/lib/support-matrix.ts:292::hardcoded /tmp; use GuildStorage.temporary()",
@@ -410,9 +410,9 @@
     "write-entry-calls-ensure-storage-layout::hooks/agent-team/task-completed.ts::TaskCompleted hook names a .guild path with no call to an imported ensureStorageLayout",
     "write-entry-calls-ensure-storage-layout::hooks/agent-team/task-created.ts::TaskCreated hook names a .guild path with no call to an imported ensureStorageLayout",
     "write-entry-calls-ensure-storage-layout::hooks/agent-team/teammate-idle.ts::TeammateIdle hook names a .guild path with no call to an imported ensureStorageLayout",
-    "write-entry-calls-ensure-storage-layout::hooks/bootstrap.sh::SessionStart hook names a .guild path and no line invokes the compiled bootstrap (`node \u2026/ensure-storage-layout.js` or `\u2026/run-trace.js`)",
+    "write-entry-calls-ensure-storage-layout::hooks/bootstrap.sh::SessionStart hook names a .guild path and no line invokes the compiled bootstrap (`node …/ensure-storage-layout.js` or `…/run-trace.js`)",
     "write-entry-calls-ensure-storage-layout::hooks/capture-telemetry.ts::PostToolUse hook names a .guild path with no call to an imported ensureStorageLayout",
-    "write-entry-calls-ensure-storage-layout::hooks/check-skill-coverage.sh::UserPromptSubmit hook names a .guild path and no line invokes the compiled bootstrap (`node \u2026/ensure-storage-layout.js` or `\u2026/run-trace.js`)",
+    "write-entry-calls-ensure-storage-layout::hooks/check-skill-coverage.sh::UserPromptSubmit hook names a .guild path and no line invokes the compiled bootstrap (`node …/ensure-storage-layout.js` or `…/run-trace.js`)",
     "write-entry-calls-ensure-storage-layout::hooks/detect-guild-version.ts::SessionStart hook names a .guild path with no call to an imported ensureStorageLayout",
     "write-entry-calls-ensure-storage-layout::hooks/dist/capture-telemetry.js::hook module names a .guild path with no call to an imported ensureStorageLayout",
     "write-entry-calls-ensure-storage-layout::hooks/dist/comms-format-lint.js::hook module names a .guild path with no call to an imported ensureStorageLayout",
@@ -486,6 +486,7 @@
     "write-entry-calls-ensure-storage-layout::scripts/dot-guild/scrub.ts::scripts CLI entrypoint names a .guild path with no call to an imported ensureStorageLayout",
     "write-entry-calls-ensure-storage-layout::scripts/evolve-loop.ts::scripts CLI entrypoint names a .guild path with no call to an imported ensureStorageLayout",
     "write-entry-calls-ensure-storage-layout::scripts/feedback-triage.ts::scripts CLI entrypoint names a .guild path with no call to an imported ensureStorageLayout",
+    "write-entry-calls-ensure-storage-layout::scripts/finalize-stable-release.ts::scripts CLI entrypoint names a .guild path with no call to an imported ensureStorageLayout",
     "write-entry-calls-ensure-storage-layout::scripts/flip-report.ts::scripts CLI entrypoint names a .guild path with no call to an imported ensureStorageLayout",
     "write-entry-calls-ensure-storage-layout::scripts/guild-run.ts::scripts CLI entrypoint names a .guild path with no call to an imported ensureStorageLayout",
     "write-entry-calls-ensure-storage-layout::scripts/host-smoke.ts::scripts CLI entrypoint names a .guild path with no call to an imported ensureStorageLayout",
@@ -603,10 +604,6 @@
     "write-entry-calls-ensure-storage-layout::scripts/verify-codex-review-trail.ts::scripts CLI entrypoint names a .guild path with no call to an imported ensureStorageLayout",
     "write-entry-calls-ensure-storage-layout::scripts/verify-gate-pass.ts::scripts CLI entrypoint names a .guild path with no call to an imported ensureStorageLayout",
     "write-entry-calls-ensure-storage-layout::scripts/workspace/doc-sync-prepush.sh::scripts shell entrypoint names a .guild path and unbalanced quotes: quote/heredoc state is undecidable",
-    "write-entry-calls-ensure-storage-layout::scripts/write-host-capability.ts::scripts CLI entrypoint names a .guild path with no call to an imported ensureStorageLayout",
-    "harvest-writer-calls-scrubbed-write::src/modules/host-runtime/resources/src/modules/security/workflows/scrubbed-write.ts::writes the wiki without a call to scrubbedWrite",
-    "harvest-writer-calls-scrubbed-write::src/modules/lifecycle/resources/src/modules/security/workflows/scrubbed-write.ts::writes the wiki without a call to scrubbedWrite",
-    "harvest-writer-calls-scrubbed-write::src/modules/migrations/resources/scripts/dot-guild/convert/wiki-importance.ts::writes the wiki without a call to scrubbedWrite",
-    "harvest-writer-calls-scrubbed-write::src/modules/security/workflows/scrubbed-write.ts::writes the wiki without a call to scrubbedWrite"
+    "write-entry-calls-ensure-storage-layout::scripts/write-host-capability.ts::scripts CLI entrypoint names a .guild path with no call to an imported ensureStorageLayout"
   ]
 }

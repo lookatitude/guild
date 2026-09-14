@@ -78,7 +78,7 @@
       "id": "PostToolUse:gate-outcome-writer.js",
       "source_path": "hooks/dist/gate-outcome-writer.js",
       "resource_path": "resources/hooks/dist/gate-outcome-writer.js",
-      "sha256": "6eb3ed8f1f5601a7ef03f223ec25e064513caa38a9c406743fecadcf2c9fa5ad"
+      "sha256": "c4caf7cd51f2fd842715ee2c752e4b40e586fa73f3d901d45e432f4833b7336d"
     },
     {
       "category": "scripts",
@@ -357,7 +357,7 @@
       "id": "projection:src/modules/communication/workflows/comms-format-lint.ts",
       "source_path": "src/modules/communication/workflows/comms-format-lint.ts",
       "resource_path": "resources/src/modules/communication/workflows/comms-format-lint.ts",
-      "sha256": "c3c29c8a5e50fbaed11603decadd872374478771d3d610e776382834df0fd22a",
+      "sha256": "ec451aaf5e88c66706351526fad6d718d03a82c299fb49cd909a03a35d92f1d3",
       "projection_dependency": true
     },
     {
@@ -365,7 +365,7 @@
       "id": "projection:src/modules/communication/workflows/no-accidental-write.ts",
       "source_path": "src/modules/communication/workflows/no-accidental-write.ts",
       "resource_path": "resources/src/modules/communication/workflows/no-accidental-write.ts",
-      "sha256": "c6a81c563b30ec356cc5e6e92bf59729160006e1644e18c5d36991cd36656e67",
+      "sha256": "9e604545c6daeaef95b8c8f776bd1d0853e27c5b10aa3efa66f6ea6f773d267f",
       "projection_dependency": true
     },
     {
@@ -437,7 +437,7 @@
       "id": "projection:src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
       "source_path": "src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
       "resource_path": "resources/src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
-      "sha256": "dfb3758cb875d51f8938b3944ab7e0bb380c5dfb4dbf63fb68c5e61264ba581e",
+      "sha256": "5ca11f770de019204f0ab93383702b362abe43256aa2190d13ed5a35458b4c27",
       "projection_dependency": true
     },
     {
@@ -453,7 +453,7 @@
       "id": "projection:src/modules/dispatch/workflows/execution-transport-adapters.ts",
       "source_path": "src/modules/dispatch/workflows/execution-transport-adapters.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/execution-transport-adapters.ts",
-      "sha256": "86a24cde0f3c65aea40b0f5483a4ea527df4f1722e6c2fab9655dfcc9922ba47",
+      "sha256": "7b6be5a167090ffd868e59b5104e29c8085e7d32b43e743c9d2e1d50217531c5",
       "projection_dependency": true
     },
     {
@@ -501,7 +501,7 @@
       "id": "projection:src/modules/dispatch/workflows/task-cell-acceptance.ts",
       "source_path": "src/modules/dispatch/workflows/task-cell-acceptance.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/task-cell-acceptance.ts",
-      "sha256": "8b088c96d4c0482c2b6f2959c93238a7bf7e3226d35cb745235f172d0c57a25a",
+      "sha256": "a7766335be5fa1d6d20a3823607e7c439bf05362d5d38b6c6a29289d5fd39265",
       "projection_dependency": true
     },
     {
@@ -525,7 +525,7 @@
       "id": "projection:src/modules/dispatch/workflows/task-cell-host-conformance.ts",
       "source_path": "src/modules/dispatch/workflows/task-cell-host-conformance.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/task-cell-host-conformance.ts",
-      "sha256": "f63e0eb131186f4a91c5abc7f8077985ce68a904a2ca818656592d998302931b",
+      "sha256": "bb6d7956bb74ed281e0469066fc46347539379eb405a1ab976657b095fab7f83",
       "projection_dependency": true
     },
     {
@@ -533,7 +533,7 @@
       "id": "projection:src/modules/dispatch/workflows/task-cell-runtime.ts",
       "source_path": "src/modules/dispatch/workflows/task-cell-runtime.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/task-cell-runtime.ts",
-      "sha256": "d2a373ae036dc0339a9fafefaad20b3c7a86cd8c49c372c6ae9961b2beb6622e",
+      "sha256": "6f24202e2e9d0a336f3c231f368946517d92874fa95dbb631bc235408cc8222a",
       "projection_dependency": true
     },
     {
@@ -749,7 +749,7 @@
       "id": "projection:src/modules/documents/workflows/document-receipts.ts",
       "source_path": "src/modules/documents/workflows/document-receipts.ts",
       "resource_path": "resources/src/modules/documents/workflows/document-receipts.ts",
-      "sha256": "73d4890c3a6aed665be8137acf76f77e1e0904bc9f65f44b3b17a09e01b52797",
+      "sha256": "821191e8e2c803720924ac99d332e630cc3d89fd2c0efb142cb7b067c78a9ab5",
       "projection_dependency": true
     },
     {
@@ -1157,7 +1157,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-binding.ts",
       "source_path": "src/modules/lifecycle/workflows/run-binding.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-binding.ts",
-      "sha256": "abf2c6138fe4b30b2817924a261eaba4b4b896daa600e3d454d8a42abca1f2f9",
+      "sha256": "e45fda88312848d858f54b2ef756afd4071e7fad7d11c61c0b580f28465664df",
       "projection_dependency": true
     },
     {
@@ -1165,7 +1165,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-lifecycle.ts",
       "source_path": "src/modules/lifecycle/workflows/run-lifecycle.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-lifecycle.ts",
-      "sha256": "cd695a0b14b2e55a1b81f31ccf4ab47616bcc9c32d85b2344f989918c3f04afd",
+      "sha256": "ceed0491650edd46f047b1ecaa9484507807b679038df593bde5cb10c310bde1",
       "projection_dependency": true
     },
     {
@@ -1181,7 +1181,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-record-validate.ts",
       "source_path": "src/modules/lifecycle/workflows/run-record-validate.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-record-validate.ts",
-      "sha256": "95fe6d088426333efd7aa89fd7b55a67d9709e163f0aeafe71b0cf211b7b5239",
+      "sha256": "f564c52113744c1a64f0e6155f60454e846191de3687d9f22869e429e07b4a3b",
       "projection_dependency": true
     },
     {
@@ -1197,7 +1197,7 @@
       "id": "projection:src/modules/lifecycle/workflows/runstart-preflight.ts",
       "source_path": "src/modules/lifecycle/workflows/runstart-preflight.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/runstart-preflight.ts",
-      "sha256": "b91cd5796b27218c0e97bedc9e8e502e3129076018fab72cb6608dfdb3cd653d",
+      "sha256": "fc0856a75a89ed6b163767f15754b4ec69fd205b2bea19ae3df401d7982f5b62",
       "projection_dependency": true
     },
     {
@@ -1357,7 +1357,7 @@
       "id": "projection:src/modules/security/workflows/scrub-redact.ts",
       "source_path": "src/modules/security/workflows/scrub-redact.ts",
       "resource_path": "resources/src/modules/security/workflows/scrub-redact.ts",
-      "sha256": "7d08fca0a9d53c28713b875ddafeb78bab586f291d01139799dd79fdbe2d3682",
+      "sha256": "56873e57db56d96cfe29fadb9aea82a36d99ca9ea6fe2fb3ebb64542bb25595d",
       "projection_dependency": true
     },
     {
@@ -1373,7 +1373,7 @@
       "id": "projection:src/modules/security/workflows/secret-patterns.ts",
       "source_path": "src/modules/security/workflows/secret-patterns.ts",
       "resource_path": "resources/src/modules/security/workflows/secret-patterns.ts",
-      "sha256": "319166216093f567c6307308f3d708f43b079068076cb353e78bd278f50ad812",
+      "sha256": "e53cc33f1a8b133b4a5ab546a9fba6795405ef8badf434cbb0b8b057db7fe944",
       "projection_dependency": true
     },
     {
@@ -1389,7 +1389,7 @@
       "id": "projection:src/modules/security/workflows/share-set.ts",
       "source_path": "src/modules/security/workflows/share-set.ts",
       "resource_path": "resources/src/modules/security/workflows/share-set.ts",
-      "sha256": "bd89148015d34ae9837363d7460371d2445e101d62555cd922d6a903865d36c2",
+      "sha256": "b664aa1ddf9541a3e062f798e863ade8dfb71f24781a8a23b17fe6a7bf8e7616",
       "projection_dependency": true
     },
     {
@@ -1573,7 +1573,7 @@
       "id": "projection:src/modules/telemetry/workflows/receipt-journal.ts",
       "source_path": "src/modules/telemetry/workflows/receipt-journal.ts",
       "resource_path": "resources/src/modules/telemetry/workflows/receipt-journal.ts",
-      "sha256": "d6282d9e147917affda8a892b35a212832e7da53039f468c9f3f4cae7c9d7170",
+      "sha256": "217002cc7ff6be3488c4d6559b9004856f5f4032b1dd75bcd17b6f5f2fbd2cc1",
       "projection_dependency": true
     },
     {

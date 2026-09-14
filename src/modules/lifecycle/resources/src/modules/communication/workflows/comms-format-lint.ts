@@ -165,7 +165,10 @@ function isLegacyExempt(filePath: string): boolean {
  * path segment is the canonical marker for that build output across the repo.
  */
 function isBuildArtifactExempt(filePath: string): boolean {
-  return normalisePath(filePath).includes("/dist/");
+  const p = normalisePath(filePath);
+  // `runtime/` is the committed Node graph emitted by scripts/compile.ts (KTD29):
+  // the same generated-output class as `/dist/`, linted at its .ts source.
+  return p.includes("/dist/") || p.includes("/runtime/");
 }
 
 /**
