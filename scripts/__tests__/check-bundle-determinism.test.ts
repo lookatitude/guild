@@ -28,7 +28,9 @@ import {
   normalizeOutfile,
   parseBuildScript,
   parseEsbuildInvocations,
+  delegatesToCompileStep,
 } from "../check-bundle-determinism";
+import { aliasForTarget, buildOptionsForTarget, targets, type Target } from "../compile";
 
 const REPO = path.resolve(__dirname, "..", "..");
 
@@ -428,14 +430,35 @@ describe("the REAL repository", () => {
     }
   });
 
-  it("REGRESSION (#75): the hooks build script pins js-yaml on every invocation and sets no NODE_PATH", () => {
+  it("REGRESSION (#75): the compile step pins js-yaml on every target and no build sets NODE_PATH", () => {
+    // The 3,500-char esbuild one-liner this used to read is gone by design: the
+    // build script delegates to `scripts/compile.ts` (KTD6/KTD7). The invariant
+    // did not move an inch — it is asserted where the invocations now live.
     const pkg = JSON.parse(fs.readFileSync(path.join(REPO, "hooks", "package.json"), "utf8"));
     const build = String(pkg.scripts.build);
     expect(build).not.toMatch(/NODE_PATH/);
-    const invocations = parseEsbuildInvocations(build);
-    expect(invocations.length).toBeGreaterThanOrEqual(20);
-    for (const inv of invocations) {
-      expect(inv.flags).toContain(aliasFlagFor("js-yaml"));
+    expect(delegatesToCompileStep(build)).toBe(true);
+
+    const all = targets();
+    expect(all.length).toBeGreaterThanOrEqual(20);
+    const bundled = all.filter((t) => t.group === "hooks" || t.group === "agent-team");
+    expect(bundled.length).toBeGreaterThanOrEqual(20);
+    // Assert on the options object esbuild actually receives (buildOne passes
+    // buildOptionsForTarget(...) straight to esbuild.buildSync), not on a helper.
+    const optionsFor = (t: Target) => buildOptionsForTarget(t, path.join(REPO, "scratch", `${t.id}.js`));
+    for (const t of bundled) {
+      expect(optionsFor(t).alias?.["js-yaml"]).toBe(path.join(REPO, "hooks", "node_modules", "js-yaml"));
     }
+    // Every other target pins js-yaml to ITS OWN package too — never unset, which
+    // is the exact state that let the importer's directory decide (#75).
+    for (const t of all.filter((t) => t.yamlFrom)) {
+      expect(optionsFor(t).alias?.["js-yaml"]).toBe(path.join(REPO, t.yamlFrom as string, "node_modules", "js-yaml"));
+      expect(aliasForTarget(t)).toEqual(optionsFor(t).alias);
+    }
+    // Negative control: a target with no yamlFrom gets NO js-yaml alias, so the
+    // assertions above cannot pass vacuously on an options object that ignores it.
+    const control = { ...all[0], id: "__control__", yamlFrom: undefined } as Target;
+    expect(optionsFor(control).alias?.["js-yaml"]).toBeUndefined();
+    expect(optionsFor(control).bundle).toBe(true);
   });
 });

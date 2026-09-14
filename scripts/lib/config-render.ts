@@ -47,10 +47,15 @@ import { PermissionDecision } from "./permission-policy-schema";
 // Canonical secret patterns — the SoT lives in docs-hygiene/scan.ts; do NOT re-spell the
 // regexes (mirrors dot-guild/scrub.ts Decision H.3). The `require.main === module` guard
 // in scan.ts makes this import side-effect-free.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { SECRET_PATTERNS } = require(
-  path.resolve(__dirname, "../docs-hygiene/scan.ts")
-) as { SECRET_PATTERNS: Array<[RegExp, string]> };
+//
+// Imported from the shared module scan.ts itself re-exports, NOT through scan.ts:
+//   * `require(path.resolve(…, "scan.ts"))` only resolves under tsx, so it broke
+//     the moment this file entered the compiled graph (KTD11); and
+//   * scan.ts guards its body with `require.main === module`, which is FALSE for
+//     a bundled entry but TRUE once esbuild hoists it into one — importing scan.ts
+//     from a bundle runs the whole docs-hygiene scan as an import side effect.
+// The shared module has no side effects at all, so neither hazard applies.
+import { SECRET_PATTERNS } from "./shared/secret-patterns";
 
 // ---------------------------------------------------------------------------
 // Inheritance-layer source (mirrors settings-resolver.ts `Source`)

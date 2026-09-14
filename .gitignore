@@ -211,3 +211,7 @@ benchmark/ui/coverage/
 
 # Script-local transient output
 scripts/docs-hygiene/.last-scan.md
+
+# Generated MCP compile entry (scripts/compile.ts writes it, bundles it, deletes
+# it in a finally). Only ever on disk mid-compile, or after a crashed compile.
+/mcp-servers/.compile-entry-mcp.ts

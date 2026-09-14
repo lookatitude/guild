@@ -44,12 +44,19 @@ function cleanEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
   if (!extra || !("GUILD_TELEMETRY_CWD" in extra)) delete e["GUILD_TELEMETRY_CWD"];
   return e;
 }
-const MEMORY_BIN = path.join(PLUGIN_ROOT, "mcp-servers", "guild-memory", "dist", "index.js");
-const TELEMETRY_BIN = path.join(PLUGIN_ROOT, "mcp-servers", "guild-telemetry", "dist", "index.js");
+/**
+ * ONE binary, two D-MCP ids selected by argv[2] (KTD3). The per-server
+ * `mcp-servers/<name>/dist/index.js` these cases used to spawn is gone by design;
+ * `runtime/guild-mcp.js <id>` is the shipped entry, and it must honour the same
+ * flags and the same root resolution. Each name below is the full argv prefix.
+ */
+const MCP_BIN = path.join(PLUGIN_ROOT, "runtime", "guild-mcp.js");
+const MEMORY_BIN: readonly string[] = [MCP_BIN, "wiki"];
+const TELEMETRY_BIN: readonly string[] = [MCP_BIN, "trace"];
 
 /** Drive a stdio MCP server through initialize + one tool call; return the call result. */
 function callTool(
-  bin: string,
+  bin: readonly string[],
   tool: string,
   args: Record<string, unknown>,
   opts: { cwd: string; flags?: string[]; env?: Record<string, string> }
@@ -68,7 +75,7 @@ function callTool(
     JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: tool, arguments: args } }),
     "",
   ].join("\n");
-  const out = execFileSync("node", [bin, ...(opts.flags ?? [])], {
+  const out = execFileSync("node", [...bin, ...(opts.flags ?? [])], {
     input: lines,
     cwd: opts.cwd,
     // HERMETIC: the servers honour GUILD_MEMORY_WIKI_ROOT / GUILD_TELEMETRY_CWD,
@@ -137,8 +144,8 @@ describe("guild-memory data root", () => {
   let foreign: string;
   let fakePlugin: string;
   beforeAll(() => {
-    if (!fs.existsSync(MEMORY_BIN)) {
-      throw new Error(`${MEMORY_BIN} missing — run \`npm run build\` in mcp-servers/guild-memory first.`);
+    if (!fs.existsSync(MCP_BIN)) {
+      throw new Error(`${MCP_BIN} missing — run \`bun run compile\` first.`);
     }
     foreign = makeForeignRepo();
     fakePlugin = makeFakePluginRoot();
@@ -185,8 +192,8 @@ describe("guild-telemetry data root", () => {
   let foreign: string;
   let fakePlugin: string;
   beforeAll(() => {
-    if (!fs.existsSync(TELEMETRY_BIN)) {
-      throw new Error(`${TELEMETRY_BIN} missing — run \`npm run build\` in mcp-servers/guild-telemetry first.`);
+    if (!fs.existsSync(MCP_BIN)) {
+      throw new Error(`${MCP_BIN} missing — run \`bun run compile\` first.`);
     }
     foreign = makeForeignRepo();
     fakePlugin = makeFakePluginRoot();
@@ -242,7 +249,7 @@ describe("the generated Codex manifest ships the flag WITH cwd — they are one 
   it("the flag string the manifest emits is the one the servers actually parse", () => {
     // Guards a rename on either side silently disarming the protection.
     for (const bin of [MEMORY_BIN, TELEMETRY_BIN]) {
-      expect(fs.readFileSync(bin, "utf8")).toContain("--no-cwd-fallback");
+      expect(fs.readFileSync(bin[0], "utf8")).toContain("--no-cwd-fallback");
     }
   });
 });
@@ -260,12 +267,12 @@ describe.each([
     TELEMETRY_BIN,
     ["trace_cost_rollup", "trace_list_runs", "trace_query", "trace_summary"],
   ],
-] as Array<[string, string, string[]]>)("%s exposed metadata in flagged mode", (_name, bin, expectedTools) => {
+] as Array<[string, readonly string[], string[]]>)("%s exposed metadata in flagged mode", (_name, bin, expectedTools) => {
   function metadata(): {
     instructions: string;
     tools: Array<{ name: string; inputSchema?: { properties?: { cwd?: { description?: string } } } }>;
   } {
-    const out = execFileSync("node", [bin, "--no-cwd-fallback"], {
+    const out = execFileSync("node", [...bin, "--no-cwd-fallback"], {
       input:
         JSON.stringify({
           jsonrpc: "2.0",
@@ -310,7 +317,7 @@ describe.each([
 describe.each([
   ["guild-memory", MEMORY_BIN, "wiki_list"],
   ["guild-telemetry", TELEMETRY_BIN, "trace_list_runs"],
-] as Array<[string, string, string]>)("%s rejects a RELATIVE root in flagged mode", (_n, bin, tool) => {
+] as Array<[string, readonly string[], string]>)("%s rejects a RELATIVE root in flagged mode", (_n, bin, tool) => {
   let payload: string;
   beforeAll(() => {
     payload = makeFakePluginRoot();
@@ -327,7 +334,7 @@ describe.each([
 
   it("a relative env override is refused for the same reason", () => {
     const envVar = bin === MEMORY_BIN ? "GUILD_MEMORY_WIKI_ROOT" : "GUILD_TELEMETRY_CWD";
-    const out = execFileSync("node", [bin, "--no-cwd-fallback"], {
+    const out = execFileSync("node", [...bin, "--no-cwd-fallback"], {
       input:
         JSON.stringify({
           jsonrpc: "2.0",
@@ -358,7 +365,7 @@ describe.each([
 describe.each([
   ["guild-memory", MEMORY_BIN, "wiki_list", "GUILD_MEMORY_WIKI_ROOT"],
   ["guild-telemetry", TELEMETRY_BIN, "trace_list_runs", "GUILD_TELEMETRY_CWD"],
-] as Array<[string, string, string, string]>)(
+] as Array<[string, readonly string[], string, string]>)(
   "%s refuses payload-scoped roots in flagged mode",
   (_n, bin, tool, envVar) => {
     let payload: string;
@@ -402,7 +409,7 @@ describe.each([
     });
 
     it("the ENV override is checked the same way", () => {
-      const out = execFileSync("node", [bin, "--no-cwd-fallback"], {
+      const out = execFileSync("node", [...bin, "--no-cwd-fallback"], {
         input:
           JSON.stringify({
             jsonrpc: "2.0",
@@ -442,7 +449,7 @@ describe.each([
 describe.each([
   ["guild-memory", MEMORY_BIN, "wiki_list", "wiki"],
   ["guild-telemetry", TELEMETRY_BIN, "trace_list_runs", "runs"],
-] as Array<[string, string, string, string]>)(
+] as Array<[string, readonly string[], string, string]>)(
   "%s refuses a root whose DATA DIR symlinks into the payload",
   (_n, bin, tool, dataDir) => {
     let payload: string;
@@ -492,7 +499,7 @@ describe.each([
 describe.each([
   ["guild-memory", MEMORY_BIN, "wiki_list"],
   ["guild-telemetry", TELEMETRY_BIN, "trace_list_runs"],
-] as Array<[string, string, string]>)("%s payload identity is not string-based", (_n, bin, tool) => {
+] as Array<[string, readonly string[], string]>)("%s payload identity is not string-based", (_n, bin, tool) => {
   let payload: string;
   beforeAll(() => {
     payload = makeFakePluginRoot();
@@ -539,7 +546,7 @@ describe.each([
 describe.each([
   ["guild-memory", MEMORY_BIN, "wiki_list", "GUILD_MEMORY_WIKI_ROOT", true],
   ["guild-telemetry", TELEMETRY_BIN, "trace_list_runs", "GUILD_TELEMETRY_CWD", false],
-] as Array<[string, string, string, string, boolean]>)(
+] as Array<[string, readonly string[], string, string, boolean]>)(
   "%s accepts a legitimate absolute env override",
   (_n, bin, tool, envVar, pointsAtWikiDir) => {
     let payload: string;
@@ -571,7 +578,7 @@ describe.each([
 describe.each([
   ["guild-memory", MEMORY_BIN, "wiki_list"],
   ["guild-telemetry", TELEMETRY_BIN, "trace_list_runs"],
-] as Array<[string, string, string]>)("%s: case folding does not over-reject", (_n, bin, tool) => {
+] as Array<[string, readonly string[], string]>)("%s: case folding does not over-reject", (_n, bin, tool) => {
   /**
    * gate r8: the previous shape (`Payload` vs `payload-consumer`) was a FALSE
    * GREEN — `payload-consumer` is not beneath `payload/`, so even unconditional

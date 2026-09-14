@@ -1,4 +1,4 @@
-#!/usr/bin/env -S npx tsx
+#!/usr/bin/env node
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -27,7 +27,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// using-guild-bootstrap.ts
+// hooks/using-guild-bootstrap.ts
 var using_guild_bootstrap_exports = {};
 __export(using_guild_bootstrap_exports, {
   buildSessionStartInjection: () => buildSessionStartInjection,
@@ -37,7 +37,7 @@ module.exports = __toCommonJS(using_guild_bootstrap_exports);
 var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
 
-// lib/guild-hook-event.ts
+// hooks/lib/guild-hook-event.ts
 async function readHookStdin() {
   return new Promise((resolve) => {
     const chunks = [];
@@ -54,7 +54,7 @@ function emitClaudeHookEvent(raw) {
   return { ...parsed, host: "claude" };
 }
 
-// using-guild-bootstrap.ts
+// hooks/using-guild-bootstrap.ts
 var USING_GUILD_SRC_REL = path.join(
   "skills",
   "meta",

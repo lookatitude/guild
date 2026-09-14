@@ -1,0 +1,11 @@
+{
+  "name": "guild-plugin",
+  "private": true,
+  "description": "Guild plugin author plane (P1). Bun authors, CI compiles, users run node — see AGENTS.md KTD6/KTD7/KTD10/KTD11.",
+  "scripts": {
+    "compile": "bun scripts/compile.ts",
+    "compile:check": "bun scripts/compile.ts --check",
+    "test": "bun test",
+    "lint:layout": "cd scripts && npm run lint:layout"
+  }
+}

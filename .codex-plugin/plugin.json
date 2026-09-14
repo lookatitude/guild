@@ -6,7 +6,8 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "mcp-servers/guild-memory/dist/index.js",
+        "runtime/guild-mcp.js",
+        "wiki",
         "--no-cwd-fallback"
       ],
       "cwd": "."
@@ -15,7 +16,8 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "mcp-servers/guild-telemetry/dist/index.js",
+        "runtime/guild-mcp.js",
+        "trace",
         "--no-cwd-fallback"
       ],
       "cwd": "."

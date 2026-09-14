@@ -69,26 +69,45 @@ except Exception as e:
 fi
 
 # ── Write host-capability manifest (RE-5, idempotent) ─────────────────────
-# Ensures .guild/hosts/<host-id>/capability.json exists before the cross-host
-# router (RE-4) needs it. The script is atomic (temp-then-rename) and never
-# deletes or replaces a fresh same-session file — true idempotent at write time.
-# Failure is non-fatal: the router reads a degraded/absent manifest gracefully.
-_WRITE_CAPABILITY="${PLUGIN_ROOT}/scripts/write-host-capability.ts"
-_PINNED_TSX="${PLUGIN_ROOT}/scripts/node_modules/.bin/tsx"
-if [[ -f "${_WRITE_CAPABILITY}" ]]; then
-  if [[ -x "${_PINNED_TSX}" ]]; then
-    "${_PINNED_TSX}" "${_WRITE_CAPABILITY}" \
-      --cwd "${PWD}" \
-      --source "session-start" >/dev/null 2>&1 || true
-  elif command -v npx &>/dev/null; then
-    # Installed packages may omit the development-only local tsx binary. Keep
-    # the historical fallback for that surface, but self-builds and tests use
-    # the pinned workspace runtime above and never depend on ambient npm cache
-    # or network state.
-    npx --yes tsx "${_WRITE_CAPABILITY}" \
-      --cwd "${PWD}" \
-      --source "session-start" >/dev/null 2>&1 || true
+# KTD10/KTD11: plain `node` on committed compile outputs — never `npx tsx`, which
+# could reach the network on a cold cache. KTD10/KTD23: these two FAIL CLOSED. A
+# missing bundle means the install is incomplete; a non-zero ensureStorageLayout
+# means the layout is newer than this build understands. Either way the session
+# must not start half-configured, so we print what to do and exit non-zero. Set
+# GUILD_BOOTSTRAP_ALLOW_DEGRADED=1 only to debug an install you already know is
+# broken.
+_guild_fail_closed() {
+  printf '%s\n' "$1" >&2
+  if [[ "${GUILD_BOOTSTRAP_ALLOW_DEGRADED:-}" == "1" ]]; then
+    printf 'guild: continuing degraded (GUILD_BOOTSTRAP_ALLOW_DEGRADED=1).\n' >&2
+    return 0
   fi
+  exit 1
+}
+
+if ! command -v node &>/dev/null; then
+  _guild_fail_closed "guild: node is required on PATH and was not found. Install Node 18+ and restart the session."
+fi
+
+# Host-capability manifest (RE-5, idempotent, atomic temp-then-rename): the
+# cross-host router reads it before dispatch.
+_WRITE_CAPABILITY="${PLUGIN_ROOT}/runtime/scripts/write-host-capability.js"
+if [[ ! -f "${_WRITE_CAPABILITY}" ]]; then
+  _guild_fail_closed "guild: missing compile output ${_WRITE_CAPABILITY}. Re-install Guild, or run \`bun run compile\` in the plugin repo."
+elif ! node "${_WRITE_CAPABILITY}" --cwd "${PWD}" --source "session-start" >/dev/null 2>&1; then
+  _guild_fail_closed "guild: write-host-capability failed. Re-install Guild, or run \`bun run compile\` in the plugin repo."
+fi
+
+# KTD29/KTD23: layout marker read. When storage_layout_version is CURRENT this is
+# one stat + one small read and returns; it never indexes and never upgrades. A
+# non-zero exit is the FUTURE-layout refusal (KTD23: never down-migrate) and must
+# stop the session, not be swallowed. T07 replaces the stub body behind this call.
+_ENSURE_LAYOUT="${PLUGIN_ROOT}/runtime/scripts/ensure-storage-layout.js"
+if [[ ! -f "${_ENSURE_LAYOUT}" ]]; then
+  _guild_fail_closed "guild: missing compile output ${_ENSURE_LAYOUT}. Re-install Guild, or run \`bun run compile\` in the plugin repo."
+else
+  _LAYOUT_ERR="$(node "${_ENSURE_LAYOUT}" --cwd="${PWD}" 2>&1 >/dev/null)" || \
+    _guild_fail_closed "guild: ${_LAYOUT_ERR:-storage layout check failed}"
 fi
 
 # ── Print status block ─────────────────────────────────────────────────────

@@ -78,7 +78,7 @@
       "id": "PostToolUse:gate-outcome-writer.js",
       "source_path": "hooks/dist/gate-outcome-writer.js",
       "resource_path": "resources/hooks/dist/gate-outcome-writer.js",
-      "sha256": "aa78fa8302512469f8f44c7a1ae13e1055acdef7225e978449acc6039d858dfa"
+      "sha256": "c4caf7cd51f2fd842715ee2c752e4b40e586fa73f3d901d45e432f4833b7336d"
     },
     {
       "category": "scripts",
@@ -357,7 +357,7 @@
       "id": "projection:src/modules/communication/workflows/comms-format-lint.ts",
       "source_path": "src/modules/communication/workflows/comms-format-lint.ts",
       "resource_path": "resources/src/modules/communication/workflows/comms-format-lint.ts",
-      "sha256": "c3c29c8a5e50fbaed11603decadd872374478771d3d610e776382834df0fd22a",
+      "sha256": "ec451aaf5e88c66706351526fad6d718d03a82c299fb49cd909a03a35d92f1d3",
       "projection_dependency": true
     },
     {

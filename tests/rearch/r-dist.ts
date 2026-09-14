@@ -23,7 +23,12 @@
  * canonical `../lib/shared/bm25` import passes.
  */
 import { REPO, RailResult, report, walk, read, rel, proveAssert } from "./_common";
-import { parseBuildScript, parseEsbuildInvocations } from "../../scripts/check-bundle-determinism";
+import {
+  parseBuildScript,
+  parseEsbuildInvocations,
+  delegatesToCompileStep,
+  runCompileCheck,
+} from "../../scripts/check-bundle-determinism";
 import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
@@ -228,12 +233,33 @@ export function run(): RailResult {
 
   // ── check 1: dist-sync ──
   const pkg = JSON.parse(fs.readFileSync(path.join(HOOKS, "package.json"), "utf8"));
-  const entries = parseBuildEntries(pkg.scripts?.build ?? "");
+  const buildScript = String(pkg.scripts?.build ?? "");
+
+  // The hooks build is `scripts/compile.ts`'s target table now, not N esbuild
+  // command lines in package.json. `compile --check` rebuilds EVERY target into a
+  // scratch dir and byte-compares it with the committed copy — this rail's exact
+  // property, over a larger surface (it also fails on a missing output and on a
+  // stray bundle no target produces). Re-deriving that table in a regex would give
+  // two sources of truth for what ships, so the replay half delegates.
+  // See scripts/check-bundle-determinism.ts §Compile-step delegation.
+  if (delegatesToCompileStep(buildScript)) {
+    const r = runCompileCheck(REPO);
+    out.notes.push(`dist-sync delegated to \`compile --check\`: ${r.ok ? "green" : "RED"}`);
+    if (!r.ok) {
+      out.violations.push(
+        `scripts/compile.ts: \`compile --check\` is not green, so the committed bundles are ` +
+          `not a pure function of their sources: ${r.detail}`,
+      );
+    }
+    return finishCanonicality(out);
+  }
+
+  const entries = parseBuildEntries(buildScript);
   out.notes.push(`parsed ${entries.length} hooks build entrypoints from package.json`);
 
   // Independent completeness assertion — see unmodelledBuildSegments(). A rail that
   // rebuilds 19 of 20 bundles and reports GREEN is worse than one that fails.
-  for (const seg of unmodelledBuildSegments(pkg.scripts?.build ?? "")) {
+  for (const seg of unmodelledBuildSegments(buildScript)) {
     out.violations.push(
       `hooks/package.json: build segment cannot be replayed by this rail, so its output is ` +
         `NOT byte-compared: \`${seg.slice(0, 120)}\`. Extend parseBuildScript() or express the ` +
@@ -247,7 +273,7 @@ export function run(): RailResult {
     );
   }
   // Cross-check the shared parser against an independent count (see countEsbuildMentions).
-  const mentions = countEsbuildMentions(pkg.scripts?.build ?? "");
+  const mentions = countEsbuildMentions(buildScript);
   if (mentions !== entries.length) {
     out.violations.push(
       `hooks/package.json: the build script mentions esbuild ${mentions} time(s) but only ` +
@@ -312,7 +338,11 @@ export function run(): RailResult {
     out.notes.push(`rebuilt + byte-compared ${checked} bundle(s) against committed dist`);
   }
 
-  // ── check 2: import canonicality ──
+  return finishCanonicality(out);
+}
+
+/** ── check 2: import canonicality ── (shared by both dist-sync paths above). */
+function finishCanonicality(out: RailResult): RailResult {
   const canonical = canonicalSharedBasenames();
   if (canonical.size === 0) {
     out.notes.push("scripts/lib/shared/ has no canonical modules yet — canonicality check inert.");

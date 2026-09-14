@@ -25,7 +25,8 @@
       "lib/replay-rundir",
       "lib/run-events",
       "lib/retention",
-      "lib/sanitized-run-export"
+      "lib/sanitized-run-export",
+      "lib/state/ensure-storage-layout"
     ]
   }
 }

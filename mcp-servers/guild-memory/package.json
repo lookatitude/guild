@@ -5,9 +5,8 @@
   "description": "Optional Guild MCP server: BM25 wiki search over .guild/wiki/ (per guild-plan.md §13.3, §10.5).",
   "type": "commonjs",
   "scripts": {
-    "start": "npx tsx src/index.ts",
     "test": "npx jest --no-coverage",
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/index.js"
+    "build": "cd ../.. && bun scripts/compile.ts --only=mcp"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

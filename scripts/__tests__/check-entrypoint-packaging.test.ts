@@ -370,7 +370,10 @@ describe("CLI: check-entrypoint-packaging.ts", () => {
       // orchestration, run via the actual CLI, hitting a genuine discrepancy.
       const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-r3-packaging-regression-"));
       try {
-        for (const dir of ["commands", "skills", "agents", "hooks", "scripts", "src", ".claude-plugin"]) {
+        // `runtime/` is the committed compile graph (KTD7). Every host renderer
+        // now refuses to render without it, so a fixture that omits it fails for
+        // a reason that has nothing to do with entrypoint packaging.
+        for (const dir of ["commands", "skills", "agents", "hooks", "scripts", "src", ".claude-plugin", "runtime"]) {
           fs.cpSync(path.join(PLUGIN_ROOT, dir), path.join(fixtureRoot, dir), {
             recursive: true,
             // Excluding only `/node_modules/` skips its CONTENTS but not the

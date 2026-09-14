@@ -1,0 +1,250 @@
+# compile-gates.yml — the U2 transitional rails for the plugin layout reshape (rev 20).
+#
+# Three gates, added in T02 and held until T13/T16 flip and delete them:
+#
+#   1. compile --check      BLOCKING. The committed Node graph (hooks/dist/**,
+#                           runtime/**) must be byte-identical to a fresh compile.
+#                           This is the R-DIST rail: it runs in the same env shape
+#                           the author plane compiles in, so a stale bundle cannot
+#                           reach a channel branch (KTD6, KTD7, R19, R24).
+#   2. lint:layout          BLOCKING against T01's baseline. A PR may REMOVE
+#                           baseline entries; any NEW violation fails. The raw and
+#                           anti-vacuity passes run alongside so a check that stops
+#                           detecting anything fails loudly rather than passing.
+#   3. bun test             ADVISORY. Jest stays blocking in test-suites.yml until
+#                           T13 flips the two; T16 deletes Jest. `continue-on-error`
+#                           is the flip switch — T13 removes that one line.
+#
+# Bun is the AUTHOR and CI runtime (P1/P2). It is never on a user's PATH (KTD10):
+# the user path is plain `node` on the committed outputs, which the
+# `installer without bun` job proves on every run.
+
+name: compile gates
+
+on:
+  pull_request:
+    branches: [next, main]
+  push:
+    branches: [next, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compile-gates-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-check:
+    name: compile --check (blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # The compile resolves esbuild from scripts/node_modules and js-yaml from
+      # hooks/node_modules; the MCP bundle resolves its SDK from each server's own
+      # node_modules. R-DIST: if this install list drifts from what the author
+      # plane has locally, --check false-flags, so keep it exactly these four.
+      - name: Install compile inputs
+        run: |
+          for dir in scripts hooks mcp-servers/guild-memory mcp-servers/guild-telemetry; do
+            (cd "$dir" && (npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline))
+          done
+
+      - name: bun run compile --check
+        run: bun run compile --check
+
+  layout-laws:
+    name: lint:layout (blocking against the T01 baseline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # the shrink gate resolves the base revision's baseline
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install scripts dependencies
+        working-directory: scripts
+        run: npm ci --prefer-offline || npm install --prefer-offline
+
+      # The lint EXECUTES code (the overlay oracle imports the validator) and
+      # builds a ts.Program per entry file, so it runs under tsx, not plain node.
+      - name: lint:layout (baseline applied — regressions fail)
+        working-directory: scripts
+        run: npm run lint:layout
+
+      # The baseline may only SHRINK. Without this, a PR that adds a violation AND
+      # adds a matching baseline entry is green — `lint:layout` reads the PR's own
+      # baseline, so it cannot see the growth (codex G-lane r1).
+      - name: layout baseline may only shrink (vs the base revision)
+        run: |
+          BASE="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "no base revision to compare against (first push on this ref) — skipping"
+            exit 0
+          fi
+          npx --prefix scripts tsx scripts/lint/baseline-shrink-gate.ts --base "$BASE"
+
+      # Raw count, recorded not gated: it is the number T03–T16 drive to zero.
+      - name: lint:layout --no-baseline (reported)
+        working-directory: scripts
+        continue-on-error: true
+        run: npx tsx lint/layout-laws.ts --no-baseline
+
+      # Anti-vacuity: fails on VACUOUS, on OVERFLAG of a negative control, and on
+      # an orphan fixture tree. Without it a check that silently stopped matching
+      # would read as a green gate.
+      - name: lint:layout --fixtures (anti-vacuity)
+        working-directory: scripts
+        run: npx tsx lint/layout-laws.ts --fixtures
+
+  bun-test:
+    name: bun test (ADVISORY until T13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # T13 flips the runner: delete this line to make bun test blocking, and make
+    # the Jest legs in test-suites.yml advisory in the same PR.
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install test inputs
+        run: |
+          for dir in scripts hooks; do
+            (cd "$dir" && (npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline))
+          done
+
+      - name: bun test
+        run: bun test
+
+  node-only-runtime:
+    name: user path runs on node with bun absent
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      # No Bun step here ON PURPOSE. Everything below must work on a machine that
+      # has never seen Bun — that is the installer's environment (KTD10).
+      - name: Committed outputs start under plain node
+        run: |
+          set -euo pipefail
+          test ! -x "$(command -v bun 2>/dev/null || echo /nonexistent)" || { echo "bun must not be on PATH for this job"; exit 1; }
+          for id in wiki trace; do
+            out="$(: | node runtime/guild-mcp.js "$id" 2>&1 | head -1)"
+            echo "guild-mcp $id -> $out"
+            case "$out" in *ready*) ;; *) echo "guild-mcp $id did not start"; exit 1;; esac
+          done
+          echo '{}' | node hooks/dist/pre-tool-use.js >/dev/null
+          node runtime/scripts/ensure-storage-layout.js --cwd="$PWD" --print
+
+      # packaged-install-smoke BUILDS host packages, which compiles; the MCP SDK
+      # and zod live only in the mcp-servers lockfiles (codex G-lane r2).
+      - name: Install package-build inputs
+        run: |
+          for dir in scripts hooks mcp-servers/guild-memory mcp-servers/guild-telemetry; do
+            (cd "$dir" && (npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline))
+          done
+
+      - name: Installer runs without bun on PATH
+        working-directory: scripts
+        run: npm run verify:installer
+
+      # A CHECKOUT always has runtime/; an INSTALLED PACKAGE only has what
+      # build-host-packages copies. Every manifest points MCP startup at
+      # runtime/guild-mcp.js, so a package missing it installs a Guild whose MCP
+      # servers cannot start — invisible to every checkout-only test (codex G-lane r1).
+      - name: Packaged install smoke (MCP binary starts from a built package)
+        run: npx --prefix scripts tsx scripts/lint/packaged-install-smoke.ts
+
+  # Split from the correctness job on purpose (codex G-lane r2): a CI runner's wall
+  # clock is noisy, so timings advise; everything that is a fact about behaviour
+  # gates in hot-path-correctness above.
+  hot-path-timings:
+    name: hot-path timings (ADVISORY — wall clock is machine-dependent)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install scripts dependencies
+        working-directory: scripts
+        run: npm ci --prefer-offline || npm install --prefer-offline
+
+      - name: SessionStart marker read ≤50ms · green after_edit ≤250ms
+        run: npx --prefix scripts tsx scripts/lint/hot-path-budget.ts timings --runs=20
+
+  hot-path-correctness:
+    name: hot-path correctness (blocking) + pending T10 rung
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install scripts dependencies
+        working-directory: scripts
+        run: npm ci --prefer-offline || npm install --prefer-offline
+
+      # BLOCKING. Behaviour, not wall clock: the compiled PostToolUse path on a
+      # green edit exits 0 and writes nothing to stdout. Named for what it measures —
+      # the verify.after_edit RUNG does not exist on this tree (see below).
+      - name: post_tool_use_hook_green (hook exit 0 · empty stdout)
+        run: npx --prefix scripts tsx scripts/lint/hot-path-budget.ts post-tool-use-green
+
+      # PENDING, owner T10 — deliberately NOT gating and deliberately visible, the
+      # same convention T13 uses for a pending test. It drives the shipped hook and
+      # asserts the HOOK spawned the declared check; on this tree it reports
+      # `rung absent` and exits 1. T10 activates it by moving it out of this
+      # `continue-on-error` step. Do not delete it to make the log green.
+      - name: verify_after_edit_rung (PENDING — owner T10, not gating)
+        continue-on-error: true
+        run: npx --prefix scripts tsx scripts/lint/hot-path-budget.ts verify-after-edit-rung
+
+      # BLOCKING. The `status` entrypoint must not load unused domains. The
+      # `config show` row is reported, not gated: it is T06's acceptance oracle
+      # (its allowlist flips to blocking when the policy/inventory split lands).
+      - name: Cheap entrypoints do not load unused domains
+        run: npx --prefix scripts tsx scripts/lint/hot-path-budget.ts require-graph

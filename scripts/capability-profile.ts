@@ -62,11 +62,26 @@ import {
   snapshotTreeHashes,
   type DerivedFacts,
 } from "./lib/capability/profile-emit";
-import {
-  captureMigrationRunBaseline,
-  profileBaselineFromMigrationRunBaseline,
-  validateMigrationRunBaseline,
-} from "./lib/capability/migration-evidence";
+// The migration-evidence chain is reached ONLY by `baseline` and `emit`. It is
+// loaded from a separate compiled chunk so it stays OUT of this bundle — see
+// `lib/capability/capability-profile-evidence.ts` and KTD29's `status` budget.
+type EvidenceChunk = typeof import("./lib/capability/capability-profile-evidence");
+let evidenceChunk: EvidenceChunk | null = null;
+function evidence(): EvidenceChunk {
+  if (evidenceChunk === null) {
+    // Non-analyzable on purpose: a literal specifier would let esbuild inline
+    // the whole chain back into this bundle. Compiled sibling first (the
+    // shipped `runtime/scripts/` layout), then the source module (tsx / jest).
+    const candidates = [
+      path.join(__dirname, "capability-profile-evidence.js"),
+      path.join(__dirname, "lib", "capability", "capability-profile-evidence"),
+    ];
+    const spec = candidates.find((c) => fs.existsSync(c) || fs.existsSync(`${c}.ts`)) ?? candidates[1];
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    evidenceChunk = require(spec) as EvidenceChunk;
+  }
+  return evidenceChunk;
+}
 import {
   CAPABILITY_RESOLVER_MODES,
   type CapabilityResolverMode,
@@ -200,7 +215,7 @@ function cmdBaseline(argv: string[]): void {
   const runId = flag(argv, "run-id");
   if (runId === null) fail("missing_arg", "--run-id is required");
   try {
-    const baseline = captureMigrationRunBaseline({ projectRoot: root, runId });
+    const baseline = evidence().captureMigrationRunBaseline({ projectRoot: root, runId });
     process.stdout.write(`${JSON.stringify({ status: "written", rel_path: `.guild/runs/${runId}/capability/run-start-baseline.json`, baseline }, null, 2)}\n`);
   } catch (error) {
     fail("baseline_refused", error instanceof Error ? error.message : String(error));
@@ -234,8 +249,8 @@ function cmdEmit(argv: string[]): void {
   if (baselineFile !== null) {
     try {
       const parsed = JSON.parse(fs.readFileSync(baselineFile, "utf8"));
-      const retained = validateMigrationRunBaseline(parsed);
-      baselineHashes = retained ? profileBaselineFromMigrationRunBaseline(retained) : parsed;
+      const retained = evidence().validateMigrationRunBaseline(parsed);
+      baselineHashes = retained ? evidence().profileBaselineFromMigrationRunBaseline(retained) : parsed;
     } catch (e) {
       fail("bad_baseline_file", `${baselineFile}: ${String(e)}`);
     }

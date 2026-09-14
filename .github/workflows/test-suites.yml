@@ -101,7 +101,9 @@ jobs:
         # so runtime deps like js-yaml must exist in the SOURCE project's
         # node_modules, not just the matrix leg's own.
         run: |
-          for dir in scripts hooks hooks/agent-team "${{ matrix.project }}"; do
+          # mcp-servers/*: scripts' check-bundle-determinism runs `compile --check`, which
+          # bundles both MCP servers from their own node_modules (same list as compile-gates).
+          for dir in scripts hooks hooks/agent-team mcp-servers/guild-memory mcp-servers/guild-telemetry "${{ matrix.project }}"; do
             case " $done_dirs " in *" $dir "*) continue;; esac
             done_dirs="$done_dirs $dir"
             if [ -f "$dir/package-lock.json" ]; then

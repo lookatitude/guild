@@ -51,6 +51,16 @@ jobs:
             cd hooks && npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline
           fi
 
+      # R-DIST and check-bundle-determinism both delegate their byte-compare to
+      # `compile --check`, which builds runtime/guild-mcp.js. The MCP SDK and zod
+      # live ONLY in these two lockfiles, so without them the compile fails to
+      # resolve and the rail reads as RED for a missing dependency.
+      - name: Install MCP server dependencies (compile --check builds guild-mcp.js)
+        run: |
+          for dir in mcp-servers/guild-memory mcp-servers/guild-telemetry; do
+            (cd "$dir" && (npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline))
+          done
+
       - name: Prove rails are non-vacuous (a rail that cannot fail is worthless)
         run: |
           cd tests && npx tsx rearch/run-all.ts --prove
@@ -159,6 +169,9 @@ jobs:
       # forbids any bundle from carrying a module resolved outside the hooks package, and
       # requires every esbuild invocation to pin each declared hooks runtime dependency.
       # Static + read-only; the byte-level rebuild-idempotence half is R-DIST above.
+      # Its byte-compare half now delegates to `bun run compile --check` (the build
+      # moved from N esbuild lines in hooks/package.json to scripts/compile.ts's
+      # target table); the issue-#75 provenance half still runs here.
       - name: Bundle determinism rail (hook bundles resolve deps only from hooks/node_modules)
         run: |
           npx tsx scripts/check-bundle-determinism.ts

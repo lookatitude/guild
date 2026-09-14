@@ -20,13 +20,17 @@ import * as path from "path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-const SERVER = path.resolve(__dirname, "../src/index.ts");
+// KTD3/KTD11: the shipped server IS `runtime/guild-mcp.js <id>` under plain
+// node — one binary, two D-MCP ids. Spawning src/index.ts under `npx tsx`
+// tested a path no user has; these tests now drive the artifact that ships.
+const SERVER = path.resolve(__dirname, "../../../runtime/guild-mcp.js");
+const SERVER_ID = "wiki";
 const FIXTURES = path.resolve(__dirname, "../fixtures");
 
 async function makeClient(env: Record<string, string> = {}): Promise<Client> {
   const transport = new StdioClientTransport({
-    command: "npx",
-    args: ["-y", "tsx", SERVER],
+    command: process.execPath,
+    args: [SERVER, SERVER_ID],
     env: {
       ...(process.env as Record<string, string>),
       GUILD_MEMORY_WIKI_ROOT: path.join(FIXTURES, "wiki"),

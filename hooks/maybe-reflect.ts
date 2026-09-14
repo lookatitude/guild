@@ -271,12 +271,19 @@ function writeStubSummary(runDir: string, runId: string, events: TelemetryEvent[
  * Returns true if the real summarizer ran, false if it's missing (use stub).
  */
 function tryRealSummarizer(cwd: string, runId: string): boolean {
-  const summarizerPath = path.join(cwd, "scripts", "trace-summarize.ts");
+  // KTD11: plain `node` on the committed compile output, never `npx tsx`. This is
+  // a Stop / SubagentStop path a real session hits, so an `npx` spawn here could
+  // reach the network on a cold cache inside a hook. The summarizer ships as
+  // runtime/scripts/trace-summarize.js next to this bundle (scripts/compile.ts
+  // target table); the plugin root is where THIS bundle lives, not the cwd being
+  // summarized — the old code looked for the summarizer under the user's repo.
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, "..", "..");
+  const summarizerPath = path.join(pluginRoot, "runtime", "scripts", "trace-summarize.js");
   if (!fs.existsSync(summarizerPath)) return false;
 
   const result = spawnSync(
-    "npx",
-    ["tsx", summarizerPath, "--run-id", runId, "--cwd", cwd],
+    process.execPath,
+    [summarizerPath, "--run-id", runId, "--cwd", cwd],
     {
       cwd,
       encoding: "utf8",
@@ -287,7 +294,7 @@ function tryRealSummarizer(cwd: string, runId: string): boolean {
 
   if (result.status !== 0) {
     process.stderr.write(
-      `[maybe-reflect] trace-summarize.ts exited ${result.status}: ${result.stderr ?? ""}\n`
+      `[maybe-reflect] trace-summarize exited ${result.status}: ${result.stderr ?? ""}\n`
     );
     return false;
   }

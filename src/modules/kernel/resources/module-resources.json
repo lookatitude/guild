@@ -8,28 +8,28 @@
       "id": "SessionStart:bootstrap.sh",
       "source_path": "hooks/bootstrap.sh",
       "resource_path": "resources/hooks/bootstrap.sh",
-      "sha256": "ee1c45afc763dd8ae6ac65755896707f7b0c74f5183f7be7e81f6c6cc4ed3de4"
+      "sha256": "d02e20cb7065ce6a1a8f956972bc76352f5706dc0dfec14988e88afd7d9c8b5e"
     },
     {
       "category": "hooks",
       "id": "SessionStart:detect-guild-version.js",
       "source_path": "hooks/dist/detect-guild-version.js",
       "resource_path": "resources/hooks/dist/detect-guild-version.js",
-      "sha256": "63ccaea73e401b11478dab4ca95b3cac54854b1654d99dd938d7de11c9fbc694"
+      "sha256": "a4c8095d2bbf7ae436859a233abecbf9bcaf3f6560755c5618c8fbc580893a9f"
     },
     {
       "category": "hooks",
       "id": "SessionStart:update-check.js",
       "source_path": "hooks/dist/update-check.js",
       "resource_path": "resources/hooks/dist/update-check.js",
-      "sha256": "9fab323888e72da4d13ca2b3a070272e3439270dd859c21583af875d04153e65"
+      "sha256": "0d44eee2e10a1f519296317107409ecccf6d9874f24c0a55d1ba508885d2ac24"
     },
     {
       "category": "hooks",
       "id": "SessionStart:using-guild-bootstrap.js",
       "source_path": "hooks/dist/using-guild-bootstrap.js",
       "resource_path": "resources/hooks/dist/using-guild-bootstrap.js",
-      "sha256": "37e7ea2a9900bd3a9ceaea3728fc8eff3c0abb572c096c854577f819b0c54403"
+      "sha256": "ec12fa254bdd948c7ef9096b7c78f048ef9624dc84b697d68551442df934d37a"
     },
     {
       "category": "hooks",

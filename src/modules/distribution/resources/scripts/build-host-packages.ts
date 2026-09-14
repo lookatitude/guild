@@ -621,6 +621,29 @@ function copyClaudeHooks(root: string, dest: string, inv: GuildInventoryV1, reso
  * product-template cite. Every installable host package carries the full
  * templates/ tree — minting is host-neutral.
  */
+/**
+ * The committed compile graph (KTD7): `runtime/guild-mcp.js`, `runtime/scripts/*.js`,
+ * and `runtime/mcp-descriptions.pins.json`.
+ *
+ * Every manifest this builder writes points MCP startup at
+ * `${CLAUDE_PLUGIN_ROOT}/runtime/guild-mcp.js`, and hooks/bootstrap.sh spawns
+ * `runtime/scripts/*.js` and now FAILS CLOSED when they are absent. A package
+ * without this directory installs a Guild whose MCP servers cannot start and whose
+ * SessionStart refuses — and no checkout-only test would notice, because the repo
+ * always has the files (codex G-lane r1). Any host package that copies
+ * `mcp-servers/` must copy this too.
+ */
+function copyCompiledRuntime(root: string, dest: string): void {
+  const src = path.join(root, "runtime");
+  if (!fs.existsSync(src)) {
+    throw new Error(
+      "build-host-packages: runtime/ is missing — the compile graph is not built. " +
+        "Run `bun run compile` before packaging (KTD7/KTD10).",
+    );
+  }
+  copyDirExcludingNodeModules(src, path.join(dest, "runtime"));
+}
+
 function copyTemplates(root: string, dest: string): void {
   copyDirExcludingNodeModules(path.join(root, "templates"), path.join(dest, "templates"));
 }
@@ -665,6 +688,7 @@ export function writeClaudeTree(
   copyScriptRuntime(root, dest);
   // MCP server runtime referenced by .mcp.json (so the package is self-contained).
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+  copyCompiledRuntime(root, dest);
   copyTemplates(root, dest);
   writeLauncher(dest, "claude");
   return dest;
@@ -761,6 +785,7 @@ export function writeCodexTree(
   copyModuleRuntime(root, dest);
   copyScriptRuntime(root, dest);
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+  copyCompiledRuntime(root, dest);
   copyTemplates(root, dest);
   copyStandaloneHookEntrypoints(root, dest);
   writeCodexHookBridge(root, dest);
@@ -815,6 +840,7 @@ function exposeGuildSkillTree(root: string, inv: GuildInventoryV1, dest: string,
   copyModuleRuntime(root, dest);
   copyScriptRuntime(root, dest);
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+  copyCompiledRuntime(root, dest);
   copyTemplates(root, dest);
   copyStandaloneHookEntrypoints(root, dest);
 }

@@ -8,28 +8,28 @@
       "id": "PreCompact:pre-compact.js",
       "source_path": "hooks/dist/pre-compact.js",
       "resource_path": "resources/hooks/dist/pre-compact.js",
-      "sha256": "2c28fbf4afe4047fe6fa818e6b64bdc8b3e6cdb2939b3202eade33847046c817"
+      "sha256": "f974a7ab402637a03d54b4f17eff729b8b3086ce7bb0e68d1c1cefc50d62ca1d"
     },
     {
       "category": "hooks",
       "id": "SessionStart:session-reanchor.js",
       "source_path": "hooks/dist/session-reanchor.js",
       "resource_path": "resources/hooks/dist/session-reanchor.js",
-      "sha256": "dd97889f9adf921284f36f5573435ba5220ff3588ab435c4f4c2d781d5faf238"
+      "sha256": "27280a9df939daf37870c3ed930fa65ba6824cc5e34090cbbc783aadf8d7c8ff"
     },
     {
       "category": "hooks",
       "id": "Stop:lean-lead-guard.js",
       "source_path": "hooks/dist/lean-lead-guard.js",
       "resource_path": "resources/hooks/dist/lean-lead-guard.js",
-      "sha256": "ca3864119576a32a2a1de8a0a14c1e9e01b1f03555a038de31c00a96aabbb4e6"
+      "sha256": "21caa2d0aae1a5a9acfbdfd3b0c058da592bcdc13222bb5aab87c9d1772e85db"
     },
     {
       "category": "hooks",
       "id": "Stop:lifecycle-gate.js",
       "source_path": "hooks/dist/lifecycle-gate.js",
       "resource_path": "resources/hooks/dist/lifecycle-gate.js",
-      "sha256": "f612ae2f7d20527320bd7d814a706dddcbed9d77ae5445228cc71443e3373e2f"
+      "sha256": "712c37e833be82759d17e76fac4f53fd690015657b5e6a9521c5fbbb2b5a6446"
     },
     {
       "category": "scripts",
@@ -107,6 +107,13 @@
       "source_path": "scripts/lib/sanitized-run-export.ts",
       "resource_path": "resources/scripts/lib/sanitized-run-export.ts",
       "sha256": "bd9271402a2461150ac5442defbbd1c49b04c8703a7c852cb336b7f60846d72e"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/state/ensure-storage-layout",
+      "source_path": "scripts/lib/state/ensure-storage-layout.ts",
+      "resource_path": "resources/scripts/lib/state/ensure-storage-layout.ts",
+      "sha256": "040561ed95491b47dc0bb1e5d5b4771af4783bc613ca242cb0d2729b360e8dc5"
     },
     {
       "category": "scripts",

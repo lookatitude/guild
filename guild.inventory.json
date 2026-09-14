@@ -961,7 +961,8 @@
       "transport": "stdio",
       "command": "node",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-memory/dist/index.js"
+        "${CLAUDE_PLUGIN_ROOT}/runtime/guild-mcp.js",
+        "wiki"
       ],
       "read_only": true,
       "description": "D-MCP declared capability (docs/v2/security.html §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation."
@@ -972,7 +973,8 @@
       "transport": "stdio",
       "command": "node",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-telemetry/dist/index.js"
+        "${CLAUDE_PLUGIN_ROOT}/runtime/guild-mcp.js",
+        "trace"
       ],
       "read_only": true,
       "description": "D-MCP declared capability (docs/v2/security.html §MCP trust surface). Definition-file field, not a guild.* contract. /guild:audit validates declaration vs observed egress; undeclared egress/write is a violation."
@@ -1112,6 +1114,11 @@
     {
       "id": "comms/no-accidental-write.cli",
       "source_path": "scripts/comms/no-accidental-write.cli.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "compile",
+      "source_path": "scripts/compile.ts",
       "kind": "cli"
     },
     {
@@ -1557,6 +1564,11 @@
     {
       "id": "lib/capability/candidate-surface",
       "source_path": "scripts/lib/capability/candidate-surface.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/capability/capability-profile-evidence",
+      "source_path": "scripts/lib/capability/capability-profile-evidence.ts",
       "kind": "lib"
     },
     {
@@ -2265,6 +2277,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/state/ensure-storage-layout",
+      "source_path": "scripts/lib/state/ensure-storage-layout.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/support-matrix",
       "source_path": "scripts/lib/support-matrix.ts",
       "kind": "lib"
@@ -2320,13 +2337,28 @@
       "kind": "cli"
     },
     {
+      "id": "lint/baseline-shrink-gate",
+      "source_path": "scripts/lint/baseline-shrink-gate.ts",
+      "kind": "cli"
+    },
+    {
       "id": "lint/build-coverage-draft",
       "source_path": "scripts/lint/build-coverage-draft.ts",
       "kind": "cli"
     },
     {
+      "id": "lint/hot-path-budget",
+      "source_path": "scripts/lint/hot-path-budget.ts",
+      "kind": "cli"
+    },
+    {
       "id": "lint/layout-laws",
       "source_path": "scripts/lint/layout-laws.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "lint/packaged-install-smoke",
+      "source_path": "scripts/lint/packaged-install-smoke.ts",
       "kind": "cli"
     },
     {

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S npx tsx
+#!/usr/bin/env node
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -22,12 +22,12 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// maybe-reflect.ts
+// hooks/maybe-reflect.ts
 var fs4 = __toESM(require("fs"));
 var path5 = __toESM(require("path"));
 var import_child_process = require("child_process");
 
-// lib/guild-root.ts
+// hooks/lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
 function resolveGuildRoot(startCwd) {
@@ -57,11 +57,11 @@ function resolveGuildRoot(startCwd) {
   }
 }
 
-// ../src/modules/lifecycle/workflows/run-binding.ts
+// src/modules/lifecycle/workflows/run-binding.ts
 var fsReal = __toESM(require("fs"));
 var path3 = __toESM(require("path"));
 
-// ../src/modules/kernel/workflows/module-manifest.ts
+// src/modules/kernel/workflows/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "commands",
   "skills",
@@ -71,7 +71,7 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "scripts"
 ]);
 
-// ../src/modules/kernel/workflows/path-containment.ts
+// src/modules/kernel/workflows/path-containment.ts
 var fs2 = __toESM(require("node:fs"));
 var path2 = __toESM(require("node:path"));
 var CONTAINMENT_REFUSAL_CODES = Object.freeze([
@@ -294,7 +294,7 @@ function writeContainedFile(root, target, bytes, options = {}) {
   }
 }
 
-// ../src/modules/lifecycle/workflows/run-binding.ts
+// src/modules/lifecycle/workflows/run-binding.ts
 function realBindingFs() {
   return {
     mkdirp: (p) => fsReal.mkdirSync(p, { recursive: true }),
@@ -378,7 +378,7 @@ function readHookBindingEnvelope(env) {
   return { run_id, binding_ref };
 }
 
-// lib/hook-binding.ts
+// hooks/lib/hook-binding.ts
 function reject(reason, run_id) {
   return { ok: false, diagnostic: "binding_rejected", reason, run_id };
 }
@@ -402,7 +402,7 @@ function formatBindingRejected(hook, auth) {
 `;
 }
 
-// lib/self-build.ts
+// hooks/lib/self-build.ts
 var fs3 = __toESM(require("fs"));
 var path4 = __toESM(require("path"));
 var SELF_BUILD_MARKER = "Guild \u2014 repo orientation";
@@ -422,13 +422,13 @@ function detectSelfBuild(root) {
   return { armed: false, path: null };
 }
 
-// maybe-reflect.ts
+// hooks/maybe-reflect.ts
 async function readStdin() {
-  return new Promise((resolve3) => {
+  return new Promise((resolve4) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve3(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve3(""));
+    process.stdin.on("end", () => resolve4(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve4(""));
   });
 }
 function loadEvents(eventsFile) {
@@ -526,11 +526,12 @@ function writeStubSummary(runDir, runId, events) {
 `);
 }
 function tryRealSummarizer(cwd, runId) {
-  const summarizerPath = path5.join(cwd, "scripts", "trace-summarize.ts");
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path5.resolve(__dirname, "..", "..");
+  const summarizerPath = path5.join(pluginRoot, "runtime", "scripts", "trace-summarize.js");
   if (!fs4.existsSync(summarizerPath)) return false;
   const result = (0, import_child_process.spawnSync)(
-    "npx",
-    ["tsx", summarizerPath, "--run-id", runId, "--cwd", cwd],
+    process.execPath,
+    [summarizerPath, "--run-id", runId, "--cwd", cwd],
     {
       cwd,
       encoding: "utf8",
@@ -540,7 +541,7 @@ function tryRealSummarizer(cwd, runId) {
   );
   if (result.status !== 0) {
     process.stderr.write(
-      `[maybe-reflect] trace-summarize.ts exited ${result.status}: ${result.stderr ?? ""}
+      `[maybe-reflect] trace-summarize exited ${result.status}: ${result.stderr ?? ""}
 `
     );
     return false;

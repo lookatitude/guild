@@ -74,7 +74,17 @@ import {
   readScopeFile,
   resolveScopeDecision,
 } from "./lib/security/enforce.js";
-import { isMcpTool, verifyMcpDescription } from "./lib/security/mcp-hash-pin.js";
+import * as crypto from "node:crypto";
+import {
+  isMcpTool,
+  verifyMcpDescription,
+  effectivePins,
+  shippedPinFor,
+  isWellFormedShippedPins,
+  GUILD_MCP_SERVER_IDS,
+  type ShippedMcpPins,
+  type ShippedPinFailure,
+} from "./lib/security/mcp-hash-pin.js";
 import {
   describeViolation,
   dispatchViolations,
@@ -538,6 +548,60 @@ function runBoundaryGuard(
 // <runDir>/logs/security-events.jsonl. The gate decision NEVER depends on the
 // log write succeeding.
 
+/** Guild's own MCP server ids — the closed, EXACTLY-matched list (see
+ *  GUILD_MCP_SERVER_IDS). Static, so a Guild tool is recognised as Guild's even
+ *  when the pin file cannot be read, which is when fail-closed matters most. */
+const GUILD_MCP_SERVERS = GUILD_MCP_SERVER_IDS;
+
+/**
+ * Load the compile-written pin file (KTD60), verifying that it describes the
+ * binary actually on disk. Cached for the process — PreToolUse is short-lived and
+ * this must not add a stat per tool call.
+ *
+ * Returns the reason on failure rather than a bare `null`: an unreadable,
+ * malformed, or stale-hash pin file used to disable enforcement silently, which
+ * turned the strongest guarantee into the weakest one (codex G-lane r1). Guild's
+ * own tools now REFUSE in that state; third-party tools are untouched.
+ */
+let shippedMcpPinsCache: { pins: ShippedMcpPins | null; failure?: ShippedPinFailure } | undefined;
+function readShippedMcpPins(): { pins: ShippedMcpPins | null; failure?: ShippedPinFailure } {
+  if (shippedMcpPinsCache !== undefined) return shippedMcpPinsCache;
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, "..", "..");
+  let raw: string;
+  try {
+    raw = fs.readFileSync(path.join(pluginRoot, "runtime", "mcp-descriptions.pins.json"), "utf8");
+  } catch {
+    shippedMcpPinsCache = { pins: null, failure: "pins_missing" };
+    return shippedMcpPinsCache;
+  }
+  let doc: unknown;
+  try {
+    doc = JSON.parse(raw);
+  } catch {
+    shippedMcpPinsCache = { pins: null, failure: "pins_malformed" };
+    return shippedMcpPinsCache;
+  }
+  if (!isWellFormedShippedPins(doc)) {
+    shippedMcpPinsCache = { pins: null, failure: "pins_malformed" };
+    return shippedMcpPinsCache;
+  }
+  // The pins are only meaningful for the binary they were generated from. A
+  // swapped or rebuilt-but-unpinned binary must not inherit the old hashes.
+  try {
+    const bin = fs.readFileSync(path.join(pluginRoot, doc.binary), "utf8");
+    const actual = crypto.createHash("sha256").update(bin, "utf8").digest("hex");
+    if (actual !== doc.binary_sha256) {
+      shippedMcpPinsCache = { pins: null, failure: "binary_hash_mismatch" };
+      return shippedMcpPinsCache;
+    }
+  } catch {
+    shippedMcpPinsCache = { pins: null, failure: "binary_hash_mismatch" };
+    return shippedMcpPinsCache;
+  }
+  shippedMcpPinsCache = { pins: doc };
+  return shippedMcpPinsCache;
+}
+
 /** Obtain a live MCP tool description: payload field, else session sidecar. */
 function readMcpDescription(
   payload: GuildHookEvent,
@@ -595,11 +659,25 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
     }
   }
 
-  const mcpPinned = isMcpTool(toolName) && sec.tool_description_hashes[toolName] !== undefined;
+  // KTD60: Guild's own MCP tools are pinned by the compile step, so they are
+  // pinned on a fresh install with no operator action. An operator pin in
+  // mcp.tool_description_hashes still wins for the same tool name.
+  const shipped = readShippedMcpPins();
+  const shippedLookup = shippedPinFor(toolName, shipped.pins, shipped.failure, GUILD_MCP_SERVERS);
+  const mcpPins = isMcpTool(toolName)
+    ? effectivePins(toolName, sec.tool_description_hashes, shippedLookup)
+    : sec.tool_description_hashes;
+  const mcpPinned = isMcpTool(toolName) && mcpPins[toolName] !== undefined;
+  // A Guild-owned tool with no usable pin is a fail-closed case, not an unpinned
+  // one: enforcement must not switch off because a file went missing.
+  const guildPinUnavailable =
+    shippedLookup.guildOwned &&
+    shippedLookup.failure !== undefined &&
+    sec.tool_description_hashes[toolName] === undefined;
 
   // Clean fall-through: not a scoped lane AND no pin for this tool ⇒ nothing
   // to enforce (lead/orchestrator + non-Guild sessions unaffected).
-  if (scope === null && !mcpPinned) return false;
+  if (scope === null && !mcpPinned && !guildPinUnavailable) return false;
 
   const runId = resolveRunId(cwd);
   const runDir =
@@ -751,7 +829,7 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
   // 3. MCP description hash-pin (independent of scope; only for pinned tools).
   if (mcpPinned) {
     const live = readMcpDescription(payload, runDir, toolName);
-    const r = verifyMcpDescription(toolName, live, sec.tool_description_hashes);
+    const r = verifyMcpDescription(toolName, live, mcpPins);
     if (r.status === "mismatch") {
       const reason =
         `MCP tool "${toolName}" description hash mismatch (pinned ${r.pinned?.slice(0, 12)}…, ` +
@@ -760,9 +838,17 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
       return gate("ask", "mcp_description_mismatch", `${reason} Confirm before allowing.`);
     }
     if (r.status === "unverifiable") {
-      // Pinned but no live description source — record + proceed (do not brick
-      // every pinned MCP call). Wiring a description source is the followup
-      // that upgrades this to a fail-closed gate.
+      // Guild's own tools fail CLOSED: we control both ends, so "cannot verify"
+      // is a defect, not a fact of life. Third-party tools keep the shipped
+      // behaviour (record + proceed) so pinning a third-party server does not
+      // brick every call when the host omits the description.
+      if (shippedLookup.guildOwned) {
+        const reason =
+          `MCP tool "${toolName}" is a Guild tool with a shipped pin but no live ` +
+          `description to verify against — refusing rather than trusting it (PI-6).`;
+        emit({ event_type: "mcp_description_unverifiable", decision: "ask", tool: toolName, detail: reason, permission_mode: permissionMode });
+        return gate("ask", "mcp_description_unverifiable", `${reason} Confirm before allowing.`);
+      }
       emit({
         event_type: "mcp_description_unverifiable",
         decision: "allow",
@@ -771,6 +857,16 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
         permission_mode: permissionMode,
       });
     }
+  }
+
+  // Guild-owned tool, no usable shipped pin and no operator pin: refuse.
+  if (guildPinUnavailable) {
+    const reason =
+      `MCP tool "${toolName}" belongs to a Guild MCP server but its shipped pin is ` +
+      `unusable (${shippedLookup.failure}). Guild's own tools are pinned by the compile ` +
+      `step; an unusable pin file means the install is incomplete or tampered with.`;
+    emit({ event_type: "mcp_description_unpinned", decision: "ask", tool: toolName, detail: reason, permission_mode: permissionMode });
+    return gate("ask", "mcp_description_unpinned", `${reason} Re-install Guild or run \`bun run compile\`.`);
   }
 
   return false;

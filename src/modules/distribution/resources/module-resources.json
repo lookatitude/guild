@@ -15,7 +15,7 @@
       "id": "build-host-packages",
       "source_path": "scripts/build-host-packages.ts",
       "resource_path": "resources/scripts/build-host-packages.ts",
-      "sha256": "3f7dbbc864960800263a4d9ae9e3fe3741edec00533934c1aa19fe3dc02fdfba"
+      "sha256": "245b3f7255aa09240da5204b0b513f5ab1a215717a05fe6884a7ac854c818289"
     },
     {
       "category": "scripts",
@@ -43,7 +43,7 @@
       "id": "check-bundle-determinism",
       "source_path": "scripts/check-bundle-determinism.ts",
       "resource_path": "resources/scripts/check-bundle-determinism.ts",
-      "sha256": "4784ec576452c93df36ac0cc372d512a01b631564cdb024719a8341432eb34af"
+      "sha256": "edaa64c0d464bb4a36f066d315d4756ce9ce41c0a60c74318cd2b475ee3286db"
     },
     {
       "category": "scripts",
@@ -86,6 +86,13 @@
       "source_path": "scripts/codex-guild-prompt-bridge.ts",
       "resource_path": "resources/scripts/codex-guild-prompt-bridge.ts",
       "sha256": "58bbafa0b9f77caa21fd16bbc4f6fe760f05ff1ded02bee0414f8a39bafde6eb"
+    },
+    {
+      "category": "scripts",
+      "id": "compile",
+      "source_path": "scripts/compile.ts",
+      "resource_path": "resources/scripts/compile.ts",
+      "sha256": "ee3389042ff6a33bd9aaa4783a98e88fa48d78dc33a5baef9bba94c0c29d2da7"
     },
     {
       "category": "scripts",
@@ -201,6 +208,13 @@
     },
     {
       "category": "scripts",
+      "id": "lint/baseline-shrink-gate",
+      "source_path": "scripts/lint/baseline-shrink-gate.ts",
+      "resource_path": "resources/scripts/lint/baseline-shrink-gate.ts",
+      "sha256": "39a661c3ba4ffa76b1e6aae6398326a0ad7719981687f7d3eeae939109cc688b"
+    },
+    {
+      "category": "scripts",
       "id": "lint/build-coverage-draft",
       "source_path": "scripts/lint/build-coverage-draft.ts",
       "resource_path": "resources/scripts/lint/build-coverage-draft.ts",
@@ -208,10 +222,24 @@
     },
     {
       "category": "scripts",
+      "id": "lint/hot-path-budget",
+      "source_path": "scripts/lint/hot-path-budget.ts",
+      "resource_path": "resources/scripts/lint/hot-path-budget.ts",
+      "sha256": "b5d7d9473586b314cc2470fe21196901be6935b86fb19d479a0fc215d2a8c61b"
+    },
+    {
+      "category": "scripts",
       "id": "lint/layout-laws",
       "source_path": "scripts/lint/layout-laws.ts",
       "resource_path": "resources/scripts/lint/layout-laws.ts",
-      "sha256": "ee79544de15c69bf840b7f3a1ff3e80d546467dc5f29f24e9bdbce20983b49c3"
+      "sha256": "186908242488121ca0dc52c983b2698777ff6f9c5b04575ba07789ce76d9ed57"
+    },
+    {
+      "category": "scripts",
+      "id": "lint/packaged-install-smoke",
+      "source_path": "scripts/lint/packaged-install-smoke.ts",
+      "resource_path": "resources/scripts/lint/packaged-install-smoke.ts",
+      "sha256": "cdb2a996f5b6e0cc469692d387fb1e6aa71b98472a31d802bf986c39ae029ce8"
     },
     {
       "category": "scripts",
