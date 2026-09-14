@@ -8,14 +8,14 @@
       "id": "adopt",
       "source_path": "commands/adopt.md",
       "resource_path": "resources/commands/adopt.md",
-      "sha256": "dbc7275a67287e43659aeba7705b92687716194c10546c0cbac92c3f2e3d9a43"
+      "sha256": "962197e0684114d3ec613ddf21dd6641dee65e1c8c4b92b1c26a62c8aef4da3a"
     },
     {
       "category": "commands",
       "id": "models",
       "source_path": "commands/models.md",
       "resource_path": "resources/commands/models.md",
-      "sha256": "d2e5e1cc302571fd5770eb0568ed93689f4334d39fb9b6889ecc7edf8f33e865"
+      "sha256": "a246a1912b496a3531329b0302ff44b5f0773d8748e7fcf4f4caba4ce9062193"
     },
     {
       "category": "scripts",

@@ -198,6 +198,41 @@ const ENTRY_ALLOWLIST = new Set<string>([
   // boundary and the close/reopen regression fixture adopts a canonical run id.
   ".claude-plugin/marketplace.json",
   "hooks/__tests__/run-trace-close-reopen.test.ts",
+  // plugin-layout-reshape T04 (commands fold, 22 -> 13): the ENTIRE commands/ surface
+  // is the deliverable, so every file under it is a VERIFIED intentional delta, not
+  // drift. Thirteen dispatchers (each <=40 lines, one assembler, compiled-Node spawns —
+  // KTD24), the new `maintain` command, eleven KTD14 print-only aliases, and the
+  // allowlist that enumerates them. `.claude-plugin/plugin.json` lists the 24 files.
+  // The layout lint (`no-14th-command-file`, `command-max-40-lines`) and the
+  // re-ratified SC-W2-5 / SC-W3-6 tree pins are the byte-level gates on this set, so
+  // the anti-vacuity floor moves to those guards rather than disappearing. After the
+  // lead commits, HEAD advances and these entries become harmless no-ops.
+  ".claude-plugin/plugin.json",
+  "commands/aliases.allowlist.json",
+  "commands/adopt.md",
+  "commands/audit.md",
+  "commands/build.md",
+  "commands/config.md",
+  "commands/dashboard.md",
+  "commands/evolve.md",
+  "commands/fix.md",
+  "commands/goal.md",
+  "commands/guild.md",
+  "commands/ideate.md",
+  "commands/init.md",
+  "commands/initiative.md",
+  "commands/learn.md",
+  "commands/maintain.md",
+  "commands/migrate.md",
+  "commands/models.md",
+  "commands/ops.md",
+  "commands/plan.md",
+  "commands/qa.md",
+  "commands/resume.md",
+  "commands/rollback.md",
+  "commands/stats.md",
+  "commands/status.md",
+  "commands/wiki.md",
 ]);
 
 function gitLines(args: string[]): string[] {
@@ -236,10 +271,13 @@ describe("SC-W1-9 — command/hook/package entry paths byte-identical vs HEAD (A
     // any admitted delta must be absent, so the offending-filter above would still
     // flag them. Versioned manifests are legitimate release deltas, so the
     // controls remain ordinary command/hook entry paths with no admitted change.
+    // T04 admitted the whole commands/ surface (the 22 -> 13 fold), so the controls are
+    // entry paths OUTSIDE that admitted set: a command filename that does not exist in
+    // any layout, and two hook entry paths with no admitted delta.
     for (const notAllowed of [
       "commands/guild-build.md",
-      "commands/status.md",
       "hooks/hooks.json",
+      "hooks/dist/emit-learning-checkpoint.js",
     ]) {
       expect(ENTRY_ALLOWLIST.has(notAllowed)).toBe(false);
     }

@@ -14,10 +14,11 @@
   "owns": {
     "commands": [
       "evolve",
+      "maintain",
       "rollback"
     ],
     "skills": [
-      "guild-evolve-skill",
+      "guild-evolve",
       "guild-reflect"
     ],
     "hooks": [

@@ -1,0 +1,30 @@
+{
+  "schema": "guild.command_aliases.v1",
+  "note": "KTD14 print-only aliases for the 11 command filenames dropped by the 22->13 fold. Each file prints its new spelling and exits; none dispatches. Deleted after one stable cut (T16).",
+  "aliases": [
+    "adopt",
+    "audit",
+    "dashboard",
+    "evolve",
+    "fix",
+    "goal",
+    "migrate",
+    "models",
+    "resume",
+    "rollback",
+    "stats"
+  ],
+  "targets": {
+    "adopt": "/guild:init adopt",
+    "audit": "/guild:maintain audit",
+    "dashboard": "/guild:status dashboard",
+    "evolve": "/guild:maintain evolve",
+    "fix": "/guild:maintain fix",
+    "goal": "/guild:plan goal",
+    "migrate": "/guild:config migrate",
+    "models": "/guild:config models",
+    "resume": "/guild:status resume",
+    "rollback": "/guild:maintain rollback",
+    "stats": "/guild:status stats"
+  }
+}

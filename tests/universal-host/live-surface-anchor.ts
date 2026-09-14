@@ -588,7 +588,31 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * `skills/knowledge/learn/SKILL.md` before these values were ratified.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
-  commands: "9f85a4882d919db6195b7a93d4c4290510309ab4",
+  // Re-ratified 2026-09-14 (T04 commands fold): the 22 -> 13 dispatcher cut. Thirteen
+  // thin dispatchers (<=40 lines, one assembler each, compiled-Node spawns), the new
+  // `maintain` command, and eleven KTD14 print-only aliases enumerated in
+  // commands/aliases.allowlist.json (KTD14/KTD20/KTD24/KTD46/KTD69). ANTI-VACUITY:
+  // SC-W2-5 and SC-W3-6 were observed RED against the prior pins and named exactly
+  // commands/** and .claude-plugin/plugin.json before these values were ratified.
+  // Re-ratified (rework-r1, codex G-lane round 1): the gate invocation regains
+  // `--proposal <f> --cwd <root>` (the compiled CLI's actual argument set), config routes
+  // `models`/`migrate` to the CLIs that accept them, `maintain` dispatches one target per
+  // sub-verb, and every lifecycle start stamps `--phase=` + user-supplied-only
+  // `--initiative=`. ANTI-VACUITY: tests/universal-host/t04-command-dispatch-shape.test.ts
+  // was observed 36-failed/10-passed against the round-0 tree and 46/46 after.
+  // Re-ratified (rework-r2, codex G-lane round 2): `/guild:config` translates `init` to the
+  // CLI's `reconcile sync` spelling and stops inserting a second `models inspect` token —
+  // both were argv the compiled parsers refuse. ANTI-VACUITY: t04-command-dispatch-shape
+  // was 11-failed/61-passed against the round-1 tree and 72/72 after.
+  // Re-ratified (codex G-lane round 3, lead fix): the `models` row stops appending a
+  // dispatcher `--cwd "$(pwd)"` after `$REMAINING_ARGS` (it overrode a user --cwd; the
+  // compiled CLI defaults to $PWD and requires the sub-verb first). One line changed.
+  // Re-ratified 2026-09-14 (rework-r3, codex G-lane round 3): `/guild:maintain` drops to
+  // ONE assembler — it dispatches `guild:evolve` and forwards $ARGUMENTS verbatim, so
+  // `wiki revert harvest-123` no longer arrives as `revert revert harvest-123`. The
+  // per-token routing moved into the assembler. ANTI-VACUITY:
+  // t04-command-dispatch-shape was 17-failed/70-passed against the round-2 tree, 87/87 after.
+  commands: "ea93a2ea08d9b2c40a6982e35b4c49a2615ab0b2",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
   // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
@@ -596,12 +620,28 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified again same day (codex G-lane r1): the chapters' relative pointers were
   // re-based onto their new parents and every assembler gained a chapter-pointer table,
   // so a `guild:<name>` in a body resolves to a file instead of a deleted skill.
-  skills: "b2f98676cc6c0196a1589563d4194787d33c5d87",
+  // Re-ratified 2026-09-14 (T04): the `evolve` assembler's frontmatter id becomes
+  // `guild-evolve` (was `guild-evolve-skill`), aligned with the directory basename and
+  // the `/guild:maintain evolve` dispatch line (U-S). No skill body changed.
+  // Re-ratified again (rework-r1): the `plan` assembler gains a `## Sub-verbs` route so
+  // `/guild:plan goal` has a handler (P4). No other skill changed.
+  // Re-ratified (rework-r2): the plan assembler's `## Sub-verbs` route moves OUT of the
+  // `## Output` example fence — inside it, the `goal` route was inert example text.
+  // Re-ratified 2026-09-14 (rework-r3): the `evolve` assembler gains a `## Sub-verbs`
+  // section outside every fence, routing evolve | rollback | audit | fix | wiki revert | gc
+  // to chapters that resolve (skill-link-integrity green). Appended at the TAIL so the
+  // line-keyed layout baseline entries for this file are not re-keyed.
+  // Re-ratified (codex G-lane round 6, lead fix): the evolve assembler's `wiki revert`
+  // row no longer points at wiki-ingest.md (no revert handler there); it names the
+  // pending harvest-journal inverse (R54) and stops. One row changed.
+  skills: "14df92d649b3dfcace945a67992712f18403a17f",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
 export const RATIFIED_MANIFESTS: Readonly<Record<string, string>> = Object.freeze({
-  ".claude-plugin/plugin.json": "0d596935979676f109865ff50c2e877df3da3c98c38b6d1025850f40aa70335e",
+  // Re-ratified 2026-09-14 (T04): the manifest `commands` list is the 13 dispatchers
+  // plus the 11 print-only aliases.
+  ".claude-plugin/plugin.json": "3a37e63ef2587d682a8c1b95ed9ca0524930075cb24cc89666857a74d9060afb",
   ".claude-plugin/marketplace.json": "ad288b80dee07f85a94eee8b9c3e92b18705a94f98e104277a92b4d2e770e2af",
 });
 

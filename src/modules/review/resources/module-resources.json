@@ -8,14 +8,14 @@
       "id": "audit",
       "source_path": "commands/audit.md",
       "resource_path": "resources/commands/audit.md",
-      "sha256": "239a6e569c4f4f4942d12c3be70da7ca16ed817bcc4560a53ffd53552f0744b1"
+      "sha256": "9965845292c6442152561b6089f241225f3b15b04678c1b55ae9ae69dc126068"
     },
     {
       "category": "commands",
       "id": "fix",
       "source_path": "commands/fix.md",
       "resource_path": "resources/commands/fix.md",
-      "sha256": "d9c38150f863f0dd94cc54c6f21ca7dbf28af3eadb0ecc98564ee4177355b727"
+      "sha256": "feb1441342b5bd59dcfe2f06d97d0c2ce08d1a7e6bae44d6d931684c1474d98e"
     },
     {
       "category": "scripts",
