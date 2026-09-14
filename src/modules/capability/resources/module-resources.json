@@ -36,7 +36,7 @@
       "id": "capability-profile",
       "source_path": "scripts/capability-profile.ts",
       "resource_path": "resources/scripts/capability-profile.ts",
-      "sha256": "5b5be6c1666e0349e8dc431d7deb691908831db93a0761924f8ea0abb51060e8"
+      "sha256": "1561ce284ca773b4e573d3e26f8553b68814df891ef54d2cf1cc319008355070"
     },
     {
       "category": "scripts",
@@ -65,6 +65,13 @@
       "source_path": "scripts/lib/capability/candidate-surface.ts",
       "resource_path": "resources/scripts/lib/capability/candidate-surface.ts",
       "sha256": "4f2987e64cf8be211becc641e640e86d2ec7fba3a224a3a60a05ca1ca8f566a4"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/capability/capability-profile-evidence",
+      "source_path": "scripts/lib/capability/capability-profile-evidence.ts",
+      "resource_path": "resources/scripts/lib/capability/capability-profile-evidence.ts",
+      "sha256": "196977e6882b78c853e46b7d72da12a6d5f2d9bc9f3c35cb88b0afa5e70df84f"
     },
     {
       "category": "scripts",

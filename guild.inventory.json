@@ -1567,6 +1567,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/capability/capability-profile-evidence",
+      "source_path": "scripts/lib/capability/capability-profile-evidence.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/capability/compatibility-catalog",
       "source_path": "scripts/lib/capability/compatibility-catalog.ts",
       "kind": "lib"

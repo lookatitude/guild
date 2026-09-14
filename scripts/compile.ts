@@ -96,6 +96,11 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   // lane's surface, not this one's).
   { id: "capability-adopt", entry: "scripts/capability-adopt.ts" },
   { id: "capability-profile", entry: "scripts/capability-profile.ts" },
+  // NOT a CLI. The lazy evidence chunk `capability-profile.js` requires by a
+  // run-time path so the migration-evidence chain stays out of the cheap
+  // `status` bundle (KTD29). Dropping this entry breaks `capability-profile
+  // baseline|emit` in a shipped package.
+  { id: "capability-profile-evidence", entry: "scripts/lib/capability/capability-profile-evidence.ts" },
   { id: "config-cmd", entry: "scripts/config-cmd.ts" },
   { id: "dashboard-launch", entry: "scripts/dashboard-launch.ts" },
   { id: "migrate-guild", entry: "scripts/dot-guild/migrate-guild.ts" },
