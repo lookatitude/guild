@@ -3,8 +3,9 @@ import * as os from "os";
 import * as path from "path";
 import { lintCommsFormat } from "../comms-format-lint";
 
-// A hand-rolled frontmatter splitter — check-b idiom (1).
-const HAND_ROLLED_YAML = 'const parts = text.split("---");\n';
+// A hand-rolled frontmatter splitter — check-b idiom (1). Assembled at runtime so
+// this test file does not itself carry the idiom the lint greps for.
+const HAND_ROLLED_YAML = ["const parts = text.spl", 'it("---");\n'].join("");
 
 function writeTemp(relPath: string): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "cf-gen-"));
