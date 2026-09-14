@@ -591,12 +591,14 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   commands: "9f85a4882d919db6195b7a93d4c4290510309ab4",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
-  skills: "199e75b169c3987e227d1aa08cb4eac63deea169",
+  // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
+  // off-glob playbooks tree, principles folded into using-guild (KTD25/KTD59).
+  skills: "bc75dbcf4e15e4f94f7067d348a73a0a3368d1bf",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
 export const RATIFIED_MANIFESTS: Readonly<Record<string, string>> = Object.freeze({
-  ".claude-plugin/plugin.json": "ca3931c342966d58472b83f72861786c119ec393df5f1748ddc0e33c7bced8ae",
+  ".claude-plugin/plugin.json": "0d596935979676f109865ff50c2e877df3da3c98c38b6d1025850f40aa70335e",
   ".claude-plugin/marketplace.json": "ad288b80dee07f85a94eee8b9c3e92b18705a94f98e104277a92b4d2e770e2af",
 });
 

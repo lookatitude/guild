@@ -22,7 +22,7 @@
       "id": "SessionStart:update-check.js",
       "source_path": "hooks/dist/update-check.js",
       "resource_path": "resources/hooks/dist/update-check.js",
-      "sha256": "3d0b028dfda4b6d291f0d8ad60c637fa9e13b157acfe370b50034984130af0b2"
+      "sha256": "d0bf716011c51cd588e5d3becd965f411b5a04a6fe984eeb65fc0adda657a2e3"
     },
     {
       "category": "hooks",
@@ -57,7 +57,7 @@
       "id": "lib/path-containment-registry",
       "source_path": "scripts/lib/path-containment-registry.ts",
       "resource_path": "resources/scripts/lib/path-containment-registry.ts",
-      "sha256": "8c7db3c922cef72cbcaf2384d91809f5eccfbed8cae95eb3c40fe19189f9da1e"
+      "sha256": "60a8dd67094731ed30943ffd5899547629a51f21dc4fa3b610fed189fc00d654"
     },
     {
       "category": "scripts",
@@ -78,7 +78,7 @@
       "id": "using-guild",
       "source_path": "skills/meta/using-guild/SKILL.src.md",
       "resource_path": "resources/skills/meta/using-guild/SKILL.src.md",
-      "sha256": "7df2bf98b6c58b098ab462b8815274c83bb00f5074557a084ff361e770321940"
+      "sha256": "32205ec6b0a54672413132796c9c294119f01596ff7bf0839e20667c0b43f2a8"
     }
   ]
 }

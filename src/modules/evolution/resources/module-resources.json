@@ -22,14 +22,14 @@
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
       "resource_path": "resources/hooks/dist/learning-backstop.js",
-      "sha256": "f713940285194985855062d5dffceacff717b70d40c0ae3a098d24e14d809e8d"
+      "sha256": "a2bc929e6e7b72fd7bcd4e46d65df1191b0dbd78008f4cdcabf11543a0813d81"
     },
     {
       "category": "hooks",
       "id": "Stop:maybe-reflect.js",
       "source_path": "hooks/dist/maybe-reflect.js",
       "resource_path": "resources/hooks/dist/maybe-reflect.js",
-      "sha256": "85146f8df8a927098e73ff3fe6b9d1996f114af00e43175db94f409ac37751ce"
+      "sha256": "d485a9441314ffe4c4960b4efbe2f7752cbabb5a4ab12037a885b1dea0e25933"
     },
     {
       "category": "scripts",
@@ -71,7 +71,7 @@
       "id": "lib/reaping",
       "source_path": "scripts/lib/reaping.ts",
       "resource_path": "resources/scripts/lib/reaping.ts",
-      "sha256": "7d42cef901970dd958c1968a7aedb0e264a64486463c20b1634a51c4c193468c"
+      "sha256": "f1b918e1be856b6113831b29713200710493b5ddc27f1ff5a25ed9ded39cc859"
     },
     {
       "category": "scripts",
