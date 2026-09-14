@@ -138,12 +138,12 @@ export function serverSegmentMatches(segment: string, serverId: string): boolean
  * server ids (`.mcp.json` keys) plus the two D-MCP ids `runtime/guild-mcp.js` is
  * launched under, because a host may name the server after either.
  */
-export const GUILD_MCP_SERVER_IDS = [
+export const GUILD_MCP_SERVER_IDS = Object.freeze([
   "guild-memory",
   "guild-telemetry",
   "wiki",
   "trace",
-] as const;
+] as const);
 
 /** Validate the shape the compile step writes. Anything else is malformed. */
 export function isWellFormedShippedPins(doc: unknown): doc is ShippedMcpPins {

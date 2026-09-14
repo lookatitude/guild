@@ -64,6 +64,12 @@ function readJson(rel: string): Record<string, unknown> {
 
 type Entry = { type?: string; command?: string; args?: string[]; cwd?: string };
 
+/** The D-MCP id the single binary must be launched under for each server name. */
+const MCP_ID_FOR_SERVER: Record<string, string> = {
+  "guild-memory": "wiki",
+  "guild-telemetry": "trace",
+};
+
 describe("the repo-root Codex manifest declares servers Codex can actually start", () => {
   it("declares BOTH Guild MCP servers (not an empty map)", () => {
     const m = readJson(MANIFEST_REL) as { mcpServers: Record<string, Entry> };
@@ -82,7 +88,12 @@ describe("the repo-root Codex manifest declares servers Codex can actually start
         expect(a.startsWith("/")).toBe(false);
         expect(a.startsWith("./")).toBe(false);
       }
-      expect(e.args?.[0]).toBe(`mcp-servers/${name}/dist/index.js`);
+      // ONE binary, two D-MCP ids selected by argv[2] (KTD3). The per-server
+      // `mcp-servers/<name>/dist/index.js` is gone; the declaration must name the
+      // compiled entry AND the id that serves this server, or Codex starts the
+      // wrong server under the right name.
+      expect(e.args?.[0]).toBe("runtime/guild-mcp.js");
+      expect(e.args?.[1]).toBe(MCP_ID_FOR_SERVER[name]);
       expect(e.args).toContain("--no-cwd-fallback");
     }
   });

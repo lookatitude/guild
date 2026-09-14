@@ -32867,12 +32867,12 @@ function verifyMcpDescription(toolName, liveDescription, pins) {
 function serverSegmentMatches(segment, serverId) {
   return segment === serverId;
 }
-var GUILD_MCP_SERVER_IDS = [
+var GUILD_MCP_SERVER_IDS = Object.freeze([
   "guild-memory",
   "guild-telemetry",
   "wiki",
   "trace"
-];
+]);
 function isWellFormedShippedPins(doc) {
   if (typeof doc !== "object" || doc === null) return false;
   const d = doc;

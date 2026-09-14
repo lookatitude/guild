@@ -92,7 +92,7 @@
       "id": "compile",
       "source_path": "scripts/compile.ts",
       "resource_path": "resources/scripts/compile.ts",
-      "sha256": "8e6234b6fa384528935137b582636f6496c597ba17fb9c56f4e5c4267d944d02"
+      "sha256": "ee3389042ff6a33bd9aaa4783a98e88fa48d78dc33a5baef9bba94c0c29d2da7"
     },
     {
       "category": "scripts",

@@ -37,7 +37,7 @@ const ROOT = path.resolve(__dirname, "..");
 // Target table — the single source of truth for what ships
 // ---------------------------------------------------------------------------
 
-interface Target {
+export interface Target {
   /** Stable id used by --only and by --check diagnostics. */
   id: string;
   /** Entry file, repo-relative. */
@@ -131,7 +131,7 @@ const MCP_ENTRY = "mcp-servers/.compile-entry-mcp.ts";
 const MCP_OUT = "runtime/guild-mcp.js";
 const PINS_OUT = "runtime/mcp-descriptions.pins.json";
 
-function targets(): Target[] {
+export function targets(): Target[] {
   const t: Target[] = [];
   for (const id of HOOK_IDS) {
     t.push({ id: `hooks/${id}`, entry: `hooks/${id}.ts`, out: `hooks/dist/${id}.js`, yamlFrom: "hooks", group: "hooks" });
@@ -159,10 +159,25 @@ function targets(): Target[] {
 /* eslint-disable @typescript-eslint/no-var-requires */
 const esbuild = require(path.join(ROOT, "scripts", "node_modules", "esbuild")) as typeof import("esbuild");
 
-function buildOne(t: Target, outAbs: string): void {
+/**
+ * The esbuild `alias` map for one target. Exported because it IS the #75 fix:
+ * every bundle must resolve `js-yaml` from its own package's `node_modules`, and
+ * the determinism rail asserts that here now that the 3,500-char one-liner in
+ * `hooks/package.json` is gone.
+ */
+export function aliasForTarget(t: Target): Record<string, string> {
   const alias: Record<string, string> = {};
   if (t.yamlFrom) alias["js-yaml"] = path.join(ROOT, t.yamlFrom, "node_modules", "js-yaml");
-  const r = esbuild.buildSync({
+  return alias;
+}
+
+/**
+ * The exact options object `buildOne` hands to esbuild. Exported so the
+ * determinism suite asserts the alias on the REAL invocation path, not on a
+ * helper that a refactor could disconnect from the build.
+ */
+export function buildOptionsForTarget(t: Target, outAbs: string): import("esbuild").BuildOptions {
+  return {
     absWorkingDir: ROOT,
     entryPoints: [t.entry],
     outfile: path.relative(ROOT, outAbs),
@@ -170,9 +185,13 @@ function buildOne(t: Target, outAbs: string): void {
     platform: "node",
     target: "node18",
     format: "cjs",
-    alias,
+    alias: aliasForTarget(t),
     logLevel: "silent",
-  });
+  };
+}
+
+function buildOne(t: Target, outAbs: string): void {
+  const r = esbuild.buildSync(buildOptionsForTarget(t, outAbs));
   if (r.errors.length) {
     throw new Error(`esbuild failed for ${t.id}:\n${r.errors.map((e) => e.text).join("\n")}`);
   }
