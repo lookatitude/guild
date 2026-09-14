@@ -5,6 +5,7 @@ name: guild-learn
 description: "Smart full learn-all dispatcher — the no-arg /guild:learn entrypoint that replaces the old usage-stop with a genuine smart full-learn. Detects target shape (regular_project | workspace | existing_guild_project | new_or_sparse_project | mixed_or_uncertain), surfaces the classification for confirmation, then runs the appropriate full pipeline: regular-project = run start → inventory → cheap-map → deep-graph (OQ1 cost-estimate gate) → derive → links → tour → candidates → indexes → provenance → checkpoint → close; workspace = detect children first, never scan sub-repos as one monolith, AUTO fan-out per learn_fanout config (OQ2), aggregate cost estimate shown before child scans, --dry-run honored. Skipped-file decisions emitted in SC-G shape. All promotions remain human-gated. TRIGGER for \"/guild:learn\" with no sub-verb, \"learn this project completely\", \"full learn everything\", \"run the full learn pipeline\", \"smart learn this workspace\", \"learn all artifacts end to end\". DO NOT TRIGGER for: explicit sub-verb forms (guild:learn-map for map, guild:learn-graph for graph, guild:learn-onboard for onboard, guild:learn-diff for diff, guild:learn-explain for explain), or for single-artifact queries (guild:wiki-query / kg-query)."
 when_to_use: "When /guild:learn is invoked with no sub-verb argument. Implements SC-A (smart full learn-all) from the learn-knowledge-convergence initiative. Explicit sub-verbs (map/graph/onboard/diff/explain) bypass this skill and go directly to their specialist learn-* skill."
 type: knowledge
+indexed: true
 derived_from_template: guild.skill_template.v1
 ---
 
@@ -474,3 +475,19 @@ user-approved scope.
 - Workspace root with root_wiki: false and workspace_knowledge: true →
   no monolithic root code wiki built; cross-project knowledge emitted as
   candidates to `.guild/wiki/workspace/`.
+
+## Chapters
+
+Three-stage disclosure (KTD25): this file is the assembler. Each row below is an
+L3 chapter that stays on disk until a request matches it. Compose by pointer —
+read the one chapter you were routed to, and never inline a chapter here.
+
+| Chapter | Covers |
+|---|---|
+| `references/learn-diff.md` | Change/blast-radius analyser — the learn-* family member that produces the per-run DiffUnderstanding (guild.diff_understanding.v1): which graph nodes/layers a base→head diff touches, and which changed files no node explains (untraced) |
+| `references/learn-explain.md` | File/module deep-dive explainer — the learn-* family member that answers \"how does THIS work?\" for a specific file, function, or module, grounded in the knowledge graph (nodes, edges, layers, source_refs) rather than a raw re-read |
+| `references/learn-graph.md` | Deep semantic knowledge-graph builder — the lazy, gated deep tier of the learn-* family |
+| `references/learn-harvest.md` | Reusable extraction pipeline over phase and run artifacts — NOT just code |
+| `references/learn-knowledge.md` | Deep multi-modal knowledge-tier builder — a lazy, cost-gated pass running the shared K1–K6 entrypoint over the structural knowledge graph to emit a topic→subtopic taxonomy, classified wiki_page + diagram nodes, and cross-modal evidenced_by edges into guild.knowledge_graph.v2, then the nonce-free knowledge-links recall projection |
+| `references/learn-map.md` | Codebase-map builder + the base of Guild's learn-* family — runs the cheap-scan tier (deterministic scan → CodebaseMap + a confidence-tagged architecture-map stub) and owns the shared two-phase pipeline, the canonical output-locations table, and the one-implementation/two-triggers contract (D3): the SAME learn-* skills run for `/guild:learn` AND for `/guild:init --learn` / `defaults.auto_learn` |
+| `references/learn-onboard.md` | Tour narrator + onboarding-guide generator — the learn-* family member that turns the dependency-BFS tour skeleton guild:learn-graph wrote into knowledge-graph.json `tour[]` into a narrated OnboardingTour (.guild/indexes/onboarding-tour.md) plus a derived onboarding guide, adding pedagogical narration + per-step languageLesson |

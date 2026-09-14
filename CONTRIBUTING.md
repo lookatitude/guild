@@ -58,9 +58,12 @@ guide to getting set up, understanding the repo layout, and submitting changes.
 ## Repo layout
 
 - `.claude-plugin/` — plugin + marketplace manifests.
-- `skills/` — 111 skills across six tiers (`core`, `meta`, `knowledge`,
-  `specialists`, `guild-operations`, `guild-quality`).
-- `agents/` — the 3 machinery agents (advisor, context-manager, developer).
+- `skills/` — 76 skills; the plugin manifest indexes exactly 17 of them (the
+  assemblers). Chapters sit in an assembler's `references/`; the specialist
+  starter recipes and the dashboard launcher sit off-index under
+  `skills/playbooks/`.
+- `agents/` — the 4 machinery agents (advisor, context-manager, developer,
+  team-lead).
 - `templates/specialists/` — the 15 domain specialist type templates minted
   into projects on demand; `templates/products/` and `templates/{skills,agents}/`
   hold the product and authoring scaffolds.

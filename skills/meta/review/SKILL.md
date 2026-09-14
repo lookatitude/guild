@@ -3,6 +3,7 @@ name: guild-review
 description: Two-stage review of per-specialist handoff receipts (spec compliance first, then quality), plus Guild's fresh-context code-review request/response discipline — how a lane solicits a reviewer with crafted context, and how it acts on the findings (triage; push back only with technical evidence). Consumes compact receipts from `.guild/runs/<run-id>/handoffs/` — NOT full specialist conversations — and writes `.guild/runs/<run-id>/review.md` with per-lane pass/fail + blocker list. TRIGGER: "review the specialist outputs", "check if this matches the spec", "evaluate the handoffs", "request a code review", "respond to the review findings", "the reviewer found X". DO NOT TRIGGER for: final task-close gating (guild:verify-done), writing more code, or re-planning.
 when_to_use: Sixth step of Guild lifecycle, after guild:execute-plan has collected all handoff receipts. Also during build when a lane requests a fresh-context code review or responds to a reviewer's findings.
 type: meta
+indexed: true
 ---
 
 # guild:review
@@ -77,3 +78,14 @@ When every lane is ✓ at both stages (or Stage 2 follow-ups are acceptable and 
 - `followups` — the Stage 2 follow-up list, carried forward for the next task's plan.
 
 If any lane is still ✗ after a loop-back round, halt and surface the failure to the user. Do not hand off with outstanding blockers — verify-done is the final gate, not a second chance for unresolved spec drift.
+
+## Chapters
+
+Three-stage disclosure (KTD25): this file is the assembler. Each row below is an
+L3 chapter that stays on disk until a request matches it. Compose by pointer —
+read the one chapter you were routed to, and never inline a chapter here.
+
+| Chapter | Covers |
+|---|---|
+| `references/codex-review.md` | DEPRECATED lifecycle entry-point (D-BR-A) — now the internal Codex adapter invoked BY `guild:review-broker`, never called directly from Guild lifecycle gates |
+| `references/review-broker.md` | Host-agnostic broker for cross-family adversarial review — one host drafts an artifact, a DIFFERENT host family critiques it (STRONG independence) |

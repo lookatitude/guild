@@ -31081,6 +31081,143 @@ var init_write_task_run = __esm({
   }
 });
 
+// src/modules/lifecycle/workflows/workflow-graph-overlay.ts
+function toNodes(value) {
+  if (Array.isArray(value)) {
+    return value.map(
+      (v) => typeof v === "string" ? { id: v } : v ?? {}
+    );
+  }
+  if (value && typeof value === "object") {
+    const nodes = value.nodes;
+    if (Array.isArray(nodes)) return nodes.map((n) => typeof n === "string" ? { id: n } : n);
+  }
+  return [];
+}
+function asGraph(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+function requiredIds(defaultNodes) {
+  const ids = new Set(PROTECTED_NODE_IDS);
+  for (const n of defaultNodes) {
+    if (n && n.required === true && typeof n.id === "string") ids.add(n.id);
+  }
+  return [...ids];
+}
+function validateWorkflowGraphOverlay(pluginDefault, overlay) {
+  const defaultNodes = toNodes(pluginDefault);
+  const hasOverlay = overlay !== void 0 && overlay !== null;
+  const overlayNodes = hasOverlay ? toNodes(overlay) : defaultNodes;
+  const overlayGraph = asGraph(hasOverlay ? overlay : pluginDefault);
+  const violations = [];
+  const present2 = new Set(overlayNodes.map((n) => n?.id).filter((id) => !!id));
+  const defaultIds = new Set(defaultNodes.map((n) => n?.id).filter(Boolean));
+  for (const id of requiredIds(defaultNodes)) {
+    if (!defaultIds.has(id)) continue;
+    if (!present2.has(id)) {
+      violations.push({
+        rule: "missing-required-node",
+        detail: `overlay drops required node '${id}'`
+      });
+    }
+  }
+  const cls = overlayGraph.class;
+  if (typeof cls === "string" && !WORKFLOW_CLASSES.includes(cls)) {
+    violations.push({ rule: "unknown-class", detail: `'${cls}' is not one of the five classes` });
+  }
+  for (const e of overlayGraph.edges ?? []) {
+    if (!e) continue;
+    if (typeof e.on === "string" && !WORKFLOW_EDGE_OUTCOMES.includes(e.on)) {
+      violations.push({
+        rule: "unknown-edge-outcome",
+        detail: `edge ${String(e.from)} -> on:'${e.on}' is not in the decision enum`
+      });
+    }
+    const target = e.to;
+    const toClass = e.change_class ?? (target && typeof target === "object" ? target.class : void 0);
+    if (toClass !== void 0 && !WORKFLOW_CLASSES.includes(toClass)) {
+      violations.push({
+        rule: "unknown-change-class",
+        detail: `edge ${String(e.from)} changes class to '${toClass}', which is not one of the five`
+      });
+    }
+    if (typeof target === "string" && present2.size > 0 && !present2.has(target)) {
+      violations.push({
+        rule: "unknown-edge-endpoint",
+        detail: `edge ${String(e.from)} -> '${target}' names a node the merged graph does not declare`
+      });
+    }
+  }
+  const ok = violations.length === 0;
+  return { ok, valid: ok, violations };
+}
+function applyWorkflowGraphOverlay(pluginDefault, overlay) {
+  const merged = overlay ? { ...pluginDefault, ...overlay, nodes: overlay.nodes ?? pluginDefault.nodes, edges: overlay.edges ?? pluginDefault.edges } : { ...pluginDefault };
+  const result = validateWorkflowGraphOverlay(pluginDefault, merged);
+  if (!result.ok) {
+    throw new Error(
+      `guild.workflow_graph.v1 overlay rejected: ${result.violations.map((v) => v.detail).join("; ")}`
+    );
+  }
+  return merged;
+}
+function validateWorkflowGraphDocument(doc) {
+  const violations = [];
+  const g = asGraph(doc);
+  const nodes = toNodes(g);
+  const ids = new Set(nodes.map((n) => n?.id).filter(Boolean));
+  if (g.schema_version !== "guild.workflow_graph.v1") {
+    violations.push({ rule: "unknown-class", detail: `schema_version '${String(g.schema_version)}' is not guild.workflow_graph.v1` });
+  }
+  if (!WORKFLOW_CLASSES.includes(String(g.class))) {
+    violations.push({ rule: "unknown-class", detail: `'${String(g.class)}' is not one of the five classes` });
+  }
+  if (nodes.length === 0) {
+    violations.push({ rule: "missing-required-node", detail: "graph declares no nodes" });
+  }
+  if (typeof g.entry !== "string" || !ids.has(g.entry)) {
+    violations.push({ rule: "unknown-edge-endpoint", detail: `entry '${String(g.entry)}' is not a declared node` });
+  }
+  for (const e of g.edges ?? []) {
+    if (!e || typeof e.from !== "string" || !ids.has(e.from)) {
+      violations.push({ rule: "unknown-edge-endpoint", detail: `edge from '${String(e?.from)}' is not a declared node` });
+    }
+    if (!WORKFLOW_EDGE_OUTCOMES.includes(String(e?.on))) {
+      violations.push({ rule: "unknown-edge-outcome", detail: `edge outcome '${String(e?.on)}' is not in the decision enum` });
+    }
+    const to = e?.to;
+    if (typeof to === "string") {
+      if (!ids.has(to)) violations.push({ rule: "unknown-edge-endpoint", detail: `edge to '${to}' is not a declared node` });
+    } else if (to && typeof to === "object") {
+      if (!WORKFLOW_CLASSES.includes(String(to.class))) {
+        violations.push({ rule: "unknown-change-class", detail: `edge crosses to class '${String(to.class)}', which is not one of the five` });
+      }
+    } else {
+      violations.push({ rule: "unknown-edge-endpoint", detail: `edge from '${String(e?.from)}' has no target` });
+    }
+    if (e?.change_class !== void 0 && !WORKFLOW_CLASSES.includes(e.change_class)) {
+      violations.push({ rule: "unknown-change-class", detail: `change_class '${e.change_class}' is not one of the five` });
+    }
+  }
+  const ok = violations.length === 0;
+  return { ok, valid: ok, violations };
+}
+var WORKFLOW_CLASSES, WORKFLOW_EDGE_OUTCOMES, PROTECTED_NODE_IDS;
+var init_workflow_graph_overlay = __esm({
+  "src/modules/lifecycle/workflows/workflow-graph-overlay.ts"() {
+    WORKFLOW_CLASSES = Object.freeze(["product", "research", "debug", "ops", "init"]);
+    WORKFLOW_EDGE_OUTCOMES = Object.freeze([
+      "next",
+      "skip",
+      "replan",
+      "harvest",
+      "escalate",
+      "change_class"
+    ]);
+    PROTECTED_NODE_IDS = Object.freeze(["product.qa", "d5", "d8", "ops.first-run"]);
+  }
+});
+
 // src/modules/lifecycle/index.ts
 var lifecycle_exports = {};
 __export(lifecycle_exports, {
@@ -31168,14 +31305,18 @@ __export(lifecycle_exports, {
   NEUTRAL_UNEVALUATED_SUPPORT: () => NEUTRAL_UNEVALUATED_SUPPORT,
   PENDING_SUBSTANTIVE_OPERATION_SCHEMA: () => PENDING_SUBSTANTIVE_OPERATION_SCHEMA,
   PROGRAM_STATUSES: () => PROGRAM_STATUSES2,
+  PROTECTED_NODE_IDS: () => PROTECTED_NODE_IDS,
   WAVE_REQUIRED_KEYS: () => WAVE_REQUIRED_KEYS,
   WAVE_STATUSES: () => WAVE_STATUSES2,
+  WORKFLOW_CLASSES: () => WORKFLOW_CLASSES,
+  WORKFLOW_EDGE_OUTCOMES: () => WORKFLOW_EDGE_OUTCOMES,
   analyzeNeutralCapabilityUse: () => analyzeNeutralCapabilityUse,
   appendGateOutcome: () => appendGateOutcome,
   appendPhase: () => appendPhase,
   applyNeutralLifecycleEvent: () => applyNeutralLifecycleEvent,
   applyNeutralLifecycleEvents: () => applyNeutralLifecycleEvents,
   applyNeutralSupportTransition: () => applyNeutralSupportTransition,
+  applyWorkflowGraphOverlay: () => applyWorkflowGraphOverlay,
   assembleNeutralConformanceEvidence: () => assembleNeutralConformanceEvidence,
   assertCanonicalRunId: () => assertCanonicalRunId,
   assertNoPendingSubstantiveOperation: () => assertNoPendingSubstantiveOperation,
@@ -31292,6 +31433,8 @@ __export(lifecycle_exports, {
   validateRunBindingRecord: () => validateRunBindingRecord,
   validateRunId: () => validateRunId,
   validateRunManifest: () => validateRunManifest,
+  validateWorkflowGraphDocument: () => validateWorkflowGraphDocument,
+  validateWorkflowGraphOverlay: () => validateWorkflowGraphOverlay,
   verifyRunBinding: () => verifyRunBinding,
   wireRunManifest: () => wireRunManifest,
   withRunBindingExclusion: () => withRunBindingExclusion,
@@ -31320,6 +31463,7 @@ var init_lifecycle = __esm({
     init_runstart_preflight();
     init_write_run_manifest();
     init_write_task_run();
+    init_workflow_graph_overlay();
   }
 });
 

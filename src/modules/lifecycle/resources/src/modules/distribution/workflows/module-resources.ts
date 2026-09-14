@@ -149,6 +149,20 @@ function serializeManifest(manifest: ModuleResourceManifest): string {
   return JSON.stringify(manifest, null, 2) + "\n";
 }
 
+/**
+ * Every companion file inside a skill folder, repo-relative to that folder,
+ * deterministic order. Recursive: `references/` chapters and `scripts/` are part
+ * of the shipped three-stage folder (KTD25), not just the immediate siblings.
+ */
+function skillCompanionFiles(skillDir: string, rel = "", out: string[] = []): string[] {
+  for (const e of fs.readdirSync(path.join(skillDir, rel), { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+    const r = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) skillCompanionFiles(skillDir, r, out);
+    else if (e.isFile()) out.push(r);
+  }
+  return out;
+}
+
 export function buildModuleResourcePlan(root: string = PLUGIN_ROOT): ModuleResourcePlan[] {
   const inventory = buildInventory(root);
   const manifests = loadModuleManifests(root);
@@ -204,13 +218,17 @@ export function buildModuleResourcePlan(root: string = PLUGIN_ROOT): ModuleResou
       // packages alongside the skill. Same owner as the parent skill.
       if (category === "skills") {
         const skillDir = path.dirname(sourceAbs);
-        for (const sib of fs.readdirSync(skillDir).sort()) {
+        // T03/KTD25: a three-stage skill folder is SKILL.md + `references/`
+        // (L3 chapters, loaded on demand) + `scripts/`. The companion walk is
+        // therefore RECURSIVE — an immediate-files-only walk silently dropped
+        // every chapter from the mirror and from every host package.
+        for (const sib of skillCompanionFiles(skillDir)) {
           // SKILL.md/.src.md are the inventory entry itself; evals.json is a
           // dev-time eval fixture (NOT a runtime/progressive-disclosure reference)
           // and must NOT ship in host packages (PA ruling, lane TE).
-          if (sib === "SKILL.md" || sib === "SKILL.src.md" || sib === "evals.json") continue;
+          if (sib === "SKILL.md" || sib === "SKILL.src.md") continue;
+          if (sib === "evals.json" || sib.endsWith("/evals.json") || sib.endsWith(".evals.json")) continue;
           const sibAbs = path.join(skillDir, sib);
-          if (!fs.statSync(sibAbs).isFile()) continue; // immediate files only
           const sibSourcePath = toPosix(path.relative(root, sibAbs));
           const sibResourcePath = resourcePathFor("skills", sibSourcePath);
           const sibKey = `${owner}:${sibResourcePath}`;

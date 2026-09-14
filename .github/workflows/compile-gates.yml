@@ -116,6 +116,15 @@ jobs:
         working-directory: scripts
         run: npx tsx lint/layout-laws.ts --fixtures
 
+      # KTD25 disclosure budgets. The catalog and per-skill legs BLOCK: the 17
+      # frontmatter descriptions are what the host pastes into every session.
+      # The prefix leg is ADVISORY (--advisory-prefix) only because the plugin
+      # AGENTS.md alone is already ~8k tokens — shrinking it is T17's F5, not
+      # this gate's. Drop the flag when F5 lands and the leg blocks too.
+      - name: description budgets (catalog + per-skill block · prefix advisory)
+        working-directory: scripts
+        run: npx tsx lint/description-budget.ts --root .. --advisory-prefix
+
   bun-test:
     name: bun test (ADVISORY until T13)
     runs-on: ubuntu-latest

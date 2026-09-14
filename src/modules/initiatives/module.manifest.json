@@ -5,15 +5,16 @@
   "kind": "capability",
   "implementation_mode": "workflow-backed",
   "description": "Owns initiative state, activity, work items, product ideation helpers, proposal classification, and decision capture surfaces.",
-  "depends_on": ["state", "knowledge"],
+  "depends_on": [
+    "state",
+    "knowledge"
+  ],
   "owns": {
-    "commands": ["initiative"],
+    "commands": [
+      "initiative"
+    ],
     "skills": [
-      "guild-decisions",
-      "guild-initiative",
-      "guild-product-define",
-      "guild-product-explore",
-      "guild-product-template"
+      "guild-initiative"
     ],
     "scripts": [
       "classify-proposal",

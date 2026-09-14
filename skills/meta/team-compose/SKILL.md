@@ -3,6 +3,7 @@ name: guild-team-compose
 description: Match spec domains against the consuming repo's project specialists (`.guild/agents/*.md`, reused never re-created) AND Guild's shipped specialist TYPE templates (minted into `.guild/agents/` via roster-resolve mint); present existing + gaps with A/B/C/D options, propose the FULL justified logical team — task-derived, UNCAPPED, with necessity rationale + excluded roles (`guild.team_proposal.v2`) — then WAIT at the `guild.team_decision.v1` user gate (approve / restructure: add, remove, substitute, edit dependencies) before any dispatch, assign each specialist a `default_tier` from its frontmatter, derive `capability_scope:` (runtime-materialized for canonical roles), and write the per-phase `.guild/team/<slug>.<phase>.yaml`. TRIGGER on "propose a team", "who should work on this", "compose specialists for the spec", "compose this phase's team". DO NOT TRIGGER for: writing the code (execute-plan), creating a new specialist TYPE for Guild itself (guild:create-specialist), reviewing completed work (guild:review).
 when_to_use: Second step of the `/guild` lifecycle, after `guild:brainstorm` has produced `.guild/spec/<slug>.md`. Also fires when the user asks to reshape an existing team (e.g. "rework the team for this task", "swap the qa slot for security").
 type: meta
+indexed: true
 ---
 
 # guild:team-compose

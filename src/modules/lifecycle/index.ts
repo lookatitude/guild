@@ -42,3 +42,8 @@ export * from "./workflows/run-manifest-wiring";
 export * from "./workflows/runstart-preflight";
 export * from "./workflows/write-run-manifest";
 export * from "./workflows/write-task-run";
+
+// KTD40/KTD42 — the class-graph overlay merge + validator. User-facing class
+// graphs are YAML data (src/surfaces/graphs/); the lifecycle domain owns
+// load / merge / validate, and the layout lint executes this export.
+export * from "./workflows/workflow-graph-overlay";

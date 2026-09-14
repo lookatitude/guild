@@ -46,6 +46,7 @@
       "lib/update-check",
       "lint/baseline-shrink-gate",
       "lint/build-coverage-draft",
+      "lint/description-budget",
       "lint/hot-path-budget",
       "lint/layout-laws",
       "lint/packaged-install-smoke",

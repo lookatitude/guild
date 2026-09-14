@@ -5,8 +5,13 @@
   "kind": "capability",
   "implementation_mode": "workflow-backed",
   "description": "Owns quality/release-readiness producer behavior and QA gate support distinct from specialist QA skills.",
-  "depends_on": ["evals", "review"],
+  "depends_on": [
+    "evals",
+    "review"
+  ],
   "owns": {
-    "skills": ["guild-quality"]
+    "skills": [
+      "guild-quality"
+    ]
   }
 }

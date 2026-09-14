@@ -6,23 +6,30 @@
     {
       "category": "skills",
       "id": "guild-quality",
-      "source_path": "skills/guild-quality/SKILL.md",
-      "resource_path": "resources/skills/guild-quality/SKILL.md",
-      "sha256": "fe695dbeaa2e81912eec969f299f1f71d30490cb96698db0071ce12d6bbb08ac"
+      "source_path": "skills/quality/SKILL.md",
+      "resource_path": "resources/skills/quality/SKILL.md",
+      "sha256": "f1c2fa5decf8fc61ff5d4c36998c3bd421de6f5b0eb3c8a48cbb79f31a21ae36"
     },
     {
       "category": "skills",
       "id": "guild-quality/quality-contract.md",
-      "source_path": "skills/guild-quality/quality-contract.md",
-      "resource_path": "resources/skills/guild-quality/quality-contract.md",
+      "source_path": "skills/quality/quality-contract.md",
+      "resource_path": "resources/skills/quality/quality-contract.md",
       "sha256": "bc3433b025ab1ec8207eec5215c1548c05b06b219a7c8e0410882b5e4dac6d28"
     },
     {
       "category": "skills",
       "id": "guild-quality/quality-mechanics.md",
-      "source_path": "skills/guild-quality/quality-mechanics.md",
-      "resource_path": "resources/skills/guild-quality/quality-mechanics.md",
+      "source_path": "skills/quality/quality-mechanics.md",
+      "resource_path": "resources/skills/quality/quality-mechanics.md",
       "sha256": "2bc3f1bf57c026b576f0253e5942205fbe0da9b427a0b26874348966dc3da427"
+    },
+    {
+      "category": "skills",
+      "id": "guild-quality/references/verify-done.md",
+      "source_path": "skills/quality/references/verify-done.md",
+      "resource_path": "resources/skills/quality/references/verify-done.md",
+      "sha256": "fcafbc8b9d203f7c4454b443599d1cd94498d0bc6f2d220afe4186b27721ca6f"
     }
   ]
 }

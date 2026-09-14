@@ -3,6 +3,7 @@ name: guild-brainstorm
 description: Socratic clustered-question flow that turns a vague user brief into an approved `.guild/spec/<slug>.md`. Captures the seven planning-contract fields — goal, audience, success criteria, non-goals, constraints, autonomy policy, and known risks/rollback — plus an eighth assumptions-vs-blocking-unknowns roll-up. TRIGGER on "let's plan X", "help me scope this feature", "what are we actually building", "start a new Guild task", "I have a vague idea for …", or any `/guild` invocation with a brief shorter than the planning-contract checklist. Supports a `--skip` escape hatch (for users who already have a clear spec); in that mode the skill validates the supplied spec and flags gaps instead of asking the full question set. DO NOT TRIGGER for implementation requests (hand off to `guild:execute-plan`), team composition (hand off to `guild:team-compose`), direct code or file edits, or micro-tasks like typo fixes and branch pushes.
 when_to_use: First step of the `/guild` lifecycle. Fires when a user invokes `/guild` with a vague brief, or when a specialist downstream needs the user's intent clarified before `guild:team-compose` can run.
 type: meta
+indexed: true
 ---
 
 # guild:brainstorm
@@ -136,3 +137,16 @@ After the G-spec review and before handoff, fire the per-phase LearningCheckpoin
 Once the spec is written **and the user has explicitly approved it** (not just "looks fine" — the word "approved" or an equivalent affirmative), invoke `guild:team-compose` with the spec path as its argument. Do not continue into team composition on your own; `guild:team-compose` is a separate skill with its own responsibilities.
 
 Handoff receipt should list: `spec_path`, `assumptions_count`, `blocking_unknowns_converted` (boolean), and `confidence` from the spec frontmatter.
+
+## Chapters
+
+Three-stage disclosure (KTD25): this file is the assembler. Each row below is an
+L3 chapter that stays on disk until a request matches it. Compose by pointer —
+read the one chapter you were routed to, and never inline a chapter here.
+
+| Chapter | Covers |
+|---|---|
+| `references/io-contract.md` | reference material for this assembler |
+| `references/loop-clarify.md` | F-1 adversarial pre-spec clarification driver — wraps `guild:brainstorm`, runs an architect↔researcher loop where the architect proposes scope and the researcher fact-checks, surfaces gaps, and either signals satisfaction with the literal sentinel `## NO MORE QUESTIONS` or returns more questions |
+| `references/loop-mechanics.md` | reference material for this assembler |
+| `references/product-explore.md` | Product-loop EXPLORE producer — turns a vague product idea into a typed, fail-closed `guild.explore.v1` artifact before any engineering scoping |

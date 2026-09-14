@@ -3,6 +3,7 @@ name: using-guild
 description: Mandatory first-read gateway to Guild — the specialist-team workflow engine installed in this repo. Read BEFORE any non-trivial software task to decide whether Guild's lifecycle (plan → build → qa → ops), specialist teams, review gate, structured debugging, or knowledge recall fits. It also carries Guild's five operating principles, which every specialist follows. TRIGGER on "plan/scope/design this feature", "review this plan or PR", "build this with a team", "use specialists", "debug this failing system", "release/deploy/roll back this", "ingest these docs into the wiki", "what are Guild's principles", or any multi-step / multi-file / multi-agent job — even when the user never types a /guild command. It says WHEN to reach for Guild and WHERE the surface lives; it does NOT list every command. DO NOT TRIGGER when you are a narrow subagent handed one fully-scoped task with full context (single-file edit, typo fix, rename, value lookup) — just do the work.
 when_to_use: At the start of any session or non-trivial task in a repo where Guild is installed, and whenever a request smells like planning, team/specialist work, review, debugging, release/ops, knowledge capture, or Guild's operating principles — regardless of whether the user typed a /guild command. Narrow subagents handed a fully-scoped task skip it.
 type: meta
+indexed: true
 ---
 
 # using-guild
@@ -111,7 +112,7 @@ straight through to the normal lifecycle, unchanged.
 user's verbatim prompt and route on its `intake` field ONLY:
 
 ```
-echo "<the user's verbatim prompt>" | npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/lib/classify-intake.ts
+echo "<the user's verbatim prompt>" | node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/classify-intake.js"
 ```
 
 - `intake === "product_loop"` → route to the product-loop intake: `guild:product-explore`

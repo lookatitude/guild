@@ -3,6 +3,7 @@ name: guild-diagnose
 description: Diagnose Guild plugin failures from recent .guild/runs telemetry, optional operator context, hook/audit-log evidence, and run artifacts; write a diagnosis report and fix plan; require explicit user approval before applying edits. TRIGGER for /guild:fix, "diagnose this Guild run", "why did /guild fail", "Guild hooks are not firing", "audit log is empty", "agent-team stalled", "self-fix Guild". DO NOT TRIGGER for auditing plugin script trust (/guild:audit), reviewing user application code (security specialist), normal /guild task review (guild-review), or evolving a skill based on accumulated reflections (guild:evolve-skill).
 when_to_use: Explicit /guild:fix command or direct user request to diagnose/self-fix Guild plugin behavior.
 type: meta
+indexed: true
 ---
 
 # guild:diagnose
@@ -219,3 +220,16 @@ Checks: <list>
 Residual gaps: <list or none>
 Pending plugin feedback: <.guild/feedback/<id>/<finding>.draft.md … or none>
 ```
+
+## Chapters
+
+Three-stage disclosure (KTD25): this file is the assembler. Each row below is an
+L3 chapter that stays on disk until a request matches it. Compose by pointer —
+read the one chapter you were routed to, and never inline a chapter here.
+
+| Chapter | Covers |
+|---|---|
+| `references/condition-based-waiting.md` | reference material for this assembler |
+| `references/defense-in-depth.md` | reference material for this assembler |
+| `references/root-cause-tracing.md` | reference material for this assembler |
+| `references/systematic-debug.md` | Guild's first-class debugging discipline — find the root cause before proposing any fix, because symptom patches waste time and breed new bugs |

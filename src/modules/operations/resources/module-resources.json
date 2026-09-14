@@ -6,50 +6,50 @@
     {
       "category": "skills",
       "id": "guild-operations",
-      "source_path": "skills/guild-operations/SKILL.md",
-      "resource_path": "resources/skills/guild-operations/SKILL.md",
-      "sha256": "58979e029ca60829a1f7cd222999558b2880c40abc0c85cfd42d73e79012d7dc"
+      "source_path": "skills/operations/SKILL.md",
+      "resource_path": "resources/skills/operations/SKILL.md",
+      "sha256": "bd0d5165a6cf71334a9780b8be2db738793c9b27523f0411702343afcc34686e"
     },
     {
       "category": "skills",
       "id": "guild-operations/operations-contract.md",
-      "source_path": "skills/guild-operations/operations-contract.md",
-      "resource_path": "resources/skills/guild-operations/operations-contract.md",
+      "source_path": "skills/operations/operations-contract.md",
+      "resource_path": "resources/skills/operations/operations-contract.md",
       "sha256": "2e3d6ad538ff3a7c9a02e72b57ac6c769bafb874e97feb4dd1990b4d02168c32"
     },
     {
       "category": "skills",
-      "id": "ops-incident",
-      "source_path": "skills/meta/ops-incident/SKILL.md",
-      "resource_path": "resources/skills/meta/ops-incident/SKILL.md",
+      "id": "guild-operations/references/ops-incident.md",
+      "source_path": "skills/operations/references/ops-incident.md",
+      "resource_path": "resources/skills/operations/references/ops-incident.md",
       "sha256": "efa1f565329d1185202f7341d5e16c5ffdce860b5624b727d23852dba7ad6a10"
     },
     {
       "category": "skills",
-      "id": "ops-maintenance",
-      "source_path": "skills/meta/ops-maintenance/SKILL.md",
-      "resource_path": "resources/skills/meta/ops-maintenance/SKILL.md",
+      "id": "guild-operations/references/ops-maintenance.md",
+      "source_path": "skills/operations/references/ops-maintenance.md",
+      "resource_path": "resources/skills/operations/references/ops-maintenance.md",
       "sha256": "6e86a6d4359e91598f550512b16ad8332e5eb565661e59c3d353b7884a24bc7e"
     },
     {
       "category": "skills",
-      "id": "ops-monitoring",
-      "source_path": "skills/meta/ops-monitoring/SKILL.md",
-      "resource_path": "resources/skills/meta/ops-monitoring/SKILL.md",
+      "id": "guild-operations/references/ops-monitoring.md",
+      "source_path": "skills/operations/references/ops-monitoring.md",
+      "resource_path": "resources/skills/operations/references/ops-monitoring.md",
       "sha256": "eacc9bf10b0208f4f8b23b5059ee6df167b65043b45954306e1f0a80f71c38f1"
     },
     {
       "category": "skills",
-      "id": "ops-release",
-      "source_path": "skills/meta/ops-release/SKILL.md",
-      "resource_path": "resources/skills/meta/ops-release/SKILL.md",
+      "id": "guild-operations/references/ops-release.md",
+      "source_path": "skills/operations/references/ops-release.md",
+      "resource_path": "resources/skills/operations/references/ops-release.md",
       "sha256": "5253d60b6f3d38517abec3a5a0696fa5c08acd07a60ab7d52aabbca350decccd"
     },
     {
       "category": "skills",
-      "id": "ops-rollback",
-      "source_path": "skills/meta/ops-rollback/SKILL.md",
-      "resource_path": "resources/skills/meta/ops-rollback/SKILL.md",
+      "id": "guild-operations/references/ops-rollback.md",
+      "source_path": "skills/operations/references/ops-rollback.md",
+      "resource_path": "resources/skills/operations/references/ops-rollback.md",
       "sha256": "26b822826256e1345cf2bf6ea2bd8b5cd895ea7378bcb64c4b2fa0777c91c165"
     }
   ]

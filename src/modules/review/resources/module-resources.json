@@ -75,45 +75,59 @@
     },
     {
       "category": "skills",
-      "id": "guild-audit",
-      "source_path": "skills/meta/audit/SKILL.md",
-      "resource_path": "resources/skills/meta/audit/SKILL.md",
-      "sha256": "5015c9b1bf6a05c108072af87ab96764cad2b34286b299d19ee6ce5f142a74d0"
-    },
-    {
-      "category": "skills",
-      "id": "guild-codex-review",
-      "source_path": "skills/meta/codex-review/SKILL.md",
-      "resource_path": "resources/skills/meta/codex-review/SKILL.md",
-      "sha256": "e6757d7b588845519e3e95e4dade20ffffa0359c15ad9c39faac587b7881fa01"
-    },
-    {
-      "category": "skills",
-      "id": "guild-codex-review/scenarios.json",
-      "source_path": "skills/meta/codex-review/scenarios.json",
-      "resource_path": "resources/skills/meta/codex-review/scenarios.json",
-      "sha256": "d74efaf1e470199d75da6c7726a816a31f7a66a8a463eb072ff1e0c2fbab5462"
-    },
-    {
-      "category": "skills",
       "id": "guild-diagnose",
       "source_path": "skills/meta/diagnose/SKILL.md",
       "resource_path": "resources/skills/meta/diagnose/SKILL.md",
-      "sha256": "53fc9ad4ab55f239b06c43c0f3e055ea1c2b5c28b0864449e8a41381ef50cf8b"
+      "sha256": "2c3f7d96e1b0b4267b8e49fb3371c5f5269985425b5cebb35c52cd7802847d69"
+    },
+    {
+      "category": "skills",
+      "id": "guild-diagnose/references/condition-based-waiting-example.ts",
+      "source_path": "skills/meta/diagnose/references/condition-based-waiting-example.ts",
+      "resource_path": "resources/skills/meta/diagnose/references/condition-based-waiting-example.ts",
+      "sha256": "0715bff7cceb6264328728fe250df1148041266344185f53fce301939e2de0af"
+    },
+    {
+      "category": "skills",
+      "id": "guild-diagnose/references/condition-based-waiting.md",
+      "source_path": "skills/meta/diagnose/references/condition-based-waiting.md",
+      "resource_path": "resources/skills/meta/diagnose/references/condition-based-waiting.md",
+      "sha256": "453cd7b4ea319e72978b67eebdaa8a705b912814ac3d7fd12879453e597880a7"
+    },
+    {
+      "category": "skills",
+      "id": "guild-diagnose/references/defense-in-depth.md",
+      "source_path": "skills/meta/diagnose/references/defense-in-depth.md",
+      "resource_path": "resources/skills/meta/diagnose/references/defense-in-depth.md",
+      "sha256": "425eaa0d76285209b8becb27f346e4408fe6f2e3aa11f1de1fb04f19af174403"
+    },
+    {
+      "category": "skills",
+      "id": "guild-diagnose/references/find-polluter.sh",
+      "source_path": "skills/meta/diagnose/references/find-polluter.sh",
+      "resource_path": "resources/skills/meta/diagnose/references/find-polluter.sh",
+      "sha256": "06bbfb3384ef3076f3848bf45bdede3f51c4ad8abcd650ce9d4daddf1352246c"
+    },
+    {
+      "category": "skills",
+      "id": "guild-diagnose/references/root-cause-tracing.md",
+      "source_path": "skills/meta/diagnose/references/root-cause-tracing.md",
+      "resource_path": "resources/skills/meta/diagnose/references/root-cause-tracing.md",
+      "sha256": "02ffad6457405c559f9a03fe508720dd4009eaa7318257f3893dae91d3b5bae5"
+    },
+    {
+      "category": "skills",
+      "id": "guild-diagnose/references/systematic-debug.md",
+      "source_path": "skills/meta/diagnose/references/systematic-debug.md",
+      "resource_path": "resources/skills/meta/diagnose/references/systematic-debug.md",
+      "sha256": "95860309eb2a69ee30ecf2d17ee466553bcb9f8273a9c92816e2ce7f5cb1fd1a"
     },
     {
       "category": "skills",
       "id": "guild-review",
       "source_path": "skills/meta/review/SKILL.md",
       "resource_path": "resources/skills/meta/review/SKILL.md",
-      "sha256": "f118673cba6e1e1e7f5be4d4a987b07c035e9c0091e13a5a6f4dcae5d6e5be64"
-    },
-    {
-      "category": "skills",
-      "id": "guild-review-broker",
-      "source_path": "skills/meta/review-broker/SKILL.md",
-      "resource_path": "resources/skills/meta/review-broker/SKILL.md",
-      "sha256": "7f9c7a1c91391a270fa8478d1f0a3e025e0dc0f3a92fa5c98e907e1610dbd1b6"
+      "sha256": "c94879c938883292df65323f44185f18ddfaea63b84041d0166d6e7a7473d913"
     },
     {
       "category": "skills",
@@ -131,66 +145,31 @@
     },
     {
       "category": "skills",
+      "id": "guild-review/references/codex-review.md",
+      "source_path": "skills/meta/review/references/codex-review.md",
+      "resource_path": "resources/skills/meta/review/references/codex-review.md",
+      "sha256": "e6757d7b588845519e3e95e4dade20ffffa0359c15ad9c39faac587b7881fa01"
+    },
+    {
+      "category": "skills",
+      "id": "guild-review/references/review-broker.md",
+      "source_path": "skills/meta/review/references/review-broker.md",
+      "resource_path": "resources/skills/meta/review/references/review-broker.md",
+      "sha256": "7f9c7a1c91391a270fa8478d1f0a3e025e0dc0f3a92fa5c98e907e1610dbd1b6"
+    },
+    {
+      "category": "skills",
+      "id": "guild-review/references/scenarios.json",
+      "source_path": "skills/meta/review/references/scenarios.json",
+      "resource_path": "resources/skills/meta/review/references/scenarios.json",
+      "sha256": "d74efaf1e470199d75da6c7726a816a31f7a66a8a463eb072ff1e0c2fbab5462"
+    },
+    {
+      "category": "skills",
       "id": "guild-review/rubric.md",
       "source_path": "skills/meta/review/rubric.md",
       "resource_path": "resources/skills/meta/review/rubric.md",
       "sha256": "41c788a4a7455ed1bd70db9ffeac4bd3509719bc35ea0bb3e78710b8333cf4fa"
-    },
-    {
-      "category": "skills",
-      "id": "guild-systematic-debug",
-      "source_path": "skills/meta/systematic-debug/SKILL.md",
-      "resource_path": "resources/skills/meta/systematic-debug/SKILL.md",
-      "sha256": "95860309eb2a69ee30ecf2d17ee466553bcb9f8273a9c92816e2ce7f5cb1fd1a"
-    },
-    {
-      "category": "skills",
-      "id": "guild-systematic-debug/condition-based-waiting-example.ts",
-      "source_path": "skills/meta/systematic-debug/condition-based-waiting-example.ts",
-      "resource_path": "resources/skills/meta/systematic-debug/condition-based-waiting-example.ts",
-      "sha256": "0715bff7cceb6264328728fe250df1148041266344185f53fce301939e2de0af"
-    },
-    {
-      "category": "skills",
-      "id": "guild-systematic-debug/condition-based-waiting.md",
-      "source_path": "skills/meta/systematic-debug/condition-based-waiting.md",
-      "resource_path": "resources/skills/meta/systematic-debug/condition-based-waiting.md",
-      "sha256": "453cd7b4ea319e72978b67eebdaa8a705b912814ac3d7fd12879453e597880a7"
-    },
-    {
-      "category": "skills",
-      "id": "guild-systematic-debug/defense-in-depth.md",
-      "source_path": "skills/meta/systematic-debug/defense-in-depth.md",
-      "resource_path": "resources/skills/meta/systematic-debug/defense-in-depth.md",
-      "sha256": "425eaa0d76285209b8becb27f346e4408fe6f2e3aa11f1de1fb04f19af174403"
-    },
-    {
-      "category": "skills",
-      "id": "guild-systematic-debug/find-polluter.sh",
-      "source_path": "skills/meta/systematic-debug/find-polluter.sh",
-      "resource_path": "resources/skills/meta/systematic-debug/find-polluter.sh",
-      "sha256": "06bbfb3384ef3076f3848bf45bdede3f51c4ad8abcd650ce9d4daddf1352246c"
-    },
-    {
-      "category": "skills",
-      "id": "guild-systematic-debug/root-cause-tracing.md",
-      "source_path": "skills/meta/systematic-debug/root-cause-tracing.md",
-      "resource_path": "resources/skills/meta/systematic-debug/root-cause-tracing.md",
-      "sha256": "02ffad6457405c559f9a03fe508720dd4009eaa7318257f3893dae91d3b5bae5"
-    },
-    {
-      "category": "skills",
-      "id": "guild-tdd",
-      "source_path": "skills/meta/tdd/SKILL.md",
-      "resource_path": "resources/skills/meta/tdd/SKILL.md",
-      "sha256": "192b335fad63b3b52badc40fdd0b009b254be31ddbec828a95087b18ed116ca8"
-    },
-    {
-      "category": "skills",
-      "id": "guild-tdd/testing-anti-patterns.md",
-      "source_path": "skills/meta/tdd/testing-anti-patterns.md",
-      "resource_path": "resources/skills/meta/tdd/testing-anti-patterns.md",
-      "sha256": "60f4421d1589764185fbee76e8e92e8645533822b8560ea69f3db39a4652145c"
     }
   ]
 }

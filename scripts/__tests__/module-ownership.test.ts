@@ -76,13 +76,17 @@ describe("src/modules ownership manifests", () => {
     // Anti-vacuity floors: the rail is checking the real current surface, not an
     // empty fixture or a narrow sample.
     expect(inventory.commands.length).toBeGreaterThanOrEqual(20);
-    expect(inventory.skills.length).toBeGreaterThanOrEqual(100);
+    // T03 folded 111 SKILL.md files into 17 indexed assemblers + 58 specialist
+    // starter playbooks + the dashboard playbook (KTD25/KTD59); the chapters are
+    // `references/*.md` and are no longer inventory entries. 76 is the new floor.
+    expect(inventory.skills.length).toBeGreaterThanOrEqual(76);
     // Machinery agents only (machinery-vs-template-library ADR): advisor +
     // developer. The 15 domain roles are templates/specialists/*.md, not
     // inventoried agents.
     // cap-loc-D01 added `context-manager` as the third machinery agent, gated on
-    // its written contract (scripts/lib/capability/context-manager-contract.ts).
-    expect(inventory.agents.length).toBe(3);
+    // its written contract (scripts/lib/capability/context-manager-contract.ts);
+    // KTD19 adds `team-lead`, the per-TaskCell lead, as the fourth.
+    expect(inventory.agents.length).toBe(4);
     expect(inventory.hooks.length).toBeGreaterThanOrEqual(10);
     expect(inventory.scripts.length).toBeGreaterThanOrEqual(200);
   });

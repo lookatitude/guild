@@ -1,9 +1,9 @@
 # Guild — repo orientation
 
-Guild is a cross-host plugin that ships 3 machinery agents (advisor, context-manager,
-developer),
+Guild is a cross-host plugin that ships 4 machinery agents (advisor, context-manager,
+developer, team-lead),
 15 domain specialist type templates (minted into a project's `.guild/agents/` on
-demand by team composition), and 111 skills across a
+demand by team composition), and 76 skills — 17 of them indexed — across a
 brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision
 capture, and a self-evolution loop with shadow-mode gating.
 
@@ -17,11 +17,17 @@ For full architecture and design documentation see **https://guildstack.dev/docs
 ## Where things live
 
 - `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` — plugin + marketplace manifests.
-- `skills/{core,meta,knowledge,specialists,guild-operations,guild-quality}/` — skill taxonomy.
-  The former `fallback/` tier no longer exists — its skills were promoted into `meta/`
-  (`tdd`, `systematic-debug`, `worktrees`, `finish-branch`) or folded into `guild:review`.
-- `agents/*.md` — the 3 machinery agents (`advisor`, `context-manager`,
-  `developer`), the only
+- `skills/` — the skill tree. `.claude-plugin/plugin.json` indexes exactly the 17
+  assembler directories (KTD59); everything else ships off-index. An assembler is a
+  three-stage folder: `SKILL.md` (frontmatter always, body on match) + `references/`
+  (L3 chapters, on demand) + `scripts/` (compiled, never prompt text). The 58
+  specialist starter recipes and the dashboard launcher live under
+  `skills/playbooks/` as copy-on-mint feedstock (KTD13/KTD20), never indexed.
+  The former `core/` and `fallback/` tiers are gone: `principles` folded into
+  `using-guild`, and `tdd` / `systematic-debug` / `worktrees` / `finish-branch`
+  are now chapters of the assembler that invokes them.
+- `agents/*.md` — the 4 machinery agents (`advisor`, `context-manager`,
+  `developer`, `team-lead`), the only
   host-registered agents the plugin ships. Populated and authored.
 - `templates/specialists/*.md` — the 15 domain specialist type templates
   (`guild.specialist_template.v1`; architect … sales, incl. `doc-writer`),

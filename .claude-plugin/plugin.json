@@ -21,12 +21,23 @@
     "mcp"
   ],
   "skills": [
-    "./skills/core/",
-    "./skills/guild-operations/",
-    "./skills/guild-quality/",
-    "./skills/knowledge/",
-    "./skills/meta/",
-    "./skills/specialists/"
+    "./skills/knowledge/learn/",
+    "./skills/knowledge/wiki/",
+    "./skills/meta/brainstorm/",
+    "./skills/meta/create-skill/",
+    "./skills/meta/create-specialist/",
+    "./skills/meta/diagnose/",
+    "./skills/meta/evolve/",
+    "./skills/meta/execute-plan/",
+    "./skills/meta/init/",
+    "./skills/meta/initiative/",
+    "./skills/meta/plan/",
+    "./skills/meta/reflect/",
+    "./skills/meta/review/",
+    "./skills/meta/team-compose/",
+    "./skills/meta/using-guild/",
+    "./skills/operations/",
+    "./skills/quality/"
   ],
   "commands": [
     "./commands/adopt.md",
@@ -56,6 +67,7 @@
   "agents": [
     "./agents/advisor.md",
     "./agents/context-manager.md",
-    "./agents/developer.md"
+    "./agents/developer.md",
+    "./agents/team-lead.md"
   ]
 }

@@ -5,6 +5,7 @@ name: init
 description: "Init-phase skill — onboard an existing repo or scaffold new-product knowledge; build the wiki and (brownfield) the cheap-scan CodebaseMap + a confidence-tagged architecture-map stub. The deep KnowledgeGraph + tour are lazy and gated, NOT produced at Init. Drives the /guild:init phase entrypoint."
 when_to_use: "First phase of the lifecycle on a fresh or unonboarded repo, or when the user runs /guild:init or smart-detect proposes Init (no wiki/init present)."
 type: meta
+indexed: true
 derived_from_template: guild.skill_template.v1
 ---
 

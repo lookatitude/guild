@@ -20,8 +20,8 @@
     {
       "category": "skills",
       "id": "guild-dashboard",
-      "source_path": "skills/meta/dashboard/SKILL.md",
-      "resource_path": "resources/skills/meta/dashboard/SKILL.md",
+      "source_path": "skills/playbooks/dashboard/SKILL.md",
+      "resource_path": "resources/skills/playbooks/dashboard/SKILL.md",
       "sha256": "328c3ffdebdda8b30057802cff2488a66f1ce18c5258eab8ab54ca71b8028983"
     }
   ]

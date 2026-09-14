@@ -206,6 +206,13 @@ function discoverSkills(root: string): SkillEntry[] {
     const entry: SkillEntry = { id, source_path: rel };
     if (tier) entry.tier = tier;
     if (description) entry.description = description;
+    // KTD59 — `indexed: true` in the skill's own frontmatter is what puts it in a
+    // host's catalog, and the plugin manifest's `skills` glob is DERIVED from it.
+    // The marker lives in the skill file on purpose: skill resolution has to stay a
+    // pure function of the `skills/` tree (the SC-W2-5 A/B guard resolves the
+    // ratified `skills/` tree alone), so sourcing it from anywhere else would make
+    // that guard permanently unsatisfiable.
+    if (readScalarField(content, "indexed") === "true") entry.indexed = true;
 
     const prior = byName.get(id);
     if (!prior) {

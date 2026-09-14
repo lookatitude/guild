@@ -73,20 +73,20 @@ describe("SC-W2-2 drift gate — ALIGNED → GREEN (no false drift)", () => {
 
 describe("SC-W2-2 drift gate — MUTATED → RED (no missed drift)", () => {
   it("a one-char body mutation in a SKILL entry is detected", () => {
-    const e = cloneSkillEntry("tdd");
+    const e = cloneSkillEntry("execute-plan");
     e.body = e.body.replace(/\n/, "\n "); // inject a single space after the first newline
     const reg: SkillSrcRegistryV1 = {
       schema_version: SKILL_REGISTRY.schema_version,
       skills: [e],
     };
-    expect(drift(renderSkillFromRegistry(reg, "tdd"), committedSkill("tdd"))).toBe(true);
+    expect(drift(renderSkillFromRegistry(reg, "execute-plan"), committedSkill("execute-plan"))).toBe(true);
   });
 
   it("a frontmatter-field mutation in a SKILL entry is detected", () => {
-    const e = cloneSkillEntry("verify-done");
+    const e = cloneSkillEntry("review");
     e.description = e.description + " DRIFT";
     const reg: SkillSrcRegistryV1 = { schema_version: SKILL_REGISTRY.schema_version, skills: [e] };
-    expect(drift(renderSkillFromRegistry(reg, "verify-done"), committedSkill("verify-done"))).toBe(true);
+    expect(drift(renderSkillFromRegistry(reg, "review"), committedSkill("review"))).toBe(true);
   });
 
   it("a description mutation in a COMMAND entry is detected", () => {
@@ -110,6 +110,6 @@ describe("SC-W2-2 drift gate — MUTATED → RED (no missed drift)", () => {
   it("the gate cannot be satisfied vacuously — a mismatched committed oracle fails too", () => {
     // Rendering a faithful skill entry against a DIFFERENT committed file must drift,
     // proving the equality is real (not e.g. `true`-by-construction).
-    expect(drift(renderSkillFromRegistry(SKILL_REGISTRY, "tdd"), committedSkill("verify-done"))).toBe(true);
+    expect(drift(renderSkillFromRegistry(SKILL_REGISTRY, "execute-plan"), committedSkill("review"))).toBe(true);
   });
 });

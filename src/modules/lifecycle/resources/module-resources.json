@@ -78,7 +78,7 @@
       "id": "PostToolUse:gate-outcome-writer.js",
       "source_path": "hooks/dist/gate-outcome-writer.js",
       "resource_path": "resources/hooks/dist/gate-outcome-writer.js",
-      "sha256": "c4caf7cd51f2fd842715ee2c752e4b40e586fa73f3d901d45e432f4833b7336d"
+      "sha256": "1467d42205935635e33b887e3870b21bfe097fd6d5e3a3fac0b8da81febe270f"
     },
     {
       "category": "scripts",
@@ -357,7 +357,7 @@
       "id": "projection:src/modules/communication/workflows/comms-format-lint.ts",
       "source_path": "src/modules/communication/workflows/comms-format-lint.ts",
       "resource_path": "resources/src/modules/communication/workflows/comms-format-lint.ts",
-      "sha256": "ec451aaf5e88c66706351526fad6d718d03a82c299fb49cd909a03a35d92f1d3",
+      "sha256": "c3c29c8a5e50fbaed11603decadd872374478771d3d610e776382834df0fd22a",
       "projection_dependency": true
     },
     {
@@ -365,7 +365,7 @@
       "id": "projection:src/modules/communication/workflows/no-accidental-write.ts",
       "source_path": "src/modules/communication/workflows/no-accidental-write.ts",
       "resource_path": "resources/src/modules/communication/workflows/no-accidental-write.ts",
-      "sha256": "9e604545c6daeaef95b8c8f776bd1d0853e27c5b10aa3efa66f6ea6f773d267f",
+      "sha256": "c6a81c563b30ec356cc5e6e92bf59729160006e1644e18c5d36991cd36656e67",
       "projection_dependency": true
     },
     {
@@ -437,7 +437,7 @@
       "id": "projection:src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
       "source_path": "src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
       "resource_path": "resources/src/modules/dispatch/resources/scripts/lib/core/contracts/task-cell-backend.ts",
-      "sha256": "5ca11f770de019204f0ab93383702b362abe43256aa2190d13ed5a35458b4c27",
+      "sha256": "dfb3758cb875d51f8938b3944ab7e0bb380c5dfb4dbf63fb68c5e61264ba581e",
       "projection_dependency": true
     },
     {
@@ -453,7 +453,7 @@
       "id": "projection:src/modules/dispatch/workflows/execution-transport-adapters.ts",
       "source_path": "src/modules/dispatch/workflows/execution-transport-adapters.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/execution-transport-adapters.ts",
-      "sha256": "7b6be5a167090ffd868e59b5104e29c8085e7d32b43e743c9d2e1d50217531c5",
+      "sha256": "86a24cde0f3c65aea40b0f5483a4ea527df4f1722e6c2fab9655dfcc9922ba47",
       "projection_dependency": true
     },
     {
@@ -501,7 +501,7 @@
       "id": "projection:src/modules/dispatch/workflows/task-cell-acceptance.ts",
       "source_path": "src/modules/dispatch/workflows/task-cell-acceptance.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/task-cell-acceptance.ts",
-      "sha256": "a7766335be5fa1d6d20a3823607e7c439bf05362d5d38b6c6a29289d5fd39265",
+      "sha256": "8b088c96d4c0482c2b6f2959c93238a7bf7e3226d35cb745235f172d0c57a25a",
       "projection_dependency": true
     },
     {
@@ -525,7 +525,7 @@
       "id": "projection:src/modules/dispatch/workflows/task-cell-host-conformance.ts",
       "source_path": "src/modules/dispatch/workflows/task-cell-host-conformance.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/task-cell-host-conformance.ts",
-      "sha256": "bb6d7956bb74ed281e0469066fc46347539379eb405a1ab976657b095fab7f83",
+      "sha256": "f63e0eb131186f4a91c5abc7f8077985ce68a904a2ca818656592d998302931b",
       "projection_dependency": true
     },
     {
@@ -533,7 +533,7 @@
       "id": "projection:src/modules/dispatch/workflows/task-cell-runtime.ts",
       "source_path": "src/modules/dispatch/workflows/task-cell-runtime.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/task-cell-runtime.ts",
-      "sha256": "6f24202e2e9d0a336f3c231f368946517d92874fa95dbb631bc235408cc8222a",
+      "sha256": "d2a373ae036dc0339a9fafefaad20b3c7a86cd8c49c372c6ae9961b2beb6622e",
       "projection_dependency": true
     },
     {
@@ -565,7 +565,7 @@
       "id": "projection:src/modules/distribution/workflows/build-inventory.ts",
       "source_path": "src/modules/distribution/workflows/build-inventory.ts",
       "resource_path": "resources/src/modules/distribution/workflows/build-inventory.ts",
-      "sha256": "1c4b6419011ca228b3f578bd028f963bf593b384b5e231549dd11f0116fdf38e",
+      "sha256": "a2b3ab73b5af40701999d5bfde7fe2e253e6563f071887b29dfbccfcf2e5982a",
       "projection_dependency": true
     },
     {
@@ -597,7 +597,7 @@
       "id": "projection:src/modules/distribution/workflows/inventory-schema.ts",
       "source_path": "src/modules/distribution/workflows/inventory-schema.ts",
       "resource_path": "resources/src/modules/distribution/workflows/inventory-schema.ts",
-      "sha256": "b92aa046ad0dbf8ce141854b8534716abffd8737055af9e3a8a876c75c9bdeb9",
+      "sha256": "d30363c67271f9cdc676431b4f0a917f94b2f7b40065b2f42d1dcffad8fe1764",
       "projection_dependency": true
     },
     {
@@ -605,7 +605,7 @@
       "id": "projection:src/modules/distribution/workflows/module-resources.ts",
       "source_path": "src/modules/distribution/workflows/module-resources.ts",
       "resource_path": "resources/src/modules/distribution/workflows/module-resources.ts",
-      "sha256": "981054de37b2fe05dc90ea692334ab1e9c3b3799556127f8e859b83bedcaf47a",
+      "sha256": "5b06f5325b9695698d04fecd311570404a8a47260c5423a72e52e456b0462276",
       "projection_dependency": true
     },
     {
@@ -621,7 +621,7 @@
       "id": "projection:src/modules/distribution/workflows/per-host-packaging.ts",
       "source_path": "src/modules/distribution/workflows/per-host-packaging.ts",
       "resource_path": "resources/src/modules/distribution/workflows/per-host-packaging.ts",
-      "sha256": "7aa3f24694ab3376cb8e46e27f77b21631aa92aade72ca7ab396c08c7330408f",
+      "sha256": "d1ed44f2ad8f60203d466ede6048904dd181dfa5abf92b437c49616ed979b6c4",
       "projection_dependency": true
     },
     {
@@ -749,7 +749,7 @@
       "id": "projection:src/modules/documents/workflows/document-receipts.ts",
       "source_path": "src/modules/documents/workflows/document-receipts.ts",
       "resource_path": "resources/src/modules/documents/workflows/document-receipts.ts",
-      "sha256": "821191e8e2c803720924ac99d332e630cc3d89fd2c0efb142cb7b067c78a9ab5",
+      "sha256": "73d4890c3a6aed665be8137acf76f77e1e0904bc9f65f44b3b17a09e01b52797",
       "projection_dependency": true
     },
     {
@@ -1021,7 +1021,7 @@
       "id": "projection:src/modules/lifecycle/index.ts",
       "source_path": "src/modules/lifecycle/index.ts",
       "resource_path": "resources/src/modules/lifecycle/index.ts",
-      "sha256": "661a19fe0f0dd9a2ea5e374d020c870a78a2ba13437858f717aa50bbd36ac252",
+      "sha256": "71b92c72d77949aa0df8c268a177b2e55127616a9280dfbe609c99e40d862ace",
       "projection_dependency": true
     },
     {
@@ -1157,7 +1157,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-binding.ts",
       "source_path": "src/modules/lifecycle/workflows/run-binding.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-binding.ts",
-      "sha256": "e45fda88312848d858f54b2ef756afd4071e7fad7d11c61c0b580f28465664df",
+      "sha256": "abf2c6138fe4b30b2817924a261eaba4b4b896daa600e3d454d8a42abca1f2f9",
       "projection_dependency": true
     },
     {
@@ -1165,7 +1165,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-lifecycle.ts",
       "source_path": "src/modules/lifecycle/workflows/run-lifecycle.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-lifecycle.ts",
-      "sha256": "ceed0491650edd46f047b1ecaa9484507807b679038df593bde5cb10c310bde1",
+      "sha256": "cd695a0b14b2e55a1b81f31ccf4ab47616bcc9c32d85b2344f989918c3f04afd",
       "projection_dependency": true
     },
     {
@@ -1181,7 +1181,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-record-validate.ts",
       "source_path": "src/modules/lifecycle/workflows/run-record-validate.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-record-validate.ts",
-      "sha256": "f564c52113744c1a64f0e6155f60454e846191de3687d9f22869e429e07b4a3b",
+      "sha256": "95fe6d088426333efd7aa89fd7b55a67d9709e163f0aeafe71b0cf211b7b5239",
       "projection_dependency": true
     },
     {
@@ -1197,7 +1197,7 @@
       "id": "projection:src/modules/lifecycle/workflows/runstart-preflight.ts",
       "source_path": "src/modules/lifecycle/workflows/runstart-preflight.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/runstart-preflight.ts",
-      "sha256": "fc0856a75a89ed6b163767f15754b4ec69fd205b2bea19ae3df401d7982f5b62",
+      "sha256": "b91cd5796b27218c0e97bedc9e8e502e3129076018fab72cb6608dfdb3cd653d",
       "projection_dependency": true
     },
     {
@@ -1214,6 +1214,14 @@
       "source_path": "src/modules/lifecycle/workflows/trace-v2.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/trace-v2.ts",
       "sha256": "a728f83490649a1122b2a0684f9db6cf55a2e4f6eb60ff39cfa9b69f9156d77e",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/workflow-graph-overlay.ts",
+      "source_path": "src/modules/lifecycle/workflows/workflow-graph-overlay.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/workflow-graph-overlay.ts",
+      "sha256": "626e8f63befcf2727c8bace60825402bde39d2af176286496cd67ee1a5d5de59",
       "projection_dependency": true
     },
     {
@@ -1357,7 +1365,7 @@
       "id": "projection:src/modules/security/workflows/scrub-redact.ts",
       "source_path": "src/modules/security/workflows/scrub-redact.ts",
       "resource_path": "resources/src/modules/security/workflows/scrub-redact.ts",
-      "sha256": "56873e57db56d96cfe29fadb9aea82a36d99ca9ea6fe2fb3ebb64542bb25595d",
+      "sha256": "7d08fca0a9d53c28713b875ddafeb78bab586f291d01139799dd79fdbe2d3682",
       "projection_dependency": true
     },
     {
@@ -1373,7 +1381,7 @@
       "id": "projection:src/modules/security/workflows/secret-patterns.ts",
       "source_path": "src/modules/security/workflows/secret-patterns.ts",
       "resource_path": "resources/src/modules/security/workflows/secret-patterns.ts",
-      "sha256": "e53cc33f1a8b133b4a5ab546a9fba6795405ef8badf434cbb0b8b057db7fe944",
+      "sha256": "319166216093f567c6307308f3d708f43b079068076cb353e78bd278f50ad812",
       "projection_dependency": true
     },
     {
@@ -1389,7 +1397,7 @@
       "id": "projection:src/modules/security/workflows/share-set.ts",
       "source_path": "src/modules/security/workflows/share-set.ts",
       "resource_path": "resources/src/modules/security/workflows/share-set.ts",
-      "sha256": "b664aa1ddf9541a3e062f798e863ade8dfb71f24781a8a23b17fe6a7bf8e7616",
+      "sha256": "bd89148015d34ae9837363d7460371d2445e101d62555cd922d6a903865d36c2",
       "projection_dependency": true
     },
     {
@@ -1413,7 +1421,7 @@
       "id": "projection:src/modules/specialists/workflows/specialist-roster.ts",
       "source_path": "src/modules/specialists/workflows/specialist-roster.ts",
       "resource_path": "resources/src/modules/specialists/workflows/specialist-roster.ts",
-      "sha256": "a96dfeb0f9de64d9b7b1dce41f0790d7754dcfaeb78d40b411899dba1891413c",
+      "sha256": "f7aa4ff350368331505aef6a4102c6f620d8112ae635fe1be685859180b59140",
       "projection_dependency": true
     },
     {
@@ -1573,7 +1581,7 @@
       "id": "projection:src/modules/telemetry/workflows/receipt-journal.ts",
       "source_path": "src/modules/telemetry/workflows/receipt-journal.ts",
       "resource_path": "resources/src/modules/telemetry/workflows/receipt-journal.ts",
-      "sha256": "217002cc7ff6be3488c4d6559b9004856f5f4032b1dd75bcd17b6f5f2fbd2cc1",
+      "sha256": "d6282d9e147917affda8a892b35a212832e7da53039f468c9f3f4cae7c9d7170",
       "projection_dependency": true
     },
     {
@@ -1640,14 +1648,42 @@
       "id": "guild-brainstorm",
       "source_path": "skills/meta/brainstorm/SKILL.md",
       "resource_path": "resources/skills/meta/brainstorm/SKILL.md",
-      "sha256": "22ce80a506fdb3cd8c4495f2fb63b5b4df7c9953c88691fd8c585454c9c249f5"
+      "sha256": "2f0c418bdfc82d5aaff2ef0bbc6692b45ce72a2e034571e99428aed558829baa"
+    },
+    {
+      "category": "skills",
+      "id": "guild-brainstorm/references/io-contract.md",
+      "source_path": "skills/meta/brainstorm/references/io-contract.md",
+      "resource_path": "resources/skills/meta/brainstorm/references/io-contract.md",
+      "sha256": "9fe9aa2da0fb0bd5bc31c5a7a28bd9a51d46b058a8ea5cb7f37adef56d6c188d"
+    },
+    {
+      "category": "skills",
+      "id": "guild-brainstorm/references/loop-clarify.md",
+      "source_path": "skills/meta/brainstorm/references/loop-clarify.md",
+      "resource_path": "resources/skills/meta/brainstorm/references/loop-clarify.md",
+      "sha256": "d84bbc87406ca21e9c164875eeabb6e2d24a8dcbcfcd24230b589c58357d0021"
+    },
+    {
+      "category": "skills",
+      "id": "guild-brainstorm/references/loop-mechanics.md",
+      "source_path": "skills/meta/brainstorm/references/loop-mechanics.md",
+      "resource_path": "resources/skills/meta/brainstorm/references/loop-mechanics.md",
+      "sha256": "dc1a421cb770fc4d04c221298eb26abde3e4aade894db2504096f00892eae1f0"
+    },
+    {
+      "category": "skills",
+      "id": "guild-brainstorm/references/product-explore.md",
+      "source_path": "skills/meta/brainstorm/references/product-explore.md",
+      "resource_path": "resources/skills/meta/brainstorm/references/product-explore.md",
+      "sha256": "3177b784b985420970733b707db1cb93918e12a086e7d5437b3b968ca288b135"
     },
     {
       "category": "skills",
       "id": "guild-execute-plan",
       "source_path": "skills/meta/execute-plan/SKILL.md",
       "resource_path": "resources/skills/meta/execute-plan/SKILL.md",
-      "sha256": "85750138684a73ff36a1c4b5dcba1719b90a6ba4581930596c4eb74a61395c93"
+      "sha256": "dba84557ee412a3f0f7f370089e53a41a00950372bba612867eb7bb1fe80cef7"
     },
     {
       "category": "skills",
@@ -1655,6 +1691,97 @@
       "source_path": "skills/meta/execute-plan/dispatch.md",
       "resource_path": "resources/skills/meta/execute-plan/dispatch.md",
       "sha256": "78c44150d27803ed51b2ba41d310faec6c207c2ad3d0c2322aeb83ad33a16ba4"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/references/context-assemble.md",
+      "source_path": "skills/meta/execute-plan/references/context-assemble.md",
+      "resource_path": "resources/skills/meta/execute-plan/references/context-assemble.md",
+      "sha256": "3842140c9742ad6b187f10ca07eb41b6e871d37c796762656351cb0d74d6bb46"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/references/counters-and-concurrency.md",
+      "source_path": "skills/meta/execute-plan/references/counters-and-concurrency.md",
+      "resource_path": "resources/skills/meta/execute-plan/references/counters-and-concurrency.md",
+      "sha256": "80cc613871cd3a109ce3ff91153e61fc2259c2e558473913ea85b1acaef0e58d"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/references/dispatching-parallel-agents.md",
+      "source_path": "skills/meta/execute-plan/references/dispatching-parallel-agents.md",
+      "resource_path": "resources/skills/meta/execute-plan/references/dispatching-parallel-agents.md",
+      "sha256": "b243f945299b4629809fb753fd23f19a98093e9b4fee447f2be4649bb8f65cac"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/references/finish-branch.md",
+      "source_path": "skills/meta/execute-plan/references/finish-branch.md",
+      "resource_path": "resources/skills/meta/execute-plan/references/finish-branch.md",
+      "sha256": "9d607e920e810b990e9370dadf2465b9a21388bb11c8e5867108d9b4f4dfd1a2"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/references/io-contract.md",
+      "source_path": "skills/meta/execute-plan/references/io-contract.md",
+      "resource_path": "resources/skills/meta/execute-plan/references/io-contract.md",
+      "sha256": "c40ed42255f07e5153ca58ee169f1b594d597a2068b05da9fda95b8330e9b3e2"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/references/loop-implement.md",
+      "source_path": "skills/meta/execute-plan/references/loop-implement.md",
+      "resource_path": "resources/skills/meta/execute-plan/references/loop-implement.md",
+      "sha256": "d2c0292b63e70bc370ffb80e6de9dcc759cbc3698d12787094babb9d64863f34"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/references/loops-applicable-enum.md",
+      "source_path": "skills/meta/execute-plan/references/loops-applicable-enum.md",
+      "resource_path": "resources/skills/meta/execute-plan/references/loops-applicable-enum.md",
+      "sha256": "e2c6973f5c435c088576c9f6ed32f967cd6d8b3b99a2f8839513c9cc2b568b9b"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/references/scenarios.json",
+      "source_path": "skills/meta/execute-plan/references/scenarios.json",
+      "resource_path": "resources/skills/meta/execute-plan/references/scenarios.json",
+      "sha256": "9f918f24248ebb362e9e18faaf11b03e3936b0bb704136211a6c42854098621d"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/references/security-review-restart.md",
+      "source_path": "skills/meta/execute-plan/references/security-review-restart.md",
+      "resource_path": "resources/skills/meta/execute-plan/references/security-review-restart.md",
+      "sha256": "0675c89f4e35615eec1871715ee9ed35e2f740561130a33807bc116e85e8b0b9"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/references/tdd.md",
+      "source_path": "skills/meta/execute-plan/references/tdd.md",
+      "resource_path": "resources/skills/meta/execute-plan/references/tdd.md",
+      "sha256": "192b335fad63b3b52badc40fdd0b009b254be31ddbec828a95087b18ed116ca8"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/references/testing-anti-patterns.md",
+      "source_path": "skills/meta/execute-plan/references/testing-anti-patterns.md",
+      "resource_path": "resources/skills/meta/execute-plan/references/testing-anti-patterns.md",
+      "sha256": "60f4421d1589764185fbee76e8e92e8645533822b8560ea69f3db39a4652145c"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/references/workflow-and-events.md",
+      "source_path": "skills/meta/execute-plan/references/workflow-and-events.md",
+      "resource_path": "resources/skills/meta/execute-plan/references/workflow-and-events.md",
+      "sha256": "4c66ba84eb39dfd9454443421b0e37c8d5160d00e4426c9b9b621a2cf3469229"
+    },
+    {
+      "category": "skills",
+      "id": "guild-execute-plan/references/worktrees.md",
+      "source_path": "skills/meta/execute-plan/references/worktrees.md",
+      "resource_path": "resources/skills/meta/execute-plan/references/worktrees.md",
+      "sha256": "8d987a69762679df94d492a72ba74cf619b3681597efcac13c6375f9bdfd9018"
     },
     {
       "category": "skills",
@@ -1668,7 +1795,42 @@
       "id": "guild-plan",
       "source_path": "skills/meta/plan/SKILL.md",
       "resource_path": "resources/skills/meta/plan/SKILL.md",
-      "sha256": "afaf839e70cd7f7587019cde2c1b512e1183803a4231310b2fb73dd32e48f31d"
+      "sha256": "37512e97df06e46a3776c1cf548c01bd55c0c71eca72b2807e627cc0d80f6446"
+    },
+    {
+      "category": "skills",
+      "id": "guild-plan/references/io-contract.md",
+      "source_path": "skills/meta/plan/references/io-contract.md",
+      "resource_path": "resources/skills/meta/plan/references/io-contract.md",
+      "sha256": "0eceea4774516c33f95c898ad584090cfda3518f232dcdd75445d1fa53eb09ce"
+    },
+    {
+      "category": "skills",
+      "id": "guild-plan/references/loop-mechanics.md",
+      "source_path": "skills/meta/plan/references/loop-mechanics.md",
+      "resource_path": "resources/skills/meta/plan/references/loop-mechanics.md",
+      "sha256": "daf788b6ee9d0686eba7c348327225a06977c39f9e35b011e50d227fd177c83c"
+    },
+    {
+      "category": "skills",
+      "id": "guild-plan/references/loop-plan-review.md",
+      "source_path": "skills/meta/plan/references/loop-plan-review.md",
+      "resource_path": "resources/skills/meta/plan/references/loop-plan-review.md",
+      "sha256": "d71f3c26d7130d28cb06d46584c96a2ebeba924eec63fab1feaceda203740d76"
+    },
+    {
+      "category": "skills",
+      "id": "guild-plan/references/product-define.md",
+      "source_path": "skills/meta/plan/references/product-define.md",
+      "resource_path": "resources/skills/meta/plan/references/product-define.md",
+      "sha256": "a0f87fd4205ff2468ed3af21ae0224187a7d170fc0e185eeca4a72122313aa5e"
+    },
+    {
+      "category": "skills",
+      "id": "guild-plan/references/product-template.md",
+      "source_path": "skills/meta/plan/references/product-template.md",
+      "resource_path": "resources/skills/meta/plan/references/product-template.md",
+      "sha256": "5a30dc9aa886994a2d117e6324b456ffcc13944b1ff20dfc99a8781325ac104d"
     },
     {
       "category": "skills",
@@ -1679,17 +1841,10 @@
     },
     {
       "category": "skills",
-      "id": "guild-verify-done",
-      "source_path": "skills/meta/verify-done/SKILL.md",
-      "resource_path": "resources/skills/meta/verify-done/SKILL.md",
-      "sha256": "fcafbc8b9d203f7c4454b443599d1cd94498d0bc6f2d220afe4186b27721ca6f"
-    },
-    {
-      "category": "skills",
       "id": "init",
       "source_path": "skills/meta/init/SKILL.md",
       "resource_path": "resources/skills/meta/init/SKILL.md",
-      "sha256": "31cf1a2d9b59bf085a43d06a2ed01f0c874156130b3f0305c679a478aa490c92"
+      "sha256": "93f04fabce81c157036a2102b85e603f5caabc1654edba7badd929e6b73b7f5d"
     }
   ]
 }

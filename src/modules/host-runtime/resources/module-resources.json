@@ -836,7 +836,7 @@
       "id": "projection:src/modules/distribution/workflows/build-inventory.ts",
       "source_path": "src/modules/distribution/workflows/build-inventory.ts",
       "resource_path": "resources/src/modules/distribution/workflows/build-inventory.ts",
-      "sha256": "1c4b6419011ca228b3f578bd028f963bf593b384b5e231549dd11f0116fdf38e",
+      "sha256": "a2b3ab73b5af40701999d5bfde7fe2e253e6563f071887b29dfbccfcf2e5982a",
       "projection_dependency": true
     },
     {
@@ -868,7 +868,7 @@
       "id": "projection:src/modules/distribution/workflows/inventory-schema.ts",
       "source_path": "src/modules/distribution/workflows/inventory-schema.ts",
       "resource_path": "resources/src/modules/distribution/workflows/inventory-schema.ts",
-      "sha256": "b92aa046ad0dbf8ce141854b8534716abffd8737055af9e3a8a876c75c9bdeb9",
+      "sha256": "d30363c67271f9cdc676431b4f0a917f94b2f7b40065b2f42d1dcffad8fe1764",
       "projection_dependency": true
     },
     {
@@ -876,7 +876,7 @@
       "id": "projection:src/modules/distribution/workflows/module-resources.ts",
       "source_path": "src/modules/distribution/workflows/module-resources.ts",
       "resource_path": "resources/src/modules/distribution/workflows/module-resources.ts",
-      "sha256": "981054de37b2fe05dc90ea692334ab1e9c3b3799556127f8e859b83bedcaf47a",
+      "sha256": "5b06f5325b9695698d04fecd311570404a8a47260c5423a72e52e456b0462276",
       "projection_dependency": true
     },
     {
@@ -892,7 +892,7 @@
       "id": "projection:src/modules/distribution/workflows/per-host-packaging.ts",
       "source_path": "src/modules/distribution/workflows/per-host-packaging.ts",
       "resource_path": "resources/src/modules/distribution/workflows/per-host-packaging.ts",
-      "sha256": "7aa3f24694ab3376cb8e46e27f77b21631aa92aade72ca7ab396c08c7330408f",
+      "sha256": "d1ed44f2ad8f60203d466ede6048904dd181dfa5abf92b437c49616ed979b6c4",
       "projection_dependency": true
     },
     {
@@ -1380,7 +1380,7 @@
       "id": "projection:src/modules/lifecycle/index.ts",
       "source_path": "src/modules/lifecycle/index.ts",
       "resource_path": "resources/src/modules/lifecycle/index.ts",
-      "sha256": "661a19fe0f0dd9a2ea5e374d020c870a78a2ba13437858f717aa50bbd36ac252",
+      "sha256": "71b92c72d77949aa0df8c268a177b2e55127616a9280dfbe609c99e40d862ace",
       "projection_dependency": true
     },
     {
@@ -1565,6 +1565,14 @@
       "source_path": "src/modules/lifecycle/workflows/trace-v2.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/trace-v2.ts",
       "sha256": "a728f83490649a1122b2a0684f9db6cf55a2e4f6eb60ff39cfa9b69f9156d77e",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/lifecycle/workflows/workflow-graph-overlay.ts",
+      "source_path": "src/modules/lifecycle/workflows/workflow-graph-overlay.ts",
+      "resource_path": "resources/src/modules/lifecycle/workflows/workflow-graph-overlay.ts",
+      "sha256": "626e8f63befcf2727c8bace60825402bde39d2af176286496cd67ee1a5d5de59",
       "projection_dependency": true
     },
     {
@@ -1772,7 +1780,7 @@
       "id": "projection:src/modules/specialists/workflows/specialist-roster.ts",
       "source_path": "src/modules/specialists/workflows/specialist-roster.ts",
       "resource_path": "resources/src/modules/specialists/workflows/specialist-roster.ts",
-      "sha256": "a96dfeb0f9de64d9b7b1dce41f0790d7754dcfaeb78d40b411899dba1891413c",
+      "sha256": "f7aa4ff350368331505aef6a4102c6f620d8112ae635fe1be685859180b59140",
       "projection_dependency": true
     },
     {

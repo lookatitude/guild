@@ -22,14 +22,14 @@
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
       "resource_path": "resources/hooks/dist/learning-backstop.js",
-      "sha256": "20e04b92f0e3aeae7576a1e608119a7fca8dfe45bb2d6eae22b8c6f2c6df0718"
+      "sha256": "f713940285194985855062d5dffceacff717b70d40c0ae3a098d24e14d809e8d"
     },
     {
       "category": "hooks",
       "id": "Stop:maybe-reflect.js",
       "source_path": "hooks/dist/maybe-reflect.js",
       "resource_path": "resources/hooks/dist/maybe-reflect.js",
-      "sha256": "d485a9441314ffe4c4960b4efbe2f7752cbabb5a4ab12037a885b1dea0e25933"
+      "sha256": "85146f8df8a927098e73ff3fe6b9d1996f114af00e43175db94f409ac37751ce"
     },
     {
       "category": "scripts",
@@ -71,7 +71,7 @@
       "id": "lib/reaping",
       "source_path": "scripts/lib/reaping.ts",
       "resource_path": "resources/scripts/lib/reaping.ts",
-      "sha256": "f1b918e1be856b6113831b29713200710493b5ddc27f1ff5a25ed9ded39cc859"
+      "sha256": "7d42cef901970dd958c1968a7aedb0e264a64486463c20b1634a51c4c193468c"
     },
     {
       "category": "scripts",
@@ -104,37 +104,44 @@
     {
       "category": "skills",
       "id": "guild-evolve-skill",
-      "source_path": "skills/meta/evolve-skill/SKILL.md",
-      "resource_path": "resources/skills/meta/evolve-skill/SKILL.md",
-      "sha256": "05dd85e698a270543e751d95976e17f1396513cd2d6bc3d00f54f37e77e55244"
+      "source_path": "skills/meta/evolve/SKILL.md",
+      "resource_path": "resources/skills/meta/evolve/SKILL.md",
+      "sha256": "2df23d09a80730ef5eed258480335675199a0856d8d1557d9d865dd81e7820ee"
+    },
+    {
+      "category": "skills",
+      "id": "guild-evolve-skill/references/audit.md",
+      "source_path": "skills/meta/evolve/references/audit.md",
+      "resource_path": "resources/skills/meta/evolve/references/audit.md",
+      "sha256": "5015c9b1bf6a05c108072af87ab96764cad2b34286b299d19ee6ce5f142a74d0"
+    },
+    {
+      "category": "skills",
+      "id": "guild-evolve-skill/references/rollback-skill.md",
+      "source_path": "skills/meta/evolve/references/rollback-skill.md",
+      "resource_path": "resources/skills/meta/evolve/references/rollback-skill.md",
+      "sha256": "692896ebfc9191407a5d11476d6cb6f6fd0f43bdcf96eb4770080081cb663210"
     },
     {
       "category": "skills",
       "id": "guild-evolve-skill/scenarios.json",
-      "source_path": "skills/meta/evolve-skill/scenarios.json",
-      "resource_path": "resources/skills/meta/evolve-skill/scenarios.json",
+      "source_path": "skills/meta/evolve/scenarios.json",
+      "resource_path": "resources/skills/meta/evolve/scenarios.json",
       "sha256": "5c9130fb90504e2cf460a5b8aa1a103a744da092c556109d8abbb1998b7ff702"
-    },
-    {
-      "category": "skills",
-      "id": "guild-learning-checkpoint",
-      "source_path": "skills/meta/learning-checkpoint/SKILL.md",
-      "resource_path": "resources/skills/meta/learning-checkpoint/SKILL.md",
-      "sha256": "97887c2fc97c853d108d8a6be4f112e5fb655e56d3a6430cd846c96a8ad0143a"
     },
     {
       "category": "skills",
       "id": "guild-reflect",
       "source_path": "skills/meta/reflect/SKILL.md",
       "resource_path": "resources/skills/meta/reflect/SKILL.md",
-      "sha256": "1c57be19408f1ff4d4f9f4be00c0edb4a20c9917bf8952fc7f5a64b0b27b380c"
+      "sha256": "47aa9ce8238dddb4296e2344607b3b31b91fa3cbc54163c39ed1268e32a63430"
     },
     {
       "category": "skills",
-      "id": "guild-rollback-skill",
-      "source_path": "skills/meta/rollback-skill/SKILL.md",
-      "resource_path": "resources/skills/meta/rollback-skill/SKILL.md",
-      "sha256": "692896ebfc9191407a5d11476d6cb6f6fd0f43bdcf96eb4770080081cb663210"
+      "id": "guild-reflect/references/learning-checkpoint.md",
+      "source_path": "skills/meta/reflect/references/learning-checkpoint.md",
+      "resource_path": "resources/skills/meta/reflect/references/learning-checkpoint.md",
+      "sha256": "97887c2fc97c853d108d8a6be4f112e5fb655e56d3a6430cd846c96a8ad0143a"
     }
   ]
 }

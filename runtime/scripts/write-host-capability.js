@@ -23906,6 +23906,23 @@ var init_write_task_run = __esm({
   }
 });
 
+// src/modules/lifecycle/workflows/workflow-graph-overlay.ts
+var WORKFLOW_CLASSES, WORKFLOW_EDGE_OUTCOMES, PROTECTED_NODE_IDS;
+var init_workflow_graph_overlay = __esm({
+  "src/modules/lifecycle/workflows/workflow-graph-overlay.ts"() {
+    WORKFLOW_CLASSES = Object.freeze(["product", "research", "debug", "ops", "init"]);
+    WORKFLOW_EDGE_OUTCOMES = Object.freeze([
+      "next",
+      "skip",
+      "replan",
+      "harvest",
+      "escalate",
+      "change_class"
+    ]);
+    PROTECTED_NODE_IDS = Object.freeze(["product.qa", "d5", "d8", "ops.first-run"]);
+  }
+});
+
 // src/modules/lifecycle/index.ts
 var init_lifecycle = __esm({
   "src/modules/lifecycle/index.ts"() {
@@ -23927,6 +23944,7 @@ var init_lifecycle = __esm({
     init_runstart_preflight();
     init_write_run_manifest();
     init_write_task_run();
+    init_workflow_graph_overlay();
   }
 });
 

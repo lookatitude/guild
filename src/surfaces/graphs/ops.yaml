@@ -1,0 +1,43 @@
+# guild.workflow_graph.v1 — plugin default for the `ops` class (KTD40).
+# The existing runbook subgraphs, preserved. `ops.first-run` is REQUIRED and
+# interactive: an overlay cannot make a first run silent.
+schema_version: "guild.workflow_graph.v1"
+class: "ops"
+graph_id: "ops.default"
+entry: "ops.first-run"
+nodes:
+  - id: "ops.first-run"
+    station: "ops-runbooks"
+    assembler: "operations"
+    inner_loop: false
+    required: true
+    skip_when: "never"
+  - id: "ops.release"
+    station: "ops-runbooks"
+    assembler: "operations"
+    inner_loop: false
+  - id: "ops.incident"
+    station: "ops-runbooks"
+    assembler: "operations"
+    inner_loop: false
+  - id: "ops.monitoring"
+    station: "ops-runbooks"
+    assembler: "operations"
+    inner_loop: false
+  - id: "ops.maintenance"
+    station: "ops-runbooks"
+    assembler: "operations"
+    inner_loop: false
+  - id: "harvest"
+    station: "harvest"
+    assembler: "reflect"
+    inner_loop: false
+edges:
+  - { from: "ops.first-run", on: "next", to: "ops.release" }
+  - { from: "ops.first-run", on: "escalate", to: "ops.incident" }
+  - { from: "ops.release", on: "next", to: "ops.monitoring" }
+  - { from: "ops.release", on: "replan", to: "ops.incident" }
+  - { from: "ops.incident", on: "next", to: "ops.monitoring" }
+  - { from: "ops.monitoring", on: "next", to: "ops.maintenance" }
+  - { from: "ops.maintenance", on: "next", to: "harvest" }
+  - { from: "harvest", on: "harvest", to: "harvest" }

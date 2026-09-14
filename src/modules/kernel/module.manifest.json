@@ -7,7 +7,6 @@
   "description": "Owns module registration conventions and plugin-wide bootstrap principles.",
   "owns": {
     "skills": [
-      "guild-principles",
       "using-guild"
     ],
     "hooks": [

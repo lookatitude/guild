@@ -116,6 +116,381 @@
       "key": "harvest-writer-calls-scrubbed-write::src/modules/telemetry/resources/scripts/trace-summarize.ts::writes the wiki without a call to scrubbedWrite",
       "reason": "Pre-existing wiki writer surfaced by the raw-text fail-closed rule (codex G-lane r2): scripts/trace-summarize.ts writes under a Guild root and names the wiki without a scrubbedWrite call site (module-resource mirror of that file). Not introduced by T02; the old literal-only predicate could not see it. Clears when T09/U-LOOP routes the write through scrubbedWrite.",
       "lane": "T02"
+    },
+    {
+      "key": "no-dispatched-claude-agents::skills/meta/execute-plan/references/context-assemble.md::shipped surface references .claude/agents",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-dispatched-claude-agents' violation now reports at 'skills/meta/execute-plan/references/context-assemble.md' instead of 'src/modules/context/resources/skills/meta/context-assemble/SKILL.md'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-dispatched-claude-agents::src/modules/lifecycle/resources/skills/meta/execute-plan/references/context-assemble.md::shipped surface references .claude/agents",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-dispatched-claude-agents' violation now reports at 'src/modules/lifecycle/resources/skills/meta/execute-plan/references/context-assemble.md' instead of 'src/modules/context/resources/skills/meta/context-assemble/SKILL.md'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::skills/meta/evolve/SKILL.md:40::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/SKILL.md:40' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::skills/meta/evolve/SKILL.md:66::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/SKILL.md:66' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::skills/meta/evolve/SKILL.md:76::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/SKILL.md:76' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::skills/meta/evolve/SKILL.md:92::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/SKILL.md:92' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::skills/meta/evolve/references/audit.md:40::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/audit.md:40' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.evals.json:7::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.evals.json:7' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.md:10::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.md:10' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.md:18::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.md:18' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.md:23::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.md:23' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.md:36::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.md:36' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.md:3::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.md:3' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.md:44::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.md:44' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.md:68::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.md:68' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/SKILL.md:40::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/SKILL.md:40' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/SKILL.md:66::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/SKILL.md:66' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/SKILL.md:76::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/SKILL.md:76' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/SKILL.md:92::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/SKILL.md:92' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/audit.md:40::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/audit.md:40' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:10::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:10' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:18::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:18' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:23::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:23' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:36::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:36' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:3::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:3' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:44::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:44' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:68::references a durable skill-versions/ tree",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:68' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/ingest-reference.md:108::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/ingest-reference.md:108' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/ingest-reference.md:13::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/ingest-reference.md:13' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/ingest-reference.md:18::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/ingest-reference.md:18' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/ingest-reference.md:19::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/ingest-reference.md:19' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/ingest-reference.md:24::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/ingest-reference.md:24' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/ingest-reference.md:78::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/ingest-reference.md:78' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/ingest-reference.md:8::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/ingest-reference.md:8' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/lint-rules.md:35::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/lint-rules.md:35' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/query-modes.md:80::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/query-modes.md:80' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/wiki-ingest.md:12::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/wiki-ingest.md:12' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/wiki-ingest.md:18::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/wiki-ingest.md:18' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/wiki-ingest.md:23::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/wiki-ingest.md:23' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/wiki-ingest.md:32::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/wiki-ingest.md:32' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/wiki-ingest.md:3::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/wiki-ingest.md:3' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/wiki-lint.md:17::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/wiki-lint.md:17' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/wiki-lint.md:3::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/wiki-lint.md:3' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/wiki-lint.md:70::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/wiki-lint.md:70' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/wiki-query.md:12::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/wiki-query.md:12' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/wiki-query.md:23::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/wiki-query.md:23' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/wiki-query.md:3::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/wiki-query.md:3' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/wiki-query.md:80::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/wiki-query.md:80' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/wiki-query.md:82::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/wiki-query.md:82' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/knowledge/wiki/references/wiki-query.md:90::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/wiki-query.md:90' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::skills/meta/init/SKILL.md:54::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/meta/init/SKILL.md:54' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/ingest-reference.md:108::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/ingest-reference.md:108' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/ingest-reference.md:13::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/ingest-reference.md:13' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/ingest-reference.md:18::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/ingest-reference.md:18' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/ingest-reference.md:19::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/ingest-reference.md:19' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/ingest-reference.md:24::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/ingest-reference.md:24' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/ingest-reference.md:78::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/ingest-reference.md:78' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/ingest-reference.md:8::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/ingest-reference.md:8' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/lint-rules.md:35::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/lint-rules.md:35' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/query-modes.md:80::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/query-modes.md:80' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-ingest.md:12::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-ingest.md:12' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-ingest.md:18::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-ingest.md:18' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-ingest.md:23::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-ingest.md:23' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-ingest.md:32::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-ingest.md:32' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-ingest.md:3::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-ingest.md:3' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-lint.md:17::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-lint.md:17' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-lint.md:3::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-lint.md:3' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-lint.md:70::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-lint.md:70' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-query.md:12::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-query.md:12' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-query.md:23::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-query.md:23' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-query.md:3::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-query.md:3' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-query.md:80::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-query.md:80' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-query.md:82::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-query.md:82' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-query.md:90::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/knowledge/resources/skills/knowledge/wiki/references/wiki-query.md:90' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/lifecycle/resources/skills/meta/init/SKILL.md:54::references .guild/raw",
+      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'src/modules/lifecycle/resources/skills/meta/init/SKILL.md:54' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
+      "lane": "T03"
     }
   ]
 }

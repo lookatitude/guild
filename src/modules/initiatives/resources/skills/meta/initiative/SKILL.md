@@ -3,6 +3,7 @@ name: guild-initiative
 description: Implements every /guild:initiative sub-verb — new|status|list|resume|update|archive|restore|close — over .guild/initiatives/{active,archived}/<id>/**. new authors initiative.yaml + the definition ledger behind the definition-ready gate; status/list are read-only; resume re-enters the next work item; update amends the ledger (--add-goal); archive/restore move active/<->archived without the release path; close is gated by the deterministic D8 gate — it MUST run scripts/initiative-gate.ts close-check and refuse to close on a non-zero exit, never re-deriving release/docs/exec resolution in prose. TRIGGER for "/guild:initiative new|status|list|resume|update|archive|restore|close", "create a durable initiative", "attach this to an initiative", "is this initiative ready to close", "what work items are open". DO NOT TRIGGER for a one-off /guild:guild run (opt-in attachment only), phase-command work (guild:plan, guild:execute-plan), decision capture (guild:decisions), or wiki ingestion (guild:wiki-ingest).
 when_to_use: Invoked by commands/initiative.md's Dispatch section for every /guild:initiative invocation, after the run-start preflight and run recording have completed. Also the target of the opt-in attachment prompt /guild:guild raises when a brief carries a durable-goal signal.
 type: meta
+indexed: true
 ---
 
 # guild:initiative

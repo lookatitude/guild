@@ -35,10 +35,21 @@ function readManifest(moduleId: string): {
 describe("capability module catalogs", () => {
   it("operations catalog matches the operations module manifest", () => {
     const manifest = readManifest("operations");
-    expect(listOperationsSkillIds()).toEqual(manifest.owns?.skills);
-    expect(listOperationsRunbooks().map((entry) => entry.skillId)).toEqual(
-      (manifest.owns?.skills ?? []).filter((id) => id.startsWith("ops-"))
-    );
+    // T03 (KTD25/KTD59): the five runbooks are `references/` CHAPTERS of the
+    // `operations` assembler, not indexed skills, so the module manifest owns the
+    // router id alone. The catalog still enumerates all six because the router
+    // routes by runbook id at runtime — so pin the router against the manifest and
+    // every runbook against the chapter file that has to exist for it to route.
+    expect(manifest.owns?.skills).toEqual(["guild-operations"]);
+    expect(listOperationsSkillIds()).toEqual([
+      "guild-operations",
+      ...listOperationsRunbooks().map((entry) => entry.skillId),
+    ]);
+    for (const entry of listOperationsRunbooks()) {
+      expect(
+        fs.existsSync(path.join(pluginRoot, "skills", "operations", "references", `${entry.skillId}.md`))
+      ).toBe(true);
+    }
   });
 
   it("quality catalog matches the quality module manifest", () => {
@@ -99,8 +110,9 @@ describe("capability module catalogs", () => {
         path.join(pluginRoot, "templates", "specialists", `${n}.md`)
       ),
     ];
-    // 3 machinery agents (advisor, context-manager, developer) + 15 domain templates.
-    expect(definitionPaths).toHaveLength(18);
+    // 4 machinery agents (advisor, context-manager, developer, team-lead) + 15
+    // domain templates.
+    expect(definitionPaths).toHaveLength(19);
     for (const p of definitionPaths) {
       const fm = parseFrontmatter(fs.readFileSync(p, "utf8")) ?? {};
       expect({ file: p, v: fm["operating_style"] }).toEqual({
