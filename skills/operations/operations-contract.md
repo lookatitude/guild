@@ -1,6 +1,6 @@
 <!--
   DH-3 BOUNDARY (static, read-only plugin install state). Shipped
-  progressive-disclosure support file for skills/guild-operations/SKILL.md and
+  progressive-disclosure support file for skills/operations/SKILL.md and
   the sibling skills/meta/ops-*/SKILL.md runbooks. NEVER written at runtime;
   per-run guild.ops.v1 / guild.incident.v1 / guild.release.v1 artifacts go to
   the consuming repo's .guild/runs/<run-id>/ops/.
@@ -16,7 +16,7 @@ the code path cited here is canonical.
 This file consolidates the ops report blocks, the runbook posture table, the 4
 safety rails → 5-boolean machine-check, the quality-consume proceed/refuse
 predicate, and the `guild.release.v1 ↔ D8` close-gate join that
-`skills/guild-operations/SKILL.md` and the five `skills/meta/ops-*/SKILL.md`
+`skills/operations/SKILL.md` and the five `skills/meta/ops-*/SKILL.md`
 runbooks own. Point at a named section below instead of restating the tables
 inline.
 

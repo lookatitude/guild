@@ -91,7 +91,7 @@ Every ingested wiki page **must** carry a `trust_tier` field in its `§10.1.1` f
 | Raw external content with `confidence: high` + verified `source_refs` | `reviewed` |
 | Opinion, forum, social, or unverifiable | `untrusted` |
 
-When `guild:context-assemble` later pulls this page via recall, the `trust_tier` field drives its wrapping tier (D-RECALL — bound by pointer: `skills/meta/context-assemble/SKILL.md §"Spotlighting"`).
+When `guild:context-assemble` later pulls this page via recall, the `trust_tier` field drives its wrapping tier (D-RECALL — bound by pointer: `skills/meta/execute-plan/references/context-assemble.md §"Spotlighting"`).
 
 ## Category selection
 

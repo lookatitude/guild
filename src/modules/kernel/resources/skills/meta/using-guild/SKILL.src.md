@@ -139,3 +139,14 @@ If you were handed **one fully-scoped task with the context you need** (a
 single-file edit, a typo fix, a rename, a value lookup), do **not** engage the
 lifecycle. Just do the task. This gateway decides whether to bring Guild's
 machinery to bear — it is not a tax on every small action.
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:product-define` | `plan` | `../plan/references/product-define.md` |
+| `guild:product-explore` | `brainstorm` | `../brainstorm/references/product-explore.md` |

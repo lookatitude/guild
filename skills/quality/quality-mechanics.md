@@ -1,6 +1,6 @@
 <!--
   DH-3 BOUNDARY (static read-only plugin install state). Supporting reference
-  for skills/guild-quality/SKILL.md — progressive-disclosure detail, loaded on
+  for skills/quality/SKILL.md — progressive-disclosure detail, loaded on
   demand. Same contract-fidelity rule as the parent: every guild.quality.v1
   body reference is a POINTER through ./quality-contract.md §"guild.quality.v1 fields". Zero
   schema_version / field text is reproduced (named-predicate anti-respell

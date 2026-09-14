@@ -85,7 +85,7 @@
       "id": "guild-learn",
       "source_path": "skills/knowledge/learn/SKILL.md",
       "resource_path": "resources/skills/knowledge/learn/SKILL.md",
-      "sha256": "b09e67738edf678a11e3e89b0dea0176e9a0d640b6dde8e8daac92a68e0e5d49"
+      "sha256": "360c79ab9042eae7cda772633af6b7f98ca1f17faa51983fc4f45ee38a7742cd"
     },
     {
       "category": "skills",
@@ -190,7 +190,7 @@
       "id": "guild-wiki/references/wiki-ingest.md",
       "source_path": "skills/knowledge/wiki/references/wiki-ingest.md",
       "resource_path": "resources/skills/knowledge/wiki/references/wiki-ingest.md",
-      "sha256": "4f2258c70cc1dd78a87a03c562c680353b2b9883378afa3387268c462b21ea9a"
+      "sha256": "80c70aad1938135be61f4d4800fb48eeff50d670ceebaceca70c49d02a3221cf"
     },
     {
       "category": "skills",

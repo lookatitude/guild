@@ -8,21 +8,21 @@
       "id": "guild-quality",
       "source_path": "skills/quality/SKILL.md",
       "resource_path": "resources/skills/quality/SKILL.md",
-      "sha256": "f1c2fa5decf8fc61ff5d4c36998c3bd421de6f5b0eb3c8a48cbb79f31a21ae36"
+      "sha256": "65490e6a2093fe1dbd123fc098338efca4b28195f96c6c52b07f1a9b18cf5546"
     },
     {
       "category": "skills",
       "id": "guild-quality/quality-contract.md",
       "source_path": "skills/quality/quality-contract.md",
       "resource_path": "resources/skills/quality/quality-contract.md",
-      "sha256": "bc3433b025ab1ec8207eec5215c1548c05b06b219a7c8e0410882b5e4dac6d28"
+      "sha256": "87479f5bd66a6bae8f27dfe9b5d8f77ae71bbab5a277a8caaad1f5d92dae2709"
     },
     {
       "category": "skills",
       "id": "guild-quality/quality-mechanics.md",
       "source_path": "skills/quality/quality-mechanics.md",
       "resource_path": "resources/skills/quality/quality-mechanics.md",
-      "sha256": "2bc3f1bf57c026b576f0253e5942205fbe0da9b427a0b26874348966dc3da427"
+      "sha256": "ea4c1e5d9125977c73af1059539e6add8823493a7553f4e22b120883d27edfd6"
     },
     {
       "category": "skills",

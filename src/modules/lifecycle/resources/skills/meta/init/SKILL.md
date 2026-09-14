@@ -125,7 +125,7 @@ an explicit refresh; the full `learn-*` pipeline also runs at Init under
    `guild:learning-checkpoint` to classify the already-written Init artifacts into
    the 12-target verdict, then emit via the hook — full call signature + the
    `GUILD_PHASE` mapping are canonical in
-   `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the
+   `skills/meta/reflect/references/learning-checkpoint.md §"How a phase skill fires the
    checkpoint"` (do not re-spell). It rides this existing boundary, defaults to
    all-`none` (a near-zero-token no-op), asks no prompt, and introduces no new
    gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
@@ -178,3 +178,18 @@ hard set). Writes confined to `.guild/` (DH-3 boundary).
   interactively (never auto-run, never forced).
 - Regular repo with only a `docs/` dir (no nested `.git`/`.guild`) →
   classified `regular`, no `workspace.json`, cheap-scan path byte-unchanged.
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:learn-graph` | `learn` | `../../knowledge/learn/references/learn-graph.md` |
+| `guild:learn-map` | `learn` | `../../knowledge/learn/references/learn-map.md` |
+| `guild:learning-checkpoint` | `reflect` | `../reflect/references/learning-checkpoint.md` |
+| `guild:review-broker` | `review` | `../review/references/review-broker.md` |
+| `guild:wiki-ingest` | `wiki` | `../../knowledge/wiki/references/wiki-ingest.md` |
+| `guild:wiki-query` | `wiki` | `../../knowledge/wiki/references/wiki-query.md` |

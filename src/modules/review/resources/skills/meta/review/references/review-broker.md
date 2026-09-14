@@ -406,7 +406,7 @@ normal gate outcome (`satisfied` / `rework` / `cap_hit` / …) with
 As the canonical lifecycle front door, the broker runs the **same FU-E
 codex-skip sentinel check** at the START of every gate that
 `guild:codex-review` documents — read it by pointer, do not re-specify it here:
-see `skills/meta/codex-review/SKILL.md` § "Codex-skip sentinel gate-read". Read
+see `skills/meta/review/references/codex-review.md` § "Codex-skip sentinel gate-read". Read
 `.guild/codex-skip-streak.json` (schema `guild.codex_skip_streak.v1`); when
 `blocked: true`, honor `codex_skip_enforcement` from `.guild/settings.json`
 (**default `warn` = surface loudly and proceed; opt-in `block` = hard-refuse**).

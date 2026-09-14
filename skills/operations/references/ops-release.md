@@ -10,7 +10,7 @@ type: meta
   guild.ops.v1 / guild.release.v1 go to the consuming repo's
   .guild/runs/<run-id>/ops/. CONTRACT FIDELITY: every guild.ops.v1 /
   guild.release.v1 reference is a POINTER through
-  ../../guild-operations/operations-contract.md §"guild.ops.v1 fields"; zero field text reproduced (anti-respell).
+  ../operations-contract.md §"guild.ops.v1 fields"; zero field text reproduced (anti-respell).
   The 4 safety rails, the 5-boolean machine-check, the allowlist exit-2, and the
   D8 3-leg join LIVE IN the guild:operations router — this playbook references
   them, never re-spells them.
@@ -47,12 +47,12 @@ execute the discovered release runbook and supply the D8 release evidence.
 - The consumed `guild.quality.v1` recommendation
   (`.guild/runs/<run-id>/quality/<run-id>.md`).
 - Frozen `guild.ops.v1` / `guild.release.v1`
-  (`../../guild-operations/operations-contract.md §"guild.ops.v1 fields"`, pointer only).
+  (`../operations-contract.md §"guild.ops.v1 fields"`, pointer only).
 
 # Output format
 
 `guild.ops.v1` **always** + `guild.release.v1` (class==release), populated **by
-pointer** to `../../guild-operations/operations-contract.md §"guild.ops.v1 fields"` (zero re-spelled fields);
+pointer** to `../operations-contract.md §"guild.ops.v1 fields"` (zero re-spelled fields);
 per-step evidence under `.guild/runs/<run-id>/ops/evidence/`.
 
 # Workflow steps
@@ -60,7 +60,7 @@ per-step evidence under `.guild/runs/<run-id>/ops/evidence/`.
 ## producer
 
 Producer **`devops-ci-cd-pipeline`**; advisory **`technical-writer-release-notes`**
-(release advisory) — class→producer map per `../../guild-operations/operations-contract.md
+(release advisory) — class→producer map per `../operations-contract.md
 §Posture` (by pointer). Posture is the **§Posture default** (release is not a
 hard-interactive class), still subject to the router's rails: rail 1 (first run
 interactive), rail 3 (always-ask hard set unconditional), rail 4 (pre-flight
@@ -70,12 +70,12 @@ dry-run mandatory).
 
 Each step records `op_class`; every **hard-set step** shows
 `autonomy: prompted_inline` (rail-3 proof). Populate `guild.ops.v1` head +
-`guild.release.v1` by pointer to `../../guild-operations/operations-contract.md §"guild.ops.v1 fields"`.
+`guild.release.v1` by pointer to `../operations-contract.md §"guild.ops.v1 fields"`.
 
 ## d8-supply
 
 Supply the **release leg** of the D8 3-leg join (the join logic lives in the
-router, `../../guild-operations/operations-contract.md §"D8 close-gate join"`): release readiness
+router, `../operations-contract.md §"D8 close-gate join"`): release readiness
 (`release.outcome.status == completed`), documentation sync
 (`release.doc_sync_status`), evidence trail (`release.release_evidence_refs[]` +
 `release.quality_ref`). **Supply-only** — `InitiativeCloseout` closes.
@@ -98,7 +98,7 @@ router, `../../guild-operations/operations-contract.md §"D8 close-gate join"`):
 - Rails are router-enforced and **not relaxed here**; runbook approval lowers
   only the SOFT gate, never the hard set (rail 3).
 - No frozen `guild.ops.v1` / `guild.release.v1` field text reproduced — all by
-  pointer through `../../guild-operations/operations-contract.md`. **No cloud-build task** (GR-7).
+  pointer through `../operations-contract.md`. **No cloud-build task** (GR-7).
 
 # Eval cases
 

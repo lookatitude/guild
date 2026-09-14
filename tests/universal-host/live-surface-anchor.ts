@@ -593,7 +593,10 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
   // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
   // off-glob playbooks tree, principles folded into using-guild (KTD25/KTD59).
-  skills: "bc75dbcf4e15e4f94f7067d348a73a0a3368d1bf",
+  // Re-ratified again same day (codex G-lane r1): the chapters' relative pointers were
+  // re-based onto their new parents and every assembler gained a chapter-pointer table,
+  // so a `guild:<name>` in a body resolves to a file instead of a deleted skill.
+  skills: "b2f98676cc6c0196a1589563d4194787d33c5d87",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

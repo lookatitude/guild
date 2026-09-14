@@ -50,6 +50,7 @@
       "lint/hot-path-budget",
       "lint/layout-laws",
       "lint/packaged-install-smoke",
+      "lint/skill-link-integrity",
       "registry-rollup",
       "release-changelog",
       "sign-release-attestation",

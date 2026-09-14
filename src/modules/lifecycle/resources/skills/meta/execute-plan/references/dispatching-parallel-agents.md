@@ -21,7 +21,7 @@ in the run's resolved-settings snapshot (U6); this skill **reads**
 not re-decide it. The per-phase team file's (`<slug>.<phase>.yaml`) `backend`
 field is only a composition-time mirror for audit, never the authority. The autonomy posture is the
 `task_run.autonomy_policy` recorded at plan approval (pointer:
-`../../guild-quality/quality-contract.md §"task_run envelope & always-ask hard set"`).
+`../../../quality/quality-contract.md §"task_run envelope & always-ask hard set"`).
 
 # When not to use it
 

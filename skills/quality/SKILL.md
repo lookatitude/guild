@@ -169,7 +169,7 @@ auto-passed** under any token (asymmetry printed, never silent). Populate
 
 ## learning-checkpoint (step 7.5 — advisory, no new gate)
 
-After `releasegate` and before phase close, fire the per-phase LearningCheckpoint with `phase=quality` and the quality report as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written quality report (results, challenger trail, release decision) into the 12-target verdict, then emit via the hook — full call signature + `GUILD_PHASE` mapping canonical in `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; it does NOT touch the `releasegate` BLOCK semantics. Non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
+After `releasegate` and before phase close, fire the per-phase LearningCheckpoint with `phase=quality` and the quality report as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written quality report (results, challenger trail, release decision) into the 12-target verdict, then emit via the hook — full call signature + `GUILD_PHASE` mapping canonical in `skills/meta/reflect/references/learning-checkpoint.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; it does NOT touch the `releasegate` BLOCK semantics. Non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
 
 # Evidence requirements
 
@@ -222,3 +222,15 @@ read the one chapter you were routed to, and never inline a chapter here.
 | Chapter | Covers |
 |---|---|
 | `references/verify-done.md` | Final gate before task close, and the home of Guild's verify-the-claim discipline — no completion language before an independent VCS diff confirms the change exists on disk |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:learning-checkpoint` | `reflect` | `../meta/reflect/references/learning-checkpoint.md` |
+| `guild:review-broker` | `review` | `../meta/review/references/review-broker.md` |
+| `guild:verify-done` | this assembler | `references/verify-done.md` |

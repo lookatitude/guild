@@ -101,3 +101,15 @@ read the one chapter you were routed to, and never inline a chapter here.
 |---|---|
 | `references/audit.md` | Security audit of Guild plugin scripts — SHA256 hashes, source, network + filesystem flags |
 | `references/rollback-skill.md` | Rolls a skill back to a previous version from compact history (KTD48) |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:context-assemble` | `execute-plan` | `../execute-plan/references/context-assemble.md` |
+| `guild:rollback-skill` | this assembler | `references/rollback-skill.md` |
+| `guild:wiki-ingest` | `wiki` | `../../knowledge/wiki/references/wiki-ingest.md` |

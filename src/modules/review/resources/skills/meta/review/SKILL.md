@@ -64,7 +64,7 @@ Keep `review.md` terse and grep-friendly — it's the compact artifact `guild:ve
 
 ## Learning checkpoint (step 7.5 — advisory, no new gate)
 
-This is the **Development** phase's review boundary. After `review.md` is written and before handoff to `guild:verify-done`, fire the per-phase LearningCheckpoint with `phase=development` and `.guild/runs/<run-id>/review.md` (plus the lane receipts) as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written receipts + review into the 12-target verdict, then emit via the hook — the full call signature + `GUILD_PHASE` mapping are canonical in `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`. (One development checkpoint per run, fired here — not in `guild:execute-plan`.)
+This is the **Development** phase's review boundary. After `review.md` is written and before handoff to `guild:verify-done`, fire the per-phase LearningCheckpoint with `phase=development` and `.guild/runs/<run-id>/review.md` (plus the lane receipts) as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written receipts + review into the 12-target verdict, then emit via the hook — the full call signature + `GUILD_PHASE` mapping are canonical in `skills/meta/reflect/references/learning-checkpoint.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`. (One development checkpoint per run, fired here — not in `guild:execute-plan`.)
 
 ## Handoff
 
@@ -89,3 +89,16 @@ read the one chapter you were routed to, and never inline a chapter here.
 |---|---|
 | `references/codex-review.md` | DEPRECATED lifecycle entry-point (D-BR-A) — now the internal Codex adapter invoked BY `guild:review-broker`, never called directly from Guild lifecycle gates |
 | `references/review-broker.md` | Host-agnostic broker for cross-family adversarial review — one host drafts an artifact, a DIFFERENT host family critiques it (STRONG independence) |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:codex-review` | this assembler | `references/codex-review.md` |
+| `guild:learning-checkpoint` | `reflect` | `../reflect/references/learning-checkpoint.md` |
+| `guild:loop-implement` | `execute-plan` | `../execute-plan/references/loop-implement.md` |
+| `guild:verify-done` | `quality` | `../../quality/references/verify-done.md` |

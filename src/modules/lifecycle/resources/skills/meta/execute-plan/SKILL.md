@@ -899,3 +899,18 @@ read the one chapter you were routed to, and never inline a chapter here.
 | `references/testing-anti-patterns.md` | reference material for this assembler |
 | `references/workflow-and-events.md` | reference material for this assembler |
 | `references/worktrees.md` | Guild's git-worktree isolation discipline — create an isolated worktree with deterministic directory selection and safety verification so a lane runs on a clean tree without disturbing the user's current checkout |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:codex-review` | `review` | `../review/references/codex-review.md` |
+| `guild:context-assemble` | this assembler | `references/context-assemble.md` |
+| `guild:decisions` | `wiki` | `../../knowledge/wiki/references/decisions.md` |
+| `guild:review-broker` | `review` | `../review/references/review-broker.md` |
+| `guild:verify-done` | `quality` | `../../quality/references/verify-done.md` |
+| `guild:wiki-ingest` | `wiki` | `../../knowledge/wiki/references/wiki-ingest.md` |

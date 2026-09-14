@@ -58,7 +58,7 @@ import type {
   InventoryManifest,
 } from "./inventory-schema";
 import { validateInventoryV1 } from "./inventory-schema";
-import { readScalarField } from "../../state";
+import { readScalarField, splitFrontmatter } from "../../state";
 import {
   COVERAGE_ENFORCED_CATEGORIES,
   checkCoverage,
@@ -186,6 +186,32 @@ function discoverAgents(root: string): AgentEntry[] {
  * colon today (they are hyphenated, e.g. "guild-review", "ops-monitoring") — the
  * id is whatever the frontmatter literally says.
  */
+/**
+ * Does this skill declare `indexed: true` — the KTD59 marker that puts it in a
+ * host's catalog and therefore in the plugin manifest's derived `skills` glob?
+ *
+ * FRONTMATTER ONLY. Read the whole file and a skill whose BODY happens to contain
+ * the line `indexed: true` (a doc example, a fenced YAML snippet) silently joins
+ * the catalog — codex G-lane r1. The block is isolated with the shared
+ * `splitFrontmatter` slicer first, and the key matched only inside it.
+ *
+ * The block is NOT handed to js-yaml: 58 of the 76 shipped skill pages have a
+ * YAML-hostile unquoted `description:` (colons, parens, quotes) and do not parse
+ * as a document — 4 of the 17 assemblers among them. A `yaml.load` here would
+ * drop those 4 from the glob, which is a worse failure than the one it fixes.
+ * `readScalarField` is the corpus-tolerant single-field reader for exactly this
+ * (see its contract note); scoping it to the sliced block is what makes it
+ * frontmatter-only.
+ *
+ * The marker is also `true`-only: any other value is not a valid index decision
+ * and is treated as un-indexed rather than guessed at.
+ */
+function isIndexedAssembler(content: string): boolean {
+  const { frontmatter } = splitFrontmatter(content);
+  if (frontmatter === null) return false;
+  return readScalarField(frontmatter, "indexed") === "true";
+}
+
 function discoverSkills(root: string): SkillEntry[] {
   const files: string[] = [];
   walkFiles(root, "skills", (_rel, name) => name === "SKILL.md" || name === "SKILL.src.md", files);
@@ -206,13 +232,7 @@ function discoverSkills(root: string): SkillEntry[] {
     const entry: SkillEntry = { id, source_path: rel };
     if (tier) entry.tier = tier;
     if (description) entry.description = description;
-    // KTD59 — `indexed: true` in the skill's own frontmatter is what puts it in a
-    // host's catalog, and the plugin manifest's `skills` glob is DERIVED from it.
-    // The marker lives in the skill file on purpose: skill resolution has to stay a
-    // pure function of the `skills/` tree (the SC-W2-5 A/B guard resolves the
-    // ratified `skills/` tree alone), so sourcing it from anywhere else would make
-    // that guard permanently unsatisfiable.
-    if (readScalarField(content, "indexed") === "true") entry.indexed = true;
+    if (isIndexedAssembler(content)) entry.indexed = true;
 
     const prior = byName.get(id);
     if (!prior) {

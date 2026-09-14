@@ -130,7 +130,7 @@ The gate runs between spec write and user-approval. It does not replace user app
 
 ## Learning checkpoint (step 7.5 — advisory, no new gate)
 
-After the G-spec review and before handoff, fire the per-phase LearningCheckpoint with `phase=ideation` and `.guild/spec/<slug>.md` as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written spec/assumptions into the 12-target verdict, then emit via the hook — the full call signature + `GUILD_PHASE` mapping are canonical in `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
+After the G-spec review and before handoff, fire the per-phase LearningCheckpoint with `phase=ideation` and `.guild/spec/<slug>.md` as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written spec/assumptions into the 12-target verdict, then emit via the hook — the full call signature + `GUILD_PHASE` mapping are canonical in `skills/meta/reflect/references/learning-checkpoint.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
 
 ## Handoff
 
@@ -150,3 +150,16 @@ read the one chapter you were routed to, and never inline a chapter here.
 | `references/loop-clarify.md` | F-1 adversarial pre-spec clarification driver — wraps `guild:brainstorm`, runs an architect↔researcher loop where the architect proposes scope and the researcher fact-checks, surfaces gaps, and either signals satisfaction with the literal sentinel `## NO MORE QUESTIONS` or returns more questions |
 | `references/loop-mechanics.md` | reference material for this assembler |
 | `references/product-explore.md` | Product-loop EXPLORE producer — turns a vague product idea into a typed, fail-closed `guild.explore.v1` artifact before any engineering scoping |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:codex-review` | `review` | `../review/references/codex-review.md` |
+| `guild:learning-checkpoint` | `reflect` | `../reflect/references/learning-checkpoint.md` |
+| `guild:review-broker` | `review` | `../review/references/review-broker.md` |
+| `guild:verify-done` | `quality` | `../../quality/references/verify-done.md` |

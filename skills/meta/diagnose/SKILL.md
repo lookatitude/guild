@@ -101,7 +101,7 @@ npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist
 ```
 
 When `codex_review` resolves true the G-diagnose review is **required**, so the
-broker obeys the SK-9 gate-pass rule (`skills/meta/review-broker/SKILL.md
+broker obeys the SK-9 gate-pass rule (`skills/meta/review/references/review-broker.md
 §"Gate-pass rule"`): a required review **never clean-`skipped`s**.
 
 1. Invoke `guild-review-broker` on the diagnosis report path:
@@ -233,3 +233,15 @@ read the one chapter you were routed to, and never inline a chapter here.
 | `references/defense-in-depth.md` | reference material for this assembler |
 | `references/root-cause-tracing.md` | reference material for this assembler |
 | `references/systematic-debug.md` | Guild's first-class debugging discipline — find the root cause before proposing any fix, because symptom patches waste time and breed new bugs |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:audit` | `evolve` | `../evolve/references/audit.md` |
+| `guild:codex-review` | `review` | `../review/references/codex-review.md` |
+| `guild:review-broker` | `review` | `../review/references/review-broker.md` |

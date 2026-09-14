@@ -95,3 +95,13 @@ read the one chapter you were routed to, and never inline a chapter here.
 | Chapter | Covers |
 |---|---|
 | `references/writing-skills.md` | The authoring discipline that fills the canonical SKILL.template.md skeleton — a method, not the skeleton |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:rollback-skill` | `evolve` | `../evolve/references/rollback-skill.md` |

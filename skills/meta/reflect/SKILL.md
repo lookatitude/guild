@@ -146,3 +146,19 @@ read the one chapter you were routed to, and never inline a chapter here.
 | Chapter | Covers |
 |---|---|
 | `references/learning-checkpoint.md` | The per-phase LearningCheckpoint classifier — `guild.learning_checkpoint.v1` |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:codex-review` | `review` | `../review/references/codex-review.md` |
+| `guild:context-assemble` | `execute-plan` | `../execute-plan/references/context-assemble.md` |
+| `guild:decisions` | `wiki` | `../../knowledge/wiki/references/decisions.md` |
+| `guild:learn-harvest` | `learn` | `../../knowledge/learn/references/learn-harvest.md` |
+| `guild:review-broker` | `review` | `../review/references/review-broker.md` |
+| `guild:verify-done` | `quality` | `../../quality/references/verify-done.md` |
+| `guild:wiki-ingest` | `wiki` | `../../knowledge/wiki/references/wiki-ingest.md` |

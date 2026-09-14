@@ -192,3 +192,16 @@ explicit only: (a) the user runs `/guild:initiative …` directly, (b)
 `--initiative=<id|new>` is passed to a phase command, or (c) the brief carries
 a durable-goal signal — in which case `/guild:guild` *asks* "attach to an
 initiative? [new / existing / one-off]" rather than auto-attaching.
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:decisions` | `wiki` | `../../knowledge/wiki/references/decisions.md` |
+| `guild:review-broker` | `review` | `../review/references/review-broker.md` |
+| `guild:verify-done` | `quality` | `../../quality/references/verify-done.md` |
+| `guild:wiki-ingest` | `wiki` | `../../knowledge/wiki/references/wiki-ingest.md` |

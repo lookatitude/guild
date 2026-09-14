@@ -19,7 +19,7 @@ indexed: true
   cited via P1-ownership-001 (not the guard impl); zero field text reproduced.
   ROUTER: per-class playbooks live in the sibling ops-* skills; this body owns
   the cross-class taxonomy, safety rails, ExecuteRunbook, and the D8 join, and
-  routes [runbook] to guild:ops-<class>. Heading set per SKILL.template.md.
+  routes [runbook] to its references/ops-<class>.md chapter. Heading set per SKILL.template.md.
 -->
 
 # guild:operations
@@ -29,7 +29,7 @@ against the frozen **`guild.ops.v1`** / **`guild.incident.v1`** /
 **`guild.release.v1`** (`./operations-contract.md §"guild.ops.v1 fields"`). Verb
 **`ops`** (never `ship`); gate **`G-operations`**. **No cloud-build (GR-7).**
 The **router**: selects the class, enforces the cross-class rails, then
-**dispatches the per-class playbook** `guild:ops-<class>`.
+**loads the per-class runbook chapter** `references/ops-<class>.md`.
 
 # When to use it
 
@@ -43,7 +43,7 @@ close-gate evidence join (consume-only).
 - Authoring a runbook's content → `devops-*` specialists.
 - Closing the initiative → `InitiativeCloseout` (Operations only **supplies**
   evidence).
-- A specific class's playbook detail → the sibling `guild:ops-<class>` skill.
+- A specific class's runbook detail → this assembler's `references/ops-<class>.md` chapter.
 
 # Required inputs
 
@@ -70,16 +70,19 @@ The routed playbook writes `guild.ops.v1` **always**; `guild.incident.v1` when
 The **5 classes + default autonomy posture**, EXACTLY per
 `./operations-contract.md §Posture` (cited; not re-derived), and the
 **routing target** for each. **ClassSelect** from the `[runbook]` positional
-else surfaced detection — **always confirmed** — then dispatch the matching
-`ops-*` skill; populate `guild.ops.v1` head by pointer to `./operations-contract.md §"guild.ops.v1 fields"`:
+else surfaced detection — **always confirmed** — then LOAD the matching runbook
+chapter and run it in place; populate `guild.ops.v1` head by pointer to
+`./operations-contract.md §"guild.ops.v1 fields"`. The five runbooks are chapters
+of THIS assembler (KTD25/KTD59), not separate skills — there is no
+`guild:ops-<class>` to dispatch to:
 
-| Class | Default posture (`§Posture`) | Routes to |
+| Class | Default posture (`§Posture`) | Load |
 |---|---|---|
-| `release` | per `§Posture` default | `guild:ops-release` |
-| `monitoring` | per `§Posture` default | `guild:ops-monitoring` |
-| `incident` | **INTERACTIVE always — never autonomous** | `guild:ops-incident` |
-| `rollback` | **INTERACTIVE always — never autonomous** | `guild:ops-rollback` |
-| `maintenance` | per `§Posture` default | `guild:ops-maintenance` |
+| `release` | per `§Posture` default | `references/ops-release.md` |
+| `monitoring` | per `§Posture` default | `references/ops-monitoring.md` |
+| `incident` | **INTERACTIVE always — never autonomous** | `references/ops-incident.md` |
+| `rollback` | **INTERACTIVE always — never autonomous** | `references/ops-rollback.md` |
+| `maintenance` | per `§Posture` default | `references/ops-maintenance.md` |
 
 **Split posture** rides the interactive-by-default policy + the additive
 `autonomy_contract` (by pointer to `./operations-contract.md §Posture`);
@@ -127,7 +130,7 @@ validator, two callers).
    outside the approved set — incident/rollback urgency shapes
    `guild.team_schedule.v1` waves only, never membership and never an early
    escape from the hold.
-1. **Dispatch** the confirmed class to `guild:ops-<class>`; the playbook names
+1. **Load** the confirmed class's `references/ops-<class>.md` chapter; the runbook names
    its producer (per `./operations-contract.md §Posture`) and emits the
    outputs.
 2. **G-operations review — two distinct, both-kept mechanisms**
@@ -192,7 +195,7 @@ automation task (DH-2 / GR-7).
 
 ## learning-checkpoint (step 7.5 — advisory, no new gate)
 
-After done-criteria + the d8-join and before phase close, fire the per-phase LearningCheckpoint with `phase=operations` and the ops record / runbook as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written ops record (`guild.ops.v1`, conditional incident/release evidence) into the 12-target verdict, then emit via the hook — full call signature + `GUILD_PHASE` mapping canonical in `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; it does NOT touch the 4 safety rails or the split autonomy posture. Non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
+After done-criteria + the d8-join and before phase close, fire the per-phase LearningCheckpoint with `phase=operations` and the ops record / runbook as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written ops record (`guild.ops.v1`, conditional incident/release evidence) into the 12-target verdict, then emit via the hook — full call signature + `GUILD_PHASE` mapping canonical in `skills/meta/reflect/references/learning-checkpoint.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; it does NOT touch the 4 safety rails or the split autonomy posture. Non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
 
 # Evidence requirements
 
@@ -252,3 +255,15 @@ read the one chapter you were routed to, and never inline a chapter here.
 | `references/ops-monitoring.md` | The monitoring runbook-class playbook for the guild:operations router — producer devops-observability-setup and the guild.ops.v1 output |
 | `references/ops-release.md` | The release runbook-class playbook for the guild:operations router — producer devops-ci-cd-pipeline + technical-writer-release-notes advisory, the guild.ops.v1 + guild.release.v1 outputs, and the release leg of the guild.release.v1 ↔ D8 close-gate join |
 | `references/ops-rollback.md` | The rollback runbook-class playbook for the guild:operations router — producer devops-incident-runbook, the guild.ops.v1 + guild.incident.v1 outputs, the hard INTERACTIVE-always (never autonomous) posture, and the REFUSE-on-non-force-pass-Quality-block rule |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:decisions` | `wiki` | `../knowledge/wiki/references/decisions.md` |
+| `guild:learning-checkpoint` | `reflect` | `../meta/reflect/references/learning-checkpoint.md` |
+| `guild:review-broker` | `review` | `../meta/review/references/review-broker.md` |

@@ -1,6 +1,6 @@
 <!--
   DH-3 BOUNDARY (static, read-only plugin install state). Shipped
-  progressive-disclosure support file for skills/guild-quality/SKILL.md +
+  progressive-disclosure support file for skills/quality/SKILL.md +
   quality-mechanics.md — same pattern as quality-mechanics.md. NEVER written at
   runtime; per-run guild.quality.v1 artifacts go to the consuming repo's
   .guild/runs/<run-id>/quality/.
@@ -14,7 +14,7 @@ by code, the code path cited here is canonical.
 
 This file consolidates the field blocks, the ReleaseGate predicate, the quality
 budget, the `task_run` permission envelope, and the lifecycle-ordering invariant
-that `skills/guild-quality/SKILL.md` and `skills/guild-quality/quality-mechanics.md`
+that `skills/quality/SKILL.md` and `skills/quality/quality-mechanics.md`
 own. Point at a named section below instead of restating the tables inline.
 
 ## guild.quality.v1 fields

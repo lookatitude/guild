@@ -22,7 +22,7 @@
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
       "resource_path": "resources/hooks/dist/learning-backstop.js",
-      "sha256": "a2bc929e6e7b72fd7bcd4e46d65df1191b0dbd78008f4cdcabf11543a0813d81"
+      "sha256": "cf3c7dc7bec39006379adc00cc3828008de9c3ee9b1c272420e47c80f87a6cde"
     },
     {
       "category": "hooks",
@@ -106,7 +106,7 @@
       "id": "guild-evolve-skill",
       "source_path": "skills/meta/evolve/SKILL.md",
       "resource_path": "resources/skills/meta/evolve/SKILL.md",
-      "sha256": "2df23d09a80730ef5eed258480335675199a0856d8d1557d9d865dd81e7820ee"
+      "sha256": "2a2c630d732be714f0919f5a9348a319748db7aa139052066aaca599b325a754"
     },
     {
       "category": "skills",
@@ -134,7 +134,7 @@
       "id": "guild-reflect",
       "source_path": "skills/meta/reflect/SKILL.md",
       "resource_path": "resources/skills/meta/reflect/SKILL.md",
-      "sha256": "47aa9ce8238dddb4296e2344607b3b31b91fa3cbc54163c39ed1268e32a63430"
+      "sha256": "8c61a1db83f15f062e5867e364355bebe640f7007c4f51fe22c03b2d0d9498b6"
     },
     {
       "category": "skills",

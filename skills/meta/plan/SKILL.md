@@ -198,7 +198,7 @@ Guild's `plan` skill deliberately shadows `guild:plan` and forks rather than ref
 
 ## Learning checkpoint (step 7.5 — advisory, no new gate)
 
-After the G-plan review + approval gate and before handoff, fire the per-phase LearningCheckpoint with `phase=planning` and `.guild/plan/<slug>.md` as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written plan/lanes into the 12-target verdict, then emit via the hook — the full call signature + `GUILD_PHASE` mapping are canonical in `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
+After the G-plan review + approval gate and before handoff, fire the per-phase LearningCheckpoint with `phase=planning` and `.guild/plan/<slug>.md` as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written plan/lanes into the 12-target verdict, then emit via the hook — the full call signature + `GUILD_PHASE` mapping are canonical in `skills/meta/reflect/references/learning-checkpoint.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
 
 ## Handoff
 
@@ -219,3 +219,17 @@ read the one chapter you were routed to, and never inline a chapter here.
 | `references/loop-plan-review.md` | F-2 adversarial plan-defect review driver — wraps `guild:plan`, runs an architect↔security loop where security raises plan-defect questions ONLY (security holes, scope creep, autonomy gaps, contract drift, untestable criteria) and signals satisfaction with the literal sentinel `## NO MORE QUESTIONS`; |
 | `references/product-define.md` | Product-loop DEFINE producer — turns a validated explore artifact into a typed, fail-closed `guild.define.v1` PRD nucleus whose every acceptance criterion carries a STABLE, unique id for full downstream traceability (plan lane → build receipt → QA check → release gate, AC32) |
 | `references/product-template.md` | Product-loop TEMPLATE producer — seeds a product idea from a named `guild.template.v1` (cli-tool, web-app, …) into a VALID `guild.explore.v1` + `guild.define.v1` skeleton pair, so the product loop starts from a proven contract |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:codex-review` | `review` | `../review/references/codex-review.md` |
+| `guild:context-assemble` | `execute-plan` | `../execute-plan/references/context-assemble.md` |
+| `guild:learning-checkpoint` | `reflect` | `../reflect/references/learning-checkpoint.md` |
+| `guild:review-broker` | `review` | `../review/references/review-broker.md` |
+| `guild:verify-done` | `quality` | `../../quality/references/verify-done.md` |

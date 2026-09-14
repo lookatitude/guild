@@ -69,3 +69,13 @@ Emit a `handoff` block naming the creation run and gate outcome:
 - On **failure** (any gate): write `.guild/evolve/<run-id>/proposed-<role>-rejected.md` with the gate outcomes and surface refinement options.
 
 Payload fields: `run_id`, `role`, `creation_authority` (`human-requested`/`evolution-proposed`), `outcome` (`registered`/`rejected`), `gate_failed` (rejection only — one of `extraction-signals`, `boundary-edit`, `new-specialist`; `extraction-signals` applies only to evolution-proposed creation), `boundary_edits` (success only — adjacent-specialist paths that received `DO NOT TRIGGER` clauses), `proposed_path`/`live_path` (traceability), and `refinement_options` (rejection only).
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:rollback-skill` | `evolve` | `../evolve/references/rollback-skill.md` |

@@ -340,7 +340,7 @@
       "id": "guild-learn",
       "source_path": "skills/knowledge/learn/SKILL.md",
       "tier": "knowledge",
-      "description": "Smart full learn-all dispatcher — the no-arg /guild:learn entrypoint that replaces the old usage-stop with a genuine smart full-learn. Detects target shape (regular_project | workspace | existing_guild_project | new_or_sparse_project | mixed_or_uncertain), surfaces the classification for confirmation, then runs the appropriate full pipeline: regular-project = run start → inventory → cheap-map → deep-graph (OQ1 cost-estimate gate) → derive → links → tour → candidates → indexes → provenance → checkpoint → close; workspace = detect children first, never scan sub-repos as one monolith, AUTO fan-out per learn_fanout config (OQ2), aggregate cost estimate shown before child scans, --dry-run honored. Skipped-file decisions emitted in SC-G shape. All promotions remain human-gated. TRIGGER for \\\"/guild:learn\\\" with no sub-verb, \\\"learn this project completely\\\", \\\"full learn everything\\\", \\\"run the full learn pipeline\\\", \\\"smart learn this workspace\\\", \\\"learn all artifacts end to end\\\". DO NOT TRIGGER for: explicit sub-verb forms (guild:learn-map for map, guild:learn-graph for graph, guild:learn-onboard for onboard, guild:learn-diff for diff, guild:learn-explain for explain), or for single-artifact queries (guild:wiki-query / kg-query).",
+      "description": "Smart full learn-all dispatcher — the no-arg /guild:learn entrypoint that replaces the old usage-stop with a genuine smart full-learn. Detects target shape (regular_project | workspace | existing_guild_project | new_or_sparse_project | mixed_or_uncertain), surfaces the classification for confirmation, then runs the appropriate full pipeline: regular-project = run start → inventory → cheap-map → deep-graph (OQ1 cost-estimate gate) → derive → links → tour → candidates → indexes → provenance → checkpoint → close; workspace = detect children first, never scan sub-repos as one monolith, AUTO fan-out per learn_fanout config (OQ2), aggregate cost estimate shown before child scans, --dry-run honored. Skipped-file decisions emitted in SC-G shape. All promotions remain human-gated. TRIGGER for \\\"/guild:learn\\\" with no sub-verb, \\\"learn this project completely\\\", \\\"full learn everything\\\", \\\"run the full learn pipeline\\\", \\\"smart learn this workspace\\\", \\\"learn all artifacts end to end\\\". DO NOT TRIGGER for: single-artifact queries (the guild-wiki assembler / kg-query). An explicit sub-verb is NOT a different skill — it is this assembler loading one references/learn-<verb>.md chapter.",
       "indexed": true
     },
     {
@@ -2176,6 +2176,11 @@
     {
       "id": "lint/packaged-install-smoke",
       "source_path": "scripts/lint/packaged-install-smoke.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "lint/skill-link-integrity",
+      "source_path": "scripts/lint/skill-link-integrity.ts",
       "kind": "cli"
     },
     {

@@ -836,7 +836,7 @@
       "id": "projection:src/modules/distribution/workflows/build-inventory.ts",
       "source_path": "src/modules/distribution/workflows/build-inventory.ts",
       "resource_path": "resources/src/modules/distribution/workflows/build-inventory.ts",
-      "sha256": "a2b3ab73b5af40701999d5bfde7fe2e253e6563f071887b29dfbccfcf2e5982a",
+      "sha256": "08c4d75b6b0ad3fa4b051f6d0c02b0d54f65dc267d153a9ce3f3f9ee1e8fc92a",
       "projection_dependency": true
     },
     {
@@ -1572,7 +1572,7 @@
       "id": "projection:src/modules/lifecycle/workflows/workflow-graph-overlay.ts",
       "source_path": "src/modules/lifecycle/workflows/workflow-graph-overlay.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/workflow-graph-overlay.ts",
-      "sha256": "626e8f63befcf2727c8bace60825402bde39d2af176286496cd67ee1a5d5de59",
+      "sha256": "7a6c34672f5af58f5d941e40bac2cd6101b40aab6c0d62dee5160514e3ba47d1",
       "projection_dependency": true
     },
     {

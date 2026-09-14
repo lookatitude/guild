@@ -78,7 +78,7 @@
       "id": "guild-diagnose",
       "source_path": "skills/meta/diagnose/SKILL.md",
       "resource_path": "resources/skills/meta/diagnose/SKILL.md",
-      "sha256": "2c3f7d96e1b0b4267b8e49fb3371c5f5269985425b5cebb35c52cd7802847d69"
+      "sha256": "187b474699a5d880957298f6825806321bb59dc70e1b779f500fdfefb73abb0a"
     },
     {
       "category": "skills",
@@ -127,7 +127,7 @@
       "id": "guild-review",
       "source_path": "skills/meta/review/SKILL.md",
       "resource_path": "resources/skills/meta/review/SKILL.md",
-      "sha256": "c94879c938883292df65323f44185f18ddfaea63b84041d0166d6e7a7473d913"
+      "sha256": "f794b1f525f9209c00e63bdce6ab4a2066b498ceb578d2336017aa986b58feac"
     },
     {
       "category": "skills",
@@ -155,7 +155,7 @@
       "id": "guild-review/references/review-broker.md",
       "source_path": "skills/meta/review/references/review-broker.md",
       "resource_path": "resources/skills/meta/review/references/review-broker.md",
-      "sha256": "7f9c7a1c91391a270fa8478d1f0a3e025e0dc0f3a92fa5c98e907e1610dbd1b6"
+      "sha256": "f19898ff000e70a6c8b85f4b2e0557dc1d6b032dbfebe0c164f18daba892dab4"
     },
     {
       "category": "skills",

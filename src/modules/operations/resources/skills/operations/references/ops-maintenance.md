@@ -9,7 +9,7 @@ type: meta
   DH-3 BOUNDARY (static, read-only). NEVER written at runtime; per-run
   guild.ops.v1 goes to the consuming repo's .guild/runs/<run-id>/ops/.
   CONTRACT FIDELITY: every guild.ops.v1 reference is a POINTER through
-  ../../guild-operations/operations-contract.md §"guild.ops.v1 fields"; zero field text
+  ../operations-contract.md §"guild.ops.v1 fields"; zero field text
   reproduced (anti-respell). The 4 safety rails, the 5-boolean machine-check,
   the allowlist exit-2, and the D8 join LIVE IN the guild:operations router.
 -->
@@ -41,11 +41,11 @@ scheduled maintenance).
 - The selected `maintenance` runbook + its wiki trust root
   `.guild/wiki/standards/runbooks/<name>.md` (router-validated).
 - Frozen `guild.ops.v1`
-  (`../../guild-operations/operations-contract.md §"guild.ops.v1 fields"`, pointer only).
+  (`../operations-contract.md §"guild.ops.v1 fields"`, pointer only).
 
 # Output format
 
-`guild.ops.v1` populated **by pointer** to `../../guild-operations/operations-contract.md §"guild.ops.v1 fields"`
+`guild.ops.v1` populated **by pointer** to `../operations-contract.md §"guild.ops.v1 fields"`
 (zero re-spelled fields); per-step evidence under
 `.guild/runs/<run-id>/ops/evidence/`.
 
@@ -54,7 +54,7 @@ scheduled maintenance).
 ## producer
 
 Producer **`devops-infrastructure-as-code`** — class→producer map per
-`../../guild-operations/operations-contract.md §Posture` (by pointer). Posture is the
+`../operations-contract.md §Posture` (by pointer). Posture is the
 **`§Posture` default**, subject to the router's rails (rail 1 first-run
 interactive, rail 3 hard set unconditional, rail 4 pre-flight dry-run).
 
@@ -81,7 +81,7 @@ listed run directories. Record the dry-run report as pre-flight evidence
 
 Each step records `op_class`; every **hard-set step** shows
 `autonomy: prompted_inline` (rail-3 proof). Populate `guild.ops.v1` head by
-pointer to `../../guild-operations/operations-contract.md §"guild.ops.v1 fields"`.
+pointer to `../operations-contract.md §"guild.ops.v1 fields"`.
 
 # Evidence requirements
 
@@ -99,7 +99,7 @@ pointer to `../../guild-operations/operations-contract.md §"guild.ops.v1 fields
 - Rails are router-enforced and **not relaxed here**; approval lowers only the
   SOFT gate, never the hard set (rail 3).
 - No frozen `guild.ops.v1` field text reproduced — all by pointer through
-  `../../guild-operations/operations-contract.md`. **No cloud-build task** (GR-7).
+  `../operations-contract.md`. **No cloud-build task** (GR-7).
 
 # Eval cases
 

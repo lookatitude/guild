@@ -403,7 +403,13 @@ describe("CLI: check-entrypoint-packaging.ts", () => {
         // Append (not add — a NEW skill dir would trip module-ownership validation,
         // since it wouldn't be declared in any src/modules/*/module.manifest.json) a
         // throwaway reference to an EXISTING, already-owned skill body.
-        const skillPath = path.join(fixtureRoot, "skills", "meta", "learning-checkpoint", "SKILL.md");
+        //
+        // T03: this used to append to `skills/meta/learning-checkpoint/SKILL.md`.
+        // That id is a domain function now (KTD57) and its body is a chapter, so the
+        // path does not exist and the fixture died before the CLI ever ran. Its
+        // parent assembler `reflect` is the equivalent target: an owned, indexed
+        // skill body the renderers ship.
+        const skillPath = path.join(fixtureRoot, "skills", "meta", "reflect", "SKILL.md");
         fs.appendFileSync(
           skillPath,
           "\n<!-- test-only, unshipped reference: -->\n" +

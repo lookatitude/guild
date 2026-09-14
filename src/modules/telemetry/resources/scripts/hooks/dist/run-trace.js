@@ -31010,6 +31010,10 @@ var init_write_task_run = __esm({
 });
 
 // src/modules/lifecycle/workflows/workflow-graph-overlay.ts
+function isReleaseShaped(node) {
+  if (!node) return false;
+  return node.station === RELEASE_ROLE.station || node.assembler === RELEASE_ROLE.assembler;
+}
 function toNodes(value) {
   if (Array.isArray(value)) {
     return value.map(
@@ -31032,21 +31036,268 @@ function requiredIds(defaultNodes) {
   }
   return [...ids];
 }
-function validateWorkflowGraphOverlay(pluginDefault, overlay) {
+function nodeIndex(nodes) {
+  const m = /* @__PURE__ */ new Map();
+  for (const n of nodes) if (n && typeof n.id === "string") m.set(n.id, n);
+  return m;
+}
+function adjacency(edges, ownClass) {
+  const out = /* @__PURE__ */ new Map();
+  const add = (from, to) => {
+    const list = out.get(from) ?? [];
+    list.push(to);
+    out.set(from, list);
+  };
+  for (const e of edges) {
+    if (!e || typeof e.from !== "string") continue;
+    if (typeof e.to === "string") {
+      add(e.from, e.to);
+      continue;
+    }
+    if (e.to && typeof e.to === "object" && ownClass !== void 0 && e.to.class === ownClass) {
+      const entry = typeof e.to.entry === "string" ? e.to.entry : CLASS_DEFAULT_ENTRIES[ownClass];
+      if (typeof entry === "string") add(e.from, entry);
+    }
+  }
+  return out;
+}
+function crossClassTargets(edges) {
+  const out = [];
+  for (const e of edges) {
+    if (!e || typeof e.to !== "object" || e.to === null) continue;
+    out.push({
+      from: String(e.from),
+      class: String(e.to.class),
+      entry: typeof e.to.entry === "string" ? e.to.entry : void 0
+    });
+  }
+  return out;
+}
+function reachableFrom(adj, from, without) {
+  const seen = /* @__PURE__ */ new Set();
+  if (from === without) return seen;
+  seen.add(from);
+  const stack = [from];
+  while (stack.length > 0) {
+    const at = stack.pop();
+    for (const next of adj.get(at) ?? []) {
+      if (next === without || seen.has(next)) continue;
+      seen.add(next);
+      stack.push(next);
+    }
+  }
+  return seen;
+}
+function dominates(adj, entry, gate, node) {
+  if (node === gate) return true;
+  return !reachableFrom(adj, entry, gate).has(node);
+}
+function mergeNode(base, over) {
+  if (base === void 0) return over;
+  if (over === void 0) return base;
+  return { ...base, ...over };
+}
+function mergeNodeList(defaultNodes, overlayNodes) {
+  const base = nodeIndex(defaultNodes);
+  return overlayNodes.map((n) => n && typeof n.id === "string" ? mergeNode(base.get(n.id), n) : n);
+}
+function validateWorkflowGraphOverlay(pluginDefault, overlay, classDefaults) {
+  const defaultGraph = asGraph(pluginDefault);
   const defaultNodes = toNodes(pluginDefault);
   const hasOverlay = overlay !== void 0 && overlay !== null;
-  const overlayNodes = hasOverlay ? toNodes(overlay) : defaultNodes;
   const overlayGraph = asGraph(hasOverlay ? overlay : pluginDefault);
+  const rawOverlayNodes = hasOverlay ? toNodes(overlay) : defaultNodes;
+  const overlayNodes = mergeNodeList(defaultNodes, rawOverlayNodes);
   const violations = [];
   const present2 = new Set(overlayNodes.map((n) => n?.id).filter((id) => !!id));
   const defaultIds = new Set(defaultNodes.map((n) => n?.id).filter(Boolean));
-  for (const id of requiredIds(defaultNodes)) {
-    if (!defaultIds.has(id)) continue;
+  const defaultIndex = nodeIndex(defaultNodes);
+  const overlayIndex = nodeIndex(overlayNodes);
+  const gates = requiredIds(defaultNodes).filter((id) => defaultIds.has(id));
+  const classProtectedIds = new Set(gates);
+  const reservedButForeign = (id) => PROTECTED_NODE_IDS.includes(id) && !classProtectedIds.has(id);
+  const ownClass = typeof overlayGraph.class === "string" ? overlayGraph.class : typeof defaultGraph.class === "string" ? defaultGraph.class : void 0;
+  const idCounts = /* @__PURE__ */ new Map();
+  for (const n of rawOverlayNodes) {
+    if (!n || typeof n.id !== "string") continue;
+    idCounts.set(n.id, (idCounts.get(n.id) ?? 0) + 1);
+  }
+  for (const [id, count] of [...idCounts.entries()].sort()) {
+    if (count > 1) {
+      violations.push({
+        rule: "duplicate-node-id",
+        detail: `overlay declares node id '${id}' ${count} times`
+      });
+    }
+  }
+  for (const id of gates) {
     if (!present2.has(id)) {
       violations.push({
         rule: "missing-required-node",
         detail: `overlay drops required node '${id}'`
       });
+      continue;
+    }
+    const before = defaultIndex.get(id);
+    if (before === void 0) continue;
+    for (const stated of rawOverlayNodes.filter((n) => n && n.id === id)) {
+      for (const key of Object.keys(stated)) {
+        if (key === "id") continue;
+        if (stated[key] === before[key]) continue;
+        violations.push({
+          rule: "protected-node-field-override",
+          detail: `overlay overrides '${key}' on protected node '${id}' (${JSON.stringify(before[key])} -> ${JSON.stringify(stated[key])}); a protected node may carry only its id`
+        });
+        if (key === "station") {
+          violations.push({
+            rule: "required-node-station-changed",
+            detail: `overlay changes required node '${id}' station '${String(before.station)}' -> '${String(stated.station)}'`
+          });
+        }
+        if (key === "required" && stated.required === false) {
+          violations.push({
+            rule: "required-node-made-skippable",
+            detail: `overlay clears required on '${id}'`
+          });
+        }
+        if (key === "skip_when" && stated.skip_when !== "never") {
+          violations.push({
+            rule: "required-node-made-skippable",
+            detail: `overlay gives required node '${id}' skip_when '${String(stated.skip_when)}'`
+          });
+        }
+      }
+    }
+  }
+  for (const [id, role] of Object.entries(PROTECTED_NODE_ROLES)) {
+    const node = overlayIndex.get(id);
+    if (node === void 0 || !defaultIds.has(id)) continue;
+    if (node.station !== void 0 && node.station !== role.station) {
+      violations.push({
+        rule: "required-node-station-changed",
+        detail: `merged node '${id}' station is '${node.station}', not its own '${role.station}'`
+      });
+    }
+    if (node.assembler !== void 0 && node.assembler !== role.assembler) {
+      violations.push({
+        rule: "protected-role-reassigned",
+        detail: `merged node '${id}' assembler is '${node.assembler}', not its own '${role.assembler}'`
+      });
+    }
+  }
+  for (const node of overlayNodes) {
+    if (!node || typeof node.id !== "string" || classProtectedIds.has(node.id)) continue;
+    if (reservedButForeign(node.id)) {
+      violations.push({
+        rule: "protected-role-reassigned",
+        detail: `node '${node.id}' uses the reserved id of a protected gate in class '${String(ownClass)}', whose default does not declare it (station '${String(node.station)}', assembler '${String(node.assembler)}')`
+      });
+    }
+    for (const [ownerId, role] of Object.entries(PROTECTED_NODE_ROLES)) {
+      if (!defaultIds.has(ownerId)) continue;
+      const stationClash = node.station !== void 0 && node.station === role.station;
+      const assemblerClash = node.assembler !== void 0 && node.assembler === role.assembler;
+      if (!stationClash && !assemblerClash) continue;
+      violations.push({
+        rule: "protected-role-reassigned",
+        detail: `node '${node.id}' claims ${stationClash ? `station '${role.station}'` : `assembler '${role.assembler}'`}, which belongs to protected node '${ownerId}'`
+      });
+    }
+  }
+  const mergedEdges = overlayGraph.edges ?? defaultGraph.edges ?? [];
+  const mergedAdj = adjacency(mergedEdges, ownClass);
+  const defaultEntry = typeof defaultGraph.entry === "string" ? defaultGraph.entry : void 0;
+  const overlayEntry = typeof overlayGraph.entry === "string" ? overlayGraph.entry : void 0;
+  const effectiveEntry = overlayEntry ?? defaultEntry;
+  if (effectiveEntry !== void 0 && !present2.has(effectiveEntry)) {
+    violations.push({
+      rule: "entry-unknown-node",
+      detail: `entry '${effectiveEntry}' names no node in the merged graph`
+    });
+  }
+  for (const target of crossClassTargets(mergedEdges)) {
+    if (!WORKFLOW_CLASSES.includes(target.class)) continue;
+    if (target.entry === void 0) continue;
+    const destGraph = classDefaults?.[target.class];
+    const destEntry = (typeof destGraph?.entry === "string" ? destGraph.entry : void 0) ?? CLASS_DEFAULT_ENTRIES[target.class];
+    if (target.class === ownClass && !present2.has(target.entry)) {
+      violations.push({
+        rule: "cross-class-entry-unknown-node",
+        detail: `edge ${target.from} hands off to class '${target.class}' at '${target.entry}', which names no node in the merged graph`
+      });
+      continue;
+    }
+    if (target.entry === destEntry) continue;
+    if (destGraph !== void 0 && destEntry !== void 0) {
+      const destNodes = toNodes(destGraph);
+      if (!destNodes.some((n) => n?.id === target.entry)) {
+        violations.push({
+          rule: "cross-class-entry-unknown-node",
+          detail: `edge ${target.from} hands off to class '${target.class}' at '${target.entry}', which names no node in that class`
+        });
+        continue;
+      }
+      const destAdj = adjacency(destGraph.edges ?? [], target.class);
+      const destGates = requiredIds(destNodes).filter(
+        (g) => destNodes.some((n) => n?.id === g)
+      );
+      const behind = destGates.filter((g) => dominates(destAdj, destEntry, g, target.entry));
+      if (behind.length === 0) continue;
+      violations.push({
+        rule: "cross-class-entry-bypasses-gate",
+        detail: `edge ${target.from} hands off to class '${target.class}' at '${target.entry}', which is behind required node(s) ${behind.map((g) => `'${g}'`).join(", ")}`
+      });
+      continue;
+    }
+    violations.push({
+      rule: "cross-class-entry-bypasses-gate",
+      detail: `edge ${target.from} hands off to class '${target.class}' at '${target.entry}', which is not that class's entry ('${String(destEntry)}') and cannot be shown to be upstream of its gates`
+    });
+  }
+  if (effectiveEntry !== void 0) {
+    const fromEntry = reachableFrom(mergedAdj, effectiveEntry);
+    const liveGates = gates.filter((g) => present2.has(g));
+    for (const gate of liveGates) {
+      if (fromEntry.has(gate)) continue;
+      violations.push({
+        rule: "gate-unreachable",
+        detail: `required node '${gate}' is not reachable from entry '${effectiveEntry}'` + (overlayEntry !== void 0 && overlayEntry !== defaultEntry ? `; the overlay entry starts the run past it` : "")
+      });
+      violations.push({
+        rule: "bypasses-required-node",
+        detail: `entry '${effectiveEntry}' is downstream of required node '${gate}', so the run starts past it`
+      });
+    }
+    for (const node of overlayNodes) {
+      if (!node || typeof node.id !== "string") continue;
+      if (classProtectedIds.has(node.id)) continue;
+      if (!isReleaseShaped(node)) continue;
+      if (!fromEntry.has(node.id)) continue;
+      for (const gate of liveGates) {
+        if (dominates(mergedAdj, effectiveEntry, gate, node.id)) continue;
+        violations.push({
+          rule: "release-work-ungated",
+          detail: `node '${node.id}' does release work (station '${String(node.station)}', assembler '${String(node.assembler)}') but required node '${gate}' does not dominate it from entry '${effectiveEntry}'`
+        });
+        violations.push({
+          rule: "bypasses-required-node",
+          detail: `overlay routes '${effectiveEntry}' -> '${node.id}' without passing through required node '${gate}'`
+        });
+      }
+    }
+    if (defaultEntry !== void 0) {
+      const defaultAdj = adjacency(defaultGraph.edges ?? [], ownClass);
+      for (const outer of liveGates) {
+        for (const inner of liveGates) {
+          if (outer === inner) continue;
+          if (!dominates(defaultAdj, defaultEntry, outer, inner)) continue;
+          if (dominates(mergedAdj, effectiveEntry, outer, inner)) continue;
+          violations.push({
+            rule: "bypasses-required-node",
+            detail: `overlay reaches required node '${inner}' without passing through required node '${outer}', which gated it in the class default`
+          });
+        }
+      }
     }
   }
   const cls = overlayGraph.class;
@@ -31055,6 +31306,15 @@ function validateWorkflowGraphOverlay(pluginDefault, overlay) {
   }
   for (const e of overlayGraph.edges ?? []) {
     if (!e) continue;
+    if (present2.size > 0) {
+      for (const [side, id] of [["from", e.from], ["to", typeof e.to === "string" ? e.to : void 0]]) {
+        if (typeof id !== "string" || present2.has(id)) continue;
+        violations.push({
+          rule: "edge-endpoint-unknown",
+          detail: `edge ${side} '${id}' names a node the merged graph does not declare`
+        });
+      }
+    }
     if (typeof e.on === "string" && !WORKFLOW_EDGE_OUTCOMES.includes(e.on)) {
       violations.push({
         rule: "unknown-edge-outcome",
@@ -31080,7 +31340,12 @@ function validateWorkflowGraphOverlay(pluginDefault, overlay) {
   return { ok, valid: ok, violations };
 }
 function applyWorkflowGraphOverlay(pluginDefault, overlay) {
-  const merged = overlay ? { ...pluginDefault, ...overlay, nodes: overlay.nodes ?? pluginDefault.nodes, edges: overlay.edges ?? pluginDefault.edges } : { ...pluginDefault };
+  const merged = overlay ? {
+    ...pluginDefault,
+    ...overlay,
+    nodes: overlay.nodes ? mergeNodeList(pluginDefault.nodes ?? [], overlay.nodes) : pluginDefault.nodes,
+    edges: overlay.edges ?? pluginDefault.edges
+  } : { ...pluginDefault };
   const result = validateWorkflowGraphOverlay(pluginDefault, merged);
   if (!result.ok) {
     throw new Error(
@@ -31130,7 +31395,7 @@ function validateWorkflowGraphDocument(doc) {
   const ok = violations.length === 0;
   return { ok, valid: ok, violations };
 }
-var WORKFLOW_CLASSES, WORKFLOW_EDGE_OUTCOMES, PROTECTED_NODE_IDS;
+var WORKFLOW_CLASSES, WORKFLOW_EDGE_OUTCOMES, PROTECTED_NODE_IDS, RELEASE_GATE, PROTECTED_NODE_STATIONS, PROTECTED_NODE_ROLES, RELEASE_ROLE, CLASS_DEFAULT_ENTRIES;
 var init_workflow_graph_overlay = __esm({
   "src/modules/lifecycle/workflows/workflow-graph-overlay.ts"() {
     WORKFLOW_CLASSES = Object.freeze(["product", "research", "debug", "ops", "init"]);
@@ -31143,6 +31408,34 @@ var init_workflow_graph_overlay = __esm({
       "change_class"
     ]);
     PROTECTED_NODE_IDS = Object.freeze(["product.qa", "d5", "d8", "ops.first-run"]);
+    RELEASE_GATE = Object.freeze({
+      class: "product",
+      from: "build",
+      gate: "product.qa",
+      releaseNodes: Object.freeze(["product.release"])
+    });
+    PROTECTED_NODE_STATIONS = Object.freeze({
+      "product.qa": "runtime-qa",
+      d5: "team-compose",
+      d8: "initiative-close",
+      "ops.first-run": "ops-runbooks"
+    });
+    PROTECTED_NODE_ROLES = Object.freeze({
+      "product.qa": Object.freeze({ station: "runtime-qa", assembler: "quality" }),
+      d5: Object.freeze({ station: "team-compose", assembler: "team-compose" }),
+      d8: Object.freeze({ station: "initiative-close", assembler: "initiative" })
+    });
+    RELEASE_ROLE = Object.freeze({
+      station: "ops-runbooks",
+      assembler: "operations"
+    });
+    CLASS_DEFAULT_ENTRIES = Object.freeze({
+      product: "intake",
+      research: "recall",
+      debug: "recall",
+      ops: "ops.first-run",
+      init: "detect"
+    });
   }
 });
 
@@ -31152,6 +31445,7 @@ __export(lifecycle_exports, {
   BindingRejectedError: () => BindingRejectedError,
   CANONICAL_PHASES: () => CANONICAL_PHASES,
   CAPABILITY_RUN_START_SNAPSHOT_SCHEMA: () => CAPABILITY_RUN_START_SNAPSHOT_SCHEMA,
+  CLASS_DEFAULT_ENTRIES: () => CLASS_DEFAULT_ENTRIES,
   CLAUDE_CODE_NATIVE_ADAPTER_VERSION: () => CLAUDE_CODE_NATIVE_ADAPTER_VERSION,
   DEFAULT_HEARTBEAT_TIMEOUT_MS: () => DEFAULT_HEARTBEAT_TIMEOUT_MS,
   HOOK_BINDING_ENV_BINDING_REF: () => HOOK_BINDING_ENV_BINDING_REF,
@@ -31234,6 +31528,10 @@ __export(lifecycle_exports, {
   PENDING_SUBSTANTIVE_OPERATION_SCHEMA: () => PENDING_SUBSTANTIVE_OPERATION_SCHEMA,
   PROGRAM_STATUSES: () => PROGRAM_STATUSES2,
   PROTECTED_NODE_IDS: () => PROTECTED_NODE_IDS,
+  PROTECTED_NODE_ROLES: () => PROTECTED_NODE_ROLES,
+  PROTECTED_NODE_STATIONS: () => PROTECTED_NODE_STATIONS,
+  RELEASE_GATE: () => RELEASE_GATE,
+  RELEASE_ROLE: () => RELEASE_ROLE,
   WAVE_REQUIRED_KEYS: () => WAVE_REQUIRED_KEYS,
   WAVE_STATUSES: () => WAVE_STATUSES2,
   WORKFLOW_CLASSES: () => WORKFLOW_CLASSES,
@@ -31285,6 +31583,7 @@ __export(lifecycle_exports, {
   isNeutralScenarioCategory: () => isNeutralScenarioCategory,
   isNeutralSupportState: () => isNeutralSupportState,
   isNeutralSupportStatus: () => isNeutralSupportStatus,
+  isReleaseShaped: () => isReleaseShaped,
   isStalled: () => isStalled,
   loadRetryOpts: () => loadRetryOpts,
   loadRunBinding: () => loadRunBinding,

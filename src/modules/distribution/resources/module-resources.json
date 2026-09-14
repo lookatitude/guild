@@ -250,6 +250,13 @@
     },
     {
       "category": "scripts",
+      "id": "lint/skill-link-integrity",
+      "source_path": "scripts/lint/skill-link-integrity.ts",
+      "resource_path": "resources/scripts/lint/skill-link-integrity.ts",
+      "sha256": "790f180b3cff69c6b15ecd6a3b3b325705c029ca9eb2786cadf1a26fd847f9ba"
+    },
+    {
+      "category": "scripts",
       "id": "projection:src/modules/distribution/workflows/release-distribution-contract.ts",
       "source_path": "src/modules/distribution/workflows/release-distribution-contract.ts",
       "resource_path": "resources/src/modules/distribution/workflows/release-distribution-contract.ts",
