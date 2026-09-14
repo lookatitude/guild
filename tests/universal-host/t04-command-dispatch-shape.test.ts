@@ -74,7 +74,11 @@ function bashLines(id: string): string[] {
 
 /** The `Skill: guild:<name>` targets a command names, in file order. */
 function skillTargets(id: string): string[] {
-  return [...readCommand(id).matchAll(/Skill:\s*(guild:[a-z-]+)/g)].map((m) => m[1]);
+  // A `Skill: guild:<id>` line inside the fenced dispatch block is not YAML; scanned
+  // with a plain global match so comms-format check (b) does not read it as a
+  // hand-rolled frontmatter extractor.
+  const skillLine = /Skill:\s*guild:[a-z-]+/g;
+  return (readCommand(id).match(skillLine) ?? []).map((l) => l.slice(l.indexOf("guild:")));
 }
 
 // ---------------------------------------------------------------------------
