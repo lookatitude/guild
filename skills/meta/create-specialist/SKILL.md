@@ -3,6 +3,7 @@ name: guild-create-specialist
 description: Runs the §12 7-step workflow to mint a new shipping specialist — interview, draft under .guild/agents/proposed/, boundary scan, gate applicable adjacent-boundary edits, gate the new specialist, register live. Creation authority is either human-requested (an explicit request or approved team-compose option A; no historical extraction prerequisite) or evolution-proposed (all §11.2.1 historical extraction signals required). TRIGGER for "create a new Guild specialist for <domain>", "mint a data-scientist specialist", "add a new role — <role>", "incubate a proposed specialist for <domain>". DO NOT TRIGGER for minting a new skill/capability (guild:create-skill), evolving an existing specialist (guild:evolve-skill), composing a team for the current task (guild:team-compose), editing an existing agent's body (specialist-agent-writer dev agent), or rolling back a specialist (guild:rollback-skill).
 when_to_use: An explicit human request, an operator-approved /guild:plan option A after a gap is flagged, OR an evolution/reflection proposal whose §11.2.1 extraction thresholds pass.
 type: meta
+indexed: true
 ---
 
 # guild:create-specialist
@@ -68,3 +69,13 @@ Emit a `handoff` block naming the creation run and gate outcome:
 - On **failure** (any gate): write `.guild/evolve/<run-id>/proposed-<role>-rejected.md` with the gate outcomes and surface refinement options.
 
 Payload fields: `run_id`, `role`, `creation_authority` (`human-requested`/`evolution-proposed`), `outcome` (`registered`/`rejected`), `gate_failed` (rejection only — one of `extraction-signals`, `boundary-edit`, `new-specialist`; `extraction-signals` applies only to evolution-proposed creation), `boundary_edits` (success only — adjacent-specialist paths that received `DO NOT TRIGGER` clauses), `proposed_path`/`live_path` (traceability), and `refinement_options` (rejection only).
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:rollback-skill` | `evolve` | `../evolve/references/rollback-skill.md` |

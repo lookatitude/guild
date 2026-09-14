@@ -15,18 +15,21 @@ gate.
 
 ## What v2 ships
 
-- **15 specialist templates + 3 machinery agents** — 15 domain type templates
+- **15 specialist templates + 4 machinery agents** — 15 domain type templates
   across three groups (engineering: architect, researcher, backend, frontend,
   devops, qa, mobile, security; content & communication: copywriter, doc-writer,
   technical-writer, social-media, seo; commercial: marketing, sales), one
   `templates/specialists/*.md` per role, minted on demand into your project's
-  `.guild/agents/` by team composition — plus the 3 machinery agents the plugin
-  registers directly (advisor, developer; one `agents/*.md` each).
-- **111 skills** across six tiers — 1 core (`guild-principles`), 39 meta
-  (the workflow spine + decisions + reflect + evolve + create-specialist +
-  rollback + audit + diagnose + v1.4 loop/review helpers), 11 knowledge
-  (wiki ingest / query / lint + the `learn-*` family), 58 specialist skills
-  (2–5 per specialist), and the `guild-operations` + `guild-quality` gate skills.
+  `.guild/agents/` by team composition — plus the 4 machinery agents the plugin
+  registers directly (advisor, context-manager, developer, team-lead; one
+  `agents/*.md` each).
+- **76 skills**, of which 17 are indexed — the host's catalog is exactly 17
+  assembler skills (using-guild, init, brainstorm, plan, team-compose,
+  execute-plan, quality, operations, learn, wiki, initiative, review, diagnose,
+  evolve, create-skill, create-specialist, reflect). Everything else still ships
+  but stays off the index: L3 chapters live in their parent assembler's
+  `references/`, and the 58 specialist starter recipes plus the dashboard
+  launcher live under `skills/playbooks/`.
 - **The v2 command surface** — `/guild:guild [brief]` plus the phase verbs
   `/guild:init|ideate|plan|build|qa|ops`, helpers `/guild:status|resume`,
   nouns `/guild:wiki|initiative`, and maintenance
@@ -347,7 +350,7 @@ The canonical docs live at the **Guild docs site** (`https://guildstack.dev`).
 
 - `https://guildstack.dev/docs/getting-started` — install, first run, and basic configuration.
 - `https://guildstack.dev/docs/architecture` — shipped plugin architecture, directory layout, the v2 single-verb lifecycle phases, hook inventory, backend options.
-- `https://guildstack.dev/docs/specialist-roster` — the 15 domain specialist templates + the 3 machinery agents (advisor, context-manager, developer), their triggers, DO NOT TRIGGER boundaries, and owned skills.
+- `https://guildstack.dev/docs/specialist-roster` — the 15 domain specialist templates + the 4 machinery agents (advisor, context-manager, developer, team-lead), their triggers, DO NOT TRIGGER boundaries, and owned skills.
 - `https://guildstack.dev/docs/context-assembly` — three-layer context contract, role mapping, ambient-context caveat.
 - `https://guildstack.dev/docs/wiki-pattern` — categorized project memory, raw vs synthesized, decision capture, scale transition.
 - `https://guildstack.dev/docs/self-evolution` — the two triggers, the 10-step pipeline, promotion gate, versioning + rollback.

@@ -3,6 +3,7 @@ name: guild-create-skill
 description: Gated mint of a NEW skill — the capability parallel to `guild:create-specialist` for skills, not agents; what phase-aware composition (G-PHASE-COMPOSE) / `guild:team-compose` takes when a phase needs a missing CAPABILITY, not a role. Interview → draft under `.guild/skills/proposed-<name>/` → boundary scan with `DO NOT TRIGGER` edits gated via `guild:evolve-skill` → paired evals + shadow mode → register within `.guild/`. Creation authority is human-requested (explicit request or team-compose option A; no historical extraction prerequisite) or evolution-proposed (all `§11.2.1` signals required). TRIGGER for "create a new skill for <capability>", "mint a skill for a capability gap", "write a new skill from scratch for <X>", "phase-compose flagged a skill gap — create the skill". DO NOT TRIGGER for minting a specialist/agent (`guild:create-specialist`), evolving or re-tuning an existing skill (`guild:evolve-skill`), composing a team (`guild:team-compose`), or rolling back a skill (`guild:rollback-skill`).
 when_to_use: An explicit human request for a new capability, OR a phase-aware composition pass (G-PHASE-COMPOSE) detects a missing CAPABILITY rather than a missing role, OR `guild:team-compose`'s gap-handling option A surfaces a skill (not agent) gap, OR `§11.2.1`-style extraction signals show a recurring capability gap across ≥3 runs with no existing skill covering it. Not for evolving an existing skill (`guild:evolve-skill`) or minting a specialist (`guild:create-specialist`).
 type: meta
+indexed: true
 ---
 
 # guild:create-skill
@@ -84,3 +85,23 @@ Emit a `handoff` block naming the creation run and gate outcome:
 - On **failure** (any gate): write `.guild/evolve/<run-id>/proposed-<name>-rejected.md` with the gate outcomes and surface refinement options.
 
 Payload fields: `run_id`, `skill_name`, `tier`, `creation_authority` (`human-requested`/`evolution-proposed`), `outcome` (`registered`/`rejected`), `gate_failed` (rejection only — one of `extraction-signals`, `boundary-edit`, `new-skill`; `extraction-signals` applies only to evolution-proposed creation), `boundary_edits` (success only — adjacent-skill paths that received `DO NOT TRIGGER` clauses), `proposed_path`/`live_path` (traceability), `degraded` (bool, success only), and `refinement_options` (rejection only).
+
+## Chapters
+
+Three-stage disclosure (KTD25): this file is the assembler. Each row below is an
+L3 chapter that stays on disk until a request matches it. Compose by pointer —
+read the one chapter you were routed to, and never inline a chapter here.
+
+| Chapter | Covers |
+|---|---|
+| `references/writing-skills.md` | The authoring discipline that fills the canonical SKILL.template.md skeleton — a method, not the skeleton |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:rollback-skill` | `evolve` | `../evolve/references/rollback-skill.md` |

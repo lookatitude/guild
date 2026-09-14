@@ -1,0 +1,115 @@
+---
+name: guild-evolve-skill
+description: Runs the §11.2 10-step evolve pipeline on one named skill — snapshot, load evals, dispatch paired subagents (A=current, B=proposed), drafter writes assertions, grader evaluates, benchmark + flip report, shadow mode, promotion gate, description optimizer, commit or archive. NEVER auto-edits a skill without passing the promotion gate; rejected attempts are archived, not deleted. TRIGGER for "evolve guild:<skill-name>", "run the evolve loop on <skill>", "re-tune this skill's description", "promote this reflection into a skill edit". DO NOT TRIGGER for creating/minting a NEW skill from a capability gap (use guild:create-skill), creating a new specialist (use guild:create-specialist), rolling back a skill version (guild:rollback-skill), reviewing runs (guild:review), composing a team (guild:team-compose), or ingesting wiki sources (guild:wiki-ingest).
+when_to_use: Explicit user request /guild:evolve <skill> OR automatic threshold when ≥3 reflection-proposals accumulate for one skill (per §11.1 automatic trigger).
+type: meta
+indexed: true
+---
+
+# guild:evolve-skill
+
+Implements the self-evolution pipeline (10 steps) with two triggers: automatic when ≥3 reflections accumulate for a skill, and explicit via `/guild:evolve <skill>`. Runs paired-subagent evals in the skill-creator style with an AgentDevel-style flip-centered promotion gate, then commits the edit only if the gate passes. Rejected attempts are archived under `.guild/evolve/<run-id>/archived/` (no destructive operations — rollbacks themselves snapshot as new versions).
+
+This skill is a **gatekeeper**, not a free-form editor. It refuses to mutate a live skill file without a passed promotion gate. If the gate fails, it stops and surfaces the flip report + shadow-mode output so the user can decide.
+
+## Input
+
+Two fields:
+
+1. **Skill slug** — the target skill to evolve, e.g. `guild:context-assemble` or `guild:brainstorm`. Must resolve to an existing live `SKILL.md` via `findLiveSkillDir` (`scripts/evolve-loop.ts`), which checks **project-instance first**: `.guild/skills/<slug>/` (an already-evolved or project-minted instance IS the live version), then the plugin tree `skills/<tier>/<slug>/` (all six tiers; self-build cwd or the plugin install via `GUILD_PLUGIN_ROOT`/`CLAUDE_PLUGIN_ROOT`). If the slug resolves nowhere, stop and hand off to `skill-author` for authoring a net-new skill instead.
+2. **Proposed-edit description** — optional when the automatic trigger fires (in which case this skill synthesizes the edit from the ≥3 accumulated reflections under `.guild/reflections/` whose frontmatter `proposals.skill_improvement` names the target skill); required when the explicit trigger is a user-supplied description. The edit may touch the skill body, the YAML frontmatter `description`, or both.
+
+   **Reading the ≥3 threshold (§11.1) is deterministic, not in-context recall.**
+   Before deciding whether the automatic trigger fires, read the aggregate
+   `/guild:reflect` already refreshed at `.guild/evolve/analyze-runs-latest.md`
+   (or regenerate it on demand if stale/absent):
+
+   ```
+   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/analyze-runs.ts --cwd <repo-root>
+   ```
+
+   Its `proposals[]` entries name each skill at or above `--min-runs` (default 3)
+   with the contributing run ids — use that list (not a fresh in-context count
+   over `.guild/reflections/*.md`) to confirm the threshold and to seed the
+   proposed-edit synthesis with concrete evidence.
+
+## Pipeline (§11.2 10 steps)
+
+Ten ordered steps. Each step's input and output is explicit so a later step can re-read the prior artifact without re-executing.
+
+1. **Snapshot current skill.** Delegates to `scripts/evolve-loop.ts`: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/evolve-loop.ts --skill <skill> --run-id <run-id> --cwd <cwd> [--proposed-edit <path>]`. The CLI resolves the live dir via `findLiveSkillDir` — `.guild/skills/<skill>/` when a project instance exists, else the plugin tree `skills/<tier>/<skill>/` (self-build cwd or `GUILD_PLUGIN_ROOT`/`CLAUDE_PLUGIN_ROOT`) — copies it to `.guild/skill-versions/<skill>/v<N>/` (`N` increments monotonically), and writes `.guild/evolve/<run-id>/pipeline.md` (the 10-step run plan steps 2-10 read from). Exits non-zero if the slug resolves nowhere. Input: `--skill`/`--proposed-edit`. Output: `.guild/skill-versions/<skill>/v<N>/` + `.guild/evolve/<run-id>/pipeline.md`.
+
+   **Snapshot completeness verification (mandatory, defense-in-depth).** `copyDirRecursive` does copy the whole resolved dir — but `findLiveSkillDir` can resolve DIFFERENT dirs (project instance, source tree, or a rendered plugin-install path), and the orchestrator must never assume the resolved dir was the intended one or that the copy captured every companion. Immediately after the CLI runs, diff the snapshot's file list against the intended live skill dir (companions like `dispatch.md`-siblings included); on any mismatch, stop and reconcile (wrong dir resolved → re-run against the right one; genuinely missing file → supplement from VCS) before step 2 proceeds. The check costs one `ls`; an unverified snapshot silently corrupts every downstream A-variant artifact. *(Provenance note: an earlier cycle wrongly asserted the script skips companions — a probe disproved it; the verification stands on the resolution-variance rationale above, not on that withdrawn claim.)*
+
+2. **Load evals.** Read `evals.json` from the step-1 live dir. If fewer than 3 positive + 3 negative cases (insufficient for paired evaluation), bootstrap 2–3 additional cases from the accumulated reflections' `proposals.skill_improvement` evidence snippets (per `§11.2` step 2). **Behavioral scenarios do not belong in `evals.json`.** `evals.json` is trigger-fixture-only — the trigger-fixture runner iterates exclusively over its `should_trigger`/`should_not_trigger` arrays; a `scenarios` array bolted onto `evals.json` is dead weight the runner never executes (`run-20260718-043952-evolve-learn-onboard` did exactly this — appended a `scenarios` array to `evals.json` alongside the trigger arrays — and it went unexercised by the runner). Convention: author behavioral scenarios in a sidecar `skills/<tier>/<skill>/scenarios.json`, carrying an explicit top-level note (e.g. `"executed_by": "manual/agent judgment only — not the trigger-fixture runner"`) so a reader never mistakes it for runner-covered. Input: `<live-dir>/evals.json` + `<live-dir>/scenarios.json` (if present) + `.guild/reflections/*.md`. Output: `.guild/evolve/<run-id>/evals.json` (merged trigger-fixture working set) + `.guild/evolve/<run-id>/scenarios.json` (merged behavioral-scenario working set) — both carried forward into the evolve dir even though only the former is runner-executed.
+
+3. **Dispatch paired subagents.** Spawn two subagents in the same turn. A = current skill (from the snapshot in step 1), B = proposed edit (from Input #2). For a net-new skill (slug does not yet exist), A = no-skill baseline (skill disabled) and B = proposed. Feed each the merged eval working set from step 2. **Dispatches are live, not simulated** — real subagent invocations captured with `--output-format json` to record per-case wall-clock duration and token usage (this feeds step 6's `duration_ms`/`total_tokens` deltas directly; it is not estimated after the fact). Behavioral-scenario fixtures come from the step-2 `scenarios.json` working set, whose per-scenario **answer keys are pre-declared in the sidecar itself, before any dispatch** — step 4 converts them (plus the trigger-fixture expectations) into `assertions.json`; grading in step 5 runs only against those pre-declared keys, never a post-hoc judgment of what a transcript happened to show. Input: snapshot + proposed edit + the step-2 **evals AND scenarios** working sets. Output: `.guild/evolve/<run-id>/runs/{A,B}/` with per-case timed trajectories.
+
+4. **Drafter writes assertions.** In parallel with step 3's runs, a drafter subagent derives per-case assertions from BOTH working sets: trigger expectations from the eval cases, and behavioral expectations transcribed from `scenarios.json`'s pre-declared answer keys (the keys already exist before dispatch — this step formats them into the assertion schema, it never invents or revises them after trajectories exist). Input: merged evals + merged scenarios. Output: `.guild/evolve/<run-id>/assertions.json`.
+
+5. **Grader evaluates.** Grader subagent reads `runs/{A,B}/` + `assertions.json` and emits a per-case pass/fail with rationale. **Variance disclosure.** A single-sample A judgment on a body-ambiguous case can vary between samples (`run-20260718-145447-evolve-execute-plan` took two A samples and they diverged across the case set). B must pass ALL cases in **every** sample taken, not merely the retained one; any observed A-sample variance is disclosed verbatim in `gate.json` — never silently averaged into one number. A sample that was overwritten or whose trajectories were not retained is declared **unverified** in `gate.json` and excluded from promotion claims (that run's `sampling_note`, which flags its own overwritten sample-1 as unverified and rests all claims on sample-2 alone, is the reference shape). Input: trajectories + assertions. Output: `.guild/evolve/<run-id>/grading.json`.
+
+6. **Benchmark + flip report.** Delegates to `scripts/flip-report.ts`. Computes `pass_rate`, `duration_ms`, `total_tokens`, mean ± stddev, and the delta between A and B. Classifies each case as P→P (stable pass), F→F (stable fail), P→F (**regression**), or F→P (**fix**). Input: `grading.json`. Output: `.guild/evolve/<run-id>/flip-report.md` with structured YAML frontmatter (regressions, fixes, pass_rate, duration_ms, total_tokens deltas) that `guild:stats` and the promotion gate can parse. **`flip-report.md` MUST be generated by `scripts/flip-report.ts` from a `grading.json` in its required schema — `{current, proposed}` arrays of `{case_id, passed, ms, tokens}` — never hand-authored.** A hand-written flip-report.md is not valid gate evidence, full stop; both `run-20260718-043952-evolve-learn-onboard` and `run-20260718-145447-evolve-execute-plan` hit and enforced exactly this rule.
+
+7. **Shadow mode.** Delegates to `scripts/shadow-mode.ts`. Replays the proposed skill (B) against the prompts recorded in historical run traces under `.guild/runs/<id>/events.ndjson` without changing live routing — for each historical `UserPromptSubmit` prompt it derives B's TRIGGER / DO NOT TRIGGER tokens from the proposed description, decides whether B would fire, and counts divergences against the skill the trace historically routed to, per `§11.2` step 7. Input: proposed skill + `.guild/runs/`. Output: `.guild/evolve/<run-id>/shadow-report.md` with YAML frontmatter emitted by the script: `skill`, `proposed_name`, `historical_runs`, `total_prompts`, `total_divergences`, `divergence_rate`. **`shadow-report.md` MUST likewise be generated by `scripts/shadow-mode.ts` — the same invalidity rule as step 6's `flip-report.md` applies**; a hand-written `shadow-report.md` is not valid gate evidence (both cycles above enforced this too).
+
+8. **Promotion gate.** Promote B if ANY of the four conditions holds:
+   - **0 regressions AND ≥1 fix** (pure improvement).
+   - **No flip change AND total_tokens ↓ ≥10%** (cost win without behavior change).
+   - **Regressions present AND user approves via review viewer** (explicit override — gate surfaces the flip report + shadow-mode output and blocks until the user acknowledges).
+   - **Doc-only fast-path** — the proposed edit is classified **doc-only**: no change to trigger phrasing, no change to body algorithm, no change to `should_trigger` / `should_not_trigger` eval cases; only prose, description, comments, or additive clarifying sections that codify existing valid behavior. A doc-only edit produces no observable behavior delta in paired evals (no fixes, no regressions, no token change — the pipeline cannot distinguish silence from a real pass). Such edits MAY promote under **explicit user approval**, recorded in `gate.json` as `condition: doc-only-fast-path` with the user's acknowledgement timestamp. User approval MUST be obtained **before** this condition is triggered (a blanket session directive from the operator qualifies; a run-time prompt also qualifies). **Scope boundary:** this condition applies ONLY when the diff contains zero body-logic changes. If any trigger phrase, algorithm step, or eval case is altered, the full three-condition gate applies — the doc-only path is NOT available as a fallback. This carve-out must NOT become a backdoor for behavior-change promotions. Motivating runs: `evolve-doc-clarification-20260528-134115` (prior session, three skills post §11.1 threshold) and `run-learn-knowledge-convergence-20260529-094021` (this initiative's reflection, §C.2 finding). Both hit the gate because pure documentation clarifications are eval-invisible; archiving them would have discarded valid improvements with no safety benefit.
+
+   **B-reproducibility invariant (mandatory, gate-time).** At gate time, every B-proposed file MUST be byte-identical to the live working-tree file it will replace — including companion files and sidecars introduced by the edit itself (`dispatch.md`-style siblings, `scenarios.json`), not just `SKILL.md` — with each file's **full** SHA-256 recorded in `gate.json` under a `b_reproducibility` block (paired `<file>_sha256` / `live_<file>_sha256` keys, one pair per touched file; truncated hashes do not satisfy this). The two 2026-07-18 runs are the motivating precedent (their records evolved toward this shape across codex rounds; this clause is the normative form). **Any drift between the recorded B and the live tree invalidates the recorded hashes — the gate never stands on stale hashes.** On drift: resync B to the live bytes and re-record every hash pair; a **doc-only** delta additionally gets a named delta note in `gate.json` (the gate's behavioral evidence remains valid); a **behavioral** delta re-runs the paired eval (steps 3-6) before promotion stands. This is the same rule scenario `S2-b-drift-at-gate` evaluates: resync-and-re-establish, never proceed on a stale record.
+
+   Gate result is recorded at `.guild/evolve/<run-id>/gate.json` with the triggering condition (`condition: doc-only-fast-path` for the fourth path, plus `user_approved_at` timestamp), and MUST additionally record `flip_source` / `shadow_source` fields naming the generating script (per steps 6-7's real-script requirement) — `gate.json` is the provenance record proving `flip-report.md`/`shadow-report.md` weren't hand-authored, not just the verdict.
+
+9. **On promote: description optimizer + commit.** Delegates to `scripts/description-optimizer.ts` — trains on the skill's `should_trigger` / `should_not_trigger` eval cases, fixes under-triggers and false triggers, keeps the final description ≤1024 chars per `§11.2` step 9. Then writes the edited skill back to the consuming repo's `.guild/skills/<skill>/` project instance — the v1 write-back to `skills/<tier>/<skill>/` (plugin install state) is an explicit **v2 DH-3 defect being fixed**: the plugin install dir is never written at runtime. The promote choke-point is preserved verbatim (step 9 is still the only writer, the gate still the only unlock); only the write *target* moves under `.guild/`. Then bumps the version folder in `.guild/skill-versions/<skill>/v<N>/` (**UNCHANGED — already correct under `.guild/`**; the snapshot from step 1 is now the pre-edit record), and updates `evals.json`/`scenarios.json` if new cases were added in step 2. The evolved instance **retains** its `derived_from_template: guild.skill_template.v1` stamp — a reflection-driven evolve **never strips or rewrites** it.
+
+   **Resource-sync-before-review ordering (mandatory).** When the edited skill lives under `plugin/skills/**` (self-build), run `sync:module-resources` and confirm **both** its `--check` passes go green — the `resources/` mirror and any per-host `dist/` copy — **before** any codex adversarial review (G-lane, per `plugin/AGENTS.md` §Codex adversarial review) runs against the edited skill, and before commit. The tree codex reviews must be the shippable tree; running sync *after* codex approves invalidates that approval, since codex signed off on a tree that was not what actually ships. `run-20260718-145447-evolve-execute-plan`'s codex gate hit exactly this ordering defect as a BLOCKER at round 1 — sync must precede review, not follow it. Only after sync is green and codex clears does the lead commit.
+
+10. **On reject: archive attempt.** Move the proposed edit (body + frontmatter diff + flip report + shadow-mode output + gate verdict) to `.guild/evolve/<run-id>/archived/` for future iterations per `§11.2` step 10. The live skill is left untouched.
+
+## Artifacts
+
+Two directories, by convention:
+
+- `.guild/skill-versions/<skill>/v<N>/` — pre-edit snapshots, one per evolve run. Monotonically versioned per `§11.3`. Used by `guild:rollback-skill` to walk back the stack.
+- `.guild/evolve/<run-id>/` — per-run workspace. Contains `pipeline.md` (run plan), `evals.json` (merged trigger-fixture set), `scenarios.json` (merged behavioral-scenario set, if any live-dir `scenarios.json` sidecar existed — not runner-executed), `assertions.json`, `runs/{A,B}/` (timed trajectories), `grading.json`, `flip-report.md` (script-generated, YAML frontmatter + human summary), `shadow-report.md` (script-generated, YAML frontmatter + human summary), `gate.json` (verdict + `b_reproducibility` hashes + `flip_source`/`shadow_source` provenance), and on rejection a full `archived/` subtree.
+
+## Non-destructive rule
+
+This skill **NEVER edits a live skill file without passing the promotion gate**. The gate is the single choke point; step 9 is the only writer to the consuming repo's `.guild/skills/<skill>/`. Rejected attempts are archived under `.guild/evolve/<run-id>/archived/`, never deleted — a future iteration can re-open an archived attempt and re-run the pipeline with different inputs. Per `§11.3`, rollbacks themselves snapshot as new versions, so there is no destructive path through this skill.
+
+If the gate returns "regressions present" and the user declines to approve, stop. Do not re-prompt, do not soft-merge a partial edit, do not suggest "just fix the description." Archive and hand control back.
+
+## Handoff
+
+Emit a `handoff` block naming the evolve run and gate outcome so the orchestrator can route downstream:
+
+- On **promote**: emits a summary to `/guild:stats` (the promoted version + flip report highlights) so the next `/guild:stats` surfaces the evolved skill. If the user later invokes `/guild:rollback <skill>`, the snapshot taken in step 1 is the target.
+- On **reject**: emits the archived-attempt path + the gate's triggering-condition rationale. The user may re-run with a refined proposed edit; the archived attempt is re-openable.
+
+Payload fields: `run_id`, `skill`, `gate_outcome` (`promoted` / `rejected`), `flip_summary` (`regressions: N, fixes: N, token_delta: ±X%`), `version_path` (the `.guild/skill-versions/<skill>/v<N>/` snapshot), and `archived_path` (only on reject).
+
+## Chapters
+
+Three-stage disclosure (KTD25): this file is the assembler. Each row below is an
+L3 chapter that stays on disk until a request matches it. Compose by pointer —
+read the one chapter you were routed to, and never inline a chapter here.
+
+| Chapter | Covers |
+|---|---|
+| `references/audit.md` | Security audit of Guild plugin scripts — SHA256 hashes, source, network + filesystem flags |
+| `references/rollback-skill.md` | Rolls a skill back to a previous version from compact history (KTD48) |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:context-assemble` | `execute-plan` | `../execute-plan/references/context-assemble.md` |
+| `guild:rollback-skill` | this assembler | `references/rollback-skill.md` |
+| `guild:wiki-ingest` | `wiki` | `../../knowledge/wiki/references/wiki-ingest.md` |

@@ -5,15 +5,13 @@
   "kind": "capability",
   "implementation_mode": "workflow-backed",
   "description": "Owns operational router skill and release, incident, maintenance, monitoring, and rollback runbooks.",
-  "depends_on": ["telemetry", "state"],
+  "depends_on": [
+    "telemetry",
+    "state"
+  ],
   "owns": {
     "skills": [
-      "guild-operations",
-      "ops-incident",
-      "ops-maintenance",
-      "ops-monitoring",
-      "ops-release",
-      "ops-rollback"
+      "guild-operations"
     ]
   }
 }

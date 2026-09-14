@@ -3,6 +3,7 @@ name: guild-plan
 description: Turns an approved `.guild/spec/<slug>.md` plus the per-phase team file `.guild/team/<slug>.<phase>.yaml` into a per-specialist lane plan at `.guild/plan/<slug>.md`. Each lane carries `task-id`, `owner`, `depends-on:`, `scope`, `success-criteria`, `autonomy-policy`, and a seed `complexity_score`+`tier` (re-scored at dispatch) so `guild:execute-plan` can dispatch parallel-where-possible subagents. FORKS `guild:plan` rather than referencing — writing-plans emits a generic linear implementation plan; `guild:plan` emits specialist lanes tied to a composed team and feeds Guild's dispatch/review loop. TRIGGER on "turn this spec into a plan", "break the work down by specialist", "plan the lanes for this task", "we have a team — now plan the work". DO NOT TRIGGER for: writing the code itself (`guild:execute-plan`), brainstorming a new feature (`guild:brainstorm`), reviewing finished work (`guild:review`), or generic implementation plans outside the Guild lifecycle (use `guild:plan`).
 when_to_use: Third step of Guild lifecycle, after guild:team-compose has produced the per-phase team file (.guild/team/<slug>.<phase>.yaml, resolved via resolveTeamFile).
 type: meta
+indexed: true
 ---
 
 # guild:plan
@@ -197,10 +198,38 @@ Guild's `plan` skill deliberately shadows `guild:plan` and forks rather than ref
 
 ## Learning checkpoint (step 7.5 — advisory, no new gate)
 
-After the G-plan review + approval gate and before handoff, fire the per-phase LearningCheckpoint with `phase=planning` and `.guild/plan/<slug>.md` as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written plan/lanes into the 12-target verdict, then emit via the hook — the full call signature + `GUILD_PHASE` mapping are canonical in `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
+After the G-plan review + approval gate and before handoff, fire the per-phase LearningCheckpoint with `phase=planning` and `.guild/plan/<slug>.md` as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written plan/lanes into the 12-target verdict, then emit via the hook — the full call signature + `GUILD_PHASE` mapping are canonical in `skills/meta/reflect/references/learning-checkpoint.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
 
 ## Handoff
 
 Once the plan is written and **user-approved** (frontmatter `approved: true`), hand off to `guild:execute-plan`. Execute-plan creates the `<run-id>`, then invokes `guild:context-assemble` once per specialist lane to build the minimum-viable-context bundle before dispatching the specialist subagent. Do not run context assembly yourself — that's `guild:execute-plan`'s responsibility during per-lane dispatch.
 
 Handoff receipt should list: `plan_path`, `prd_form` (`inline` | `standalone` — with `prd_path` when standalone), `lane_count`, `parallel_eligible_count` (lanes with empty `depends-on:`), `backend` (mirrored from team.yaml), `approved_at` timestamp, and `team_plan_path` — **forwarded verbatim** from `guild:team-compose`'s handoff (the companion `guild.team_plan.v1` at `.guild/runs/<run-id>/team-plan/<phase>.json`, or its fail-soft skip note). Pass it through unchanged so `guild:execute-plan` can wire its `team_result` `team_plan_ref` to it — `guild:plan` neither reads nor regenerates it.
+
+## Chapters
+
+Three-stage disclosure (KTD25): this file is the assembler. Each row below is an
+L3 chapter that stays on disk until a request matches it. Compose by pointer —
+read the one chapter you were routed to, and never inline a chapter here.
+
+| Chapter | Covers |
+|---|---|
+| `references/io-contract.md` | reference material for this assembler |
+| `references/loop-mechanics.md` | reference material for this assembler |
+| `references/loop-plan-review.md` | F-2 adversarial plan-defect review driver — wraps `guild:plan`, runs an architect↔security loop where security raises plan-defect questions ONLY (security holes, scope creep, autonomy gaps, contract drift, untestable criteria) and signals satisfaction with the literal sentinel `## NO MORE QUESTIONS`; |
+| `references/product-define.md` | Product-loop DEFINE producer — turns a validated explore artifact into a typed, fail-closed `guild.define.v1` PRD nucleus whose every acceptance criterion carries a STABLE, unique id for full downstream traceability (plan lane → build receipt → QA check → release gate, AC32) |
+| `references/product-template.md` | Product-loop TEMPLATE producer — seeds a product idea from a named `guild.template.v1` (cli-tool, web-app, …) into a VALID `guild.explore.v1` + `guild.define.v1` skeleton pair, so the product loop starts from a proven contract |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:codex-review` | `review` | `../review/references/codex-review.md` |
+| `guild:context-assemble` | `execute-plan` | `../execute-plan/references/context-assemble.md` |
+| `guild:learning-checkpoint` | `reflect` | `../reflect/references/learning-checkpoint.md` |
+| `guild:review-broker` | `review` | `../review/references/review-broker.md` |
+| `guild:verify-done` | `quality` | `../../quality/references/verify-done.md` |

@@ -15,7 +15,7 @@
       "id": "build-host-packages",
       "source_path": "scripts/build-host-packages.ts",
       "resource_path": "resources/scripts/build-host-packages.ts",
-      "sha256": "245b3f7255aa09240da5204b0b513f5ab1a215717a05fe6884a7ac854c818289"
+      "sha256": "654805e1ddd8a93e8eb9cb6f2b58589b2cc4eed932f11c4e9add84e63e057cef"
     },
     {
       "category": "scripts",
@@ -190,7 +190,7 @@
       "id": "lib/skill-source-transform",
       "source_path": "scripts/lib/skill-source-transform.ts",
       "resource_path": "resources/scripts/lib/skill-source-transform.ts",
-      "sha256": "89577b0e0aa3af1011de629475437f0bb399c5683e8cf466102ccf2771a695bd"
+      "sha256": "1c9570b98c9fd668ef4cc64fcc2ac8c7c8c4a050bf8eaf875479fad83ee0cc32"
     },
     {
       "category": "scripts",
@@ -218,7 +218,14 @@
       "id": "lint/build-coverage-draft",
       "source_path": "scripts/lint/build-coverage-draft.ts",
       "resource_path": "resources/scripts/lint/build-coverage-draft.ts",
-      "sha256": "b68fc4e1fed1c1ebdbe8a83f6cc074af3c300ee5373844d63d10d37d67243131"
+      "sha256": "488340880a1412c9873cb8b1757d4dab6a4b84b60b52950df1f1ca483f9147dd"
+    },
+    {
+      "category": "scripts",
+      "id": "lint/description-budget",
+      "source_path": "scripts/lint/description-budget.ts",
+      "resource_path": "resources/scripts/lint/description-budget.ts",
+      "sha256": "73a85b6e22efe760cd90a95573afad1adddb584d4daac809ef2f955ff82516f1"
     },
     {
       "category": "scripts",
@@ -240,6 +247,13 @@
       "source_path": "scripts/lint/packaged-install-smoke.ts",
       "resource_path": "resources/scripts/lint/packaged-install-smoke.ts",
       "sha256": "cdb2a996f5b6e0cc469692d387fb1e6aa71b98472a31d802bf986c39ae029ce8"
+    },
+    {
+      "category": "scripts",
+      "id": "lint/skill-link-integrity",
+      "source_path": "scripts/lint/skill-link-integrity.ts",
+      "resource_path": "resources/scripts/lint/skill-link-integrity.ts",
+      "sha256": "790f180b3cff69c6b15ecd6a3b3b325705c029ca9eb2786cadf1a26fd847f9ba"
     },
     {
       "category": "scripts",

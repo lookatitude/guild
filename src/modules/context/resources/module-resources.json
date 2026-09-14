@@ -51,20 +51,6 @@
       "source_path": "scripts/lint-context-bundle.ts",
       "resource_path": "resources/scripts/lint-context-bundle.ts",
       "sha256": "88697d8276736bd6fec6d9cb94d93727ee79f9d53fb949e3c7055d6c1b187bc1"
-    },
-    {
-      "category": "skills",
-      "id": "guild-context-assemble",
-      "source_path": "skills/meta/context-assemble/SKILL.md",
-      "resource_path": "resources/skills/meta/context-assemble/SKILL.md",
-      "sha256": "3842140c9742ad6b187f10ca07eb41b6e871d37c796762656351cb0d74d6bb46"
-    },
-    {
-      "category": "skills",
-      "id": "guild-context-assemble/scenarios.json",
-      "source_path": "skills/meta/context-assemble/scenarios.json",
-      "resource_path": "resources/skills/meta/context-assemble/scenarios.json",
-      "sha256": "9f918f24248ebb362e9e18faaf11b03e3936b0bb704136211a6c42854098621d"
     }
   ]
 }

@@ -61,38 +61,10 @@
     },
     {
       "category": "skills",
-      "id": "guild-decisions",
-      "source_path": "skills/meta/decisions/SKILL.md",
-      "resource_path": "resources/skills/meta/decisions/SKILL.md",
-      "sha256": "a3105d8b3e918611df33f46b1376b26007f744c2a19a3031a32e038a7ce19da3"
-    },
-    {
-      "category": "skills",
       "id": "guild-initiative",
       "source_path": "skills/meta/initiative/SKILL.md",
       "resource_path": "resources/skills/meta/initiative/SKILL.md",
-      "sha256": "36fd56378cecd7061107cf0ea7018b283a197e99a79139e298532d900422ab3b"
-    },
-    {
-      "category": "skills",
-      "id": "guild-product-define",
-      "source_path": "skills/meta/product-define/SKILL.md",
-      "resource_path": "resources/skills/meta/product-define/SKILL.md",
-      "sha256": "a0f87fd4205ff2468ed3af21ae0224187a7d170fc0e185eeca4a72122313aa5e"
-    },
-    {
-      "category": "skills",
-      "id": "guild-product-explore",
-      "source_path": "skills/meta/product-explore/SKILL.md",
-      "resource_path": "resources/skills/meta/product-explore/SKILL.md",
-      "sha256": "3177b784b985420970733b707db1cb93918e12a086e7d5437b3b968ca288b135"
-    },
-    {
-      "category": "skills",
-      "id": "guild-product-template",
-      "source_path": "skills/meta/product-template/SKILL.md",
-      "resource_path": "resources/skills/meta/product-template/SKILL.md",
-      "sha256": "5a30dc9aa886994a2d117e6324b456ffcc13944b1ff20dfc99a8781325ac104d"
+      "sha256": "37fd533e5d76378d9fe943728997d04201a8ffcc4163f3d5dc02f5b5f9113b98"
     }
   ]
 }

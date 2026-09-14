@@ -474,14 +474,29 @@ function copyScriptRuntime(root: string, dest: string): void {
  * become file-path lists; mcp/hooks pass through.
  */
 export function toNeutralManifest(inv: GuildInventoryV1): GuildPluginManifest {
+  // KTD59 — the glob is the CLOSED list of indexed assembler DIRECTORIES, one
+  // entry per skill the module manifests marked `owns.indexed_skills`.
+  //
+  // TRAP this replaced: emitting `./skills/<tier>/` per distinct tier made the
+  // manifest a tier glob, so every sibling under an indexed skill's tier — L3
+  // chapters, the specialist starter recipes, the playbooks tree — was re-indexed
+  // the moment this render ran. `sync:claude-install` then overwrote a correct
+  // hand-written manifest with the wrong one and reported "matches" (T03 fix-r0).
+  // Per-skill directories make the render reproduce the closed list instead.
   const skillDirs = [
     ...new Set(
-      inv.skills.map((s) => {
-        const tier = s.tier ?? s.source_path.split("/")[1];
-        return `./skills/${tier}/`;
-      })
+      inv.skills
+        .filter((s) => s.indexed === true)
+        .map((s) => `./${s.source_path.replace(/\/SKILL(\.src)?\.md$/, "")}/`)
     ),
   ].sort();
+  if (skillDirs.length === 0) {
+    throw new Error(
+      "build-host-packages: guild.inventory.json marks no skill `indexed: true` — refusing " +
+        "to render a manifest with an empty skills glob (rebuild the inventory: the marker " +
+        "comes from owns.indexed_skills in the module manifests)"
+    );
+  }
 
   const m: GuildPluginManifest = {
     name: inv.manifest.name,

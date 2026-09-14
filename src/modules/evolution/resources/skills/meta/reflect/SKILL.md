@@ -3,6 +3,7 @@ name: guild-reflect
 description: Post-task reflection. Consumes a compact run summary (from scripts/trace-summarize.ts), handoff receipts, and verify.md, and emits proposals to .guild/reflections/<run-id>.md. Proposals cover (a) skill-improvement candidates (a skill triggered wrong N times, or body needs a new section), (b) missing-specialist candidates (gap repeated >=3 runs), (c) context-bundle issues (over 3k tokens, summarization hit), (d) followups not addressed. Does NOT write to .guild/wiki/ — that is wiki-ingest / decisions territory. TRIGGER for "reflect on this run", "what did we learn", "run post-task reflection", "capture lessons from the specialist outputs", "any skill gaps in this run". DO NOT TRIGGER for wiki ingest (guild:wiki-ingest owns), capturing a decision (guild:decisions), any mid-task reflection (only fires post-verify-done), or promoting a reflection to the wiki.
 when_to_use: Final step of Guild lifecycle after guild:verify-done passes. Invoked automatically by hooks/maybe-reflect.ts Stop hook when the heuristic gate (>=1 specialist dispatched + >=1 file edited + no error) clears.
 type: meta
+indexed: true
 ---
 
 # guild:reflect
@@ -135,3 +136,29 @@ Emit a `handoff` block naming the reflection path so the orchestrator can hand o
 - `pending_plugin_feedback` — finding ids with sanitized drafts awaiting the operator's file/deny decision (empty when none; never auto-filed).
 
 For P5 this is a forward reference: `/guild:stats` and `/guild:evolve` land in P6. If neither is installed, stop after writing the reflection and return its path to the user.
+
+## Chapters
+
+Three-stage disclosure (KTD25): this file is the assembler. Each row below is an
+L3 chapter that stays on disk until a request matches it. Compose by pointer —
+read the one chapter you were routed to, and never inline a chapter here.
+
+| Chapter | Covers |
+|---|---|
+| `references/learning-checkpoint.md` | The per-phase LearningCheckpoint classifier — `guild.learning_checkpoint.v1` |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:codex-review` | `review` | `../review/references/codex-review.md` |
+| `guild:context-assemble` | `execute-plan` | `../execute-plan/references/context-assemble.md` |
+| `guild:decisions` | `wiki` | `../../knowledge/wiki/references/decisions.md` |
+| `guild:learn-harvest` | `learn` | `../../knowledge/learn/references/learn-harvest.md` |
+| `guild:review-broker` | `review` | `../review/references/review-broker.md` |
+| `guild:verify-done` | `quality` | `../../quality/references/verify-done.md` |
+| `guild:wiki-ingest` | `wiki` | `../../knowledge/wiki/references/wiki-ingest.md` |

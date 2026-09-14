@@ -2,9 +2,10 @@
 # Derived from the canonical skill template (DH-3 boundary): instance frontmatter
 # carries derived_from_template for traceability to the canonical base.
 name: guild-learn
-description: "Smart full learn-all dispatcher — the no-arg /guild:learn entrypoint that replaces the old usage-stop with a genuine smart full-learn. Detects target shape (regular_project | workspace | existing_guild_project | new_or_sparse_project | mixed_or_uncertain), surfaces the classification for confirmation, then runs the appropriate full pipeline: regular-project = run start → inventory → cheap-map → deep-graph (OQ1 cost-estimate gate) → derive → links → tour → candidates → indexes → provenance → checkpoint → close; workspace = detect children first, never scan sub-repos as one monolith, AUTO fan-out per learn_fanout config (OQ2), aggregate cost estimate shown before child scans, --dry-run honored. Skipped-file decisions emitted in SC-G shape. All promotions remain human-gated. TRIGGER for \"/guild:learn\" with no sub-verb, \"learn this project completely\", \"full learn everything\", \"run the full learn pipeline\", \"smart learn this workspace\", \"learn all artifacts end to end\". DO NOT TRIGGER for: explicit sub-verb forms (guild:learn-map for map, guild:learn-graph for graph, guild:learn-onboard for onboard, guild:learn-diff for diff, guild:learn-explain for explain), or for single-artifact queries (guild:wiki-query / kg-query)."
-when_to_use: "When /guild:learn is invoked with no sub-verb argument. Implements SC-A (smart full learn-all) from the learn-knowledge-convergence initiative. Explicit sub-verbs (map/graph/onboard/diff/explain) bypass this skill and go directly to their specialist learn-* skill."
+description: "Smart full learn-all dispatcher — the no-arg /guild:learn entrypoint that replaces the old usage-stop with a genuine smart full-learn. Detects target shape (regular_project | workspace | existing_guild_project | new_or_sparse_project | mixed_or_uncertain), surfaces the classification for confirmation, then runs the appropriate full pipeline: regular-project = run start → inventory → cheap-map → deep-graph (OQ1 cost-estimate gate) → derive → links → tour → candidates → indexes → provenance → checkpoint → close; workspace = detect children first, never scan sub-repos as one monolith, AUTO fan-out per learn_fanout config (OQ2), aggregate cost estimate shown before child scans, --dry-run honored. Skipped-file decisions emitted in SC-G shape. All promotions remain human-gated. TRIGGER for \"/guild:learn\" with no sub-verb, \"learn this project completely\", \"full learn everything\", \"run the full learn pipeline\", \"smart learn this workspace\", \"learn all artifacts end to end\". DO NOT TRIGGER for: single-artifact queries (the guild-wiki assembler / kg-query). An explicit sub-verb is NOT a different skill — it is this assembler loading one references/learn-<verb>.md chapter."
+when_to_use: "When /guild:learn is invoked with no sub-verb argument. Implements SC-A (smart full learn-all) from the learn-knowledge-convergence initiative. Explicit sub-verbs (map/graph/onboard/diff/explain) route through this same assembler, which loads the matching references/learn-<verb>.md chapter instead of running the full pipeline."
 type: knowledge
+indexed: true
 derived_from_template: guild.skill_template.v1
 ---
 
@@ -14,18 +15,34 @@ Use when `/guild:learn` is called **with no sub-verb** — the "learn this
 project completely" intent. Implements the `§"Smart /guild:learn Behavior"`
 contract from `learn-knowledge-run-convergence.md` (SC-A).
 
-Explicit sub-verbs (`map`, `graph`, `onboard`, `diff`, `explain`) bypass this
-skill entirely and route directly to their specialist skill. This skill owns
-only the **no-arg full-learn path**.
+Explicit sub-verbs (`map`, `graph`, `onboard`, `diff`, `explain`, `knowledge`,
+`harvest`) route **through this assembler**, not around it: each one loads exactly
+one `references/learn-<verb>.md` chapter and runs that, instead of the full
+pipeline below. There is no separate `guild:learn-<verb>` skill to hand off to —
+the fold (KTD25/KTD59) made every one of them a chapter of this file.
+
+# Sub-verb routing (chapter pointers)
+
+| Sub-verb | Load | Then |
+|---|---|---|
+| `map` | `references/learn-map.md` | cheap-scan CodebaseMap + architecture stub |
+| `graph` | `references/learn-graph.md` | deep KnowledgeGraph, stages 2–7 |
+| `knowledge` | `references/learn-knowledge.md` | K1–K6 deep knowledge tier |
+| `onboard` | `references/learn-onboard.md` | guided tour |
+| `diff` | `references/learn-diff.md` | change analysis / blast radius |
+| `explain` | `references/learn-explain.md` | file / module deep-dive |
+| `harvest` | `references/learn-harvest.md` | phase/run artifact extraction |
+
+Read ONE chapter. Wherever the pipeline below says "invoke `guild:learn-<verb>`",
+it means: load that verb's chapter from the table and execute it in place.
 
 # When not to use it
 
-Not for any explicit sub-verb invocation (those go directly to `guild:learn-map`
-/ `guild:learn-graph` / `guild:learn-onboard` / `guild:learn-diff` /
-`guild:learn-explain`). Not for querying an existing graph (`kg-query` /
-`guild:wiki-query`). Not for a single-source ingest (`guild:wiki-ingest`).
-Not as an alternative to `guild:learn-harvest` (which is for phase/run
-artifact extraction, not code).
+Not for querying an existing graph (`kg-query`, or the `guild-wiki` assembler's
+`../wiki/references/wiki-query.md` chapter). Not for a single-source ingest (that
+is the `guild-wiki` assembler's `../wiki/references/wiki-ingest.md` chapter). Code learning is
+this assembler; phase/run artifact extraction is its `harvest` chapter, not a
+separate skill.
 
 # Required inputs
 
@@ -474,3 +491,33 @@ user-approved scope.
 - Workspace root with root_wiki: false and workspace_knowledge: true →
   no monolithic root code wiki built; cross-project knowledge emitted as
   candidates to `.guild/wiki/workspace/`.
+
+## Chapters
+
+Three-stage disclosure (KTD25): this file is the assembler. Each row below is an
+L3 chapter that stays on disk until a request matches it. Compose by pointer —
+read the one chapter you were routed to, and never inline a chapter here.
+
+| Chapter | Covers |
+|---|---|
+| `references/learn-diff.md` | Change/blast-radius analyser — the learn-* family member that produces the per-run DiffUnderstanding (guild.diff_understanding.v1): which graph nodes/layers a base→head diff touches, and which changed files no node explains (untraced) |
+| `references/learn-explain.md` | File/module deep-dive explainer — the learn-* family member that answers \"how does THIS work?\" for a specific file, function, or module, grounded in the knowledge graph (nodes, edges, layers, source_refs) rather than a raw re-read |
+| `references/learn-graph.md` | Deep semantic knowledge-graph builder — the lazy, gated deep tier of the learn-* family |
+| `references/learn-harvest.md` | Reusable extraction pipeline over phase and run artifacts — NOT just code |
+| `references/learn-knowledge.md` | Deep multi-modal knowledge-tier builder — a lazy, cost-gated pass running the shared K1–K6 entrypoint over the structural knowledge graph to emit a topic→subtopic taxonomy, classified wiki_page + diagram nodes, and cross-modal evidenced_by edges into guild.knowledge_graph.v2, then the nonce-free knowledge-links recall projection |
+| `references/learn-map.md` | Codebase-map builder + the base of Guild's learn-* family — runs the cheap-scan tier (deterministic scan → CodebaseMap + a confidence-tagged architecture-map stub) and owns the shared two-phase pipeline, the canonical output-locations table, and the one-implementation/two-triggers contract (D3): the SAME learn-* skills run for `/guild:learn` AND for `/guild:init --learn` / `defaults.auto_learn` |
+| `references/learn-onboard.md` | Tour narrator + onboarding-guide generator — the learn-* family member that turns the dependency-BFS tour skeleton guild:learn-graph wrote into knowledge-graph.json `tour[]` into a narrated OnboardingTour (.guild/indexes/onboarding-tour.md) plus a derived onboarding guide, adding pedagogical narration + per-step languageLesson |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:learn-graph` | this assembler | `references/learn-graph.md` |
+| `guild:learn-harvest` | this assembler | `references/learn-harvest.md` |
+| `guild:learn-knowledge` | this assembler | `references/learn-knowledge.md` |
+| `guild:learn-map` | this assembler | `references/learn-map.md` |
+| `guild:learn-onboard` | this assembler | `references/learn-onboard.md` |

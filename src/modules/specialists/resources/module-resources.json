@@ -25,6 +25,13 @@
       "sha256": "d542ff5e4335a9c56f5032162b0762478618563ded8a98b2d77c448c96181ac0"
     },
     {
+      "category": "agents",
+      "id": "team-lead",
+      "source_path": "agents/team-lead.md",
+      "resource_path": "resources/agents/team-lead.md",
+      "sha256": "c0ce0575a241a5be3ad838c66fb82ffd2cc0e97244ca1629273e669a7a288ab4"
+    },
+    {
       "category": "scripts",
       "id": "lib/roster",
       "source_path": "scripts/lib/roster.ts",

@@ -3,6 +3,7 @@ name: guild-diagnose
 description: Diagnose Guild plugin failures from recent .guild/runs telemetry, optional operator context, hook/audit-log evidence, and run artifacts; write a diagnosis report and fix plan; require explicit user approval before applying edits. TRIGGER for /guild:fix, "diagnose this Guild run", "why did /guild fail", "Guild hooks are not firing", "audit log is empty", "agent-team stalled", "self-fix Guild". DO NOT TRIGGER for auditing plugin script trust (/guild:audit), reviewing user application code (security specialist), normal /guild task review (guild-review), or evolving a skill based on accumulated reflections (guild:evolve-skill).
 when_to_use: Explicit /guild:fix command or direct user request to diagnose/self-fix Guild plugin behavior.
 type: meta
+indexed: true
 ---
 
 # guild:diagnose
@@ -100,7 +101,7 @@ npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist
 ```
 
 When `codex_review` resolves true the G-diagnose review is **required**, so the
-broker obeys the SK-9 gate-pass rule (`skills/meta/review-broker/SKILL.md
+broker obeys the SK-9 gate-pass rule (`skills/meta/review/references/review-broker.md
 §"Gate-pass rule"`): a required review **never clean-`skipped`s**.
 
 1. Invoke `guild-review-broker` on the diagnosis report path:
@@ -219,3 +220,28 @@ Checks: <list>
 Residual gaps: <list or none>
 Pending plugin feedback: <.guild/feedback/<id>/<finding>.draft.md … or none>
 ```
+
+## Chapters
+
+Three-stage disclosure (KTD25): this file is the assembler. Each row below is an
+L3 chapter that stays on disk until a request matches it. Compose by pointer —
+read the one chapter you were routed to, and never inline a chapter here.
+
+| Chapter | Covers |
+|---|---|
+| `references/condition-based-waiting.md` | reference material for this assembler |
+| `references/defense-in-depth.md` | reference material for this assembler |
+| `references/root-cause-tracing.md` | reference material for this assembler |
+| `references/systematic-debug.md` | Guild's first-class debugging discipline — find the root cause before proposing any fix, because symptom patches waste time and breed new bugs |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:audit` | `evolve` | `../evolve/references/audit.md` |
+| `guild:codex-review` | `review` | `../review/references/codex-review.md` |
+| `guild:review-broker` | `review` | `../review/references/review-broker.md` |

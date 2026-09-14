@@ -3,6 +3,7 @@ name: guild-execute-plan
 description: For each specialist lane in the plan: invoke `guild:context-assemble` to build the bundle, auto-score the lane to its lowest viable model tier (dispatched via the Agent `model` param; honors `--model-tier` and per-lane pins), then dispatch each lane via the agent_mode-resolved backend (team / tmux primary; in-process Agent() dispatch for no-tmux hosts; subagent last resort) as an ephemeral one-agent-per-task §task§agent (spawn → work → extract learnings → dismiss). Runs the advisor escalation protocol when a low-tier agent emits `escalate`. Parallelize lanes when `depends-on:` allows. Collect per-lane handoff receipts at `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md`. TRIGGER: "execute the plan", "run the lanes", "start specialist work", "dispatch the team", "dispatch each lane at its tier", "escalate this to the advisor". DO NOT TRIGGER for: explaining the plan (guild:plan owns that), reviewing results (guild:review), writing more tests.
 when_to_use: Fifth step of Guild lifecycle, after plan approved and per-specialist context bundles staged.
 type: meta
+indexed: true
 ---
 
 # guild:execute-plan
@@ -877,3 +878,39 @@ Once the stop condition is met, hand off to `guild:review` with:
 - `team_result_path` — the companion `guild.team_result.v1` emitted at `.guild/runs/<run-id>/team-result/<station>.json` (or the fail-soft skip note), the typed mirror of the dispatched instances against the composed team_plan.
 
 `guild:review` runs its 2-stage per-task review (spec-conformance then quality) against the receipts in `handoffs_dir`. Do not run review yourself — it is a separate skill with its own responsibilities.
+
+## Chapters
+
+Three-stage disclosure (KTD25): this file is the assembler. Each row below is an
+L3 chapter that stays on disk until a request matches it. Compose by pointer —
+read the one chapter you were routed to, and never inline a chapter here.
+
+| Chapter | Covers |
+|---|---|
+| `references/context-assemble.md` | Assembles per-specialist 3-layer context bundle: Universal (~400 tokens — guild:principles + project-overview + goals) + Role-dependent (~800–1500 — standards + 2–4 entity pages matching role) + Task-dependent (~800–1500 — lane from plan + named refs + upstream contracts + active decisions) |
+| `references/counters-and-concurrency.md` | reference material for this assembler |
+| `references/dispatching-parallel-agents.md` | The discipline for dispatching independent specialist lanes in parallel — respect depends-on edges, isolate context, collect handoff receipts, and never parallelize work with ordering or shared-state hazards |
+| `references/finish-branch.md` | Guild's branch-completion discipline — once work is done and tests pass, present clear integration options (merge, PR, keep, discard) and execute the chosen one safely, then clean up the worktree |
+| `references/io-contract.md` | reference material for this assembler |
+| `references/loop-implement.md` | F-3 implementation-phase adversarial-loop dispatcher — wraps `guild:execute-plan` per lane |
+| `references/loops-applicable-enum.md` | reference material for this assembler |
+| `references/security-review-restart.md` | reference material for this assembler |
+| `references/tdd.md` | Guild's first-class test-first discipline — write the failing test, watch it fail, then write the minimal code that passes |
+| `references/testing-anti-patterns.md` | reference material for this assembler |
+| `references/workflow-and-events.md` | reference material for this assembler |
+| `references/worktrees.md` | Guild's git-worktree isolation discipline — create an isolated worktree with deterministic directory selection and safety verification so a lane runs on a clean tree without disturbing the user's current checkout |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:codex-review` | `review` | `../review/references/codex-review.md` |
+| `guild:context-assemble` | this assembler | `references/context-assemble.md` |
+| `guild:decisions` | `wiki` | `../../knowledge/wiki/references/decisions.md` |
+| `guild:review-broker` | `review` | `../review/references/review-broker.md` |
+| `guild:verify-done` | `quality` | `../../quality/references/verify-done.md` |
+| `guild:wiki-ingest` | `wiki` | `../../knowledge/wiki/references/wiki-ingest.md` |

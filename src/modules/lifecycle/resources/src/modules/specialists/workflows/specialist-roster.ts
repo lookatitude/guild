@@ -23,6 +23,9 @@ export const MACHINERY_AGENT_IDS = Object.freeze([
   "advisor",
   "context-manager",
   "developer",
+  // KTD19 — the per-TaskCell lead (tier T1). Registered machinery, not an
+  // augmenting worker: it dispatches a cell and rolls it up, it never joins a lane.
+  "team-lead",
 ] as const);
 
 export const SPECIALIST_TEMPLATE_IDS = Object.freeze([

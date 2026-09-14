@@ -18,9 +18,7 @@
     ],
     "skills": [
       "guild-evolve-skill",
-      "guild-learning-checkpoint",
-      "guild-reflect",
-      "guild-rollback-skill"
+      "guild-reflect"
     ],
     "hooks": [
       "Stop:learning-backstop.js",

@@ -38,6 +38,237 @@ const COMMAND_SUBVERBS: Record<string, string> = {
   adopt: "command:init adopt",
 };
 
+/** The pre-reshape eval corpus paths (T01 draft), frozen for the same reason as
+ * the skill ids below: T03 renamed a chapter's `evals.json` to
+ * `<assembler>/references/<chapter>.evals.json`, so a live walk alone loses the id. */
+const PRE_CHANGE_EVAL_PATHS: string[] = [
+  "skills/core/principles/evals.json",
+  "skills/knowledge/learn-diff/evals.json",
+  "skills/knowledge/learn-explain/evals.json",
+  "skills/knowledge/learn-graph/evals.json",
+  "skills/knowledge/learn-harvest/evals.json",
+  "skills/knowledge/learn-knowledge/evals.json",
+  "skills/knowledge/learn-map/evals.json",
+  "skills/knowledge/learn-onboard/evals.json",
+  "skills/knowledge/learn/evals.json",
+  "skills/knowledge/wiki-ingest/evals.json",
+  "skills/knowledge/wiki-lint/evals.json",
+  "skills/knowledge/wiki-query/evals.json",
+  "skills/meta/audit/evals.json",
+  "skills/meta/brainstorm/evals.json",
+  "skills/meta/codex-review/evals.json",
+  "skills/meta/context-assemble/evals.json",
+  "skills/meta/create-skill/evals.json",
+  "skills/meta/create-specialist/evals.json",
+  "skills/meta/dashboard/evals.json",
+  "skills/meta/decisions/evals.json",
+  "skills/meta/dispatching-parallel-agents/evals.json",
+  "skills/meta/evolve-skill/evals.json",
+  "skills/meta/execute-plan/evals.json",
+  "skills/meta/finish-branch/evals.json",
+  "skills/meta/init/evals.json",
+  "skills/meta/initiative/evals.json",
+  "skills/meta/learning-checkpoint/evals.json",
+  "skills/meta/loop-clarify/evals.json",
+  "skills/meta/loop-implement/evals.json",
+  "skills/meta/loop-plan-review/evals.json",
+  "skills/meta/ops-incident/evals.json",
+  "skills/meta/ops-maintenance/evals.json",
+  "skills/meta/ops-monitoring/evals.json",
+  "skills/meta/ops-release/evals.json",
+  "skills/meta/ops-rollback/evals.json",
+  "skills/meta/plan/evals.json",
+  "skills/meta/product-define/evals.json",
+  "skills/meta/product-explore/evals.json",
+  "skills/meta/product-template/evals.json",
+  "skills/meta/reflect/evals.json",
+  "skills/meta/review-broker/evals.json",
+  "skills/meta/review/evals.json",
+  "skills/meta/rollback-skill/evals.json",
+  "skills/meta/systematic-debug/evals.json",
+  "skills/meta/tdd/evals.json",
+  "skills/meta/team-compose/evals.json",
+  "skills/meta/using-guild/evals.json",
+  "skills/meta/verify-done/evals.json",
+  "skills/meta/worktrees/evals.json",
+  "skills/meta/writing-skills/evals.json",
+  "skills/specialists/architect-adr-writer/evals.json",
+  "skills/specialists/architect-systems-design/evals.json",
+  "skills/specialists/architect-tradeoff-matrix/evals.json",
+  "skills/specialists/backend-api-contract/evals.json",
+  "skills/specialists/backend-data-layer/evals.json",
+  "skills/specialists/backend-migration-writer/evals.json",
+  "skills/specialists/backend-service-integration/evals.json",
+  "skills/specialists/copywriter-email-sequences/evals.json",
+  "skills/specialists/copywriter-long-form/evals.json",
+  "skills/specialists/copywriter-product-microcopy/evals.json",
+  "skills/specialists/copywriter-voice-guide/evals.json",
+  "skills/specialists/devops-ci-cd-pipeline/evals.json",
+  "skills/specialists/devops-incident-runbook/evals.json",
+  "skills/specialists/devops-infrastructure-as-code/evals.json",
+  "skills/specialists/devops-observability-setup/evals.json",
+  "skills/specialists/doc-writer-doc-site/evals.json",
+  "skills/specialists/doc-writer-onboarding-doc/evals.json",
+  "skills/specialists/doc-writer-product-guide/evals.json",
+  "skills/specialists/doc-writer-readme/evals.json",
+  "skills/specialists/frontend-a11y/evals.json",
+  "skills/specialists/frontend-bundler-config/evals.json",
+  "skills/specialists/frontend-react/evals.json",
+  "skills/specialists/frontend-state-management/evals.json",
+  "skills/specialists/marketing-ab-copy-variants/evals.json",
+  "skills/specialists/marketing-campaign-brief/evals.json",
+  "skills/specialists/marketing-launch-plan/evals.json",
+  "skills/specialists/marketing-positioning/evals.json",
+  "skills/specialists/mobile-android-kotlin/evals.json",
+  "skills/specialists/mobile-ios-swift/evals.json",
+  "skills/specialists/mobile-performance-tuning/evals.json",
+  "skills/specialists/mobile-react-native/evals.json",
+  "skills/specialists/qa-flaky-test-hunter/evals.json",
+  "skills/specialists/qa-property-based-tests/evals.json",
+  "skills/specialists/qa-snapshot-tests/evals.json",
+  "skills/specialists/qa-test-strategy/evals.json",
+  "skills/specialists/researcher-comparison-table/evals.json",
+  "skills/specialists/researcher-deep-dive/evals.json",
+  "skills/specialists/researcher-paper-digest/evals.json",
+  "skills/specialists/sales-cold-outreach/evals.json",
+  "skills/specialists/sales-discovery-framework/evals.json",
+  "skills/specialists/sales-follow-up-sequence/evals.json",
+  "skills/specialists/sales-proposal-writer/evals.json",
+  "skills/specialists/security-auth-flow-review/evals.json",
+  "skills/specialists/security-dependency-audit/evals.json",
+  "skills/specialists/security-secrets-scan/evals.json",
+  "skills/specialists/security-threat-modeling/evals.json",
+  "skills/specialists/seo-internal-linking/evals.json",
+  "skills/specialists/seo-keyword-research/evals.json",
+  "skills/specialists/seo-on-page-optimization/evals.json",
+  "skills/specialists/seo-technical-audit/evals.json",
+  "skills/specialists/social-media-content-calendar/evals.json",
+  "skills/specialists/social-media-engagement-templates/evals.json",
+  "skills/specialists/social-media-platform-post/evals.json",
+  "skills/specialists/social-media-thread/evals.json",
+  "skills/specialists/technical-writer-api-docs/evals.json",
+  "skills/specialists/technical-writer-release-notes/evals.json",
+  "skills/specialists/technical-writer-tutorial/evals.json",
+  "skills/specialists/technical-writer-user-manual/evals.json",
+  "tests/boundary/evals.json",
+];
+
+/** The 111 skill ids on the pre-reshape tree (T01 draft). Frozen: the coverage
+ * bijection must still answer "where did each of these go" after T03 moved them. */
+const PRE_CHANGE_SKILL_IDS_RAW: string[] = [
+  "core/principles",
+  "guild-operations",
+  "guild-quality",
+  "knowledge/learn",
+  "knowledge/learn-diff",
+  "knowledge/learn-explain",
+  "knowledge/learn-graph",
+  "knowledge/learn-harvest",
+  "knowledge/learn-knowledge",
+  "knowledge/learn-map",
+  "knowledge/learn-onboard",
+  "knowledge/wiki-ingest",
+  "knowledge/wiki-lint",
+  "knowledge/wiki-query",
+  "meta/audit",
+  "meta/brainstorm",
+  "meta/codex-review",
+  "meta/context-assemble",
+  "meta/create-skill",
+  "meta/create-specialist",
+  "meta/dashboard",
+  "meta/decisions",
+  "meta/diagnose",
+  "meta/dispatching-parallel-agents",
+  "meta/evolve-skill",
+  "meta/execute-plan",
+  "meta/finish-branch",
+  "meta/init",
+  "meta/initiative",
+  "meta/learning-checkpoint",
+  "meta/loop-clarify",
+  "meta/loop-implement",
+  "meta/loop-plan-review",
+  "meta/ops-incident",
+  "meta/ops-maintenance",
+  "meta/ops-monitoring",
+  "meta/ops-release",
+  "meta/ops-rollback",
+  "meta/plan",
+  "meta/product-define",
+  "meta/product-explore",
+  "meta/product-template",
+  "meta/reflect",
+  "meta/review",
+  "meta/review-broker",
+  "meta/rollback-skill",
+  "meta/systematic-debug",
+  "meta/tdd",
+  "meta/team-compose",
+  "meta/using-guild",
+  "meta/verify-done",
+  "meta/worktrees",
+  "meta/writing-skills",
+  "specialists/architect-adr-writer",
+  "specialists/architect-systems-design",
+  "specialists/architect-tradeoff-matrix",
+  "specialists/backend-api-contract",
+  "specialists/backend-data-layer",
+  "specialists/backend-migration-writer",
+  "specialists/backend-service-integration",
+  "specialists/copywriter-email-sequences",
+  "specialists/copywriter-long-form",
+  "specialists/copywriter-product-microcopy",
+  "specialists/copywriter-voice-guide",
+  "specialists/devops-ci-cd-pipeline",
+  "specialists/devops-incident-runbook",
+  "specialists/devops-infrastructure-as-code",
+  "specialists/devops-observability-setup",
+  "specialists/doc-writer-doc-site",
+  "specialists/doc-writer-onboarding-doc",
+  "specialists/doc-writer-product-guide",
+  "specialists/doc-writer-readme",
+  "specialists/frontend-a11y",
+  "specialists/frontend-bundler-config",
+  "specialists/frontend-react",
+  "specialists/frontend-state-management",
+  "specialists/marketing-ab-copy-variants",
+  "specialists/marketing-campaign-brief",
+  "specialists/marketing-launch-plan",
+  "specialists/marketing-positioning",
+  "specialists/mobile-android-kotlin",
+  "specialists/mobile-ios-swift",
+  "specialists/mobile-performance-tuning",
+  "specialists/mobile-react-native",
+  "specialists/qa-flaky-test-hunter",
+  "specialists/qa-property-based-tests",
+  "specialists/qa-snapshot-tests",
+  "specialists/qa-test-strategy",
+  "specialists/researcher-comparison-table",
+  "specialists/researcher-deep-dive",
+  "specialists/researcher-paper-digest",
+  "specialists/sales-cold-outreach",
+  "specialists/sales-discovery-framework",
+  "specialists/sales-follow-up-sequence",
+  "specialists/sales-proposal-writer",
+  "specialists/security-auth-flow-review",
+  "specialists/security-dependency-audit",
+  "specialists/security-secrets-scan",
+  "specialists/security-threat-modeling",
+  "specialists/seo-internal-linking",
+  "specialists/seo-keyword-research",
+  "specialists/seo-on-page-optimization",
+  "specialists/seo-technical-audit",
+  "specialists/social-media-content-calendar",
+  "specialists/social-media-engagement-templates",
+  "specialists/social-media-platform-post",
+  "specialists/social-media-thread",
+  "specialists/technical-writer-api-docs",
+  "specialists/technical-writer-release-notes",
+  "specialists/technical-writer-tutorial",
+  "specialists/technical-writer-user-manual",
+];
+
 /** Current skill id -> one of the 17 indexed assemblers. */
 const SKILL_TO_ASSEMBLER: Record<string, string> = {
   "meta/using-guild": "using-guild", "meta/init": "init", "meta/brainstorm": "brainstorm",
@@ -46,6 +277,10 @@ const SKILL_TO_ASSEMBLER: Record<string, string> = {
   "meta/initiative": "initiative", "meta/review": "review", "meta/diagnose": "diagnose",
   "meta/evolve-skill": "evolve", "meta/create-skill": "create-skill",
   "meta/create-specialist": "create-specialist", "meta/reflect": "reflect",
+  // Post-T03 live ids. The pre-change keys above stay so the coverage bijection
+  // still answers "where did <old id> go"; these answer "what is this folder now".
+  "quality": "quality", "operations": "operations", "meta/evolve": "evolve",
+  "knowledge/wiki": "wiki",
 };
 /** Current skill id -> `references/` chapter of the named assembler. */
 const SKILL_TO_CHAPTER: Record<string, string> = {
@@ -58,25 +293,30 @@ const SKILL_TO_CHAPTER: Record<string, string> = {
   "meta/product-template": "plan", "meta/verify-done": "quality",
   "meta/writing-skills": "create-skill", "meta/review-broker": "review",
   "meta/audit": "evolve", "meta/rollback-skill": "evolve",
+  // T03 brief overrides the T01 draft for these: they are `references/` chapters of
+  // the assembler that invokes them, not standalone off-glob playbooks.
+  "meta/tdd": "execute-plan", "meta/worktrees": "execute-plan",
+  "meta/loop-implement": "execute-plan", "meta/finish-branch": "execute-plan",
+  "meta/dispatching-parallel-agents": "execute-plan",
+  "meta/loop-clarify": "brainstorm", "meta/loop-plan-review": "plan",
+  "meta/systematic-debug": "diagnose", "meta/codex-review": "review",
+  "meta/ops-incident": "operations", "meta/ops-maintenance": "operations",
+  "meta/ops-monitoring": "operations", "meta/ops-release": "operations",
+  "meta/ops-rollback": "operations",
+  // Decision capture IS the wiki (KTD35/KTD43); context-assemble is machinery kept
+  // reachable by the parent that invokes it; learning-checkpoint keeps its body as a
+  // reference stub naming the domain function it became (KTD57).
+  "meta/decisions": "wiki", "meta/context-assemble": "execute-plan",
+  "meta/learning-checkpoint": "reflect",
 };
 /** Current skill id -> off-glob L3 playbook under src/surfaces/playbooks/. */
 const SKILL_TO_PLAYBOOK: Record<string, string> = {
-  "meta/tdd": "tdd", "meta/worktrees": "worktrees",
-  "meta/systematic-debug": "systematic-debug", "meta/finish-branch": "finish-branch",
-  "meta/dispatching-parallel-agents": "dispatching-parallel-agents",
-  "meta/codex-review": "codex-review",
-  "meta/loop-clarify": "loop-clarify", "meta/loop-implement": "loop-implement",
-  "meta/loop-plan-review": "loop-plan-review",
   "meta/dashboard": "dashboard",
-  "meta/ops-incident": "ops-incident", "meta/ops-maintenance": "ops-maintenance",
-  "meta/ops-monitoring": "ops-monitoring", "meta/ops-release": "ops-release",
-  "meta/ops-rollback": "ops-rollback",
+  // Post-T03 live id for the same file.
+  "playbooks/dashboard": "dashboard",
 };
 /** Current skill id -> a domain function; the skill file itself is deleted. */
 const SKILL_TO_DOMAIN: Record<string, string> = {
-  "meta/learning-checkpoint": "domain:knowledge#learningCheckpoint",
-  "meta/context-assemble": "domain:knowledge#assembleLaneBundle",
-  "meta/decisions": "domain:knowledge#writeDecision",
 };
 /** Folded wholesale into another surface; no file survives. */
 const SKILL_FOLDED: Record<string, string> = {
@@ -203,11 +443,25 @@ function commands(): Entry[] {
   });
 }
 
-function skillIds(): string[] {
+function liveSkillIds(): string[] {
   return walk(path.join(ROOT, "skills"))
     .filter((f) => /(^|\/)SKILL(\.src)?\.md$/.test(f))
     .map((f) => f.replace(/\/?SKILL(\.src)?\.md$/, ""))
     .sort();
+}
+
+/**
+ * Coverage is a bijection over PRE-change ids (spec gap G-a), and T03 moved most
+ * of the corpus: a chapter is a `references/*.md`, not a `SKILL.md`, so a live
+ * walk alone can no longer see it. Enumerate the union — every pre-reshape id
+ * (frozen below, from the T01 draft) plus whatever the tree holds today — so the
+ * draft answers both "where did <old id> go" and "what is this folder now", and
+ * `unmapped` stays a real number rather than one that shrinks by forgetting.
+ */
+const PRE_CHANGE_SKILL_IDS: string[] = PRE_CHANGE_SKILL_IDS_RAW;
+
+function skillIds(): string[] {
+  return [...new Set([...PRE_CHANGE_SKILL_IDS, ...liveSkillIds()])].sort();
 }
 
 function skillTarget(sid: string): { target: string; disposition: string; note?: string } {
@@ -293,17 +547,34 @@ function moduleExports(): Entry[] {
 
 function evals(): Entry[] {
   const out: Entry[] = [];
-  for (const sid of skillIds()) {
-    if (!fs.existsSync(path.join(ROOT, "skills", sid, "evals.json"))) continue;
+  const emitted = new Set<string>();
+  const emit = (evalPath: string, sid: string) => {
+    if (emitted.has(evalPath)) return;
+    emitted.add(evalPath);
     const t = skillTarget(sid);
     out.push({
-      id: `eval:skills/${sid}/evals.json`, kind: "eval",
+      id: `eval:${evalPath}`, kind: "eval",
       target: t.target.startsWith("assembler:")
         ? `eval-corpus:${t.target.slice("assembler:".length)}`
         : `eval-corpus:${t.target.split(":")[1] ?? t.target}`,
       disposition: t.disposition === "deleted" ? "eval-retired" : "eval-moved",
       note: "evals ride the surface they score (evals corpus lives in the evolve domain)",
     });
+  };
+  // Pre-change corpus first: these ids are the coverage keys and must not vanish
+  // just because T03 renamed the file that backs them.
+  for (const evalPath of PRE_CHANGE_EVAL_PATHS) {
+    const m = /^skills\/(.+)\/evals\.json$/.exec(evalPath);
+    if (m) emit(evalPath, m[1]);
+  }
+  // Then whatever the tree holds now, including relocated chapter evals at
+  // `<assembler>/references/<chapter>.evals.json`.
+  for (const f of walk(path.join(ROOT, "skills"))) {
+    if (!/(^|\/)([\w.-]+\.)?evals\.json$/.test(f)) continue;
+    const evalPath = `skills/${f}`;
+    const chapter = /^(.*)\/references\/([\w.-]+)\.evals\.json$/.exec(f);
+    const sid = chapter ? chapter[1] : path.dirname(f);
+    emit(evalPath, sid);
   }
   const boundary = "tests/boundary/evals.json";
   if (fs.existsSync(path.join(ROOT, boundary))) {

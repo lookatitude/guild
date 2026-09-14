@@ -5,23 +5,23 @@
   "kind": "capability",
   "implementation_mode": "workflow-backed",
   "description": "Owns wiki, recall, learn-* flows, knowledge graph outputs, links, and the guild-memory MCP surface.",
-  "depends_on": ["kernel", "state", "learning"],
+  "depends_on": [
+    "kernel",
+    "state",
+    "learning"
+  ],
   "owns": {
-    "commands": ["learn", "wiki"],
+    "commands": [
+      "learn",
+      "wiki"
+    ],
     "skills": [
       "guild-learn",
-      "guild-learn-diff",
-      "guild-learn-explain",
-      "guild-learn-graph",
-      "guild-learn-harvest",
-      "guild-learn-knowledge",
-      "guild-learn-map",
-      "guild-learn-onboard",
-      "guild-wiki-ingest",
-      "guild-wiki-lint",
-      "guild-wiki-query"
+      "guild-wiki"
     ],
-    "mcp_servers": ["guild-memory"],
+    "mcp_servers": [
+      "guild-memory"
+    ],
     "scripts": [
       "knowledge-links-builder",
       "knowledge-links-traverse",

@@ -355,7 +355,7 @@ describe("(E) static guard — no consumer hard-codes a single-file team path", 
     ["C7 create-specialist", "skills/meta/create-specialist/workflow.md"],
     ["C8 build", "commands/build.md"],
     ["C9 plan-cmd", "commands/plan.md"],
-    ["C11 dispatching-parallel-agents", "skills/meta/dispatching-parallel-agents/SKILL.md"],
+    ["C11 dispatching-parallel-agents", "skills/meta/execute-plan/references/dispatching-parallel-agents.md"],
   ];
   it.each(MUST_SPEAK_PERPHASE)("%s references the per-phase filename", (_label, rel) => {
     expect(readConsumer(rel)).toMatch(/\.<phase>\.yaml|\.\$\{phase\}\.yaml/);
@@ -386,7 +386,7 @@ describe("(E) static guard — no consumer hard-codes a single-file team path", 
     "skills/meta/create-specialist/workflow.md",
     "commands/build.md",
     "commands/plan.md",
-    "skills/meta/dispatching-parallel-agents/SKILL.md",
+    "skills/meta/execute-plan/references/dispatching-parallel-agents.md",
     "scripts/agent-team-launcher.ts",
     "scripts/lib/team-backend.ts",
   ];

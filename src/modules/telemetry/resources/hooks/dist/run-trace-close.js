@@ -24697,6 +24697,51 @@ var init_write_task_run = __esm({
   }
 });
 
+// src/modules/lifecycle/workflows/workflow-graph-overlay.ts
+var WORKFLOW_CLASSES, WORKFLOW_EDGE_OUTCOMES, PROTECTED_NODE_IDS, RELEASE_GATE, PROTECTED_NODE_STATIONS, PROTECTED_NODE_ROLES, RELEASE_ROLE, CLASS_DEFAULT_ENTRIES;
+var init_workflow_graph_overlay = __esm({
+  "src/modules/lifecycle/workflows/workflow-graph-overlay.ts"() {
+    WORKFLOW_CLASSES = Object.freeze(["product", "research", "debug", "ops", "init"]);
+    WORKFLOW_EDGE_OUTCOMES = Object.freeze([
+      "next",
+      "skip",
+      "replan",
+      "harvest",
+      "escalate",
+      "change_class"
+    ]);
+    PROTECTED_NODE_IDS = Object.freeze(["product.qa", "d5", "d8", "ops.first-run"]);
+    RELEASE_GATE = Object.freeze({
+      class: "product",
+      from: "build",
+      gate: "product.qa",
+      releaseNodes: Object.freeze(["product.release"])
+    });
+    PROTECTED_NODE_STATIONS = Object.freeze({
+      "product.qa": "runtime-qa",
+      d5: "team-compose",
+      d8: "initiative-close",
+      "ops.first-run": "ops-runbooks"
+    });
+    PROTECTED_NODE_ROLES = Object.freeze({
+      "product.qa": Object.freeze({ station: "runtime-qa", assembler: "quality" }),
+      d5: Object.freeze({ station: "team-compose", assembler: "team-compose" }),
+      d8: Object.freeze({ station: "initiative-close", assembler: "initiative" })
+    });
+    RELEASE_ROLE = Object.freeze({
+      station: "ops-runbooks",
+      assembler: "operations"
+    });
+    CLASS_DEFAULT_ENTRIES = Object.freeze({
+      product: "intake",
+      research: "recall",
+      debug: "recall",
+      ops: "ops.first-run",
+      init: "detect"
+    });
+  }
+});
+
 // src/modules/lifecycle/index.ts
 var init_lifecycle = __esm({
   "src/modules/lifecycle/index.ts"() {
@@ -24718,6 +24763,7 @@ var init_lifecycle = __esm({
     init_runstart_preflight();
     init_write_run_manifest();
     init_write_task_run();
+    init_workflow_graph_overlay();
   }
 });
 

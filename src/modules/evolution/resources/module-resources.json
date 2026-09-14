@@ -22,7 +22,7 @@
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
       "resource_path": "resources/hooks/dist/learning-backstop.js",
-      "sha256": "20e04b92f0e3aeae7576a1e608119a7fca8dfe45bb2d6eae22b8c6f2c6df0718"
+      "sha256": "cf3c7dc7bec39006379adc00cc3828008de9c3ee9b1c272420e47c80f87a6cde"
     },
     {
       "category": "hooks",
@@ -104,37 +104,44 @@
     {
       "category": "skills",
       "id": "guild-evolve-skill",
-      "source_path": "skills/meta/evolve-skill/SKILL.md",
-      "resource_path": "resources/skills/meta/evolve-skill/SKILL.md",
-      "sha256": "05dd85e698a270543e751d95976e17f1396513cd2d6bc3d00f54f37e77e55244"
+      "source_path": "skills/meta/evolve/SKILL.md",
+      "resource_path": "resources/skills/meta/evolve/SKILL.md",
+      "sha256": "2a2c630d732be714f0919f5a9348a319748db7aa139052066aaca599b325a754"
+    },
+    {
+      "category": "skills",
+      "id": "guild-evolve-skill/references/audit.md",
+      "source_path": "skills/meta/evolve/references/audit.md",
+      "resource_path": "resources/skills/meta/evolve/references/audit.md",
+      "sha256": "5015c9b1bf6a05c108072af87ab96764cad2b34286b299d19ee6ce5f142a74d0"
+    },
+    {
+      "category": "skills",
+      "id": "guild-evolve-skill/references/rollback-skill.md",
+      "source_path": "skills/meta/evolve/references/rollback-skill.md",
+      "resource_path": "resources/skills/meta/evolve/references/rollback-skill.md",
+      "sha256": "692896ebfc9191407a5d11476d6cb6f6fd0f43bdcf96eb4770080081cb663210"
     },
     {
       "category": "skills",
       "id": "guild-evolve-skill/scenarios.json",
-      "source_path": "skills/meta/evolve-skill/scenarios.json",
-      "resource_path": "resources/skills/meta/evolve-skill/scenarios.json",
+      "source_path": "skills/meta/evolve/scenarios.json",
+      "resource_path": "resources/skills/meta/evolve/scenarios.json",
       "sha256": "5c9130fb90504e2cf460a5b8aa1a103a744da092c556109d8abbb1998b7ff702"
-    },
-    {
-      "category": "skills",
-      "id": "guild-learning-checkpoint",
-      "source_path": "skills/meta/learning-checkpoint/SKILL.md",
-      "resource_path": "resources/skills/meta/learning-checkpoint/SKILL.md",
-      "sha256": "97887c2fc97c853d108d8a6be4f112e5fb655e56d3a6430cd846c96a8ad0143a"
     },
     {
       "category": "skills",
       "id": "guild-reflect",
       "source_path": "skills/meta/reflect/SKILL.md",
       "resource_path": "resources/skills/meta/reflect/SKILL.md",
-      "sha256": "1c57be19408f1ff4d4f9f4be00c0edb4a20c9917bf8952fc7f5a64b0b27b380c"
+      "sha256": "8c61a1db83f15f062e5867e364355bebe640f7007c4f51fe22c03b2d0d9498b6"
     },
     {
       "category": "skills",
-      "id": "guild-rollback-skill",
-      "source_path": "skills/meta/rollback-skill/SKILL.md",
-      "resource_path": "resources/skills/meta/rollback-skill/SKILL.md",
-      "sha256": "692896ebfc9191407a5d11476d6cb6f6fd0f43bdcf96eb4770080081cb663210"
+      "id": "guild-reflect/references/learning-checkpoint.md",
+      "source_path": "skills/meta/reflect/references/learning-checkpoint.md",
+      "resource_path": "resources/skills/meta/reflect/references/learning-checkpoint.md",
+      "sha256": "97887c2fc97c853d108d8a6be4f112e5fb655e56d3a6430cd846c96a8ad0143a"
     }
   ]
 }

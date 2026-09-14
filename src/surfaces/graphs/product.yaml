@@ -1,0 +1,81 @@
+# guild.workflow_graph.v1 — plugin default for the `product` class (KTD40/KTD42).
+# Data, not a skill. Project overlay: .guild/graphs/product.yaml.
+# Overlay may reorder or omit nodes with `required: false`. It can NEVER drop a
+# node marked `required: true` — qa-before-release, D5, and D8 are the trap.
+schema_version: "guild.workflow_graph.v1"
+class: "product"
+graph_id: "product.default"
+entry: "intake"
+nodes:
+  - id: "intake"
+    station: "ambient-routing"
+    inner_loop: false
+  - id: "product.explore"
+    station: "ideation"
+    assembler: "brainstorm"
+    inner_loop: false
+  - id: "product.define"
+    station: "ideation"
+    assembler: "plan"
+    inner_loop: false
+  - id: "spec"
+    station: "define-to-spec"
+    assembler: "brainstorm"
+    inner_loop: false
+  - id: "ideate"
+    station: "ideation"
+    assembler: "brainstorm"
+    inner_loop: false
+    skip_when: "operator"
+  - id: "d5"
+    station: "team-compose"
+    assembler: "team-compose"
+    inner_loop: false
+    required: true
+  - id: "plan"
+    station: "planning"
+    assembler: "plan"
+    inner_loop: false
+  - id: "build"
+    station: "implementation"
+    assembler: "execute-plan"
+    inner_loop: true
+  - id: "product.qa"
+    station: "runtime-qa"
+    assembler: "quality"
+    inner_loop: false
+    required: true
+  - id: "d8"
+    station: "initiative-close"
+    assembler: "initiative"
+    inner_loop: false
+    required: true
+  - id: "product.release"
+    station: "ops-runbooks"
+    assembler: "operations"
+    inner_loop: false
+    skip_when: "operator"
+  - id: "harvest"
+    station: "harvest"
+    assembler: "reflect"
+    inner_loop: false
+edges:
+  - { from: "intake", on: "next", to: "product.explore" }
+  - { from: "intake", on: "change_class", to: { class: "research", entry: "recall" }, change_class: "research" }
+  - { from: "product.explore", on: "next", to: "product.define" }
+  - { from: "product.define", on: "next", to: "spec" }
+  - { from: "spec", on: "next", to: "ideate" }
+  - { from: "spec", on: "skip", to: "d5" }
+  - { from: "ideate", on: "next", to: "d5" }
+  - { from: "d5", on: "next", to: "plan" }
+  - { from: "plan", on: "next", to: "build" }
+  - { from: "plan", on: "replan", to: "spec" }
+  - { from: "build", on: "next", to: "product.qa" }
+  - { from: "build", on: "replan", to: "plan" }
+  - { from: "build", on: "escalate", to: "d5" }
+  - { from: "product.qa", on: "next", to: "d8" }
+  - { from: "product.qa", on: "replan", to: "build" }
+  - { from: "d8", on: "next", to: "product.release" }
+  - { from: "d8", on: "skip", to: "harvest" }
+  - { from: "product.release", on: "next", to: "harvest" }
+  - { from: "harvest", on: "harvest", to: "harvest" }

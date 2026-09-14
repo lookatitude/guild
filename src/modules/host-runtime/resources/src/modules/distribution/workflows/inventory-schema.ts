@@ -95,6 +95,14 @@ export interface SkillEntry extends InventoryEntryBase {
   tier?: string;
   /** Optional one-line description (skill frontmatter `description:`). */
   description?: string;
+  /**
+   * True when a host INDEXES this skill — the KTD59 closed list of assemblers.
+   * Stamped from `owns.indexed_skills` in the module manifests, which are the
+   * source of truth; the plugin manifest's `skills` glob is derived from it.
+   * Absent/false means the skill ships but stays out of every skill catalog
+   * (L3 chapters, specialist starter recipes, playbooks).
+   */
+  indexed?: boolean;
 }
 
 /** An agent/specialist surface. id = bare agent name ("architect"). */

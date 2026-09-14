@@ -19,9 +19,6 @@
     "teams"
   ],
   "owns": {
-    "skills": [
-      "dispatching-parallel-agents"
-    ],
     "scripts": [
       "agent-team-launcher",
       "resolve-specialist-capability-scope",

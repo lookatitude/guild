@@ -22,7 +22,14 @@
       "id": "guild-create-skill",
       "source_path": "skills/meta/create-skill/SKILL.md",
       "resource_path": "resources/skills/meta/create-skill/SKILL.md",
-      "sha256": "3edff1ea917ab7431a0a61d268149ac0e317a09fe6318b48c7b6edf2fefee1b8"
+      "sha256": "c992693ae7aabb736cb7ea0f3bd4a6574b24d80b0dbae85d0a412e492df112a1"
+    },
+    {
+      "category": "skills",
+      "id": "guild-create-skill/references/writing-skills.md",
+      "source_path": "skills/meta/create-skill/references/writing-skills.md",
+      "resource_path": "resources/skills/meta/create-skill/references/writing-skills.md",
+      "sha256": "b72e8327ffe41a86731eb9b54eed77d4ac50acf64e7a81b835a8fae33009abc9"
     },
     {
       "category": "skills",

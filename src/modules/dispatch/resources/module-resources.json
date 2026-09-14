@@ -149,13 +149,6 @@
       "source_path": "scripts/task-cell-team-result.ts",
       "resource_path": "resources/scripts/task-cell-team-result.ts",
       "sha256": "63f64dd12f701a86e990248003115b0ccef3f9d52e057b71ac9298e170bb5f57"
-    },
-    {
-      "category": "skills",
-      "id": "dispatching-parallel-agents",
-      "source_path": "skills/meta/dispatching-parallel-agents/SKILL.md",
-      "resource_path": "resources/skills/meta/dispatching-parallel-agents/SKILL.md",
-      "sha256": "b243f945299b4629809fb753fd23f19a98093e9b4fee447f2be4649bb8f65cac"
     }
   ]
 }

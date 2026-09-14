@@ -96,6 +96,14 @@ export interface SkillSrcV1 {
   /** Frontmatter `type:` — e.g. `meta`; rendered as an unquoted scalar. */
   type: string;
   /**
+   * Frontmatter `indexed:` — true only for the KTD59 closed list of assemblers,
+   * the skills a host puts in its catalog. Optional because most skills ship
+   * off-index (L3 chapters, specialist starter recipes, playbooks); rendered as
+   * `indexed: true` after `type:` and OMITTED entirely when absent, which is what
+   * keeps the render byte-identical to both corpus shapes.
+   */
+  indexed?: boolean;
+  /**
    * The verbatim markdown body — EVERYTHING after the closing `---` frontmatter
    * fence (exactly what `splitFrontmatter` returns as `body`, including the leading
    * blank line). Carried byte-for-byte; the renderer never reflows it.
@@ -103,7 +111,7 @@ export interface SkillSrcV1 {
   body: string;
 }
 
-const SKILL_ALLOWED_KEYS = ["id", "name", "description", "when_to_use", "type", "body"];
+const SKILL_ALLOWED_KEYS = ["id", "name", "description", "when_to_use", "type", "indexed", "body"];
 
 // ---------------------------------------------------------------------------
 // Type — the registry (the single neutral source for the skill set)
@@ -211,6 +219,13 @@ function validateSkillSrcV1Inner(value: unknown): ValidationResult {
     errors.push(`${where("type")}: not a plain scalar type (must match ${SKILL_TYPE})`);
   }
 
+  // indexed — optional, and when present must be literal `true`. `false` is not a
+  // shape the corpus renders (an off-index skill simply omits the key), so accepting
+  // it would let two entries render to the same bytes from different sources.
+  if (e.indexed !== undefined && e.indexed !== true) {
+    errors.push(`${where("indexed")}: must be omitted or literally true`);
+  }
+
   // body — verbatim, but must be CANONICAL skill-file shape so a valid entry renders
   // the corpus structure: a non-empty string that begins with EXACTLY ONE blank line
   // then content (`\n` + a non-newline) and ends with EXACTLY ONE trailing newline
@@ -304,6 +319,7 @@ function validateSkillSrcRegistryV1Inner(value: unknown): ValidationResult {
  *   description: <description>\n
  *   when_to_use: <when_to_use>\n
  *   type: <type>\n
+ *   [indexed: true\n]          (only when the skill is an indexed assembler)
  *   ---\n<body>
  *
  * `body` is appended verbatim — it begins with the blank line between the closing
@@ -323,6 +339,7 @@ export function renderSkillV1(entry: SkillSrcV1): string {
     `description: ${entry.description}`,
     `when_to_use: ${entry.when_to_use}`,
     `type: ${entry.type}`,
+    ...(entry.indexed === true ? ["indexed: true"] : []),
   ].join("\n");
 
   // "---\n" + frontmatter + "\n---\n" + body  (the closing fence's trailing newline
@@ -386,6 +403,7 @@ export function extractSkillV1(id: string, content: string): SkillSrcV1 | null {
     description: fields.description,
     when_to_use: fields.when_to_use,
     type: fields.type,
+    ...(fields.indexed === "true" ? { indexed: true } : {}),
     body,
   };
 }
@@ -516,13 +534,19 @@ export function renderSkillToStaging(
 // CLI — render the registry to a staging path (never the live surface)
 // ---------------------------------------------------------------------------
 
-/** The five invocation-driving skills with a committed SKILL.md (F-5: using-guild excluded). */
+/**
+ * The five-skill pilot slice. Still five invocation-driving skills with a
+ * committed SKILL.md (F-5: using-guild excluded) — but the earlier slice named
+ * `review-broker` / `systematic-debug` / `tdd` / `verify-done`, and T03 folded all
+ * four into `references/` chapters of their parent assembler (KTD25/KTD59). A
+ * chapter has no `SKILL.md`, so the slice now names assemblers that do.
+ */
 export const WAVE2_SKILL_IDS = Object.freeze([
-  "review-broker",
+  "brainstorm",
+  "plan",
   "execute-plan",
-  "systematic-debug",
-  "tdd",
-  "verify-done",
+  "review",
+  "diagnose",
 ] as const);
 
 interface CliArgs {

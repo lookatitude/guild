@@ -325,8 +325,12 @@ function commandNameFromPath(commandPath: string): string {
  */
 function remapSkillDirsToPackageRoot(skillDirs: readonly string[], agentsSkillRoot: string): string[] {
   return skillDirs.map((dir) => {
-    const tier = dir.replace(/^\.\/skills\//, "").replace(/\/$/, "");
-    return `${agentsSkillRoot}/${tier}/`;
+    // The suffix is whatever follows `./skills/` — one segment when the manifest
+    // carried a tier glob, two or more now that KTD59 makes it one entry per
+    // indexed assembler directory (`./skills/meta/plan/`). Keep every segment:
+    // truncating to the first would re-index the tier in every host package.
+    const under = dir.replace(/^\.\/skills\//, "").replace(/\/$/, "");
+    return `${agentsSkillRoot}/${under}/`;
   });
 }
 

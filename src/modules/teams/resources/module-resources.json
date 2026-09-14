@@ -29,7 +29,7 @@
       "id": "guild-create-specialist",
       "source_path": "skills/meta/create-specialist/SKILL.md",
       "resource_path": "resources/skills/meta/create-specialist/SKILL.md",
-      "sha256": "32c6d424f518d2b7333a28bea2cb2885647bb583fa41f5b6118138c3668cb249"
+      "sha256": "f9ad4419882b0eb3ba5f09bdd2c84432e4596869aa60bc9f96226b3df4950e91"
     },
     {
       "category": "skills",
@@ -40,17 +40,10 @@
     },
     {
       "category": "skills",
-      "id": "guild-finish-branch",
-      "source_path": "skills/meta/finish-branch/SKILL.md",
-      "resource_path": "resources/skills/meta/finish-branch/SKILL.md",
-      "sha256": "9d607e920e810b990e9370dadf2465b9a21388bb11c8e5867108d9b4f4dfd1a2"
-    },
-    {
-      "category": "skills",
       "id": "guild-team-compose",
       "source_path": "skills/meta/team-compose/SKILL.md",
       "resource_path": "resources/skills/meta/team-compose/SKILL.md",
-      "sha256": "6bb6c96dc24686e037ebb22a1021f3cd80bda5190e52d2a9600da4322935170e"
+      "sha256": "47609381ef864c3795ed33ae36f6d90c810fc5b03f1da35dbd75a01a5a3bb9e5"
     },
     {
       "category": "skills",
@@ -58,20 +51,6 @@
       "source_path": "skills/meta/team-compose/gap-handling.md",
       "resource_path": "resources/skills/meta/team-compose/gap-handling.md",
       "sha256": "b2ac2a65c325204d535afea37babac5fc03a8be2d9db98739dc46124969d42ba"
-    },
-    {
-      "category": "skills",
-      "id": "guild-worktrees",
-      "source_path": "skills/meta/worktrees/SKILL.md",
-      "resource_path": "resources/skills/meta/worktrees/SKILL.md",
-      "sha256": "8d987a69762679df94d492a72ba74cf619b3681597efcac13c6375f9bdfd9018"
-    },
-    {
-      "category": "skills",
-      "id": "writing-skills",
-      "source_path": "skills/meta/writing-skills/SKILL.md",
-      "resource_path": "resources/skills/meta/writing-skills/SKILL.md",
-      "sha256": "b72e8327ffe41a86731eb9b54eed77d4ac50acf64e7a81b835a8fae33009abc9"
     }
   ]
 }
