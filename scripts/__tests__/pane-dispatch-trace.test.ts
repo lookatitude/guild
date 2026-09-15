@@ -40,6 +40,7 @@ import * as os from "os";
 import * as yaml from "js-yaml";
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
+import { hostCapabilityCacheFile } from "../../src/modules/state";
 
 const SUMMARIZER = path.resolve(__dirname, "../trace-summarize.ts");
 const PANE_TRACE_CLI = path.resolve(__dirname, "../lib/host/pane-dispatch-trace.ts");
@@ -112,14 +113,16 @@ function setupConsumerRepo(
 
 /** guild.host_capability.v1 manifest the launcher's cross-host routing reads. */
 function writeHostManifest(cwd: string, hostId: string, hostKind: "claude" | "codex"): void {
-  const dir = path.join(cwd, ".guild", "hosts", hostId);
+  // U-CFG (T06): host capability lives on the platform cache root, never under .guild.
+  const file = hostCapabilityCacheFile(cwd, hostId);
+  const dir = path.dirname(file);
   fs.mkdirSync(dir, { recursive: true });
   const tierModels =
     hostKind === "codex"
       ? { cheap: "gpt-4o-mini", mid: "gpt-4o", powerful: "o3" }
       : { cheap: "haiku", mid: "sonnet", powerful: "opus" };
   fs.writeFileSync(
-    path.join(dir, "capability.json"),
+    file,
     JSON.stringify({
       schema_version: "guild.host_capability.v1",
       host_id: hostId,
