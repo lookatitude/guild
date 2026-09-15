@@ -13775,13 +13775,14 @@ function splitInlineValue(rawValue) {
     let i = 1;
     while (i < text.length) {
       if (q === '"' && text[i] === "\\") i += 2;
+      else if (q === "'" && text[i] === "'" && text[i + 1] === "'") i += 2;
       else if (text[i] === q) break;
       else i += 1;
     }
     const rest = text.slice(i + 1).trim();
     return { value: text.slice(1, i), comment: rest.startsWith("#") ? rest : null };
   }
-  const hash = rawValue.indexOf(" #");
+  const hash = rawValue.search(/[ \t]#/);
   if (hash >= 0) return { value: rawValue.slice(0, hash).trim(), comment: rawValue.slice(hash + 1).trim() };
   return { value: rawValue.trim(), comment: null };
 }
