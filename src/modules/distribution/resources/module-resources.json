@@ -92,7 +92,7 @@
       "id": "compile",
       "source_path": "scripts/compile.ts",
       "resource_path": "resources/scripts/compile.ts",
-      "sha256": "ee3389042ff6a33bd9aaa4783a98e88fa48d78dc33a5baef9bba94c0c29d2da7"
+      "sha256": "0b1d018d2b416743ddd3d75ae2fa6206ebeb55f02d8628d4abd40be7c4b0c343"
     },
     {
       "category": "scripts",
@@ -239,7 +239,7 @@
       "id": "lint/layout-laws",
       "source_path": "scripts/lint/layout-laws.ts",
       "resource_path": "resources/scripts/lint/layout-laws.ts",
-      "sha256": "186908242488121ca0dc52c983b2698777ff6f9c5b04575ba07789ce76d9ed57"
+      "sha256": "01c17ef81e39382474b6fd29e85edfd5a3bfc9094d8d56f59296215614fa5017"
     },
     {
       "category": "scripts",

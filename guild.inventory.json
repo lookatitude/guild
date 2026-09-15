@@ -2099,6 +2099,16 @@
       "kind": "lib"
     },
     {
+      "id": "lib/state/storage",
+      "source_path": "scripts/lib/state/storage.ts",
+      "kind": "lib"
+    },
+    {
+      "id": "lib/state/storage-gc",
+      "source_path": "scripts/lib/state/storage-gc.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/support-matrix",
       "source_path": "scripts/lib/support-matrix.ts",
       "kind": "lib"

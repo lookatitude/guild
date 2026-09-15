@@ -85,6 +85,8 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   { id: "write-host-capability", entry: "scripts/write-host-capability.ts" },
   // SessionStart marker read (KTD29). Stub until T07 lands the step chain.
   { id: "ensure-storage-layout", entry: "scripts/lib/state/ensure-storage-layout.ts" },
+  // `/guild:maintain gc` — scratch janitor + report-only durable sweep (U-STOR).
+  { id: "storage-gc", entry: "scripts/lib/state/storage-gc.ts" },
   // Product-loop intake router, named by using-guild. Compiled here so T03 can
   // repoint the skill body at `node` without a second build.
   { id: "classify-intake", entry: "scripts/lib/classify-intake.ts" },
