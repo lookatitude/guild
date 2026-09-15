@@ -34,6 +34,7 @@ import {
   isReusableCacheKey,
   isRunLocalCacheKey,
   isSnapshotStale,
+  legacyModelCatalogCacheDir,
   modelCatalogCacheDir,
   nextGeneration,
   publishSnapshot,
@@ -303,6 +304,7 @@ describe("sealed cache-key surface (T4-R2-002 encapsulation, permanent reviewer 
       "isReusableCacheKey",
       "isRunLocalCacheKey",
       "isSnapshotStale",
+      "legacyModelCatalogCacheDir",
       "modelCatalogCacheDir",
       "nextGeneration",
       "publishSnapshot",
@@ -331,7 +333,10 @@ describe("run-scope quarantine + cache path constants", () => {
 
   test("cache dir constants agree with the scrub-leg path", () => {
     expect(MODEL_CATALOG_CACHE_REL).toBe(".guild/indexes/model-catalog");
-    expect(modelCatalogCacheDir("/ws")).toBe(path.join("/ws", ".guild", "indexes", "model-catalog"));
+    // U-CFG: the live cache lives on the platform cache root, outside the repo; the
+    // scrub leg keeps guarding the LEGACY in-repo location.
+    expect(legacyModelCatalogCacheDir("/ws")).toBe(path.join("/ws", ".guild", "indexes", "model-catalog"));
+    expect(modelCatalogCacheDir("/ws").startsWith(path.join("/ws", ".guild"))).toBe(false);
     expect(isModelCatalogCachePath(".guild/indexes/model-catalog/abc.json")).toBe(true);
     expect(isModelCatalogCachePath(".guild/indexes/other/abc.json")).toBe(false);
   });
