@@ -194,6 +194,17 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
       "Ingested source blobs — GuildStorage.definition(\"sources\", <id>) (KTD47/R59). Replaces the retired raw tree.",
   },
   {
+    path: ".guild/config/project.json",
+    kind: "file",
+    source: "generated",
+    clobber: "reconcile-only",
+    repair_required: true,
+    version: "guild.policy_config.v1",
+    description:
+      "Project POLICY config — the closed key set only (KTD22). Host family, host id, and concrete " +
+      "model names are refused here at write AND at read; they are session state on the run record.",
+  },
+  {
     path: ".guild/settings.json",
     kind: "file",
     source: "generated",
@@ -395,6 +406,17 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
 
 /** Deep-frozen for the same shared-identity reason as STANDARD_ROOT_FLOOR. */
 const WORKSPACE_EXTRAS: readonly ScaffoldEntry[] = deepFreeze([
+  {
+    path: ".guild/config/workspace.json",
+    kind: "file",
+    source: "generated",
+    clobber: "reconcile-only",
+    repair_required: true,
+    version: "guild.policy_config.v1",
+    description:
+      "Workspace POLICY config — the closed key set only (KTD22), inherited by children. " +
+      "Host and model identity are refused here; they are bound per session on the run record.",
+  },
   {
     path: ".guild/workspace.json",
     kind: "file",

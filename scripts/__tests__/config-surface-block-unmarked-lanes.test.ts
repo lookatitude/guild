@@ -122,9 +122,10 @@ describe("reconcile repair — #93 key is HELD, not silently disabled", () => {
   it("a VALID operator value is untouched by repair (anti-vacuity)", () => {
     const dir = mkRepo();
     expect(runConfigCmd(["reconcile", "sync", "--cwd", dir]).status).toBe(0);
-    expect(
-      runConfigCmd(["set", KEY, "true", "--scope", "project", "--cwd", dir]).status,
-    ).toBe(0);
+    // U-CFG (KTD22): `config set` is policy-only, so this legacy key is written
+    // the way an operator writes it now — by editing the file. What is under test
+    // is REPAIR's never-clobber behaviour, not the write surface.
+    writeSettings(dir, { defaults: { dispatch: { block_unmarked_lanes: true } } });
     expect(runConfigCmd(["reconcile", "repair", "--cwd", dir]).status).toBe(0);
     const after = JSON.parse(
       fs.readFileSync(path.join(dir, ".guild", "settings.json"), "utf8"),
@@ -242,26 +243,30 @@ describe("config-cmd.ts — #93 key on the show/set surfaces", () => {
     expect(json.dispatch).toEqual({ block_unmarked_lanes: true });
   });
 
-  it("config set persists a real BOOLEAN (not the string 'true') the resolver keeps", () => {
+  // U-CFG (KTD22): `config set` writes the 14 POLICY keys and refuses everything
+  // else, so this key is no longer settable from the CLI. The two properties that
+  // mattered — a real boolean survives the resolver, and the schema stays closed —
+  // are pinned on the surfaces that still own them: the file + the validator.
+  it("a real BOOLEAN in the file round-trips through the resolver", () => {
     const dir = repo();
-    const r = runConfigCmd(["set", KEY, "true", "--scope", "project", "--cwd", dir]);
-    expect(r.status).toBe(0);
-    const persisted = JSON.parse(
-      fs.readFileSync(path.join(dir, ".guild", "settings.json"), "utf8"),
-    );
-    expect(persisted.defaults.dispatch.block_unmarked_lanes).toBe(true);
-    // round-trips through the resolver rather than being dropped as a non-boolean
+    writeSettings(dir, { defaults: { dispatch: { block_unmarked_lanes: true } } });
     const resolved = JSON.parse(runReadGuildConfig(["--cwd", dir]).out);
     expect(resolved.defaults.dispatch.block_unmarked_lanes).toBe(true);
   });
 
-  it("config set rejects an unknown defaults.dispatch sub-key", () => {
+  it("config set REFUSES this key — it is not in the closed policy set", () => {
     const dir = repo();
-    const r = runConfigCmd([
-      "set", "defaults.dispatch.bogus_key", "true", "--scope", "project", "--cwd", dir,
-    ]);
+    const r = runConfigCmd(["set", KEY, "true", "--scope", "project", "--cwd", dir]);
     expect(r.status).not.toBe(0);
-    expect(`${r.out}${r.err}`).toMatch(/unknown defaults\.dispatch key "bogus_key"/);
+    expect(`${r.out}${r.err}`).toContain("is not a policy key");
+  });
+
+  it("the validator STILL rejects an unknown defaults.dispatch sub-key", () => {
+    const dir = repo();
+    writeSettings(dir, { defaults: { dispatch: { bogus_key: true } } });
+    const { status, out } = runReadGuildConfig(["--validate", "--cwd", dir]);
+    expect(status).not.toBe(0);
+    expect(out).toMatch(/unknown defaults\.dispatch key "bogus_key"/);
   });
 });
 

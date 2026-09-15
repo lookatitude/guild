@@ -51,6 +51,7 @@ import { spawnSync } from "child_process";
 import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { hostCapabilityCacheDir, hostCapabilityCacheFile } from "../src/modules/state";
 // RE-4: the tmux spawn logic now lives behind the TeamBackend seam. The
 // launcher is the CLI front-end (arg parse + D5 ladder + collision UX +
 // manifest + attach) and delegates compose/probe/spawn to TmuxTeamBackend.
@@ -1308,7 +1309,7 @@ function contextBundleHash(cwd: string, relativePath: string, dryRun: boolean): 
 }
 
 function hostCapabilitiesHash(cwd: string, runId: string, hostId: string, dryRun: boolean): string {
-  const manifest = readRegularFile(path.join(cwd, ".guild", "hosts", hostId, "capability.json"));
+  const manifest = readRegularFile(hostCapabilityCacheFile(cwd, hostId));
   if (manifest) return sha256Prefixed(manifest);
   const captured = captureHostCapabilitySnapshot({ host: hostId, runId });
   if (captured.disposition === "succeeded" && captured.snapshot) {
@@ -1553,7 +1554,7 @@ function resolveLifecycleRunId(cwd: string, callerRunId: string | null): string 
 // reads. Absent dir / unreadable files ⇒ empty list (single-host behavior).
 
 function loadHostManifests(cwd: string): RoutableHost[] {
-  const dir = path.join(cwd, ".guild", "hosts");
+  const dir = hostCapabilityCacheDir(cwd);
   let ids: string[];
   try {
     ids = fs.readdirSync(dir);

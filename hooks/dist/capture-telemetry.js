@@ -22486,6 +22486,218 @@ var init_config_defaults = __esm({
   }
 });
 
+// src/modules/config/workflows/policy-keys.ts
+var POLICY_KEYS, BY_KEY, POLICY_KEY_ALIASES, HOST_FAMILY_TOKENS, MODEL_FAMILY_TOKENS, MODEL_NAME_PATTERNS, INVENTORY_KEY_PATTERNS;
+var init_policy_keys = __esm({
+  "src/modules/config/workflows/policy-keys.ts"() {
+    init_kernel();
+    POLICY_KEYS = deepFreeze([
+      // Tier SELECTORS — which tier a lane starts at, never which model serves it.
+      {
+        key: "tiers.default",
+        type: "enum",
+        values: ["cheap", "mid", "powerful"],
+        default: "mid",
+        note: "tier a lane starts at when its score names none; the adapter maps tier\u2192model at dispatch"
+      },
+      // Score floors — the complexity score at which a lane is promoted a tier.
+      {
+        key: "tiers.floors.mid",
+        type: "number",
+        min: 0,
+        max: 10,
+        default: 3,
+        note: "complexity-score floor at which a lane resolves to the mid tier"
+      },
+      {
+        key: "tiers.floors.powerful",
+        type: "number",
+        min: 0,
+        max: 10,
+        default: 6,
+        note: "complexity-score floor at which a lane resolves to the powerful tier"
+      },
+      {
+        key: "advisorRounds",
+        type: "integer",
+        min: 0,
+        max: 10,
+        default: 2,
+        note: "advisor escalation rounds a cell may spend before it blocks with next_need: budget (R72)"
+      },
+      {
+        key: "budget.tokens",
+        type: "integer",
+        min: 0,
+        default: null,
+        note: "optional per-run token cap; null = uncapped. D-PROBE and inner verify do not decrement it"
+      },
+      {
+        key: "budget.usd",
+        type: "number",
+        min: 0,
+        default: null,
+        note: "optional per-run spend cap in USD; null = uncapped"
+      },
+      {
+        key: "team.compose_scope",
+        type: "enum",
+        values: ["phase", "goal"],
+        default: "phase",
+        note: "whether team-compose mints per phase or slices a roster per goal (KTD62)"
+      },
+      {
+        key: "recall.backend",
+        type: "enum",
+        values: ["bm25", "hybrid"],
+        default: "bm25",
+        note: "recall backend; embeddings are cache only and a missing model fails open to bm25 (KTD67)"
+      },
+      {
+        key: "recall.thresholds.min_score",
+        type: "number",
+        min: 0,
+        max: 1,
+        default: 0.2,
+        note: "minimum BM25 score a recall hit needs to enter a bundle"
+      },
+      {
+        key: "recall.thresholds.max_hits",
+        type: "integer",
+        min: 1,
+        max: 100,
+        default: 8,
+        note: "maximum recall hits a lane bundle may carry"
+      },
+      {
+        key: "review.critic",
+        type: "enum",
+        values: ["off", "advisor"],
+        default: "advisor",
+        note: "who plays critic; `advisor` is the machinery agent, never a new model family (KTD68)"
+      },
+      {
+        key: "review.independence",
+        type: "boolean",
+        default: true,
+        note: "a Team Lead may not review its own cell (KTD58); false only for single-agent local runs"
+      },
+      {
+        key: "wiki.autopromote",
+        type: "boolean",
+        default: true,
+        note: "harvest auto-promotes decisions on this cwd; false = candidates-only (KTD35)"
+      },
+      {
+        key: "agent_mode",
+        type: "enum",
+        values: ["auto", "team", "agent", "subagent"],
+        default: "auto",
+        note: "dispatch backend PREFERENCE only; never a statement about which host is running"
+      }
+    ]);
+    BY_KEY = new Map(POLICY_KEYS.map((s) => [s.key, s]));
+    POLICY_KEY_ALIASES = Object.freeze({
+      "defaults.wiki.autopromote": "wiki.autopromote",
+      "defaults.agent_mode": "agent_mode",
+      "defaults.team.compose_scope": "team.compose_scope",
+      "defaults.recall.backend": "recall.backend",
+      "defaults.review.critic": "review.critic",
+      "defaults.advisorRounds": "advisorRounds"
+    });
+    HOST_FAMILY_TOKENS = Object.freeze([
+      "claude",
+      "codex",
+      "cursor",
+      "gemini",
+      "copilot",
+      "windsurf",
+      "aider",
+      "antigravity",
+      "pi",
+      "cline",
+      "continue",
+      "zed"
+    ]);
+    MODEL_FAMILY_TOKENS = Object.freeze([
+      "anthropic",
+      "openai",
+      "google"
+    ]);
+    MODEL_NAME_PATTERNS = Object.freeze([
+      /\bopus\b/i,
+      /\bsonnet\b/i,
+      /\bhaiku\b/i,
+      /\bfable\b/i,
+      /\bgpt-?[0-9]/i,
+      /\bo[1-9](?:-(?:mini|pro|preview))?\b/i,
+      /\bgemini-[0-9]/i,
+      /\bclaude-[a-z0-9]/i,
+      /\bllama-?[0-9]/i,
+      /\bmistral\b/i,
+      /\bgrok-?[0-9]/i,
+      /\bdeepseek\b/i,
+      /\bqwen\b/i
+    ]);
+    INVENTORY_KEY_PATTERNS = Object.freeze([
+      /^models(\.|$)/,
+      /^defaults\.models(\.|$)/,
+      /^host_profiles(\.|$)/,
+      /^defaults\.host_profiles(\.|$)/,
+      /^host(\.|$)/,
+      /^defaults\.host(\.|$)/,
+      /^roles\.[^.]+\.host(\.|$)/,
+      /^defaults\.cross_host(\.|$)/
+    ]);
+  }
+});
+
+// src/modules/config/workflows/policy-resolver.ts
+var POLICY_FILES, ALIASES_BY_CANONICAL;
+var init_policy_resolver = __esm({
+  "src/modules/config/workflows/policy-resolver.ts"() {
+    init_policy_keys();
+    POLICY_FILES = Object.freeze({
+      project: "config/project.json",
+      projectLocal: "config/project.local.json",
+      workspace: "config/workspace.json",
+      workspaceLocal: "config/workspace.local.json"
+    });
+    ALIASES_BY_CANONICAL = (() => {
+      const m = /* @__PURE__ */ new Map();
+      for (const [legacy, target] of Object.entries(POLICY_KEY_ALIASES)) {
+        m.set(target, [...m.get(target) ?? [], legacy]);
+      }
+      return m;
+    })();
+  }
+});
+
+// src/modules/config/workflows/session-binding.ts
+var HOST_TO_MODEL_FAMILY, ENV_SIGNALS, KNOWN_FAMILIES;
+var init_session_binding = __esm({
+  "src/modules/config/workflows/session-binding.ts"() {
+    HOST_TO_MODEL_FAMILY = Object.freeze({
+      claude: "anthropic",
+      codex: "openai",
+      copilot: "openai",
+      cursor: "openai",
+      gemini: "google",
+      antigravity: "google"
+    });
+    ENV_SIGNALS = Object.freeze([
+      { env: "GUILD_HOST_FAMILY", fromValue: true },
+      { env: "CLAUDE_PLUGIN_ROOT", family: "claude" },
+      { env: "CLAUDECODE", family: "claude" },
+      { env: "CODEX_HOME", family: "codex" },
+      { env: "CODEX_SANDBOX", family: "codex" },
+      { env: "CURSOR_TRACE_ID", family: "cursor" },
+      { env: "GEMINI_CLI", family: "gemini" }
+    ]);
+    KNOWN_FAMILIES = /* @__PURE__ */ new Set([...Object.keys(HOST_TO_MODEL_FAMILY), "cline", "zed", "aider", "windsurf", "pi"]);
+  }
+});
+
 // src/modules/config/workflows/config-validation.ts
 var init_config_validation = __esm({
   "src/modules/config/workflows/config-validation.ts"() {
@@ -22571,6 +22783,9 @@ var init_tier_model = __esm({
 var init_config = __esm({
   "src/modules/config/index.ts"() {
     init_config_defaults();
+    init_policy_keys();
+    init_policy_resolver();
+    init_session_binding();
     init_config_validation();
     init_settings_resolver();
     init_tier_model();
@@ -22584,383 +22799,47 @@ var init_retry_lane = __esm({
   }
 });
 
-// src/modules/lifecycle/workflows/run-lifecycle.ts
-var CANONICAL_PHASES;
-var init_run_lifecycle = __esm({
-  "src/modules/lifecycle/workflows/run-lifecycle.ts"() {
-    init_kernel();
+// src/modules/prompting/workflows/compose-prompt.ts
+var MODEL_FAMILIES, HOST_FAMILY_TOKENS_PROMPT, HOST_FAMILY_RE, YOU_ARE_HOST_RE, USING_GUILD_BASE_RELS;
+var init_compose_prompt = __esm({
+  "src/modules/prompting/workflows/compose-prompt.ts"() {
+    MODEL_FAMILIES = Object.freeze(["anthropic", "openai", "google"]);
+    HOST_FAMILY_TOKENS_PROMPT = Object.freeze([
+      "claude",
+      "codex",
+      "cursor",
+      "gemini",
+      "copilot",
+      "windsurf",
+      "aider",
+      "antigravity",
+      "cline",
+      "zed"
+    ]);
+    HOST_FAMILY_RE = new RegExp(`\\b(${HOST_FAMILY_TOKENS_PROMPT.join("|")})\\b`, "i");
+    YOU_ARE_HOST_RE = new RegExp(
+      `\\byou(?:'re| are)\\s+(?:an?\\s+)?(${HOST_FAMILY_TOKENS_PROMPT.join("|")})\\b`,
+      "i"
+    );
+    USING_GUILD_BASE_RELS = Object.freeze([
+      "skills/meta/using-guild/SKILL.md",
+      "skills/meta/using-guild/SKILL.src.md"
+    ]);
+  }
+});
+
+// src/modules/prompting/workflows/team-prompt.ts
+var init_team_prompt = __esm({
+  "src/modules/prompting/workflows/team-prompt.ts"() {
     init_host_runtime();
-    init_config();
-    init_state();
-    init_run_binding();
-    init_security();
-    init_telemetry();
-    CANONICAL_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"]);
   }
 });
 
-// src/modules/lifecycle/workflows/write-run-manifest.ts
-function manifestPathFor(cwd, slug) {
-  return path25.join(cwd, ".guild", "programs", slug, "manifest.json");
-}
-function readRunManifest(cwd, slug) {
-  try {
-    const raw = fs20.readFileSync(manifestPathFor(cwd, slug), "utf8");
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-function computeCurrentWave(waves) {
-  if (waves.length === 0) return null;
-  const sorted = [...waves].sort((a, b) => a.wave_index - b.wave_index);
-  const pending = sorted.find((w) => w.status !== "completed");
-  return pending ? pending.wave_index : sorted[sorted.length - 1].wave_index;
-}
-function writeRunManifest(cwd, manifest) {
-  manifest.waves.sort((a, b) => a.wave_index - b.wave_index);
-  manifest.current_wave = computeCurrentWave(manifest.waves);
-  const out = manifestPathFor(cwd, manifest.slug);
-  atomicWrite(out, JSON.stringify(manifest, null, 2) + "\n");
-  return out;
-}
-function initRunManifest(cwd, slug, opts = {}) {
-  const existing = readRunManifest(cwd, slug);
-  if (existing) return existing;
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  const manifest = {
-    schema_version: "guild.run_manifest.v1",
-    slug,
-    title: opts.title ?? null,
-    status: "active",
-    created_at: now,
-    updated_at: now,
-    current_wave: null,
-    waves: []
-  };
-  writeRunManifest(cwd, manifest);
-  return manifest;
-}
-function upsertWave(cwd, slug, patch2) {
-  const manifest = readRunManifest(cwd, slug) ?? initRunManifest(cwd, slug);
-  const now = (/* @__PURE__ */ new Date()).toISOString();
-  let wave = manifest.waves.find((w) => w.wave_index === patch2.wave_index);
-  if (!wave) {
-    wave = {
-      wave_index: patch2.wave_index,
-      name: patch2.name ?? `wave-${patch2.wave_index}`,
-      status: patch2.status ?? "pending",
-      run_id: patch2.run_id ?? null,
-      started_at: patch2.started_at ?? null,
-      completed_at: patch2.completed_at ?? null,
-      handoff_summary: patch2.handoff_summary ?? null
-    };
-    manifest.waves.push(wave);
-  } else {
-    if (patch2.name !== void 0) wave.name = patch2.name;
-    if (patch2.status !== void 0) wave.status = patch2.status;
-    if (patch2.run_id !== void 0) wave.run_id = patch2.run_id;
-    if (patch2.started_at !== void 0) wave.started_at = patch2.started_at;
-    if (patch2.completed_at !== void 0) wave.completed_at = patch2.completed_at;
-    if (patch2.handoff_summary !== void 0) wave.handoff_summary = patch2.handoff_summary;
-  }
-  if (wave.status === "active" && wave.started_at === null && patch2.started_at === void 0) {
-    wave.started_at = now;
-  }
-  if ((wave.status === "completed" || wave.status === "failed") && wave.completed_at === null && patch2.completed_at === void 0) {
-    wave.completed_at = now;
-  }
-  manifest.updated_at = now;
-  writeRunManifest(cwd, manifest);
-  return manifest;
-}
-function setProgramStatus(cwd, slug, status) {
-  const manifest = readRunManifest(cwd, slug) ?? initRunManifest(cwd, slug);
-  manifest.status = status;
-  manifest.updated_at = (/* @__PURE__ */ new Date()).toISOString();
-  writeRunManifest(cwd, manifest);
-  return manifest;
-}
-function parseArgs2(argv) {
-  const out = {
-    cwd: process.env["GUILD_CWD"] ?? process.cwd(),
-    slug: null,
-    init: false,
-    show: false
-  };
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === "--cwd" && argv[i + 1]) out.cwd = argv[++i];
-    else if (a === "--slug" && argv[i + 1]) out.slug = argv[++i];
-    else if (a === "--init") out.init = true;
-    else if (a === "--title" && argv[i + 1]) out.title = argv[++i];
-    else if (a === "--wave" && argv[i + 1]) {
-      const n = Number.parseInt(argv[++i], 10);
-      if (Number.isFinite(n)) out.wave = n;
-    } else if (a === "--wave-name" && argv[i + 1]) out.waveName = argv[++i];
-    else if (a === "--wave-status" && argv[i + 1]) {
-      const v = argv[++i];
-      if (WAVE_STATUSES.has(v)) out.waveStatus = v;
-    } else if (a === "--run-id" && argv[i + 1]) out.runId = argv[++i];
-    else if (a === "--handoff-summary" && argv[i + 1]) out.handoffSummary = argv[++i];
-    else if (a === "--status" && argv[i + 1]) {
-      const v = argv[++i];
-      if (PROGRAM_STATUSES.has(v)) out.status = v;
-    } else if (a === "--show") out.show = true;
-  }
-  return out;
-}
-function runWriteRunManifestCli(argv = process.argv.slice(2)) {
-  const args = parseArgs2(argv);
-  if (!args.slug) {
-    process.stderr.write("[write-run-manifest] ERROR: --slug <slug> is required.\n");
-    process.exit(1);
-  }
-  if (!fs20.existsSync(args.cwd) || !fs20.statSync(args.cwd).isDirectory()) {
-    process.stderr.write(`[write-run-manifest] ERROR: --cwd "${args.cwd}" is not a directory
-`);
-    process.exit(1);
-  }
-  try {
-    let manifest = null;
-    if (args.init) {
-      manifest = initRunManifest(args.cwd, args.slug, { title: args.title });
-    }
-    if (args.wave !== void 0) {
-      manifest = upsertWave(args.cwd, args.slug, {
-        wave_index: args.wave,
-        name: args.waveName,
-        status: args.waveStatus,
-        run_id: args.runId,
-        handoff_summary: args.handoffSummary
-      });
-    }
-    if (args.status !== void 0) {
-      manifest = setProgramStatus(args.cwd, args.slug, args.status);
-    }
-    if (!args.init && args.wave === void 0 && args.status === void 0) {
-      manifest = readRunManifest(args.cwd, args.slug);
-      if (!manifest) {
-        process.stderr.write(
-          `[write-run-manifest] ERROR: no manifest for slug "${args.slug}" (pass --init to create one).
-`
-        );
-        process.exit(1);
-      }
-    }
-    if (args.show) {
-      process.stdout.write(JSON.stringify(manifest, null, 2) + "\n");
-    } else {
-      process.stdout.write(manifestPathFor(args.cwd, args.slug) + "\n");
-    }
-  } catch (e) {
-    process.stderr.write(`[write-run-manifest] ERROR: ${e.message}
-`);
-    process.exit(2);
-  }
-}
-var fs20, path25, WAVE_STATUSES, PROGRAM_STATUSES;
-var init_write_run_manifest = __esm({
-  "src/modules/lifecycle/workflows/write-run-manifest.ts"() {
-    fs20 = __toESM(require("fs"));
-    path25 = __toESM(require("path"));
-    init_state();
-    WAVE_STATUSES = /* @__PURE__ */ new Set(["pending", "active", "completed", "failed"]);
-    PROGRAM_STATUSES = /* @__PURE__ */ new Set(["active", "completed", "paused", "aborted"]);
-    if (require.main === module && new RegExp("[\\\\/]write-run-manifest\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
-      runWriteRunManifestCli();
-    }
-  }
-});
-
-// src/modules/lifecycle/workflows/run-manifest-wiring.ts
-function validateRunManifest(raw) {
-  const errors = [];
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-    return { valid: false, errors: ["manifest must be a non-null object"] };
-  }
-  const obj = raw;
-  if (obj["schema_version"] !== "guild.run_manifest.v1") {
-    errors.push(
-      `schema_version must be "guild.run_manifest.v1"; got ${JSON.stringify(obj["schema_version"])}`
-    );
-  }
-  for (const k of MANIFEST_REQUIRED_KEYS) {
-    if (k === "schema_version") continue;
-    if (!(k in obj)) {
-      errors.push(`missing required key: ${k}`);
-    }
-  }
-  if ("status" in obj) {
-    const s = obj["status"];
-    if (!PROGRAM_STATUSES2.includes(s)) {
-      errors.push(
-        `status must be one of ${PROGRAM_STATUSES2.join("|")}; got ${JSON.stringify(s)}`
-      );
-    }
-  }
-  if ("current_wave" in obj) {
-    const cw = obj["current_wave"];
-    if (cw !== null && typeof cw !== "number") {
-      errors.push(`current_wave must be a number or null; got ${JSON.stringify(cw)}`);
-    }
-  }
-  if ("waves" in obj) {
-    if (!Array.isArray(obj["waves"])) {
-      errors.push("waves must be an array");
-    } else {
-      const waves = obj["waves"];
-      waves.forEach((w, i) => {
-        if (w === null || typeof w !== "object" || Array.isArray(w)) {
-          errors.push(`waves[${i}] must be an object`);
-          return;
-        }
-        const wObj = w;
-        for (const k of WAVE_REQUIRED_KEYS) {
-          if (!(k in wObj)) {
-            errors.push(`waves[${i}] missing required key: ${k}`);
-          }
-        }
-        if ("wave_index" in wObj) {
-          const wi = wObj["wave_index"];
-          if (typeof wi !== "number" || !Number.isInteger(wi) || wi < 0) {
-            errors.push(
-              `waves[${i}].wave_index must be a non-negative integer; got ${JSON.stringify(wi)}`
-            );
-          }
-        }
-        if ("status" in wObj) {
-          const ws = wObj["status"];
-          const allWaveStatuses = [...WAVE_STATUSES2, "active", "pending"];
-          if (!allWaveStatuses.includes(ws)) {
-            errors.push(
-              `waves[${i}].status must be one of ${allWaveStatuses.join("|")}; got ${JSON.stringify(ws)}`
-            );
-          }
-        }
-      });
-    }
-  }
-  return { valid: errors.length === 0, errors };
-}
-function wireRunManifest(opts) {
-  const { cwd, slug, now, title, wave, programStatus } = opts;
-  let manifest = readRunManifest(cwd, slug);
-  if (!manifest) {
-    manifest = _buildInitialManifest(slug, title ?? null, now);
-    writeRunManifest(cwd, manifest);
-  }
-  if (wave !== void 0) {
-    manifest = _upsertWaveWithNow(cwd, slug, wave, now);
-  }
-  if (programStatus !== void 0) {
-    manifest = _setProgramStatusWithNow(cwd, slug, programStatus, now);
-  }
-  const onDisk = readRunManifest(cwd, slug);
-  if (!onDisk) {
-    throw new Error(
-      `[run-manifest-wiring] wireRunManifest: manifest not found on disk after write (cwd=${cwd}, slug=${slug})`
-    );
-  }
-  const manifestPath = manifestPathFor(cwd, slug);
-  const validation = validateRunManifest(onDisk);
-  return { manifest: onDisk, manifestPath, validation };
-}
-function _buildInitialManifest(slug, title, now) {
-  return {
-    schema_version: "guild.run_manifest.v1",
-    slug,
-    title,
-    status: "active",
-    created_at: now,
-    updated_at: now,
-    current_wave: null,
-    waves: []
-  };
-}
-function _upsertWaveWithNow(cwd, slug, wave, now) {
-  const manifest = upsertWave(cwd, slug, wave);
-  manifest.updated_at = now;
-  writeRunManifest(cwd, manifest);
-  return manifest;
-}
-function _setProgramStatusWithNow(cwd, slug, status, now) {
-  const manifest = setProgramStatus(cwd, slug, status);
-  manifest.updated_at = now;
-  writeRunManifest(cwd, manifest);
-  return manifest;
-}
-function runRunManifestWiringCli(args = process.argv.slice(2)) {
-  function getArg(flag) {
-    const i = args.indexOf(flag);
-    return i >= 0 ? args[i + 1] : void 0;
-  }
-  const cwd = getArg("--cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
-  const slug = getArg("--slug");
-  const now = getArg("--now") ?? (/* @__PURE__ */ new Date()).toISOString();
-  const title = getArg("--title");
-  const waveIndexRaw = getArg("--wave");
-  const waveStatus = getArg("--wave-status");
-  const runId = getArg("--run-id");
-  const handoffSummary = getArg("--handoff-summary");
-  const programStatus = getArg("--status");
-  if (!slug) {
-    process.stderr.write("[run-manifest-wiring] ERROR: --slug <slug> is required.\n");
-    process.exit(1);
-  }
-  const wave = waveIndexRaw !== void 0 ? {
-    wave_index: parseInt(waveIndexRaw, 10),
-    status: waveStatus,
-    run_id: runId ?? null,
-    handoff_summary: handoffSummary ?? null
-  } : void 0;
-  try {
-    const result = wireRunManifest({
-      cwd,
-      slug,
-      title,
-      now,
-      wave,
-      programStatus
-    });
-    if (!result.validation.valid) {
-      process.stderr.write(
-        `[run-manifest-wiring] WARN: validation errors after write:
-` + result.validation.errors.map((e) => `  - ${e}`).join("\n") + "\n"
-      );
-    }
-    process.stdout.write(result.manifestPath + "\n");
-  } catch (e) {
-    process.stderr.write(`[run-manifest-wiring] ERROR: ${e.message}
-`);
-    process.exit(2);
-  }
-}
-var PROGRAM_STATUSES2, WAVE_STATUSES2, MANIFEST_REQUIRED_KEYS, WAVE_REQUIRED_KEYS;
-var init_run_manifest_wiring = __esm({
-  "src/modules/lifecycle/workflows/run-manifest-wiring.ts"() {
-    init_write_run_manifest();
-    PROGRAM_STATUSES2 = Object.freeze(["active", "completed", "paused", "aborted"]);
-    WAVE_STATUSES2 = Object.freeze(["pending", "active", "completed", "failed"]);
-    MANIFEST_REQUIRED_KEYS = Object.freeze([
-      "schema_version",
-      "slug",
-      "status",
-      "created_at",
-      "updated_at",
-      "current_wave",
-      "waves"
-    ]);
-    WAVE_REQUIRED_KEYS = Object.freeze([
-      "wave_index",
-      "status",
-      "run_id",
-      "started_at",
-      "completed_at"
-    ]);
-    if (require.main === module && new RegExp("[\\\\/]run-manifest-wiring\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
-      runRunManifestWiringCli();
-    }
+// src/modules/prompting/index.ts
+var init_prompting = __esm({
+  "src/modules/prompting/index.ts"() {
+    init_compose_prompt();
+    init_team_prompt();
   }
 });
 
@@ -22968,6 +22847,7 @@ var init_run_manifest_wiring = __esm({
 var MODEL_CATALOG_CACHE_DIRNAME, MODEL_CATALOG_CACHE_REL_SEGMENTS, MODEL_CATALOG_CACHE_REL, CACHE_KEY_COMPONENTS;
 var init_catalog_cache = __esm({
   "src/modules/capability/workflows/catalog-cache.ts"() {
+    init_state();
     MODEL_CATALOG_CACHE_DIRNAME = "model-catalog";
     MODEL_CATALOG_CACHE_REL_SEGMENTS = Object.freeze([".guild", "indexes", MODEL_CATALOG_CACHE_DIRNAME]);
     MODEL_CATALOG_CACHE_REL = MODEL_CATALOG_CACHE_REL_SEGMENTS.join("/");
@@ -23636,6 +23516,7 @@ var init_models_command = __esm({
     init_security();
     init_catalog_cache();
     init_model_inspect();
+    init_config();
     init_routing_rollout();
     MODELS_COMMAND_USAGE = [
       "usage: guild models inspect [--cwd <repo-root>] [--run-id <id>] [--json]",
@@ -23849,6 +23730,393 @@ var init_capability = __esm({
     init_router();
     init_tiebreak();
     init_tier_defaults();
+  }
+});
+
+// src/modules/lifecycle/workflows/run-lifecycle.ts
+var HOST_FAMILY_TO_KIND, CANONICAL_PHASES;
+var init_run_lifecycle = __esm({
+  "src/modules/lifecycle/workflows/run-lifecycle.ts"() {
+    init_config();
+    init_prompting();
+    init_capability();
+    init_kernel();
+    init_host_runtime();
+    init_config();
+    init_state();
+    init_run_binding();
+    init_security();
+    init_telemetry();
+    HOST_FAMILY_TO_KIND = Object.freeze({
+      claude: "claude",
+      codex: "codex"
+    });
+    CANONICAL_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"]);
+  }
+});
+
+// src/modules/lifecycle/workflows/write-run-manifest.ts
+function manifestPathFor(cwd, slug) {
+  return path25.join(cwd, ".guild", "programs", slug, "manifest.json");
+}
+function readRunManifest(cwd, slug) {
+  try {
+    const raw = fs20.readFileSync(manifestPathFor(cwd, slug), "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+function computeCurrentWave(waves) {
+  if (waves.length === 0) return null;
+  const sorted = [...waves].sort((a, b) => a.wave_index - b.wave_index);
+  const pending = sorted.find((w) => w.status !== "completed");
+  return pending ? pending.wave_index : sorted[sorted.length - 1].wave_index;
+}
+function writeRunManifest(cwd, manifest) {
+  manifest.waves.sort((a, b) => a.wave_index - b.wave_index);
+  manifest.current_wave = computeCurrentWave(manifest.waves);
+  const out = manifestPathFor(cwd, manifest.slug);
+  atomicWrite(out, JSON.stringify(manifest, null, 2) + "\n");
+  return out;
+}
+function initRunManifest(cwd, slug, opts = {}) {
+  const existing = readRunManifest(cwd, slug);
+  if (existing) return existing;
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const manifest = {
+    schema_version: "guild.run_manifest.v1",
+    slug,
+    title: opts.title ?? null,
+    status: "active",
+    created_at: now,
+    updated_at: now,
+    current_wave: null,
+    waves: []
+  };
+  writeRunManifest(cwd, manifest);
+  return manifest;
+}
+function upsertWave(cwd, slug, patch2) {
+  const manifest = readRunManifest(cwd, slug) ?? initRunManifest(cwd, slug);
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  let wave = manifest.waves.find((w) => w.wave_index === patch2.wave_index);
+  if (!wave) {
+    wave = {
+      wave_index: patch2.wave_index,
+      name: patch2.name ?? `wave-${patch2.wave_index}`,
+      status: patch2.status ?? "pending",
+      run_id: patch2.run_id ?? null,
+      started_at: patch2.started_at ?? null,
+      completed_at: patch2.completed_at ?? null,
+      handoff_summary: patch2.handoff_summary ?? null
+    };
+    manifest.waves.push(wave);
+  } else {
+    if (patch2.name !== void 0) wave.name = patch2.name;
+    if (patch2.status !== void 0) wave.status = patch2.status;
+    if (patch2.run_id !== void 0) wave.run_id = patch2.run_id;
+    if (patch2.started_at !== void 0) wave.started_at = patch2.started_at;
+    if (patch2.completed_at !== void 0) wave.completed_at = patch2.completed_at;
+    if (patch2.handoff_summary !== void 0) wave.handoff_summary = patch2.handoff_summary;
+  }
+  if (wave.status === "active" && wave.started_at === null && patch2.started_at === void 0) {
+    wave.started_at = now;
+  }
+  if ((wave.status === "completed" || wave.status === "failed") && wave.completed_at === null && patch2.completed_at === void 0) {
+    wave.completed_at = now;
+  }
+  manifest.updated_at = now;
+  writeRunManifest(cwd, manifest);
+  return manifest;
+}
+function setProgramStatus(cwd, slug, status) {
+  const manifest = readRunManifest(cwd, slug) ?? initRunManifest(cwd, slug);
+  manifest.status = status;
+  manifest.updated_at = (/* @__PURE__ */ new Date()).toISOString();
+  writeRunManifest(cwd, manifest);
+  return manifest;
+}
+function parseArgs2(argv) {
+  const out = {
+    cwd: process.env["GUILD_CWD"] ?? process.cwd(),
+    slug: null,
+    init: false,
+    show: false
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--cwd" && argv[i + 1]) out.cwd = argv[++i];
+    else if (a === "--slug" && argv[i + 1]) out.slug = argv[++i];
+    else if (a === "--init") out.init = true;
+    else if (a === "--title" && argv[i + 1]) out.title = argv[++i];
+    else if (a === "--wave" && argv[i + 1]) {
+      const n = Number.parseInt(argv[++i], 10);
+      if (Number.isFinite(n)) out.wave = n;
+    } else if (a === "--wave-name" && argv[i + 1]) out.waveName = argv[++i];
+    else if (a === "--wave-status" && argv[i + 1]) {
+      const v = argv[++i];
+      if (WAVE_STATUSES.has(v)) out.waveStatus = v;
+    } else if (a === "--run-id" && argv[i + 1]) out.runId = argv[++i];
+    else if (a === "--handoff-summary" && argv[i + 1]) out.handoffSummary = argv[++i];
+    else if (a === "--status" && argv[i + 1]) {
+      const v = argv[++i];
+      if (PROGRAM_STATUSES.has(v)) out.status = v;
+    } else if (a === "--show") out.show = true;
+  }
+  return out;
+}
+function runWriteRunManifestCli(argv = process.argv.slice(2)) {
+  const args = parseArgs2(argv);
+  if (!args.slug) {
+    process.stderr.write("[write-run-manifest] ERROR: --slug <slug> is required.\n");
+    process.exit(1);
+  }
+  if (!fs20.existsSync(args.cwd) || !fs20.statSync(args.cwd).isDirectory()) {
+    process.stderr.write(`[write-run-manifest] ERROR: --cwd "${args.cwd}" is not a directory
+`);
+    process.exit(1);
+  }
+  try {
+    let manifest = null;
+    if (args.init) {
+      manifest = initRunManifest(args.cwd, args.slug, { title: args.title });
+    }
+    if (args.wave !== void 0) {
+      manifest = upsertWave(args.cwd, args.slug, {
+        wave_index: args.wave,
+        name: args.waveName,
+        status: args.waveStatus,
+        run_id: args.runId,
+        handoff_summary: args.handoffSummary
+      });
+    }
+    if (args.status !== void 0) {
+      manifest = setProgramStatus(args.cwd, args.slug, args.status);
+    }
+    if (!args.init && args.wave === void 0 && args.status === void 0) {
+      manifest = readRunManifest(args.cwd, args.slug);
+      if (!manifest) {
+        process.stderr.write(
+          `[write-run-manifest] ERROR: no manifest for slug "${args.slug}" (pass --init to create one).
+`
+        );
+        process.exit(1);
+      }
+    }
+    if (args.show) {
+      process.stdout.write(JSON.stringify(manifest, null, 2) + "\n");
+    } else {
+      process.stdout.write(manifestPathFor(args.cwd, args.slug) + "\n");
+    }
+  } catch (e) {
+    process.stderr.write(`[write-run-manifest] ERROR: ${e.message}
+`);
+    process.exit(2);
+  }
+}
+var fs20, path25, WAVE_STATUSES, PROGRAM_STATUSES;
+var init_write_run_manifest = __esm({
+  "src/modules/lifecycle/workflows/write-run-manifest.ts"() {
+    fs20 = __toESM(require("fs"));
+    path25 = __toESM(require("path"));
+    init_state();
+    WAVE_STATUSES = /* @__PURE__ */ new Set(["pending", "active", "completed", "failed"]);
+    PROGRAM_STATUSES = /* @__PURE__ */ new Set(["active", "completed", "paused", "aborted"]);
+    if (require.main === module && new RegExp("[\\\\/]write-run-manifest\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
+      runWriteRunManifestCli();
+    }
+  }
+});
+
+// src/modules/lifecycle/workflows/run-manifest-wiring.ts
+function validateRunManifest(raw) {
+  const errors = [];
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    return { valid: false, errors: ["manifest must be a non-null object"] };
+  }
+  const obj = raw;
+  if (obj["schema_version"] !== "guild.run_manifest.v1") {
+    errors.push(
+      `schema_version must be "guild.run_manifest.v1"; got ${JSON.stringify(obj["schema_version"])}`
+    );
+  }
+  for (const k of MANIFEST_REQUIRED_KEYS) {
+    if (k === "schema_version") continue;
+    if (!(k in obj)) {
+      errors.push(`missing required key: ${k}`);
+    }
+  }
+  if ("status" in obj) {
+    const s = obj["status"];
+    if (!PROGRAM_STATUSES2.includes(s)) {
+      errors.push(
+        `status must be one of ${PROGRAM_STATUSES2.join("|")}; got ${JSON.stringify(s)}`
+      );
+    }
+  }
+  if ("current_wave" in obj) {
+    const cw = obj["current_wave"];
+    if (cw !== null && typeof cw !== "number") {
+      errors.push(`current_wave must be a number or null; got ${JSON.stringify(cw)}`);
+    }
+  }
+  if ("waves" in obj) {
+    if (!Array.isArray(obj["waves"])) {
+      errors.push("waves must be an array");
+    } else {
+      const waves = obj["waves"];
+      waves.forEach((w, i) => {
+        if (w === null || typeof w !== "object" || Array.isArray(w)) {
+          errors.push(`waves[${i}] must be an object`);
+          return;
+        }
+        const wObj = w;
+        for (const k of WAVE_REQUIRED_KEYS) {
+          if (!(k in wObj)) {
+            errors.push(`waves[${i}] missing required key: ${k}`);
+          }
+        }
+        if ("wave_index" in wObj) {
+          const wi = wObj["wave_index"];
+          if (typeof wi !== "number" || !Number.isInteger(wi) || wi < 0) {
+            errors.push(
+              `waves[${i}].wave_index must be a non-negative integer; got ${JSON.stringify(wi)}`
+            );
+          }
+        }
+        if ("status" in wObj) {
+          const ws = wObj["status"];
+          const allWaveStatuses = [...WAVE_STATUSES2, "active", "pending"];
+          if (!allWaveStatuses.includes(ws)) {
+            errors.push(
+              `waves[${i}].status must be one of ${allWaveStatuses.join("|")}; got ${JSON.stringify(ws)}`
+            );
+          }
+        }
+      });
+    }
+  }
+  return { valid: errors.length === 0, errors };
+}
+function wireRunManifest(opts) {
+  const { cwd, slug, now, title, wave, programStatus } = opts;
+  let manifest = readRunManifest(cwd, slug);
+  if (!manifest) {
+    manifest = _buildInitialManifest(slug, title ?? null, now);
+    writeRunManifest(cwd, manifest);
+  }
+  if (wave !== void 0) {
+    manifest = _upsertWaveWithNow(cwd, slug, wave, now);
+  }
+  if (programStatus !== void 0) {
+    manifest = _setProgramStatusWithNow(cwd, slug, programStatus, now);
+  }
+  const onDisk = readRunManifest(cwd, slug);
+  if (!onDisk) {
+    throw new Error(
+      `[run-manifest-wiring] wireRunManifest: manifest not found on disk after write (cwd=${cwd}, slug=${slug})`
+    );
+  }
+  const manifestPath = manifestPathFor(cwd, slug);
+  const validation = validateRunManifest(onDisk);
+  return { manifest: onDisk, manifestPath, validation };
+}
+function _buildInitialManifest(slug, title, now) {
+  return {
+    schema_version: "guild.run_manifest.v1",
+    slug,
+    title,
+    status: "active",
+    created_at: now,
+    updated_at: now,
+    current_wave: null,
+    waves: []
+  };
+}
+function _upsertWaveWithNow(cwd, slug, wave, now) {
+  const manifest = upsertWave(cwd, slug, wave);
+  manifest.updated_at = now;
+  writeRunManifest(cwd, manifest);
+  return manifest;
+}
+function _setProgramStatusWithNow(cwd, slug, status, now) {
+  const manifest = setProgramStatus(cwd, slug, status);
+  manifest.updated_at = now;
+  writeRunManifest(cwd, manifest);
+  return manifest;
+}
+function runRunManifestWiringCli(args = process.argv.slice(2)) {
+  function getArg(flag) {
+    const i = args.indexOf(flag);
+    return i >= 0 ? args[i + 1] : void 0;
+  }
+  const cwd = getArg("--cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
+  const slug = getArg("--slug");
+  const now = getArg("--now") ?? (/* @__PURE__ */ new Date()).toISOString();
+  const title = getArg("--title");
+  const waveIndexRaw = getArg("--wave");
+  const waveStatus = getArg("--wave-status");
+  const runId = getArg("--run-id");
+  const handoffSummary = getArg("--handoff-summary");
+  const programStatus = getArg("--status");
+  if (!slug) {
+    process.stderr.write("[run-manifest-wiring] ERROR: --slug <slug> is required.\n");
+    process.exit(1);
+  }
+  const wave = waveIndexRaw !== void 0 ? {
+    wave_index: parseInt(waveIndexRaw, 10),
+    status: waveStatus,
+    run_id: runId ?? null,
+    handoff_summary: handoffSummary ?? null
+  } : void 0;
+  try {
+    const result = wireRunManifest({
+      cwd,
+      slug,
+      title,
+      now,
+      wave,
+      programStatus
+    });
+    if (!result.validation.valid) {
+      process.stderr.write(
+        `[run-manifest-wiring] WARN: validation errors after write:
+` + result.validation.errors.map((e) => `  - ${e}`).join("\n") + "\n"
+      );
+    }
+    process.stdout.write(result.manifestPath + "\n");
+  } catch (e) {
+    process.stderr.write(`[run-manifest-wiring] ERROR: ${e.message}
+`);
+    process.exit(2);
+  }
+}
+var PROGRAM_STATUSES2, WAVE_STATUSES2, MANIFEST_REQUIRED_KEYS, WAVE_REQUIRED_KEYS;
+var init_run_manifest_wiring = __esm({
+  "src/modules/lifecycle/workflows/run-manifest-wiring.ts"() {
+    init_write_run_manifest();
+    PROGRAM_STATUSES2 = Object.freeze(["active", "completed", "paused", "aborted"]);
+    WAVE_STATUSES2 = Object.freeze(["pending", "active", "completed", "failed"]);
+    MANIFEST_REQUIRED_KEYS = Object.freeze([
+      "schema_version",
+      "slug",
+      "status",
+      "created_at",
+      "updated_at",
+      "current_wave",
+      "waves"
+    ]);
+    WAVE_REQUIRED_KEYS = Object.freeze([
+      "wave_index",
+      "status",
+      "run_id",
+      "started_at",
+      "completed_at"
+    ]);
+    if (require.main === module && new RegExp("[\\\\/]run-manifest-wiring\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
+      runRunManifestWiringCli();
+    }
   }
 });
 
@@ -24864,7 +25132,7 @@ var init_storage_artifact_registry = __esm({
         rebuildable: false,
         retention: { kind: "permanent" },
         cleanupOwner: "never",
-        description: ".guild/settings.json \u2014 policy-only durable config (U-CFG owns the split)."
+        description: ".guild/config/{project,workspace}.json \u2014 policy-only durable config; host/model identity is refused here (KTD22)."
       },
       {
         id: "wiki-page",
@@ -25048,12 +25316,17 @@ var init_storage_roots = __esm({
 });
 
 // src/modules/state/workflows/storage-layout.ts
+var POLICY_CONFIG_FILES;
 var init_storage_layout = __esm({
   "src/modules/state/workflows/storage-layout.ts"() {
     init_guild_discovery();
     init_storage_fs();
     init_storage_policy();
     init_storage_roots();
+    POLICY_CONFIG_FILES = Object.freeze({
+      project: "config/project.json",
+      workspace: "config/workspace.json"
+    });
   }
 });
 

@@ -326,15 +326,30 @@ const CHEAP_ENTRYPOINTS: Array<{ id: string; argv: string[]; allow: string[]; bl
     blocking: true,
   },
   {
-    // Known WIDE at 14 domains. Narrowing it needs the policy/inventory split, which
-    // is T06's lane — this row is that lane's acceptance oracle, so it reports rather
-    // than gates until T06 lands. T06 flips `blocking` to true (codex G-lane r1: the
-    // criterion stays honest and visible instead of being quietly advisory).
+    // Known WIDE at 14 domains. T06 landed the policy/inventory split and its
+    // resolver imports NO domain barrel — but the row did not narrow, and the
+    // measurement says why: every `src/modules/<d>/index.ts` transitively reaches
+    // all 14 through `state -> migrations -> lifecycle`, and `index-only-domain-imports`
+    // (KTD27) REQUIRES a src/ file to import through that barrel. So any entrypoint
+    // touching a domain from src/ loads all 14 until the domain fold cuts the graph.
+    //
+    // Measured on the T06 tree (esbuild bundle, one entry each):
+    //   src/modules/kernel/index                     ->  1 domain
+    //   src/modules/config/workflows/policy-keys     ->  2 domains (config, kernel)
+    //   src/modules/config/workflows/settings-reader -> 14 domains (via the host-runtime + security barrels)
+    //   src/modules/config/index                     -> 14 domains
+    //   src/modules/state/index                      -> 14 domains
+    //
+    // So the policy key set itself is cheap; everything that names a durable PATH
+    // is not, because `GuildStorage` lives behind the state barrel.
+    //
+    // The flip therefore belongs to T12 (U3 domain fold), which owns the barrel
+    // graph. Kept reporting rather than gating so the criterion stays visible.
     id: "config show --sources",
     argv: ["runtime/scripts/config-cmd.js", "show", "--sources"],
     allow: ["state", "config", "capability", "security", "host-runtime", "kernel"],
     blocking: false,
-    note: "T06 oracle — flip blocking:true when the policy/inventory split lands",
+    note: "T12 oracle — the barrel graph, not the config split, is what keeps this wide (see the comment above)",
   },
 ];
 

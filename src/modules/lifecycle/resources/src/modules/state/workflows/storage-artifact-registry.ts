@@ -45,7 +45,7 @@ export const STORAGE_ARTIFACT_REGISTRY: readonly ArtifactPolicy[] = deepFreeze([
     rebuildable: false,
     retention: { kind: "permanent" },
     cleanupOwner: "never",
-    description: ".guild/settings.json — policy-only durable config (U-CFG owns the split).",
+    description: ".guild/config/{project,workspace}.json — policy-only durable config; host/model identity is refused here (KTD22).",
   },
   {
     id: "wiki-page",

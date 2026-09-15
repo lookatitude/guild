@@ -32,6 +32,8 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 
+import { modelCatalogCacheHome } from "../../state";
+
 // ── Contract constants ───────────────────────────────────────────────────────
 
 export const MODEL_CATALOG_SCHEMA_VERSION = "guild.model_catalog.v1";
@@ -47,8 +49,21 @@ export const MODEL_CATALOG_CACHE_DIRNAME = "model-catalog";
 export const MODEL_CATALOG_CACHE_REL_SEGMENTS = Object.freeze([".guild", "indexes", MODEL_CATALOG_CACHE_DIRNAME] as const);
 export const MODEL_CATALOG_CACHE_REL = MODEL_CATALOG_CACHE_REL_SEGMENTS.join("/");
 
-/** Absolute cache dir for a workspace root. */
+/**
+ * Absolute cache dir for a workspace root — the PLATFORM cache root (KTD15/U-CFG),
+ * not `.guild/`. A model catalog is a discovered fact about this machine's auth and
+ * entitlements; keeping it inside the repo made it a second durable inventory that
+ * a clone inherited (KTD22).
+ *
+ * `MODEL_CATALOG_CACHE_REL*` stay exported: the scrub legs still sweep the legacy
+ * in-repo location so an upgraded root does not leave one behind.
+ */
 export function modelCatalogCacheDir(workspaceRoot: string): string {
+  return modelCatalogCacheHome(workspaceRoot);
+}
+
+/** The pre-U-CFG in-repo location, kept for scrub/upgrade sweeps only. */
+export function legacyModelCatalogCacheDir(workspaceRoot: string): string {
   return path.join(workspaceRoot, ...MODEL_CATALOG_CACHE_REL_SEGMENTS);
 }
 

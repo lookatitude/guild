@@ -1733,7 +1733,56 @@ function writeCapableEntries(ctx: Ctx): Array<{ kind: string; source: string }> 
     .sort((a, b) => (a.source < b.source ? -1 : 1));
 }
 
-// ---------------------------------------------------------------- the 24 checks
+// ---------------------------------------------------------------- KTD22 helpers
+/** Host FAMILY tokens a durable file may never carry as authority. */
+const HOST_FAMILY_LINT = [
+  "claude", "codex", "cursor", "gemini", "copilot", "windsurf", "aider",
+  "antigravity", "pi", "cline", "zed",
+];
+
+/** Model FAMILIES are fine — they name no product and are what a dialect keys on. */
+const MODEL_FAMILY_LINT = new Set(["anthropic", "openai", "google"]);
+
+const MODEL_NAME_LINT_RE =
+  /\b(opus|sonnet|haiku|fable|gpt-?[0-9][^\s]*|gemini-[0-9][^\s]*|claude-[a-z0-9][^\s]*|llama-?[0-9][^\s]*|mistral|grok-?[0-9][^\s]*|deepseek|qwen)\b/i;
+
+/** Key paths that persist per-host inventory regardless of their value. */
+const INVENTORY_KEY_LINT = [
+  /^models(\.|$)/, /^defaults\.models(\.|$)/,
+  /^host_profiles(\.|$)/, /^defaults\.host_profiles(\.|$)/,
+  /^host(\.|$)/, /^defaults\.host(\.|$)/,
+];
+
+/** Every host-identity finding in one parsed config object, as detail strings. */
+function hostIdentityHits(obj: unknown, prefix = "", out: string[] = []): string[] {
+  if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
+    if (typeof obj === "string" && prefix !== "") {
+      const m = MODEL_NAME_LINT_RE.exec(obj);
+      if (m) out.push(`'${prefix}' holds the concrete model name '${m[0]}'`);
+    }
+    return out;
+  }
+  for (const [k, val] of Object.entries(obj as Record<string, unknown>)) {
+    const dotted = prefix === "" ? k : `${prefix}.${k}`;
+    if (INVENTORY_KEY_LINT.some((re) => re.test(dotted))) {
+      out.push(`'${dotted}' persists per-host model inventory`);
+      continue;
+    }
+    if (!MODEL_FAMILY_LINT.has(k.toLowerCase())) {
+      const fam = HOST_FAMILY_LINT.find((h) =>
+        new RegExp(`(^|[^a-z0-9])${h}([^a-z0-9]|$)`, "i").test(k),
+      );
+      if (fam) {
+        out.push(`'${dotted}' keys durable config on the host family '${fam}'`);
+        continue;
+      }
+    }
+    hostIdentityHits(val, dotted, out);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- the checks
 const CHECKS: Check[] = [
   {
     id: "skills-glob-17",
@@ -2215,6 +2264,86 @@ const CHECKS: Check[] = [
       for (const f of under(ctx.files, ...SURFACE_PREFIXES)) {
         if (/\/glossary\/(SKILL\.md|SKILL\.src\.md)$/.test(f)) {
           v.push({ check: "glossary-not-indexed-skill", path: f, detail: "glossary authored as a skill folder" });
+        }
+      }
+      return v;
+    },
+  },
+  // ---------------------------------------------------------------- KTD22 / U-CFG
+  // Durable config is POLICY. Host family, host id, and concrete model names are
+  // session facts on the run record. These three checks are the grep form of that
+  // law on the SHIPPED tree: a template or scaffold that seeds one of them puts a
+  // host pin into every project that runs init.
+  {
+    id: "no-host-ids-in-durable-config",
+    ktd: "KTD22",
+    title: "shipped durable-config templates carry no host family, host id, or model name",
+    run(ctx) {
+      const v: Violation[] = [];
+      for (const f of under(ctx.files, "templates/", "src/surfaces/", "src/modules/", "skills/")) {
+        if (isFixturePath(f) || isLayoutLawsSource(f)) continue;
+        if (!/\.json$/.test(f)) continue;
+        const base = path.posix.basename(f);
+        const isConfigSeed =
+          base === "settings.json" ||
+          base === "settings.local.json" ||
+          /(^|\/)config\/(project|workspace)(\.local)?\.json$/.test(f);
+        if (!isConfigSeed) continue;
+        const json = readJson(path.join(ctx.root, f));
+        if (json === null || typeof json !== "object") continue;
+        for (const hit of hostIdentityHits(json as Record<string, unknown>)) {
+          v.push({ check: "no-host-ids-in-durable-config", path: f, detail: hit });
+        }
+      }
+      return v;
+    },
+  },
+  {
+    id: "plan-lanes-pin-tier-only",
+    ktd: "KTD22",
+    title: "plan-lane and team templates pin tier:, never model: or host:",
+    run(ctx) {
+      const v: Violation[] = [];
+      for (const f of under(ctx.files, "templates/", "src/surfaces/")) {
+        if (isFixturePath(f) || isLayoutLawsSource(f)) continue;
+        if (!/\.(md|ya?ml)$/.test(f)) continue;
+        const body = read(path.join(ctx.root, f));
+        // Only files that actually declare lanes are in scope; a prose page that
+        // mentions a model is documentation, not a durable pin.
+        if (!/^\s*[-#]?\s*(task-id|task_id|participant-id|lane):/m.test(body)) continue;
+        for (const [i, line] of body.split("\n").entries()) {
+          const m = /^\s*[-*]?\s*(model|host|host_id|host_family)\s*:\s*(\S+)/.exec(line);
+          if (!m) continue;
+          if (/^(null|~|)$/.test(m[2])) continue;
+          v.push({
+            check: "plan-lanes-pin-tier-only",
+            path: f,
+            detail: `line ${i + 1}: lane declares '${m[1]}: ${m[2]}' — lanes pin tier: only (the adapter fills the name at dispatch)`,
+          });
+        }
+      }
+      return v;
+    },
+  },
+  {
+    id: "dialect-fragment-budget",
+    ktd: "KTD31",
+    title: "model-family dialect fragments are <=200 tokens and name no concrete model",
+    run(ctx) {
+      const v: Violation[] = [];
+      for (const f of ctx.files) {
+        if (isFixturePath(f) || isLayoutLawsSource(f)) continue;
+        if (!/(^|\/)(prompts\/)?dialects\/[a-z]+\.md$/.test(f)) continue;
+        const body = read(path.join(ctx.root, f));
+        const tokens = Math.ceil(
+          Math.max(body.trim().split(/\s+/).filter(Boolean).length * 1.3, body.length / 4),
+        );
+        if (tokens > 200) {
+          v.push({ check: "dialect-fragment-budget", path: f, detail: `dialect is ~${tokens} tokens (budget 200)` });
+        }
+        const model = MODEL_NAME_LINT_RE.exec(body);
+        if (model) {
+          v.push({ check: "dialect-fragment-budget", path: f, detail: `names the concrete model '${model[0]}' — dialects key on a model FAMILY` });
         }
       }
       return v;

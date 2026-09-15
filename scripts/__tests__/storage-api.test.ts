@@ -354,11 +354,14 @@ describe("R23 — the init floor is lazy", () => {
   test("the floor is root identity plus scoped config, and no derived registry", () => {
     expect(eagerEntriesFor("single_project").map((e) => e.path)).toEqual([
       ".guild/guild.yaml",
+      ".guild/config/project.json",
       ".guild/settings.json",
     ]);
     expect(eagerEntriesFor("workspace_root").map((e) => e.path)).toEqual([
       ".guild/guild.yaml",
+      ".guild/config/project.json",
       ".guild/settings.json",
+      ".guild/config/workspace.json",
       ".guild/workspace.json",
       ".guild/workspace/workspace.yaml",
     ]);
@@ -377,7 +380,9 @@ describe("R23 — the init floor is lazy", () => {
 
   test("every remaining home is still documented, just lazy", () => {
     const all = scaffoldFor("workspace_root");
-    expect(lazyEntriesFor("workspace_root").length).toBe(all.length - 4);
+    // 6 eager entries: guild.yaml + the project policy config, plus the workspace
+    // policy config, workspace.json and workspace.yaml (U-CFG split the config file).
+    expect(lazyEntriesFor("workspace_root").length).toBe(all.length - 6);
     expect(all.map((e) => e.path)).toContain(".guild/knowledge/sources/");
     expect(all.map((e) => e.path)).not.toContain(".guild/raw/");
   });

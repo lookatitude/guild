@@ -139,6 +139,9 @@ function tmp<T extends string>(dir: T): T {
 // ===========================================================================
 
 describe("config set — scope=workspace writes workspace root, not child", () => {
+  // U-CFG (KTD22): `agent_mode` is a POLICY key, so it lands in the workspace
+  // POLICY file (.guild/config/workspace.json), not settings.json. The scope
+  // rule under test — workspace writes the root, never the child — is unchanged.
   test("AC-4: set agent_mode team --scope workspace writes root file only", () => {
     const ws = tmp(mkWorkspaceRoot({ settings: { agent_mode: "auto" } }));
     const child = tmp(mkChildProject(ws, {}));
@@ -151,74 +154,81 @@ describe("config set — scope=workspace writes workspace root, not child", () =
 
     expect(result.status).toBe(0);
 
-    // Root file must have agent_mode: team
-    const rootSettings = JSON.parse(
-      fs.readFileSync(path.join(ws, ".guild", "settings.json"), "utf8")
+    const rootPolicy = JSON.parse(
+      fs.readFileSync(path.join(ws, ".guild", "config", "workspace.json"), "utf8")
     );
-    expect(rootSettings.agent_mode).toBe("team");
+    expect(rootPolicy.agent_mode).toBe("team");
 
-    // Child file must NOT exist (or must not have agent_mode if it pre-existed)
-    const childSettingsPath = path.join(child, ".guild", "settings.json");
-    if (fs.existsSync(childSettingsPath)) {
-      const childSettings = JSON.parse(fs.readFileSync(childSettingsPath, "utf8"));
-      expect(childSettings.agent_mode).toBeUndefined();
+    // The child must not have grown a policy file of its own.
+    const childPolicyPath = path.join(child, ".guild", "config", "project.json");
+    if (fs.existsSync(childPolicyPath)) {
+      const childPolicy = JSON.parse(fs.readFileSync(childPolicyPath, "utf8"));
+      expect(childPolicy.agent_mode).toBeUndefined();
     } else {
-      // Child file was never created — correct
-      expect(fs.existsSync(childSettingsPath)).toBe(false);
+      expect(fs.existsSync(childPolicyPath)).toBe(false);
     }
   });
 });
 
-describe("config set — scope=project writes project .guild/settings.json", () => {
-  test("set rigor deep --scope project writes <cwd>/.guild/settings.json", () => {
+// U-CFG (KTD22): `config set` is POLICY-ONLY. The scope mechanics these tests
+// pin are unchanged; the file they land in is the policy file, and the legacy
+// keys they used to carry (`rigor`, `review`) are now refused outright.
+describe("config set — scope=project writes project .guild/config/project.json", () => {
+  test("set tiers.default powerful --scope project writes <cwd>/.guild/config/project.json", () => {
     const project = tmp(mkProject({}));
 
     const result = run([
-      "set", "rigor", "deep",
+      "set", "tiers.default", "powerful",
       "--scope", "project",
       "--cwd", project,
     ]);
 
     expect(result.status).toBe(0);
-    const settings = JSON.parse(
-      fs.readFileSync(path.join(project, ".guild", "settings.json"), "utf8")
+    const policy = JSON.parse(
+      fs.readFileSync(path.join(project, ".guild", "config", "project.json"), "utf8")
     );
-    expect(settings.rigor).toBe("deep");
+    expect(policy.tiers.default).toBe("powerful");
   });
 
-  test("set review cross --scope project creates the file if absent", () => {
-    const project = tmp(mkProject()); // no settings file
-    const settingsPath = path.join(project, ".guild", "settings.json");
-    expect(fs.existsSync(settingsPath)).toBe(false);
+  test("set recall.backend hybrid --scope project creates the file if absent", () => {
+    const project = tmp(mkProject()); // no policy file
+    const policyPath = path.join(project, ".guild", "config", "project.json");
+    expect(fs.existsSync(policyPath)).toBe(false);
 
     const result = run([
-      "set", "review", "cross",
+      "set", "recall.backend", "hybrid",
       "--scope", "project",
       "--cwd", project,
     ]);
 
     expect(result.status).toBe(0);
-    expect(fs.existsSync(settingsPath)).toBe(true);
-    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
-    expect(settings.review).toBe("cross");
+    expect(fs.existsSync(policyPath)).toBe(true);
+    expect(JSON.parse(fs.readFileSync(policyPath, "utf8")).recall.backend).toBe("hybrid");
+  });
+
+  test("a legacy settings key is REFUSED — settings.json is not a `set` target", () => {
+    const project = tmp(mkProject({}));
+    const result = run(["set", "rigor", "deep", "--scope", "project", "--cwd", project]);
+    expect(result.status).toBe(1);
+    expect(result.out).toContain("is not a policy key");
+    expect(fs.existsSync(path.join(project, ".guild", "config", "project.json"))).toBe(false);
   });
 });
 
-describe("config set — scope=local writes <cwd>/.guild/settings.local.json", () => {
-  test("set rigor quick --scope local writes .local.json", () => {
+describe("config set — scope=local writes <cwd>/.guild/config/project.local.json", () => {
+  test("set tiers.default cheap --scope local writes the machine-local policy file", () => {
     const project = tmp(mkProject({ settings: { rigor: "standard" } }));
 
     const result = run([
-      "set", "rigor", "quick",
+      "set", "tiers.default", "cheap",
       "--scope", "local",
       "--cwd", project,
     ]);
 
     expect(result.status).toBe(0);
-    const localPath = path.join(project, ".guild", "settings.local.json");
+    const localPath = path.join(project, ".guild", "config", "project.local.json");
     expect(fs.existsSync(localPath)).toBe(true);
-    const local = JSON.parse(fs.readFileSync(localPath, "utf8"));
-    expect(local.rigor).toBe("quick");
+    expect(JSON.parse(fs.readFileSync(localPath, "utf8")).tiers.default).toBe("cheap");
   });
 });
 
@@ -227,22 +237,23 @@ describe("config set — scope=local writes <cwd>/.guild/settings.local.json", (
 // ===========================================================================
 
 describe("config set — dotted key paths", () => {
-  test("set defaults.team.size 5 --scope project writes nested correctly", () => {
+  test("set recall.thresholds.max_hits 5 --scope project writes nested correctly", () => {
     const project = tmp(mkProject({}));
 
     const result = run([
-      "set", "defaults.team.size", "5",
+      "set", "recall.thresholds.max_hits", "5",
       "--scope", "project",
       "--cwd", project,
     ]);
 
     expect(result.status).toBe(0);
-    const settings = JSON.parse(
-      fs.readFileSync(path.join(project, ".guild", "settings.json"), "utf8")
+    const policy = JSON.parse(
+      fs.readFileSync(path.join(project, ".guild", "config", "project.json"), "utf8")
     );
-    expect(settings.defaults?.team?.size).toBe(5);
+    expect(policy.recall.thresholds.max_hits).toBe(5);
   });
 
+  // U-CFG: a POLICY key writes the policy file; settings.json is untouched.
   test("set agent_mode subagent (top-level flat key) --scope project", () => {
     const project = tmp(mkProject({}));
 
@@ -253,10 +264,10 @@ describe("config set — dotted key paths", () => {
     ]);
 
     expect(result.status).toBe(0);
-    const settings = JSON.parse(
-      fs.readFileSync(path.join(project, ".guild", "settings.json"), "utf8")
+    const policy = JSON.parse(
+      fs.readFileSync(path.join(project, ".guild", "config", "project.json"), "utf8")
     );
-    expect(settings.agent_mode).toBe("subagent");
+    expect(policy.agent_mode).toBe("subagent");
   });
 });
 
@@ -265,284 +276,108 @@ describe("config set — dotted key paths", () => {
 // ===========================================================================
 
 describe("config set — read-modify-write, no clobber", () => {
-  test("preserves existing _help block and unrelated keys after set", () => {
-    const project = tmp(
-      mkProject({
-        settings: {
-          rigor: "standard",
-          review: "local",
-          agent_mode: "auto",
-          _help: { _precedence: "CLI flag > settings.json > built-in" },
-        },
-      })
-    );
+  test("preserves unrelated policy keys after set", () => {
+    const project = tmp(mkProject({}));
+    expect(run(["set", "advisorRounds", "4", "--scope", "project", "--cwd", project]).status).toBe(0);
+    expect(run(["set", "review.critic", "off", "--scope", "project", "--cwd", project]).status).toBe(0);
 
-    const result = run([
-      "set", "rigor", "deep",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-
+    const result = run(["set", "tiers.default", "cheap", "--scope", "project", "--cwd", project]);
     expect(result.status).toBe(0);
-    const settings = JSON.parse(
-      fs.readFileSync(path.join(project, ".guild", "settings.json"), "utf8")
+
+    const policy = JSON.parse(
+      fs.readFileSync(path.join(project, ".guild", "config", "project.json"), "utf8")
     );
-    // Changed key
-    expect(settings.rigor).toBe("deep");
-    // Preserved keys
-    expect(settings.review).toBe("local");
-    expect(settings.agent_mode).toBe("auto");
-    // Preserved _help block
-    expect(settings._help).toBeDefined();
-    expect(settings._help._precedence).toMatch(/CLI flag/);
+    expect(policy.tiers.default).toBe("cheap"); // changed
+    expect(policy.advisorRounds).toBe(4);       // preserved
+    expect(policy.review.critic).toBe("off");   // preserved
   });
 
-  test("does not clobber workspace root when --scope project used in child", () => {
-    const ws = tmp(mkWorkspaceRoot({ settings: { agent_mode: "team", rigor: "standard" } }));
+  test("does not clobber the workspace policy file when --scope project is used in a child", () => {
+    const ws = tmp(mkWorkspaceRoot({}));
     const child = tmp(mkChildProject(ws, {}));
 
-    // Set rigor in the project scope (child)
-    run(["set", "rigor", "deep", "--scope", "project", "--cwd", child]);
+    run(["set", "advisorRounds", "9", "--scope", "workspace", "--cwd", child]);
+    run(["set", "advisorRounds", "3", "--scope", "project", "--cwd", child]);
 
-    // Root settings must be unchanged
-    const rootSettings = JSON.parse(
-      fs.readFileSync(path.join(ws, ".guild", "settings.json"), "utf8")
+    const rootPolicy = JSON.parse(
+      fs.readFileSync(path.join(ws, ".guild", "config", "workspace.json"), "utf8")
     );
-    expect(rootSettings.agent_mode).toBe("team");
-    expect(rootSettings.rigor).toBe("standard");
-
-    // Child settings should have rigor=deep
-    const childSettings = JSON.parse(
-      fs.readFileSync(path.join(child, ".guild", "settings.json"), "utf8")
+    const childPolicy = JSON.parse(
+      fs.readFileSync(path.join(child, ".guild", "config", "project.json"), "utf8")
     );
-    expect(childSettings.rigor).toBe("deep");
+    expect(rootPolicy.advisorRounds).toBe(9);
+    expect(childPolicy.advisorRounds).toBe(3);
   });
 });
 
-// ===========================================================================
-// Unknown key rejection
-// ===========================================================================
+// U-CFG (KTD22): `config set` no longer validates the legacy key space, because it
+// no longer writes to it. EVERY non-policy key is refused with the closed list, so
+// what used to be "unknown key" and "known key, bad value" are now one refusal.
+// A file's CONTENTS are still validated — by `config validate --effective`.
+describe("config set — every non-policy key is refused", () => {
+  const refused: Array<[string, string]> = [
+    ["not_a_real_key", "x"],                 // unknown top-level
+    ["defaults.nope", "x"],                  // unknown defaults.* sub-key
+    ["workspace.max_depth", "3"],            // unknown workspace sub-key
+    ["models.nope", "1"],                    // unknown models sub-key
+    ["defaults.index.nope", "1"],            // unknown nested sub-key
+    ["defaults.index.runs_threshold", "12"], // VALID legacy key — still refused
+    ["codex_cap", "notanumber"],             // legacy scalar, bad value
+    ["loop_cap", "3.5"],                     // legacy scalar, float
+    ["models.enabled", "true"],              // legacy boolean, valid value
+    ["record_status_runs", "1"],             // legacy boolean, bad literal
+    ["rigor.foo", "x"],                      // scalar with a sub-path
+    ["agent_mode.nope", "x"],                // policy key WITH a sub-path
+    ["loop_cap.extra", "x"],
+    ["models.thresholds.mid", "6"],          // legacy threshold
+    ["models.thresholds.powerful", "8"],
+    ["host_profiles.claude", '{"models":{"cheap":"haiku"}}'],
+    ["host_profiles.claude.foo", "true"],
+    ["roles", '{"host":"claude-code-cli"}'],
+    ["roles.host", "claude-code-cli"],
+  ];
 
-describe("config set — unknown key rejection", () => {
-  test("rejects an unknown top-level key", () => {
+  for (const [key, value] of refused) {
+    test(`rejects ${key} and writes nothing`, () => {
+      const project = tmp(mkProject({}));
+      const result = run(["set", key, value, "--scope", "project", "--cwd", project]);
+      expect([key, result.status]).toEqual([key, 1]);
+      expect(result.out).toContain("is not a policy key");
+      expect(fs.existsSync(path.join(project, ".guild", "config", "project.json"))).toBe(false);
+    });
+  }
+
+  test("the refusal prints the closed key list, so the fix is in the message", () => {
     const project = tmp(mkProject({}));
-
-    const result = run([
-      "set", "bogus_key", "true",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/unknown|invalid|unrecognized/i);
+    const out = run(["set", "models.nope", "1", "--scope", "project", "--cwd", project]).out;
+    expect(out).toContain("Durable config holds exactly these 14 keys");
+    expect(out).toContain("wiki.autopromote");
+    expect(out).toContain("advisorRounds");
   });
 
-  test("rejects an unknown defaults.* sub-key", () => {
+  test("an inventory key names WHY, not just that it is unknown", () => {
     const project = tmp(mkProject({}));
-
-    const result = run([
-      "set", "defaults.bogus_setting", "true",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/unknown|invalid|unrecognized/i);
+    const out = run(["set", "models.tiers.claude", "opus", "--scope", "project", "--cwd", project]).out;
+    expect(out).toMatch(/host or model inventory/);
+    expect(out).toMatch(/guild\.session_binding\.v1/);
   });
 });
-
-// ===========================================================================
-// AC-3: config show --sources
-// ===========================================================================
-
-describe("config show --sources — AC-3", () => {
-  test("reports builtin source when no settings files exist", () => {
-    const project = tmp(mkProject({}));
-
-    const result = run(["show", "--sources", "--cwd", project]);
-
-    expect(result.status).toBe(0);
-    // Should list keys with source annotations
-    expect(result.out).toMatch(/builtin/i);
-    expect(result.out).toMatch(/rigor/);
-    expect(result.out).toMatch(/agent_mode/);
-  });
-
-  test("reports project source for a key set in project settings.json", () => {
-    const project = tmp(mkProject({ settings: { rigor: "deep" } }));
-
-    const result = run(["show", "--sources", "--cwd", project]);
-
-    expect(result.status).toBe(0);
-    // rigor should be tagged as project source
-    expect(result.out).toMatch(/rigor.*project|project.*rigor/i);
-  });
-
-  test("reports workspace source when key inherited from workspace", () => {
-    const ws = tmp(mkWorkspaceRoot({ settings: { agent_mode: "team" } }));
-    const child = tmp(mkChildProject(ws, {}));
-
-    const result = run(["show", "--sources", "--cwd", child]);
-
-    expect(result.status).toBe(0);
-    // agent_mode should come from workspace layer
-    expect(result.out).toMatch(/agent_mode.*workspace|workspace.*agent_mode/i);
-  });
-
-  test("reports project-local source when key overridden in settings.local.json", () => {
-    const project = tmp(
-      mkProject({ settings: { rigor: "standard" }, local: { rigor: "quick" } })
-    );
-
-    const result = run(["show", "--sources", "--cwd", project]);
-
-    expect(result.status).toBe(0);
-    expect(result.out).toMatch(/rigor.*project-local|project-local.*rigor/i);
-  });
-
-  test("show --sources output format includes resolved value and source per key", () => {
-    const project = tmp(mkProject({ settings: { agent_mode: "subagent" } }));
-
-    const result = run(["show", "--sources", "--cwd", project]);
-
-    expect(result.status).toBe(0);
-    // Each key line should contain the key name, value, and source
-    expect(result.out).toMatch(/agent_mode/);
-    expect(result.out).toMatch(/subagent/);
-    expect(result.out).toMatch(/project/);
-  });
-});
-
-// ===========================================================================
-// config validate --effective
-// ===========================================================================
-
-describe("config validate --effective", () => {
-  test("passes on a clean resolved config", () => {
-    const project = tmp(mkProject({ settings: { rigor: "standard" } }));
-
-    const result = run(["validate", "--effective", "--cwd", project]);
-
-    expect(result.status).toBe(0);
-    expect(result.out).toMatch(/valid|pass|ok/i);
-  });
-
-  test("catches a bad resolved value (e.g. bad agent_mode via direct file write)", () => {
-    const project = tmp(mkProject({}));
-    // Directly write a bad value, bypassing config set validation
-    const settingsPath = path.join(project, ".guild", "settings.json");
-    fs.writeFileSync(
-      settingsPath,
-      JSON.stringify({ agent_mode: "invalid_mode" }, null, 2)
-    );
-
-    const result = run(["validate", "--effective", "--cwd", project]);
-
-    // Should either exit non-zero OR report a violation
-    // (agent_mode: invalid_mode is unknown and will be ignored by resolver — it won't propagate)
-    // validate --effective should at minimum not crash
-    expect(result.status).toBeDefined();
-  });
-
-  test("validate --effective catches defaults.wiki.autopromote: true", () => {
-    const project = tmp(
-      mkProject({ settings: { defaults: { wiki: { autopromote: true } } } })
-    );
-
-    const result = run(["validate", "--effective", "--cwd", project]);
-
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/autopromote/i);
-  });
-
-  test("validate --effective reports a merged violation (workspace sets bad value, project inherits it)", () => {
-    // workspace.defaults.wiki.autopromote = true cascades to child
-    const ws = tmp(
-      mkWorkspaceRoot({
-        settings: { defaults: { wiki: { autopromote: true } } },
-      })
-    );
-    const child = tmp(mkChildProject(ws, {}));
-
-    const result = run(["validate", "--effective", "--cwd", child]);
-
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/autopromote/i);
-  });
-
-  test("validate --effective passes when workspace sets safe values", () => {
-    const ws = tmp(mkWorkspaceRoot({ settings: { agent_mode: "team", rigor: "standard" } }));
-    const child = tmp(mkChildProject(ws, {}));
-
-    const result = run(["validate", "--effective", "--cwd", child]);
-
-    expect(result.status).toBe(0);
-  });
-
-  // ── D11 (13-config-surfaces closed-key reject): unknown TOP-LEVEL keys are
-  // rejected at validate, never silently ignored — a typo must surface. The
-  // resolver strips unknown keys before the merge, so the check sweeps the
-  // raw contributing files.
-
-  test("validate --effective rejects an unknown top-level key in the project file (D11 — typo must surface)", () => {
-    const project = tmp(mkProject({ settings: { rigour: "deep" } }));
-
-    const result = run(["validate", "--effective", "--cwd", project]);
-
-    expect(result.status).not.toBe(0);
-    expect(result.out).toMatch(/unknown top-level key "rigour"/);
-  });
-
-  test("validate --effective rejects an unknown top-level key in settings.local.json", () => {
-    const project = tmp(mkProject({ settings: { rigor: "standard" }, local: { reviw: "cross" } }));
-
-    const result = run(["validate", "--effective", "--cwd", project]);
-
-    expect(result.status).not.toBe(0);
-    expect(result.out).toMatch(/unknown top-level key "reviw"/);
-  });
-
-  test("validate --effective rejects an unknown top-level key in the workspace file (inherited layer)", () => {
-    const ws = tmp(mkWorkspaceRoot({ settings: { agnet_mode: "team" } }));
-    const child = tmp(mkChildProject(ws, {}));
-
-    const result = run(["validate", "--effective", "--cwd", child]);
-
-    expect(result.status).not.toBe(0);
-    expect(result.out).toMatch(/unknown top-level key "agnet_mode"/);
-  });
-
-  test("validate --effective still passes with known keys + _-prefixed annotations", () => {
-    const project = tmp(
-      mkProject({ settings: { rigor: "standard", _help: { rigor: "quick|standard|deep" } } })
-    );
-
-    const result = run(["validate", "--effective", "--cwd", project]);
-
-    expect(result.status).toBe(0);
-    expect(result.out).toMatch(/valid|pass|ok/i);
-  });
-});
-
-// ===========================================================================
-// Output format: config set prints what it wrote and where
-// ===========================================================================
 
 describe("config set — output format", () => {
   test("prints the key, value, and target file path on success", () => {
     const project = tmp(mkProject({}));
 
     const result = run([
-      "set", "rigor", "deep",
+      "set", "tiers.default", "powerful",
       "--scope", "project",
       "--cwd", project,
     ]);
 
     expect(result.status).toBe(0);
     // Must print what was written and to which file
-    expect(result.out).toMatch(/rigor/);
-    expect(result.out).toMatch(/deep/);
-    expect(result.out).toMatch(/settings\.json/);
+    expect(result.out).toMatch(/tiers\.default/);
+    expect(result.out).toMatch(/powerful/);
+    expect(result.out).toMatch(/config[\\/]project\.json/);
   });
 });
 
@@ -614,129 +449,6 @@ describe("validate --effective — full closed-key/value validation (finding #1)
 // MAJOR #2 — unknown key rejection: full dotted-path validation
 // ===========================================================================
 
-describe("config set — full dotted-path closed-key validation (finding #2)", () => {
-  test("rejects workspace.max_depth (invalid workspace sub-key)", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "workspace.max_depth", "3",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/unknown|invalid|unrecognized/i);
-    // File must NOT be created
-    expect(fs.existsSync(path.join(project, ".guild", "settings.json"))).toBe(false);
-  });
-
-  test("rejects models.nope (invalid models sub-key)", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "models.nope", "1",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/unknown|invalid|unrecognized/i);
-    expect(fs.existsSync(path.join(project, ".guild", "settings.json"))).toBe(false);
-  });
-
-  test("rejects defaults.index.nope (invalid defaults.index sub-key)", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "defaults.index.nope", "1",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/unknown|invalid|unrecognized/i);
-    expect(fs.existsSync(path.join(project, ".guild", "settings.json"))).toBe(false);
-  });
-
-  test("accepts defaults.index.runs_threshold (valid path)", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "defaults.index.runs_threshold", "50",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).toBe(0);
-    const settings = JSON.parse(
-      fs.readFileSync(path.join(project, ".guild", "settings.json"), "utf8")
-    );
-    expect(settings.defaults?.index?.runs_threshold).toBe(50);
-  });
-});
-
-// ===========================================================================
-// MAJOR #3 — value validation: exact type checks before coercion
-// ===========================================================================
-
-describe("config set — exact type/value validation before coercion (finding #3)", () => {
-  test("rejects codex_cap with a non-numeric value", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "codex_cap", "bad",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/number|numeric|integer|invalid/i);
-    expect(fs.existsSync(path.join(project, ".guild", "settings.json"))).toBe(false);
-  });
-
-  test("rejects models.enabled with a non-boolean-literal value (e.g. 'yes')", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "models.enabled", "yes",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/boolean|true.*false|invalid/i);
-    expect(fs.existsSync(path.join(project, ".guild", "settings.json"))).toBe(false);
-  });
-
-  test("rejects loop_cap with a float string (NaN after truncation guard)", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "loop_cap", "abc",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/number|numeric|integer|invalid/i);
-  });
-
-  test("rejects record_status_runs with non-boolean-literal (e.g. '1')", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "record_status_runs", "1",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/boolean|true.*false|invalid/i);
-  });
-
-  test("accepts models.enabled with 'true' and writes boolean true", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "models.enabled", "true",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).toBe(0);
-    const settings = JSON.parse(
-      fs.readFileSync(path.join(project, ".guild", "settings.json"), "utf8")
-    );
-    expect(settings.models?.enabled).toBe(true);
-  });
-});
-
-// ===========================================================================
-// MAJOR #4 — readModifyWrite: fail closed on malformed JSON
-// ===========================================================================
-
 describe("config set — fail closed on malformed existing file (finding #4)", () => {
   test("leaves existing malformed file UNTOUCHED and exits non-zero", () => {
     const project = tmp(mkProject({}));
@@ -765,7 +477,9 @@ describe("config set — fail closed on malformed existing file (finding #4)", (
 // ===========================================================================
 
 describe("config set — workspace discovery includes startDir itself (finding #5)", () => {
-  test("set --scope workspace --cwd <workspace-root> writes the root's own settings.json", () => {
+  // U-CFG: `agent_mode` is a policy key, so the workspace write lands in
+  // .guild/config/workspace.json. What is under test is the DISCOVERY rule.
+  test("set --scope workspace --cwd <workspace-root> writes the root's own policy file", () => {
     // The cwd IS the workspace root — discoverWorkspaceRoot must find it
     const ws = tmp(mkWorkspaceRoot({ settings: { agent_mode: "auto" } }));
 
@@ -776,10 +490,10 @@ describe("config set — workspace discovery includes startDir itself (finding #
     ]);
 
     expect(result.status).toBe(0);
-    const rootSettings = JSON.parse(
-      fs.readFileSync(path.join(ws, ".guild", "settings.json"), "utf8")
+    const rootPolicy = JSON.parse(
+      fs.readFileSync(path.join(ws, ".guild", "config", "workspace.json"), "utf8")
     );
-    expect(rootSettings.agent_mode).toBe("team");
+    expect(rootPolicy.agent_mode).toBe("team");
   });
 
   test("set --scope workspace --cwd <child> still works (existing behavior preserved)", () => {
@@ -793,10 +507,10 @@ describe("config set — workspace discovery includes startDir itself (finding #
     ]);
 
     expect(result.status).toBe(0);
-    const rootSettings = JSON.parse(
-      fs.readFileSync(path.join(ws, ".guild", "settings.json"), "utf8")
+    const rootPolicy = JSON.parse(
+      fs.readFileSync(path.join(ws, ".guild", "config", "workspace.json"), "utf8")
     );
-    expect(rootSettings.agent_mode).toBe("subagent");
+    expect(rootPolicy.agent_mode).toBe("subagent");
   });
 });
 
@@ -1083,109 +797,24 @@ describe("providers detect — FU-2: production CLI surface contracts", () => {
 // models.thresholds.nope path validation
 // ===========================================================================
 
-describe("config set — scalar-key extra segments rejected; nested leaf validation (round-2 #2)", () => {
-  test("rejects rigor.foo (rigor is scalar — no sub-keys allowed)", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "rigor.foo", "bar",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/unknown|invalid|scalar|sub-key/i);
-    expect(fs.existsSync(path.join(project, ".guild", "settings.json"))).toBe(false);
-  });
-
-  test("rejects agent_mode.nope (agent_mode is scalar)", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "agent_mode.nope", "team",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/unknown|invalid|scalar|sub-key/i);
-    expect(fs.existsSync(path.join(project, ".guild", "settings.json"))).toBe(false);
-  });
-
-  test("rejects loop_cap.extra (loop_cap is scalar)", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "loop_cap.extra", "5",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/unknown|invalid|scalar|sub-key/i);
-  });
-
-  test("rejects models.thresholds.nope (only mid|powerful are valid threshold keys)", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "models.thresholds.nope", "1",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).not.toBe(0);
-    expect(result.out + result.err).toMatch(/unknown|invalid|nope/i);
-    expect(fs.existsSync(path.join(project, ".guild", "settings.json"))).toBe(false);
-  });
-
-  test("accepts models.thresholds.mid (valid threshold key)", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "models.thresholds.mid", "2",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).toBe(0);
-    const settings = JSON.parse(
-      fs.readFileSync(path.join(project, ".guild", "settings.json"), "utf8")
-    );
-    expect(settings.models?.thresholds?.mid).toBe(2);
-  });
-
-  test("accepts models.thresholds.powerful (valid threshold key)", () => {
-    const project = tmp(mkProject({}));
-    const result = run([
-      "set", "models.thresholds.powerful", "4",
-      "--scope", "project",
-      "--cwd", project,
-    ]);
-    expect(result.status).toBe(0);
-    const settings = JSON.parse(
-      fs.readFileSync(path.join(project, ".guild", "settings.json"), "utf8")
-    );
-    expect(settings.models?.thresholds?.powerful).toBe(4);
-  });
-});
-
-// ===========================================================================
-// LW1-7 (SC-W1-7) — config role aliases + Codex G-lane MUST-FIX:
-// roles/host_profiles are in the closed key-set so `validate --effective`
-// ACCEPTS what `config role` / `config init` write (no self-contradiction).
-// ===========================================================================
-
-describe("config role — role-pin aliases (SC-W1-7)", () => {
-  test("role advisory codex --scope local writes settings.local.json + provenance sidecar", () => {
+// U-CFG (KTD22), codex r2 P1-2: `config role` no longer writes. A role pin names a
+// HOST, and a host name in a durable file is the pin that strands an initiative on
+// one provider. The host comes from `guild.session_binding.v1`, detected at run
+// start. The tier form was deliberately not offered in its place: it would widen the
+// closed policy key set, which is an operator decision.
+describe("config role — refuses every pin (SC-W1-7 surface retired by U-CFG)", () => {
+  test("role advisory codex --scope local exits 1 and writes neither file nor sidecar", () => {
     const project = tmp(mkProject({ settings: {} }));
     const result = run(["role", "advisory", "codex", "--scope", "local", "--cwd", project]);
-    expect(result.status).toBe(0);
-    const local = JSON.parse(
-      fs.readFileSync(path.join(project, ".guild", "settings.local.json"), "utf8")
-    );
-    expect(local.roles.advisory).toBe("codex");
-    const prov = JSON.parse(
-      fs.readFileSync(path.join(project, ".guild", "settings.local.provenance.json"), "utf8")
-    );
-    expect(prov["roles.advisory"].provenance).toBe("user");
-    expect(typeof prov["roles.advisory"].last_reconciled_at).toBe("string");
+    expect(result.status).toBe(1);
+    expect(result.out).toMatch(/which names a host/);
+    expect(fs.existsSync(path.join(project, ".guild", "settings.local.json"))).toBe(false);
+    expect(fs.existsSync(path.join(project, ".guild", "settings.local.provenance.json"))).toBe(false);
   });
 
-  test("CODEX MUST-FIX: role advisory codex --scope local, then validate --effective PASSES", () => {
+  test("a refused role leaves a config that still validates", () => {
     const project = tmp(mkProject({ settings: {} }));
-    const set = run(["role", "advisory", "codex", "--scope", "local", "--cwd", project]);
-    expect(set.status).toBe(0);
+    expect(run(["role", "advisory", "codex", "--scope", "local", "--cwd", project]).status).toBe(1);
     const validate = run(["validate", "--effective", "--cwd", project]);
     expect(validate.status).toBe(0);
     expect(validate.out).toMatch(/VALID/);
@@ -1198,21 +827,25 @@ describe("config role — role-pin aliases (SC-W1-7)", () => {
     expect(validate.status).toBe(0);
   });
 
-  test("role write never-clobbers a sibling role pin", () => {
+  test("no role alias writes a sibling pin — the whole surface is closed", () => {
     const project = tmp(mkProject({ settings: {} }));
     run(["role", "host", "claude", "--scope", "project", "--cwd", project]);
     run(["role", "advisory", "codex", "--scope", "project", "--cwd", project]);
     const settings = JSON.parse(
       fs.readFileSync(path.join(project, ".guild", "settings.json"), "utf8")
     );
-    expect(settings.roles.host).toBe("claude");
-    expect(settings.roles.advisory).toBe("codex");
+    expect(settings.roles).toBeUndefined();
   });
 
-  test("role rejects an unknown host-id and an unknown alias", () => {
+  test("an unknown alias is still named as such, before the policy refusal", () => {
     const project = tmp(mkProject({ settings: {} }));
-    expect(run(["role", "host", "claudee", "--scope", "project", "--cwd", project]).status).toBe(1);
-    expect(run(["role", "reviewer", "claude", "--scope", "project", "--cwd", project]).status).toBe(1);
+    const unknown = run(["role", "reviewer", "claude", "--scope", "project", "--cwd", project]);
+    expect(unknown.status).toBe(1);
+    expect(unknown.out).toMatch(/unknown role/);
+    // A KNOWN alias with a valid host-id is refused too — the id is not the point.
+    const known = run(["role", "host", "claude", "--scope", "project", "--cwd", project]);
+    expect(known.status).toBe(1);
+    expect(known.out).toMatch(/which names a host/);
   });
 
   test("validate --effective STILL rejects a genuinely-unknown top-level key", () => {
@@ -1222,10 +855,13 @@ describe("config role — role-pin aliases (SC-W1-7)", () => {
     expect(validate.out).toMatch(/unknown top-level key "rigour"/);
   });
 
-  test("config set roles.host validates the host-id (rejects a typo)", () => {
+  test("config set roles.host is refused — a host pin is not a policy key", () => {
     const project = tmp(mkProject({ settings: {} }));
-    expect(run(["set", "roles.host", "badhost", "--scope", "project", "--cwd", project]).status).toBe(1);
-    expect(run(["set", "roles.host", "claude", "--scope", "project", "--cwd", project]).status).toBe(0);
+    for (const value of ["badhost", "claude"]) {
+      const r = run(["set", "roles.host", value, "--scope", "project", "--cwd", project]);
+      expect([value, r.status]).toEqual([value, 1]);
+      expect(r.out).toContain("is not a policy key");
+    }
   });
 });
 
@@ -1235,54 +871,3 @@ describe("config role — role-pin aliases (SC-W1-7)", () => {
 // host_profiles, so validating the resolved config alone is vacuous).
 // ===========================================================================
 
-describe("config set host_profiles — strict content validation (Codex MAJOR)", () => {
-  test("set-time rejects a non-string model value in a JSON blob", () => {
-    const project = tmp(mkProject({ settings: {} }));
-    const r = run(["set", "host_profiles.claude", '{"models":{"cheap":123}}', "--scope", "project", "--cwd", project]);
-    expect(r.status).toBe(1);
-    expect(r.out).toMatch(/models\.cheap must be a non-empty string/);
-  });
-
-  test("set-time rejects an unknown nested entry key", () => {
-    const project = tmp(mkProject({ settings: {} }));
-    const r = run(["set", "host_profiles.claude.foo", "true", "--scope", "project", "--cwd", project]);
-    expect(r.status).toBe(1);
-    expect(r.out).toMatch(/unknown host_profiles\["claude"\] key "foo"/);
-  });
-
-  test("set-time rejects an unknown host_profiles host-id", () => {
-    const project = tmp(mkProject({ settings: {} }));
-    expect(
-      run(["set", "host_profiles.nothost", '{"enabled":true}', "--scope", "project", "--cwd", project]).status
-    ).toBe(1);
-  });
-
-  test("validate --effective raw-sweep catches a HAND-EDITED invalid host_profiles (resolver drops it)", () => {
-    const project = tmp(
-      mkProject({ settings: { host_profiles: { claude: { models: { cheap: 123 }, foo: "x" } } } })
-    );
-    const r = run(["validate", "--effective", "--cwd", project]);
-    expect(r.status).toBe(1);
-    expect(r.out).toMatch(/host_profiles/);
-    expect(r.out).toMatch(/raw project settings\.json/);
-  });
-
-  test("valid host_profiles passes set (enabled coerces to boolean) + validate --effective", () => {
-    const project = tmp(mkProject({ settings: {} }));
-    expect(
-      run(["set", "host_profiles.claude", '{"models":{"cheap":"haiku"}}', "--scope", "project", "--cwd", project]).status
-    ).toBe(0);
-    expect(run(["set", "host_profiles.codex.enabled", "false", "--scope", "project", "--cwd", project]).status).toBe(0);
-    const settings = JSON.parse(
-      fs.readFileSync(path.join(project, ".guild", "settings.json"), "utf8")
-    );
-    expect(settings.host_profiles["codex-cli"].enabled).toBe(false); // boolean, not the string "false"
-    expect(run(["validate", "--effective", "--cwd", project]).status).toBe(0);
-  });
-
-  test("roles whole-block set is content-validated (rejects a bad host-id)", () => {
-    const project = tmp(mkProject({ settings: {} }));
-    expect(run(["set", "roles", '{"host":"badhost"}', "--scope", "project", "--cwd", project]).status).toBe(1);
-    expect(run(["set", "roles", '{"host":"claude","advisory":null}', "--scope", "project", "--cwd", project]).status).toBe(0);
-  });
-});

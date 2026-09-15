@@ -116,6 +116,26 @@ import {
 import type { ConfigScope } from "./lib/config-ui-metadata";
 // CLI/agents-file native-host set — drives the per-host `blocked` decision (app/connector → blocked).
 import { CLI_NATIVE_HOSTS } from "./lib/host-open-preflight";
+// U-CFG (KTD22): the closed POLICY key set and the host-identity guard. A policy
+// key writes to `.guild/config/<scope>.json`; inventory is refused outright.
+// Deep imports, not the `src/modules/config` barrel: the barrel re-exports the
+// settings resolver, which reaches the host-runtime barrel and closes an import
+// cycle that fails at load (`HOST_ADAPTER_CONTRACT_VERSION` of undefined). These
+// two files import nothing but node builtins and each other.
+import {
+  policyFilesFor,
+  policyOverlayFile,
+  policyValue,
+  resolvePolicy,
+} from "../src/modules/config/workflows/policy-resolver";
+import {
+  POLICY_KEYS,
+  POLICY_KEY_ALIASES,
+  PolicyRejectedError,
+  assertPolicyWrite,
+  isPolicyKey,
+  scanHostIdentity,
+} from "../src/modules/config/workflows/policy-keys";
 
 // ---------------------------------------------------------------------------
 // Prototype-pollution guard — PROTO_POISON_KEYS is the canonical single-source
@@ -1037,41 +1057,7 @@ interface ProvenanceRecord {
   last_reconciled_at: string | null;
 }
 
-/**
- * The provenance sidecar path for a settings file. Mirrors config-reconcile.ts:
- * `settings.json → settings.provenance.json` (the file the reconciler reads to gate
- * clobbering), and by the same rule `settings.local.json → settings.local.provenance.json`.
- */
-function provenanceSidecarFor(settingsFile: string): string {
-  return settingsFile.replace(/\.json$/, ".provenance.json");
-}
 
-/**
- * Stamp `key` as `user`-provenance (+ a UTC timestamp) in the scope's provenance sidecar,
- * reusing the P1 reconcile never-clobber contract: a `user` value is IMMUTABLE to the
- * reconciler (`mayReconcileWrite` returns false), so an explicit role pin is never
- * clobbered by a later `reconcile sync|repair`. Read-modify-write — preserves every
- * sibling record. Provenance is ADVISORY: if the existing sidecar is malformed we warn and
- * skip rather than corrupt it (the role write itself already succeeded, and a value with no
- * sidecar record is treated as `user` ⇒ still never-clobbered). Returns a status note.
- */
-function stampUserProvenance(settingsFile: string, key: string, now: string): string {
-  const sidecar = provenanceSidecarFor(settingsFile);
-  let existing: Record<string, ProvenanceRecord> = {};
-  if (fs.existsSync(sidecar)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(sidecar, "utf8")) as unknown;
-      if (isPlainObject(parsed)) existing = parsed as Record<string, ProvenanceRecord>;
-      else return `provenance sidecar ${path.basename(sidecar)} is not an object — left untouched (role still never-clobbered)`;
-    } catch {
-      return `provenance sidecar ${path.basename(sidecar)} is malformed — left untouched (role still never-clobbered)`;
-    }
-  }
-  existing[key] = { provenance: "user", last_reconciled_at: now };
-  fs.mkdirSync(path.dirname(sidecar), { recursive: true });
-  fs.writeFileSync(sidecar, JSON.stringify(existing, null, 2) + "\n");
-  return `provenance: ${key} → user @ ${now} (${path.basename(sidecar)})`;
-}
 
 // ---------------------------------------------------------------------------
 // Workspace discovery — check startDir itself first
@@ -1394,28 +1380,60 @@ function parseArgs(argv: string[]): ParsedArgs | { error: string } {
 // Subcommand: set
 // ---------------------------------------------------------------------------
 
-function cmdSet(
+/**
+ * Policy-key and inventory handling for `config set` (U-CFG / KTD22).
+ *
+ * Returns the exit code. It always owns the outcome: a policy key is written to
+ * the policy file, every other key is refused with the closed list.
+ */
+function cmdSetPolicy(
   keyPath: string,
   rawValue: string,
   scope: "workspace" | "project" | "local",
   cwd: string
 ): number {
-  const writeKeyPath = normalizeHostProfileKeyPath(keyPath);
-  // 1. Validate the FULL dotted key path
-  const keyErr = validateKeyPath(keyPath);
-  if (keyErr) {
-    process.stdout.write(`[config-cmd] ERROR: ${keyErr}\n`);
+  // POLICY-ONLY, not policy-first. `config set` writes the 14 policy keys and
+  // REFUSES everything else — including the legacy inventory it used to accept
+  // (`models.tiers.*`, `hosts.*`, `host_profiles.*`, `roles.*.model`). A durable
+  // file is policy (KTD22), so a surface that can still write inventory into one
+  // is the hole, not a convenience (codex G-lane r1 P1-3).
+  //
+  // This function now always OWNS the outcome; it never returns null.
+  if (!isPolicyKey(keyPath)) {
+    const inventory = /^(models|hosts|host_profiles|host)(\.|$)/.test(keyPath) ||
+      /^roles\.[^.]+\.(model|host)(\.|$)/.test(keyPath);
+    process.stdout.write(
+      `[config-cmd] ERROR: '${keyPath}' is not a policy key, so \`config set\` refuses it.` +
+        (inventory
+          ? ` It names host or model inventory, which is SESSION state on the run record` +
+            ` (guild.session_binding.v1), never a durable file (KTD22).`
+          : ``) +
+        `\n  Durable config holds exactly these ${POLICY_KEYS.length} keys:\n` +
+        POLICY_KEYS.map((k) => `    ${k.key}`).join("\n") +
+        `\n  Inspect this session's host and models with \`guild config models\`.\n`
+    );
     return 1;
   }
 
-  // 2. Validate value (exact type check BEFORE coercion)
-  const valErr = validateValue(keyPath, rawValue);
-  if (valErr) {
-    process.stdout.write(`[config-cmd] ERROR: ${valErr}\n`);
-    return 1;
+  let coerced: unknown;
+  try {
+    coerced = JSON.parse(rawValue);
+  } catch {
+    coerced = rawValue; // a bare enum member such as `phase`
   }
 
-  // 3. Resolve target file
+  let canonical: string;
+  try {
+    canonical = assertPolicyWrite(keyPath, coerced, { knownHostIds: HOST_IDS });
+  } catch (e) {
+    if (e instanceof PolicyRejectedError) {
+      process.stdout.write(`[config-cmd] ERROR: ${e.message}\n`);
+      return 1;
+    }
+    throw e;
+  }
+
+  // Policy files are named by GuildStorage, never joined by hand (KTD15).
   let targetFile: string;
   if (scope === "workspace") {
     const wsRoot = discoverWorkspaceRoot(cwd);
@@ -1426,86 +1444,58 @@ function cmdSet(
       );
       return 1;
     }
-    targetFile = path.join(wsRoot, ".guild", "settings.json");
-  } else if (scope === "project") {
-    targetFile = path.join(cwd, ".guild", "settings.json");
-  } else {
-    targetFile = path.join(cwd, ".guild", "settings.local.json");
-  }
-
-  // 4. Coerce value
-  const coerced = coerceValue(keyPath, rawValue);
-
-  // 4b. AUTHORITATIVE validate-before-persist (completeness guarantee). Build the post-set
-  // candidate for THIS file and run the resolver's OWN validator (validateResolved — the same
-  // checks `config validate` uses). Reject only a violation the SET INTRODUCES, so a pre-existing
-  // file issue never blocks an unrelated edit. This catches any resolver bound not mirrored in the
-  // NUMERIC_RANGE fast-path table, so the UI/CLI set can't persist a value `config validate` rejects.
-  try {
-    let current: Record<string, unknown> = {};
-    if (fs.existsSync(targetFile)) {
-      try {
-        current = JSON.parse(fs.readFileSync(targetFile, "utf8")) as Record<string, unknown>;
-      } catch {
-        current = {}; // malformed file → step 5's readModifyWrite fails closed
-      }
-    }
-    const before = validateResolved(current);
-    const candidate = JSON.parse(JSON.stringify(current)) as Record<string, unknown>;
-    deepSet(candidate, writeKeyPath, coerced);
-    const introduced = validateResolved(candidate).filter((v) => !before.includes(v));
-    if (introduced.length > 0) {
-      process.stdout.write(`[config-cmd] ERROR: ${introduced[0]}\n`);
+    const ws = policyFilesFor(wsRoot, "workspace");
+    if (!ws) {
+      process.stdout.write(`[config-cmd] ERROR: ${wsRoot} does not own workspace scope\n`);
       return 1;
     }
-  } catch {
-    /* a validation-harness failure must never block a legitimate write — fall through */
+    targetFile = ws.config;
+  } else {
+    const project = policyFilesFor(cwd, "project");
+    if (!project) {
+      process.stdout.write(`[config-cmd] ERROR: ${cwd} does not own project scope\n`);
+      return 1;
+    }
+    targetFile = scope === "project" ? project.config : project.local;
   }
 
-  // 5. Read-modify-write — FAIL CLOSED on malformed JSON
   try {
-    readModifyWrite(targetFile, writeKeyPath, coerced);
+    fs.mkdirSync(path.dirname(targetFile), { recursive: true });
+    readModifyWrite(targetFile, canonical, coerced);
   } catch (e) {
     process.stdout.write(`[config-cmd] ERROR: ${(e as Error).message}\n`);
     return 1;
   }
 
-  // 6. Print what was written and where
-  const valueDisplay = JSON.stringify(coerced);
-  const fileName = path.basename(targetFile);
   process.stdout.write(
-    `[config-cmd] SET ${writeKeyPath} = ${valueDisplay}\n` +
+    `[config-cmd] SET ${canonical} = ${JSON.stringify(coerced)}\n` +
       `  scope: ${scope}\n` +
       `  file:  ${targetFile}\n` +
-      `  written: ${fileName}\n`
+      `  written: ${path.basename(targetFile)}\n`
   );
-
   return 0;
 }
+
+function cmdSet(
+  keyPath: string,
+  rawValue: string,
+  scope: "workspace" | "project" | "local",
+  cwd: string
+): number {
+  // `config set` is POLICY-ONLY (U-CFG / KTD22). cmdSetPolicy writes the key when
+  // it is one of the 14, and refuses it otherwise — either way it owns the exit
+  // code, so nothing below this line runs for a `set`. The legacy validators and
+  // the settings.json writer stay in this file because `config role`, `config
+  // reconcile` and `config validate` still use them; T07 retires them with the
+  // settings.json transfer.
+  return cmdSetPolicy(keyPath, rawValue, scope, cwd);
+}
+
 
 // ---------------------------------------------------------------------------
 // Scoped settings-file resolution (shared by role; mirrors cmdSet)
 // ---------------------------------------------------------------------------
 
-/** Resolve the settings file for a scope, or an error string for an unfound workspace root. */
-function resolveScopedSettingsFile(
-  scope: "workspace" | "project" | "local",
-  cwd: string
-): { file: string } | { error: string } {
-  if (scope === "workspace") {
-    const wsRoot = discoverWorkspaceRoot(cwd);
-    if (!wsRoot) {
-      return {
-        error:
-          `--scope workspace requires a workspace root ` +
-          `(found by checking ${cwd} and walking up for .guild/workspace.json with is_workspace:true)`,
-      };
-    }
-    return { file: path.join(wsRoot, ".guild", "settings.json") };
-  }
-  if (scope === "project") return { file: path.join(cwd, ".guild", "settings.json") };
-  return { file: path.join(cwd, ".guild", "settings.local.json") };
-}
 
 // ---------------------------------------------------------------------------
 // Subcommand: role (SC-W1-7 / AC14) — host-native role-pin aliases
@@ -1536,57 +1526,106 @@ function cmdRole(
     return 1;
   }
 
-  // 2. Coerce the value: null|none ⇒ null (clear the pin); else the literal host_id.
-  const coerced: string | null =
-    rawValue === "null" || rawValue === "none" ? null : rawValue;
-
-  // 3. Validate the value via the imported validateRoles (closed host-id set — no drift).
-  const rejects = validateRoles({ [alias]: coerced });
-  if (rejects.length > 0) {
-    for (const r of rejects) process.stdout.write(`[config-cmd] ERROR: ${r}\n`);
-    return 1;
-  }
-
-  // 4. Resolve the scoped target file.
-  const resolved = resolveScopedSettingsFile(scope, cwd);
-  if ("error" in resolved) {
-    process.stdout.write(`[config-cmd] ERROR: ${resolved.error}\n`);
-    return 1;
-  }
-  const targetFile = resolved.file;
-  const keyPath = `roles.${alias}`;
-
-  // 5. Read-modify-write the role pin — FAILS CLOSED on malformed JSON; preserves siblings.
-  try {
-    readModifyWrite(targetFile, keyPath, coerced);
-  } catch (e) {
-    process.stdout.write(`[config-cmd] ERROR: ${(e as Error).message}\n`);
-    return 1;
-  }
-
-  // 6. Stamp never-clobber provenance (advisory — a sidecar failure never fails the write).
-  const now = new Date().toISOString();
-  const provNote = stampUserProvenance(targetFile, keyPath, now);
-
-  // 7. Report exactly what was written and where.
+  // 2. REFUSED — `config role` no longer writes (U-CFG / KTD22).
+  //
+  //    A role pin names a HOST, and a host name in a durable file is exactly what
+  //    strands an initiative on whichever provider the operator happened to be
+  //    running. The host for a run comes from `guild.session_binding.v1`, detected
+  //    at run start.
+  //
+  //    The tier form (`roles.<role>.tier`) is deliberately NOT offered instead: it
+  //    would widen the closed policy key set, and that is an operator decision, not
+  //    a lane one. A lane's tier is already pinned in the plan file, which is where
+  //    the plan puts it (codex G-lane r2 P1-2).
+  void rawValue;
+  void scope;
+  void cwd;
   process.stdout.write(
-    `[config-cmd] ROLE ${keyPath} = ${JSON.stringify(coerced)}\n` +
-      `  scope: ${scope}\n` +
-      `  file:  ${targetFile}\n` +
-      `  ${provNote}\n`
+    `[config-cmd] ERROR: \`config role ${alias}\` writes 'roles.${alias}', which names a host — ` +
+      `durable config is policy only (KTD22). Host and model are bound per session on the ` +
+      `run record (guild.session_binding.v1), never pinned in a file.\n` +
+      `  Inspect this session's binding:  guild config models\n` +
+      `  Durable config holds exactly these ${POLICY_KEYS.length} keys:\n` +
+      POLICY_KEYS.map((k) => `    ${k.key}`).join("\n") +
+      `\n  A lane's tier is pinned in the plan (\`tier:\`), not in config.\n`
   );
-  return 0;
+  return 1;
 }
 
 // ---------------------------------------------------------------------------
 // Subcommand: show --sources
 // ---------------------------------------------------------------------------
 
+/**
+ * The POLICY half of `config show --sources` (U-CFG / KTD22).
+ *
+ * Durable config is two surfaces now, and a `show` that prints only the legacy
+ * settings chain hides the one that is authoritative: `config set wiki.autopromote
+ * false` succeeded and then did not appear (codex G-lane r1 P1-2). This prints the
+ * closed policy set with the layer AND the file each key resolved from, followed by
+ * the legacy inventory section under its own heading.
+ *
+ * A rejected layer is REPORTED, not swallowed: the whole point of the guard is that
+ * an operator learns which key in which file is refused.
+ */
+function appendPolicySourceLines(lines: string[], cwd: string): void {
+  lines.push("POLICY  (.guild/config/*.json — the closed key set, KTD22)");
+  let resolved: ReturnType<typeof resolvePolicy>;
+  try {
+    resolved = resolvePolicy({ cwd, workspaceRoot: discoverWorkspaceRoot(cwd), knownHostIds: HOST_IDS });
+  } catch (e) {
+    lines.push(`  REFUSED: ${(e as Error).message}`);
+    lines.push("");
+    return;
+  }
+  const byLayer = new Map(resolved.files.map((f) => [f.layer, f.file]));
+  for (const spec of POLICY_KEYS) {
+    const value = policyValue(resolved, spec.key);
+    const layer = resolved.sources[spec.key] ?? "builtin";
+    const file = byLayer.get(layer);
+    lines.push(
+      `  ${spec.key} = ${JSON.stringify(value ?? null)}  [${layer}]` + (file ? `  ${file}` : ""),
+    );
+  }
+  if (resolved.files.length === 0) {
+    lines.push("  (no policy file on disk — every key is at its builtin default)");
+  }
+
+  // The machine overlay is a SOURCE, so it is named even when absent: "not read"
+  // and "read, empty" are different answers to an operator asking why a value is
+  // what it is. Before this, `show --sources` never passed an overlay path at all,
+  // so an overlay carrying `opus` was invisible here (codex G-lane r2 P1-3).
+  const overlay = policyOverlayFile(cwd);
+  const overlayRead = resolved.files.find((f) => f.layer === "overlay");
+  lines.push(
+    overlayRead
+      ? `  overlay: ${overlayRead.file}  (read)`
+      : `  overlay: ${overlay ?? "(unresolvable root)"}  (absent)`,
+  );
+
+  // A legacy `defaults.*` spelling is inert once the canonical key sits beside it.
+  // Print it, rather than leaving an operator to wonder why editing it does nothing.
+  for (const a of resolved.legacyAliases) {
+    lines.push(
+      `  ${a.legacy} → ${a.key}  [legacy-alias${a.shadowed ? " (shadowed)" : ""}]  ${a.file}`,
+    );
+  }
+
+  lines.push("");
+  lines.push("LEGACY SETTINGS  (.guild/settings.json — inventory, retired by T07)");
+}
+
 function cmdShowSources(cwd: string): number {
+  const policyLines: string[] = [];
+  appendPolicySourceLines(policyLines, cwd);
+
   let result: ReturnType<typeof resolveSettings>;
   try {
     result = resolveSettings({ cwd });
   } catch (e) {
+    // The policy half already resolved; print it before reporting the legacy
+    // failure, so a broken settings.json cannot hide the authoritative surface.
+    process.stdout.write(policyLines.join("\n") + "\n");
     process.stdout.write(
       `[config-cmd] ERROR: could not resolve settings — ${(e as Error).message}\n`
     );
@@ -1629,7 +1668,7 @@ function cmdShowSources(cwd: string): number {
   // (`ask`, builtin). So each cell's layer = the layer of the key that drives it.
   appendPermissionSourceLines(lines, config, sources);
 
-  process.stdout.write(lines.join("\n") + "\n");
+  process.stdout.write([...policyLines, ...lines].join("\n") + "\n");
   return 0;
 }
 
@@ -2007,14 +2046,74 @@ export interface UiSetDeps {
 
 const DEFAULT_UI_SET_DEPS: UiSetDeps = {
   persist: (key, rawValue, scope, cwd) => cmdSet(key, rawValue, scope, cwd),
+  // Reload through the POLICY resolver, because that is where the write landed.
+  // Reading only `resolveSettings` here made the UI print `agent_mode = auto
+  // [builtin]` immediately after persisting `team` to the policy file — a reload
+  // that reads a different file than the write is not a reload (r2 P2).
+  //
+  // The legacy resolution stays UNDER it so the print still works for any key the
+  // policy set does not own; a policy key wins the collision, matching the two
+  // surfaces' precedence on disk.
   reload: (cwd) => {
-    const { config, sources } = resolveSettings({ cwd });
-    return {
-      config: config as unknown as Record<string, unknown>,
-      sources: sources as Record<string, string>,
-    };
+    const legacy = resolveSettings({ cwd });
+    const config = { ...(legacy.config as unknown as Record<string, unknown>) };
+    const sources = { ...(legacy.sources as Record<string, string>) };
+    try {
+      const policy = resolvePolicy({
+        cwd,
+        workspaceRoot: discoverWorkspaceRoot(cwd),
+        knownHostIds: HOST_IDS,
+      });
+      for (const spec of POLICY_KEYS) {
+        const value = policyValue(policy, spec.key);
+        const layer = policy.sources[spec.key] ?? "builtin";
+        setByPathLocal(config, spec.key, value);
+        sources[spec.key] = layer;
+        // The legacy spelling reads from the same place, so the UI cannot show one
+        // spelling move while the other looks stale.
+        for (const legacyKey of legacyAliasesOf(spec.key)) {
+          setByPathLocal(config, legacyKey, value);
+          sources[legacyKey] = layer;
+        }
+      }
+    } catch (e) {
+      // A refused policy layer is a reload FAILURE (codex G-lane r3): the write
+      // landed but the effective policy cannot be shown, so the caller's nonzero
+      // reload-failure path must fire instead of printing a stale `[builtin]`.
+      throw new Error(`policy reload refused: ${(e as Error).message}`);
+    }
+    return { config, sources };
   },
 };
+
+/**
+ * Dotted-path write for the reload projection (mirrors getByPathLocal).
+ *
+ * CLONES each level on the way down: the resolved legacy config shares its nested
+ * objects with the deep-frozen DEFAULTS, so writing into one in place throws and
+ * the reload's catch then swallowed it — leaving the UI printing the very stale
+ * value the projection exists to replace.
+ */
+function setByPathLocal(obj: Record<string, unknown>, dotted: string, value: unknown): void {
+  const parts = dotted.split(".");
+  let cur = obj;
+  for (const part of parts.slice(0, -1)) {
+    const next = cur[part];
+    cur[part] =
+      next !== null && typeof next === "object" && !Array.isArray(next)
+        ? { ...(next as Record<string, unknown>) }
+        : {};
+    cur = cur[part] as Record<string, unknown>;
+  }
+  cur[parts[parts.length - 1]] = value;
+}
+
+/** Legacy `defaults.*` spellings that alias one canonical policy key. */
+function legacyAliasesOf(canonical: string): string[] {
+  return Object.entries(POLICY_KEY_ALIASES)
+    .filter(([, target]) => target === canonical)
+    .map(([legacy]) => legacy);
+}
 
 /**
  * `config ui set <key> <value> --scope <s> [--confirm <strength>]` — the §E12 persistence path.
@@ -2517,6 +2616,22 @@ export function cmdUpdateMcpHashes(
     : { ...existingHashes, ...newHashes };
 
   existing["mcp"] = { ...existingMcp, tool_description_hashes: mergedHashes };
+
+  // U-CFG sweep (KTD22): this is the last LIVE writer of settings.json in this
+  // file. What it writes — MCP tool-description hashes — is a security pin, not
+  // policy and not inventory, so it keeps its home rather than being refused.
+  // What it must never do is carry host or model identity in with the hashes, so
+  // the block it is about to write goes through the same guard `config set` uses.
+  const identity = scanHostIdentity({ mcp: existing["mcp"] }, HOST_IDS);
+  if (identity.length > 0) {
+    const hit = identity[0];
+    process.stdout.write(
+      `[config-cmd] ERROR: refusing to write '${hit.key}' — it carries '${hit.token}'. ` +
+        `Durable config never holds host or model identity (KTD22); MCP hashes are ` +
+        `pinned per tool, not per host.\n`
+    );
+    return 1;
+  }
 
   const dir = path.dirname(targetFile);
   fs.mkdirSync(dir, { recursive: true });

@@ -63,6 +63,7 @@ import {
   MODEL_CATALOG_SCHEMA_VERSION,
 } from "./catalog-cache";
 import { buildModelInspection, MODEL_INSPECTION_SCHEMA, type ModelInspectionV1 } from "./model-inspect";
+import { readSessionBinding } from "../../config";
 import { readRoutingFlags, ROUTING_FLAG_KEYS, type RoutingFlags } from "./routing-rollout";
 
 export const MODELS_COMMAND_USAGE = [
@@ -510,6 +511,18 @@ export interface InspectionEntryView {
   unknowns: string[];
 }
 
+/** The subset of `guild.session_binding.v1` this read-only surface prints. */
+export interface SessionBindingView {
+  host_family: string;
+  model_family: string;
+  surface: string;
+  detected_at: string;
+  prompt_compose_hash: string;
+  dialect_id: string;
+  evidence: { cheap: string; mid: string; powerful: string };
+  models: Record<string, string>;
+}
+
 export interface ModelsInspectView {
   schema_version: "guild.model_inspection_view.v1";
   generated_at: string;
@@ -525,6 +538,15 @@ export interface ModelsInspectView {
    * command failed closed (exit 3) - the surface refused to print something.
    */
   display_rejections: DisplayRejection[];
+  /**
+   * `guild.session_binding.v1` for this run, or `null` when none was written.
+   *
+   * THIS is the authority for which host and models this run dispatches to
+   * (KTD22). Durable config carries none of it, so inspect reads the run record
+   * rather than a settings file — and `null` means the run has not bound yet,
+   * never "assume Claude".
+   */
+  session_binding: SessionBindingView | null;
 }
 
 /**
@@ -662,6 +684,27 @@ export function renderInspectView(view: ModelsInspectView): string {
   const L: string[] = [];
   L.push("guild models inspect - READ-ONLY (no artifact was written)");
   L.push("run: " + view.run_id + " (run id resolved from: " + view.run_id_source + ")");
+  L.push("");
+  const sb = view.session_binding;
+  L.push("SESSION BINDING  (guild.session_binding.v1 - the authority for this run)");
+  if (sb === null) {
+    L.push("  not bound - this run has no session binding on record.");
+    L.push("  Guild does not fall back to a default host: start a /guild session to bind one.");
+  } else {
+    L.push("  host_family=" + sb.host_family + " model_family=" + sb.model_family + " surface=" + sb.surface);
+    L.push("  detected_at=" + sb.detected_at);
+    L.push("  prompt_compose  " + sb.dialect_id + " hash=" + sb.prompt_compose_hash.slice(0, 16));
+    L.push(
+      "  tiers           " +
+        (Object.keys(sb.models).length === 0
+          ? "(none - no tier map was bound; an unknown host gets none by design, never Claude defaults)"
+          : Object.entries(sb.models).map(([t, m]) => t + "=" + m).join(" ")),
+    );
+    L.push(
+      "  evidence        cheap=" + sb.evidence.cheap + " mid=" + sb.evidence.mid +
+        " powerful=" + sb.evidence.powerful,
+    );
+  }
   L.push("");
   L.push("ROLLOUT FLAGS  source=" + view.flags.source);
   for (const f of view.flags.values) L.push("  " + f.key + " = " + f.value);
@@ -812,6 +855,35 @@ export function safeEmit(rendered: string): SafeEmit {
  *   3  the rendered output tripped the redaction applier - REDACTED bytes were
  *      emitted and the command failed closed
  */
+/**
+ * Read this run's session binding off the run record. Inspect-only: a missing or
+ * malformed binding renders as "not bound", never as a default host.
+ */
+function readBindingView(cwd: string, runId: string): SessionBindingView | null {
+  // The run record is named by GuildStorage (KTD15). The require is lazy: a
+  // top-level state import from capability closes an init cycle.
+  const { createGuildStorage } = require("../../state") as {
+    createGuildStorage: (cwd: string) => { project?: { runRecord(id: string): string }; workspace?: { runRecord(id: string): string } };
+  };
+  const storage = createGuildStorage(cwd);
+  const scoped = storage.project ?? storage.workspace;
+  if (!scoped) return null;
+  const b = readSessionBinding(scoped.runRecord(runId));
+  if (b === null) return null;
+  return {
+    host_family: b.host_family,
+    model_family: b.model_family,
+    surface: b.surface,
+    detected_at: b.detected_at,
+    prompt_compose_hash: b.prompt_compose?.hash ?? "",
+    dialect_id: b.prompt_compose?.dialect_id ?? "dialect:none",
+    evidence: b.evidence,
+    models: Object.fromEntries(
+      Object.entries(b.models ?? {}).filter(([, v]) => typeof v === "string"),
+    ) as Record<string, string>,
+  };
+}
+
 export function runModelsCommand(argv: readonly string[], deps: ModelsCommandDeps = {}): number {
   const d = resolveDeps(deps);
   const parsed = parseModelsArgs(argv);
@@ -921,6 +993,7 @@ export function runModelsCommand(argv: readonly string[], deps: ModelsCommandDep
     entries,
     notes,
     display_rejections,
+    session_binding: readBindingView(cwd, runId),
   };
 
   const rendered = json ? JSON.stringify(view, null, 2) + "\n" : renderInspectView(view);

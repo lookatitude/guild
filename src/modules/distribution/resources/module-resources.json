@@ -232,14 +232,14 @@
       "id": "lint/hot-path-budget",
       "source_path": "scripts/lint/hot-path-budget.ts",
       "resource_path": "resources/scripts/lint/hot-path-budget.ts",
-      "sha256": "b5d7d9473586b314cc2470fe21196901be6935b86fb19d479a0fc215d2a8c61b"
+      "sha256": "a9a6ff0ceac4644678bcb7770b0ef3bdc24512fc4ac0c2db8723ab6396a68a4b"
     },
     {
       "category": "scripts",
       "id": "lint/layout-laws",
       "source_path": "scripts/lint/layout-laws.ts",
       "resource_path": "resources/scripts/lint/layout-laws.ts",
-      "sha256": "01c17ef81e39382474b6fd29e85edfd5a3bfc9094d8d56f59296215614fa5017"
+      "sha256": "101b18c9256a5770bfe5fef86fc75e08595ed3eb27076c4ac49a3a3d82ed0db9"
     },
     {
       "category": "scripts",

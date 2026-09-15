@@ -23,7 +23,7 @@
  *
  * Detection tiers (OD-6):
  *   - A provider is `detected` if its CLI is on PATH AND a light version probe
- *     passes, OR a `.guild/hosts/**​/capability.json` manifest declares it.
+ *     passes, OR a the host-capability cache (`<platform cache>/roots/<root-id>/hosts/**`) manifest declares it.
  *   - A provider is `authed` when its auth probe passes (codex stored-auth or
  *     OPENAI_API_KEY for codex; equivalents per provider where probeable).
  *   - A provider is `selectable` for cross-review ONLY when a real adapter exists:
@@ -49,6 +49,7 @@
  */
 
 import { execSync } from "child_process";
+
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -182,7 +183,7 @@ export interface ProbeEnv {
   readStoredCodexAuth(): boolean;
   /** Read an env var (auth probes). */
   readEnv(name: string): string | undefined;
-  /** Provider ids declared by `.guild/hosts/**​/capability.json` manifests. */
+  /** Provider ids declared by the host-capability cache (`<platform cache>/roots/<root-id>/hosts/**`) manifests. */
   readCapabilityProviders(): string[];
   /**
    * Is the named native plugin adapter installed in the current host (e.g. the
@@ -695,13 +696,21 @@ export function defaultProbeEnv(cwd: string): ProbeEnv {
 }
 
 /**
- * Scan `.guild/hosts/**​/capability.json` and collect declared provider ids /
+ * Scan the host-capability cache (`<platform cache>/roots/<root-id>/hosts/**`) and collect declared provider ids /
  * families. Lenient: malformed JSON or a missing dir yields []. We read either a
  * `provider` / `id` field, a `family` field, or a `providers: []` list — whatever
  * a future host adapter chooses to declare.
  */
 function readCapabilityManifests(cwd: string): string[] {
-  const hostsDir = path.join(cwd, ".guild", "hosts");
+  // Platform cache, not `.guild/hosts` (KTD15/U-CFG): host capability is machine
+  // state and must not travel with the repo.
+  // Resolved LAZILY through the state barrel. A top-level import here closes an
+  // init cycle (state -> migrations -> lifecycle -> config -> … -> host-runtime)
+  // that throws on load; nothing in this module needs the path before first call.
+  const { hostCapabilityCacheDir } = require("../../state") as {
+    hostCapabilityCacheDir: (cwd: string) => string;
+  };
+  const hostsDir = hostCapabilityCacheDir(cwd);
   if (!fs.existsSync(hostsDir)) return [];
   const out = new Set<string>();
   const walk = (dir: string): void => {

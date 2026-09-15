@@ -467,6 +467,9 @@ describe("u6 — back-compat: startRun WITHOUT snapshot", () => {
         path.join(ROOT, ".guild", "runs", runId, "run.yaml"),
         path.join(ROOT, ".guild", "runs", runId, "binding.json"),
         path.join(ROOT, ".guild", "runs", runId, "session-context.json"),
+        // U-CFG (KTD22): host + model identity is bound to the RUN, never to
+        // durable config, so every start writes guild.session_binding.v1 too.
+        path.join(ROOT, ".guild", "runs", runId, "session-binding.json"),
       ].sort()
     );
   });
