@@ -942,6 +942,162 @@ function targetsWikiRawText(root: string, rel: string): boolean {
   return /(^|[^A-Za-z0-9_])wiki([^A-Za-z0-9_]|$)/i.test(body) || /\bwiki[A-Z]/.test(body);
 }
 
+/**
+ * KTD15 — the storage allowlist. `.guild/` path CONSTRUCTION is legal in exactly
+ * two places: the state-domain storage layer (`GuildStorage` and the discovery /
+ * layout helpers it is built on) and the storage-v2 migration code, which by
+ * definition has to name the old shape to move it.
+ *
+ * Resolved through `liveOf`, so a module-resource mirror of an allowlisted file
+ * is allowlisted too (a rule that holds for the live file and not its byte-identical
+ * mirror is a lint bug).
+ */
+const GUILD_JOIN_ALLOWLIST = [
+  // state storage: the ONLY code that may build a .guild path. Kept minimal on
+  // purpose — every entry here is a file that provably needs the exemption today,
+  // never a directory added "in case". `scripts/lib/state/` is the live shim home
+  // for the GuildStorage entrypoints.
+  "src/modules/state/workflows/storage-",
+  "src/modules/state/workflows/guild-root.ts",
+  "src/modules/state/workflows/guild-discovery.ts",
+  "scripts/lib/state/",
+  // storage-v2 / layout migration: must name the legacy shape in order to move it
+  "src/modules/migrations/",
+  "scripts/dot-guild/",
+];
+
+function isStorageAllowlisted(f: string): boolean {
+  const live = liveOf(f);
+  return GUILD_JOIN_ALLOWLIST.some((p) => live === p || live.startsWith(p));
+}
+
+/** Strip redundant parentheses: `(path.join)` and `(".guild")` are their inner node. */
+function unwrapParens(n: ts.Expression): ts.Expression {
+  return ts.isParenthesizedExpression(n) ? unwrapParens(n.expression) : n;
+}
+
+/**
+ * Constant-fold a string expression. Handles a literal, a parenthesized literal,
+ * and `+` concatenation of those, so `"." + "guild"` is the same argument as
+ * `".guild"` (codex G-lane r5). `null` when the value is not static.
+ */
+function staticString(n: ts.Expression): string | null {
+  const e = unwrapParens(n);
+  if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) return e.text;
+  if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    const left = staticString(e.left);
+    const right = staticString(e.right);
+    return left !== null && right !== null ? left + right : null;
+  }
+  return null;
+}
+
+/**
+ * Local names bound to `path.join` / `path.resolve` by an import or a destructure,
+ * including renames: `import { join as j }`, `const { resolve: r } = require("path")`.
+ */
+function pathJoinAliases(sf: ts.SourceFile): Set<string> {
+  const aliases = new Set<string>(["join", "resolve"]);
+  eachNode(sf, (n) => {
+    if (
+      ts.isImportDeclaration(n) &&
+      n.importClause?.namedBindings &&
+      ts.isNamedImports(n.importClause.namedBindings)
+    ) {
+      for (const el of n.importClause.namedBindings.elements) {
+        const original = (el.propertyName ?? el.name).text;
+        if (original === "join" || original === "resolve") aliases.add(el.name.text);
+      }
+    }
+    if (ts.isVariableDeclaration(n) && n.name && ts.isObjectBindingPattern(n.name)) {
+      for (const el of n.name.elements) {
+        const original =
+          el.propertyName && ts.isIdentifier(el.propertyName)
+            ? el.propertyName.text
+            : ts.isIdentifier(el.name)
+              ? el.name.text
+              : null;
+        if ((original === "join" || original === "resolve") && ts.isIdentifier(el.name)) {
+          aliases.add(el.name.text);
+        }
+      }
+    }
+  });
+  return aliases;
+}
+
+/** The name a call actually invokes, seeing through parens and `obj["join"]`. */
+function invokedName(n: ts.CallExpression): string | null {
+  const e = unwrapParens(n.expression);
+  if (ts.isIdentifier(e)) return e.text;
+  if (ts.isPropertyAccessExpression(e) && ts.isIdentifier(e.name)) return e.name.text;
+  if (ts.isElementAccessExpression(e)) return staticString(e.argumentExpression);
+  return null;
+}
+
+/**
+ * The placeholder a non-static `${…}` substitution contributes to an assembled
+ * template. Any character that cannot occur in a path literal works; this one
+ * cannot occur in source at all.
+ */
+const TEMPLATE_HOLE = " ";
+const TEMPLATE_GUILD_RE = new RegExp(`${TEMPLATE_HOLE}[\\s\\S]*[\\\\/]\\.guild(?![A-Za-z0-9_-])`);
+
+/**
+ * Every place a file BUILDS a `.guild` directory path, found on the AST.
+ *
+ * This check was regex-based for three review rounds and lost every round: a call
+ * in the first argument, a multi-line call, an object literal, an inline comment
+ * carrying a quote, nested parens, and a string that faked a comment delimiter.
+ * Each patch bought one shape and leaked the next. A raw-text rule is right for a
+ * FAIL-CLOSED guard, where over-matching is the safe direction; this rule is the
+ * opposite — a miss is a violation shipping — so it parses instead.
+ *
+ * Two shapes, both unambiguous on the AST:
+ *   1. a `join` / `resolve` call — under any local alias, through `obj["join"]`,
+ *      through parens — whose argument after the first STATICALLY evaluates to
+ *      `".guild"`, i.e. `.guild` appended to some base;
+ *   2. a template literal whose assembled text puts a `.guild` path segment after
+ *      a substitution, `${cwd}/../.guild/wiki` included.
+ *
+ * Comments, formatting, nesting, renames and concatenation are all handled by
+ * construction rather than by another pattern.
+ *
+ * NOT flagged: `path.join(guildDir, "wiki")` — the `.guild` segment came from the
+ * storage API; and a bare `".guild/…"` string with no join, which is a reference,
+ * not a construction.
+ */
+function guildPathConstructions(root: string, rel: string): Array<{ line: number }> {
+  const sf = parse(root, rel);
+  if (!sf) return [];
+  const aliases = pathJoinAliases(sf);
+  const lines = new Set<number>();
+  const mark = (node: ts.Node) => {
+    lines.add(sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1);
+  };
+  eachNode(sf, (n) => {
+    if (ts.isCallExpression(n)) {
+      const callee = invokedName(n);
+      if (callee !== null && aliases.has(callee)) {
+        n.arguments.forEach((arg, i) => {
+          if (i === 0 || ts.isSpreadElement(arg)) return;
+          if (staticString(arg) === ".guild") mark(arg);
+        });
+      }
+    }
+    if (ts.isTemplateExpression(n)) {
+      let assembled = n.head.text;
+      for (const span of n.templateSpans) {
+        assembled += staticString(span.expression) ?? TEMPLATE_HOLE;
+        assembled += span.literal.text;
+      }
+      if (TEMPLATE_GUILD_RE.test(assembled)) mark(n);
+    }
+  });
+  return [...lines].sort((a, b) => a - b).map((line) => ({ line }));
+}
+
+
 function tsFiles(ctx: Ctx, prefixes: string[]): string[] {
   return under(ctx.files, ...prefixes).filter(
     (f) => (f.endsWith(".ts") || f.endsWith(".tsx")) &&
@@ -1789,6 +1945,32 @@ const CHECKS: Check[] = [
             v.push({ check: "latest-only-context-files", path: `${f}:${i + 1}`, detail: "dated update / changelog block in a prompt-loaded file" });
           }
         });
+      }
+      return v;
+    },
+  },
+  {
+    id: "no-direct-guild-join",
+    ktd: "KTD15",
+    title: "only state storage + storage-v2 construct a .guild path",
+    // The consumer migration is T12's; until then every existing construction is a
+    // declared baseline entry. What this check buys NOW is that no NEW one appears.
+    run(ctx) {
+      const v: Violation[] = [];
+      for (const f of tsFiles(ctx, [...DOMAIN_PREFIXES, "hooks/", "scripts/", "mcp-servers/"])) {
+        // A module-resource mirror is a generated byte-copy of a live file that is
+        // itself scanned here, so reporting it too would double every baseline key
+        // for zero extra signal. The live file carries the verdict.
+        if (isModuleResourceMirror(f)) continue;
+        if (f.endsWith(".test.ts") || isLayoutLawsSource(f) || isStorageAllowlisted(f)) continue;
+        if (!read(path.join(ctx.root, f)).includes(".guild")) continue;
+        for (const { line } of guildPathConstructions(ctx.root, f)) {
+          v.push({
+            check: "no-direct-guild-join",
+            path: `${f}:${line}`,
+            detail: "builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+          });
+        }
       }
       return v;
     },

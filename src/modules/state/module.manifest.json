@@ -5,7 +5,10 @@
   "kind": "substrate",
   "implementation_mode": "workflow-backed",
   "description": "Owns .guild root/path discovery, artifact paths, run replay/export, retention, and durable state helpers.",
-  "depends_on": ["kernel", "migrations"],
+  "depends_on": [
+    "kernel",
+    "migrations"
+  ],
   "owns": {
     "hooks": [
       "PreCompact:pre-compact.js",
@@ -26,7 +29,9 @@
       "lib/run-events",
       "lib/retention",
       "lib/sanitized-run-export",
-      "lib/state/ensure-storage-layout"
+      "lib/state/ensure-storage-layout",
+      "lib/state/storage",
+      "lib/state/storage-gc"
     ]
   }
 }

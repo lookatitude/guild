@@ -8,28 +8,28 @@
       "id": "PreCompact:pre-compact.js",
       "source_path": "hooks/dist/pre-compact.js",
       "resource_path": "resources/hooks/dist/pre-compact.js",
-      "sha256": "793d8b1900a30be789eaa16c7be50db1e50720b4d6976c93818ac9fb5a5d3b3a"
+      "sha256": "fd06468cda1b48111aeb547f552e90636f02da7052a69ff76ceba7e59ae07fc1"
     },
     {
       "category": "hooks",
       "id": "SessionStart:session-reanchor.js",
       "source_path": "hooks/dist/session-reanchor.js",
       "resource_path": "resources/hooks/dist/session-reanchor.js",
-      "sha256": "634b011357320ceb61d02be2567f0dd5667c479b74c689cff55a6b7f44c925c9"
+      "sha256": "7889366909a5e949e8457ec0a4c0ba0842cf69a6f9169ad2fabf98c8ed77b82f"
     },
     {
       "category": "hooks",
       "id": "Stop:lean-lead-guard.js",
       "source_path": "hooks/dist/lean-lead-guard.js",
       "resource_path": "resources/hooks/dist/lean-lead-guard.js",
-      "sha256": "b566e0d81e8805d2328d1dca04107f1ac99df83dbe24750d06fd435f27f19294"
+      "sha256": "90c174fcad955b8f59794bdcc3990efa5b36a228f4d7d4376e7d088167a98cb3"
     },
     {
       "category": "hooks",
       "id": "Stop:lifecycle-gate.js",
       "source_path": "hooks/dist/lifecycle-gate.js",
       "resource_path": "resources/hooks/dist/lifecycle-gate.js",
-      "sha256": "d04b3247a81f55ff7cb0054028ab86a95791d5734e0d21e7e66f0bb69407f60a"
+      "sha256": "e74b3f5d21c649b4090e361e51d8546603398126db3295b3a8da1bf9c5010a95"
     },
     {
       "category": "scripts",
@@ -114,6 +114,20 @@
       "source_path": "scripts/lib/state/ensure-storage-layout.ts",
       "resource_path": "resources/scripts/lib/state/ensure-storage-layout.ts",
       "sha256": "040561ed95491b47dc0bb1e5d5b4771af4783bc613ca242cb0d2729b360e8dc5"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/state/storage",
+      "source_path": "scripts/lib/state/storage.ts",
+      "resource_path": "resources/scripts/lib/state/storage.ts",
+      "sha256": "2db9aec87a14911a2739023e25690da4f2bcb65e9bd018b82a7fb655a4fffe71"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/state/storage-gc",
+      "source_path": "scripts/lib/state/storage-gc.ts",
+      "resource_path": "resources/scripts/lib/state/storage-gc.ts",
+      "sha256": "a86839a540408c58ec9252ef3563b6719e9f6bc90d9e79c8364e8c6141f636df"
     },
     {
       "category": "scripts",

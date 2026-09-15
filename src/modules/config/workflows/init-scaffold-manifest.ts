@@ -53,7 +53,7 @@ export type ScaffoldClobber = "never" | "reconcile-only";
  * resolve it against the target `cwd`. Absolute paths are never stored here.
  */
 export interface ScaffoldEntry {
-  /** repo-root-relative POSIX path, e.g. ".guild/settings.json" or ".guild/raw/". */
+  /** repo-root-relative POSIX path, e.g. ".guild/settings.json" or ".guild/wiki/". */
   readonly path: string;
   /** "file" or "dir". Directory paths conventionally end in "/". */
   readonly kind: "file" | "dir";
@@ -80,6 +80,16 @@ export interface ScaffoldEntry {
   readonly expected_hash?: string;
   /** Human note for the repair report / docs. Not used for matching. */
   readonly description?: string;
+  /**
+   * R23 / KTD15: the entry is created at FIRST DURABLE WRITE, never at init.
+   * Every `empty-dir` entry and every DERIVED registry index is lazy — an empty
+   * `.guild/artifacts/audits/` and a zero-row `agents/registry.yaml` are both
+   * debris that make a fresh root look like a populated one.
+   *
+   * A lazy entry still documents WHERE the artifact lives; it just stops init
+   * from materialising it. `eagerEntriesFor(mode)` is what init writes.
+   */
+  readonly lazy?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,8 +129,9 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "file",
     source: "generated",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
     version: "guild.agents_registry.v1",
+    lazy: true,
     description: "Project/workspace-shared specialist agent registry.",
   },
   {
@@ -128,8 +139,9 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "file",
     source: "generated",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
     version: "guild.skills_registry.v1",
+    lazy: true,
     description: "Project/workspace-shared skill registry.",
   },
   {
@@ -137,8 +149,9 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "file",
     source: "generated",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
     version: "guild.workflows_registry.v1",
+    lazy: true,
     description: "Repeatable project/workspace workflow registry.",
   },
   {
@@ -146,8 +159,9 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "file",
     source: "generated",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
     version: "guild.loops_registry.v1",
+    lazy: true,
     description: "Custom loop registry.",
   },
   {
@@ -155,7 +169,8 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Holds per-run init records (.guild/init/<slug>.md). The dir is the requirement; the slug file is per-run.",
   },
   {
@@ -163,17 +178,20 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "file",
     source: "template",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
     version: "guild.wiki_index.v1",
+    lazy: true,
     description: "Wiki entrypoint; user-authored knowledge accretes here.",
   },
   {
-    path: ".guild/raw/",
+    path: ".guild/knowledge/sources/",
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
-    description: "Immutable source inputs + checksums.",
+    repair_required: false,
+    lazy: true,
+    description:
+      "Ingested source blobs — GuildStorage.definition(\"sources\", <id>) (KTD47/R59). Replaces the retired raw tree.",
   },
   {
     path: ".guild/settings.json",
@@ -189,7 +207,8 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Structured knowledge graph artifacts.",
   },
   {
@@ -197,23 +216,17 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Structured knowledge indexes.",
-  },
-  {
-    path: ".guild/knowledge/sources/",
-    kind: "dir",
-    source: "empty-dir",
-    clobber: "never",
-    repair_required: true,
-    description: "Source material and checksums promoted into knowledge.",
   },
   {
     path: ".guild/knowledge/candidates/",
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Human-gated knowledge promotion candidates.",
   },
   {
@@ -221,7 +234,8 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Durable summarized memory promoted from runs.",
   },
   {
@@ -229,7 +243,8 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Reusable lessons promoted from reflections and run analysis.",
   },
   {
@@ -237,8 +252,9 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "file",
     source: "generated",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
     version: "guild.recall_index.v1",
+    lazy: true,
     description: "Project/workspace recall index placeholder.",
   },
   {
@@ -246,7 +262,8 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Active initiative records.",
   },
   {
@@ -254,7 +271,8 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Archived initiative records.",
   },
   {
@@ -262,8 +280,9 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "file",
     source: "generated",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
     version: "guild.initiatives_registry.v1",
+    lazy: true,
     description: "Initiative registry for this Guild root.",
   },
   {
@@ -271,7 +290,8 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Run records and replay evidence.",
   },
   {
@@ -279,8 +299,9 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "file",
     source: "generated",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
     version: "guild.teams_registry.v1",
+    lazy: true,
     description: "Reusable team composition registry.",
   },
   {
@@ -288,7 +309,8 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Shared reports not yet promoted to wiki/memory.",
   },
   {
@@ -296,7 +318,8 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Shared audit outputs.",
   },
   {
@@ -304,7 +327,8 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Shared handoff artifacts.",
   },
   {
@@ -312,7 +336,8 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Generated artifacts reviewed for sharing.",
   },
   {
@@ -320,7 +345,8 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Workspace relationship files; inert for standalone projects.",
   },
   {
@@ -329,6 +355,7 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     source: "empty-dir",
     clobber: "never",
     repair_required: false,
+    lazy: true,
     description: "Host-local capability state. Usually ignored unless explicitly shared.",
   },
   {
@@ -336,7 +363,8 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Compatibility home for existing Guild index artifacts.",
   },
   {
@@ -344,8 +372,9 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     kind: "file",
     source: "generated",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
     version: "guild.codebase_map.v1",
+    lazy: true,
     description: "Cheap-scan CodebaseMap produced by init/learn-map.",
   },
   {
@@ -355,6 +384,7 @@ const STANDARD_ROOT_FLOOR: readonly ScaffoldEntry[] = deepFreeze([
     clobber: "never",
     repair_required: false,
     version: "guild.architecture_map.v1",
+    lazy: true,
     description: "Brownfield-only architecture-map stub. Seeded for brownfield init; absence is not a broken install.",
   },
 ] as const);
@@ -388,8 +418,9 @@ const WORKSPACE_EXTRAS: readonly ScaffoldEntry[] = deepFreeze([
     kind: "file",
     source: "generated",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
     version: "guild.workspace_children.v1",
+    lazy: true,
     description: "Workspace child project registry.",
   },
   {
@@ -397,8 +428,9 @@ const WORKSPACE_EXTRAS: readonly ScaffoldEntry[] = deepFreeze([
     kind: "file",
     source: "generated",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
     version: "guild.workspace_relationships.v1",
+    lazy: true,
     description: "Cross-project relationship and release-coupling registry.",
   },
   {
@@ -406,7 +438,8 @@ const WORKSPACE_EXTRAS: readonly ScaffoldEntry[] = deepFreeze([
     kind: "dir",
     source: "empty-dir",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
+    lazy: true,
     description: "Cross-project coordination knowledge (workspace-only).",
   },
   {
@@ -414,8 +447,9 @@ const WORKSPACE_EXTRAS: readonly ScaffoldEntry[] = deepFreeze([
     kind: "file",
     source: "generated",
     clobber: "never",
-    repair_required: true,
+    repair_required: false,
     version: "guild.initiatives_registry.v1",
+    lazy: true,
     description: "Workspace initiative registry (scope resolution for initiative_default inheritance).",
   },
 ] as const);
@@ -455,6 +489,30 @@ export const repairRequired: readonly ScaffoldEntry[] = Object.freeze(
 /** Full scaffold for a given mode. */
 export function scaffoldFor(mode: ScaffoldMode): readonly ScaffoldEntry[] {
   return mode === "workspace_root" ? workspaceRoot : singleProject;
+}
+
+/**
+ * R23 / KTD15 — what init ACTUALLY writes. Everything else in the manifest is
+ * `lazy` and is materialised by the first durable write through `GuildStorage`.
+ *
+ * The floor is deliberately tiny: root identity plus scoped config (and, for a
+ * workspace root, the two files that make it a workspace). A fresh `.guild/` with
+ * two files is honest; a fresh `.guild/` with 30 empty directories and five
+ * zero-row registries is a tree that looks used and is not.
+ */
+export function eagerEntriesFor(
+  mode: ScaffoldMode | "workspace_child",
+): readonly ScaffoldEntry[] {
+  const base = mode === "workspace_root" ? workspaceRoot : singleProject;
+  return base.filter((e) => e.lazy !== true);
+}
+
+/** The lazy remainder: documented homes that init must NOT create. */
+export function lazyEntriesFor(
+  mode: ScaffoldMode | "workspace_child",
+): readonly ScaffoldEntry[] {
+  const base = mode === "workspace_root" ? workspaceRoot : singleProject;
+  return base.filter((e) => e.lazy === true);
 }
 
 /**

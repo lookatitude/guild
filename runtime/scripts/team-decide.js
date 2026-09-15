@@ -10576,12 +10576,12 @@ function safeArrayLength(value) {
 function isObjectLike(value) {
   return typeof value === "object" && value !== null && !safeIsArray(value);
 }
-function issue(path27, code, message) {
-  return { path: path27, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
+function issue(path28, code, message) {
+  return { path: path28, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
 }
-function pushIssue(issues, path27, code, message) {
+function pushIssue(issues, path28, code, message) {
   if (issues.length >= MAX_ISSUES) return;
-  issues.push(issue(path27, code, message));
+  issues.push(issue(path28, code, message));
 }
 function sortIssues(issues) {
   return [...issues].sort(
@@ -10592,15 +10592,15 @@ function canonicalDocumentJson(value) {
   const errors = [];
   const active = /* @__PURE__ */ new Set();
   let nodes = 0;
-  const walk = (node, path27, depth) => {
+  const walk = (node, path28, depth) => {
     if (errors.length >= MAX_ISSUES) return null;
     if (depth > MAX_CANONICAL_DEPTH) {
-      pushIssue(errors, path27, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
+      pushIssue(errors, path28, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
       return null;
     }
     nodes += 1;
     if (nodes > MAX_CANONICAL_NODES) {
-      pushIssue(errors, path27, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
+      pushIssue(errors, path28, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
       return null;
     }
     if (node === null) return "null";
@@ -10609,7 +10609,7 @@ function canonicalDocumentJson(value) {
     if (kind === "string") {
       const text = node;
       if (text.length > MAX_STRING_LENGTH) {
-        pushIssue(errors, path27, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
+        pushIssue(errors, path28, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
         return null;
       }
       return JSON.stringify(text);
@@ -10617,17 +10617,17 @@ function canonicalDocumentJson(value) {
     if (kind === "number") {
       const num = node;
       if (!Number.isFinite(num)) {
-        pushIssue(errors, path27, "non_finite_number", "numbers must be finite");
+        pushIssue(errors, path28, "non_finite_number", "numbers must be finite");
         return null;
       }
       return Object.is(num, -0) ? "0" : String(num);
     }
     if (kind !== "object") {
-      pushIssue(errors, path27, "unsupported_type", `${kind} has no canonical JSON form`);
+      pushIssue(errors, path28, "unsupported_type", `${kind} has no canonical JSON form`);
       return null;
     }
     if (active.has(node)) {
-      pushIssue(errors, path27, "cycle_detected", "value contains a cycle");
+      pushIssue(errors, path28, "cycle_detected", "value contains a cycle");
       return null;
     }
     active.add(node);
@@ -10635,26 +10635,26 @@ function canonicalDocumentJson(value) {
       if (safeIsArray(node)) {
         const length = safeArrayLength(node);
         if (length.ok === false) {
-          pushIssue(errors, path27, "array_length_unreadable", length.reason);
+          pushIssue(errors, path28, "array_length_unreadable", length.reason);
           return null;
         }
         if (length.length > MAX_ARRAY_ITEMS) {
-          pushIssue(errors, path27, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
+          pushIssue(errors, path28, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
           return null;
         }
         const parts2 = [];
         for (let index = 0; index < length.length; index += 1) {
           const key = String(index);
           if (!safeHasOwn(node, key)) {
-            pushIssue(errors, `${path27}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
+            pushIssue(errors, `${path28}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
             return null;
           }
           const read = safeGet(node, key);
           if (read.ok === false) {
-            pushIssue(errors, `${path27}[${index}]`, "property_read_threw", read.reason);
+            pushIssue(errors, `${path28}[${index}]`, "property_read_threw", read.reason);
             return null;
           }
-          const encoded = walk(read.value, `${path27}[${index}]`, depth + 1);
+          const encoded = walk(read.value, `${path28}[${index}]`, depth + 1);
           if (encoded === null) return null;
           parts2.push(encoded);
         }
@@ -10662,11 +10662,11 @@ function canonicalDocumentJson(value) {
       }
       const keys = safeOwnKeys(node);
       if (keys.ok === false) {
-        pushIssue(errors, path27, "own_keys_threw", keys.reason);
+        pushIssue(errors, path28, "own_keys_threw", keys.reason);
         return null;
       }
       if (keys.keys.length > MAX_OBJECT_KEYS) {
-        pushIssue(errors, path27, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
+        pushIssue(errors, path28, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
         return null;
       }
       const sorted = [...keys.keys].sort();
@@ -10674,14 +10674,14 @@ function canonicalDocumentJson(value) {
       for (const key of sorted) {
         const read = safeGet(node, key);
         if (read.ok === false) {
-          pushIssue(errors, `${path27}.${key}`, "property_read_threw", read.reason);
+          pushIssue(errors, `${path28}.${key}`, "property_read_threw", read.reason);
           return null;
         }
         if (read.value === void 0) {
-          pushIssue(errors, `${path27}.${key}`, "undefined_value", "undefined has no canonical JSON form");
+          pushIssue(errors, `${path28}.${key}`, "undefined_value", "undefined has no canonical JSON form");
           return null;
         }
-        const encoded = walk(read.value, `${path27}.${key}`, depth + 1);
+        const encoded = walk(read.value, `${path28}.${key}`, depth + 1);
         if (encoded === null) return null;
         parts.push(`${JSON.stringify(key)}:${encoded}`);
       }
@@ -10737,38 +10737,38 @@ var init_document_safe = __esm({
 });
 
 // src/modules/documents/workflows/document-records.ts
-function readShape(issues, value, path27, allowed) {
+function readShape(issues, value, path28, allowed) {
   if (value === null || typeof value !== "object") {
-    pushIssue(issues, path27, "not_an_object", `${path27} must be an object`);
+    pushIssue(issues, path28, "not_an_object", `${path28} must be an object`);
     return false;
   }
   if (safeIsArray(value)) {
-    pushIssue(issues, path27, "not_an_object", `${path27} must be an object, not an array`);
+    pushIssue(issues, path28, "not_an_object", `${path28} must be an object, not an array`);
     return false;
   }
   const keys = safeOwnKeys(value);
   if (keys.ok === false) {
-    pushIssue(issues, path27, "own_keys_threw", `${path27}: ${keys.reason}`);
+    pushIssue(issues, path28, "own_keys_threw", `${path28}: ${keys.reason}`);
     return false;
   }
   const allowedSet = new Set(allowed);
   let ok = true;
   for (const key of [...keys.keys].sort()) {
     if (!allowedSet.has(key)) {
-      pushIssue(issues, `${path27}.${key}`, "unexpected_key", `${path27}.${key} is not part of the closed schema`);
+      pushIssue(issues, `${path28}.${key}`, "unexpected_key", `${path28}.${key} is not part of the closed schema`);
       ok = false;
     }
   }
   for (const key of allowed) {
     if (!safeHasOwn(value, key)) {
-      pushIssue(issues, `${path27}.${key}`, "missing_field", `${path27}.${key} is required`);
+      pushIssue(issues, `${path28}.${key}`, "missing_field", `${path28}.${key} is required`);
       ok = false;
     }
   }
   return ok;
 }
-function readString(issues, parent, path27, key, options = {}) {
-  const fieldPath = `${path27}.${key}`;
+function readString(issues, parent, path28, key, options = {}) {
+  const fieldPath = `${path28}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -10803,8 +10803,8 @@ function readString(issues, parent, path27, key, options = {}) {
   }
   return value;
 }
-function readArray(issues, parent, path27, key, options = {}) {
-  const fieldPath = `${path27}.${key}`;
+function readArray(issues, parent, path28, key, options = {}) {
+  const fieldPath = `${path28}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -10847,10 +10847,10 @@ function readArray(issues, parent, path27, key, options = {}) {
   }
   return ok ? items : null;
 }
-function readStringArray(issues, parent, path27, key, options = {}) {
-  const items = readArray(issues, parent, path27, key, options);
+function readStringArray(issues, parent, path28, key, options = {}) {
+  const items = readArray(issues, parent, path28, key, options);
   if (items === null) return null;
-  const fieldPath = `${path27}.${key}`;
+  const fieldPath = `${path28}.${key}`;
   const out = [];
   let ok = true;
   for (let index = 0; index < items.length; index += 1) {
@@ -10876,10 +10876,10 @@ function readStringArray(issues, parent, path27, key, options = {}) {
   }
   return ok ? out : null;
 }
-function readItemArray(issues, parent, path27, key, options, readItem) {
-  const items = readArray(issues, parent, path27, key, options);
+function readItemArray(issues, parent, path28, key, options, readItem) {
+  const items = readArray(issues, parent, path28, key, options);
   if (items === null) return null;
-  const fieldPath = `${path27}.${key}`;
+  const fieldPath = `${path28}.${key}`;
   const out = [];
   const firstIndexById = /* @__PURE__ */ new Map();
   let ok = true;
@@ -10906,13 +10906,13 @@ function readItemArray(issues, parent, path27, key, options, readItem) {
   }
   return ok ? out : null;
 }
-function readProvenance(issues, parent, path27) {
+function readProvenance(issues, parent, path28) {
   const read = safeGet(parent, "provenance");
   if (read.ok === false) {
-    pushIssue(issues, `${path27}.provenance`, "property_read_threw", `${path27}.provenance: property read threw`);
+    pushIssue(issues, `${path28}.provenance`, "property_read_threw", `${path28}.provenance: property read threw`);
     return null;
   }
-  const provenancePath = `${path27}.provenance`;
+  const provenancePath = `${path28}.provenance`;
   if (!readShape(issues, read.value, provenancePath, PROVENANCE_KEYS)) return null;
   const source = read.value;
   const authorId = readString(issues, source, provenancePath, "author_id", {
@@ -10953,10 +10953,10 @@ function readProvenance(issues, parent, path27) {
     source: provenanceSource
   };
 }
-function readPlanBody(issues, body, path27) {
-  if (!readShape(issues, body, path27, ["objectives", "steps"])) return null;
-  const objectives = readStringArray(issues, body, path27, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
-  const steps = readItemArray(issues, body, path27, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
+function readPlanBody(issues, body, path28) {
+  if (!readShape(issues, body, path28, ["objectives", "steps"])) return null;
+  const objectives = readStringArray(issues, body, path28, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
+  const steps = readItemArray(issues, body, path28, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
     if (!readShape(itemIssues, item, itemPath, ["id", "title", "status"])) return null;
     const id = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
     const title = readString(itemIssues, item, itemPath, "title", { maxLength: 500 });
@@ -10967,12 +10967,12 @@ function readPlanBody(issues, body, path27) {
   if (objectives === null || steps === null) return null;
   return { objectives, steps };
 }
-function readSpecBody(issues, body, path27) {
-  if (!readShape(issues, body, path27, ["requirements"])) return null;
+function readSpecBody(issues, body, path28) {
+  if (!readShape(issues, body, path28, ["requirements"])) return null;
   const requirements = readItemArray(
     issues,
     body,
-    path27,
+    path28,
     "requirements",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -10989,22 +10989,22 @@ function readSpecBody(issues, body, path27) {
   if (requirements === null) return null;
   return { requirements };
 }
-function readHandoffBody(issues, body, path27) {
-  if (!readShape(issues, body, path27, ["task_id", "status", "artifacts", "issues"])) return null;
-  const taskId = readString(issues, body, path27, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
-  const status = readString(issues, body, path27, "status", { enumOf: HANDOFF_STATUSES });
-  const artifacts = readStringArray(issues, body, path27, "artifacts", { max: 256, itemMaxLength: 1e3 });
-  const handoffIssues = readStringArray(issues, body, path27, "issues", { max: 256, itemMaxLength: 1e3 });
+function readHandoffBody(issues, body, path28) {
+  if (!readShape(issues, body, path28, ["task_id", "status", "artifacts", "issues"])) return null;
+  const taskId = readString(issues, body, path28, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+  const status = readString(issues, body, path28, "status", { enumOf: HANDOFF_STATUSES });
+  const artifacts = readStringArray(issues, body, path28, "artifacts", { max: 256, itemMaxLength: 1e3 });
+  const handoffIssues = readStringArray(issues, body, path28, "issues", { max: 256, itemMaxLength: 1e3 });
   if (taskId === null || status === null || artifacts === null || handoffIssues === null) return null;
   return { task_id: taskId, status, artifacts, issues: handoffIssues };
 }
-function readReviewBody(issues, body, path27) {
-  if (!readShape(issues, body, path27, ["verdict", "findings"])) return null;
-  const verdict = readString(issues, body, path27, "verdict", { enumOf: REVIEW_VERDICTS });
+function readReviewBody(issues, body, path28) {
+  if (!readShape(issues, body, path28, ["verdict", "findings"])) return null;
+  const verdict = readString(issues, body, path28, "verdict", { enumOf: REVIEW_VERDICTS });
   const findings = readItemArray(
     issues,
     body,
-    path27,
+    path28,
     "findings",
     { max: 256 },
     (itemIssues, item, itemPath) => {
@@ -11019,13 +11019,13 @@ function readReviewBody(issues, body, path27) {
   if (verdict === null || findings === null) return null;
   return { verdict, findings };
 }
-function readVerifyBody(issues, body, path27) {
-  if (!readShape(issues, body, path27, ["outcome", "checks"])) return null;
-  const outcome = readString(issues, body, path27, "outcome", { enumOf: VERIFY_OUTCOMES });
+function readVerifyBody(issues, body, path28) {
+  if (!readShape(issues, body, path28, ["outcome", "checks"])) return null;
+  const outcome = readString(issues, body, path28, "outcome", { enumOf: VERIFY_OUTCOMES });
   const checks = readItemArray(
     issues,
     body,
-    path27,
+    path28,
     "checks",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -11629,10 +11629,10 @@ function requiredRecord(errors, parent, key) {
   }
   return value;
 }
-function requiredString(errors, parent, path27, key) {
+function requiredString(errors, parent, path28, key) {
   const value = parent[key];
   if (typeof value !== "string" || value.length === 0) {
-    pushIssue(errors, `${path27}.${key}`, "missing_field", `${key} must be a non-empty string`);
+    pushIssue(errors, `${path28}.${key}`, "missing_field", `${key} must be a non-empty string`);
     return null;
   }
   return value;
@@ -11645,23 +11645,23 @@ function requiredArray(errors, parent, key) {
   }
   return value;
 }
-function validateStringArray(errors, values, path27) {
+function validateStringArray(errors, values, path28) {
   if (values === null) return;
   values.forEach((value, index) => {
     if (typeof value !== "string" || value.length === 0) {
-      pushIssue(errors, `${path27}[${index}]`, "wrong_type", `${path27} entries must be non-empty strings`);
+      pushIssue(errors, `${path28}[${index}]`, "wrong_type", `${path28} entries must be non-empty strings`);
     }
   });
 }
-function canonicalReceiptInstant(errors, value, path27) {
+function canonicalReceiptInstant(errors, value, path28) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
-    pushIssue(errors, path27, "invalid_timestamp", `${path27} must be an ISO-8601 timestamp`);
+    pushIssue(errors, path28, "invalid_timestamp", `${path28} must be an ISO-8601 timestamp`);
     return null;
   }
   const parsed = Date.parse(value);
   const expectedCanonical = value.includes(".") ? value : value.replace(/Z$/, ".000Z");
   if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== expectedCanonical) {
-    pushIssue(errors, path27, "invalid_timestamp", `${path27} must name a real UTC calendar instant`);
+    pushIssue(errors, path28, "invalid_timestamp", `${path28} must name a real UTC calendar instant`);
     return null;
   }
   return expectedCanonical;
@@ -12728,11 +12728,11 @@ function exclusionSentinelPath(runDir2) {
   return (0, import_node_path.join)(runDir2, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir2) {
-  const path27 = stableLockPath(runDir2);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path27), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path27)) return;
+  const path28 = stableLockPath(runDir2);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path28), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path28)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path27, "wx");
+    const fd = (0, import_node_fs.openSync)(path28, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -12830,9 +12830,9 @@ function appendEvent(runDir2, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId2 = opts.laneId ?? "global";
-    const path27 = laneFallbackPath(runDir2, laneId2);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path27), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path27, "a");
+    const path28 = laneFallbackPath(runDir2, laneId2);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path28), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path28, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -24689,6 +24689,273 @@ var init_index_cache = __esm({
   }
 });
 
+// src/modules/state/workflows/storage-policy.ts
+var path25, NON_DURABLE_CLASSES, DURABLE_CLASSES, KTD16_FROZEN_PREFIXES, DURABLE_SUBTREES;
+var init_storage_policy = __esm({
+  "src/modules/state/workflows/storage-policy.ts"() {
+    path25 = __toESM(require("node:path"));
+    init_kernel();
+    NON_DURABLE_CLASSES = sealSet(
+      ["runtime", "cache", "managed-resource", "temporary"],
+      "NON_DURABLE_CLASSES"
+    );
+    DURABLE_CLASSES = sealSet(
+      ["canonical", "durable-record"],
+      "DURABLE_CLASSES"
+    );
+    KTD16_FROZEN_PREFIXES = deepFreeze([
+      "runs",
+      "analysis",
+      "recommendations"
+    ]);
+    DURABLE_SUBTREES = deepFreeze({
+      /** Canonical knowledge (KTD35/KTD70). */
+      knowledge: "wiki",
+      /**
+       * The definition tree root is `.guild/` itself: `agents/`, `skills/` and `teams/`
+       * already sit there (KTD20).
+       */
+      definitionsRoot: "",
+      /**
+       * `definition("sources", id)` — the one logical name that maps elsewhere, onto
+       * the durable sources tree that already exists, so R59 does not invent a third home.
+       */
+      sources: path25.join("knowledge", "sources"),
+      initiatives: "initiatives",
+      /** KTD16 freeze. */
+      runs: "runs",
+      artifacts: "artifacts"
+    });
+  }
+});
+
+// src/modules/state/workflows/storage-artifact-registry.ts
+var STORAGE_ARTIFACT_REGISTRY, BY_ID;
+var init_storage_artifact_registry = __esm({
+  "src/modules/state/workflows/storage-artifact-registry.ts"() {
+    init_kernel();
+    init_storage_policy();
+    STORAGE_ARTIFACT_REGISTRY = deepFreeze([
+      // ── canonical: the knowledge a user would mourn ───────────────────────────
+      {
+        id: "root-identity",
+        storageClass: "canonical",
+        scope: "project",
+        shareable: true,
+        rebuildable: false,
+        retention: { kind: "permanent" },
+        cleanupOwner: "never",
+        description: ".guild/guild.yaml \u2014 root identity (workspace or project)."
+      },
+      {
+        id: "project-config",
+        storageClass: "canonical",
+        scope: "project",
+        shareable: true,
+        rebuildable: false,
+        retention: { kind: "permanent" },
+        cleanupOwner: "never",
+        description: ".guild/settings.json \u2014 policy-only durable config (U-CFG owns the split)."
+      },
+      {
+        id: "wiki-page",
+        storageClass: "canonical",
+        scope: "project",
+        shareable: true,
+        rebuildable: false,
+        retention: { kind: "permanent" },
+        cleanupOwner: "never",
+        description: ".guild/wiki/** \u2014 synthesized knowledge, decisions, standards, glossary."
+      },
+      {
+        id: "definition-agent",
+        storageClass: "canonical",
+        scope: "project",
+        shareable: true,
+        rebuildable: false,
+        retention: { kind: "permanent" },
+        cleanupOwner: "never",
+        description: ".guild/agents/*.md \u2014 minted specialist profiles (KTD20); never overwritten by feedstock."
+      },
+      {
+        id: "definition-skill",
+        storageClass: "canonical",
+        scope: "project",
+        shareable: true,
+        rebuildable: false,
+        retention: { kind: "permanent" },
+        cleanupOwner: "never",
+        description: ".guild/skills/<name>/SKILL.md \u2014 project-authored skills (KTD20)."
+      },
+      {
+        id: "definition-source",
+        storageClass: "durable-record",
+        scope: "project",
+        shareable: false,
+        rebuildable: false,
+        retention: { kind: "permanent" },
+        cleanupOwner: "never",
+        description: 'definition("sources", <id>) \u2014 ingested blobs kept as durable sources (KTD47/R59). Replaces the retired raw sources tree.'
+      },
+      {
+        id: "initiative-record",
+        storageClass: "durable-record",
+        scope: "project",
+        shareable: true,
+        rebuildable: false,
+        retention: { kind: "until-archive" },
+        cleanupOwner: "initiative-archive",
+        description: ".guild/initiatives/{active,archived}/** \u2014 durable work records."
+      },
+      {
+        id: "run-record",
+        storageClass: "durable-record",
+        scope: "project",
+        shareable: true,
+        rebuildable: false,
+        retention: { kind: "until-archive" },
+        cleanupOwner: "initiative-archive",
+        description: ".guild/runs/<run-id>/** \u2014 the KTD16 frozen run record the benchmark reads (logs/v1.4-events.jsonl)."
+      },
+      {
+        id: "analysis-artifact",
+        storageClass: "durable-record",
+        scope: "project",
+        shareable: true,
+        rebuildable: true,
+        retention: { kind: "until-archive" },
+        cleanupOwner: "initiative-archive",
+        description: ".guild/analysis/** and .guild/recommendations/** \u2014 KTD16 producer outputs."
+      },
+      // ── runtime: needed while something runs, not truth afterwards ────────────
+      {
+        id: "layout-journal",
+        storageClass: "runtime",
+        scope: "local",
+        shareable: false,
+        rebuildable: false,
+        retention: { kind: "ttl", ttl_hours: 24 * 30 },
+        cleanupOwner: "cache-gc",
+        description: "<state>/roots/<root-id>/journal/** \u2014 the layout-upgrade journal, deliberately OUTSIDE .guild (KTD23; T07 writes it)."
+      },
+      {
+        id: "run-lease",
+        storageClass: "runtime",
+        scope: "local",
+        shareable: false,
+        rebuildable: false,
+        retention: { kind: "run-scoped" },
+        cleanupOwner: "run-close",
+        description: "<state>/roots/<root-id>/runs/<run-id>/** \u2014 leases and live execution state."
+      },
+      // ── cache: derived, rebuildable, off the repo ─────────────────────────────
+      {
+        id: "index-sqlite",
+        storageClass: "cache",
+        scope: "local",
+        shareable: false,
+        rebuildable: true,
+        retention: { kind: "ttl", ttl_hours: 24 * 30 },
+        cleanupOwner: "cache-gc",
+        description: "BM25/recall SQLite index \u2014 rebuildable from the wiki (was .guild/index.sqlite)."
+      },
+      {
+        id: "codebase-map",
+        storageClass: "cache",
+        scope: "local",
+        shareable: false,
+        rebuildable: true,
+        retention: { kind: "ttl", ttl_hours: 24 * 14 },
+        cleanupOwner: "cache-gc",
+        description: "CodebaseMap cheap-scan output \u2014 rebuildable by learn-map."
+      },
+      {
+        id: "knowledge-graph",
+        storageClass: "cache",
+        scope: "local",
+        shareable: false,
+        rebuildable: true,
+        retention: { kind: "ttl", ttl_hours: 24 * 30 },
+        cleanupOwner: "cache-gc",
+        description: "KnowledgeGraph + knowledge-links recall projection \u2014 rebuildable by learn-graph."
+      },
+      {
+        id: "model-catalog",
+        storageClass: "cache",
+        scope: "local",
+        shareable: false,
+        rebuildable: true,
+        retention: { kind: "ttl", ttl_hours: 24 * 7 },
+        cleanupOwner: "cache-gc",
+        description: "Provider/model catalog \u2014 refetched on miss; never durable truth (KTD22)."
+      },
+      // ── managed resources: things with an owner and a reaper ──────────────────
+      {
+        id: "lane-worktree",
+        storageClass: "managed-resource",
+        scope: "local",
+        shareable: false,
+        rebuildable: true,
+        retention: { kind: "run-scoped" },
+        cleanupOwner: "resource-reaper",
+        description: "<worktrees>/<root-id>/<run-id>/<lane-id> \u2014 managed lane worktree; dirty trees are preserved."
+      },
+      // ── temporary: scratch, deleted on close ──────────────────────────────────
+      {
+        id: "run-scratch",
+        storageClass: "temporary",
+        scope: "local",
+        shareable: false,
+        rebuildable: true,
+        retention: { kind: "run-scoped" },
+        cleanupOwner: "run-close",
+        description: "temporary(<run-id>) \u2014 research/experiment working files (KTD34/R51). Never a durable tree; deleted by closeRun."
+      },
+      {
+        id: "session-scratch",
+        storageClass: "temporary",
+        scope: "local",
+        shareable: false,
+        rebuildable: true,
+        retention: { kind: "ttl", ttl_hours: 24 },
+        cleanupOwner: "scratch-janitor",
+        description: "temporary() with no run \u2014 swept by the 24h janitor after a crash or reboot."
+      }
+    ]);
+    BY_ID = new Map(STORAGE_ARTIFACT_REGISTRY.map((p) => [p.id, p]));
+  }
+});
+
+// src/modules/state/workflows/storage-fs.ts
+var init_storage_fs = __esm({
+  "src/modules/state/workflows/storage-fs.ts"() {
+  }
+});
+
+// src/modules/state/workflows/storage-roots.ts
+var init_storage_roots = __esm({
+  "src/modules/state/workflows/storage-roots.ts"() {
+  }
+});
+
+// src/modules/state/workflows/storage-layout.ts
+var init_storage_layout = __esm({
+  "src/modules/state/workflows/storage-layout.ts"() {
+    init_guild_discovery();
+    init_storage_fs();
+    init_storage_policy();
+    init_storage_roots();
+  }
+});
+
+// src/modules/state/workflows/storage-janitor.ts
+var init_storage_janitor = __esm({
+  "src/modules/state/workflows/storage-janitor.ts"() {
+    init_storage_layout();
+    init_storage_fs();
+  }
+});
+
 // src/modules/state/index.ts
 var init_state = __esm({
   "src/modules/state/index.ts"() {
@@ -24699,6 +24966,12 @@ var init_state = __esm({
     init_guild_discovery();
     init_guild_root();
     init_index_cache();
+    init_storage_artifact_registry();
+    init_storage_fs();
+    init_storage_janitor();
+    init_storage_layout();
+    init_storage_policy();
+    init_storage_roots();
   }
 });
 
@@ -24709,12 +24982,12 @@ __export(team_decide_exports, {
 });
 module.exports = __toCommonJS(team_decide_exports);
 var fs21 = __toESM(require("fs"));
-var path26 = __toESM(require("path"));
+var path27 = __toESM(require("path"));
 init_state();
 
 // src/modules/teams/workflows/team-decision-surface.ts
 var fs20 = __toESM(require("fs"));
-var path25 = __toESM(require("path"));
+var path26 = __toESM(require("path"));
 init_state();
 init_canonical_hash();
 
@@ -25459,7 +25732,7 @@ function realTrailFs() {
   };
 }
 function teamPlanDir(cwd, runId, guildDir = ".guild") {
-  return path25.join(cwd, guildDir, "runs", runId, "team-plan");
+  return path26.join(cwd, guildDir, "runs", runId, "team-plan");
 }
 function loadPersistedDecisions(cwd, runId, phase, opts = {}) {
   const f = opts.fs ?? realTrailFs();
@@ -25468,7 +25741,7 @@ function loadPersistedDecisions(cwd, runId, phase, opts = {}) {
   const out = [];
   for (const name of f.readdir(dir)) {
     if (!name.startsWith(prefix) || !name.endsWith(".yaml")) continue;
-    const p = path25.join(dir, name);
+    const p = path26.join(dir, name);
     const raw = f.readFile(p);
     if (raw === null) continue;
     let parsed;
@@ -26017,7 +26290,7 @@ function parseFlags(argv) {
 }
 function readArtifact(p) {
   if (typeof p !== "string" || p.length === 0) throw new Error("missing file argument");
-  const abs = path26.resolve(p);
+  const abs = path27.resolve(p);
   const raw = fs21.readFileSync(abs, "utf8");
   return abs.endsWith(".json") ? JSON.parse(raw) : parseYaml(raw);
 }
@@ -26091,7 +26364,7 @@ function main(argv = process.argv.slice(2)) {
     }
     if (verb === "gate") {
       const proposal = readArtifact(f["proposal"]);
-      const cwd = typeof f["cwd"] === "string" ? path26.resolve(f["cwd"]) : process.cwd();
+      const cwd = typeof f["cwd"] === "string" ? path27.resolve(f["cwd"]) : process.cwd();
       const runId = typeof f["run_id"] === "string" ? f["run_id"] : proposal.run_id;
       const phase = typeof f["phase"] === "string" ? f["phase"] : proposal.phase;
       const decisions = loadPersistedDecisions(cwd, runId, phase);
@@ -26110,7 +26383,7 @@ function main(argv = process.argv.slice(2)) {
     }
     if (verb === "persist") {
       const proposal = readArtifact(f["proposal"]);
-      const cwd = typeof f["cwd"] === "string" ? path26.resolve(f["cwd"]) : process.cwd();
+      const cwd = typeof f["cwd"] === "string" ? path27.resolve(f["cwd"]) : process.cwd();
       const written = writeProposal(cwd, proposal);
       process.stdout.write(
         json ? JSON.stringify({ proposal_path: written, proposal_hash: proposal.proposal_hash }, null, 2) + "\n" : "persisted proposal: " + written + "\n"
@@ -26119,7 +26392,7 @@ function main(argv = process.argv.slice(2)) {
     }
     if (verb === "record") {
       const proposal = readArtifact(f["proposal"]);
-      const cwd = typeof f["cwd"] === "string" ? path26.resolve(f["cwd"]) : process.cwd();
+      const cwd = typeof f["cwd"] === "string" ? path27.resolve(f["cwd"]) : process.cwd();
       const decision = f["decision"];
       const decidedBy = f["decided_by"];
       const channel = f["channel"];

@@ -1788,7 +1788,7 @@
       "id": "projection:src/modules/state/index.ts",
       "source_path": "src/modules/state/index.ts",
       "resource_path": "resources/src/modules/state/index.ts",
-      "sha256": "5fd3bde2898d8e9e36619c3154010effa9fc5f8c7ac6c16a9fc71b700c7c5bd8",
+      "sha256": "7407c14876e685b79044dcea644c852360a7527250e4ee49ab88acbbce1328fc",
       "projection_dependency": true
     },
     {
@@ -1853,6 +1853,54 @@
       "source_path": "src/modules/state/workflows/plugin-install-guard.ts",
       "resource_path": "resources/src/modules/state/workflows/plugin-install-guard.ts",
       "sha256": "f83a4ccecd8768886ccfa6d9474f75a8c7b89346724e906e2e7bbac8c306992e",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/storage-artifact-registry.ts",
+      "source_path": "src/modules/state/workflows/storage-artifact-registry.ts",
+      "resource_path": "resources/src/modules/state/workflows/storage-artifact-registry.ts",
+      "sha256": "8d0bac14e0fab5cc0b50d8c78ee905589fde71b7bdb54f9b7101bb95cd175ffb",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/storage-fs.ts",
+      "source_path": "src/modules/state/workflows/storage-fs.ts",
+      "resource_path": "resources/src/modules/state/workflows/storage-fs.ts",
+      "sha256": "fe9cd147c7394c08968c7ad8847ff36361def73412e2c729372ca684e78af6c8",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/storage-janitor.ts",
+      "source_path": "src/modules/state/workflows/storage-janitor.ts",
+      "resource_path": "resources/src/modules/state/workflows/storage-janitor.ts",
+      "sha256": "a24ecabe8de3c3045b080de021ece4f40340fe6a8778312e26e9d3b8a5a22013",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/storage-layout.ts",
+      "source_path": "src/modules/state/workflows/storage-layout.ts",
+      "resource_path": "resources/src/modules/state/workflows/storage-layout.ts",
+      "sha256": "eeb146066dcd8aee86e0286ab7d55ab1732341c0d4bd60950833f787b1e394d3",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/storage-policy.ts",
+      "source_path": "src/modules/state/workflows/storage-policy.ts",
+      "resource_path": "resources/src/modules/state/workflows/storage-policy.ts",
+      "sha256": "c941ff8715c0c2c0297099c63908b36393bdd875d860f4640b7a4a7d8c3c59cc",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/storage-roots.ts",
+      "source_path": "src/modules/state/workflows/storage-roots.ts",
+      "resource_path": "resources/src/modules/state/workflows/storage-roots.ts",
+      "sha256": "81ba737c1dc5273a67a306092b4f33d22a0262107c5c93c988e621ae5e22c9d5",
       "projection_dependency": true
     },
     {
