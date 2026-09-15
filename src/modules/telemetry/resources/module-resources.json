@@ -15,21 +15,21 @@
       "id": "PostToolUse:capture-telemetry.js",
       "source_path": "hooks/dist/capture-telemetry.js",
       "resource_path": "resources/hooks/dist/capture-telemetry.js",
-      "sha256": "1282736ad4b82f3bd14f36d4ffdc4c9eb44c11f9cc5baf9cbe3570cdaa6b4d22"
+      "sha256": "a086203a653c7a75bccc90bd2dd1a732346b45f79f10e374373cdabccc08e28c"
     },
     {
       "category": "hooks",
       "id": "Stop:run-trace-close.js",
       "source_path": "hooks/dist/run-trace-close.js",
       "resource_path": "resources/hooks/dist/run-trace-close.js",
-      "sha256": "f56c66d899880b712033d99907b7a83ed250d61b425fee777724b0cdb8a545b3"
+      "sha256": "f8d9ab6b1d060830826f5d2535cd8236fe07b643271b192d06bfb2c347885a5a"
     },
     {
       "category": "hooks",
       "id": "UserPromptSubmit:run-trace-start.js",
       "source_path": "hooks/dist/run-trace-start.js",
       "resource_path": "resources/hooks/dist/run-trace-start.js",
-      "sha256": "2ca42c8a030ee04f502960ca06e8518be1e0692ff795ae828dba44947a551c60"
+      "sha256": "0342d5474f0166eb27b2f6a12e44caf8996820b871cfa77046ed77dffdb74f68"
     },
     {
       "category": "mcp_servers",
@@ -50,7 +50,7 @@
       "id": "hooks/dist/run-trace",
       "source_path": "hooks/dist/run-trace.js",
       "resource_path": "resources/scripts/hooks/dist/run-trace.js",
-      "sha256": "c4af99ac55b7af3c3928d52da8fae7a99cde9761dbcd425a6de7032f5995f6b4"
+      "sha256": "15403e847a35c27de876f52f89d84b4bf32b579e224ee8874dece38422e089b7"
     },
     {
       "category": "scripts",

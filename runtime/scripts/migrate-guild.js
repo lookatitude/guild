@@ -3065,10 +3065,8 @@ var require_js_yaml = __commonJS({
 });
 
 // scripts/dot-guild/migrate-guild.ts
-var path8 = __toESM(require("path"));
-
-// scripts/dot-guild/convert/index.ts
-var path7 = __toESM(require("path"));
+var fs4 = __toESM(require("fs"));
+var path6 = __toESM(require("path"));
 
 // scripts/dot-guild/convert/seams.ts
 var fs = __toESM(require("fs"));
@@ -3105,374 +3103,9 @@ var realFs = {
   },
   sha256: (p) => crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex")
 };
-var realClock = {
-  stamp: () => isoToStamp((/* @__PURE__ */ new Date()).toISOString()),
-  iso: () => (/* @__PURE__ */ new Date()).toISOString()
-};
-function isoToStamp(iso) {
-  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
-  if (!m) return iso.replace(/[^0-9A-Za-z]/g, "");
-  const [, y, mo, d, h, mi, s] = m;
-  return `${y}${mo}${d}T${h}${mi}${s}Z`;
-}
-function parseJson(content) {
-  try {
-    return { ok: true, value: JSON.parse(content) };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-}
-function parseYaml(content) {
-  try {
-    const value = yaml.load(content);
-    return { ok: true, value: value === void 0 ? null : value };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-}
-function extractSchemaVersion(head) {
-  const m = head.match(/schema_version["'\s]*[:=]\s*["']?([A-Za-z0-9_.]+)/);
-  return m ? m[1] : null;
-}
-
-// scripts/dot-guild/convert/detect.ts
-var path2 = __toESM(require("path"));
-var SCHEMA_STAMP_RE = /^guild\.[a-z0-9_]+\.v\d+$/;
-var P10_SCAN_RE = /schema_version["':\s]+guild\.[a-z0-9_]+\.v\d+/;
-var V2_STAMPS = /* @__PURE__ */ new Set([
-  "guild.run.v1",
-  "guild.provenance.v1",
-  "guild.initiatives_registry.v1",
-  "guild.workspace.v1",
-  "guild.host_capability.v1",
-  "guild.reflection.v1"
-]);
-var P10_HEAD_BYTES = 4096;
-var P10_EXTS = /* @__PURE__ */ new Set([".json", ".yaml", ".yml", ".md"]);
-function isBackupDir(name) {
-  return name.startsWith(".backup-v1-");
-}
-function isReportFile(name) {
-  return name.startsWith(".migration-report-");
-}
-var WALK_MAX_DEPTH = 25;
-var WALK_MAX_NODES = 2e4;
-function walk(fs2, dir, excludeDir, base, _depth = 0, _budget = { nodes: 0 }) {
-  if (_depth > WALK_MAX_DEPTH) return [];
-  if (_budget.nodes >= WALK_MAX_NODES) return [];
-  if (!fs2.existsSync(dir)) return [];
-  const out = [];
-  let entries;
-  try {
-    entries = fs2.readdirSync(dir);
-  } catch {
-    return out;
-  }
-  for (const e of entries) {
-    if (_budget.nodes >= WALK_MAX_NODES) break;
-    _budget.nodes += 1;
-    const full = path2.join(dir, e.name);
-    if (e.isDirectory) {
-      if (excludeDir(e.name)) continue;
-      const sub = walk(fs2, full, excludeDir, base, _depth + 1, _budget);
-      out.push(...sub);
-    } else if (e.isFile) {
-      out.push(full);
-    }
-  }
-  return out;
-}
-function v1KeysIn(obj) {
-  if (!obj || typeof obj !== "object") return [];
-  const rec = obj;
-  const hits = [];
-  if ("codex_review" in rec) hits.push("codex_review");
-  if (typeof rec["auto_approve"] === "string") hits.push("auto_approve");
-  const defaults = rec["defaults"];
-  if (defaults && typeof defaults === "object" && "agent_team" in defaults) {
-    hits.push("defaults.agent_team");
-  }
-  return hits;
-}
-function relTo(guildDir, p) {
-  return path2.relative(guildDir, p);
-}
-function readParsed(pr, p, kind, authoritative) {
-  if (!pr.fs.existsSync(p)) return void 0;
-  let content;
-  try {
-    content = pr.fs.readFileSync(p);
-  } catch {
-    pr.unparseable.push({ path: relTo(pr.guildDir, p), authoritative });
-    return void 0;
-  }
-  const res = kind === "json" ? parseJson(content) : parseYaml(content);
-  if (!res.ok) {
-    pr.unparseable.push({ path: relTo(pr.guildDir, p), authoritative });
-    return void 0;
-  }
-  return res.value;
-}
-function detect(fs2, guildDir) {
-  const evidence = [];
-  const unparseable = [];
-  const pr = { fs: fs2, guildDir, evidence, unparseable };
-  const addM1 = (p, marker, note) => evidence.push({ path: relTo(guildDir, p), marker, contributes: "M1", note });
-  const addM2 = (p, marker, note) => evidence.push({ path: relTo(guildDir, p), marker, contributes: "M2", note });
-  if (!fs2.existsSync(guildDir)) {
-    return { classification: "none", m1: false, m2: false, hasUnparseable: false, evidence, unparseable };
-  }
-  const topFiles = walk(fs2, guildDir, (name) => isBackupDir(name), guildDir);
-  if (topFiles.length === 0) {
-    return { classification: "none", m1: false, m2: false, hasUnparseable: false, evidence, unparseable };
-  }
-  const j = (rel2) => path2.join(guildDir, rel2);
-  {
-    const p = j("settings.json");
-    if (fs2.existsSync(p)) {
-      addM2(p, "P1", "settings.json exists (v2-only file)");
-      const parsed = readParsed(pr, p, "json", true);
-      for (const k of v1KeysIn(parsed)) addM1(p, "P1", `v1-only key: ${k}`);
-    }
-  }
-  {
-    const p = j("settings.local.json");
-    if (fs2.existsSync(p)) {
-      addM2(p, "P9", "settings.local.json exists (v2-era surface \u2014 F2)");
-      const parsed = readParsed(pr, p, "json", true);
-      for (const k of v1KeysIn(parsed)) addM1(p, "P9", `local-only v1 key: ${k}`);
-    }
-  }
-  {
-    const p = j("config.yml");
-    if (fs2.existsSync(p)) {
-      addM1(p, "P2", "config.yml exists (v1-only file)");
-      readParsed(pr, p, "yaml", true);
-    }
-  }
-  {
-    const p = j(path2.join("indexes", "initiatives-registry.yaml"));
-    const parsed = readParsed(pr, p, "yaml", true);
-    const sv = svOf(parsed);
-    if (sv) {
-      if (V2_STAMPS.has(sv) || SCHEMA_STAMP_RE.test(sv)) addM2(p, "P3", `schema_version: ${sv}`);
-    }
-  }
-  {
-    const p = j("workspace.json");
-    const parsed = readParsed(pr, p, "json", true);
-    const sv = svOf(parsed);
-    if (sv && (sv === "guild.workspace.v1" || SCHEMA_STAMP_RE.test(sv))) addM2(p, "P4", `schema_version: ${sv}`);
-  }
-  {
-    const runsDir = j("runs");
-    if (fs2.existsSync(runsDir)) {
-      let runEntries;
-      try {
-        runEntries = fs2.readdirSync(runsDir);
-      } catch {
-        runEntries = [];
-      }
-      for (const e of runEntries) {
-        if (!e.isDirectory) continue;
-        const runDir = path2.join(runsDir, e.name);
-        const runYaml = path2.join(runDir, "run.yaml");
-        const meta = path2.join(runDir, "metadata.json");
-        const hasRunYaml = fs2.existsSync(runYaml);
-        if (hasRunYaml) {
-          const parsed = readParsed(pr, runYaml, "yaml", true);
-          const sv = svOf(parsed);
-          if (sv === "guild.run.v1" || sv && SCHEMA_STAMP_RE.test(sv)) addM2(runYaml, "P5", `schema_version: ${sv}`);
-          else addM2(runYaml, "P5", "run.yaml present (v2 run manifest)");
-        }
-        if (fs2.existsSync(meta) && !hasRunYaml) {
-          addM1(meta, "P6", "metadata.json without sibling run.yaml (v1 run record)");
-          readParsed(pr, meta, "json", true);
-        }
-      }
-    }
-  }
-  {
-    const hostsDir = j("hosts");
-    if (fs2.existsSync(hostsDir)) {
-      let hostEntries;
-      try {
-        hostEntries = fs2.readdirSync(hostsDir);
-      } catch {
-        hostEntries = [];
-      }
-      for (const e of hostEntries) {
-        if (!e.isDirectory) continue;
-        const cap = path2.join(hostsDir, e.name, "capability.json");
-        const parsed = readParsed(pr, cap, "json", false);
-        const sv = svOf(parsed);
-        if (sv && (sv === "guild.host_capability.v1" || SCHEMA_STAMP_RE.test(sv))) addM2(cap, "P7", `schema_version: ${sv}`);
-      }
-    }
-  }
-  {
-    const refDir = j("reflections");
-    if (fs2.existsSync(refDir)) {
-      let refEntries;
-      try {
-        refEntries = fs2.readdirSync(refDir);
-      } catch {
-        refEntries = [];
-      }
-      for (const e of refEntries) {
-        if (!e.isFile || !e.name.endsWith(".md")) continue;
-        const p = path2.join(refDir, e.name);
-        let head = "";
-        try {
-          head = fs2.readFileSync(p).slice(0, P10_HEAD_BYTES);
-        } catch {
-          continue;
-        }
-        const sv = extractSchemaVersion(head);
-        if (sv && (sv === "guild.reflection.v1" || SCHEMA_STAMP_RE.test(sv))) addM2(p, "P8", `schema_version: ${sv}`);
-      }
-    }
-  }
-  {
-    const p = j("project.yaml");
-    const parsed = readParsed(pr, p, "yaml", true);
-    if (hasWikiShareMode(parsed)) addM1(p, "P11", "project.yaml wiki.share_mode (v1 key \u2014 RF1)");
-  }
-  {
-    const files = walk(
-      fs2,
-      guildDir,
-      (name) => isBackupDir(name),
-      guildDir
-    );
-    for (const f of files) {
-      const base = path2.basename(f);
-      const ext = path2.extname(f).toLowerCase();
-      if (isBackupDir(base) || isReportFile(base)) continue;
-      if (base === "events.ndjson" || f.includes(`${path2.sep}logs${path2.sep}`) || ext === ".jsonl") continue;
-      if (!P10_EXTS.has(ext)) continue;
-      let head = "";
-      try {
-        head = fs2.readFileSync(f).slice(0, P10_HEAD_BYTES);
-      } catch {
-        continue;
-      }
-      if (P10_SCAN_RE.test(head)) {
-        const sv = extractSchemaVersion(head) ?? "guild.*.vN";
-        addM2(f, "P10", `generic scan hit: ${sv}`);
-      }
-    }
-  }
-  const hasUnparseable = unparseable.some((u) => u.authoritative);
-  if (hasUnparseable) {
-    return { classification: "corrupt", m1: false, m2: false, hasUnparseable: true, evidence, unparseable };
-  }
-  const m1 = evidence.some((e) => e.contributes === "M1");
-  const m2 = evidence.some((e) => e.contributes === "M2");
-  let classification;
-  if (m2 && !m1) classification = "v2";
-  else if (m1 && !m2) classification = "v1";
-  else if (m1 && m2) classification = "mixed";
-  else classification = "none";
-  return { classification, m1, m2, hasUnparseable: false, evidence, unparseable };
-}
-function svOf(parsed) {
-  if (parsed && typeof parsed === "object" && "schema_version" in parsed) {
-    const v = parsed["schema_version"];
-    return typeof v === "string" ? v : null;
-  }
-  return null;
-}
-function hasWikiShareMode(parsed) {
-  if (!parsed || typeof parsed !== "object") return false;
-  const rec = parsed;
-  const wiki = rec["wiki"];
-  if (wiki && typeof wiki === "object" && "share_mode" in wiki) return true;
-  if ("wiki.share_mode" in rec) return true;
-  return false;
-}
-
-// scripts/dot-guild/convert/snapshot.ts
-var path3 = __toESM(require("path"));
-var BACKUP_PREFIX = ".backup-v1-";
-var REPORT_PREFIX = ".migration-report-";
-function walkExcluding(fs2, guildDir, destAbs) {
-  const out = [];
-  const recur = (dir) => {
-    let entries;
-    try {
-      entries = fs2.readdirSync(dir);
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      const full = path3.join(dir, e.name);
-      if (full === destAbs) continue;
-      if (e.isDirectory) {
-        if (e.name.startsWith(BACKUP_PREFIX)) continue;
-        recur(full);
-      } else if (e.isFile) {
-        if (e.name.startsWith(REPORT_PREFIX) && dir === guildDir) continue;
-        out.push(full);
-      }
-    }
-  };
-  recur(guildDir);
-  return out;
-}
-function claimDest(fs2, guildDir, stamp) {
-  const base = path3.join(guildDir, `${BACKUP_PREFIX}${stamp}`);
-  let dest = base;
-  let n = 1;
-  for (let attempts = 0; attempts < 64; attempts++) {
-    try {
-      fs2.mkdirSync(dest, { recursive: false });
-      return dest;
-    } catch {
-      if (n <= 16) {
-        dest = `${base}-${n++}`;
-      } else {
-        const rand = Math.random().toString(36).slice(2, 8);
-        dest = `${base}-${rand}`;
-      }
-    }
-  }
-  throw new Error(`snapshot: could not claim a unique backup dir under ${guildDir}`);
-}
-function snapshot(fs2, clock, guildDir) {
-  const dest = claimDest(fs2, guildDir, clock.stamp());
-  const destAbs = dest;
-  const destRel = path3.basename(dest);
-  const files = walkExcluding(fs2, guildDir, destAbs);
-  let mismatch;
-  let copied = 0;
-  for (const srcFile of files) {
-    const rel2 = path3.relative(guildDir, srcFile);
-    const dstFile = path3.join(dest, rel2);
-    const srcHash = fs2.sha256(srcFile);
-    const bytes = fs2.readBytes(srcFile);
-    fs2.writeBytes(dstFile, bytes);
-    const dstHash = fs2.sha256(dstFile);
-    if (srcHash !== dstHash) {
-      mismatch = rel2;
-      break;
-    }
-    copied++;
-  }
-  return {
-    dest: destAbs,
-    destRel,
-    verified: mismatch === void 0,
-    fileCount: copied,
-    mismatch
-  };
-}
-
-// scripts/dot-guild/convert/convert.ts
-var path6 = __toESM(require("path"));
 
 // scripts/dot-guild/convert/wiki-importance.ts
-var path5 = __toESM(require("path"));
+var path3 = __toESM(require("path"));
 
 // src/modules/kernel/workflows/sealed-collections.ts
 var SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
@@ -3516,15 +3149,15 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
 ]);
 
 // src/modules/kernel/workflows/yaml-loader.ts
-var path4 = __toESM(require("node:path"));
+var path2 = __toESM(require("node:path"));
 function pluginLocalScriptsRoots() {
   return [
     // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
-    path4.resolve(__dirname, "..", "..", "..", "..", "scripts"),
+    path2.resolve(__dirname, "..", "..", "..", "..", "scripts"),
     // Bundled hook layout: hooks/dist -> plugin/scripts.
-    path4.resolve(__dirname, "..", "..", "scripts"),
+    path2.resolve(__dirname, "..", "..", "scripts"),
     // Bundled agent-team hook layout: hooks/agent-team/dist -> plugin/scripts.
-    path4.resolve(__dirname, "..", "..", "..", "scripts")
+    path2.resolve(__dirname, "..", "..", "..", "scripts")
   ];
 }
 function tryScriptsRoot(scriptsRoot) {
@@ -3545,7 +3178,7 @@ function loadYamlApi() {
     return require_js_yaml();
   } catch {
   }
-  const cwdRoot = path4.resolve(process.cwd(), "scripts");
+  const cwdRoot = path2.resolve(process.cwd(), "scripts");
   tried.push(cwdRoot);
   const api = tryScriptsRoot(cwdRoot);
   if (api) return api;
@@ -3587,10 +3220,7 @@ function parseYaml2(text, opts = {}) {
 var parseYaml3 = parseYaml2;
 
 // scripts/dot-guild/convert/wiki-importance.ts
-var GRADED_BY_STAMP = "guild-migrate";
 var STRUCTURAL_BASENAMES = sealSet(["index.md", "readme.md", "log.md", "query.md", "transfer-manifest.md"], "STRUCTURAL_BASENAMES");
-var PROVENANCE_SEGMENTS = /* @__PURE__ */ new Set(["research", "ideation", "sources"]);
-var PROVENANCE_FM_VALUES = /* @__PURE__ */ new Set(["provenance", "exploratory", "research", "ideation", "source"]);
 function splitFrontmatter2(content) {
   if (content.slice(0, 3) !== "---") return { fmLines: null, body: content };
   const lines = content.split("\n");
@@ -3609,37 +3239,17 @@ function fmValue(fmLines, key) {
   const v = doc[key];
   return v === void 0 || v === null ? null : String(v);
 }
-function isProvenance(relInWiki, fmLines) {
-  const segments = relInWiki.split(path5.sep).slice(0, -1).map((s) => s.toLowerCase());
-  if (segments.some((s) => PROVENANCE_SEGMENTS.has(s))) return true;
-  for (const key of ["type", "category"]) {
-    const v = fmValue(fmLines, key)?.toLowerCase();
-    if (v && PROVENANCE_FM_VALUES.has(v)) return true;
-  }
-  return false;
-}
-function draftGrade(relInWiki, fmLines) {
-  const first = relInWiki.split(path5.sep)[0].toLowerCase();
-  const base = path5.basename(relInWiki).toLowerCase();
-  if (first === "standards") return { grade: "high", rule: "standards/** \u2192 high" };
-  if (base === "architecture-map.md" || relInWiki.toLowerCase().includes("architecture-map"))
-    return { grade: "high", rule: "architecture-map \u2192 high" };
-  if (first === "decisions") return { grade: "high", rule: "decisions/** \u2192 high" };
-  if (fmValue(fmLines, "type")?.toLowerCase() === "decision")
-    return { grade: "high", rule: "type: decision \u2192 high" };
-  return { grade: "medium", rule: "default \u2192 medium" };
-}
-function walkWiki(fs2, wikiDir) {
+function walkWiki(fs5, wikiDir) {
   const out = [];
   const recur = (dir) => {
     let entries;
     try {
-      entries = fs2.readdirSync(dir);
+      entries = fs5.readdirSync(dir);
     } catch {
       return;
     }
     for (const e of [...entries].sort((a, b) => a.name.localeCompare(b.name))) {
-      const full = path5.join(dir, e.name);
+      const full = path3.join(dir, e.name);
       if (e.isDirectory) recur(full);
       else if (e.isFile && e.name.endsWith(".md")) out.push(full);
     }
@@ -3647,1037 +3257,206 @@ function walkWiki(fs2, wikiDir) {
   recur(wikiDir);
   return out.sort();
 }
-function isStructural(basename5) {
-  const b = basename5.toLowerCase();
-  return STRUCTURAL_BASENAMES.has(b) || b.startsWith("lint-");
-}
-function backfillWikiImportance(fs2, guildDir, dryRun) {
-  const wikiDir = path5.join(guildDir, "wiki");
-  const records = [];
-  if (!fs2.existsSync(wikiDir)) return records;
-  for (const p of walkWiki(fs2, wikiDir)) {
-    const rel2 = path5.relative(guildDir, p);
-    const relInWiki = path5.relative(wikiDir, p);
-    if (isStructural(path5.basename(p))) {
-      records.push({ rel: rel2, action: "skipped-structural", rule: "index/README/log/lint-* \u2192 skip" });
-      continue;
-    }
-    const content = fs2.readFileSync(p);
-    const { fmLines } = splitFrontmatter2(content);
-    if (fmValue(fmLines, "importance") !== null) {
-      records.push({ rel: rel2, action: "skipped-already-graded", rule: "importance: present \u2192 never touch" });
-      continue;
-    }
-    if (isProvenance(relInWiki, fmLines)) {
-      records.push({
-        rel: rel2,
-        action: "skipped-provenance",
-        rule: "provenance/exploratory \u2192 confidence-graded only, never importance"
-      });
-      continue;
-    }
-    const { grade, rule } = draftGrade(relInWiki, fmLines);
-    const draftLines = [`importance: ${grade}`, `importance_draft: true`, `graded_by: ${GRADED_BY_STAMP}`];
-    if (!dryRun) {
-      let next;
-      if (fmLines === null) {
-        next = `---
-${draftLines.join("\n")}
----
-${content}`;
-      } else {
-        const { body } = splitFrontmatter2(content);
-        next = `---
-${[...fmLines, ...draftLines].join("\n")}
----
-${body}`;
-      }
-      fs2.writeFileSync(p, next);
-    }
-    records.push({ rel: rel2, action: "graded", grade, rule, createdFrontmatter: fmLines === null });
-  }
-  return records;
-}
-function acceptGrades(fs2, guildDir) {
-  const wikiDir = path5.join(guildDir, "wiki");
+function acceptGrades(fs5, guildDir) {
+  const wikiDir = path3.join(guildDir, "wiki");
   const accepted = [];
-  if (!fs2.existsSync(wikiDir)) return accepted;
-  for (const p of walkWiki(fs2, wikiDir)) {
-    const content = fs2.readFileSync(p);
+  if (!fs5.existsSync(wikiDir)) return accepted;
+  for (const p of walkWiki(fs5, wikiDir)) {
+    const content = fs5.readFileSync(p);
     const { fmLines, body } = splitFrontmatter2(content);
     if (fmLines === null) continue;
     if (fmValue(fmLines, "importance_draft") !== "true") continue;
     const kept = fmLines.filter(
       (l) => !/^importance_draft\s*:/.test(l) && !/^graded_by\s*:/.test(l)
     );
-    fs2.writeFileSync(p, `---
+    fs5.writeFileSync(p, `---
 ${kept.join("\n")}
 ---
 ${body}`);
     accepted.push({
-      rel: path5.relative(guildDir, p),
+      rel: path3.relative(guildDir, p),
       grade: fmValue(fmLines, "importance") ?? "(none)"
     });
   }
   return accepted;
 }
 
-// scripts/dot-guild/convert/keymap.ts
-var UNMIGRATED_STAMP = "guild.unmigrated.v1";
-function mapV1Key(v1Key, value) {
-  switch (v1Key) {
-    case "codex_review":
-      return { v1Key, v2Key: "review", v2Value: value === true ? "cross" : "local" };
-    case "auto_approve":
-      if (typeof value === "string") {
-        return { v1Key, v2Key: "auto_approve", v2Value: autoApproveToArray(value) };
-      }
-      return null;
-    case "defaults.agent_team":
-      return { v1Key, v2Key: "agent_mode", v2Value: agentTeamToMode(value) };
-    case "wiki.share_mode":
-      return { v1Key, v2Key: "defaults.wiki.share_mode", v2Value: value };
-    default:
-      return null;
-  }
-}
-function autoApproveToArray(s) {
-  switch (s) {
-    case "none":
-      return [];
-    case "spec-and-plan":
-      return ["spec", "plan"];
-    case "implementation":
-      return ["build"];
-    case "all":
-      return ["all"];
-    default:
-      return [];
-  }
-}
-function agentTeamToMode(value) {
-  if (value === true || value === "on") return "team";
-  if (value === false || value === "off") return "subagent";
-  return "auto";
-}
-function getPath(obj, dotted) {
-  if (!obj) return void 0;
-  const parts = dotted.split(".");
-  let cur = obj;
-  for (const p of parts) {
-    if (cur && typeof cur === "object" && p in cur) {
-      cur = cur[p];
-    } else {
-      return void 0;
-    }
-  }
-  return cur;
-}
-function setPath(obj, dotted, value) {
-  const parts = dotted.split(".");
-  let cur = obj;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const p = parts[i];
-    if (!cur[p] || typeof cur[p] !== "object") cur[p] = {};
-    cur = cur[p];
-  }
-  cur[parts[parts.length - 1]] = value;
-}
-function valueEqual(a, b) {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-function classifyKey(v1Key, value, v2Target, inPlace = false) {
-  const mapped = mapV1Key(v1Key, value);
-  if (!mapped) {
-    return {
-      outcome: { key: v1Key, case: "C2", detail: `relocated verbatim (value=${JSON.stringify(value)})` },
-      relocate: { key: v1Key, value }
-    };
-  }
-  if (mapped.v1Key === mapped.v2Key && inPlace) {
-    if (valueEqual(value, mapped.v2Value)) {
-      return {
-        outcome: {
-          key: v1Key,
-          case: "C3",
-          detail: `${v1Key} already in v2 form ${JSON.stringify(value)}; redundant`
-        }
-      };
-    }
-    return {
-      outcome: {
-        key: v1Key,
-        case: "C1",
-        detail: `${v1Key} transformed in-place \u2192 ${JSON.stringify(mapped.v2Value)}`
-      },
-      write: mapped
-    };
-  }
-  const existing = getPath(v2Target, mapped.v2Key);
-  if (existing === void 0) {
-    return {
-      outcome: {
-        key: v1Key,
-        case: "C1",
-        detail: `${v1Key} \u2192 ${mapped.v2Key}=${JSON.stringify(mapped.v2Value)}`
-      },
-      write: mapped
-    };
-  }
-  if (valueEqual(existing, mapped.v2Value)) {
-    return {
-      outcome: {
-        key: v1Key,
-        case: "C3",
-        detail: `redundant: ${mapped.v2Key} already = ${JSON.stringify(existing)}; v1 key dropped`
-      }
-    };
-  }
-  return {
-    outcome: {
-      key: v1Key,
-      case: "C4",
-      detail: `CONFLICT: ${mapped.v2Key}=${JSON.stringify(existing)} vs v1 ${v1Key}=${JSON.stringify(
-        value
-      )} \u2192 kept LIVE, unresolved`
-    }
-  };
-}
-function buildUnmigratedDoc(createdAt, snapshotRef, entries) {
-  const doc = {
-    schema_version: UNMIGRATED_STAMP,
-    created_at: createdAt,
-    snapshot_ref: snapshotRef,
-    entries
-  };
-  return JSON.stringify(doc, null, 2) + "\n";
-}
+// scripts/lib/state/ensure-storage-layout.ts
+var fs3 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
 
-// scripts/dot-guild/convert/convert.ts
-function rel(guildDir, p) {
-  return path6.relative(guildDir, p);
-}
-function readSettings(fs2, p) {
-  if (!fs2.existsSync(p)) return {};
-  const res = parseJson(fs2.readFileSync(p));
-  return res.ok && res.value && typeof res.value === "object" ? res.value : {};
-}
-function readKeyValue(parsed, dotted) {
-  if (dotted in parsed) return parsed[dotted];
-  return getPath(parsed, dotted);
-}
-function stripKey(obj, dotted) {
-  if (dotted in obj) delete obj[dotted];
-  const parts = dotted.split(".");
-  if (parts.length === 1) return;
-  let cur = obj;
-  for (let i = 0; i < parts.length - 1; i++) {
-    if (cur && typeof cur === "object" && parts[i] in cur) {
-      cur = cur[parts[i]];
-    } else {
-      return;
-    }
-  }
-  if (cur && typeof cur === "object") delete cur[parts[parts.length - 1]];
-}
-function convert(fs2, clock, guildDir, dryRun, snapshotRef) {
-  const out = { artifacts: [], relocated: [], conflicts: [], removed: [], generated: [], grades: [] };
-  const ctx = { fs: fs2, clock, guildDir, dryRun, snapshotRef, out };
-  const j = (r) => path6.join(guildDir, r);
-  const deferredRemovals = [];
-  const settingsPath = j("settings.json");
-  const v2Settings = readSettings(fs2, settingsPath);
-  let settingsMutated = false;
-  convertV2SurfaceInPlace(ctx, settingsPath, v2Settings, (mut) => {
-    if (mut) settingsMutated = true;
-  });
-  convertSettingsLocal(ctx, j, guildDir, out);
-  {
-    const p = j("config.yml");
-    if (fs2.existsSync(p)) {
-      const res = parseYaml(fs2.readFileSync(p));
-      if (!res.ok || !res.value || typeof res.value !== "object") {
-        out.artifacts.push({
-          rel: rel(guildDir, p),
-          disposition: "preserve+flag",
-          note: "config.yml unparseable at convert time \u2014 preserved"
-        });
-      } else {
-        const parsed = res.value;
-        const v1Keys = v1KeysIn(parsed);
-        const carryKeys = ["loops", "loop_cap", "codex_cap"].filter((k) => k in parsed);
-        const allKeys = [.../* @__PURE__ */ new Set([...v1Keys, ...carryKeys])];
-        const { outcomes, mutated } = convertSurfaceWithCarry(
-          ctx,
-          rel(guildDir, p),
-          parsed,
-          v2Settings,
-          allKeys
-        );
-        if (mutated) settingsMutated = true;
-        for (const k of Object.keys(parsed)) {
-          if (allKeys.includes(k)) continue;
-          const handledChildren = allKeys.filter((hk) => hk.startsWith(k + "."));
-          if (handledChildren.length === 0) {
-            const cls = classifyKey(k, parsed[k], v2Settings);
-            outcomes.push(cls.outcome);
-            if (cls.write) {
-              setPath(v2Settings, cls.write.v2Key, cls.write.v2Value);
-              settingsMutated = true;
-            }
-            if (cls.relocate)
-              out.relocated.push({ source: rel(guildDir, p), key: k, value: parsed[k], reason: "unmapped" });
-            if (cls.outcome.case === "C4") out.conflicts.push(cls.outcome);
-          } else {
-            const remainder = stripHandledLeaves(parsed[k], k, allKeys);
-            if (remainder !== void 0) {
-              out.relocated.push({ source: rel(guildDir, p), key: k, value: remainder, reason: "unmapped" });
-              outcomes.push({ key: k, case: "C2", detail: `partial parent: unhandled sub-keys relocated (handled: ${handledChildren.join(", ")})` });
-            }
-          }
-        }
-        const anyC4 = outcomes.some((o) => o.case === "C4");
-        const sourceRemovable = !anyC4;
-        out.artifacts.push({
-          rel: rel(guildDir, p),
-          disposition: anyC4 ? "preserve+flag" : "convert",
-          target: "settings.json",
-          keys: outcomes,
-          note: anyC4 ? "C4 conflict \u2014 config.yml kept LIVE, tree stays mixed, re-surface next open" : "converted to settings.json; removed from live (snapshot holds original)",
-          removed: sourceRemovable
-        });
-        if (sourceRemovable) {
-          if (!dryRun) deferredRemovals.push(p);
-          out.removed.push(rel(guildDir, p));
-        }
-      }
-    }
-  }
-  {
-    const p = j("project.yaml");
-    if (fs2.existsSync(p)) {
-      const res = parseYaml(fs2.readFileSync(p));
-      if (res.ok && res.value && typeof res.value === "object") {
-        const parsed = res.value;
-        const shareVal = readKeyValue(parsed, "wiki.share_mode");
-        if (shareVal !== void 0) {
-          const cls = classifyKey("wiki.share_mode", shareVal, v2Settings);
-          const outcomes = [cls.outcome];
-          if (cls.write) {
-            setPath(v2Settings, cls.write.v2Key, cls.write.v2Value);
-            settingsMutated = true;
-          }
-          const isC4 = cls.outcome.case === "C4";
-          if (isC4) out.conflicts.push(cls.outcome);
-          if (!isC4 && !dryRun) {
-            stripKey(parsed, "wiki.share_mode");
-            fs2.writeFileSync(p, serializeYaml(parsed));
-          }
-          out.artifacts.push({
-            rel: rel(guildDir, p),
-            disposition: isC4 ? "preserve+flag" : "convert",
-            target: "settings.json:defaults.wiki.share_mode",
-            keys: outcomes,
-            note: isC4 ? "C4 share_mode conflict \u2014 wiki.share_mode kept LIVE in project.yaml, settings.json NOT clobbered, re-surface" : cls.outcome.case === "C3" ? "redundant share_mode dropped from project.yaml (settings.json authoritative)" : "wiki.share_mode moved to settings.json; key removed from project.yaml",
-            removed: false
-          });
-        }
-      }
-    }
-  }
-  convertLegacyRuns(ctx);
-  out.grades = backfillWikiImportance(fs2, guildDir, dryRun);
-  {
-    const graded = out.grades.filter((g) => g.action === "graded");
-    if (graded.length > 0) {
-      out.artifacts.push({
-        rel: "wiki/",
-        disposition: "convert",
-        target: "wiki/ (importance backfill \u2014 drafted grades)",
-        note: `${graded.length} page(s) drafted an importance: grade (importance_draft: true) \u2014 REVIEW, then --accept-grades`,
-        removed: false
-      });
-    }
-  }
-  if (settingsMutated && !dryRun) {
-    const settingsIsNew = !fs2.existsSync(settingsPath);
-    fs2.writeFileSync(settingsPath, JSON.stringify(v2Settings, null, 2) + "\n");
-    if (settingsIsNew) out.generated.push(rel(guildDir, settingsPath));
-  }
-  if (out.relocated.length > 0 && !dryRun) {
-    const unmigratedPath = j(".unmigrated-v1.json");
-    const isNew = !fs2.existsSync(unmigratedPath);
-    let mergedEntries = [];
-    if (!isNew) {
-      const existing = parseJson(fs2.readFileSync(unmigratedPath));
-      if (existing.ok && existing.value && typeof existing.value === "object") {
-        const prior = existing.value["entries"];
-        if (Array.isArray(prior)) mergedEntries = prior;
-      }
-    }
-    const indexMap = new Map(mergedEntries.map((e, i) => [`${e.source}\0${e.key}`, i]));
-    for (const entry of out.relocated) {
-      const id = `${entry.source}\0${entry.key}`;
-      const existing = indexMap.get(id);
-      if (existing !== void 0) {
-        mergedEntries[existing] = entry;
-      } else {
-        indexMap.set(id, mergedEntries.length);
-        mergedEntries.push(entry);
-      }
-    }
-    const doc = buildUnmigratedDoc(clock.iso(), snapshotRef, mergedEntries);
-    fs2.writeFileSync(unmigratedPath, doc);
-    if (isNew) out.generated.push(rel(guildDir, unmigratedPath));
-  }
-  for (const p of deferredRemovals) {
-    fs2.rmFileSync(p);
-  }
-  return out;
-}
-function convertSurfaceWithCarry(ctx, sourceRel, parsed, v2Target, keys) {
-  const outcomes = [];
-  let mutated = false;
-  for (const k of keys) {
-    const value = readKeyValue(parsed, k);
-    if (k === "loops" || k === "loop_cap" || k === "codex_cap") {
-      const existing = getPath(v2Target, k);
-      if (existing === void 0) {
-        setPath(v2Target, k, normalizeCarry(k, value));
-        mutated = true;
-        outcomes.push({ key: k, case: "C1", detail: `${k}=${JSON.stringify(normalizeCarry(k, value))}` });
-      } else if (valueEqual(existing, normalizeCarry(k, value))) {
-        outcomes.push({ key: k, case: "C3", detail: `${k} redundant (already ${JSON.stringify(existing)})` });
-      } else {
-        outcomes.push({ key: k, case: "C4", detail: `${k} conflict: v2=${JSON.stringify(existing)} vs v1=${JSON.stringify(value)}` });
-        ctx.out.conflicts.push(outcomes[outcomes.length - 1]);
-      }
-      continue;
-    }
-    const cls = classifyKey(k, value, v2Target);
-    outcomes.push(cls.outcome);
-    if (cls.write) {
-      setPath(v2Target, cls.write.v2Key, cls.write.v2Value);
-      mutated = true;
-    }
-    if (cls.relocate)
-      ctx.out.relocated.push({ source: sourceRel, key: cls.relocate.key, value: cls.relocate.value, reason: "unmapped" });
-    if (cls.outcome.case === "C4") {
-      ctx.out.conflicts.push(cls.outcome);
-    }
-  }
-  return { outcomes, mutated };
-}
-function normalizeCarry(k, v) {
-  if (k === "loop_cap" && typeof v === "number") return Math.min(256, Math.max(1, v));
-  if (k === "codex_cap" && typeof v === "number") return Math.min(10, Math.max(1, v));
-  return v;
-}
-function convertSettingsLocal(ctx, j, guildDir, out) {
-  const { fs: fs2, dryRun } = ctx;
-  const p = j("settings.local.json");
-  if (!fs2.existsSync(p)) return;
-  const res = parseJson(fs2.readFileSync(p));
-  if (!res.ok || !res.value || typeof res.value !== "object") return;
-  const parsed = res.value;
-  const v1Keys = v1KeysIn(parsed);
-  if (v1Keys.length === 0) return;
-  const outcomes = [];
-  let anyC4 = false;
-  let localMutated = false;
-  for (const k of v1Keys) {
-    const value = readKeyValue(parsed, k);
-    const cls = classifyKey(
-      k,
-      value,
-      parsed,
-      /*inPlace=*/
-      true
-    );
-    outcomes.push(cls.outcome);
-    if (cls.write) {
-      setPath(parsed, cls.write.v2Key, cls.write.v2Value);
-      if (cls.write.v1Key !== cls.write.v2Key) stripKey(parsed, k);
-      localMutated = true;
-    } else if (cls.relocate) {
-      out.relocated.push({ source: rel(guildDir, p), key: k, value, reason: "unmapped" });
-      stripKey(parsed, k);
-      localMutated = true;
-    } else if (cls.outcome.case === "C3") {
-      stripKey(parsed, k);
-      localMutated = true;
-    } else if (cls.outcome.case === "C4") {
-      anyC4 = true;
-      out.conflicts.push(cls.outcome);
-    }
-  }
-  if (localMutated && !dryRun) fs2.writeFileSync(p, JSON.stringify(parsed, null, 2) + "\n");
-  out.artifacts.push({
-    rel: rel(guildDir, p),
-    disposition: anyC4 ? "preserve+flag" : "convert",
-    keys: outcomes,
-    note: anyC4 ? "C4 conflict \u2014 deprecated alias kept LIVE in settings.local.json, re-surface" : "v1 keys migrated in place (file is a v2 surface; stays)",
-    removed: false
-  });
-}
-function convertV2SurfaceInPlace(ctx, p, v2Obj, onMutate) {
-  if (!ctx.fs.existsSync(p)) return;
-  const v1Keys = v1KeysIn(v2Obj);
-  if (v1Keys.length === 0) return;
-  const outcomes = [];
-  let anyC4 = false;
-  let mutated = false;
-  for (const k of v1Keys) {
-    const value = readKeyValue(v2Obj, k);
-    const mapped = mapV1Key(k, value);
-    if (!mapped) {
-      ctx.out.relocated.push({ source: rel(ctx.guildDir, p), key: k, value, reason: "unmapped" });
-      stripKey(v2Obj, k);
-      mutated = true;
-      outcomes.push({ key: k, case: "C2", detail: `relocated verbatim (${JSON.stringify(value)})` });
-      continue;
-    }
-    if (mapped.v1Key === mapped.v2Key) {
-      if (valueEqual(value, mapped.v2Value)) {
-        outcomes.push({ key: k, case: "C3", detail: `${k} already in v2 form ${JSON.stringify(value)}` });
-      } else {
-        setPath(v2Obj, mapped.v2Key, mapped.v2Value);
-        mutated = true;
-        outcomes.push({ key: k, case: "C1", detail: `${k} transformed in-place \u2192 ${JSON.stringify(mapped.v2Value)}` });
-      }
-      continue;
-    }
-    const existing = getPath(v2Obj, mapped.v2Key);
-    if (existing === void 0) {
-      setPath(v2Obj, mapped.v2Key, mapped.v2Value);
-      stripKey(v2Obj, k);
-      mutated = true;
-      outcomes.push({ key: k, case: "C1", detail: `${k} \u2192 ${mapped.v2Key}=${JSON.stringify(mapped.v2Value)}` });
-    } else if (valueEqual(existing, mapped.v2Value)) {
-      stripKey(v2Obj, k);
-      mutated = true;
-      outcomes.push({ key: k, case: "C3", detail: `redundant: ${mapped.v2Key} already ${JSON.stringify(existing)}` });
-    } else {
-      anyC4 = true;
-      outcomes.push({
-        key: k,
-        case: "C4",
-        detail: `CONFLICT: ${mapped.v2Key}=${JSON.stringify(existing)} vs v1 ${k}=${JSON.stringify(value)} \u2192 kept LIVE`
-      });
-      ctx.out.conflicts.push(outcomes[outcomes.length - 1]);
-    }
-  }
-  onMutate(mutated);
-  ctx.out.artifacts.push({
-    rel: rel(ctx.guildDir, p),
-    disposition: anyC4 ? "preserve+flag" : "convert",
-    keys: outcomes,
-    note: anyC4 ? "C4 stray-key conflict \u2014 v1 key kept LIVE in settings.json, re-surface" : "stray v1 key(s) rewritten in place to v2 form",
-    removed: false
-  });
-}
-function convertLegacyRuns(ctx) {
-  const { fs: fs2, guildDir, dryRun } = ctx;
-  const runsDir = path6.join(guildDir, "runs");
-  if (!fs2.existsSync(runsDir)) return;
-  let entries;
-  try {
-    entries = fs2.readdirSync(runsDir);
-  } catch {
-    return;
-  }
-  for (const e of entries) {
-    if (!e.isDirectory) continue;
-    const runDir = path6.join(runsDir, e.name);
-    const meta = path6.join(runDir, "metadata.json");
-    const runYaml = path6.join(runDir, "run.yaml");
-    if (!fs2.existsSync(meta) || fs2.existsSync(runYaml)) continue;
-    const res = parseJson(fs2.readFileSync(meta));
-    if (!res.ok || !res.value || typeof res.value !== "object") {
-      ctx.out.artifacts.push({
-        rel: rel(guildDir, meta),
-        disposition: "preserve+flag",
-        note: "metadata.json unparseable \u2014 preserved",
-        removed: false
-      });
-      continue;
-    }
-    const m = res.value;
-    const runId = m["run_id"] ?? m["id"] ?? e.name;
-    const startedAt = m["started_at"] ?? m["created_at"];
-    if (!runId || !startedAt) {
-      ctx.out.artifacts.push({
-        rel: rel(guildDir, meta),
-        disposition: "preserve+flag",
-        note: "insufficient fields to reconstruct a faithful run.yaml \u2014 preserved (NOT fabricated)",
-        removed: false
-      });
-      continue;
-    }
-    const initiativeAttachment = m["initiative_attachment"] ?? m["initiative"] ?? null;
-    const provPath = path6.join(runDir, "provenance.json");
-    const provExists = fs2.existsSync(provPath);
-    const runStatus = m["status"] ?? "closed";
-    const runDoc = `schema_version: guild.run.v1
-run_id: ${runId}
-started_at: ${startedAt}
-` + (initiativeAttachment ? `initiative_attachment: ${initiativeAttachment}
-` : `initiative_attachment: null
-`) + `status: ${runStatus}
-`;
-    if (provExists) {
-      ctx.out.artifacts.push({
-        rel: rel(guildDir, meta),
-        disposition: "preserve+flag",
-        note: `run-level conflict: provenance.json already exists \u2014 metadata.json kept LIVE, run.yaml NOT written, re-surface next open`,
-        removed: false
-      });
-      continue;
-    }
-    const provDoc = {
-      schema_version: "guild.provenance.v1",
-      run_id: runId,
-      initiative: initiativeAttachment,
-      started_at: startedAt,
-      reconstructed_from: "metadata.json",
-      status: runStatus
-    };
-    if (!dryRun) {
-      fs2.writeFileSync(runYaml, runDoc);
-      fs2.writeFileSync(provPath, JSON.stringify(provDoc, null, 2) + "\n");
-      ctx.out.generated.push(rel(guildDir, runYaml));
-      ctx.out.generated.push(rel(guildDir, provPath));
-      fs2.rmFileSync(meta);
-    }
-    ctx.out.removed.push(rel(guildDir, meta));
-    ctx.out.artifacts.push({
-      rel: rel(guildDir, meta),
-      disposition: "convert",
-      target: `runs/${e.name}/run.yaml + provenance.json`,
-      note: "legacy metadata.json \u2192 run.yaml/provenance reconstructed; metadata.json moved to snapshot",
-      removed: true
-    });
-  }
-}
-function stripHandledLeaves(obj, prefix, handledKeys) {
-  if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
-    return obj;
-  }
-  const rec = obj;
-  const result = {};
-  for (const [k, v] of Object.entries(rec)) {
-    const dotted = `${prefix}.${k}`;
-    if (handledKeys.includes(dotted)) continue;
-    const handledBelow = handledKeys.filter((hk) => hk.startsWith(dotted + "."));
-    if (handledBelow.length > 0) {
-      const sub = stripHandledLeaves(v, dotted, handledKeys);
-      if (sub !== void 0) result[k] = sub;
-    } else {
-      result[k] = v;
-    }
-  }
-  return Object.keys(result).length === 0 ? void 0 : result;
-}
-function serializeYaml(obj) {
-  const yaml2 = require_js_yaml();
-  return yaml2.dump(obj);
-}
-
-// scripts/dot-guild/convert/report.ts
-function reportFileName(stamp) {
-  return `${REPORT_PREFIX}${stamp}.md`;
-}
-function detectSummary(d) {
-  const m1 = d.evidence.filter((e) => e.contributes === "M1");
-  const m2 = d.evidence.filter((e) => e.contributes === "M2");
-  const lines = [];
-  lines.push(`- **classification:** \`${d.classification}\` (M1=${d.m1}, M2=${d.m2})`);
-  if (d.hasUnparseable) {
-    lines.push(`- **corrupt:** an authoritative artifact failed to parse \u2014 ALL in-place writes blocked.`);
-  }
-  if (m1.length) {
-    lines.push(`- **v1 evidence (M1):**`);
-    for (const e of m1) lines.push(`  - \`${e.path}\` (${e.marker})${e.note ? ` \u2014 ${e.note}` : ""}`);
-  }
-  if (m2.length) {
-    lines.push(`- **v2 evidence (M2):**`);
-    for (const e of m2.slice(0, 24)) lines.push(`  - \`${e.path}\` (${e.marker})${e.note ? ` \u2014 ${e.note}` : ""}`);
-    if (m2.length > 24) lines.push(`  - \u2026 and ${m2.length - 24} more`);
-  }
-  if (d.unparseable.length) {
-    lines.push(`- **unparseable:**`);
-    for (const u of d.unparseable)
-      lines.push(`  - \`${u.path}\`${u.authoritative ? " (AUTHORITATIVE \u2014 forces corrupt)" : " (non-authoritative \u2014 preserved)"}`);
-  }
-  return lines.join("\n");
-}
-function renderReport(child, mode, iso) {
-  const d = child.detect;
-  let out = "";
-  out += `---
-type: artifact
-artifact: migration-report
-initiative: cleanup-consolidation
-`;
-  out += `mode: ${mode}
-classification: ${d.classification}
-created_at: ${iso}
----
-
-`;
-  out += `# v1 \u2192 v2 \`.guild\` migration report
-
-`;
-  out += `Root: \`${child.root}\`
-
-Mode: **${mode}**${mode === "dry-run" ? " \u2014 NOTHING was written." : ""}
-
-`;
-  out += `## Detection
-
-${detectSummary(d)}
-
-`;
-  if (d.classification === "corrupt") {
-    out += `## Action: BLOCKED (corrupt dominates)
-
-`;
-    out += `No migration occurred. An authoritative artifact is unparseable, so the tree's
-`;
-    out += `state is untrustworthy and ALL in-place writes are refused (\xA71.3 precedence).
-`;
-    out += `Recommended: run \`--dry-run\`, repair/remove the corrupt file(s) above, re-open.
-`;
-    if (child.snapshot) out += `
-A verified snapshot was still taken at \`${child.snapshot.destRel}\`.
-`;
-    return out + "\n";
-  }
-  if (d.classification === "v2" || d.classification === "none") {
-    out += `## Action: ${child.action}
-
-`;
-    if (child.conflicts.length || child.artifacts.length) {
-      out += `Advisory: a v2 tree carried a deprecated alias \u2014 flagged below (no mutation).
-
-`;
-    } else {
-      out += `No v1 markers \u2014 nothing to migrate.
-`;
-      return out + "\n";
-    }
-  }
-  if (child.snapshot) {
-    out += `## Snapshot (SC-3)
-
-`;
-    out += `- dest: \`${child.snapshot.destRel}\` (${child.snapshot.fileCount} file(s), `;
-    out += child.snapshot.verified ? `sha256-verified)
-` : `**VERIFY FAILED** at \`${child.snapshot.mismatch}\` \u2014 conversion aborted)
-`;
-    if (child.restoreCommand) out += `- restore: \`${child.restoreCommand}\`
-`;
-    out += `
-`;
-  }
-  out += `## Per-artifact disposition
-
-`;
-  if (child.artifacts.length === 0) {
-    out += `_No convert/preserve artifacts (carry-forward artifacts are left untouched and not listed)._
-
-`;
-  } else {
-    out += `| Artifact | Disposition | v2 target | Removed from live | Note |
-|---|---|---|---|---|
-`;
-    for (const a of child.artifacts) {
-      out += `| \`${a.rel}\` | ${a.disposition} | ${a.target ? `\`${a.target}\`` : "\u2014"} | ${a.removed ? "yes" : "no"} | ${a.note ?? ""} |
-`;
-    }
-    out += `
-`;
-    for (const a of child.artifacts) {
-      if (a.keys && a.keys.length) {
-        out += `### Keys \u2014 \`${a.rel}\`
-
-`;
-        out += `| Key | Case | Detail |
-|---|---|---|
-`;
-        for (const k of a.keys) out += `| \`${k.key}\` | ${k.case} | ${k.detail} |
-`;
-        out += `
-`;
-      }
-    }
-  }
-  if (child.relocated.length) {
-    out += `## Relocated to \`.unmigrated-v1.json\` (C2 \u2014 unmapped, preserved live + in snapshot)
-
-`;
-    out += `| Source | Key | Value | Reason |
-|---|---|---|---|
-`;
-    for (const r of child.relocated)
-      out += `| \`${r.source}\` | \`${r.key}\` | \`${JSON.stringify(r.value)}\` | ${r.reason} |
-`;
-    out += `
-`;
-  }
-  if (child.conflicts.length) {
-    out += `## Conflicts \u2014 REVIEW (C4 \u2014 kept LIVE, re-surfaced every open until resolved)
-
-`;
-    for (const c of child.conflicts) out += `- \`${c.key}\` \u2014 ${c.detail}
-`;
-    out += `
-The tree intentionally stays \`mixed\` until you resolve these. The converter
-`;
-    out += `will NOT auto-pick a winner, clobber the v2 value, or remove the v1 source.
-
-`;
-  }
-  out += renderGradesSection(child, mode);
-  return out + "\n";
-}
-function renderGradesSection(child, mode) {
-  const graded = child.grades.filter((g) => g.action === "graded");
-  if (graded.length === 0) return "";
-  const skipped = child.grades.filter((g) => g.action !== "graded");
-  const count = (a) => skipped.filter((g) => g.action === a).length;
-  let out = `## Drafted wiki importance grades \u2014 REVIEW REQUIRED (human gate)
-
-`;
-  out += mode === "dry-run" ? `${graded.length} wiki page(s) WOULD be drafted a v2 \`importance:\` grade (dry-run \u2014 nothing was written):
-
-` : `${graded.length} wiki page(s) were drafted a v2 \`importance:\` grade by deterministic heuristics.
-Each is marked \`importance_draft: true\` + \`graded_by: guild-migrate\` until you accept it:
-
-`;
-  out += `| Page | Drafted grade | Rule |
-|---|---|---|
-`;
-  for (const g of graded) {
-    out += `| \`${g.rel}\` | ${g.grade}${g.createdFrontmatter ? " (frontmatter created)" : ""} | ${g.rule} |
-`;
-  }
-  out += `
-Skipped: ${count("skipped-already-graded")} already graded (never touched), `;
-  out += `${count("skipped-provenance")} provenance/exploratory (confidence-graded only, never importance), `;
-  out += `${count("skipped-structural")} structural (index/README/log/lint).
-
-`;
-  out += `**Next step (the gate):** review each drafted grade \u2014 edit the \`importance:\` value
-`;
-  out += `in place where the heuristic is wrong \u2014 then accept:
-
-`;
-  out += `\`\`\`bash
-npx tsx plugin/scripts/dot-guild/migrate-guild.ts --accept-grades --root=${child.root}
-\`\`\`
-
-`;
-  out += `\`--accept-grades\` strips the \`importance_draft\`/\`graded_by\` markers and keeps the
-`;
-  out += `grade. Until accepted, wiki lint flags these pages as a pending-review item.
-`;
-  return out;
-}
-
-// scripts/dot-guild/convert/index.ts
-function runMigration(opts) {
-  const fs2 = opts.fs ?? realFs;
-  const clock = opts.clock ?? realClock;
-  const mode = opts.mode;
-  const units = discoverUnits(fs2, opts.root, opts.workspace);
-  const children = [];
-  for (const root of units.roots) {
-    try {
-      children.push(processChild(fs2, clock, root, mode));
-    } catch (e) {
-      const guildDir = path7.join(root, ".guild");
-      children.push({
-        root,
-        guildDir,
-        detect: { classification: "none", m1: false, m2: false, hasUnparseable: false, evidence: [], unparseable: [] },
-        action: "error",
-        artifacts: [],
-        relocated: [],
-        conflicts: [],
-        grades: [],
-        reportPath: path7.join(guildDir, reportFileName(clock.stamp())),
-        reportBody: "",
-        error: e.message
-      });
-    }
-  }
-  return { children, workspace: units.workspace };
-}
-function validateImmediateChild(fs2, root, childRel) {
-  if (path7.isAbsolute(childRel)) return null;
-  const resolved = path7.resolve(root, childRel);
-  const resolvedRoot = path7.resolve(root);
-  if (path7.dirname(resolved) !== resolvedRoot) return null;
-  const base = path7.basename(resolved);
-  if (base === "." || base === "..") return null;
-  if (fs2.isSymlink(resolved)) return null;
-  return resolved;
-}
-function discoverUnits(fs2, root, forceWorkspace) {
-  const rootGuild = path7.join(root, ".guild");
-  const workspaceJson = path7.join(rootGuild, "workspace.json");
-  if (forceWorkspace === false) {
-    return { roots: [root], workspace: false };
-  }
-  let childRoots = [];
-  let isWorkspace = forceWorkspace === true;
-  if (fs2.existsSync(workspaceJson)) {
-    const res = parseJson(fs2.readFileSync(workspaceJson));
-    if (res.ok && res.value && typeof res.value === "object") {
-      const sub = res.value["sub_guilds"];
-      if (Array.isArray(sub) && sub.length > 0) {
-        isWorkspace = true;
-        for (const s of sub) {
-          const childRel = typeof s === "string" ? s : s?.["path"];
-          if (typeof childRel === "string") {
-            const validated = validateImmediateChild(fs2, root, childRel);
-            if (validated) childRoots.push(validated);
-          }
-        }
-      }
-    }
-  }
-  if (childRoots.length === 0) {
-    if (fs2.existsSync(root)) {
-      let entries;
+// src/modules/state/workflows/guild-root.ts
+var fs2 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path4.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs2.existsSync(path4.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path4.join(current, ".guild");
       try {
-        entries = fs2.readdirSync(root);
+        if (fs2.existsSync(guildDir) && fs2.statSync(guildDir).isDirectory()) nearestGuildDir = current;
       } catch {
-        entries = [];
       }
-      for (const e of entries) {
-        if (!e.isDirectory) continue;
-        const childRoot = path7.join(root, e.name);
-        if (fs2.isSymlink(childRoot)) continue;
-        if (fs2.existsSync(path7.join(childRoot, ".guild")) || fs2.existsSync(path7.join(childRoot, ".git"))) {
-          childRoots.push(childRoot);
-        }
-      }
-      if (childRoots.length > 0) isWorkspace = true;
     }
+    const parent = path4.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
   }
-  const roots = isWorkspace ? [root, ...childRoots] : [root];
-  const seen = /* @__PURE__ */ new Set();
-  const uniqueRoots = roots.filter((r) => seen.has(r) ? false : (seen.add(r), true));
-  return { roots: uniqueRoots, workspace: isWorkspace };
 }
-function processChild(fs2, clock, root, mode) {
-  const guildDir = path7.join(root, ".guild");
-  const det = detect(fs2, guildDir);
-  const stamp = clock.stamp();
-  const reportPath = path7.join(guildDir, reportFileName(stamp));
-  const base = {
-    root,
-    guildDir,
-    detect: det,
-    action: "none",
-    artifacts: [],
-    relocated: [],
-    conflicts: [],
-    grades: [],
-    reportPath,
-    reportBody: ""
-  };
-  if (det.classification === "none") {
-    base.action = "none";
-    base.reportBody = renderReport(base, mode, clock.iso());
-    return base;
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path5.join(root, ".guild", "storage-layout.json");
+}
+function detect2(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs3.existsSync(path5.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
   }
-  if (det.classification === "corrupt") {
-    base.action = "corrupt-blocked";
-    if (mode === "migrate") {
-      const snap2 = snapshot(fs2, clock, guildDir);
-      base.snapshot = snap2;
-    }
-    base.reportBody = renderReport(base, mode, clock.iso());
-    writeReport(fs2, base);
-    return base;
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs3.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
   }
-  if (det.classification === "v2") {
-    base.action = "v2-noop";
-    base.reportBody = renderReport(base, mode, clock.iso());
-    return base;
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path5.join(__dirname, "upgrade-chain.js"),
+      path5.join(__dirname, "lib", "state", "upgrade-chain"),
+      path5.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs3.existsSync(c) || fs3.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
   }
-  if (mode === "skip") {
-    base.action = "skip";
-    base.reportBody = renderReport(base, mode, clock.iso());
-    writeReport(fs2, base);
-    return base;
-  }
-  if (mode === "dry-run") {
-    base.action = "dry-run";
-    const out2 = convert(
-      fs2,
-      clock,
-      guildDir,
-      /*dryRun*/
-      true,
-      "(dry-run \u2014 no snapshot)"
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect2(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
     );
-    base.artifacts = out2.artifacts;
-    base.relocated = out2.relocated;
-    base.conflicts = out2.conflicts;
-    base.grades = out2.grades;
-    base.reportBody = renderReport(base, mode, clock.iso());
-    writeReport(fs2, base);
-    return base;
   }
-  base.action = "migrate";
-  const snap = snapshot(fs2, clock, guildDir);
-  base.snapshot = snap;
-  if (!snap.verified) {
-    base.error = `snapshot verify failed at ${snap.mismatch} \u2014 conversion aborted (snapshot left for inspection)`;
-    base.reportBody = renderReport(base, mode, clock.iso());
-    writeReport(fs2, base);
-    return base;
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect2(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
   }
-  const out = convert(
-    fs2,
-    clock,
-    guildDir,
-    /*dryRun*/
-    false,
-    snap.destRel
-  );
-  base.artifacts = out.artifacts;
-  base.relocated = out.relocated;
-  base.conflicts = out.conflicts;
-  base.grades = out.grades;
-  base.restoreCommand = buildRestore(snap.destRel, out.removed, out.generated);
-  base.reportBody = renderReport(base, mode, clock.iso());
-  writeReport(fs2, base);
-  return base;
-}
-function buildRestore(destRel, removed, generated) {
-  const toDelete = [...removed, ...generated];
-  const rmPart = toDelete.length ? `rm -f ${toDelete.map((p) => `.guild/${p}`).join(" ")} && ` : "";
-  return `${rmPart}cp -R .guild/${destRel}/. .guild/`;
-}
-function writeReport(fs2, child) {
-  if (child.detect.classification === "none" || child.action === "v2-noop") return;
-  fs2.writeFileSync(child.reportPath, child.reportBody);
 }
 
 // scripts/dot-guild/migrate-guild.ts
+function childGuildRoots(root) {
+  let names = [];
+  try {
+    names = fs4.readdirSync(root);
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const name of names) {
+    if (name.startsWith(".")) continue;
+    const child = path6.join(root, name);
+    try {
+      if (!fs4.lstatSync(child).isDirectory()) continue;
+      if (fs4.existsSync(path6.join(child, ".guild"))) out.push(child);
+    } catch {
+    }
+  }
+  return out;
+}
+function upgradeOne(root, mode, prefix) {
+  const before = detect2(root);
+  if (before.state === "absent") {
+    process.stdout.write(`${prefix}no .guild/ at ${root} \u2014 nothing to migrate.
+`);
+    return 0;
+  }
+  if (before.state === "current") {
+    process.stdout.write(`${prefix}layout ${before.version} \u2014 already current (${CURRENT_LAYOUT_VERSION}).
+`);
+    return 0;
+  }
+  if (mode === "skip") {
+    process.stdout.write(`${prefix}layout ${before.version ?? "unmarked"} (${before.state}); chain not loaded.
+`);
+    return 0;
+  }
+  let status;
+  try {
+    status = ensureStorageLayout(root, { dryRun: mode === "dry-run" });
+  } catch (e) {
+    process.stderr.write(`${prefix}${e.message}
+`);
+    return 1;
+  }
+  const up = status.upgrade;
+  if (!up) {
+    process.stdout.write(`${prefix}layout ${status.version ?? "unmarked"} (${status.state}); no upgrade ran.
+`);
+    return 0;
+  }
+  process.stdout.write(
+    up.report.split("\n").map((l) => prefix + l).join("\n") + "\n"
+  );
+  if (mode === "dry-run") {
+    process.stdout.write(`${prefix}dry run \u2014 nothing was written. Apply with: --mode=migrate
+`);
+    return 0;
+  }
+  return up.state === "committed" ? 0 : 1;
+}
 function main() {
   const args = process.argv.slice(2);
   const rootArg = args.find((a) => a.startsWith("--root="));
   const modeArg = args.find((a) => a.startsWith("--mode="));
   const workspace = args.includes("--workspace");
-  const root = rootArg ? path8.resolve(rootArg.split("=").slice(1).join("=")) : process.cwd();
+  const root = rootArg ? path6.resolve(rootArg.split("=").slice(1).join("=")) : process.cwd();
   if (args.includes("--accept-grades")) {
-    const accepted = acceptGrades(realFs, path8.join(root, ".guild"));
+    const accepted = acceptGrades(realFs, path6.join(root, ".guild"));
     if (accepted.length === 0) {
       process.stdout.write(`No drafted wiki importance grades pending \u2014 nothing to accept.
 `);
@@ -4698,50 +3477,17 @@ function main() {
     process.exit(1);
   }
   const mode = rawMode;
-  const result = runMigration({ root, mode, workspace: workspace ? true : void 0 });
+  const roots = workspace ? [root, ...childGuildRoots(root)] : [root];
   let exit = 0;
-  for (const child of result.children) {
-    const tag = result.workspace ? `[${child.root}] ` : "";
-    process.stdout.write(`${tag}classification=${child.detect.classification} action=${child.action}
-`);
-    if (child.snapshot) {
-      process.stdout.write(
-        `${tag}  snapshot: ${child.snapshot.destRel} (${child.snapshot.fileCount} file(s), ${child.snapshot.verified ? "verified" : "VERIFY-FAILED"})
-`
-      );
-    }
-    for (const a of child.artifacts) {
-      process.stdout.write(`${tag}  ${a.disposition}: ${a.rel}${a.target ? ` \u2192 ${a.target}` : ""}
-`);
-    }
-    if (child.relocated.length)
-      process.stdout.write(`${tag}  relocated ${child.relocated.length} key(s) \u2192 .unmigrated-v1.json
-`);
-    if (child.conflicts.length)
-      process.stdout.write(`${tag}  CONFLICTS (C4, kept LIVE): ${child.conflicts.map((c) => c.key).join(", ")}
-`);
-    {
-      const graded = child.grades.filter((g) => g.action === "graded");
-      if (graded.length)
-        process.stdout.write(
-          `${tag}  drafted ${graded.length} wiki importance grade(s) \u2014 review the report table, then: --accept-grades
-`
-        );
-    }
-    if (child.restoreCommand) process.stdout.write(`${tag}  restore: ${child.restoreCommand}
-`);
-    if (child.action !== "none" && child.action !== "v2-noop")
-      process.stdout.write(`${tag}  report: ${child.reportPath}
-`);
-    if (child.error) {
-      process.stderr.write(`${tag}  ERROR: ${child.error}
+  for (const target of roots) {
+    const prefix = roots.length > 1 ? `[${target}] ` : "";
+    try {
+      exit = upgradeOne(target, mode, prefix) === 0 ? exit : 1;
+    } catch (e) {
+      process.stderr.write(`${prefix}ERROR: ${e.message}
 `);
       exit = 1;
     }
-  }
-  if (result.children.every((c) => c.detect.classification === "none")) {
-    process.stdout.write(`No .guild/ artifacts found \u2014 nothing to migrate.
-`);
   }
   process.exit(exit);
 }

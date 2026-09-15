@@ -11,3 +11,7 @@ export * from "./workflows/storage-janitor";
 export * from "./workflows/storage-layout";
 export * from "./workflows/storage-policy";
 export * from "./workflows/storage-roots";
+export * from "./workflows/upgrade-glossary";
+export * from "./workflows/upgrade-journal";
+export * from "./workflows/upgrade-runner";
+export * from "./workflows/upgrade-steps";

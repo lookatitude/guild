@@ -36,7 +36,7 @@
       "id": "capability-profile",
       "source_path": "scripts/capability-profile.ts",
       "resource_path": "resources/scripts/capability-profile.ts",
-      "sha256": "1561ce284ca773b4e573d3e26f8553b68814df891ef54d2cf1cc319008355070"
+      "sha256": "a769fae78843b334541f3b565edf71dc9d7967c5987a03405293dd6b554accb1"
     },
     {
       "category": "scripts",

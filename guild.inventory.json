@@ -2109,6 +2109,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/state/upgrade-chain",
+      "source_path": "scripts/lib/state/upgrade-chain.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/support-matrix",
       "source_path": "scripts/lib/support-matrix.ts",
       "kind": "lib"
