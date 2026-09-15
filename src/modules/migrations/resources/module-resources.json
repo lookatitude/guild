@@ -36,7 +36,7 @@
       "id": "dot-guild/convert/index",
       "source_path": "scripts/dot-guild/convert/index.ts",
       "resource_path": "resources/scripts/dot-guild/convert/index.ts",
-      "sha256": "76c52bdf80ea2b4e58ba78c91bdfc2ffa7c8a7fcd4a0db2091ccf2bb60b6503d"
+      "sha256": "cb25a89b39a6f171890fdb770fcc389c96ff2459ea98a2c61728bf306f811d12"
     },
     {
       "category": "scripts",
@@ -92,7 +92,7 @@
       "id": "dot-guild/migrate-guild",
       "source_path": "scripts/dot-guild/migrate-guild.ts",
       "resource_path": "resources/scripts/dot-guild/migrate-guild.ts",
-      "sha256": "77df57e2c5c2b77ee06fe51a24c8bf579c7dc9945d8925247d3c1937a843560b"
+      "sha256": "2fe809e9dfef079aba3957cbadb324d997a079549b243901550bd1cdf86db48c"
     },
     {
       "category": "scripts",

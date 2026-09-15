@@ -1233,16 +1233,6 @@
       "lane": "T05"
     },
     {
-      "key": "no-direct-guild-join::scripts/lib/config-reconcile.ts:100::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/lib/config-reconcile.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/lib/config-reconcile.ts:103::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/lib/config-reconcile.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
       "key": "no-direct-guild-join::scripts/lib/core/config-cli.ts:1623::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction in scripts/lib/core/config-cli.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
       "lane": "T05"
@@ -2031,6 +2021,81 @@
       "key": "no-ts-workflows-dir::src/modules/lifecycle/resources/src/modules/prompting/workflows::workflows/ directory name is retired",
       "reason": "Pre-existing no-direct-guild-join site whose line moved when T06 rework-r2 refused `config role`, wired the overlay into `show --sources` and deleted the dead settings.json writers. Not a new .guild join.",
       "lane": "T06"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/host-runtime/resources/src/modules/state/workflows/upgrade-steps.ts:1112::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/host-runtime/resources/src/modules/state/workflows/upgrade-steps.ts:1125::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/host-runtime/resources/src/modules/state/workflows/upgrade-steps.ts:1127::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/host-runtime/resources/src/modules/state/workflows/upgrade-steps.ts:1162::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/host-runtime/resources/src/modules/state/workflows/upgrade-steps.ts:14::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/lifecycle/resources/src/modules/state/workflows/upgrade-steps.ts:1112::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/lifecycle/resources/src/modules/state/workflows/upgrade-steps.ts:1125::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/lifecycle/resources/src/modules/state/workflows/upgrade-steps.ts:1127::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/lifecycle/resources/src/modules/state/workflows/upgrade-steps.ts:1162::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/lifecycle/resources/src/modules/state/workflows/upgrade-steps.ts:14::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/state/workflows/upgrade-steps.ts:1112::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/state/workflows/upgrade-steps.ts:1125::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/state/workflows/upgrade-steps.ts:1127::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/state/workflows/upgrade-steps.ts:1162::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
+    },
+    {
+      "key": "no-durable-skill-versions::src/modules/state/workflows/upgrade-steps.ts:14::references a durable skill-versions/ tree",
+      "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
+      "lane": "T07"
     }
   ]
 }

@@ -87,6 +87,10 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   { id: "ensure-storage-layout", entry: "scripts/lib/state/ensure-storage-layout.ts" },
   // `/guild:maintain gc` — scratch janitor + report-only durable sweep (U-STOR).
   { id: "storage-gc", entry: "scripts/lib/state/storage-gc.ts" },
+  // NOT a CLI. The cold half of the layout upgrade (U-UPG), required by a
+  // non-analyzable specifier from `ensure-storage-layout.js` so the ≤50ms
+  // SessionStart bundle carries the marker read and nothing else (KTD29).
+  { id: "upgrade-chain", entry: "scripts/lib/state/upgrade-chain.ts" },
   // Product-loop intake router, named by using-guild. Compiled here so T03 can
   // repoint the skill body at `node` without a second build.
   { id: "classify-intake", entry: "scripts/lib/classify-intake.ts" },

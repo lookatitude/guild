@@ -30,6 +30,7 @@
       "lib/retention",
       "lib/sanitized-run-export",
       "lib/state/ensure-storage-layout",
+      "lib/state/upgrade-chain",
       "lib/state/storage",
       "lib/state/storage-gc"
     ]

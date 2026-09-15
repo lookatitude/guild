@@ -191,6 +191,10 @@ const DIST_ALLOWLIST = [
   // bundle is the same program and must carry the same exemption, or shipping
   // a compiled converter would fail the gate the converter is exempt from.
   path.join(PLUGIN_ROOT, "runtime/scripts/migrate-guild.js"),
+  // T07: the upgrade chain's COLD half bundles the same v1 converter (it is the
+  // bridge that supplies it to the step chain), so it carries the converter's
+  // exemption for the same reason migrate-guild.js does.
+  path.join(PLUGIN_ROOT, "runtime/scripts/upgrade-chain.js"),
   // T02: the single MCP binary statically bundles the MCP SDK and zod. Their
   // JSDoc carries `@deprecated` on THEIR symbols, not on a live Guild symbol,
   // so Marker 10 reads vendored text as a Guild violation. Guild's own MCP

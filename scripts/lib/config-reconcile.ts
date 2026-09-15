@@ -37,6 +37,9 @@ import {
   defaultIsValidValue,
 } from "./config-reconcile-contract";
 import { CONFIG_SCHEMA, flattenSettings, setDotted } from "./config-schema";
+// The closed policy set (KTD22). Same import site `config-cmd.ts` uses.
+import { canonicalPolicyKey, findHostIdentity, isPolicyKey } from "../../src/modules/config/workflows/policy-keys";
+import { createGuildStorage } from "./state/storage";
 import { DEFAULTS, HELP } from "../read-guild-config";
 // S5: semantic validity for capability.* (canonical shared entrypoint — R-DIST).
 import {
@@ -96,11 +99,19 @@ export interface ReconcileRunResult extends ReconcileResult {
   changed: boolean;
 }
 
+/**
+ * The durable root, named by the storage API — the only constructor of a `.guild`
+ * path (KTD15). `profile: "standalone"` keeps this pure path arithmetic: the
+ * legacy settings pair has no scope, so discovery would tell us nothing.
+ */
+function durableDir(cwd: string): string {
+  return createGuildStorage(cwd, { activeRoot: cwd, profile: "standalone" }).root.durable;
+}
 function settingsPathFor(cwd: string): string {
-  return path.join(cwd, ".guild", "settings.json");
+  return path.join(durableDir(cwd), "settings.json");
 }
 function provenancePathFor(cwd: string): string {
-  return path.join(cwd, ".guild", "settings.provenance.json");
+  return path.join(durableDir(cwd), "settings.provenance.json");
 }
 
 function parseJsonObject(text: string | null): Record<string, unknown> | null {
@@ -215,11 +226,53 @@ export function reconcileConfig(opts: ReconcileOptions): ReconcileRunResult {
     if (provenanceChanged) io.writeFileText(provenancePath, nextProvenanceText);
   }
 
+  // ── The POLICY FLOOR (U-CFG / KTD22) ───────────────────────────────────────
+  // `config init` (= `reconcile sync`) must leave a root with its scoped POLICY
+  // file present, not only the v1 `settings.json` inventory grab-bag. This write
+  // is additive and never-clobber: an existing policy file is left exactly as it
+  // is, and no inventory key ever reaches it (the closed policy set decides).
+  const floorWritten = writePolicyFloor(io, opts.cwd, merged);
+
   return {
     ...result,
     settings_path: settingsPath,
-    changed: settingsChanged || provenanceChanged,
+    changed: settingsChanged || provenanceChanged || floorWritten,
   };
+}
+
+/**
+ * Materialize `.guild/config/project.json` from the reconciled tree, taking ONLY
+ * keys inside the closed policy set and skipping any key already present.
+ *
+ * Why this lives here and not in the upgrade chain: `reconcile sync` is the path a
+ * FRESH root takes, and a fresh root has no `settings.json` to split. The upgrade
+ * chain's `settings-policy-split` step is the same transfer for an EXISTING root.
+ * Both are never-clobber, so a root that takes both paths is written once.
+ */
+function writePolicyFloor(io: ReconcileIO, cwd: string, merged: Record<string, unknown>): boolean {
+  // Named through the storage API, the only constructor of a durable path (KTD15).
+  const target = createGuildStorage(cwd, { activeRoot: cwd, profile: "standalone" }).project!.config();
+  const existingText = io.readFileText(target);
+  const existing = (parseJsonObject(existingText) as Record<string, unknown> | null) ?? {};
+  const flatExistingPolicy = flattenSettings({ ...existing });
+
+  const next: Record<string, unknown> = JSON.parse(JSON.stringify(existing)) as Record<string, unknown>;
+  let added = 0;
+  for (const [key, value] of Object.entries(flattenSettings({ ...merged }))) {
+    const canonical = canonicalPolicyKey(key);
+    if (!isPolicyKey(canonical)) continue;
+    if (findHostIdentity(canonical, value) !== null) continue;
+    if (canonical in flatExistingPolicy) continue;
+    setDotted(next, canonical, value);
+    added += 1;
+  }
+  if (added === 0) return false;
+
+  const text = JSON.stringify(next, null, 2) + "\n";
+  if (text === existingText) return false;
+  io.ensureDir(path.dirname(target));
+  io.writeFileText(target, text);
+  return true;
 }
 
 // ---------------------------------------------------------------------------

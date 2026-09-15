@@ -268,9 +268,9 @@ function resolveTsImport(importer, specifier) {
   return candidates.find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile()) ?? base;
 }
 function moduleIdForPath(modulesDir, filePath, moduleIds) {
-  const rel = path.relative(modulesDir, filePath);
-  if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
-  const [moduleId] = rel.split(path.sep);
+  const rel2 = path.relative(modulesDir, filePath);
+  if (rel2.startsWith("..") || path.isAbsolute(rel2)) return null;
+  const [moduleId] = rel2.split(path.sep);
   return moduleIds.has(moduleId) ? moduleId : null;
 }
 function dependencyTokens(source) {
@@ -446,9 +446,9 @@ function literalRelativeDependencySpecifiers(source) {
   return specifiers;
 }
 function hostFacingRootFor(root, filePath) {
-  const rel = path.relative(root, filePath);
-  if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
-  const [top] = rel.split(path.sep);
+  const rel2 = path.relative(root, filePath);
+  if (rel2.startsWith("..") || path.isAbsolute(rel2)) return null;
+  const [top] = rel2.split(path.sep);
   return HOST_FACING_ROOTS.includes(top) ? top : null;
 }
 function validateModuleBoundaries(root, manifests) {
@@ -3748,8 +3748,8 @@ var init_sealed_collections = __esm({
 function isRefused(r) {
   return "code" in r;
 }
-function escapes(rel) {
-  return rel === ".." || rel.startsWith(`..${path3.sep}`) || path3.isAbsolute(rel);
+function escapes(rel2) {
+  return rel2 === ".." || rel2.startsWith(`..${path3.sep}`) || path3.isAbsolute(rel2);
 }
 function refuse(code, detail) {
   return Object.freeze({ contained: false, code, detail });
@@ -3765,8 +3765,8 @@ function lstatOrNull(p) {
   }
 }
 function isWithin(child, parent) {
-  const rel = path3.relative(parent, child);
-  return rel === "" || !escapes(rel);
+  const rel2 = path3.relative(parent, child);
+  return rel2 === "" || !escapes(rel2);
 }
 function checkContained(root, target, options = {}) {
   const policy = options.policy ?? "resolve";
@@ -3810,8 +3810,8 @@ function checkContained(root, target, options = {}) {
       `${probe} is a symlink that does not resolve; refusing to write through it`
     );
   }
-  const rel = path3.relative(realRoot2, realProbe);
-  if (rel !== "" && escapes(rel)) {
+  const rel2 = path3.relative(realRoot2, realProbe);
+  if (rel2 !== "" && escapes(rel2)) {
     return refuse("outside-root", `${abs} resolves outside the project root (${realProbe})`);
   }
   if (policy === "physical") {
@@ -5105,9 +5105,9 @@ function assertNotUnderPluginInstall(absPath, pluginInstallRoot) {
   const root = pluginInstallRoot ?? process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"] ?? process.env["CODEX_PLUGIN_ROOT"];
   if (!root) return;
   const resolvedRoot = path4.resolve(root);
-  const rel = path4.relative(resolvedRoot, path4.resolve(absPath));
-  if (rel === "" || !rel.startsWith("..") && !path4.isAbsolute(rel)) {
-    const underOwnDotGuild = rel === ".guild" || rel.startsWith(`.guild${path4.sep}`);
+  const rel2 = path4.relative(resolvedRoot, path4.resolve(absPath));
+  if (rel2 === "" || !rel2.startsWith("..") && !path4.isAbsolute(rel2)) {
+    const underOwnDotGuild = rel2 === ".guild" || rel2.startsWith(`.guild${path4.sep}`);
     if (underOwnDotGuild && fs3.existsSync(path4.join(resolvedRoot, ".git"))) return;
     throw new Error(`project-created Guild artifact would be written under plugin install dir: ${absPath}`);
   }
@@ -11492,9 +11492,9 @@ function resolveRelative(importer, specifier) {
   return candidates.find((candidate) => fs9.existsSync(candidate) && fs9.statSync(candidate).isFile()) ?? base;
 }
 function moduleIdOfPath(root, target, moduleIds) {
-  const rel = relativeTo(path10.join(root, "src", "modules"), target);
-  if (rel.indexOf("..") === 0 || path10.isAbsolute(rel)) return null;
-  const head = rel.split("/")[0];
+  const rel2 = relativeTo(path10.join(root, "src", "modules"), target);
+  if (rel2.indexOf("..") === 0 || path10.isAbsolute(rel2)) return null;
+  const head = rel2.split("/")[0];
   return moduleIds.indexOf(head) === -1 ? null : head;
 }
 function moduleIdsOf(manifests) {
@@ -11511,26 +11511,26 @@ function classifyDestination(root, importer, specifier, fromModule, moduleIds) {
     };
   }
   const resolved = resolveRelative(importer, specifier);
-  const rel = relativeTo(root, resolved);
-  if (rel.indexOf("..") === 0 || path10.isAbsolute(rel)) {
-    return { destination_class: "unclassified", imported: rel, to_module: null };
+  const rel2 = relativeTo(root, resolved);
+  if (rel2.indexOf("..") === 0 || path10.isAbsolute(rel2)) {
+    return { destination_class: "unclassified", imported: rel2, to_module: null };
   }
-  const head = rel.split("/")[0];
+  const head = rel2.split("/")[0];
   if (MH07_HOST_FACING_ROOTS.indexOf(head) !== -1) {
-    return { destination_class: "host_facing_mirror", imported: rel, to_module: head };
+    return { destination_class: "host_facing_mirror", imported: rel2, to_module: head };
   }
   const toModule = moduleIdOfPath(root, resolved, moduleIds);
   if (toModule === null) {
-    return { destination_class: "unclassified", imported: rel, to_module: null };
+    return { destination_class: "unclassified", imported: rel2, to_module: null };
   }
   if (toModule === fromModule) {
-    return { destination_class: "intra_module", imported: rel, to_module: toModule };
+    return { destination_class: "intra_module", imported: rel2, to_module: toModule };
   }
   const publicIndex = path10.join(root, "src", "modules", toModule, "index.ts");
   const isPublic = path10.resolve(resolved) === path10.resolve(publicIndex);
   return {
     destination_class: isPublic ? "module_public_index" : "module_private",
-    imported: rel,
+    imported: rel2,
     to_module: toModule
   };
 }
@@ -11543,8 +11543,8 @@ function mh07ScanDependencyGraph(root, extract = extractNeutralImportEdges, modu
   const unresolved2 = [];
   const ambient = [];
   for (const file of files) {
-    const rel = relativeTo(root, file);
-    nodes.push(rel);
+    const rel2 = relativeTo(root, file);
+    nodes.push(rel2);
     const fromModule = moduleIdOfPath(root, file, moduleIds);
     if (fromModule === null) continue;
     const extracted = extract(fs9.readFileSync(file, "utf8"));
@@ -11552,16 +11552,16 @@ function mh07ScanDependencyGraph(root, extract = extractNeutralImportEdges, modu
       if (edge.kind === "unresolved") {
         const detail = edge.detail ?? "";
         if (edge.form === "require" && detail.indexOf("require used as a value") === 0) {
-          ambient.push({ importer: rel, detail });
+          ambient.push({ importer: rel2, detail });
         } else {
-          unresolved2.push({ importer: rel, form: edge.form, detail });
+          unresolved2.push({ importer: rel2, form: edge.form, detail });
         }
         continue;
       }
       const specifier = edge.specifier ?? "";
       const classified = classifyDestination(root, file, specifier, fromModule, moduleIds);
       edges.push({
-        importer: rel,
+        importer: rel2,
         specifier,
         form: edge.form,
         imported: classified.imported,
@@ -12396,12 +12396,12 @@ function safeArrayLength(value) {
 function isObjectLike(value) {
   return typeof value === "object" && value !== null && !safeIsArray(value);
 }
-function issue(path53, code, message) {
-  return { path: path53, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
+function issue(path56, code, message) {
+  return { path: path56, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
 }
-function pushIssue(issues, path53, code, message) {
+function pushIssue(issues, path56, code, message) {
   if (issues.length >= MAX_ISSUES) return;
-  issues.push(issue(path53, code, message));
+  issues.push(issue(path56, code, message));
 }
 function sortIssues(issues) {
   return [...issues].sort(
@@ -12412,15 +12412,15 @@ function canonicalDocumentJson(value) {
   const errors = [];
   const active = /* @__PURE__ */ new Set();
   let nodes = 0;
-  const walk = (node, path53, depth) => {
+  const walk = (node, path56, depth) => {
     if (errors.length >= MAX_ISSUES) return null;
     if (depth > MAX_CANONICAL_DEPTH) {
-      pushIssue(errors, path53, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
+      pushIssue(errors, path56, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
       return null;
     }
     nodes += 1;
     if (nodes > MAX_CANONICAL_NODES) {
-      pushIssue(errors, path53, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
+      pushIssue(errors, path56, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
       return null;
     }
     if (node === null) return "null";
@@ -12429,7 +12429,7 @@ function canonicalDocumentJson(value) {
     if (kind === "string") {
       const text = node;
       if (text.length > MAX_STRING_LENGTH) {
-        pushIssue(errors, path53, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
+        pushIssue(errors, path56, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
         return null;
       }
       return JSON.stringify(text);
@@ -12437,17 +12437,17 @@ function canonicalDocumentJson(value) {
     if (kind === "number") {
       const num = node;
       if (!Number.isFinite(num)) {
-        pushIssue(errors, path53, "non_finite_number", "numbers must be finite");
+        pushIssue(errors, path56, "non_finite_number", "numbers must be finite");
         return null;
       }
       return Object.is(num, -0) ? "0" : String(num);
     }
     if (kind !== "object") {
-      pushIssue(errors, path53, "unsupported_type", `${kind} has no canonical JSON form`);
+      pushIssue(errors, path56, "unsupported_type", `${kind} has no canonical JSON form`);
       return null;
     }
     if (active.has(node)) {
-      pushIssue(errors, path53, "cycle_detected", "value contains a cycle");
+      pushIssue(errors, path56, "cycle_detected", "value contains a cycle");
       return null;
     }
     active.add(node);
@@ -12455,26 +12455,26 @@ function canonicalDocumentJson(value) {
       if (safeIsArray(node)) {
         const length = safeArrayLength(node);
         if (length.ok === false) {
-          pushIssue(errors, path53, "array_length_unreadable", length.reason);
+          pushIssue(errors, path56, "array_length_unreadable", length.reason);
           return null;
         }
         if (length.length > MAX_ARRAY_ITEMS) {
-          pushIssue(errors, path53, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
+          pushIssue(errors, path56, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
           return null;
         }
         const parts2 = [];
         for (let index = 0; index < length.length; index += 1) {
           const key = String(index);
           if (!safeHasOwn(node, key)) {
-            pushIssue(errors, `${path53}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
+            pushIssue(errors, `${path56}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
             return null;
           }
           const read = safeGet(node, key);
           if (read.ok === false) {
-            pushIssue(errors, `${path53}[${index}]`, "property_read_threw", read.reason);
+            pushIssue(errors, `${path56}[${index}]`, "property_read_threw", read.reason);
             return null;
           }
-          const encoded = walk(read.value, `${path53}[${index}]`, depth + 1);
+          const encoded = walk(read.value, `${path56}[${index}]`, depth + 1);
           if (encoded === null) return null;
           parts2.push(encoded);
         }
@@ -12482,11 +12482,11 @@ function canonicalDocumentJson(value) {
       }
       const keys = safeOwnKeys(node);
       if (keys.ok === false) {
-        pushIssue(errors, path53, "own_keys_threw", keys.reason);
+        pushIssue(errors, path56, "own_keys_threw", keys.reason);
         return null;
       }
       if (keys.keys.length > MAX_OBJECT_KEYS) {
-        pushIssue(errors, path53, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
+        pushIssue(errors, path56, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
         return null;
       }
       const sorted = [...keys.keys].sort();
@@ -12494,14 +12494,14 @@ function canonicalDocumentJson(value) {
       for (const key of sorted) {
         const read = safeGet(node, key);
         if (read.ok === false) {
-          pushIssue(errors, `${path53}.${key}`, "property_read_threw", read.reason);
+          pushIssue(errors, `${path56}.${key}`, "property_read_threw", read.reason);
           return null;
         }
         if (read.value === void 0) {
-          pushIssue(errors, `${path53}.${key}`, "undefined_value", "undefined has no canonical JSON form");
+          pushIssue(errors, `${path56}.${key}`, "undefined_value", "undefined has no canonical JSON form");
           return null;
         }
-        const encoded = walk(read.value, `${path53}.${key}`, depth + 1);
+        const encoded = walk(read.value, `${path56}.${key}`, depth + 1);
         if (encoded === null) return null;
         parts.push(`${JSON.stringify(key)}:${encoded}`);
       }
@@ -12557,38 +12557,38 @@ var init_document_safe = __esm({
 });
 
 // src/modules/documents/workflows/document-records.ts
-function readShape(issues, value, path53, allowed) {
+function readShape(issues, value, path56, allowed) {
   if (value === null || typeof value !== "object") {
-    pushIssue(issues, path53, "not_an_object", `${path53} must be an object`);
+    pushIssue(issues, path56, "not_an_object", `${path56} must be an object`);
     return false;
   }
   if (safeIsArray(value)) {
-    pushIssue(issues, path53, "not_an_object", `${path53} must be an object, not an array`);
+    pushIssue(issues, path56, "not_an_object", `${path56} must be an object, not an array`);
     return false;
   }
   const keys = safeOwnKeys(value);
   if (keys.ok === false) {
-    pushIssue(issues, path53, "own_keys_threw", `${path53}: ${keys.reason}`);
+    pushIssue(issues, path56, "own_keys_threw", `${path56}: ${keys.reason}`);
     return false;
   }
   const allowedSet = new Set(allowed);
   let ok = true;
   for (const key of [...keys.keys].sort()) {
     if (!allowedSet.has(key)) {
-      pushIssue(issues, `${path53}.${key}`, "unexpected_key", `${path53}.${key} is not part of the closed schema`);
+      pushIssue(issues, `${path56}.${key}`, "unexpected_key", `${path56}.${key} is not part of the closed schema`);
       ok = false;
     }
   }
   for (const key of allowed) {
     if (!safeHasOwn(value, key)) {
-      pushIssue(issues, `${path53}.${key}`, "missing_field", `${path53}.${key} is required`);
+      pushIssue(issues, `${path56}.${key}`, "missing_field", `${path56}.${key} is required`);
       ok = false;
     }
   }
   return ok;
 }
-function readString(issues, parent, path53, key, options = {}) {
-  const fieldPath = `${path53}.${key}`;
+function readString(issues, parent, path56, key, options = {}) {
+  const fieldPath = `${path56}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -12623,8 +12623,8 @@ function readString(issues, parent, path53, key, options = {}) {
   }
   return value;
 }
-function readArray(issues, parent, path53, key, options = {}) {
-  const fieldPath = `${path53}.${key}`;
+function readArray(issues, parent, path56, key, options = {}) {
+  const fieldPath = `${path56}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -12667,10 +12667,10 @@ function readArray(issues, parent, path53, key, options = {}) {
   }
   return ok ? items : null;
 }
-function readStringArray(issues, parent, path53, key, options = {}) {
-  const items = readArray(issues, parent, path53, key, options);
+function readStringArray(issues, parent, path56, key, options = {}) {
+  const items = readArray(issues, parent, path56, key, options);
   if (items === null) return null;
-  const fieldPath = `${path53}.${key}`;
+  const fieldPath = `${path56}.${key}`;
   const out = [];
   let ok = true;
   for (let index = 0; index < items.length; index += 1) {
@@ -12696,10 +12696,10 @@ function readStringArray(issues, parent, path53, key, options = {}) {
   }
   return ok ? out : null;
 }
-function readItemArray(issues, parent, path53, key, options, readItem) {
-  const items = readArray(issues, parent, path53, key, options);
+function readItemArray(issues, parent, path56, key, options, readItem) {
+  const items = readArray(issues, parent, path56, key, options);
   if (items === null) return null;
-  const fieldPath = `${path53}.${key}`;
+  const fieldPath = `${path56}.${key}`;
   const out = [];
   const firstIndexById = /* @__PURE__ */ new Map();
   let ok = true;
@@ -12726,13 +12726,13 @@ function readItemArray(issues, parent, path53, key, options, readItem) {
   }
   return ok ? out : null;
 }
-function readProvenance(issues, parent, path53) {
+function readProvenance(issues, parent, path56) {
   const read = safeGet(parent, "provenance");
   if (read.ok === false) {
-    pushIssue(issues, `${path53}.provenance`, "property_read_threw", `${path53}.provenance: property read threw`);
+    pushIssue(issues, `${path56}.provenance`, "property_read_threw", `${path56}.provenance: property read threw`);
     return null;
   }
-  const provenancePath2 = `${path53}.provenance`;
+  const provenancePath2 = `${path56}.provenance`;
   if (!readShape(issues, read.value, provenancePath2, PROVENANCE_KEYS)) return null;
   const source = read.value;
   const authorId = readString(issues, source, provenancePath2, "author_id", {
@@ -12773,10 +12773,10 @@ function readProvenance(issues, parent, path53) {
     source: provenanceSource
   };
 }
-function readPlanBody(issues, body, path53) {
-  if (!readShape(issues, body, path53, ["objectives", "steps"])) return null;
-  const objectives = readStringArray(issues, body, path53, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
-  const steps = readItemArray(issues, body, path53, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
+function readPlanBody(issues, body, path56) {
+  if (!readShape(issues, body, path56, ["objectives", "steps"])) return null;
+  const objectives = readStringArray(issues, body, path56, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
+  const steps = readItemArray(issues, body, path56, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
     if (!readShape(itemIssues, item, itemPath, ["id", "title", "status"])) return null;
     const id = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
     const title = readString(itemIssues, item, itemPath, "title", { maxLength: 500 });
@@ -12787,12 +12787,12 @@ function readPlanBody(issues, body, path53) {
   if (objectives === null || steps === null) return null;
   return { objectives, steps };
 }
-function readSpecBody(issues, body, path53) {
-  if (!readShape(issues, body, path53, ["requirements"])) return null;
+function readSpecBody(issues, body, path56) {
+  if (!readShape(issues, body, path56, ["requirements"])) return null;
   const requirements = readItemArray(
     issues,
     body,
-    path53,
+    path56,
     "requirements",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -12809,22 +12809,22 @@ function readSpecBody(issues, body, path53) {
   if (requirements === null) return null;
   return { requirements };
 }
-function readHandoffBody(issues, body, path53) {
-  if (!readShape(issues, body, path53, ["task_id", "status", "artifacts", "issues"])) return null;
-  const taskId = readString(issues, body, path53, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
-  const status = readString(issues, body, path53, "status", { enumOf: HANDOFF_STATUSES });
-  const artifacts = readStringArray(issues, body, path53, "artifacts", { max: 256, itemMaxLength: 1e3 });
-  const handoffIssues = readStringArray(issues, body, path53, "issues", { max: 256, itemMaxLength: 1e3 });
+function readHandoffBody(issues, body, path56) {
+  if (!readShape(issues, body, path56, ["task_id", "status", "artifacts", "issues"])) return null;
+  const taskId = readString(issues, body, path56, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+  const status = readString(issues, body, path56, "status", { enumOf: HANDOFF_STATUSES });
+  const artifacts = readStringArray(issues, body, path56, "artifacts", { max: 256, itemMaxLength: 1e3 });
+  const handoffIssues = readStringArray(issues, body, path56, "issues", { max: 256, itemMaxLength: 1e3 });
   if (taskId === null || status === null || artifacts === null || handoffIssues === null) return null;
   return { task_id: taskId, status, artifacts, issues: handoffIssues };
 }
-function readReviewBody(issues, body, path53) {
-  if (!readShape(issues, body, path53, ["verdict", "findings"])) return null;
-  const verdict = readString(issues, body, path53, "verdict", { enumOf: REVIEW_VERDICTS });
+function readReviewBody(issues, body, path56) {
+  if (!readShape(issues, body, path56, ["verdict", "findings"])) return null;
+  const verdict = readString(issues, body, path56, "verdict", { enumOf: REVIEW_VERDICTS });
   const findings = readItemArray(
     issues,
     body,
-    path53,
+    path56,
     "findings",
     { max: 256 },
     (itemIssues, item, itemPath) => {
@@ -12839,13 +12839,13 @@ function readReviewBody(issues, body, path53) {
   if (verdict === null || findings === null) return null;
   return { verdict, findings };
 }
-function readVerifyBody(issues, body, path53) {
-  if (!readShape(issues, body, path53, ["outcome", "checks"])) return null;
-  const outcome = readString(issues, body, path53, "outcome", { enumOf: VERIFY_OUTCOMES });
+function readVerifyBody(issues, body, path56) {
+  if (!readShape(issues, body, path56, ["outcome", "checks"])) return null;
+  const outcome = readString(issues, body, path56, "outcome", { enumOf: VERIFY_OUTCOMES });
   const checks = readItemArray(
     issues,
     body,
-    path53,
+    path56,
     "checks",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -13449,10 +13449,10 @@ function requiredRecord(errors, parent, key) {
   }
   return value;
 }
-function requiredString(errors, parent, path53, key) {
+function requiredString(errors, parent, path56, key) {
   const value = parent[key];
   if (typeof value !== "string" || value.length === 0) {
-    pushIssue(errors, `${path53}.${key}`, "missing_field", `${key} must be a non-empty string`);
+    pushIssue(errors, `${path56}.${key}`, "missing_field", `${key} must be a non-empty string`);
     return null;
   }
   return value;
@@ -13465,23 +13465,23 @@ function requiredArray(errors, parent, key) {
   }
   return value;
 }
-function validateStringArray(errors, values, path53) {
+function validateStringArray(errors, values, path56) {
   if (values === null) return;
   values.forEach((value, index) => {
     if (typeof value !== "string" || value.length === 0) {
-      pushIssue(errors, `${path53}[${index}]`, "wrong_type", `${path53} entries must be non-empty strings`);
+      pushIssue(errors, `${path56}[${index}]`, "wrong_type", `${path56} entries must be non-empty strings`);
     }
   });
 }
-function canonicalReceiptInstant(errors, value, path53) {
+function canonicalReceiptInstant(errors, value, path56) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
-    pushIssue(errors, path53, "invalid_timestamp", `${path53} must be an ISO-8601 timestamp`);
+    pushIssue(errors, path56, "invalid_timestamp", `${path56} must be an ISO-8601 timestamp`);
     return null;
   }
   const parsed = Date.parse(value);
   const expectedCanonical = value.includes(".") ? value : value.replace(/Z$/, ".000Z");
   if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== expectedCanonical) {
-    pushIssue(errors, path53, "invalid_timestamp", `${path53} must name a real UTC calendar instant`);
+    pushIssue(errors, path56, "invalid_timestamp", `${path56} must name a real UTC calendar instant`);
     return null;
   }
   return expectedCanonical;
@@ -14208,7 +14208,7 @@ function redactHomeDirPaths(input) {
 function redactKeyValueSecrets(input) {
   return input.replace(
     KV_SECRET_PATTERN,
-    (_match, key, sep13) => `${key}${sep13}${KV_REDACTED}`
+    (_match, key, sep14) => `${key}${sep14}${KV_REDACTED}`
   );
 }
 function allWordsWordish(words) {
@@ -14854,11 +14854,11 @@ function exclusionSentinelPath(runDir3) {
   return (0, import_node_path.join)(runDir3, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir3) {
-  const path53 = stableLockPath(runDir3);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path53), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path53)) return;
+  const path56 = stableLockPath(runDir3);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path56), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path56)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path53, "wx");
+    const fd = (0, import_node_fs.openSync)(path56, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -14956,9 +14956,9 @@ function appendEvent(runDir3, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId2 = opts.laneId ?? "global";
-    const path53 = laneFallbackPath(runDir3, laneId2);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path53), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path53, "a");
+    const path56 = laneFallbackPath(runDir3, laneId2);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path56), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path56, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -20313,8 +20313,8 @@ function buildBatteryModuleWorkspace(base) {
     'export const BENCHMARK_CONTRACT_VERSION = "guild.benchmark.contract.v1" as const;',
     ""
   ].join("\n");
-  for (const [rel, content] of Object.entries(files)) {
-    const target = path24.join(base, rel);
+  for (const [rel2, content] of Object.entries(files)) {
+    const target = path24.join(base, rel2);
     fs20.mkdirSync(path24.dirname(target), { recursive: true });
     fs20.writeFileSync(target, content);
   }
@@ -22532,8 +22532,8 @@ function runBindingPath(root, runId) {
 function pendingSubstantiveOperationPath(root, runId) {
   return path27.join(root, ".guild", "runs", runId, "capability", "pending-substantive-operation.json");
 }
-function readPendingSubstantiveOperation(root, runId, fs43 = realBindingFs()) {
-  const raw = fs43.readFile(pendingSubstantiveOperationPath(root, runId));
+function readPendingSubstantiveOperation(root, runId, fs46 = realBindingFs()) {
+  const raw = fs46.readFile(pendingSubstantiveOperationPath(root, runId));
   if (raw === null) return null;
   let value;
   try {
@@ -22548,20 +22548,20 @@ function readPendingSubstantiveOperation(root, runId, fs43 = realBindingFs()) {
   }
   return record;
 }
-function writePendingSubstantiveOperation(root, record, fs43) {
+function writePendingSubstantiveOperation(root, record, fs46) {
   const target = pendingSubstantiveOperationPath(root, record.run_id);
   const serialized = `${JSON.stringify(record, null, 2)}
 `;
-  if (fs43.writeFileAtomicContained) {
-    fs43.writeFileAtomicContained(root, target, serialized);
+  if (fs46.writeFileAtomicContained) {
+    fs46.writeFileAtomicContained(root, target, serialized);
     return;
   }
-  fs43.mkdirp(path27.dirname(target));
-  fs43.writeFile(target, serialized);
+  fs46.mkdirp(path27.dirname(target));
+  fs46.writeFile(target, serialized);
 }
 function stagePendingSubstantiveOperation(opts) {
-  const fs43 = opts.fs ?? realBindingFs();
-  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs43);
+  const fs46 = opts.fs ?? realBindingFs();
+  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs46);
   if (prior?.state === "pending" && prior.task_id !== opts.task_id) {
     throw new Error(`pending substantive operation for ${prior.task_id} must be recovered before ${opts.task_id}`);
   }
@@ -22571,14 +22571,14 @@ function stagePendingSubstantiveOperation(opts) {
     state: "pending",
     run_id: opts.run_id,
     task_id: opts.task_id
-  }, fs43);
+  }, fs46);
 }
 function completePendingSubstantiveOperation(opts) {
-  const fs43 = opts.fs ?? realBindingFs();
-  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs43);
+  const fs46 = opts.fs ?? realBindingFs();
+  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs46);
   if (!prior || prior.task_id !== opts.task_id) throw new Error("pending substantive operation completion has no matching transaction");
   if (prior.state === "complete") return;
-  writePendingSubstantiveOperation(opts.root, { ...prior, state: "complete" }, fs43);
+  writePendingSubstantiveOperation(opts.root, { ...prior, state: "complete" }, fs46);
 }
 function assertNoPendingSubstantiveOperation(opts) {
   const record = readPendingSubstantiveOperation(opts.root, opts.run_id, opts.fs ?? realBindingFs());
@@ -22602,9 +22602,9 @@ function initializeRunBindingExclusion(root, runId) {
   initStableLockfile(path27.join(root, ".guild", "runs", runId));
 }
 function mintRunBinding(opts) {
-  const fs43 = opts.fs ?? realBindingFs();
+  const fs46 = opts.fs ?? realBindingFs();
   const p = runBindingPath(opts.root, opts.run_id);
-  if (fs43.exists(p)) {
+  if (fs46.exists(p)) {
     throw new Error(
       `run-binding: a binding for ${opts.run_id} is already minted \u2014 resume restores it (loadRunBinding); it is never re-minted`
     );
@@ -22615,9 +22615,9 @@ function mintRunBinding(opts) {
     binding_ref: `rb-${crypto6.randomBytes(16).toString("hex")}`,
     state: "open"
   };
-  fs43.mkdirp(path27.dirname(p));
+  fs46.mkdirp(path27.dirname(p));
   const contents = JSON.stringify(record, null, 2) + "\n";
-  const created = fs43.writeFileExclusive ? fs43.writeFileExclusive(p, contents) : !fs43.exists(p) && (fs43.writeFile(p, contents), true);
+  const created = fs46.writeFileExclusive ? fs46.writeFileExclusive(p, contents) : !fs46.exists(p) && (fs46.writeFile(p, contents), true);
   if (!created) {
     throw new Error(
       `run-binding: a binding for ${opts.run_id} is already minted \u2014 resume restores it (loadRunBinding); it is never re-minted`
@@ -22641,8 +22641,8 @@ function validateRunBindingRecord(parsed, expectedRunId) {
   };
 }
 function readRunBindingRecord(opts) {
-  const fs43 = opts.fs ?? realBindingFs();
-  const raw = fs43.readFile(runBindingPath(opts.root, opts.run_id));
+  const fs46 = opts.fs ?? realBindingFs();
+  const raw = fs46.readFile(runBindingPath(opts.root, opts.run_id));
   if (raw === null) return { status: "absent" };
   let parsed;
   try {
@@ -22659,10 +22659,10 @@ function loadRunBinding(opts) {
   return read.status === "ok" ? read.record : null;
 }
 function closeRunBinding(opts) {
-  const fs43 = opts.fs ?? realBindingFs();
+  const fs46 = opts.fs ?? realBindingFs();
   const record = loadRunBinding(opts);
   if (record === null || record.state === "closed") return;
-  fs43.writeFile(
+  fs46.writeFile(
     runBindingPath(opts.root, opts.run_id),
     JSON.stringify({ ...record, state: "closed" }, null, 2) + "\n"
   );
@@ -22671,7 +22671,7 @@ function reopenRunBinding(opts, binding_ref) {
   return withRunBindingExclusion(opts.root, opts.run_id, () => reopenRunBindingUnderExclusion(opts, binding_ref));
 }
 function reopenRunBindingUnderExclusion(opts, binding_ref) {
-  const fs43 = opts.fs ?? realBindingFs();
+  const fs46 = opts.fs ?? realBindingFs();
   const read = readRunBindingRecord(opts);
   if (read.status === "absent") throw new BindingRejectedError("binding_not_minted", opts.run_id);
   if (read.status === "malformed") throw new BindingRejectedError("binding_malformed", opts.run_id);
@@ -22681,7 +22681,7 @@ function reopenRunBindingUnderExclusion(opts, binding_ref) {
   }
   if (record.state === "open") return record;
   const reopened = { ...record, state: "open" };
-  fs43.writeFile(runBindingPath(opts.root, opts.run_id), JSON.stringify(reopened, null, 2) + "\n");
+  fs46.writeFile(runBindingPath(opts.root, opts.run_id), JSON.stringify(reopened, null, 2) + "\n");
   return reopened;
 }
 function verifyRunBinding(input) {
@@ -22707,8 +22707,8 @@ function assertWritableBinding(input) {
   if (verdict.ok === false) throw new BindingRejectedError(verdict.reason, input.run_id);
   return verdict.binding;
 }
-function locateCandidateRunId(root, fs43) {
-  const f = fs43 ?? realBindingFs();
+function locateCandidateRunId(root, fs46) {
+  const f = fs46 ?? realBindingFs();
   const candidates = [
     [path27.join(root, ".guild", "runs", "current-run-id"), "sentinel-legacy"],
     [path27.join(root, ".guild", "current-run-id"), "sentinel-b2"]
@@ -22850,8 +22850,8 @@ function assertNoModelName(file, text) {
 function composeSessionPrompt(input) {
   let base = "";
   if (input.pluginRoot) {
-    for (const rel of USING_GUILD_BASE_RELS) {
-      const text = readIfFile(path28.join(input.pluginRoot, rel));
+    for (const rel2 of USING_GUILD_BASE_RELS) {
+      const text = readIfFile(path28.join(input.pluginRoot, rel2));
       if (text !== null) {
         base = text;
         break;
@@ -22942,8 +22942,8 @@ function modelCatalogCacheDir(workspaceRoot) {
 function legacyModelCatalogCacheDir(workspaceRoot) {
   return path29.join(workspaceRoot, ...MODEL_CATALOG_CACHE_REL_SEGMENTS);
 }
-function isModelCatalogCachePath(rel) {
-  const norm = rel.split(path29.sep).join("/");
+function isModelCatalogCachePath(rel2) {
+  const norm = rel2.split(path29.sep).join("/");
   return norm === MODEL_CATALOG_CACHE_REL || norm.startsWith(`${MODEL_CATALOG_CACHE_REL}/`);
 }
 function needsQuote(value) {
@@ -24244,9 +24244,9 @@ function readArray3(value) {
   return out;
 }
 function toCanonicalRelPath(absPath, root) {
-  const rel = path30.relative(root, absPath);
-  if (rel.length === 0 || rel.startsWith("..") || path30.isAbsolute(rel)) return null;
-  const posix = rel.split(path30.sep).join("/");
+  const rel2 = path30.relative(root, absPath);
+  if (rel2.length === 0 || rel2.startsWith("..") || path30.isAbsolute(rel2)) return null;
+  const posix = rel2.split(path30.sep).join("/");
   if (posix.length > MAX_SCALAR_LEN3 || CONTROL_CHARS4.test(posix)) return null;
   for (const seg of posix.split("/")) {
     if (seg.length === 0 || seg === "." || seg === "..") return null;
@@ -24302,8 +24302,8 @@ function buildCompatibilityCatalog(opts) {
   const problems = [];
   const entries = [];
   const push = (kind, id, abs) => {
-    const rel = toCanonicalRelPath(abs, root);
-    if (rel === null) {
+    const rel2 = toCanonicalRelPath(abs, root);
+    if (rel2 === null) {
       problems.push(`${kind} "${id}": path is not canonical plugin-relative (${abs})`);
       return;
     }
@@ -24327,7 +24327,7 @@ function buildCompatibilityCatalog(opts) {
       Object.freeze({
         kind,
         id,
-        path: rel,
+        path: rel2,
         content_hash: crypto9.createHash("sha256").update(bytes).digest("hex"),
         deprecation,
         deprecated_by: deprecatedBy
@@ -28697,7 +28697,7 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
     );
   }
   const { cwd, fs: fsSeam, resolvedAtRef } = opts;
-  const fs43 = fsSeam ?? realProvenanceFsSeam();
+  const fs46 = fsSeam ?? realProvenanceFsSeam();
   const outPath = resolvedSettingsPath(cwd, runId);
   const runsBase = path37.resolve(cwd, ".guild", "runs");
   assertContained(outPath, cwd, "writeResolvedSettingsSnapshot");
@@ -28706,9 +28706,9 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
     resolved_at_ref: resolvedAtRef ?? runId
   };
   const serialized = JSON.stringify(onDisk, null, 2) + "\n";
-  if (fs43.scrubbedWriteDurable) {
+  if (fs46.scrubbedWriteDurable) {
     const runDir3 = path37.join(cwd, ".guild", "runs", runId);
-    const result = fs43.scrubbedWriteDurable(outPath, serialized, "config", runDir3, runId);
+    const result = fs46.scrubbedWriteDurable(outPath, serialized, "config", runDir3, runId);
     if (result.blocked) {
       process.stderr.write(
         `[run-lifecycle] WARN: resolved-settings.json write BLOCKED by secret scrub (fail-CLOSED) for run ${runId}. Security event emitted.
@@ -28716,7 +28716,7 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
       );
     }
   } else {
-    fs43.writeFile(outPath, serialized);
+    fs46.writeFile(outPath, serialized);
   }
   return outPath;
 }
@@ -28809,7 +28809,7 @@ function writePluginConfigSnapshot(runId, snapshot, start, env) {
 function readResolvedSettingsSnapshot(runId, opts) {
   if (!validateRunId(runId)) return null;
   const { cwd, fs: fsSeam } = opts;
-  const fs43 = fsSeam ?? realProvenanceFsSeam();
+  const fs46 = fsSeam ?? realProvenanceFsSeam();
   const filePath = resolvedSettingsPath(cwd, runId);
   const runsBase = path37.resolve(cwd, ".guild", "runs");
   try {
@@ -28817,7 +28817,7 @@ function readResolvedSettingsSnapshot(runId, opts) {
   } catch {
     return null;
   }
-  const raw = fs43.readFile(filePath);
+  const raw = fs46.readFile(filePath);
   if (raw === null) return null;
   try {
     return JSON.parse(raw);
@@ -28876,14 +28876,14 @@ function writeGateBlock(raw, gate, rec) {
   lines.splice(end, 0, gateKeyLine, ...entryLines);
   return lines.join("\n");
 }
-function appendGateOutcome(fs43, root, runId, gate, record) {
+function appendGateOutcome(fs46, root, runId, gate, record) {
   if (!GATE_TOKEN.test(gate)) return false;
   const p = runYamlPath(root, runId);
-  const raw = fs43.readFile(p);
+  const raw = fs46.readFile(p);
   if (raw === null) return false;
   const next = writeGateBlock(raw, gate, record);
   if (next === null) return false;
-  fs43.writeFile(p, next);
+  fs46.writeFile(p, next);
   return true;
 }
 function readRunStartedAt(runDir3, readFile = (p) => {
@@ -30640,10 +30640,10 @@ function journalPath(root) {
   return path40.join(root, "journal.ndjson");
 }
 function assertNoSymlinkComponents(base, resolved) {
-  const rel = path40.relative(base, resolved);
-  if (rel.length === 0) return;
+  const rel2 = path40.relative(base, resolved);
+  if (rel2.length === 0) return;
   let current = base;
-  for (const segment of rel.split(path40.sep)) {
+  for (const segment of rel2.split(path40.sep)) {
     if (segment.length === 0) continue;
     current = path40.join(current, segment);
     const stat = fs34.lstatSync(current);
@@ -31161,7 +31161,7 @@ function getFingerprint(db, tableName) {
     return null;
   }
 }
-function setFingerprint(db, tableName, sourcePath, sha2563) {
+function setFingerprint(db, tableName, sourcePath, sha2564) {
   db.prepare(
     `INSERT INTO _fingerprints (table_name, source_path, sha256, populated_at)
      VALUES (?, ?, ?, ?)
@@ -31169,7 +31169,7 @@ function setFingerprint(db, tableName, sourcePath, sha2563) {
        source_path  = excluded.source_path,
        sha256       = excluded.sha256,
        populated_at = excluded.populated_at`
-  ).run(tableName, sourcePath, sha2563, (/* @__PURE__ */ new Date()).toISOString());
+  ).run(tableName, sourcePath, sha2564, (/* @__PURE__ */ new Date()).toISOString());
 }
 function openIndex(dbPath) {
   const migResult = runMigrations(dbPath);
@@ -31424,13 +31424,13 @@ var init_index_cache = __esm({
 });
 
 // src/modules/state/workflows/storage-policy.ts
-function isKtd16FrozenPath(rel) {
-  const head = rel.replace(/^\/+/, "").split("/")[0];
+function isKtd16FrozenPath(rel2) {
+  const head = rel2.replace(/^\/+/, "").split("/")[0];
   return KTD16_FROZEN_PREFIXES.includes(head);
 }
 function isUnderDurable(abs, guildDir) {
-  const rel = path42.relative(path42.resolve(guildDir), path42.resolve(abs));
-  return rel === "" || !rel.startsWith("..") && !path42.isAbsolute(rel);
+  const rel2 = path42.relative(path42.resolve(guildDir), path42.resolve(abs));
+  return rel2 === "" || !rel2.startsWith("..") && !path42.isAbsolute(rel2);
 }
 function assertClassPlacement(storageClass, absPath, guildDir) {
   const under = isUnderDurable(absPath, guildDir);
@@ -31770,8 +31770,8 @@ function resolveContainedRealDir(abs, root) {
   } catch {
     return null;
   }
-  const rel = path43.relative(realRoot2, real);
-  if (rel === "" || rel.startsWith("..") || path43.isAbsolute(rel)) return null;
+  const rel2 = path43.relative(realRoot2, real);
+  if (rel2 === "" || rel2.startsWith("..") || path43.isAbsolute(rel2)) return null;
   return real;
 }
 function isContainedRealDir(abs, root) {
@@ -32164,6 +32164,1196 @@ var init_storage_janitor = __esm({
   }
 });
 
+// src/modules/state/workflows/upgrade-glossary.ts
+var GLOSSARY_FEEDSTOCK;
+var init_upgrade_glossary = __esm({
+  "src/modules/state/workflows/upgrade-glossary.ts"() {
+    GLOSSARY_FEEDSTOCK = `---
+schema_version: guild.glossary.v1
+title: Glossary
+description: Guild operating terms. Add this project's own terms below; Guild never overwrites this file.
+---
+
+# Glossary
+
+Terms the Guild machinery uses. The context-manager attaches matching entries to a
+specialist bundle on demand \u2014 this file is never loaded whole into the always-on
+prefix (KTD70).
+
+## Guild terms
+
+- **root** \u2014 a directory with a \`.guild/\` tree. Guild has exactly two levels: an
+  umbrella workspace root and its immediate project roots.
+- **durable** \u2014 content under \`.guild/\` that you would lose by deleting it. Caches,
+  scratch and runtime state are NOT durable and live off the repo.
+- **run** \u2014 one lifecycle execution, recorded under \`.guild/runs/<run-id>/\`.
+- **lane** \u2014 one specialist's slice of a plan, dispatched as its own task cell.
+- **handoff** \u2014 the compact envelope a specialist returns. The parent reads the
+  envelope, never the specialist's transcript.
+- **tier** \u2014 \`cheap\` | \`mid\` | \`powerful\`. A selector, never a model name; the
+  host adapter maps a tier to a model at dispatch.
+- **session binding** \u2014 the host and models resolved for ONE run. Session state,
+  never durable config.
+- **harvest** \u2014 the automatic capture of a decision into this root's wiki.
+- **layout version** \u2014 the integer in \`.guild/storage-layout.json\` saying which
+  storage layout this root is on. Guild upgrades a root on activation.
+
+## Project terms
+
+Add yours here. This file is yours once it exists.
+`;
+  }
+});
+
+// src/modules/state/workflows/upgrade-journal.ts
+function upgradeJournalPath(runtime) {
+  return runtime("journal", "upgrade", "layout.json");
+}
+function upgradeLockPath(runtime) {
+  return runtime("journal", "upgrade", "layout.lock");
+}
+function ensureParent(file) {
+  fs39.mkdirSync(path47.dirname(file), { recursive: true });
+}
+function loadJournal(file) {
+  let text;
+  try {
+    text = fs39.readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed?.schema_version !== UPGRADE_JOURNAL_SCHEMA) return null;
+    if (!Array.isArray(parsed.entries)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+function saveJournal(file, journal) {
+  ensureParent(file);
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs39.writeFileSync(tmp, `${JSON.stringify(journal, null, 2)}
+`, "utf8");
+  fs39.renameSync(tmp, file);
+}
+function newJournal(opts) {
+  return {
+    schema_version: UPGRADE_JOURNAL_SCHEMA,
+    root_id: opts.rootId,
+    root: opts.root,
+    from_version: opts.fromVersion,
+    to_version: opts.toVersion,
+    state: "planned",
+    started_at: opts.now,
+    updated_at: opts.now,
+    dirty_paths: [],
+    entries: []
+  };
+}
+function settledSteps(journal) {
+  const out = /* @__PURE__ */ new Set();
+  for (const e of journal.entries) {
+    if (e.status === "completed" || e.status === "skipped") out.add(e.step_id);
+  }
+  return out;
+}
+function recordStep(journal, entry) {
+  const entries = journal.entries.filter((e) => e.step_id !== entry.step_id);
+  entries.push(entry);
+  return { ...journal, entries, updated_at: entry.at };
+}
+function inverseSteps(journal) {
+  return journal.entries.filter((e) => e.status === "completed").slice().reverse();
+}
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === "EPERM";
+  }
+}
+function acquireLock(file, nowMs) {
+  ensureParent(file);
+  const payload = `${JSON.stringify({ pid: process.pid, at: nowMs })}
+`;
+  const claim = () => {
+    try {
+      fs39.writeFileSync(file, payload, { encoding: "utf8", flag: "wx" });
+      return {
+        path: file,
+        release: () => {
+          try {
+            const held2 = JSON.parse(fs39.readFileSync(file, "utf8"));
+            if (held2.pid === process.pid) fs39.rmSync(file, { force: true });
+          } catch {
+          }
+        }
+      };
+    } catch {
+      return null;
+    }
+  };
+  const first = claim();
+  if (first) return first;
+  let held;
+  try {
+    held = JSON.parse(fs39.readFileSync(file, "utf8"));
+  } catch {
+    held = {};
+  }
+  const stale = typeof held.pid !== "number" || !pidAlive(held.pid) || typeof held.at !== "number" || nowMs - held.at > LOCK_STALE_MS;
+  if (!stale) return null;
+  fs39.rmSync(file, { force: true });
+  return claim();
+}
+var fs39, path47, UPGRADE_JOURNAL_SCHEMA, LOCK_STALE_MS;
+var init_upgrade_journal = __esm({
+  "src/modules/state/workflows/upgrade-journal.ts"() {
+    fs39 = __toESM(require("node:fs"));
+    path47 = __toESM(require("node:path"));
+    UPGRADE_JOURNAL_SCHEMA = "guild.upgrade_journal.v1";
+    LOCK_STALE_MS = 15 * 60 * 1e3;
+  }
+});
+
+// src/modules/state/workflows/upgrade-steps.ts
+function classifyPath(relToGuild) {
+  const rel2 = relToGuild.split(path48.sep).join("/");
+  return DERIVED_PATTERNS.some((re) => re.test(rel2)) ? "derived" : "durable";
+}
+function rel(ctx, abs) {
+  return path48.relative(ctx.root, abs).split(path48.sep).join("/");
+}
+function knowledgeDir(ctx, ...segments) {
+  const scope = ctx.storage.project ?? ctx.storage.workspace;
+  if (!scope) throw new Error("root owns no durable scope: cannot name the knowledge tree");
+  return scope.knowledge(...segments);
+}
+function readIfFile2(abs) {
+  const st = lstatSafe(abs);
+  if (!st || !st.isFile()) return null;
+  try {
+    return fs40.readFileSync(abs, "utf8");
+  } catch {
+    return null;
+  }
+}
+function writeFile(ctx, abs, text) {
+  if (ctx.dryRun) return;
+  fs40.mkdirSync(path48.dirname(abs), { recursive: true });
+  fs40.writeFileSync(abs, text, "utf8");
+}
+function sha2563(text) {
+  return crypto13.createHash("sha256").update(text).digest("hex");
+}
+function filesUnder(dir, out = []) {
+  for (const name of readdirSafe(dir)) {
+    const abs = path48.join(dir, name);
+    const st = lstatSafe(abs);
+    if (!st) continue;
+    if (st.isDirectory()) filesUnder(abs, out);
+    else if (st.isFile()) out.push(abs);
+  }
+  return out;
+}
+function setByPath2(target, dotted, value) {
+  const parts = dotted.split(".");
+  let node = target;
+  for (const seg of parts.slice(0, -1)) {
+    const next = node[seg];
+    if (typeof next !== "object" || next === null || Array.isArray(next)) node[seg] = {};
+    node = node[seg];
+  }
+  node[parts[parts.length - 1]] = value;
+}
+function getByPath2(source, dotted) {
+  let node = source;
+  for (const seg of dotted.split(".")) {
+    if (typeof node !== "object" || node === null) return void 0;
+    node = node[seg];
+  }
+  return node;
+}
+function flatten(value, prefix = "", out = {}) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    if (prefix) out[prefix] = value;
+    return out;
+  }
+  for (const [k, v] of Object.entries(value)) {
+    flatten(v, prefix ? `${prefix}.${k}` : k, out);
+  }
+  return out;
+}
+function isPlainScalar(v) {
+  return typeof v === "string" || typeof v === "number" || typeof v === "boolean";
+}
+function isIdentityEntry(key, raw, parsed, cfg) {
+  const isDate = parsed instanceof Date || raw !== void 0 && TIMESTAMP_RE.test(raw);
+  const text = raw !== void 0 ? raw : isPlainScalar(parsed) ? String(parsed) : void 0;
+  const scalar = raw !== void 0 ? raw !== "" : isPlainScalar(parsed) && String(parsed) !== "";
+  if (!scalar) return false;
+  if (text !== void 0 && text.includes("\n")) return false;
+  if (PINNED_KEYS.test(key)) return true;
+  if (isDate || text === void 0) return cfg.findHostIdentity(key, "") !== null;
+  return cfg.findHostIdentity(key, text) !== null;
+}
+function expectedAfterStrip(node, cfg) {
+  if (Array.isArray(node)) {
+    const out2 = [];
+    for (const item of node) {
+      const wasNonEmptyMapping = isPlainObject6(item) && Object.keys(item).length > 0;
+      const next = expectedAfterStrip(item, cfg);
+      if (wasNonEmptyMapping && isPlainObject6(next) && Object.keys(next).length === 0) continue;
+      out2.push(next);
+    }
+    return out2;
+  }
+  if (!isPlainObject6(node)) return node;
+  const out = {};
+  for (const [key, value] of Object.entries(node)) {
+    if (isIdentityEntry(key, void 0, value, cfg)) continue;
+    out[key] = expectedAfterStrip(value, cfg);
+  }
+  return out;
+}
+function isPlainObject6(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof Date);
+}
+function sameData(a, b) {
+  if (a instanceof Date || b instanceof Date) {
+    return a instanceof Date && b instanceof Date && a.getTime() === b.getTime();
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((item, i) => sameData(item, b[i]));
+  }
+  if (isPlainObject6(a) || isPlainObject6(b)) {
+    if (!isPlainObject6(a) || !isPlainObject6(b)) return false;
+    const ka = Object.keys(a);
+    const kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    return ka.every(
+      (k) => kb.includes(k) && sameData(a[k], b[k])
+    );
+  }
+  return a === b;
+}
+function splitInlineValue(rawValue) {
+  if (rawValue.trimStart().startsWith("#")) return { value: "", comment: rawValue.trim() };
+  const quote = /^["']/.exec(rawValue.trimStart());
+  if (quote) {
+    const text = rawValue.trimStart();
+    const q = text[0];
+    let i = 1;
+    while (i < text.length) {
+      if (q === '"' && text[i] === "\\") i += 2;
+      else if (q === "'" && text[i] === "'" && text[i + 1] === "'") i += 2;
+      else if (text[i] === q) break;
+      else i += 1;
+    }
+    const rest = text.slice(i + 1).trim();
+    return { value: text.slice(1, i), comment: rest.startsWith("#") ? rest : null };
+  }
+  const hash = rawValue.search(/[ \t]#/);
+  if (hash >= 0) return { value: rawValue.slice(0, hash).trim(), comment: rawValue.slice(hash + 1).trim() };
+  return { value: rawValue.trim(), comment: null };
+}
+function scanLines(lines) {
+  const scan = [];
+  const protectedLines = /* @__PURE__ */ new Set();
+  let pending = null;
+  let contentIndent = null;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const blank = line.trim() === "";
+    const indent = line.length - line.trimStart().length;
+    if (pending !== null || contentIndent !== null) {
+      if (blank) {
+        protectedLines.add(i);
+        continue;
+      }
+      if (contentIndent === null) {
+        const base = pending.base;
+        const resolved = pending.explicit !== null ? base + pending.explicit : indent;
+        if (resolved <= base) {
+          pending = null;
+        } else {
+          contentIndent = resolved;
+          pending = null;
+          if (indent >= contentIndent) {
+            protectedLines.add(i);
+            continue;
+          }
+          contentIndent = null;
+        }
+      } else if (indent >= contentIndent) {
+        protectedLines.add(i);
+        continue;
+      } else {
+        contentIndent = null;
+      }
+    }
+    if (blank || /^\s*#/.test(line)) continue;
+    const m = MAP_ENTRY.exec(line);
+    if (!m) continue;
+    const [, pad, dash, dashGap, key, , rawValue] = m;
+    const keyCol = pad.length + (dash ? 1 + (dashGap ?? "").length : 0);
+    const header = BLOCK_SCALAR.exec(line);
+    if (header) {
+      pending = { base: keyCol, explicit: header[1] === "" ? null : Number(header[1]) };
+      contentIndent = null;
+    }
+    const split = rawValue === void 0 ? null : splitInlineValue(rawValue);
+    scan.push({
+      idx: i,
+      indent: pad.length,
+      dash: dash === "-",
+      keyCol,
+      key: key.replace(/^["'](.*)["']$/, "$1"),
+      value: split === null ? void 0 : split.value,
+      comment: split === null ? null : split.comment,
+      rawValue: rawValue ?? ""
+    });
+  }
+  return { scan, protectedLines };
+}
+function commentsIn(text) {
+  const lines = text.split("\n");
+  const { protectedLines } = scanLines(lines);
+  const out = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (protectedLines.has(i)) continue;
+    const line = lines[i];
+    if (/^\s*#/.test(line)) {
+      out.push(line.trim());
+      continue;
+    }
+    const m = MAP_ENTRY.exec(line);
+    if (!m) continue;
+    const rawValue = m[6];
+    if (rawValue === void 0) continue;
+    const { comment } = splitInlineValue(rawValue);
+    if (comment !== null) out.push(comment);
+  }
+  return out.sort();
+}
+function stripHostIdentityFromYaml(text, cfg, commentsOf = commentsIn) {
+  const yaml4 = loadYamlApi();
+  let doc;
+  try {
+    doc = yaml4.load(text);
+  } catch (e) {
+    return { next: text, removed: [], parseError: e.message };
+  }
+  if (doc === null || doc === void 0 || typeof doc !== "object") {
+    return { next: text, removed: [] };
+  }
+  const lines = text.split("\n");
+  const { scan, protectedLines } = scanLines(lines);
+  const removed = [];
+  const deleted = /* @__PURE__ */ new Set();
+  const rewritten = /* @__PURE__ */ new Map();
+  const promotedItems = /* @__PURE__ */ new Set();
+  const keptComments = /* @__PURE__ */ new Map();
+  const block = (reason, line) => ({
+    next: text,
+    removed: [],
+    blockReason: reason,
+    blockLine: line === void 0 ? void 0 : line + 1
+  });
+  for (let n = 0; n < scan.length; n += 1) {
+    const node = scan[n];
+    if (node.key === null || node.value === void 0) continue;
+    const flow = /^[[{]/.test(node.rawValue.trim());
+    if (flow) {
+      const pairs = node.rawValue.matchAll(/([A-Za-z_][\w.-]*)\s*:\s*([^,{}[\]]+)/g);
+      for (const [, k, v] of pairs) {
+        if (isIdentityEntry(k, v.trim(), void 0, cfg)) {
+          return block(`flow-style mapping carries host/model identity (${k}: ${v.trim()})`, node.idx);
+        }
+      }
+      continue;
+    }
+    if (!isIdentityEntry(node.key, node.value, void 0, cfg)) continue;
+    if (/^\t| \t/.test(lines[node.idx]) || lines.some((l, i) => !protectedLines.has(i) && /^\t/.test(l))) {
+      return block("tab-indented YAML cannot be edited by line", node.idx);
+    }
+    if (lines.some((l, i) => i > 0 && !protectedLines.has(i) && /^(---|\.\.\.)\s*$/.test(l))) {
+      return block("multi-document YAML", node.idx);
+    }
+    const anchorAt = lines.findIndex((l, i) => !protectedLines.has(i) && /(^|\s)(<<:|[&*][A-Za-z_])/.test(l));
+    if (anchorAt >= 0) return block("anchor or alias in the document", anchorAt);
+    removed.push(`${node.key}: ${node.value}`);
+    if (node.comment !== null) keptComments.set(node.idx, { indent: node.indent, text: node.comment });
+    if (!node.dash) {
+      deleted.add(node.idx);
+      continue;
+    }
+    const body = [];
+    for (let k = n + 1; k < scan.length; k += 1) {
+      if (scan[k].indent <= node.indent) break;
+      if (scan[k].indent === node.keyCol) body.push(scan[k].idx);
+    }
+    if (body.length === 0) {
+      deleted.add(node.idx);
+      continue;
+    }
+    const promote = body[0];
+    promotedItems.add(node.idx);
+    const promoted = lines[promote];
+    if (promoted.length - promoted.trimStart().length !== node.keyCol) {
+      return block("sequence item continuation is not at the key column", promote);
+    }
+    const dashGap = " ".repeat(node.keyCol - node.indent - 1);
+    deleted.add(node.idx);
+    rewritten.set(promote, `${" ".repeat(node.indent)}-${dashGap}${promoted.trimStart()}`);
+  }
+  if (removed.length === 0) return { next: text, removed: [] };
+  for (let n = 0; n < scan.length; n += 1) {
+    const parent = scan[n];
+    if (parent.key === null || parent.value !== void 0 && parent.value !== "") continue;
+    if (deleted.has(parent.idx) || rewritten.has(parent.idx)) continue;
+    const direct = [];
+    let childIndent = null;
+    for (let k = n + 1; k < scan.length; k += 1) {
+      const c = scan[k];
+      if (c.indent < parent.indent) break;
+      if (c.indent === parent.indent && !c.dash) break;
+      if (childIndent === null) childIndent = c.indent;
+      if (c.indent < childIndent) break;
+      if (c.indent === childIndent) direct.push(c);
+    }
+    if (direct.length === 0) continue;
+    if (!direct.every((c) => deleted.has(c.idx) && !promotedItems.has(c.idx))) continue;
+    const empty = direct[0].dash ? "[]" : "{}";
+    const moved = [];
+    for (const child of direct) {
+      const kept = keptComments.get(child.idx);
+      if (kept === void 0) continue;
+      moved.push(`${" ".repeat(parent.indent)}${kept.text}`);
+      keptComments.delete(child.idx);
+    }
+    const parentLine = lines[parent.idx];
+    const parentComment = parent.comment;
+    const upToComment = parentComment === null ? "" : parentLine.slice(0, parentLine.lastIndexOf(parentComment));
+    const head = parentComment === null ? parentLine.replace(/:\s*$/, "") : upToComment.replace(/[:\s]*$/, "");
+    const tail = parentComment === null ? "" : `${/(\s*)$/.exec(upToComment)?.[1] ?? " "}${parentComment}`;
+    rewritten.set(parent.idx, [...moved, `${head}: ${empty}${tail}`].join("\n"));
+  }
+  const next = lines.map((line, i) => {
+    if (!deleted.has(i)) return rewritten.get(i) ?? line;
+    const kept = keptComments.get(i);
+    return kept === void 0 ? null : `${" ".repeat(kept.indent)}${kept.text}`;
+  }).filter((line) => line !== null).join("\n");
+  let after;
+  try {
+    after = yaml4.load(next);
+  } catch (e) {
+    return block(`the line edit produced unparseable YAML (${e.message})`);
+  }
+  if (!sameData(after, expectedAfterStrip(doc, cfg))) {
+    return block("the line edit would change data other than the host/model identity");
+  }
+  const before = commentsOf(text);
+  const afterComments = commentsOf(next);
+  const pool = [...afterComments];
+  const lost = [];
+  for (const comment of before) {
+    const at = pool.indexOf(comment);
+    if (at < 0) lost.push(comment);
+    else pool.splice(at, 1);
+  }
+  if (lost.length > 0) return { next: text, removed: [], lostComments: lost };
+  return { next, removed };
+}
+function terminalRunStatus(runYaml) {
+  let doc;
+  try {
+    doc = loadYamlApi().load(runYaml);
+  } catch {
+    return null;
+  }
+  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return null;
+  const value = doc["status"];
+  if (typeof value !== "string") return null;
+  const status = value.trim().toLowerCase();
+  return TERMINAL_STATUSES2.includes(status) ? status : null;
+}
+function upgradeStep(id) {
+  return UPGRADE_STEPS.find((s) => s.id === id);
+}
+var crypto13, fs40, path48, KNOWLEDGE_PREFIX, DERIVED_PATTERNS, NO_CLASSIFIER, v1Content, settingsPolicySplit, PINNED_KEYS, TIMESTAMP_RE, BLOCK_SCALAR, MAP_ENTRY, ktd22Strip, CACHE_TARGETS, cachesOut, TERMINAL_STATUSES2, closedRunReceipts, currentRunIdRetire, LEGACY_VERSION_TREE, skillVersionsDelete, AUTHORED_REGISTRIES, DERIVED_REGISTRIES, registryYamlRetire, glossaryCreate, UPGRADE_STEPS, UPGRADE_STEP_IDS;
+var init_upgrade_steps = __esm({
+  "src/modules/state/workflows/upgrade-steps.ts"() {
+    crypto13 = __toESM(require("node:crypto"));
+    fs40 = __toESM(require("node:fs"));
+    path48 = __toESM(require("node:path"));
+    init_upgrade_glossary();
+    init_storage_fs();
+    init_storage_policy();
+    init_kernel();
+    KNOWLEDGE_PREFIX = `.guild/${DURABLE_SUBTREES.knowledge}`;
+    DERIVED_PATTERNS = Object.freeze([
+      /^indexes(\/|$)/,
+      /^index\.sqlite$/,
+      /^hosts(\/|$)/,
+      /^current-run-id$/,
+      /^agents\/registry\.yaml$/,
+      /^skills\/registry\.yaml$/,
+      /^bus\/\.lock$/,
+      /(^|\/)\.tmp-[^/]+$/
+    ]);
+    NO_CLASSIFIER = {
+      canonicalPolicyKey: (dotted) => dotted,
+      isPolicyKey: () => false,
+      findHostIdentity: () => null
+    };
+    v1Content = {
+      id: "v1-content",
+      cls: "durable",
+      source: "proposal \xA721.7",
+      affects: [".guild"],
+      apply(ctx) {
+        if (!ctx.v1) {
+          return {
+            status: "skipped",
+            detail: "no v1 converter provided by this entry point; legacy content left untouched",
+            paths: []
+          };
+        }
+        const r = ctx.v1({ root: ctx.root, dryRun: ctx.dryRun });
+        const complaints = [r.error, ...r.warnings ?? []].filter((m) => typeof m === "string" && m !== "");
+        if (complaints.length > 0 || r.action === "error" || r.action === "corrupt-blocked") {
+          return {
+            status: "failed",
+            detail: `v1 converter reported ${complaints.length || 1} problem(s): ${complaints.join("; ") || r.action}`,
+            paths: []
+          };
+        }
+        if (r.classification === "v2" || r.classification === "none" || r.action === "v2-noop" || r.action === "none") {
+          return { status: "skipped", detail: `v1 converter: ${r.classification}/${r.action} \u2014 nothing to convert`, paths: [] };
+        }
+        return {
+          status: "completed",
+          detail: `v1 converter: ${r.classification}/${r.action}, ${r.changed} artifact(s)`,
+          paths: [".guild"]
+        };
+      }
+    };
+    settingsPolicySplit = {
+      id: "settings-policy-split",
+      cls: "durable",
+      source: "proposal \xA721.6",
+      affects: [".guild/settings.json", ".guild/config"],
+      apply(ctx) {
+        const legacy = readIfFile2(path48.join(ctx.guildDir, "settings.json"));
+        if (legacy === null) return { status: "skipped", detail: "no .guild/settings.json to split", paths: [] };
+        let parsed;
+        try {
+          parsed = JSON.parse(legacy);
+        } catch {
+          return { status: "skipped", detail: ".guild/settings.json is not parseable JSON \u2014 preserved, not split", paths: [] };
+        }
+        if (!ctx.policy) {
+          return { status: "skipped", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
+        }
+        const cfg = ctx.policy;
+        const flat = flatten(parsed);
+        const policy = {};
+        let dropped = 0;
+        for (const [key, value] of Object.entries(flat)) {
+          const canonical = cfg.canonicalPolicyKey(key);
+          if (!cfg.isPolicyKey(canonical)) {
+            dropped += 1;
+            continue;
+          }
+          if (cfg.findHostIdentity(canonical, value) !== null) {
+            dropped += 1;
+            continue;
+          }
+          setByPath2(policy, canonical, value);
+        }
+        const targets = [];
+        if (ctx.storage.project) targets.push(ctx.storage.project.config());
+        if (ctx.storage.workspace) targets.push(ctx.storage.workspace.config());
+        if (targets.length === 0) return { status: "skipped", detail: "root owns no durable config scope", paths: [] };
+        const written = [];
+        for (const target of targets) {
+          const existing = readIfFile2(target);
+          let base = {};
+          if (existing !== null) {
+            try {
+              const value = JSON.parse(existing);
+              if (value === null || typeof value !== "object" || Array.isArray(value)) {
+                throw new Error("top level is not a JSON object");
+              }
+              base = value;
+            } catch (e) {
+              const where = rel(ctx, target);
+              return {
+                status: "blocked_confirm",
+                detail: `${where} is not parseable JSON (${e.message}) \u2014 left byte-identical, not replaced`,
+                paths: [where],
+                question: `settings-policy-split cannot read ${where}: ${e.message}. Fix or remove that file, then re-run the upgrade. Replace it with a fresh policy file?`
+              };
+            }
+          }
+          let added = 0;
+          for (const [key, value] of Object.entries(flatten(policy))) {
+            if (getByPath2(base, key) !== void 0) continue;
+            setByPath2(base, key, value);
+            added += 1;
+          }
+          if (added === 0) continue;
+          writeFile(ctx, target, `${JSON.stringify(base, null, 2)}
+`);
+          written.push(rel(ctx, target));
+        }
+        if (written.length === 0) {
+          return { status: "skipped", detail: "policy keys already present in every scoped config file", paths: [] };
+        }
+        return {
+          status: "completed",
+          detail: `split ${Object.keys(flatten(policy)).length} policy key(s) into ${written.join(" + ")}` + (dropped > 0 ? `; ${dropped} non-policy/inventory key(s) not transferred (KTD22)` : "") + (written.length === 2 ? "; hybrid root \u2014 the legacy dual-role file was split into both scopes" : ""),
+          paths: written
+        };
+      }
+    };
+    PINNED_KEYS = /^(host|host_id|host_family|model|model_id|model_name|models)$/;
+    TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}([Tt ].*)?$/;
+    BLOCK_SCALAR = /:\s*[|>]([0-9]?)[+-]?\s*(#.*)?$/;
+    MAP_ENTRY = /^(\s*)(?:(-)(\s+))?("[^"]*"|'[^']*'|[^\s#][^:]*?):(?:(\s+)(.*))?$/;
+    ktd22Strip = {
+      id: "ktd22-host-identity-strip",
+      cls: "durable",
+      source: "KTD22 / R38",
+      affects: [".guild/initiatives", ".guild/team", ".guild/teams"],
+      apply(ctx) {
+        if (!ctx.policy) {
+          return { status: "skipped", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
+        }
+        const cfg = ctx.policy;
+        const roots = ["initiatives", "team", "teams"].map((d) => path48.join(ctx.guildDir, d));
+        const touched = [];
+        let removedTotal = 0;
+        for (const dir of roots) {
+          if (!isContainedRealDir(dir, ctx.guildDir)) continue;
+          for (const abs of filesUnder(dir)) {
+            if (!/\.ya?ml$/.test(abs)) continue;
+            const text = readIfFile2(abs);
+            if (text === null) continue;
+            const { next, removed, parseError, blockReason, blockLine, lostComments } = stripHostIdentityFromYaml(text, cfg);
+            if (parseError !== void 0) {
+              const where = rel(ctx, abs);
+              return {
+                status: "blocked_confirm",
+                detail: `${where} is not parseable YAML (${parseError}) \u2014 left byte-identical, not rewritten`,
+                paths: [where],
+                question: `ktd22-host-identity-strip cannot parse ${where}: ${parseError}. Fix that file, then re-run the upgrade. Skip it and continue?`
+              };
+            }
+            if (lostComments !== void 0 && lostComments.length > 0) {
+              return {
+                status: "failed",
+                detail: `${rel(ctx, abs)}: the strip would drop ${lostComments.length} comment(s) (${lostComments.join(" / ")}) \u2014 nothing was written`,
+                paths: [rel(ctx, abs)]
+              };
+            }
+            if (blockReason !== void 0) {
+              const where = blockLine === void 0 ? rel(ctx, abs) : `${rel(ctx, abs)}:${blockLine}`;
+              return {
+                status: "blocked_confirm",
+                detail: `${where} carries host/model identity this step cannot remove by line (${blockReason}) \u2014 left byte-identical`,
+                paths: [rel(ctx, abs)],
+                question: `ktd22-host-identity-strip cannot safely edit ${where}: ${blockReason}. Remove the host/model identity there by hand, then re-run the upgrade. Skip it and continue?`
+              };
+            }
+            if (removed.length === 0) continue;
+            writeFile(ctx, abs, next);
+            touched.push(rel(ctx, abs));
+            removedTotal += removed.length;
+          }
+        }
+        if (touched.length === 0) {
+          return { status: "skipped", detail: "no host or model identity pinned in durable initiative/team files", paths: [] };
+        }
+        return {
+          status: "completed",
+          detail: `stripped ${removedTotal} host/model pin(s) from ${touched.length} durable file(s)`,
+          paths: touched
+        };
+      }
+    };
+    CACHE_TARGETS = Object.freeze(["indexes", "index.sqlite", "hosts"]);
+    cachesOut = {
+      id: "caches-out",
+      cls: "safe-local",
+      source: "proposal \xA721.11",
+      affects: [],
+      apply(ctx) {
+        const removed = [];
+        for (const name of CACHE_TARGETS) {
+          const abs = path48.join(ctx.guildDir, name);
+          const st = lstatSafe(abs);
+          if (!st) continue;
+          if (classifyPath(name) !== "derived") {
+            return {
+              status: "blocked_confirm",
+              detail: `refusing to remove non-derived path .guild/${name}`,
+              paths: [rel(ctx, abs)],
+              question: `caches-out wants to delete .guild/${name}, which is not classified derived. Delete it?`
+            };
+          }
+          if (ctx.dryRun) {
+            removed.push(rel(ctx, abs));
+            continue;
+          }
+          if (st.isDirectory()) {
+            if (removeContainedTree(abs, ctx.guildDir) !== null) removed.push(rel(ctx, abs));
+          } else {
+            fs40.rmSync(abs, { force: true });
+            removed.push(rel(ctx, abs));
+          }
+        }
+        if (removed.length === 0) return { status: "skipped", detail: "no derived cache left under .guild", paths: [] };
+        return {
+          status: "completed",
+          detail: `removed ${removed.length} derived cache path(s); V2 rebuilds them on the platform cache root`,
+          paths: removed
+        };
+      }
+    };
+    TERMINAL_STATUSES2 = Object.freeze([
+      "closed",
+      "complete",
+      "completed",
+      "done",
+      "failed",
+      "aborted",
+      "cancelled",
+      "canceled"
+    ]);
+    closedRunReceipts = {
+      id: "closed-run-receipts",
+      cls: "durable",
+      source: "proposal \xA721.10",
+      affects: [".guild/runs"],
+      apply(ctx) {
+        const runsDir = path48.join(ctx.guildDir, "runs");
+        if (!isContainedRealDir(runsDir, ctx.guildDir)) {
+          return { status: "skipped", detail: "no .guild/runs tree", paths: [] };
+        }
+        const written = [];
+        let open = 0;
+        for (const name of readdirSafe(runsDir)) {
+          if (name.startsWith("_")) continue;
+          const runDir3 = path48.join(runsDir, name);
+          if (!isContainedRealDir(runDir3, ctx.guildDir)) continue;
+          const receipt = path48.join(runDir3, "receipt.json");
+          if (lstatSafe(receipt)) continue;
+          const runYaml = readIfFile2(path48.join(runDir3, "run.yaml"));
+          if (runYaml === null) continue;
+          const status = terminalRunStatus(runYaml);
+          if (status === null) {
+            open += 1;
+            continue;
+          }
+          writeFile(
+            ctx,
+            receipt,
+            `${JSON.stringify(
+              {
+                schema_version: "guild.run_receipt.v1",
+                run_id: name,
+                status,
+                source: "layout-upgrade",
+                generated_at: ctx.now()
+              },
+              null,
+              2
+            )}
+`
+          );
+          written.push(rel(ctx, receipt));
+        }
+        if (written.length === 0) {
+          return {
+            status: "skipped",
+            detail: `every legacy run already has a receipt or is not terminal (${open} left open)`,
+            paths: []
+          };
+        }
+        return {
+          status: "completed",
+          detail: `wrote ${written.length} run receipt(s); ${open} non-terminal run(s) left untouched (never falsely closed)`,
+          paths: written
+        };
+      }
+    };
+    currentRunIdRetire = {
+      id: "current-run-id-retire",
+      cls: "safe-local",
+      source: "proposal \xA721.10",
+      affects: [],
+      apply(ctx) {
+        const abs = path48.join(ctx.guildDir, "current-run-id");
+        const text = readIfFile2(abs);
+        if (text === null) return { status: "skipped", detail: "no current-run-id sentinel", paths: [] };
+        const captured = text.trim();
+        if (classifyPath("current-run-id") !== "derived") {
+          return {
+            status: "blocked_confirm",
+            detail: "current-run-id is not classified derived",
+            paths: [rel(ctx, abs)],
+            question: "current-run-id-retire wants to delete .guild/current-run-id. Delete it?"
+          };
+        }
+        if (!ctx.dryRun) fs40.rmSync(abs, { force: true });
+        return {
+          status: "completed",
+          detail: `captured run binding "${captured}" and retired the singleton sentinel; V2 writers never recreate it`,
+          paths: [rel(ctx, abs)]
+        };
+      }
+    };
+    LEGACY_VERSION_TREE = "skill-versions";
+    skillVersionsDelete = {
+      id: "skill-versions-delete",
+      cls: "safe-local",
+      source: "proposal \xA721.12 / R60",
+      affects: [],
+      apply(ctx) {
+        const dir = path48.join(ctx.guildDir, LEGACY_VERSION_TREE);
+        if (!isContainedRealDir(dir, ctx.guildDir)) {
+          return { status: "skipped", detail: `no leftover ${LEGACY_VERSION_TREE} tree`, paths: [] };
+        }
+        const snapshots = filesUnder(dir);
+        if (snapshots.length === 0) {
+          if (!ctx.dryRun) removeContainedTree(dir, ctx.guildDir);
+          return { status: "completed", detail: `removed the empty ${LEGACY_VERSION_TREE} tree`, paths: [rel(ctx, dir)] };
+        }
+        const live = /* @__PURE__ */ new Set();
+        const skillsDir = path48.join(ctx.guildDir, "skills");
+        if (isContainedRealDir(skillsDir, ctx.guildDir)) {
+          for (const abs of filesUnder(skillsDir)) {
+            const text = readIfFile2(abs);
+            if (text !== null) live.add(sha2563(text));
+          }
+        }
+        const unique = snapshots.filter((abs) => {
+          const text = readIfFile2(abs);
+          return text === null || !live.has(sha2563(text));
+        });
+        if (unique.length > 0) {
+          return {
+            status: "blocked_confirm",
+            detail: `${unique.length} legacy snapshot(s) carry content no live skill body has`,
+            paths: unique.slice(0, 10).map((abs) => rel(ctx, abs)),
+            question: `skill-versions-delete found ${unique.length} snapshot(s) under .guild/${LEGACY_VERSION_TREE}/ whose content is NOT in any live .guild/skills/** body, so they are not derived. Review them and either keep the tree or remove it yourself, then re-run \`config migrate --mode=migrate\`.`
+          };
+        }
+        if (!ctx.dryRun) removeContainedTree(dir, ctx.guildDir);
+        return {
+          status: "completed",
+          detail: `removed ${snapshots.length} redundant snapshot(s); every one matched a live skill body`,
+          paths: [rel(ctx, dir)]
+        };
+      }
+    };
+    AUTHORED_REGISTRIES = Object.freeze(["loops/registry.yaml", "workflows/registry.yaml"]);
+    DERIVED_REGISTRIES = Object.freeze(["agents/registry.yaml", "skills/registry.yaml"]);
+    registryYamlRetire = {
+      id: "registry-yaml-retire",
+      cls: "durable",
+      source: "KTD56 / R68",
+      affects: [".guild/loops", ".guild/workflows", ".guild/agents/registry.yaml", ".guild/skills/registry.yaml"],
+      apply(ctx) {
+        const changed = [];
+        for (const relPath of DERIVED_REGISTRIES) {
+          const abs = path48.join(ctx.guildDir, relPath);
+          if (!lstatSafe(abs)) continue;
+          if (classifyPath(relPath) !== "derived") continue;
+          if (!ctx.dryRun) fs40.rmSync(abs, { force: true });
+          changed.push(rel(ctx, abs));
+        }
+        for (const relPath of AUTHORED_REGISTRIES) {
+          const abs = path48.join(ctx.guildDir, relPath);
+          const text = readIfFile2(abs);
+          if (text === null) continue;
+          const target = path48.join(ctx.guildDir, "artifacts", "legacy", relPath.replace("/", "-"));
+          if (lstatSafe(target)) continue;
+          writeFile(ctx, target, text);
+          if (!ctx.dryRun) fs40.rmSync(abs, { force: true });
+          changed.push(`${rel(ctx, abs)} \u2192 ${rel(ctx, target)}`);
+        }
+        if (changed.length === 0) {
+          return { status: "skipped", detail: "no registry YAML left to retire", paths: [] };
+        }
+        return {
+          status: "completed",
+          detail: `retired ${changed.length} registry file(s); authored ones were preserved under artifacts/legacy/, not deleted`,
+          paths: changed
+        };
+      }
+    };
+    glossaryCreate = {
+      id: "glossary-create",
+      cls: "durable",
+      source: "R80 / KTD70",
+      // The KNOWLEDGE TREE, not just the file: a durable step must not write into a
+      // tree whose tracked pages are dirty, even when its own target does not exist yet.
+      affects: [KNOWLEDGE_PREFIX],
+      apply(ctx) {
+        const abs = knowledgeDir(ctx, "glossary.md");
+        if (lstatSafe(abs)) {
+          return {
+            status: "skipped",
+            detail: "project glossary already exists \u2014 feedstock never replaces it (R80)",
+            paths: []
+          };
+        }
+        writeFile(ctx, abs, GLOSSARY_FEEDSTOCK);
+        return { status: "completed", detail: "created the root glossary page from plugin feedstock", paths: [rel(ctx, abs)] };
+      }
+    };
+    UPGRADE_STEPS = deepFreeze([
+      v1Content,
+      settingsPolicySplit,
+      ktd22Strip,
+      cachesOut,
+      closedRunReceipts,
+      currentRunIdRetire,
+      skillVersionsDelete,
+      registryYamlRetire,
+      glossaryCreate
+    ]);
+    UPGRADE_STEP_IDS = Object.freeze(UPGRADE_STEPS.map((s) => s.id));
+  }
+});
+
+// src/modules/state/workflows/upgrade-runner.ts
+function defaultDirtyProbe(root) {
+  if (!fs41.existsSync(path49.join(root, ".git"))) return [];
+  let out;
+  try {
+    const { execFileSync: execFileSync3 } = require("node:child_process");
+    out = execFileSync3("git", ["status", "--porcelain", "--", ".guild"], {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+  } catch {
+    return null;
+  }
+  return out.split("\n").filter((line) => line.length > 3 && !line.startsWith("??")).map((line) => line.slice(3).trim()).map((p) => p.includes(" -> ") ? p.split(" -> ")[1] : p).map((p) => p.replace(/^"|"$/g, "").replace(/\/+$/, "")).filter((p) => p.length > 0);
+}
+function markerFile(storage) {
+  return path49.join(storage.root.durable, "storage-layout.json");
+}
+function agentProfiles(guildDir) {
+  const out = /* @__PURE__ */ new Map();
+  const dir = path49.join(guildDir, "agents");
+  for (const name of readdirSafe(dir)) {
+    if (!name.endsWith(".md")) continue;
+    const abs = path49.join(dir, name);
+    const st = lstatSafe(abs);
+    if (!st?.isFile()) continue;
+    try {
+      out.set(name, fs41.readFileSync(abs, "utf8"));
+    } catch {
+    }
+  }
+  return out;
+}
+function validateUpgrade(guildDir, before, knowledgeDir2 = path49.join(guildDir, DURABLE_SUBTREES.knowledge), steps = []) {
+  const errors = [];
+  for (const step of steps) {
+    if (step.status === "completed" || step.status === "skipped") continue;
+    errors.push(`step ${step.step_id} did not complete (${step.status}) \u2014 refusing to stamp the marker`);
+  }
+  const after = agentProfiles(guildDir);
+  for (const [name, body] of before.profiles) {
+    const now = after.get(name);
+    if (now === void 0) errors.push(`agents/${name} disappeared during upgrade`);
+    else if (now !== body) errors.push(`agents/${name} was rewritten during upgrade (feedstock must never replace it)`);
+  }
+  const pagesNow = countKnowledgePages(knowledgeDir2);
+  if (pagesNow < before.knowledgePages) {
+    errors.push(`knowledge page count fell from ${before.knowledgePages} to ${pagesNow} \u2014 knowledge was lost`);
+  }
+  for (const leftover of ["indexes", "index.sqlite"]) {
+    if (lstatSafe(path49.join(guildDir, leftover))) errors.push(`.guild/${leftover} still present after caches-out`);
+  }
+  return errors;
+}
+function countKnowledgePages(dir, seen = 0) {
+  let n = seen;
+  for (const name of readdirSafe(dir)) {
+    const abs = path49.join(dir, name);
+    const st = lstatSafe(abs);
+    if (!st) continue;
+    if (st.isDirectory()) n = countKnowledgePages(abs, n);
+    else if (st.isFile() && name.endsWith(".md")) n += 1;
+  }
+  return n;
+}
+function runUpgrade(opts) {
+  const storage = opts.storage ?? createGuildStorage(opts.cwd);
+  const root = storage.activeRoot;
+  const guildDir = storage.root.durable;
+  const dryRun = opts.dryRun === true;
+  const now = opts.now ?? (() => (/* @__PURE__ */ new Date()).toISOString());
+  const nowMs = opts.nowMs ?? (() => Date.now());
+  const journalFile = upgradeJournalPath((...s) => storage.runtime(...s));
+  const lockFile = upgradeLockPath((...s) => storage.runtime(...s));
+  const base = (state, journal2, extra = {}) => ({
+    root,
+    state,
+    from_version: opts.fromVersion,
+    to_version: opts.toVersion,
+    marker_written: false,
+    journal_path: journalFile,
+    journal: { ...journal2, state },
+    dirty_paths: journal2.dirty_paths,
+    question: null,
+    validation_errors: [],
+    ...extra
+  });
+  let journal = loadJournal(journalFile) ?? newJournal({ rootId: guildRootId(root), root, fromVersion: opts.fromVersion, toVersion: opts.toVersion, now: now() });
+  if (journal.to_version !== opts.toVersion) {
+    journal = newJournal({
+      rootId: guildRootId(root),
+      root,
+      fromVersion: opts.fromVersion,
+      toVersion: opts.toVersion,
+      now: now()
+    });
+  }
+  const lock = dryRun ? null : acquireLock(lockFile, nowMs());
+  if (!dryRun && !lock) {
+    return base("running", journal);
+  }
+  try {
+    const dirtyRaw = (opts.dirtyProbe ?? defaultDirtyProbe)(root);
+    const dirty = dirtyRaw ?? [".guild"];
+    journal = { ...journal, dirty_paths: dirty, state: "running" };
+    const knowledgeDir2 = (storage.project ?? storage.workspace).knowledge();
+    const before = { profiles: agentProfiles(guildDir), knowledgePages: countKnowledgePages(knowledgeDir2) };
+    const settled = settledSteps(journal);
+    const ctx = { root, guildDir, storage, dryRun, now, v1: opts.v1, policy: opts.policy };
+    let blockedDirty = false;
+    for (const step of UPGRADE_STEPS) {
+      if (settled.has(step.id)) continue;
+      if (step.cls === "durable") {
+        const hits = dirty.filter((p) => step.affects.some((a) => p === a || p.startsWith(`${a}/`) || a.startsWith(p)));
+        if (hits.length > 0) {
+          blockedDirty = true;
+          journal = recordStep(journal, {
+            step_id: step.id,
+            status: "blocked_dirty",
+            cls: step.cls,
+            detail: `durable step blocked by uncommitted tracked changes: ${hits.join(", ")}`,
+            paths: hits,
+            at: now()
+          });
+          continue;
+        }
+      }
+      let result;
+      try {
+        result = step.apply(ctx);
+      } catch (e) {
+        journal = recordStep(journal, {
+          step_id: step.id,
+          status: "failed",
+          cls: step.cls,
+          detail: e.message,
+          paths: [],
+          at: now()
+        });
+        if (!dryRun) saveJournal(journalFile, { ...journal, state: "failed" });
+        return base("failed", journal);
+      }
+      journal = recordStep(journal, {
+        step_id: step.id,
+        status: result.status === "blocked_confirm" ? "blocked_confirm" : result.status,
+        cls: step.cls,
+        detail: result.detail,
+        paths: result.paths,
+        question: result.question,
+        at: now()
+      });
+      if (result.status === "blocked_confirm") {
+        if (!dryRun) saveJournal(journalFile, { ...journal, state: "blocked_confirm" });
+        return base("blocked_confirm", journal, { question: result.question ?? null });
+      }
+      if (result.status === "failed") {
+        if (!dryRun) saveJournal(journalFile, { ...journal, state: "failed" });
+        return base("failed", journal);
+      }
+    }
+    if (blockedDirty) {
+      if (!dryRun) saveJournal(journalFile, { ...journal, state: "blocked_dirty_durable" });
+      return base("blocked_dirty_durable", journal, { dirty_paths: dirty });
+    }
+    journal = { ...journal, state: "validating", updated_at: now() };
+    if (!dryRun) saveJournal(journalFile, journal);
+    const errors = dryRun ? [] : validateUpgrade(guildDir, before, knowledgeDir2, journal.entries);
+    if (errors.length > 0) {
+      if (!dryRun) saveJournal(journalFile, { ...journal, state: "failed" });
+      return base("failed", journal, { validation_errors: errors });
+    }
+    if (dryRun) return base("planned", journal);
+    fs41.mkdirSync(guildDir, { recursive: true });
+    fs41.writeFileSync(
+      markerFile(storage),
+      `${JSON.stringify({ storage_layout_version: opts.toVersion, upgraded_at: now() }, null, 2)}
+`,
+      "utf8"
+    );
+    journal = { ...journal, state: "committed", updated_at: now() };
+    saveJournal(journalFile, journal);
+    return base("committed", journal, { marker_written: true });
+  } finally {
+    lock?.release();
+  }
+}
+function formatUpgradeReport(result) {
+  const lines = [
+    `layout upgrade ${result.from_version ?? "unmarked"} \u2192 ${result.to_version} \xB7 ${result.state} \xB7 ${result.root}`
+  ];
+  for (const e of result.journal.entries) {
+    lines.push(`  [${e.status}] ${e.step_id} (${e.cls}) \u2014 ${e.detail}`);
+  }
+  if (result.state === "blocked_dirty_durable") {
+    lines.push("  durable steps blocked by uncommitted tracked changes under .guild/:");
+    for (const p of result.dirty_paths) lines.push(`    ${p}`);
+    lines.push("  commit or stash those paths, then: guild config migrate --mode=migrate");
+  }
+  if (result.question) lines.push(`  CONFIRM NEEDED: ${result.question}`);
+  for (const e of result.validation_errors) lines.push(`  VALIDATION: ${e}`);
+  if (result.marker_written) {
+    lines.push("  marker stamped. Review the git diff and commit the upgrade as one change (Guild never commits).");
+  }
+  return lines.join("\n");
+}
+var fs41, path49;
+var init_upgrade_runner = __esm({
+  "src/modules/state/workflows/upgrade-runner.ts"() {
+    fs41 = __toESM(require("node:fs"));
+    path49 = __toESM(require("node:path"));
+    init_storage_layout();
+    init_storage_roots();
+    init_storage_fs();
+    init_storage_policy();
+    init_upgrade_journal();
+    init_upgrade_steps();
+  }
+});
+
 // src/modules/state/index.ts
 var state_exports = {};
 __export(state_exports, {
@@ -32172,15 +33362,22 @@ __export(state_exports, {
   DEPENDENCY_GRAPH_V1_EXAMPLE: () => DEPENDENCY_GRAPH_V1_EXAMPLE,
   DURABLE_CLASSES: () => DURABLE_CLASSES,
   DURABLE_SUBTREES: () => DURABLE_SUBTREES,
+  GLOSSARY_FEEDSTOCK: () => GLOSSARY_FEEDSTOCK,
   GUILD_NAMESPACE: () => GUILD_NAMESPACE,
   KTD16_FROZEN_PREFIXES: () => KTD16_FROZEN_PREFIXES,
+  LOCK_STALE_MS: () => LOCK_STALE_MS,
   NON_DURABLE_CLASSES: () => NON_DURABLE_CLASSES,
+  NO_CLASSIFIER: () => NO_CLASSIFIER,
   POLICY_CONFIG_FILES: () => POLICY_CONFIG_FILES,
   REASON_MAX_LEN: () => REASON_MAX_LEN,
   SCRATCH_TTL_HOURS: () => SCRATCH_TTL_HOURS,
   STORAGE_ARTIFACT_REGISTRY: () => STORAGE_ARTIFACT_REGISTRY,
   STORAGE_ARTIFACT_REGISTRY_SCHEMA: () => STORAGE_ARTIFACT_REGISTRY_SCHEMA,
   StoragePlacementError: () => StoragePlacementError,
+  UPGRADE_JOURNAL_SCHEMA: () => UPGRADE_JOURNAL_SCHEMA,
+  UPGRADE_STEPS: () => UPGRADE_STEPS,
+  UPGRADE_STEP_IDS: () => UPGRADE_STEP_IDS,
+  acquireLock: () => acquireLock,
   artifactPolicy: () => artifactPolicy,
   assertClassPlacement: () => assertClassPlacement,
   assertRegistered: () => assertRegistered,
@@ -32188,18 +33385,23 @@ __export(state_exports, {
   atomicWrite: () => atomicWrite,
   buildUnifiedGraph: () => buildUnifiedGraph,
   classifyMemoryPath: () => classifyMemoryPath,
+  classifyPath: () => classifyPath,
+  commentsIn: () => commentsIn,
   createGuildStorage: () => createGuildStorage,
+  defaultDirtyProbe: () => defaultDirtyProbe,
   deriveGraphFromProductMap: () => deriveGraphFromProductMap,
   discoverGuild: () => discoverGuild,
   ensureKgIndex: () => ensureKgIndex,
   ensureKgProjectionIndex: () => ensureKgProjectionIndex,
   ensureWikiFtsIndex: () => ensureWikiFtsIndex,
   formatGcReport: () => formatGcReport,
+  formatUpgradeReport: () => formatUpgradeReport,
   guardChildWikiReads: () => guardChildWikiReads,
   guildRootId: () => guildRootId,
   hasTopLevelKey: () => hasTopLevelKey,
   hostCapabilityCacheDir: () => hostCapabilityCacheDir,
   hostCapabilityCacheFile: () => hostCapabilityCacheFile,
+  inverseSteps: () => inverseSteps,
   isCanonicalGuildMemoryPath: () => isCanonicalGuildMemoryPath,
   isChildWikiPath: () => isChildWikiPath,
   isContainedRealDir: () => isContainedRealDir,
@@ -32207,8 +33409,10 @@ __export(state_exports, {
   isKtd16FrozenPath: () => isKtd16FrozenPath,
   isUnderDurable: () => isUnderDurable,
   loadDependencyGraphArtifact: () => loadDependencyGraphArtifact,
+  loadJournal: () => loadJournal,
   lstatSafe: () => lstatSafe,
   modelCatalogCacheHome: () => modelCatalogCacheHome,
+  newJournal: () => newJournal,
   parseFrontmatter: () => parseFrontmatter,
   parseYaml: () => parseYaml,
   readFrontmatterField: () => readFrontmatterField,
@@ -32217,6 +33421,7 @@ __export(state_exports, {
   readWorkspaceManifest: () => readWorkspaceManifest,
   readdirSafe: () => readdirSafe,
   realReadSeam: () => realReadSeam,
+  recordStep: () => recordStep,
   removeContainedEmptyDir: () => removeContainedEmptyDir,
   removeContainedTree: () => removeContainedTree,
   replaceTopLevelLine: () => replaceTopLevelLine,
@@ -32226,10 +33431,19 @@ __export(state_exports, {
   resolveStorageRoots: () => resolveStorageRoots,
   runSelfCheck: () => runSelfCheck,
   runStorageGc: () => runStorageGc,
+  runUpgrade: () => runUpgrade,
+  saveJournal: () => saveJournal,
   scanDurableDebris: () => scanDurableDebris,
+  settledSteps: () => settledSteps,
   splitFrontmatter: () => splitFrontmatter,
+  splitInlineValue: () => splitInlineValue,
+  stripHostIdentityFromYaml: () => stripHostIdentityFromYaml,
+  upgradeJournalPath: () => upgradeJournalPath,
+  upgradeLockPath: () => upgradeLockPath,
+  upgradeStep: () => upgradeStep,
   validateDependencyGraphV1: () => validateDependencyGraphV1,
   validateRegistry: () => validateRegistry,
+  validateUpgrade: () => validateUpgrade,
   workspaceReadThroughSources: () => workspaceReadThroughSources
 });
 var init_state = __esm({
@@ -32247,6 +33461,10 @@ var init_state = __esm({
     init_storage_layout();
     init_storage_policy();
     init_storage_roots();
+    init_upgrade_glossary();
+    init_upgrade_journal();
+    init_upgrade_runner();
+    init_upgrade_steps();
   }
 });
 
@@ -32465,9 +33683,9 @@ function defaultProbeEnv(cwd) {
       return true;
     }, false),
     readStoredCodexAuth: () => safe(() => {
-      const home = process.env["CODEX_HOME"] || path47.join(os4.homedir(), ".codex");
-      const authFile = path47.join(home, "auth.json");
-      const st = fs39.statSync(authFile);
+      const home = process.env["CODEX_HOME"] || path50.join(os4.homedir(), ".codex");
+      const authFile = path50.join(home, "auth.json");
+      const st = fs42.statSync(authFile);
       return st.isFile() && st.size > 0;
     }, false),
     readEnv: (name) => process.env[name],
@@ -32487,21 +33705,21 @@ function defaultProbeEnv(cwd) {
 function readCapabilityManifests(cwd) {
   const { hostCapabilityCacheDir: hostCapabilityCacheDir2 } = (init_state(), __toCommonJS(state_exports));
   const hostsDir = hostCapabilityCacheDir2(cwd);
-  if (!fs39.existsSync(hostsDir)) return [];
+  if (!fs42.existsSync(hostsDir)) return [];
   const out = /* @__PURE__ */ new Set();
   const walk = (dir) => {
     let entries;
     try {
-      entries = fs39.readdirSync(dir, { withFileTypes: true });
+      entries = fs42.readdirSync(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const e of entries) {
-      const full = path47.join(dir, e.name);
+      const full = path50.join(dir, e.name);
       if (e.isDirectory()) walk(full);
       else if (e.isFile() && e.name === "capability.json") {
         try {
-          const m = JSON.parse(fs39.readFileSync(full, "utf8"));
+          const m = JSON.parse(fs42.readFileSync(full, "utf8"));
           for (const key of ["provider", "id", "family"]) {
             if (typeof m[key] === "string") out.add(m[key]);
           }
@@ -32529,13 +33747,13 @@ function shellSafe(bin) {
   }
   return bin;
 }
-var import_child_process2, fs39, os4, path47, PROVIDER_REGISTRY, KNOWN_FAMILIES2;
+var import_child_process2, fs42, os4, path50, PROVIDER_REGISTRY, KNOWN_FAMILIES2;
 var init_provider_detect = __esm({
   "src/modules/host-runtime/workflows/provider-detect.ts"() {
     import_child_process2 = require("child_process");
-    fs39 = __toESM(require("fs"));
+    fs42 = __toESM(require("fs"));
     os4 = __toESM(require("os"));
-    path47 = __toESM(require("path"));
+    path50 = __toESM(require("path"));
     init_host_registry();
     PROVIDER_REGISTRY = [
       // The author host itself — always "detected on the host", never a cross reviewer
@@ -32643,10 +33861,10 @@ function realFs() {
   };
 }
 function sessionContextPath(root, runId) {
-  return path48.join(root, ".guild", "runs", runId, "session-context.json");
+  return path51.join(root, ".guild", "runs", runId, "session-context.json");
 }
-function writeSessionContext(root, ctx, fs43) {
-  const f = fs43 ?? realFs();
+function writeSessionContext(root, ctx, fs46) {
+  const f = fs46 ?? realFs();
   const p = sessionContextPath(root, ctx.run_id);
   const serialized = JSON.stringify(ctx, null, 2) + "\n";
   const existing = f.readFile(p);
@@ -32656,11 +33874,11 @@ function writeSessionContext(root, ctx, fs43) {
       `session-context: refusing to overwrite the frozen record for ${ctx.run_id} \u2014 session_context is written once at run start and never mutated`
     );
   }
-  f.mkdirp(path48.dirname(p));
+  f.mkdirp(path51.dirname(p));
   f.writeFile(p, serialized);
 }
-function loadSessionContext(root, runId, fs43) {
-  const f = fs43 ?? realFs();
+function loadSessionContext(root, runId, fs46) {
+  const f = fs46 ?? realFs();
   const raw = f.readFile(sessionContextPath(root, runId));
   if (raw === null) return null;
   try {
@@ -32672,11 +33890,11 @@ function loadSessionContext(root, runId, fs43) {
     return null;
   }
 }
-var fsReal2, path48, UNKNOWN_TARGET;
+var fsReal2, path51, UNKNOWN_TARGET;
 var init_session_context = __esm({
   "src/modules/host-runtime/workflows/session-context.ts"() {
     fsReal2 = __toESM(require("fs"));
-    path48 = __toESM(require("path"));
+    path51 = __toESM(require("path"));
     init_provider_detect();
     UNKNOWN_TARGET = {
       target_id: "unknown",
@@ -34390,8 +35608,8 @@ var init_host_runtime = __esm({
 function parseWorkspaceManifest(manifestPath) {
   let raw;
   try {
-    if (!fs40.existsSync(manifestPath)) return { status: "absent" };
-    raw = fs40.readFileSync(manifestPath, "utf8");
+    if (!fs43.existsSync(manifestPath)) return { status: "absent" };
+    raw = fs43.readFileSync(manifestPath, "utf8");
   } catch (e) {
     return { status: "parse_error", error: e instanceof Error ? e.message : String(e) };
   }
@@ -34407,10 +35625,10 @@ function parseWorkspaceManifest(manifestPath) {
   return { status: "not_workspace" };
 }
 function discoverWorkspace(startDir) {
-  let current = path49.dirname(startDir);
-  const fsRoot = path49.parse(current).root;
+  let current = path52.dirname(startDir);
+  const fsRoot = path52.parse(current).root;
   while (current !== fsRoot) {
-    const manifestPath = path49.join(current, ".guild", "workspace.json");
+    const manifestPath = path52.join(current, ".guild", "workspace.json");
     const parsed = parseWorkspaceManifest(manifestPath);
     if (parsed.status === "workspace") {
       return { rootDir: current, manifest: parsed.manifest };
@@ -34418,17 +35636,17 @@ function discoverWorkspace(startDir) {
     if (parsed.status === "not_workspace") {
       return null;
     }
-    const parent = path49.dirname(current);
+    const parent = path52.dirname(current);
     if (parent === current) break;
     current = parent;
   }
   return null;
 }
-var fs40, path49;
+var fs43, path52;
 var init_workspace_manifest = __esm({
   "src/modules/config/workflows/workspace-manifest.ts"() {
-    fs40 = __toESM(require("fs"));
-    path49 = __toESM(require("path"));
+    fs43 = __toESM(require("fs"));
+    path52 = __toESM(require("path"));
   }
 });
 
@@ -34502,7 +35720,7 @@ function coerceCapability(raw) {
   }
   return out;
 }
-function isPlainObject6(v) {
+function isPlainObject7(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 function deepMerge(base, overlay) {
@@ -34511,7 +35729,7 @@ function deepMerge(base, overlay) {
     if (PROTO_POISON_KEYS.has(k)) continue;
     if (Array.isArray(v)) {
       result[k] = v;
-    } else if (isPlainObject6(v) && isPlainObject6(result[k])) {
+    } else if (isPlainObject7(v) && isPlainObject7(result[k])) {
       result[k] = deepMerge(
         result[k],
         v
@@ -34528,7 +35746,7 @@ function collectKeyPaths(obj, prefix = "") {
     if (PROTO_POISON_KEYS.has(k)) continue;
     const full = prefix ? `${prefix}.${k}` : k;
     paths.add(full);
-    if (isPlainObject6(v)) {
+    if (isPlainObject7(v)) {
       for (const sub of collectKeyPaths(v, full)) {
         paths.add(sub);
       }
@@ -34564,21 +35782,21 @@ function rigorProfile(rigor) {
   }
 }
 function parseSettingsFile(filePath) {
-  if (!fs41.existsSync(filePath)) return {};
+  if (!fs44.existsSync(filePath)) return {};
   let parsed;
   try {
-    parsed = JSON.parse(fs41.readFileSync(filePath, "utf8"));
+    parsed = JSON.parse(fs44.readFileSync(filePath, "utf8"));
   } catch {
     return {};
   }
   return parseSettingsFile_fromParsed(parsed);
 }
 function parseLocalFile(guildDir) {
-  const localPath = path50.join(guildDir, "settings.local.json");
-  if (!fs41.existsSync(localPath)) return {};
+  const localPath = path53.join(guildDir, "settings.local.json");
+  if (!fs44.existsSync(localPath)) return {};
   let localParsed;
   try {
-    localParsed = JSON.parse(fs41.readFileSync(localPath, "utf8"));
+    localParsed = JSON.parse(fs44.readFileSync(localPath, "utf8"));
   } catch {
     return {};
   }
@@ -34601,9 +35819,9 @@ function parseSettingsFile_fromParsed(parsed) {
   if (parsed["host_mode"] === null) out.host_mode = null;
   else if (typeof parsed["host_mode"] === "string" && HOST_MODES.includes(parsed["host_mode"]))
     out.host_mode = parsed["host_mode"];
-  if (isPlainObject6(parsed["roles"]))
+  if (isPlainObject7(parsed["roles"]))
     out.roles = sparseRoles(parsed["roles"]);
-  if (isPlainObject6(parsed["host_profiles"]))
+  if (isPlainObject7(parsed["host_profiles"]))
     out.host_profiles = sparseHostProfiles(parsed["host_profiles"]);
   if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
     out.initiative_default = parsed["initiative_default"];
@@ -34615,7 +35833,7 @@ function parseSettingsFile_fromParsed(parsed) {
     out.codex_skip_enforcement = parsed["codex_skip_enforcement"];
   if (VALID_AGENT_MODE.has(parsed["agent_mode"]))
     out.agent_mode = parsed["agent_mode"];
-  if (isPlainObject6(parsed["workspace"])) {
+  if (isPlainObject7(parsed["workspace"])) {
     const ws = parsed["workspace"];
     const wsMode = ws["mode"];
     if (wsMode === "auto" || wsMode === "on" || wsMode === "off") {
@@ -34623,29 +35841,29 @@ function parseSettingsFile_fromParsed(parsed) {
     }
   }
   if (parsed["model_policy"] === null) out.model_policy = null;
-  else if (isPlainObject6(parsed["model_policy"]) && validateModelPolicy2(parsed["model_policy"]).length === 0)
+  else if (isPlainObject7(parsed["model_policy"]) && validateModelPolicy2(parsed["model_policy"]).length === 0)
     out.model_policy = parsed["model_policy"];
-  if (isPlainObject6(parsed["models"])) {
+  if (isPlainObject7(parsed["models"])) {
     const rawModels = parsed["models"];
     const sparse = {};
     if (typeof rawModels["enabled"] === "boolean") sparse.enabled = rawModels["enabled"];
-    if (isPlainObject6(rawModels["tiers"])) {
+    if (isPlainObject7(rawModels["tiers"])) {
       const rt = rawModels["tiers"];
       const sparseTiers = {};
       for (const tier of ["cheap", "mid", "powerful"]) {
-        if (isPlainObject6(rt[tier])) sparseTiers[tier] = sparseTierHostMap(rt[tier]);
+        if (isPlainObject7(rt[tier])) sparseTiers[tier] = sparseTierHostMap(rt[tier]);
       }
       sparse.tiers = sparseTiers;
     }
-    if (isPlainObject6(rawModels["scoreWeights"])) sparse.scoreWeights = rawModels["scoreWeights"];
-    if (isPlainObject6(rawModels["thresholds"])) sparse.thresholds = rawModels["thresholds"];
+    if (isPlainObject7(rawModels["scoreWeights"])) sparse.scoreWeights = rawModels["scoreWeights"];
+    if (isPlainObject7(rawModels["thresholds"])) sparse.thresholds = rawModels["thresholds"];
     if (typeof rawModels["advisorRounds"] === "number" && rawModels["advisorRounds"] >= 1)
       sparse.advisorRounds = Math.floor(rawModels["advisorRounds"]);
     if (Array.isArray(rawModels["escalationMarkers"])) sparse.escalationMarkers = rawModels["escalationMarkers"];
     if (typeof rawModels["recallBeforeRead"] === "boolean") sparse.recallBeforeRead = rawModels["recallBeforeRead"];
     if (typeof rawModels["recallScoreThreshold"] === "number") sparse.recallScoreThreshold = rawModels["recallScoreThreshold"];
     if (typeof rawModels["structuredOutputRequired"] === "boolean") sparse.structuredOutputRequired = rawModels["structuredOutputRequired"];
-    if (isPlainObject6(rawModels["cacheTTL"])) {
+    if (isPlainObject7(rawModels["cacheTTL"])) {
       const rttl = rawModels["cacheTTL"];
       const newTTL = {};
       if (VALID_CACHE_TTL.has(rttl["coordinator"])) newTTL.coordinator = rttl["coordinator"];
@@ -34660,11 +35878,11 @@ function parseSettingsFile_fromParsed(parsed) {
       sparse.importanceAtIngest = rawModels["importanceAtIngest"];
     if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1)
       sparse.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
-    if (isPlainObject6(rawModels["shortOutputThreshold"])) {
+    if (isPlainObject7(rawModels["shortOutputThreshold"])) {
       const sot = rawModels["shortOutputThreshold"];
       const sotMerged = {};
       for (const taskType of Object.keys(sot)) {
-        if (!isPlainObject6(sot[taskType])) continue;
+        if (!isPlainObject7(sot[taskType])) continue;
         const innerRaw = sot[taskType];
         const innerMerged = {};
         for (const tier of Object.keys(innerRaw)) {
@@ -34674,7 +35892,7 @@ function parseSettingsFile_fromParsed(parsed) {
       }
       sparse.shortOutputThreshold = sotMerged;
     }
-    if (isPlainObject6(rawModels["knowledge"])) {
+    if (isPlainObject7(rawModels["knowledge"])) {
       const rawK = rawModels["knowledge"];
       const sparseK = {};
       if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
@@ -34695,14 +35913,14 @@ function parseSettingsFile_fromParsed(parsed) {
     }
     out.models = sparse;
   }
-  if (isPlainObject6(parsed["security"])) {
+  if (isPlainObject7(parsed["security"])) {
     const rawSec = parsed["security"];
     const sparseSec = {};
     const bpp = rawSec["bypass_permissions_policy"];
     if (bpp === "deny" || bpp === "audit" || bpp === "allow") sparseSec.bypass_permissions_policy = bpp;
     out.security = sparseSec;
   }
-  if (isPlainObject6(parsed["secrets_policy"])) {
+  if (isPlainObject7(parsed["secrets_policy"])) {
     const rawSp = parsed["secrets_policy"];
     const sparseSp = {};
     if (Array.isArray(rawSp["env_allowlist"])) sparseSp.env_allowlist = rawSp["env_allowlist"];
@@ -34711,10 +35929,10 @@ function parseSettingsFile_fromParsed(parsed) {
     if (rawSp["fail_mode_telemetry"] === "open" || rawSp["fail_mode_telemetry"] === "closed") sparseSp.fail_mode_telemetry = rawSp["fail_mode_telemetry"];
     out.secrets_policy = sparseSp;
   }
-  if (isPlainObject6(parsed["mcp"])) {
+  if (isPlainObject7(parsed["mcp"])) {
     const rawMcp = parsed["mcp"];
     const sparseMcp = {};
-    if (isPlainObject6(rawMcp["tool_description_hashes"]))
+    if (isPlainObject7(rawMcp["tool_description_hashes"]))
       sparseMcp.tool_description_hashes = rawMcp["tool_description_hashes"];
     if (typeof rawMcp["stdio_available"] === "boolean") sparseMcp.stdio_available = rawMcp["stdio_available"];
     if (typeof rawMcp["http_available"] === "boolean") sparseMcp.http_available = rawMcp["http_available"];
@@ -34722,7 +35940,7 @@ function parseSettingsFile_fromParsed(parsed) {
       sparseMcp.bridge_package = rawMcp["bridge_package"];
     out.mcp = sparseMcp;
   }
-  if (isPlainObject6(parsed["capability"])) {
+  if (isPlainObject7(parsed["capability"])) {
     const rawCapability = parsed["capability"];
     const known2 = {};
     for (const k of Object.keys(rawCapability)) {
@@ -34740,7 +35958,7 @@ function parseSettingsFile_fromParsed(parsed) {
     out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
   if (typeof parsed["codex_cap"] === "number")
     out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"]));
-  if (isPlainObject6(parsed["defaults"])) {
+  if (isPlainObject7(parsed["defaults"])) {
     const rawDefaults = parsed["defaults"];
     const sparseDefaults = {};
     for (const k of Object.keys(rawDefaults)) {
@@ -34778,28 +35996,28 @@ function isValidInitiativeId(id) {
   return true;
 }
 function isContainedIn(candidatePath, baseDir) {
-  const resolved = path50.resolve(candidatePath);
-  const resolvedBase = path50.resolve(baseDir);
-  return resolved.startsWith(resolvedBase + path50.sep);
+  const resolved = path53.resolve(candidatePath);
+  const resolvedBase = path53.resolve(baseDir);
+  return resolved.startsWith(resolvedBase + path53.sep);
 }
 function initiativeIsWorkspaceScoped(workspaceRoot, id) {
   try {
     if (!isValidInitiativeId(id)) return false;
-    const registryPath = path50.join(
+    const registryPath = path53.join(
       workspaceRoot,
       ".guild",
       "indexes",
       "initiatives-registry.yaml"
     );
-    if (fs41.existsSync(registryPath)) {
+    if (fs44.existsSync(registryPath)) {
       try {
-        const raw = fs41.readFileSync(registryPath, "utf8");
+        const raw = fs44.readFileSync(registryPath, "utf8");
         const parsed = yaml3.load(raw);
-        if (isPlainObject6(parsed)) {
+        if (isPlainObject7(parsed)) {
           const list = parsed["initiatives"];
           if (Array.isArray(list)) {
             for (const entry of list) {
-              if (!isPlainObject6(entry)) continue;
+              if (!isPlainObject7(entry)) continue;
               const rec = entry;
               if (rec["id"] === id) {
                 return rec["scope"] === "workspace";
@@ -34811,37 +36029,37 @@ function initiativeIsWorkspaceScoped(workspaceRoot, id) {
         return false;
       }
     }
-    const initiativesBase = path50.join(workspaceRoot, ".guild", "initiatives");
-    const activePath = path50.join(
+    const initiativesBase = path53.join(workspaceRoot, ".guild", "initiatives");
+    const activePath = path53.join(
       initiativesBase,
       "active",
       id,
       "initiative.yaml"
     );
-    const archivedPath = path50.join(
+    const archivedPath = path53.join(
       initiativesBase,
       "archived",
       id,
       "initiative.yaml"
     );
-    const activeBase = path50.join(initiativesBase, "active");
-    const archivedBase = path50.join(initiativesBase, "archived");
+    const activeBase = path53.join(initiativesBase, "active");
+    const archivedBase = path53.join(initiativesBase, "archived");
     if (!isContainedIn(activePath, activeBase) && !isContainedIn(archivedPath, archivedBase)) {
       return false;
     }
     let yamlPath = null;
-    if (isContainedIn(activePath, activeBase) && fs41.existsSync(activePath)) {
+    if (isContainedIn(activePath, activeBase) && fs44.existsSync(activePath)) {
       yamlPath = activePath;
-    } else if (isContainedIn(archivedPath, archivedBase) && fs41.existsSync(archivedPath)) {
+    } else if (isContainedIn(archivedPath, archivedBase) && fs44.existsSync(archivedPath)) {
       yamlPath = archivedPath;
     }
     if (yamlPath !== null) {
       try {
-        const raw = fs41.readFileSync(yamlPath, "utf8");
+        const raw = fs44.readFileSync(yamlPath, "utf8");
         const parsed = yaml3.load(raw);
-        if (isPlainObject6(parsed)) {
+        if (isPlainObject7(parsed)) {
           const doc = parsed["initiative"];
-          if (isPlainObject6(doc)) {
+          if (isPlainObject7(doc)) {
             return doc["scope"] === "workspace";
           }
         }
@@ -34868,8 +36086,8 @@ function resolveSettings2(opts) {
   let wsSettings = {};
   let wsLocalSettings = {};
   if (ws !== null) {
-    const wsGuildDir = path50.join(ws.rootDir, ".guild");
-    const rawWsSettings = parseSettingsFile(path50.join(wsGuildDir, "settings.json"));
+    const wsGuildDir = path53.join(ws.rootDir, ".guild");
+    const rawWsSettings = parseSettingsFile(path53.join(wsGuildDir, "settings.json"));
     const wsInheritable = {};
     for (const [k, v] of Object.entries(rawWsSettings)) {
       const key = k;
@@ -34905,8 +36123,8 @@ function resolveSettings2(opts) {
     } catch {
     }
   }
-  const projectGuildDir = path50.join(cwd, ".guild");
-  const projectSettings = parseSettingsFile(path50.join(projectGuildDir, "settings.json"));
+  const projectGuildDir = path53.join(cwd, ".guild");
+  const projectSettings = parseSettingsFile(path53.join(projectGuildDir, "settings.json"));
   for (const key of Object.keys(projectSettings)) {
     if (key === "workspace") {
       sources["workspace.mode"] = "project";
@@ -35036,11 +36254,11 @@ function resolveSettings2(opts) {
   }
   return { config: assembled, sources };
 }
-var fs41, path50, yaml3, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS, RESOLVER_TIER1_KEYS, VALID_CAPABILITY_KEYS;
+var fs44, path53, yaml3, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS, RESOLVER_TIER1_KEYS, VALID_CAPABILITY_KEYS;
 var init_settings_reader = __esm({
   "src/modules/config/workflows/settings-reader.ts"() {
-    fs41 = __toESM(require("fs"));
-    path50 = __toESM(require("path"));
+    fs44 = __toESM(require("fs"));
+    path53 = __toESM(require("path"));
     init_host_runtime();
     init_host_runtime();
     init_host_runtime();
@@ -35138,9 +36356,9 @@ function resolveSettings(opts) {
     const { cwd, flags = {} } = opts;
     const assembled = result.config;
     const _traceRunId = process.env["GUILD_RUN_ID"] ?? "";
-    const _traceRunDir = _traceRunId && cwd ? path51.join(cwd, ".guild", "runs", _traceRunId) : void 0;
+    const _traceRunDir = _traceRunId && cwd ? path54.join(cwd, ".guild", "runs", _traceRunId) : void 0;
     if (_traceRunDir) {
-      const _fingerprint = crypto13.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
+      const _fingerprint = crypto14.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
       const sources = result.sources;
       emitTraceEvent(
         makeConfigResolutionEvent({
@@ -35167,11 +36385,11 @@ function resolveSettings(opts) {
   }
   return result;
 }
-var path51, crypto13;
+var path54, crypto14;
 var init_settings_resolver = __esm({
   "src/modules/config/workflows/settings-resolver.ts"() {
-    path51 = __toESM(require("path"));
-    crypto13 = __toESM(require("crypto"));
+    path54 = __toESM(require("path"));
+    crypto14 = __toESM(require("crypto"));
     init_settings_reader();
     init_settings_reader();
     init_telemetry();
@@ -35302,7 +36520,7 @@ function collectKeyPaths2(obj, prefix = "") {
   for (const [k, v] of Object.entries(obj)) {
     const full = prefix ? `${prefix}.${k}` : k;
     paths.add(full);
-    if (isPlainObject7(v)) {
+    if (isPlainObject8(v)) {
       for (const sub of collectKeyPaths2(v, full)) {
         paths.add(sub);
       }
@@ -35327,7 +36545,7 @@ function deepMergeLocal(base, local) {
     if (PROTO_POISON_KEYS.has(k)) continue;
     if (Array.isArray(v)) {
       result[k] = v;
-    } else if (isPlainObject7(v) && isPlainObject7(result[k])) {
+    } else if (isPlainObject8(v) && isPlainObject8(result[k])) {
       result[k] = deepMergeLocal(
         result[k],
         v
@@ -35339,11 +36557,11 @@ function deepMergeLocal(base, local) {
   return result;
 }
 function loadLocalOverride(cwd, fileConfig, selfBuild) {
-  const localPath = path52.join(cwd, ".guild", "settings.local.json");
-  if (!fs42.existsSync(localPath)) return fileConfig;
+  const localPath = path55.join(cwd, ".guild", "settings.local.json");
+  if (!fs45.existsSync(localPath)) return fileConfig;
   let localParsed;
   try {
-    localParsed = JSON.parse(fs42.readFileSync(localPath, "utf8"));
+    localParsed = JSON.parse(fs45.readFileSync(localPath, "utf8"));
   } catch (e) {
     process.stderr.write(
       `[read-guild-config] WARN: could not parse .guild/settings.local.json (${e.message}) \u2014 local overrides ignored.
@@ -35364,7 +36582,7 @@ function loadLocalOverride(cwd, fileConfig, selfBuild) {
   );
   return merged;
 }
-function isPlainObject7(v) {
+function isPlainObject8(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 function validateModels2(m) {
@@ -35374,7 +36592,7 @@ function validateModels2(m) {
       rejects.push(`unknown models key "${k}" (closed key set \u2014 check spelling against ADR \xA710)`);
     }
   }
-  if (isPlainObject7(m["tiers"])) {
+  if (isPlainObject8(m["tiers"])) {
     const rt = m["tiers"];
     const VALID_TIER_KEYS = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
     const VALID_TIER_SPEC_KEYS = /* @__PURE__ */ new Set(["model", "effort", "reasoning", "thinking", "verbosity"]);
@@ -35383,7 +36601,7 @@ function validateModels2(m) {
         rejects.push(`unknown models.tiers key "${tk}" (valid: cheap|mid|powerful)`);
         continue;
       }
-      if (!isPlainObject7(rt[tk])) continue;
+      if (!isPlainObject8(rt[tk])) continue;
       const hostMap = rt[tk];
       const seenCanonicalHosts = /* @__PURE__ */ new Map();
       for (const [hk, hv] of Object.entries(hostMap)) {
@@ -35403,7 +36621,7 @@ function validateModels2(m) {
         }
         seenCanonicalHosts.set(canonicalHostId, hk);
         if (hv === null || typeof hv === "string") continue;
-        if (isPlainObject7(hv)) {
+        if (isPlainObject8(hv)) {
           const spec = hv;
           for (const sk of Object.keys(spec)) {
             if (!VALID_TIER_SPEC_KEYS.has(sk)) {
@@ -35437,7 +36655,7 @@ function validateModels2(m) {
       }
     }
   }
-  if (isPlainObject7(m["thresholds"])) {
+  if (isPlainObject8(m["thresholds"])) {
     const t = m["thresholds"];
     for (const tk of Object.keys(t)) {
       if (tk !== "mid" && tk !== "powerful") {
@@ -35445,7 +36663,7 @@ function validateModels2(m) {
       }
     }
   }
-  if (isPlainObject7(m["cacheTTL"])) {
+  if (isPlainObject8(m["cacheTTL"])) {
     const ttl = m["cacheTTL"];
     for (const ck of Object.keys(ttl)) {
       if (ck !== "coordinator" && ck !== "leaf") {
@@ -35534,7 +36752,7 @@ function validateMcp2(m) {
       rejects.push(`unknown mcp key "${k}" (closed key set \u2014 valid: tool_description_hashes, stdio_available, http_available, bridge_package)`);
     }
   }
-  if (m["tool_description_hashes"] !== void 0 && !isPlainObject7(m["tool_description_hashes"])) {
+  if (m["tool_description_hashes"] !== void 0 && !isPlainObject8(m["tool_description_hashes"])) {
     rejects.push(`mcp.tool_description_hashes must be an object (tool-name \u2192 SHA-256 hash)`);
   }
   if (m["stdio_available"] !== void 0 && typeof m["stdio_available"] !== "boolean") {
@@ -35665,13 +36883,13 @@ function validateCrossHostBlock3(ch) {
     rejects.push(`defaults.cross_host.fallback_to_claude must be a boolean (got ${JSON.stringify(ch["fallback_to_claude"])})`);
   }
   if (ch["hosts"] !== void 0) {
-    if (!isPlainObject7(ch["hosts"])) {
+    if (!isPlainObject8(ch["hosts"])) {
       rejects.push(`defaults.cross_host.hosts must be an object { host_id: { address, port?, user? } }`);
     } else {
       const hosts = ch["hosts"];
       const ALLOWED_ENTRY = /* @__PURE__ */ new Set(["address", "port", "user", "login_shell"]);
       for (const [hostId, entry] of Object.entries(hosts)) {
-        if (!isPlainObject7(entry)) {
+        if (!isPlainObject8(entry)) {
           rejects.push(`defaults.cross_host.hosts["${hostId}"] must be an object { address, port?, user? }`);
           continue;
         }
@@ -35718,21 +36936,21 @@ function validateDefaults2(d, selfBuild) {
   }
   if (d["adversarial"] === "off" && selfBuild)
     rejects.push(`defaults.adversarial: off is REJECTED for Guild self-build`);
-  if (isPlainObject7(d["wiki"]) && d["wiki"]["autopromote"] === true)
+  if (isPlainObject8(d["wiki"]) && d["wiki"]["autopromote"] === true)
     rejects.push(`defaults.wiki.autopromote: true is REJECTED always (agents emit candidates only)`);
-  if (isPlainObject7(d["quality"])) {
+  if (isPlainObject8(d["quality"])) {
     const q = d["quality"]["budget"];
-    if (isPlainObject7(q)) {
+    if (isPlainObject8(q)) {
       for (const bk of Object.keys(q)) {
         if (bk !== "per_class_minutes" && bk !== "total_minutes")
           rejects.push(`unknown defaults.quality.budget key "${bk}"`);
       }
     }
   }
-  if (isPlainObject7(d["cross_host"])) {
+  if (isPlainObject8(d["cross_host"])) {
     rejects.push(...validateCrossHostBlock3(d["cross_host"]));
   }
-  if (isPlainObject7(d["retry"])) {
+  if (isPlainObject8(d["retry"])) {
     const retry = d["retry"];
     const VALID_RETRY_KEYS = /* @__PURE__ */ new Set(["max_attempts", "backoff"]);
     for (const rk of Object.keys(retry)) {
@@ -35749,7 +36967,7 @@ function validateDefaults2(d, selfBuild) {
         rejects.push(`defaults.retry.backoff must be "immediate"|"linear"|"exponential" (got ${JSON.stringify(v)})`);
     }
   }
-  if (isPlainObject7(d["resume"])) {
+  if (isPlainObject8(d["resume"])) {
     const res = d["resume"];
     const VALID_RESUME_KEYS = /* @__PURE__ */ new Set(["enabled"]);
     for (const rk of Object.keys(res)) {
@@ -35786,9 +37004,9 @@ function validateDefaults2(d, selfBuild) {
   }
   if (d["allowed_tools"] !== void 0 && !Array.isArray(d["allowed_tools"]))
     rejects.push(`defaults.allowed_tools must be an array of strings`);
-  if (d["lean_lead"] !== void 0 && !isPlainObject7(d["lean_lead"])) {
+  if (d["lean_lead"] !== void 0 && !isPlainObject8(d["lean_lead"])) {
     rejects.push(`defaults.lean_lead must be an object { enabled?, hands_on_edit_threshold? } (got ${JSON.stringify(d["lean_lead"])})`);
-  } else if (isPlainObject7(d["lean_lead"])) {
+  } else if (isPlainObject8(d["lean_lead"])) {
     const ll = d["lean_lead"];
     const VALID_LEAN_LEAD_KEYS = /* @__PURE__ */ new Set(["enabled", "hands_on_edit_threshold"]);
     for (const k of Object.keys(ll)) {
@@ -35802,9 +37020,9 @@ function validateDefaults2(d, selfBuild) {
         rejects.push(`defaults.lean_lead.hands_on_edit_threshold must be a positive integer (got ${JSON.stringify(v)})`);
     }
   }
-  if (d["lifecycle_gate"] !== void 0 && !isPlainObject7(d["lifecycle_gate"])) {
+  if (d["lifecycle_gate"] !== void 0 && !isPlainObject8(d["lifecycle_gate"])) {
     rejects.push(`defaults.lifecycle_gate must be an object { enabled?, adhoc_activity_threshold? } (got ${JSON.stringify(d["lifecycle_gate"])})`);
-  } else if (isPlainObject7(d["lifecycle_gate"])) {
+  } else if (isPlainObject8(d["lifecycle_gate"])) {
     const lg = d["lifecycle_gate"];
     const VALID_LIFECYCLE_GATE_KEYS = /* @__PURE__ */ new Set(["enabled", "adhoc_activity_threshold"]);
     for (const k of Object.keys(lg)) {
@@ -35818,9 +37036,9 @@ function validateDefaults2(d, selfBuild) {
         rejects.push(`defaults.lifecycle_gate.adhoc_activity_threshold must be a positive integer (got ${JSON.stringify(v)})`);
     }
   }
-  if (d["dispatch"] !== void 0 && !isPlainObject7(d["dispatch"])) {
+  if (d["dispatch"] !== void 0 && !isPlainObject8(d["dispatch"])) {
     rejects.push(`defaults.dispatch must be an object { block_unmarked_lanes? } (got ${JSON.stringify(d["dispatch"])})`);
-  } else if (isPlainObject7(d["dispatch"])) {
+  } else if (isPlainObject8(d["dispatch"])) {
     const dp = d["dispatch"];
     const VALID_DISPATCH_KEYS = /* @__PURE__ */ new Set(["block_unmarked_lanes"]);
     for (const k of Object.keys(dp)) {
@@ -35829,7 +37047,7 @@ function validateDefaults2(d, selfBuild) {
     if (dp["block_unmarked_lanes"] !== void 0 && typeof dp["block_unmarked_lanes"] !== "boolean")
       rejects.push(`defaults.dispatch.block_unmarked_lanes must be a boolean (got ${JSON.stringify(dp["block_unmarked_lanes"])})`);
   }
-  if (isPlainObject7(d["index"])) {
+  if (isPlainObject8(d["index"])) {
     const idx = d["index"];
     for (const ik of Object.keys(idx)) {
       if (!VALID_INDEX_KEYS.has(ik)) {
@@ -35857,11 +37075,11 @@ function validateDefaults2(d, selfBuild) {
   return rejects;
 }
 function loadFileConfig(cwd, selfBuild) {
-  const settingsPath = path52.join(cwd, ".guild", "settings.json");
-  if (fs42.existsSync(settingsPath)) {
+  const settingsPath = path55.join(cwd, ".guild", "settings.json");
+  if (fs45.existsSync(settingsPath)) {
     let parsed;
     try {
-      parsed = JSON.parse(fs42.readFileSync(settingsPath, "utf8"));
+      parsed = JSON.parse(fs45.readFileSync(settingsPath, "utf8"));
     } catch (e) {
       process.stderr.write(`[read-guild-config] WARN: could not parse .guild/settings.json (${e.message}) \u2014 using defaults
 `);
@@ -35940,7 +37158,7 @@ function loadFileConfig(cwd, selfBuild) {
         `host_mode must be a string (${HOST_MODES2.join("|")}) or null (got ${JSON.stringify(parsed["host_mode"])})`
       );
     }
-    if (isPlainObject7(parsed["roles"])) {
+    if (isPlainObject8(parsed["roles"])) {
       const rawRoles = parsed["roles"];
       rejects.push(...validateRoles(rawRoles));
       const mergedRoles = { ...DEFAULTS3.roles };
@@ -35955,13 +37173,13 @@ function loadFileConfig(cwd, selfBuild) {
       }
       out.roles = mergedRoles;
     }
-    if (isPlainObject7(parsed["host_profiles"])) {
+    if (isPlainObject8(parsed["host_profiles"])) {
       const rawHp = parsed["host_profiles"];
       rejects.push(...validateHostProfiles(rawHp));
       const mergedHp = {};
       for (const [hostId, entry] of Object.entries(rawHp)) {
         const normalized = normalizeHostId(hostId);
-        if (normalized && isPlainObject7(entry)) {
+        if (normalized && isPlainObject8(entry)) {
           mergedHp[normalized] = entry;
         }
       }
@@ -35989,7 +37207,7 @@ function loadFileConfig(cwd, selfBuild) {
     }
     if (VALID_AGENT_MODE2.has(parsed["agent_mode"]))
       out.agent_mode = parsed["agent_mode"];
-    if (isPlainObject7(parsed["workspace"])) {
+    if (isPlainObject8(parsed["workspace"])) {
       const ws = parsed["workspace"];
       const wsMode = ws["mode"];
       if (wsMode === "auto" || wsMode === "on" || wsMode === "off") {
@@ -36009,16 +37227,16 @@ function loadFileConfig(cwd, selfBuild) {
         }
       }
     }
-    if (isPlainObject7(parsed["models"])) {
+    if (isPlainObject8(parsed["models"])) {
       const rawModels = parsed["models"];
       rejects.push(...validateModels2(rawModels));
       const mergedModels = { ...DEFAULTS3.models };
       if (typeof rawModels["enabled"] === "boolean") mergedModels.enabled = rawModels["enabled"];
-      if (isPlainObject7(rawModels["tiers"])) {
+      if (isPlainObject8(rawModels["tiers"])) {
         const rt = rawModels["tiers"];
         mergedModels.tiers = { ...DEFAULTS3.models.tiers };
         for (const tier of ["cheap", "mid", "powerful"]) {
-          if (isPlainObject7(rt[tier])) {
+          if (isPlainObject8(rt[tier])) {
             const rawHostMap = rt[tier];
             const knownHosts = {};
             for (const hk of Object.keys(rawHostMap)) {
@@ -36031,10 +37249,10 @@ function loadFileConfig(cwd, selfBuild) {
           }
         }
       }
-      if (isPlainObject7(rawModels["scoreWeights"])) {
+      if (isPlainObject8(rawModels["scoreWeights"])) {
         mergedModels.scoreWeights = { ...DEFAULTS3.models.scoreWeights, ...rawModels["scoreWeights"] };
       }
-      if (isPlainObject7(rawModels["thresholds"])) {
+      if (isPlainObject8(rawModels["thresholds"])) {
         mergedModels.thresholds = { ...DEFAULTS3.models.thresholds, ...rawModels["thresholds"] };
       }
       if (typeof rawModels["advisorRounds"] === "number" && rawModels["advisorRounds"] >= 1) {
@@ -36048,7 +37266,7 @@ function loadFileConfig(cwd, selfBuild) {
       if (typeof rawModels["importanceAtIngest"] === "boolean") mergedModels.importanceAtIngest = rawModels["importanceAtIngest"];
       if (typeof rawModels["recallScoreThreshold"] === "number") mergedModels.recallScoreThreshold = rawModels["recallScoreThreshold"];
       if (typeof rawModels["structuredOutputRequired"] === "boolean") mergedModels.structuredOutputRequired = rawModels["structuredOutputRequired"];
-      if (isPlainObject7(rawModels["cacheTTL"])) {
+      if (isPlainObject8(rawModels["cacheTTL"])) {
         const rttl = rawModels["cacheTTL"];
         const newTTL = { ...DEFAULTS3.models.cacheTTL };
         if (VALID_CACHE_TTL2.has(rttl["coordinator"])) newTTL.coordinator = rttl["coordinator"];
@@ -36061,11 +37279,11 @@ function loadFileConfig(cwd, selfBuild) {
       if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1) {
         mergedModels.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
       }
-      if (isPlainObject7(rawModels["shortOutputThreshold"])) {
+      if (isPlainObject8(rawModels["shortOutputThreshold"])) {
         const sot = rawModels["shortOutputThreshold"];
         const merged = {};
         for (const taskType of Object.keys(sot)) {
-          if (!isPlainObject7(sot[taskType])) continue;
+          if (!isPlainObject8(sot[taskType])) continue;
           const innerRaw = sot[taskType];
           const innerMerged = {};
           for (const tier of Object.keys(innerRaw)) {
@@ -36077,7 +37295,7 @@ function loadFileConfig(cwd, selfBuild) {
         }
         mergedModels.shortOutputThreshold = merged;
       }
-      if (isPlainObject7(rawModels["knowledge"])) {
+      if (isPlainObject8(rawModels["knowledge"])) {
         const rawK = rawModels["knowledge"];
         const mergedK = { ...DEFAULTS3.models.knowledge };
         if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
@@ -36098,7 +37316,7 @@ function loadFileConfig(cwd, selfBuild) {
       }
       out.models = mergedModels;
     }
-    if (isPlainObject7(parsed["security"])) {
+    if (isPlainObject8(parsed["security"])) {
       const rawSec = parsed["security"];
       rejects.push(...validateSecurity2(rawSec));
       const mergedSec = { ...DEFAULTS3.security };
@@ -36106,7 +37324,7 @@ function loadFileConfig(cwd, selfBuild) {
       if (bpp === "deny" || bpp === "audit" || bpp === "allow") mergedSec.bypass_permissions_policy = bpp;
       out.security = mergedSec;
     }
-    if (isPlainObject7(parsed["secrets_policy"])) {
+    if (isPlainObject8(parsed["secrets_policy"])) {
       const rawSp = parsed["secrets_policy"];
       rejects.push(...validateSecretsPolicy2(rawSp));
       const mergedSp = { ...DEFAULTS3.secrets_policy };
@@ -36116,11 +37334,11 @@ function loadFileConfig(cwd, selfBuild) {
       if (rawSp["fail_mode_telemetry"] === "open" || rawSp["fail_mode_telemetry"] === "closed") mergedSp.fail_mode_telemetry = rawSp["fail_mode_telemetry"];
       out.secrets_policy = mergedSp;
     }
-    if (isPlainObject7(parsed["mcp"])) {
+    if (isPlainObject8(parsed["mcp"])) {
       const rawMcp = parsed["mcp"];
       rejects.push(...validateMcp2(rawMcp));
       const mergedMcp = { ...DEFAULTS3.mcp };
-      if (isPlainObject7(rawMcp["tool_description_hashes"])) {
+      if (isPlainObject8(rawMcp["tool_description_hashes"])) {
         mergedMcp.tool_description_hashes = rawMcp["tool_description_hashes"];
       }
       if (typeof rawMcp["stdio_available"] === "boolean") mergedMcp.stdio_available = rawMcp["stdio_available"];
@@ -36130,7 +37348,7 @@ function loadFileConfig(cwd, selfBuild) {
       }
       out.mcp = mergedMcp;
     }
-    if (isPlainObject7(parsed["capability"])) {
+    if (isPlainObject8(parsed["capability"])) {
       const rawCapability = parsed["capability"];
       rejects.push(...validateCapability(rawCapability));
       out.capability = coerceCapabilityBlock(rawCapability);
@@ -36142,7 +37360,7 @@ function loadFileConfig(cwd, selfBuild) {
     if (typeof parsed["adversarial_review_provider"] === "string") {
       out.adversarial_review_provider = parsed["adversarial_review_provider"];
     }
-    if (isPlainObject7(parsed["defaults"])) {
+    if (isPlainObject8(parsed["defaults"])) {
       rejects.push(...validateDefaults2(parsed["defaults"], selfBuild));
       const rawDefaults = parsed["defaults"];
       const knownDefaults = {};
@@ -36150,7 +37368,7 @@ function loadFileConfig(cwd, selfBuild) {
         if (DEFAULTS_ALLOWED_KEYS2.has(k)) knownDefaults[k] = rawDefaults[k];
       }
       const rawCrossHost = knownDefaults["cross_host"];
-      if (rawCrossHost && isPlainObject7(rawCrossHost)) {
+      if (rawCrossHost && isPlainObject8(rawCrossHost)) {
         knownDefaults["cross_host"] = { ...DEFAULTS3.defaults.cross_host, ...rawCrossHost };
       }
       out.defaults = { ...DEFAULTS3.defaults, ...knownDefaults };
@@ -36200,11 +37418,11 @@ function main() {
     process.exit(1);
     return;
   }
-  const localPath = path52.join(cwd, ".guild", "settings.local.json");
+  const localPath = path55.join(cwd, ".guild", "settings.local.json");
   let localLoadedKeys = [];
-  if (fs42.existsSync(localPath)) {
+  if (fs45.existsSync(localPath)) {
     try {
-      const rawLocal = JSON.parse(fs42.readFileSync(localPath, "utf8"));
+      const rawLocal = JSON.parse(fs45.readFileSync(localPath, "utf8"));
       localLoadedKeys = Object.keys(rawLocal).filter((k) => !k.startsWith("_"));
       const schemaBase = DEFAULTS3;
       const basePaths = /* @__PURE__ */ new Set();
@@ -36255,11 +37473,11 @@ function main() {
   }
   process.stdout.write(JSON.stringify(output, null, 2) + "\n");
 }
-var fs42, path52, HOST_MODES2, DEFAULTS3, HELP, VALID_RIGOR2, VALID_REVIEW2, DISPATCH_HOST_IDS2, VALID_PHASES, VALID_AGENT_MODE2, VALID_MODEL_TIER, VALID_CACHE_TTL2, VALID_MODELS_KEYS, VALID_TIER_HOST_KEYS2, KNOWN_HOST_IDS3, VALID_ROLES_KEYS, VALID_SECURITY_KEYS, VALID_SECRETS_POLICY_KEYS, VALID_MCP_KEYS, VALID_INDEX_KEYS, VALID_CAPABILITY_KEYS2, DEFAULTS_ALLOWED_KEYS2;
+var fs45, path55, HOST_MODES2, DEFAULTS3, HELP, VALID_RIGOR2, VALID_REVIEW2, DISPATCH_HOST_IDS2, VALID_PHASES, VALID_AGENT_MODE2, VALID_MODEL_TIER, VALID_CACHE_TTL2, VALID_MODELS_KEYS, VALID_TIER_HOST_KEYS2, KNOWN_HOST_IDS3, VALID_ROLES_KEYS, VALID_SECURITY_KEYS, VALID_SECRETS_POLICY_KEYS, VALID_MCP_KEYS, VALID_INDEX_KEYS, VALID_CAPABILITY_KEYS2, DEFAULTS_ALLOWED_KEYS2;
 var init_config_cli = __esm({
   "scripts/lib/core/config-cli.ts"() {
-    fs42 = __toESM(require("fs"));
-    path52 = __toESM(require("path"));
+    fs45 = __toESM(require("fs"));
+    path55 = __toESM(require("path"));
     init_settings_resolver2();
     init_host_registry_schema2();
     init_host_id_namespace2();

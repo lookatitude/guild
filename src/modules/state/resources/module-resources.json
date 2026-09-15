@@ -8,28 +8,28 @@
       "id": "PreCompact:pre-compact.js",
       "source_path": "hooks/dist/pre-compact.js",
       "resource_path": "resources/hooks/dist/pre-compact.js",
-      "sha256": "afe138c87320fb8ef3b306e1685e001af84c732829861f018b508c52ac6ab1a5"
+      "sha256": "c0679b332f7f49be87f750c8fd26c6fde22598947f85f4223701a440e3e8f703"
     },
     {
       "category": "hooks",
       "id": "SessionStart:session-reanchor.js",
       "source_path": "hooks/dist/session-reanchor.js",
       "resource_path": "resources/hooks/dist/session-reanchor.js",
-      "sha256": "dd1bded4771f8ac401811f471ff30ab230dfcf454f0210a324a1ba815d8439d0"
+      "sha256": "d517b2cab8aed7b9d410e778e6c4dbcf18e8509ab06fc5ec3a3b3012de59dfd1"
     },
     {
       "category": "hooks",
       "id": "Stop:lean-lead-guard.js",
       "source_path": "hooks/dist/lean-lead-guard.js",
       "resource_path": "resources/hooks/dist/lean-lead-guard.js",
-      "sha256": "6f1f1790fb550a82ac6c801da6ca9d67dd4386b4b0bef6e48657e7fc296ad3aa"
+      "sha256": "ab43e80a75f42b0a85287494a0480ac77cc2249f93e36e6768e30a41804e2300"
     },
     {
       "category": "hooks",
       "id": "Stop:lifecycle-gate.js",
       "source_path": "hooks/dist/lifecycle-gate.js",
       "resource_path": "resources/hooks/dist/lifecycle-gate.js",
-      "sha256": "272b1d9b7420728b14773e75d29db1fdd7b6cf65aa9602730c75265604fa08af"
+      "sha256": "697f055f29f64ed7968c58c542a4a3e15cecdca22bbe98f98ad5458fee0ccabe"
     },
     {
       "category": "scripts",
@@ -113,7 +113,7 @@
       "id": "lib/state/ensure-storage-layout",
       "source_path": "scripts/lib/state/ensure-storage-layout.ts",
       "resource_path": "resources/scripts/lib/state/ensure-storage-layout.ts",
-      "sha256": "040561ed95491b47dc0bb1e5d5b4771af4783bc613ca242cb0d2729b360e8dc5"
+      "sha256": "872b574a68d2554c246bb1a2100443d666d459c66baccc7e2c852402349e03bf"
     },
     {
       "category": "scripts",
@@ -128,6 +128,13 @@
       "source_path": "scripts/lib/state/storage-gc.ts",
       "resource_path": "resources/scripts/lib/state/storage-gc.ts",
       "sha256": "a86839a540408c58ec9252ef3563b6719e9f6bc90d9e79c8364e8c6141f636df"
+    },
+    {
+      "category": "scripts",
+      "id": "lib/state/upgrade-chain",
+      "source_path": "scripts/lib/state/upgrade-chain.ts",
+      "resource_path": "resources/scripts/lib/state/upgrade-chain.ts",
+      "sha256": "45772b253b8df70c2cd2d8757690399955b73b5b87d760b12bfcb282a4e9c9cc"
     },
     {
       "category": "scripts",

@@ -1828,7 +1828,7 @@
       "id": "projection:src/modules/state/index.ts",
       "source_path": "src/modules/state/index.ts",
       "resource_path": "resources/src/modules/state/index.ts",
-      "sha256": "7407c14876e685b79044dcea644c852360a7527250e4ee49ab88acbbce1328fc",
+      "sha256": "3ea3f8564b4cbb1cae5be3a4006ef78ef42ea653f6640ed3d67ac818e3ce2ad6",
       "projection_dependency": true
     },
     {
@@ -1941,6 +1941,38 @@
       "source_path": "src/modules/state/workflows/storage-roots.ts",
       "resource_path": "resources/src/modules/state/workflows/storage-roots.ts",
       "sha256": "81ba737c1dc5273a67a306092b4f33d22a0262107c5c93c988e621ae5e22c9d5",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/upgrade-glossary.ts",
+      "source_path": "src/modules/state/workflows/upgrade-glossary.ts",
+      "resource_path": "resources/src/modules/state/workflows/upgrade-glossary.ts",
+      "sha256": "5497a3b140e1a7c91ea8879b1557208feaefb458192a4e9d21fd567cc8262b06",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/upgrade-journal.ts",
+      "source_path": "src/modules/state/workflows/upgrade-journal.ts",
+      "resource_path": "resources/src/modules/state/workflows/upgrade-journal.ts",
+      "sha256": "1a1aef36d49a6803235b6ce885445bb6a19d33d97f8971195bcc7a6d79b85802",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/upgrade-runner.ts",
+      "source_path": "src/modules/state/workflows/upgrade-runner.ts",
+      "resource_path": "resources/src/modules/state/workflows/upgrade-runner.ts",
+      "sha256": "573560d32f337aaa090a9b6e99d4d63e1724c089a4028c842c5dbbfb59851f16",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/state/workflows/upgrade-steps.ts",
+      "source_path": "src/modules/state/workflows/upgrade-steps.ts",
+      "resource_path": "resources/src/modules/state/workflows/upgrade-steps.ts",
+      "sha256": "d8de5789bd15eb981cbe0199d25094bbb51772276f26a16e43198c92a0c3ea39",
       "projection_dependency": true
     },
     {
