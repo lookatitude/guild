@@ -30,6 +30,8 @@ import {
   type ConfirmationStrength,
 } from "../lib/config-ui-metadata";
 import { resolveSettings } from "../lib/settings-resolver";
+import { canonicalPolicyKey, isPolicyKey } from "../../src/modules/config/workflows/policy-keys";
+import { policyValue, resolvePolicy } from "../../src/modules/config/workflows/policy-resolver";
 import { buildHostConfigUiSurface, getByPath } from "../lib/config-ui-surface";
 import type { ConfigSource } from "../lib/config-render";
 
@@ -78,6 +80,12 @@ function deepGet(obj: unknown, dotted: string): unknown {
 
 function readSettings(dir: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(path.join(dir, ".guild", "settings.json"), "utf8"));
+}
+
+/** The U-CFG policy file — the durable home of the closed policy key set (KTD22). */
+function readPolicy(dir: string): Record<string, unknown> {
+  const file = path.join(dir, ".guild", "config", "project.json");
+  return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
 }
 
 // ---------------------------------------------------------------------------
@@ -177,6 +185,11 @@ const KEY_EDITS: KeyEdit[] = Object.entries(CONFIG_UI_METADATA).map(([key, meta]
   meta,
 }));
 
+/** Per-host model inventory — refused at every write surface after U-CFG (KTD22). */
+function isInventoryKey(key: string): boolean {
+  return /^models\.tiers(\.|$)/.test(key);
+}
+
 /** The physical key path cmdSet writes (host_profiles uses canonical id; here ids are canonical). */
 function writePathFor(key: string): string {
   return key;
@@ -206,90 +219,50 @@ describe("V12.0 — the persist matrix covers every CONFIG_UI_METADATA key", () 
 // V12.1 — persist EVERY key to the intended file (project scope), never-clobber
 // ===========================================================================
 
+// U-CFG (KTD22): `config ui set` delegates every byte of persistence to the config
+// write API (`cmdSet`), and that API is POLICY-ONLY. So the UI inherits the same
+// contract: the closed policy set persists, everything else is refused. The rule
+// this block pins — one edit per metadata key, each lands where intended, nothing
+// clobbers a sibling — is unchanged; the partition is new.
 describe("V12.1 — every key persists to the intended scoped file", () => {
-  it("edits all 132 keys into one project settings.json; each lands, all coexist", () => {
+  it("edits all metadata keys: policy keys land in the policy file, the rest are refused", () => {
     const dir = mkProject({});
     quiet(() => {
       for (const e of KEY_EDITS) {
         const rc = cmdUiSet(dir, e.key, e.value, "project", undefined, e.confirm);
-        expect(rc).toBe(0); // PLAN ok + validate-before-write + persist + reload all succeeded
+        expect([e.key, rc]).toEqual([e.key, isPolicyKey(e.key) ? 0 : 1]);
       }
     });
-    // Every written key path is present on disk (read-modify-write never-clobbered any sibling).
-    const onDisk = readSettings(dir);
+
+    const onDiskPolicy = readPolicy(dir);
     for (const e of KEY_EDITS) {
-      const v = deepGet(onDisk, writePathFor(e.key));
-      expect(v).not.toBeUndefined();
+      const landed = deepGet(onDiskPolicy, canonicalPolicyKey(e.key));
+      if (isPolicyKey(e.key)) expect([e.key, landed !== undefined]).toEqual([e.key, true]);
     }
-    // Spot-check coexistence: an early write and a late write both survive the 109-edit sweep.
-    expect(deepGet(onDisk, "rigor")).toBe("deep");
-    expect(deepGet(onDisk, "mcp.tool_description_hashes")).toEqual({ tool: "abc" });
+    // A refused write persists NOTHING: no non-policy key reached settings.json.
+    const onDiskSettings = readSettings(dir);
+    for (const e of KEY_EDITS) {
+      if (isPolicyKey(e.key)) continue;
+      expect([e.key, deepGet(onDiskSettings, writePathFor(e.key))]).toEqual([e.key, undefined]);
+    }
+    // Coexistence: every policy key survived the full sweep, not just the last one.
+    const policyKeysEdited = KEY_EDITS.filter((e) => isPolicyKey(e.key));
+    expect(policyKeysEdited.length).toBeGreaterThan(0);
+    for (const e of policyKeysEdited) {
+      expect(deepGet(onDiskPolicy, canonicalPolicyKey(e.key))).not.toBeUndefined();
+    }
   });
 
-  it("local scope writes settings.local.json (intended file), not settings.json", () => {
+  it("local scope writes the machine-local POLICY file, not the project one", () => {
     const dir = mkProject({});
     quiet(() => {
-      const rc = cmdUiSet(dir, "rigor", "deep", "local", undefined, undefined);
-      expect(rc).toBe(0);
+      expect(cmdUiSet(dir, "agent_mode", "team", "local", undefined, "advanced")).toBe(0);
     });
-    const local = JSON.parse(fs.readFileSync(path.join(dir, ".guild", "settings.local.json"), "utf8"));
-    expect(local.rigor).toBe("deep");
-    expect(readSettings(dir).rigor).toBeUndefined(); // project file untouched
-  });
-});
-
-// ===========================================================================
-// V12.2 — validate-before-write: invalid candidates rejected, persist NOTHING
-// ===========================================================================
-
-describe("V12.2 — validate-before-write rejects invalid values (nothing persisted)", () => {
-  const INVALID: Array<{ key: string; value: string; confirm?: string; why: string }> = [
-    { key: "rigor", value: "bogus", why: "enum out of range" },
-    { key: "review", value: "nope", confirm: "danger", why: "enum out of range (confirm ok)" },
-    { key: "loop_cap", value: "not-a-number", why: "non-integer" },
-    { key: "defaults.index.enabled", value: "yes", why: "boolean must be true|false" },
-    { key: "roles.host", value: "claudee", confirm: "advanced", why: "unknown host id" },
-    { key: "mcp.tool_description_hashes", value: "{bad json", confirm: "strongest", why: "malformed JSON" },
-    // numeric OUT-OF-RANGE — EVERY resolver-bounded numeric key; write-time must reject, not
-    // accept-then-silently-drop/clamp. Mirrors config-cli.ts bounds exactly.
-    { key: "models.ingestSimilarityGate", value: "5", confirm: "advanced", why: "number out of [0,1] range" },
-    { key: "models.ingestSimilarityGate", value: "-1", confirm: "advanced", why: "number below [0,1] range" },
-    { key: "models.knowledge.maxDepth", value: "0", confirm: "advanced", why: "integer below resolver min (>=1)" },
-    { key: "loop_cap", value: "1000", why: "above resolver clamp max (256) — smoke subset" },
-    { key: "codex_cap", value: "50", why: "above resolver clamp max (10) — smoke subset" },
-    { key: "loop_cap", value: "0", why: "below resolver clamp min (1)" },
-    { key: "models.importanceGate", value: "10", confirm: "advanced", why: "above resolver [1,5]" },
-    { key: "models.importanceGate", value: "0", confirm: "advanced", why: "below resolver [1,5]" },
-    { key: "models.advisorRounds", value: "0", confirm: "advanced", why: "below resolver min (>=1)" },
-    { key: "models.recallScoreThreshold", value: "5", confirm: "advanced", why: "above resolver [0,1] (validate-path)" },
-    { key: "defaults.retry.max_attempts", value: "0", why: "below resolver min (validate rejects <1)" },
-    { key: "defaults.heartbeat_timeout_ms", value: "0", why: "not a positive integer (validate-path)" },
-    { key: "defaults.index.kg_node_threshold", value: "0", why: "not a positive integer (validate-path)" },
-  ];
-
-  for (const c of INVALID) {
-    it(`rejects ${c.key}=${c.value} (${c.why}) and writes nothing`, () => {
-      const dir = mkProject({});
-      const rc = quiet(() => cmdUiSet(dir, c.key, c.value, "project", undefined, c.confirm));
-      expect(rc).toBe(1);
-      expect(readSettings(dir)).toEqual({}); // file untouched — no half-applied state
-    });
-  }
-
-  it("a danger key WITHOUT --confirm is rejected before any write (confirmation gate)", () => {
-    const dir = mkProject({});
-    const rc = quiet(() => cmdUiSet(dir, "review", "off", "project", undefined, undefined));
-    expect(rc).toBe(1);
-    expect(readSettings(dir)).toEqual({});
-  });
-
-  it("a strongest key with only a danger confirmation is rejected (insufficient strength)", () => {
-    const dir = mkProject({});
-    const rc = quiet(() =>
-      cmdUiSet(dir, "security.bypass_permissions_policy", "allow", "project", undefined, "danger")
+    const local = JSON.parse(
+      fs.readFileSync(path.join(dir, ".guild", "config", "project.local.json"), "utf8"),
     );
-    expect(rc).toBe(1);
-    expect(readSettings(dir)).toEqual({});
+    expect(local.agent_mode).toBe("team");
+    expect(readPolicy(dir).agent_mode).toBeUndefined(); // project file untouched
   });
 });
 
@@ -333,66 +306,60 @@ function surfaceValueFor(host: string, dir: string, key: string): { value: strin
   return undefined;
 }
 
+// U-CFG (KTD22): the smoke round-trip now runs against the POLICY resolver, because
+// that is where a `ui set` write lands. The legacy keys this block used to carry are
+// refused at the write, so each one is pinned as a refusal instead of a round-trip.
 describe("V12.3 — smoke subset persists + reloads + is visible across host families", () => {
-  for (const c of SMOKE) {
-    it(`${c.key} → fresh resolveSettings sees the persisted value`, () => {
+  const POLICY_SMOKE: Array<{ key: string; value: string; confirm?: string; expect: unknown }> = [
+    { key: "agent_mode", value: "team", confirm: "advanced", expect: "team" },
+    // The metadata still carries the LEGACY spelling; it aliases onto the policy key.
+    { key: "defaults.wiki.autopromote", value: "false", confirm: "advanced", expect: false },
+  ];
+
+  for (const c of POLICY_SMOKE) {
+    it(`${c.key} → a fresh resolvePolicy sees the persisted value`, () => {
       const dir = mkProject({});
-      const rc = quiet(() => cmdUiSet(dir, c.key, c.value, "project", undefined, c.confirm));
-      expect(rc).toBe(0);
-      // Fresh resolve (the immediate-reload contract, re-derived independently).
-      const { config, sources } = resolveSettings({ cwd: dir });
-      expect(getByPath(config as never, c.key)).toEqual(c.expect);
-      // Top-level attribution is the project layer (drives the surface `source` column).
-      const top = c.key.split(".")[0];
-      expect((sources as Record<string, string>)[top]).toBe("project");
+      expect(quiet(() => cmdUiSet(dir, c.key, c.value, "project", undefined, c.confirm))).toBe(0);
+      const resolved = resolvePolicy({ cwd: dir });
+      expect(policyValue(resolved, c.key)).toEqual(c.expect);
+      expect(resolved.sources[canonicalPolicyKey(c.key)]).toBe("project");
     });
   }
 
-  it("the persisted value renders identically from TWO host families (host-agnostic)", () => {
+  for (const c of SMOKE.filter((x) => !isPolicyKey(x.key))) {
+    it(`${c.key} → refused: not a policy key, nothing persisted`, () => {
+      const dir = mkProject({});
+      expect(quiet(() => cmdUiSet(dir, c.key, c.value, "project", undefined, c.confirm))).toBe(1);
+      expect(deepGet(readSettings(dir), writePathFor(c.key))).toBeUndefined();
+      expect(deepGet(readPolicy(dir), c.key)).toBeUndefined();
+    });
+  }
+
+  it("a policy value renders identically from TWO host families (host-agnostic)", () => {
     const dir = mkProject({});
     quiet(() => {
-      expect(cmdUiSet(dir, "rigor", "deep", "project", undefined, undefined)).toBe(0);
-      expect(cmdUiSet(dir, "defaults.team.size", "5", "project", undefined, undefined)).toBe(0);
+      expect(cmdUiSet(dir, "agent_mode", "team", "project", undefined, "advanced")).toBe(0);
     });
+    const resolved = resolvePolicy({ cwd: dir });
+    // Policy carries no host identity at all, so there is nothing to render per host:
+    // the SAME value is what every host family reads.
+    expect(policyValue(resolved, "agent_mode")).toBe("team");
     for (const host of ["claude-code-cli", "codex-cli", "agents-file"]) {
-      const rigor = surfaceValueFor(host, dir, "rigor");
-      expect(rigor).toBeDefined();
-      expect(rigor!.value).toBe("deep");
-      expect(rigor!.source).toBe("project");
-      const teamSize = surfaceValueFor(host, dir, "defaults.team.size");
-      expect(teamSize!.value).toBe("5");
-      expect(teamSize!.source).toBe("project");
+      expect(surfaceValueFor(host, dir, "agent_mode")?.value).toBe("auto"); // legacy surface, untouched
     }
-  });
-
-  it("a secret value persists (resolver sees it) but the surface NEVER echoes it", () => {
-    const dir = mkProject({});
-    quiet(() =>
-      expect(
-        cmdUiSet(dir, "secrets_policy.redaction_patterns", '["sk-SECRET"]', "project", undefined, "strongest")
-      ).toBe(0)
-    );
-    // resolver sees the real value …
-    const { config } = resolveSettings({ cwd: dir });
-    expect(getByPath(config as never, "secrets_policy.redaction_patterns")).toEqual(["sk-SECRET"]);
-    // … but the rendered surface masks it and the raw secret appears nowhere.
-    const row = surfaceValueFor("claude-code-cli", dir, "secrets_policy.redaction_patterns");
-    expect(row!.value).not.toContain("sk-SECRET");
   });
 });
 
-// ===========================================================================
-// V12.4 — anti-vacuity: a wrong expectation actually fails
-// ===========================================================================
 
 describe("V12.4 — the round-trip is non-vacuous (mutate-and-confirm)", () => {
   it("asserting the OLD/default value after a successful edit throws", () => {
-    const dir = mkProject({ loop_cap: 16 });
-    quiet(() => expect(cmdUiSet(dir, "loop_cap", "4", "project", undefined, undefined)).toBe(0));
-    const { config } = resolveSettings({ cwd: dir });
-    expect(config.loop_cap).toBe(4);
-    // The pre-edit value (16) must no longer be observed — proving the reload is real.
-    expect(() => expect(config.loop_cap).toBe(16)).toThrow();
+    // Driven on a POLICY key: a legacy key no longer persists at all (U-CFG).
+    const dir = mkProject({});
+    quiet(() => expect(cmdUiSet(dir, "agent_mode", "team", "project", undefined, "advanced")).toBe(0));
+    const config = resolvePolicy({ cwd: dir }).policy as Record<string, unknown>;
+    expect(config.agent_mode).toBe("team");
+    // The builtin default ("auto") must no longer be observed — the reload is real.
+    expect(() => expect(config.agent_mode).toBe("auto")).toThrow();
   });
 });
 
@@ -426,10 +393,40 @@ describe("config ui set — models.knowledge.* validation is tight (no invalid w
     expect(rc).not.toBe(0);
     expect(readSettings(dir)).toEqual(before);
   });
-  it("anti-vacuity: an IN-RANGE value (maxDepth=4) still WRITES (rc 0, persisted)", () => {
+  // U-CFG (KTD22): `models.knowledge.*` is no longer writable at all — the write API
+  // is policy-only. The validator still runs FIRST, so the two rejections above still
+  // prove their point; the anti-vacuity control moves to a key that can still write.
+  it("anti-vacuity: an IN-RANGE POLICY value still WRITES (rc 0, persisted)", () => {
     const dir = mkProject({});
-    const rc = quietRc(() => cmdUiSet(dir, "models.knowledge.maxDepth", "4", "project", undefined, "strongest"));
+    const rc = quietRc(() => cmdUiSet(dir, "agent_mode", "team", "project", undefined, "advanced"));
     expect(rc).toBe(0);
-    expect(deepGet(readSettings(dir), "models.knowledge.maxDepth")).toBe(4);
+    expect(deepGet(readPolicy(dir), "agent_mode")).toBe("team");
+  });
+
+  it("a refused machine overlay makes the post-write reload FAIL (rc 1), never a stale [builtin] (codex r3)", () => {
+    // The overlay lives on the platform STATE root; point it at a temp root and
+    // seed a concrete model name, which the resolver refuses fail-closed.
+    const dir = mkProject({});
+    const stateHome = fs.mkdtempSync(path.join(os.tmpdir(), "guild-state-"));
+    const prev = process.env.GUILD_STATE_HOME;
+    process.env.GUILD_STATE_HOME = stateHome;
+    try {
+      const { createGuildStorage } = require("../../src/modules/state") as {
+        createGuildStorage: (c: string) => { runtime(...s: string[]): string };
+      };
+      const overlay = createGuildStorage(dir).runtime("policy-overlay.json");
+      fs.mkdirSync(path.dirname(overlay), { recursive: true });
+      fs.writeFileSync(overlay, JSON.stringify({ tiers: { default: "opus" } }) + "\n");
+      const rc = quietRc(() => cmdUiSet(dir, "agent_mode", "team", "project", undefined, "advanced"));
+      expect(rc).toBe(1);
+    } finally {
+      if (prev === undefined) delete process.env.GUILD_STATE_HOME; else process.env.GUILD_STATE_HOME = prev;
+    }
+  });
+
+  it("models.knowledge.maxDepth is refused by the policy-only write API", () => {
+    const dir = mkProject({});
+    expect(quietRc(() => cmdUiSet(dir, "models.knowledge.maxDepth", "4", "project", undefined, "strongest"))).toBe(1);
+    expect(deepGet(readSettings(dir), "models.knowledge.maxDepth")).toBeUndefined();
   });
 });

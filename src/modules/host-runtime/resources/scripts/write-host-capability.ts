@@ -29,18 +29,18 @@
  *   npx tsx scripts/write-host-capability.ts --cwd <root> \
  *       [--host claude|codex] [--host-id <id>] [--source <label>]
  *
- * Writes:  <cwd>/.guild/hosts/<host-id>/capability.json (atomic temp→rename).
+ * Writes:  <platform cache>/roots/<root-id>/hosts/<host-id>/capability.json (atomic temp→rename).
  * Stdout:  path to the written manifest.
  * Stderr:  diagnostics.
  * Exit:    0 success · 1 bad input (--cwd invalid) · 2 internal error.
  *
- * Invariant: never writes to .guild/wiki/. Writes only under .guild/hosts/.
+ * Invariant: never writes under .guild/ at all — the manifest is machine cache.
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import { probeTmuxAvailable } from "./lib/team-backend";
-import { atomicWrite } from "../src/modules/state";
+import { atomicWrite, hostCapabilityCacheDir, hostCapabilityCacheFile } from "../src/modules/state";
 // G-11 (SC-6): models.tiers values are a union (string | {model,effort?,verbosity?} | null);
 // resolveTierModel is the ONLY place the union is unpacked. It also tolerates the
 // legacy flat form (tiers.cheap = "model-name") this writer historically accepted.
@@ -202,9 +202,10 @@ export function buildCapability(opts: BuildCapabilityOpts): HostCapabilityManife
 
 export function writeHostCapability(opts: BuildCapabilityOpts): string {
   const manifest = buildCapability(opts);
-  const hostDir = path.join(opts.cwd, ".guild", "hosts", manifest.host_id);
-  fs.mkdirSync(hostDir, { recursive: true });
-  const manifestPath = path.join(hostDir, "capability.json");
+  // Platform CACHE, not `.guild/` (KTD15/KTD22): a capability manifest describes
+  // this machine's host, so it must not travel with the repo.
+  const manifestPath = hostCapabilityCacheFile(opts.cwd, manifest.host_id);
+  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
   // Atomic write: same-directory temp file → rename (never a partial
   // capability.json; never os.tmpdir(), which can throw EXDEV on rename).
   atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");

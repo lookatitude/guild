@@ -50,7 +50,7 @@ import { redact } from "../lib/shared/scrub-redact";
 // time with the same canonical path constants).
 import {
   MODEL_CATALOG_CACHE_REL,
-  modelCatalogCacheDir,
+  legacyModelCatalogCacheDir,
 } from "../../src/modules/capability/workflows/catalog-cache";
 
 const args = process.argv.slice(2);
@@ -471,7 +471,9 @@ function findNestedGuildLeaks(repoPath: string, trackedOnlyMode = false): FileFl
  */
 export function findModelCatalogCacheLeaks(repoPath: string, trackedOnlyMode = false): FileFlag[] {
   const flags: FileFlag[] = [];
-  const cacheDir = modelCatalogCacheDir(repoPath);
+  // The leak surface is the repo: the live cache is on the platform cache root
+  // (U-CFG), so only the legacy in-repo location can ever be git-trackable.
+  const cacheDir = legacyModelCatalogCacheDir(repoPath);
   if (!fs.existsSync(cacheDir)) {
     // No cache on disk. Still catch the tracked-file case: anything under the
     // cache path already in the index is a leak even if deleted locally.

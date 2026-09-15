@@ -14,6 +14,7 @@
  *  - Existing tmux session collision → exit 1 (refuse to clobber).
  */
 import { execFileSync, spawnSync } from "child_process";
+import { hostCapabilityCacheFile } from "../../src/modules/state";
 import { createHash } from "crypto";
 import * as path from "path";
 import * as fs from "fs";
@@ -402,8 +403,9 @@ function makeFakeMixedBin(
 
 // Write a guild.host_capability.v1 manifest the launcher's routing block reads.
 function writeHostManifest(cwd: string, hostId: string, hostKind: "claude" | "codex"): void {
-  const dir = path.join(cwd, ".guild", "hosts", hostId);
-  fs.mkdirSync(dir, { recursive: true });
+  // U-CFG (T06): host capability lives on the platform cache root, never under .guild.
+  const file = hostCapabilityCacheFile(cwd, hostId);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   // TE-07: canonical field name is tier_models
   const tierModels =
     hostKind === "codex"
@@ -429,7 +431,7 @@ function writeHostManifest(cwd: string, hostId: string, hostKind: "claude" | "co
       pre_tool_use_ask: hostKind === "claude",
     },
   };
-  fs.writeFileSync(path.join(dir, "capability.json"), JSON.stringify(manifest, null, 2), "utf8");
+  fs.writeFileSync(file, JSON.stringify(manifest, null, 2), "utf8");
 }
 
 describe("agent-team-launcher.ts", () => {
@@ -2991,10 +2993,10 @@ describe("agent-team-launcher.ts", () => {
 
       // Custom claude manifest: agent_team:false + independent_agents:false
       // (standard writeHostManifest sets these true for claude — override here)
-      const claudeHostDir = path.join(tmpDir, ".guild", "hosts", "claude");
-      fs.mkdirSync(claudeHostDir, { recursive: true });
+      const claudeHostDirFile = hostCapabilityCacheFile(tmpDir, "claude");
+      fs.mkdirSync(path.dirname(claudeHostDirFile), { recursive: true });
       fs.writeFileSync(
-        path.join(claudeHostDir, "capability.json"),
+        claudeHostDirFile,
         JSON.stringify({
           schema_version: "guild.host_capability.v1",
           host_id: "claude",
@@ -3085,10 +3087,10 @@ describe("agent-team-launcher.ts", () => {
       );
 
       // Both hosts incapable of parallel (no qualifying host → degraded routing)
-      const claudeDir = path.join(tmpDir, ".guild", "hosts", "claude-w2a2");
-      fs.mkdirSync(claudeDir, { recursive: true });
+      const claudeDirFile = hostCapabilityCacheFile(tmpDir, "claude-w2a2");
+      fs.mkdirSync(path.dirname(claudeDirFile), { recursive: true });
       fs.writeFileSync(
-        path.join(claudeDir, "capability.json"),
+        claudeDirFile,
         JSON.stringify({
           schema_version: "guild.host_capability.v1",
           host_id: "claude-w2a2",

@@ -15,7 +15,7 @@
       "id": "config-cmd",
       "source_path": "scripts/config-cmd.ts",
       "resource_path": "resources/scripts/config-cmd.ts",
-      "sha256": "7c72b3b45028a25cd060dff8107831cee669b249d34ded13e0bc39c3f09e3d1b"
+      "sha256": "695bc05f8db1f09db3daa1da6c90d27a2b52617b9e8abee1adbe5a0e9c398adc"
     },
     {
       "category": "scripts",

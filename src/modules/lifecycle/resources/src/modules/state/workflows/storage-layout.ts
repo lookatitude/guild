@@ -44,6 +44,16 @@ import {
   type StorageRootsOptions,
 } from "./storage-roots";
 
+/**
+ * The durable POLICY config file per scope (U-CFG). `settings.json` was the v1
+ * home and mixed policy with host/model inventory; the split keeps the inventory
+ * out of git entirely (KTD22) and gives each scope one file to reason about.
+ */
+export const POLICY_CONFIG_FILES = Object.freeze({
+  project: "config/project.json",
+  workspace: "config/workspace.json",
+});
+
 /** Proposal §21.5. Which durable scopes this root owns. */
 export type RootProfile = "standalone" | "workspace-only" | "hybrid" | "child";
 
@@ -188,10 +198,13 @@ export function createGuildStorage(cwd: string = process.cwd(), opts: CreateStor
     return abs;
   };
 
-  const project = profile === "workspace-only" ? undefined : scopedPaths(guildDir, "project", "settings.json");
+  // The config SPLIT (KTD22 / U-CFG): each scope's config is a POLICY file under
+  // `.guild/config/`, not the v1 `settings.json` inventory grab-bag. This accessor
+  // is the seam — repointing it here is what moves every caller at once.
+  const project = profile === "workspace-only" ? undefined : scopedPaths(guildDir, "project", POLICY_CONFIG_FILES.project);
   const workspace =
     profile === "workspace-only" || profile === "hybrid"
-      ? scopedPaths(guildDir, "workspace", "settings.json")
+      ? scopedPaths(guildDir, "workspace", POLICY_CONFIG_FILES.workspace)
       : undefined;
   const activeScope = project ?? workspace!;
 
@@ -274,4 +287,50 @@ export function createGuildStorage(cwd: string = process.cwd(), opts: CreateStor
     },
   };
   return storage;
+}
+
+// ---------------------------------------------------------------------------
+// Platform cache homes (KTD15 / U-CFG)
+// ---------------------------------------------------------------------------
+
+/**
+ * Host capability manifests and model catalogs are DISCOVERED facts about the
+ * machine, not durable truth about the project. They live on the platform cache
+ * root, so a clone carries no host identity and a stale pin cannot survive into
+ * someone else's session (KTD22).
+ *
+ * Both helpers go through `GuildStorage.cache()` rather than joining a path, so
+ * the class placement check runs and `no-direct-guild-join` stays satisfied.
+ */
+export function hostCapabilityCacheDir(cwd: string, hostId?: string): string {
+  const storage = createGuildStorage(realRoot(cwd));
+  return hostId === undefined ? storage.cache("hosts") : storage.cache("hosts", hostId);
+}
+
+/**
+ * Resolve symlinks before the root id is derived.
+ *
+ * A DURABLE path is inside the repo, so a writer and a reader always agree on it
+ * however they spelled the root. A CACHE path is keyed by a hash of the root, so
+ * a symlinked temp root and its resolved spelling — one directory on macOS — key two different
+ * caches, and one process writes a manifest the next cannot find. Resolving first
+ * makes the key the directory, not the spelling. A path that does not exist yet
+ * is returned unchanged; the caller is about to create it.
+ */
+function realRoot(cwd: string): string {
+  try {
+    return fs.realpathSync(cwd);
+  } catch {
+    return cwd;
+  }
+}
+
+/** The capability manifest for one host id, on the platform cache root. */
+export function hostCapabilityCacheFile(cwd: string, hostId: string): string {
+  return path.join(hostCapabilityCacheDir(cwd, hostId), "capability.json");
+}
+
+/** Model-catalog snapshot home, on the platform cache root. */
+export function modelCatalogCacheHome(cwd: string): string {
+  return createGuildStorage(realRoot(cwd)).cache("model-catalog");
 }

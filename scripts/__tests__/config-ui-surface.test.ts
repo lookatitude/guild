@@ -396,33 +396,54 @@ describe("config ui — CLI surface (§E11/§E12)", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it("ui set persists a danger key WITH --confirm and reloads", () => {
+  // U-CFG (KTD22): the config write API is POLICY-ONLY, and `ui set` delegates every
+  // byte of persistence to it — so the UI writes the closed policy set and refuses the
+  // rest. These three cases keep testing the CONFIRMATION, RELOAD and SCOPE mechanics,
+  // now on a key the API will actually write.
+  it("ui set persists a confirmed key WITH --confirm and reloads", () => {
+    const dir = mkProject({});
+    const r = runCli(["ui", "set", "agent_mode", "team", "--scope", "project", "--confirm", "advanced", "--cwd", dir]);
+    expect(r.status).toBe(0);
+    expect(r.out).toMatch(/reloaded: agent_mode/);
+    const after = JSON.parse(
+      fs.readFileSync(path.join(dir, ".guild", "config", "project.json"), "utf8"),
+    );
+    expect(after.agent_mode).toBe("team"); // routed through the config API
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("ui set REFUSES a non-policy key, whatever the confirmation", () => {
     const dir = mkProject({});
     const r = runCli(["ui", "set", "review", "off", "--scope", "project", "--confirm", "danger", "--cwd", dir]);
-    expect(r.status).toBe(0);
-    expect(r.out).toMatch(/reloaded: review = "off"\s+\[project\]/);
-    const after = JSON.parse(fs.readFileSync(path.join(dir, ".guild", "settings.json"), "utf8"));
-    expect(after.review).toBe("off"); // routed through the config API
+    expect(r.status).toBe(1);
+    expect(r.out).toContain("is not a policy key");
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
   it("ui set never-clobbers an unrelated key (read-modify-write via the config API)", () => {
-    const dir = mkProject({ rigor: "deep" });
-    const r = runCli(["ui", "set", "review", "off", "--scope", "project", "--confirm", "danger", "--cwd", dir]);
+    const dir = mkProject({});
+    expect(
+      runCli(["ui", "set", "defaults.wiki.autopromote", "false", "--scope", "project", "--confirm", "advanced", "--cwd", dir]).status
+    ).toBe(0);
+    const r = runCli(["ui", "set", "agent_mode", "team", "--scope", "project", "--confirm", "advanced", "--cwd", dir]);
     expect(r.status).toBe(0);
-    const after = JSON.parse(fs.readFileSync(path.join(dir, ".guild", "settings.json"), "utf8"));
-    expect(after.rigor).toBe("deep"); // preserved
-    expect(after.review).toBe("off");
+    const after = JSON.parse(
+      fs.readFileSync(path.join(dir, ".guild", "config", "project.json"), "utf8"),
+    );
+    expect(after.wiki.autopromote).toBe(false); // preserved
+    expect(after.agent_mode).toBe("team");
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
   it("ui set defaults to project scope when --scope is omitted (§E12)", () => {
     const dir = mkProject({});
-    const r = runCli(["ui", "set", "rigor", "deep", "--cwd", dir]);
+    const r = runCli(["ui", "set", "agent_mode", "team", "--confirm", "advanced", "--cwd", dir]);
     expect(r.status).toBe(0);
-    const after = JSON.parse(fs.readFileSync(path.join(dir, ".guild", "settings.json"), "utf8"));
-    expect(after.rigor).toBe("deep"); // written to the project settings.json
-    expect(fs.existsSync(path.join(dir, ".guild", "settings.local.json"))).toBe(false);
+    const after = JSON.parse(
+      fs.readFileSync(path.join(dir, ".guild", "config", "project.json"), "utf8"),
+    );
+    expect(after.agent_mode).toBe("team"); // written to the project POLICY file
+    expect(fs.existsSync(path.join(dir, ".guild", "config", "project.local.json"))).toBe(false);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 

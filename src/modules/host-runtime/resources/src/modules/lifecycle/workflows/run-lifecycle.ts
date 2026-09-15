@@ -36,11 +36,14 @@
  */
 
 import * as crypto from "crypto";
+import { bindSessionForRun, detectSession, isUnknownHost } from "../../config";
+import { composeSessionPrompt } from "../../prompting";
+import { tierDefaultsForHost } from "../../capability";
 import * as fsNode from "fs";
 import * as path from "path";
 
-import { checkContained, isRefused, isWithin } from "../../kernel";
 import type { HostKind } from "../../host-runtime";
+import { checkContained, isRefused, isWithin } from "../../kernel";
 import {
   buildSessionContext,
   writeSessionContext,
@@ -519,6 +522,110 @@ function serializeRunYaml(rec: Record<string, unknown>): string {
   return lines.join("\n") + "\n";
 }
 
+/**
+ * Bind this run's session identity, with the REAL inputs.
+ *
+ * Three things the first cut left empty and this does not:
+ *   - the composed-prompt hash comes from `composeSessionPrompt`, over the plugin
+ *     base + the project's own `.guild/prompts/` overlays + the model-family
+ *     dialect, so a Claude run and a Codex run of the same initiative carry
+ *     different hashes for a reason a reader can reproduce;
+ *   - the tier map comes from the host registry for the DETECTED host, and stays
+ *     empty for an unknown host — `tierDefaultsForHost` falls back to Claude's
+ *     ladder, which is exactly the coercion KTD22 forbids, so it is never called
+ *     for an unknown host;
+ *   - a refusal or a throw is surfaced, never swallowed.
+ */
+function bindRunSession(env: RunLifecycleEnv, root: string, runId: string): void {
+  const dir = runDir(root, runId);
+  const errorPath = path.join(dir, "session-binding.error");
+  const fail = (message: string, cause?: unknown): never => {
+    const detail = cause instanceof Error ? `\n${cause.message}` : "";
+    try {
+      env.fs.writeFile(errorPath, `${message}${detail}\n`);
+    } catch {
+      /* the throw below is the signal; losing the sidecar must not mask it */
+    }
+    throw new Error(`[run-lifecycle] session binding failed for ${runId}: ${message}${detail}`);
+  };
+
+  const detected = detectSession(process.env);
+
+  let composed: { dialect_id: string; overlay_ids: string[]; hash: string };
+  try {
+    const c = composeSessionPrompt({
+      host_family: detected.host_family,
+      model_family: detected.model_family,
+      pluginRoot: process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"] ?? null,
+      guildDir: guildDirOf(root),
+    });
+    composed = { dialect_id: c.dialect_id, overlay_ids: c.overlay_ids, hash: c.hash };
+  } catch (e) {
+    // A project prompt file carrying host or model identity is an operator
+    // problem, and a loud one: it would otherwise ride into every session.
+    return fail("prompt composition refused", e);
+  }
+
+  const models = isUnknownHost(detected)
+    ? {}
+    : tierMapForHostFamily(detected.host_family);
+
+  // The refusal arm, named: the TS narrowing on `!result.ok` does not survive
+  // ts-jest's compiler settings, and a cast at the use site reads worse.
+  type BindRefusal = Extract<ReturnType<typeof bindSessionForRun>, { ok: false }>;
+  let result: ReturnType<typeof bindSessionForRun>;
+  try {
+    result = bindSessionForRun({
+      runDir: dir,
+      runId,
+      promptCompose: composed,
+      models,
+      fs: {
+        exists: (abs) => env.fs.exists(abs),
+        readFile: (abs) => env.fs.readFile(abs),
+        writeFile: (abs, contents) => env.fs.writeFile(abs, contents),
+      },
+    });
+  } catch (e) {
+    return fail("binding write failed", e);
+  }
+  if (!result.ok) return fail((result as BindRefusal).message);
+}
+
+/**
+ * The durable root for `root`, named by GuildStorage (KTD15) rather than joined.
+ * Lazy require: a top-level state import from lifecycle closes an init cycle.
+ */
+function guildDirOf(root: string): string {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { createGuildStorage } = require("../../state") as {
+    createGuildStorage: (cwd: string) => { root: { durable: string } };
+  };
+  return createGuildStorage(root).root.durable;
+}
+
+/**
+ * The tier→model map for a host FAMILY, or `{}` when the family has no registry
+ * row. Never Claude's ladder for a host that is not Claude.
+ */
+function tierMapForHostFamily(family: string): { cheap?: string; mid?: string; powerful?: string } {
+  const kind = HOST_FAMILY_TO_KIND[family];
+  if (kind === undefined) return {};
+  const row = tierDefaultsForHost(kind);
+  const out: { cheap?: string; mid?: string; powerful?: string } = {};
+  for (const tier of ["cheap", "mid", "powerful"] as const) {
+    const model = row[tier];
+    if (typeof model === "string" && model !== "") out[tier] = model;
+  }
+  return out;
+}
+
+/** Detected host FAMILY → the registry's HostKind. Absent ⇒ no tier map. */
+const HOST_FAMILY_TO_KIND: Readonly<Record<string, HostKind>> = Object.freeze({
+  claude: "claude",
+  codex: "codex",
+});
+
 // ── startRun ──────────────────────────────────────────────────────────────────
 
 function buildRunManifest(
@@ -874,6 +981,18 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
         capabilityBaselineHash,
       });
       env.fs.writeFile(runYamlPath(root, runId), serializeRunYaml(manifest));
+
+      // guild.session_binding.v1 (KTD22): host and model identity belong to the
+      // RUN, never to durable config. Bound once here, at the only place a new
+      // run record comes into existence, so every dispatch in this run copies
+      // its ids from one immutable snapshot.
+      //
+      // NOT advisory. A run whose identity never bound cannot dispatch honestly:
+      // every downstream consumer would read "not bound" and either stop or guess,
+      // and guessing is the KTD22 defect. So the failure is WRITTEN to the run
+      // record as `session-binding.error` (evidence survives) and then THROWN, on
+      // the same footing as the capability-baseline failure above.
+      bindRunSession(env, root, runId);
 
       if (capabilityBaselineHash) {
         const failAndRollback = (reason: string): never => {

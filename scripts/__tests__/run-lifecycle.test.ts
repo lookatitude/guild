@@ -379,9 +379,11 @@ describe("run-lifecycle — startRun (SC-B §1)", () => {
     }
   });
 
-  it("writes EXACTLY run.yaml + current-run-id + binding.json + session-context.json at start", () => {
+  it("writes EXACTLY run.yaml + current-run-id + binding.json + session-context.json + session-binding.json at start", () => {
     // T3 (guild.session_context.v1): startRun additionally mints the run
     // binding (§5) and freezes the session context (§1) — both run-scoped.
+    // U-CFG (KTD22): plus guild.session_binding.v1 — host and model identity
+    // live on the run record, never in durable config.
     const mem = memFs();
     const lc = createRunLifecycle(makeEnv(mem));
     const runId = lc.startRun(baseStartOpts({ initiative: "foo" }));
@@ -392,6 +394,7 @@ describe("run-lifecycle — startRun (SC-B §1)", () => {
         path.join(ROOT, ".guild", "runs", runId, "run.yaml"),
         path.join(ROOT, ".guild", "runs", runId, "binding.json"),
         path.join(ROOT, ".guild", "runs", runId, "session-context.json"),
+        path.join(ROOT, ".guild", "runs", runId, "session-binding.json"),
       ].sort()
     );
   });

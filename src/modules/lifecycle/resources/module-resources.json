@@ -78,7 +78,7 @@
       "id": "PostToolUse:gate-outcome-writer.js",
       "source_path": "hooks/dist/gate-outcome-writer.js",
       "resource_path": "resources/hooks/dist/gate-outcome-writer.js",
-      "sha256": "0a6597df9300958761c6e3fd542d9362e0fed7d3a99a2591a43375db594b3e05"
+      "sha256": "ad0623d7d5ea749e5685abd14b5c37dabca0196b69e979c45e3703120bc42b09"
     },
     {
       "category": "scripts",
@@ -149,7 +149,7 @@
       "id": "projection:src/modules/capability/workflows/catalog-cache.ts",
       "source_path": "src/modules/capability/workflows/catalog-cache.ts",
       "resource_path": "resources/src/modules/capability/workflows/catalog-cache.ts",
-      "sha256": "d78814bd91204f424b0e1f3e11b91d45775dc58f5abdb32eeba1427340dd8716",
+      "sha256": "9d87513d175c3b433ca0715003ad5aebbd89ca7f622bd1914f4966404b04f3f2",
       "projection_dependency": true
     },
     {
@@ -245,7 +245,7 @@
       "id": "projection:src/modules/capability/workflows/models-command.ts",
       "source_path": "src/modules/capability/workflows/models-command.ts",
       "resource_path": "resources/src/modules/capability/workflows/models-command.ts",
-      "sha256": "b095b65cb370cf3252360058372ccd8fc1f17e0cd853c659eec5fe3daa51e1de",
+      "sha256": "e8657739f9f13b52c8843541dff73145fd4c233c0984b7eda9e68ab06d80b9cc",
       "projection_dependency": true
     },
     {
@@ -373,7 +373,7 @@
       "id": "projection:src/modules/config/index.ts",
       "source_path": "src/modules/config/index.ts",
       "resource_path": "resources/src/modules/config/index.ts",
-      "sha256": "5f2e2eb8685b8d448aef50ba2cdbe2a54a72ccef558a46337b6371b6f3da2bf2",
+      "sha256": "4e76ac4c8517a418708c904e1af280ea4ace00e29ead4648243d537700a26abf",
       "projection_dependency": true
     },
     {
@@ -390,6 +390,30 @@
       "source_path": "src/modules/config/workflows/config-validation.ts",
       "resource_path": "resources/src/modules/config/workflows/config-validation.ts",
       "sha256": "7a014518165b9069d631600cc889076cfbde90bd078b936f7b2f106a407cc282",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/config/workflows/policy-keys.ts",
+      "source_path": "src/modules/config/workflows/policy-keys.ts",
+      "resource_path": "resources/src/modules/config/workflows/policy-keys.ts",
+      "sha256": "88467e1e1e68f7c47eca70f69444bb9e22858f857a2984304695a8a57bdc7da4",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/config/workflows/policy-resolver.ts",
+      "source_path": "src/modules/config/workflows/policy-resolver.ts",
+      "resource_path": "resources/src/modules/config/workflows/policy-resolver.ts",
+      "sha256": "dba3e46d78ad20bc2cd6a3c6bc6c529391fbb724be6991dcf02e9e55d3e611c0",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/config/workflows/session-binding.ts",
+      "source_path": "src/modules/config/workflows/session-binding.ts",
+      "resource_path": "resources/src/modules/config/workflows/session-binding.ts",
+      "sha256": "4997d781252703c169bb28695fb1fcf14fbfb5d15f11e355d8b47b7f1bb029c8",
       "projection_dependency": true
     },
     {
@@ -957,7 +981,7 @@
       "id": "projection:src/modules/host-runtime/workflows/provider-detect.ts",
       "source_path": "src/modules/host-runtime/workflows/provider-detect.ts",
       "resource_path": "resources/src/modules/host-runtime/workflows/provider-detect.ts",
-      "sha256": "7cd0b9587aa69be2737bf8867d9963386d77fccbdbda3ade1410c68237bf0b36",
+      "sha256": "a80000cdbce9a51f9f5a7f26d95d82cb62221aa159de815eb8cba6007e38c800",
       "projection_dependency": true
     },
     {
@@ -1165,7 +1189,7 @@
       "id": "projection:src/modules/lifecycle/workflows/run-lifecycle.ts",
       "source_path": "src/modules/lifecycle/workflows/run-lifecycle.ts",
       "resource_path": "resources/src/modules/lifecycle/workflows/run-lifecycle.ts",
-      "sha256": "ceed0491650edd46f047b1ecaa9484507807b679038df593bde5cb10c310bde1",
+      "sha256": "95f11cd2cf7c948d2bb81122e8803eee2e28f06165d2d9a540583da71a502b50",
       "projection_dependency": true
     },
     {
@@ -1270,6 +1294,30 @@
       "source_path": "src/modules/migrations/workflows/wiki-importance.ts",
       "resource_path": "resources/src/modules/migrations/workflows/wiki-importance.ts",
       "sha256": "d053a5ea511bbeef54030e473f5abe605f188f41614a6be9d82ed8a5fe0fc74d",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/prompting/index.ts",
+      "source_path": "src/modules/prompting/index.ts",
+      "resource_path": "resources/src/modules/prompting/index.ts",
+      "sha256": "5fa46353e856869eaaf9d7ee599f1e1357774776e8ab31d91c5ccfb99749e3c8",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/prompting/workflows/compose-prompt.ts",
+      "source_path": "src/modules/prompting/workflows/compose-prompt.ts",
+      "resource_path": "resources/src/modules/prompting/workflows/compose-prompt.ts",
+      "sha256": "1edda11649613aa2840b47f3cf179be998ca4884d59f01ab00598414f2dfad74",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/prompting/workflows/team-prompt.ts",
+      "source_path": "src/modules/prompting/workflows/team-prompt.ts",
+      "resource_path": "resources/src/modules/prompting/workflows/team-prompt.ts",
+      "sha256": "3c815616d5620cf2574fc1ceca4e6be24551d9cf7f2957ca7fd5c8b3d73a66ab",
       "projection_dependency": true
     },
     {
@@ -1501,7 +1549,7 @@
       "id": "projection:src/modules/state/workflows/storage-artifact-registry.ts",
       "source_path": "src/modules/state/workflows/storage-artifact-registry.ts",
       "resource_path": "resources/src/modules/state/workflows/storage-artifact-registry.ts",
-      "sha256": "8d0bac14e0fab5cc0b50d8c78ee905589fde71b7bdb54f9b7101bb95cd175ffb",
+      "sha256": "e3db59d8b99a02be496cc921c5cf7e7e261581de82cedff2f1f95bbcce4eae6f",
       "projection_dependency": true
     },
     {
@@ -1525,7 +1573,7 @@
       "id": "projection:src/modules/state/workflows/storage-layout.ts",
       "source_path": "src/modules/state/workflows/storage-layout.ts",
       "resource_path": "resources/src/modules/state/workflows/storage-layout.ts",
-      "sha256": "eeb146066dcd8aee86e0286ab7d55ab1732341c0d4bd60950833f787b1e394d3",
+      "sha256": "b9b47a66f8aec1dbe9abfb150f4d375724dd66ea76299c55c9d90f51978541f4",
       "projection_dependency": true
     },
     {

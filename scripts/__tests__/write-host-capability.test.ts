@@ -9,12 +9,15 @@
  *   - tiers fall back to the built-in ladder, or read settings.json models.tiers.
  *   - tool_support: subagent always true; tmux/agent_team follow the probe;
  *     independent_agents follows the claude/codex heuristic + env override.
- *   - writeHostCapability writes .guild/hosts/<host-id>/capability.json,
+ *   - writeHostCapability writes the host-capability manifest on the PLATFORM CACHE
+ *     root (U-CFG/KTD22: a capability manifest describes this machine's host, so it
+ *     must not travel with the repo). `hostCapabilityCacheFile` names the path.
  *     idempotently, and never creates .guild/wiki/.
  *   - CLI smoke: writes the file and prints its path.
  */
 
 import { spawnSync } from "child_process";
+import { hostCapabilityCacheFile } from "../../src/modules/state";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -33,7 +36,7 @@ function mkTmp(): string {
 
 function readManifest(root: string, hostId: string): HostCapabilityManifest {
   return JSON.parse(
-    fs.readFileSync(path.join(root, ".guild", "hosts", hostId, "capability.json"), "utf8")
+    fs.readFileSync(hostCapabilityCacheFile(root, hostId), "utf8")
   );
 }
 
@@ -160,10 +163,12 @@ describe("write-host-capability — writeHostCapability (RE-5)", () => {
     return d;
   };
 
-  it("writes .guild/hosts/<host-id>/capability.json and returns its path", () => {
+  it("writes <platform cache>/hosts/<host-id>/capability.json and returns its path", () => {
     const root = mkRoot();
     const out = writeHostCapability({ cwd: root, env: {}, probeTmux: () => false });
-    expect(out).toBe(path.join(root, ".guild", "hosts", "claude", "capability.json"));
+    expect(out).toBe(hostCapabilityCacheFile(root, "claude"));
+    // KTD22: nothing about the host landed inside the repo.
+    expect(fs.existsSync(path.join(root, ".guild", "hosts"))).toBe(false);
     expect(fs.existsSync(out)).toBe(true);
     expect(readManifest(root, "claude").schema_version).toBe("guild.host_capability.v1");
   });
@@ -171,7 +176,7 @@ describe("write-host-capability — writeHostCapability (RE-5)", () => {
   it("uses host_id in the directory path", () => {
     const root = mkRoot();
     writeHostCapability({ cwd: root, hostId: "codex-ci", host: "codex", env: {}, probeTmux: () => false });
-    expect(fs.existsSync(path.join(root, ".guild", "hosts", "codex-ci", "capability.json"))).toBe(true);
+    expect(fs.existsSync(hostCapabilityCacheFile(root, "codex-ci"))).toBe(true);
   });
 
   it("idempotent: re-running refreshes without error and keeps schema stable", () => {
@@ -198,8 +203,8 @@ describe("write-host-capability — writeHostCapability (RE-5)", () => {
       timeout: 120_000,
     });
     expect(r.status).toBe(0);
-    expect(r.stdout.trim()).toContain(path.join(".guild", "hosts", "claude", "capability.json"));
-    expect(fs.existsSync(path.join(root, ".guild", "hosts", "claude", "capability.json"))).toBe(true);
+    expect(r.stdout.trim()).toContain(path.join("hosts", "claude", "capability.json"));
+    expect(fs.existsSync(hostCapabilityCacheFile(root, "claude"))).toBe(true);
   });
 
   it("CLI: exits non-zero when --cwd is not a directory", () => {
