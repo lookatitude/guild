@@ -52,6 +52,27 @@ import { readSecurityConfig, type SecretsPolicy } from "./lib/security/config.js
 import { applySecretsPolicy, resolveTelemetryField } from "./lib/security/secrets.js";
 // G-9 (SC-5): structured heartbeat WRITE side — backend-agnostic liveness.
 import { writeHeartbeatFromEnv } from "./lib/heartbeat-write.js";
+// T10 (KTD23/R45): a hook is a write-capable entry, so it runs the layout
+// bootstrap itself. Fail-open wrapper over the canonical implementation.
+import { ensureStorageLayout } from "./lib/ensure-layout.js";
+// T10 (R36/KTD28/KTD30): the `verify.after_edit` adapter rung — native |
+// wrapped | skip-recorded. Green is 0 tokens; a skip is a RECORDED loss.
+import {
+  VERIFY_CHECKS_FILENAME,
+  runVerifyAfterEdit,
+} from "./lib/verify-after-edit.js";
+// T10 (KTD26): tool results crossing into T1/T0 are capped at 2000 tokens with
+// the full bytes on disk.
+import { truncateToolResultForParent } from "./lib/tool-result-truncate.js";
+// T10 rework (KTD28 P2): a skip-recorded compaction rung has no PreCompact, so
+// the tool path keeps its disk snapshot current on a bounded cadence.
+import {
+  rehydrateFromDisk,
+  resolveCompactionRung,
+  runRecordExists,
+  snapshotIsStale,
+  writeRehydrateHeartbeat,
+} from "./lib/compaction-rehydrate.js";
 // L5a: host-neutral hook payload + Claude emitter. PostToolUsePayload is now the
 // shared `GuildHookEvent`; for Claude the emitter mapping is the identity, so the
 // PostToolUse behavior is preserved byte-for-byte.
@@ -78,7 +99,31 @@ function isOk(payload: GuildHookEvent): "ok" | "err" {
   return "ok";
 }
 
-function resultExcerpt(payload: GuildHookEvent, policy: SecretsPolicy): string {
+/**
+ * The tool result as it is allowed to travel.
+ *
+ * Two caps in a fixed order, and the order is the security half:
+ *
+ *  1. **Scrub** (D-SECRETS). Must come first, because step 2 writes the full
+ *     bytes to the run tree — writing an unscrubbed 50k log to disk to satisfy
+ *     a token budget would trade a context problem for a secrets leak.
+ *  2. **Cap** (KTD26). A result at or over 2000 tokens becomes a ≤2000-token
+ *     pointer; the scrubbed remainder lives at the path the pointer names.
+ *
+ * Step 2 is a BELT on an existing brace, and normally a no-op: redaction
+ * already caps this field at the schema's 4 KiB (`FIELD_SIZE_CAP_BYTES`), which
+ * is well inside 2000 tokens, so nothing that survives step 1 is big enough to
+ * truncate here today. It is wired anyway because the KTD26 number is the one
+ * this field is contractually bound to, and a later widening of the schema cap
+ * should not silently widen what a lead's context sees. The seam where the cap
+ * is load-bearing is the verify-fail stderr below and the exported
+ * `truncateToolResultForParent` that T15 routes parent-bound results through.
+ */
+function resultExcerpt(
+  payload: GuildHookEvent,
+  policy: SecretsPolicy,
+  cap: { runDir?: string; toolName: string; id: string },
+): string {
   const resp = payload.tool_response;
   if (resp === null || resp === undefined) return "";
   let raw: string;
@@ -98,7 +143,14 @@ function resultExcerpt(payload: GuildHookEvent, policy: SecretsPolicy): string {
         `(fail_mode_telemetry=${policy.fail_mode_telemetry}).\n`,
     );
   }
-  return resolved.value ?? "";
+  const scrubbed = resolved.value ?? "";
+  if (scrubbed.length === 0) return "";
+  return truncateToolResultForParent({
+    text: scrubbed,
+    toolName: cap.toolName,
+    id: cap.id,
+    ...(cap.runDir === undefined ? {} : { runDir: cap.runDir }),
+  }).text;
 }
 
 // ── HK-06: durable-surface PostToolUse scrub-in-place helpers ────────────────
@@ -271,20 +323,34 @@ function runGuildArtifactScrub(
 
 // ── Run ID helpers ────────────────────────────────────────────────────────────
 
-function readCurrentRunId(guildRoot: string): string | undefined {
-  const sentinelPath = path.join(guildRoot, ".guild", "runs", "current-run-id");
-  try {
-    const value = fs.readFileSync(sentinelPath, "utf8").trim();
-    return value.length > 0 ? value : undefined;
-  } catch {
-    return undefined;
-  }
+/**
+ * `GUILD_RUN_DIR`, honoured only when it is a non-empty ABSOLUTE path.
+ *
+ * A bare `??` accepts "" (an empty string is not nullish), and every write then
+ * lands at a RELATIVE path under whatever cwd the hook inherited — observed
+ * creating `rungs/` and `logs/` inside the repo from a test spawn. An unusable
+ * override is treated as absent so the caller falls back to this root's own run
+ * directory; a hook never writes outside the run tree it resolved.
+ */
+function runDirOverride(): string | undefined {
+  const raw = process.env["GUILD_RUN_DIR"];
+  if (typeof raw !== "string" || raw.length === 0) return undefined;
+  return path.isAbsolute(raw) ? raw : undefined;
 }
 
-function resolveRunId(guildRoot: string): string | undefined {
+/**
+ * R71 / C2: the active run is the run RECORD plus `GUILD_RUN_ID`.
+ *
+ * This used to fall back to the workspace-global `current-run-id` sentinel, and
+ * that fallback was the C2 defect: a sentinel is interactive command INTAKE and
+ * must never authorize a runtime write, because moving it mid-run redirects an
+ * in-flight writer onto another run's log. The sentinel is not read here and is
+ * never written anywhere — it is not recreated by any hook.
+ */
+function resolveRunId(): string | undefined {
   const envRunId = process.env["GUILD_RUN_ID"];
   if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
-  return readCurrentRunId(guildRoot);
+  return undefined;
 }
 
 export async function main(): Promise<void> {
@@ -302,6 +368,20 @@ export async function main(): Promise<void> {
   // Walk up from cwd to find the repo root — ensures .guild/ always lands at
   // the nearest .git / .guild ancestor, never in a subdirectory.
   const guildRoot = resolveGuildRoot(cwd);
+
+  // ── T10 (KTD23): layout bootstrap on a write-capable entry ────────────────
+  // This hook mutates durable state (event log, sidecar sweep, in-place scrub),
+  // so it runs the bootstrap itself rather than assuming an earlier entry did.
+  // On a current root this is a stat plus one marker read; the wrapper is
+  // fail-open, so a refused root degrades to "no upgrade ran" and the hook
+  // still exits 0.
+  const layout = ensureStorageLayout(guildRoot, "post-tool-use");
+  // KTD23 fails CLOSED on a layout this build does not understand: a future
+  // marker means every write below would land in a root that is not ours.
+  if (!layout.ok) {
+    process.stderr.write(`warn: [post-tool-use] .guild layout refused (${layout.refused}) — no writes\n`);
+    return;
+  }
 
   // ── G-9 (SC-5): structured heartbeat write ────────────────────────────────
   // When GUILD_RUN_ID + GUILD_SPECIALIST are both exported (the dispatch path
@@ -327,13 +407,13 @@ export async function main(): Promise<void> {
   // surface. The scrub uses synthetic fallback values when runId is absent.
   // Non-blocking: always exits 0. Non-throwing by contract.
   {
-    const earlyRunId = resolveRunId(guildRoot);
+    const earlyRunId = resolveRunId();
     const earlyRunIdSafe =
       typeof earlyRunId === "string" && earlyRunId.length > 0 && isSafeRunId(earlyRunId)
         ? earlyRunId
         : undefined;
     const earlyRunDir = earlyRunIdSafe
-      ? (process.env["GUILD_RUN_DIR"] ?? path.join(guildRoot, ".guild", "runs", earlyRunIdSafe))
+      ? (runDirOverride() ?? path.join(guildRoot, ".guild", "runs", earlyRunIdSafe))
       : undefined;
     // oir-wi-57: GUILD_LANE_ID has no producer anywhere in this codebase — every
     // real dispatch backend (inprocess-backend.ts, tmux-backend.ts,
@@ -355,23 +435,107 @@ export async function main(): Promise<void> {
   }
   // ── end HK-06 ────────────────────────────────────────────────────────────
 
-  const runId = resolveRunId(guildRoot);
+  // ── T10 (R36/R45/KTD28/KTD30): the `verify.after_edit` rung ───────────────
+  // The INNER verify: after an edit lands, run the project's own check. Placed
+  // BEFORE the run-id gate on purpose — an edit deserves its check whether or
+  // not a Guild run is bound; the run directory only decides WHERE the verdict
+  // is recorded, not whether the oracle runs.
+  //
+  // Three outcomes, and none of them is a silent pass:
+  //   pass           nothing on stdout, nothing on stderr, 0 assistant tokens.
+  //   fail           a KTD26-capped excerpt on stderr, full log on disk.
+  //   skip-recorded  no declared check (or a host that states the rung is
+  //                  absent) — written to the run tree as a recorded LOSS, so
+  //                  the outer qa gate sees an unverified cell.
+  if (toolName === "Write" || toolName === "Edit") {
+    try {
+      const durableDir = path.join(guildRoot, ".guild");
+      const verifyRunId = resolveRunId();
+      const verifyRunDir =
+        runDirOverride() ??
+        (verifyRunId !== undefined && isSafeRunId(verifyRunId)
+          ? path.join(durableDir, "runs", verifyRunId)
+          : undefined);
+      const outcome = runVerifyAfterEdit({
+        configPath: path.join(durableDir, VERIFY_CHECKS_FILENAME),
+        cwd: guildRoot,
+        ...(verifyRunDir === undefined ? {} : { runDir: verifyRunDir }),
+      });
+      if (outcome.state === "fail" && outcome.stderr_excerpt.length > 0) {
+        process.stderr.write(outcome.stderr_excerpt);
+      }
+    } catch (err) {
+      // The rung's own contract is never-throw; this is the belt to that braces,
+      // because a verify defect may not break the user's edit.
+      process.stderr.write(
+        `warn: [post-tool-use] verify.after_edit rung threw (non-fatal): ${
+          err instanceof Error ? err.message : String(err)
+        }\n`,
+      );
+    }
+  }
+  // ── end verify.after_edit ────────────────────────────────────────────────
+
+  // ── T10 rework (KTD28/R42 P2): skip-recorded compaction, from the tool path ─
+  // KTD28 says a skip-recorded compaction rung still writes its disk files "each
+  // heartbeat" — and the heartbeat cannot be PreCompact, because a skip-recorded
+  // host is precisely one with no compaction event. So the snapshot a next
+  // session rehydrates from is refreshed here, gated on a single `stat`: the
+  // rehydrate reads five files and this path is budgeted at 250ms, so it runs at
+  // most once every SNAPSHOT_MAX_AGE_MS rather than on every tool call.
+  if (resolveCompactionRung(process.env) === "skip-recorded") {
+    try {
+      const snapRunId = resolveRunId();
+      const snapRunDir =
+        runDirOverride() ??
+        (snapRunId !== undefined && isSafeRunId(snapRunId)
+          ? path.join(guildRoot, ".guild", "runs", snapRunId)
+          : undefined);
+      if (
+        snapRunId !== undefined &&
+        snapRunDir !== undefined &&
+        runRecordExists(snapRunDir) &&
+        snapshotIsStale(snapRunDir)
+      ) {
+        const snapshot = rehydrateFromDisk({
+          runDir: snapRunDir,
+          cwd: guildRoot,
+          runId: snapRunId,
+          rung: "skip-recorded",
+          ...(process.env["GUILD_PHASE"] ? { phase: process.env["GUILD_PHASE"] } : {}),
+          ...(process.env["GUILD_TASK_ID"] ? { logicalTaskId: process.env["GUILD_TASK_ID"] } : {}),
+        });
+        writeRehydrateHeartbeat(
+          snapRunDir,
+          snapshot,
+          "compaction rung is skip-recorded; snapshot refreshed from the tool path",
+        );
+      }
+    } catch (err) {
+      process.stderr.write(
+        `warn: [post-tool-use] compaction snapshot refresh failed (non-fatal): ${
+          err instanceof Error ? err.message : String(err)
+        }\n`,
+      );
+    }
+  }
+  // ── end skip-recorded compaction ─────────────────────────────────────────
+
+  const runId = resolveRunId();
   if (typeof runId !== "string" || runId.length === 0) {
     process.stderr.write(
-      "warn: [post-tool-use] GUILD_RUN_ID unset and current-run-id missing — falling through (no tool_call emit).\n",
+      "warn: [post-tool-use] GUILD_RUN_ID unset — falling through (no tool_call emit).\n",
     );
     return;
   }
   if (!isSafeRunId(runId)) {
     process.stderr.write(
-      "warn: [post-tool-use] invalid GUILD_RUN_ID/current-run-id — falling through (no tool_call emit).\n",
+      "warn: [post-tool-use] invalid GUILD_RUN_ID — falling through (no tool_call emit).\n",
     );
     return;
   }
 
-  const runDir =
-    process.env["GUILD_RUN_DIR"] ??
-    path.join(guildRoot, ".guild", "runs", runId);
+  const runDir = runDirOverride() ?? path.join(guildRoot, ".guild", "runs", runId);
   // Sidecar PAIRING key — MUST stay GUILD_LANE_ID-only, matching
   // hooks/pre-tool-use.ts's own resolution byte-for-byte (that file is a
   // sibling lane's and out of scope here). Broadening this to include
@@ -460,7 +624,11 @@ export async function main(): Promise<void> {
         ts_post: tsPost,
         run_id: runId,
         tool: toolName,
-        result_excerpt_redacted: resultExcerpt(payload, secretsPolicy),
+        result_excerpt_redacted: resultExcerpt(payload, secretsPolicy, {
+          runDir,
+          toolName,
+          id: tsPost,
+        }),
         ...(attributionLaneId !== undefined ? { lane_id: attributionLaneId } : {}),
         ...(typeof payload.duration_ms === "number"
           ? { latency_ms_override: payload.duration_ms }
@@ -471,7 +639,11 @@ export async function main(): Promise<void> {
         ts_post: tsPost,
         run_id: runId,
         status: isOk(payload),
-        result_excerpt_redacted: resultExcerpt(payload, secretsPolicy),
+        result_excerpt_redacted: resultExcerpt(payload, secretsPolicy, {
+          runDir,
+          toolName,
+          id: tsPost,
+        }),
       });
       // oir-wi-57: buildToolCallFromPair otherwise inherits pre.lane_id (the
       // PRE sidecar's own GUILD_LANE_ID-only resolution, always absent in

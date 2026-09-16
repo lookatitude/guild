@@ -76,6 +76,8 @@ import {
   readAssignmentForInstance,
   isTerminationAuthorized,
 } from "../../src/modules/dispatch/workflows/task-cell-acceptance.js";
+// T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
+import { ensureStorageLayout } from "../lib/ensure-layout.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -467,6 +469,19 @@ async function main(): Promise<void> {
   const cwd = payload.cwd ?? process.cwd();
 
   const guildRootForRun = resolveGuildRoot(cwd);
+
+  // T10 (KTD23): layout bootstrap on a write-capable entry. A hook can be the
+  // first thing to touch a root after an upgrade landed, so it runs the
+  // bootstrap itself; on a current root this is a stat plus one marker read.
+  // Fail-open by contract — a refused root still exits 0.
+  const layout = ensureStorageLayout(guildRootForRun, "teammate-idle");
+  // KTD23 fails CLOSED on a layout this build does not understand: a future
+  // marker means every write below would land in a root that is not ours.
+  if (!layout.ok) {
+    process.stderr.write(`warn: [teammate-idle] .guild layout refused (${layout.refused}) — no writes\n`);
+    return;
+  }
+
   const runId = deriveRunId(sessionId, guildRootForRun);
   const runDir = path.join(guildRootForRun, ".guild", "runs", runId);
 

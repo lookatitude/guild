@@ -44,6 +44,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { resolveGuildRoot } from "./lib/guild-root.js";
 import { appendGateOutcome } from "../src/modules/lifecycle/workflows/run-lifecycle.js";
+// T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
+import { ensureStorageLayout } from "./lib/ensure-layout.js";
 
 interface GateWriterPayload {
   tool_name?: string;
@@ -147,6 +149,19 @@ export async function main(): Promise<void> {
   if (typeof runId !== "string" || runId.length === 0) return;
 
   const root = resolveGuildRoot(cwd);
+
+  // T10 (KTD23): layout bootstrap on a write-capable entry. A hook can be the
+  // first thing to touch a root after an upgrade landed, so it runs the
+  // bootstrap itself; on a current root this is a stat plus one marker read.
+  // Fail-open by contract — a refused root still exits 0.
+  const layout = ensureStorageLayout(root, "gate-outcome-writer");
+  // KTD23 fails CLOSED on a layout this build does not understand: a future
+  // marker means every write below would land in a root that is not ours.
+  if (!layout.ok) {
+    process.stderr.write(`warn: [gate-outcome-writer] .guild layout refused (${layout.refused}) — no writes\n`);
+    return;
+  }
+
   const expectedDir = path.join(root, ".guild", "runs", runId);
   const abs = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
   // Path-anchor: the write must be INSIDE THIS run's own dir — never record a

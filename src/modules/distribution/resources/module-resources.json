@@ -232,7 +232,7 @@
       "id": "lint/hot-path-budget",
       "source_path": "scripts/lint/hot-path-budget.ts",
       "resource_path": "resources/scripts/lint/hot-path-budget.ts",
-      "sha256": "a9a6ff0ceac4644678bcb7770b0ef3bdc24512fc4ac0c2db8723ab6396a68a4b"
+      "sha256": "7f408a4b4a64e3a051e5386d86ad77cc8c2c9bf8a5c7c0b52dd01c3bbe417746"
     },
     {
       "category": "scripts",

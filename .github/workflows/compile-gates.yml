@@ -238,18 +238,18 @@ jobs:
         run: npm ci --prefer-offline || npm install --prefer-offline
 
       # BLOCKING. Behaviour, not wall clock: the compiled PostToolUse path on a
-      # green edit exits 0 and writes nothing to stdout. Named for what it measures —
-      # the verify.after_edit RUNG does not exist on this tree (see below).
+      # green edit exits 0 and writes nothing to stdout. Distinct from the rung
+      # oracle below: this leg asserts the hook PAIR is quiet, that one asserts
+      # the hook actually spawned the project check.
       - name: post_tool_use_hook_green (hook exit 0 · empty stdout)
         run: npx --prefix scripts tsx scripts/lint/hot-path-budget.ts post-tool-use-green
 
-      # PENDING, owner T10 — deliberately NOT gating and deliberately visible, the
-      # same convention T13 uses for a pending test. It drives the shipped hook and
-      # asserts the HOOK spawned the declared check; on this tree it reports
-      # `rung absent` and exits 1. T10 activates it by moving it out of this
-      # `continue-on-error` step. Do not delete it to make the log green.
-      - name: verify_after_edit_rung (PENDING — owner T10, not gating)
-        continue-on-error: true
+      # BLOCKING since T10 landed the rung. It drives the SHIPPED PostToolUse
+      # entry against a project that declares a check and asserts the HOOK — not
+      # the harness — spawned it: the marker is written by the check process
+      # itself, so it can only appear if something actually ran it. A regression
+      # that stops spawning the check reads as `rung absent` here.
+      - name: verify_after_edit_rung (hook spawns the declared check)
         run: npx --prefix scripts tsx scripts/lint/hot-path-budget.ts verify-after-edit-rung
 
       # BLOCKING. The `status` entrypoint must not load unused domains. The
