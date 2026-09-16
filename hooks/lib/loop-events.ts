@@ -22,12 +22,12 @@
 import { appendEvent, type JsonlEvent } from "./v1.4/log-jsonl.js";
 
 /** The four additive kinds. Nothing else may be emitted through this door. */
-export const LOOP_EVENT_KINDS = [
+export const LOOP_EVENT_KINDS = Object.freeze([
   "harvest_event",
   "redirect_event",
   "cas_event",
   "curator_event",
-] as const;
+] as const);
 
 export type LoopEventKind = (typeof LOOP_EVENT_KINDS)[number];
 

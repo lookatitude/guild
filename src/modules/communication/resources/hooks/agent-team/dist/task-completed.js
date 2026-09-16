@@ -27815,12 +27815,12 @@ function ensureStorageLayout2(cwd, hookName = "hook") {
 init_event_log();
 
 // hooks/lib/loop-events.ts
-var LOOP_EVENT_KINDS = [
+var LOOP_EVENT_KINDS = Object.freeze([
   "harvest_event",
   "redirect_event",
   "cas_event",
   "curator_event"
-];
+]);
 function isLoopEventKind(value) {
   return typeof value === "string" && LOOP_EVENT_KINDS.includes(value);
 }
