@@ -12608,12 +12608,12 @@ function safeArrayLength(value) {
 function isObjectLike(value) {
   return typeof value === "object" && value !== null && !safeIsArray(value);
 }
-function issue(path39, code, message) {
-  return { path: path39, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
+function issue(path40, code, message) {
+  return { path: path40, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
 }
-function pushIssue(issues, path39, code, message) {
+function pushIssue(issues, path40, code, message) {
   if (issues.length >= MAX_ISSUES) return;
-  issues.push(issue(path39, code, message));
+  issues.push(issue(path40, code, message));
 }
 function sortIssues(issues) {
   return [...issues].sort(
@@ -12624,15 +12624,15 @@ function canonicalDocumentJson(value) {
   const errors = [];
   const active = /* @__PURE__ */ new Set();
   let nodes = 0;
-  const walk = (node, path39, depth) => {
+  const walk = (node, path40, depth) => {
     if (errors.length >= MAX_ISSUES) return null;
     if (depth > MAX_CANONICAL_DEPTH) {
-      pushIssue(errors, path39, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
+      pushIssue(errors, path40, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
       return null;
     }
     nodes += 1;
     if (nodes > MAX_CANONICAL_NODES) {
-      pushIssue(errors, path39, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
+      pushIssue(errors, path40, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
       return null;
     }
     if (node === null) return "null";
@@ -12641,7 +12641,7 @@ function canonicalDocumentJson(value) {
     if (kind === "string") {
       const text = node;
       if (text.length > MAX_STRING_LENGTH) {
-        pushIssue(errors, path39, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
+        pushIssue(errors, path40, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
         return null;
       }
       return JSON.stringify(text);
@@ -12649,17 +12649,17 @@ function canonicalDocumentJson(value) {
     if (kind === "number") {
       const num = node;
       if (!Number.isFinite(num)) {
-        pushIssue(errors, path39, "non_finite_number", "numbers must be finite");
+        pushIssue(errors, path40, "non_finite_number", "numbers must be finite");
         return null;
       }
       return Object.is(num, -0) ? "0" : String(num);
     }
     if (kind !== "object") {
-      pushIssue(errors, path39, "unsupported_type", `${kind} has no canonical JSON form`);
+      pushIssue(errors, path40, "unsupported_type", `${kind} has no canonical JSON form`);
       return null;
     }
     if (active.has(node)) {
-      pushIssue(errors, path39, "cycle_detected", "value contains a cycle");
+      pushIssue(errors, path40, "cycle_detected", "value contains a cycle");
       return null;
     }
     active.add(node);
@@ -12667,26 +12667,26 @@ function canonicalDocumentJson(value) {
       if (safeIsArray(node)) {
         const length = safeArrayLength(node);
         if (length.ok === false) {
-          pushIssue(errors, path39, "array_length_unreadable", length.reason);
+          pushIssue(errors, path40, "array_length_unreadable", length.reason);
           return null;
         }
         if (length.length > MAX_ARRAY_ITEMS) {
-          pushIssue(errors, path39, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
+          pushIssue(errors, path40, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
           return null;
         }
         const parts2 = [];
         for (let index = 0; index < length.length; index += 1) {
           const key = String(index);
           if (!safeHasOwn(node, key)) {
-            pushIssue(errors, `${path39}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
+            pushIssue(errors, `${path40}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
             return null;
           }
           const read = safeGet(node, key);
           if (read.ok === false) {
-            pushIssue(errors, `${path39}[${index}]`, "property_read_threw", read.reason);
+            pushIssue(errors, `${path40}[${index}]`, "property_read_threw", read.reason);
             return null;
           }
-          const encoded = walk(read.value, `${path39}[${index}]`, depth + 1);
+          const encoded = walk(read.value, `${path40}[${index}]`, depth + 1);
           if (encoded === null) return null;
           parts2.push(encoded);
         }
@@ -12694,11 +12694,11 @@ function canonicalDocumentJson(value) {
       }
       const keys = safeOwnKeys(node);
       if (keys.ok === false) {
-        pushIssue(errors, path39, "own_keys_threw", keys.reason);
+        pushIssue(errors, path40, "own_keys_threw", keys.reason);
         return null;
       }
       if (keys.keys.length > MAX_OBJECT_KEYS) {
-        pushIssue(errors, path39, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
+        pushIssue(errors, path40, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
         return null;
       }
       const sorted = [...keys.keys].sort();
@@ -12706,14 +12706,14 @@ function canonicalDocumentJson(value) {
       for (const key of sorted) {
         const read = safeGet(node, key);
         if (read.ok === false) {
-          pushIssue(errors, `${path39}.${key}`, "property_read_threw", read.reason);
+          pushIssue(errors, `${path40}.${key}`, "property_read_threw", read.reason);
           return null;
         }
         if (read.value === void 0) {
-          pushIssue(errors, `${path39}.${key}`, "undefined_value", "undefined has no canonical JSON form");
+          pushIssue(errors, `${path40}.${key}`, "undefined_value", "undefined has no canonical JSON form");
           return null;
         }
-        const encoded = walk(read.value, `${path39}.${key}`, depth + 1);
+        const encoded = walk(read.value, `${path40}.${key}`, depth + 1);
         if (encoded === null) return null;
         parts.push(`${JSON.stringify(key)}:${encoded}`);
       }
@@ -12769,38 +12769,38 @@ var init_document_safe = __esm({
 });
 
 // src/modules/documents/workflows/document-records.ts
-function readShape(issues, value, path39, allowed) {
+function readShape(issues, value, path40, allowed) {
   if (value === null || typeof value !== "object") {
-    pushIssue(issues, path39, "not_an_object", `${path39} must be an object`);
+    pushIssue(issues, path40, "not_an_object", `${path40} must be an object`);
     return false;
   }
   if (safeIsArray(value)) {
-    pushIssue(issues, path39, "not_an_object", `${path39} must be an object, not an array`);
+    pushIssue(issues, path40, "not_an_object", `${path40} must be an object, not an array`);
     return false;
   }
   const keys = safeOwnKeys(value);
   if (keys.ok === false) {
-    pushIssue(issues, path39, "own_keys_threw", `${path39}: ${keys.reason}`);
+    pushIssue(issues, path40, "own_keys_threw", `${path40}: ${keys.reason}`);
     return false;
   }
   const allowedSet = new Set(allowed);
   let ok = true;
   for (const key of [...keys.keys].sort()) {
     if (!allowedSet.has(key)) {
-      pushIssue(issues, `${path39}.${key}`, "unexpected_key", `${path39}.${key} is not part of the closed schema`);
+      pushIssue(issues, `${path40}.${key}`, "unexpected_key", `${path40}.${key} is not part of the closed schema`);
       ok = false;
     }
   }
   for (const key of allowed) {
     if (!safeHasOwn(value, key)) {
-      pushIssue(issues, `${path39}.${key}`, "missing_field", `${path39}.${key} is required`);
+      pushIssue(issues, `${path40}.${key}`, "missing_field", `${path40}.${key} is required`);
       ok = false;
     }
   }
   return ok;
 }
-function readString(issues, parent, path39, key, options = {}) {
-  const fieldPath = `${path39}.${key}`;
+function readString(issues, parent, path40, key, options = {}) {
+  const fieldPath = `${path40}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -12835,8 +12835,8 @@ function readString(issues, parent, path39, key, options = {}) {
   }
   return value;
 }
-function readArray(issues, parent, path39, key, options = {}) {
-  const fieldPath = `${path39}.${key}`;
+function readArray(issues, parent, path40, key, options = {}) {
+  const fieldPath = `${path40}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -12879,10 +12879,10 @@ function readArray(issues, parent, path39, key, options = {}) {
   }
   return ok ? items : null;
 }
-function readStringArray(issues, parent, path39, key, options = {}) {
-  const items = readArray(issues, parent, path39, key, options);
+function readStringArray(issues, parent, path40, key, options = {}) {
+  const items = readArray(issues, parent, path40, key, options);
   if (items === null) return null;
-  const fieldPath = `${path39}.${key}`;
+  const fieldPath = `${path40}.${key}`;
   const out = [];
   let ok = true;
   for (let index = 0; index < items.length; index += 1) {
@@ -12908,10 +12908,10 @@ function readStringArray(issues, parent, path39, key, options = {}) {
   }
   return ok ? out : null;
 }
-function readItemArray(issues, parent, path39, key, options, readItem) {
-  const items = readArray(issues, parent, path39, key, options);
+function readItemArray(issues, parent, path40, key, options, readItem) {
+  const items = readArray(issues, parent, path40, key, options);
   if (items === null) return null;
-  const fieldPath = `${path39}.${key}`;
+  const fieldPath = `${path40}.${key}`;
   const out = [];
   const firstIndexById = /* @__PURE__ */ new Map();
   let ok = true;
@@ -12938,13 +12938,13 @@ function readItemArray(issues, parent, path39, key, options, readItem) {
   }
   return ok ? out : null;
 }
-function readProvenance(issues, parent, path39) {
+function readProvenance(issues, parent, path40) {
   const read = safeGet(parent, "provenance");
   if (read.ok === false) {
-    pushIssue(issues, `${path39}.provenance`, "property_read_threw", `${path39}.provenance: property read threw`);
+    pushIssue(issues, `${path40}.provenance`, "property_read_threw", `${path40}.provenance: property read threw`);
     return null;
   }
-  const provenancePath = `${path39}.provenance`;
+  const provenancePath = `${path40}.provenance`;
   if (!readShape(issues, read.value, provenancePath, PROVENANCE_KEYS)) return null;
   const source = read.value;
   const authorId = readString(issues, source, provenancePath, "author_id", {
@@ -12985,10 +12985,10 @@ function readProvenance(issues, parent, path39) {
     source: provenanceSource
   };
 }
-function readPlanBody(issues, body, path39) {
-  if (!readShape(issues, body, path39, ["objectives", "steps"])) return null;
-  const objectives = readStringArray(issues, body, path39, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
-  const steps = readItemArray(issues, body, path39, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
+function readPlanBody(issues, body, path40) {
+  if (!readShape(issues, body, path40, ["objectives", "steps"])) return null;
+  const objectives = readStringArray(issues, body, path40, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
+  const steps = readItemArray(issues, body, path40, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
     if (!readShape(itemIssues, item, itemPath, ["id", "title", "status"])) return null;
     const id = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
     const title = readString(itemIssues, item, itemPath, "title", { maxLength: 500 });
@@ -12999,12 +12999,12 @@ function readPlanBody(issues, body, path39) {
   if (objectives === null || steps === null) return null;
   return { objectives, steps };
 }
-function readSpecBody(issues, body, path39) {
-  if (!readShape(issues, body, path39, ["requirements"])) return null;
+function readSpecBody(issues, body, path40) {
+  if (!readShape(issues, body, path40, ["requirements"])) return null;
   const requirements = readItemArray(
     issues,
     body,
-    path39,
+    path40,
     "requirements",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -13021,22 +13021,22 @@ function readSpecBody(issues, body, path39) {
   if (requirements === null) return null;
   return { requirements };
 }
-function readHandoffBody(issues, body, path39) {
-  if (!readShape(issues, body, path39, ["task_id", "status", "artifacts", "issues"])) return null;
-  const taskId = readString(issues, body, path39, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
-  const status = readString(issues, body, path39, "status", { enumOf: HANDOFF_STATUSES });
-  const artifacts = readStringArray(issues, body, path39, "artifacts", { max: 256, itemMaxLength: 1e3 });
-  const handoffIssues = readStringArray(issues, body, path39, "issues", { max: 256, itemMaxLength: 1e3 });
+function readHandoffBody(issues, body, path40) {
+  if (!readShape(issues, body, path40, ["task_id", "status", "artifacts", "issues"])) return null;
+  const taskId = readString(issues, body, path40, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+  const status = readString(issues, body, path40, "status", { enumOf: HANDOFF_STATUSES });
+  const artifacts = readStringArray(issues, body, path40, "artifacts", { max: 256, itemMaxLength: 1e3 });
+  const handoffIssues = readStringArray(issues, body, path40, "issues", { max: 256, itemMaxLength: 1e3 });
   if (taskId === null || status === null || artifacts === null || handoffIssues === null) return null;
   return { task_id: taskId, status, artifacts, issues: handoffIssues };
 }
-function readReviewBody(issues, body, path39) {
-  if (!readShape(issues, body, path39, ["verdict", "findings"])) return null;
-  const verdict = readString(issues, body, path39, "verdict", { enumOf: REVIEW_VERDICTS });
+function readReviewBody(issues, body, path40) {
+  if (!readShape(issues, body, path40, ["verdict", "findings"])) return null;
+  const verdict = readString(issues, body, path40, "verdict", { enumOf: REVIEW_VERDICTS });
   const findings = readItemArray(
     issues,
     body,
-    path39,
+    path40,
     "findings",
     { max: 256 },
     (itemIssues, item, itemPath) => {
@@ -13051,13 +13051,13 @@ function readReviewBody(issues, body, path39) {
   if (verdict === null || findings === null) return null;
   return { verdict, findings };
 }
-function readVerifyBody(issues, body, path39) {
-  if (!readShape(issues, body, path39, ["outcome", "checks"])) return null;
-  const outcome = readString(issues, body, path39, "outcome", { enumOf: VERIFY_OUTCOMES });
+function readVerifyBody(issues, body, path40) {
+  if (!readShape(issues, body, path40, ["outcome", "checks"])) return null;
+  const outcome = readString(issues, body, path40, "outcome", { enumOf: VERIFY_OUTCOMES });
   const checks = readItemArray(
     issues,
     body,
-    path39,
+    path40,
     "checks",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -13661,10 +13661,10 @@ function requiredRecord(errors, parent, key) {
   }
   return value;
 }
-function requiredString(errors, parent, path39, key) {
+function requiredString(errors, parent, path40, key) {
   const value = parent[key];
   if (typeof value !== "string" || value.length === 0) {
-    pushIssue(errors, `${path39}.${key}`, "missing_field", `${key} must be a non-empty string`);
+    pushIssue(errors, `${path40}.${key}`, "missing_field", `${key} must be a non-empty string`);
     return null;
   }
   return value;
@@ -13677,23 +13677,23 @@ function requiredArray(errors, parent, key) {
   }
   return value;
 }
-function validateStringArray(errors, values, path39) {
+function validateStringArray(errors, values, path40) {
   if (values === null) return;
   values.forEach((value, index) => {
     if (typeof value !== "string" || value.length === 0) {
-      pushIssue(errors, `${path39}[${index}]`, "wrong_type", `${path39} entries must be non-empty strings`);
+      pushIssue(errors, `${path40}[${index}]`, "wrong_type", `${path40} entries must be non-empty strings`);
     }
   });
 }
-function canonicalReceiptInstant(errors, value, path39) {
+function canonicalReceiptInstant(errors, value, path40) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
-    pushIssue(errors, path39, "invalid_timestamp", `${path39} must be an ISO-8601 timestamp`);
+    pushIssue(errors, path40, "invalid_timestamp", `${path40} must be an ISO-8601 timestamp`);
     return null;
   }
   const parsed = Date.parse(value);
   const expectedCanonical = value.includes(".") ? value : value.replace(/Z$/, ".000Z");
   if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== expectedCanonical) {
-    pushIssue(errors, path39, "invalid_timestamp", `${path39} must name a real UTC calendar instant`);
+    pushIssue(errors, path40, "invalid_timestamp", `${path40} must name a real UTC calendar instant`);
     return null;
   }
   return expectedCanonical;
@@ -14379,7 +14379,11 @@ var init_event_log_schema = __esm({
       "gate_decision",
       "assumption_logged",
       "escalation",
-      "codex_review_round"
+      "codex_review_round",
+      "harvest_event",
+      "redirect_event",
+      "cas_event",
+      "curator_event"
     ], "EVENT_TYPES");
     RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
     LANE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
@@ -14645,12 +14649,28 @@ var init_plugin_install_guard = __esm({
 
 // src/modules/state/workflows/atomic-write.ts
 function atomicWrite(targetPath, content, pluginInstallRoot) {
+  writeThroughTemp(targetPath, content, false, pluginInstallRoot);
+}
+function atomicWriteDurable(targetPath, content, pluginInstallRoot) {
+  writeThroughTemp(targetPath, content, true, pluginInstallRoot);
+}
+function writeThroughTemp(targetPath, content, durable, pluginInstallRoot) {
   assertNotUnderPluginInstall(targetPath, pluginInstallRoot);
   const dir = path8.dirname(targetPath);
   fs6.mkdirSync(dir, { recursive: true });
   const unique = `${process.pid}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
   const tmpPath = path8.join(dir, `.${path8.basename(targetPath)}.tmp-${unique}`);
-  fs6.writeFileSync(tmpPath, content, "utf8");
+  if (durable) {
+    const fd = fs6.openSync(tmpPath, "w");
+    try {
+      fs6.writeFileSync(fd, content, "utf8");
+      fs6.fsyncSync(fd);
+    } finally {
+      fs6.closeSync(fd);
+    }
+  } else {
+    fs6.writeFileSync(tmpPath, content, "utf8");
+  }
   try {
     fs6.renameSync(tmpPath, targetPath);
   } catch (err) {
@@ -17194,7 +17214,20 @@ prefix (KTD70).
   host adapter maps a tier to a model at dispatch.
 - **session binding** \u2014 the host and models resolved for ONE run. Session state,
   never durable config.
-- **harvest** \u2014 the automatic capture of a decision into this root's wiki.
+- **harvest** \u2014 the automatic capture of a decision into this root's wiki. The
+  only unattended writer there is; everything else goes through a human.
+- **class** \u2014 which of the five graphs a run follows: \`product\`, \`research\`,
+  \`debug\`, \`ops\`, \`init\`. Bound once at intake, by a typed verb, or by
+  \`--class=\`.
+- **cursor** \u2014 where a run currently sits on its class graph. Read on crash resume.
+- **working set** \u2014 the small card a phase reads first: pinned decision ids, open
+  questions, and a fingerprint that says whether any of it can have changed.
+- **lane bundle** \u2014 the \u22641200-token citation list a parent sees. Parents get
+  citations; only the specialist reads the sources.
+- **recall** \u2014 looking something up before doing it. Cheap and mandatory; research
+  is what happens when recall misses.
+- **redirect** \u2014 an operator correction that made the orchestrator change course.
+  Three on the same agent and topic in one run fire a harvest.
 - **layout version** \u2014 the integer in \`.guild/storage-layout.json\` saying which
   storage layout this root is on. Guild upgrades a root on activation.
 
@@ -18383,6 +18416,7 @@ __export(state_exports, {
   assertRegistered: () => assertRegistered,
   assertSafeSegments: () => assertSafeSegments,
   atomicWrite: () => atomicWrite,
+  atomicWriteDurable: () => atomicWriteDurable,
   buildUnifiedGraph: () => buildUnifiedGraph,
   classifyMemoryPath: () => classifyMemoryPath,
   classifyPath: () => classifyPath,
@@ -18633,6 +18667,7 @@ var init_security = __esm({
     init_share_set();
     init_scrub_redact();
     init_secret_patterns();
+    init_events();
   }
 });
 
@@ -18644,11 +18679,11 @@ function exclusionSentinelPath(runDir2) {
   return (0, import_node_path.join)(runDir2, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir2) {
-  const path39 = stableLockPath(runDir2);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path39), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path39)) return;
+  const path40 = stableLockPath(runDir2);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path40), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path40)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path39, "wx");
+    const fd = (0, import_node_fs.openSync)(path40, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -18746,9 +18781,9 @@ function appendEvent(runDir2, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId2 = opts.laneId ?? "global";
-    const path39 = laneFallbackPath(runDir2, laneId2);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path39), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path39, "a");
+    const path40 = laneFallbackPath(runDir2, laneId2);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path40), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path40, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -28061,6 +28096,49 @@ var init_workflow_graph_overlay = __esm({
   }
 });
 
+// src/modules/lifecycle/workflows/learning-checkpoint-5.ts
+var CHECKPOINT_VERDICTS, VERDICT_ROUTE;
+var init_learning_checkpoint_5 = __esm({
+  "src/modules/lifecycle/workflows/learning-checkpoint-5.ts"() {
+    CHECKPOINT_VERDICTS = Object.freeze([
+      "decision",
+      "playbook_span",
+      "skill_def",
+      "reflect",
+      "none"
+    ]);
+    VERDICT_ROUTE = Object.freeze({
+      decision: "harvest",
+      playbook_span: "curator",
+      skill_def: "curator",
+      reflect: "human-queue",
+      none: "no-op"
+    });
+  }
+});
+
+// src/modules/lifecycle/workflows/workflow-graph-load.ts
+var path38, PLUGIN_GRAPH_DIRS;
+var init_workflow_graph_load = __esm({
+  "src/modules/lifecycle/workflows/workflow-graph-load.ts"() {
+    path38 = __toESM(require("node:path"));
+    init_kernel();
+    init_state();
+    init_workflow_graph_overlay();
+    PLUGIN_GRAPH_DIRS = Object.freeze([
+      path38.join("src", "surfaces", "graphs"),
+      "graphs"
+    ]);
+  }
+});
+
+// src/modules/lifecycle/workflows/workflow-router.ts
+var init_workflow_router = __esm({
+  "src/modules/lifecycle/workflows/workflow-router.ts"() {
+    init_workflow_graph_overlay();
+  }
+});
+
 // src/modules/lifecycle/index.ts
 var init_lifecycle = __esm({
   "src/modules/lifecycle/index.ts"() {
@@ -28084,6 +28162,11 @@ var init_lifecycle = __esm({
     init_write_task_run();
     init_workflow_graph_overlay();
     init_stable_lock();
+    init_learning_checkpoint_5();
+    init_workflow_graph_load();
+    init_workflow_router();
+    init_event_log_schema();
+    init_event_log_writer();
   }
 });
 
@@ -28542,8 +28625,8 @@ function parseModelsArgs(argv) {
   for (let i = 1; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--json") json = true;
-    else if (a === "--cwd" && argv[i + 1] !== void 0) cwd = path38.resolve(argv[++i]);
-    else if (a.startsWith("--cwd=")) cwd = path38.resolve(a.slice("--cwd=".length));
+    else if (a === "--cwd" && argv[i + 1] !== void 0) cwd = path39.resolve(argv[++i]);
+    else if (a.startsWith("--cwd=")) cwd = path39.resolve(a.slice("--cwd=".length));
     else if (a === "--run-id" && argv[i + 1] !== void 0) runId = argv[++i];
     else if (a.startsWith("--run-id=")) runId = a.slice("--run-id=".length);
     else return { error: "unknown argument: " + a };
@@ -28562,12 +28645,12 @@ function readJson2(p) {
   }
 }
 function loadPersistedInspections(root, runId) {
-  const dir = path38.join(root, ".guild", "runs", runId, "inspection");
+  const dir = path39.join(root, ".guild", "runs", runId, "inspection");
   if (!fs29.existsSync(dir)) return [];
   const out = [];
   for (const name of fs29.readdirSync(dir).sort()) {
     if (!name.endsWith(".json")) continue;
-    const p = path38.join(dir, name);
+    const p = path39.join(dir, name);
     const parsed = readJson2(p);
     const label = name.replace(/\.json$/, "");
     if (parsed === null || typeof parsed !== "object") {
@@ -28641,7 +28724,7 @@ function loadVerifiedCatalogSnapshot(root, runId, sessionContext) {
       note: "catalog cache identity could not be constructed: " + err.message
     };
   }
-  const entry = readJson2(path38.join(modelCatalogCacheDir(root), key.hash + ".json"));
+  const entry = readJson2(path39.join(modelCatalogCacheDir(root), key.hash + ".json"));
   if (entry === null) {
     return { snapshot: null, note: "no catalog cache entry for this run's target identity" };
   }
@@ -28669,7 +28752,7 @@ function loadVerifiedSources(root, runId) {
   return { session_context, catalog_snapshot: snapshot, notes };
 }
 function loadRoutingFlags(root) {
-  const p = path38.join(root, ".guild", "settings.json");
+  const p = path39.join(root, ".guild", "settings.json");
   const settings = readJson2(p);
   if (settings === null) {
     const { flags: flags2, rejects: rejects2 } = readRoutingFlags(null);
@@ -29049,12 +29132,12 @@ function runModelsCommand(argv, deps = {}) {
   }
   return 0;
 }
-var crypto9, fs29, path38, MODELS_COMMAND_USAGE, DISPLAY_TOKEN_RE, REVERSIBLE_IDENTITY_RE, CONTROL_CHAR_RE, FREE_TEXT_MAX;
+var crypto9, fs29, path39, MODELS_COMMAND_USAGE, DISPLAY_TOKEN_RE, REVERSIBLE_IDENTITY_RE, CONTROL_CHAR_RE, FREE_TEXT_MAX;
 var init_models_command = __esm({
   "src/modules/capability/workflows/models-command.ts"() {
     crypto9 = __toESM(require("crypto"));
     fs29 = __toESM(require("fs"));
-    path38 = __toESM(require("path"));
+    path39 = __toESM(require("path"));
     init_host_runtime();
     init_security();
     init_catalog_cache();

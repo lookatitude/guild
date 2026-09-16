@@ -124,7 +124,7 @@ as "load this file and run it in place"; never try to dispatch it as a skill.
 | `rollback <skill> [n]` | `references/rollback-skill.md` |
 | `audit` | `references/audit.md` |
 | `fix [run-id\|symptom]` | `../diagnose/references/systematic-debug.md` |
-| `wiki revert <harvest_id>` | the `guild.harvest_journal.v1` inverse (R54/KTD39) owned by U-LOOP · U-STOR; no handler ships yet — report that the harvest journal is pending and stop (never ingest) |
+| `wiki revert <harvest_id>` | `references/wiki-revert.md` |
 | `gc` | the durable-state sweep + scratch janitor owned by the storage domain (U-STOR); no chapter to load yet — report that and stop |
 
 An unrecognized first token is not a route: print the table above as usage and invoke nothing. The promotion gate applies to `evolve` and `rollback` exactly as `## Non-destructive rule` states — routing through this section never bypasses it.

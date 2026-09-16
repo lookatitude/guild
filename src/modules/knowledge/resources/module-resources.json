@@ -29,7 +29,7 @@
       "id": "knowledge-links-builder",
       "source_path": "scripts/knowledge-links-builder.ts",
       "resource_path": "resources/scripts/knowledge-links-builder.ts",
-      "sha256": "a92d5d0c9fca7ddd8dcf569c65996112fefc1a90a0ce352dbe5034a76ebf60bf"
+      "sha256": "051eb17cd227b4b96131239485cb183435dcf5df7a3eaa241c5f3e61cfce9f0f"
     },
     {
       "category": "scripts",
@@ -79,6 +79,13 @@
       "source_path": "scripts/lib/write-back-scored-tier.ts",
       "resource_path": "resources/scripts/lib/write-back-scored-tier.ts",
       "sha256": "2393547db5b61fc22dea53e36db4bb3cf2d1226a80dc183d301896e6f21b6c3c"
+    },
+    {
+      "category": "scripts",
+      "id": "wiki-revert",
+      "source_path": "scripts/wiki-revert.ts",
+      "resource_path": "resources/scripts/wiki-revert.ts",
+      "sha256": "d74c01f9329850acb4b62439cda3db6376d1917243d30a3ebb1dd236e563f055"
     },
     {
       "category": "skills",

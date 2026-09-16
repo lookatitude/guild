@@ -612,7 +612,11 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // `wiki revert harvest-123` no longer arrives as `revert revert harvest-123`. The
   // per-token routing moved into the assembler. ANTI-VACUITY:
   // t04-command-dispatch-shape was 17-failed/70-passed against the round-2 tree, 87/87 after.
-  commands: "ea93a2ea08d9b2c40a6982e35b4c49a2615ab0b2",
+  // Re-ratified 2026-09-16 (T09 work loop): `maintain wiki revert` row in commands/maintain.md,
+  // the evolve skill's revert pointer, and skills/meta/evolve/references/wiki-revert.md (KTD39).
+  // ANTI-VACUITY: SC-W2-5, SC-W3-6 and check-surface-pins were RED on guild#197 CI against
+  // the prior pins and named exactly commands/** and skills/**.
+  commands: "c42004c1286c413fd2742152e0e314d28b2c86f3",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
   // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
@@ -634,7 +638,7 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified (codex G-lane round 6, lead fix): the evolve assembler's `wiki revert`
   // row no longer points at wiki-ingest.md (no revert handler there); it names the
   // pending harvest-journal inverse (R54) and stops. One row changed.
-  skills: "14df92d649b3dfcace945a67992712f18403a17f",
+  skills: "47e258a5dd797fbaa9449ebd21c054a62b55e2a9",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

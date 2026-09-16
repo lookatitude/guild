@@ -9,7 +9,8 @@
  * What it does:
  *   Reads CANONICAL stores (non-negotiable #8 — see spec SC-E):
  *     .guild/wiki/**                  : wiki pages + decision entries
- *     .guild/raw/sources/**           : raw research sources
+ *     <definition>/sources/**         : durable ingested sources (R59),
+ *                                       with a V1 read fallback to .guild/raw/sources/**
  *     .guild/initiatives/**           : goals, non-goals, initiative facts, specs, plans, work items
  *     .guild/runs/**                  : tasks, runs, touched facts, agents, skills, reviews, verify evidence
  *     .guild/reflections/**           : reflection/evolution candidates
@@ -46,6 +47,7 @@ import * as path from "path";
 import { readScalarField } from "./lib/frontmatter";
 import { KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION } from "../src/modules/knowledge/workflows/knowledge-links-contract";
 import { loadKnowledgeLinksDoc, writeKnowledgeLinksDoc } from "./learn/lib/knowledge-links-io";
+import { createGuildStorage } from "../src/modules/state";
 
 // ── Extended node-kind type ───────────────────────────────────────────────────
 
@@ -335,21 +337,41 @@ function collectWikiEdges(root: string, runId: string): KnowledgeLink[] {
 }
 
 /**
- * FROM: .guild/raw/sources/**
+ * FROM: the durable sources tree — `GuildStorage.definition("sources", <id>)`
+ * (R59 / KTD47), with a V1 read fallback to the retired raw-sources tree.
+ *
  * Emits: raw_source : wiki page (learned_from) when the frontmatter declares
  *        a wiki_target. Otherwise the raw_source node is just declared.
+ *
+ * The fallback is READ-ONLY and deliberately additive: a root that has not been
+ * upgraded yet still has its blobs in the old place, and an index that silently
+ * lost those edges would look identical to a root that never ingested anything.
+ * Nothing here WRITES the old tree — the layout upgrade moves it.
  */
 function collectRawSourceEdges(root: string, runId: string): KnowledgeLink[] {
-  const rawDir = path.join(root, ".guild", "raw", "sources");
   const links: KnowledgeLink[] = [];
-  if (!fs.existsSync(rawDir)) return links;
+  const dirs: string[] = [];
+  try {
+    const storage = createGuildStorage(root, { activeRoot: root });
+    dirs.push(storage.definition("sources"));
+  } catch {
+    // No resolvable root (a fixture tree, a partially-scaffolded repo): fall
+    // through to the compatibility path rather than failing the whole build.
+  }
+  // V1 compatibility read. Listed second so an upgraded root wins on a duplicate id.
+  dirs.push(path.join(root, ".guild", "raw", "sources"));
 
-  const files = walkDir(rawDir, (n) => n.endsWith(".md") || n.endsWith(".yaml"));
+  const files = dirs
+    .filter((d) => fs.existsSync(d))
+    .flatMap((d) => walkDir(d, (n) => n.endsWith(".md") || n.endsWith(".yaml")));
+  const seen = new Set<string>();
   for (const f of files) {
     const raw = readFile(f);
     if (!raw) continue;
     const slug = slugify(f);
     const srcId = `raw_source:${slug}`;
+    if (seen.has(srcId)) continue;
+    seen.add(srcId);
 
     const wikiTarget = yamlVal(raw, "wiki_target");
     if (wikiTarget) {

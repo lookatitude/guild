@@ -51,3 +51,18 @@ export * from "./workflows/workflow-graph-overlay";
 // instance cap can make "count the run's slots" and "claim one" a single atomic
 // step rather than an observation followed by a hopeful write.
 export * from "./workflows/stable-lock";
+
+// ── T09 work loop (U-LOOP) ───────────────────────────────────────────────────
+// The RUNTIME half of the class graphs: load/merge the authored YAML, carry the
+// cursor on the run, and route one closed decision per node. The 5-way
+// LearningCheckpoint is a domain function here for the same reason — it rides an
+// existing phase boundary and is not a skill (KTD57).
+export * from "./workflows/learning-checkpoint-5";
+export * from "./workflows/workflow-graph-load";
+export * from "./workflows/workflow-router";
+// T09 (KTD38): the KTD16 JSONL append path. The four additive work-loop kinds
+// (harvest / redirect / CAS / curator) ride the EXISTING run log, so the
+// knowledge domain reaches the writer through this index — there is no third
+// JSONL and no second writer.
+export * from "./workflows/event-log-schema";
+export * from "./workflows/event-log-writer";

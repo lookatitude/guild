@@ -101,7 +101,7 @@ export interface IncludedArtifact {
  */
 export interface QuarantinedInput {
   kind: QuarantineKind;
-  /** Path to the original under .guild/raw/sources/. */
+  /** Path to the original under the durable sources tree (R59/KTD47). */
   ref: string;
   /** sha256 hex digest of the original. */
   sha256: string;

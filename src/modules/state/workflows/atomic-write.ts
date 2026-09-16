@@ -55,6 +55,36 @@ import { assertNotUnderPluginInstall } from "./plugin-install-guard";
  *                          production callers rely on the env-var default).
  */
 export function atomicWrite(targetPath: string, content: string, pluginInstallRoot?: string): void {
+  writeThroughTemp(targetPath, content, false, pluginInstallRoot);
+}
+
+/**
+ * `atomicWrite` plus an `fsync` of the temp file BEFORE the rename.
+ *
+ * Atomicity and durability are different guarantees. A plain rename makes the
+ * swap all-or-nothing for a reader, but the renamed bytes can still be sitting
+ * in the page cache when the machine dies — so a crash can leave the rename
+ * visible and the content empty. Any protocol whose correctness rests on "the
+ * record is on disk BEFORE the next durable write starts" (the harvest journal's
+ * inverse-first ordering) needs the fsync as well as the rename.
+ *
+ * The extra fsync costs a real disk round trip, so it is a separate entrypoint:
+ * ordinary artifact writers keep `atomicWrite`.
+ */
+export function atomicWriteDurable(
+  targetPath: string,
+  content: string,
+  pluginInstallRoot?: string,
+): void {
+  writeThroughTemp(targetPath, content, true, pluginInstallRoot);
+}
+
+function writeThroughTemp(
+  targetPath: string,
+  content: string,
+  durable: boolean,
+  pluginInstallRoot?: string,
+): void {
   assertNotUnderPluginInstall(targetPath, pluginInstallRoot);
   const dir = path.dirname(targetPath);
   fs.mkdirSync(dir, { recursive: true });
@@ -62,7 +92,18 @@ export function atomicWrite(targetPath: string, content: string, pluginInstallRo
   const unique = `${process.pid}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
   const tmpPath = path.join(dir, `.${path.basename(targetPath)}.tmp-${unique}`);
 
-  fs.writeFileSync(tmpPath, content, "utf8");
+  if (durable) {
+    const fd = fs.openSync(tmpPath, "w");
+    try {
+      fs.writeFileSync(fd, content, "utf8");
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } else {
+    fs.writeFileSync(tmpPath, content, "utf8");
+  }
+
   try {
     fs.renameSync(tmpPath, targetPath);
   } catch (err) {

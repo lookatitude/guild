@@ -24,7 +24,7 @@ node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/c
 | `rollback <skill> [n]` | `references/rollback-skill.md` — non-destructive revert |
 | `audit` | `references/audit.md` — static script + boundary audit |
 | `fix [run-id\|symptom]` | `../diagnose/references/systematic-debug.md` |
-| `wiki revert` | `../../knowledge/wiki/references/wiki-ingest.md` |
+| `wiki revert` | `references/wiki-revert.md` — the harvest-journal inverse |
 | `gc` | durable-state sweep + scratch janitor (storage domain, U-STOR) |
 
 ## Dispatch
