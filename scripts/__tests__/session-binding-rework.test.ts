@@ -8,7 +8,7 @@
  *         bind failure (session-binding.error on the run record, then throw).
  *   P1-2  `config show --sources` renders the POLICY resolution with per-key
  *         source attribution, separately from the legacy inventory.
- *   P1-3  `config set` writes the 14 policy keys and refuses every other key.
+ *   P1-3  `config set` writes the closed policy key set and refuses every other key.
  *   P1-4  the identity guard scans every string leaf — arrays, nested objects,
  *         mixed case — and the prompt scan catches the "you are <host>" prose.
  *   P1-5  binding creation is exclusive: of two competing hosts exactly one wins.
@@ -28,7 +28,7 @@ import {
   readSessionBinding,
   sessionBindingPath,
 } from "../../src/modules/config/workflows/session-binding";
-import { scanHostIdentity } from "../../src/modules/config/workflows/policy-keys";
+import { POLICY_KEYS, scanHostIdentity } from "../../src/modules/config/workflows/policy-keys";
 import {
   policyOverlayFile,
   policyValue,
@@ -282,7 +282,7 @@ describe("P1-2 · config show --sources renders POLICY with per-key source", () 
 // P1-3 — config set is policy-only
 // ---------------------------------------------------------------------------
 
-describe("P1-3 · config set writes the 14 policy keys and refuses the rest", () => {
+describe("P1-3 · config set writes the closed policy key set and refuses the rest", () => {
   for (const [key, value] of [
     ["models.tiers.claude", "x"],
     ["hosts.claude.profile", "y"],
@@ -294,7 +294,7 @@ describe("P1-3 · config set writes the 14 policy keys and refuses the rest", ()
       const r = runConfig(["set", key, value, "--scope", "project", "--cwd", root]);
       expect(r.status).toBe(1);
       expect(r.out).toContain("is not a policy key");
-      expect(r.out).toContain("Durable config holds exactly these 14 keys");
+      expect(r.out).toContain(`Durable config holds exactly these ${POLICY_KEYS.length} keys`);
       expect(guildFiles(root)).toEqual(before);
     });
   }
@@ -308,7 +308,7 @@ describe("P1-3 · config set writes the 14 policy keys and refuses the rest", ()
     expect(guildFiles(root)).toEqual(before);
   });
 
-  test("each of the 14 policy keys is accepted", () => {
+  test("every closed policy key is accepted", () => {
     const accepted: Array<[string, string]> = [
       ["tiers.default", "powerful"],
       ["tiers.floors.mid", "4"],
@@ -324,7 +324,11 @@ describe("P1-3 · config set writes the 14 policy keys and refuses the rest", ()
       ["review.independence", "false"],
       ["wiki.autopromote", "false"],
       ["agent_mode", "team"],
+      // R46: concurrency cap. Listed here so the closed set and this table stay
+      // the same length — the assertion below is what actually enforces that.
+      ["dispatch.max_instances", "6"],
     ];
+    expect(accepted).toHaveLength(POLICY_KEYS.length);
     const root = mkRoot();
     for (const [key, value] of accepted) {
       const r = runConfig(["set", key, value, "--scope", "project", "--cwd", root]);
@@ -336,6 +340,7 @@ describe("P1-3 · config set writes the 14 policy keys and refuses the rest", ()
     expect(written.tiers.default).toBe("powerful");
     expect(written.agent_mode).toBe("team");
     expect(written.budget.usd).toBe(2.5);
+    expect(written.dispatch.max_instances).toBe(6);
   });
 });
 

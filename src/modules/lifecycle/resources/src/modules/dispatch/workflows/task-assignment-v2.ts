@@ -81,6 +81,8 @@ import {
   type PreviewConfirmationSession,
 } from "./confirmation-gate";
 import type { SpecialistModelProvenance } from "./specialist-contract";
+import type { DoneWhenItem } from "./progress-ledger";
+import { isInstanceReservation } from "./instance-cap";
 import { publishTaskCellFile, type TaskCellArtifactKind } from "./task-cell-artifact-join";
 
 /**
@@ -139,6 +141,14 @@ export interface TaskCellDispatchInput {
   leadBindingId?: string | null;
   /** …or a cell that spawns a distinct Team Lead records `team_lead_instance_id`. Exactly one. */
   teamLeadInstanceId?: string | null;
+  /**
+   * Assignment v2 `done_when[]` — the MACHINE form of the D6 acceptance tests
+   * (R46). Additive to the frozen field floor, which D6 states is a must-carry
+   * minimum, not a closed set. Omitting it produces a cell that CANNOT go done:
+   * `cellCanGoDone` refuses an oracle-less ledger, so an unchecked lane fails
+   * closed instead of passing on the worker's own word.
+   */
+  doneWhen?: readonly DoneWhenItem[];
   now: () => string;
 }
 
@@ -196,6 +206,14 @@ export function buildTaskCell(input: TaskCellDispatchInput): TaskCell {
     deadline: input.deadline ?? null,
     written_at: input.now(),
   });
+  // Stamped after the builder so the frozen `guild.task_assignment.v2` shape in
+  // the contract module stays untouched: `done_when` rides as an additive field
+  // that lenient readers ignore and the ledger reads through `readDoneWhen`.
+  if (input.doneWhen !== undefined) {
+    (assignment as TaskAssignmentV2 & { done_when?: DoneWhenItem[] }).done_when = [
+      ...input.doneWhen,
+    ];
+  }
 
   // Re-validate the built assignment fail-closed — the builder cannot express the
   // full D6 field contract in the type system, so a malformed shape must be
@@ -378,11 +396,20 @@ export function writeTaskAttemptV1(
   const publicPath = path.resolve(cwd, paths.attempt_path);
   const serialized = JSON.stringify(valid, null, 2) + "\n";
   if (fs.existsSync(out)) {
-    if (fs.readFileSync(out, "utf8") === serialized) return publicPath; // idempotent re-write
-    throw new Error(
-      `attempt record overwrite refused at ${paths.attempt_path} — a terminal ` +
-        `attempt is immutable; a retry mints a new attempt (D4)`
-    );
+    const existing = fs.readFileSync(out, "utf8");
+    if (existing === serialized) return publicPath; // idempotent re-write
+    // The ONE legal overwrite: this attempt's own admission placeholder. The cap
+    // claims the slot by creating this exact file with `wx`, so the real record
+    // completing it is the reservation becoming what it reserved — not a second
+    // attempt overwriting a first. Every other overwrite stays refused (D4).
+    if (!isInstanceReservation(existing)) {
+      throw new Error(
+        `attempt record overwrite refused at ${paths.attempt_path} — a terminal ` +
+          `attempt is immutable; a retry mints a new attempt (D4)`
+      );
+    }
+    fs.writeFileSync(out, serialized, { encoding: "utf8" });
+    return publicPath;
   }
   fs.writeFileSync(out, serialized, { encoding: "utf8", flag: "wx" });
   return publicPath;
@@ -464,6 +491,7 @@ export function writeTaskCell(
       relativePath,
       hostId: cell.assignment.host_id,
       role: "task-cell-runtime",
+      bindingRef: binding.binding_ref,
       now: () => cell.assignment.written_at,
     });
     if (required && artifact === null) {

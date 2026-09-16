@@ -3132,6 +3132,66 @@ function loadYamlApi() {
   );
 }
 
+// src/modules/kernel/workflows/sealed-collections.ts
+function regExpWritesLastIndex(re) {
+  return re.global || re.sticky;
+}
+function freezeRegExpSafely(re) {
+  if (regExpWritesLastIndex(re)) return false;
+  Object.freeze(re);
+  return true;
+}
+var SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
+function isSealedCollection(value) {
+  if (value === null || typeof value !== "object") return false;
+  if (value instanceof Set || value instanceof Map) return false;
+  const brand = value[SEALED_BRAND];
+  return (brand === "set" || brand === "map") && Object.isFrozen(value);
+}
+function sealedCollectionValues(value) {
+  if (!isSealedCollection(value)) return void 0;
+  return [...value];
+}
+function deepFreeze(value, options = {}) {
+  const policy = options.regexps ?? "safe";
+  const seen = /* @__PURE__ */ new WeakSet();
+  const walk = (node) => {
+    if (node === null || typeof node !== "object") return;
+    const obj = node;
+    if (seen.has(obj)) return;
+    seen.add(obj);
+    if (obj instanceof RegExp) {
+      if (policy === "freeze") Object.freeze(obj);
+      else if (policy === "safe") freezeRegExpSafely(obj);
+      return;
+    }
+    if (obj instanceof Date) {
+      return;
+    }
+    if (obj instanceof Set || obj instanceof Map) {
+      throw new TypeError(
+        "deepFreeze: refusing to 'freeze' a Set/Map \u2014 freeze does not close membership and the intrinsics reach past neutered own methods. Declare it with sealSet()/sealMap()."
+      );
+    }
+    const sealedValues = sealedCollectionValues(obj);
+    if (sealedValues !== void 0) {
+      for (const entry of sealedValues) walk(entry);
+      return;
+    }
+    Object.freeze(obj);
+    for (const key of Reflect.ownKeys(obj)) {
+      const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+      if (!descriptor || !("value" in descriptor)) continue;
+      walk(descriptor.value);
+    }
+  };
+  walk(value);
+  return value;
+}
+function frozenList(items, options = {}) {
+  return deepFreeze(items.slice(), options);
+}
+
 // src/modules/kernel/workflows/path-containment.ts
 var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "root-unresolvable",
@@ -3144,6 +3204,16 @@ var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "parent-traversal",
   "destination-moved"
 ]);
+
+// src/modules/kernel/workflows/tier-bus.ts
+var BUS_TIERS = frozenList(["T0", "T1", "T2"]);
+var LEAD_ROLE_IDS = frozenList(["team-lead", "lead", "orchestrator"]);
+var TIER_BUS_CONTRACT = deepFreeze({
+  tiers: BUS_TIERS,
+  upward_envelopes: { T2: "guild.handoff.v2", T1: "guild.goal_status.v1" },
+  lead_roles: LEAD_ROLE_IDS,
+  tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
+});
 
 // src/modules/state/workflows/frontmatter.ts
 var loadedYaml = null;

@@ -29,14 +29,14 @@
       "id": "team-lead",
       "source_path": "agents/team-lead.md",
       "resource_path": "resources/agents/team-lead.md",
-      "sha256": "c0ce0575a241a5be3ad838c66fb82ffd2cc0e97244ca1629273e669a7a288ab4"
+      "sha256": "cf35560fc3029d8dd5f60ffc66c3757d449e22c5780c5a5b5d04f58e5bf60810"
     },
     {
       "category": "scripts",
       "id": "lib/roster",
       "source_path": "scripts/lib/roster.ts",
       "resource_path": "resources/scripts/lib/roster.ts",
-      "sha256": "5f4aaafa671f3fb68d7ce27b1ce92b546b926625a1f96cb32761be6b335fbfd5"
+      "sha256": "8cfbec6176d00f36334a6cba6bd2c5204664e3c48b928aeb6d7cf6990ac35907"
     },
     {
       "category": "scripts",

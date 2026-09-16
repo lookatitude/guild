@@ -71,6 +71,22 @@ import {
   writeValidationRecord,
 } from "./task-cell-acceptance";
 import { publishTaskCellFile } from "./task-cell-artifact-join";
+import { cellBlocked, cellCanGoDone, ledgerBoundToAssignment, readProgressLedger } from "./progress-ledger";
+import { DEFAULT_MAX_INSTANCES, reserveInstance, reserveRefused } from "./instance-cap";
+import {
+  authorizeProjectedToolCall,
+  checkProjectedTool,
+  projectionNarrowsOnly,
+  projectionRefused,
+} from "./isolation-guard";
+import {
+  consumeConsult,
+  initAdvisorBudget,
+  readAdvisorBudget,
+  resolveAdvisorRounds,
+  type ConsultKind,
+  type ConsultResult,
+} from "./advisor-budget";
 import type {
   ExecutionHandle,
   ExecutionSpawnRequest,
@@ -108,6 +124,14 @@ export interface FilesystemTaskCellRuntimeOpts {
   worker: TaskCellWorkerPort;
   now?: () => string;
   idFactory?: (kind: "instance" | "attempt" | "validation") => string;
+  /**
+   * Live worker instances this RUN may hold at once (R46/KTD30). Defaults to 4.
+   * Concurrency only: the approved roster is unchanged, and terminal attempts
+   * (immutable, D4) do not count against it.
+   */
+  maxInstances?: number;
+  /** `advisorRounds` policy for cells on this runtime (KTD61). Default 2. */
+  advisorRounds?: number;
 }
 
 export interface ExecutionTransportTaskCellWorkerPortOpts {
@@ -205,9 +229,32 @@ interface Live {
   state: TaskCellState;
 }
 
+
 function readJson(file: string): unknown | null {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
 }
+
+/**
+ * The port a `lead_only` cell runs on: NO transport at all.
+ *
+ * `lead_only` binds the parent orchestrator as the lead and executes the lane in
+ * that session (TaskCell resolved decision 2). Round 2 found the runtime still
+ * calling `notifyAssignment`, so a real transport port answered "no transport
+ * handle" and the cell failed on a substrate it was never supposed to touch.
+ * Every operation here is a no-op that succeeds, and the isolation loss is
+ * recorded on the instance rather than implied by a silent success.
+ */
+const IN_SESSION_PORT: TaskCellWorkerPort = Object.freeze({
+  mode: "degraded" as const,
+  losses: Object.freeze([
+    "no_isolation: lead_only binds the parent session; no worker process, no transport",
+  ]),
+  isAvailable: () => true,
+  spawn: () => ({ ok: true, reason: null }),
+  ready: () => ({ ok: true, reason: null }),
+  notifyAssignment: () => ({ ok: true, reason: null }),
+  terminate: () => ({ ok: true, reason: null }),
+});
 
 export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecordStore {
   readonly substrate: TaskCellSubstrate;
@@ -222,8 +269,12 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
   private readonly idFactory: (kind: "instance" | "attempt" | "validation") => string;
   private readonly cells = new Map<string, CellHandle>();
   private readonly live = new Map<string, Live>();
+  /** Instances bound to the parent as lead — no process was spawned for them. */
+  private readonly leadOnly = new Set<string>();
   private seq = 0;
   private telemetrySeq = 0;
+  readonly maxInstances: number;
+  readonly advisorRounds: number;
 
   constructor(opts: FilesystemTaskCellRuntimeOpts) {
     if (!Number.isInteger(opts.parallelism) || opts.parallelism < 1) throw new Error("parallelism must be >= 1");
@@ -236,6 +287,21 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     this.recorded_losses = [...opts.worker.losses];
     this.now = opts.now ?? (() => new Date().toISOString());
     this.idFactory = opts.idFactory ?? ((kind) => `${kind}-${process.pid}-${++this.seq}`);
+    const cap = opts.maxInstances ?? DEFAULT_MAX_INSTANCES;
+    if (!Number.isInteger(cap) || cap < 1) throw new Error("maxInstances must be an integer >= 1");
+    this.maxInstances = cap;
+    this.advisorRounds = opts.advisorRounds ?? resolveAdvisorRounds(null);
+  }
+
+
+  /**
+   * The transport for one instance. A `lead_only` instance gets the in-session
+   * port, so NO call reaches the real transport — not spawn, not notify, not
+   * terminate. One selector instead of a branch at each call site: a future
+   * operation added to the seam cannot forget the lead_only case.
+   */
+  private port(instanceId: string): TaskCellWorkerPort {
+    return this.leadOnly.has(instanceId) ? IN_SESSION_PORT : this.worker;
   }
 
   contentHash(content: string | Buffer): string { return `sha256:${sha256(content)}`; }
@@ -249,9 +315,46 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
   }
 
   async spawnInstance(cell: CellHandle, req: SpawnInstanceRequest): Promise<InstanceHandle> {
-    if (!this.worker.isAvailable()) throw new Error(`${this.substrate} TaskCell worker substrate is unavailable`);
     const known = this.cells.get(cell.cell_id);
     if (!known) throw new Error(`unknown cell: ${cell.cell_id}`);
+    // A lead_only cell runs in the parent session, so an unavailable transport is
+    // not its problem — requiring one would make the collapse-to-parent path
+    // depend on the substrate it exists to avoid.
+    if (known.fanout !== "lead_only" && !this.worker.isAvailable()) {
+      throw new Error(`${this.substrate} TaskCell worker substrate is unavailable`);
+    }
+    // Admission RESERVES, it does not observe: the count and the claim happen
+    // together under the run lock, and the claim IS this attempt's live marker —
+    // the `attempt.json` the real record will complete. So there is no window in
+    // which a slot is counted twice, and no window in which it is counted zero
+    // times either.
+    const attemptNumber = attemptLineage(req).attempt;
+    const claim = reserveInstance({
+      cwd: this.cwd,
+      run_id: cell.run_id,
+      logical_task_id: cell.logical_task_id,
+      attempt: attemptNumber,
+      max: this.maxInstances,
+      now: this.now,
+    });
+    if (reserveRefused(claim)) throw new Error(`${claim.failure}: ${claim.reason}`);
+    try {
+      return await this.spawnReserved(cell, known, req);
+    } catch (error) {
+      // ONLY on failure. On success the attempt record has replaced the
+      // placeholder and IS the live marker; releasing then would hand back a slot
+      // the run is still holding.
+      claim.reservation.release();
+      throw error;
+    }
+  }
+
+  private async spawnReserved(
+    cell: CellHandle,
+    known: CellHandle,
+    req: SpawnInstanceRequest,
+  ): Promise<InstanceHandle> {
+    const leadOnlyCell = known.fanout === "lead_only";
     const lineage = attemptLineage(req);
     const instanceId = this.idFactory("instance");
     const attemptId = this.idFactory("attempt");
@@ -279,7 +382,25 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
       model_id: req.model_id ?? null,
       context_bundle_id: req.context_bundle_id,
       context_bundle_hash: req.context_bundle_hash,
-      projection: req.projection,
+      // `lead_only` collapses isolation into the parent. The loss is RECORDED on
+      // the instance's own projection — the contract's home for recorded losses —
+      // so a reader of the run tree sees it without consulting a log.
+      projection: leadOnlyCell
+        ? {
+            ...req.projection,
+            recorded_losses: [
+              ...req.projection.recorded_losses,
+              {
+                capability: "task_cell.isolation",
+                mapping: "lead_only",
+                loss:
+                  `cell ${cell.cell_id} bound to lead_binding_id ` +
+                  `${known.lead.lead_binding_id ?? "unset"}; no worker process spawned, ` +
+                  `the parent's context runs the lane`,
+              },
+            ],
+          }
+        : req.projection,
       budgets: req.budgets,
       created_at: createdAt,
       started_at: null,
@@ -336,14 +457,24 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
       projection_hash: `sha256:${sha256(JSON.stringify(instance.projection))}`,
       context_bundle_bytes: contextBytes,
     });
-    const spawned = this.worker.spawn({ instance_id: instanceId, run_id: cell.run_id, assignment_path: paths.assignment_path, instance });
-    if (!spawned.ok) {
-      const failedAt = this.now();
-      sealTerminalAttempt({ cwd: this.cwd, ids: this.ids(handle), terminal_state: "failed", reason: spawned.reason ?? "spawn failed", now: () => failedAt });
-      this.emitLifecycle(instance, "failed", failedAt);
-      throw new Error(spawned.reason ?? "TaskCell worker spawn failed");
+    // `lead_only` binds the PARENT as lead and spawns nothing (TaskCell resolved
+    // decision 2). Round 1 recorded the binding and then spawned anyway, which
+    // paid for a process the cell had already decided it did not need. The
+    // records are still written — the cell is auditable either way — and the
+    // collapsed isolation is a RECORDED loss, not a silent one.
+    if (leadOnlyCell) {
+      this.leadOnly.add(instanceId);
+      this.emitLifecycle(instance, "spawned", this.now());
+    } else {
+      const spawned = this.worker.spawn({ instance_id: instanceId, run_id: cell.run_id, assignment_path: paths.assignment_path, instance });
+      if (!spawned.ok) {
+        const failedAt = this.now();
+        sealTerminalAttempt({ cwd: this.cwd, ids: this.ids(handle), terminal_state: "failed", reason: spawned.reason ?? "spawn failed", now: () => failedAt });
+        this.emitLifecycle(instance, "failed", failedAt);
+        throw new Error(spawned.reason ?? "TaskCell worker spawn failed");
+      }
+      this.emitLifecycle(instance, "spawned", this.now());
     }
-    this.emitLifecycle(instance, "spawned", this.now());
     const nextCell = Object.freeze({ ...known, instance_ids: Object.freeze([...known.instance_ids, instanceId]) });
     this.cells.set(cell.cell_id, nextCell);
     this.live.set(instanceId, { cell: nextCell, handle, state: "instantiated" });
@@ -353,8 +484,12 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
   async awaitReady(instance: InstanceHandle, _opts?: WaitOptions): Promise<AwaitReadyResult> {
     const live = this.mustLive(instance);
     if (live.state !== "instantiated") return this.failure(live, "illegal_state", `expected instantiated, got ${live.state}`);
-    const ready = this.worker.ready({ instance_id: instance.instance_id, run_id: instance.run_id });
-    if (!ready.ok) return this.forceTerminal(live, "timed_out", ready.reason ?? "worker did not become ready");
+    // Nothing was spawned for a lead_only cell, so there is no worker to probe;
+    // asking the port would be asking about a process that does not exist.
+    if (!this.leadOnly.has(instance.instance_id)) {
+      const ready = this.port(instance.instance_id).ready({ instance_id: instance.instance_id, run_id: instance.run_id });
+      if (!ready.ok) return this.forceTerminal(live, "timed_out", ready.reason ?? "worker did not become ready");
+    }
     this.transition(live, "ready");
     this.emitLifecycle(live.handle, "ready", this.now());
     return { ok: true, instance: this.snapshot(live) };
@@ -369,6 +504,33 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
         assignment.task_run_id !== instance.task_run_id || assignment.attempt !== instance.attempt) {
       return this.forceTerminal(live, "failed", "assignment identity does not match instance", "identity_mismatch");
     }
+    // KTD28, spawn side: an ISOLATED worker with no projected tool set is refused
+    // rather than handed the parent's full authority. Isolation that is claimed
+    // but not applied is worse than a recorded `lead_only` fallback, because
+    // downstream reads the assignment and believes the scope.
+    const isolated = this.isolatedSubstrate() && !this.leadOnly.has(instance.instance_id);
+    if (isolated) {
+      const spawnGate = checkProjectedTool({
+        projection: assignment.projection,
+        tool: "__spawn__",
+        isolated: true,
+      });
+      if (projectionRefused(spawnGate) && spawnGate.refusal === "unprojectable_isolated_spawn") {
+        return this.forceTerminal(live, "failed", spawnGate.reason, "not_authorized");
+      }
+    }
+    // The projection is FIXED at spawn. An assignment may drop tools from it and
+    // never add: round 1 let a cell spawned with ["Read"] be handed an assignment
+    // carrying ["Read","Bash"], and the widened set silently became the worker's
+    // authority for the rest of the lane.
+    const spawnedRecord = this.instanceRecord(instance);
+    const narrowing = projectionNarrowsOnly({
+      spawned: spawnedRecord.projection,
+      delivered: assignment.projection,
+    });
+    if (projectionRefused(narrowing)) {
+      return this.forceTerminal(live, "failed", narrowing.reason, "not_authorized");
+    }
     const gate = gateDependencies(assignment.dependencies, findRunAcceptances(this.cwd, assignment.run_id).map((x) => x.acceptance));
     if (!gate.ready) return { ...this.failure(live, "dependencies_blocked", `blocked on ${gate.blocked_on.join(", ")}`), blocked_on: gate.blocked_on };
     const assignmentPath = writeTaskAssignmentV2(this.cwd, assignment, this.binding);
@@ -376,8 +538,14 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     if (fs.existsSync(path.resolve(this.cwd, assignment.context_bundle_id))) {
       this.publish(this.instanceRecord(instance), "context", assignment.context_bundle_id, assignment.written_at, true);
     }
-    const notified = this.worker.notifyAssignment({ instance_id: instance.instance_id, run_id: instance.run_id, assignment_path: assignment.assignment_path });
-    if (!notified.ok) return this.forceTerminal(live, "failed", notified.reason ?? "assignment delivery failed");
+    if (this.leadOnly.has(instance.instance_id)) {
+      // Delivered IN-SESSION: the parent is the lead and the worker, so delivery
+      // and acknowledgement are the same act. No transport call is made at all.
+      acknowledgeAssignment(this.cwd, assignment, this.now);
+    } else {
+      const notified = this.worker.notifyAssignment({ instance_id: instance.instance_id, run_id: instance.run_id, assignment_path: assignment.assignment_path });
+      if (!notified.ok) return this.forceTerminal(live, "failed", notified.reason ?? "assignment delivery failed");
+    }
     this.transition(live, "assigned");
     this.emitLifecycle(live.handle, "assignment_delivered", this.now());
     return { ok: true, instance: this.snapshot(live), assignment, assignment_path: assignmentPath };
@@ -468,6 +636,30 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     if (live.state !== "handoff_validated") return this.failure(live, "illegal_state", `expected handoff_validated, got ${live.state}`);
     const validation = this.validationRecord(instance);
     if (!validation) return this.failure(live, "validation_failed", "missing validation record");
+    // R46: the acceptance authority may not release a cell whose done_when
+    // oracles are unsettled — and a cell that declared NO oracles has nothing to
+    // settle, so it can never reach done. The ledger is the authority here, not
+    // the receipt: a receipt on disk has never been sufficient (D5).
+    const assignment = readTaskAssignmentV2(
+      this.cwd,
+      taskCellPaths(this.ids(instance)).assignment_path,
+    );
+    if (!assignment) {
+      return this.failure(live, "malformed_assignment", "no readable assignment for this instance");
+    }
+    const ledger = readProgressLedger({
+      cwd: this.cwd,
+      run_id: instance.run_id,
+      logical_task_id: instance.logical_task_id,
+    });
+    // The ledger must be THIS assignment's. Round 1 only asked "is some ledger on
+    // disk satisfied", so an oracle-less assignment inherited a passing ledger a
+    // different assignment had written for the same logical task — a retry could
+    // be released by the previous attempt's evidence.
+    const bound = ledgerBoundToAssignment(ledger, assignment);
+    if (cellBlocked(bound)) return this.failure(live, "validation_failed", bound.reason);
+    const done = cellCanGoDone(ledger);
+    if (cellBlocked(done)) return this.failure(live, "validation_failed", done.reason);
     try {
       const acceptance = buildAcceptance({ validation, acceptancePolicyVersion: req.acceptance_policy_version, authoritiesRequired: req.authorities_required, authoritiesObserved: req.authorities_observed, reviewerCellId: req.reviewer_cell_id, now: this.now });
       writeAcceptanceRecord(this.cwd, acceptance);
@@ -520,7 +712,7 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
       if (live.state === "handoff_accepted") this.transition(live, "terminating");
       else live.state = "terminating";
     }
-    const killed = this.worker.terminate({ instance_id: instance.instance_id, run_id: instance.run_id, reason: req.reason ?? "accepted handoff" });
+    const killed = this.port(instance.instance_id).terminate({ instance_id: instance.instance_id, run_id: instance.run_id, reason: req.reason ?? "accepted handoff" });
     if (!killed.ok) {
       markAttemptOrphaned(this.cwd, this.ids(instance));
       live.state = "terminating";
@@ -547,7 +739,7 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     if (!live || live.handle.run_id !== ref.run_id) return { ok: false, reaped: false, instance: this.unknownHandle(ref), reap_attempts: 0, outcome: null };
     const attempt = this.attemptRecord(live.handle);
     if (!attempt?.orphaned || attempt.terminal_state !== null) return { ok: true, reaped: false, instance: this.snapshot(live), reap_attempts: attempt?.reap_attempts ?? 0, outcome: attempt?.terminal_state ? this.outcome(attempt) : null };
-    const killed = this.worker.terminate({ instance_id: ref.instance_id, run_id: ref.run_id, reason: "orphan reap" });
+    const killed = this.port(ref.instance_id).terminate({ instance_id: ref.instance_id, run_id: ref.run_id, reason: "orphan reap" });
     if (!killed.ok) {
       const again = markAttemptOrphaned(this.cwd, this.ids(live.handle));
       this.emitLifecycle(live.handle, "orphaned", this.now());
@@ -580,9 +772,74 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
   }
 
   private publish(instance: AgentInstanceV1, kind: Parameters<typeof publishTaskCellFile>[0]["kind"], relativePath: string, at: string, required: boolean): void {
-    const artifact = publishTaskCellFile({ cwd: this.cwd, ids: { run_id: instance.run_id, logical_task_id: instance.logical_task_id, attempt: instance.attempt, instance_id: instance.instance_id }, kind, relativePath, hostId: instance.host_id, role: "task-cell-runtime", now: () => at });
+    const artifact = publishTaskCellFile({ cwd: this.cwd, ids: { run_id: instance.run_id, logical_task_id: instance.logical_task_id, attempt: instance.attempt, instance_id: instance.instance_id }, kind, relativePath, hostId: instance.host_id, role: "task-cell-runtime", bindingRef: this.binding.binding_ref, now: () => at });
     if (required && artifact === null) throw new Error(`artifact-bus publish failed for ${kind}:${relativePath}`);
   }
+  /**
+   * True when this substrate runs workers in their OWN context (a pane, a
+   * process, a remote shell). `in-process` collapses into the parent, which is
+   * the `lead_only` shape where an empty projection is unscoped-by-design.
+   */
+  private isolatedSubstrate(): boolean {
+    return this.substrate !== "in-process";
+  }
+
+  /**
+   * The per-call projection gate the adapter routes a worker's tool call through.
+   * Off-projection FAILS CLOSED: the projection is the worker's whole authority,
+   * and a tool absent from it was never granted.
+   */
+  authorizeToolCall(instance: InstanceHandle, tool: string): { ok: true } | OpFailure {
+    const live = this.mustLive(instance);
+    const verdict = authorizeProjectedToolCall({
+      cwd: this.cwd,
+      run_id: instance.run_id,
+      logical_task_id: instance.logical_task_id,
+      attempt: instance.attempt,
+      instance_id: instance.instance_id,
+      tool,
+      isolated: this.isolatedSubstrate() && !this.leadOnly.has(instance.instance_id),
+    });
+    if (!projectionRefused(verdict)) return { ok: true };
+    return this.failure(live, "not_authorized", verdict.reason);
+  }
+
+  /**
+   * The in-cell critic call (KTD68), budget-enforced.
+   *
+   * This is the production path the advisor consult goes through, and the reason
+   * it lives on the runtime: the budget is per CELL, and the runtime is the only
+   * thing that knows which cell an instance belongs to. Exhaustion returns the
+   * block so the lead can put `next_need: budget` on its status envelope — it is
+   * not an exception, because a blocked cell is a normal reportable state.
+   */
+  consultAdvisor(instance: InstanceHandle, kind: ConsultKind = "advisor"): ConsultResult {
+    this.mustLive(instance);
+    this.ensureAdvisorBudget(instance);
+    return consumeConsult({
+      cwd: this.cwd,
+      run_id: instance.run_id,
+      logical_task_id: instance.logical_task_id,
+      kind,
+      now: this.now,
+    });
+  }
+
+  /** Idempotent: an existing budget file is NEVER reset (a retry does not refund). */
+  private ensureAdvisorBudget(instance: InstanceHandle): void {
+    if (readAdvisorBudget({ cwd: this.cwd, run_id: instance.run_id, logical_task_id: instance.logical_task_id })) {
+      return;
+    }
+    initAdvisorBudget({
+      cwd: this.cwd,
+      run_id: instance.run_id,
+      logical_task_id: instance.logical_task_id,
+      cell_id: instance.cell_id,
+      rounds_allowed: this.advisorRounds,
+      now: this.now,
+    });
+  }
+
   private ids(i: InstanceHandle): { run_id: string; logical_task_id: string; attempt: number; instance_id: string } { return { run_id: i.run_id, logical_task_id: i.logical_task_id, attempt: i.attempt, instance_id: i.instance_id }; }
   private mustLive(i: InstanceHandle): Live { const live = this.live.get(i.instance_id); if (!live || live.handle.run_id !== i.run_id) throw new Error(`unknown instance: ${i.instance_id}`); return live; }
   private snapshot(live: Live): InstanceHandle { return Object.freeze({ ...live.handle, state: live.state }); }
@@ -590,7 +847,7 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
   private failure(live: Live, failure: OpFailure["failure"], reason: string): OpFailure { return { ok: false, failure, reason, instance: this.snapshot(live) }; }
   private forceTerminal(live: Live, state: Extract<TerminalState, "failed" | "timed_out">, reason: string, failure: OpFailure["failure"] = "timed_out"): OpFailure {
     this.emitLifecycle(live.handle, "termination_started", this.now());
-    const killed = this.worker.terminate({ instance_id: live.handle.instance_id, run_id: live.handle.run_id, reason });
+    const killed = this.port(live.handle.instance_id).terminate({ instance_id: live.handle.instance_id, run_id: live.handle.run_id, reason });
     if (!killed.ok) {
       markAttemptOrphaned(this.cwd, this.ids(live.handle));
       live.state = "terminating";
