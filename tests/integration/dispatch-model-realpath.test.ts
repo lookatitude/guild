@@ -50,6 +50,7 @@ import {
   modelCatalogCacheDir,
 } from "../../src/modules/capability/workflows/catalog-cache";
 import { loadRunBinding, mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { sessionBindingPath, type SessionBinding } from "../../src/modules/config/workflows/session-binding";
 import { selfReferentialHash } from "../../src/modules/teams/workflows/canonical-hash";
 import { recordDecision, writeDecision } from "../../src/modules/teams/workflows/team-decision";
 import { composeProposal, writeProposal } from "../../src/modules/teams/workflows/team-proposal";
@@ -204,8 +205,31 @@ function runLauncher(
  * the "run-identity contract" probes at the bottom of this file — the fixtures
  * adapt to the contract; they never soften it.
  */
+/**
+ * T06/T08: the launcher copies assignment host/model ids from the run's
+ * `guild.session_binding.v1` and BLOCKS without one, so every pre-minted run
+ * tree seeds it through the same file the lifecycle writes.
+ */
+function seedSessionBinding(root: string, runId: string): void {
+  const runDir = path.join(root, ".guild", "runs", runId);
+  fs.mkdirSync(runDir, { recursive: true });
+  const binding: SessionBinding = {
+    schema_version: "guild.session_binding.v1",
+    run_id: runId,
+    host_family: "claude-code-cli",
+    surface: "cli",
+    detected_at: new Date().toISOString(),
+    models: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+    model_family: "claude",
+    prompt_compose: { dialect_id: "claude", overlay_ids: [], hash: "sha256:x" },
+    evidence: { cheap: "available", mid: "available", powerful: "available" },
+  };
+  fs.writeFileSync(sessionBindingPath(runDir), `${JSON.stringify(binding, null, 2)}\n`, "utf8");
+}
+
 function seedLifecycleRun(root: string, runId: string): string {
   const binding = mintRunBinding({ root, run_id: runId });
+  seedSessionBinding(root, runId);
   const runsDir = path.join(root, ".guild", "runs");
   fs.mkdirSync(runsDir, { recursive: true });
   fs.writeFileSync(path.join(runsDir, "current-run-id"), `${runId}\n`, "utf8");
@@ -416,6 +440,7 @@ describe("REAL PATH (F5): gated M2 selection through the production function", (
   /** Seed a bound run with verified M0+M1 evidence THROUGH the production writers. */
   function seedBoundEvidence(runId: string): string {
     const binding = mintRunBinding({ root: tmp, run_id: runId });
+    seedSessionBinding(tmp, runId);
     const report = buildModelInspection({
       session_context: {
         schema_version: "guild.session_context.v1",
@@ -674,6 +699,7 @@ describe("REAL PATH (T8R/F3): the M0 inspection report has a production writer",
     catalogModels: typeof CATALOG_MODELS = CATALOG_MODELS,
   ): string {
     const binding = mintRunBinding({ root: tmp, run_id: runId });
+    seedSessionBinding(tmp, runId);
     const sessionContext = {
       schema_version: SESSION_CONTEXT_SCHEMA,
       run_id: runId,

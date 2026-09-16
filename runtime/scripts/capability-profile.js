@@ -1432,6 +1432,9 @@ function deepFreeze(value, options = {}) {
   walk(value);
   return value;
 }
+function frozenList(items, options = {}) {
+  return deepFreeze(items.slice(), options);
+}
 
 // src/modules/kernel/workflows/path-containment.ts
 var fs6 = __toESM(require("node:fs"));
@@ -1537,6 +1540,16 @@ function checkContained(root, target, options = {}) {
   const realPath = tail === "" ? realProbe : path6.join(realProbe, tail);
   return Object.freeze({ contained: true, realRoot, realPath });
 }
+
+// src/modules/kernel/workflows/tier-bus.ts
+var BUS_TIERS = frozenList(["T0", "T1", "T2"]);
+var LEAD_ROLE_IDS = frozenList(["team-lead", "lead", "orchestrator"]);
+var TIER_BUS_CONTRACT = deepFreeze({
+  tiers: BUS_TIERS,
+  upward_envelopes: { T2: "guild.handoff.v2", T1: "guild.goal_status.v1" },
+  lead_roles: LEAD_ROLE_IDS,
+  tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
+});
 
 // src/modules/state/workflows/storage-policy.ts
 var NON_DURABLE_CLASSES = sealSet(

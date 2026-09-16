@@ -68,6 +68,7 @@ import {
 // ISSUE #94: the manifest-absent fallback for `pre_tool_use_ask` reads the same
 // capability rows the manifest is rendered from — see hostSupportsPreToolUseAsk.
 import { HOST_REGISTRY_ROWS } from "../src/modules/host-runtime/workflows/host-registry-schema.js";
+import { authorizeProjectedToolCall } from "../src/modules/dispatch/workflows/isolation-guard.js";
 import {
   effectiveBypassPolicy,
   readScopeContext,
@@ -622,6 +623,61 @@ function readMcpDescription(
     }
   }
   return undefined;
+}
+
+/**
+ * KTD19/KTD28 — the assignment's tool projection, enforced at the real seam.
+ *
+ * The worker's env carries GUILD_RUN_ID, GUILD_TASK_ID and
+ * GUILD_TASK_CELL_INSTANCE_ID (the launcher exports all three at spawn), so the
+ * hook can resolve the worker's own `guild.task_assignment.v2` from the run tree
+ * and refuse any tool outside its projection. Round 1 shipped this check with no
+ * caller; this is the caller.
+ *
+ * Absent env ⇒ NO opinion (return false): a session that is not a TaskCell worker
+ * is not projected and must not be gated by a cell's scope.
+ */
+function runProjectionGate(payload: GuildHookEvent, cwd: string): boolean {
+  const runId = process.env["GUILD_RUN_ID"];
+  const taskId = process.env["GUILD_TASK_ID"];
+  const instanceId = process.env["GUILD_TASK_CELL_INSTANCE_ID"];
+  const toolName = payload.tool_name ?? "";
+  if (
+    typeof runId !== "string" || runId.length === 0 ||
+    typeof taskId !== "string" || taskId.length === 0 ||
+    typeof instanceId !== "string" || instanceId.length === 0 ||
+    toolName.length === 0
+  ) {
+    return false;
+  }
+  const attemptRaw = process.env["GUILD_TASK_ATTEMPT"];
+  const attempt = Number.parseInt(attemptRaw ?? "1", 10);
+  let verdict: { ok: boolean; reason?: string };
+  try {
+    verdict = authorizeProjectedToolCall({
+      cwd: resolveGuildRoot(cwd),
+      run_id: runId,
+      logical_task_id: taskId,
+      attempt: Number.isInteger(attempt) && attempt >= 1 ? attempt : 1,
+      instance_id: instanceId,
+      tool: toolName,
+    });
+  } catch {
+    // A malformed identity is not a licence to run: the worker declared itself a
+    // projected cell instance and we could not verify its scope.
+    verdict = { ok: false, reason: `projection could not be resolved for ${taskId}` };
+  }
+  if (verdict.ok) return false;
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: verdict.reason ?? "tool is outside this assignment's projection",
+      },
+    }),
+  );
+  return true;
 }
 
 /**
@@ -1408,6 +1464,11 @@ export async function main(): Promise<void> {
   // Runs BEFORE the boundary guard so a security gate owns stdout for this
   // event. If it emits a permission decision, skip everything else and return.
   if (runSecurityEnforcement(payload, cwd)) return;
+
+  // KTD28 — the assignment's tool projection. AFTER the security enforcement so
+  // the security gate still owns stdout when it fires, and before anything that
+  // would let an off-projection call proceed.
+  if (runProjectionGate(payload, cwd)) return;
 
   // P5-boundary-001 — additive Guild-owned-file boundary guard. Runs for
   // EVERY Write/Edit regardless of the telemetry run-id gating below. If it

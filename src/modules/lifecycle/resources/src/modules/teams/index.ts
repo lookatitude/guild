@@ -6,3 +6,8 @@ export * from "./workflows/team-file";
 export * from "./workflows/canonical-hash";
 export * from "./workflows/station-composer";
 export * from "./workflows/station-signals";
+// U-TIER (T08): the two goal nouns and the per-goal roster slice. Exported here
+// because the orchestrator lint and the slice are consumed across domains
+// (dispatch, lifecycle) and the index is the only cross-domain import surface.
+export * from "./workflows/goal-contract";
+export * from "./workflows/compose-scope";

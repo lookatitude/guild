@@ -39,6 +39,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as yaml from "js-yaml";
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { sessionBindingPath } from "../../src/modules/config/workflows/session-binding";
 import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 import { hostCapabilityCacheFile } from "../../src/modules/state";
 
@@ -100,6 +101,21 @@ function setupConsumerRepo(
   // t7-h1-dispatch-approval.test.ts; these launcher tests use --approval-override
   // to focus on the trace-emission wiring).
   mintRunBinding({ root: tmpDir, run_id: runId });
+  // T06/T08: the launcher BLOCKS without the run's guild.session_binding.v1.
+  {
+    const runDir = path.join(tmpDir, ".guild", "runs", runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(
+      sessionBindingPath(runDir),
+      `${JSON.stringify({
+        schema_version: "guild.session_binding.v1", run_id: runId, host_family: "claude-code-cli", surface: "cli",
+        detected_at: new Date().toISOString(), models: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+        model_family: "claude", prompt_compose: { dialect_id: "claude", overlay_ids: [], hash: "sha256:x" },
+        evidence: { cheap: "available", mid: "available", powerful: "available" },
+      }, null, 2)}\n`,
+      "utf8",
+    );
+  }
   // Fix B (run-identity-and-dispatch): real (non-dry) launches emit their
   // immutable task-cells post-gates with STRICT per-task context hashing —
   // seed the default <role>-<role>.md bundles for every fixture role.

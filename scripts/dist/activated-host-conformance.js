@@ -9043,6 +9043,9 @@ function deepFreeze(value, options = {}) {
   walk(value);
   return value;
 }
+function frozenList(items, options = {}) {
+  return deepFreeze(items.slice(), options);
+}
 var SEALED_BRAND;
 var init_sealed_collections = __esm({
   "../src/modules/kernel/workflows/sealed-collections.ts"() {
@@ -9278,6 +9281,22 @@ var init_path_containment = __esm({
   }
 });
 
+// ../src/modules/kernel/workflows/tier-bus.ts
+var BUS_TIERS, LEAD_ROLE_IDS, TIER_BUS_CONTRACT;
+var init_tier_bus = __esm({
+  "../src/modules/kernel/workflows/tier-bus.ts"() {
+    init_sealed_collections();
+    BUS_TIERS = frozenList(["T0", "T1", "T2"]);
+    LEAD_ROLE_IDS = frozenList(["team-lead", "lead", "orchestrator"]);
+    TIER_BUS_CONTRACT = deepFreeze({
+      tiers: BUS_TIERS,
+      upward_envelopes: { T2: "guild.handoff.v2", T1: "guild.goal_status.v1" },
+      lead_roles: LEAD_ROLE_IDS,
+      tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
+    });
+  }
+});
+
 // ../src/modules/kernel/index.ts
 var init_kernel = __esm({
   "../src/modules/kernel/index.ts"() {
@@ -9286,6 +9305,7 @@ var init_kernel = __esm({
     init_identifier_tokenize();
     init_sealed_collections();
     init_path_containment();
+    init_tier_bus();
   }
 });
 
@@ -24190,10 +24210,92 @@ var init_no_accidental_write = __esm({
   }
 });
 
+// ../src/modules/communication/resources/src/modules/kernel/workflows/sealed-collections.ts
+function regExpWritesLastIndex2(re) {
+  return re.global || re.sticky;
+}
+function freezeRegExpSafely2(re) {
+  if (regExpWritesLastIndex2(re)) return false;
+  Object.freeze(re);
+  return true;
+}
+function isSealedCollection2(value) {
+  if (value === null || typeof value !== "object") return false;
+  if (value instanceof Set || value instanceof Map) return false;
+  const brand = value[SEALED_BRAND2];
+  return (brand === "set" || brand === "map") && Object.isFrozen(value);
+}
+function sealedCollectionValues2(value) {
+  if (!isSealedCollection2(value)) return void 0;
+  return [...value];
+}
+function deepFreeze3(value, options = {}) {
+  const policy = options.regexps ?? "safe";
+  const seen = /* @__PURE__ */ new WeakSet();
+  const walk = (node) => {
+    if (node === null || typeof node !== "object") return;
+    const obj = node;
+    if (seen.has(obj)) return;
+    seen.add(obj);
+    if (obj instanceof RegExp) {
+      if (policy === "freeze") Object.freeze(obj);
+      else if (policy === "safe") freezeRegExpSafely2(obj);
+      return;
+    }
+    if (obj instanceof Date) {
+      return;
+    }
+    if (obj instanceof Set || obj instanceof Map) {
+      throw new TypeError(
+        "deepFreeze: refusing to 'freeze' a Set/Map \u2014 freeze does not close membership and the intrinsics reach past neutered own methods. Declare it with sealSet()/sealMap()."
+      );
+    }
+    const sealedValues = sealedCollectionValues2(obj);
+    if (sealedValues !== void 0) {
+      for (const entry of sealedValues) walk(entry);
+      return;
+    }
+    Object.freeze(obj);
+    for (const key of Reflect.ownKeys(obj)) {
+      const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+      if (!descriptor || !("value" in descriptor)) continue;
+      walk(descriptor.value);
+    }
+  };
+  walk(value);
+  return value;
+}
+function frozenList2(items, options = {}) {
+  return deepFreeze3(items.slice(), options);
+}
+var SEALED_BRAND2;
+var init_sealed_collections2 = __esm({
+  "../src/modules/communication/resources/src/modules/kernel/workflows/sealed-collections.ts"() {
+    SEALED_BRAND2 = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
+  }
+});
+
+// ../src/modules/communication/resources/src/modules/kernel/workflows/tier-bus.ts
+var BUS_TIERS2, LEAD_ROLE_IDS2, TIER_BUS_CONTRACT2;
+var init_tier_bus2 = __esm({
+  "../src/modules/communication/resources/src/modules/kernel/workflows/tier-bus.ts"() {
+    init_sealed_collections2();
+    BUS_TIERS2 = frozenList2(["T0", "T1", "T2"]);
+    LEAD_ROLE_IDS2 = frozenList2(["team-lead", "lead", "orchestrator"]);
+    TIER_BUS_CONTRACT2 = deepFreeze3({
+      tiers: BUS_TIERS2,
+      upward_envelopes: { T2: "guild.handoff.v2", T1: "guild.goal_status.v1" },
+      lead_roles: LEAD_ROLE_IDS2,
+      tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
+    });
+  }
+});
+
 // ../src/modules/communication/resources/scripts/lib/artifact-bus.ts
 var TOPIC_TYPES, BUS_EVENT_KINDS;
 var init_artifact_bus = __esm({
   "../src/modules/communication/resources/scripts/lib/artifact-bus.ts"() {
+    init_tier_bus2();
     TOPIC_TYPES = Object.freeze([
       "handoff",
       "status",
@@ -24246,6 +24348,64 @@ var init_station_signals = __esm({
   }
 });
 
+// ../src/modules/teams/workflows/goal-contract.ts
+var GOAL_SCHEMA, GOAL_STATUS_SCHEMA, GOAL_STATUS_STATES, NEXT_NEEDS, WORKFLOW_CLASSES, FORBIDDEN_NESTED_SCHEMAS, ORCHESTRATOR_WINDOW, GOAL_CONTRACT;
+var init_goal_contract = __esm({
+  "../src/modules/teams/workflows/goal-contract.ts"() {
+    init_kernel();
+    GOAL_SCHEMA = "guild.goal.v1";
+    GOAL_STATUS_SCHEMA = "guild.goal_status.v1";
+    GOAL_STATUS_STATES = frozenList(["running", "blocked", "done", "failed"]);
+    NEXT_NEEDS = frozenList([
+      "ingest",
+      "evolve",
+      "create-specialist",
+      "operator",
+      "budget",
+      "verify",
+      "commit"
+    ]);
+    WORKFLOW_CLASSES = frozenList([
+      "product",
+      "research",
+      "debug",
+      "ops",
+      "init"
+    ]);
+    FORBIDDEN_NESTED_SCHEMAS = frozenList([
+      "guild.task_assignment.v2",
+      "guild.task_assignment.v1",
+      "guild.handoff_receipt.v1",
+      "guild.handoff.v2"
+    ]);
+    ORCHESTRATOR_WINDOW = 5;
+    GOAL_CONTRACT = deepFreeze({
+      intent: GOAL_SCHEMA,
+      rollup: GOAL_STATUS_SCHEMA,
+      window: ORCHESTRATOR_WINDOW,
+      states: GOAL_STATUS_STATES,
+      next_needs: NEXT_NEEDS,
+      classes: WORKFLOW_CLASSES
+    });
+  }
+});
+
+// ../src/modules/teams/workflows/compose-scope.ts
+var COMPOSE_SCOPES, MINTING_CLASSES, COMPOSE_SCOPE_CONTRACT;
+var init_compose_scope = __esm({
+  "../src/modules/teams/workflows/compose-scope.ts"() {
+    init_kernel();
+    COMPOSE_SCOPES = frozenList(["phase", "goal"]);
+    MINTING_CLASSES = frozenList(["product", "init"]);
+    COMPOSE_SCOPE_CONTRACT = deepFreeze({
+      policy_key: "team.compose_scope",
+      scopes: COMPOSE_SCOPES,
+      default: "phase",
+      minting_classes: MINTING_CLASSES
+    });
+  }
+});
+
 // ../src/modules/teams/index.ts
 var init_teams = __esm({
   "../src/modules/teams/index.ts"() {
@@ -24253,6 +24413,8 @@ var init_teams = __esm({
     init_canonical_hash();
     init_station_composer();
     init_station_signals();
+    init_goal_contract();
+    init_compose_scope();
   }
 });
 
@@ -24715,6 +24877,14 @@ var init_policy_keys = __esm({
         values: ["auto", "team", "agent", "subagent"],
         default: "auto",
         note: "dispatch backend PREFERENCE only; never a statement about which host is running"
+      },
+      {
+        key: "dispatch.max_instances",
+        type: "integer",
+        min: 1,
+        max: 32,
+        default: 4,
+        note: "live worker instances one run may hold at once; CONCURRENCY, not a roster cap (R46/KTD30)"
       }
     ]);
     BY_KEY = new Map(POLICY_KEYS.map((s) => [s.key, s]));
@@ -26527,10 +26697,10 @@ var init_write_task_run = __esm({
 });
 
 // ../src/modules/lifecycle/workflows/workflow-graph-overlay.ts
-var WORKFLOW_CLASSES, WORKFLOW_EDGE_OUTCOMES, PROTECTED_NODE_IDS, RELEASE_GATE, PROTECTED_NODE_STATIONS, PROTECTED_NODE_ROLES, RELEASE_ROLE, CLASS_DEFAULT_ENTRIES;
+var WORKFLOW_CLASSES2, WORKFLOW_EDGE_OUTCOMES, PROTECTED_NODE_IDS, RELEASE_GATE, PROTECTED_NODE_STATIONS, PROTECTED_NODE_ROLES, RELEASE_ROLE, CLASS_DEFAULT_ENTRIES;
 var init_workflow_graph_overlay = __esm({
   "../src/modules/lifecycle/workflows/workflow-graph-overlay.ts"() {
-    WORKFLOW_CLASSES = Object.freeze(["product", "research", "debug", "ops", "init"]);
+    WORKFLOW_CLASSES2 = Object.freeze(["product", "research", "debug", "ops", "init"]);
     WORKFLOW_EDGE_OUTCOMES = Object.freeze([
       "next",
       "skip",
@@ -26593,6 +26763,7 @@ var init_lifecycle = __esm({
     init_write_run_manifest();
     init_write_task_run();
     init_workflow_graph_overlay();
+    init_stable_lock();
   }
 });
 
@@ -26942,9 +27113,105 @@ init_capability();
 init_lifecycle();
 init_capability();
 
+// ../src/modules/dispatch/workflows/instance-cap.ts
+init_kernel();
+init_lifecycle();
+var DEFAULT_MAX_INSTANCES = 4;
+var INSTANCE_CAP_FAILURE = "not_authorized";
+var INSTANCE_RESERVATION_SCHEMA = "guild.instance_reservation.v1";
+var INSTANCE_CAP_CONTRACT = deepFreeze({
+  policy_key: "dispatch.max_instances",
+  default: DEFAULT_MAX_INSTANCES,
+  failure: INSTANCE_CAP_FAILURE,
+  admission_entry: "reserveInstance",
+  reservation_schema: INSTANCE_RESERVATION_SCHEMA,
+  note: "the reservation IS the attempt's live marker; there is no observe-only admission"
+});
+
 // ../src/modules/dispatch/workflows/task-cell-acceptance.ts
 init_documents();
 init_kernel();
+
+// ../src/modules/dispatch/workflows/progress-ledger.ts
+init_kernel();
+var PROGRESS_LEDGER_SCHEMA = "guild.progress_ledger.v1";
+var DONE_WHEN_ORACLE_KINDS = frozenList([
+  /** The adapter's inner verify hook (native | wrapped | skip-recorded). */
+  "verify.after_edit",
+  /** A named check the project already defines (lint id, test id, script id). */
+  "named_check",
+  /** An exact command that must exit 0. */
+  "command",
+  /** A file the assignment's scope says must exist after the lane runs. */
+  "artifact_exists",
+  /** An upstream `guild.handoff_acceptance.v1` record that must be durable. */
+  "acceptance_record"
+]);
+var LEDGER_ITEM_STATES = frozenList([
+  "pending",
+  "running",
+  "pass",
+  "fail",
+  "skip-recorded"
+]);
+var CELL_LAST_FAILURES = frozenList([
+  "retry",
+  "replan",
+  "escalate",
+  "skip-recorded"
+]);
+var PROGRESS_LEDGER_CONTRACT = deepFreeze({
+  schema: PROGRESS_LEDGER_SCHEMA,
+  oracle_kinds: DONE_WHEN_ORACLE_KINDS,
+  item_states: LEDGER_ITEM_STATES,
+  last_failures: CELL_LAST_FAILURES
+});
+
+// ../src/modules/dispatch/workflows/isolation-guard.ts
+init_kernel();
+init_kernel();
+var ISOLATION_CONTRACT = deepFreeze({
+  projection: "fixed at spawn; an assignment may only narrow it",
+  tool_gate: "authorizeProjectedToolCall (PreToolUse seam, disk-backed)",
+  bus: TIER_BUS_CONTRACT
+});
+
+// ../src/modules/dispatch/workflows/advisor-budget.ts
+init_kernel();
+var ADVISOR_BUDGET_SCHEMA = "guild.advisor_budget.v1";
+var DEFAULT_ADVISOR_ROUNDS = 2;
+var CONSULT_KINDS = frozenList([
+  /** A real advisor escalation. THE decrementing kind. */
+  "advisor",
+  /** Security probe over untrusted text. Never decrements (KTD61). */
+  "d-probe",
+  /** The adapter's verify.after_edit hook. Never decrements. */
+  "inner-verify",
+  /** BM25 recall during harvest. Never decrements. */
+  "harvest-bm25",
+  /** Compile / SessionStart marker read. Never decrements. */
+  "machinery"
+]);
+var ADVISOR_BUDGET_CONTRACT = deepFreeze({
+  schema: ADVISOR_BUDGET_SCHEMA,
+  policy_key: "advisorRounds",
+  default: DEFAULT_ADVISOR_ROUNDS,
+  consult_kinds: CONSULT_KINDS,
+  decrementing_kinds: frozenList(["advisor"])
+});
+
+// ../src/modules/dispatch/workflows/task-cell-runtime.ts
+var IN_SESSION_PORT = Object.freeze({
+  mode: "degraded",
+  losses: Object.freeze([
+    "no_isolation: lead_only binds the parent session; no worker process, no transport"
+  ]),
+  isAvailable: () => true,
+  spawn: () => ({ ok: true, reason: null }),
+  ready: () => ({ ok: true, reason: null }),
+  notifyAssignment: () => ({ ok: true, reason: null }),
+  terminate: () => ({ ok: true, reason: null })
+});
 
 // ../src/modules/dispatch/workflows/task-cell-telemetry-reconcile.ts
 init_telemetry();
@@ -27051,6 +27318,15 @@ var DEFINITION_REF_KEYS = Object.freeze([
   "skills"
 ]);
 var PINNED_SKILL_KEYS = Object.freeze(["id", "relative_path", "content_hash"]);
+
+// ../src/modules/dispatch/workflows/assignment-binding.ts
+init_config2();
+init_kernel();
+var ASSIGNMENT_BINDING_CONTRACT = deepFreeze({
+  source: "guild.session_binding.v1",
+  blocks: ["no_binding", "unknown_host", "no_model_for_tier"],
+  never: "config, initiative inventory, or a host default"
+});
 
 // ../src/modules/lifecycle/workflows/run-record-validate.ts
 var RUN_RECORD_FINDING_CODES = Object.freeze([

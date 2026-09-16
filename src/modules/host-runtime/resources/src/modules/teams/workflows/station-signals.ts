@@ -300,6 +300,24 @@ function stationTopic(kind: typeof TEAM_PLAN_DIR | typeof TEAM_RESULT_DIR, stati
     : `handoff/station/${station}/team-result`;
 }
 
+/**
+ * The run's minted `binding_ref`, proving this write is machinery (KTD19).
+ *
+ * The team-result topic is `handoff/…`, which the bus gates, and the tier is now
+ * authenticated rather than declared. Empty string authenticates as nothing, so
+ * an unreadable binding fails the publish closed instead of passing as a lead.
+ */
+function runBindingRef(runDir: string): string {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(runDir, "binding.json"), "utf8")) as {
+      binding_ref?: unknown;
+    };
+    return typeof parsed.binding_ref === "string" ? parsed.binding_ref : "";
+  } catch {
+    return "";
+  }
+}
+
 function publishTeamArtifact(
   cwd: string,
   runId: string,
@@ -317,6 +335,7 @@ function publishTeamArtifact(
     content: bytes,
     artifactPath: relativePath,
     publisher: opts.publisher ?? { host_id: process.env.GUILD_HOST_ID ?? "guild-runtime", role: "station-composer" },
+    identity: { kind: "runtime", binding_ref: runBindingRef(runDir) },
     now: opts.now ?? (() => new Date().toISOString()),
   });
   if (!event?.sha256) {

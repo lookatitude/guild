@@ -5,7 +5,14 @@
   "kind": "substrate",
   "implementation_mode": "workflow-backed",
   "description": "Owns machine-readable handoff, liveness, and communication-format linting surfaces.",
-  "depends_on": ["distribution", "kernel", "state"],
+  "depends_on": [
+    "distribution",
+    "kernel",
+    "state"
+  ],
+  "resource_projection_entrypoints": [
+    "lib/artifact-bus"
+  ],
   "owns": {
     "hooks": [
       "PostToolUse:comms-format-lint.js",

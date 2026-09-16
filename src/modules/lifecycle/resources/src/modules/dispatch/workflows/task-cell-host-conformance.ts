@@ -7,12 +7,18 @@ import { loadRunBinding, mintRunBinding } from "../../lifecycle";
 import { readTaskCellLifecycleEvents } from "../../telemetry";
 import { auditTaskCellArtifactJoin } from "./task-cell-artifact-join";
 import {
+  assignmentId,
   buildTaskAssignmentV2,
   taskCellPaths,
   validateTaskAssignmentV2,
   type TaskAssignmentV2,
 } from "./task-cell-contract";
 import { acknowledgeAssignment } from "./task-assignment-v2";
+import {
+  initProgressLedger,
+  recordOracleOutcome,
+  type DoneWhenItem,
+} from "./progress-ledger";
 import {
   FilesystemTaskCellRuntime,
   type TaskCellMechanicsMode,
@@ -530,6 +536,25 @@ export async function runTaskCellHostConformance(
         deadline: null,
         written_at: now(),
       });
+      // R46: every cell declares its oracles. The conformance probe's oracle is
+      // the structured-result check it already performs, named so the ledger can
+      // settle it — the probe is not exempt from the law it is verifying.
+      const doneWhen: DoneWhenItem[] = [
+        { id: "structured_result", oracle: "named_check", target: "task-cell-host-conformance" },
+      ];
+      (assignment as TaskAssignmentV2 & { done_when?: DoneWhenItem[] }).done_when = doneWhen;
+      const ledger = initProgressLedger({
+        cwd,
+        run_id: input.run_id,
+        logical_task_id: cell.logical_task_id,
+        cell_id: cell.cell_id,
+        // Bound to THIS attempt's assignment: the retry attempt below must settle
+        // its own oracle, not inherit attempt 1's.
+        assignment_id: assignmentId(assignment),
+        done_when: doneWhen,
+        now,
+      });
+      if (!ledger.ok) throw new Error(`conformance ledger refused: ${(ledger as { reason: string }).reason}`);
       const delivered = await runtime.deliverAssignment(instance, assignment);
       if (!delivered.ok) throw new Error(failureReason(delivered));
       const acknowledged = await runtime.awaitAssignmentAck(instance);
@@ -538,6 +563,17 @@ export async function runTaskCellHostConformance(
       if (!heartbeat.ok) throw new Error("heartbeat failed");
       const collected = await runtime.collectHandoff(instance);
       if (!collected.ok) throw new Error(failureReason(collected));
+      // The deterministic floor passed, so the named oracle is settled. Acceptance
+      // reads the ledger; it never takes the receipt's word for completion (D5).
+      const settled = recordOracleOutcome({
+        cwd,
+        run_id: input.run_id,
+        logical_task_id: cell.logical_task_id,
+        item_id: "structured_result",
+        state: "pass",
+        now,
+      });
+      if (!settled.ok) throw new Error(`conformance oracle not settled: ${(settled as { reason: string }).reason}`);
       const accepted = await runtime.acceptHandoff(instance, {
         acceptance_policy_version: "G9.1",
         authorities_required: ["deterministic_floor", "team_lead"],

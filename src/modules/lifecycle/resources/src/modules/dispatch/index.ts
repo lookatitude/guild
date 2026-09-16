@@ -18,3 +18,12 @@ export * from "./workflows/task-cell-host-conformance";
 // tmux/ssh implementation, wrapper, or launcher into a consumer.
 export * from "./workflows/execution-transport-ports";
 export * from "./workflows/execution-transport-adapters";
+
+// U-TIER (T08): cell completion oracles + ledger, the instance cap, structural
+// isolation, the advisor round budget, and the session-binding copy that gives
+// an assignment its host/model ids.
+export * from "./workflows/progress-ledger";
+export * from "./workflows/instance-cap";
+export * from "./workflows/isolation-guard";
+export * from "./workflows/advisor-budget";
+export * from "./workflows/assignment-binding";

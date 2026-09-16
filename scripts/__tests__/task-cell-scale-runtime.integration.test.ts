@@ -9,8 +9,14 @@ import {
 import { auditTaskCellScaleRecords, type TaskCellCapabilityIndex } from "../../src/modules/dispatch/workflows/task-cell-scale-audit";
 import { acknowledgeAssignment } from "../../src/modules/dispatch/workflows/task-assignment-v2";
 import { publishSubmittedHandoffPointer } from "../../src/modules/dispatch/workflows/task-cell-acceptance";
+import {
+  initProgressLedger,
+  readProgressLedger,
+  recordOracleOutcome,
+} from "../../src/modules/dispatch/workflows/progress-ledger";
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 import {
+  assignmentId,
   buildTaskAssignmentV2,
   taskCellPaths,
   type CellHandle,
@@ -124,6 +130,10 @@ describe("TaskCell production record-runtime scale proof", () => {
         deadline: null,
         written_at: NOW(),
       });
+      // R46 (T08 rework): every dispatch declares its own oracles.
+      (assignment as typeof assignment & { done_when?: unknown }).done_when = [
+        { id: "floor", oracle: "named_check", target: "deterministic_floor" },
+      ];
       expect((await runtime.deliverAssignment(instance, assignment)).ok).toBe(true);
       acknowledgeAssignment(cwd, assignment, NOW);
       expect((await runtime.awaitAssignmentAck(instance)).ok).toBe(true);
@@ -194,6 +204,23 @@ describe("TaskCell production record-runtime scale proof", () => {
       fs.writeFileSync(path.join(cwd, receiptPath), receiptBytes);
       expect(publishSubmittedHandoffPointer({ cwd, assignment, submittedAt: NOW() })).not.toBeNull();
       expect((await runtime.collectHandoff(instance)).ok).toBe(true);
+      // R46 (T08): acceptance reads the cell's done_when ledger, so every cell in
+      // the scale proof declares and settles one oracle.
+      const ledgerIds = { cwd, run_id: runId, logical_task_id: instance.logical_task_id };
+      // The ledger is bound to THIS attempt's assignment (T08 rework): a retry
+      // writes a new assignment id and must not inherit the prior one's evidence.
+      const boundAssignmentId = assignmentId(assignment);
+      const existing = readProgressLedger(ledgerIds);
+      if (!existing || existing.assignment_id !== boundAssignmentId) {
+        initProgressLedger({
+          ...ledgerIds,
+          cell_id: `cell-${instance.logical_task_id}`,
+          assignment_id: boundAssignmentId,
+          done_when: [{ id: "floor", oracle: "named_check", target: "deterministic_floor" }],
+          now: NOW,
+        });
+      }
+      recordOracleOutcome({ ...ledgerIds, item_id: "floor", state: "pass", now: NOW });
       const authorities = [
         { authority: "deterministic_floor" as const, decision: "accepted" as const, at: NOW(), reason: null },
         { authority: "team_lead" as const, decision: reject ? "rejected" as const : "accepted" as const, at: NOW(), reason: reject ? "retry" : null },

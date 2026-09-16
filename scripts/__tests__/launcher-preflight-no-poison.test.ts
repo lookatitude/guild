@@ -30,6 +30,25 @@ import * as fs from "fs";
 import * as os from "os";
 import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
+// T06/T08: the launcher copies assignment host/model ids from the run's
+// guild.session_binding.v1 and BLOCKS without one; every pre-minted run tree
+// seeds it through the same file the lifecycle writes.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const __sessionBinding = require("../../src/modules/config/workflows/session-binding") as
+  typeof import("../../src/modules/config/workflows/session-binding");
+function __seedSessionBinding(root: string, runId: string): void {
+  const runDir = path.join(root, ".guild", "runs", runId);
+  const file = __sessionBinding.sessionBindingPath(runDir);
+  if (fs.existsSync(file)) return;
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify({
+    schema_version: "guild.session_binding.v1", run_id: runId, host_family: "claude-code-cli", surface: "cli",
+    detected_at: new Date().toISOString(), models: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+    model_family: "claude", prompt_compose: { dialect_id: "claude", overlay_ids: [], hash: "sha256:x" },
+    evidence: { cheap: "available", mid: "available", powerful: "available" },
+  }, null, 2)}\n`, "utf8");
+}
+
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const binding = require("../../src/modules/lifecycle/workflows/run-binding") as
   typeof import("../../src/modules/lifecycle/workflows/run-binding");
@@ -49,6 +68,7 @@ function seedRepo(tmpDir: string): { teamPath: string } {
   fs.mkdirSync(runsRoot, { recursive: true });
   fs.writeFileSync(path.join(runsRoot, "current-run-id"), `${RUN_ID}\n`, "utf8");
   binding.mintRunBinding({ root: tmpDir, run_id: RUN_ID });
+  __seedSessionBinding(tmpDir, RUN_ID);
   const ctxDir = path.join(tmpDir, ".guild", "context", RUN_ID);
   fs.mkdirSync(ctxDir, { recursive: true });
   for (const role of ["architect", "backend", "qa", "security"]) {

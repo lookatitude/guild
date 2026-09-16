@@ -197,6 +197,15 @@ import { readRoutingFlags } from "../src/modules/capability/workflows/routing-ro
 // from the SAME unpack point the legacy path uses (models.tiers), never a
 // parallel implementation.
 import { resolveTierModel } from "../src/modules/config/workflows/tier-model";
+import { readSessionBinding } from "../src/modules/config/workflows/session-binding";
+import { createGuildStorage } from "./lib/state/storage";
+import { resolvePolicy } from "../src/modules/config/workflows/policy-resolver";
+import { resolveAssignmentBinding } from "../src/modules/dispatch/workflows/assignment-binding";
+import {
+  reserveInstanceBatch,
+  reserveRefused,
+  resolveMaxInstances,
+} from "../src/modules/dispatch/workflows/instance-cap";
 // R-016a: bounded retry for the ONE TS-level dispatch call site (RemoteTeamBackend.launch).
 import { runWithRetry, loadRetryOpts } from "./retry-lane";
 // R-016 bridge: on retry exhaustion, mark each remote lane dead via the shared writer.
@@ -1319,14 +1328,33 @@ function hostCapabilitiesHash(cwd: string, runId: string, hostId: string, dryRun
   throw new Error(`no capability manifest or registry snapshot for selected host: ${hostId}`);
 }
 
-function emitTaskCellsV2(
+/**
+ * Resolved policy for the cap, or null when policy cannot be read.
+ *
+ * A null resolves to the BUILT-IN default (4), never to unbounded: a project
+ * whose config file is missing or malformed gets the conservative cap, not a
+ * free pass.
+ */
+function readPolicyForRun(cwd: string): Record<string, unknown> | null {
+  try {
+    return resolvePolicy({ cwd }).policy;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Exported so a fixture can drive the EXACT function every launcher path calls
+ * before it spawns anything — the binding block and the run-scoped admission
+ * below are only meaningful if they are proven on this code, not on a copy.
+ */
+export function emitTaskCellsV2(
   cwd: string,
   runId: string,
   slug: string,
   specialists: readonly TaskCellLaunchLane[],
   phaseId: string,
   substrate: TaskCellSubstrate,
-  hostIdFor: (specialist: TaskCellLaunchLane) => string,
   bindingRef: string | null,
   dryRun: boolean,
 ): number {
@@ -1344,12 +1372,56 @@ function emitTaskCellsV2(
   // next real launch. Pre-fix, this flag only relaxed hash computation while
   // the writes below still ran unconditionally.
   if (dryRun) return 0;
+  // KTD22: the run's session binding is AUTHORITATIVE for assignment host and
+  // model ids when it exists. Host detection and config are not: an initiative
+  // that continues on another host must not inherit yesterday's provider.
+  const runDir = createGuildStorage(cwd, { activeRoot: cwd, profile: "standalone" }).project!.runRecord(runId);
+  // NO FALLBACK. Round 1 fell back to host detection when the run carried no
+  // binding, which is the "unknown host quietly becomes Claude" path KTD22
+  // exists to close — the absence of a binding is exactly the case where nobody
+  // established which host this run is on.
+  if (readSessionBinding(runDir) === null) {
+    throw new Error(
+      `binding_blocked: run ${runId} carries no guild.session_binding.v1 — ` +
+        `refusing to emit guild.task_assignment.v2 cells. Assignment host and ` +
+        `model ids are copied from the run binding; bind the run first (KTD22).`,
+    );
+  }
+  // R46: THE admission entry, the same one `spawnInstance` uses. Each lane's slot
+  // is CLAIMED here — the claim is the lane's own `attempt.json`, which the cell
+  // records below complete — so two interleaved launcher passes over one run
+  // cannot both be admitted. Round 3 found this path still calling an
+  // observe-only check while the claim existed only on the runtime.
+  const admission = reserveInstanceBatch({
+    cwd,
+    run_id: runId,
+    max: resolveMaxInstances(readPolicyForRun(cwd)),
+    lanes: specialists.map((s) => ({ logical_task_id: s.taskId, attempt: 1 })),
+  });
+  if (reserveRefused(admission)) {
+    throw new Error(`${admission.failure}: ${admission.reason}`);
+  }
+  const claimed = admission.reservations;
+  /** Hand every still-unconsumed claim back; a failed emit leaves no slot held. */
+  const releaseClaims = (): void => {
+    for (const claim of claimed) claim.release();
+  };
   let written = 0;
   // Resolved decision 2: the launcher reuses the parent orchestrator as lead, so
   // every cell carries a `lead_binding_id` (no distinct Team Lead instance minted).
   const leadBindingId = `lead-binding-${safeSegment(slug)}`;
+  try {
   for (const s of specialists) {
-    const hostId = hostIdFor(s);
+    const tier = s.tier ?? s.default_tier ?? "mid";
+    const bound = resolveAssignmentBinding({ runDir, tier });
+    if (!bound.ok) {
+      throw new Error(
+        `binding_blocked: refusing to emit guild.task_assignment.v2 for ` +
+          `${s.name}/${s.taskId} — ${(bound as { reason: string }).reason}`,
+      );
+    }
+    const hostId = bound.host_id;
+    const boundModelId = bound.model_id;
     const logicalTaskId = s.taskId;
     const identity = specialistIdentity(cwd, runId, bindingRef, logicalTaskId, s);
     const compatibilityRecordedAtMillis = identity.compatibilityRecordedAt === null
@@ -1390,8 +1462,10 @@ function emitTaskCellsV2(
         adapterId: `${hostId}@${ADAPTER_VERSION}`,
         hostCapabilitiesHash: hostCapabilitiesHash(cwd, runId, hostId, dryRun),
         substrate,
-        modelTier: s.tier ?? s.default_tier ?? "mid",
-        modelId: s.modelProvenance?.selected_model ?? null,
+        modelTier: tier,
+        // The binding's id wins when the run is bound; lane provenance is the
+        // pre-binding fallback, never an override of the run's own snapshot.
+        modelId: boundModelId ?? s.modelProvenance?.selected_model ?? null,
         // objective must be non-empty (D6 fail-closed); fall back for a degenerate
         // team file rather than dropping the lane silently.
         objective: s.scope && s.scope.length > 0 ? s.scope : `implement ${logicalTaskId}`,
@@ -1412,6 +1486,13 @@ function emitTaskCellsV2(
     });
     writeTaskCell(cwd, cell, { binding_ref: bindingRef });
     written += 1;
+  }
+  } catch (error) {
+    // A refused or malformed lane aborts the whole emit, so no claim may survive
+    // it. Release is placeholder-only: lanes whose real attempt record already
+    // landed keep their slot, exactly as a live attempt should.
+    releaseClaims();
+    throw error;
   }
   return written;
 }
@@ -2762,9 +2843,6 @@ async function main(): Promise<void> {
         lanes,
         phaseId,
         "cmux",
-        (lane) =>
-          hostKindToRegistryId(lane.host_kind ?? orchestratorHostKind) ||
-          String(lane.host_kind ?? orchestratorHostKind),
         bindingRef,
         args.dryRun,
       );
@@ -2894,7 +2972,9 @@ async function main(): Promise<void> {
       for (const lane of launchLanes) planLaneModel(lane, lane.taskId);
       if (!args.dryRun) {
         const phaseId = phaseFromTeamPath(args.team) ?? "build";
-        const hostId = hostKindToRegistryId(orchestratorHostKind ?? "claude") || String(orchestratorHostKind ?? "claude");
+        // The host id is NOT derived here any more: it is copied from the run's
+        // guild.session_binding.v1 inside emitTaskCellsV2 (KTD22), so the
+        // `?? "claude"` default that used to live on this line is gone.
         const written = emitTaskCellsV2(
           cwd,
           runId,
@@ -2902,7 +2982,6 @@ async function main(): Promise<void> {
           launchLanes,
           phaseId,
           "in-process",
-          () => hostId,
           bindingRef,
           args.dryRun,
         );
@@ -3385,11 +3464,6 @@ async function main(): Promise<void> {
             remoteLaunchLanes,
             phaseId,
             "remote",
-            (lane) => {
-              const route = routes.find((candidate) => candidate.specialist === lane.name);
-              if (!route) throw new Error(`missing selected remote host for ${lane.name}`);
-              return route.decision.host;
-            },
             launchBindingRef,
             args.dryRun || args.runId === null,
           );
@@ -3798,10 +3872,6 @@ async function main(): Promise<void> {
       team.specialists as TaskCellLaunchLane[],
       phaseId,
       "tmux",
-      (lane) =>
-        routedHostByRole.get(lane.name) ??
-        hostKindToRegistryId(lane.host_kind ?? orchestratorHostKind) ??
-        String(lane.host_kind ?? orchestratorHostKind),
       launchBindingRef,
       args.dryRun || args.runId === null,
     );

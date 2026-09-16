@@ -57,11 +57,38 @@ export interface PublishTaskCellFileInput {
   relativePath: string;
   hostId: string;
   role: string;
+  /**
+   * The run's minted `binding_ref` — the runtime-issued identity the bus
+   * authenticates this write against (KTD19). Round 2 removed the self-declared
+   * `tier` this replaced: machinery proves what it is, it does not say so.
+   *
+   * Optional only because two machinery call sites (`acknowledgeAssignment`, the
+   * acceptance publisher) are reached without a dispatch envelope; absent, it is
+   * read from the run's own binding record.
+   */
+  bindingRef?: string;
   now: () => string;
 }
 
 function runDir(cwd: string, runId: string): string {
   return path.join(cwd, ".guild", "runs", runId);
+}
+
+/**
+ * The run's minted `binding_ref` from its own binding record.
+ *
+ * Empty string when unreadable, which authenticates as NOTHING — a gated publish
+ * without a provable identity is refused rather than waved through.
+ */
+function readRunBindingRef(dir: string): string {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(dir, "binding.json"), "utf8")) as {
+      binding_ref?: unknown;
+    };
+    return typeof parsed.binding_ref === "string" ? parsed.binding_ref : "";
+  } catch {
+    return "";
+  }
 }
 
 function topic(kind: TaskCellArtifactKind, ids: TaskCellCoordinates): string {
@@ -99,7 +126,15 @@ export function publishTaskCellFile(
     topic: topic(input.kind, input.ids),
     content,
     artifactPath: input.relativePath,
+    // The TaskCell record join is CODE-OWNED: the runtime and the launcher write
+    // the cell's own records on the lead's side of the boundary. `role` stays the
+    // worker role for provenance; the TIER is proved by the run's minted
+    // binding_ref, which a worker process does not hold.
     publisher: { host_id: input.hostId, role: input.role },
+    identity: {
+      kind: "runtime",
+      binding_ref: input.bindingRef ?? readRunBindingRef(runDir(input.cwd, input.ids.run_id)),
+    },
     now: input.now,
   });
   if (!event || event.sha256 === null) return null;

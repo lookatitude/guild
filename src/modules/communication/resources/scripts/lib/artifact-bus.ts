@@ -26,6 +26,17 @@ import * as fs from "fs";
 import * as path from "path";
 import { createHash } from "crypto";
 
+// KTD19: the bus is where the T0/T1/T2 edges actually pass, so the tier rule is
+// enforced HERE. It lives in the kernel (not `dispatch`) so this import does not
+// close a dispatch↔communication cycle.
+import {
+  authenticateBusTier,
+  busRefused,
+  checkBusPublish,
+  type BusIdentity,
+  type BusTier,
+} from "../../src/modules/kernel/workflows/tier-bus";
+
 // JSON is a strict subset of YAML. New bus metadata is therefore emitted as
 // deterministic JSON bytes under the existing `.yaml` filenames, eliminating
 // a load-time runtime dependency for installed/source-projected consumers.
@@ -77,6 +88,15 @@ export type SubscriberCallback = "hook" | "poll" | "webhook-url";
 export interface BusPublisher {
   host_id: string;
   role: string;
+  /**
+   * The tier the publisher BELIEVES it holds (KTD19).
+   *
+   * Advisory only, and cross-checked: the authoritative tier comes from the
+   * `identity` on the publish, resolved against durable state. A value here that
+   * disagrees with the authenticated tier is refused as `tier_spoofed` rather
+   * than corrected — a component asserting a tier it does not hold is a bug.
+   */
+  tier?: BusTier;
 }
 
 export interface BusEventV1 {
@@ -409,7 +429,28 @@ export interface PublishInput {
   /** Streaming chunk byte offset (D-BUS-4); null for whole artifacts. */
   byteOffset?: number | null;
   publisher: BusPublisher;
+  /** The envelope schema this artifact carries, when the publisher names one. */
+  envelope?: string;
+  /**
+   * The runtime-issued identity behind this publish (KTD19). REQUIRED on a gated
+   * topic (`status/**`, `handoff/**`); ignored on intra-cell plumbing.
+   */
+  identity?: BusIdentity;
   now: () => string;
+}
+
+/**
+ * Why the last `publish` returned null.
+ *
+ * `publish` is fail-closed-by-null (an invalid topic, an unknown event kind, a
+ * contended lock), and a tier refusal must not be mistaken for any of those. The
+ * reason is recorded here so a caller — and a fixture — can tell "refused by the
+ * isolation rule" from "retry, the lock was busy".
+ */
+let lastBusRefusal: string | null = null;
+
+export function lastBusPublishRefusal(): string | null {
+  return lastBusRefusal;
 }
 
 /**
@@ -420,6 +461,25 @@ export interface PublishInput {
  */
 export function publish(runDir: string, input: PublishInput): BusEventV1 | null {
   if (!isValidTopic(input.topic)) return null;
+  // Structural isolation, enforced on the real message path. A specialist
+  // publishing to a `status/` topic is "a specialist addressed the orchestrator"
+  // (KTD19) and is refused here rather than being caught by a later reader.
+  if (input.publisher) {
+    const tier = checkBusPublish({
+      topic: input.topic,
+      publisher: { role: input.publisher.role, tier: input.publisher.tier },
+      envelope: input.envelope,
+      authenticated:
+        input.identity === undefined
+          ? undefined
+          : authenticateBusTier(input.identity, readIdentityFacts(runDir, input.identity)),
+    });
+    if (busRefused(tier)) {
+      lastBusRefusal = tier.reason;
+      return null;
+    }
+  }
+  lastBusRefusal = null;
   const type = topicType(input.topic)!;
   const event = input.event ?? "artifact.published";
   // Fail-closed: reject an unknown event kind before any write.
@@ -463,6 +523,47 @@ export function publish(runDir: string, input: PublishInput): BusEventV1 | null 
   } catch (err) {
     if (err instanceof BusLockTimeout) return null; // contended → caller retries
     throw err;
+  }
+}
+
+/**
+ * Read the durable facts that prove a publisher's identity.
+ *
+ * Deliberately the only place that touches disk for this: the rule itself is
+ * pure (`authenticateBusTier`), so the thing a reviewer has to trust is these
+ * two reads — the attempt record under the cell, and the run's minted binding.
+ */
+function readIdentityFacts(runDir: string, identity: BusIdentity): {
+  attempt_instance_id?: string | null;
+  run_binding_ref?: string | null;
+} {
+  if (identity.kind === "attempt") {
+    const file = path.join(
+      runDir,
+      "task-cells",
+      identity.logical_task_id,
+      "attempts",
+      String(identity.attempt),
+      "attempt.json",
+    );
+    try {
+      const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as { instance_id?: unknown };
+      return {
+        attempt_instance_id: typeof parsed.instance_id === "string" ? parsed.instance_id : null,
+      };
+    } catch {
+      return { attempt_instance_id: null };
+    }
+  }
+  // The run binding sits at the run record root: `<run_dir>/binding.json`
+  // (`runBindingPath`). Read by name so this module keeps no lifecycle import.
+  try {
+    const parsed = JSON.parse(
+      fs.readFileSync(path.join(runDir, "binding.json"), "utf8"),
+    ) as { binding_ref?: unknown };
+    return { run_binding_ref: typeof parsed.binding_ref === "string" ? parsed.binding_ref : null };
+  } catch {
+    return { run_binding_ref: null };
   }
 }
 

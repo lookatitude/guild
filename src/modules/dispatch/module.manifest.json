@@ -8,6 +8,7 @@
   "depends_on": [
     "capability",
     "communication",
+    "config",
     "documents",
     "host-runtime",
     "kernel",
@@ -15,8 +16,8 @@
     "prompting",
     "review",
     "state",
-    "telemetry",
-    "teams"
+    "teams",
+    "telemetry"
   ],
   "owns": {
     "scripts": [

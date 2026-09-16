@@ -38,6 +38,25 @@ import {
 
 const SCRIPT = path.resolve(__dirname, "../station-compose.ts");
 
+
+/**
+ * A machinery write on a run record is authenticated by the run's minted
+ * binding (KTD19, T08 rework-r2): `handoff/station/**` is a gated bus topic, so
+ * a run with no binding is not a run these writers will publish to.
+ */
+function mintBindingFor(cwd: string, runId: string): void {
+  const runDir = path.join(cwd, ".guild", "runs", runId);
+  fs.mkdirSync(runDir, { recursive: true });
+  const p = path.join(runDir, "binding.json");
+  if (!fs.existsSync(p)) {
+    fs.writeFileSync(
+      p,
+      JSON.stringify({ run_id: runId, binding_ref: `rb-fixture-${runId}` }),
+      "utf8",
+    );
+  }
+}
+
 function runCli(
   args: string[],
   opts: { input?: string } = {}
@@ -453,7 +472,9 @@ describe("writeTeamPlan / readTeamPlan", () => {
   test("all lifecycle stations publish and consume the same typed bus contract", () => {
     const tmp = mkTmp();
     for (const station of STATIONS) {
+      mintBindingFor(tmp, "run-all-stations");
       writeTeamPlan(tmp, "run-all-stations", { ...VALID_PLAN, station });
+      mintBindingFor(tmp, "run-all-stations");
       writeTeamResult(tmp, "run-all-stations", {
         ...VALID_RESULT,
         station,
@@ -468,6 +489,7 @@ describe("writeTeamPlan / readTeamPlan", () => {
 
   test("round-trips a valid plan through the canonical path", () => {
     const tmp = mkTmp();
+    mintBindingFor(tmp, "run-a");
     const p = writeTeamPlan(tmp, "run-a", VALID_PLAN);
     expect(p).toBe(path.join(tmp, ".guild", "runs", "run-a", "team-plan", "build.json"));
     const bytes = fs.readFileSync(p);
@@ -482,6 +504,7 @@ describe("writeTeamPlan / readTeamPlan", () => {
 
   test("fails closed when a valid-looking plan drifts from its bus/CAS event", () => {
     const tmp = mkTmp();
+    mintBindingFor(tmp, "run-a");
     const p = writeTeamPlan(tmp, "run-a", VALID_PLAN);
     fs.writeFileSync(p, JSON.stringify({ ...VALID_PLAN, advisory_panel: [] }, null, 2) + "\n");
     expect(readTeamPlan(tmp, "run-a", "build")).toBeNull();
@@ -489,6 +512,7 @@ describe("writeTeamPlan / readTeamPlan", () => {
 
   test("fails closed when the canonical plan path is replaced with a symlink", () => {
     const tmp = mkTmp();
+    mintBindingFor(tmp, "run-a");
     const p = writeTeamPlan(tmp, "run-a", VALID_PLAN);
     const outside = path.join(mkTmp(), "build.json");
     fs.writeFileSync(outside, fs.readFileSync(p));
@@ -499,6 +523,7 @@ describe("writeTeamPlan / readTeamPlan", () => {
 
   test("fails closed after the latest matching bus event retracts the plan", () => {
     const tmp = mkTmp();
+    mintBindingFor(tmp, "run-a");
     writeTeamPlan(tmp, "run-a", VALID_PLAN);
     const runDir = path.join(tmp, ".guild", "runs", "run-a");
     publish(runDir, {
@@ -599,6 +624,7 @@ describe("writeTeamPlan / readTeamPlan", () => {
 describe("writeTeamResult / readTeamResult", () => {
   test("round-trips a valid result", () => {
     const tmp = mkTmp();
+    mintBindingFor(tmp, "run-b");
     const p = writeTeamResult(tmp, "run-b", VALID_RESULT);
     expect(p).toBe(path.join(tmp, ".guild", "runs", "run-b", "team-result", "build.json"));
     const event = readBusLog(path.join(tmp, ".guild", "runs", "run-b"))
@@ -611,6 +637,7 @@ describe("writeTeamResult / readTeamResult", () => {
 
   test("fails closed when a valid result has no authoritative bus event", () => {
     const tmp = mkTmp();
+    mintBindingFor(tmp, "run-b");
     writeTeamResult(tmp, "run-b", VALID_RESULT);
     fs.unlinkSync(path.join(tmp, ".guild", "runs", "run-b", "bus", "log.jsonl"));
     expect(readTeamResult(tmp, "run-b", "build")).toBeNull();

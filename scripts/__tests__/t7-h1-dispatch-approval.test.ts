@@ -52,6 +52,25 @@ import { recordDecision, writeDecision } from "../../src/modules/teams/workflows
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
+// T06/T08: the launcher copies assignment host/model ids from the run's
+// guild.session_binding.v1 and BLOCKS without one; every pre-minted run tree
+// seeds it through the same file the lifecycle writes.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const __sessionBinding = require("../../src/modules/config/workflows/session-binding") as
+  typeof import("../../src/modules/config/workflows/session-binding");
+function __seedSessionBinding(root: string, runId: string): void {
+  const runDir = path.join(root, ".guild", "runs", runId);
+  const file = __sessionBinding.sessionBindingPath(runDir);
+  if (fs.existsSync(file)) return;
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify({
+    schema_version: "guild.session_binding.v1", run_id: runId, host_family: "claude-code-cli", surface: "cli",
+    detected_at: new Date().toISOString(), models: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+    model_family: "claude", prompt_compose: { dialect_id: "claude", overlay_ids: [], hash: "sha256:x" },
+    evidence: { cheap: "available", mid: "available", powerful: "available" },
+  }, null, 2)}\n`, "utf8");
+}
+
 const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
 const SCRIPT = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
 const RUN_ID = "run-20260811-020000-t7h1-approval";
@@ -136,6 +155,7 @@ function seedApprovedRepo(
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "t7-h1-"));
   fs.mkdirSync(path.join(root, ".guild", "runs", RUN_ID), { recursive: true });
   mintRunBinding({ root, run_id: RUN_ID });
+  __seedSessionBinding(root, RUN_ID);
   seedLifecycleContexts(root);
 
   const participants = [
@@ -474,6 +494,7 @@ function seedUnapprovedRepo(): { root: string; teamPath: string } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "t7-h1-noapproval-"));
   fs.mkdirSync(path.join(root, ".guild", "runs", RUN_ID), { recursive: true });
   mintRunBinding({ root, run_id: RUN_ID });
+  __seedSessionBinding(root, RUN_ID);
   seedLifecycleContexts(root);
   const teamDir = path.join(root, ".guild", "team");
   fs.mkdirSync(teamDir, { recursive: true });

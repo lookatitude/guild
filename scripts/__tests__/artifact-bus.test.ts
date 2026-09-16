@@ -38,11 +38,34 @@ import {
 
 const NOW = () => "2026-06-27T00:00:00.000Z";
 const PUB = { host_id: "claude-local", role: "backend" };
+// KTD19 (T08): a `status/` topic is the T1 → T0 roll-up channel, so only a lead
+// may publish there. A specialist doing so is a structural-isolation defect and
+// `publish` refuses it — see the T08 fixture for that case.
+const LEAD_PUB = { host_id: "claude-local", role: "team-lead" };
 
+const BINDING_REF = "rb-testbinding";
+
+/**
+ * A run dir with a minted binding record.
+ *
+ * KTD19 (T08 rework-r2): `status/**` and `handoff/**` are gated topics and the
+ * publisher's tier is now AUTHENTICATED against durable state, so these fixtures
+ * publish as the runtime and the run must have a binding to prove it against.
+ */
 function tmpRunDir(): string {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), "guild-bus-"));
-  return path.join(d, ".guild", "runs", "run-x");
+  const runDir = path.join(d, ".guild", "runs", "run-x");
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(runDir, "binding.json"),
+    JSON.stringify({ run_id: "run-x", binding_ref: BINDING_REF }),
+    "utf8",
+  );
+  return runDir;
 }
+
+/** The runtime identity these fixtures publish under. */
+const RUNTIME_ID = { kind: "runtime" as const, binding_ref: BINDING_REF };
 
 describe("topic helpers", () => {
   it("isValidTopic requires a known type + 3 non-empty segments", () => {
@@ -95,8 +118,8 @@ describe("CAS — cas_meta.v1 (D-BUS-3)", () => {
     const runDir = tmpRunDir();
     const body = "shared bundle";
     // Two lanes publish the identical bundle → one CAS entry, two bus refs.
-    const a = publish(runDir, { runId: "run-x", topic: "context/architect/T1", content: body, publisher: PUB, now: NOW })!;
-    publish(runDir, { runId: "run-x", topic: "context/backend/T2", content: body, publisher: PUB, now: NOW });
+    const a = publish(runDir, { runId: "run-x", topic: "context/architect/T1", content: body, publisher: PUB, identity: RUNTIME_ID, now: NOW })!;
+    publish(runDir, { runId: "run-x", topic: "context/backend/T2", content: body, publisher: PUB, identity: RUNTIME_ID, now: NOW });
     expect(refCount(runDir, a.sha256!)).toBe(2);
   });
 
@@ -111,8 +134,8 @@ describe("CAS — cas_meta.v1 (D-BUS-3)", () => {
 describe("publish / read — bus_event.v1 (D-BUS-1)", () => {
   it("publish appends an event, CAS-indexes the body, and assigns monotonic seq", () => {
     const runDir = tmpRunDir();
-    const e0 = publish(runDir, { runId: "run-x", topic: "handoff/backend/T2", content: "body0", artifactPath: ".guild/runs/run-x/handoffs/backend-T2.md", publisher: PUB, now: NOW })!;
-    const e1 = publish(runDir, { runId: "run-x", topic: "status/qa/T3", content: "body1", publisher: PUB, now: NOW })!;
+    const e0 = publish(runDir, { runId: "run-x", topic: "handoff/backend/T2", content: "body0", artifactPath: ".guild/runs/run-x/handoffs/backend-T2.md", publisher: PUB, identity: RUNTIME_ID, now: NOW })!;
+    const e1 = publish(runDir, { runId: "run-x", topic: "status/qa/T3", content: "body1", publisher: LEAD_PUB, identity: RUNTIME_ID, now: NOW })!;
     expect(e0.schema_version).toBe(BUS_EVENT_SCHEMA);
     expect(e0.seq).toBe(0);
     expect(e1.seq).toBe(1);
@@ -124,28 +147,28 @@ describe("publish / read — bus_event.v1 (D-BUS-1)", () => {
 
   it("readBusLog round-trips and tailBusLog returns events after a seq", () => {
     const runDir = tmpRunDir();
-    publish(runDir, { runId: "run-x", topic: "handoff/backend/T1", content: "a", publisher: PUB, now: NOW });
-    publish(runDir, { runId: "run-x", topic: "handoff/backend/T2", content: "b", publisher: PUB, now: NOW });
-    publish(runDir, { runId: "run-x", topic: "handoff/backend/T3", content: "c", publisher: PUB, now: NOW });
+    publish(runDir, { runId: "run-x", topic: "handoff/backend/T1", content: "a", publisher: PUB, identity: RUNTIME_ID, now: NOW });
+    publish(runDir, { runId: "run-x", topic: "handoff/backend/T2", content: "b", publisher: PUB, identity: RUNTIME_ID, now: NOW });
+    publish(runDir, { runId: "run-x", topic: "handoff/backend/T3", content: "c", publisher: PUB, identity: RUNTIME_ID, now: NOW });
     expect(readBusLog(runDir).map((e) => e.seq)).toEqual([0, 1, 2]);
     expect(tailBusLog(runDir, 0).map((e) => e.seq)).toEqual([1, 2]);
   });
 
   it("publish rejects an invalid topic (fail-closed, writes nothing)", () => {
     const runDir = tmpRunDir();
-    expect(publish(runDir, { runId: "run-x", topic: "bogus/x/y", content: "z", publisher: PUB, now: NOW })).toBeNull();
+    expect(publish(runDir, { runId: "run-x", topic: "bogus/x/y", content: "z", publisher: PUB, identity: RUNTIME_ID, now: NOW })).toBeNull();
     expect(fs.existsSync(busLogPath(runDir))).toBe(false);
   });
 
   it("publish rejects an unknown event kind (fail-closed, writes nothing)", () => {
     const runDir = tmpRunDir();
-    expect(publish(runDir, { runId: "run-x", topic: "handoff/backend/T2", event: "exploded" as never, content: "z", publisher: PUB, now: NOW })).toBeNull();
+    expect(publish(runDir, { runId: "run-x", topic: "handoff/backend/T2", event: "exploded" as never, content: "z", publisher: PUB, identity: RUNTIME_ID, now: NOW })).toBeNull();
     expect(fs.existsSync(busLogPath(runDir))).toBe(false);
   });
 
   it("a retraction carries no CAS body", () => {
     const runDir = tmpRunDir();
-    const e = publish(runDir, { runId: "run-x", topic: "handoff/backend/T2", event: "artifact.retracted", publisher: PUB, now: NOW })!;
+    const e = publish(runDir, { runId: "run-x", topic: "handoff/backend/T2", event: "artifact.retracted", publisher: PUB, identity: RUNTIME_ID, now: NOW })!;
     expect(e.event).toBe("artifact.retracted");
     expect(e.sha256).toBeNull();
   });
@@ -164,7 +187,7 @@ describe("subscribers + fan-out — bus_subscriber.v1 (D-BUS-2)", () => {
     registerSubscriber(runDir, { subscriber_id: "hook-sub", host_id: "h", topics: ["handoff/backend/*"], callback: "hook", now: NOW });
     registerSubscriber(runDir, { subscriber_id: "poll-sub", host_id: "h", topics: ["handoff/**"], callback: "poll", now: NOW });
     registerSubscriber(runDir, { subscriber_id: "wh-sub", host_id: "h", topics: ["status/**"], callback: "webhook-url", now: NOW });
-    const ev = publish(runDir, { runId: "run-x", topic: "handoff/backend/T2", content: "b", publisher: PUB, now: NOW })!;
+    const ev = publish(runDir, { runId: "run-x", topic: "handoff/backend/T2", content: "b", publisher: PUB, identity: RUNTIME_ID, now: NOW })!;
     const out = fanout(runDir, ev);
     expect(out.hook.map((s) => s.subscriber_id)).toEqual(["hook-sub"]);
     expect(out.poll.map((s) => s.subscriber_id)).toEqual(["poll-sub"]);
@@ -175,7 +198,7 @@ describe("subscribers + fan-out — bus_subscriber.v1 (D-BUS-2)", () => {
     const runDir = tmpRunDir();
     registerSubscriber(runDir, { subscriber_id: "hook-sub", host_id: "h", topics: ["handoff/**"], callback: "hook", now: NOW });
     registerSubscriber(runDir, { subscriber_id: "wh-sub", host_id: "h", topics: ["handoff/**"], callback: "webhook-url", now: NOW });
-    publish(runDir, { runId: "run-x", topic: "handoff/backend/T2", content: "b", publisher: PUB, now: NOW });
+    publish(runDir, { runId: "run-x", topic: "handoff/backend/T2", content: "b", publisher: PUB, identity: RUNTIME_ID, now: NOW });
 
     const r1 = processFanout(runDir, NOW);
     expect(r1).toEqual({ processed: 1, delivered: 1, deferred: 1 });

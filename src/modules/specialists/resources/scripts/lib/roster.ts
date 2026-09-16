@@ -41,6 +41,10 @@ import {
   checkContained,
   isRefused,
 } from "../../src/modules/kernel/workflows/path-containment";
+// KTD20/R59: the mint tree is addressed through GuildStorage.definition, never
+// by hand-joining ".guild". One constructor means one place decides where a
+// project's definitions live, so a layout change moves the mint with it.
+import { createGuildStorage } from "./state/storage";
 
 const yaml = require("js-yaml") as {
   dump: (o: unknown, opts?: Record<string, unknown>) => string;
@@ -446,8 +450,31 @@ export function checkWorkspaceRosterScopes(workspaceRootInput: string): Workspac
   };
 }
 
+/**
+ * The mint tree for one project root, through the ONE path constructor (KTD20).
+ *
+ * `definition("agents")` and `definition("skills")` are the canonical homes for
+ * minted specialist profiles and project-local skills. Resolution is
+ * PROJECT-FIRST by construction: this returns the consuming repo's own tree, and
+ * plugin `templates/specialists/*.md` is compose-time feedstock only — after a
+ * mint, the live body is the project file this path names, never the install-dir
+ * copy.
+ */
+function definitionTree(projectRoot: string): { agents: string; skills: string } {
+  const storage = createGuildStorage(projectRoot, {
+    activeRoot: projectRoot,
+    profile: "standalone",
+  });
+  return { agents: storage.definition("agents"), skills: storage.definition("skills") };
+}
+
+/** Relative spelling of a definition path, for the entries the roster reports. */
+function definitionRel(projectRoot: string, abs: string): string {
+  return path.relative(path.resolve(projectRoot), abs);
+}
+
 function listProjectSkills(projectRoot: string): RosterSkillEntry[] {
-  const skillsDir = path.join(projectRoot, ".guild", "skills");
+  const skillsDir = definitionTree(projectRoot).skills;
   if (!fs.existsSync(skillsDir)) return [];
   const entries: RosterSkillEntry[] = [];
   for (const e of fs.readdirSync(skillsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -525,10 +552,11 @@ export function resolveRoster(opts: {
   // and `_shared/` are never candidates.
   const project: RosterAgentEntry[] = [];
   const shippedNames = new Set(shipped.map((s) => s.name));
-  for (const f of listAgentFiles(path.join(projectRoot, ".guild", "agents"))) {
+  const projectAgents = definitionTree(projectRoot).agents;
+  for (const f of listAgentFiles(projectAgents)) {
     const entry = readAgentEntry(
       projectRoot,
-      path.join(".guild", "agents", f),
+      definitionRel(projectRoot, path.join(projectAgents, f)),
       "project",
       warnings
     );
@@ -646,10 +674,11 @@ export function mintFromTemplate(opts: {
   // role already covers it (codex G-lane finding — a second `frontend` under a
   // different filename would produce duplicate registry ids).
   const projWarnings: string[] = [];
-  for (const f of listAgentFiles(path.join(projectRoot, ".guild", "agents"))) {
+  const mintDir = definitionTree(projectRoot).agents;
+  for (const f of listAgentFiles(mintDir)) {
     const existing = readAgentEntry(
       projectRoot,
-      path.join(".guild", "agents", f),
+      definitionRel(projectRoot, path.join(mintDir, f)),
       "project",
       projWarnings
     );
@@ -662,7 +691,7 @@ export function mintFromTemplate(opts: {
     }
   }
 
-  const target = path.join(projectRoot, ".guild", "agents", `${name}.md`);
+  const target = path.join(mintDir, `${name}.md`);
   // Path-safety (same hard rules as writeDerived): never write through a
   // symlink, never let an ancestor's realpath escape the project root.
   let st: fs.Stats | null = null;

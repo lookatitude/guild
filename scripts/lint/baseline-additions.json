@@ -738,31 +738,6 @@
       "lane": "T05"
     },
     {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:1425::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in hooks/pre-tool-use.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:1469::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in hooks/pre-tool-use.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:172::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in hooks/pre-tool-use.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:243::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in hooks/pre-tool-use.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:656::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in hooks/pre-tool-use.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
       "key": "no-direct-guild-join::hooks/run-trace-close.ts:410::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction in hooks/run-trace-close.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
       "lane": "T05"
@@ -800,51 +775,6 @@
     {
       "key": "no-direct-guild-join::mcp-servers/guild-telemetry/src/index.ts:271::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction in mcp-servers/guild-telemetry/src/index.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:1533::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/agent-team-launcher.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API. (T06 rework-r2: line shifted by the U-CFG edits in this file; same site, same worklist.)",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:1857::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/agent-team-launcher.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API. (T06 rework-r2: line shifted by the U-CFG edits in this file; same site, same worklist.)",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:2022::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/agent-team-launcher.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API. (T06 rework-r2: line shifted by the U-CFG edits in this file; same site, same worklist.)",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:2188::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/agent-team-launcher.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API. (T06 rework-r2: line shifted by the U-CFG edits in this file; same site, same worklist.)",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:3194::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/agent-team-launcher.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API. (T06 rework-r2: line shifted by the U-CFG edits in this file; same site, same worklist.)",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:3320::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/agent-team-launcher.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API. (T06 rework-r2: line shifted by the U-CFG edits in this file; same site, same worklist.)",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:3458::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/agent-team-launcher.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API. (T06 rework-r2: line shifted by the U-CFG edits in this file; same site, same worklist.)",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:921::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/agent-team-launcher.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API. (T06 rework-r2: line shifted by the U-CFG edits in this file; same site, same worklist.)",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:971::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/agent-team-launcher.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API. (T06 rework-r2: line shifted by the U-CFG edits in this file; same site, same worklist.)",
       "lane": "T05"
     },
     {
@@ -1298,56 +1228,6 @@
       "lane": "T05"
     },
     {
-      "key": "no-direct-guild-join::scripts/lib/roster.ts:1052::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/lib/roster.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/lib/roster.ts:277::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/lib/roster.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/lib/roster.ts:349::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/lib/roster.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/lib/roster.ts:450::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/lib/roster.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/lib/roster.ts:528::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/lib/roster.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/lib/roster.ts:649::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/lib/roster.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/lib/roster.ts:665::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/lib/roster.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/lib/roster.ts:838::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/lib/roster.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/lib/roster.ts:875::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/lib/roster.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/lib/roster.ts:946::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/lib/roster.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
       "key": "no-direct-guild-join::scripts/lib/task-cell-launch-plan.ts:106::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction in scripts/lib/task-cell-launch-plan.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
       "lane": "T05"
@@ -1563,16 +1443,6 @@
       "lane": "T05"
     },
     {
-      "key": "no-direct-guild-join::src/modules/dispatch/workflows/task-assignment-v2.ts:654::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in src/modules/dispatch/workflows/task-assignment-v2.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::src/modules/dispatch/workflows/task-assignment-v2.ts:662::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in src/modules/dispatch/workflows/task-assignment-v2.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
       "key": "no-direct-guild-join::src/modules/dispatch/workflows/task-cell-acceptance.ts:663::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction in src/modules/dispatch/workflows/task-cell-acceptance.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
       "lane": "T05"
@@ -1580,16 +1450,6 @@
     {
       "key": "no-direct-guild-join::src/modules/dispatch/workflows/task-cell-acceptance.ts:879::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction in src/modules/dispatch/workflows/task-cell-acceptance.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::src/modules/dispatch/workflows/task-cell-artifact-join.ts:64::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in src/modules/dispatch/workflows/task-cell-artifact-join.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::src/modules/dispatch/workflows/task-cell-runtime.ts:563::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in src/modules/dispatch/workflows/task-cell-runtime.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
       "lane": "T05"
     },
     {
@@ -2096,6 +1956,141 @@
       "key": "no-durable-skill-versions::src/modules/state/workflows/upgrade-steps.ts:14::references a durable skill-versions/ tree",
       "reason": "The upgrade step `skill-versions-delete` (R60) is the code whose job is to delete the durable skill-versions/ tree; naming that tree is its purpose, not a durable write. Declared for lane T07; retired when T11 compacts history.",
       "lane": "T07"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/lib/roster.ts:1081::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only: the SAME pre-existing no-direct-guild-join site, moved by T08's edits to the file (the launcher's binding copy, roster's GuildStorage mint route, the done_when stamp, and the projection/oracle gates each add lines above it). No new direct .guild join is introduced by T08 \u2014 the lane's own new join went through GuildStorage.runRecord, and the mint route REMOVED four entries. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/lib/roster.ts:281::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only: the SAME pre-existing no-direct-guild-join site, moved by T08's edits to the file (the launcher's binding copy, roster's GuildStorage mint route, the done_when stamp, and the projection/oracle gates each add lines above it). No new direct .guild join is introduced by T08 \u2014 the lane's own new join went through GuildStorage.runRecord, and the mint route REMOVED four entries. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/lib/roster.ts:353::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only: the SAME pre-existing no-direct-guild-join site, moved by T08's edits to the file (the launcher's binding copy, roster's GuildStorage mint route, the done_when stamp, and the projection/oracle gates each add lines above it). No new direct .guild join is introduced by T08 \u2014 the lane's own new join went through GuildStorage.runRecord, and the mint route REMOVED four entries. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/lib/roster.ts:867::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only: the SAME pre-existing no-direct-guild-join site, moved by T08's edits to the file (the launcher's binding copy, roster's GuildStorage mint route, the done_when stamp, and the projection/oracle gates each add lines above it). No new direct .guild join is introduced by T08 \u2014 the lane's own new join went through GuildStorage.runRecord, and the mint route REMOVED four entries. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/lib/roster.ts:904::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only: the SAME pre-existing no-direct-guild-join site, moved by T08's edits to the file (the launcher's binding copy, roster's GuildStorage mint route, the done_when stamp, and the projection/oracle gates each add lines above it). No new direct .guild join is introduced by T08 \u2014 the lane's own new join went through GuildStorage.runRecord, and the mint route REMOVED four entries. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/lib/roster.ts:975::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only: the SAME pre-existing no-direct-guild-join site, moved by T08's edits to the file (the launcher's binding copy, roster's GuildStorage mint route, the done_when stamp, and the projection/oracle gates each add lines above it). No new direct .guild join is introduced by T08 \u2014 the lane's own new join went through GuildStorage.runRecord, and the mint route REMOVED four entries. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:930::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r1): the SAME pre-existing no-direct-guild-join site, moved again by the T08 rework (the launcher's binding block + run-scoped admission, and the runtime's assignment read in acceptHandoff, each add lines above it). No new direct .guild join: the lane's own run-dir join goes through GuildStorage.runRecord. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:980::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r1): the SAME pre-existing no-direct-guild-join site, moved again by the T08 rework (the launcher's binding block + run-scoped admission, and the runtime's assignment read in acceptHandoff, each add lines above it). No new direct .guild join: the lane's own run-dir join goes through GuildStorage.runRecord. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:1486::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r1): the SAME pre-existing no-direct-guild-join site in hooks/pre-tool-use.ts, moved by the KTD28 projection gate this rework added above it. No new direct .guild join \u2014 the gate resolves its root through resolveGuildRoot. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:1530::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r1): the SAME pre-existing no-direct-guild-join site in hooks/pre-tool-use.ts, moved by the KTD28 projection gate this rework added above it. No new direct .guild join \u2014 the gate resolves its root through resolveGuildRoot. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:173::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r1): the SAME pre-existing no-direct-guild-join site in hooks/pre-tool-use.ts, moved by the KTD28 projection gate this rework added above it. No new direct .guild join \u2014 the gate resolves its root through resolveGuildRoot. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:244::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r1): the SAME pre-existing no-direct-guild-join site in hooks/pre-tool-use.ts, moved by the KTD28 projection gate this rework added above it. No new direct .guild join \u2014 the gate resolves its root through resolveGuildRoot. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:712::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r1): the SAME pre-existing no-direct-guild-join site in hooks/pre-tool-use.ts, moved by the KTD28 projection gate this rework added above it. No new direct .guild join \u2014 the gate resolves its root through resolveGuildRoot. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-ts-workflows-dir::src/modules/communication/resources/src/modules/kernel/workflows::workflows/ directory name is retired",
+      "reason": "New module-resource mirror created by hand for the rework (the lead's sync may not be re-run from a lane): `scripts/lib/artifact-bus.ts` now imports the kernel's tier-bus so the KTD19 rule is enforced on the real message path, and its resources mirror needs the matching `src/modules/kernel/workflows/` copy. Same class as the 68 kernel-mirror entries already baselined; all of them clear together at T12.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-ts-workflows-dir::src/modules/host-runtime/resources/src/modules/communication/resources/src/modules/kernel/workflows::workflows/ directory name is retired",
+      "reason": "New module-resource mirror created by hand for the rework (the lead's sync may not be re-run from a lane): `scripts/lib/artifact-bus.ts` now imports the kernel's tier-bus so the KTD19 rule is enforced on the real message path, and its resources mirror needs the matching `src/modules/kernel/workflows/` copy. Same class as the 68 kernel-mirror entries already baselined; all of them clear together at T12.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-ts-workflows-dir::src/modules/lifecycle/resources/src/modules/communication/resources/src/modules/kernel/workflows::workflows/ directory name is retired",
+      "reason": "New module-resource mirror created by hand for the rework (the lead's sync may not be re-run from a lane): `scripts/lib/artifact-bus.ts` now imports the kernel's tier-bus so the KTD19 rule is enforced on the real message path, and its resources mirror needs the matching `src/modules/kernel/workflows/` copy. Same class as the 68 kernel-mirror entries already baselined; all of them clear together at T12.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::src/modules/dispatch/workflows/task-cell-artifact-join.ts:74::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r2): the SAME pre-existing no-direct-guild-join site, moved by this round's edits above it (the bus identity resolver in the artifact join, the bindingRef threaded through writeTaskCell, and the reservation split in the runtime). No new direct .guild join is introduced. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::src/modules/dispatch/workflows/task-cell-runtime.ts:755::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r2): the SAME pre-existing no-direct-guild-join site, moved by this round's edits above it (the bus identity resolver in the artifact join, the bindingRef threaded through writeTaskCell, and the reservation split in the runtime). No new direct .guild join is introduced. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:1614::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r3): the SAME pre-existing no-direct-guild-join site, moved by this round's edits above it (the launcher's batch claim + rollback wrapper, and the placeholder-completion branch in writeTaskAttemptV1). No new direct .guild join is introduced. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:1938::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r3): the SAME pre-existing no-direct-guild-join site, moved by this round's edits above it (the launcher's batch claim + rollback wrapper, and the placeholder-completion branch in writeTaskAttemptV1). No new direct .guild join is introduced. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:2103::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r3): the SAME pre-existing no-direct-guild-join site, moved by this round's edits above it (the launcher's batch claim + rollback wrapper, and the placeholder-completion branch in writeTaskAttemptV1). No new direct .guild join is introduced. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:2269::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r3): the SAME pre-existing no-direct-guild-join site, moved by this round's edits above it (the launcher's batch claim + rollback wrapper, and the placeholder-completion branch in writeTaskAttemptV1). No new direct .guild join is introduced. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:3273::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r3): the SAME pre-existing no-direct-guild-join site, moved by this round's edits above it (the launcher's batch claim + rollback wrapper, and the placeholder-completion branch in writeTaskAttemptV1). No new direct .guild join is introduced. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:3399::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r3): the SAME pre-existing no-direct-guild-join site, moved by this round's edits above it (the launcher's batch claim + rollback wrapper, and the placeholder-completion branch in writeTaskAttemptV1). No new direct .guild join is introduced. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/agent-team-launcher.ts:3532::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r3): the SAME pre-existing no-direct-guild-join site, moved by this round's edits above it (the launcher's batch claim + rollback wrapper, and the placeholder-completion branch in writeTaskAttemptV1). No new direct .guild join is introduced. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::src/modules/dispatch/workflows/task-assignment-v2.ts:682::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r3): the SAME pre-existing no-direct-guild-join site, moved by this round's edits above it (the launcher's batch claim + rollback wrapper, and the placeholder-completion branch in writeTaskAttemptV1). No new direct .guild join is introduced. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::src/modules/dispatch/workflows/task-assignment-v2.ts:690::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Line re-key only (rework-r3): the SAME pre-existing no-direct-guild-join site, moved by this round's edits above it (the launcher's batch claim + rollback wrapper, and the placeholder-completion branch in writeTaskAttemptV1). No new direct .guild join is introduced. Clears when T12 folds these files into the domains.",
+      "lane": "T08"
     }
   ]
 }

@@ -96,6 +96,9 @@ function deepFreeze(value, options = {}) {
   walk(value);
   return value;
 }
+function frozenList(items, options = {}) {
+  return deepFreeze(items.slice(), options);
+}
 
 // src/modules/kernel/workflows/path-containment.ts
 var CONTAINMENT_REFUSAL_CODES = Object.freeze([
@@ -109,6 +112,16 @@ var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "parent-traversal",
   "destination-moved"
 ]);
+
+// src/modules/kernel/workflows/tier-bus.ts
+var BUS_TIERS = frozenList(["T0", "T1", "T2"]);
+var LEAD_ROLE_IDS = frozenList(["team-lead", "lead", "orchestrator"]);
+var TIER_BUS_CONTRACT = deepFreeze({
+  tiers: BUS_TIERS,
+  upward_envelopes: { T2: "guild.handoff.v2", T1: "guild.goal_status.v1" },
+  lead_roles: LEAD_ROLE_IDS,
+  tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
+});
 
 // src/modules/intake/workflows/classify-intake.ts
 var THRESHOLD = 1;
