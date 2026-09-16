@@ -44,7 +44,7 @@ import { appendEvent, exclusionSentinelPath, withStableLock } from "../../lifecy
 import { sanitizeForInjection } from "../../security";
 import { appendSecurityEvent, buildSecurityEvent } from "../../security";
 import { scrubbedWrite } from "../../security";
-import { createGuildStorage, type GuildStorage } from "../../state";
+import { createGuildStorage, type GuildStorage, readScalarField } from "../../state";
 import {
   findOp,
   isTerminalHarvestStatus,
@@ -216,8 +216,10 @@ export function renderDecisionPage(page: DecisionPage): string {
     "",
   ].join("\n");
 
+  // Read the rendered block through the shared frontmatter reader (OD-3): the
+  // self-check must not become a second hand-rolled YAML scanner.
   for (const key of FORBIDDEN_HARVEST_KEYS) {
-    if (new RegExp(`^${key}\\s*:`, "m").test(fm)) {
+    if (readScalarField(fm, key) !== undefined) {
       throw new HarvestRefusal(`harvest does not stamp '${key}' (R66)`, "labels");
     }
   }
