@@ -411,8 +411,14 @@ describe("T04 R3-3 — the evolve assembler carries the routing table", () => {
     // and stop rather than forward a revert into an ingest.
     const table = stripFences(fs.readFileSync(EVOLVE_SKILL, "utf8")).split("\n").find((l) => /^\|\s*`wiki revert/.test(l)) ?? "";
     expect(table).not.toMatch(/wiki-ingest\.md/);
-    expect(table).toMatch(/harvest_journal|pending/);
-    expect(table).toMatch(/stop/);
+    // T09 shipped the harvest-journal inverse: the row names the revert chapter.
+    // Before that it had to report the pending capability and stop.
+    if (/wiki-revert\.md/.test(table)) {
+      expect(fs.existsSync(path.join(path.dirname(EVOLVE_SKILL), "references", "wiki-revert.md"))).toBe(true);
+    } else {
+      expect(table).toMatch(/harvest_journal|pending/);
+      expect(table).toMatch(/stop/);
+    }
   });
 
   it("`## Sub-verbs` is a real section, surviving a fence-strip", () => {

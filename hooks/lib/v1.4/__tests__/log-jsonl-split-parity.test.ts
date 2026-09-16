@@ -132,8 +132,11 @@ describe("schema: constants and ID validators", () => {
     expect(HOOK_EVENT_NAMES).not.toContain("UnknownHook");
   });
 
-  it("EVENT_TYPES is a Set with 12 members", () => {
-    expect(EVENT_TYPES.size).toBe(12);
+  it("EVENT_TYPES is a Set with 16 members (12 frozen v1.4 + 4 additive T09 kinds)", () => {
+    expect(EVENT_TYPES.size).toBe(16);
+    for (const k of ["harvest_event", "redirect_event", "cas_event", "curator_event"]) {
+      expect(EVENT_TYPES.has(k as any)).toBe(true);
+    }
     expect(EVENT_TYPES.has("tool_call")).toBe(true);
     expect(EVENT_TYPES.has("phase_start")).toBe(true);
     // @control: unknown event names must not pass the whitelist.

@@ -89,7 +89,16 @@ export type SecurityEventType =
    * `guild.tier_dispatch.v1` record at `<runDir>/logs/tier-dispatch.jsonl`;
    * this security record is the audit-rail twin of the gate decision.
    */
-  | "tier_dispatch_untiered";
+  | "tier_dispatch_untiered"
+  /**
+   * R53 (T09): the knowledge domain's harvest writer performed an AUTOMATIC
+   * durable write to this root's wiki — a canonical `guild.decision.v1` page no
+   * human clicked. Harvest is the only auto wiki writer there is, so this is the
+   * audit rail for the one unattended durable-write path in Guild. `decision`
+   * is "allow" on a promote, "blocked" when the probe, the injection guard, the
+   * secret scrub, or the wiki CAS refused it.
+   */
+  | "harvest_auto_promote";
 
 /** The action Guild took for the gated tool call. */
 export type SecurityDecision = "ask" | "deny" | "allow" | "pass"

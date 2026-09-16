@@ -40,7 +40,20 @@ prefix (KTD70).
   host adapter maps a tier to a model at dispatch.
 - **session binding** — the host and models resolved for ONE run. Session state,
   never durable config.
-- **harvest** — the automatic capture of a decision into this root's wiki.
+- **harvest** — the automatic capture of a decision into this root's wiki. The
+  only unattended writer there is; everything else goes through a human.
+- **class** — which of the five graphs a run follows: \`product\`, \`research\`,
+  \`debug\`, \`ops\`, \`init\`. Bound once at intake, by a typed verb, or by
+  \`--class=\`.
+- **cursor** — where a run currently sits on its class graph. Read on crash resume.
+- **working set** — the small card a phase reads first: pinned decision ids, open
+  questions, and a fingerprint that says whether any of it can have changed.
+- **lane bundle** — the ≤1200-token citation list a parent sees. Parents get
+  citations; only the specialist reads the sources.
+- **recall** — looking something up before doing it. Cheap and mandatory; research
+  is what happens when recall misses.
+- **redirect** — an operator correction that made the orchestrator change course.
+  Three on the same agent and topic in one run fire a harvest.
 - **layout version** — the integer in \`.guild/storage-layout.json\` saying which
   storage layout this root is on. Guild upgrades a root on activation.
 

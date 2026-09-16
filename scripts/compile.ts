@@ -96,6 +96,10 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   { id: "classify-intake", entry: "scripts/lib/classify-intake.ts" },
   // Stop / SubagentStop: hooks/maybe-reflect.ts spawns this. Was `npx tsx`.
   { id: "trace-summarize", entry: "scripts/trace-summarize.ts" },
+  // `/guild:maintain wiki revert <harvest_id>` — the guild.harvest_journal.v1
+  // inverse (R54/KTD39). Compiled because an operator reaches for it exactly when
+  // something went wrong, which is the worst moment to need a working tsx.
+  { id: "wiki-revert", entry: "scripts/wiki-revert.ts" },
   // Every script a `commands/*.md` body spawns today with `npx tsx`. Compiling
   // them here is T02's half of the fix; T04 owns swapping the command bodies to
   // `node "$GUILD_PLUGIN_ROOT/runtime/scripts/<id>.js"` (command bodies are that

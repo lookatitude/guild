@@ -110,7 +110,46 @@ export const EVENT_TYPES = Object.freeze([
   "assumption_logged",
   "escalation",
   "codex_review_round",
+  // ── T09 additive work-loop kinds (KTD38 / R53) ──────────────────────────────
+  // Additive on the EXISTING file. No third JSONL: harvest, the redirect ledger
+  // and the curator are observable because they append here.
+  "harvest_event",
+  "redirect_event",
+  "cas_event",
+  "curator_event",
 ] as const);
+
+export const HARVEST_TRIGGER = Object.freeze([
+  "methodology_repeat",
+  "redirect_threshold",
+  "new_feature",
+  "harvest",
+  "manual",
+] as const);
+export const HARVEST_STATUS = Object.freeze([
+  "planned",
+  "probed",
+  "written",
+  "indexed",
+  "reported",
+  "refused",
+  "reverted",
+  "failed",
+  "replan_queued",
+] as const);
+export const HARVEST_REFUSE_REASON = Object.freeze([
+  "injection",
+  "probe",
+  "secrets",
+  "lint",
+  "cas",
+  "scope",
+  "replay",
+  "missing_anchor",
+] as const);
+export const CAS_OUTCOME = Object.freeze(["won", "lost"] as const);
+export const CURATOR_TARGET_TYPE = Object.freeze(["playbook", "skill", "profile"] as const);
+export const CURATOR_OP = Object.freeze(["replace", "add", "remove"] as const);
 
 export const PHASE_END_STATUS = Object.freeze(["ok", "error", "escalated"] as const);
 export const LOOP_TERMINATED = Object.freeze([
@@ -348,6 +387,52 @@ function validateEscalation(o: Record<string, unknown>, errs: string[]): void {
   }
   checkRequiredEnum(o, "user_choice", ESCALATION_LABELS, errs);
 }
+/**
+ * `harvest_event` — one journal status transition. `wiki_path` is a PATH: the
+ * page body never rides the trace (R53), so there is deliberately no body field
+ * to validate.
+ */
+function validateHarvestEvent(o: Record<string, unknown>, errs: string[]): void {
+  checkEnvelope(o, errs, "harvest_event");
+  checkRequiredString(o, "op_id", errs);
+  checkRequiredEnum(o, "trigger", HARVEST_TRIGGER, errs);
+  checkRequiredEnum(o, "status", HARVEST_STATUS, errs);
+  checkOptionalString(o, "decision_id", errs);
+  checkOptionalString(o, "wiki_path", errs);
+  if ("refuse_reason" in o) {
+    checkRequiredEnum(o, "refuse_reason", HARVEST_REFUSE_REASON, errs);
+  }
+  if (o.status === "refused" && !("refuse_reason" in o)) {
+    errs.push(`refuse_reason: required when status is "refused"`);
+  }
+}
+
+function validateRedirectEvent(o: Record<string, unknown>, errs: string[]): void {
+  checkEnvelope(o, errs, "redirect_event");
+  checkRequiredString(o, "agent_id", errs);
+  checkRequiredString(o, "topic_key", errs);
+  if (!isPosInt(o.count)) errs.push(`count: expected positive integer`);
+  if (!isBool(o.fired)) errs.push(`fired: expected boolean`);
+}
+
+function validateCasEvent(o: Record<string, unknown>, errs: string[]): void {
+  checkEnvelope(o, errs, "cas_event");
+  checkRequiredString(o, "target", errs);
+  checkRequiredEnum(o, "outcome", CAS_OUTCOME, errs);
+  checkOptionalString(o, "expected_hash", errs);
+  checkOptionalString(o, "actual_hash", errs);
+}
+
+function validateCuratorEvent(o: Record<string, unknown>, errs: string[]): void {
+  checkEnvelope(o, errs, "curator_event");
+  checkRequiredEnum(o, "target_type", CURATOR_TARGET_TYPE, errs);
+  checkRequiredString(o, "target_path", errs);
+  checkRequiredEnum(o, "op", CURATOR_OP, errs);
+  checkRequiredString(o, "span", errs);
+  if (!isBool(o.applied)) errs.push(`applied: expected boolean`);
+  checkOptionalString(o, "decision_id", errs);
+}
+
 function validateCodexReviewRound(o: Record<string, unknown>, errs: string[]): void {
   checkEnvelope(o, errs, "codex_review_round");
   if (!isString(o.gate)) {
@@ -435,6 +520,10 @@ const VALIDATORS: Record<
   assumption_logged: validateAssumptionLogged,
   escalation: validateEscalation,
   codex_review_round: validateCodexReviewRound,
+  harvest_event: validateHarvestEvent,
+  redirect_event: validateRedirectEvent,
+  cas_event: validateCasEvent,
+  curator_event: validateCuratorEvent,
 };
 
 /**

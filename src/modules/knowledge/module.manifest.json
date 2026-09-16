@@ -7,8 +7,10 @@
   "description": "Owns wiki, recall, learn-* flows, knowledge graph outputs, links, and the guild-memory MCP surface.",
   "depends_on": [
     "kernel",
-    "state",
-    "learning"
+    "learning",
+    "lifecycle",
+    "security",
+    "state"
   ],
   "owns": {
     "commands": [
@@ -30,7 +32,8 @@
       "lib/kb-snapshot",
       "lib/shared/bm25",
       "lib/shared/graph-scoring",
-      "lib/write-back-scored-tier"
+      "lib/write-back-scored-tier",
+      "wiki-revert"
     ]
   }
 }

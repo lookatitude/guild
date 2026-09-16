@@ -203,7 +203,86 @@ export interface CodexReviewRoundEvent {
   terminated_by_satisfied: boolean;
 }
 
-/** Discriminated union of all 12 v1.4 schema_version=1 event types. */
+/**
+ * ── T09 additive work-loop kinds (KTD38 / R53) ────────────────────────────────
+ *
+ * These ride the EXISTING run JSONL. There is no third log and no second writer:
+ * the whole reason harvest and the redirect ledger are observable at all is that
+ * they append here like every other event. The wiki BODY is deliberately absent
+ * from `harvest_event` — the event says a page was written and where, and the page
+ * itself is the page. Putting the body on the trace would duplicate durable
+ * content into a rotating log and re-open every scrub question on the copy.
+ */
+export interface HarvestEvent {
+  ts: string;
+  event: "harvest_event";
+  run_id: string;
+  op_id: string;
+  trigger: "methodology_repeat" | "redirect_threshold" | "new_feature" | "harvest" | "manual";
+  /** The journal status this event records the transition INTO. */
+  status:
+    | "planned"
+    | "probed"
+    | "written"
+    | "indexed"
+    | "reported"
+    | "refused"
+    | "reverted"
+    | "failed"
+    | "replan_queued";
+  decision_id?: string;
+  /** Path only. Never the page body. */
+  wiki_path?: string;
+  refuse_reason?:
+    | "injection"
+    | "probe"
+    | "secrets"
+    | "lint"
+    | "cas"
+    | "scope"
+    | "replay"
+    | "missing_anchor";
+}
+
+export interface RedirectEvent {
+  ts: string;
+  event: "redirect_event";
+  run_id: string;
+  agent_id: string;
+  /** Stable key for the thing being corrected. Never free-text prose. */
+  topic_key: string;
+  count: number;
+  /** True on the count that crosses the KTD33 threshold. */
+  fired: boolean;
+}
+
+export interface CasEvent {
+  ts: string;
+  event: "cas_event";
+  run_id: string;
+  /** The contended durable path. */
+  target: string;
+  outcome: "won" | "lost";
+  expected_hash?: string;
+  actual_hash?: string;
+}
+
+export interface CuratorEvent {
+  ts: string;
+  event: "curator_event";
+  run_id: string;
+  target_type: "playbook" | "skill" | "profile";
+  target_path: string;
+  op: "replace" | "add" | "remove";
+  span: string;
+  applied: boolean;
+  decision_id?: string;
+}
+
+/**
+ * Discriminated union of every schema_version=1 event type: the frozen v1.4
+ * twelve, plus the four T09 work-loop kinds appended after them.
+ */
 export type JsonlEvent =
   | PhaseStartEvent
   | PhaseEndEvent
@@ -216,7 +295,12 @@ export type JsonlEvent =
   | GateDecisionEvent
   | AssumptionLoggedEvent
   | EscalationEvent
-  | CodexReviewRoundEvent;
+  | CodexReviewRoundEvent
+  // T09 additive kinds (KTD38). Additive: the frozen v1 twelve are unchanged.
+  | HarvestEvent
+  | RedirectEvent
+  | CasEvent
+  | CuratorEvent;
 
 /** Set of valid `event` field values. The validator uses this. */
 export const EVENT_TYPES: ReadonlySet<JsonlEvent["event"]> = sealSet([
@@ -232,6 +316,10 @@ export const EVENT_TYPES: ReadonlySet<JsonlEvent["event"]> = sealSet([
   "assumption_logged",
   "escalation",
   "codex_review_round",
+  "harvest_event",
+  "redirect_event",
+  "cas_event",
+  "curator_event",
 ], "EVENT_TYPES");
 
 export const RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;

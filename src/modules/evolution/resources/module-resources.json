@@ -15,7 +15,7 @@
       "id": "maintain",
       "source_path": "commands/maintain.md",
       "resource_path": "resources/commands/maintain.md",
-      "sha256": "746bc42aaca44048f678c00802f246809840fff8e1961800b737bc67eb55fc68"
+      "sha256": "0c48889e488db027dfd2e86e6137fe71d345c36f0181938ad7acb14317500e52"
     },
     {
       "category": "commands",
@@ -29,7 +29,7 @@
       "id": "Stop:learning-backstop.js",
       "source_path": "hooks/dist/learning-backstop.js",
       "resource_path": "resources/hooks/dist/learning-backstop.js",
-      "sha256": "93cbdb0f8907e4b10902d02eac5fcc48713d94a69f0a9c10ff127fb48ee14069"
+      "sha256": "f0d51ad87347a0507b98753d29022d6de128ba896f543843245260d87f2d1671"
     },
     {
       "category": "hooks",
@@ -113,7 +113,7 @@
       "id": "guild-evolve",
       "source_path": "skills/meta/evolve/SKILL.md",
       "resource_path": "resources/skills/meta/evolve/SKILL.md",
-      "sha256": "130a909504db2770c21f41b49d89de8fe0a652eb947529c4834b30612c62c923"
+      "sha256": "7a0c23cc461be9c90a9fc91b63d3e3750af231c4a1dbbbda6f284ddc7d20ab33"
     },
     {
       "category": "skills",
@@ -128,6 +128,13 @@
       "source_path": "skills/meta/evolve/references/rollback-skill.md",
       "resource_path": "resources/skills/meta/evolve/references/rollback-skill.md",
       "sha256": "692896ebfc9191407a5d11476d6cb6f6fd0f43bdcf96eb4770080081cb663210"
+    },
+    {
+      "category": "skills",
+      "id": "guild-evolve/references/wiki-revert.md",
+      "source_path": "skills/meta/evolve/references/wiki-revert.md",
+      "resource_path": "resources/skills/meta/evolve/references/wiki-revert.md",
+      "sha256": "a7a98725073035a17ec393299a94912cb176aba7ef8a3332fe600542827827ca"
     },
     {
       "category": "skills",

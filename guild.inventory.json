@@ -2404,6 +2404,11 @@
       "kind": "cli"
     },
     {
+      "id": "wiki-revert",
+      "source_path": "scripts/wiki-revert.ts",
+      "kind": "cli"
+    },
+    {
       "id": "workspace-role-localize",
       "source_path": "scripts/workspace-role-localize.ts",
       "kind": "cli"

@@ -973,46 +973,6 @@
       "lane": "T05"
     },
     {
-      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:286::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/knowledge-links-builder.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:343::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/knowledge-links-builder.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:381::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/knowledge-links-builder.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:492::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/knowledge-links-builder.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:643::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/knowledge-links-builder.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:680::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/knowledge-links-builder.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:718::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/knowledge-links-builder.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:836::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/knowledge-links-builder.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
       "key": "no-direct-guild-join::scripts/knowledge-links-traverse.ts:238::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction in scripts/knowledge-links-traverse.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
       "lane": "T05"
@@ -1628,11 +1588,6 @@
       "lane": "T05"
     },
     {
-      "key": "no-direct-guild-join::src/modules/security/workflows/events.ts:285::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in src/modules/security/workflows/events.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
       "key": "no-direct-guild-join::src/modules/state/workflows/dependency-graph-reader.ts:144::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction in src/modules/state/workflows/dependency-graph-reader.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
       "lane": "T05"
@@ -2091,6 +2046,56 @@
       "key": "no-direct-guild-join::src/modules/dispatch/workflows/task-assignment-v2.ts:690::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Line re-key only (rework-r3): the SAME pre-existing no-direct-guild-join site, moved by this round's edits above it (the launcher's batch claim + rollback wrapper, and the placeholder-completion branch in writeTaskAttemptV1). No new direct .guild join is introduced. Clears when T12 folds these files into the domains.",
       "lane": "T08"
+    },
+    {
+      "key": "no-direct-guild-join::src/modules/security/workflows/events.ts:294::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "RE-KEY, not a new violation. T09 appends the additive `harvest_auto_promote` security-event type (R53) to the SecurityEventType union in this file, which shifts the PRE-EXISTING resolveRunDir .guild construction from line 285 to 294. The stale :285 key is removed in the same change, so the baseline count is unchanged. The real fix is T12's consumer migration onto GuildStorage.",
+      "lane": "T09-work-loop"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:288::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "RE-KEY, not a new violation. T09 repoints collectRawSourceEdges at the durable sources tree (R59/KTD47) with a V1 read fallback, which adds lines above the PRE-EXISTING .guild constructions in this file and shifts their line numbers. The stale keys are removed in the same change, so the baseline count is unchanged. The real fix is T12's consumer migration onto GuildStorage.",
+      "lane": "T09-work-loop"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:362::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "RE-KEY, not a new violation. T09 repoints collectRawSourceEdges at the durable sources tree (R59/KTD47) with a V1 read fallback, which adds lines above the PRE-EXISTING .guild constructions in this file and shifts their line numbers. The stale keys are removed in the same change, so the baseline count is unchanged. The real fix is T12's consumer migration onto GuildStorage.",
+      "lane": "T09-work-loop"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:403::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "RE-KEY, not a new violation. T09 repoints collectRawSourceEdges at the durable sources tree (R59/KTD47) with a V1 read fallback, which adds lines above the PRE-EXISTING .guild constructions in this file and shifts their line numbers. The stale keys are removed in the same change, so the baseline count is unchanged. The real fix is T12's consumer migration onto GuildStorage.",
+      "lane": "T09-work-loop"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:514::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "RE-KEY, not a new violation. T09 repoints collectRawSourceEdges at the durable sources tree (R59/KTD47) with a V1 read fallback, which adds lines above the PRE-EXISTING .guild constructions in this file and shifts their line numbers. The stale keys are removed in the same change, so the baseline count is unchanged. The real fix is T12's consumer migration onto GuildStorage.",
+      "lane": "T09-work-loop"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:665::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "RE-KEY, not a new violation. T09 repoints collectRawSourceEdges at the durable sources tree (R59/KTD47) with a V1 read fallback, which adds lines above the PRE-EXISTING .guild constructions in this file and shifts their line numbers. The stale keys are removed in the same change, so the baseline count is unchanged. The real fix is T12's consumer migration onto GuildStorage.",
+      "lane": "T09-work-loop"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:702::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "RE-KEY, not a new violation. T09 repoints collectRawSourceEdges at the durable sources tree (R59/KTD47) with a V1 read fallback, which adds lines above the PRE-EXISTING .guild constructions in this file and shifts their line numbers. The stale keys are removed in the same change, so the baseline count is unchanged. The real fix is T12's consumer migration onto GuildStorage.",
+      "lane": "T09-work-loop"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:740::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "RE-KEY, not a new violation. T09 repoints collectRawSourceEdges at the durable sources tree (R59/KTD47) with a V1 read fallback, which adds lines above the PRE-EXISTING .guild constructions in this file and shifts their line numbers. The stale keys are removed in the same change, so the baseline count is unchanged. The real fix is T12's consumer migration onto GuildStorage.",
+      "lane": "T09-work-loop"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/knowledge-links-builder.ts:858::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "RE-KEY, not a new violation. T09 repoints collectRawSourceEdges at the durable sources tree (R59/KTD47) with a V1 read fallback, which adds lines above the PRE-EXISTING .guild constructions in this file and shifts their line numbers. The stale keys are removed in the same change, so the baseline count is unchanged. The real fix is T12's consumer migration onto GuildStorage.",
+      "lane": "T09-work-loop"
+    },
+    {
+      "key": "no-guild-raw-writes::src/modules/knowledge/resources/scripts/knowledge-links-builder.ts:13::references .guild/raw",
+      "reason": "R59 read-only V1 fallback: knowledge-links-builder reads the retired .guild/raw/sources tree only to migrate sources it has not yet seen under definition(\"sources\"); it never writes there. Declared for lane T09; retired with the T12 consumer fold.",
+      "lane": "T09"
     }
   ]
 }
