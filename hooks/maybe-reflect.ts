@@ -80,6 +80,8 @@ import { spawnSync } from "child_process";
 import { resolveGuildRoot } from "./lib/guild-root.js";
 import { authorizeHookWrite, formatBindingRejected } from "./lib/hook-binding.js";
 import { detectSelfBuild } from "./lib/self-build.js";
+// T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
+import { ensureStorageLayout } from "./lib/ensure-layout.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -503,6 +505,18 @@ async function main(): Promise<void> {
   // Walk up from cwd to find the repo root — ensures .guild/ always lands at
   // the nearest .git / .guild ancestor, never in a subdirectory.
   const guildRoot = resolveGuildRoot(cwd);
+
+  // T10 (KTD23): layout bootstrap on a write-capable entry. A hook can be the
+  // first thing to touch a root after an upgrade landed, so it runs the
+  // bootstrap itself; on a current root this is a stat plus one marker read.
+  // Fail-open by contract — a refused root still exits 0.
+  const layout = ensureStorageLayout(guildRoot, "maybe-reflect");
+  // KTD23 fails CLOSED on a layout this build does not understand: a future
+  // marker means every write below would land in a root that is not ours.
+  if (!layout.ok) {
+    process.stderr.write(`warn: [maybe-reflect] .guild layout refused (${layout.refused}) — no writes\n`);
+    return;
+  }
 
   // Signal 2 (cross-run): codex-skip discipline guard on self-build runs (FU-E).
   //

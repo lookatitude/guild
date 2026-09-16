@@ -134,6 +134,8 @@ import {
   writePayloadSidecar,
   type TraceTokens,
 } from "./lib/trace-v2.js";
+// T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
+import { ensureStorageLayout } from "./lib/ensure-layout.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -223,6 +225,19 @@ async function main(): Promise<void> {
   // Resolve run context — explicit binding env ONLY, verified before any
   // write (T3b, session_context §5). No sentinel, no session/date fallback.
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+
+  // T10 (KTD23): layout bootstrap on a write-capable entry. A hook can be the
+  // first thing to touch a root after an upgrade landed, so it runs the
+  // bootstrap itself; on a current root this is a stat plus one marker read.
+  // Fail-open by contract — a refused root still exits 0.
+  const layout = ensureStorageLayout(cwd, "capture-telemetry");
+  // KTD23 fails CLOSED on a layout this build does not understand: a future
+  // marker means every write below would land in a root that is not ours.
+  if (!layout.ok) {
+    process.stderr.write(`warn: [capture-telemetry] .guild layout refused (${layout.refused}) — no writes\n`);
+    return;
+  }
+
   const runId = resolveBoundRunId(cwd);
   if (runId === null) process.exit(0); // fail closed: no write, never block the session
 

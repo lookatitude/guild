@@ -84,6 +84,8 @@ import {
   reopenRunBinding,
 } from "../scripts/lib/run-binding.js";
 import { readScalarField } from "../scripts/lib/frontmatter.js";
+// T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
+import { ensureStorageLayout } from "./lib/ensure-layout.js";
 
 /**
  * Tolerance window (ms) for the reopen-on-activity check (see header). Newer
@@ -403,6 +405,20 @@ async function main(): Promise<void> {
 
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   const root = resolveGuildRoot(cwd);
+
+  // T10 (KTD23): layout bootstrap on a write-capable entry. A hook can be the
+  // first thing to touch a root after an upgrade landed, so it runs the
+  // bootstrap itself; on a current root this is a stat plus one marker read.
+  // Fail-open by contract — a refused root still exits 0.
+  const layout = ensureStorageLayout(root, "run-trace-close");
+  // KTD23 fails CLOSED on a layout this build does not understand: a future
+  // marker means every write below would land in a root that is not ours.
+  if (!layout.ok) {
+    // Silent: this hook's stderr budget is 0 bytes
+    // (hooks/__tests__/hook-output-budget.test.ts). The refusal is in the
+    // process memo; activation is where an operator is told.
+    return;
+  }
 
   const runId = resolveRunIdForTrace(root, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] });
   if (!runId) process.exit(0); // no active run

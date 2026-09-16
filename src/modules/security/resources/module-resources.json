@@ -8,7 +8,7 @@
       "id": "PostToolUse:post-tool-use.js",
       "source_path": "hooks/dist/post-tool-use.js",
       "resource_path": "resources/hooks/dist/post-tool-use.js",
-      "sha256": "6b433116d6652e99f988244fe9c0eed7b3178a834e0f1a638d3178a6f76647fe"
+      "sha256": "2e2ab9cb05ad57ce7da6292343f6cb6768d05c83d189f1fc8f71f54a1cc4c426"
     },
     {
       "category": "hooks",

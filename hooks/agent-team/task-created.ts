@@ -47,6 +47,8 @@ import { resolveGuildRoot } from "../lib/guild-root.js";
 import { markLaneInProgress } from "../lib/run-state.js";
 import { emitBusEvent } from "../lib/bus-emit.js";
 import { authorizeHookWrite, formatBindingRejected } from "../lib/hook-binding.js";
+// T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
+import { ensureStorageLayout } from "../lib/ensure-layout.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -187,6 +189,19 @@ async function main(): Promise<void> {
   // sentinel and no run-<session_id> fallback: an unbound write is refused
   // (structured binding_rejected note), never redirected.
   const guildRootForRun = resolveGuildRoot(cwd);
+
+  // T10 (KTD23): layout bootstrap on a write-capable entry. A hook can be the
+  // first thing to touch a root after an upgrade landed, so it runs the
+  // bootstrap itself; on a current root this is a stat plus one marker read.
+  // Fail-open by contract — a refused root still exits 0.
+  const layout = ensureStorageLayout(guildRootForRun, "task-created");
+  // KTD23 fails CLOSED on a layout this build does not understand: a future
+  // marker means every write below would land in a root that is not ours.
+  if (!layout.ok) {
+    process.stderr.write(`warn: [task-created] .guild layout refused (${layout.refused}) — no writes\n`);
+    return;
+  }
+
   const runStateAuth = authorizeHookWrite(guildRootForRun);
   if (runStateAuth.ok === false) {
     process.stderr.write(formatBindingRejected("task-created", runStateAuth));

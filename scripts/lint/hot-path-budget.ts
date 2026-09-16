@@ -2,7 +2,7 @@
  * scripts/lint/hot-path-budget.ts — the U2 hot-path oracles (KTD29, R45).
  *
  *   timings        layout-current SessionStart marker read ≤50ms; green
- *                  verify.after_edit ≤250ms. Reports p50/p95 over N runs.
+ *                  after-edit path ≤250ms. Reports p50/p95 over N runs.
  *   require-graph  which src/modules/<domain> trees a cheap entrypoint actually
  *                  loads. KTD29: "the graph may contain them; the entrypoint
  *                  must not load them."
@@ -31,6 +31,27 @@ const BUDGET_MS = {
   session_start_marker_read: 50,
   post_tool_use_hook_green: 250,
 };
+
+/**
+ * The environment a fixture spawn gets: the ambient one with every `GUILD_*`
+ * variable REMOVED, then the fixture's own.
+ *
+ * Without the strip these oracles measure the wrong thing whenever they are run
+ * from inside a Guild session — which is exactly when someone runs them. A lane
+ * worker's shell exports `GUILD_CWD`, `GUILD_RUN_DIR`, `GUILD_TASK_ID` and
+ * friends; the hook honours `GUILD_CWD` over its own cwd, so the spawned hook
+ * would resolve the DEVELOPER's root instead of the fixture's, report the rung
+ * absent because that root declares no check, and write its records into that
+ * session's live run tree. Observed, not theorised (T10).
+ */
+function fixtureEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (k.startsWith("GUILD_")) continue;
+    env[k] = v;
+  }
+  return { ...env, ...extra };
+}
 
 // ---------------------------------------------------------------------------
 // timings
@@ -116,13 +137,11 @@ function makeActiveRunFixture(): { dir: string; runId: string; marker: string } 
 }
 
 /**
- * What the shipped tree ACTUALLY has: the compiled PostToolUse path on a green edit.
+ * The compiled PostToolUse path on a green edit: hook pair exits 0, stdout empty.
  *
- * Named for what it measures (codex G-lane r3). Earlier rounds called this
- * `verify.after_edit`, but that rung does not exist on this tree — the harness was
- * spawning the check itself, so a passing result said nothing about whether the
- * shipped hook would ever spawn one. `verifyAfterEdgeRungOracle` below is the real
- * criterion, pending its owner.
+ * Named for what it measures (codex G-lane r3). This leg asserts the hook PAIR is
+ * QUIET; it does not assert that any project check ran. `verifyAfterEditRung`
+ * below is the rung criterion and asserts the spawn.
  */
 function runPostToolUseGreen(
   fixture: { dir: string; runId: string; marker: string },
@@ -136,7 +155,7 @@ function runPostToolUseGreen(
     tool_input: { file_path: edited, old_string: "a", new_string: "b" },
     tool_response: { success: true, filePath: edited },
   });
-  const env = { ...process.env, GUILD_RUN_ID: fixture.runId, CLAUDE_PLUGIN_ROOT: ROOT };
+  const env = fixtureEnv({ GUILD_RUN_ID: fixture.runId, CLAUDE_PLUGIN_ROOT: ROOT });
   const pre = spawnSync(NODE, [preToolUse], { input: payload, cwd: fixture.dir, encoding: "utf8", env });
   const post = spawnSync(NODE, [postToolUse], { input: payload, cwd: fixture.dir, encoding: "utf8", env });
   return {
@@ -182,19 +201,14 @@ function postToolUseHookGreen(): number {
 }
 
 /**
- * `verify_after_edit_rung` — the REAL plan criterion (R45 / KTD30), PENDING.
+ * BLOCKING. `verify_after_edit_rung` — the plan criterion (R45 / KTD30), landed
+ * by T10 and gating since.
  *
- * owner: T10. Not in any blocking job until T10 activates it. This mirrors the
- * `test.todo` convention T13 uses: a visible pending entry naming the owning lane,
- * so the criterion cannot be quietly dropped.
- *
- * The assertion, when T10 lands it: drive the SHIPPED PostToolUse entry with an Edit
- * payload in a project whose config declares a check command, and prove the HOOK —
- * not this harness — spawned that check. The marker is written by the check process
- * itself, so it can only appear if something actually ran it.
- *
- * On this tree the hook spawns nothing, so the marker is absent and this exits
- * non-zero with `rung absent`. That is the correct report: the rung is unimplemented.
+ * Drive the SHIPPED PostToolUse entry with an Edit payload in a project whose
+ * config declares a check command, and prove the HOOK — not this harness —
+ * spawned that check. The marker is written by the check process itself, so it
+ * can only appear if something actually ran it; a hook that stopped spawning
+ * the check reads here as `rung absent`, not as a pass.
  */
 function verifyAfterEditRung(): number {
   const entries = hookEntrypoints();
@@ -208,24 +222,25 @@ function verifyAfterEditRung(): number {
       tool_input: { file_path: edited, old_string: "a", new_string: "b" },
       tool_response: { success: true, filePath: edited },
     });
-    const env = {
-      ...process.env,
+    const env = fixtureEnv({
       GUILD_RUN_ID: fixture.runId,
       CLAUDE_PLUGIN_ROOT: ROOT,
       GUILD_CHECK_MARKER: fixture.marker,
-    };
+    });
     fs.rmSync(fixture.marker, { force: true });
     // ONLY the shipped hook runs. Nothing here spawns the check.
     const post = spawnSync(NODE, [entries.post], { input: payload, cwd: fixture.dir, encoding: "utf8", env });
     const checkRan = fs.existsSync(fixture.marker);
     const marker = checkRan ? fs.readFileSync(fixture.marker, "utf8").trim() : "";
 
-    process.stdout.write("verify_after_edit_rung — PENDING (owner: T10, not gating)\n");
+    process.stdout.write("verify_after_edit_rung — correctness (blocking)\n");
     if (!checkRan) {
       process.stdout.write(
-        "  PENDING  rung absent — the shipped PostToolUse hook spawned no check.\n" +
-          `           .guild/verify.json declared verify.after_edit; no marker was written.\n` +
-          "           T10 implements the rung; this oracle turns green without edits.\n",
+        "  FAIL  rung absent — the shipped PostToolUse hook spawned no check.\n" +
+          `        the fixture declared verify.after_edit; no marker was written.\n` +
+          "        stderr from the hook:\n" +
+          (post.stderr ?? "").split("\n").map((l) => `          ${l}`).join("\n") +
+          "\n",
       );
       return 1;
     }

@@ -64,11 +64,23 @@
  *      ancestor so .guild/ always lands at the repo root, never in a subdirectory.
  */
 
-import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
 import { buildCompactSummaryInstructions } from "./lib/reanchor.js";
+// T10 (KTD23/R45): a hook is a write-capable entry — it runs the layout
+// bootstrap itself. Fail-open wrapper over the canonical implementation.
+import { ensureStorageLayout } from "./lib/ensure-layout.js";
+// T10 (KTD26/KTD28/R42/R46): the `compaction` adapter rung. Rehydrate reads
+// DISK ONLY — its signature has no transcript or summary parameter.
+import {
+  rehydrateFromDisk,
+  renderRehydrateInstructions,
+  resolveCompactionRung,
+  runRecordExists,
+  snapshotIsEmpty,
+  writeRehydrateHeartbeat,
+} from "./lib/compaction-rehydrate.js";
 import { appendEvent, type HookEvent } from "./lib/v1.4/log-jsonl.js";
 // guild.trace_event.v2 additive fields (D-OBS-1/6). Bound BY POINTER — see
 // lib/trace-v2.ts header. Hook events are not LLM calls → no tokens.
@@ -108,20 +120,33 @@ function payloadExcerpt(payload: unknown): string {
   }
 }
 
-function readCurrentRunId(guildRoot: string): string | undefined {
-  const sentinelPath = path.join(guildRoot, ".guild", "runs", "current-run-id");
-  try {
-    const value = fs.readFileSync(sentinelPath, "utf8").trim();
-    return value.length > 0 ? value : undefined;
-  } catch {
-    return undefined;
-  }
+/**
+ * `GUILD_RUN_DIR`, honoured only when it is a non-empty ABSOLUTE path.
+ *
+ * A bare `??` accepts "" (an empty string is not nullish), and every write then
+ * lands at a RELATIVE path under whatever cwd the hook inherited — observed
+ * creating `rungs/` and `logs/` inside the repo from a test spawn. An unusable
+ * override is treated as absent so the caller falls back to this root's own run
+ * directory; a hook never writes outside the run tree it resolved.
+ */
+function runDirOverride(): string | undefined {
+  const raw = process.env["GUILD_RUN_DIR"];
+  if (typeof raw !== "string" || raw.length === 0) return undefined;
+  return path.isAbsolute(raw) ? raw : undefined;
 }
 
-function resolveRunId(guildRoot: string): string | undefined {
+/**
+ * R71 / C2: the active run is the run RECORD plus `GUILD_RUN_ID`.
+ *
+ * The `current-run-id` sentinel fallback is gone. A sentinel is interactive
+ * command INTAKE and must never authorize a runtime write: moving it mid-run
+ * would redirect an in-flight writer onto another run's log. Nothing here reads
+ * it and nothing anywhere recreates it.
+ */
+function resolveRunId(): string | undefined {
   const envRunId = process.env["GUILD_RUN_ID"];
   if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
-  return readCurrentRunId(guildRoot);
+  return undefined;
 }
 
 export async function main(): Promise<void> {
@@ -148,6 +173,18 @@ export async function main(): Promise<void> {
   // Walk up from cwd to find the repo root — ensures .guild/ always lands at
   // the nearest .git / .guild ancestor, never in a subdirectory.
   const guildRoot = resolveGuildRoot(cwd);
+
+  // ── T10 (KTD23): layout bootstrap on a write-capable entry ────────────────
+  // PreCompact appends a hook_event and, on a skip-recorded compaction rung,
+  // writes the rehydrate snapshot. Both mutate the run tree, so this entry runs
+  // the bootstrap itself. Fail-open: a refused root still exits 0.
+  const layout = ensureStorageLayout(guildRoot, "pre-compact");
+  // KTD23 fails CLOSED on a layout this build does not understand: a future
+  // marker means every write below would land in a root that is not ours.
+  if (!layout.ok) {
+    process.stderr.write(`warn: [pre-compact] .guild layout refused (${layout.refused}) — no writes\n`);
+    return;
+  }
 
   // oir-wi-57 round-4/5: PreCompact is a globally-registered hook — it fires
   // inside every dispatched specialist's own pane/subagent session too, not
@@ -189,17 +226,58 @@ export async function main(): Promise<void> {
     }
   }
 
-  const runId = resolveRunId(guildRoot);
+  const runId = resolveRunId();
   if (typeof runId !== "string" || runId.length === 0) {
     process.stderr.write(
-      "warn: [pre-compact] GUILD_RUN_ID unset and current-run-id missing — falling through (no log emit).\n",
+      "warn: [pre-compact] GUILD_RUN_ID unset — falling through (no log emit).\n",
     );
     return;
   }
 
-  const runDir =
-    process.env["GUILD_RUN_DIR"] ??
-    path.join(guildRoot, ".guild", "runs", runId);
+  const runDir = runDirOverride() ?? path.join(guildRoot, ".guild", "runs", runId);
+
+  // ── T10 (KTD26/KTD28/R42/R46): the compaction rung ────────────────────────
+  // The context is about to be reclaimed. What survives is what is on DISK:
+  // the working-set card, the last five goal_status envelopes, the cell's
+  // assignment, its progress ledger, and the workflow cursor. The snapshot is
+  // built by `rehydrateFromDisk`, whose signature accepts no transcript and no
+  // summary — so "never from a host transcript summary" is a property of the
+  // call, not a promise in a comment.
+  //
+  // native         emit the pointers as plain text so the post-compact turn
+  //                knows which files to read. LEAD-ONLY, for the same
+  //                role-collapse reason as the re-anchor text above.
+  // skip-recorded  the host has no compaction event at all. Write the same
+  //                snapshot to the run tree each heartbeat instead, so a brand
+  //                new session can rehydrate from files rather than from a
+  //                summary nobody produced.
+  //
+  // R71: an unknown run id with no run RECORD on disk is not an active run, so
+  // there is nothing to rehydrate and nothing is written.
+  if (runRecordExists(runDir)) {
+    try {
+      const rung = resolveCompactionRung(process.env);
+      const snapshot = rehydrateFromDisk({
+        runDir,
+        cwd: guildRoot,
+        runId,
+        rung,
+        ...(process.env["GUILD_PHASE"] ? { phase: process.env["GUILD_PHASE"] } : {}),
+        ...(process.env["GUILD_TASK_ID"] ? { logicalTaskId: process.env["GUILD_TASK_ID"] } : {}),
+      });
+      if (rung === "skip-recorded") {
+        writeRehydrateHeartbeat(runDir, snapshot);
+      } else if (laneId === undefined && !snapshotIsEmpty(snapshot)) {
+        process.stdout.write(renderRehydrateInstructions(snapshot, { runDir }));
+      }
+    } catch (err) {
+      process.stderr.write(
+        `warn: [pre-compact] compaction rehydrate failed (non-fatal): ${
+          err instanceof Error ? err.message : String(err)
+        }\n`,
+      );
+    }
+  }
 
   const ts = new Date().toISOString();
   // laneId resolved above (before the re-anchor gate). Stamping it here lets

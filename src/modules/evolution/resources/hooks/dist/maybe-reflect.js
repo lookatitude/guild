@@ -23,8 +23,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // hooks/maybe-reflect.ts
-var fs4 = __toESM(require("fs"));
-var path5 = __toESM(require("path"));
+var fs6 = __toESM(require("fs"));
+var path8 = __toESM(require("path"));
 var import_child_process = require("child_process");
 
 // hooks/lib/guild-root.ts
@@ -408,8 +408,8 @@ function validateRunBindingRecord(parsed, expectedRunId) {
   };
 }
 function readRunBindingRecord(opts) {
-  const fs5 = opts.fs ?? realBindingFs();
-  const raw = fs5.readFile(runBindingPath(opts.root, opts.run_id));
+  const fs7 = opts.fs ?? realBindingFs();
+  const raw = fs7.readFile(runBindingPath(opts.root, opts.run_id));
   if (raw === null) return { status: "absent" };
   let parsed;
   try {
@@ -492,18 +492,169 @@ function detectSelfBuild(root) {
   return { armed: false, path: null };
 }
 
+// hooks/lib/ensure-layout.ts
+var path7 = __toESM(require("node:path"));
+var import_node_child_process = require("node:child_process");
+
+// scripts/lib/state/ensure-storage-layout.ts
+var fs5 = __toESM(require("node:fs"));
+var path6 = __toESM(require("node:path"));
+
+// src/modules/state/workflows/guild-root.ts
+var fs4 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
+function resolveGuildRoot2(startDir) {
+  const resolvedStart = path5.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs4.existsSync(path5.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path5.join(current, ".guild");
+      try {
+        if (fs4.existsSync(guildDir) && fs4.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path5.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path6.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot2(cwd);
+  const marker = markerPath(root);
+  if (!fs5.existsSync(path6.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs5.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path6.join(__dirname, "upgrade-chain.js"),
+      path6.join(__dirname, "lib", "state", "upgrade-chain"),
+      path6.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs5.existsSync(c) || fs5.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
+// hooks/lib/ensure-layout.ts
+var memo = /* @__PURE__ */ new Map();
+function runColdBootstrapOutOfProcess(cwd) {
+  const pluginRoot = process.env["CLAUDE_PLUGIN_ROOT"] ?? process.env["GUILD_PLUGIN_ROOT"];
+  if (pluginRoot === void 0 || pluginRoot.length === 0) return false;
+  const cli = path7.join(pluginRoot, "runtime", "scripts", "ensure-storage-layout.js");
+  const r = (0, import_node_child_process.spawnSync)(process.execPath, [cli, `--cwd=${cwd}`], {
+    encoding: "utf8",
+    timeout: 6e4
+  });
+  return r.status === 0;
+}
+function ensureStorageLayout2(cwd, hookName = "hook") {
+  void hookName;
+  const cached = memo.get(cwd);
+  if (cached !== void 0) return cached;
+  const gate = (() => {
+    const pre = detect(cwd);
+    if (pre.state === "future") {
+      return {
+        ok: false,
+        status: null,
+        refused: "future",
+        reason: `layout ${String(pre.version)} is newer than this build (KTD23: never down-migrated)`
+      };
+    }
+    if (pre.state === "current" || pre.state === "absent") {
+      return { ok: true, status: pre, refused: null, reason: null };
+    }
+    try {
+      return { ok: true, status: ensureStorageLayout(cwd), refused: null, reason: null };
+    } catch {
+      runColdBootstrapOutOfProcess(cwd);
+      return { ok: true, status: detect(cwd), refused: null, reason: null };
+    }
+  })();
+  memo.set(cwd, gate);
+  return gate;
+}
+
 // hooks/maybe-reflect.ts
 async function readStdin() {
-  return new Promise((resolve4) => {
+  return new Promise((resolve5) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve4(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve4(""));
+    process.stdin.on("end", () => resolve5(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve5(""));
   });
 }
 function loadEvents(eventsFile) {
-  if (!fs4.existsSync(eventsFile)) return [];
-  const content = fs4.readFileSync(eventsFile, "utf8");
+  if (!fs6.existsSync(eventsFile)) return [];
+  const content = fs6.readFileSync(eventsFile, "utf8");
   const events = [];
   for (const line of content.split("\n")) {
     const trimmed = line.trim();
@@ -538,20 +689,20 @@ function devteamSubagentGateCheck(events, cwd) {
       reason: `dispatch count ${dispatchCount} < 3`
     };
   }
-  const specDir = path5.join(resolveGuildRoot(cwd), ".guild", "spec");
+  const specDir = path8.join(resolveGuildRoot(cwd), ".guild", "spec");
   const slug = process.env["GUILD_SPEC_SLUG"];
   if (slug && slug.trim().length > 0) {
-    const specPath = path5.join(specDir, `${slug}.md`);
-    if (!fs4.existsSync(specPath)) {
+    const specPath = path8.join(specDir, `${slug}.md`);
+    if (!fs6.existsSync(specPath)) {
       return { passed: false, reason: `spec not found: ${specPath}` };
     }
   } else {
-    if (!fs4.existsSync(specDir)) {
+    if (!fs6.existsSync(specDir)) {
       return { passed: false, reason: `spec dir not found: ${specDir}` };
     }
     let anySpec = false;
     try {
-      const entries = fs4.readdirSync(specDir);
+      const entries = fs6.readdirSync(specDir);
       anySpec = entries.some((name) => name.endsWith(".md"));
     } catch {
       anySpec = false;
@@ -590,15 +741,15 @@ function writeStubSummary(runDir, runId, events) {
     "",
     "<!-- fallback summary from maybe-reflect.ts \u2014 scripts/trace-summarize.ts was unavailable at this cwd. Install/restore scripts/trace-summarize.ts for the richer summary that guild:reflect prefers. -->"
   ];
-  const summaryPath = path5.join(runDir, "summary.md");
-  fs4.writeFileSync(summaryPath, lines.join("\n") + "\n", "utf8");
+  const summaryPath = path8.join(runDir, "summary.md");
+  fs6.writeFileSync(summaryPath, lines.join("\n") + "\n", "utf8");
   process.stderr.write(`[maybe-reflect] wrote fallback summary to ${summaryPath}
 `);
 }
 function tryRealSummarizer(cwd, runId) {
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path5.resolve(__dirname, "..", "..");
-  const summarizerPath = path5.join(pluginRoot, "runtime", "scripts", "trace-summarize.js");
-  if (!fs4.existsSync(summarizerPath)) return false;
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path8.resolve(__dirname, "..", "..");
+  const summarizerPath = path8.join(pluginRoot, "runtime", "scripts", "trace-summarize.js");
+  if (!fs6.existsSync(summarizerPath)) return false;
   const result = (0, import_child_process.spawnSync)(
     process.execPath,
     [summarizerPath, "--run-id", runId, "--cwd", cwd],
@@ -631,12 +782,12 @@ function evaluateCodexSkipGuard(guildRoot) {
   try {
     const { armed } = detectSelfBuild(guildRoot);
     if (!armed) return { armed: false, streak: 0 };
-    const reflectionsDir = path5.join(guildRoot, ".guild", "reflections");
-    if (!fs4.existsSync(reflectionsDir)) return { armed: true, streak: 0 };
-    const files = fs4.readdirSync(reflectionsDir).filter((f) => f.endsWith(".md")).map((f) => path5.join(reflectionsDir, f)).map((p) => {
+    const reflectionsDir = path8.join(guildRoot, ".guild", "reflections");
+    if (!fs6.existsSync(reflectionsDir)) return { armed: true, streak: 0 };
+    const files = fs6.readdirSync(reflectionsDir).filter((f) => f.endsWith(".md")).map((f) => path8.join(reflectionsDir, f)).map((p) => {
       let mtime = 0;
       try {
-        mtime = fs4.statSync(p).mtimeMs;
+        mtime = fs6.statSync(p).mtimeMs;
       } catch {
         mtime = 0;
       }
@@ -646,7 +797,7 @@ function evaluateCodexSkipGuard(guildRoot) {
     for (const { path: p } of files) {
       let content = "";
       try {
-        content = fs4.readFileSync(p, "utf8");
+        content = fs6.readFileSync(p, "utf8");
       } catch {
         break;
       }
@@ -663,9 +814,9 @@ function evaluateCodexSkipGuard(guildRoot) {
 }
 function clearCodexSkipSentinel(guildRoot) {
   try {
-    const sentinel = path5.join(guildRoot, ".guild", "codex-skip-streak.json");
-    if (!fs4.existsSync(sentinel)) return;
-    fs4.rmSync(sentinel);
+    const sentinel = path8.join(guildRoot, ".guild", "codex-skip-streak.json");
+    if (!fs6.existsSync(sentinel)) return;
+    fs6.rmSync(sentinel);
     process.stderr.write(
       `[maybe-reflect] codex-skip streak broken \u2014 cleared stale sentinel: ${sentinel}
 `
@@ -679,9 +830,9 @@ function clearCodexSkipSentinel(guildRoot) {
 }
 function writeCodexSkipSentinel(guildRoot, streak) {
   try {
-    const guildDir = path5.join(guildRoot, ".guild");
-    fs4.mkdirSync(guildDir, { recursive: true });
-    const sentinel = path5.join(guildDir, "codex-skip-streak.json");
+    const guildDir = path8.join(guildRoot, ".guild");
+    fs6.mkdirSync(guildDir, { recursive: true });
+    const sentinel = path8.join(guildDir, "codex-skip-streak.json");
     const data = {
       schema_version: "guild.codex_skip_streak.v1",
       streak,
@@ -691,7 +842,7 @@ function writeCodexSkipSentinel(guildRoot, streak) {
       reason: "codex adversarial review skipped on >= 3 consecutive self-build reflections (FU-E)",
       clear_by: "run guild:codex-review at the next gate, OR record a reflection without a codex_review: SKIPPED marker, OR delete this file after an explicit operator override"
     };
-    fs4.writeFileSync(sentinel, JSON.stringify(data, null, 2) + "\n", "utf8");
+    fs6.writeFileSync(sentinel, JSON.stringify(data, null, 2) + "\n", "utf8");
     process.stderr.write(
       `[maybe-reflect] wrote codex-skip sentinel: ${sentinel}
 `
@@ -714,6 +865,12 @@ async function main() {
   }
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   const guildRoot = resolveGuildRoot(cwd);
+  const layout = ensureStorageLayout2(guildRoot, "maybe-reflect");
+  if (!layout.ok) {
+    process.stderr.write(`warn: [maybe-reflect] .guild layout refused (${layout.refused}) \u2014 no writes
+`);
+    return;
+  }
   const codexGuard = evaluateCodexSkipGuard(guildRoot);
   if (codexGuard.armed && codexGuard.streak < CODEX_SKIP_THRESHOLD) {
     clearCodexSkipSentinel(guildRoot);
@@ -747,10 +904,10 @@ async function main() {
     process.exit(0);
   }
   const runId = reflectAuth.run_id;
-  const eventsRunDir = path5.join(guildRoot, ".guild", "runs", runId);
-  const canonicalEventsFile = path5.join(eventsRunDir, "logs", "v1.4-events.jsonl");
-  const legacyEventsFile = path5.join(eventsRunDir, "events.ndjson");
-  const eventsFile = fs4.existsSync(canonicalEventsFile) ? canonicalEventsFile : legacyEventsFile;
+  const eventsRunDir = path8.join(guildRoot, ".guild", "runs", runId);
+  const canonicalEventsFile = path8.join(eventsRunDir, "logs", "v1.4-events.jsonl");
+  const legacyEventsFile = path8.join(eventsRunDir, "events.ndjson");
+  const eventsFile = fs6.existsSync(canonicalEventsFile) ? canonicalEventsFile : legacyEventsFile;
   const events = loadEvents(eventsFile);
   const hookEvent = payload.hook_event_name ?? "Stop";
   if (hookEvent === "SubagentStop") {
@@ -771,7 +928,7 @@ async function main() {
       process.exit(0);
     }
   }
-  const runDir = path5.join(guildRoot, ".guild", "runs", runId);
+  const runDir = path8.join(guildRoot, ".guild", "runs", runId);
   const usedRealSummarizer = tryRealSummarizer(cwd, runId);
   if (!usedRealSummarizer) {
     writeStubSummary(runDir, runId, events);
