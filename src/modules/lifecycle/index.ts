@@ -47,3 +47,7 @@ export * from "./workflows/write-task-run";
 // graphs are YAML data (src/surfaces/graphs/); the lifecycle domain owns
 // load / merge / validate, and the layout lint executes this export.
 export * from "./workflows/workflow-graph-overlay";
+// U-TIER (T08 rework-r2): the per-run stable lock. Exported so the dispatch
+// instance cap can make "count the run's slots" and "claim one" a single atomic
+// step rather than an observation followed by a hopeful write.
+export * from "./workflows/stable-lock";

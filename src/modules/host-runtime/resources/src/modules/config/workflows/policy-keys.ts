@@ -156,6 +156,14 @@ export const POLICY_KEYS: readonly PolicyKeySpec[] = deepFreeze([
     default: "auto",
     note: "dispatch backend PREFERENCE only; never a statement about which host is running",
   },
+  {
+    key: "dispatch.max_instances",
+    type: "integer",
+    min: 1,
+    max: 32,
+    default: 4,
+    note: "live worker instances one run may hold at once; CONCURRENCY, not a roster cap (R46/KTD30)",
+  },
 ] as PolicyKeySpec[]);
 
 const BY_KEY = new Map(POLICY_KEYS.map((s) => [s.key, s]));

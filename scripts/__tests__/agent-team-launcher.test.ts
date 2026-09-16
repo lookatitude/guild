@@ -29,8 +29,40 @@ import { taskCellPaths } from "../../src/modules/dispatch/workflows/task-cell-co
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const launcherTestBinding = require("../../src/modules/lifecycle/workflows/run-binding") as
   typeof import("../../src/modules/lifecycle/workflows/run-binding");
+// T06/T08: the launcher copies assignment host/model ids from the run's
+// guild.session_binding.v1 and BLOCKS without one, so the fixture seeds it
+// alongside the run binding (never rely on an ambient run in the lead's shell).
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const launcherTestSession = require("../../src/modules/config/workflows/session-binding") as
+  typeof import("../../src/modules/config/workflows/session-binding");
+function launcherTestSeedSessionBinding(cwd: string, runId: string): void {
+  const runDir = path.join(cwd, ".guild", "runs", runId);
+  const file = launcherTestSession.sessionBindingPath(runDir);
+  if (fs.existsSync(file)) return;
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(
+    file,
+    `${JSON.stringify(
+      {
+        schema_version: "guild.session_binding.v1",
+        run_id: runId,
+        host_family: "claude-code-cli",
+        surface: "cli",
+        detected_at: new Date().toISOString(),
+        models: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+        model_family: "claude",
+        prompt_compose: { dialect_id: "claude", overlay_ids: [], hash: "sha256:x" },
+        evidence: { cheap: "available", mid: "available", powerful: "available" },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+}
 function launcherTestBindFor(cwd: string, runId: string): { binding_ref: string } {
   const existing = launcherTestBinding.loadRunBinding({ root: cwd, run_id: runId });
+  launcherTestSeedSessionBinding(cwd, runId);
   return {
     binding_ref:
       (existing ?? launcherTestBinding.mintRunBinding({ root: cwd, run_id: runId })).binding_ref,

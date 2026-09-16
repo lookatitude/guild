@@ -8,28 +8,28 @@
       "id": "PostToolUse:comms-format-lint.js",
       "source_path": "hooks/dist/comms-format-lint.js",
       "resource_path": "resources/hooks/dist/comms-format-lint.js",
-      "sha256": "19df54fff7290d78073a5442b7264b4f9109aae4813f7aa6b19120c71fc2ae96"
+      "sha256": "83ef38fd92607b2116500686f9449f64bfe03fb7c95363a316e0ef6f38227cdf"
     },
     {
       "category": "hooks",
       "id": "TaskCompleted:task-completed.js",
       "source_path": "hooks/agent-team/dist/task-completed.js",
       "resource_path": "resources/hooks/agent-team/dist/task-completed.js",
-      "sha256": "2de1f167a4c680acf90054f944323196eab8a6ae6f33e10837b4ba2173363f5f"
+      "sha256": "046c5488c4fbaa57d2f4d499f6d0fe2639517df8e0c9cd410daff3e56ad765d3"
     },
     {
       "category": "hooks",
       "id": "TaskCreated:task-created.js",
       "source_path": "hooks/agent-team/dist/task-created.js",
       "resource_path": "resources/hooks/agent-team/dist/task-created.js",
-      "sha256": "3e8adca53ae893293e6fa946e0dbce6e6d7ab02f22d60e68dcf1d7923f39edeb"
+      "sha256": "8d3324a330e4706ca1cf1816d62e91af06d4a1d86b16c3012697be08715d9b31"
     },
     {
       "category": "hooks",
       "id": "TeammateIdle:teammate-idle.js",
       "source_path": "hooks/agent-team/dist/teammate-idle.js",
       "resource_path": "resources/hooks/agent-team/dist/teammate-idle.js",
-      "sha256": "31a7dd31ecd789b3d73008a6c3415476b4b92b7db84c52156acbb3bc41e0a498"
+      "sha256": "8bf850333c4793c1700add0af60e0409887b9169a8fa7fd5513afc07a0435f4d"
     },
     {
       "category": "scripts",
@@ -64,7 +64,23 @@
       "id": "lib/artifact-bus",
       "source_path": "scripts/lib/artifact-bus.ts",
       "resource_path": "resources/scripts/lib/artifact-bus.ts",
-      "sha256": "f3b76a0aa944d660338fbed3594d67b741c88e046f6264dd3ff68be97dbbf8a7"
+      "sha256": "fb66adc0d5c6123871d51ea8ff1b7e49afb35806da10c909116d7ce840ee5859"
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/kernel/workflows/sealed-collections.ts",
+      "source_path": "src/modules/kernel/workflows/sealed-collections.ts",
+      "resource_path": "resources/src/modules/kernel/workflows/sealed-collections.ts",
+      "sha256": "8fa9aa0b18e2d7cda69151d7eae0aecbd89f4a176e3f61f121b7d34e4d63ac1c",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/kernel/workflows/tier-bus.ts",
+      "source_path": "src/modules/kernel/workflows/tier-bus.ts",
+      "resource_path": "resources/src/modules/kernel/workflows/tier-bus.ts",
+      "sha256": "95fc3e6cb776fa4c14138a15d02847e7b4e73cc6147e6347e900d9ad1575d425",
+      "projection_dependency": true
     }
   ]
 }

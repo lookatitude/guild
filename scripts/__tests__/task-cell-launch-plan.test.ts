@@ -14,6 +14,25 @@ import { readTeamResult, writeTeamResult } from "../../src/modules/teams/workflo
 
 const backend: Specialist = { name: "backend", scope: "API", dependsOn: [] };
 
+
+/**
+ * A machinery write on a run record is authenticated by the run's minted
+ * binding (KTD19, T08 rework-r2): `handoff/station/**` is a gated bus topic, so
+ * a run with no binding is not a run these writers will publish to.
+ */
+function mintBindingFor(cwd: string, runId: string): void {
+  const runDir = path.join(cwd, ".guild", "runs", runId);
+  fs.mkdirSync(runDir, { recursive: true });
+  const p = path.join(runDir, "binding.json");
+  if (!fs.existsSync(p)) {
+    fs.writeFileSync(
+      p,
+      JSON.stringify({ run_id: runId, binding_ref: `rb-fixture-${runId}` }),
+      "utf8",
+    );
+  }
+}
+
 describe("task-cell production launch plan", () => {
   it("expands one specialist owning two tasks into two fresh transport lanes", () => {
     const lanes = expandTaskCellLaunchLanes(
@@ -87,6 +106,7 @@ describe("task-cell production launch plan", () => {
       `.guild/runs/${runId}/team-plan/build.json`,
       lanes,
     );
+    mintBindingFor(cwd, runId);
     writeTeamResult(cwd, runId, initial);
 
     for (const lane of lanes) {
@@ -155,6 +175,7 @@ describe("task-cell production launch plan", () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "guild-team-result-mismatch-"));
     const runId = "run-mismatch";
     const lanes = expandTaskCellLaunchLanes(runId, [backend], new Map([["backend", ["T1"]]]));
+    mintBindingFor(cwd, runId);
     writeTeamResult(cwd, runId, buildStationTaskCellResult(
       "build",
       `.guild/runs/${runId}/team-plan/build.json`,

@@ -3737,6 +3737,9 @@ function deepFreeze(value, options = {}) {
   walk(value);
   return value;
 }
+function frozenList(items, options = {}) {
+  return deepFreeze(items.slice(), options);
+}
 var SEALED_BRAND;
 var init_sealed_collections = __esm({
   "src/modules/kernel/workflows/sealed-collections.ts"() {
@@ -3976,6 +3979,22 @@ var init_path_containment = __esm({
   }
 });
 
+// src/modules/kernel/workflows/tier-bus.ts
+var BUS_TIERS, LEAD_ROLE_IDS, TIER_BUS_CONTRACT;
+var init_tier_bus = __esm({
+  "src/modules/kernel/workflows/tier-bus.ts"() {
+    init_sealed_collections();
+    BUS_TIERS = frozenList(["T0", "T1", "T2"]);
+    LEAD_ROLE_IDS = frozenList(["team-lead", "lead", "orchestrator"]);
+    TIER_BUS_CONTRACT = deepFreeze({
+      tiers: BUS_TIERS,
+      upward_envelopes: { T2: "guild.handoff.v2", T1: "guild.goal_status.v1" },
+      lead_roles: LEAD_ROLE_IDS,
+      tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
+    });
+  }
+});
+
 // src/modules/kernel/index.ts
 var init_kernel = __esm({
   "src/modules/kernel/index.ts"() {
@@ -3984,6 +4003,7 @@ var init_kernel = __esm({
     init_identifier_tokenize();
     init_sealed_collections();
     init_path_containment();
+    init_tier_bus();
   }
 });
 
@@ -14907,6 +14927,53 @@ function withStableLock(runDir3, fn, opts = {}) {
     }
   }
 }
+async function withStableLockAsync(runDir3, fn, opts = {}) {
+  initStableLockfile(runDir3);
+  const sentinel = exclusionSentinelPath(runDir3);
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const backoff = opts.backoffMs ?? DEFAULT_BACKOFF_MS;
+  const start = Date.now();
+  let attempt = 0;
+  for (; ; ) {
+    try {
+      const fd = (0, import_node_fs.openSync)(sentinel, "wx");
+      try {
+        (0, import_node_fs.writeSync)(fd, `${process.pid}
+`);
+      } catch {
+      }
+      (0, import_node_fs.closeSync)(fd);
+      try {
+        return await fn();
+      } finally {
+        try {
+          (0, import_node_fs.unlinkSync)(sentinel);
+        } catch {
+        }
+      }
+    } catch (err) {
+      const code = err?.code;
+      if (code !== "EEXIST") throw err;
+      if (Date.now() - start > timeoutMs) {
+        throw new Error(
+          `v1.4-lock: timed out waiting for ${sentinel} (${timeoutMs}ms). Stale lock? Remove the file if you are sure no other process holds it.`
+        );
+      }
+      const idx = Math.min(attempt, backoff.length - 1);
+      sleepSyncMs(backoff[idx]);
+      attempt += 1;
+    }
+  }
+}
+function clearStaleExclusionSentinel(runDir3) {
+  const sentinel = exclusionSentinelPath(runDir3);
+  if ((0, import_node_fs.existsSync)(sentinel)) {
+    try {
+      (0, import_node_fs.unlinkSync)(sentinel);
+    } catch {
+    }
+  }
+}
 var import_node_fs, import_node_path, DEFAULT_BACKOFF_MS, DEFAULT_TIMEOUT_MS;
 var init_stable_lock = __esm({
   "src/modules/lifecycle/workflows/stable-lock.ts"() {
@@ -21283,10 +21350,92 @@ var init_no_accidental_write = __esm({
   }
 });
 
+// src/modules/communication/resources/src/modules/kernel/workflows/sealed-collections.ts
+function regExpWritesLastIndex2(re) {
+  return re.global || re.sticky;
+}
+function freezeRegExpSafely2(re) {
+  if (regExpWritesLastIndex2(re)) return false;
+  Object.freeze(re);
+  return true;
+}
+function isSealedCollection2(value) {
+  if (value === null || typeof value !== "object") return false;
+  if (value instanceof Set || value instanceof Map) return false;
+  const brand = value[SEALED_BRAND2];
+  return (brand === "set" || brand === "map") && Object.isFrozen(value);
+}
+function sealedCollectionValues2(value) {
+  if (!isSealedCollection2(value)) return void 0;
+  return [...value];
+}
+function deepFreeze3(value, options = {}) {
+  const policy = options.regexps ?? "safe";
+  const seen = /* @__PURE__ */ new WeakSet();
+  const walk = (node) => {
+    if (node === null || typeof node !== "object") return;
+    const obj = node;
+    if (seen.has(obj)) return;
+    seen.add(obj);
+    if (obj instanceof RegExp) {
+      if (policy === "freeze") Object.freeze(obj);
+      else if (policy === "safe") freezeRegExpSafely2(obj);
+      return;
+    }
+    if (obj instanceof Date) {
+      return;
+    }
+    if (obj instanceof Set || obj instanceof Map) {
+      throw new TypeError(
+        "deepFreeze: refusing to 'freeze' a Set/Map \u2014 freeze does not close membership and the intrinsics reach past neutered own methods. Declare it with sealSet()/sealMap()."
+      );
+    }
+    const sealedValues = sealedCollectionValues2(obj);
+    if (sealedValues !== void 0) {
+      for (const entry of sealedValues) walk(entry);
+      return;
+    }
+    Object.freeze(obj);
+    for (const key of Reflect.ownKeys(obj)) {
+      const descriptor = Object.getOwnPropertyDescriptor(obj, key);
+      if (!descriptor || !("value" in descriptor)) continue;
+      walk(descriptor.value);
+    }
+  };
+  walk(value);
+  return value;
+}
+function frozenList2(items, options = {}) {
+  return deepFreeze3(items.slice(), options);
+}
+var SEALED_BRAND2;
+var init_sealed_collections2 = __esm({
+  "src/modules/communication/resources/src/modules/kernel/workflows/sealed-collections.ts"() {
+    SEALED_BRAND2 = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
+  }
+});
+
+// src/modules/communication/resources/src/modules/kernel/workflows/tier-bus.ts
+var BUS_TIERS2, LEAD_ROLE_IDS2, TIER_BUS_CONTRACT2;
+var init_tier_bus2 = __esm({
+  "src/modules/communication/resources/src/modules/kernel/workflows/tier-bus.ts"() {
+    init_sealed_collections2();
+    BUS_TIERS2 = frozenList2(["T0", "T1", "T2"]);
+    LEAD_ROLE_IDS2 = frozenList2(["team-lead", "lead", "orchestrator"]);
+    TIER_BUS_CONTRACT2 = deepFreeze3({
+      tiers: BUS_TIERS2,
+      upward_envelopes: { T2: "guild.handoff.v2", T1: "guild.goal_status.v1" },
+      lead_roles: LEAD_ROLE_IDS2,
+      tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
+    });
+  }
+});
+
 // src/modules/communication/resources/scripts/lib/artifact-bus.ts
 var TOPIC_TYPES, BUS_EVENT_KINDS;
 var init_artifact_bus = __esm({
   "src/modules/communication/resources/scripts/lib/artifact-bus.ts"() {
+    init_tier_bus2();
     TOPIC_TYPES = Object.freeze([
       "handoff",
       "status",
@@ -21339,6 +21488,64 @@ var init_station_signals = __esm({
   }
 });
 
+// src/modules/teams/workflows/goal-contract.ts
+var GOAL_SCHEMA, GOAL_STATUS_SCHEMA, GOAL_STATUS_STATES, NEXT_NEEDS, WORKFLOW_CLASSES, FORBIDDEN_NESTED_SCHEMAS, ORCHESTRATOR_WINDOW, GOAL_CONTRACT;
+var init_goal_contract = __esm({
+  "src/modules/teams/workflows/goal-contract.ts"() {
+    init_kernel();
+    GOAL_SCHEMA = "guild.goal.v1";
+    GOAL_STATUS_SCHEMA = "guild.goal_status.v1";
+    GOAL_STATUS_STATES = frozenList(["running", "blocked", "done", "failed"]);
+    NEXT_NEEDS = frozenList([
+      "ingest",
+      "evolve",
+      "create-specialist",
+      "operator",
+      "budget",
+      "verify",
+      "commit"
+    ]);
+    WORKFLOW_CLASSES = frozenList([
+      "product",
+      "research",
+      "debug",
+      "ops",
+      "init"
+    ]);
+    FORBIDDEN_NESTED_SCHEMAS = frozenList([
+      "guild.task_assignment.v2",
+      "guild.task_assignment.v1",
+      "guild.handoff_receipt.v1",
+      "guild.handoff.v2"
+    ]);
+    ORCHESTRATOR_WINDOW = 5;
+    GOAL_CONTRACT = deepFreeze({
+      intent: GOAL_SCHEMA,
+      rollup: GOAL_STATUS_SCHEMA,
+      window: ORCHESTRATOR_WINDOW,
+      states: GOAL_STATUS_STATES,
+      next_needs: NEXT_NEEDS,
+      classes: WORKFLOW_CLASSES
+    });
+  }
+});
+
+// src/modules/teams/workflows/compose-scope.ts
+var COMPOSE_SCOPES, MINTING_CLASSES, COMPOSE_SCOPE_CONTRACT;
+var init_compose_scope = __esm({
+  "src/modules/teams/workflows/compose-scope.ts"() {
+    init_kernel();
+    COMPOSE_SCOPES = frozenList(["phase", "goal"]);
+    MINTING_CLASSES = frozenList(["product", "init"]);
+    COMPOSE_SCOPE_CONTRACT = deepFreeze({
+      policy_key: "team.compose_scope",
+      scopes: COMPOSE_SCOPES,
+      default: "phase",
+      minting_classes: MINTING_CLASSES
+    });
+  }
+});
+
 // src/modules/teams/index.ts
 var init_teams = __esm({
   "src/modules/teams/index.ts"() {
@@ -21346,6 +21553,8 @@ var init_teams = __esm({
     init_canonical_hash();
     init_station_composer();
     init_station_signals();
+    init_goal_contract();
+    init_compose_scope();
   }
 });
 
@@ -21987,6 +22196,14 @@ var init_policy_keys = __esm({
         values: ["auto", "team", "agent", "subagent"],
         default: "auto",
         note: "dispatch backend PREFERENCE only; never a statement about which host is running"
+      },
+      {
+        key: "dispatch.max_instances",
+        type: "integer",
+        min: 1,
+        max: 32,
+        default: 4,
+        note: "live worker instances one run may hold at once; CONCURRENCY, not a roster cap (R46/KTD30)"
       }
     ]);
     BY_KEY = new Map(POLICY_KEYS.map((s) => [s.key, s]));
@@ -25409,11 +25626,11 @@ function dispatchUpgrade(input) {
   }
   return { upgrades: true, model: served };
 }
-function deepFreeze3(value) {
+function deepFreeze4(value) {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
     Object.freeze(value);
     for (const key of Object.getOwnPropertyNames(value)) {
-      deepFreeze3(value[key]);
+      deepFreeze4(value[key]);
     }
   }
   return value;
@@ -25422,7 +25639,7 @@ function freezeSnapshot(snapshot) {
   const log = [];
   const frozen = { ...snapshot, target_log: log };
   for (const key of Object.keys(snapshot)) {
-    deepFreeze3(frozen[key]);
+    deepFreeze4(frozen[key]);
   }
   Object.freeze(frozen);
   return frozen;
@@ -26700,9 +26917,9 @@ function asRecord(v) {
 function str(v, fallback) {
   return typeof v === "string" && v.length > 0 ? v : fallback;
 }
-function deepFreeze4(value) {
+function deepFreeze5(value) {
   if (value && typeof value === "object") {
-    for (const v of Object.values(value)) deepFreeze4(v);
+    for (const v of Object.values(value)) deepFreeze5(v);
     Object.freeze(value);
   }
   return value;
@@ -26742,7 +26959,7 @@ function buildModelInspection(input) {
   if (target.target_id === "unknown") unknowns.push("target");
   const inspectOff = flags["model_routing.inspect"] !== "on";
   if (inspectOff) {
-    return deepFreeze4({
+    return deepFreeze5({
       schema_version: MODEL_INSPECTION_SCHEMA,
       state: "inspect_disabled",
       generated_at: input.now,
@@ -26902,7 +27119,7 @@ function buildModelInspection(input) {
   if (!independence.adjudicated) unknowns.push("independence");
   const degradationBlock = asRecord(outcomeBlock?.["degradation"]);
   const degradation = receiptFinalized && degradationBlock ? { kind: str(degradationBlock["kind"], "unknown"), note: str(degradationBlock["note"], "") } : null;
-  return deepFreeze4({
+  return deepFreeze5({
     schema_version: MODEL_INSPECTION_SCHEMA,
     state: "ok",
     generated_at: input.now,
@@ -30389,7 +30606,7 @@ function validateWorkflowGraphOverlay(pluginDefault, overlay, classDefaults) {
     });
   }
   for (const target of crossClassTargets(mergedEdges)) {
-    if (!WORKFLOW_CLASSES.includes(target.class)) continue;
+    if (!WORKFLOW_CLASSES2.includes(target.class)) continue;
     if (target.entry === void 0) continue;
     const destGraph = classDefaults?.[target.class];
     const destEntry = (typeof destGraph?.entry === "string" ? destGraph.entry : void 0) ?? CLASS_DEFAULT_ENTRIES[target.class];
@@ -30474,7 +30691,7 @@ function validateWorkflowGraphOverlay(pluginDefault, overlay, classDefaults) {
     }
   }
   const cls = overlayGraph.class;
-  if (typeof cls === "string" && !WORKFLOW_CLASSES.includes(cls)) {
+  if (typeof cls === "string" && !WORKFLOW_CLASSES2.includes(cls)) {
     violations.push({ rule: "unknown-class", detail: `'${cls}' is not one of the five classes` });
   }
   for (const e of overlayGraph.edges ?? []) {
@@ -30496,7 +30713,7 @@ function validateWorkflowGraphOverlay(pluginDefault, overlay, classDefaults) {
     }
     const target = e.to;
     const toClass = e.change_class ?? (target && typeof target === "object" ? target.class : void 0);
-    if (toClass !== void 0 && !WORKFLOW_CLASSES.includes(toClass)) {
+    if (toClass !== void 0 && !WORKFLOW_CLASSES2.includes(toClass)) {
       violations.push({
         rule: "unknown-change-class",
         detail: `edge ${String(e.from)} changes class to '${toClass}', which is not one of the five`
@@ -30535,7 +30752,7 @@ function validateWorkflowGraphDocument(doc) {
   if (g.schema_version !== "guild.workflow_graph.v1") {
     violations.push({ rule: "unknown-class", detail: `schema_version '${String(g.schema_version)}' is not guild.workflow_graph.v1` });
   }
-  if (!WORKFLOW_CLASSES.includes(String(g.class))) {
+  if (!WORKFLOW_CLASSES2.includes(String(g.class))) {
     violations.push({ rule: "unknown-class", detail: `'${String(g.class)}' is not one of the five classes` });
   }
   if (nodes.length === 0) {
@@ -30555,23 +30772,23 @@ function validateWorkflowGraphDocument(doc) {
     if (typeof to === "string") {
       if (!ids.has(to)) violations.push({ rule: "unknown-edge-endpoint", detail: `edge to '${to}' is not a declared node` });
     } else if (to && typeof to === "object") {
-      if (!WORKFLOW_CLASSES.includes(String(to.class))) {
+      if (!WORKFLOW_CLASSES2.includes(String(to.class))) {
         violations.push({ rule: "unknown-change-class", detail: `edge crosses to class '${String(to.class)}', which is not one of the five` });
       }
     } else {
       violations.push({ rule: "unknown-edge-endpoint", detail: `edge from '${String(e?.from)}' has no target` });
     }
-    if (e?.change_class !== void 0 && !WORKFLOW_CLASSES.includes(e.change_class)) {
+    if (e?.change_class !== void 0 && !WORKFLOW_CLASSES2.includes(e.change_class)) {
       violations.push({ rule: "unknown-change-class", detail: `change_class '${e.change_class}' is not one of the five` });
     }
   }
   const ok = violations.length === 0;
   return { ok, valid: ok, violations };
 }
-var WORKFLOW_CLASSES, WORKFLOW_EDGE_OUTCOMES, PROTECTED_NODE_IDS, RELEASE_GATE, PROTECTED_NODE_STATIONS, PROTECTED_NODE_ROLES, RELEASE_ROLE, CLASS_DEFAULT_ENTRIES;
+var WORKFLOW_CLASSES2, WORKFLOW_EDGE_OUTCOMES, PROTECTED_NODE_IDS, RELEASE_GATE, PROTECTED_NODE_STATIONS, PROTECTED_NODE_ROLES, RELEASE_ROLE, CLASS_DEFAULT_ENTRIES;
 var init_workflow_graph_overlay = __esm({
   "src/modules/lifecycle/workflows/workflow-graph-overlay.ts"() {
-    WORKFLOW_CLASSES = Object.freeze(["product", "research", "debug", "ops", "init"]);
+    WORKFLOW_CLASSES2 = Object.freeze(["product", "research", "debug", "ops", "init"]);
     WORKFLOW_EDGE_OUTCOMES = Object.freeze([
       "next",
       "skip",
@@ -30707,7 +30924,7 @@ __export(lifecycle_exports, {
   RELEASE_ROLE: () => RELEASE_ROLE,
   WAVE_REQUIRED_KEYS: () => WAVE_REQUIRED_KEYS,
   WAVE_STATUSES: () => WAVE_STATUSES2,
-  WORKFLOW_CLASSES: () => WORKFLOW_CLASSES,
+  WORKFLOW_CLASSES: () => WORKFLOW_CLASSES2,
   WORKFLOW_EDGE_OUTCOMES: () => WORKFLOW_EDGE_OUTCOMES,
   analyzeNeutralCapabilityUse: () => analyzeNeutralCapabilityUse,
   appendGateOutcome: () => appendGateOutcome,
@@ -30723,6 +30940,7 @@ __export(lifecycle_exports, {
   buildMultiWaveProgram: () => buildMultiWaveProgram,
   calcDelayMs: () => calcDelayMs,
   capabilityRunStartIdentityHash: () => capabilityRunStartIdentityHash,
+  clearStaleExclusionSentinel: () => clearStaleExclusionSentinel,
   closeRunBinding: () => closeRunBinding,
   collectNeutralBoundNames: () => collectNeutralBoundNames,
   completePendingSubstantiveOperation: () => completePendingSubstantiveOperation,
@@ -30738,10 +30956,12 @@ __export(lifecycle_exports, {
   evaluateNeutralGate: () => evaluateNeutralGate,
   evaluateNeutralModuleBoundaries: () => evaluateNeutralModuleBoundaries,
   evaluateNeutralPolicy: () => evaluateNeutralPolicy,
+  exclusionSentinelPath: () => exclusionSentinelPath,
   extractNeutralImportEdges: () => extractNeutralImportEdges,
   extractNeutralImportSpecifiers: () => extractNeutralImportSpecifiers,
   freezeNeutralCapabilitySnapshot: () => freezeNeutralCapabilitySnapshot,
   initRunManifest: () => initRunManifest,
+  initStableLockfile: () => initStableLockfile,
   initializeRunBindingExclusion: () => initializeRunBindingExclusion,
   isCanonicalPhase: () => isCanonicalPhase,
   isCanonicalRunId: () => isCanonicalRunId,
@@ -30821,6 +31041,7 @@ __export(lifecycle_exports, {
   runWriteTaskRunCli: () => runWriteTaskRunCli,
   scanResumableLanes: () => scanResumableLanes,
   setProgramStatus: () => setProgramStatus,
+  stableLockPath: () => stableLockPath,
   stagePendingSubstantiveOperation: () => stagePendingSubstantiveOperation,
   sweepLaneLiveness: () => sweepLaneLiveness,
   taskRunPath: () => taskRunPath,
@@ -30838,6 +31059,8 @@ __export(lifecycle_exports, {
   verifyRunBinding: () => verifyRunBinding,
   wireRunManifest: () => wireRunManifest,
   withRunBindingExclusion: () => withRunBindingExclusion,
+  withStableLock: () => withStableLock,
+  withStableLockAsync: () => withStableLockAsync,
   writePluginConfigSnapshot: () => writePluginConfigSnapshot,
   writeResolvedSettingsSnapshot: () => writeResolvedSettingsSnapshot,
   writeRunManifest: () => writeRunManifest,
@@ -30864,6 +31087,7 @@ var init_lifecycle = __esm({
     init_write_run_manifest();
     init_write_task_run();
     init_workflow_graph_overlay();
+    init_stable_lock();
   }
 });
 

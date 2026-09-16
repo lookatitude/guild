@@ -14,6 +14,8 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
+import { POLICY_KEYS } from "../../src/modules/config/workflows/policy-keys";
+
 const SCRIPT = path.resolve(__dirname, "..", "config-cmd.ts");
 const ENV = { ...process.env, NODE_NO_WARNINGS: "1" } as NodeJS.ProcessEnv;
 
@@ -350,7 +352,7 @@ describe("config set — every non-policy key is refused", () => {
   test("the refusal prints the closed key list, so the fix is in the message", () => {
     const project = tmp(mkProject({}));
     const out = run(["set", "models.nope", "1", "--scope", "project", "--cwd", project]).out;
-    expect(out).toContain("Durable config holds exactly these 14 keys");
+    expect(out).toContain(`Durable config holds exactly these ${POLICY_KEYS.length} keys`);
     expect(out).toContain("wiki.autopromote");
     expect(out).toContain("advisorRounds");
   });
@@ -870,4 +872,3 @@ describe("config role — refuses every pin (SC-W1-7 surface retired by U-CFG)",
 // at set-time AND raw-file-swept by validate --effective (the resolver DROPS malformed
 // host_profiles, so validating the resolved config alone is vacuous).
 // ===========================================================================
-

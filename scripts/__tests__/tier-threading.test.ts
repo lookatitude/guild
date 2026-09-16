@@ -39,6 +39,7 @@ import { planTeamRouting, type RoutableHost } from "../lib/host-router";
 import { buildCapability, writeHostCapability } from "../write-host-capability";
 import { writeBackScoredTier } from "../lib/write-back-scored-tier";
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { sessionBindingPath, type SessionBinding } from "../../src/modules/config/workflows/session-binding";
 import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
 const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
@@ -180,6 +181,24 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
 
     const runId = "run-20260812-071100-tier-threading";
     mintRunBinding({ root: repo, run_id: runId });
+    // T06/T08: the launcher copies assignment host/model ids from the run's
+    // session binding and BLOCKS without one, so the fixture seeds it.
+    {
+      const runDir = path.join(repo, ".guild", "runs", runId);
+      fs.mkdirSync(runDir, { recursive: true });
+      const binding: SessionBinding = {
+        schema_version: "guild.session_binding.v1",
+        run_id: runId,
+        host_family: "claude-code-cli",
+        surface: "cli",
+        detected_at: new Date().toISOString(),
+        models: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+        model_family: "claude",
+        prompt_compose: { dialect_id: "claude", overlay_ids: [], hash: "sha256:x" },
+        evidence: { cheap: "available", mid: "available", powerful: "available" },
+      };
+      fs.writeFileSync(sessionBindingPath(runDir), `${JSON.stringify(binding, null, 2)}\n`, "utf8");
+    }
     const contextDir = path.join(repo, ".guild", "context", runId);
     fs.mkdirSync(contextDir, { recursive: true });
     fs.writeFileSync(path.join(contextDir, "sec-arch-T1-route.md"), "# security context\n");

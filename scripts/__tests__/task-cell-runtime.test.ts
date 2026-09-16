@@ -9,8 +9,12 @@ import {
 } from "../../src/modules/dispatch/workflows/task-cell-runtime";
 import { auditTaskCellArtifactJoin } from "../../src/modules/dispatch/workflows/task-cell-artifact-join";
 import { acknowledgeAssignment } from "../../src/modules/dispatch/workflows/task-assignment-v2";
+import {
+  initProgressLedger,
+  recordOracleOutcome,
+} from "../../src/modules/dispatch/workflows/progress-ledger";
 import { publishSubmittedHandoffPointer } from "../../src/modules/dispatch/workflows/task-cell-acceptance";
-import { buildTaskAssignmentV2, taskCellPaths } from "../lib/core/contracts/task-cell-backend";
+import { assignmentId, buildTaskAssignmentV2, taskCellPaths } from "../lib/core/contracts/task-cell-backend";
 import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
 import type { ExecutionTransportPort } from "../../src/modules/dispatch/workflows/execution-transport-ports";
 import { readTaskCellLifecycleEvents } from "../../src/modules/telemetry/workflows/task-cell-telemetry";
@@ -144,6 +148,11 @@ describe("FilesystemTaskCellRuntime production seam", () => {
       deadline: null,
       written_at: NOW(),
     });
+    // R46 (T08 rework): `done_when[]` is the additive machine form of the D6
+    // acceptance tests; the ledger below binds to THIS assignment's id.
+    (assignment as typeof assignment & { done_when?: unknown }).done_when = [
+      { id: "api", oracle: "named_check", target: "npm test -- api" },
+    ];
     worker.onNotify = ({ assignment_path }) => {
       const persisted = JSON.parse(fs.readFileSync(path.join(cwd, assignment_path), "utf8"));
       acknowledgeAssignment(cwd, persisted, () => "2026-08-10T16:59:59.000Z");
@@ -218,6 +227,18 @@ describe("FilesystemTaskCellRuntime production seam", () => {
     expect(JSON.parse(fs.readFileSync(path.join(cwd, paths.handoff_path), "utf8")).receipt_path).toBe(paths.receipt_path);
     fs.writeFileSync(path.join(cwd, receiptPath), "later retry bytes");
     expect(fs.readFileSync(path.join(cwd, paths.receipt_path))).toEqual(Buffer.from(receiptBytes));
+    // R46 (T08): the cell declares one oracle and settles it before acceptance.
+    const ledgerIds = { cwd, run_id: runId, logical_task_id: "T1" };
+    expect(
+      initProgressLedger({
+        ...ledgerIds,
+        cell_id: "cell-T1",
+        assignment_id: assignmentId(assignment),
+        done_when: [{ id: "api", oracle: "named_check", target: "npm test -- api" }],
+        now: NOW,
+      }).ok,
+    ).toBe(true);
+    recordOracleOutcome({ ...ledgerIds, item_id: "api", state: "pass", now: NOW });
     const accepted = await runtime.acceptHandoff(instance, {
       acceptance_policy_version: "1",
       authorities_required: ["deterministic_floor", "team_lead"],
@@ -276,7 +297,10 @@ describe("FilesystemTaskCellRuntime production seam", () => {
     worker.available = false;
     const cell = await runtime.spawnCell({
       run_id: runId, cell_id: "c", goal_id: "g", phase_id: "build", step_id: "s",
-      team_id: "t", logical_task_id: "T", fanout: "lead_only", lead: { lead_binding_id: "lead" },
+      // lead_plus_one, not lead_only: this asserts the SUBSTRATE precondition, and
+      // a lead_only cell runs in the parent session, so an unavailable transport
+      // is deliberately not its problem (T08 rework-r2).
+      team_id: "t", logical_task_id: "T", fanout: "lead_plus_one", lead: { lead_binding_id: "lead" },
     });
     await expect(runtime.spawnInstance(cell, {
       task_run_id: "tr", attempt: 1, worker_role: "backend",
@@ -318,7 +342,10 @@ describe("FilesystemTaskCellRuntime production seam", () => {
     worker.ready = () => ({ ok: false, reason: "readiness timed out" });
     const cell = await runtime.spawnCell({
       run_id: runId, cell_id: "c-orphan", goal_id: "g", phase_id: "build", step_id: "s",
-      team_id: "t", logical_task_id: "T-orphan", fanout: "lead_only", lead: { lead_binding_id: "lead" },
+      // lead_plus_one, not lead_only: this scenario is about a worker that was
+      // SPAWNED and never became ready. A lead_only cell spawns no process (T08),
+      // so there would be nothing to fail readiness or to orphan.
+      team_id: "t", logical_task_id: "T-orphan", fanout: "lead_plus_one", lead: { lead_binding_id: "lead" },
     });
     const instance = await runtime.spawnInstance(cell, {
       task_run_id: "tr-orphan", attempt: 1, worker_role: "backend",
