@@ -277,6 +277,25 @@ export function reserveInstance(input: ReserveInstanceInput): ReserveResult {
         const parsed = JSON.parse(raw) as Partial<InstanceReservationV1>;
         if (parsed.owner !== owner) return;
         fs.rmSync(file, { force: true });
+        // A released claim leaves no trace: prune the attempt/cell directories the
+        // placeholder created while they are empty, up to the run's task-cells root,
+        // so a refusal BEFORE assignment leaves no cell directory behind.
+        // Anchor on the placeholder's OWN path (not a re-resolved run dir): tmp
+        // roots may be symlinked, and a resolved/unresolved spelling mismatch
+        // would silently skip the prune.
+        const marker = `${path.sep}task-cells${path.sep}`;
+        const at = file.lastIndexOf(marker);
+        const stop = at >= 0 ? file.slice(0, at + marker.length - 1) : null;
+        let dir = path.dirname(file);
+        while (stop !== null && dir.startsWith(stop + path.sep) && dir !== stop) {
+          try {
+            if (fs.readdirSync(dir).length > 0) break;
+            fs.rmdirSync(dir);
+          } catch {
+            break;
+          }
+          dir = path.dirname(dir);
+        }
       } catch {
         /* already gone, or already a real attempt record — leave it */
       }

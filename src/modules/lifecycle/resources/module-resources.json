@@ -525,7 +525,7 @@
       "id": "projection:src/modules/dispatch/workflows/instance-cap.ts",
       "source_path": "src/modules/dispatch/workflows/instance-cap.ts",
       "resource_path": "resources/src/modules/dispatch/workflows/instance-cap.ts",
-      "sha256": "77f8172e1aefddf3ea8939df211e3a5da1248eea8777a7b8060cb683f00e917c",
+      "sha256": "9ecc7b73c8bb93367e9bbb471d1e80f3184f5e14e6e9f78a42ed2c7f547bf9c0",
       "projection_dependency": true
     },
     {
