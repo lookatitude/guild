@@ -18,7 +18,12 @@ import {
   type ModuleManifest,
 } from "../lib/module-manifest";
 import * as shim from "../lib/module-manifest";
-import * as moduleImpl from "../../src/modules/kernel/workflows/module-manifest";
+import * as moduleImpl from "../../src/domains/kernel/module-manifest";
+import {
+  DOMAIN_IDS,
+  MODULE_TO_DOMAIN,
+  validateDomainOwnership,
+} from "../../src/domains/distribution";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
 
@@ -55,15 +60,27 @@ describe("src/modules ownership manifests", () => {
   });
 
   it("versions every public module API introduced for host-facing migrations", () => {
-    for (const moduleId of [
-      "config", "dispatch", "distribution", "learning",
-      "migrations", "review", "security", "specialists",
-    ]) {
-      const publicIndex = fs.readFileSync(
+    // T12: the declaration moved into the module's domain home and the module
+    // index republishes it, so assert the surface, not the declaration site.
+    const declaredIn = new Set<string>();
+    for (const [moduleId, domain] of [
+      ["config", "config"], ["dispatch", "dispatch"], ["distribution", "distribution"],
+      ["learning", "knowledge"], ["migrations", "state"], ["review", "review"],
+      ["security", "security"], ["specialists", "teams"],
+    ] as const) {
+      const shim = fs.readFileSync(
         path.join(PLUGIN_ROOT, "src", "modules", moduleId, "index.ts"),
         "utf8"
       );
-      expect(publicIndex).toContain(
+      expect(shim).toContain("MODULE_PUBLIC_API_VERSION");
+      declaredIn.add(domain);
+    }
+    for (const domain of declaredIn) {
+      const domainIndex = fs.readFileSync(
+        path.join(PLUGIN_ROOT, "src", "domains", domain, "index.ts"),
+        "utf8"
+      );
+      expect(domainIndex).toContain(
         'export const MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1" as const;'
       );
     }
@@ -96,15 +113,19 @@ describe("src/modules ownership manifests", () => {
     expect(result).toEqual({ ok: true, violations: [], errors: [] });
   });
 
-  it("keeps every module healthy: generated resources exist and workflow modules expose public indexes", () => {
+  it("keeps every module healthy: the module tree is re-export shims over the domain fold", () => {
     const result = validateModuleHealth(PLUGIN_ROOT, manifests);
     expect(result.ok).toBe(true);
     expect(result.findings).toEqual([]);
     expect(result.modules.length).toBe(manifests.length);
-    expect(result.modules.filter((module) => module.workflows > 0).length).toBeGreaterThanOrEqual(20);
-    expect(result.modules.filter((module) => module.workflows > 0).every((module) => module.has_public_index)).toBe(
-      true
-    );
+    // T12: the implementation moved into src/domains/<id>; `workflows` now counts
+    // the TypeScript LEFT BEHIND in the module directory, which must be zero.
+    expect(result.modules.every((module) => module.workflows === 0)).toBe(true);
+    expect(
+      result.modules
+        .filter((module) => module.implementation_mode === "workflow-backed")
+        .every((module) => module.has_public_index)
+    ).toBe(true);
     expect(
       result.modules
         .filter((module) => module.implementation_mode === "resource-only")
@@ -115,14 +136,8 @@ describe("src/modules ownership manifests", () => {
     expect(
       result.modules
         .filter((module) => module.implementation_mode === "resource-only")
-        .every((module) => module.workflows === 0)
+        .every((module) => !module.has_public_index)
     ).toBe(true);
-    expect(
-      result.modules
-        .filter((module) => module.implementation_mode === "workflow-backed")
-        .every((module) => module.workflows > 0)
-    ).toBe(true);
-    expect(result.modules.reduce((sum, module) => sum + module.resources, 0)).toBeGreaterThanOrEqual(390);
   });
 
   it("CONTROL: removing an owner makes the real inventory report a missing surface", () => {
@@ -155,22 +170,39 @@ describe("src/modules ownership manifests", () => {
     );
   });
 
-  it("CONTROL: removing a dependency makes an existing cross-module import fail the boundary rail", () => {
-    const mutated = cloneManifests(manifests);
-    const context = mutated.find((manifest) => manifest.id === "context");
-    if (!context) throw new Error("context manifest missing");
-    context.depends_on = (context.depends_on ?? []).filter((id) => id !== "knowledge");
+  it("CONTROL: an undeclared cross-module import fails the boundary rail", () => {
+    // T12: the real module tree is re-export shims, so there is no live
+    // cross-module edge left to mutate — the rule is pinned on a synthetic tree.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-module-undeclared-"));
+    try {
+      fs.mkdirSync(path.join(tmp, "src/modules/a"), { recursive: true });
+      fs.mkdirSync(path.join(tmp, "src/modules/b"), { recursive: true });
+      fs.writeFileSync(path.join(tmp, "src/modules/a/index.ts"), 'import { b } from "../b";\nexport const a = b;\n');
+      fs.writeFileSync(path.join(tmp, "src/modules/b/index.ts"), "export const b = 1;\n");
 
-    const result = validateModuleBoundaries(PLUGIN_ROOT, mutated);
-    expect(result.ok).toBe(false);
-    expect(result.violations).toContainEqual(
-      expect.objectContaining({
-        importer: "src/modules/context/workflows/recall.ts",
-        from_module: "context",
-        to_module: "knowledge",
-        reason: "undeclared_dependency",
-      })
-    );
+      const fixtureManifests: ModuleManifest[] = ["a", "b"].map((id) => ({
+        schema_version: "guild.module_manifest.v1" as const,
+        id,
+        title: id.toUpperCase(),
+        kind: "substrate" as const,
+        implementation_mode: "workflow-backed" as const,
+        description: "fixture",
+        owns: {},
+      }));
+
+      const result = validateModuleBoundaries(tmp, fixtureManifests);
+      expect(result.ok).toBe(false);
+      expect(result.violations).toContainEqual(
+        expect.objectContaining({
+          importer: "src/modules/a/index.ts",
+          from_module: "a",
+          to_module: "b",
+          reason: "undeclared_dependency",
+        })
+      );
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 
   it("CONTROL: declared dependencies still reject private cross-module workflow imports", () => {
@@ -227,13 +259,13 @@ describe("src/modules ownership manifests", () => {
   it("CONTROL: export-from host-facing re-exports are detected once per importer/specifier", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-module-host-export-"));
     try {
-      fs.mkdirSync(path.join(tmp, "src/modules/state/workflows"), { recursive: true });
+      fs.mkdirSync(path.join(tmp, "src/domains/state"), { recursive: true });
       fs.mkdirSync(path.join(tmp, "hooks/lib"), { recursive: true });
       fs.writeFileSync(
-        path.join(tmp, "src/modules/state/workflows/guild-root.ts"),
+        path.join(tmp, "src/domains/state/guild-root.ts"),
         [
-          "export { findGuildRoot } from '../../../../hooks/lib/guild-root';",
-          "export { requireGuildRoot } from '../../../../hooks/lib/guild-root';",
+          "export { findGuildRoot } from '../../../hooks/lib/guild-root';",
+          "export { requireGuildRoot } from '../../../hooks/lib/guild-root';",
           "",
         ].join("\n")
       );
@@ -254,11 +286,11 @@ describe("src/modules ownership manifests", () => {
       const result = validateModuleBoundaries(tmp, fixtureManifests);
       expect(result.violations).toEqual([
         expect.objectContaining({
-          importer: "src/modules/state/workflows/guild-root.ts",
+          importer: "src/domains/state/guild-root.ts",
           imported: "hooks/lib/guild-root.ts",
           from_module: "state",
           to_module: "hooks",
-          specifier: "../../../../hooks/lib/guild-root",
+          specifier: "../../../hooks/lib/guild-root",
           reason: "host_facing_import",
         }),
       ]);
@@ -268,83 +300,83 @@ describe("src/modules ownership manifests", () => {
   });
 
   it.each([
-    ["reviewer side-effect import", 'import "../../../../hooks/lib/guild-root";', 1],
-    ["reviewer commented import", '// import { x } from "../../../../hooks/lib/guild-root";', 0],
-    ["import-from", 'import { x } from "../../../../hooks/lib/guild-root";', 1],
-    ["type import-from", 'import type { X } from "../../../../hooks/lib/guild-root";', 1],
-    ["export-from", 'export { x } from "../../../../hooks/lib/guild-root";', 1],
-    ["type export-from", 'export type { X } from "../../../../hooks/lib/guild-root";', 1],
-    ["literal dynamic import", 'const x = import("../../../../hooks/lib/guild-root");', 1],
-    ["literal require", 'const x = require("../../../../hooks/lib/guild-root");', 1],
+    ["reviewer side-effect import", 'import "../../../hooks/lib/guild-root";', 1],
+    ["reviewer commented import", '// import { x } from "../../../hooks/lib/guild-root";', 0],
+    ["import-from", 'import { x } from "../../../hooks/lib/guild-root";', 1],
+    ["type import-from", 'import type { X } from "../../../hooks/lib/guild-root";', 1],
+    ["export-from", 'export { x } from "../../../hooks/lib/guild-root";', 1],
+    ["type export-from", 'export type { X } from "../../../hooks/lib/guild-root";', 1],
+    ["literal dynamic import", 'const x = import("../../../hooks/lib/guild-root");', 1],
+    ["literal require", 'const x = require("../../../hooks/lib/guild-root");', 1],
     [
       "literal require between numeric division operators",
-      'const x = 2 / require("../../../../hooks/lib/guild-root") / 3;',
+      'const x = 2 / require("../../../hooks/lib/guild-root") / 3;',
       1,
     ],
     [
       "literal require after a parenthesized division operand",
-      'const x = (2) / require("../../../../hooks/lib/guild-root") / 3;',
+      'const x = (2) / require("../../../hooks/lib/guild-root") / 3;',
       1,
     ],
     [
       "literal require after a string-valued division operand",
-      'const x = "left" / require("../../../../hooks/lib/guild-root") / 3;',
+      'const x = "left" / require("../../../hooks/lib/guild-root") / 3;',
       1,
     ],
-    ["line comment", '// require("../../../../hooks/lib/guild-root");', 0],
-    ["block comment", '/* import "../../../../hooks/lib/guild-root"; */', 0],
-    ["ordinary string", 'const x = \'import "../../../../hooks/lib/guild-root"\';', 0],
-    ["template text", 'const x = `import "../../../../hooks/lib/guild-root"`;', 0],
+    ["line comment", '// require("../../../hooks/lib/guild-root");', 0],
+    ["block comment", '/* import "../../../hooks/lib/guild-root"; */', 0],
+    ["ordinary string", 'const x = \'import "../../../hooks/lib/guild-root"\';', 0],
+    ["template text", 'const x = `import "../../../hooks/lib/guild-root"`;', 0],
     [
       "cross-statement decoy",
-      'import { x };\nconst from = "../../../../hooks/lib/guild-root";',
+      'import { x };\nconst from = "../../../hooks/lib/guild-root";',
       0,
     ],
     [
       "semicolonless cross-statement decoy",
-      'import { x }\nconst from = "../../../../hooks/lib/guild-root"',
+      'import { x }\nconst from = "../../../hooks/lib/guild-root"',
       0,
     ],
     [
       "regular-expression literal decoys",
       [
-        'const requirePattern = /require\\("\\.\\.\\/\\.\\.\\/\\.\\.\\/\\.\\.\\/hooks\\/lib\\/guild-root"\\)/;',
-        'const importPattern = /import\\("\\.\\.\\/\\.\\.\\/\\.\\.\\/\\.\\.\\/hooks\\/lib\\/guild-root"\\)/;',
-        'const exportPattern = /export .* from "\\.\\.\\/\\.\\.\\/\\.\\.\\/\\.\\.\\/hooks\\/lib\\/guild-root"/;',
+        'const requirePattern = /require\\("\\.\\.\\/\\.\\.\\/\\.\\.\\/hooks\\/lib\\/guild-root"\\)/;',
+        'const importPattern = /import\\("\\.\\.\\/\\.\\.\\/\\.\\.\\/hooks\\/lib\\/guild-root"\\)/;',
+        'const exportPattern = /export .* from "\\.\\.\\/\\.\\.\\/\\.\\.\\/hooks\\/lib\\/guild-root"/;',
       ].join("\n"),
       0,
     ],
     [
       "member-call decoys",
       [
-        'loader.require("../../../../hooks/lib/guild-root");',
-        'loader.import("../../../../hooks/lib/guild-root");',
+        'loader.require("../../../hooks/lib/guild-root");',
+        'loader.import("../../../hooks/lib/guild-root");',
       ].join("\n"),
       0,
     ],
     [
       "live import inside template interpolation",
-      'const loaded = `${import("../../../../hooks/lib/guild-root")}`;',
+      'const loaded = `${import("../../../hooks/lib/guild-root")}`;',
       1,
     ],
     [
       "live import inside nested escaped template interpolation",
-      'const loaded = `raw \\` ${`nested ${import("../../../../hooks/lib/guild-root")}`} tail`;',
+      'const loaded = `raw \\` ${`nested ${import("../../../hooks/lib/guild-root")}`} tail`;',
       1,
     ],
     [
       "duplicate importer/specifier references",
       [
-        'import "../../../../hooks/lib/guild-root";',
-        'export { x } from "../../../../hooks/lib/guild-root";',
-        'require("../../../../hooks/lib/guild-root");',
+        'import "../../../hooks/lib/guild-root";',
+        'export { x } from "../../../hooks/lib/guild-root";',
+        'require("../../../hooks/lib/guild-root");',
       ].join("\n"),
       1,
     ],
     [
       "non-literal dynamic and require expressions",
       [
-        'const specifier = "../../../../hooks/lib/guild-root";',
+        'const specifier = "../../../hooks/lib/guild-root";',
         "void import(specifier);",
         "void require(specifier);",
       ].join("\n"),
@@ -353,9 +385,9 @@ describe("src/modules ownership manifests", () => {
   ])("CONTROL: dependency lexer handles %s", (_label, source, expectedCount) => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-module-dependency-lexer-"));
     try {
-      fs.mkdirSync(path.join(tmp, "src/modules/state/workflows"), { recursive: true });
+      fs.mkdirSync(path.join(tmp, "src/domains/state"), { recursive: true });
       fs.mkdirSync(path.join(tmp, "hooks/lib"), { recursive: true });
-      fs.writeFileSync(path.join(tmp, "src/modules/state/workflows/probe.ts"), `${source}\n`);
+      fs.writeFileSync(path.join(tmp, "src/domains/state/probe.ts"), `${source}\n`);
       fs.writeFileSync(path.join(tmp, "hooks/lib/guild-root.ts"), "export const x = 1;\n");
 
       const fixtureManifests: ModuleManifest[] = [
@@ -377,9 +409,9 @@ describe("src/modules ownership manifests", () => {
       if (expectedCount === 1) {
         expect(hostFacing[0]).toEqual(
           expect.objectContaining({
-            importer: "src/modules/state/workflows/probe.ts",
+            importer: "src/domains/state/probe.ts",
             imported: "hooks/lib/guild-root.ts",
-            specifier: "../../../../hooks/lib/guild-root",
+            specifier: "../../../hooks/lib/guild-root",
             reason: "host_facing_import",
           })
         );
@@ -392,8 +424,8 @@ describe("src/modules ownership manifests", () => {
   it("CONTROL: the real state workflow re-export remains part of the 19-edge baseline", () => {
     const stateEdge = [...OBSERVED_HOST_FACING_EDGES, ...REMAINING_HOST_FACING_EDGES].filter(
       (edge) =>
-        edge.importer === "src/modules/state/workflows/guild-root.ts" &&
-        edge.specifier === "../../../../hooks/lib/guild-root"
+        edge.importer === "src/domains/state/guild-root.ts" &&
+        edge.specifier === "../../../hooks/lib/guild-root"
     );
     expect(stateEdge).toHaveLength(1);
     expect(new Set([...OBSERVED_HOST_FACING_EDGES, ...REMAINING_HOST_FACING_EDGES].map(edgeKey)).size).toBe(19);
@@ -500,49 +532,29 @@ describe("src/modules ownership manifests", () => {
     }
   });
 
-  it("CONTROL: workflow-backed modules without workflows fail the health rail", () => {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-module-workflow-backed-"));
+  it("CONTROL: a module directory holding more than its shim fails DOMAIN ownership", () => {
+    // T12: "no implementation left behind in src/modules" is stated once, in the
+    // domain-ownership check, not duplicated into the module health rail.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-module-leftover-"));
     try {
-      fs.mkdirSync(path.join(tmp, "src/modules/a/resources"), { recursive: true });
-      fs.writeFileSync(path.join(tmp, "src/modules/a/index.ts"), "export const a = 1;\n");
-      fs.writeFileSync(
-        path.join(tmp, "src/modules/a/resources/.generated-by-guild-module-resources"),
-        "generated by test\n"
-      );
-      fs.writeFileSync(
-        path.join(tmp, "src/modules/a/resources/module-resources.json"),
-        JSON.stringify(
-          {
-            schema_version: "guild.module_resources.v1",
-            module_id: "a",
-            generated_from: "guild.inventory.v1",
-            entries: [],
-          },
-          null,
-          2
-        ) + "\n"
-      );
+      for (const id of DOMAIN_IDS) {
+        fs.mkdirSync(path.join(tmp, "src", "domains", id), { recursive: true });
+        fs.writeFileSync(path.join(tmp, "src", "domains", id, "index.ts"), "export {};\n");
+      }
+      fs.mkdirSync(path.join(tmp, "src", "adapters"), { recursive: true });
+      fs.writeFileSync(path.join(tmp, "src", "adapters", "index.ts"), "export {};\n");
+      for (const [id, domain] of MODULE_TO_DOMAIN) {
+        const target = domain === "adapters" ? "../../adapters" : `../../domains/${domain}`;
+        fs.mkdirSync(path.join(tmp, "src", "modules", id), { recursive: true });
+        fs.writeFileSync(path.join(tmp, "src", "modules", id, "index.ts"), `export * from "${target}";\n`);
+      }
+      expect(validateDomainOwnership(tmp).ok).toBe(true);
 
-      const fixtureManifests: ModuleManifest[] = [
-        {
-          schema_version: "guild.module_manifest.v1",
-          id: "a",
-          title: "A",
-          kind: "substrate",
-          implementation_mode: "workflow-backed",
-          description: "fixture",
-          owns: {},
-        },
-      ];
-
-      const result = validateModuleHealth(tmp, fixtureManifests);
-      expect(result.ok).toBe(false);
-      expect(result.findings).toContainEqual(
-        expect.objectContaining({
-          module_id: "a",
-          reason: "workflow_backed_module_has_no_workflows",
-          path: "src/modules/a/workflows",
-        })
+      fs.writeFileSync(path.join(tmp, "src/modules/state/leftover.ts"), "export const b = 1;\n");
+      const after = validateDomainOwnership(tmp);
+      expect(after.ok).toBe(false);
+      expect(after.violations).toContainEqual(
+        expect.objectContaining({ rule: "module_holds_implementation" })
       );
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
@@ -566,42 +578,42 @@ interface HostFacingEdge {
 
 const OBSERVED_HOST_FACING_EDGES: readonly HostFacingEdge[] = [
   {
-    importer: "src/modules/context/workflows/recall-protect.ts",
+    importer: "src/domains/knowledge/recall-protect.ts",
     specifier: "../../../../hooks/lib/security/injection-guard",
     imported: "hooks/lib/security/injection-guard.ts",
     from_module: "context",
     to_module: "hooks",
   },
   {
-    importer: "src/modules/context/workflows/recall.ts",
+    importer: "src/domains/knowledge/recall.ts",
     specifier: "../../../../scripts/learn/lib/graph-query",
     imported: "scripts/learn/lib/graph-query.ts",
     from_module: "context",
     to_module: "scripts",
   },
   {
-    importer: "src/modules/capability/workflows/role-resolver.ts",
+    importer: "src/domains/config/role-resolver.ts",
     specifier: "../../../../scripts/lib/advisory-record",
     imported: "scripts/lib/advisory-record.ts",
     from_module: "capability",
     to_module: "scripts",
   },
   {
-    importer: "src/modules/dispatch/workflows/task-assignment-v2.ts",
+    importer: "src/domains/dispatch/task-assignment-v2.ts",
     specifier: "../../../../scripts/lib/core/contracts/task-cell-backend",
     imported: "scripts/lib/core/contracts/task-cell-backend.ts",
     from_module: "dispatch",
     to_module: "scripts",
   },
   {
-    importer: "src/modules/dispatch/workflows/task-cell-acceptance.ts",
+    importer: "src/domains/dispatch/task-cell-acceptance.ts",
     specifier: "../../../../scripts/lib/core/contracts/task-cell-backend",
     imported: "scripts/lib/core/contracts/task-cell-backend.ts",
     from_module: "dispatch",
     to_module: "scripts",
   },
   {
-    importer: "src/modules/distribution/workflows/result-contracts.ts",
+    importer: "src/domains/distribution/result-contracts.ts",
     specifier: "../../../../hooks/lib/handoff-v2",
     imported: "hooks/lib/handoff-v2.ts",
     from_module: "distribution",
@@ -616,35 +628,35 @@ const OBSERVED_HOST_FACING_EDGES: readonly HostFacingEdge[] = [
  */
 const REMAINING_HOST_FACING_EDGES: readonly HostFacingEdge[] = [
   {
-    importer: "src/modules/communication/workflows/comms-format-lint.ts",
+    importer: "src/domains/dispatch/comms-format-lint.ts",
     specifier: "../../../../hooks/lib/handoff-v2",
     imported: "hooks/lib/handoff-v2.ts",
     from_module: "communication",
     to_module: "hooks",
   },
   {
-    importer: "src/modules/docs-sync/workflows/wiki-lint-checks.ts",
+    importer: "src/domains/distribution/wiki-lint-checks.ts",
     specifier: "../../../../scripts/dot-guild/convert/wiki-importance",
     imported: "scripts/dot-guild/convert/wiki-importance.ts",
     from_module: "docs-sync",
     to_module: "scripts",
   },
   {
-    importer: "src/modules/docs-sync/workflows/wiki-lint-checks.ts",
+    importer: "src/domains/distribution/wiki-lint-checks.ts",
     specifier: "../../../../scripts/learn/wiki-lint-knowledge",
     imported: "scripts/learn/wiki-lint-knowledge.ts",
     from_module: "docs-sync",
     to_module: "scripts",
   },
   {
-    importer: "src/modules/docs-sync/workflows/wiki-lint-checks.ts",
+    importer: "src/domains/distribution/wiki-lint-checks.ts",
     specifier: "../../../../scripts/learn/lib/schema",
     imported: "scripts/learn/lib/schema.ts",
     from_module: "docs-sync",
     to_module: "scripts",
   },
   {
-    importer: "src/modules/lifecycle/workflows/emit-loop-event.ts",
+    importer: "src/domains/lifecycle/emit-loop-event.ts",
     specifier: "../../../../hooks/lib/v1.4/log-jsonl.js",
     // no .ts candidate resolves for a ".js" specifier, so the validator keeps
     // the unresolved base path — still unambiguously a hooks/ mirror target.
@@ -653,56 +665,56 @@ const REMAINING_HOST_FACING_EDGES: readonly HostFacingEdge[] = [
     to_module: "hooks",
   },
   {
-    importer: "src/modules/lifecycle/workflows/mark-lane-dead.ts",
+    importer: "src/domains/lifecycle/mark-lane-dead.ts",
     specifier: "../../../../hooks/lib/run-state",
     imported: "hooks/lib/run-state.ts",
     from_module: "lifecycle",
     to_module: "hooks",
   },
   {
-    importer: "src/modules/lifecycle/workflows/resume-lanes.ts",
+    importer: "src/domains/lifecycle/resume-lanes.ts",
     specifier: "../../../../hooks/lib/run-state",
     imported: "hooks/lib/run-state.ts",
     from_module: "lifecycle",
     to_module: "hooks",
   },
   {
-    importer: "src/modules/lifecycle/workflows/run-lifecycle.ts",
+    importer: "src/domains/lifecycle/run-lifecycle.ts",
     specifier: "../../../../hooks/lib/security/scrubbed-write",
     imported: "hooks/lib/security/scrubbed-write.ts",
     from_module: "lifecycle",
     to_module: "hooks",
   },
   {
-    importer: "src/modules/lifecycle/workflows/runstart-preflight.ts",
+    importer: "src/domains/lifecycle/runstart-preflight.ts",
     specifier: "../../../../scripts/read-guild-config",
     imported: "scripts/read-guild-config.ts",
     from_module: "lifecycle",
     to_module: "scripts",
   },
   {
-    importer: "src/modules/state/workflows/guild-root.ts",
-    specifier: "../../../../hooks/lib/guild-root",
+    importer: "src/domains/state/guild-root.ts",
+    specifier: "../../../hooks/lib/guild-root",
     imported: "hooks/lib/guild-root.ts",
     from_module: "state",
     to_module: "hooks",
   },
   {
-    importer: "src/modules/teams/workflows/station-composer.ts",
+    importer: "src/domains/teams/station-composer.ts",
     specifier: "../../../../scripts/lib/core/contracts/task-cell-backend",
     imported: "scripts/lib/core/contracts/task-cell-backend.ts",
     from_module: "teams",
     to_module: "scripts",
   },
   {
-    importer: "src/modules/teams/workflows/station-composer.ts",
+    importer: "src/domains/teams/station-composer.ts",
     specifier: "../../../../scripts/lib/roster",
     imported: "scripts/lib/roster.ts",
     from_module: "teams",
     to_module: "scripts",
   },
   {
-    importer: "src/modules/teams/workflows/station-signals.ts",
+    importer: "src/domains/teams/station-signals.ts",
     specifier: "../../../../scripts/lib/core/contracts/task-cell-backend",
     imported: "scripts/lib/core/contracts/task-cell-backend.ts",
     from_module: "teams",

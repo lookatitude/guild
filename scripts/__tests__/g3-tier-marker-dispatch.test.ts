@@ -35,7 +35,7 @@ import {
   dispatchViolations,
   resolveDispatchAttribution,
 } from "../../hooks/lib/dispatch-attribution";
-import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { mintRunBinding } from "../../src/domains/lifecycle";
 import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
 const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();

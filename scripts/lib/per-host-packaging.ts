@@ -5,4 +5,4 @@
  * move internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/modules/distribution/workflows/per-host-packaging";
+export * from "../../src/domains/distribution/per-host-packaging";

@@ -5,4 +5,4 @@
  * internals without breaking existing imports from scripts/lib/*.
  */
 
-export type { HostKind } from "../../src/modules/host-runtime/workflows/host-types";
+export type { HostKind } from "../../src/adapters/host-types";

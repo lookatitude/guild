@@ -32,11 +32,7 @@ import {
   type CompatibilityReadReason,
   type CompatibilityUsageV1,
 } from "../lib/capability/compatibility-usage";
-import {
-  RECEIPT_DISPOSITIONS,
-  RECEIPT_EVENT_NAMES,
-  RECEIPT_OUTCOME_TYPES,
-} from "../../src/modules/telemetry/workflows/receipt-journal";
+import { RECEIPT_DISPOSITIONS, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES } from "../../src/domains/telemetry";
 
 function usage(over: Partial<CompatibilityUsageV1> = {}): CompatibilityUsageV1 {
   return {

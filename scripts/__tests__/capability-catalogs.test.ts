@@ -4,8 +4,8 @@ import { parseFrontmatter } from "../lib/frontmatter";
 import {
   listOperationsRunbooks,
   listOperationsSkillIds,
-} from "../../src/modules/operations";
-import { listQualitySkillIds } from "../../src/modules/quality";
+} from "../../src/domains/lifecycle";
+import { listQualitySkillIds } from "../../src/domains/review";
 import {
   isMachineryAgentId,
   isSpecialistSkillId,
@@ -13,7 +13,7 @@ import {
   listMachineryAgentIds,
   listSpecialistSkillPrefixes,
   listSpecialistTemplateIds,
-} from "../../src/modules/specialists";
+} from "../../src/domains/teams";
 
 const pluginRoot = path.resolve(__dirname, "../..");
 

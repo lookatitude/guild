@@ -16,7 +16,7 @@
  *
  *   1. a source-owned integration function
  *      `runNeutralConformanceReleaseIntegration` in a new module
- *      `src/modules/distribution/workflows/release-conformance-integration.ts`,
+ *      `src/domains/distribution/release-conformance-integration.ts`,
  *      exported through the distribution index, that accepts ONE canonical JSON
  *      text (never an object graph), invokes or consumes all six real owner
  *      evaluators WITHOUT caller-supplied scenario ids or outcomes, obtains six
@@ -54,7 +54,7 @@
  *   green 31/31 emission remains an operator act outside any test repository.
  *
  * PINNED NAMES (the GREEN lane implements exactly these)
- *   module   src/modules/distribution/workflows/release-conformance-integration.ts
+ *   module   src/domains/distribution/release-conformance-integration.ts
  *   exports  runNeutralConformanceReleaseIntegration
  *            runNeutralReleaseIntegrationControls
  *            RELEASE_INTEGRATION_CONTROLS
@@ -73,34 +73,12 @@ import * as os from "os";
 import * as path from "path";
 import { createHash } from "crypto";
 
-import {
-  neutralCanonicalJson,
-  NEUTRAL_CONTRACT_VERSION,
-} from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
-import type { NeutralOutcome } from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
-import {
-  evaluateNeutralConformanceDecision,
-  NEUTRAL_EVIDENCE_IDENTITY_FIELDS,
-  NEUTRAL_REQUIRED_CORE_SCENARIO_IDS,
-  NEUTRAL_SCENARIO_SUITE_ID,
-  NEUTRAL_SCENARIO_SUITE_VERSION,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
-import type {
-  NeutralConformanceAuthority,
-  NeutralConformanceEvidence,
-  NeutralEvidenceIdentity,
-  NeutralScenarioResult,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
-import {
-  assembleNeutralConformanceEvidence,
-  NEUTRAL_ASSEMBLY_PACKET_SCHEMA,
-  NEUTRAL_CONFORMANCE_OWNER_KEYS,
-  NEUTRAL_CONFORMANCE_OWNER_SCENARIO_COUNTS,
-  NEUTRAL_OWNER_SCENARIO_IDS,
-  NEUTRAL_REQUIRED_SUITE_SCENARIO_COUNT,
-  NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-assembly";
-import type { NeutralOwnerConformancePacket } from "../../src/modules/lifecycle/workflows/neutral-conformance-assembly";
+import { neutralCanonicalJson, NEUTRAL_CONTRACT_VERSION } from "../../src/domains/lifecycle";
+import type { NeutralOutcome } from "../../src/domains/lifecycle";
+import { evaluateNeutralConformanceDecision, NEUTRAL_EVIDENCE_IDENTITY_FIELDS, NEUTRAL_REQUIRED_CORE_SCENARIO_IDS, NEUTRAL_SCENARIO_SUITE_ID, NEUTRAL_SCENARIO_SUITE_VERSION } from "../../src/domains/lifecycle";
+import type { NeutralConformanceAuthority, NeutralConformanceEvidence, NeutralEvidenceIdentity, NeutralScenarioResult } from "../../src/domains/lifecycle";
+import { assembleNeutralConformanceEvidence, NEUTRAL_ASSEMBLY_PACKET_SCHEMA, NEUTRAL_CONFORMANCE_OWNER_KEYS, NEUTRAL_CONFORMANCE_OWNER_SCENARIO_COUNTS, NEUTRAL_OWNER_SCENARIO_IDS, NEUTRAL_REQUIRED_SUITE_SCENARIO_COUNT, NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS } from "../../src/domains/lifecycle";
+import type { NeutralOwnerConformancePacket } from "../../src/domains/lifecycle";
 import { emitReleaseConformance } from "../emit-release-conformance";
 import {
   checkStablePromotion,
@@ -117,12 +95,13 @@ import type { PromotionGitOps } from "../check-channel-integrity";
 
 const RED = "A21-X RED: production release-conformance integration not implemented yet";
 
-const INTEGRATION_REQUEST = "../../src/modules/distribution/workflows/release-conformance-integration";
+const INTEGRATION_REQUEST = "../../src/domains/distribution/release-conformance-integration";
 const INTEGRATION_SOURCE_PATH = path.resolve(
   __dirname,
-  "../../src/modules/distribution/workflows/release-conformance-integration.ts"
+  "../../src/domains/distribution/release-conformance-integration.ts"
 );
-const DISTRIBUTION_INDEX_PATH = path.resolve(__dirname, "../../src/modules/distribution/index.ts");
+// T12: the public index the contract means is the DOMAIN index, not the module shim.
+const DISTRIBUTION_INDEX_PATH = path.resolve(__dirname, "../../src/domains/distribution/index.ts");
 const EMITTER_SOURCE_PATH = path.resolve(__dirname, "../emit-release-conformance.ts");
 const GATE_SOURCE_PATH = path.resolve(__dirname, "../check-channel-integrity.ts");
 

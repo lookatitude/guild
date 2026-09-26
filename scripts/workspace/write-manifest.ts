@@ -6,9 +6,12 @@
  * move internals without breaking existing script paths.
  */
 
-import { runWriteWorkspaceManifestCli } from "../../src/modules/workspace/workflows/write-manifest";
+import { runWriteWorkspaceManifestCli } from "../../src/domains/state";
 
-export * from "../../src/modules/workspace/workflows/write-manifest";
+export {
+  writeManifest,
+  runWriteWorkspaceManifestCli,
+} from "../../src/domains/state";
 
 if (require.main === module) {
   runWriteWorkspaceManifestCli();

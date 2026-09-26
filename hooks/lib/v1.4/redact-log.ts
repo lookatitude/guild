@@ -1,1 +1,1 @@
-export * from "../../../src/modules/security/workflows/redact-log.js";
+export * from "../../../src/domains/security/redact-log.js";

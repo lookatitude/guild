@@ -2,7 +2,7 @@
 
 import * as path from "node:path";
 
-import { auditTaskCellArtifactJoin } from "../src/modules/dispatch/workflows/task-cell-artifact-join";
+import { auditTaskCellArtifactJoin } from "../src/domains/dispatch";
 
 function fail(message: string): never {
   process.stderr.write(`[task-cell-audit] ${message}\n`);

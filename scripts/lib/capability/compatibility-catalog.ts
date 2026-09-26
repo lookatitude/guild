@@ -7,4 +7,4 @@
  * scripts/lib/capability/*.
  */
 
-export * from "../../../src/modules/capability/workflows/compatibility-catalog";
+export * from "../../../src/domains/config/compatibility-catalog";

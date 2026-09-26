@@ -195,13 +195,13 @@ function prove(): void {
 
   const moduleShim = detectUpwardImports(
     "scripts/lib/shared/graph-scoring.ts",
-    'export * from "../../../src/modules/knowledge/workflows/graph-scoring";\n',
+    'export * from "../../../src/domains/knowledge/graph-scoring";\n',
   );
   proveAssert(moduleShim.length === 0, "layering detector ALLOWS a pure shared/ compatibility shim to src/modules");
 
   const impureModuleShim = detectUpwardImports(
     "scripts/lib/shared/graph-scoring.ts",
-    'const local = 1;\nexport * from "../../../src/modules/knowledge/workflows/graph-scoring";\n',
+    'const local = 1;\nexport * from "../../../src/domains/knowledge/graph-scoring";\n',
   );
   proveAssert(impureModuleShim.length === 1, "PLANTED CONTROL: a shared/ shim with local logic still TRIPS the layer rail");
 

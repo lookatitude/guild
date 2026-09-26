@@ -95,7 +95,7 @@ export function mkTmpWorkspace(prefix = "guild-contract-"): string {
  *
  * REWORK ROUND 2 (T2B-R1-F1): this is an INDEPENDENT second implementation of
  * the §1 spec — written separately from the runtime serializer
- * (src/modules/teams/workflows/canonical-hash.ts) so the two can cross-check
+ * (src/domains/teams/canonical-hash.ts) so the two can cross-check
  * each other; both are pinned to hand-authored golden bytes in the c12 suite.
  * The previous js-yaml delegation implemented UTF-16 key ordering and a
  * single-quoted fallback, both §1 violations.

@@ -26,7 +26,7 @@ import * as os from "os";
 import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 import * as path from "path";
 import { spawnSync } from "child_process";
-import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { mintRunBinding } from "../../src/domains/lifecycle";
 
 const DETECT_SCRIPT = path.resolve(__dirname, "../workspace/detect.ts");
 const NODE_ENV = {

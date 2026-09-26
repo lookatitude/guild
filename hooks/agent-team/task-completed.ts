@@ -90,12 +90,12 @@ import {
   evaluateContextCompliance,
   recordContextCompliance,
 } from "../lib/context-compliance.js";
-import { readTaskAssignmentV2 } from "../../src/modules/dispatch/workflows/task-assignment-v2.js";
+import { readTaskAssignmentV2 } from "../../src/domains/dispatch/task-assignment-v2.js";
 import {
   readTaskAssignment,
   taskAssignmentPath,
-} from "../../src/modules/dispatch/workflows/task-assignment.js";
-import { publishSubmittedHandoffPointer } from "../../src/modules/dispatch/workflows/task-cell-acceptance.js";
+} from "../../src/domains/dispatch/task-assignment.js";
+import { publishSubmittedHandoffPointer } from "../../src/domains/dispatch/task-cell-acceptance.js";
 // T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
 import { ensureStorageLayout } from "../lib/ensure-layout.js";
 
@@ -935,7 +935,7 @@ async function main(): Promise<void> {
   // authorizes nothing. Termination is acceptance-gated — a durable
   // `guild.handoff_acceptance.v1` (deterministic floor + Team Lead + any reviewer
   // cell) authorizes it, and the launcher's `--dismiss-completed` performs the
-  // REAL, confirmed kill (see src/modules/dispatch/workflows/task-cell-acceptance.ts
+  // REAL, confirmed kill (see src/domains/dispatch/task-cell-acceptance.ts
   // and scripts/lib/host/tmux-backend.ts:terminatePane). This hook never claims a
   // dismissal it cannot perform.
   process.stderr.write(

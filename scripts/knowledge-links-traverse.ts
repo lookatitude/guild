@@ -43,7 +43,7 @@
  */
 
 import * as fs from "node:fs";
-import { sealSet } from "../src/modules/kernel/workflows/sealed-collections";
+import { sealSet } from "../src/domains/kernel";
 import * as path from "node:path";
 
 import {

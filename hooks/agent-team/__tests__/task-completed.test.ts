@@ -32,8 +32,8 @@ import { hermeticEnv } from "../../test-support/hermetic-env";
 import {
   buildTaskCell,
   writeTaskCell,
-} from "../../../src/modules/dispatch/workflows/task-assignment-v2";
-import { buildTaskAssignment } from "../../../src/modules/dispatch/workflows/task-assignment";
+} from "../../../src/domains/dispatch/task-assignment-v2";
+import { buildTaskAssignment } from "../../../src/domains/dispatch/task-assignment";
 
 function runScript(
   payloadOverride: object,

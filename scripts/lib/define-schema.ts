@@ -5,4 +5,4 @@
  * internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/modules/evals/workflows/define-schema";
+export * from "../../src/domains/evolve/define-schema";

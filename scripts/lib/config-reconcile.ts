@@ -38,7 +38,7 @@ import {
 } from "./config-reconcile-contract";
 import { CONFIG_SCHEMA, flattenSettings, setDotted } from "./config-schema";
 // The closed policy set (KTD22). Same import site `config-cmd.ts` uses.
-import { canonicalPolicyKey, findHostIdentity, isPolicyKey } from "../../src/modules/config/workflows/policy-keys";
+import { canonicalPolicyKey, findHostIdentity, isPolicyKey } from "../../src/domains/config/policy-keys";
 import { createGuildStorage } from "./state/storage";
 import { DEFAULTS, HELP } from "../read-guild-config";
 // S5: semantic validity for capability.* (canonical shared entrypoint — R-DIST).

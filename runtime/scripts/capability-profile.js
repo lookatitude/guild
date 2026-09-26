@@ -1057,7 +1057,7 @@ function renderCandidateSection(surface) {
 var fs3 = __toESM(require("node:fs"));
 var path3 = __toESM(require("node:path"));
 
-// src/modules/state/workflows/guild-root.ts
+// src/domains/state/guild-root.ts
 var fs2 = __toESM(require("node:fs"));
 var path2 = __toESM(require("node:path"));
 function resolveGuildRoot(startDir) {
@@ -1160,11 +1160,11 @@ if (isProcessEntry()) {
   }
 }
 
-// src/modules/state/workflows/storage-layout.ts
+// src/domains/state/storage-layout.ts
 var fs7 = __toESM(require("node:fs"));
 var path9 = __toESM(require("node:path"));
 
-// src/modules/state/workflows/guild-discovery.ts
+// src/domains/state/guild-discovery.ts
 var fs4 = __toESM(require("node:fs"));
 var path4 = __toESM(require("node:path"));
 function readJson(file) {
@@ -1283,7 +1283,7 @@ function discoverGuild(startCwd) {
   };
 }
 
-// src/modules/state/workflows/storage-fs.ts
+// src/domains/state/storage-fs.ts
 var fs5 = __toESM(require("node:fs"));
 var path5 = __toESM(require("node:path"));
 function lstatSafe(p) {
@@ -1335,10 +1335,10 @@ function removeContainedEmptyDir(abs, root) {
   }
 }
 
-// src/modules/state/workflows/storage-policy.ts
+// src/domains/state/storage-policy.ts
 var path7 = __toESM(require("node:path"));
 
-// src/modules/kernel/workflows/module-manifest.ts
+// src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "commands",
   "skills",
@@ -1348,7 +1348,7 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "scripts"
 ]);
 
-// src/modules/kernel/workflows/sealed-collections.ts
+// src/domains/kernel/sealed-collections.ts
 function regExpWritesLastIndex(re) {
   return re.global || re.sticky;
 }
@@ -1436,7 +1436,7 @@ function frozenList(items, options = {}) {
   return deepFreeze(items.slice(), options);
 }
 
-// src/modules/kernel/workflows/path-containment.ts
+// src/domains/kernel/path-containment.ts
 var fs6 = __toESM(require("node:fs"));
 var path6 = __toESM(require("node:path"));
 var CONTAINMENT_REFUSAL_CODES = Object.freeze([
@@ -1541,7 +1541,7 @@ function checkContained(root, target, options = {}) {
   return Object.freeze({ contained: true, realRoot, realPath });
 }
 
-// src/modules/kernel/workflows/runtime-tree-guard.ts
+// src/domains/kernel/runtime-tree-guard.ts
 var RUNTIME_SUBTREE_SEGMENTS = sealSet(
   [
     "skills",
@@ -1556,7 +1556,7 @@ var RUNTIME_SUBTREE_SEGMENTS = sealSet(
   "RUNTIME_SUBTREE_SEGMENTS"
 );
 
-// src/modules/kernel/workflows/tier-bus.ts
+// src/domains/kernel/tier-bus.ts
 var BUS_TIERS = frozenList(["T0", "T1", "T2"]);
 var LEAD_ROLE_IDS = frozenList(["team-lead", "lead", "orchestrator"]);
 var TIER_BUS_CONTRACT = deepFreeze({
@@ -1566,7 +1566,7 @@ var TIER_BUS_CONTRACT = deepFreeze({
   tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
 });
 
-// src/modules/state/workflows/storage-policy.ts
+// src/domains/state/storage-policy.ts
 var NON_DURABLE_CLASSES = sealSet(
   ["runtime", "cache", "managed-resource", "temporary"],
   "NON_DURABLE_CLASSES"
@@ -1648,7 +1648,7 @@ var DURABLE_SUBTREES = deepFreeze({
   artifacts: "artifacts"
 });
 
-// src/modules/state/workflows/storage-roots.ts
+// src/domains/state/storage-roots.ts
 var crypto = __toESM(require("node:crypto"));
 var os = __toESM(require("node:os"));
 var path8 = __toESM(require("node:path"));
@@ -1708,7 +1708,7 @@ function resolveStorageRoots(opts) {
   };
 }
 
-// src/modules/state/workflows/storage-layout.ts
+// src/domains/state/storage-layout.ts
 var POLICY_CONFIG_FILES = Object.freeze({
   project: "config/project.json",
   workspace: "config/workspace.json"
@@ -1829,7 +1829,7 @@ function createGuildStorage(cwd = process.cwd(), opts = {}) {
   return storage;
 }
 
-// src/modules/state/workflows/upgrade-journal.ts
+// src/domains/state/upgrade-journal.ts
 var fs8 = __toESM(require("node:fs"));
 var UPGRADE_JOURNAL_SCHEMA = "guild.upgrade_journal.v1";
 function upgradeJournalPath(runtime) {
@@ -2479,7 +2479,7 @@ function emitCapabilityProfile(opts) {
   }
 }
 
-// src/modules/config/workflows/config-defaults.ts
+// src/domains/config/config-defaults.ts
 var DEFAULT_ESCALATION_MARKERS = Object.freeze([
   "I'm not sure",
   "unclear",

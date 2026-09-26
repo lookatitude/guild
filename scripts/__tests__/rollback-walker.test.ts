@@ -19,12 +19,12 @@ import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
 
-import { createGuildStorage } from "../../src/modules/state/workflows/storage-layout";
-import { applyEvolveDelta } from "../../src/modules/evolution/workflows/evolve-apply";
-import { projectTargetRoot } from "../../src/modules/evolution/workflows/evolve-apply";
-import { sha256, type EvolveDelta } from "../../src/modules/evolution/workflows/evolve-delta";
-import { compactHistoryPath } from "../../src/modules/evolution/workflows/compact-history";
-import { locatePlaybookSpan } from "../../src/modules/knowledge/workflows/harvest";
+import { createGuildStorage } from "../../src/domains/state";
+import { applyEvolveDelta } from "../../src/domains/evolve";
+import { projectTargetRoot } from "../../src/domains/evolve";
+import { sha256, type EvolveDelta } from "../../src/domains/evolve";
+import { compactHistoryPath } from "../../src/domains/evolve";
+import { locatePlaybookSpan } from "../../src/domains/knowledge";
 
 const SCRIPT = path.resolve(__dirname, "../rollback-walker.ts");
 

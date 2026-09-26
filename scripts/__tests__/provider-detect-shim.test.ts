@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/provider-detect";
 import type { ProbeEnv } from "../lib/provider-detect";
-import * as moduleImpl from "../../src/modules/host-runtime/workflows/provider-detect";
+import * as moduleImpl from "../../src/adapters/provider-detect";
 
 const CWD = "/tmp/guild-provider-detect-shim";
 
@@ -64,12 +64,12 @@ describe("provider-detect compatibility shim", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/provider-detect.ts"), "utf8");
     const modulePath = fs.readFileSync(
-      path.join(repoRoot, "src/modules/host-runtime/workflows/provider-detect.ts"),
+      path.join(repoRoot, "src/adapters/provider-detect.ts"),
       "utf8"
     );
 
     expect(oldPath).toMatch(
-      /export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/modules\/host-runtime\/workflows\/provider-detect["']/
+      /export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/adapters\/provider-detect["']/
     );
     expect(oldPath).not.toMatch(/export\s+function\s+detectProviders/);
     expect(modulePath).toMatch(/export\s+function\s+detectProviders/);

@@ -1,4 +1,4 @@
-import { resolveTraceV2Fields } from "../../src/modules/lifecycle/workflows/trace-v2";
+import { resolveTraceV2Fields } from "../../src/domains/lifecycle/trace-v2";
 
 describe("TaskCell trace attribution", () => {
   it("binds provider usage to the exact launcher-authored runtime instance", () => {

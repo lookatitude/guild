@@ -19,40 +19,40 @@ import {
   fingerprintOrUnknown,
   nullIo,
   runAdapter,
-} from "../../src/modules/host-runtime/workflows/model-discovery/adapter-contract";
+} from "../../src/adapters/model-discovery/adapter-contract";
 import {
   codexAppServerAdapter,
   parseModelListResult,
   normalizeAppServerModels,
-} from "../../src/modules/host-runtime/workflows/model-discovery/codex-app-server";
+} from "../../src/adapters/model-discovery/codex-app-server";
 import {
   codexDebugModelsAdapter,
   parseDebugModelsOutput,
   normalizeDebugModels,
-} from "../../src/modules/host-runtime/workflows/model-discovery/codex-debug-models";
+} from "../../src/adapters/model-discovery/codex-debug-models";
 import {
   claudeApiAdapter,
-} from "../../src/modules/host-runtime/workflows/model-discovery/claude-api";
+} from "../../src/adapters/model-discovery/claude-api";
 import {
   openAiApiAdapter,
   openAiFamilyFor,
-} from "../../src/modules/host-runtime/workflows/model-discovery/openai-api";
+} from "../../src/adapters/model-discovery/openai-api";
 import {
   makeHonestUnknownAdapter,
-} from "../../src/modules/host-runtime/workflows/model-discovery/honest-unknown";
+} from "../../src/adapters/model-discovery/honest-unknown";
 import {
   CODEX_SEAM_PREFERENCE,
   DISCOVERY_ADAPTER_REGISTRY,
   adapterForTarget,
   discoverCodexModels,
-} from "../../src/modules/host-runtime/workflows/model-discovery";
+} from "../../src/adapters/model-discovery";
 import {
   CatalogTarget,
   LISTING_AUTHORITY,
   appendEvidenceEvent,
   evidenceStateForListing,
   normalizeDiscovery,
-} from "../../src/modules/capability/workflows/model-catalog";
+} from "../../src/domains/config/model-catalog";
 
 const FIXTURES = path.join(__dirname, "fixtures");
 const NOW = "2026-07-30T13:13:34Z";
@@ -594,7 +594,7 @@ describe("listing authority is row-keyed and closed (T4-R1-001 / T4-R1-002 probe
 
   test("REGRESSION (T4-R2-001): the module's public surface is sealed — no raw state-transition/setter escapes", () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const catalog = require("../../src/modules/capability/workflows/model-catalog");
+    const catalog = require("../../src/domains/config/model-catalog");
     expect(Object.keys(catalog).sort()).toEqual([
       "EVIDENCE_STATES",
       "LEGAL_EVIDENCE_TRANSITIONS",

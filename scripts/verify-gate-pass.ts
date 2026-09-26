@@ -49,14 +49,8 @@
 
 import * as fs from "node:fs";
 import { createHash } from "node:crypto";
-import {
-  parseReviewResult,
-  type ReviewResultMinimal,
-} from "../src/modules/distribution/workflows/review-result";
-export {
-  parseReviewResult,
-  type ReviewResultMinimal,
-} from "../src/modules/distribution/workflows/review-result";
+import { parseReviewResult, type ReviewResultMinimal } from "../src/domains/distribution";
+export { parseReviewResult, type ReviewResultMinimal } from "../src/domains/distribution";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

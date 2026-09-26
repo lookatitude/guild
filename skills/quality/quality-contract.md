@@ -51,7 +51,7 @@ Per-class execution outcomes from `RunChecks`.
 The advisory G-quality panel trail (non-blocking).
 
 - Sourced from the station composer's **`qa` station `advisory_panel`** (SoT:
-  `src/modules/teams/workflows/station-composer.ts` `STATION_POLICY.qa.advisory_panel`,
+  `src/domains/teams/station-composer.ts` `STATION_POLICY.qa.advisory_panel`,
   resolved by `composeStationTeam`) — not a hardcoded fixed pair. Producer
   `qa-test-strategy` (matches the composer); challengers `security` (BASELINE — always
   present) + `architect` (GATED on the `multi_component` signal; recorded as
@@ -94,7 +94,7 @@ not_applicable | gap}`. Single-source — cited, never re-derived or "extended"
 
 Canonical per-class + total wall-clock budget is `defaults.quality.budget`.
 **The code is the source of truth:**
-`src/modules/config/workflows/config-defaults.ts:130` →
+`src/domains/config/config-defaults.ts:130` →
 `{ per_class_minutes: 10, total_minutes: 30 }`. Consume by pointer to that path;
 do not restate the numbers elsewhere. On exhaustion the class is `inconclusive:
 budget exhausted` — never silently passed.

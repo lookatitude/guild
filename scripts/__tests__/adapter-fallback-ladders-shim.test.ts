@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/adapter-fallback-ladders";
-import * as moduleImpl from "../../src/modules/host-runtime/workflows/adapter-fallback-ladders";
+import * as moduleImpl from "../../src/adapters/adapter-fallback-ladders";
 
 describe("adapter-fallback-ladders compatibility shim", () => {
   test("scripts/lib/adapter-fallback-ladders re-exports src/modules/host-runtime", () => {
@@ -34,9 +34,9 @@ describe("adapter-fallback-ladders compatibility shim", () => {
   test("only the module file defines the fallback ladder table", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/adapter-fallback-ladders.ts"), "utf8");
-    const modulePath = fs.readFileSync(path.join(repoRoot, "src/modules/host-runtime/workflows/adapter-fallback-ladders.ts"), "utf8");
+    const modulePath = fs.readFileSync(path.join(repoRoot, "src/adapters/adapter-fallback-ladders.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/modules\/host-runtime\/workflows\/adapter-fallback-ladders["']/);
+    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/adapters\/adapter-fallback-ladders["']/);
     expect(oldPath).not.toMatch(/export\s+const\s+FALLBACK_LADDER_TABLE/);
     expect(modulePath).toMatch(/export\s+const\s+FALLBACK_LADDER_TABLE/);
     expect(modulePath).toMatch(/from\s+["']\.\/host-registry-schema["']/);

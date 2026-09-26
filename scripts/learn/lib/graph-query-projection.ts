@@ -40,8 +40,8 @@ import {
   ensureKgIndex,
   ensureKgProjectionIndex,
   type IndexBlock,
-} from "../../../src/modules/state/workflows/index-cache";
-import { tokenizeIdentifierAware } from "../../../src/modules/kernel";
+} from "../../../src/domains/state/index-cache";
+import { tokenizeIdentifierAware } from "../../../src/domains/kernel";
 
 // ── node:sqlite read-only handle (minimal stub; mirrors index-cache.ts) ──────
 

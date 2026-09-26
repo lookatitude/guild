@@ -5,4 +5,4 @@
  * internals without breaking existing imports from scripts/lib/shared/*.
  */
 
-export * from "../../../src/modules/config/workflows/config-defaults";
+export * from "../../../src/domains/config/config-defaults";

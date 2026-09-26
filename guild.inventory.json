@@ -874,6 +874,11 @@
       "kind": "cli"
     },
     {
+      "id": "check-domain-ownership",
+      "source_path": "scripts/check-domain-ownership.ts",
+      "kind": "cli"
+    },
+    {
       "id": "check-entrypoint-packaging",
       "source_path": "scripts/check-entrypoint-packaging.ts",
       "kind": "cli"
@@ -881,11 +886,6 @@
     {
       "id": "check-lane-liveness",
       "source_path": "scripts/check-lane-liveness.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "check-module-ownership",
-      "source_path": "scripts/check-module-ownership.ts",
       "kind": "cli"
     },
     {
@@ -2304,18 +2304,8 @@
       "kind": "cli"
     },
     {
-      "id": "sync-live-resources",
-      "source_path": "scripts/sync-live-resources.ts",
-      "kind": "cli"
-    },
-    {
       "id": "sync-migration",
       "source_path": "scripts/sync-migration.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "sync-module-resources",
-      "source_path": "scripts/sync-module-resources.ts",
       "kind": "cli"
     },
     {
@@ -2468,25 +2458,25 @@
     },
     {
       "id": "guild.host_event.v1",
-      "source_path": "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
+      "source_path": "plugin/src/domains/distribution/result-contracts-v2.ts",
       "status": "exists",
       "validator_kind": "strict"
     },
     {
       "id": "guild.permission_receipt.v1",
-      "source_path": "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
+      "source_path": "plugin/src/domains/distribution/result-contracts-v2.ts",
       "status": "exists",
       "validator_kind": "strict"
     },
     {
       "id": "guild.phase_result.v1",
-      "source_path": "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
+      "source_path": "plugin/src/domains/distribution/result-contracts-v2.ts",
       "status": "exists",
       "validator_kind": "strict"
     },
     {
       "id": "guild.qa_result.v1",
-      "source_path": "plugin/src/modules/distribution/workflows/result-contracts-v2.ts",
+      "source_path": "plugin/src/domains/distribution/result-contracts-v2.ts",
       "status": "exists",
       "validator_kind": "strict"
     },

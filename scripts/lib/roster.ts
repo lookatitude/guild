@@ -32,7 +32,7 @@
  */
 
 import * as fs from "fs";
-import { sealSet } from "../../src/modules/kernel/workflows/sealed-collections";
+import { sealSet } from "../../src/domains/kernel/sealed-collections";
 import * as path from "path";
 // The ONE shared, js-yaml-backed frontmatter/YAML reader (OD-3): all reading
 // goes through it — this file only DUMPS YAML directly.
@@ -40,7 +40,7 @@ import { parseFrontmatter, parseYaml } from "./frontmatter";
 import {
   checkContained,
   isRefused,
-} from "../../src/modules/kernel/workflows/path-containment";
+} from "../../src/domains/kernel/path-containment";
 // KTD20/R59: the mint tree is addressed through GuildStorage.definition, never
 // by hand-joining ".guild". One constructor means one place decides where a
 // project's definitions live, so a layout change moves the mint with it.

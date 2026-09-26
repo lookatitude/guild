@@ -337,42 +337,40 @@ const CHEAP_ENTRYPOINTS: Array<{ id: string; argv: string[]; allow: string[]; bl
   {
     id: "status (capability-profile)",
     argv: ["runtime/scripts/capability-profile.js", "--help"],
-    allow: ["state", "config", "capability", "security", "host-runtime", "kernel"],
+    allow: ["state", "config", "security", "adapters", "kernel"],
     blocking: true,
   },
   {
-    // Known WIDE at 14 domains. T06 landed the policy/inventory split and its
-    // resolver imports NO domain barrel — but the row did not narrow, and the
-    // measurement says why: every `src/modules/<d>/index.ts` transitively reaches
-    // all 14 through `state -> migrations -> lifecycle`, and `index-only-domain-imports`
-    // (KTD27) REQUIRES a src/ file to import through that barrel. So any entrypoint
-    // touching a domain from src/ loads all 14 until the domain fold cuts the graph.
+    // MEASURED on the post-T12 tree: still WIDE, 13 domains (was 15 modules).
+    // The fold was expected to cut this and did not. Before, every module barrel
+    // reached all 14 through `state -> migrations -> lifecycle`; `migrations` is
+    // now inside `state`, so that particular edge is gone — but the twelve domain
+    // barrels are still mutually reachable, and `index-only-domain-imports` (KTD27)
+    // REQUIRES a src/ file to import a sibling domain through its index. Narrowing
+    // this needs the domains themselves to be less entangled (a dependency cut),
+    // which is not something a mechanical relocation can deliver.
     //
-    // Measured on the T06 tree (esbuild bundle, one entry each):
-    //   src/modules/kernel/index                     ->  1 domain
-    //   src/modules/config/workflows/policy-keys     ->  2 domains (config, kernel)
-    //   src/modules/config/workflows/settings-reader -> 14 domains (via the host-runtime + security barrels)
-    //   src/modules/config/index                     -> 14 domains
-    //   src/modules/state/index                      -> 14 domains
+    // Post-fold measurement, `runtime/scripts/config-cmd.js`:
+    //   allowed:  adapters, config, kernel, security, state
+    //   also in:  dispatch, distribution, evolve, knowledge, lifecycle, review,
+    //             teams, telemetry
     //
-    // So the policy key set itself is cheap; everything that names a durable PATH
-    // is not, because `GuildStorage` lives behind the state barrel.
-    //
-    // The flip therefore belongs to T12 (U3 domain fold), which owns the barrel
-    // graph. Kept reporting rather than gating so the criterion stays visible.
+    // Kept reporting, not gating, so the criterion stays visible and honest.
     id: "config show --sources",
     argv: ["runtime/scripts/config-cmd.js", "show", "--sources"],
-    allow: ["state", "config", "capability", "security", "host-runtime", "kernel"],
+    allow: ["state", "config", "security", "adapters", "kernel"],
     blocking: false,
-    note: "T12 oracle — the barrel graph, not the config split, is what keeps this wide (see the comment above)",
+    note: "the domain barrels are still mutually reachable; a dependency cut, not a relocation, narrows this",
   },
 ];
 
-/** Bundled entrypoints have no require graph — read the domains from the bytes. */
+/** Bundled entrypoints have no require graph — read the domains from the bytes.
+ *  T12: the tree is `src/domains/<id>/` plus the non-domain `src/adapters/`. */
 function domainsInBundle(file: string): string[] {
   const src = fs.readFileSync(file, "utf8");
   const found = new Set<string>();
-  for (const m of src.matchAll(/\/\/ src\/modules\/([a-z0-9-]+)\//g)) found.add(m[1]);
+  for (const m of src.matchAll(/\/\/ src\/domains\/([a-z0-9-]+)\//g)) found.add(m[1]);
+  if (/\/\/ src\/adapters\//.test(src)) found.add("adapters");
   return [...found].sort();
 }
 

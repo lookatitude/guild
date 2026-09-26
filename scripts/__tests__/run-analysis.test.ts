@@ -5,18 +5,7 @@ import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-import {
-  analyzeRun,
-  compareRuns,
-  resolveComparisonTarget,
-  routeRecommendation,
-  decideRecommendation,
-  updateRecommendationStatus,
-  writeRunComparison,
-  writeRunAnalysis,
-  withRecommendationLock,
-  type RunAnalysis,
-} from "../../src/modules/telemetry/workflows/run-analysis";
+import { analyzeRun, compareRuns, resolveComparisonTarget, routeRecommendation, decideRecommendation, updateRecommendationStatus, writeRunComparison, writeRunAnalysis, withRecommendationLock, type RunAnalysis } from "../../src/domains/telemetry";
 
 const RUN_A = "run-20260812-010000-alpha";
 const RUN_B = "run-20260812-020000-beta";
@@ -1014,7 +1003,7 @@ describe("run-tracing-evaluation — plugin-owned analysis", () => {
       schema_version: "guild.recommendation_lock.v1", pid: 99999999, created_at: "2026-08-12T01:00:00Z",
     }) + "\n");
     const marker = path.join(root, "writers.txt");
-    const moduleUrl = pathToFileURL(path.resolve(__dirname, "../../src/modules/telemetry/workflows/run-analysis.ts")).href;
+    const moduleUrl = pathToFileURL(path.resolve(__dirname, "../../src/domains/telemetry/run-analysis.ts")).href;
     const script = `
       import fs from "node:fs";
       import runAnalysis from ${JSON.stringify(moduleUrl)};

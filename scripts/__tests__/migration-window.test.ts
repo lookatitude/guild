@@ -8,11 +8,11 @@ import { MIGRATION_RESTART_HISTORY_RELPATH, MIGRATION_TRANSITION_RELPATH, MIGRAT
 import { readCompatibilityAsset } from "../lib/capability/compatibility-loader";
 import { baselineBinding, emitCapabilityProfile, snapshotTreeHashes } from "../lib/capability/profile-emit";
 import { FEATURE_GATE_RELPATH, readFeatureGateRegistry } from "../lib/capability/strangler-control";
-import { appendReceipt, defaultJournalIo, makeReceiptInput, scanReceiptJournal, sealReceiptRecord } from "../../src/modules/telemetry/workflows/receipt-journal";
-import { CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, capabilityRunStartIdentityHash } from "../../src/modules/lifecycle/workflows/run-lifecycle";
-import { closeRunBinding, loadRunBinding, mintRunBinding, reopenRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
-import { buildSessionContext, writeSessionContext } from "../../src/modules/host-runtime/workflows/session-context";
-import { buildTaskAssignmentV2, taskCellPaths } from "../../src/modules/dispatch/workflows/task-cell-contract";
+import { appendReceipt, defaultJournalIo, makeReceiptInput, scanReceiptJournal, sealReceiptRecord } from "../../src/domains/telemetry";
+import { CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, capabilityRunStartIdentityHash } from "../../src/domains/lifecycle";
+import { closeRunBinding, loadRunBinding, mintRunBinding, reopenRunBinding } from "../../src/domains/lifecycle";
+import { buildSessionContext, writeSessionContext } from "../../src/adapters/session-context";
+import { buildTaskAssignmentV2, taskCellPaths } from "../../src/domains/dispatch";
 
 let mockGhFailure = false;
 let mockGhSourceDigest = "";

@@ -20,7 +20,7 @@ import {
   readFeatureGateRegistry,
   writeFeatureGateRegistry,
 } from "../lib/capability/strangler-control";
-import * as resolverMode from "../../src/modules/capability/workflows/resolver-mode";
+import * as resolverMode from "../../src/domains/config/resolver-mode";
 import { main as selfBuildCanonicalizeMain } from "../self-build-canonicalize";
 
 describe("PCL-15 self-build canonicalization", () => {

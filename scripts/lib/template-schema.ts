@@ -5,4 +5,4 @@
  * move internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/modules/templates/workflows/template-schema";
+export * from "../../src/domains/teams/template-schema";

@@ -10,10 +10,7 @@ import {
   type TaskCellRecordSet,
   type TaskCellSubstrate,
 } from "../lib/core/contracts/task-cell-backend";
-import {
-  auditTaskCellScaleRecords,
-  type TaskCellCapabilityIndex,
-} from "../../src/modules/dispatch/workflows/task-cell-scale-audit";
+import { auditTaskCellScaleRecords, type TaskCellCapabilityIndex } from "../../src/domains/dispatch";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";

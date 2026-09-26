@@ -46,7 +46,7 @@
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-import { sealSet } from "../../src/modules/kernel/workflows/sealed-collections";
+import { sealSet } from "../../src/domains/kernel/sealed-collections";
 
 export type HandoffTier = "cheap" | "mid" | "powerful";
 export type HandoffStatus = "done" | "blocked" | "escalate";

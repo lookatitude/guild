@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/host-profiles-validate";
-import * as moduleImpl from "../../src/modules/host-runtime/workflows/host-profiles-validate";
+import * as moduleImpl from "../../src/adapters/host-profiles-validate";
 
 describe("host-profiles-validate compatibility shim", () => {
   test("scripts/lib/host-profiles-validate re-exports src/modules/host-runtime", () => {
@@ -30,9 +30,9 @@ describe("host-profiles-validate compatibility shim", () => {
   test("only the module file defines host profile validation", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/host-profiles-validate.ts"), "utf8");
-    const modulePath = fs.readFileSync(path.join(repoRoot, "src/modules/host-runtime/workflows/host-profiles-validate.ts"), "utf8");
+    const modulePath = fs.readFileSync(path.join(repoRoot, "src/adapters/host-profiles-validate.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/modules\/host-runtime\/workflows\/host-profiles-validate["']/);
+    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/adapters\/host-profiles-validate["']/);
     expect(oldPath).not.toMatch(/export\s+function\s+validateHostProfiles/);
     expect(modulePath).toMatch(/export\s+function\s+validateHostProfiles/);
     expect(modulePath).toMatch(/from\s+["']\.\/host-registry-schema["']/);

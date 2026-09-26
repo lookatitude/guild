@@ -8,8 +8,8 @@ import { FEDERATION_DEFINITION_MANIFEST_REF_SCHEMA, validateFederationDefinition
 import { tierForModel } from "../roster";
 import { commitAdoptionManifest, readAdoptionManifest } from "./adoption-migrate";
 import { definitionRefForDispatch, readCommittedAdoptionManifest } from "./definition-ref-for-dispatch";
-import { writeContainedFile } from "../../../src/modules/kernel/workflows/path-containment";
-import { resolveCapability } from "../../../src/modules/capability/workflows/resolver-mode";
+import { writeContainedFile } from "../../../src/domains/kernel/path-containment";
+import { resolveCapability } from "../../../src/domains/config/resolver-mode";
 import {
   executeResolverRollback,
   readFeatureGateRegistry,

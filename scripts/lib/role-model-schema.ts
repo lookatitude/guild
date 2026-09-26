@@ -5,4 +5,4 @@
  * can move internals without breaking existing imports from scripts/lib.
  */
 
-export * from "../../src/modules/capability/workflows/role-model-schema";
+export * from "../../src/domains/config/role-model-schema";

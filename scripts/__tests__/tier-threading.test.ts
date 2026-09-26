@@ -38,8 +38,8 @@ import { scoreTier } from "../score-tier";
 import { planTeamRouting, type RoutableHost } from "../lib/host-router";
 import { buildCapability, writeHostCapability } from "../write-host-capability";
 import { writeBackScoredTier } from "../lib/write-back-scored-tier";
-import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
-import { sessionBindingPath, type SessionBinding } from "../../src/modules/config/workflows/session-binding";
+import { mintRunBinding } from "../../src/domains/lifecycle";
+import { sessionBindingPath, type SessionBinding } from "../../src/domains/config";
 import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
 const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();

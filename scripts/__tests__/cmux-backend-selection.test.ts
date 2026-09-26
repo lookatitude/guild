@@ -31,16 +31,13 @@
  * test in this file claims it.
  */
 
-import {
-  selectExecutionSubstrate,
-  type ExecutionCapabilityProbe,
-} from "../../src/modules/dispatch/workflows/execution-transport-ports";
+import { selectExecutionSubstrate, type ExecutionCapabilityProbe } from "../../src/domains/dispatch";
 import {
   runStartPreflight,
   resolveRunStartDispatchBackend,
   type PreflightProbe,
 } from "../lib/runstart-preflight";
-import type { ProbeEnv } from "../../src/modules/host-runtime";
+import type { ProbeEnv } from "../../src/adapters";
 import * as fs from "fs";
 import * as os from "os";
 import * as nodePath from "path";

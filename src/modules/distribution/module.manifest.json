@@ -22,8 +22,8 @@
       "build-verify",
       "check-bundle-determinism",
       "check-channel-integrity",
+      "check-domain-ownership",
       "check-entrypoint-packaging",
-      "check-module-ownership",
       "check-plugin-root-fallback",
       "check-roster-consistency",
       "codex-guild-prompt-bridge",
@@ -54,13 +54,8 @@
       "registry-rollup",
       "release-changelog",
       "sign-release-attestation",
-      "sync-live-resources",
-      "sync-module-resources",
       "verify-host-packages",
       "verify-installer"
     ]
-  },
-  "resource_projection_entrypoints": [
-    "build-release-candidate"
-  ]
+  }
 }

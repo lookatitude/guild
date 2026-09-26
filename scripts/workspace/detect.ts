@@ -6,9 +6,17 @@
  * internals without breaking existing script paths.
  */
 
-import { runWorkspaceDetectCli } from "../../src/modules/workspace/workflows/detect";
+import { runWorkspaceDetectCli } from "../../src/domains/state";
 
-export * from "../../src/modules/workspace/workflows/detect";
+export {
+  detect,
+  runWorkspaceDetectCli,
+  type WorkspaceMode,
+  type RepoKind,
+  type SubGuildKind,
+  type SubGuild,
+  type DetectionResult,
+} from "../../src/domains/state";
 
 if (require.main === module) {
   runWorkspaceDetectCli();

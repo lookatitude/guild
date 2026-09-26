@@ -21,7 +21,7 @@ import {
   type ConfigValueType,
 } from "./config-reconcile-contract";
 import { DEFAULTS } from "../read-guild-config";
-import { deepFreeze } from "../../src/modules/kernel/workflows/sealed-collections";
+import { deepFreeze } from "../../src/domains/kernel/sealed-collections";
 // S5: the capability vocabularies live beside the DEFAULTS they describe, so the
 // enum members and the shipped default cannot drift apart. Imported through the
 // CANONICAL shared entrypoint (R-DIST canonicality rail forbids reaching past it

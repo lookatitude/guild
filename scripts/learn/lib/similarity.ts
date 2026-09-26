@@ -46,7 +46,7 @@ import { STRUCTURAL_PROFILE_KEYS } from "./structural";
 import {
   checkContained,
   isRefused,
-} from "../../../src/modules/kernel/workflows/path-containment";
+} from "../../../src/domains/kernel/path-containment";
 
 // ---------------------------------------------------------------------------
 // Tunables (all overridable via SimilarityOptions)

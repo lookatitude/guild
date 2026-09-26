@@ -3,7 +3,7 @@
  *
  * FIC-140 / A21-8 (RED-FIRST) — the executable contract for the not-yet-written
  * production module
- * `src/modules/migrations/workflows/host-cutover-controller.ts`, exported
+ * `src/domains/state/host-cutover-controller.ts`, exported
  * through the migrations module's public index.
  *
  * WHAT THIS BINDS
@@ -57,28 +57,11 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import {
-  NEUTRAL_DISPOSITIONS,
-  NEUTRAL_OUTCOME_TYPES,
-  NEUTRAL_REASON_CODES,
-  neutralCanonicalJson,
-  neutralFreeze,
-} from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
-import {
-  NEUTRAL_EVIDENCE_PROFILES,
-  NEUTRAL_SCENARIO_SUITE_ID,
-  NEUTRAL_SCENARIO_SUITE_VERSION,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
-import type {
-  NeutralEvidenceIdentity,
-  NeutralScenarioResult,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
-import {
-  NEUTRAL_ASSEMBLY_PACKET_SCHEMA,
-  NEUTRAL_CONFORMANCE_OWNER_SCENARIO_COUNTS,
-  NEUTRAL_OWNER_SCENARIO_IDS,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-assembly";
-import type { NeutralOwnerConformancePacket } from "../../src/modules/lifecycle/workflows/neutral-conformance-assembly";
+import { NEUTRAL_DISPOSITIONS, NEUTRAL_OUTCOME_TYPES, NEUTRAL_REASON_CODES, neutralCanonicalJson, neutralFreeze } from "../../src/domains/lifecycle";
+import { NEUTRAL_EVIDENCE_PROFILES, NEUTRAL_SCENARIO_SUITE_ID, NEUTRAL_SCENARIO_SUITE_VERSION } from "../../src/domains/lifecycle";
+import type { NeutralEvidenceIdentity, NeutralScenarioResult } from "../../src/domains/lifecycle";
+import { NEUTRAL_ASSEMBLY_PACKET_SCHEMA, NEUTRAL_CONFORMANCE_OWNER_SCENARIO_COUNTS, NEUTRAL_OWNER_SCENARIO_IDS } from "../../src/domains/lifecycle";
+import type { NeutralOwnerConformancePacket } from "../../src/domains/lifecycle";
 
 // ---------------------------------------------------------------------------
 // The module under contract
@@ -86,12 +69,14 @@ import type { NeutralOwnerConformancePacket } from "../../src/modules/lifecycle/
 
 const PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
 
-const CONTROLLER_REQUEST = "../../src/modules/migrations/workflows/host-cutover-controller";
+const CONTROLLER_REQUEST = "../../src/domains/state/host-cutover-controller";
 const CONTROLLER_SOURCE_PATH = path.resolve(
   __dirname,
-  "../../src/modules/migrations/workflows/host-cutover-controller.ts"
+  "../../src/domains/state/host-cutover-controller.ts"
 );
-const MIGRATIONS_INDEX_PATH = path.resolve(__dirname, "../../src/modules/migrations/index.ts");
+// T12 folded `migrations` into the state domain; the PUBLIC index the contract
+// means is that domain's index, not the transitional module shim beside it.
+const MIGRATIONS_INDEX_PATH = path.resolve(__dirname, "../../src/domains/state/index.ts");
 
 const RED = "A21-8 RED: production module not implemented yet";
 

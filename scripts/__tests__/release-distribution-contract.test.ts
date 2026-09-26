@@ -3,13 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import {
-  OPERATION_KINDS,
-  ACCEPTED_CONFORMANCE_ARTIFACTS,
-  buildOperationEvidence,
-  buildReleaseClaim,
-  verifyReleaseClaim,
-} from "../../src/modules/distribution/workflows/release-distribution-contract";
+import { OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS, buildOperationEvidence, buildReleaseClaim, verifyReleaseClaim } from "../../src/domains/distribution";
 
 const sha = (value: string) => crypto.createHash("sha256").update(value).digest("hex");
 const archive = Buffer.from("deterministic archive bytes");

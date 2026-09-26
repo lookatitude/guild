@@ -240,7 +240,7 @@ describe("G8 gate 3 — 0 model tokens, 0 network", () => {
     // allowlist entry.
     const imports = [...SIMILARITY_CODE.matchAll(/from ["']([^"']+)["']/g)].map((m) => m[1]).sort();
     expect(imports).toEqual([
-      "../../../src/modules/kernel/workflows/path-containment",
+      "../../../src/domains/kernel/path-containment",
       "./schema",
       "./structural",
       "fs",
@@ -258,7 +258,7 @@ describe("G8 gate 3 — 0 model tokens, 0 network", () => {
     expect(closure.some((f) => f.endsWith(path.join("lib", "schema.ts")))).toBe(true);
     // …and into the shared primitive, so the cost proof covers it too.
     expect(
-      closure.some((f) => f.endsWith(path.join("workflows", "path-containment.ts"))),
+      closure.some((f) => f.endsWith(path.join("domains", "kernel", "path-containment.ts"))),
     ).toBe(true);
     for (const file of closure) {
       const code = stripComments(fs.readFileSync(file, "utf8"));

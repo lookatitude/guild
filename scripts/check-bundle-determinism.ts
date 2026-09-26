@@ -88,10 +88,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import {
-  checkContained,
-  isRefused,
-} from "../src/modules/kernel/workflows/path-containment";
+import { checkContained, isRefused } from "../src/domains/kernel";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 

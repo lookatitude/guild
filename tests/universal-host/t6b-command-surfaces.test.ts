@@ -42,11 +42,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { splitFrontmatter, parseYaml } from "../../scripts/lib/frontmatter";
-import { parseModelsArgs } from "../../src/modules/capability/workflows/models-command";
+import { parseModelsArgs } from "../../src/domains/config/models-command";
 import {
   createCacheKey,
   modelCatalogCacheDir,
-} from "../../src/modules/capability/workflows/catalog-cache";
+} from "../../src/domains/config/catalog-cache";
 import {
   DECISION_VOCABULARY,
   kindCoverage,
@@ -55,10 +55,10 @@ import {
   preDispatchGate,
   scanCapReintroduction,
   teamPlanDir,
-} from "../../src/modules/teams/workflows/team-decision-surface";
-import { composeProposal, writeProposal } from "../../src/modules/teams/workflows/team-proposal";
-import { recordDecision, writeDecision } from "../../src/modules/teams/workflows/team-decision";
-import { canonicalYaml } from "../../src/modules/teams/workflows/canonical-hash";
+} from "../../src/domains/teams/team-decision-surface";
+import { composeProposal, writeProposal } from "../../src/domains/teams/team-proposal";
+import { recordDecision, writeDecision } from "../../src/domains/teams/team-decision";
+import { canonicalYaml } from "../../src/domains/teams/canonical-hash";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 

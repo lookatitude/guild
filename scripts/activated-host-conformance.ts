@@ -24,11 +24,8 @@ import {
   NEUTRAL_SCENARIO_SUITE_VERSION,
   neutralCanonicalJson,
   type NeutralConformanceEvidence,
-} from "../src/modules/lifecycle";
-import {
-  evaluateTransportedReleaseConformance,
-  runNeutralConformanceReleaseIntegration,
-} from "../src/modules/distribution/workflows/release-conformance-integration";
+} from "../src/domains/lifecycle";
+import { evaluateTransportedReleaseConformance, runNeutralConformanceReleaseIntegration } from "../src/domains/distribution";
 import {
   loadAttestedMigrationBoundary,
   snapshotMigrationRuntimePackage,

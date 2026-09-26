@@ -1,7 +1,7 @@
 /**
  * scripts/__tests__/receipt-journal.test.ts
  *
- * MH-06 — atomic receipt journal (src/modules/telemetry/workflows/receipt-journal.ts).
+ * MH-06 — atomic receipt journal (src/domains/telemetry/receipt-journal.ts).
  *
  * Pins the W1/MH-06 slice of the frozen W0 conformance contract
  * (conformance-scenarios.v1.json), scenarios:
@@ -22,28 +22,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { spawn } from "child_process";
-import {
-  appendReceipt,
-  scanReceiptJournal,
-  readCheckpoint,
-  readCheckpointState,
-  isValidCheckpointShape,
-  compareCheckpointToJournal,
-  analyzeReceiptRecords,
-  journalLockPath,
-  canonicalJournalPath,
-  resolveJournalIdentity,
-  acquireJournalAuthority,
-  JournalIdentityError,
-  defaultJournalIo,
-  makeReceiptInput,
-  sealReceiptRecord,
-  repairTornTail,
-  RECEIPT_CONTRACT_VERSION,
-  type JournalIo,
-  type JournalLockGrant,
-  type ReceiptAppendInput,
-} from "../../src/modules/telemetry/workflows/receipt-journal";
+import { appendReceipt, scanReceiptJournal, readCheckpoint, readCheckpointState, isValidCheckpointShape, compareCheckpointToJournal, analyzeReceiptRecords, journalLockPath, canonicalJournalPath, resolveJournalIdentity, acquireJournalAuthority, JournalIdentityError, defaultJournalIo, makeReceiptInput, sealReceiptRecord, repairTornTail, RECEIPT_CONTRACT_VERSION, type JournalIo, type JournalLockGrant, type ReceiptAppendInput } from "../../src/domains/telemetry";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixtures — fully deterministic
@@ -655,10 +634,7 @@ const JOURNAL_MODULE = path.join(
   __dirname,
   "..",
   "..",
-  "src",
-  "modules",
-  "telemetry",
-  "workflows",
+  "src", "domains", "telemetry",
   "receipt-journal",
 );
 

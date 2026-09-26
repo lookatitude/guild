@@ -1,3 +1,12 @@
+/**
+ * Projection contract.
+ *
+ * T12 retired the `src/modules/<id>/resources/**` byte mirrors: a host package is
+ * now a PROJECTION of the live surface (KTD28), so what these tests compile and
+ * diff-check is the authored file itself, addressed through the projection plan's
+ * `source_path`. There is no second copy left to drift from.
+ */
+
 import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
@@ -37,10 +46,8 @@ function compileStrict(cwd: string, inputs: string[]) {
   );
 }
 
-it("keeps generated TypeScript projection bytes free of diff-check whitespace defects", () => {
-  const projectedRuntime = fs.mkdtempSync(
-    path.join(os.tmpdir(), "guild-projection-diff-check-")
-  );
+it("keeps projected TypeScript bytes free of diff-check whitespace defects", () => {
+  const staged = fs.mkdtempSync(path.join(os.tmpdir(), "guild-projection-diff-check-"));
   try {
     const hostRuntime = buildModuleResourcePlan(PLUGIN_ROOT).find(
       (plan) => plan.module_id === "host-runtime"
@@ -48,18 +55,12 @@ it("keeps generated TypeScript projection bytes free of diff-check whitespace de
     expect(hostRuntime).toBeDefined();
 
     for (const entry of hostRuntime!.entries) {
-      if (!entry.resource_path.endsWith(".ts")) continue;
+      if (!entry.source_path.endsWith(".ts")) continue;
 
-      const projected = path.join(
-        PLUGIN_ROOT,
-        "src",
-        "modules",
-        "host-runtime",
-        entry.resource_path
-      );
-      const temporary = path.join(projectedRuntime, entry.resource_path);
+      const live = path.join(PLUGIN_ROOT, entry.source_path);
+      const temporary = path.join(staged, entry.source_path);
       fs.mkdirSync(path.dirname(temporary), { recursive: true });
-      fs.writeFileSync(temporary, fs.readFileSync(projected));
+      fs.writeFileSync(temporary, fs.readFileSync(live));
 
       const diffCheck = spawnSync(
         "git",
@@ -67,34 +68,24 @@ it("keeps generated TypeScript projection bytes free of diff-check whitespace de
         { encoding: "utf8" }
       );
       expect({
-        path: entry.resource_path,
+        path: entry.source_path,
         status: diffCheck.status,
         stdout: diffCheck.stdout,
         stderr: diffCheck.stderr,
       }).toEqual({
-        path: entry.resource_path,
+        path: entry.source_path,
         status: 1,
         stdout: "",
         stderr: "",
       });
     }
   } finally {
-    fs.rmSync(projectedRuntime, { recursive: true, force: true });
+    fs.rmSync(staged, { recursive: true, force: true });
   }
 });
 
-it("strictly compiles lifecycle workflow projections in every owning module", () => {
-  const plans = buildModuleResourcePlan(PLUGIN_ROOT);
-  const projectionId = "projection:src/modules/lifecycle/workflows/run-lifecycle.ts";
-  const inputs = ["lifecycle", "host-runtime"].map((moduleId) => {
-    const plan = plans.find((candidate) => candidate.module_id === moduleId);
-    expect(plan).toBeDefined();
-    const entry = plan!.entries.find((candidate) => candidate.id === projectionId);
-    expect(entry).toBeDefined();
-    return path.join("src", "modules", moduleId, entry!.resource_path);
-  });
-
-  const compiled = compileStrict(PLUGIN_ROOT, inputs);
+it("strictly compiles the lifecycle domain entrypoint the host adapters reach", () => {
+  const compiled = compileStrict(PLUGIN_ROOT, [path.join("src", "domains", "lifecycle", "run-lifecycle.ts")]);
   expect({
     status: compiled.status,
     stdout: compiled.stdout,
@@ -115,9 +106,7 @@ it("projects the Claude, Codex, and Pi adapter dependency graph for source-tree 
     return entry!;
   });
 
-  const sourceInputs = adapterEntries.map((entry) =>
-    path.join("src", "modules", "host-runtime", entry.resource_path)
-  );
+  const sourceInputs = adapterEntries.map((entry) => entry.source_path);
   const sourceCompile = compileStrict(PLUGIN_ROOT, sourceInputs);
   expect({
     status: sourceCompile.status,
@@ -127,18 +116,13 @@ it("projects the Claude, Codex, and Pi adapter dependency graph for source-tree 
 
   const installed = fs.mkdtempSync(path.join(os.tmpdir(), "guild-projected-runtime-"));
   try {
+    // The projector copies every planned surface file from its live path, exactly
+    // as build-host-packages does, plus the domain tree those scripts import.
     for (const plan of plans) {
       for (const entry of plan.entries) {
-        const from = path.join(
-          PLUGIN_ROOT,
-          "src",
-          "modules",
-          plan.module_id,
-          entry.resource_path
-        );
         const to = path.join(installed, entry.source_path);
         fs.mkdirSync(path.dirname(to), { recursive: true });
-        fs.copyFileSync(from, to);
+        fs.copyFileSync(path.join(PLUGIN_ROOT, entry.source_path), to);
       }
     }
     fs.cpSync(path.join(PLUGIN_ROOT, "src"), path.join(installed, "src"), {

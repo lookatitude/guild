@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/recall";
-import * as moduleImpl from "../../src/modules/context/workflows/recall";
+import * as moduleImpl from "../../src/domains/knowledge/recall";
 
 describe("recall compatibility shim", () => {
   test("scripts/lib/recall re-exports src/modules/context", () => {
@@ -16,14 +16,14 @@ describe("recall compatibility shim", () => {
   test("legacy path stays a thin public and CLI wrapper", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/recall.ts"), "utf8");
-    const modulePath = fs.readFileSync(path.join(repoRoot, "src/modules/context/workflows/recall.ts"), "utf8");
+    const modulePath = fs.readFileSync(path.join(repoRoot, "src/domains/knowledge/recall.ts"), "utf8");
 
-    expect(oldPath).toMatch(/src\/modules\/context\/workflows\/recall/);
+    expect(oldPath).toMatch(/src\/domains\/knowledge\/recall/);
     expect(oldPath).not.toMatch(/export\s+function\s+recall/);
     expect(oldPath).toMatch(/runRecallCli\(\)/);
     expect(modulePath).toMatch(/export\s+function\s+recall/);
     expect(modulePath).toMatch(/export\s+function\s+runRecallCli/);
     expect(modulePath).toMatch(/from\s+["']\.\/wiki-recall["']/);
-    expect(modulePath).toMatch(/from\s+["']\.\.\/\.\.\/state["']/);
+    expect(modulePath).toMatch(/from\s+["']\.\.\/state["']/);
   });
 });

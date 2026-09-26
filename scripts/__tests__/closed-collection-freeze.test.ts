@@ -52,7 +52,7 @@ import * as ts from "typescript";
 // The rail uses the shipped predicates on purpose: a private re-implementation could
 // drift from the primitive it is supposed to be checking.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { isSealedCollection, sealedCollectionValues } = require("../../src/modules/kernel/workflows/sealed-collections") as {
+const { isSealedCollection, sealedCollectionValues } = require("../../src/domains/kernel/sealed-collections") as {
   isSealedCollection: (v: unknown) => boolean;
   sealedCollectionValues: (v: unknown) => unknown[] | undefined;
 };
@@ -93,10 +93,14 @@ const SEAL_WRAPPERS = new Set(["sealSet", "sealMap"]);
  */
 const WRAPPER_IMPLEMENTATIONS = new Set([
   "src/modules/kernel/index.ts",
-  "src/modules/kernel/workflows/sealed-collections.ts",
+  // T12: the kernel domain's public index is the import surface every domain and
+  // adapter file uses (`../kernel`, `../domains/kernel`).
+  "src/domains/kernel/index.ts",
+  "src/domains/kernel/sealed-collections.ts",
   // The neutral core's deliberate duplicate; `neutralFreeze` is re-exported by the index.
   "src/modules/lifecycle/index.ts",
-  "src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
+  "src/domains/lifecycle/index.ts",
+  "src/domains/lifecycle/neutral-runtime-contracts.ts",
 ]);
 
 /** Resolve a relative import specifier to a repo-relative `.ts` path, TEXTUALLY. */
@@ -284,9 +288,18 @@ export function scanSource(rel: string, text: string): StaticCollection[] {
     }
     const kind = kindFromWrapper ?? kindFromValue(value) ?? kindFromType(type);
     if (!kind) return;
+    // A Map built from `[key, value]` literals does not retain the tuples — `new Map`
+    // copies them out — so the graph it owns is each tuple's VALUE, not the tuple.
+    const ownedElements = (list: ts.ArrayLiteralExpression): readonly ts.Expression[] =>
+      kind === "map"
+        ? list.elements.flatMap((tuple) => {
+            const t = unwrap(tuple as ts.Expression);
+            return ts.isArrayLiteralExpression(t) && t.elements.length === 2 ? [t.elements[1] as ts.Expression] : [t];
+          })
+        : list.elements;
     const ownsGraph =
       ts.isArrayLiteralExpression(value) &&
-      value.elements.some((element) => {
+      ownedElements(value).some((element) => {
         const el = unwrap(element as ts.Expression);
         const cal = calleeText(el);
         if (cal && trustedWrapper(cal)) return false;
@@ -646,7 +659,15 @@ function walkValue(
 
   const sealedValues = sealedCollectionValues(obj);
   if (sealedValues !== undefined) {
-    for (const value of sealedValues) walkValue(value, `${label}{}`, seen, result, depth + 1, true);
+    // A sealed MAP iterates as `[key, value]` tuples the inner Map iterator mints fresh on
+    // every step — not state the facade holds, so mutating one changes nothing. Walk what
+    // the tuple CARRIES, not the tuple (the control below pins that a mutable value is
+    // still found, and that the tuples really are fresh).
+    const isMap = typeof (obj as { get?: unknown }).get === "function";
+    for (const value of sealedValues) {
+      const parts = isMap && Array.isArray(value) ? value : [value];
+      for (const part of parts) walkValue(part, `${label}{}`, seen, result, depth + 1, true);
+    }
     return;
   }
 
@@ -878,7 +899,7 @@ describe("closed collections — POSITIVE CONTROLS for the round-1 findings", ()
       // The contrast is the point: the rule keys on where the binding RESOLVES, not on
       // whether the file happens to contain the letters `sealSet`.
       const real = `
-        import { sealSet } from "../../src/modules/kernel/workflows/sealed-collections";
+        import { sealSet } from "../../src/domains/kernel/sealed-collections";
         export const PERMITTED_ACTIONS = sealSet(["bypass"]);
       `;
       const [found] = scanSource("scripts/lib/real.ts", real);
@@ -951,6 +972,52 @@ describe("closed collections — POSITIVE CONTROLS for the round-1 findings", ()
       // A sweep that flags every local array would be a different (and much noisier) rail,
       // and would make the assertions above meaningless.
       expect(scanSource("scripts/lib/private.ts", `const VOCAB = ["a"];`)).toEqual([]);
+    });
+  });
+
+  // --- T12: domain indexes are trusted wrapper sources; sealMap owns its values ---
+  describe("T12 — the domain fold", () => {
+    it("a wrapper imported through the kernel DOMAIN index is trusted; a sibling domain's is not", () => {
+      const viaDomain = `
+        import { sealSet } from "../kernel";
+        export const PERMITTED_ACTIONS = sealSet(["bypass"]);
+      `;
+      expect(scanSource("src/domains/config/x.ts", viaDomain)[0]).toMatchObject({ kind: "set", sealed: true });
+      const viaSibling = `
+        import { sealSet } from "../review";
+        export const PERMITTED_ACTIONS = sealSet(["bypass"]);
+      `;
+      expect(scanSource("src/domains/config/x.ts", viaSibling)[0]).toMatchObject({ kind: "set", sealed: false });
+    });
+
+    it("a sealMap of string tuples owns no graph, but a mutable VALUE still makes it shallow", () => {
+      const strings = `
+        import { sealMap } from "../kernel";
+        export const M = sealMap([["a", "x"], ["b", "y"]]);
+      `;
+      expect(scanSource("src/domains/config/x.ts", strings)[0]).toMatchObject({ kind: "map", sealed: true, ownsGraph: false });
+      const objects = `
+        import { sealMap } from "../kernel";
+        export const M = sealMap([["a", { open: true }]]);
+      `;
+      expect(scanSource("src/domains/config/x.ts", objects)[0]).toMatchObject({ kind: "map", ownsGraph: true, deep: false });
+    });
+
+    it("the runtime walk reads a sealed Map's VALUES: fresh tuples pass, a mutable value is found", () => {
+      const { sealMap } = require("../../src/domains/kernel/sealed-collections") as {
+        sealMap: <K, V>(e: Iterable<readonly [K, V]>) => ReadonlyMap<K, V>;
+      };
+      const clean = sealMap([["a", "x"]]);
+      // The tuples really are minted per iteration — mutating one cannot reach the map.
+      const [first] = [...clean];
+      (first as unknown as string[])[1] = "tampered";
+      expect(clean.get("a")).toBe("x");
+      const ok: WalkResult = { findings: [], visited: 0, names: new Set() };
+      walkValue(clean, "probe/clean", newVisited(), ok, 0, false);
+      expect(ok.findings).toEqual([]);
+      const open: WalkResult = { findings: [], visited: 0, names: new Set() };
+      walkValue(sealMap([["a", ["mutable"]]]), "probe/open", newVisited(), open, 0, false);
+      expect(open.findings).toEqual([{ path: "probe/open{}", kind: "unfrozen-array" }]);
     });
   });
 
@@ -1287,7 +1354,7 @@ describe("closed collections — the exploits, demonstrated against this branch"
     // index-exports-only runtime half could not see them.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const config = require(
-      path.join(REPO, "src", "modules", "config", "workflows", "init-scaffold-manifest.ts"),
+      path.join(REPO, "src", "domains", "config", "init-scaffold-manifest.ts"),
     ) as {
       singleProject: readonly { path: string }[];
       repairRequired: readonly { path: string }[];
@@ -1359,14 +1426,14 @@ describe("closed collections — nothing branches on the REPRESENTATION of a voc
    * below, so an exempted file that stops containing the use it was exempted for is a
    * failure rather than a quietly widened hole.
    */
-  const PRIMITIVE = "src/modules/kernel/workflows/sealed-collections.ts";
+  const PRIMITIVE = "src/domains/kernel/sealed-collections.ts";
   /**
    * The neutral core's deliberate, weaker duplicate of the primitive. It must REFUSE a
    * branded Set/Map rather than "freeze" one — it cannot build the facade — and refusing
    * requires recognizing one. Exempted for exactly the same reason as the primitive, and
    * for nothing else: this is the only `instanceof Set/Map` the file may contain.
    */
-  const NEUTRAL_DUPLICATE = "src/modules/lifecycle/workflows/neutral-runtime-contracts.ts";
+  const NEUTRAL_DUPLICATE = "src/domains/lifecycle/neutral-runtime-contracts.ts";
   const EXEMPT: Record<string, { minHits: number; why: string }> = {
     [PRIMITIVE]: { minHits: 3, why: "the kernel primitive — distinguishing brand from facade IS its job" },
     [NEUTRAL_DUPLICATE]: {
@@ -1427,57 +1494,58 @@ describe("closed collections — nothing branches on the REPRESENTATION of a voc
 // The mirror hazard the sweep walked into — pinned so it cannot come back
 // ---------------------------------------------------------------------------
 
-describe("closed collections — files LOADED THROUGH a resources mirror resolve from there", () => {
+describe("closed collections — the resources mirrors are gone; domain files load in place", () => {
   /**
-   * `src/modules/<id>/resources/**` is a GENERATED verbatim copy of a live `scripts/**` or
-   * `hooks/**` file, sitting three directories deeper than the original. Most mirrors are
-   * inert payload — 263 of 550 relative specifiers inside them already fail to resolve at
-   * the base commit, and nothing loads them in place, so that is not a defect.
-   *
-   * The exception is a mirror that a LIVE module file re-exports. Those ARE loaded from
-   * the mirror path, so every relative import in them must resolve from there. Adding
-   * `import { deepFreeze } from "../../../../src/modules/kernel/..."` to
-   * task-cell-backend.ts broke the entire dispatch module index exactly this way; the fix
-   * was to drop the import and freeze by hand. This test is why the next person will not
-   * spend an hour rediscovering it.
+   * T12 retired `src/modules/<id>/resources/**`. The hazard this block used to guard — a
+   * live module file re-exporting a mirror three directories deeper, whose relative
+   * imports then failed to resolve — cannot recur while no live file imports a
+   * `resources/` path. What remains worth pinning is the successor property: every
+   * relative import in a domain or adapter file resolves from where the file IS.
    */
-  const reExportedMirrors: { importer: string; mirror: string }[] = [];
-  const liveModuleFiles = walkFiles(path.join(REPO, "src", "modules"));
-  for (const file of liveModuleFiles) {
-    const text = fs.readFileSync(file, "utf8");
-    for (const match of text.matchAll(/from "(\.\.?\/(?:[^"]*\/)?resources\/[^"]+)"/g)) {
-      reExportedMirrors.push({
-        importer: path.relative(REPO, file).replace(/\\/g, "/"),
-        mirror: path.resolve(path.dirname(file), match[1]),
-      });
-    }
-  }
-
-  it("finds the mirror re-exports (anti-vacuity — this set is small and must not be empty)", () => {
-    expect(reExportedMirrors.length).toBeGreaterThan(0);
+  const liveFiles = [
+    ...walkFiles(path.join(REPO, "src")),
+    ...walkFiles(path.join(REPO, "scripts")),
+    ...walkFiles(path.join(REPO, "hooks")),
+  ];
+  const foldedFiles = liveFiles.filter((file) => {
+    const rel = path.relative(REPO, file).replace(/\\/g, "/");
+    return rel.startsWith("src/domains/") || rel.startsWith("src/adapters/");
   });
 
-  it("every relative import inside a re-exported mirror resolves from the MIRROR path", () => {
-    const broken: string[] = [];
-    const resolves = (base: string, spec: string): boolean => {
-      const target = path.resolve(base, spec);
-      return [".ts", ".js", "", "/index.ts"].some((suffix) => fs.existsSync(target + suffix));
-    };
-    const seen = new Set<string>();
-    const check = (mirrorPath: string): void => {
-      const file = [".ts", ".js"].map((s) => mirrorPath + s).find((p) => fs.existsSync(p)) ?? mirrorPath;
-      if (!fs.existsSync(file) || seen.has(file)) return;
-      seen.add(file);
+  it("no live file imports a resources/ mirror", () => {
+    const importers: string[] = [];
+    for (const file of liveFiles) {
       const text = fs.readFileSync(file, "utf8");
-      for (const match of text.matchAll(/from "(\.\.?\/[^"]+)"/g)) {
-        const spec = match[1].replace(/\.js$/, "");
-        if (!resolves(path.dirname(file), spec)) {
-          broken.push(`${path.relative(REPO, file).replace(/\\/g, "/")} -> ${match[1]}`);
+      for (const match of text.matchAll(/from "(\.\.?\/(?:[^"]*\/)?resources\/[^"]+)"/g)) {
+        importers.push(`${path.relative(REPO, file).replace(/\\/g, "/")} -> ${match[1]}`);
+      }
+    }
+    expect(importers).toEqual([]);
+    // Anti-vacuity: the sweep read the live tree.
+    expect(liveFiles.length).toBeGreaterThan(500);
+  });
+
+  it("every relative import inside a domain or adapter file resolves from its own path", () => {
+    const broken: string[] = [];
+    let checked = 0;
+    for (const file of foldedFiles) {
+      // Real import/export statements only (AST), so a specifier quoted in a comment or
+      // a fixture string is not mistaken for an edge.
+      const source = ts.createSourceFile(file, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
+      for (const statement of source.statements) {
+        if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) continue;
+        const spec = statement.moduleSpecifier;
+        if (!spec || !ts.isStringLiteral(spec) || !spec.text.startsWith(".")) continue;
+        const target = path.resolve(path.dirname(file), spec.text.replace(/\.js$/, ""));
+        checked += 1;
+        if (![".ts", ".js", "", "/index.ts"].some((suffix) => fs.existsSync(target + suffix))) {
+          broken.push(`${path.relative(REPO, file).replace(/\\/g, "/")} -> ${spec.text}`);
         }
       }
-    };
-    for (const entry of reExportedMirrors) check(entry.mirror);
+    }
     expect(broken.sort()).toEqual([]);
+    expect(foldedFiles.length).toBeGreaterThan(250);
+    expect(checked).toBeGreaterThan(500);
   });
 });
 

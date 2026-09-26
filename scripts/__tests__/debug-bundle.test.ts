@@ -2,7 +2,7 @@
  * scripts/__tests__/debug-bundle.test.ts
  *
  * MH-06 — structured debugging boundary
- * (src/modules/telemetry/workflows/debug-bundle.ts).
+ * (src/domains/telemetry/debug-bundle.ts).
  *
  * Pins MH-06 acceptance statement 4:
  *   "Debug bundles link capability snapshot, normalized events, policy
@@ -19,18 +19,8 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import {
-  appendReceipt,
-  makeReceiptInput,
-  type ReceiptAppendInput,
-} from "../../src/modules/telemetry/workflows/receipt-journal";
-import {
-  buildDebugBundle,
-  DEBUG_BUNDLE_SECTION_KINDS,
-  type DebugLinkInput,
-  type DebugSectionKind,
-  type EvidenceResolver,
-} from "../../src/modules/telemetry/workflows/debug-bundle";
+import { appendReceipt, makeReceiptInput, type ReceiptAppendInput } from "../../src/domains/telemetry";
+import { buildDebugBundle, DEBUG_BUNDLE_SECTION_KINDS, type DebugLinkInput, type DebugSectionKind, type EvidenceResolver } from "../../src/domains/telemetry";
 
 const VERSIONS = {
   host_id: "codex-local",

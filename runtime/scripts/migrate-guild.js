@@ -3107,7 +3107,57 @@ var realFs = {
 // scripts/dot-guild/convert/wiki-importance.ts
 var path3 = __toESM(require("path"));
 
-// src/modules/kernel/workflows/sealed-collections.ts
+// src/domains/kernel/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES = Object.freeze([
+  "commands",
+  "skills",
+  "agents",
+  "hooks",
+  "mcp_servers",
+  "scripts"
+]);
+
+// src/domains/kernel/yaml-loader.ts
+var path2 = __toESM(require("node:path"));
+function pluginLocalScriptsRoots() {
+  return [
+    // Source TS layout (src/domains/<id>) and the bundled agent-team hook layout
+    // (hooks/agent-team/dist) both sit three levels under plugin/.
+    path2.resolve(__dirname, "..", "..", "..", "scripts"),
+    // Bundled hook layout (hooks/dist) and src/adapters both sit two levels under.
+    path2.resolve(__dirname, "..", "..", "scripts"),
+    // src/adapters/model-discovery and any deeper nesting.
+    path2.resolve(__dirname, "..", "..", "..", "..", "scripts")
+  ];
+}
+function tryScriptsRoot(scriptsRoot) {
+  try {
+    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
+  } catch {
+    return null;
+  }
+}
+function loadYamlApi() {
+  const tried = [];
+  for (const scriptsRoot of pluginLocalScriptsRoots()) {
+    tried.push(scriptsRoot);
+    const api2 = tryScriptsRoot(scriptsRoot);
+    if (api2) return api2;
+  }
+  try {
+    return require_js_yaml();
+  } catch {
+  }
+  const cwdRoot = path2.resolve(process.cwd(), "scripts");
+  tried.push(cwdRoot);
+  const api = tryScriptsRoot(cwdRoot);
+  if (api) return api;
+  throw new Error(
+    `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
+  );
+}
+
+// src/domains/kernel/sealed-collections.ts
 function regExpWritesLastIndex(re) {
   return re.global || re.sticky;
 }
@@ -3195,56 +3245,7 @@ function frozenList(items, options = {}) {
   return deepFreeze(items.slice(), options);
 }
 
-// src/modules/kernel/workflows/module-manifest.ts
-var OWNED_INVENTORY_CATEGORIES = Object.freeze([
-  "commands",
-  "skills",
-  "agents",
-  "hooks",
-  "mcp_servers",
-  "scripts"
-]);
-
-// src/modules/kernel/workflows/yaml-loader.ts
-var path2 = __toESM(require("node:path"));
-function pluginLocalScriptsRoots() {
-  return [
-    // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
-    path2.resolve(__dirname, "..", "..", "..", "..", "scripts"),
-    // Bundled hook layout: hooks/dist -> plugin/scripts.
-    path2.resolve(__dirname, "..", "..", "scripts"),
-    // Bundled agent-team hook layout: hooks/agent-team/dist -> plugin/scripts.
-    path2.resolve(__dirname, "..", "..", "..", "scripts")
-  ];
-}
-function tryScriptsRoot(scriptsRoot) {
-  try {
-    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
-  } catch {
-    return null;
-  }
-}
-function loadYamlApi() {
-  const tried = [];
-  for (const scriptsRoot of pluginLocalScriptsRoots()) {
-    tried.push(scriptsRoot);
-    const api2 = tryScriptsRoot(scriptsRoot);
-    if (api2) return api2;
-  }
-  try {
-    return require_js_yaml();
-  } catch {
-  }
-  const cwdRoot = path2.resolve(process.cwd(), "scripts");
-  tried.push(cwdRoot);
-  const api = tryScriptsRoot(cwdRoot);
-  if (api) return api;
-  throw new Error(
-    `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
-  );
-}
-
-// src/modules/kernel/workflows/path-containment.ts
+// src/domains/kernel/path-containment.ts
 var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "root-unresolvable",
   "no-existing-ancestor",
@@ -3257,7 +3258,7 @@ var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "destination-moved"
 ]);
 
-// src/modules/kernel/workflows/runtime-tree-guard.ts
+// src/domains/kernel/runtime-tree-guard.ts
 var RUNTIME_SUBTREE_SEGMENTS = sealSet(
   [
     "skills",
@@ -3272,7 +3273,7 @@ var RUNTIME_SUBTREE_SEGMENTS = sealSet(
   "RUNTIME_SUBTREE_SEGMENTS"
 );
 
-// src/modules/kernel/workflows/tier-bus.ts
+// src/domains/kernel/tier-bus.ts
 var BUS_TIERS = frozenList(["T0", "T1", "T2"]);
 var LEAD_ROLE_IDS = frozenList(["team-lead", "lead", "orchestrator"]);
 var TIER_BUS_CONTRACT = deepFreeze({
@@ -3282,7 +3283,7 @@ var TIER_BUS_CONTRACT = deepFreeze({
   tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
 });
 
-// src/modules/state/workflows/frontmatter.ts
+// src/domains/state/frontmatter.ts
 var loadedYaml = null;
 function yamlApi() {
   if (loadedYaml === null) loadedYaml = loadYamlApi();
@@ -3367,7 +3368,7 @@ ${body}`);
 var fs3 = __toESM(require("node:fs"));
 var path5 = __toESM(require("node:path"));
 
-// src/modules/state/workflows/guild-root.ts
+// src/domains/state/guild-root.ts
 var fs2 = __toESM(require("node:fs"));
 var path4 = __toESM(require("node:path"));
 function resolveGuildRoot(startDir) {

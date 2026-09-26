@@ -40,11 +40,7 @@ import * as path from "node:path";
 import { instantiateTemplate, type InstantiateResult } from "./lib/template-schema";
 import { validateExploreV1 } from "./lib/explore-schema";
 import { validateDefineV1 } from "./lib/define-schema";
-import {
-  RUNTIME_SUBTREE_SEGMENTS,
-  assertNotRuntimeTree,
-  isForbiddenRuntimeSubtree,
-} from "../src/modules/kernel/workflows/runtime-tree-guard";
+import { RUNTIME_SUBTREE_SEGMENTS, assertNotRuntimeTree, isForbiddenRuntimeSubtree } from "../src/domains/kernel";
 
 // ---------------------------------------------------------------------------
 // Pure core (no IO — exported for tests / the eval harness)

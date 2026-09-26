@@ -115,7 +115,7 @@ Budget = `defaults.quality.budget` **by pointer to `./quality-contract.md §Budg
 Two **distinct, both-kept** review mechanisms at this boundary (https://guildstack.dev/docs/adversarial-review):
 
 1. **In-phase advisory panel.** Advisory (non-blocking). Sourced from the station
-   composer's `qa` `advisory_panel` (SoT: `src/modules/teams/workflows/station-composer.ts`
+   composer's `qa` `advisory_panel` (SoT: `src/domains/teams/station-composer.ts`
    `STATION_POLICY.qa.advisory_panel`) — not a hardcoded fixed pair: producer
    `qa-test-strategy` (matches the composer); challengers `security` (BASELINE — always
    present) + `architect` (GATED on `multi_component`, recorded `chal:qa:architect`);

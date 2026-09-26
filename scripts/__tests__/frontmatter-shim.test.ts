@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/frontmatter";
-import * as moduleImpl from "../../src/modules/state/workflows/frontmatter";
+import * as moduleImpl from "../../src/domains/state/frontmatter";
 
 describe("frontmatter compatibility shim", () => {
   test("scripts/lib/frontmatter re-exports src/modules/state", () => {
@@ -35,11 +35,11 @@ describe("frontmatter compatibility shim", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/frontmatter.ts"), "utf8");
     const modulePath = fs.readFileSync(
-      path.join(repoRoot, "src/modules/state/workflows/frontmatter.ts"),
+      path.join(repoRoot, "src/domains/state/frontmatter.ts"),
       "utf8",
     );
 
-    expect(oldPath).toMatch(/src\/modules\/state\/workflows\/frontmatter/);
+    expect(oldPath).toMatch(/src\/domains\/state\/frontmatter/);
     expect(oldPath).not.toMatch(/export\s+function\s+readScalarField/);
     expect(modulePath).toMatch(/export\s+function\s+readScalarField/);
     expect(modulePath).toMatch(/JSON_SCHEMA/);

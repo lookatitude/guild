@@ -296,7 +296,7 @@ First, the **env vars**, injected **on the spawned lane agent only** (never the 
     //     instruction the lane runs as a generic agent that merely LOOKS
     //     compliant — syntactically complete, functionally persona-stripped.
     //     Emit the SAME instruction `buildPrompt` emits
-    //     (`src/modules/prompting/workflows/team-prompt.ts` — keep them in step):
+    //     (`src/domains/config/team-prompt.ts` — keep them in step):
     const adoption = isProject
       ? `Your role definition is at \`${definitionPath}\` — read it FIRST and adopt it ` +
         `fully (persona, boundaries, TRIGGER / DO NOT TRIGGER limits). For each skill listed ` +
@@ -458,7 +458,7 @@ artifact; it does not create a second result.
    typed result is the mandatory identity join.
 
 Contract: `guild.team_result.v1` in
-`src/modules/teams/workflows/station-composer.ts`; read/write path in
+`src/domains/teams/station-composer.ts`; read/write path in
 `station-signals.ts`; TaskCell canonical paths in
 `scripts/lib/core/contracts/task-cell-backend.ts`.
 
@@ -549,7 +549,7 @@ first:
    `defaults.resume.enabled` is (`hooks/lib/run-state.ts readResumeEnabled`).
    **Known gap:** this key is not yet wired through `guild:config`'s
    validate/set/resolve surfaces (`scripts/lib/core/config-cli.ts`,
-   `scripts/config-cmd.ts`, `src/modules/config/workflows/settings-reader.ts`)
+   `scripts/config-cmd.ts`, `src/domains/config/settings-reader.ts`)
    — those files are outside this lane's scope — so `guild:config set` and
    `guild:config validate` do not yet recognize it; only a direct hand-edit
    of `settings.json` takes effect. Follow-up: register it as a proper

@@ -22,24 +22,10 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import {
-  bindSession,
-  detectSession,
-  readSessionBinding,
-  sessionBindingPath,
-} from "../../src/modules/config/workflows/session-binding";
-import { POLICY_KEYS, scanHostIdentity } from "../../src/modules/config/workflows/policy-keys";
-import {
-  policyOverlayFile,
-  policyValue,
-  resolvePolicy,
-} from "../../src/modules/config/workflows/policy-resolver";
-import {
-  composeSessionPrompt,
-  loadPromptExtensions,
-  promptIdentityIn,
-  PromptRejectedError,
-} from "../../src/modules/prompting/workflows/compose-prompt";
+import { bindSession, detectSession, readSessionBinding, sessionBindingPath } from "../../src/domains/config";
+import { POLICY_KEYS, scanHostIdentity } from "../../src/domains/config";
+import { policyOverlayFile, policyValue, resolvePolicy } from "../../src/domains/config";
+import { composeSessionPrompt, loadPromptExtensions, promptIdentityIn, PromptRejectedError } from "../../src/domains/config";
 import { createRunLifecycle, type RunLifecycleEnv, type StartRunOpts } from "../lib/run-lifecycle";
 
 /**

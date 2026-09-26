@@ -34,8 +34,8 @@ import * as os from "os";
 import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const binding = require("../../src/modules/lifecycle/workflows/run-binding") as
-  typeof import("../../src/modules/lifecycle/workflows/run-binding");
+const binding = require("../../src/domains/lifecycle/run-binding") as
+  typeof import("../../src/domains/lifecycle/run-binding");
 
 const FIXTURES = path.resolve(__dirname, "../fixtures");
 const RUN_ID = "run-20260811-000800-frozen-dispatch";

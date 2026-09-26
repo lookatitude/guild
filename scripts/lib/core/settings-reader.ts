@@ -5,4 +5,4 @@
  * internals without breaking existing imports from scripts/lib/core/*.
  */
 
-export * from "../../../src/modules/config/workflows/settings-reader";
+export * from "../../../src/domains/config/settings-reader";

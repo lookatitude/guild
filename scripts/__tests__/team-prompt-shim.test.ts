@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { buildPrompt as teamBackendBuildPrompt } from "../lib/team-backend";
 import { buildPrompt as tmuxBackendBuildPrompt } from "../lib/host/tmux-backend";
-import { buildPrompt as moduleBuildPrompt } from "../../src/modules/prompting/workflows/team-prompt";
+import { buildPrompt as moduleBuildPrompt } from "../../src/domains/config";
 
 describe("team prompt module compatibility", () => {
   test("legacy backend paths re-export the src/modules/prompting renderer", () => {
@@ -41,12 +41,12 @@ describe("team prompt module compatibility", () => {
   test("only the prompting module defines buildPrompt", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const tmuxBackend = fs.readFileSync(path.join(repoRoot, "scripts/lib/host/tmux-backend.ts"), "utf8");
-    const moduleFile = fs.readFileSync(path.join(repoRoot, "src/modules/prompting/workflows/team-prompt.ts"), "utf8");
+    const moduleFile = fs.readFileSync(path.join(repoRoot, "src/domains/config/team-prompt.ts"), "utf8");
 
-    expect(tmuxBackend).toMatch(/src\/modules\/prompting\/workflows\/team-prompt/);
+    expect(tmuxBackend).toMatch(/src\/domains\/config\/team-prompt/);
     expect(tmuxBackend).not.toMatch(/export\s+function\s+buildPrompt/);
     expect(moduleFile).toMatch(/export\s+function\s+buildPrompt/);
-    expect(moduleFile).toMatch(/from\s+["']\.\.\/\.\.\/host-runtime["']/);
-    expect(moduleFile).not.toMatch(/host-runtime\/workflows\/host-registry/);
+    expect(moduleFile).toMatch(/from\s+["']\.\.\/\.\.\/adapters["']/);
+    expect(moduleFile).not.toMatch(/adapters\/host-registry/);
   });
 });

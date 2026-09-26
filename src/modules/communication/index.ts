@@ -1,3 +1,67 @@
-export * from "./workflows/comms-format-lint";
-export * from "./workflows/no-accidental-write";
-export * from "./workflows/artifact-bus";
+/**
+ * Transitional re-export shim (T12 fold, KTD36).
+ *
+ * The implementation moved once into src/domains/dispatch/. This file republishes the exact
+ * pre-fold public surface of src/modules/communication so existing importers keep working;
+ * T16 deletes it. New code imports src/domains/dispatch directly.
+ */
+
+export {
+  ALLOWED_ENVELOPE_KEYS,
+  BUS_EVENT_KINDS,
+  BUS_EVENT_SCHEMA,
+  BUS_SUBSCRIBER_SCHEMA,
+  BusLockTimeout,
+  CAS_META_SCHEMA,
+  DOCS_KNOWLEDGE_FRONTMATTER_REQUIRED_KEYS,
+  POLICY_EFFECTIVE_DATE,
+  PROVENANCE_JSON_REQUIRED_KEYS,
+  SETTINGS_JSON_KNOWN_KEYS,
+  SETTINGS_JSON_REQUIRED_KEYS,
+  TOPIC_TYPES,
+  TRACE_JSONL_REQUIRED_KEYS,
+  WORKSPACE_JSON_REQUIRED_KEYS,
+  busDir,
+  busLogPath,
+  casGet,
+  casMetaPath,
+  casPut,
+  casVerify,
+  checkAccidentalWrite,
+  fanout,
+  isValidTopic,
+  lastBusPublishRefusal,
+  lintCommsFormat,
+  matchTopic,
+  parseArgs,
+  printFindings,
+  processFanout,
+  publish,
+  readBusLog,
+  readSubscribers,
+  refCount,
+  registerSubscriber,
+  sha256,
+  subscriberPath,
+  tailBusLog,
+  topicType,
+  validateBusEventV1,
+  validateBusSubscriberV1,
+  validateCasMetaV1,
+} from "../../domains/dispatch";
+export type {
+  AccidentalWriteOpts,
+  AccidentalWriteResult,
+  AccidentalWriteViolation,
+  BusEventKind,
+  BusEventV1,
+  BusPublisher,
+  BusSubscriberV1,
+  CasMetaV1,
+  CommsLintFinding,
+  CommsLintOpts,
+  ProtectedSurface,
+  PublishInput,
+  SubscriberCallback,
+  TopicType,
+} from "../../domains/dispatch";

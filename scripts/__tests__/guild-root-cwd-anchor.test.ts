@@ -25,7 +25,7 @@ import * as path from "path";
 
 import { resolveGuildRoot } from "../lib/guild-root";
 import * as shim from "../lib/guild-root";
-import * as moduleImpl from "../../src/modules/state/workflows/guild-root";
+import * as moduleImpl from "../../src/domains/state/guild-root";
 
 const EMIT_LOOP_EVENT = path.resolve(__dirname, "../emit-loop-event.ts");
 

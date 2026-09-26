@@ -3,7 +3,7 @@
  *
  * A21-S SPINE (RED-FIRST) — the executable contract for the not-yet-written pure
  * production module
- * `src/modules/lifecycle/workflows/neutral-conformance-assembly.ts`.
+ * `src/domains/lifecycle/neutral-conformance-assembly.ts`.
  *
  * WHAT THIS BINDS
  *   `guild.conformance_scenarios.v1` freezes 31 scenarios across six owners.
@@ -44,32 +44,19 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import {
-  NEUTRAL_REASON_CODES,
-  neutralCanonicalJson,
-  neutralOutcome,
-} from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
-import type { NeutralOutcome } from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
-import {
-  NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS,
-  NEUTRAL_EVIDENCE_IDENTITY_FIELDS,
-  NEUTRAL_SCENARIO_SUITE_ID,
-  NEUTRAL_SCENARIO_SUITE_VERSION,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
-import type {
-  NeutralConformanceEvidence,
-  NeutralEvidenceIdentity,
-  NeutralScenarioResult,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
+import { NEUTRAL_REASON_CODES, neutralCanonicalJson, neutralOutcome } from "../../src/domains/lifecycle";
+import type { NeutralOutcome } from "../../src/domains/lifecycle";
+import { NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS, NEUTRAL_EVIDENCE_IDENTITY_FIELDS, NEUTRAL_SCENARIO_SUITE_ID, NEUTRAL_SCENARIO_SUITE_VERSION } from "../../src/domains/lifecycle";
+import type { NeutralConformanceEvidence, NeutralEvidenceIdentity, NeutralScenarioResult } from "../../src/domains/lifecycle";
 
 // ---------------------------------------------------------------------------
 // The module under contract
 // ---------------------------------------------------------------------------
 
-const ASSEMBLY_REQUEST = "../../src/modules/lifecycle/workflows/neutral-conformance-assembly";
+const ASSEMBLY_REQUEST = "../../src/domains/lifecycle/neutral-conformance-assembly";
 const ASSEMBLY_SOURCE_PATH = path.resolve(
   __dirname,
-  "../../src/modules/lifecycle/workflows/neutral-conformance-assembly.ts"
+  "../../src/domains/lifecycle/neutral-conformance-assembly.ts"
 );
 
 let assemblyModuleCache: Record<string, unknown> | undefined;

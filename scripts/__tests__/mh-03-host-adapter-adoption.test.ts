@@ -19,6 +19,7 @@
  * substitute spies only to prove what is NOT called.
  */
 
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -29,6 +30,7 @@ import {
   parseArgs,
   type CliArgs,
 } from "../guild-run";
+import { buildModuleResourcePlan } from "../../src/domains/distribution";
 import { createHostAdapter } from "../lib/host-adapter-factory";
 import { planWrapperInvocation, type WrapperPlan, type WrapperRequest } from "../lib/guild-run-wrapper";
 import { DERIVED_HOST_CAPABILITY_ROWS } from "../lib/host-registry";
@@ -41,19 +43,11 @@ import {
   createHostCapabilitySnapshotStore,
   type HostAdapter,
   type HostAdapterProvider,
-} from "../../src/modules/host-runtime";
+} from "../../src/adapters";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const LIVE_GUILD_RUN = path.join(REPO_ROOT, "scripts", "guild-run.ts");
-const RESOURCE_GUILD_RUN = path.join(
-  REPO_ROOT,
-  "src",
-  "modules",
-  "host-runtime",
-  "resources",
-  "scripts",
-  "guild-run.ts"
-);
+const SHIPPED_GUILD_RUN = path.join(REPO_ROOT, "dist", "claude-code", "scripts", "guild-run.ts");
 
 /** The hosts the shipped wrapper can actually plan an invocation for. */
 const PLANNER_HOSTS = Object.keys(DERIVED_HOST_CAPABILITY_ROWS);
@@ -129,9 +123,9 @@ describe("acceptance 1: the shipped guild-run caller routes through the public b
 
   test("imports bindHostRuntimeAdapter from the host-runtime PUBLIC index", () => {
     expect(source).toMatch(/bindHostRuntimeAdapter/);
-    expect(source).toMatch(/from\s+"\.\.\/src\/modules\/host-runtime"/);
-    // Not reached around the public index into the workflow file.
-    expect(source).not.toMatch(/src\/modules\/host-runtime\/workflows\//);
+    expect(source).toMatch(/from\s+"\.\.\/src\/adapters"/);
+    // Not reached around the public index into an adapter file.
+    expect(source).not.toMatch(/src\/adapters\/[A-Za-z]/);
   });
 
   test("keeps the factory as the INJECTED provider rather than the receipt's adapter source", () => {
@@ -146,7 +140,7 @@ describe("acceptance 1: the shipped guild-run caller routes through the public b
 
   test("the boundary does not import the factory, so adoption creates no recursion", () => {
     const boundary = fs.readFileSync(
-      path.join(REPO_ROOT, "src", "modules", "host-runtime", "workflows", "host-adapter-boundary.ts"),
+      path.join(REPO_ROOT, "src", "adapters", "host-adapter-boundary.ts"),
       "utf8"
     );
     // Only the module SPECIFIERS matter — the boundary's doc comment names the
@@ -157,8 +151,14 @@ describe("acceptance 1: the shipped guild-run caller routes through the public b
     expect(specifiers.filter((s) => s.includes("scripts/"))).toEqual([]);
   });
 
-  test("module resource and live projection of guild-run.ts are byte-identical", () => {
-    expect(fs.readFileSync(RESOURCE_GUILD_RUN)).toEqual(fs.readFileSync(LIVE_GUILD_RUN));
+  test("the projector reads the live guild-run.ts and the shipped package copy is byte-identical", () => {
+    const live = fs.readFileSync(LIVE_GUILD_RUN);
+    const entry = buildModuleResourcePlan(REPO_ROOT)
+      .flatMap((plan) => plan.entries)
+      .find((e) => e.source_path === "scripts/guild-run.ts");
+    expect(entry).toBeDefined();
+    expect(entry!.sha256).toBe(crypto.createHash("sha256").update(live).digest("hex"));
+    expect(fs.readFileSync(SHIPPED_GUILD_RUN)).toEqual(live);
   });
 });
 

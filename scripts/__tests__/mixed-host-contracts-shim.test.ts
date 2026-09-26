@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/mixed-host-contracts";
-import * as moduleImpl from "../../src/modules/host-runtime/workflows/mixed-host-contracts";
+import * as moduleImpl from "../../src/adapters/mixed-host-contracts";
 
 describe("mixed-host-contracts compatibility shim", () => {
   test("scripts/lib/mixed-host-contracts re-exports src/modules/host-runtime", () => {
@@ -46,9 +46,9 @@ describe("mixed-host-contracts compatibility shim", () => {
   test("only the module file defines mixed-host validators", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/mixed-host-contracts.ts"), "utf8");
-    const modulePath = fs.readFileSync(path.join(repoRoot, "src/modules/host-runtime/workflows/mixed-host-contracts.ts"), "utf8");
+    const modulePath = fs.readFileSync(path.join(repoRoot, "src/adapters/mixed-host-contracts.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/modules\/host-runtime\/workflows\/mixed-host-contracts["']/);
+    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/adapters\/mixed-host-contracts["']/);
     expect(oldPath).not.toMatch(/export\s+function\s+validateTmuxTeam/);
     expect(modulePath).toMatch(/export\s+function\s+validateTmuxTeam/);
     expect(modulePath).toMatch(/export\s+function\s+validateLaneStatus/);

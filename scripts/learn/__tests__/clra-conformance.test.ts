@@ -39,7 +39,7 @@ import {
   canonicalize,
   type IndexModeContext,
 } from "../lib/parity-harness";
-import { ensureKgIndex } from "../../../src/modules/state/workflows/index-cache";
+import { ensureKgIndex } from "../../../src/domains/state/index-cache";
 import { extractStructuralGraph } from "../lib/structural";
 import { refineCalls } from "../resolve-calls";
 import { kgDeadCode, kgTrace, type GraphView } from "../lib/graph-query";
@@ -49,7 +49,7 @@ import type { GraphNode, GraphEdge } from "../lib/schema";
 // G14 security invariants (T14.2): the recall-protection choke-point and the
 // single-source scrub/audit share-set. recall-protect is a pure module (safe to
 // import); scrub.ts/audit.ts run main() at load → NEVER imported (parsed as text).
-import { protectChunks } from "../../../src/modules/context/workflows/recall-protect";
+import { protectChunks } from "../../../src/domains/knowledge/recall-protect";
 import {
   SHARED_SCRUBBED_NAMES,
   inShareSet,
@@ -1534,7 +1534,7 @@ describe("[G14-sec] scrub/audit share-set — ONE canonical source, no mirror dr
   const auditSrc = fs.readFileSync(AUDIT_SRC_PATH, "utf8");
 
   // The canonical per-run summary-artifact key set (single source of truth in
-  // src/modules/security/workflows/share-set.ts). Locked here so a silent add or
+  // src/domains/security/share-set.ts). Locked here so a silent add or
   // drop in that module must be a DELIBERATE change that also updates this gate.
   const EXPECTED_CANON = new Set([
     "verify.md", "review.md", "provenance.json", "summary.md", "run.yaml", "run-state.json",

@@ -65,7 +65,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 
-import { evaluateTransportedReleaseConformance } from "../src/modules/distribution/workflows/release-conformance-integration";
+import { evaluateTransportedReleaseConformance } from "../src/domains/distribution";
 
 export const MANIFEST_PATH = ".claude-plugin/plugin.json";
 export const MARKETPLACE_PATH = ".claude-plugin/marketplace.json";

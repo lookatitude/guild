@@ -1,7 +1,7 @@
 /**
  * scripts/__tests__/atomic-write.test.ts
  *
- * Shared atomicWrite() helper (src/modules/state/workflows/atomic-write.ts).
+ * Shared atomicWrite() helper (src/domains/state/atomic-write.ts).
  *
  * Covers:
  *   - Writes the target file with the exact content given.

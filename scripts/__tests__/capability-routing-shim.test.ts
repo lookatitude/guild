@@ -4,10 +4,10 @@ import * as routerShim from "../lib/capability/router";
 import * as rankShim from "../lib/capability/rank";
 import * as tiebreakShim from "../lib/capability/tiebreak";
 import * as tierShim from "../lib/capability/tier-defaults";
-import * as routerModule from "../../src/modules/capability/workflows/router";
-import * as rankModule from "../../src/modules/capability/workflows/rank";
-import * as tiebreakModule from "../../src/modules/capability/workflows/tiebreak";
-import * as tierModule from "../../src/modules/capability/workflows/tier-defaults";
+import * as routerModule from "../../src/domains/config/router";
+import * as rankModule from "../../src/domains/config/rank";
+import * as tiebreakModule from "../../src/domains/config/tiebreak";
+import * as tierModule from "../../src/domains/config/tier-defaults";
 
 describe("capability routing compatibility shims", () => {
   test("scripts/lib/capability re-exports src/modules/capability implementations", () => {
@@ -94,21 +94,21 @@ describe("capability routing compatibility shims", () => {
     ];
     for (const file of shimFiles) {
       const content = fs.readFileSync(path.join(repoRoot, file), "utf8");
-      expect(content).toMatch(/src\/modules\/capability\/workflows/);
+      expect(content).toMatch(/src\/domains\/config/);
       expect(content).not.toMatch(/export\s+function\s+(route|affinityBoost|hostKindRank|tierDefaults)/);
     }
 
-    const router = fs.readFileSync(path.join(repoRoot, "src/modules/capability/workflows/router.ts"), "utf8");
-    const rank = fs.readFileSync(path.join(repoRoot, "src/modules/capability/workflows/rank.ts"), "utf8");
-    const tiebreak = fs.readFileSync(path.join(repoRoot, "src/modules/capability/workflows/tiebreak.ts"), "utf8");
-    const tierDefaults = fs.readFileSync(path.join(repoRoot, "src/modules/capability/workflows/tier-defaults.ts"), "utf8");
+    const router = fs.readFileSync(path.join(repoRoot, "src/domains/config/router.ts"), "utf8");
+    const rank = fs.readFileSync(path.join(repoRoot, "src/domains/config/rank.ts"), "utf8");
+    const tiebreak = fs.readFileSync(path.join(repoRoot, "src/domains/config/tiebreak.ts"), "utf8");
+    const tierDefaults = fs.readFileSync(path.join(repoRoot, "src/domains/config/tier-defaults.ts"), "utf8");
     expect(router).toMatch(/export\s+function\s+route/);
     expect(rank).toMatch(/export\s+function\s+affinityBoost/);
     expect(tiebreak).toMatch(/export\s+function\s+hostKindRank/);
     expect(tierDefaults).toMatch(/export\s+function\s+tierDefaults/);
-    expect(rank).toMatch(/from\s+["']\.\.\/\.\.\/host-runtime["']/);
-    expect(tierDefaults).toMatch(/from\s+["']\.\.\/\.\.\/host-runtime["']/);
-    expect(rank).not.toMatch(/host-runtime\/workflows\//);
-    expect(tierDefaults).not.toMatch(/host-runtime\/workflows\//);
+    expect(rank).toMatch(/from\s+["']\.\.\/\.\.\/adapters["']/);
+    expect(tierDefaults).toMatch(/from\s+["']\.\.\/\.\.\/adapters["']/);
+    expect(rank).not.toMatch(/\.\.\/\.\.\/adapters\//);
+    expect(tierDefaults).not.toMatch(/\.\.\/\.\.\/adapters\//);
   });
 });

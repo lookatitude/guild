@@ -15,6 +15,11 @@
  *   packaged-install-smoke.ts                 build packages into a temp dir, check all
  *   packaged-install-smoke.ts --dir <path>    check an already-built package tree
  *
+ * KTD28: a package is a projection. Its src/ holds only src/surfaces/** (runtime
+ * data), src/modules/** (manifests + shims the conformance worker evaluates) and
+ * the domain TypeScript a shipped .ts file imports; an unreachable domain file
+ * there is a domain copy, and a missing closure file breaks a user-path script.
+ *
  * Exit 0 all good · 1 a package is incomplete or its binary will not start · 2 the
  * packages could not be built (the reason is printed; not a pass).
  */
@@ -23,6 +28,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
+
+import { srcImportClosure } from "../build-host-packages";
 
 const ROOT = path.resolve(__dirname, "..", "..");
 
@@ -71,8 +78,34 @@ function startsUnderPlainNode(pkgDir: string, id: string): { ok: boolean; detail
   return { ok: true, detail: err.split("\n")[0] };
 }
 
-function checkPackage(pkgDir: string): string[] {
+function walkFiles(dir: string, out: string[] = []): string[] {
+  if (!fs.existsSync(dir)) return out;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walkFiles(p, out);
+    else out.push(p);
+  }
+  return out;
+}
+
+/** src/ in a package = src/surfaces/** + the import closure of its shipped .ts. */
+export function checkPackagedSource(pkgDir: string, sourceRoot: string = ROOT): string[] {
+  const name = path.basename(pkgDir);
+  const closure = new Set(srcImportClosure(sourceRoot, pkgDir));
   const problems: string[] = [];
+  for (const abs of walkFiles(path.join(pkgDir, "src"))) {
+    const rel = path.relative(pkgDir, abs).split(path.sep).join("/");
+    if (rel.startsWith("src/surfaces/") || rel.startsWith("src/modules/")) continue;
+    if (!closure.has(rel)) problems.push(`${name}: ships ${rel}, which no shipped script imports (a domain copy, KTD28)`);
+  }
+  for (const rel of closure) {
+    if (!fs.existsSync(path.join(pkgDir, rel))) problems.push(`${name}: a shipped script imports ${rel}, which the package lacks`);
+  }
+  return problems;
+}
+
+function checkPackage(pkgDir: string): string[] {
+  const problems: string[] = [...checkPackagedSource(pkgDir)];
   for (const rel of REQUIRED_RUNTIME) {
     if (!fs.existsSync(path.join(pkgDir, rel))) {
       problems.push(`${path.basename(pkgDir)}: ships mcp-servers/ but not ${rel}`);

@@ -42,12 +42,12 @@
  */
 
 import * as fs from "fs";
-import { sealSet } from "../src/modules/kernel/workflows/sealed-collections";
+import { sealSet } from '../src/domains/kernel';
 import * as path from "path";
 import { readScalarField } from "./lib/frontmatter";
-import { KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION } from "../src/modules/knowledge/workflows/knowledge-links-contract";
+import { KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION } from '../src/domains/knowledge';
 import { loadKnowledgeLinksDoc, writeKnowledgeLinksDoc } from "./learn/lib/knowledge-links-io";
-import { createGuildStorage } from "../src/modules/state";
+import { createGuildStorage } from "../src/domains/state";
 
 // ── Extended node-kind type ───────────────────────────────────────────────────
 

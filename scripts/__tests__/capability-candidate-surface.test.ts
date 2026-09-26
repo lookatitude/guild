@@ -24,11 +24,7 @@ import {
   surfaceCapabilityCandidates,
 } from "../lib/capability/candidate-surface";
 import { emitCapabilityProfile, type DerivedFacts } from "../lib/capability/profile-emit";
-import {
-  CAPABILITY_RESOLVER_MODE_AFTER_F7,
-  CAPABILITY_RESOLVER_MODE_DEFAULT,
-  DEFAULTS,
-} from "../../src/modules/config/workflows/config-defaults";
+import { CAPABILITY_RESOLVER_MODE_AFTER_F7, CAPABILITY_RESOLVER_MODE_DEFAULT, DEFAULTS } from "../../src/domains/config";
 
 let tmp: string;
 

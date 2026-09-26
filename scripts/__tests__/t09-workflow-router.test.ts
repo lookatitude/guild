@@ -14,23 +14,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import {
-  WORKFLOW_CLASSES,
-  applyWorkflowGraphOverlay,
-  type WorkflowGraph,
-} from "../../src/modules/lifecycle/workflows/workflow-graph-overlay";
-import {
-  loadAllClassGraphs,
-  loadClassGraph,
-} from "../../src/modules/lifecycle/workflows/workflow-graph-load";
-import {
-  bindWorkflowCursor,
-  normalizeWorkflowDecision,
-  readWorkflowCursor,
-  routeWorkflowDecision,
-  routeWorkflowDecisionAtRun,
-  writeWorkflowCursor,
-} from "../../src/modules/lifecycle/workflows/workflow-router";
+import { WORKFLOW_CLASSES, applyWorkflowGraphOverlay, type WorkflowGraph } from "../../src/domains/lifecycle";
+import { loadAllClassGraphs, loadClassGraph } from "../../src/domains/lifecycle";
+import { bindWorkflowCursor, normalizeWorkflowDecision, readWorkflowCursor, routeWorkflowDecision, routeWorkflowDecisionAtRun, writeWorkflowCursor } from "../../src/domains/lifecycle";
 
 const REPO = path.resolve(__dirname, "..", "..");
 

@@ -11,20 +11,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as yaml from "js-yaml";
 
-import {
-  WORKFLOW_CLASSES,
-  PROTECTED_NODE_IDS,
-  PROTECTED_NODE_STATIONS,
-  PROTECTED_NODE_ROLES,
-  RELEASE_ROLE,
-  isReleaseShaped,
-  CLASS_DEFAULT_ENTRIES,
-  RELEASE_GATE,
-  validateWorkflowGraphDocument,
-  validateWorkflowGraphOverlay,
-  applyWorkflowGraphOverlay,
-  type WorkflowGraph,
-} from "../../src/modules/lifecycle/workflows/workflow-graph-overlay";
+import { WORKFLOW_CLASSES, PROTECTED_NODE_IDS, PROTECTED_NODE_STATIONS, PROTECTED_NODE_ROLES, RELEASE_ROLE, isReleaseShaped, CLASS_DEFAULT_ENTRIES, RELEASE_GATE, validateWorkflowGraphDocument, validateWorkflowGraphOverlay, applyWorkflowGraphOverlay, type WorkflowGraph } from "../../src/domains/lifecycle";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
 const GRAPH_DIR = path.join(PLUGIN_ROOT, "src", "surfaces", "graphs");

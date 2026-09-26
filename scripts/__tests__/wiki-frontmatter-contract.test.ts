@@ -1,20 +1,11 @@
 /**
  * scripts/__tests__/wiki-frontmatter-contract.test.ts
  *
- * TDD for src/modules/knowledge/workflows/wiki-frontmatter-contract.ts — the
+ * TDD for src/domains/knowledge/wiki-frontmatter-contract.ts — the
  * §10.1.1 wiki-page frontmatter field vocabulary as typed constants.
  */
 
-import {
-  WIKI_PAGE_TYPES,
-  WIKI_TYPE_TO_DIR,
-  WIKI_CONFIDENCE_LEVELS,
-  WIKI_SENSITIVITY_LEVELS,
-  WIKI_FRONTMATTER_FIELDS,
-  isWikiPageType,
-  isWikiConfidenceLevel,
-  isWikiSensitivityLevel,
-} from "../../src/modules/knowledge/workflows/wiki-frontmatter-contract";
+import { WIKI_PAGE_TYPES, WIKI_TYPE_TO_DIR, WIKI_CONFIDENCE_LEVELS, WIKI_SENSITIVITY_LEVELS, WIKI_FRONTMATTER_FIELDS, isWikiPageType, isWikiConfidenceLevel, isWikiSensitivityLevel } from "../../src/domains/knowledge";
 
 describe("wiki-frontmatter-contract — WIKI_PAGE_TYPES (§10.1.1 type: enum)", () => {
   it("matches the canonical 7-value enum from guild-plan.md §10.1.1", () => {

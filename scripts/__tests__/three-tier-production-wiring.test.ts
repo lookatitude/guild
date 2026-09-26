@@ -28,52 +28,52 @@ import * as path from "path";
 
 import { emitTaskCellsV2 } from "../agent-team-launcher";
 import { publish, lastBusPublishRefusal } from "../lib/artifact-bus";
-import { authenticateBusTier } from "../../src/modules/kernel/workflows/tier-bus";
+import { authenticateBusTier } from "../../src/domains/kernel";
 import {
   buildTaskCell,
   writeTaskCell,
   type TaskCellDispatchInput,
-} from "../../src/modules/dispatch/workflows/task-assignment-v2";
+} from "../../src/domains/dispatch/task-assignment-v2";
 import {
   ExecutionTransportTaskCellWorkerPort,
   FilesystemTaskCellRuntime,
   type TaskCellWorkerPort,
-} from "../../src/modules/dispatch/workflows/task-cell-runtime";
-import { InProcessExecutionTransport } from "../../src/modules/dispatch/workflows/execution-transport-adapters";
-import type { ExecutionTransportPort } from "../../src/modules/dispatch/workflows/execution-transport-ports";
+} from "../../src/domains/dispatch/task-cell-runtime";
+import { InProcessExecutionTransport } from "../../src/domains/dispatch/execution-transport-adapters";
+import type { ExecutionTransportPort } from "../../src/domains/dispatch/execution-transport-ports";
 import {
   countLiveRunInstances,
   countOpenReservations,
   isInstanceReservation,
   reserveInstance,
   type ReserveResult,
-} from "../../src/modules/dispatch/workflows/instance-cap";
+} from "../../src/domains/dispatch/instance-cap";
 import {
   authorizeProjectedToolCall,
   projectionNarrowsOnly,
-} from "../../src/modules/dispatch/workflows/isolation-guard";
+} from "../../src/domains/dispatch/isolation-guard";
 import {
   initProgressLedger,
   ledgerBoundToAssignment,
   recordOracleOutcome,
   readProgressLedger,
-} from "../../src/modules/dispatch/workflows/progress-ledger";
+} from "../../src/domains/dispatch/progress-ledger";
 import {
   consumeConsult,
   initAdvisorBudget,
   readAdvisorBudget,
-} from "../../src/modules/dispatch/workflows/advisor-budget";
+} from "../../src/domains/dispatch/advisor-budget";
 import {
   findNestedForbiddenSchema,
   foldOrchestratorContext,
   lintOrchestratorContext,
-} from "../../src/modules/teams/workflows/goal-contract";
-import { sliceRosterForGoal } from "../../src/modules/teams/workflows/compose-scope";
-import { loadRunBinding, mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+} from "../../src/domains/teams/goal-contract";
+import { sliceRosterForGoal } from "../../src/domains/teams/compose-scope";
+import { loadRunBinding, mintRunBinding } from "../../src/domains/lifecycle/run-binding";
 import {
   sessionBindingPath,
   type SessionBinding,
-} from "../../src/modules/config/workflows/session-binding";
+} from "../../src/domains/config/session-binding";
 import {
   assignmentId,
   taskCellPaths,

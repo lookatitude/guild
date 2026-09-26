@@ -43,13 +43,13 @@ export const DUP_SIGS: DupSig[] = [
   {
     id: "bm25-scorer",
     signature: "export function bm25Score(",
-    canonical: "src/modules/knowledge/workflows/bm25.ts",
+    canonical: "src/domains/knowledge/bm25.ts",
   },
   {
     id: "kg-graph-scoring",
     // the term-scoring haystack line shared by kg-query.ts scoreNode + recall.ts scoreKgNode
     signature: '(node.source_refs ?? []).join(" ")}`.toLowerCase()',
-    canonical: "src/modules/knowledge/workflows/graph-scoring.ts",
+    canonical: "src/domains/knowledge/graph-scoring.ts",
   },
   {
     id: "scrub-share-set",
@@ -59,7 +59,7 @@ export const DUP_SIGS: DupSig[] = [
     // single-line literal was reflowed multi-line, so a literal-substring match is brittle).
     // A re-introduced duplicate of the concern would re-declare inShareSet().
     signature: "export function inShareSet(",
-    canonical: "src/modules/security/workflows/share-set.ts",
+    canonical: "src/domains/security/share-set.ts",
   },
   {
     id: "proto-poison-keys",
@@ -76,7 +76,7 @@ export const DUP_SIGS: DupSig[] = [
     // than the old signature: an inline `new Set([...])` copy, a `sealSet([...])`
     // copy, and a bare array copy all now hit, where only the first did before.
     signature: '["__proto__", "prototype", "constructor"]',
-    canonical: "src/modules/security/workflows/safe-object.ts",
+    canonical: "src/domains/security/safe-object.ts",
   },
 ];
 
@@ -216,15 +216,15 @@ function prove(): void {
     "test files are EXCLUDED from the match scope (parity tests are not counted as duplicates)",
   );
   const withGeneratedProjection = new Map<string, string>([
-    ["src/modules/knowledge/workflows/probe.ts", "export const __DUP_PROBE__ = 1;"],
+    ["src/domains/knowledge/probe.ts", "export const __DUP_PROBE__ = 1;"],
     [
-      "src/modules/host-runtime/resources/src/modules/knowledge/workflows/probe.ts",
+      "src/modules/host-runtime/resources/src/domains/knowledge/probe.ts",
       "export const __DUP_PROBE__ = 1;",
     ],
   ]);
   const generatedProbe: DupSig = {
     ...probeSig,
-    canonical: "src/modules/knowledge/workflows/probe.ts",
+    canonical: "src/domains/knowledge/probe.ts",
   };
   proveAssert(
     detectDups(withGeneratedProjection, [generatedProbe]).length === 0,
@@ -233,11 +233,11 @@ function prove(): void {
   proveAssert(
       isTestPath("scripts/__tests__/graph-scoring-parity.test.ts") &&
       isTestPath("scripts/foo.test.ts") &&
-      !isTestPath("src/modules/knowledge/workflows/graph-scoring.ts") &&
+      !isTestPath("src/domains/knowledge/graph-scoring.ts") &&
       isGeneratedResourceProjectionPath(
-        "src/modules/host-runtime/resources/src/modules/knowledge/workflows/graph-scoring.ts",
+        "src/modules/host-runtime/resources/src/domains/knowledge/graph-scoring.ts",
       ) &&
-      !isGeneratedResourceProjectionPath("src/modules/knowledge/workflows/graph-scoring.ts"),
+      !isGeneratedResourceProjectionPath("src/domains/knowledge/graph-scoring.ts"),
     "isTestPath classifies *.test.ts and /__tests__/ as tests, real source as non-test",
   );
 }

@@ -6,4 +6,13 @@
  * internals without breaking existing imports from scripts/retry-lane.
  */
 
-export * from "../src/modules/lifecycle/workflows/retry-lane";
+export {
+  calcDelayMs,
+  runWithRetry,
+  loadRetryOpts,
+  type BackoffStrategy,
+  type SleepFn,
+  type ExhaustionSignal,
+  type RetryOpts,
+  type RetryOutcome,
+} from "../src/domains/lifecycle";

@@ -13,49 +13,14 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import {
-  createGuildStorage,
-  type GuildStorage,
-} from "../../src/modules/state/workflows/storage-layout";
-import {
-  AUTO_PATH_TARGETS,
-  EVOLVE_TARGETS,
-  EvolveTargetRefusal,
-  HUMAN_ONLY_TARGETS,
-  assertAutoPathAllowed,
-  assertNotPermissionEdit,
-  classifyAutoPath,
-  isPermissionSentence,
-  classifyFileClass,
-  classifyPermissionContent,
-  sentences,
-  blockUnits,
-  evolveHome,
-  isEvolveTarget,
-  routeCheckpointVerdict,
-} from "../../src/modules/evolution/workflows/evolve-targets";
-import {
-  assertCheapCurator,
-  findLatestOnlyViolation,
-  isCuratorSpan,
-  lintReplacement,
-  planEvolveDelta,
-  renderCuratorSpan,
-  sha256,
-  type EvolveDelta,
-} from "../../src/modules/evolution/workflows/evolve-delta";
-import {
-  applyEvolveDelta,
-  projectTargetRoot,
-} from "../../src/modules/evolution/workflows/evolve-apply";
-import {
-  compactHistoryPath,
-  readCompactHistory,
-  rollbackEvolve,
-} from "../../src/modules/evolution/workflows/compact-history";
-import { locatePlaybookSpan } from "../../src/modules/knowledge/workflows/harvest";
-import { assertNotRuntimeTree } from "../../src/modules/kernel/workflows/runtime-tree-guard";
-import { learningCheckpoint } from "../../src/modules/lifecycle/workflows/learning-checkpoint-5";
+import { createGuildStorage, type GuildStorage } from "../../src/domains/state";
+import { AUTO_PATH_TARGETS, EVOLVE_TARGETS, EvolveTargetRefusal, HUMAN_ONLY_TARGETS, assertAutoPathAllowed, assertNotPermissionEdit, classifyAutoPath, isPermissionSentence, classifyFileClass, classifyPermissionContent, sentences, blockUnits, evolveHome, isEvolveTarget, routeCheckpointVerdict } from "../../src/domains/evolve";
+import { assertCheapCurator, findLatestOnlyViolation, isCuratorSpan, lintReplacement, planEvolveDelta, renderCuratorSpan, sha256, type EvolveDelta } from "../../src/domains/evolve";
+import { applyEvolveDelta, projectTargetRoot } from "../../src/domains/evolve";
+import { compactHistoryPath, readCompactHistory, rollbackEvolve } from "../../src/domains/evolve";
+import { locatePlaybookSpan } from "../../src/domains/knowledge";
+import { assertNotRuntimeTree } from "../../src/domains/kernel";
+import { learningCheckpoint } from "../../src/domains/lifecycle";
 
 const RUN_ID = "run-t11";
 
@@ -82,7 +47,7 @@ function mkStorage(root: string, external: string): GuildStorage {
 function mkPluginTree(root: string): void {
   for (const rel of [
     "src/surfaces/playbooks/specialists",
-    "src/modules/evolution/workflows",
+    "src/domains/evolve",
     "skills/meta/evolve",
     "hooks",
     "templates/specialists",
@@ -265,7 +230,7 @@ describe("R74 — plugin RSI is a candidate plus a human commit", () => {
     expect(candidate.promote_requires.join(" ")).toMatch(/human commit/);
     // Nothing under the plugin's own machinery moved.
     expect(fs.existsSync(path.join(pluginRoot, "hooks/verify-after-edit.ts"))).toBe(false);
-    expect(fs.readdirSync(path.join(pluginRoot, "src/modules/evolution/workflows"))).toHaveLength(0);
+    expect(fs.readdirSync(path.join(pluginRoot, "src/domains/evolve"))).toHaveLength(0);
   });
 
   it("the auto path targeting domain_ts fails closed with next_need: operator", () => {
@@ -278,7 +243,7 @@ describe("R74 — plugin RSI is a candidate plus a human commit", () => {
       applyEvolveDelta(
         delta({
           target: "domain_ts",
-          path: path.join(pluginRoot, "src/modules/evolution/workflows/x.ts"),
+          path: path.join(pluginRoot, "src/domains/evolve/x.ts"),
         }),
         ctx({ auto: true }),
       ),

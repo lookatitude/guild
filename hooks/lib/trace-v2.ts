@@ -1,1 +1,1 @@
-export * from "../../src/modules/lifecycle/workflows/trace-v2.js";
+export * from "../../src/domains/lifecycle/trace-v2.js";

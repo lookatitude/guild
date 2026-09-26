@@ -1,3 +1,3 @@
 /** Backward-compatible scripts/lib entrypoint for the distribution-owned contract. */
 
-export * from "../../src/modules/distribution/workflows/release-package-identity";
+export * from "../../src/domains/distribution/release-package-identity";

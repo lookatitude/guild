@@ -8,7 +8,7 @@
  * lock timeout degrades read-side to newest valid cache else honest unknown —
  * never blocks, never triggers a paid probe.
  *
- * EXPECTED TO FAIL TODAY: src/modules/capability/workflows/catalog-cache.ts
+ * EXPECTED TO FAIL TODAY: src/domains/config/catalog-cache.ts
  * does not exist (lane T4). Race fixtures are DETERMINISTIC simulations
  * (explicit interleavings — no wall-clock, no threads, no network).
  */
@@ -20,7 +20,7 @@ import {
   TARGET_TUPLE_COMPONENTS,
 } from "./_helpers";
 
-const CACHE_MODULE = "src/modules/capability/workflows/catalog-cache";
+const CACHE_MODULE = "src/domains/config/catalog-cache";
 const LANE = "T4-catalog-discovery";
 
 describe("C4 model_catalog §7 — cache key + concurrency", () => {

@@ -36,7 +36,7 @@
 //   2 — usage error (missing/unreadable file)
 
 import { readFileSync, existsSync } from "node:fs";
-import { validateGuildTraceEvent } from "../src/modules/telemetry/workflows/guild-trace-events";
+import { validateGuildTraceEvent } from "../src/domains/telemetry";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Closed enums — copied verbatim from `guild-benchmark/plans/v1.4-jsonl-schema.md`.

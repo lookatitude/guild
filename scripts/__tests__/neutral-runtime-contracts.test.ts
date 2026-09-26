@@ -45,41 +45,9 @@
  * no host handle — so the suite is deterministic and host independent.
  */
 
-import {
-  NEUTRAL_CONTRACTS_SCHEMA_VERSION,
-  NEUTRAL_CONTRACT_VERSION,
-  NEUTRAL_DISPOSITIONS,
-  NEUTRAL_EVENT_NAMES,
-  NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2,
-  NEUTRAL_LIFECYCLE_PHASES,
-  NEUTRAL_NORMALIZED_EVENT_VOCABULARY,
-  NEUTRAL_OBSERVATION_STATES,
-  NEUTRAL_OUTCOME_TYPES,
-  NEUTRAL_REASON_CODES,
-  NEUTRAL_SUPERSEDED_EVENT_NAMES_V1,
-  NEUTRAL_SUPPORT_STATES,
-  NEUTRAL_SUPPORT_STATUS_VALUES,
-  isNeutralCleanObservation,
-  isNeutralDisposition,
-  isNeutralEventName,
-  isNeutralLifecyclePhase,
-  isNeutralReasonCode,
-  mapLegacyNeutralEventName,
-  neutralCanonicalDigest,
-  neutralCanonicalJson,
-  neutralFingerprint,
-  neutralOutcome,
-  neutralSha256Hex,
-} from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
+import { NEUTRAL_CONTRACTS_SCHEMA_VERSION, NEUTRAL_CONTRACT_VERSION, NEUTRAL_DISPOSITIONS, NEUTRAL_EVENT_NAMES, NEUTRAL_EVENT_NAMES_INTRODUCED_IN_V2, NEUTRAL_LIFECYCLE_PHASES, NEUTRAL_NORMALIZED_EVENT_VOCABULARY, NEUTRAL_OBSERVATION_STATES, NEUTRAL_OUTCOME_TYPES, NEUTRAL_REASON_CODES, NEUTRAL_SUPERSEDED_EVENT_NAMES_V1, NEUTRAL_SUPPORT_STATES, NEUTRAL_SUPPORT_STATUS_VALUES, isNeutralCleanObservation, isNeutralDisposition, isNeutralEventName, isNeutralLifecyclePhase, isNeutralReasonCode, mapLegacyNeutralEventName, neutralCanonicalDigest, neutralCanonicalJson, neutralFingerprint, neutralOutcome, neutralSha256Hex } from "../../src/domains/lifecycle";
 
-import {
-  evaluateNeutralAdmission,
-  evaluateNeutralCapability,
-  evaluateNeutralGate,
-  evaluateNeutralPolicy,
-  freezeNeutralCapabilitySnapshot,
-  neutralCapabilitySnapshotHash,
-} from "../../src/modules/lifecycle/workflows/neutral-gate-policy";
+import { evaluateNeutralAdmission, evaluateNeutralCapability, evaluateNeutralGate, evaluateNeutralPolicy, freezeNeutralCapabilitySnapshot, neutralCapabilitySnapshotHash } from "../../src/domains/lifecycle";
 
 // ---------------------------------------------------------------------------
 // Literal fixtures (deterministic + host independent)

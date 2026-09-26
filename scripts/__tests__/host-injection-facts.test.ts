@@ -13,11 +13,11 @@ import {
   HOST_IDS,
   HOST_REGISTRY_ROWS,
   type HostId,
-} from "../../src/modules/host-runtime/workflows/host-registry-schema";
+} from "../../src/adapters/host-registry-schema";
 import {
   INJECTION_SUPPORT,
   validateHostCapabilitiesV1,
-} from "../../src/modules/host-runtime/workflows/host-capabilities-schema";
+} from "../../src/adapters/host-capabilities-schema";
 
 const ALL = HOST_IDS as readonly HostId[];
 
@@ -202,7 +202,7 @@ describe("E3 — the 'Claude AND Codex activated proof' bar is unsatisfiable tod
 
 // ── Codex adversarial review (S6 round 1) — regression coverage ────────────
 
-import { validateHostRegistryEntry } from "../../src/modules/host-runtime/workflows/host-registry-schema";
+import { validateHostRegistryEntry } from "../../src/adapters/host-registry-schema";
 
 describe("HIGH-2 fix — the cross-field structural invariant is VALIDATED", () => {
   it("rejects dispatch_selectable:false with target injection facts", () => {

@@ -8,13 +8,13 @@
  * claude-cli/app/web adapters resolve honest `unknown`.
  *
  * EXPECTED TO FAIL TODAY: the owning module
- * src/modules/capability/workflows/model-catalog.ts does not exist (lane T4).
+ * src/domains/config/model-catalog.ts does not exist (lane T4).
  * Failing-by-design via CONTRACT-MODULE-MISSING; [control] tests pass today.
  */
 
 import { requireContractModule, EVIDENCE_STATES } from "./_helpers";
 
-const CATALOG_MODULE = "src/modules/capability/workflows/model-catalog";
+const CATALOG_MODULE = "src/domains/config/model-catalog";
 const LANE = "T4-catalog-discovery";
 
 /** catalog §5 — the closed purpose-aware eligibility matrix, verbatim. */

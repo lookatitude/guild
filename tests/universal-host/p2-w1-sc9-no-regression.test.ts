@@ -96,6 +96,28 @@ const ENTRY_PATHS = ["commands", "hooks", ".claude-plugin"];
 //     bundles embedding the additive config-defaults.ts DEFAULTS tree (host_mode +
 //     defaults.lean_lead + defaults.lifecycle_gate) — no other behavior change.
 const ENTRY_ALLOWLIST = new Set<string>([
+  // T12 (domain fold, KTD36): these hook entrypoints and shims changed ONE line each —
+  // the re-export specifier now names the domain home (src/domains/<id>/) instead of the
+  // retired src/modules/<id>/workflows/ path. Verified with `git diff HEAD`: import
+  // specifier only, no behaviour edit. hooks/dist/emit-learning-checkpoint.js is the
+  // recompile of that change.
+  "hooks/dist/emit-learning-checkpoint.js",
+  "hooks/gate-outcome-writer.ts",
+  "hooks/lib/handoff-v2.ts",
+  "hooks/lib/reanchor.ts",
+  "hooks/lib/security/config.ts",
+  "hooks/lib/security/events.ts",
+  "hooks/lib/security/scrubbed-write.ts",
+  "hooks/lib/security/secrets.ts",
+  "hooks/lib/tier-dispatch.ts",
+  "hooks/lib/trace-v2.ts",
+  "hooks/lib/v1.4/log-jsonl-schema.ts",
+  "hooks/lib/v1.4/log-jsonl-sidecar.ts",
+  "hooks/lib/v1.4/log-jsonl-writer.ts",
+  "hooks/lib/v1.4/log-jsonl.ts",
+  "hooks/lib/v1.4/redact-log.ts",
+  "hooks/lib/v1.4/v1.4-lock.ts",
+  "hooks/update-check.ts",
   "hooks/lib/guild-hook-event.ts",
   "hooks/lib/run-state.ts",
   "hooks/dist/run-trace.js",
@@ -277,7 +299,9 @@ describe("SC-W1-9 — command/hook/package entry paths byte-identical vs HEAD (A
     for (const notAllowed of [
       "commands/guild-build.md",
       "hooks/hooks.json",
-      "hooks/dist/emit-learning-checkpoint.js",
+      // T12 admitted emit-learning-checkpoint.js (an import-specifier recompile), so
+      // the control moved to a bundle with no admitted delta in any lane so far.
+      "hooks/dist/using-guild-bootstrap.js",
     ]) {
       expect(ENTRY_ALLOWLIST.has(notAllowed)).toBe(false);
     }

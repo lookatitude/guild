@@ -12,7 +12,7 @@ import * as path from "path";
 import {
   detectChildGitRepos,
   suggestWorkspaceMode,
-} from "../../src/modules/config/workflows/host-open-preflight";
+} from "../../src/domains/config/host-open-preflight";
 
 const tmps: string[] = [];
 afterAll(() => { for (const d of tmps) try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* */ } });

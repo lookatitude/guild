@@ -32,11 +32,11 @@ import * as path from "path";
 
 import { requireContractModule, mkTmpWorkspace, selfRefHash } from "./_helpers";
 
-const PROPOSAL_MODULE = "src/modules/teams/workflows/team-proposal";
-const DECISION_MODULE = "src/modules/teams/workflows/team-decision";
-const SCHEDULE_MODULE = "src/modules/teams/workflows/team-schedule";
-const COMPAT_MODULE = "src/modules/teams/workflows/team-plan-compat";
-const SIGNALS_MODULE = "src/modules/teams/workflows/station-signals";
+const PROPOSAL_MODULE = "src/domains/teams/team-proposal";
+const DECISION_MODULE = "src/domains/teams/team-decision";
+const SCHEDULE_MODULE = "src/domains/teams/team-schedule";
+const COMPAT_MODULE = "src/domains/teams/team-plan-compat";
+const SIGNALS_MODULE = "src/domains/teams/station-signals";
 const LANE = "T2b-unbounded-team-composer";
 
 const proposalMod: any = requireContractModule(PROPOSAL_MODULE, LANE);

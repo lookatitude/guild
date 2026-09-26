@@ -52,25 +52,25 @@ const EMIT_POINTS: EmitPoint[] = [
     // v2 reorg: the emit moved into the module tree; scripts/write-task-run.ts
     // is now a back-compat shim that re-exports this file (which holds the
     // real emitTraceEvent(makeDispatchEvent(...)) call ~L346).
-    file: "src/modules/lifecycle/workflows/write-task-run.ts",
+    file: "src/domains/lifecycle/write-task-run.ts",
     line_hint: "~346",
     description: "emitted by writeTaskRun() after the task_run YAML is written (pre-dispatch gate)",
   },
   {
     event: "guild.trace.recall.v1",
-    file: "src/modules/context/workflows/recall.ts",
+    file: "src/domains/knowledge/recall.ts",
     line_hint: "~519",
     description: "emitted by recall() after result is assembled, measures branch + chunk_count + duration",
   },
   {
     event: "guild.trace.config_resolution.v1",
-    file: "src/modules/config/workflows/settings-resolver.ts",
+    file: "src/domains/config/settings-resolver.ts",
     line_hint: "~45",
     description: "emitted by resolveSettings() wrapper in the config module (not pure reader), captures rigor/layers/fingerprint",
   },
   {
     event: "guild.trace.security_decision.v1",
-    file: "src/modules/context/workflows/recall-protect.ts",
+    file: "src/domains/knowledge/recall-protect.ts",
     line_hint: "~280",
     description: "emitted by protectChunks() when a chunk is quarantined (injection probe deny)",
   },
@@ -352,7 +352,7 @@ function prove(): void {
   // (e) Emit-point detector passes when file exists AND has the import
   const realEmitPoint: EmitPoint = {
     event: "guild.trace.recall.v1",
-    file: "src/modules/context/workflows/recall.ts",
+    file: "src/domains/knowledge/recall.ts",
     line_hint: "~519",
     description: "real recall emit point",
   };

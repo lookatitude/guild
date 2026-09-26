@@ -47,7 +47,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { loadRunEvents, RunEvent } from "./lib/run-events";
-import { readCompactHistory } from "../src/modules/evolution/workflows/compact-history";
+import { readCompactHistory } from "../src/domains/evolve";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 

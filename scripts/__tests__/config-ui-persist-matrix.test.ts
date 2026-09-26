@@ -30,8 +30,8 @@ import {
   type ConfirmationStrength,
 } from "../lib/config-ui-metadata";
 import { resolveSettings } from "../lib/settings-resolver";
-import { canonicalPolicyKey, isPolicyKey } from "../../src/modules/config/workflows/policy-keys";
-import { policyValue, resolvePolicy } from "../../src/modules/config/workflows/policy-resolver";
+import { canonicalPolicyKey, isPolicyKey } from "../../src/domains/config";
+import { policyValue, resolvePolicy } from "../../src/domains/config";
 import { buildHostConfigUiSurface, getByPath } from "../lib/config-ui-surface";
 import type { ConfigSource } from "../lib/config-render";
 
@@ -411,7 +411,7 @@ describe("config ui set — models.knowledge.* validation is tight (no invalid w
     const prev = process.env.GUILD_STATE_HOME;
     process.env.GUILD_STATE_HOME = stateHome;
     try {
-      const { createGuildStorage } = require("../../src/modules/state") as {
+      const { createGuildStorage } = require("../../src/domains/state") as {
         createGuildStorage: (c: string) => { runtime(...s: string[]): string };
       };
       const overlay = createGuildStorage(dir).runtime("policy-overlay.json");

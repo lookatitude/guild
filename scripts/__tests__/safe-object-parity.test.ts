@@ -21,7 +21,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { PROTO_POISON_KEYS as canonical, isProtoPoisonKey } from "../lib/shared/safe-object";
 import * as safeObjectShim from "../lib/shared/safe-object";
-import * as safeObjectModule from "../../src/modules/security/workflows/safe-object";
+import * as safeObjectModule from "../../src/domains/security/safe-object";
 
 // Frozen reference: the verbatim pre-collapse set.
 const REF = new Set(["__proto__", "prototype", "constructor"]);
@@ -93,6 +93,6 @@ describe("WAVE-1 Unit 4 — proto-poison keys single-source parity", () => {
     }
     for (const r of roots) walk(r);
 
-    expect(definers).toEqual(["src/modules/security/workflows/safe-object.ts"]);
+    expect(definers).toEqual(["src/domains/security/safe-object.ts"]);
   });
 });

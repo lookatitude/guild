@@ -21,7 +21,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as graphScoringShim from "../lib/shared/graph-scoring";
-import * as graphScoringModule from "../../src/modules/knowledge/workflows/graph-scoring";
+import * as graphScoringModule from "../../src/domains/knowledge/graph-scoring";
 import {
   scoreNode as canonicalScoreNode,
   termMatchScore as canonicalTermMatchScore,
@@ -160,9 +160,9 @@ describe("WAVE-1 Unit 2 — KG scorer single-source parity", () => {
     }
     for (const r of roots) walk(r);
 
-    expect(definers.scoreNode).toEqual(["src/modules/knowledge/workflows/graph-scoring.ts"]);
-    expect(definers.buildProximityBonuses).toEqual(["src/modules/knowledge/workflows/graph-scoring.ts"]);
-    expect(definers.termMatchScore).toEqual(["src/modules/knowledge/workflows/graph-scoring.ts"]);
+    expect(definers.scoreNode).toEqual(["src/domains/knowledge/graph-scoring.ts"]);
+    expect(definers.buildProximityBonuses).toEqual(["src/domains/knowledge/graph-scoring.ts"]);
+    expect(definers.termMatchScore).toEqual(["src/domains/knowledge/graph-scoring.ts"]);
     expect(definers.scoreKgNode).toEqual([]); // old duplicate name must be gone for good
   });
 });

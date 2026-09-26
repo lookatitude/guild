@@ -5,4 +5,4 @@
  * move internals without breaking existing imports from scripts/lib/shared/*.
  */
 
-export * from "../../../src/modules/security/workflows/share-set";
+export * from "../../../src/domains/security/share-set";

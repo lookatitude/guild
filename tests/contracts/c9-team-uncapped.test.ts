@@ -15,13 +15,10 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import {
-  composeStationTeam,
-  type StationSignals,
-} from "../../src/modules/teams/workflows/station-composer";
+import { composeStationTeam, type StationSignals } from "../../src/domains/teams";
 import { requireContractModule, seededRng, rngInt, selfRefHash, PLUGIN_ROOT } from "./_helpers";
 
-const PROPOSAL_MODULE = "src/modules/teams/workflows/team-proposal";
+const PROPOSAL_MODULE = "src/domains/teams/team-proposal";
 const LANE = "T2b-unbounded-team-composer";
 
 /** All six global signals true — for station "init" this JUSTIFIES 7 distinct roles. */
@@ -90,7 +87,7 @@ describe("C9 team-contracts §2 — uncapped composition", () => {
 
   describe("source guards: no numeric logical-size limiter / slice-drop path (team-contracts §2)", () => {
     const composerSource = fs.readFileSync(
-      path.join(PLUGIN_ROOT, "src", "modules", "teams", "workflows", "station-composer.ts"),
+      path.join(PLUGIN_ROOT, "src", "domains", "teams", "station-composer.ts"),
       "utf8"
     );
 

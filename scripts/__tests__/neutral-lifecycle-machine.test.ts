@@ -24,21 +24,11 @@
  * host handle — so both hosts in every pair are simulated by input alone.
  */
 
-import {
-  applyNeutralLifecycleEvent,
-  applyNeutralLifecycleEvents,
-  neutralInitialLifecycleState,
-  neutralLifecycleEquivalent,
-  neutralLifecycleFingerprint,
-  neutralLifecycleSemanticView,
-} from "../../src/modules/lifecycle/workflows/neutral-lifecycle-machine";
-import type {
-  NeutralLifecycleEvent,
-  NeutralLifecycleState,
-} from "../../src/modules/lifecycle/workflows/neutral-lifecycle-machine";
-import { NEUTRAL_LIFECYCLE_PHASES } from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
-import { evaluateNeutralAdmission, freezeNeutralCapabilitySnapshot } from "../../src/modules/lifecycle/workflows/neutral-gate-policy";
-import type { NeutralAdmissionContext } from "../../src/modules/lifecycle/workflows/neutral-lifecycle-machine";
+import { applyNeutralLifecycleEvent, applyNeutralLifecycleEvents, neutralInitialLifecycleState, neutralLifecycleEquivalent, neutralLifecycleFingerprint, neutralLifecycleSemanticView } from "../../src/domains/lifecycle";
+import type { NeutralLifecycleEvent, NeutralLifecycleState } from "../../src/domains/lifecycle";
+import { NEUTRAL_LIFECYCLE_PHASES } from "../../src/domains/lifecycle";
+import { evaluateNeutralAdmission, freezeNeutralCapabilitySnapshot } from "../../src/domains/lifecycle";
+import type { NeutralAdmissionContext } from "../../src/domains/lifecycle";
 
 // ---------------------------------------------------------------------------
 // Literal fixtures

@@ -46,7 +46,7 @@ import { buildAdapters } from "../lib/pane-adapter";
 import { createAgentsFileAdapter } from "../lib/host-adapters/agents-file";
 import { DERIVED_HOST_CAPABILITY_ROWS } from "../lib/host-registry";
 import type { HostKind } from "../lib/host-types";
-import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { mintRunBinding } from "../../src/domains/lifecycle";
 import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
 const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();

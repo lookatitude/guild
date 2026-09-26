@@ -20,52 +20,15 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import {
-  EXECUTION_TRANSPORT_SCHEMA_VERSION,
-  EXECUTION_TRANSPORT_CONTRACT_VERSION,
-  EXECUTION_OPERATIONS,
-  EXECUTION_OUTCOME_STATUSES,
-  EXECUTION_REASON_CODES,
-  EXECUTION_TRANSPORT_IDS,
-  EXECUTION_DETAIL_MAX_LENGTH,
-  EXECUTION_STATUS_TO_NEUTRAL_DISPOSITION,
-  EXECUTION_REASON_TO_NEUTRAL_REASON,
-  executionOutcome,
-  normalizeExecutionError,
-  redactExecutionDetail,
-  isExecutionContractCompatible,
-  isTeamDispatchPort,
-  selectExecutionSubstrate,
-  type ExecutionCapabilityProbe,
-  type ExecutionHandle,
-  type ExecutionObservationSink,
-  type ExecutionOperation,
-  type ExecutionOutcome,
-  type ExecutionRunFn,
-  type ExecutionRunResult,
-  type ExecutionTransportPort,
-  type PaneAdapterLike,
-  type RemoteProbeFacts,
-  type RemoteTransportLike,
-  type TeamBackendLike,
-} from "../../src/modules/dispatch/workflows/execution-transport-ports";
-import {
-  PaneExecutionTransport,
-  InProcessExecutionTransport,
-  TeamDispatchExecutionTransport,
-  TmuxExecutionTransport,
-  RemoteExecutionTransport,
-  createHostExecutionRuntime,
-  recordingObservationSink,
-  type TeamSessionSeamLike,
-} from "../../src/modules/dispatch/workflows/execution-transport-adapters";
+import { EXECUTION_TRANSPORT_SCHEMA_VERSION, EXECUTION_TRANSPORT_CONTRACT_VERSION, EXECUTION_OPERATIONS, EXECUTION_OUTCOME_STATUSES, EXECUTION_REASON_CODES, EXECUTION_TRANSPORT_IDS, EXECUTION_DETAIL_MAX_LENGTH, EXECUTION_STATUS_TO_NEUTRAL_DISPOSITION, EXECUTION_REASON_TO_NEUTRAL_REASON, executionOutcome, normalizeExecutionError, redactExecutionDetail, isExecutionContractCompatible, isTeamDispatchPort, selectExecutionSubstrate, type ExecutionCapabilityProbe, type ExecutionHandle, type ExecutionObservationSink, type ExecutionOperation, type ExecutionOutcome, type ExecutionRunFn, type ExecutionRunResult, type ExecutionTransportPort, type PaneAdapterLike, type RemoteProbeFacts, type RemoteTransportLike, type TeamBackendLike } from "../../src/domains/dispatch";
+import { PaneExecutionTransport, InProcessExecutionTransport, TeamDispatchExecutionTransport, TmuxExecutionTransport, RemoteExecutionTransport, createHostExecutionRuntime, recordingObservationSink, type TeamSessionSeamLike } from "../../src/domains/dispatch";
 
 import {
   NEUTRAL_DISPOSITIONS,
   NEUTRAL_REASON_CODES,
   isNeutralDisposition,
   isNeutralReasonCode,
-} from "../../src/modules/lifecycle";
+} from "../../src/domains/lifecycle";
 
 import { buildAdapters, ClaudePaneAdapter, CodexPaneAdapter } from "../lib/pane-adapter";
 import {
@@ -902,15 +865,12 @@ describe("selectExecutionSubstrate — the launcher seam (MHRC-MOD-003)", () => 
   });
 
   it("keeps the substrate DECISION out of the launcher source (host branching absent)", () => {
-    // The CANONICAL launcher is the dispatch module's own copy; the top-level
-    // scripts/ entry is its materialized projection and is regenerated, not authored.
-    const moduleRoot = path.join(__dirname, "..", "..", "src", "modules", "dispatch");
-    const launcher = fs.readFileSync(
-      path.join(moduleRoot, "resources", "scripts", "agent-team-launcher.ts"),
-      "utf8"
-    );
+    // The launcher is authored once at scripts/ (the projector copies it live);
+    // the substrate decision lives in the dispatch domain's transport ports.
+    const repoRoot = path.join(__dirname, "..", "..");
+    const launcher = fs.readFileSync(path.join(repoRoot, "scripts", "agent-team-launcher.ts"), "utf8");
     const ports = fs.readFileSync(
-      path.join(moduleRoot, "workflows", "execution-transport-ports.ts"),
+      path.join(repoRoot, "src", "domains", "dispatch", "execution-transport-ports.ts"),
       "utf8"
     );
     const decisionVocabulary = [

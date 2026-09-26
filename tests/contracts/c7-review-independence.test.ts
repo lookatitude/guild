@@ -12,10 +12,10 @@
  *  - The §7 predicate module does not exist yet (lanes T5+T6).
  */
 
-import { planReviewPairing } from "../../src/modules/review/workflows/review-pairing";
+import { planReviewPairing } from "../../src/domains/review";
 import { requireContractModule } from "./_helpers";
 
-const PREDICATE_MODULE = "src/modules/capability/workflows/independence-predicates";
+const PREDICATE_MODULE = "src/domains/config/independence-predicates";
 const LANE = "T5+T6-review-independence";
 
 /**

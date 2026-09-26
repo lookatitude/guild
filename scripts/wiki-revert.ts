@@ -20,8 +20,8 @@
  * files were already restored, so a retry is safe).
  */
 
-import { revertHarvest } from "../src/modules/knowledge/workflows/harvest";
-import { readHarvestJournal } from "../src/modules/knowledge/workflows/harvest-journal";
+import { revertHarvest } from "../src/domains/knowledge";
+import { readHarvestJournal } from "../src/domains/knowledge";
 
 interface Args {
   opId: string | null;

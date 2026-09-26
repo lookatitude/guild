@@ -16,10 +16,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import {
-  CacheKeyIdentity,
-  createCacheKey,
-} from "../../src/modules/capability/workflows/catalog-cache";
+import { CacheKeyIdentity, createCacheKey } from "../../src/domains/config";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
 const TSX_BIN = path.join(PLUGIN_ROOT, "tests", "node_modules", ".bin", "tsx");

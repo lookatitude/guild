@@ -1,13 +1,118 @@
-export * from "./workflows/team-file";
-// T8R F2: the canonical-YAML hasher is the shared artifact-integrity primitive
-// (self-referential proposal/decision hashes, resolution receipts, shadow
-// provenance). It is published here so capability/dispatch consume it through
-// the public module entrypoint instead of a private cross-module import.
-export * from "./workflows/canonical-hash";
-export * from "./workflows/station-composer";
-export * from "./workflows/station-signals";
-// U-TIER (T08): the two goal nouns and the per-goal roster slice. Exported here
-// because the orchestrator lint and the slice are consumed across domains
-// (dispatch, lifecycle) and the index is the only cross-domain import surface.
-export * from "./workflows/goal-contract";
-export * from "./workflows/compose-scope";
+/**
+ * Transitional re-export shim (T12 fold, KTD36).
+ *
+ * The implementation moved once into src/domains/teams/. This file republishes the exact
+ * pre-fold public surface of src/modules/teams so existing importers keep working;
+ * T16 deletes it. New code imports src/domains/teams directly.
+ */
+
+export {
+  CANONICAL_PHASES,
+  COMPOSE_SCOPES,
+  COMPOSE_SCOPE_CONTRACT,
+  COMPOSITION_TRACE_SCHEMA,
+  COST_GATE_POLICY,
+  GOAL_CONTRACT,
+  GOAL_SCHEMA,
+  GOAL_STATUS_SCHEMA,
+  GOAL_STATUS_STATES,
+  IMPLIED_RULES,
+  MINTING_CLASSES,
+  NEXT_NEEDS,
+  ORCHESTRATOR_WINDOW,
+  STATIONS,
+  STATION_POLICY,
+  STATION_POLICY_SCHEMA,
+  STATION_SIGNALS_SCHEMA,
+  STATION_SIGNAL_KEYS,
+  SUMMARY_TOKEN_CAP,
+  TEAM_PLAN_SCHEMA,
+  TEAM_RESULT_SCHEMA,
+  TEAM_SIZE_POLICY,
+  WORKFLOW_CLASSES,
+  buildTierIndex,
+  canonicalYaml,
+  classMaysMintDeliveryRoster,
+  cloneArtifact,
+  codePointCompare,
+  collectStringLeaves,
+  composeStationTeam,
+  deriveDecompositionSignals,
+  doubleQuoted,
+  emptyStationSignalsV1,
+  findNestedForbiddenSchema,
+  foldOrchestratorContext,
+  isCanonicalPhase,
+  isNonEmptyString,
+  isNonEmptyStringArray,
+  isPlainSafe,
+  isSha256Hex,
+  isStation,
+  legacyTeamFilePath,
+  lintOrchestratorContext,
+  phaseFromTeamPath,
+  readActivePhase,
+  readCurrentPhasePointer,
+  readPlanOwnerTaskIds,
+  readPlanTaskIdSet,
+  readTeamPlan,
+  readTeamResult,
+  resolveDeadLaneKeys,
+  resolveMintScope,
+  resolveTeamFile,
+  scoreFanoutMode,
+  selfReferentialHash,
+  sha256Hex,
+  signalsOf,
+  sliceRosterForGoal,
+  slugFromTeamPath,
+  teamFilePath,
+  validateGoalStatusV1,
+  validateGoalV1,
+  validateStationSignalsV1,
+  validateTeamPlanV1,
+  validateTeamResultV1,
+  writeCurrentPhasePointer,
+  writeRunArtifact,
+  writeTeamPlan,
+  writeTeamResult,
+} from "../../domains/teams";
+export type {
+  AdvisoryChallenger,
+  AdvisoryChallengerSignal,
+  AdvisoryPanelPolicy,
+  AdvisoryPanelV1,
+  ComposeScope,
+  CompositionTraceV1,
+  CostBand,
+  CostEstimate,
+  DecompositionSignals,
+  EmitOptions,
+  FanoutOverride,
+  FanoutOverrideRecord,
+  FanoutSignalsFired,
+  GoalStatusState,
+  GoalStatusV1,
+  GoalV1,
+  ImpliedRule,
+  LaneSource,
+  LeadBindingKind,
+  MintScopeVerdict,
+  NextNeed,
+  OrchestratorContext,
+  OrchestratorLintFinding,
+  OrchestratorLintInput,
+  RosterMember,
+  RosterSliceResult,
+  StationComposeConfig,
+  StationDefault,
+  StationId,
+  StationSignalKey,
+  StationSignals,
+  StationSignalsV1,
+  TeamPlanLane,
+  TeamPlanV1,
+  TeamResultLane,
+  TeamResultV1,
+  WorkflowClass,
+} from "../../domains/teams";

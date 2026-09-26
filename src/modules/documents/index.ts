@@ -1,33 +1,149 @@
 /**
- * src/modules/documents/index.ts
+ * Transitional re-export shim (T12 fold, KTD36).
  *
- * Public entrypoint for the documents module — HTML-native typed document
- * contracts (DC-01..DC-09).
- *
- * Consumers must import from this file only; the `workflows/` files are
- * private. The module depends on no other module and never on host internals
- * (DC-08), so importing it cannot pull a host, hook, wrapper or transport
- * surface into a consumer.
- *
- * The entrypoints machine consumers want:
- *
- *   validateDocumentRecord     untrusted value → validated, normalized record
- *   projectDocumentRecord      record → compact execution projection
- *   resolveDocumentAuthority   sources → who, if anyone, may speak
- *   decideFromDocumentSources  sources → an actionable, fail-closed decision
- *   decideFromReceiptDocument  receipt text → the same decision
- *   renderDocumentHtml         record → deterministic, inert HTML
- *   importLegacyMarkdown       Markdown → explicitly partial legacy record
- *   migrateDocumentRecord      versioned payload → current record or refusal
+ * The implementation moved once into src/domains/lifecycle/. This file republishes the exact
+ * pre-fold public surface of src/modules/documents so existing importers keep working;
+ * T16 deletes it. New code imports src/domains/lifecycle directly.
  */
 
-export * from "./workflows/document-safe";
-export * from "./workflows/document-records";
-export * from "./workflows/document-hash";
-export * from "./workflows/document-projection";
-export * from "./workflows/document-html";
-export * from "./workflows/document-legacy-import";
-export * from "./workflows/document-versioning";
-export * from "./workflows/document-decisions";
-export * from "./workflows/document-receipts";
-export * from "./workflows/document-service-boundary";
+export {
+  CANONICAL_RECEIPT_SECTIONS,
+  DOCUMENTS_ALLOWED_EXTERNAL_PACKAGES,
+  DOCUMENTS_ALLOWED_MODULE_DEPENDENCIES,
+  DOCUMENTS_ERROR_NAMESPACE,
+  DOCUMENTS_MODULE_ID,
+  DOCUMENTS_MODULE_SOURCE_FILES,
+  DOCUMENT_DISPOSITIONS,
+  DOCUMENT_HASH_PATTERN,
+  DOCUMENT_ID_PATTERN,
+  DOCUMENT_ITEM_ID_PATTERN,
+  DOCUMENT_KINDS,
+  DOCUMENT_PROJECTION_SCHEMA_VERSION,
+  DOCUMENT_PROVENANCE_SOURCES,
+  DOCUMENT_SCHEMA_VERSION,
+  DOCUMENT_TIMESTAMP_PATTERN,
+  HANDOFF_STATUSES,
+  LEGACY_DOCUMENT_SCHEMA_VERSION,
+  LEGACY_IMPORT_BOUNDS,
+  LEGACY_INFERABLE_KINDS,
+  MAX_ARRAY_ITEMS,
+  MAX_CANONICAL_DEPTH,
+  MAX_CANONICAL_NODES,
+  MAX_ISSUES,
+  MAX_OBJECT_KEYS,
+  MAX_STRING_LENGTH,
+  MIGRATABLE_DOCUMENT_SCHEMA_VERSIONS,
+  PLAN_STEP_STATUSES,
+  PROJECTABLE_DOCUMENT_KINDS,
+  RECEIPT_FRONTMATTER_SCHEMA_VERSION,
+  RECEIPT_MACHINE_SCHEMA_VERSION,
+  RECEIPT_PARSE_BOUNDS,
+  REVIEW_SEVERITIES,
+  REVIEW_VERDICTS,
+  SPEC_REQUIREMENT_PRIORITIES,
+  SUPPORTED_DOCUMENT_SCHEMA_VERSIONS,
+  VERIFY_CHECK_RESULTS,
+  VERIFY_OUTCOMES,
+  canonicalDocumentJson,
+  decideFromDocumentSources,
+  decideFromReceiptDocument,
+  decisionAllowsAdvance,
+  decisionIsTrusted,
+  deepFreeze,
+  documentContentHash,
+  documentRoundTripEvidence,
+  escapeHtml,
+  evaluateDocumentServiceBoundary,
+  extractDocumentHtmlBinding,
+  hasCanonicalReceiptWrapper,
+  hashCanonicalValue,
+  hashDocumentRecord,
+  importLegacyMarkdown,
+  isDocumentRecord,
+  isLegacyDocumentRecord,
+  isObjectLike,
+  issue,
+  migrateDocumentRecord,
+  parseReceiptDocument,
+  projectDocumentRecord,
+  projectValidatedRecord,
+  pushIssue,
+  readReceiptFrontmatter,
+  readReceiptMachineBlock,
+  renderDocumentHtml,
+  renderValidatedRecordHtml,
+  resolveDocumentAuthority,
+  safeArrayLength,
+  safeGet,
+  safeHasOwn,
+  safeIsArray,
+  safeOwnKeys,
+  scanHtmlForActivePayloads,
+  sha256Of,
+  sortIssues,
+  unescapeHtmlStrict,
+  validateDocumentProjection,
+  validateDocumentRecord,
+  validateFrozenReceiptDocument,
+  verifyProjectionAgainstRecord,
+  verifyRenderedDocumentBinding,
+} from "../../domains/lifecycle";
+export type {
+  BoundaryOptions,
+  BoundarySourceFile,
+  BoundaryViolationReason,
+  CanonicalJsonResult,
+  DocumentAuthority,
+  DocumentAuthorityResolution,
+  DocumentBoundaryReport,
+  DocumentBoundaryViolation,
+  DocumentDecision,
+  DocumentDisposition,
+  DocumentGateSignal,
+  DocumentHashResult,
+  DocumentHtmlBinding,
+  DocumentHtmlBindingResult,
+  DocumentHtmlResult,
+  DocumentIssue,
+  DocumentKind,
+  DocumentMigrationResult,
+  DocumentMigrationStatus,
+  DocumentProjection,
+  DocumentProjectionResult,
+  DocumentProvenance,
+  DocumentProvenanceSource,
+  DocumentRecord,
+  DocumentSources,
+  DocumentValidationResult,
+  HandoffBody,
+  HandoffDocumentRecord,
+  HandoffStatus,
+  LegacyDocumentRecord,
+  LegacyDocumentSection,
+  LegacyImportIssue,
+  LegacyImportResult,
+  LegacyImportWarning,
+  PlanBody,
+  PlanDocumentRecord,
+  PlanStep,
+  PlanStepStatus,
+  ProjectionValidationResult,
+  ReceiptParseResult,
+  ReviewBody,
+  ReviewDocumentRecord,
+  ReviewFinding,
+  ReviewSeverity,
+  ReviewVerdict,
+  RoundTripCheck,
+  RoundTripEvidence,
+  SafeRead,
+  SpecBody,
+  SpecDocumentRecord,
+  SpecRequirement,
+  SpecRequirementPriority,
+  VerifyBody,
+  VerifyCheck,
+  VerifyCheckResult,
+  VerifyDocumentRecord,
+  VerifyOutcome,
+} from "../../domains/lifecycle";

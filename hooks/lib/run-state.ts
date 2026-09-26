@@ -1,1 +1,1 @@
-export * from "../../src/modules/lifecycle/workflows/run-state.js";
+export * from "../../src/domains/lifecycle/run-state.js";

@@ -6,9 +6,12 @@
  * reorg can move internals without breaking existing script paths.
  */
 
-import { runFederatedQueryCli } from "../../src/modules/workspace/workflows/federated-query";
+import { runFederatedQueryCli } from "../../src/domains/state";
 
-export * from "../../src/modules/workspace/workflows/federated-query";
+export {
+  federatedQuery,
+  runFederatedQueryCli,
+} from "../../src/domains/state";
 
 if (require.main === module) {
   runFederatedQueryCli();

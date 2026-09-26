@@ -3083,7 +3083,7 @@ module.exports = __toCommonJS(initiative_gate_exports);
 var fs = __toESM(require("node:fs"));
 var path2 = __toESM(require("node:path"));
 
-// src/modules/kernel/workflows/module-manifest.ts
+// src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "commands",
   "skills",
@@ -3093,16 +3093,17 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "scripts"
 ]);
 
-// src/modules/kernel/workflows/yaml-loader.ts
+// src/domains/kernel/yaml-loader.ts
 var path = __toESM(require("node:path"));
 function pluginLocalScriptsRoots() {
   return [
-    // Source/runtime TS layout: src/modules/kernel/workflows -> plugin/scripts.
-    path.resolve(__dirname, "..", "..", "..", "..", "scripts"),
-    // Bundled hook layout: hooks/dist -> plugin/scripts.
+    // Source TS layout (src/domains/<id>) and the bundled agent-team hook layout
+    // (hooks/agent-team/dist) both sit three levels under plugin/.
+    path.resolve(__dirname, "..", "..", "..", "scripts"),
+    // Bundled hook layout (hooks/dist) and src/adapters both sit two levels under.
     path.resolve(__dirname, "..", "..", "scripts"),
-    // Bundled agent-team hook layout: hooks/agent-team/dist -> plugin/scripts.
-    path.resolve(__dirname, "..", "..", "..", "scripts")
+    // src/adapters/model-discovery and any deeper nesting.
+    path.resolve(__dirname, "..", "..", "..", "..", "scripts")
   ];
 }
 function tryScriptsRoot(scriptsRoot) {
@@ -3132,7 +3133,7 @@ function loadYamlApi() {
   );
 }
 
-// src/modules/kernel/workflows/sealed-collections.ts
+// src/domains/kernel/sealed-collections.ts
 function regExpWritesLastIndex(re) {
   return re.global || re.sticky;
 }
@@ -3220,7 +3221,7 @@ function frozenList(items, options = {}) {
   return deepFreeze(items.slice(), options);
 }
 
-// src/modules/kernel/workflows/path-containment.ts
+// src/domains/kernel/path-containment.ts
 var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "root-unresolvable",
   "no-existing-ancestor",
@@ -3233,7 +3234,7 @@ var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "destination-moved"
 ]);
 
-// src/modules/kernel/workflows/runtime-tree-guard.ts
+// src/domains/kernel/runtime-tree-guard.ts
 var RUNTIME_SUBTREE_SEGMENTS = sealSet(
   [
     "skills",
@@ -3248,7 +3249,7 @@ var RUNTIME_SUBTREE_SEGMENTS = sealSet(
   "RUNTIME_SUBTREE_SEGMENTS"
 );
 
-// src/modules/kernel/workflows/tier-bus.ts
+// src/domains/kernel/tier-bus.ts
 var BUS_TIERS = frozenList(["T0", "T1", "T2"]);
 var LEAD_ROLE_IDS = frozenList(["team-lead", "lead", "orchestrator"]);
 var TIER_BUS_CONTRACT = deepFreeze({
@@ -3258,7 +3259,7 @@ var TIER_BUS_CONTRACT = deepFreeze({
   tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
 });
 
-// src/modules/state/workflows/frontmatter.ts
+// src/domains/state/frontmatter.ts
 var loadedYaml = null;
 function yamlApi() {
   if (loadedYaml === null) loadedYaml = loadYamlApi();
@@ -3277,7 +3278,7 @@ function parseYaml(text, opts = {}) {
 // scripts/lib/frontmatter.ts
 var parseYaml2 = parseYaml;
 
-// src/modules/initiatives/workflows/initiative.ts
+// src/domains/lifecycle/initiative.ts
 var DEFINITION_STATUS = Object.freeze(["incomplete", "assumed", "complete"]);
 var EXECUTION_STATUS = Object.freeze(["not_started", "active", "blocked", "done"]);
 var RELEASE_STATUS = Object.freeze(["not_released", "release_candidate", "released", "rollback_required"]);
@@ -3318,7 +3319,7 @@ function d8CloseGate(i) {
   return { canClose: exec && release && docs, legs: { exec, release, docs }, blockers };
 }
 
-// src/modules/initiatives/workflows/initiative-workitems.ts
+// src/domains/lifecycle/initiative-workitems.ts
 var WORK_ITEM_TYPES = Object.freeze([
   "research",
   "design",

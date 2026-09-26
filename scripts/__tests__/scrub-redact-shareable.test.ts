@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { redactShareableFile } from "../../src/modules/security/workflows/scrub-redact";
+import { redactShareableFile } from "../../src/domains/security";
 
 const SHA = "0123456789abcdef".repeat(4);
 const digest = (label: string): string => createHash("sha256").update(label).digest("hex");

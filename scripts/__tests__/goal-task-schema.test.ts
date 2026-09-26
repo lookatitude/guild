@@ -1,10 +1,4 @@
-import {
-  GOAL_V1_EXAMPLE,
-  TASK_GROUP_V1_EXAMPLE,
-  selectGoalSurface,
-  validateGoalV1,
-  validateTaskGroupV1,
-} from "../../src/modules/evals/workflows/goal-task-schema";
+import { GOAL_V1_EXAMPLE, TASK_GROUP_V1_EXAMPLE, selectGoalSurface, validateGoalV1, validateTaskGroupV1 } from "../../src/domains/evolve";
 
 describe("guild.goal.v1", () => {
   test("accepts the P.O.V.E.R. goal example", () => {

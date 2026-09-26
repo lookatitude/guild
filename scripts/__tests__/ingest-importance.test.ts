@@ -118,3 +118,13 @@ describe("resolveRecallImportance — persisted wins, else category-derived", ()
     expect(resolveRecallImportance(FM(`${RECALL_IMPORTANCE_KEY}: 9`), "standards")).toBe(4);
   });
 });
+
+describe("codex T12 r1 — a quoted score line is replaced in place on force", () => {
+  it('force-stamping `recall_importance: "4"` to 5 reads back 5 and leaves ONE key line', () => {
+    const doc = '---\ntitle: x\nrecall_importance: "4"\n---\n\nbody\n';
+    const out = stampRecallImportance(doc, 5, { force: true, createFrontmatter: false });
+    expect(out.changed).toBe(true);
+    expect(parseRecallImportance(out.content)).toBe(5);
+    expect(out.content.split("\n").filter((l) => l.startsWith("recall_importance:"))).toHaveLength(1);
+  });
+});

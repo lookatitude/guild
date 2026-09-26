@@ -5,4 +5,4 @@
  * internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/modules/kernel/workflows/module-manifest";
+export * from "../../src/domains/kernel/module-manifest";

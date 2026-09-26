@@ -25,8 +25,8 @@ import { execFileSync } from "child_process";
 import {
   HOST_REGISTRY_ROWS,
   type HostId,
-} from "../../src/modules/host-runtime/workflows/host-registry-schema";
-import type { UpdateCaps } from "../../src/modules/host-runtime/workflows/host-capabilities-schema";
+} from "../../src/adapters/host-registry-schema";
+import type { UpdateCaps } from "../../src/adapters/host-capabilities-schema";
 
 export const SOURCE_REPO_DEFAULT = "https://github.com/lookatitude/guild.git";
 export const CACHE_SCHEMA = "guild.update_check_cache.v1";

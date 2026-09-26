@@ -25,7 +25,7 @@ const pluginFinding: RunLearningFinding = {
   id: "F-1",
   summary: "Host adapter drops degradation receipts on codex",
   details: "Seen in /Users/testuser/host-logs/session.log — the host adapter path loses receipts on all hosts.",
-  evidence_refs: ["plugin/src/modules/host-runtime/workflows/host-router.ts"],
+  evidence_refs: ["plugin/src/adapters/host-router.ts"],
   proposed_change: "Persist degradation receipts before dispatch returns.",
 };
 

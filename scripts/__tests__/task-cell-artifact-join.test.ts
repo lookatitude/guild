@@ -2,27 +2,27 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import { sha256 } from "../../src/modules/communication";
+import { sha256 } from "../../src/domains/dispatch";
 import {
   acknowledgeAssignment,
   buildTaskCell,
   writeTaskCell,
   type TaskCellDispatchInput,
-} from "../../src/modules/dispatch/workflows/task-assignment-v2";
+} from "../../src/domains/dispatch/task-assignment-v2";
 import {
   buildAcceptance,
   runDeterministicFloor,
   sealTerminalAttempt,
   writeAcceptanceRecord,
   writeValidationRecord,
-} from "../../src/modules/dispatch/workflows/task-cell-acceptance";
+} from "../../src/domains/dispatch/task-cell-acceptance";
 import {
   auditTaskCellArtifactJoin,
   type TaskCellArtifactKind,
-} from "../../src/modules/dispatch/workflows/task-cell-artifact-join";
-import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
-import { composeStationTeam } from "../../src/modules/teams/workflows/station-composer";
-import { writeTeamPlan, writeTeamResult } from "../../src/modules/teams/workflows/station-signals";
+} from "../../src/domains/dispatch/task-cell-artifact-join";
+import { mintRunBinding } from "../../src/domains/lifecycle/run-binding";
+import { composeStationTeam } from "../../src/domains/teams/station-composer";
+import { writeTeamPlan, writeTeamResult } from "../../src/domains/teams/station-signals";
 
 const NOW = () => "2026-08-10T16:30:00.000Z";
 

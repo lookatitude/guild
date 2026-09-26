@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/host-capabilities-schema";
 import { planWrapperInvocation } from "../lib/guild-run-wrapper";
-import * as moduleImpl from "../../src/modules/host-runtime/workflows/host-capabilities-schema";
+import * as moduleImpl from "../../src/adapters/host-capabilities-schema";
 
 describe("host-capabilities-schema compatibility shim", () => {
   test("scripts/lib/host-capabilities-schema re-exports src/modules/host-runtime", () => {
@@ -17,9 +17,9 @@ describe("host-capabilities-schema compatibility shim", () => {
   test("only the module file defines the capability row body", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/host-capabilities-schema.ts"), "utf8");
-    const modulePath = fs.readFileSync(path.join(repoRoot, "src/modules/host-runtime/workflows/host-capabilities-schema.ts"), "utf8");
+    const modulePath = fs.readFileSync(path.join(repoRoot, "src/adapters/host-capabilities-schema.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/modules\/host-runtime\/workflows\/host-capabilities-schema["']/);
+    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/adapters\/host-capabilities-schema["']/);
     expect(oldPath).not.toMatch(/export\s+const\s+CLAUDE_CAPABILITIES/);
     expect(modulePath).toMatch(/export\s+const\s+CLAUDE_CAPABILITIES/);
   });

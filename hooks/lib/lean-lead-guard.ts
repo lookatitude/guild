@@ -169,7 +169,7 @@ export interface LeanLeadConfig {
  */
 export function readLeanLeadConfig(guildRoot: string): LeanLeadConfig {
   try {
-    const { resolveSettings } = require("../../src/modules/config/workflows/settings-resolver") as {
+    const { resolveSettings } = require("../../src/domains/config/settings-resolver") as {
       resolveSettings: (o: { cwd: string }) => { config: Record<string, unknown> };
     };
     const parsed = resolveSettings({ cwd: guildRoot }).config as {

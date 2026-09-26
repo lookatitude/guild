@@ -5,4 +5,4 @@
  * can move internals without breaking existing imports from scripts/lib/shared/*.
  */
 
-export * from "../../../src/modules/security/workflows/secret-patterns";
+export * from "../../../src/domains/security/secret-patterns";

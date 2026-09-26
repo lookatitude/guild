@@ -81,10 +81,10 @@ import { checkSubset, type PackageReferences } from "./lib/parity-contract";
 import { renderLauncherScript } from "./lib/guild-run-wrapper";
 import {
   buildModuleResourcePlan,
-  syncModuleResources,
   type ModuleResourcePlan,
   type ModuleResourceEntry,
 } from "./lib/module-resources";
+import { OWNED_INVENTORY_CATEGORIES } from "./lib/module-manifest";
 import {
   assertNativeClaudePackageIdentityCurrent,
   assertLockedScriptRuntimeDependencies,
@@ -338,9 +338,11 @@ class ModuleResourceResolver {
     if (!resource) {
       throw new Error(`missing module resource for ${category}:${entry.id} (${entry.source_path})`);
     }
-    const abs = path.join(this.root, "src", "modules", resource.module_id, resource.resource_path);
+    // T12: the host package is a PROJECTION of the live surface (KTD28). The
+    // renderer reads the authored file itself — there is no mirror to go stale.
+    const abs = path.join(this.root, resource.source_path);
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
-      throw new Error(`module resource file is missing for ${category}:${entry.id}: ${abs}`);
+      throw new Error(`projected surface file is missing for ${category}:${entry.id}: ${abs}`);
     }
     return abs;
   }
@@ -373,18 +375,14 @@ class ModuleResourceResolver {
     if (!resource) {
       throw new Error(`missing module resource for ${category}:${sourcePath}`);
     }
-    const abs = path.join(this.root, "src", "modules", resource.module_id, resource.resource_path);
+    const abs = path.join(this.root, resource.source_path);
     if (!copyFileEnsured(abs, destAbs)) {
       throw new Error(`failed to copy module resource for ${category}:${sourcePath}`);
     }
   }
 }
 
-function loadModuleResourceResolver(root: string): ModuleResourceResolver {
-  const check = syncModuleResources({ root, check: true });
-  if (!check.ok) {
-    throw new Error("module resources are stale:\n  " + check.errors.join("\n  "));
-  }
+export function loadModuleResourceResolver(root: string): ModuleResourceResolver {
   return new ModuleResourceResolver(root, buildModuleResourcePlan(root));
 }
 /** Recursively copy a directory, skipping node_modules and ALL symlinks (incl. the
@@ -416,10 +414,92 @@ function copyDirExcludingNodeModules(srcDir: string, destDir: string): boolean {
 }
 const stableJson = (v: unknown): string => JSON.stringify(v, null, 2) + "\n";
 
-/** Module-owned implementations live under src/. Script shims import them, so
- * every generated package that bundles scripts must also bundle src/. */
+/**
+ * KTD28: a host package is a projection, never a copy of the domain tree. Three
+ * parts of src/ still ship, and only these:
+ *   - src/surfaces/** — runtime DATA (the class graphs workflow-graph-load reads);
+ *   - src/modules/** — module manifests + index shims, which the shipped
+ *     activated-host-conformance worker evaluates in place (--module-boundary-root);
+ *   - the src/ TypeScript that a shipped .ts file imports, transitively. Skill
+ *     bodies run shipped scripts with `tsx`, and those scripts import domain
+ *     files; without their closure the user-path command fails on import.
+ * Call it LAST, after every other .ts file has landed in `dest`.
+ */
 function copyModuleRuntime(root: string, dest: string): void {
-  copyDirExcludingNodeModules(path.join(root, "src"), path.join(dest, "src"));
+  copyDirExcludingNodeModules(path.join(root, "src", "surfaces"), path.join(dest, "src", "surfaces"));
+  copyDirExcludingNodeModules(path.join(root, "src", "modules"), path.join(dest, "src", "modules"));
+  for (const rel of srcImportClosure(root, dest)) {
+    copyFileEnsured(path.join(root, rel), path.join(dest, rel));
+  }
+}
+
+const TS_SOURCE = /\.(ts|tsx|mts|cts)$/;
+
+function walkShippedTs(dir: string, out: string[]): string[] {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
+    if (e.name === "node_modules" || e.isSymbolicLink()) continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walkShippedTs(p, out);
+    else if (TS_SOURCE.test(e.name) && !e.name.endsWith(".d.ts")) out.push(p);
+  }
+  return out;
+}
+
+/** Every relative string literal is a candidate specifier. Over-matching only
+ *  tries to resolve a path that is not a module; it catches `require` hidden
+ *  behind `eval("require")`, which a syntax-aware scan would miss. */
+function relativeSpecifiers(text: string): string[] {
+  const out: string[] = [];
+  const re = /["'](\.{1,2}\/[^"'\n]*)["']/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) out.push(m[1]);
+  return out;
+}
+
+function resolveSourceModule(root: string, fromRel: string, spec: string): string | null {
+  const base = path.resolve(path.dirname(path.join(root, fromRel)), spec);
+  const stem = base.replace(/\.(js|mjs|cjs)$/, "");
+  for (const c of [base, `${stem}.ts`, `${stem}.tsx`, path.join(base, "index.ts")]) {
+    try {
+      if (fs.statSync(c).isFile()) return path.relative(root, c).split(path.sep).join("/");
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return null;
+}
+
+/** The src/ TypeScript files reachable from the .ts files already in `dest`. */
+export function srcImportClosure(root: string, dest: string): string[] {
+  const shipped = walkShippedTs(dest, [])
+    .map((abs) => path.relative(dest, abs).split(path.sep).join("/"))
+    .filter((rel) => !rel.startsWith("src/") || rel.startsWith("src/modules/"));
+  const closure = new Set<string>();
+  const queue = [...shipped];
+  const seen = new Set(queue);
+  while (queue.length > 0) {
+    const rel = queue.pop() as string;
+    let text: string;
+    try {
+      text = fs.readFileSync(path.join(root, rel), "utf8");
+    } catch {
+      continue; // generated in dest only (launcher, bridge): nothing to follow
+    }
+    for (const spec of relativeSpecifiers(text)) {
+      const target = resolveSourceModule(root, rel, spec);
+      if (!target || seen.has(target) || !TS_SOURCE.test(target)) continue;
+      seen.add(target);
+      queue.push(target);
+      if (/^src\/(?!surfaces\/|modules\/)/.test(target)) closure.add(target);
+    }
+  }
+  return [...closure].sort();
 }
 
 // The full production closure of scripts/package.json: js-yaml@4 plus its one
@@ -699,12 +779,12 @@ export function writeClaudeTree(
   }
   copyFileEnsured(path.join(root, "AGENTS.md"), path.join(dest, "AGENTS.md"));
   copyFileEnsured(path.join(root, "CLAUDE.md"), path.join(dest, "CLAUDE.md"));
-  copyModuleRuntime(root, dest);
   copyScriptRuntime(root, dest);
   // MCP server runtime referenced by .mcp.json (so the package is self-contained).
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
   copyCompiledRuntime(root, dest);
   copyTemplates(root, dest);
+  copyModuleRuntime(root, dest);
   writeLauncher(dest, "claude");
   return dest;
 }
@@ -758,9 +838,11 @@ export function checkClaudeInstallSurface(
 }
 
 export function syncClaudeInstallSurface(root: string, inv: GuildInventoryV1, generatedAt: string): void {
-  const check = syncModuleResources({ root, check: true });
-  if (!check.ok) {
-    throw new Error("module resources are stale:\n  " + check.errors.join("\n  "));
+  // Fail closed: never publish install metadata that names a surface file the
+  // projector cannot read (the inventory is stale, or the file was removed).
+  const resources = loadModuleResourceResolver(root);
+  for (const category of OWNED_INVENTORY_CATEGORIES) {
+    for (const entry of inv[category] as InventoryResourceEntry[]) resources.resolve(category, entry);
   }
   const expected = renderClaudeInstallSurface(inv, generatedAt);
   for (const rel of CLAUDE_INSTALL_SURFACE_FILES) {
@@ -797,13 +879,13 @@ export function writeCodexTree(
   for (const s of inv.scripts) {
     resources.copy("scripts", s, path.join(dest, s.source_path));
   }
-  copyModuleRuntime(root, dest);
   copyScriptRuntime(root, dest);
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
   copyCompiledRuntime(root, dest);
   copyTemplates(root, dest);
   copyStandaloneHookEntrypoints(root, dest);
   writeCodexHookBridge(root, dest);
+  copyModuleRuntime(root, dest);
   writeLauncher(dest, "codex");
   return dest;
 }
@@ -852,12 +934,12 @@ function exposeGuildSkillTree(root: string, inv: GuildInventoryV1, dest: string,
   for (const s of inv.scripts) {
     resources.copy("scripts", s, path.join(dest, s.source_path));
   }
-  copyModuleRuntime(root, dest);
   copyScriptRuntime(root, dest);
   copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
   copyCompiledRuntime(root, dest);
   copyTemplates(root, dest);
   copyStandaloneHookEntrypoints(root, dest);
+  copyModuleRuntime(root, dest);
 }
 
 /** Emit the universal `.agents` package: AGENTS.md + skill tree + CLI + launcher. */
@@ -1312,7 +1394,7 @@ function main(): number {
   try {
     result = buildHostPackages(parsed);
   } catch (err) {
-    process.stderr.write("build:hosts: " + String(err instanceof Error ? err.message : err) + "\n");
+    process.stderr.write("build:hosts: " + String(err instanceof Error ? (err.stack ?? err.message) : err) + "\n");
     return 1;
   }
 

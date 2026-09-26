@@ -1,1 +1,1 @@
-export * from "../../src/modules/distribution/workflows/release-distribution-contract";
+export * from "../../src/domains/distribution/release-distribution-contract";

@@ -6,9 +6,15 @@
  * reorg can move internals without breaking existing script paths.
  */
 
-import { runPromoteUpstreamCli } from "../../src/modules/workspace/workflows/promote-upstream";
+import { runPromoteUpstreamCli } from "../../src/domains/state";
 
-export * from "../../src/modules/workspace/workflows/promote-upstream";
+export {
+  validateRunId,
+  collectUpstreamCandidates,
+  runPromoteUpstreamCli,
+  type UpstreamCandidate,
+  type CollectOptions,
+} from "../../src/domains/state";
 
 if (require.main === module) {
   runPromoteUpstreamCli();

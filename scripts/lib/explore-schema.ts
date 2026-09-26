@@ -5,4 +5,4 @@
  * internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/modules/evals/workflows/explore-schema";
+export * from "../../src/domains/evolve/explore-schema";

@@ -29,7 +29,7 @@ import {
   buildTaskCell,
   writeTaskCell,
   type TaskCellDispatchInput,
-} from "../../src/modules/dispatch/workflows/task-assignment-v2";
+} from "../../src/domains/dispatch/task-assignment-v2";
 import {
   buildAcceptance,
   buildRejection,
@@ -49,7 +49,7 @@ import {
   writeAcceptanceRecord,
   writeValidationRecord,
   type TaskCellInstanceIds,
-} from "../../src/modules/dispatch/workflows/task-cell-acceptance";
+} from "../../src/domains/dispatch/task-cell-acceptance";
 import {
   ACCEPTANCE_AUTHORITIES,
   taskCellPaths,
@@ -65,8 +65,8 @@ function tmpCwd(): string {
 
 // T3 F3: the v2 descriptor writers fail closed without the run's minted binding.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const runBindingMod = require("../../src/modules/lifecycle/workflows/run-binding") as
-  typeof import("../../src/modules/lifecycle/workflows/run-binding");
+const runBindingMod = require("../../src/domains/lifecycle/run-binding") as
+  typeof import("../../src/domains/lifecycle/run-binding");
 
 /** Mint-or-load the run's binding under this test root. */
 function bindFor(cwd: string, runId: string): { binding_ref: string } {
@@ -177,7 +177,7 @@ describe("runDeterministicFloor", () => {
     fs.mkdirSync(path.dirname(path.join(cwd, receiptPath)), { recursive: true });
     fs.writeFileSync(path.join(cwd, receiptPath), canonicalFrozenReceipt(assignment));
 
-    const acceptanceModule = require("../../src/modules/dispatch/workflows/task-cell-acceptance") as {
+    const acceptanceModule = require("../../src/domains/dispatch/task-cell-acceptance") as {
       publishSubmittedHandoffPointer?: (input: {
         cwd: string;
         assignment: TaskAssignmentV2;
@@ -222,7 +222,7 @@ describe("runDeterministicFloor", () => {
     fs.writeFileSync(path.join(outside, receiptName), canonicalFrozenReceipt(assignment));
     fs.symlinkSync(outside, handoffsDir, "dir");
 
-    const acceptanceModule = require("../../src/modules/dispatch/workflows/task-cell-acceptance") as {
+    const acceptanceModule = require("../../src/domains/dispatch/task-cell-acceptance") as {
       publishSubmittedHandoffPointer: (input: {
         cwd: string;
         assignment: TaskAssignmentV2;
@@ -256,7 +256,7 @@ describe("runDeterministicFloor", () => {
     fs.mkdirSync(path.dirname(path.join(cwd, assignment.handoff_path)), { recursive: true });
     fs.writeFileSync(path.join(cwd, assignment.handoff_path), JSON.stringify(forged, null, 2) + "\n");
 
-    const acceptanceModule = require("../../src/modules/dispatch/workflows/task-cell-acceptance") as {
+    const acceptanceModule = require("../../src/domains/dispatch/task-cell-acceptance") as {
       publishSubmittedHandoffPointer: (input: {
         cwd: string;
         assignment: TaskAssignmentV2;

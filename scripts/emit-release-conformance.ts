@@ -83,8 +83,8 @@ import {
   RELEASE_CONFORMANCE_SCHEMA,
   RELEASE_PROMOTION_SCHEMA,
 } from "./check-channel-integrity";
-import { NEUTRAL_SCENARIO_SUITE_ID } from "../src/modules/lifecycle/workflows/neutral-conformance-core";
-import { evaluateTransportedReleaseConformance } from "../src/modules/distribution/workflows/release-conformance-integration";
+import { NEUTRAL_SCENARIO_SUITE_ID } from "../src/domains/lifecycle";
+import { evaluateTransportedReleaseConformance } from "../src/domains/distribution";
 
 export { RELEASE_CONFORMANCE_SCHEMA, RELEASE_PROMOTION_SCHEMA };
 
@@ -315,7 +315,7 @@ export function emitReleaseConformance(opts: EmitOptions): EmitOutcome {
     },
     scenario_coverage: {
       evaluator:
-        "evaluateTransportedReleaseConformance (src/modules/distribution/workflows/release-conformance-integration.ts, " +
+        "evaluateTransportedReleaseConformance (src/domains/distribution/release-conformance-integration.ts, " +
         "A21-X full-suite integration; six re-derived owner packets re-joined by assembleNeutralConformanceEvidence, " +
         "decision by evaluateNeutralConformanceDecision)",
       evaluated_scenario_ids: [...FROZEN_SCENARIO_CONTRACT_IDS],

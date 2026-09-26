@@ -53,7 +53,7 @@ Emitted when `class == release`. Supplies the D8 join fields (see
 The 5 runbook classes + their default autonomy posture + routing target. The
 class→producer map is the same source that drives each runbook's producer; it fills
 the **`null` ops producer** in the station composer's `ops` `advisory_panel` (SoT:
-`src/modules/teams/workflows/station-composer.ts` `STATION_POLICY.ops.advisory_panel`).
+`src/domains/teams/station-composer.ts` `STATION_POLICY.ops.advisory_panel`).
 
 | Class | Default posture | Producer | Routes to |
 |---|---|---|---|
@@ -125,7 +125,7 @@ automation `[v2.x]` — the ops phase supplies the **contract join only**, no
 automation task (DH-2 / GR-7). **No cloud-build task** (GR-7).
 
 **Code source of truth for the docs-reconciled close criterion:**
-`src/modules/initiatives/workflows/initiative-workitems.ts` (thin re-export shim
+`src/domains/lifecycle/initiative-workitems.ts` (thin re-export shim
 `scripts/lib/initiative-workitems.ts`), `populateReleaseDocsWorkItems` — the
 auto-populated D8 work items carry the acceptance criteria, including
 `docs/v2 design set reconciled in the same rollout (or 'docs/v2: n/a <reason>'

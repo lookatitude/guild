@@ -1,22 +1,22 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
-import type { CapabilityResolverMode } from "../../../src/modules/config";
+import type { CapabilityResolverMode } from "../../../src/domains/config";
 import {
   appendReceipt,
   compareCheckpointToJournal,
   makeReceiptInput,
   readCheckpointState,
   scanReceiptJournal,
-} from "../../../src/modules/telemetry";
-import { compatibilityUsageForRead, readCatalogEntry, type CompatibilityCatalog, type CompatibilityCatalogEntry } from "../../../src/modules/capability/workflows/compatibility-catalog";
-import { parseCompatibilityUsageV1, rollupCompatibilityUsage, type CompatibilityUsageRollup } from "../../../src/modules/capability/workflows/compatibility-usage";
-import type { CapabilityResolutionIntent } from "../../../src/modules/capability/workflows/resolver-mode";
-import { checkContained, isRefused, writeContainedFile } from "../../../src/modules/kernel/workflows/path-containment";
+} from "../../../src/domains/telemetry";
+import { compatibilityUsageForRead, readCatalogEntry, type CompatibilityCatalog, type CompatibilityCatalogEntry } from "../../../src/domains/config/compatibility-catalog";
+import { parseCompatibilityUsageV1, rollupCompatibilityUsage, type CompatibilityUsageRollup } from "../../../src/domains/config/compatibility-usage";
+import type { CapabilityResolutionIntent } from "../../../src/domains/config/resolver-mode";
+import { checkContained, isRefused, writeContainedFile } from "../../../src/domains/kernel/path-containment";
 import {
   assertWritableBinding,
   withRunBindingExclusion,
-} from "../../../src/modules/lifecycle/workflows/run-binding";
+} from "../../../src/domains/lifecycle/run-binding";
 import { normalizeHostId } from "../host-id-namespace";
 import { hashCompatibilityRuntimeProducer, type MigrationRuntimeHost } from "./migration-evidence";
 

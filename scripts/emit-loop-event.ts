@@ -6,9 +6,11 @@
  * internals without breaking existing script paths.
  */
 
-import { runEmitLoopEventCli } from "../src/modules/lifecycle/workflows/emit-loop-event";
+import { runEmitLoopEventCli } from "../src/domains/lifecycle";
 
-export * from "../src/modules/lifecycle/workflows/emit-loop-event";
+export {
+  runEmitLoopEventCli,
+} from "../src/domains/lifecycle";
 
 if (require.main === module) {
   runEmitLoopEventCli();

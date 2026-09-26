@@ -8,8 +8,8 @@ import {
   recordTaskCellUsage,
   summarizeTaskCellTelemetry,
   type TaskCellUsageV1,
-} from "../src/modules/telemetry";
-import { reconcileTaskCellLifecycleTelemetry } from "../src/modules/dispatch";
+} from "../src/domains/telemetry";
+import { reconcileTaskCellLifecycleTelemetry } from "../src/domains/dispatch";
 
 function usage(message: string): never {
   process.stderr.write(`[task-cell-telemetry] ${message}\n`);

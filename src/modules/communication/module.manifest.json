@@ -10,9 +10,6 @@
     "kernel",
     "state"
   ],
-  "resource_projection_entrypoints": [
-    "lib/artifact-bus"
-  ],
   "owns": {
     "hooks": [
       "PostToolUse:comms-format-lint.js",

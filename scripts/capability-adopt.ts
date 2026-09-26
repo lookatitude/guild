@@ -3,7 +3,7 @@
  * scripts/capability-adopt.ts
  *
  * THE ADOPTION MIGRATION COMMAND (gap D6) — the user-facing surface over
- * `src/modules/capability/workflows/adoption-migrate.ts`.
+ * `src/domains/config/adoption-migrate.ts`.
  *
  * Generalizes `roster-resolve.ts migrate-team-roster` from roles-only and
  * script-internal into a four-verb operator command covering roles AND skills:

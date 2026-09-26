@@ -29,7 +29,7 @@ import * as path from "path";
 import { CONFIG_SCHEMA, getFieldSpec, isSecuritySensitiveKey } from "../lib/config-schema";
 import { CONFIG_UI_METADATA } from "../lib/config-ui-metadata";
 import { DEFAULTS } from "../lib/shared/config-defaults";
-import { validateDefaults } from "../../src/modules/config/workflows/config-validation";
+import { validateDefaults } from "../../src/domains/config";
 
 const READ_GUILD_CONFIG = path.resolve(__dirname, "..", "read-guild-config.ts");
 const CONFIG_CMD = path.resolve(__dirname, "..", "config-cmd.ts");
@@ -271,7 +271,7 @@ describe("config-cmd.ts — #93 key on the show/set surfaces", () => {
 });
 
 // ── The FOURTH closed-key set ────────────────────────────────────────────────
-// `src/modules/config/workflows/config-validation.ts` is a validator distinct
+// `src/domains/config/config-validation.ts` is a validator distinct
 // from the three in config-cmd.ts / config-cli.ts / settings-reader.ts, and it is
 // the one `runStartPreflight` calls. Registering the key in the other three but
 // not here made every run start with `validation.ok: false` on an otherwise

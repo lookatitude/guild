@@ -34,8 +34,8 @@ import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-f
 // guild.session_binding.v1 and BLOCKS without one; every pre-minted run tree
 // seeds it through the same file the lifecycle writes.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const __sessionBinding = require("../../src/modules/config/workflows/session-binding") as
-  typeof import("../../src/modules/config/workflows/session-binding");
+const __sessionBinding = require("../../src/domains/config/session-binding") as
+  typeof import("../../src/domains/config/session-binding");
 function __seedSessionBinding(root: string, runId: string): void {
   const runDir = path.join(root, ".guild", "runs", runId);
   const file = __sessionBinding.sessionBindingPath(runDir);
@@ -50,8 +50,8 @@ function __seedSessionBinding(root: string, runId: string): void {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const binding = require("../../src/modules/lifecycle/workflows/run-binding") as
-  typeof import("../../src/modules/lifecycle/workflows/run-binding");
+const binding = require("../../src/domains/lifecycle/run-binding") as
+  typeof import("../../src/domains/lifecycle/run-binding");
 
 const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
 

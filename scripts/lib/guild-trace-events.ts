@@ -5,7 +5,7 @@
  * internals without breaking imports from scripts/lib/guild-trace-events.
  */
 
-import * as traceEventsImpl from "../../src/modules/telemetry/workflows/guild-trace-events";
+import * as traceEventsImpl from "../../src/domains/telemetry/guild-trace-events";
 
 export const GUILD_TRACE_SCHEMA_VERSIONS = traceEventsImpl.GUILD_TRACE_SCHEMA_VERSIONS;
 export const validateDispatchEvent = traceEventsImpl.validateDispatchEvent;
@@ -37,4 +37,4 @@ export type {
   GuildTraceDegradationV1,
   GuildTraceEvent,
   GuildTraceSchemaVersion,
-} from "../../src/modules/telemetry/workflows/guild-trace-events";
+} from "../../src/domains/telemetry/guild-trace-events";

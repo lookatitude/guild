@@ -64,7 +64,7 @@ import * as path from "node:path";
 import {
   canonicalizeRealPath,
   isWithin,
-} from "../../src/modules/kernel/workflows/path-containment";
+} from "../../src/domains/kernel/path-containment";
 
 import { splitFrontmatter } from "./frontmatter";
 
@@ -462,7 +462,7 @@ const LIVE_SURFACE_DIRS = ["skills", ".claude-plugin", "commands"] as const;
 
 /**
  * MIGRATED to the shared path-containment primitive
- * (`src/modules/kernel/workflows/path-containment.ts`).
+ * (`src/domains/kernel/path-containment.ts`).
  *
  * The private `canonicalAbs`/`isUnderOrEqual` pair that used to live here was
  * BYTE-IDENTICAL to the pair in `command-registry.ts` and near-identical to

@@ -90,22 +90,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import {
-  NEUTRAL_ATTESTATION_CHAINS,
-  NEUTRAL_ATTESTATION_CHAIN_LENGTH,
-  NEUTRAL_ATTESTATION_CHECKSUM_CHAINS,
-  NEUTRAL_ATTESTATION_MESSAGE_CHAINS,
-  NEUTRAL_ATTESTATION_SCHEME,
-  NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN,
-  NEUTRAL_ATTESTATION_TREE_HEIGHT,
-  NEUTRAL_ATTESTOR_TRUST_ROOT,
-  neutralAttestorVerificationKey,
-  neutralVerifyAttestationSignature,
-} from "../src/modules/lifecycle/workflows/neutral-conformance-core";
-import {
-  neutralCanonicalJson,
-  neutralSha256Hex,
-} from "../src/modules/lifecycle/workflows/neutral-runtime-contracts";
+import { NEUTRAL_ATTESTATION_CHAINS, NEUTRAL_ATTESTATION_CHAIN_LENGTH, NEUTRAL_ATTESTATION_CHECKSUM_CHAINS, NEUTRAL_ATTESTATION_MESSAGE_CHAINS, NEUTRAL_ATTESTATION_SCHEME, NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN, NEUTRAL_ATTESTATION_TREE_HEIGHT, NEUTRAL_ATTESTOR_TRUST_ROOT, neutralAttestorVerificationKey, neutralVerifyAttestationSignature } from "../src/domains/lifecycle";
+import { neutralCanonicalJson, neutralSha256Hex } from "../src/domains/lifecycle";
 
 // ---------------------------------------------------------------------------
 // Contract surface

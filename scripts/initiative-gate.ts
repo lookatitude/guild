@@ -35,7 +35,7 @@
  *                leg — "verify.md PASS for the contributing runs"). The gate
  *                function's own contract is explicit that this is SUPPLIED
  *                BY THE CALLER ("Pure function; the sub-verb supplies the run
- *                evidence" — src/modules/initiatives/workflows/initiative.ts),
+ *                evidence" — src/domains/lifecycle/initiative.ts),
  *                never re-derived from heuristics here. Defaults to `false`
  *                (fail-closed) when omitted.
  *

@@ -52,7 +52,7 @@ import {
 // property" under ts-jest (no babel-jest hoisting in this project's jest
 // config). hooks/lib/run-trace.ts's own `export *` chain re-reads this same
 // module's exports object on every call, so the spy is visible end-to-end.
-import * as runstartPreflightOriginal from "../../src/modules/lifecycle/workflows/runstart-preflight";
+import * as runstartPreflightOriginal from "../../src/domains/lifecycle/runstart-preflight";
 
 // Shared js-yaml frontmatter parser (OD-3 compliant) — read run.yaml fields by
 // parsing the document instead of hand-rolled line-anchored regex assertions.
@@ -62,7 +62,7 @@ import {
   defaultJournalIo,
   readCheckpointState,
   scanReceiptJournal,
-} from "../../src/modules/telemetry/workflows/receipt-journal";
+} from "../../src/domains/telemetry/receipt-journal";
 
 /** Parse a run.yaml document to its top-level fields (fail-loud null on parse error). */
 const runYamlFields = (text: string) =>

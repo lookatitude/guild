@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { checkContained, isRefused } from "../../src/modules/kernel/workflows/path-containment";
+import { checkContained, isRefused } from "../../src/domains/kernel/path-containment";
 
 export type WorkspaceProjectRootResult =
   | { status: "resolved"; root: string; workspace_root: string }

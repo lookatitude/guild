@@ -29,9 +29,6 @@
     "qa",
     "ops"
   ],
-  "resource_projection_entrypoints": [
-    "lib/run-record-validate"
-  ],
   "owns": {
     "commands": [
       "build",

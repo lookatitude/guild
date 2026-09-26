@@ -17,32 +17,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { createGuildStorage, type GuildStorage } from "../../src/modules/state/workflows/storage-layout";
-import {
-  GLOSSARY_TERM_TOKEN_CAP,
-  matchTerms,
-  parseGlossary,
-  resolveGlossary,
-} from "../../src/modules/knowledge/workflows/glossary";
-import {
-  LANE_BUNDLE_TOKEN_CAP,
-  SPECIALIST_BUNDLE_TOKEN_CAP,
-  assertNoSpecialistBundle,
-  buildLaneBundle,
-  renderSpecialistBundle,
-  validateLaneBundle,
-} from "../../src/modules/knowledge/workflows/lane-bundle";
-import { refreshTouched, knowledgeLinksPath } from "../../src/modules/knowledge/workflows/refresh-touched";
-import {
-  WORKING_SET_TOKEN_CAP,
-  loadWorkingSet,
-} from "../../src/modules/knowledge/workflows/working-set";
-import {
-  refreshWikiIndexPaths,
-  searchWiki,
-  wikiIndexPath,
-} from "../../src/modules/knowledge/workflows/wiki-index";
-import { GLOSSARY_FEEDSTOCK } from "../../src/modules/state/workflows/upgrade-glossary";
+import { createGuildStorage, type GuildStorage } from "../../src/domains/state";
+import { GLOSSARY_TERM_TOKEN_CAP, matchTerms, parseGlossary, resolveGlossary } from "../../src/domains/knowledge";
+import { LANE_BUNDLE_TOKEN_CAP, SPECIALIST_BUNDLE_TOKEN_CAP, assertNoSpecialistBundle, buildLaneBundle, renderSpecialistBundle, validateLaneBundle } from "../../src/domains/knowledge";
+import { refreshTouched, knowledgeLinksPath } from "../../src/domains/knowledge";
+import { WORKING_SET_TOKEN_CAP, loadWorkingSet } from "../../src/domains/knowledge";
+import { refreshWikiIndexPaths, searchWiki, wikiIndexPath } from "../../src/domains/knowledge";
+import { GLOSSARY_FEEDSTOCK } from "../../src/domains/state";
 
 let sandbox: string;
 let repoRoot: string;

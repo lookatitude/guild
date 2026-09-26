@@ -83,7 +83,7 @@ import {
 import {
   checkContained,
   isRefused,
-} from "../../../src/modules/kernel/workflows/path-containment";
+} from "../../../src/domains/kernel/path-containment";
 import { isRealRunDir } from "./candidate-surface";
 import { classifyContextManagerWrite } from "./context-manager-contract";
 

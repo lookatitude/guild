@@ -5,14 +5,14 @@
  * internals without breaking existing imports or `npx tsx scripts/lib/wiki-recall.ts`.
  */
 
-import { runWikiRecallCli } from "../../src/modules/context/workflows/wiki-recall";
+import { runWikiRecallCli } from "../../src/domains/knowledge/wiki-recall";
 
 export type {
   TrustTier,
   WikiHit,
   WikiChunk,
   WikiRecallResult,
-} from "../../src/modules/context/workflows/wiki-recall";
+} from "../../src/domains/knowledge/wiki-recall";
 export {
   classifyTrustTier,
   RECALL_INTEGRITY_DIRECTIVE,
@@ -20,7 +20,7 @@ export {
   normalizeFtsQuery,
   isIdentifierAwareQuery,
   runWikiRecallCli,
-} from "../../src/modules/context/workflows/wiki-recall";
+} from "../../src/domains/knowledge/wiki-recall";
 
 if (typeof module !== "undefined" && require.main === module) {
   runWikiRecallCli();

@@ -3,7 +3,7 @@
  * scripts/models-cmd.ts
  *
  * Stable CLI shim for the public `guild models inspect` command (lane T6b).
- * The implementation lives in src/modules/capability/workflows/models-command.ts;
+ * The implementation lives in src/domains/config/models-command.ts;
  * this file only threads in the ONE dependency capability may not import
  * directly - lifecycle's intake-only run-id candidate (lifecycle depends on
  * capability, so the reverse import would be a module cycle).
@@ -14,7 +14,7 @@
  * rendered output trips the canonical redaction applier.
  */
 
-import { runModelsCommand } from "../src/modules/capability/workflows/models-command";
+import { runModelsCommand } from "../src/domains/config/models-command";
 import { locateCandidateRunId } from "./lib/run-binding";
 
 export function main(argv: string[] = process.argv.slice(2)): number {

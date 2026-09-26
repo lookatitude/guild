@@ -5,7 +5,7 @@
  * Event:   PostToolUse (matcher: Write|Edit)
  * Purpose: G5(b) (v23x-deferred-followups rf-wi-05, origin oir-wi-58) — the
  *          missing writer for run.yaml's `gates:` block. `buildRunManifest`
- *          (src/modules/lifecycle/workflows/run-lifecycle.ts) writes
+ *          (src/domains/lifecycle/run-lifecycle.ts) writes
  *          `gates: {}` once at run start and NOTHING ever updated it.
  *          hooks/lib/reanchor.ts's `readRunYamlFacts`/`deriveNextGate` (the
  *          re-anchor header's next-gate pointer) already READS this map and
@@ -43,7 +43,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { resolveGuildRoot } from "./lib/guild-root.js";
-import { appendGateOutcome } from "../src/modules/lifecycle/workflows/run-lifecycle.js";
+import { appendGateOutcome } from "../src/domains/lifecycle";
 // T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
 import { ensureStorageLayout } from "./lib/ensure-layout.js";
 

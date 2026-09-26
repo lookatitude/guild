@@ -7,15 +7,15 @@
  * scripts/index-migrate.
  */
 
-import { runIndexMigrateCli } from "../src/modules/migrations/workflows/index-migrate";
+import { runIndexMigrateCli } from "../src/domains/state/index-migrate";
 
 export {
   CURRENT_SCHEMA_VERSION,
   runMigrations,
   resolveGuildRoot,
   runIndexMigrateCli,
-} from "../src/modules/migrations/workflows/index-migrate";
-export type { MigrationResult } from "../src/modules/migrations/workflows/index-migrate";
+} from "../src/domains/state/index-migrate";
+export type { MigrationResult } from "../src/domains/state/index-migrate";
 
 if (typeof module !== "undefined" && require.main === module) {
   runIndexMigrateCli();

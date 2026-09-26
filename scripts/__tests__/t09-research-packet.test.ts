@@ -11,17 +11,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { createGuildStorage, type GuildStorage } from "../../src/modules/state/workflows/storage-layout";
-import {
-  MAX_CONCLUSIONS,
-  MAX_QUESTIONS,
-  buildResearchPacket,
-  readResearchPacket,
-  researchScratchDir,
-  storeResearchSource,
-  writeResearchPacket,
-} from "../../src/modules/knowledge/workflows/research-packet";
-import { loadClassGraph } from "../../src/modules/lifecycle/workflows/workflow-graph-load";
+import { createGuildStorage, type GuildStorage } from "../../src/domains/state";
+import { MAX_CONCLUSIONS, MAX_QUESTIONS, buildResearchPacket, readResearchPacket, researchScratchDir, storeResearchSource, writeResearchPacket } from "../../src/domains/knowledge";
+import { loadClassGraph } from "../../src/domains/lifecycle";
 
 const REPO = path.resolve(__dirname, "..", "..");
 const RUN_ID = "run-research";

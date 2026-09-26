@@ -1,13 +1,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { CapabilityResolverMode } from "../../../src/modules/config";
-import { writeContainedFile } from "../../../src/modules/kernel/workflows/path-containment";
+import type { CapabilityResolverMode } from "../../../src/domains/config";
+import { writeContainedFile } from "../../../src/domains/kernel/path-containment";
 import {
   planModeTransition,
   resolveCapability,
   resolverModeRank,
   type CapabilityResolutionRequest,
-} from "../../../src/modules/capability/workflows/resolver-mode";
+} from "../../../src/domains/config/resolver-mode";
 
 export const FEATURE_GATE_REGISTRY_SCHEMA = "guild.capability_feature_gates.v1" as const;
 export const SHADOW_COMPARISON_SCHEMA = "guild.capability_shadow_comparison.v1" as const;

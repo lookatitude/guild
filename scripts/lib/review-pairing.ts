@@ -4,4 +4,4 @@
  * Review pairing lives in src/modules/review so the reorg can move internals
  * without breaking existing imports from scripts/lib/*.
  */
-export * from "../../src/modules/review/workflows/review-pairing";
+export * from "../../src/domains/review/review-pairing";

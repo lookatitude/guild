@@ -44,20 +44,20 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import { composeProposal, writeProposal } from "../../src/modules/teams/workflows/team-proposal";
-import { recordDecision, writeDecision } from "../../src/modules/teams/workflows/team-decision";
+import { composeProposal, writeProposal } from "../../src/domains/teams/team-proposal";
+import { recordDecision, writeDecision } from "../../src/domains/teams/team-decision";
 // §5/D6: the v2 task-cell channel is hard fail-closed without the run's minted
 // binding, so the fixture mints one — otherwise the POSITIVE CONTROL would fail
 // for a reason unrelated to approval and the anti-vacuity leg would be useless.
-import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { mintRunBinding } from "../../src/domains/lifecycle/run-binding";
 import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
 
 // T06/T08: the launcher copies assignment host/model ids from the run's
 // guild.session_binding.v1 and BLOCKS without one; every pre-minted run tree
 // seeds it through the same file the lifecycle writes.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const __sessionBinding = require("../../src/modules/config/workflows/session-binding") as
-  typeof import("../../src/modules/config/workflows/session-binding");
+const __sessionBinding = require("../../src/domains/config/session-binding") as
+  typeof import("../../src/domains/config/session-binding");
 function __seedSessionBinding(root: string, runId: string): void {
   const runDir = path.join(root, ".guild", "runs", runId);
   const file = __sessionBinding.sessionBindingPath(runDir);

@@ -5,4 +5,4 @@
  * src/modules/lifecycle so the reorg can move internals without breaking
  * imports from scripts/lib/*.
  */
-export * from "../../src/modules/lifecycle/workflows/run-binding";
+export * from "../../src/domains/lifecycle/run-binding";

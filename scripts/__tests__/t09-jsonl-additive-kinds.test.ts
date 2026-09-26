@@ -13,7 +13,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { EVENT_TYPES as SCHEMA_EVENT_TYPES } from "../../src/modules/lifecycle/workflows/event-log-schema";
+import { EVENT_TYPES as SCHEMA_EVENT_TYPES } from "../../src/domains/lifecycle";
 import { EVENT_TYPES as VALIDATOR_EVENT_TYPES, validateEvent } from "../v1.4-log-validator";
 
 const TS = "2026-09-16T12:00:00.000Z";
@@ -89,7 +89,7 @@ describe("the four additive kinds are additive (KTD38 / R53)", () => {
 describe("refreshTouched does not reach Stage-2 (R62 / R75)", () => {
   it("names neither the extractor nor its wrapper", () => {
     const body = fs.readFileSync(
-      path.resolve(__dirname, "..", "..", "src/modules/knowledge/workflows/refresh-touched.ts"),
+      path.resolve(__dirname, "..", "..", "src/domains/knowledge/refresh-touched.ts"),
       "utf8",
     );
     for (const forbidden of ["extract-structural", "analyze-structural", "knowledge-graph.json", "knowledge-recall.json", "validate-graph"]) {

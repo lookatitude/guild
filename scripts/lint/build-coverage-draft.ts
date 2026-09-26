@@ -16,6 +16,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as ts from "typescript";
 
+import {
+  DOMAIN_IDS,
+  MODULE_TO_DOMAIN as SHIPPED_MODULE_TO_DOMAIN,
+  checkDomainBijection,
+  domainTree,
+} from "../../src/domains/distribution";
+
 const ROOT = path.resolve(
   typeof __dirname !== "undefined" ? __dirname : path.join(process.cwd(), "lint"),
   "..", "..",
@@ -323,20 +330,12 @@ const SKILL_FOLDED: Record<string, string> = {
   "core/principles": "assembler:using-guild §Operating principles",
 };
 
-/** Live module -> its domain home (KTD36 fold table). */
-const MODULE_TO_DOMAIN: Record<string, string> = {
-  kernel: "kernel", state: "state", security: "security", config: "config",
-  lifecycle: "lifecycle", knowledge: "knowledge", teams: "teams", dispatch: "dispatch",
-  review: "review", telemetry: "telemetry", evolution: "evolve", distribution: "distribution",
-  migrations: "state", capability: "config", context: "knowledge", learning: "knowledge",
-  initiatives: "lifecycle", operations: "lifecycle", loops: "lifecycle", intake: "lifecycle",
-  quality: "review", evals: "evolve", communication: "dispatch", prompting: "config",
-  workspace: "state", specialists: "teams", templates: "teams", "docs-sync": "distribution",
-  documents: "lifecycle", "host-runtime": "adapters",
-  // Judgment call (not in the source fold table): the status dashboard launcher is
-  // a producer/launcher surface (KTD66) whose functions belong with run telemetry.
-  dashboard: "telemetry",
-};
+/**
+ * Live module -> its domain home. The map is NOT restated here: it is the shipped
+ * `MODULE_TO_DOMAIN` from the distribution domain (src/domains/distribution/domain-fold.ts),
+ * so the fold has exactly one source and the coverage file records it as data (KTD36).
+ */
+const MODULE_TO_DOMAIN: Record<string, string> = Object.fromEntries(SHIPPED_MODULE_TO_DOMAIN);
 
 // ------------------------------------------------------------------ helpers
 function read(p: string): string {
@@ -503,6 +502,36 @@ function skills(): Entry[] {
   });
 }
 
+/**
+ * A module shim republishes its exact pre-fold surface, aliasing any name the
+ * fold had to disambiguate. This is module-side name -> domain-side name, so a
+ * coverage row points at the symbol the DOMAIN index actually exports.
+ */
+function shimAliases(moduleId: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const file = path.join(ROOT, "src/modules", moduleId, "index.ts");
+  if (!fs.existsSync(file)) return out;
+  const sf = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  for (const st of sf.statements) {
+    if (!ts.isExportDeclaration(st) || !st.moduleSpecifier) continue;
+    if (!st.exportClause || !ts.isNamedExports(st.exportClause)) continue;
+    for (const el of st.exportClause.elements) {
+      out.set(el.name.text, (el.propertyName ?? el.name).text);
+    }
+  }
+  return out;
+}
+
+/** Public surface of every domain index, plus the adapter tree (not a domain). */
+function domainSurfaces(): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  for (const id of [...DOMAIN_IDS, "adapters"]) {
+    const idx = path.join(ROOT, domainTree(id), "index.ts");
+    out.set(id, new Set(collectExports(idx, new Set()).keys()));
+  }
+  return out;
+}
+
 function moduleExports(): Entry[] {
   const base = path.join(ROOT, "src/modules");
   const out: Entry[] = [];
@@ -522,12 +551,13 @@ function moduleExports(): Entry[] {
     // TypeScript compiler API, recursively, so the row is a public export and not a
     // file path. Symbols keep the file they come from, which is what U3 has to move.
     const symbols = collectExports(idx, new Set());
+    const aliases = shimAliases(m);
     for (const [name, from] of [...symbols.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
       const rel = path.relative(ROOT, from).replace(/\\/g, "/");
       out.push({
         id: `module:${m}#${name}`,
         kind: "module_export",
-        target: `domain:${domain}#${name}`,
+        target: `domain:${domain}#${aliases.get(name) ?? name}`,
         disposition: "domain-fold",
         note: rel === `src/modules/${m}/index.ts` ? undefined : `declared in ${rel}`,
       });
@@ -594,6 +624,27 @@ function main(argv: string[]): number {
   };
   const entries = [...commands(), ...skills(), ...moduleExports(), ...evals()];
   const unmapped = entries.filter((e) => !e.target || !e.target.trim());
+
+  // ---- KTD36 bijection over the live domain public APIs ---------------------
+  // Every module_export row names a symbol its domain index actually exports,
+  // and every domain export is claimed by at least one row. An orphan on either
+  // side is a hole in the fold, not a formatting nit.
+  const surfaces = domainSurfaces();
+  const foldedInto = new Map<string, string[]>();
+  for (const [moduleId, domain] of Object.entries(MODULE_TO_DOMAIN)) {
+    if (!isDir(path.join(ROOT, "src/modules", moduleId))) continue;
+    let list = foldedInto.get(domain);
+    if (!list) foldedInto.set(domain, (list = []));
+    list.push(moduleId);
+  }
+  const bijection = checkDomainBijection(
+    surfaces,
+    foldedInto,
+    entries.filter((e) => e.kind === "module_export").map((e) => [e.id, e.target] as const),
+  );
+  const domainRows = bijection.rows;
+  const missing = bijection.missing;
+  const orphanCount = bijection.orphans;
   const counts = entries.reduce<Record<string, number>>((a, e) => {
     a[e.kind] = (a[e.kind] ?? 0) + 1; return a;
   }, {});
@@ -613,6 +664,19 @@ function main(argv: string[]): number {
   for (const k of ["command", "skill", "module_export", "eval"]) lines.push(`  ${k}: ${counts[k] ?? 0}`);
   lines.push(`  total: ${entries.length}`);
   lines.push(`  unmapped: ${unmapped.length}`);
+  lines.push(`  domain_orphans: ${orphanCount}`);
+  lines.push(`  domain_targets_missing: ${missing.length}`);
+  lines.push("# The KTD36 fold, as data: which modules folded into each domain and whether");
+  lines.push("# the domain's public API is exactly what those modules published. `orphans` is");
+  lines.push("# a domain export no module row claims; a non-empty list is a failed review.");
+  lines.push("domains:");
+  for (const d of domainRows) {
+    lines.push(`  - id: ${yamlStr(d.id)}`);
+    lines.push(`    tree: ${yamlStr(d.tree)}`);
+    lines.push(`    modules: [${d.modules.map(yamlStr).join(", ")}]`);
+    lines.push(`    exports: ${d.exports}`);
+    lines.push(`    orphans: [${d.orphans.map(yamlStr).join(", ")}]`);
+  }
   lines.push("entries:");
   for (const e of entries) {
     lines.push(`  - id: ${yamlStr(e.id)}`);
@@ -623,16 +687,26 @@ function main(argv: string[]): number {
   }
   const body = `${lines.join("\n")}\n`;
 
+  const bijective = unmapped.length === 0 && orphanCount === 0 && missing.length === 0;
   if (argv.includes("--check")) {
-    console.log(`coverage draft: ${entries.length} ids · ${unmapped.length} unmapped`);
-    return unmapped.length === 0 ? 0 : 1;
+    console.log(
+      `coverage draft: ${entries.length} ids · ${unmapped.length} unmapped · ` +
+        `${orphanCount} domain orphans · ${missing.length} missing domain targets`,
+    );
+    for (const m of missing.slice(0, 20)) console.error(`  missing domain export: ${m}`);
+    return bijective ? 0 : 1;
   }
   const out = path.resolve(opt("out") ?? path.join(ROOT, ".guild/evolve/coverage-draft.yaml"));
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, body);
   console.log(`wrote ${entries.length} ids (${unmapped.length} unmapped) to ${out}`);
   for (const k of Object.keys(counts).sort()) console.log(`  ${k}: ${counts[k]}`);
-  return unmapped.length === 0 ? 0 : 1;
+  console.log(`  domain_orphans: ${orphanCount}`);
+  for (const m of missing.slice(0, 20)) console.error(`  missing domain export: ${m}`);
+  for (const d of domainRows) {
+    if (d.orphans.length) console.error(`  orphan exports in ${d.id}: ${d.orphans.slice(0, 10).join(", ")}`);
+  }
+  return bijective ? 0 : 1;
 }
 
 process.exit(main(process.argv.slice(2)));

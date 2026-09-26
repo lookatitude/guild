@@ -1,9 +1,99 @@
-export const MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1" as const;
+/**
+ * Transitional re-export shim (T12 fold, KTD36).
+ *
+ * The implementation moved once into src/domains/config/. This file republishes the exact
+ * pre-fold public surface of src/modules/config so existing importers keep working;
+ * T16 deletes it. New code imports src/domains/config directly.
+ */
 
-export * from "./workflows/config-defaults";
-export * from "./workflows/policy-keys";
-export * from "./workflows/policy-resolver";
-export * from "./workflows/session-binding";
-export * from "./workflows/config-validation";
-export * from "./workflows/settings-resolver";
-export * from "./workflows/tier-model";
+export {
+  CAPABILITY_AUTO_CREATE_POLICIES,
+  CAPABILITY_RESOLVER_MODES,
+  CAPABILITY_RESOLVER_MODE_AFTER_F7,
+  CAPABILITY_RESOLVER_MODE_DEFAULT,
+  CAPABILITY_ROLE_SLUG_MAX_LEN,
+  CAPABILITY_SUGGESTION_BUDGET_MAX,
+  CAPABILITY_SUGGESTION_BUDGET_MIN,
+  DEFAULTS,
+  DEFAULT_ESCALATION_MARKERS,
+  HOST_FAMILY_TOKENS,
+  LOG_ROTATION_THRESHOLD_BYTES,
+  MODEL_FAMILY_TOKENS,
+  MODULE_PUBLIC_API_VERSION,
+  NON_INHERITABLE_KEYS,
+  POLICY_FILES,
+  POLICY_KEYS,
+  POLICY_KEY_ALIASES,
+  POLICY_OVERLAY_FILE,
+  PolicyRejectedError,
+  RESOLVER_TIER1_KEYS,
+  SESSION_BINDING_FILE,
+  SIDECAR_MAX_BYTES,
+  UNKNOWN_HOST_FAMILY,
+  UNKNOWN_MODEL_FAMILY,
+  assertPolicyWrite,
+  bindSession,
+  bindSessionForRun,
+  canonicalPolicyKey,
+  deepMerge,
+  detectSession,
+  findHostIdentity,
+  findModelNameInText,
+  getByPath,
+  initiativeIsWorkspaceScoped,
+  isCanonicalRoleSlug,
+  isPlainObject,
+  isPolicyKey,
+  isUnknownHost,
+  isValidCapabilityValue,
+  policyDefaults,
+  policyFilesFor,
+  policyKeySpec,
+  policyOverlayFile,
+  policyValue,
+  readSessionBinding,
+  resolvePolicy,
+  resolveSettings,
+  resolveTierModel,
+  rigorProfile,
+  roleSlugDedupKey,
+  scanHostIdentity,
+  sessionBindingPath,
+  setByPath,
+  validateCrossHostBlock,
+  validateDefaults,
+  validateMcp,
+  validateModels,
+  validatePolicyValue,
+  validateSecretsPolicy,
+  validateSecurity,
+  writePolicyOverlay,
+} from "../../domains/config";
+export type {
+  BindForRunOptions,
+  BindFsSeam,
+  BindResult,
+  BindSessionOptions,
+  CapabilityAutoCreatePolicy,
+  CapabilityResolverMode,
+  DetectedSession,
+  EvidenceGrade,
+  HostIdentityHit,
+  HostIdentityKind,
+  LegacyAliasRecord,
+  PolicyKeySpec,
+  PolicyKeyType,
+  PolicySource,
+  PromptComposeRef,
+  ResolveOptions,
+  ResolvePolicyOptions,
+  ResolveResult,
+  ResolvedConfig,
+  ResolvedPolicy,
+  ResolvedTierModel,
+  RigorProfile,
+  SessionBinding,
+  Source,
+  TierHostValue,
+  TierModelSpec,
+} from "../../domains/config";
