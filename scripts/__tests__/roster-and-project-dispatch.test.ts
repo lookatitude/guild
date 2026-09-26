@@ -15,6 +15,7 @@
  *    wins over the plugin tree (DH-3 read path).
  */
 
+import * as crypto from "crypto";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -888,13 +889,19 @@ describe("evolve-loop findLiveSkillDir — project instance wins (DH-3)", () => 
       { encoding: "utf8", timeout: 120_000 }
     );
     expect(result.status).toBe(0);
-    const snap = path.join(tmpDir, ".guild", "skill-versions", "myskill", "v1", "SKILL.md");
-    expect(fs.readFileSync(snap, "utf8")).toContain("PROJECT-INSTANCE");
+    // KTD48: no version-snapshot tree; the pre-edit record is the baseline hash of
+    // the PROJECT instance (the inverse span lands in compact history at apply time).
+    expect(fs.existsSync(path.join(tmpDir, ".guild", "skill-versions"))).toBe(false);
     const pipeline = fs.readFileSync(
       path.join(tmpDir, ".guild", "evolve", "r1", "pipeline.md"),
       "utf8"
     );
     expect(pipeline).toContain(".guild/skills/myskill");
+    const projectHash = crypto
+      .createHash("sha256")
+      .update(fs.readFileSync(path.join(projSkill, "SKILL.md")))
+      .digest("hex");
+    expect(pipeline).toContain(`baseline_sha256: ${projectHash}`);
   });
 
   it("falls back to the plugin tree (all six tiers) when no project instance exists", () => {
@@ -909,7 +916,15 @@ describe("evolve-loop findLiveSkillDir — project instance wins (DH-3)", () => 
       { encoding: "utf8", timeout: 120_000 }
     );
     expect(result.status).toBe(0);
-    const snap = path.join(tmpDir, ".guild", "skill-versions", "qskill", "v1", "SKILL.md");
-    expect(fs.readFileSync(snap, "utf8")).toContain("TIER");
+    expect(fs.existsSync(path.join(tmpDir, ".guild", "skill-versions"))).toBe(false);
+    const pipeline = fs.readFileSync(
+      path.join(tmpDir, ".guild", "evolve", "r1", "pipeline.md"),
+      "utf8"
+    );
+    const tierHash = crypto
+      .createHash("sha256")
+      .update(fs.readFileSync(path.join(tierSkill, "SKILL.md")))
+      .digest("hex");
+    expect(pipeline).toContain(`baseline_sha256: ${tierHash}`);
   });
 });

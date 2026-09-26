@@ -196,8 +196,8 @@
     {
       "id": "maintain",
       "name": "maintain",
-      "description": "Self-heal + RSI — sub-verbs evolve | rollback | audit | fix | gc | wiki revert. ONE assembler: every sub-verb dispatches guild:evolve, which routes the token to its own chapter (`guild:evolve §Sub-verbs`). Nothing auto-promotes: the promotion gate is always respected.",
-      "argument_hint": "<evolve <id> [--auto] | rollback <skill> [n] | audit | fix [run-id|symptom] | gc | wiki revert>",
+      "description": "Self-heal + RSI — sub-verbs evolve | rollback | audit | fix | gc | wiki revert. ONE assembler: every sub-verb dispatches guild:evolve, which routes the token to its own chapter (`guild:evolve §Sub-verbs`). One gate, two homes: project targets write this repo's .guild/, machinery targets write a candidate a human commits.",
+      "argument_hint": "<evolve <id> [--target=<type>] [--auto] | rollback <skill> [n] | audit | fix [run-id|symptom] | gc | wiki revert>",
       "allowed_tools": [
         "Read",
         "Write",
@@ -209,7 +209,7 @@
         "Skill",
         "AskUserQuestion"
       ],
-      "body": "\n# /guild:maintain — self-maintenance\n\nOne entry, one assembler. `$ARGUMENTS` is forwarded VERBATIM — the sub-verb token is\nthe assembler's to read, never re-inserted here. An unknown sub-verb prints usage.\n\n## Run recording\n\n```bash\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js\" start --command=/guild:maintain --cwd \"$(pwd)\"\n```\n\n## Sub-verbs (routed by `guild:evolve §Sub-verbs`)\n\n| Token | Chapter the assembler loads |\n|---|---|\n| `evolve <id> [--auto]` | the evolve pipeline in the assembler body |\n| `rollback <skill> [n]` | `references/rollback-skill.md` — non-destructive revert |\n| `audit` | `references/audit.md` — static script + boundary audit |\n| `fix [run-id\\|symptom]` | `../diagnose/references/systematic-debug.md` |\n| `wiki revert` | `references/wiki-revert.md` — the harvest-journal inverse |\n| `gc` | durable-state sweep + scratch janitor (storage domain, U-STOR) |\n\n## Dispatch\n\n```\nSkill: guild:evolve\nargs: $ARGUMENTS\n```\n\n`--auto` runs unattended; the promotion gate still decides, and a rejected attempt\nis archived, not deleted. Pipelines, reports and every `.guild/` write live in the\nassembler and the chapter it routes to.\n"
+      "body": "\n# /guild:maintain — self-maintenance\n\nOne entry, one assembler. `$ARGUMENTS` is forwarded VERBATIM — the sub-verb token is\nthe assembler's to read, never re-inserted here. An unknown sub-verb prints usage.\n\n## Run recording\n\n```bash\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js\" start --command=/guild:maintain --cwd \"$(pwd)\"\n```\n\n## Sub-verbs (routed by `guild:evolve §Sub-verbs`)\n\n| Token | Chapter the assembler loads |\n|---|---|\n| `evolve <id> [--target=<type>] [--auto]` | `references/evolve-targets.md` — target enum + the two homes |\n| `rollback <skill> [n]` | `references/rollback-skill.md` — restore the inverse span |\n| `audit` | `references/audit.md` — static script + boundary audit |\n| `fix [run-id\\|symptom]` | `../diagnose/references/systematic-debug.md` |\n| `wiki revert` | `references/wiki-revert.md` — the harvest-journal inverse |\n| `gc` | durable-state sweep + scratch janitor (storage domain, U-STOR) |\n\n## Dispatch\n\n```\nSkill: guild:evolve\nargs: $ARGUMENTS\n```\n\n`--target=<type>` names one of the eleven evolve targets; omitted, the assembler infers\nit. `--auto` runs unattended and is the cheap curator only: it carries `playbook` and\n`skill`, and fails closed with `next_need: operator` on everything else. Machinery\ntargets never write the install tree — they write a candidate a human commits.\n"
     },
     {
       "id": "migrate",

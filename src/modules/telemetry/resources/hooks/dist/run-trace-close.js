@@ -3979,6 +3979,28 @@ var init_path_containment = __esm({
   }
 });
 
+// src/modules/kernel/workflows/runtime-tree-guard.ts
+var RUNTIME_SUBTREE_SEGMENTS;
+var init_runtime_tree_guard = __esm({
+  "src/modules/kernel/workflows/runtime-tree-guard.ts"() {
+    init_path_containment();
+    init_sealed_collections();
+    RUNTIME_SUBTREE_SEGMENTS = sealSet(
+      [
+        "skills",
+        "agents",
+        "commands",
+        "hooks",
+        ".claude-plugin",
+        "dist",
+        "src",
+        "templates"
+      ],
+      "RUNTIME_SUBTREE_SEGMENTS"
+    );
+  }
+});
+
 // src/modules/kernel/workflows/tier-bus.ts
 var BUS_TIERS, LEAD_ROLE_IDS, TIER_BUS_CONTRACT;
 var init_tier_bus = __esm({
@@ -4003,6 +4025,7 @@ var init_kernel = __esm({
     init_identifier_tokenize();
     init_sealed_collections();
     init_path_containment();
+    init_runtime_tree_guard();
     init_tier_bus();
   }
 });
@@ -17423,6 +17446,16 @@ var init_storage_artifact_registry = __esm({
         retention: { kind: "ttl", ttl_hours: 24 * 30 },
         cleanupOwner: "cache-gc",
         description: "<state>/roots/<root-id>/journal/** \u2014 the layout-upgrade journal, deliberately OUTSIDE .guild (KTD23; T07 writes it)."
+      },
+      {
+        id: "evolve-compact-history",
+        storageClass: "runtime",
+        scope: "local",
+        shareable: false,
+        rebuildable: false,
+        retention: { kind: "ttl", ttl_hours: 24 * 90 },
+        cleanupOwner: "cache-gc",
+        description: "<state>/roots/<root-id>/evolve-history/<key>.json \u2014 guild.evolve_history.v1: the inverse span + before/after hash of each applied evolve delta. Replaces the retired per-version snapshot tree (KTD48/R60); NOT run-scoped, because rollback must work in a later session."
       },
       {
         id: "run-lease",

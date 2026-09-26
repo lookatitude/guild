@@ -37,7 +37,7 @@ One row per audited script, with the following fields:
 - `allowed_tools` — from frontmatter when present (e.g. the hook has `allowed-tools:` declared), else `n/a`.
 - `network_evidence` — list of matched lines for `fetch(`, `http.request`, `https.request`, `WebFetch`, `WebSearch`, `axios`, `undici`, `node-fetch`, `got`, `curl` (in `.sh`). Each match records the file:line and the surrounding 1-line context. Empty list ⇒ no evidence of egress.
 - `filesystem_write_evidence` — list of matched lines for `writeFile`, `appendFile`, `createWriteStream`, `mkdir`, `rm`, `spawn(`, `exec(`, `execSync`, `>` / `>>` / `tee` in `.sh`. Each match records the file:line + the path argument literal when present.
-- `writes_outside_guild` — sub-list of the above where the path literal is NOT under `.guild/runs/`, `.guild/evolve/`, `.guild/skill-versions/`, `.guild/reflections/`, `.guild/wiki/`, `.guild/team/`, `.guild/audit/`, or a temp dir (`os.tmpdir()`, `/tmp`). Any non-empty value here is a red flag surfaced in the summary.
+- `writes_outside_guild` — sub-list of the above where the path literal is NOT under `.guild/runs/`, `.guild/evolve/`, `.guild/reflections/`, `.guild/wiki/`, `.guild/team/`, `.guild/audit/`, or a temp dir (`os.tmpdir()`, `/tmp`). Any non-empty value here is a red flag surfaced in the summary.
 - `notes` — free-form remarks (e.g. "uses child_process to shell out to git", "reads env var GUILD_TOKEN").
 
 ## Trust boundary (§15.1 #12, §15.2)

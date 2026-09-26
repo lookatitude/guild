@@ -1,7 +1,7 @@
 ---
 name: maintain
-description: "Self-heal + RSI — sub-verbs evolve | rollback | audit | fix | gc | wiki revert. ONE assembler: every sub-verb dispatches guild:evolve, which routes the token to its own chapter (`guild:evolve §Sub-verbs`). Nothing auto-promotes: the promotion gate is always respected."
-argument-hint: "<evolve <id> [--auto] | rollback <skill> [n] | audit | fix [run-id|symptom] | gc | wiki revert>"
+description: "Self-heal + RSI — sub-verbs evolve | rollback | audit | fix | gc | wiki revert. ONE assembler: every sub-verb dispatches guild:evolve, which routes the token to its own chapter (`guild:evolve §Sub-verbs`). One gate, two homes: project targets write this repo's .guild/, machinery targets write a candidate a human commits."
+argument-hint: "<evolve <id> [--target=<type>] [--auto] | rollback <skill> [n] | audit | fix [run-id|symptom] | gc | wiki revert>"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion
 ---
 
@@ -20,8 +20,8 @@ node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/c
 
 | Token | Chapter the assembler loads |
 |---|---|
-| `evolve <id> [--auto]` | the evolve pipeline in the assembler body |
-| `rollback <skill> [n]` | `references/rollback-skill.md` — non-destructive revert |
+| `evolve <id> [--target=<type>] [--auto]` | `references/evolve-targets.md` — target enum + the two homes |
+| `rollback <skill> [n]` | `references/rollback-skill.md` — restore the inverse span |
 | `audit` | `references/audit.md` — static script + boundary audit |
 | `fix [run-id\|symptom]` | `../diagnose/references/systematic-debug.md` |
 | `wiki revert` | `references/wiki-revert.md` — the harvest-journal inverse |
@@ -34,6 +34,7 @@ Skill: guild:evolve
 args: $ARGUMENTS
 ```
 
-`--auto` runs unattended; the promotion gate still decides, and a rejected attempt
-is archived, not deleted. Pipelines, reports and every `.guild/` write live in the
-assembler and the chapter it routes to.
+`--target=<type>` names one of the eleven evolve targets; omitted, the assembler infers
+it. `--auto` runs unattended and is the cheap curator only: it carries `playbook` and
+`skill`, and fails closed with `next_need: operator` on everything else. Machinery
+targets never write the install tree — they write a candidate a human commits.

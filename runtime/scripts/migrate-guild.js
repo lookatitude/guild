@@ -3257,6 +3257,21 @@ var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "destination-moved"
 ]);
 
+// src/modules/kernel/workflows/runtime-tree-guard.ts
+var RUNTIME_SUBTREE_SEGMENTS = sealSet(
+  [
+    "skills",
+    "agents",
+    "commands",
+    "hooks",
+    ".claude-plugin",
+    "dist",
+    "src",
+    "templates"
+  ],
+  "RUNTIME_SUBTREE_SEGMENTS"
+);
+
 // src/modules/kernel/workflows/tier-bus.ts
 var BUS_TIERS = frozenList(["T0", "T1", "T2"]);
 var LEAD_ROLE_IDS = frozenList(["team-lead", "lead", "orchestrator"]);

@@ -9,7 +9,8 @@
  *
  *   - `scripts/lib/command-registry.ts`         (`canonicalAbs` + `isUnderOrEqual`)
  *   - `scripts/lib/skill-source-transform.ts`   (BYTE-IDENTICAL copy of both)
- *   - `scripts/instantiate-template.ts`         (`resolveRealTarget`, same shape)
+ *   - `scripts/instantiate-template.ts`         (`resolveRealTarget`, same shape — retired by T11:
+ *                                              every verdict is now the kernel `runtime-tree-guard`)
  *   - `scripts/learn/extract-structural.ts`     (`assertContained`, same climb)
  *   - `scripts/lib/roster.ts`                   (the same inline climb, THREE times)
  *   - `scripts/learn/lib/similarity.ts`         (`resolveUnderRoot`, leaf-only)
@@ -109,11 +110,6 @@ export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
     path: "scripts/lib/skill-source-transform.ts",
     status: "adopted",
     note: "The byte-identical twin of command-registry.ts. Two files, one shape, one fix that had to be applied twice.",
-  }),
-  Object.freeze({
-    path: "scripts/instantiate-template.ts",
-    status: "adopted",
-    note: "`resolveRealTarget` was the third copy of the same climb.",
   }),
   Object.freeze({
     path: "scripts/learn/extract-structural.ts",

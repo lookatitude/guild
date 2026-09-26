@@ -1,73 +1,88 @@
 ---
 name: guild-rollback-skill
-description: Rolls back a skill to a previous version from .guild/skill-versions/<skill>/v<N>/. The rollback ITSELF is a snapshot — non-destructive, appends a new vN+1 with "source: rollback-from-vX" metadata. Can walk the stack (rollback N steps at once, default 1). Re-runs the restored version's eval suite after rollback to confirm the older content still passes its own evals against the current repo — flags drift if not. TRIGGER for "roll back guild:<skill> to v3", "revert the last evolve of <skill>", "undo yesterday's tune on brainstorm", "walk guild:<skill> back two steps", "restore guild:<skill> to v<N>". DO NOT TRIGGER for: evolving a skill forward (guild:evolve-skill owns), creating a new specialist (guild:create-specialist), deleting a skill (never supported — rollback-only, no destroy path), auditing scripts (guild:audit), or reviewing a run (guild:review).
-when_to_use: Explicit /guild:rollback <skill> [n] command — rolls back n steps (default 1). Also fires when a recently-promoted edit shows regressions post-promote and the user asks to revert.
+description: Rolls a skill, playbook, profile, or glossary span back by restoring the inverse span recorded in compact history (KTD48). Span-scoped, never a whole-file rewrite — a span that drifted since the delta landed is blocked_confirm, not a silent restore. Walks n entries back, newest first (default 1). Re-runs the restored skill's eval suite to confirm it still passes against the current repo. TRIGGER for "roll back guild:<skill>", "revert the last evolve of <skill>", "undo yesterday's tune on brainstorm", "walk guild:<skill> back two steps". DO NOT TRIGGER for: evolving forward (guild:evolve owns), creating a new specialist (guild:create-specialist), deleting a skill (never supported), auditing scripts (guild:audit), reverting a harvest wiki write (references/wiki-revert.md), or reviewing a run (guild:review).
+when_to_use: Explicit /guild:maintain rollback <skill> [n] — walks n entries back (default 1). Also fires when a recently-promoted edit shows regressions post-promote and the user asks to revert.
 type: meta
 ---
 
 # guild:rollback-skill
 
-Implements the versioning and rollback policy. Every skill edit is a versioned artifact under `.guild/skill-versions/<skill>/v<N>/`, and this skill walks that stack back. **Rollbacks themselves snapshot as new versions — no destructive operations.** The folder only grows.
+Rollback is the INVERSE SPAN, applied.
 
-This skill is the counterpart to `guild:evolve-skill`: evolve writes forward vN+1 on promote, rollback writes forward vN+1 sourced from an older vX. There is exactly one writer (this skill) and one gate (`guild:evolve-skill`) for skill content; neither ever deletes.
+Every applied `guild.evolve_delta.v1` records, in compact history, the region bytes as
+they stood, the region bytes it wrote, and the sha256 of each. Rolling one back is
+replacing the current region with the recorded inverse. The old design kept a full copy
+of the body in a per-version tree under durable `.guild/` and restored the copy; compact
+history replaced that tree (KTD48), because a whole-file restore also reverts every edit
+that landed after the copy was taken, and nobody asked for those to go.
+
+Compact history lives in the runtime storage class through `GuildStorage`, off the repo.
+There is no version tree, and nothing in this flow creates one.
 
 ## Input
 
-Two fields:
-
-1. **Skill slug** — target skill to revert, e.g. `guild:brainstorm` or `guild:context-assemble`. Must resolve to an existing `skills/<tier>/<slug>/SKILL.md` path AND an existing `.guild/skill-versions/<skill>/` history. If no history exists (the skill has never been evolved), stop — there is nothing to roll back to.
-2. **Steps-back count `n`** — optional integer, default `1`. Walks `n` versions back from the current live skill. If `n` would walk past v1, stop and surface the available depth so the user can re-issue with a valid count. An explicit `/guild:rollback <skill> v<N>` form pins to a specific version instead of walking n steps.
+1. **Key** — the rollback key: a skill slug, a playbook basename, a profile role. It
+   must have compact history; a target that was never evolved has nothing to roll back
+   and the flow stops there.
+2. **Steps-back count `n`** — optional integer, default `1`. Walks `n` entries back,
+   newest first. `n` past the oldest entry stops and surfaces the available depth.
 
 ## Walk the stack
 
-Enumerate `.guild/skill-versions/<skill>/` to list every available `v<N>/` with its metadata: version number, timestamp, source (fresh evolve-promote vs prior rollback), short diff summary against the live skill. Delegates to `scripts/rollback-walker.ts` (owned by tooling-engineer in P6) — this skill supplies the slug + step count, the script returns the enumerated stack plus the resolved target version.
+Delegates to `scripts/rollback-walker.ts`. Without `--apply` it writes nothing:
 
-The walker MUST surface:
+```
+npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/rollback-walker.ts --skill <key> --steps <n> --cwd <repo-root>
+```
 
-- the full version list (v1…vN) so the user can see what else is available,
-- the resolved target version (current − n, or the explicit pinned vX),
-- the short diff between target and live (so the user sees exactly what rollback will restore),
-- any `source:` metadata recording whether a prior vX was itself a rollback (so the user is not blindsided by a rollback-of-a-rollback chain).
+It prints the recorded deltas newest-first (entry id, timestamp, target, span, proposer)
+and a `proposed_rollback:` block naming each span and its `after_hash`. Show that to the
+user before applying anything.
 
-If the resolved target equals the live skill (n = 0, or pinned to current version), stop — nothing to do.
+Re-run with `--apply` to restore. The walk stops at the FIRST blocked step.
 
-## Non-destructive rule
+## Three outcomes per entry
 
-A rollback is a snapshot that **appends** `vN+1` with `source: rollback-from-vX` metadata. The live `skills/<tier>/<slug>/` is replaced with the content of vX, and a new `.guild/skill-versions/<skill>/v<N+1>/` is written containing the restored content plus a `metadata.json` recording:
+| Verdict | What it means | What to do |
+|---|---|---|
+| `restored` | the region still hashed to `after_hash`, so the recorded inverse still describes it | report the path and the span |
+| `blocked_confirm` | the span drifted after the delta landed, or the anchor is gone, or the file is gone | STOP. Surface the question verbatim. Restoring would discard whatever changed |
+| `noop` | no history, or `n` was 0 | nothing to do |
 
-- `source: rollback-from-v<X>`
-- `rolled_back_from_v: <previous live version N>`
-- `rolled_back_at: <timestamp>`
-- `rolled_back_by: <user or command>`
-- `reason: <optional user-supplied note>`
+A blocked step blocks everything older than it too. History is a stack: restoring entry
+k−1 while entry k is still applied leaves the file in a state no entry describes.
 
-Never overwrite history. `.guild/skill-versions/<skill>/` only grows. A rollback-of-a-rollback is fine — it produces yet another vN+1 sourced from the older vX. Per `§11.3`, there is no destructive path through this skill; delete is not a supported operation.
+A restored entry is POPPED from history. The retired design "snapshotted rollbacks as new
+versions", which made the stack grow on undo and made a second rollback re-apply what the
+first one removed.
 
 ## Post-rollback verify
 
-After the rollback write, re-run the skill's own eval suite (`should_trigger` / `should_not_trigger` from the restored `evals.json`) against the current repo. The restored version passed its evals at the time it was promoted, but the repo may have drifted since — an older version might have lost signal because adjacent specialists changed their `DO NOT TRIGGER` clauses, or a referenced wiki path was moved, or a skill the older body delegated to was renamed.
+After a restore, re-run the target's own eval suite (`should_trigger` /
+`should_not_trigger` from the restored `evals.json`) against the current repo. The
+restored text passed its evals when it was live, but the repo may have drifted: an
+adjacent specialist may have changed its `DO NOT TRIGGER` clause, a referenced path may
+have moved, a delegated skill may have been renamed.
 
-Three outcomes, each surfaced in the handoff payload:
+1. **All evals pass** — the rollback is clean.
+2. **Failures that look like repo drift** — surface the failing cases and the drift
+   hypothesis, then offer either (a) keep the rollback and patch the drift in a follow-up
+   evolve, or (b) re-apply the delta forward.
+3. **Failures unrelated to drift** — surface them verbatim. Either the older text was
+   always wrong against these cases (a lesson for the promotion gate) or the evals
+   themselves have drifted and need editing before the rollback is trustworthy.
 
-1. **All evals pass** — rollback is clean. Confirm vN+1 is live.
-2. **Evals fail in a way that suggests repo drift** — surface the failing cases and the drift hypothesis (e.g. "the restored body references `scripts/flip-report.ts` but that path now lives at `scripts/evolve/flip-report.ts`"), and offer the user the choice to (a) keep the rollback and patch the drift in a follow-up evolve, or (b) revert the rollback itself (which creates yet another vN+2 sourced from the pre-rollback live version — still non-destructive).
-3. **Evals fail in a way unrelated to drift** — surface the failures verbatim. The user decides whether the older version was always broken against these cases (in which case the gate should have caught it and this is a lesson for `guild:evolve-skill`) or whether the evals themselves have drifted and need editing before the rollback is trustworthy.
-
-This step is part of the skill, not an optional check. Rollback is not considered complete until the verify outcome is recorded.
+The verify is part of the flow, not an optional check.
 
 ## Handoff
 
-Emit a `handoff` block confirming the rollback and linking to the restored content.
-
 Payload fields:
 
-- `skill` — the slug rolled back.
-- `from_version` — the live version before rollback (vN).
-- `to_version` — the target vX whose content was restored.
-- `new_version` — the vN+1 slot written for the rollback snapshot.
-- `new_version_path` — `.guild/skill-versions/<skill>/v<N+1>/`.
-- `live_skill_path` — `skills/<tier>/<slug>/` (for the user to re-read).
-- `post_rollback_verify` — one of `passed`, `drift_suspected`, `failed_unrelated`, with the failing cases and drift hypothesis on anything but `passed`.
-- `chain_depth` — how many prior rollbacks are in the restored version's lineage (0 for a fresh rollback, ≥1 for a rollback-of-a-rollback), so the user is not surprised by the metadata.
+- `key` — what was rolled back.
+- `requested` / `restored` — steps asked for, spans actually restored.
+- `entries` — per entry: `entry_id`, `path`, `span`, `status`, and `question` on a block.
+- `post_rollback_verify` — `passed`, `drift_suspected`, or `failed_unrelated`, with the
+  failing cases and drift hypothesis on anything but `passed`.
 
-On drift or unrelated failure, the handoff explicitly flags the skill for a follow-up `guild:evolve-skill` run with the restored content as baseline. Rollback does not unilaterally chase drift — it surfaces and hands off.
+On drift or unrelated failure the handoff flags the target for a follow-up evolve with
+the restored text as baseline. Rollback surfaces and hands off; it does not chase drift.

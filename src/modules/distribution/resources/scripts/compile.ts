@@ -100,6 +100,13 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   // inverse (R54/KTD39). Compiled because an operator reaches for it exactly when
   // something went wrong, which is the worst moment to need a working tsx.
   { id: "wiki-revert", entry: "scripts/wiki-revert.ts" },
+  // `/guild:maintain rollback <skill> [n]` — the compact-history walker (KTD48/R60).
+  // Compiled for the same reason as wiki-revert: an operator reaches for rollback
+  // exactly when something went wrong, which is the worst moment to need a working tsx.
+  { id: "rollback-walker", entry: "scripts/rollback-walker.ts" },
+  // `/guild:maintain evolve <id>` step 1 — records the pre-edit baseline hash and the
+  // 10-step pipeline plan. No version tree is written (KTD48).
+  { id: "evolve-loop", entry: "scripts/evolve-loop.ts" },
   // Every script a `commands/*.md` body spawns today with `npx tsx`. Compiling
   // them here is T02's half of the fix; T04 owns swapping the command bodies to
   // `node "$GUILD_PLUGIN_ROOT/runtime/scripts/<id>.js"` (command bodies are that

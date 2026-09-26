@@ -7,9 +7,10 @@
   "description": "Owns reflection, learning checkpoints, shadow mode, skill evolution, rollback, and run-learning extraction.",
   "depends_on": [
     "initiatives",
+    "kernel",
     "knowledge",
-    "state",
-    "security"
+    "security",
+    "state"
   ],
   "owns": {
     "commands": [

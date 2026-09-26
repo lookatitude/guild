@@ -133,6 +133,17 @@ export const STORAGE_ARTIFACT_REGISTRY: readonly ArtifactPolicy[] = deepFreeze([
       "<state>/roots/<root-id>/journal/** — the layout-upgrade journal, deliberately OUTSIDE .guild (KTD23; T07 writes it).",
   },
   {
+    id: "evolve-compact-history",
+    storageClass: "runtime",
+    scope: "local",
+    shareable: false,
+    rebuildable: false,
+    retention: { kind: "ttl", ttl_hours: 24 * 90 },
+    cleanupOwner: "cache-gc",
+    description:
+      "<state>/roots/<root-id>/evolve-history/<key>.json — guild.evolve_history.v1: the inverse span + before/after hash of each applied evolve delta. Replaces the retired per-version snapshot tree (KTD48/R60); NOT run-scoped, because rollback must work in a later session.",
+  },
+  {
     id: "run-lease",
     storageClass: "runtime",
     scope: "local",

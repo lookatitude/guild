@@ -2,155 +2,112 @@
 /**
  * scripts/rollback-walker.ts
  *
- * Implements guild-plan.md §11.3 — versioning and rollback enumeration.
- * Reads .guild/skill-versions/<slug>/ — expects vN/ subdirs each with
- * SKILL.md + evals.json + meta.json ({created_at, source, delta_summary}).
- * Emits the version history to stdout as a markdown table.
+ * `maintain rollback <skill> [n]` — the compact-history walker (KTD48 / R60).
  *
- * With --steps <n>: identifies the target version (current - n) and emits a
- * "proposed_rollback" action as YAML on stdout. The orchestrator performs the
- * actual snapshot. This script NEVER mutates skill-versions/ itself.
+ * The retired implementation read a per-version snapshot tree under durable `.guild/`
+ * and proposed restoring a whole file. Compact history replaced that tree: what is
+ * recorded now is the INVERSE SPAN of each applied `guild.evolve_delta.v1` plus the
+ * before/after hashes, so a rollback is span-scoped by construction and cannot
+ * silently revert edits that landed after the delta.
+ *
+ * Two modes, and the default is the safe one:
+ *
+ *   (no --apply)  enumerate the stack and, with `--steps n`, print the
+ *                 `proposed_rollback` block. Writes NOTHING.
+ *   --apply       restore `n` inverse spans, newest first, through
+ *                 `rollbackEvolve`. A span that drifted since the delta landed is
+ *                 `blocked_confirm` — the walk stops there and nothing older is
+ *                 touched, because restoring past a blocked entry would leave the
+ *                 file in a state no entry describes.
  *
  * Usage:
- *   scripts/rollback-walker.ts --skill <slug> [--steps <n>] [--cwd <path>]
+ *   scripts/rollback-walker.ts --skill <slug> [--steps <n>] [--apply] [--cwd <path>]
  *
- * Options:
- *   --skill <slug>  (required) Skill slug.
- *   --steps <n>     (optional) Walk n versions back from live (default: 0,
- *                   which just enumerates the stack without picking a target).
- *   --cwd <path>    (optional, default ".") Repo root.
- *
- * Reads:  <cwd>/.guild/skill-versions/<slug>/vN/ (SKILL.md + meta.json)
- * Writes: NONE (non-mutating by contract; rollback itself is performed by the
- *          orchestrator as a new vN+1 snapshot per §11.3 non-destructive rule).
- *
- * Stdout: markdown version table, and (if --steps is given) a YAML
- *          proposed_rollback block.
- * Stderr: diagnostics.
+ * Reads:  the compact history for <slug> (runtime storage class, off the repo).
+ * Writes: NOTHING without --apply; with it, only the named spans.
  *
  * Exit codes:
  *   0  Success.
- *   1  Bad input (missing --skill, skill-versions dir missing, --steps past v1).
- *   2  Internal error.
+ *   1  Bad input (missing --skill, no history, unreadable history, --steps past the oldest).
+ *   2  A blocked_confirm step — a human must look at the drifted span.
  *
- * Invariant: never writes to .guild/wiki/. Never writes to skill-versions/.
+ * Invariant: never writes `.guild/wiki/`, never creates a durable version tree.
  */
 
-import * as fs from "fs";
 import * as path from "path";
 
-// ── Types ──────────────────────────────────────────────────────────────────
-
-interface VersionMeta {
-  created_at?: string;
-  source?: string;
-  delta_summary?: string;
-}
-
-interface VersionEntry {
-  name: string; // "v1", "v2", …
-  n: number; // parsed version number
-  dir: string; // absolute path to the version directory
-  meta: VersionMeta;
-}
+import {
+  readCompactHistory,
+  rollbackEvolve,
+  type EvolveHistoryEntry,
+} from "../src/modules/evolution/workflows/compact-history";
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
 
 function parseArgs(argv: string[]): {
   skill: string | null;
   steps: number | null;
+  apply: boolean;
   cwd: string;
 } {
   let skill: string | null = null;
   let steps: number | null = null;
+  let apply = false;
   let cwd = ".";
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--skill" && i + 1 < argv.length) skill = argv[++i];
+    else if (argv[i] === "--apply") apply = true;
     else if (argv[i] === "--steps" && i + 1 < argv.length) {
       const parsed = parseInt(argv[++i], 10);
       if (!Number.isFinite(parsed) || parsed < 0) {
-        process.stderr.write(
-          `[rollback-walker] ERROR: --steps must be a non-negative integer\n`
-        );
+        process.stderr.write(`[rollback-walker] ERROR: --steps must be a non-negative integer\n`);
         process.exit(1);
       }
       steps = parsed;
     } else if (argv[i] === "--cwd" && i + 1 < argv.length) cwd = argv[++i];
   }
-  return { skill, steps, cwd };
-}
-
-// ── Version enumeration ────────────────────────────────────────────────────
-
-function enumerateVersions(versionsDir: string): VersionEntry[] {
-  const entries = fs
-    .readdirSync(versionsDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && /^v\d+$/.test(d.name));
-
-  const versions: VersionEntry[] = [];
-  for (const d of entries) {
-    const n = parseInt(d.name.slice(1), 10);
-    const dir = path.join(versionsDir, d.name);
-    let meta: VersionMeta = {};
-    const metaPath = path.join(dir, "meta.json");
-    if (fs.existsSync(metaPath)) {
-      try {
-        meta = JSON.parse(fs.readFileSync(metaPath, "utf8")) as VersionMeta;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        process.stderr.write(
-          `[rollback-walker] WARN: failed to parse ${metaPath}: ${msg}\n`
-        );
-      }
-    }
-    versions.push({ name: d.name, n, dir, meta });
-  }
-  versions.sort((a, b) => a.n - b.n);
-  return versions;
+  return { skill, steps, apply, cwd };
 }
 
 // ── Formatting ─────────────────────────────────────────────────────────────
 
-function formatTable(versions: VersionEntry[]): string {
-  if (versions.length === 0) return "_No versions._";
+function formatTable(entries: readonly EvolveHistoryEntry[]): string {
+  if (entries.length === 0) return "_No recorded deltas._";
   const lines: string[] = [];
-  lines.push("| version | created_at | source | delta_summary |");
-  lines.push("|---|---|---|---|");
-  for (const v of versions) {
-    const createdAt = v.meta.created_at ?? "—";
-    const source = v.meta.source ?? "—";
-    const delta = v.meta.delta_summary ?? "—";
-    lines.push(`| ${v.name} | ${createdAt} | ${source} | ${delta} |`);
+  lines.push("| entry | at | target | span | proposer |");
+  lines.push("|---|---|---|---|---|");
+  // Newest first: that is the order a rollback walks.
+  for (const e of [...entries].reverse()) {
+    lines.push(`| ${e.entry_id} | ${e.at} | ${e.target} | ${e.span} | ${e.proposer} |`);
   }
   return lines.join("\n");
 }
 
 function formatProposedRollback(
   skill: string,
-  current: VersionEntry,
-  target: VersionEntry,
-  steps: number
+  entries: readonly EvolveHistoryEntry[],
+  steps: number,
 ): string {
+  const targets = [...entries].reverse().slice(0, steps);
   const lines: string[] = [];
   lines.push("proposed_rollback:");
   lines.push(`  skill: ${skill}`);
-  lines.push(`  current_version: ${current.name}`);
-  lines.push(`  target_version: ${target.name}`);
   lines.push(`  steps_back: ${steps}`);
-  lines.push(`  target_source: ${target.meta.source ?? "unknown"}`);
-  lines.push(
-    `  target_delta_summary: ${target.meta.delta_summary ?? "(none)"}`
-  );
-  lines.push(
-    `  note: Rollback is performed by the orchestrator as a new v${current.n + 1} snapshot per §11.3 (non-destructive).`
-  );
+  lines.push("  spans:");
+  for (const t of targets) {
+    lines.push(`    - entry_id: ${t.entry_id}`);
+    lines.push(`      path: ${t.path}`);
+    lines.push(`      span: ${t.span}`);
+    lines.push(`      after_hash: ${t.after_hash}`);
+  }
+  lines.push("  note: re-run with --apply to restore these inverse spans (KTD48).");
   return lines.join("\n");
 }
 
 // ── Main ───────────────────────────────────────────────────────────────────
 
 function main(): void {
-  const { skill, steps, cwd: cwdArg } = parseArgs(process.argv.slice(2));
+  const { skill, steps, apply, cwd: cwdArg } = parseArgs(process.argv.slice(2));
 
   if (!skill) {
     process.stderr.write("[rollback-walker] ERROR: --skill <slug> is required\n");
@@ -158,46 +115,69 @@ function main(): void {
   }
 
   const cwd = path.resolve(cwdArg);
-  const versionsDir = path.join(cwd, ".guild", "skill-versions", skill);
+  // A history file that exists but will not parse now THROWS (fail-closed, KTD48):
+  // treating it as an empty stack is what let the next record overwrite every
+  // inverse. Surface it as a bad-input exit, never as "nothing to roll back".
+  let history;
+  try {
+    history = readCompactHistory(skill, { cwd });
+  } catch (err) {
+    process.stderr.write(`[rollback-walker] ERROR: ${(err as Error).message}\n`);
+    process.exit(1);
+    return;
+  }
 
-  if (!fs.existsSync(versionsDir)) {
+  if (history.entries.length === 0) {
+    process.stderr.write(`[rollback-walker] ERROR: no compact history for '${skill}' under ${cwd}\n`);
+    process.exit(1);
+  }
+
+  process.stdout.write(`# Compact history — ${skill}\n\n`);
+  process.stdout.write(formatTable(history.entries) + "\n");
+
+  if (steps === null || steps === 0) {
     process.stderr.write(
-      `[rollback-walker] ERROR: version history not found at ${versionsDir}\n`
+      `[rollback-walker] ${history.entries.length} recorded delta(s) for ${skill}\n`,
+    );
+    process.exit(0);
+  }
+  if (steps > history.entries.length) {
+    process.stderr.write(
+      `[rollback-walker] ERROR: --steps ${steps} walks past the oldest entry ` +
+        `(only ${history.entries.length} recorded)\n`,
     );
     process.exit(1);
   }
 
-  const versions = enumerateVersions(versionsDir);
-  if (versions.length === 0) {
-    process.stderr.write(
-      `[rollback-walker] ERROR: no v<N> subdirs under ${versionsDir}\n`
-    );
+  if (!apply) {
+    process.stdout.write("\n" + formatProposedRollback(skill, history.entries, steps) + "\n");
+    process.exit(0);
+  }
+
+  let result;
+  try {
+    result = rollbackEvolve(skill, steps, { cwd });
+  } catch (err) {
+    process.stderr.write(`[rollback-walker] ERROR: ${(err as Error).message}\n`);
     process.exit(1);
+    return;
   }
-
-  // Emit version table to stdout.
-  const table = formatTable(versions);
-  process.stdout.write(`# Version history — ${skill}\n\n`);
-  process.stdout.write(table + "\n");
-
-  // --steps walk (if provided and > 0).
-  if (steps !== null && steps > 0) {
-    const current = versions[versions.length - 1];
-    const targetIdx = versions.length - 1 - steps;
-    if (targetIdx < 0) {
-      process.stderr.write(
-        `[rollback-walker] ERROR: --steps ${steps} would walk past v1 (only ${versions.length} versions available)\n`
-      );
-      process.exit(1);
-    }
-    const target = versions[targetIdx];
-    process.stdout.write("\n");
-    process.stdout.write(formatProposedRollback(skill, current, target, steps) + "\n");
+  process.stdout.write("\nrollback:\n");
+  process.stdout.write(`  status: ${result.status}\n`);
+  process.stdout.write("  steps:\n");
+  for (const s of result.steps) {
+    process.stdout.write(`    - entry_id: ${s.entry_id}\n`);
+    process.stdout.write(`      status: ${s.status}\n`);
+    process.stdout.write(`      detail: ${s.detail}\n`);
+    if (s.question) process.stdout.write(`      question: ${s.question}\n`);
   }
-
-  process.stderr.write(
-    `[rollback-walker] enumerated ${versions.length} version(s) for ${skill}\n`
-  );
+  if (result.status === "blocked_confirm") {
+    process.stderr.write(
+      `[rollback-walker] blocked: a span drifted since the delta landed — review it, then re-run\n`,
+    );
+    process.exit(2);
+  }
+  process.stderr.write(`[rollback-walker] restored ${result.restored.length} span(s) for ${skill}\n`);
   process.exit(0);
 }
 

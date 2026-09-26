@@ -660,7 +660,10 @@ describe("the real repository", () => {
       "src/modules/kernel/workflows/path-containment.ts",
       "scripts/lib/command-registry.ts",
       "scripts/lib/skill-source-transform.ts",
-      "scripts/instantiate-template.ts",
+      // scripts/instantiate-template.ts left this list with T11: its climb
+      // (`resolveRealTarget`) is gone and every verdict is the kernel
+      // `runtime-tree-guard`, so the scanner sees no containment logic there and
+      // the rail refuses a registration with nothing to feel it.
       "scripts/learn/extract-structural.ts",
       "scripts/lib/roster.ts",
       "scripts/learn/lib/similarity.ts",

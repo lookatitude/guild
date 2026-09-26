@@ -128,131 +128,6 @@
       "lane": "T03"
     },
     {
-      "key": "no-durable-skill-versions::skills/meta/evolve/SKILL.md:40::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/SKILL.md:40' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::skills/meta/evolve/SKILL.md:66::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/SKILL.md:66' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::skills/meta/evolve/SKILL.md:76::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/SKILL.md:76' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::skills/meta/evolve/SKILL.md:92::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/SKILL.md:92' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::skills/meta/evolve/references/audit.md:40::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/audit.md:40' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.evals.json:7::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.evals.json:7' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.md:10::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.md:10' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.md:18::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.md:18' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.md:23::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.md:23' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.md:36::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.md:36' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.md:3::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.md:3' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.md:44::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.md:44' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::skills/meta/evolve/references/rollback-skill.md:68::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'skills/meta/evolve/references/rollback-skill.md:68' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/SKILL.md:40::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/SKILL.md:40' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/SKILL.md:66::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/SKILL.md:66' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/SKILL.md:76::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/SKILL.md:76' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/SKILL.md:92::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/SKILL.md:92' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/audit.md:40::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/audit.md:40' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:10::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:10' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:18::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:18' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:23::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:23' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:36::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:36' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:3::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:3' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:44::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:44' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
-      "key": "no-durable-skill-versions::src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:68::references a durable skill-versions/ tree",
-      "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-durable-skill-versions' violation now reports at 'src/modules/evolution/resources/skills/meta/evolve/references/rollback-skill.md:68' instead of 'skills/meta/rollback-skill/SKILL.md:44'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
-      "lane": "T03"
-    },
-    {
       "key": "no-guild-raw-writes::skills/knowledge/wiki/references/ingest-reference.md:108::references .guild/raw",
       "reason": "Relocation, not a regression: T03 moved this file as part of the KTD59/KTD25 skill fold, so the SAME pre-existing 'no-guild-raw-writes' violation now reports at 'skills/knowledge/wiki/references/ingest-reference.md:108' instead of 'skills/knowledge/wiki-ingest/ingest-reference.md:24'. The old key is removed from the baseline in the same commit, so the entry count does not grow. Clears when the underlying violation is fixed by its owning lane, not by T03.",
       "lane": "T03"
@@ -743,26 +618,6 @@
       "lane": "T05"
     },
     {
-      "key": "no-direct-guild-join::scripts/evolve-loop.ts:112::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/evolve-loop.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/evolve-loop.ts:295::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/evolve-loop.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/evolve-loop.ts:303::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/evolve-loop.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/evolve-loop.ts:310::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/evolve-loop.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
       "key": "no-direct-guild-join::scripts/feedback-triage.ts:84::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction in scripts/feedback-triage.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
       "lane": "T05"
@@ -805,11 +660,6 @@
     {
       "key": "no-direct-guild-join::scripts/initiative-gate.ts:96::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction in scripts/initiative-gate.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/instantiate-template.ts:245::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/instantiate-template.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
       "lane": "T05"
     },
     {
@@ -1060,21 +910,6 @@
     {
       "key": "no-direct-guild-join::scripts/resolve-specialist-capability-scope.ts:94::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction in scripts/resolve-specialist-capability-scope.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/rollback-walker.ts:161::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/rollback-walker.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/shadow-mode.ts:176::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/shadow-mode.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
-      "lane": "T05"
-    },
-    {
-      "key": "no-direct-guild-join::scripts/shadow-mode.ts:360::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction in scripts/shadow-mode.ts, surfaced by the new no-direct-guild-join check (KTD15) that T05 lands. Not introduced by T05: the rule did not exist before this lane. The consumer migration onto GuildStorage is T12's scope (U-STOR must not move consumer files first); this entry clears when that file takes its base from the storage API.",
       "lane": "T05"
     },
     {
@@ -2101,6 +1936,31 @@
       "key": "no-direct-guild-join::hooks/run-trace-close.ts:426::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Line-number shift only, not a new construction. The T10 rework moved the pre-existing `path.join(root, \".guild\", \u2026)` line again: every wired hook entry gained the KTD23 fail-closed gate (`if (!layout.ok) return;`), and post-tool-use.ts also gained the skip-recorded compaction refresh. The same construction leaves the baseline at its old line in this commit; migrating these consumers onto GuildStorage is T12's domain fold.",
       "lane": "T10"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/evolve-loop.ts:116::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Pre-existing `.guild` path construction whose baseline key moved because T11 rewrote the surrounding file for KTD48 (the version-snapshot tree became compact history). Same construction, new line number \u2014 the retired key is shrunk in the same commit. Clears when T12 moves these CLIs onto GuildStorage.",
+      "lane": "T11"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/evolve-loop.ts:264::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Pre-existing `.guild` path construction whose baseline key moved because T11 rewrote the surrounding file for KTD48 (the version-snapshot tree became compact history). Same construction, new line number \u2014 the retired key is shrunk in the same commit. Clears when T12 moves these CLIs onto GuildStorage.",
+      "lane": "T11"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/evolve-loop.ts:275::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Pre-existing `.guild` path construction whose baseline key moved because T11 rewrote the surrounding file for KTD48 (the version-snapshot tree became compact history). Same construction, new line number \u2014 the retired key is shrunk in the same commit. Clears when T12 moves these CLIs onto GuildStorage.",
+      "lane": "T11"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/shadow-mode.ts:177::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Pre-existing `.guild` path construction whose baseline key moved because T11 rewrote the surrounding file for KTD48 (the version-snapshot tree became compact history). Same construction, new line number \u2014 the retired key is shrunk in the same commit. Clears when T12 moves these CLIs onto GuildStorage.",
+      "lane": "T11"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/shadow-mode.ts:386::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Pre-existing `.guild` path construction whose baseline key moved because T11 rewrote the surrounding file for KTD48 (the version-snapshot tree became compact history). Same construction, new line number \u2014 the retired key is shrunk in the same commit. Clears when T12 moves these CLIs onto GuildStorage.",
+      "lane": "T11"
     }
   ]
 }

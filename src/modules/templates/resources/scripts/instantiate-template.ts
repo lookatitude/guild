@@ -41,9 +41,10 @@ import { instantiateTemplate, type InstantiateResult } from "./lib/template-sche
 import { validateExploreV1 } from "./lib/explore-schema";
 import { validateDefineV1 } from "./lib/define-schema";
 import {
-  canonicalizeRealPath,
-  isWithin,
-} from "../src/modules/kernel/workflows/path-containment";
+  RUNTIME_SUBTREE_SEGMENTS,
+  assertNotRuntimeTree,
+  isForbiddenRuntimeSubtree,
+} from "../src/modules/kernel/workflows/runtime-tree-guard";
 
 // ---------------------------------------------------------------------------
 // Pure core (no IO — exported for tests / the eval harness)
@@ -151,110 +152,12 @@ export function safeSlug(slug: string): string {
 }
 
 /**
- * MIGRATED to the shared path-containment primitive
- * (`src/modules/kernel/workflows/path-containment.ts`). This was the third home of
- * one shape — the other two were `canonicalAbs` in `lib/command-registry.ts` and a
- * byte-identical `canonicalAbs` in `lib/skill-source-transform.ts`. All three
- * climbed with `existsSync`, which FOLLOWS symlinks, so a DANGLING symlink read as
- * "does not exist" and the resolved target was not where a write would land.
+ * AC37 containment is the SHARED kernel guard (`runtime-tree-guard.ts`). It lived here
+ * first; T11 needed the same question answered for every evolve writer, so the body
+ * moved to the kernel and this module re-exports it. One implementation, one place a
+ * newly-forbidden tree is added.
  */
-const resolveRealTarget = canonicalizeRealPath;
-
-/**
- * Runtime surface sub-trees the producer must NEVER write into, anchored at ANY repo root
- * (the plugin tree OR a consuming repo). These hold runtime permissions / skills / agents /
- * the live install surface — exactly what AC37 forbids the producer from self-editing. Kept
- * deliberately small + first-segment-anchored; `.claude/agents` is checked as a two-segment
- * special case below so an unrelated `.claude/settings` write is not over-blocked.
- */
-const FORBIDDEN_FIRST_SEGMENTS = new Set([
-  "skills",
-  "agents",
-  "commands",
-  "hooks",
-  ".claude-plugin",
-  "dist",
-]);
-
-/**
- * Canonicalize a single path segment for the forbidden-subtree comparison, defeating
- * filesystem aliasing that resolves to the SAME directory as a forbidden name:
- *   - case-insensitivity (macOS/Windows): `Skills` → `skills`;
- *   - Win32 trailing-dot / trailing-space stripping: `skills.`, `skills `, `SKILLS. ` → `skills`
- *     (Windows ignores trailing `.`/space in a path component).
- * A leading dot is meaningful and preserved (`.skills` is a distinct dir, NOT forbidden;
- * `.claude` must stay `.claude`).
- */
-function canonSegment(seg: string): string {
-  return seg.toLowerCase().replace(/[. ]+$/, "");
-}
-
-/**
- * True iff `real` resolves INSIDE `root` and lands in a forbidden runtime sub-tree of it
- * (`skills/`, `agents/`, `commands/`, `hooks/`, `.claude-plugin/`, `dist/`, or `.claude/agents/`).
- * A target outside `root` (rel is "..", a "../…" traversal, or absolute) is NOT this root's
- * concern → false. A falsy `root` short-circuits to false. Never creates anything.
- */
-function isForbiddenRuntimeSubtree(real: string, root: string | null | undefined): boolean {
-  if (!root) return false;
-  const realRoot = canonicalizeRealPath(root);
-  const rel = path.relative(realRoot, real);
-  if (!isWithin(real, realRoot)) return false; // outside this root
-  const segs = rel === "" ? [] : rel.split(path.sep);
-  const first = canonSegment(segs[0] ?? "");
-  if (FORBIDDEN_FIRST_SEGMENTS.has(first)) return true;
-  if (first === ".claude" && canonSegment(segs[1] ?? "") === "agents") return true; // .claude/agents/**
-  return false;
-}
-
-/**
- * AC37 guard — refuse to write into any runtime surface, at the plugin root AND the consuming
- * repo root:
- *   1. POSITIVE plugin-root containment: a target INSIDE the plugin root is allowed ONLY when it
- *      is the `.guild` artifact tree (`<pluginRoot>/.guild/...`); everything else under the
- *      plugin root is refused (no list to keep in sync — a future runtime tree is denied too).
- *   2. CONSUMING-root deny-list (codex G-lane LW3-5 FINDING): a target outside the plugin root
- *      that lands in a forbidden runtime sub-tree of the **consuming repo** — `skills/`,
- *      `agents/`, `.claude/agents/`, `commands/`, `hooks/`, `.claude-plugin/`, `dist/` — is
- *      refused. This closes `--out-dir=skills` (which previously read as "outside pluginRoot →
- *      allowed" and wrote into the consuming repo's `skills/**`). The normal `.guild` target and
- *      arbitrary build dirs stay allowed.
- *
- * @throws Error if the (symlink-resolved) target is a runtime sub-tree of either root.
- */
-export function assertNotRuntimeTree(
-  targetDir: string,
-  pluginRoot: string,
-  consumingRoot?: string | null
-): void {
-  const real = resolveRealTarget(targetDir);
-  // Realpath the plugin root too — else a symlinked root component (e.g. macOS
-  // /var → /private/var) makes the resolved target read as "outside" and bypasses the guard.
-  const realRoot = canonicalizeRealPath(pluginRoot);
-  const rel = path.relative(realRoot, real);
-  // Genuinely OUTSIDE the plugin root: rel is "..", a "../…" traversal, or absolute (different
-  // drive). NB: test the path SEGMENT, not `startsWith("..")` — a sibling dir literally named
-  // "..guild" yields rel "..guild/…" which starts with ".." yet is INSIDE the root (must NOT escape).
-  const outsidePluginRoot = !isWithin(real, realRoot);
-  if (!outsidePluginRoot) {
-    // Inside the plugin root: ONLY the .guild artifact tree is a legitimate write target.
-    const first = rel === "" ? "" : rel.split(path.sep)[0];
-    if (first !== ".guild") {
-      const where = first === "" ? "the plugin root itself" : `the plugin tree "${first}/"`;
-      throw new Error(
-        `refusing to write into ${where} (AC37 no-self-edit; only <pluginRoot>/.guild is writable): ${real}`
-      );
-    }
-  }
-  // Whether inside or outside the plugin root, refuse a forbidden runtime sub-tree of the
-  // consuming repo (the AC37 self-edit surface the positive check above could not see).
-  if (isForbiddenRuntimeSubtree(real, consumingRoot)) {
-    throw new Error(
-      `refusing to write into a consuming-repo runtime tree (AC37 no-self-edit; ` +
-        `skills/agents/commands/hooks/.claude-plugin/dist/.claude/agents are forbidden): ${real}`
-    );
-  }
-}
+export { assertNotRuntimeTree, isForbiddenRuntimeSubtree, RUNTIME_SUBTREE_SEGMENTS };
 
 /**
  * Write the validated skeleton pair to `<outDir|.guild>/{explore,define}/<slug>.json`,

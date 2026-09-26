@@ -94,7 +94,7 @@
     {
       "id": "maintain",
       "source_path": "commands/maintain.md",
-      "description": "Self-heal + RSI — sub-verbs evolve | rollback | audit | fix | gc | wiki revert. ONE assembler: every sub-verb dispatches guild:evolve, which routes the token to its own chapter (`guild:evolve §Sub-verbs`). Nothing auto-promotes: the promotion gate is always respected."
+      "description": "Self-heal + RSI — sub-verbs evolve | rollback | audit | fix | gc | wiki revert. ONE assembler: every sub-verb dispatches guild:evolve, which routes the token to its own chapter (`guild:evolve §Sub-verbs`). One gate, two homes: project targets write this repo's .guild/, machinery targets write a candidate a human commits."
     },
     {
       "id": "migrate",
