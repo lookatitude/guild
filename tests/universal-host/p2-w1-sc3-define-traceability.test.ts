@@ -5,6 +5,7 @@
  * SHIPPED `checkTraceability()` over a fixture define + plan→receipt→QA→release
  * chain (real path, no seam). The authoritative SC-W1-3 test is LW1-8.
  */
+import { describe, it, expect } from "bun:test";
 import {
   checkTraceability,
   runSelfCheck,

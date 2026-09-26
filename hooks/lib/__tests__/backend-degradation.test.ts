@@ -9,6 +9,7 @@
  * The REAL hook path is covered by __tests__/pre-tool-use-backend-guard.test.ts.
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";

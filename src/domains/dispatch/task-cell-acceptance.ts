@@ -456,6 +456,8 @@ export interface AcceptanceInput {
   authoritiesRequired: AcceptanceAuthority[];
   authoritiesObserved: AuthorityDecision[];
   reviewerCellId?: string | null;
+  /** Policy `review.independence` (default true): a cell may not review itself (KTD58). */
+  reviewIndependence?: boolean;
   now: () => string;
 }
 
@@ -465,7 +467,9 @@ export interface AcceptanceInput {
  *   - THROWS unless the validation passed the deterministic floor (a failed floor
  *     can never be accepted — D5, adversarial test 5);
  *   - THROWS unless every REQUIRED authority is observed as `accepted` (resolved
- *     decision 3 — no rubber-stamp).
+ *     decision 3 — no rubber-stamp);
+ *   - THROWS when the reviewer cell IS the cell under review while
+ *     `review.independence` holds (KTD58: a Team Lead is never its own reviewer).
  * Both `downstream_release_at` and `termination_authorized_at` are set: an accepted
  * lane releases its dependents AND its worker may be torn down.
  */
@@ -484,6 +488,12 @@ export function buildAcceptance(input: AcceptanceInput): HandoffAcceptanceV1 {
   if (missing.length > 0) {
     throw new Error(
       `acceptance authorities not satisfied: ${missing.join(", ")} — no rubber-stamp (D5)`,
+    );
+  }
+  if (input.reviewIndependence !== false && input.reviewerCellId === validation.cell_id) {
+    throw new Error(
+      `cell ${validation.cell_id} may not review its own handoff — a Team Lead is never ` +
+        `its own reviewer (KTD58, review.independence)`,
     );
   }
   const at = input.now();

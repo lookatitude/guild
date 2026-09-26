@@ -20,6 +20,7 @@
  * their code points so the fixture bytes are unambiguous in review.
  */
 
+import { describe, test, expect } from "bun:test";
 import * as yaml from "js-yaml";
 
 import {

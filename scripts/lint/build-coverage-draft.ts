@@ -358,7 +358,13 @@ function yamlStr(s: string): string {
   return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-interface Entry { id: string; kind: string; target: string; disposition: string; note?: string; }
+interface Entry {
+  id: string; kind: string; target: string; disposition: string; note?: string;
+  /** Verification Contract rows only: the R-/KTD-ids the eval proves. */
+  r_ids?: string[];
+  /** Verification Contract rows only: the test files that carry the fixture. */
+  fixtures?: string[];
+}
 
 // ------------------------------------------------------------ export resolution
 /** Barrels whose backing file is not on disk; surfaced instead of silently dropped. */
@@ -616,13 +622,45 @@ function evals(): Entry[] {
   return out;
 }
 
+/**
+ * The Verification Contract fixture suite (T13): one eval id per row of
+ * tests/verification-contract/index.json, carrying the row's R-id. A row a later
+ * lane owns is listed too, as eval-pending with its owner, so a contract id can
+ * never drop out of the map while its fixture is still a todo.
+ */
+const VC_SUITE = "tests/verification-contract/verification-contract.test.ts";
+const VC_INDEX = "tests/verification-contract/index.json";
+
+function vcEvalKey(row: { id: string; owner?: string }): string {
+  return `eval:${VC_SUITE}#${row.owner ? `${row.id}@${row.owner}` : row.id}`;
+}
+
+function vcEvals(): Entry[] {
+  const abs = path.join(ROOT, VC_INDEX);
+  if (!fs.existsSync(abs)) return [];
+  const index = JSON.parse(fs.readFileSync(abs, "utf8")) as {
+    rows: Array<{ id: string; proves: string; owner?: string; pending?: string; fixtures?: Array<{ test?: string; lint?: string; budget?: string }> }>;
+  };
+  return index.rows.map((row) => ({
+    id: vcEvalKey(row),
+    kind: "eval",
+    target: "eval-corpus:verification-contract",
+    disposition: row.owner ? "eval-pending" : "eval-bound",
+    note: row.owner ? `${row.pending} (owner: ${row.owner})` : row.proves,
+    r_ids: [row.id],
+    fixtures: [...new Set((row.fixtures ?? []).map((f) =>
+      f.test ?? (f.lint ? `scripts/lint/layout-laws.ts --check=${f.lint}` : `scripts/lint/description-budget.ts ${f.budget}`),
+    ))],
+  }));
+}
+
 // ------------------------------------------------------------------ emit
 function main(argv: string[]): number {
   const opt = (n: string) => {
     const hit = argv.find((a) => a.startsWith(`--${n}=`));
     return hit ? hit.slice(n.length + 3) : undefined;
   };
-  const entries = [...commands(), ...skills(), ...moduleExports(), ...evals()];
+  const entries = [...commands(), ...skills(), ...moduleExports(), ...evals(), ...vcEvals()];
   const unmapped = entries.filter((e) => !e.target || !e.target.trim());
 
   // ---- KTD36 bijection over the live domain public APIs ---------------------
@@ -684,6 +722,8 @@ function main(argv: string[]): number {
     lines.push(`    target: ${yamlStr(e.target)}`);
     lines.push(`    disposition: ${e.disposition}`);
     if (e.note) lines.push(`    note: ${yamlStr(e.note)}`);
+    if (e.r_ids) lines.push(`    r_ids: [${e.r_ids.map(yamlStr).join(", ")}]`);
+    if (e.fixtures && e.fixtures.length) lines.push(`    fixtures: [${e.fixtures.map(yamlStr).join(", ")}]`);
   }
   const body = `${lines.join("\n")}\n`;
 

@@ -74,7 +74,7 @@ export const SECURITY_CONTROLS: SecurityControl[] = [
     enforcer_file: "src/domains/knowledge/recall-protect.ts",
     enforcer_function: "protectChunks",
     enforcer_kind: "code",
-    hostile_test: "scripts/__tests__/recall-protect.test.ts",
+    hostile_test: "src/domains/knowledge/recall-protect.test.ts",
     anti_vacuity_control:
       "Test 'quarantines a chunk with injection language' feeds INJECTION constant " +
       "('ignore all previous instructions…') and asserts rendered === '[QUARANTINED:…]'. " +
@@ -99,7 +99,7 @@ export const SECURITY_CONTROLS: SecurityControl[] = [
     enforcer_file: "src/domains/knowledge/recall-protect.ts",
     enforcer_function: "classifyTrustTier",
     enforcer_kind: "code",
-    hostile_test: "scripts/__tests__/recall-protect.test.ts",
+    hostile_test: "src/domains/knowledge/recall-protect.test.ts",
     anti_vacuity_control:
       "Test 'forged operator frontmatter is downgraded to trusted' uses FORGED_OPERATOR_CONTENT " +
       "with `owner: operator` on a non-operator path and asserts tier === 'trusted' " +
@@ -294,7 +294,7 @@ export const SECURITY_CONTROLS: SecurityControl[] = [
     enforcer_file: "scripts/lib/shared/share-set.ts",
     enforcer_function: "inShareSet",
     enforcer_kind: "code",
-    hostile_test: "scripts/__tests__/share-set-parity.test.ts",
+    hostile_test: "src/domains/security/share-set-parity.test.ts",
     anti_vacuity_control:
       "share-set-parity.test.ts asserts that exactly ONE source file exports inShareSet " +
       "and that both scrub.ts and audit.ts import from scripts/lib/shared/share-set, " +
@@ -315,7 +315,7 @@ export const SECURITY_CONTROLS: SecurityControl[] = [
     enforcer_file: "scripts/lib/shared/safe-object.ts",
     enforcer_function: "isProtoPoisonKey",
     enforcer_kind: "code",
-    hostile_test: "scripts/__tests__/safe-object-parity.test.ts",
+    hostile_test: "src/domains/security/safe-object-parity.test.ts",
     anti_vacuity_control:
       "Test '(B) anti-vacuity control: a set missing constructor disagrees' asserts that " +
       "a DIVERGENT set (missing 'constructor') differs from the canonical set on that key, " +
@@ -363,7 +363,7 @@ export const SECURITY_CONTROLS: SecurityControl[] = [
     enforcer_file: "scripts/instantiate-template.ts",
     enforcer_function: "assertNotRuntimeTree",
     enforcer_kind: "code",
-    hostile_test: "scripts/__tests__/instantiate-template.test.ts",
+    hostile_test: "scripts/instantiate-template.test.ts",
     anti_vacuity_control:
       "Test feeds --out-dir=skills and asserts writeSkeletonPair throws with message " +
       "containing 'AC37'. A normal --out-dir=.guild target asserts no throw, proving " +

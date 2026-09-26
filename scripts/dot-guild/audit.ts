@@ -391,7 +391,7 @@ export function findPackageReceiptLeaks(repoPath: string, trackedOnlyMode = fals
 // Any .guild/ under one of these glob roots is a test fixture, not a leak.
 // `(?:[^/]+/)*` matches zero or more intermediate directory segments — the
 // fixture .guild/ can live directly under fixtures/ OR nested below it.
-// Exported so the exemption-parity test (scripts/dot-guild/__tests__/exemption-parity.test.ts)
+// Exported so the exemption-parity test (scripts/dot-guild/exemption-parity.test.ts)
 // can assert directly against the SAME array — no hand-copied mirror to drift.
 export const FIXTURE_EXEMPT_PATTERNS = deepFreeze([
   /\/benchmark\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,

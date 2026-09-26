@@ -10,7 +10,7 @@
  * Determinism (SC-9): every field here is deterministic-script; no LLM calls.
  * Behaviour is byte-for-byte the same as the former kg-query.ts copy — the
  * term-match loop that recall.ts had inlined (scoreKgNode) is now the shared
- * `termMatchScore` primitive. Guarded by scripts/__tests__/graph-scoring-parity.test.ts.
+ * `termMatchScore` primitive. Guarded by scripts/learn/lib/graph-scoring-parity.test.ts.
  */
 
 import type { GraphEdge, GraphNode } from "./knowledge-graph-contract";

@@ -6,7 +6,7 @@
  *
  * These tests drive the Wave-1 scripts AS SUBPROCESSES (`npx tsx <script>`) over
  * mkdtemp fixture trees — a distinct layer from Lane B's in-process unit tests
- * (`scripts/__tests__/workspace-*.test.ts`). The contract under test is the CLI
+ * (`scripts/workspace/workspace-*.test.ts`). The contract under test is the CLI
  * invocation surface itself, end-to-end.
  *
  * Determinism: every fixture is built under os.tmpdir() via mkdtempSync, no

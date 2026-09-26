@@ -18,6 +18,7 @@
  * end-to-end wiring + the dist-grep rail.
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { execFileSync, spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";

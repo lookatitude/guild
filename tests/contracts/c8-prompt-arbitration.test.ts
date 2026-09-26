@@ -11,6 +11,7 @@
  * Deterministic: explicit interleavings, no timers.
  */
 
+import { describe, test, expect } from "bun:test";
 import { requireContractModule } from "./_helpers";
 
 const ARBITER_MODULE = "src/domains/config/confirmation-arbiter";

@@ -29,6 +29,7 @@
  *   [x] the receipt never lands in the validated v1.4 channel
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";

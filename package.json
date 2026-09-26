@@ -5,7 +5,7 @@
   "scripts": {
     "compile": "bun scripts/compile.ts",
     "compile:check": "bun scripts/compile.ts --check",
-    "test": "bun test",
+    "test": "bun test --isolate",
     "lint:layout": "cd scripts && npm run lint:layout"
   }
 }

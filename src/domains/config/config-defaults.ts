@@ -221,8 +221,8 @@ export const DEFAULTS = deepFreeze({
     // own contract, stated in the module doc comment above, is to stay free of
     // internal runtime imports so core settings code can load it before the
     // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
-    // roster (host-registry-schema.ts) enumerated by hand; a jest test
-    // (scripts/__tests__/config-defaults-tiers-host-ids.test.ts) asserts the two
+    // roster (host-registry-schema.ts) enumerated by hand; a test
+    // (scripts/lib/config-defaults-tiers-host-ids.test.ts) asserts the two
     // stay in sync so this can never silently drift again the way it had (7 of
     // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
     // non-null model — every other host's registry row carries `models.<tier>.model:

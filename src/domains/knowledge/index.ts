@@ -25,6 +25,7 @@ export * from "./harvest";
 export * from "./harvest-journal";
 export * from "./lane-bundle";
 export * from "./redirect-ledger";
+export * from "./redirect-route";
 export * from "./refresh-touched";
 export * from "./research-packet";
 export * from "./wiki-index";

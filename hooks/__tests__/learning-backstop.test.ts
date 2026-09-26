@@ -19,6 +19,7 @@
  *  - inline phases_log from .guild/runs/run-85d27757-.../run.yaml
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";

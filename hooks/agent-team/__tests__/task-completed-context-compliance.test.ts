@@ -10,6 +10,7 @@
  *   - compliance is non-blocking (exit 0 in every mode — the lane is complete)
  */
 
+import { describe, it, test, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";

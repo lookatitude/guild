@@ -15,6 +15,7 @@
  *     agents-file renderer via adapter_binding (AC-REG-4 / AC-ADP-1).
  */
 
+import { describe, test, expect } from "bun:test";
 import {
   renderWrappedCliPackage,
   type GuildPluginManifest,

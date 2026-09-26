@@ -22,6 +22,7 @@
  * in offline environments (detected by a failed clone exit code).
  */
 
+import { describe, test, expect, beforeAll, afterAll, jest, setDefaultTimeout } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -150,7 +151,7 @@ function cloneRepo(
 
 describe("clone-roundtrip: SC-8 assertions across 4 repos", () => {
   // Timeout: 5 min per suite (network clones can be slow)
-  jest.setTimeout(300_000);
+  setDefaultTimeout(300_000);
 
   for (const [repoName, repoInfo] of Object.entries(REPOS)) {
     describe(`repo: ${repoName}`, () => {

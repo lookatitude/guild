@@ -12,6 +12,7 @@
  *  - the guild.team_proposal.v2 composer/validator module does not exist (T2b).
  */
 
+import { describe, test, expect } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 

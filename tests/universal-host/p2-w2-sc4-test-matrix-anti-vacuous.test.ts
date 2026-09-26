@@ -17,6 +17,7 @@
  * (spec SC-W2-4 'named imported interface').
  */
 
+import { describe, it, test, expect } from "bun:test";
 import {
   generateTestMatrix,
   type TestMatrixReport,

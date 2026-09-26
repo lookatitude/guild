@@ -20,6 +20,7 @@
  * VC-K7 evidence: nothing auto-promotes; non-`none` only routes to reflections queue.
  */
 
+import { describe, it, test, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";

@@ -9,6 +9,7 @@
  * `-`/`.` split the run.
  */
 
+import { describe, it, expect } from "bun:test";
 import {
   redactField,
   redactHighEntropy,

@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 
 import { sha256 } from "./artifact-bus";
+import { sliceMintedRosterForGoal, validateGoalV1 } from "../teams";
 import {
   appendTaskCellLifecycleEvent,
   type TaskCellLifecycleEventName,
@@ -256,6 +257,19 @@ const IN_SESSION_PORT: TaskCellWorkerPort = Object.freeze({
   terminate: () => ({ ok: true, reason: null }),
 });
 
+/** A dispatch refused because the role is outside the cell's goal slice (R73). */
+export class GoalSliceRefusedError extends Error {
+  readonly next_need = "mint" as const;
+  constructor(
+    readonly worker_role: string,
+    readonly goal_id: string,
+    reason: string,
+  ) {
+    super(`goal_slice_refused: ${reason}`);
+    this.name = "GoalSliceRefusedError";
+  }
+}
+
 export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecordStore {
   readonly substrate: TaskCellSubstrate;
   readonly parallelism: number;
@@ -309,6 +323,9 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
 
   async spawnCell(req: SpawnCellRequest): Promise<CellHandle> {
     if (this.cells.has(req.cell_id)) throw new Error(`cell already spawned: ${req.cell_id}`);
+    if (req.goal !== undefined && (validateGoalV1(req.goal) === null || req.goal.id !== req.goal_id)) {
+      throw new Error(`cell ${req.cell_id} carries a goal that is not a valid guild.goal.v1 for goal_id ${req.goal_id}`);
+    }
     const cell: CellHandle = Object.freeze({ ...req, instance_ids: Object.freeze([] as string[]) });
     this.cells.set(req.cell_id, cell);
     return cell;
@@ -323,6 +340,7 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     if (known.fanout !== "lead_only" && !this.worker.isAvailable()) {
       throw new Error(`${this.substrate} TaskCell worker substrate is unavailable`);
     }
+    if (known.goal) this.assertInGoalSlice(known, req.worker_role);
     // Admission RESERVES, it does not observe: the count and the claim happen
     // together under the run lock, and the claim IS this attempt's live marker —
     // the `attempt.json` the real record will complete. So there is no window in
@@ -504,6 +522,29 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
         assignment.task_run_id !== instance.task_run_id || assignment.attempt !== instance.attempt) {
       return this.forceTerminal(live, "failed", "assignment identity does not match instance", "identity_mismatch");
     }
+    // R73 / KTD62, delivery side: the role is FIXED at spawn and the goal slice is
+    // re-applied here. Spawn checked `worker_role` against the slice, but an
+    // assignment naming a different role (a minted one outside the goal, or any
+    // role the instance was not spawned as) reached the worker unchecked (codex
+    // G-lane r4).
+    const spawnedRecord = this.instanceRecord(instance);
+    if (assignment.worker_role !== spawnedRecord.worker_role) {
+      return this.forceTerminal(
+        live,
+        "failed",
+        `assignment role '${assignment.worker_role}' does not match the spawned role '${spawnedRecord.worker_role}' (R73)`,
+        "not_authorized",
+      );
+    }
+    const owningCell = this.cells.get(instance.cell_id);
+    if (owningCell?.goal) {
+      try {
+        this.assertInGoalSlice(owningCell, assignment.worker_role);
+      } catch (err) {
+        if (err instanceof GoalSliceRefusedError) return this.forceTerminal(live, "failed", err.message, "not_authorized");
+        throw err;
+      }
+    }
     // KTD28, spawn side: an ISOLATED worker with no projected tool set is refused
     // rather than handed the parent's full authority. Isolation that is claimed
     // but not applied is worse than a recorded `lead_only` fallback, because
@@ -523,7 +564,6 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     // never add: round 1 let a cell spawned with ["Read"] be handed an assignment
     // carrying ["Read","Bash"], and the widened set silently became the worker's
     // authority for the rest of the lane.
-    const spawnedRecord = this.instanceRecord(instance);
     const narrowing = projectionNarrowsOnly({
       spawned: spawnedRecord.projection,
       delivered: assignment.projection,
@@ -661,7 +701,7 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     const done = cellCanGoDone(ledger);
     if (cellBlocked(done)) return this.failure(live, "validation_failed", done.reason);
     try {
-      const acceptance = buildAcceptance({ validation, acceptancePolicyVersion: req.acceptance_policy_version, authoritiesRequired: req.authorities_required, authoritiesObserved: req.authorities_observed, reviewerCellId: req.reviewer_cell_id, now: this.now });
+      const acceptance = buildAcceptance({ validation, acceptancePolicyVersion: req.acceptance_policy_version, authoritiesRequired: req.authorities_required, authoritiesObserved: req.authorities_observed, reviewerCellId: req.reviewer_cell_id, reviewIndependence: req.review_independence, now: this.now });
       writeAcceptanceRecord(this.cwd, acceptance);
       this.transition(live, "handoff_accepted");
       this.emitLifecycle(live.handle, "handoff_accepted", acceptance.downstream_release_at ?? acceptance.termination_authorized_at ?? this.now());
@@ -838,6 +878,41 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
       rounds_allowed: this.advisorRounds,
       now: this.now,
     });
+  }
+
+  /**
+   * KTD62 / R73: a cell that carries a goal dispatches only to a role in that
+   * goal's slice of this project's MINTED profiles. The slice never mints; a role
+   * outside it is refused with `next_need: mint`, recorded on the cell before the
+   * throw so the refusal survives the caller.
+   */
+  private assertInGoalSlice(cell: CellHandle, role: string): void {
+    const goal = cell.goal!;
+    const slice = sliceMintedRosterForGoal({ projectRoot: this.cwd, goal });
+    if (slice.ok && slice.roster.some((m) => m.name === role)) return;
+    const reason = slice.ok
+      ? `role '${role}' is not in goal ${goal.id}'s slice (${slice.roster.map((m) => m.name).join(", ")}) (R73)`
+      : slice.reason;
+    const cellDir = path.resolve(
+      this.cwd,
+      taskCellPaths({ run_id: cell.run_id, logical_task_id: cell.logical_task_id, attempt: 1, instance_id: "goal-slice" }).cell_dir,
+    );
+    fs.mkdirSync(cellDir, { recursive: true });
+    fs.appendFileSync(
+      path.join(cellDir, "goal-slice-refusals.jsonl"),
+      `${JSON.stringify({
+        schema_version: "guild.goal_slice_refusal.v1",
+        run_id: cell.run_id,
+        cell_id: cell.cell_id,
+        goal_id: goal.id,
+        worker_role: role,
+        next_need: "mint",
+        reason,
+        at: this.now(),
+      })}\n`,
+      "utf8",
+    );
+    throw new GoalSliceRefusedError(role, goal.id, reason);
   }
 
   private ids(i: InstanceHandle): { run_id: string; logical_task_id: string; attempt: number; instance_id: string } { return { run_id: i.run_id, logical_task_id: i.logical_task_id, attempt: i.attempt, instance_id: i.instance_id }; }

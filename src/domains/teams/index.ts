@@ -20,6 +20,8 @@ export * from "./station-signals";
 // (dispatch, lifecycle) and the index is the only cross-domain import surface.
 export * from "./goal-contract";
 export * from "./compose-scope";
+// T13 rework-r3: the one `.guild/agents` creation seam and the minted-profile slice.
+export * from "./profile-create";
 
 // ── from src/modules/specialists ──────────────────────────────────────────
 export const MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1" as const;

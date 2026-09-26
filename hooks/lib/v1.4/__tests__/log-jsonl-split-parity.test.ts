@@ -11,6 +11,7 @@
  * A vacuous test that passes regardless is not a parity test.
  */
 
+import { describe, it, test, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";

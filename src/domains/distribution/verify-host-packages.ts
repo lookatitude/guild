@@ -6,6 +6,7 @@
  */
 
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -284,7 +285,7 @@ function verifyWrapper(
   const res = spawnSync(wrapper, ["--dry-run", "--host", expected.host, "--prompt", `verify ${packageName}`, "--cwd", packageDir], {
     cwd: packageDir,
     encoding: "utf8",
-    env: { ...process.env, npm_config_cache: process.env["npm_config_cache"] ?? "/private/tmp/guild-npm-cache" },
+    env: { ...process.env, npm_config_cache: process.env["npm_config_cache"] ?? path.join(os.tmpdir(), "guild-npm-cache") },
     maxBuffer: 10 * 1024 * 1024,
   });
   if (res.status !== 0) {

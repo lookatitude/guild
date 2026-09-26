@@ -17670,8 +17670,8 @@ var init_config_defaults = __esm({
         // own contract, stated in the module doc comment above, is to stay free of
         // internal runtime imports so core settings code can load it before the
         // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
-        // roster (host-registry-schema.ts) enumerated by hand; a jest test
-        // (scripts/__tests__/config-defaults-tiers-host-ids.test.ts) asserts the two
+        // roster (host-registry-schema.ts) enumerated by hand; a test
+        // (scripts/lib/config-defaults-tiers-host-ids.test.ts) asserts the two
         // stay in sync so this can never silently drift again the way it had (7 of
         // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
         // non-null model — every other host's registry row carries `models.<tier>.model:
@@ -31750,6 +31750,7 @@ var IN_SESSION_PORT;
 var init_task_cell_runtime = __esm({
   "src/domains/dispatch/task-cell-runtime.ts"() {
     init_artifact_bus();
+    init_teams();
     init_telemetry();
     init_task_cell_contract();
     init_task_assignment_v2();
@@ -35051,6 +35052,15 @@ var init_redirect_ledger = __esm({
   }
 });
 
+// src/domains/knowledge/redirect-route.ts
+var init_redirect_route = __esm({
+  "src/domains/knowledge/redirect-route.ts"() {
+    init_lifecycle();
+    init_harvest();
+    init_redirect_ledger();
+  }
+});
+
 // src/domains/knowledge/refresh-touched.ts
 var init_refresh_touched = __esm({
   "src/domains/knowledge/refresh-touched.ts"() {
@@ -36393,6 +36403,7 @@ var init_knowledge = __esm({
     init_harvest_journal();
     init_lane_bundle();
     init_redirect_ledger();
+    init_redirect_route();
     init_refresh_touched();
     init_research_packet();
     init_wiki_index();
@@ -36839,6 +36850,18 @@ var init_goal_contract = __esm({
 });
 
 // src/domains/teams/compose-scope.ts
+function classMaysMintDeliveryRoster(cls) {
+  return MINTING_CLASSES.includes(cls);
+}
+function resolveMintScope(input) {
+  if (classMaysMintDeliveryRoster(input.workflow_class)) return { ok: true, may_mint: true };
+  return {
+    ok: true,
+    may_mint: false,
+    fallback: input.requires_existing_profile ? "already_minted_profiles" : "lead_only",
+    reason: `class '${input.workflow_class}' does not mint a delivery roster (R67) \u2014 it runs lead_only or reuses profiles this project already minted.`
+  };
+}
 var COMPOSE_SCOPES, MINTING_CLASSES, COMPOSE_SCOPE_CONTRACT;
 var init_compose_scope = __esm({
   "src/domains/teams/compose-scope.ts"() {
@@ -36851,6 +36874,31 @@ var init_compose_scope = __esm({
       default: "phase",
       minting_classes: MINTING_CLASSES
     });
+  }
+});
+
+// src/domains/teams/profile-create.ts
+function gateProfileCreation(input) {
+  const cls = input.workflow_class;
+  if (typeof cls !== "string" || !WORKFLOW_CLASSES.includes(cls)) {
+    return {
+      ok: false,
+      role: input.role,
+      next_need: "operator",
+      reason: `${input.writer}: no workflow class bound${cls ? ` ('${String(cls)}' is not a class)` : ""} \u2014 creating .guild/agents/${input.role}.md is class-scoped (R67)`
+    };
+  }
+  const scope = resolveMintScope({ workflow_class: cls });
+  if (!scope.may_mint) {
+    return { ok: false, role: input.role, next_need: "operator", reason: `${input.writer}: ${scope.reason}` };
+  }
+  return { ok: true, role: input.role, workflow_class: cls };
+}
+var init_profile_create = __esm({
+  "src/domains/teams/profile-create.ts"() {
+    init_state();
+    init_compose_scope();
+    init_goal_contract();
   }
 });
 
@@ -37085,6 +37133,7 @@ var init_evolve_apply = __esm({
     init_kernel();
     init_knowledge();
     init_security();
+    init_teams();
     init_evolve_delta();
     init_evolve_targets();
     init_compact_history();
@@ -37187,6 +37236,7 @@ var init_teams = __esm({
     init_station_signals();
     init_goal_contract();
     init_compose_scope();
+    init_profile_create();
     init_specialist_roster();
     init_roster_contract();
     init_template_schema();
@@ -45681,6 +45731,7 @@ init_path_containment();
 init_state();
 
 // scripts/lib/roster.ts
+init_teams();
 var yaml5 = require_js_yaml();
 var AUGMENTING_AGENT_IDS = sealSet(
   ["advisor", "context-manager", "developer"],
@@ -49210,6 +49261,9 @@ function collectCompatibilityUsageWindow(options) {
 
 // scripts/lib/capability/adoption-migrate.ts
 init_run_binding();
+init_lifecycle();
+init_state();
+init_teams();
 init_telemetry();
 var CATALOG_KEYS = [
   "schema_version",
@@ -49772,6 +49826,7 @@ function applyAdoptionPlan(opts) {
   const compatibilityOnly = [];
   const pendingEntries = [];
   const seenDecisions = /* @__PURE__ */ new Set();
+  const runClass = readWorkflowCursor(createGuildStorage(projRoot, { activeRoot: projRoot, profile: "standalone" }).project?.runRecord(runId) ?? "")?.class ?? null;
   for (const raw of decisionsRaw) {
     const d = readOptions4(raw, DECISION_KEYS);
     if (d === null) return { status: "refused", reason: "a decision was rejected (proxy/accessor/symbol/unknown key)" };
@@ -49866,6 +49921,10 @@ function applyAdoptionPlan(opts) {
           status: "refused",
           reason: `${successorRelPath} already exists with different bytes; resolve it or choose compatibility_only for "${id}"`
         };
+      }
+      if (kind === "agent" && existing2 === null) {
+        const gate = gateProfileCreation({ workflow_class: runClass, role: id, writer: "capability.adopt" });
+        if (!gate.ok) return { status: "refused", reason: gate.reason };
       }
       writes.push({
         absTarget,

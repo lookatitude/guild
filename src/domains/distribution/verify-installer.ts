@@ -340,6 +340,18 @@ function executableOnPath(binary: string, pathEnv: string): boolean {
   return res.status === 0 && res.stdout.trim().length > 0;
 }
 
+/**
+ * The spawn env for install.sh: the parent env minus PWD. An inherited logical
+ * PWD makes bash's `pwd` disagree with the script's physical dir (a symlinked
+ * /tmp, a test runner that chdir'd) and flips install.sh's "installing from this
+ * checkout" branch. Deleted, not set to undefined: Bun would stringify that.
+ */
+function spawnEnvWithoutPwd(overrides: Record<string, string>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...overrides };
+  delete env["PWD"];
+  return env;
+}
+
 export function verifyInstallerDryRuns(options: VerifyOptions = {}): InstallerVerification {
   const root = options.root ?? PLUGIN_ROOT;
   const installScript = options.installScript ?? path.join(root, "install.sh");
@@ -358,11 +370,10 @@ export function verifyInstallerDryRuns(options: VerifyOptions = {}): InstallerVe
     const res = spawnSync("bash", [installScript, "--dry-run", "--host", expectation.host], {
       cwd: root,
       encoding: "utf8",
-      env: {
-        ...process.env,
+      env: spawnEnvWithoutPwd({
         PATH: options.pathEnv ?? "/usr/bin:/bin",
-        npm_config_cache: process.env["npm_config_cache"] ?? "/private/tmp/guild-npm-cache",
-      },
+        npm_config_cache: process.env["npm_config_cache"] ?? path.join(os.tmpdir(), "guild-npm-cache"),
+      }),
       maxBuffer: 10 * 1024 * 1024,
     });
     if (res.status !== 0) {
@@ -419,7 +430,7 @@ export function verifyInstallerFixtureExecutions(options: VerifyOptions = {}): I
           XDG_CONFIG_HOME: fakeConfig,
           GUILD_INSTALL_FAKE_HOST_LOG: logFile,
           PATH: `${fakeBin}${path.delimiter}${options.pathEnv ?? process.env.PATH ?? "/usr/bin:/bin"}`,
-          npm_config_cache: process.env["npm_config_cache"] ?? "/private/tmp/guild-npm-cache",
+          npm_config_cache: process.env["npm_config_cache"] ?? path.join(os.tmpdir(), "guild-npm-cache"),
         },
         maxBuffer: 20 * 1024 * 1024,
       });
@@ -495,7 +506,7 @@ export function verifyInstallerLiveIsolatedExecutions(options: VerifyOptions = {
           XDG_DATA_HOME: data,
           XDG_STATE_HOME: state,
           PATH: pathEnv,
-          npm_config_cache: process.env["npm_config_cache"] ?? "/private/tmp/guild-npm-cache",
+          npm_config_cache: process.env["npm_config_cache"] ?? path.join(os.tmpdir(), "guild-npm-cache"),
         },
         timeout: 120_000,
         maxBuffer: 30 * 1024 * 1024,

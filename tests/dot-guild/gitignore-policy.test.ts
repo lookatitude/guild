@@ -21,6 +21,7 @@
  * for Lane B (tooling-engineer).
  */
 
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";

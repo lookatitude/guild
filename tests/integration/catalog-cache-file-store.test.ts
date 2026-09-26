@@ -12,6 +12,7 @@
  * constructor; caller-supplied run_scope is unrepresentable.
  */
 
+import { describe, it, test, expect } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -44,7 +45,7 @@ import {
   runScopeFor,
   singleflight,
   singleflightDiscover,
-} from "../../src/domains/config/catalog-cache";
+} from "../../src/domains/config";
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "guild-catalog-cache-"));

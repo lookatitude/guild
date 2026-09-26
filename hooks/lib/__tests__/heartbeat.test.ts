@@ -9,6 +9,7 @@
  *     future-dated stamp clamp, distinct-from-O-3 (no output inspection)
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";

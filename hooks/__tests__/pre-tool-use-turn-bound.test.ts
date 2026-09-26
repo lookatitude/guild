@@ -12,6 +12,7 @@
  * (default `allow`) under it — never a hard `deny`.
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";

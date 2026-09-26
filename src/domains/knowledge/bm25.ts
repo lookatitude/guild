@@ -13,7 +13,7 @@
  *
  * Parameters: k1=1.5, b=0.75 — identical to the guild-memory search path.
  * Changing these constants is a breaking change for every consumer above and is
- * guarded by scripts/__tests__/bm25-parity.test.ts (parity + anti-vacuity).
+ * guarded by src/domains/knowledge/bm25-parity.test.ts (parity + anti-vacuity).
  */
 
 // The identifier-tokenizer primitive (TOKEN_RE + camel/snake-aware split) lives in

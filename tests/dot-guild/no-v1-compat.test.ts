@@ -51,6 +51,7 @@
  * regression is immediately actionable.
  */
 
+import { describe, test, expect } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -280,7 +281,7 @@ const ALLOWLIST = [
   // Test SUITES (D3): narrowed — only the test-runner files + fixtures.
   // Non-test .ts under tests/ (e.g. tests/workspace/_fixtures.ts) IS scanned.
   // These are handled by the dedicated isTestAllowlisted() below, not here.
-  path.join(PLUGIN_ROOT, "scripts/__tests__"),
+  path.join(PLUGIN_ROOT, "scripts/fixtures"),
   path.join(PLUGIN_ROOT, "hooks/__tests__"),
   // Docs / history: document what was removed, not live code
   path.join(PLUGIN_ROOT, "MIGRATION.md"),
@@ -295,16 +296,17 @@ const ALLOWLIST = [
 
 /**
  * D3: narrow the tests/ allowlist. Only *.test.ts / *.test.js (the test runners
- * that NAME markers to assert removal) and tests/**\/fixtures/** are exempt.
+ * that NAME markers to assert removal, wherever they are colocated) and
+ * tests/**\/fixtures/** are exempt.
  * A non-test .ts under tests/ (a shared helper, an accidentally-checked-in
  * shim) IS scanned.
  */
 function isTestAllowlisted(filePath: string): boolean {
   const norm = path.normalize(filePath);
+  // Colocated bun suites (src/**, scripts/**) are test runners wherever they live.
+  if (/\.test\.(ts|js)$/.test(norm)) return true;
   const testsRoot = path.normalize(path.join(PLUGIN_ROOT, "tests"));
   if (!norm.startsWith(testsRoot + path.sep)) return false;
-  // Exempt the test-runner files themselves.
-  if (/\.test\.(ts|js)$/.test(norm)) return true;
   // Exempt anything under a fixtures/ directory.
   if (norm.includes(path.sep + "fixtures" + path.sep)) return true;
   return false;

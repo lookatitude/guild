@@ -27,6 +27,7 @@
  * guild-plan.md §15.2 risk row 4 (evolve overfit) + VC-12 (SC-12).
  */
 
+import { describe, it, test, expect } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -260,13 +261,30 @@ describe("eval-fixture vocabulary — tiering/recall/escalate cases present (ADR
 // ── No trigger/should_not_trigger overlap ────────────────────────────────────
 // A case that appears in both arrays is a definite eval defect.
 
+/** Prompts listed as BOTH a trigger and a non-trigger — a fixture that contradicts itself. */
+function overlapsOf(ev: EvalsJson): string[] {
+  const triggerSet = new Set(ev.should_trigger);
+  return ev.should_not_trigger.filter((s) => triggerSet.has(s));
+}
+
 describe("eval-fixture integrity — no trigger/non-trigger overlap (defect guard)", () => {
   for (const { slug, path: skillPath } of TIER_SKILLS) {
     test(`${slug}: no exact string appears in both should_trigger and should_not_trigger`, () => {
-      const ev = loadEvals(skillPath);
-      const triggerSet = new Set(ev.should_trigger);
-      const overlaps = ev.should_not_trigger.filter((s) => triggerSet.has(s));
-      expect(overlaps).toHaveLength(0);
+      expect(overlapsOf(loadEvals(skillPath))).toHaveLength(0);
     });
   }
+
+  test("CONTROL: a planted self-contradicting fixture is caught", () => {
+    const planted: EvalsJson = { should_trigger: ["map the repo", "x"], should_not_trigger: ["map the repo", "y"] };
+    expect(overlapsOf(planted)).toEqual(["map the repo"]);
+  });
+
+  test("CONTROL: the vocabulary probe finds nothing in a fixture that lacks the words", () => {
+    expect(anyMatches(["plan the release", "deploy it"], "cheap", "scan")).toBe(false);
+    expect(anyMatches(["run a cheap scan"], "cheap", "scan")).toBe(true);
+  });
+
+  test("CONTROL: a missing fixture file throws rather than reading as empty", () => {
+    expect(() => loadEvals("meta/no-such-skill-t13-control")).toThrow();
+  });
 });

@@ -45,6 +45,7 @@ import {
 // by hand-joining ".guild". One constructor means one place decides where a
 // project's definitions live, so a layout change moves the mint with it.
 import { createGuildStorage } from "./state/storage";
+import { gateProfileCreation, resolveMintScope, type WorkflowClass } from "../../src/domains/teams";
 
 const yaml = require("js-yaml") as {
   dump: (o: unknown, opts?: Record<string, unknown>) => string;
@@ -612,12 +613,31 @@ export interface MintResult {
  * instance is guild:evolve-skill's job, not a re-mint). Path safety mirrors the
  * derived-registry writer: symlinked targets or ancestors escaping the project
  * root are refused outright.
+ *
+ * The class gate runs first (KTD55 / R67): only a `product` or `init` run grows
+ * the roster. Any other class, or no class at all, is refused with the
+ * `resolveMintScope` reason, and nothing is written.
  */
 export function mintFromTemplate(opts: {
   pluginRoot: string;
   projectRoot: string;
   name: string;
+  /** The run's bound workflow class; absent is refused. */
+  workflowClass: WorkflowClass | null | undefined;
   /** Run every check and report the would-be action WITHOUT writing anything. */
+  dryRun?: boolean;
+}): MintResult {
+  const target = path.join(definitionTree(path.resolve(opts.projectRoot)).agents, `${opts.name}.md`);
+  const gate = gateProfileCreation({ workflow_class: opts.workflowClass, role: opts.name, writer: "roster.mint" });
+  if (!gate.ok) return { path: target, action: "refused", reason: gate.reason };
+  return copyTemplateInstance(opts);
+}
+
+/** The template → instance copy behind mintFromTemplate, without the class gate. */
+function copyTemplateInstance(opts: {
+  pluginRoot: string;
+  projectRoot: string;
+  name: string;
   dryRun?: boolean;
 }): MintResult {
   const pluginRoot = path.resolve(opts.pluginRoot);
@@ -1070,10 +1090,17 @@ export interface TeamMigrationFileResult {
  * Team files are derived composition artifacts, so the rewrite is a canonical
  * re-dump of the parsed document (data-preserving; comment lines are not).
  * Files that fail the shared YAML parse are refused, never guessed at.
+ *
+ * Class gate (KTD55 / R67): an instance that already exists is re-linked under
+ * any class; an ABSENT one is created only through `mintFromTemplate`, so a
+ * non-minting class (or none) refuses the creation and the role lands in
+ * `failed`. A team file's own `workflow_class:`, when present, is gated too.
  */
 export function migrateTeamRoster(opts: {
   pluginRoot: string;
   projectRoot: string;
+  /** The run's bound workflow class; absent refuses every creation. */
+  workflowClass: WorkflowClass | null | undefined;
   dryRun?: boolean;
 }): TeamMigrationFileResult[] {
   const projectRoot = path.resolve(opts.projectRoot);
@@ -1119,7 +1146,24 @@ export function migrateTeamRoster(opts: {
       if (!templateNames.has(role)) continue; // machinery/dev-team stay shipped
       // Probe/execute the mint — dry-run runs the SAME checks without writing,
       // so a dry-run report never overstates what the real run can do.
-      const mint = mintFromTemplate({ pluginRoot, projectRoot, name: role, dryRun: opts.dryRun });
+      // An existing instance is only re-linked; creating one grows the roster
+      // and goes through the class-gated mint.
+      const probe = copyTemplateInstance({ pluginRoot, projectRoot, name: role, dryRun: true });
+      let mint = probe;
+      if (probe.action !== "exists") {
+        const fileClass = asString(doc["workflow_class"]) as WorkflowClass | undefined;
+        const fileScope = fileClass ? resolveMintScope({ workflow_class: fileClass }) : null;
+        mint =
+          fileScope && !fileScope.may_mint
+            ? { path: probe.path, action: "refused", reason: fileScope.reason }
+            : mintFromTemplate({
+                pluginRoot,
+                projectRoot,
+                name: role,
+                workflowClass: opts.workflowClass,
+                dryRun: opts.dryRun,
+              });
+      }
       if (mint.action === "refused") {
         // Leave the entry untouched, but SURFACE it: this lane stays broken.
         failed.push({ role, reason: mint.reason ?? "mint refused" });

@@ -5,7 +5,7 @@
  * exported vocabulary immutable at RUNTIME.
  *
  * Three structural facts drive every line here. All three are verified by the rail at
- * scripts/__tests__/closed-collection-freeze.test.ts rather than asserted in prose:
+ * tests/rails/closed-collection-freeze.test.ts rather than asserted in prose:
  *
  *  1. `as const` and `readonly` / `ReadonlyArray` / `ReadonlySet` are COMPILE-TIME. They
  *     erase. The emitted value is a plain mutable Array/Set with working mutators.

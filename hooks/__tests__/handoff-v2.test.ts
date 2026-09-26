@@ -5,6 +5,7 @@
  * escalate_reason coupling, optional fields, isHandoffV2 guard.
  */
 
+import { describe, it, expect } from "bun:test";
 import {
   validateHandoffV2,
   isHandoffV2,

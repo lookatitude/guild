@@ -19,7 +19,7 @@
  *
  * Behavior-neutral proof: the computed map equals the prior hand-typed maps for
  * all 9 hosts (verified by the parity test in
- * scripts/__tests__/rearch-tier-defaults-parity.test.ts — anti-vacuous).
+ * scripts/lib/rearch-tier-defaults-parity.test.ts — anti-vacuous).
  *
  * CONTRACT: pure synchronous function. No I/O, no clock, never throws.
  * Owned by tooling-engineer (W4); consumed by rank.ts, write-host-capability.ts,

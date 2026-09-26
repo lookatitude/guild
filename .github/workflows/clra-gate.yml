@@ -24,11 +24,11 @@ on:
 
 env:
   # Single source of truth for the CLRA conformance test path (scripts/-relative).
-  # Both the anti-skip guard and the jest invocation below consume this ONE
+  # Both the anti-skip guard and the bun test invocation below consume this ONE
   # value, so they can never drift apart again — the understand→learn rename
   # left this path hardcoded in two places and the guard kept passing
   # vacuously against a dead path (scripts/understand/...) for weeks.
-  CLRA_TEST: "learn/__tests__/clra-conformance.test.ts"
+  CLRA_TEST: "learn/clra-conformance.test.ts"
 
 jobs:
   clra-conformance:
@@ -42,6 +42,11 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Set up Bun (the test runner; the index:on branch still spawns Node 24)
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Install scripts/ dependencies
         run: |
           if [ -f scripts/package.json ]; then
@@ -52,14 +57,14 @@ jobs:
         run: |
           cd scripts
           test -f "$CLRA_TEST" || { echo "::error::CLRA_TEST path 'scripts/$CLRA_TEST' does not exist — the anti-skip guard has nothing to check and must hard-fail, not pass vacuously."; exit 1; }
-          if grep -nE "describe\.skip|it\.skip|test\.skip" "$CLRA_TEST"; then
+          if grep -nE "describe\.skip|it\.skip|test\.skip|\.todo\(" "$CLRA_TEST"; then
             echo "::error::$CLRA_TEST contains a skipped block — the gate must not be vacuous."
             exit 1
           fi
 
       - name: CLRA conformance gate (oracle + parity + security invariants)
         run: |
-          cd scripts && npx jest --no-coverage --runInBand "$CLRA_TEST"
+          bun test --isolate "./scripts/$CLRA_TEST"
 
   structural-intelligence:
     runs-on: ubuntu-latest
@@ -72,6 +77,11 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Install scripts/ dependencies
         run: |
           if [ -f scripts/package.json ]; then
@@ -80,5 +90,10 @@ jobs:
 
       - name: Structural extractor / incremental / artifact / impact / similarity suites
         run: |
-          cd scripts && npx jest --no-coverage --runInBand \
-            --testPathPattern="extract-structural|incremental|graph-artifact|graph-query-projection|impact|similarity"
+          bun test --isolate \
+            ./scripts/learn/extract-structural.test.ts \
+            ./scripts/learn/lib/incremental.test.ts \
+            ./scripts/learn/lib/graph-query-projection.test.ts \
+            ./scripts/learn/lib/impact.test.ts \
+            ./scripts/learn/lib/similarity.test.ts \
+            ./scripts/lib/ingest-similarity.test.ts

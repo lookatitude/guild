@@ -129,5 +129,5 @@ During migration, stable inventory paths under `scripts/` may become thin shims
 that import implementation from `src/modules/*`. Because generated host packages
 bundle the `scripts/` tree, `scripts/build-host-packages.ts` must also bundle
 `src/` anywhere it bundles scripts. Keep the focused Claude package test in
-`scripts/__tests__/claude-host-adapter.test.ts` green before moving more runtime
+`scripts/lib/claude-host-adapter.test.ts` green before moving more runtime
 code behind module-owned implementations.

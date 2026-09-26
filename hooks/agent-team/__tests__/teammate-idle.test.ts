@@ -5,6 +5,7 @@
  * teammate-idle always exits 0 but emits nudge messages to stdout.
  */
 
+import { describe, it, test, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";

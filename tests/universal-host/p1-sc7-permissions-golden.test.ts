@@ -25,6 +25,7 @@
  * default behavior must equal this baseline golden (asserted live when L10 lands).
  */
 
+import { describe, it, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {

@@ -23,6 +23,7 @@
  * a sub-guild's .guild/ … read-only on sub-guilds."
  */
 
+import { describe, it, test, expect, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 import {

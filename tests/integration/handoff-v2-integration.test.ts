@@ -23,6 +23,7 @@
  * Import path: ../../hooks/lib/handoff-v2 — same as production hooks.
  */
 
+import { describe, test, expect } from "bun:test";
 import {
   validateHandoffV2,
   isHandoffV2,
