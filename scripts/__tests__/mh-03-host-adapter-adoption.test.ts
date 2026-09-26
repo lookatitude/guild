@@ -21,6 +21,7 @@
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
 import {
@@ -31,6 +32,8 @@ import {
   type CliArgs,
 } from "../guild-run";
 import { buildModuleResourcePlan } from "../../src/domains/distribution";
+import { buildInventory } from "../build-inventory";
+import { writeClaudeTree } from "../build-host-packages";
 import { createHostAdapter } from "../lib/host-adapter-factory";
 import { planWrapperInvocation, type WrapperPlan, type WrapperRequest } from "../lib/guild-run-wrapper";
 import { DERIVED_HOST_CAPABILITY_ROWS } from "../lib/host-registry";
@@ -47,7 +50,13 @@ import {
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const LIVE_GUILD_RUN = path.join(REPO_ROOT, "scripts", "guild-run.ts");
-const SHIPPED_GUILD_RUN = path.join(REPO_ROOT, "dist", "claude-code", "scripts", "guild-run.ts");
+// dist/ is gitignored and CI's Jest legs never build it: render the Claude
+// package into a temp dir with the real projector instead of reading dist/.
+function shippedGuildRun(): string {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "guild-mh03-pkg-"));
+  const pkg = writeClaudeTree(REPO_ROOT, buildInventory(REPO_ROOT), out, "2026-01-01T00:00:00.000Z");
+  return path.join(pkg, "scripts", "guild-run.ts");
+}
 
 /** The hosts the shipped wrapper can actually plan an invocation for. */
 const PLANNER_HOSTS = Object.keys(DERIVED_HOST_CAPABILITY_ROWS);
@@ -158,7 +167,7 @@ describe("acceptance 1: the shipped guild-run caller routes through the public b
       .find((e) => e.source_path === "scripts/guild-run.ts");
     expect(entry).toBeDefined();
     expect(entry!.sha256).toBe(crypto.createHash("sha256").update(live).digest("hex"));
-    expect(fs.readFileSync(SHIPPED_GUILD_RUN)).toEqual(live);
+    expect(fs.readFileSync(shippedGuildRun())).toEqual(live);
   });
 });
 
