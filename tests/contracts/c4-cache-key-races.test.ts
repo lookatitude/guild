@@ -13,6 +13,7 @@
  * (explicit interleavings — no wall-clock, no threads, no network).
  */
 
+import { describe, it, test, expect } from "bun:test";
 import {
   requireContractModule,
   referenceTargetTuple,

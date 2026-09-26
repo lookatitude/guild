@@ -16,6 +16,7 @@
  *   cat fixtures/session-start.json | GUILD_PLUGIN_ROOT=<plugin-root> \
  *     node dist/using-guild-bootstrap.js > __tests__/golden/using-guild-session-start.json
  */
+import { describe, it, test, expect, jest } from "bun:test";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -57,6 +58,21 @@ describe("using-guild-bootstrap.ts (L5b SessionStart injection)", () => {
     const golden = fs.readFileSync(GOLDEN, "utf8");
     expect(status).toBe(0);
     expect(stdout).toBe(golden);
+  });
+
+  it("CONTROL: a one-byte change to the using-guild source breaks the golden match", () => {
+    const root = fs.mkdtempSync(path.join(require("os").tmpdir(), "ug-drift-"));
+    try {
+      const skillDir = path.join(root, "skills", "meta", "using-guild");
+      fs.mkdirSync(skillDir, { recursive: true });
+      fs.writeFileSync(path.join(skillDir, "SKILL.src.md"), fs.readFileSync(SKILL_SRC, "utf8").replace("# using-guild", "# using-guild!"));
+      const { stdout, status } = runHook(fixture, { GUILD_PLUGIN_ROOT: root, CLAUDE_PLUGIN_ROOT: root });
+      expect(status).toBe(0);
+      expect(stdout.length).toBeGreaterThan(0);
+      expect(stdout).not.toBe(fs.readFileSync(GOLDEN, "utf8"));
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("emits a well-formed hookSpecificOutput.additionalContext SessionStart envelope", () => {

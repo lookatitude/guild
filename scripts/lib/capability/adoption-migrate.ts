@@ -105,6 +105,9 @@ import {
 } from "./compatibility-catalog";
 import { readCompatibilityAsset, readRuntimeVersion } from "./compatibility-loader";
 import { assertWritableBinding } from "../../../src/domains/lifecycle/run-binding";
+import { readWorkflowCursor } from "../../../src/domains/lifecycle";
+import { createGuildStorage } from "../../../src/domains/state";
+import { gateProfileCreation } from "../../../src/domains/teams";
 import {
   appendReceipt,
   makeReceiptInput,
@@ -1154,6 +1157,13 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
   const compatibilityOnly: string[] = [];
   const pendingEntries: Array<Omit<AdoptionEntry, "sequence" | "prev_digest">> = [];
   const seenDecisions = new Set<string>();
+  // The run's bound class gates every NEW `.guild/agents/<id>.md` (R67). Read
+  // off the run record's workflow cursor, never taken from the caller: a debug
+  // run cannot adopt its way into a roster it may not mint. No cursor means the
+  // class is unknown, and an unknown class refuses creation.
+  const runClass =
+    readWorkflowCursor(createGuildStorage(projRoot, { activeRoot: projRoot, profile: "standalone" }).project?.runRecord(runId) ?? "")
+      ?.class ?? null;
 
   for (const raw of decisionsRaw) {
     const d = readOptions(raw, DECISION_KEYS);
@@ -1283,6 +1293,10 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
           status: "refused",
           reason: `${successorRelPath} already exists with different bytes; resolve it or choose compatibility_only for "${id}"`,
         };
+      }
+      if (kind === "agent" && existing === null) {
+        const gate = gateProfileCreation({ workflow_class: runClass, role: id, writer: "capability.adopt" });
+        if (!gate.ok) return { status: "refused", reason: gate.reason };
       }
       writes.push({
         absTarget,

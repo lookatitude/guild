@@ -12,6 +12,7 @@
  * Failing-by-design via CONTRACT-MODULE-MISSING; [control] tests pass today.
  */
 
+import { describe, test, expect } from "bun:test";
 import { requireContractModule, EVIDENCE_STATES } from "./_helpers";
 
 const CATALOG_MODULE = "src/domains/config/model-catalog";

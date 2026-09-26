@@ -12,6 +12,7 @@
  *  - The §7 predicate module does not exist yet (lanes T5+T6).
  */
 
+import { describe, test, expect } from "bun:test";
 import { planReviewPairing } from "../../src/domains/review";
 import { requireContractModule } from "./_helpers";
 

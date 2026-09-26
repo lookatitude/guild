@@ -23,6 +23,7 @@
  * a green here can never mean "the audit stopped detecting anything".
  */
 
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";

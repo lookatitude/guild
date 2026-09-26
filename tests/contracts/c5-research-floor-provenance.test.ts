@@ -14,6 +14,7 @@
  * source the runtime must read.
  */
 
+import { describe, it, test, expect } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 

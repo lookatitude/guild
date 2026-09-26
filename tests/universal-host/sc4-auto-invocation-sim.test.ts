@@ -20,6 +20,7 @@
  * Status at authoring: GREEN — L4 (using-guild) landed.
  */
 
+import { describe, it, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";

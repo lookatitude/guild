@@ -11,6 +11,7 @@
  * processes ran discovery (discovery_count=2) and returned their own bodies.
  */
 
+import { describe, it, test, expect } from "bun:test";
 import { spawn } from "child_process";
 import * as fs from "fs";
 import * as os from "os";

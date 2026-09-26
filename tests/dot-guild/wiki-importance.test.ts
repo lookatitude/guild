@@ -19,6 +19,7 @@
  *  - report ends with the drafted-grades review table + accept instruction
  */
 
+import { describe, test, expect } from "bun:test";
 import * as path from "path";
 import {
   runMigration,

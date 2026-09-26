@@ -17,7 +17,8 @@
  *      asserts indirectly); pending/skipped (it.skip/it.todo/xit) and table-only
  *      placeholders are not double-counted.
  *
- * Scope: tests/** + scripts/__tests__/** (the two suites that ship tests).
+ * Scope: every *.test.ts under tests/, scripts/ and src/ (bun tests are colocated
+ * beside the code they cover since T13).
  * ADVISORY — lists violations as W2 backlog; it does not block.
  *
  * Anti-vacuity (the lint guarding the lint): `--prove` asserts (a) a guard test with no
@@ -114,7 +115,7 @@ export function lintFile(relPath: string, content: string): VacFinding | null {
   return { file: relPath, guardTitles: titles, hasControl, zeroAssertionTests };
 }
 
-const SCAN_DIRS = ["tests", path.join("scripts", "__tests__")];
+const SCAN_DIRS = ["tests", "scripts", "src"];
 
 export function run(): RailResult {
   const out: RailResult = { rail: "R-VAC", pass: true, advisory: true, violations: [], notes: [] };

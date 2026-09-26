@@ -23,6 +23,7 @@
  *     against a caller-supplied clock (no wall-clock reads).
  */
 
+import { describe, test, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -30,7 +31,7 @@ import * as path from "path";
 import {
   buildModelInspection,
   MODEL_INSPECTION_SCHEMA,
-} from "../../src/domains/config/model-inspect";
+} from "../../src/domains/config";
 import { persistInspectionReport } from "../../src/domains/config";
 import { buildIndependenceAdjudication } from "../../src/domains/config";
 import { readRoutingFlags, ROUTING_FLAG_DEFAULTS, type RoutingFlags } from "../../src/domains/config";
@@ -653,14 +654,14 @@ describe("model-inspect — M0 read-only inspection service (lane T6)", () => {
         };
         const before = listTree(tmp);
         const writeSpies = [
-          jest.spyOn(fs, "writeFileSync"),
-          jest.spyOn(fs, "appendFileSync"),
-          jest.spyOn(fs, "mkdirSync"),
-          jest.spyOn(fs, "renameSync"),
-          jest.spyOn(fs, "openSync"),
-          jest.spyOn(fs, "createWriteStream"),
-          jest.spyOn(fs, "rmSync"),
-          jest.spyOn(fs, "unlinkSync"),
+          spyOn(fs, "writeFileSync"),
+          spyOn(fs, "appendFileSync"),
+          spyOn(fs, "mkdirSync"),
+          spyOn(fs, "renameSync"),
+          spyOn(fs, "openSync"),
+          spyOn(fs, "createWriteStream"),
+          spyOn(fs, "rmSync"),
+          spyOn(fs, "unlinkSync"),
         ];
         try {
           // Every inspection shape: ok, disabled, forged receipt, adjudicated.

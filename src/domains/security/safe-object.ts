@@ -11,7 +11,7 @@
  * These keys must never be merged/assigned from untrusted input (e.g. an
  * attacker-authored settings.local.json). Keep this list authoritative — the
  * former three identical copies are gone; this is guarded by
- * scripts/__tests__/safe-object-parity.test.ts.
+ * src/domains/security/safe-object-parity.test.ts.
  */
 
 /** Keys that must never be merged into any object (prototype pollution guard). */

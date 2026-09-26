@@ -7,6 +7,7 @@
  * silent default-shape drift fails fast. The ONE allowlisted intentional re-baseline is the
  * config-schema-extension golden (LW1-9-signed) — NOT these.
  */
+import { describe, it, expect } from "bun:test";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { classifyIntake } from "../../scripts/lib/classify-intake";
@@ -44,7 +45,7 @@ describe("SC-W1-9 — additive pure surfaces are deterministic (A/B)", () => {
 // allowlist. The ONE intentional default-output delta this wave is the config-schema-
 // extension scaffold, which lives under the CONFIG path (scripts/lib/config-schema.ts +
 // the re-baselined tests/.../config-init-baseline.json) and is byte-pinned separately by
-// scripts/__tests__/config-reconcile.test.ts (`scaffold() === config-init-baseline.json`).
+// scripts/lib/config-reconcile.test.ts (`scaffold() === config-init-baseline.json`).
 // So the command/hook/package allowlist is EMPTY — those entry paths must be byte-identical.
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 const ENTRY_PATHS = ["commands", "hooks", ".claude-plugin"];
@@ -70,7 +71,7 @@ const ENTRY_PATHS = ["commands", "hooks", ".claude-plugin"];
 // migration moved the shared frontmatter/YAML reader behind src/modules/state and
 // the package-local YAML resolver behind src/modules/kernel. `task-completed.js`
 // is rebuilt from the same hook source, but the bundle shape legitimately changes
-// to use the module runtime resolver. scripts/__tests__/claude-host-adapter.test.ts
+// to use the module runtime resolver. scripts/lib/claude-host-adapter.test.ts
 // probes generated Claude hook execution from the installed package layout, so
 // this is an explicit, tested re-baseline rather than silent entrypoint drift.
 // The allowlist stays EXPLICIT (named files, never a wildcard) so any OTHER entry-path
@@ -255,6 +256,58 @@ const ENTRY_ALLOWLIST = new Set<string>([
   "commands/stats.md",
   "commands/status.md",
   "commands/wiki.md",
+  // plugin-layout-reshape T13 (bun test migration): every hook suite now imports its
+  // runner from "bun:test" instead of Jest's globals, and the committed bundles were
+  // recompiled because comments in their domain sources name the relocated test
+  // paths (compile --check pins them). No hook source behaviour changed; the hook
+  // suites and the bundle-determinism gate re-prove the surface. After the lead
+  // commits, HEAD advances and these entries become harmless no-ops.
+  "hooks/__tests__/bootstrap-capability.test.ts",
+  "hooks/__tests__/bypass-forcing.test.ts",
+  "hooks/__tests__/capture-telemetry.test.ts",
+  "hooks/__tests__/comms-format-lint.test.ts",
+  "hooks/__tests__/detect-guild-version.test.ts",
+  "hooks/__tests__/emit-learning-checkpoint.test.ts",
+  "hooks/__tests__/gate-outcome-writer.test.ts",
+  "hooks/__tests__/guild-root.test.ts",
+  "hooks/__tests__/handoff-v2.test.ts",
+  "hooks/__tests__/heartbeat-tier-timeout.test.ts",
+  "hooks/__tests__/heartbeat-write.test.ts",
+  "hooks/__tests__/hook-binding.test.ts",
+  "hooks/__tests__/injection-guard.test.ts",
+  "hooks/__tests__/learning-backstop.test.ts",
+  "hooks/__tests__/maybe-reflect.test.ts",
+  "hooks/__tests__/phase-checkpoint-coverage.test.ts",
+  "hooks/__tests__/pre-tool-use-degrade.test.ts",
+  "hooks/__tests__/pre-tool-use-projection-gate.test.ts",
+  "hooks/__tests__/pre-tool-use-security.test.ts",
+  "hooks/__tests__/pre-tool-use-tier-guard.test.ts",
+  "hooks/__tests__/pre-tool-use-turn-bound.test.ts",
+  "hooks/__tests__/run-trace-classify-integration.test.ts",
+  "hooks/__tests__/run-trace-close-checkpoint.test.ts",
+  "hooks/__tests__/scrubbed-write.test.ts",
+  "hooks/__tests__/security-config.test.ts",
+  "hooks/__tests__/security-enforce.test.ts",
+  "hooks/__tests__/security-events.test.ts",
+  "hooks/__tests__/security-mcp-hash-pin.test.ts",
+  "hooks/__tests__/security-secrets.test.ts",
+  "hooks/__tests__/t10-hook-rungs.test.ts",
+  "hooks/__tests__/task-completed-injection.test.ts",
+  "hooks/__tests__/task-completed-scrub.test.ts",
+  "hooks/agent-team/__tests__/bus-emit.test.ts",
+  "hooks/agent-team/__tests__/task-completed-context-compliance.test.ts",
+  "hooks/agent-team/__tests__/task-created.test.ts",
+  "hooks/lib/__tests__/context-compliance.test.ts",
+  "hooks/lib/__tests__/g3-marker-blockable.test.ts",
+  "hooks/lib/__tests__/heartbeat.test.ts",
+  "hooks/lib/__tests__/lane-attribution.test.ts",
+  "hooks/lib/__tests__/run-date.test.ts",
+  "hooks/lib/__tests__/self-build.test.ts",
+  "hooks/lib/__tests__/tier-dispatch.test.ts",
+  "hooks/lib/__tests__/tool-turn-bound.test.ts",
+  "hooks/lib/__tests__/trace-v2.test.ts",
+  "hooks/lib/v1.4/__tests__/append-trace-v2.test.ts",
+  "hooks/lib/v1.4/__tests__/log-jsonl-split-parity.test.ts",
 ]);
 
 function gitLines(args: string[]): string[] {

@@ -9,6 +9,7 @@
  * the shapes the product-explore / product-define producer skills emit, so a passing
  * example here is the producer-shape check too.
  */
+import { describe, it, expect } from "bun:test";
 import {
   validateExploreV1,
   EXPLORE_V1_EXAMPLE,

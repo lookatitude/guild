@@ -4,6 +4,7 @@
  * its catalog-pinned bytes and durable MH-06 receipt have been established.
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";

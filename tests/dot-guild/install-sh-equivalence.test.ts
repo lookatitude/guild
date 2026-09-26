@@ -15,6 +15,7 @@
  * failing — the gate is enforceable only where both checkouts exist.
  */
 
+import { describe, test, expect } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 

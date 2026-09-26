@@ -1,6 +1,6 @@
 ---
 name: guild-evolve-targets
-description: The closed evolve target enum and the one-gate/two-homes law — which of the eleven targets a change is, whether it lands under the consuming repo's own .guild/ (project RSI) or as a candidate a human commits (plugin RSI), and which targets the automatic path may touch at all. Read BEFORE running the evolve pipeline on any target. TRIGGER for "maintain evolve <id> --target=<type>", "can the auto path change this", "where does this evolve land", "why did evolve refuse my target". DO NOT TRIGGER for: rolling a change back (references/rollback-skill.md), reverting a harvest wiki write (references/wiki-revert.md), auditing scripts (references/audit.md), or authoring a net-new skill (guild:create-skill).
+description: The closed evolve target enum and the one-gate/two-homes law — which of the eleven targets a change is, whether it lands under the consuming repo's own .guild/ (project RSI) or as a candidate a human commits (plugin RSI), and which targets the automatic path may touch at all. Read BEFORE running the evolve pipeline on any target. TRIGGER for "maintain evolve <id> --target=<type>", "can the auto path change this", "where does this evolve land", "why did evolve refuse my target". DO NOT TRIGGER for: rolling a change back (rollback-skill.md), reverting a harvest wiki write (wiki-revert.md), auditing scripts (audit.md), or authoring a net-new skill (guild:create-skill).
 when_to_use: First step of every `maintain evolve` run, before the §11.2 pipeline. Also whenever a refusal names a target and the operator needs to know what unblocks it.
 type: meta
 ---
@@ -157,7 +157,7 @@ An unrecognized verdict routes to the human queue, never to a write.
 
 Every applied delta records its inverse span, both hashes, and the region's **byte
 offset** with head/tail hashes in compact history (KTD48). `maintain rollback <key> [n]`
-restores them — see `references/rollback-skill.md`. No durable per-version tree is
+restores them — see `rollback-skill.md`. No durable per-version tree is
 written.
 
 Rollback verifies the SPAN, not the file. It locates the region by its anchor and restores

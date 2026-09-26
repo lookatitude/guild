@@ -14,6 +14,7 @@
  * does not exist (lane T5).
  */
 
+import { describe, it, test, expect } from "bun:test";
 import { requireContractModule, FAILURE_TAXONOMY, selfRefHash, canonicalYaml, sha256 } from "./_helpers";
 
 const RESOLVER_MODULE = "src/domains/config/model-resolver";

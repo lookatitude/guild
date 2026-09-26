@@ -215,7 +215,7 @@ function prove(): void {
       enforcer_file: "scripts/lib/security/DOES_NOT_EXIST_abcxyz.ts",
       enforcer_function: "noop",
       enforcer_kind: "code",
-      hostile_test: "scripts/__tests__/recall-protect.test.ts", // real file
+      hostile_test: "src/domains/knowledge/recall-protect.test.ts", // real file
       anti_vacuity_control: "planted nonexistent enforcer",
     },
   ];
@@ -251,7 +251,7 @@ function prove(): void {
       enforcer_file: "",
       enforcer_function: "",
       enforcer_kind: "prose-only",
-      hostile_test: "scripts/__tests__/recall-protect.test.ts", // real file
+      hostile_test: "src/domains/knowledge/recall-protect.test.ts", // real file
       anti_vacuity_control: "planted prose-only",
     },
   ];
@@ -275,7 +275,7 @@ function prove(): void {
       enforcer_file: "scripts/lib/recall-protect.ts",
       enforcer_function: "protectChunks",
       enforcer_kind: "code",
-      hostile_test: "scripts/__tests__/recall-protect.test.ts",
+      hostile_test: "src/domains/knowledge/recall-protect.test.ts",
       anti_vacuity_control: "planted clean control",
     },
   ];

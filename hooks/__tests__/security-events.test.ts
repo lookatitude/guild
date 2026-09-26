@@ -4,6 +4,7 @@
  * Unit tests for the guild.security_event.v1 emitter (hooks/lib/security/events.ts).
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";

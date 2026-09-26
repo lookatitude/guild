@@ -616,7 +616,7 @@ const HAND_ROLLED_PATTERNS: Array<{ pattern: RegExp; label: string }> =
 const SELF_EXEMPT_SUFFIXES = [
   "src/domains/dispatch/comms-format-lint.ts",
   "scripts/comms/comms-format-lint.ts",
-  "scripts/comms/__tests__/comms-format-lint.test.ts",
+  "src/domains/dispatch/comms-format-lint.test.ts",
 ];
 
 function checkNewHandRolledYaml(

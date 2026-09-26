@@ -30,6 +30,7 @@ export {
   EXECUTION_TRANSPORT_SCHEMA_VERSION,
   ExecutionTransportTaskCellWorkerPort,
   FilesystemTaskCellRuntime,
+  GoalSliceRefusedError,
   HANDOFF_ACCEPTANCE_SCHEMA,
   HANDOFF_VALIDATION_SCHEMA,
   INSTANCE_CAP_CONTRACT,

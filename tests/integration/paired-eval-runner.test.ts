@@ -43,21 +43,21 @@
  *       description-shape reasons; specialist-agent-writer owns
  *       templates/specialists/*.md.
  *
- * SKIP MECHANISM: `runCase()` below computes `wouldTrigger` at collection
- * time and only marks a case `test.skip` when it is CURRENTLY genuinely
- * failing — this is a live per-case check, not a hardcoded stale skip list:
- * a future matcher fix or fixture fix flips the case back to a real,
- * asserting `test()` automatically, with no runner edit required. Each skip
- * title carries its own prompt + expected owner (per-case, not wholesale) and
- * points back to the MATCHER LIMITS catalogue for the root-cause category. A
- * ceiling assertion per tier (below) guards against silent regression: if a
- * change ever pushes MORE cases into skip than this measured baseline, that
- * assertion fails loudly instead of quietly widening the skip surface.
+ * GAP MECHANISM: `runCase()` below computes `wouldTrigger` at collection
+ * time. A case the matcher currently agrees with is a real asserting `test()`;
+ * a case it currently gets wrong is recorded on a per-tier gap list (its title
+ * carries the prompt, the mismatch and a pointer to trigger-matcher.ts's
+ * MATCHER LIMITS). It is a live per-case check, not a stale list: a matcher or
+ * fixture fix moves the case back to an asserting `test()` with no runner
+ * edit. A ceiling assertion per tier (below) fails loudly, listing every gap,
+ * if a change pushes MORE cases past the matcher than the measured baseline.
+ * Nothing here is registered as a skipped test.
  *
- * The runner must be GREEN at rest — skips are acceptable per-case (with a
- * reason), never wholesale.
+ * The runner must be GREEN at rest — gaps are acceptable per-case (with a
+ * reason, under the ceiling), never wholesale.
  */
 
+import { describe, test, expect } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 import { readScalarField } from "../../scripts/lib/frontmatter";
@@ -213,19 +213,19 @@ interface TriggerEvalsFile {
   cases: TriggerCase[];
 }
 
-// ── Live skip mechanism (see file header: SKIP MECHANISM) ─────────────────
+// ── Live gap mechanism (see file header: GAP MECHANISM) ──────────────────
 
-/** Per-tier skip counters, asserted against a measured ceiling at the bottom of each describe block. */
-const skipCounts = { skill: 0, trigger: 0, boundary: 0 };
+/** Per-tier matcher gaps, asserted against a measured ceiling at the bottom of each describe block. */
+const gaps: Record<"skill" | "trigger" | "boundary", string[]> = { skill: [], trigger: [], boundary: [] };
 
 /**
  * Register one case as a real assertion if the matcher currently agrees with
- * `expected`, or as a `test.skip` (with the mismatch + a MATCHER LIMITS
- * pointer in the title) if it currently does not. Computed live at
- * collection time — see file header.
+ * `expected`, or record it as a gap (with the mismatch + a MATCHER LIMITS
+ * pointer) if it currently does not. Computed live at collection time — see
+ * file header.
  */
 function runCase(
-  tier: keyof typeof skipCounts,
+  tier: keyof typeof gaps,
   title: string,
   actual: boolean,
   expected: boolean,
@@ -236,12 +236,21 @@ function runCase(
     });
     return;
   }
-  skipCounts[tier]++;
-  test.skip(
-    `${title} — SKIP: matcher currently says ${actual}, fixture expects ${expected} ` +
+  gaps[tier].push(
+    `${title} — GAP: matcher currently says ${actual}, fixture expects ${expected} ` +
       `(v1 keyword/phrase heuristic gap — see trigger-matcher.ts's MATCHER LIMITS)`,
-    () => {},
   );
+}
+
+/** The ceiling check: on failure the message lists every recorded gap. */
+function expectGapsWithin(tier: keyof typeof gaps, ceiling: number): void {
+  if (gaps[tier].length > ceiling) {
+    throw new Error(
+      `${gaps[tier].length} ${tier}-tier matcher gaps exceed the ceiling of ${ceiling}:\n  ` +
+        gaps[tier].join("\n  "),
+    );
+  }
+  expect(gaps[tier].length).toBeLessThanOrEqual(ceiling);
 }
 
 // ── Tier 1: per-skill evals.json vs the SAME skill's own description ───────
@@ -278,10 +287,10 @@ describe("per-skill evals.json vs own description", () => {
   // remediation G9, 2026-07-13) after the matcher fixes documented in
   // trigger-matcher.ts: self-overlap resolution, corpus document-frequency
   // floor (35%, DO-NOT-TRIGGER-tuned), X/<placeholder> stripping, backtick-
-  // span masking. A future change that pushes MORE cases into skip here is a
+  // span masking. A future change that pushes MORE cases into a gap here is a
   // real regression, not routine drift — investigate before raising this.
-  test("skip ceiling: no more than 178 per-skill cases are in matcher-limit skip", () => {
-    expect(skipCounts.skill).toBeLessThanOrEqual(178);
+  test("gap ceiling: no more than 178 per-skill cases are matcher-limit gaps", () => {
+    expectGapsWithin("skill", 178);
   });
 });
 
@@ -368,11 +377,11 @@ describe("tests/trigger/{core,meta}/evals.json vs all skill descriptions", () =>
   // Re-measured 2026-09-14 (T03 surfaces/skills fold): 14 → 29. The fold replaced
   // narrow per-skill descriptions with broader assembler descriptions and added the
   // `references/` chapters to the corpus, which raises document frequency and pushes
-  // more cases past the matcher limit. Skip is "the matcher cannot decide", not a
+  // more cases past the matcher limit. A gap is "the matcher cannot decide", not a
   // routing failure — but 29 is a worse number than 14 and the trigger corpus wants
   // a re-tune against the 17-assembler surface (followup, eval lane).
-  test("skip ceiling: no more than 29 trigger-tier cases are in matcher-limit skip", () => {
-    expect(skipCounts.trigger).toBeLessThanOrEqual(29);
+  test("gap ceiling: no more than 29 trigger-tier cases are matcher-limit gaps", () => {
+    expectGapsWithin("trigger", 29);
   });
 });
 
@@ -420,7 +429,7 @@ describe("tests/boundary/evals.json vs all specialist template descriptions", ()
 
   // Regression ceiling — see tier 1's identical note. Measured baseline as of
   // this lane after the matcher fixes in trigger-matcher.ts.
-  test("skip ceiling: no more than 16 boundary-tier cases are in matcher-limit skip", () => {
-    expect(skipCounts.boundary).toBeLessThanOrEqual(16);
+  test("gap ceiling: no more than 16 boundary-tier cases are matcher-limit gaps", () => {
+    expectGapsWithin("boundary", 16);
   });
 });

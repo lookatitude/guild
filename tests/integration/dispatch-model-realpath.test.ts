@@ -23,6 +23,7 @@
  *      command with no `--model` and no `GUILD_MODEL` at all.
  */
 
+import { describe, it, test, expect, beforeEach, afterAll, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
@@ -32,15 +33,15 @@ import {
   deriveResolveInputsFromM0Evidence,
   planProductionDispatchModel,
 } from "../../src/domains/dispatch/task-assignment-v2";
-import { persistInspectionReport } from "../../src/domains/config/inspection-persist";
+import { persistInspectionReport } from "../../src/domains/config";
 import {
   buildModelInspection,
   MODEL_INSPECTION_SCHEMA,
-} from "../../src/domains/config/model-inspect";
+} from "../../src/domains/config";
 import {
   loadVerifiedM0Reports,
   ROUTING_FLAG_DEFAULTS,
-} from "../../src/domains/config/routing-rollout";
+} from "../../src/domains/config";
 // T8R/F3: the run-identity artifacts a real run owns (frozen session context +
 // content-addressed catalog cache entry) are seeded through the SAME key
 // builder production reads with — a hand-picked filename would prove nothing.
@@ -48,13 +49,13 @@ import {
   createCacheKey,
   MODEL_CATALOG_SCHEMA_VERSION,
   modelCatalogCacheDir,
-} from "../../src/domains/config/catalog-cache";
-import { loadRunBinding, mintRunBinding } from "../../src/domains/lifecycle/run-binding";
-import { sessionBindingPath, type SessionBinding } from "../../src/domains/config/session-binding";
-import { selfReferentialHash } from "../../src/domains/teams/canonical-hash";
+} from "../../src/domains/config";
+import { loadRunBinding, mintRunBinding } from "../../src/domains/lifecycle";
+import { sessionBindingPath, type SessionBinding } from "../../src/domains/config";
+import { selfReferentialHash } from "../../src/domains/teams";
 import { recordDecision, writeDecision } from "../../src/domains/teams/team-decision";
 import { composeProposal, writeProposal } from "../../src/domains/teams/team-proposal";
-import { createExactClaudePluginFixture } from "../../scripts/__tests__/fixtures/exact-claude-plugin-fixture";
+import { createExactClaudePluginFixture } from "../fixtures/exact-claude-plugin-fixture";
 
 const SESSION_CONTEXT_SCHEMA = "guild.session_context.v1";
 
@@ -153,7 +154,7 @@ function runLauncher(
   // launcher path. These fixtures are about M0/M1/M2 model selection, not
   // approval, and carry no team-plan trail — opt into the ONE audited escape
   // hatch with a stated reason. The gate's own pins live in
-  // scripts/__tests__/t7-h1-dispatch-approval.test.ts.
+  // src/domains/teams/t7-h1-dispatch-approval.test.ts.
   if (opts.approvalOverride !== false) {
     env.GUILD_DISPATCH_APPROVAL_OVERRIDE =
       "dispatch-model realpath fixture: no team-plan trail; approval verification is pinned separately";

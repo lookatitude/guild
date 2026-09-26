@@ -231,7 +231,7 @@ function prove(): void {
     "generated resource projections are EXCLUDED from canonical-source duplication counts",
   );
   proveAssert(
-      isTestPath("scripts/__tests__/graph-scoring-parity.test.ts") &&
+      isTestPath("scripts/learn/lib/graph-scoring-parity.test.ts") &&
       isTestPath("scripts/foo.test.ts") &&
       !isTestPath("src/domains/knowledge/graph-scoring.ts") &&
       isGeneratedResourceProjectionPath(

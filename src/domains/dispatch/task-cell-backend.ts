@@ -33,6 +33,8 @@
 
 import * as path from "path";
 
+import type { GoalV1 } from "../teams";
+
 // ── D5 · Lifecycle state machine ─────────────────────────────────────────────
 
 /**
@@ -951,6 +953,8 @@ export interface CellHandle {
   readonly fanout: CellFanout;
   readonly lead: LeadBinding;
   readonly instance_ids: readonly string[];
+  /** The `guild.goal.v1` this cell serves, when it carries one (KTD62 slice). */
+  readonly goal?: GoalV1;
 }
 
 /**
@@ -1008,6 +1012,12 @@ export interface SpawnCellRequest {
   logical_task_id: string;
   fanout: CellFanout;
   lead: LeadBinding;
+  /**
+   * The `guild.goal.v1` this cell serves. When present, every instance's
+   * `worker_role` must be in the goal's slice of this project's MINTED profiles
+   * (KTD62 / R73); `goal.id` must equal `goal_id`.
+   */
+  goal?: GoalV1;
 }
 
 export interface SpawnInstanceRequest {
@@ -1076,6 +1086,8 @@ export interface AcceptHandoffRequest {
   authorities_required: AcceptanceAuthority[];
   authorities_observed: AuthorityDecision[];
   reviewer_cell_id?: string | null;
+  /** Policy `review.independence`; absent means true (KTD58). */
+  review_independence?: boolean;
 }
 
 export type AcceptHandoffResult =

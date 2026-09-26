@@ -14,6 +14,7 @@
  * git-trackable-but-uncovered ones.
  */
 
+import { describe, it, test, expect } from "bun:test";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";

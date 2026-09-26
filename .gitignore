@@ -146,7 +146,7 @@ node_modules/
 # tests/wiki-lint/fixtures/**/.guild/ was declared EXEMPT in FIXTURE_EXEMPT_PATTERNS
 # (plugin/scripts/dot-guild/audit.ts) but had NO matching re-include here — a real
 # drift between the two allow-lists this audit pass found via the exemption-parity
-# test (scripts/dot-guild/__tests__/exemption-parity.test.ts). Latent/harmless only
+# test (scripts/dot-guild/exemption-parity.test.ts). Latent/harmless only
 # because no wiki-lint fixture has ever needed a nested .guild/ yet; fixed here so
 # the exemption and the re-include stay in lockstep.
 !tests/wiki-lint/fixtures/**/.guild/

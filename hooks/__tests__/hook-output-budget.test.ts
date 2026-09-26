@@ -11,6 +11,7 @@
  * cannot pass merely because its command discovery or byte accounting is dead.
  */
 
+import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";

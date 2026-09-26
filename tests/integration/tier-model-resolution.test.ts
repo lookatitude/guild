@@ -4,7 +4,7 @@
  * Cross-cutting integration tests for the host-agnostic tier→model map
  * contract (ADR §1, §2, §10; VC-5 SC-5).
  *
- * These tests cover surfaces Lane C (scripts/__tests__/read-guild-config.test.ts)
+ * These tests cover surfaces Lane C (scripts/read-guild-config.test.ts)
  * did NOT cover:
  *   - End-to-end resolution of cheap→haiku / mid→sonnet / powerful→opus via
  *     the resolved config object (not just "is the key present").
@@ -22,6 +22,7 @@
  * guild-plan.md §15.2 risk row 3 (decision-capture noise) + VC-5 (SC-5).
  */
 
+import { describe, it, test, expect, afterAll } from "bun:test";
 import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
@@ -239,7 +240,7 @@ describe("Tier→model map resolution — end-to-end contract (ADR §1, VC-5)", 
     // G4b (host-reachability): the registry grew from 9 to 16 host ids (4
     // wrapped-CLI + 3 agents-file IDE hosts); config-defaults.ts's DEFAULTS.models.tiers
     // now carries a slot for every one of them (see
-    // scripts/__tests__/config-defaults-tiers-host-ids.test.ts for the drift guard).
+    // scripts/lib/config-defaults-tiers-host-ids.test.ts for the drift guard).
     const CANONICAL_HOST_KEYS = [
       "claude-code-cli",
       "codex-cli",

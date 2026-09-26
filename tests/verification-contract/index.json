@@ -1,0 +1,1134 @@
+{
+  "schema": "guild.verification_contract_index.v1",
+  "source": ".guild/artifacts/reports/plugin-layout-implementation-plan.html §Verification Contract (rev 20)",
+  "note": "Every Verification Contract R-id and KTD row names at least one fixture: a test title in a test file, a layout-laws check that must flag its planted fixture and pass the live tree, or a description-budget leg. Rows a later lane owns are test.todo entries naming that lane. build-coverage-draft.ts lists every row as a kind: eval entry with its R-ids.",
+  "required_ids": [
+    "R1",
+    "R18",
+    "R19",
+    "R20",
+    "R21",
+    "R22",
+    "R23",
+    "R24",
+    "R25",
+    "R26",
+    "R27",
+    "R28",
+    "R29",
+    "R30",
+    "R31",
+    "R32",
+    "R33",
+    "R34",
+    "R35",
+    "R36",
+    "R37",
+    "R38",
+    "R39",
+    "R40",
+    "R41",
+    "R42",
+    "R43",
+    "R44",
+    "R45",
+    "R46",
+    "R47",
+    "R48",
+    "R49",
+    "R50",
+    "R51",
+    "R52",
+    "R53",
+    "R54",
+    "R55",
+    "R56",
+    "R57",
+    "R58",
+    "R59",
+    "R60",
+    "R61",
+    "R62",
+    "R63",
+    "R64",
+    "R65",
+    "R66",
+    "R67",
+    "R68",
+    "R69",
+    "R70",
+    "R71",
+    "R72",
+    "R73",
+    "R74",
+    "R75",
+    "R76",
+    "R77",
+    "R78",
+    "R79",
+    "R80",
+    "KTD1",
+    "KTD2",
+    "KTD3",
+    "KTD4",
+    "KTD5",
+    "KTD6",
+    "KTD7",
+    "KTD8",
+    "KTD9",
+    "KTD10",
+    "KTD11",
+    "KTD28",
+    "F9",
+    "F2",
+    "F12",
+    "D5"
+  ],
+  "rows": [
+    {
+      "id": "R1",
+      "unit": "U-S",
+      "proves": "no capability orphans; the coverage map is complete",
+      "fixtures": [
+        {
+          "test": "scripts/t12-domain-fold.test.ts",
+          "title": "the live coverage draft is bijective with zero orphans"
+        },
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R1 · the coverage map regenerates with zero unmapped ids"
+        }
+      ]
+    },
+    {
+      "id": "R18",
+      "unit": "U1",
+      "proves": "a new host-visible skill is an assembler or a playbook",
+      "fixtures": [
+        {
+          "lint": "skills-glob-17"
+        },
+        {
+          "lint": "learning-checkpoint-not-indexed"
+        }
+      ]
+    },
+    {
+      "id": "R19",
+      "unit": "U2",
+      "proves": "both channels compile; users run Node",
+      "fixtures": [
+        {
+          "test": "tests/universal-host/t04-command-dispatch-shape.test.ts",
+          "title": "no command spawns through npx / tsx (KTD7, KTD10)"
+        },
+        {
+          "test": "scripts/check-bundle-determinism.test.ts",
+          "title": "REGRESSION (#75): the compile step pins js-yaml on every target and no build sets NODE_PATH"
+        },
+        {
+          "test": "scripts/t12-domain-fold.test.ts",
+          "title": "the built Claude package carries only surfaces, module shims + the closure, and its runtime starts"
+        }
+      ]
+    },
+    {
+      "id": "R20",
+      "unit": "U-S",
+      "proves": "the typed palette is 13 command files; dropped tokens are arguments or print-only aliases",
+      "fixtures": [
+        {
+          "lint": "no-14th-command-file"
+        },
+        {
+          "test": "tests/universal-host/t04-command-dispatch-shape.test.ts",
+          "title": "T04 shape floor — 13 dispatchers, thin, compiled spawns only"
+        }
+      ]
+    },
+    {
+      "id": "R21",
+      "unit": "U-S",
+      "proves": "closed 17 indexed skills; catalog <=8k; per-skill <=350; commands <=40 lines",
+      "fixtures": [
+        {
+          "lint": "skills-glob-17"
+        },
+        {
+          "lint": "command-max-40-lines"
+        },
+        {
+          "budget": "catalog"
+        },
+        {
+          "budget": "per-skill"
+        }
+      ]
+    },
+    {
+      "id": "R22",
+      "unit": "U9",
+      "proves": "one authoring home; dual copies and the nested clone are gone",
+      "owner": "T16",
+      "pending": "clone and deletion greps for the one authoring home"
+    },
+    {
+      "id": "R23",
+      "unit": "U-STOR",
+      "proves": "no fake registries, no eager empty dirs",
+      "fixtures": [
+        {
+          "test": "scripts/lib/state/storage-api.test.ts",
+          "title": "R23 — the init floor is lazy"
+        },
+        {
+          "lint": "no-authored-registry-sot"
+        }
+      ]
+    },
+    {
+      "id": "R24",
+      "unit": "U8 · U-STOR",
+      "proves": "bun test is the runner; the spawn path is compiled Node; no runtime debris in durable .guild",
+      "fixtures": [
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R24 · bun test is the blocking runner, isolated per file, in a hermetic cwd"
+        },
+        {
+          "test": "scripts/lib/state/storage-api.test.ts",
+          "title": "R25–R27 — closeRun is a resource close"
+        }
+      ]
+    },
+    {
+      "id": "R25",
+      "unit": "U-STOR",
+      "proves": "storage classes, close-as-resource-close, lazy per-root layout; KTD16 paths readable",
+      "fixtures": [
+        {
+          "test": "scripts/lib/state/storage-api.test.ts",
+          "title": "R25–R27 — closeRun is a resource close"
+        },
+        {
+          "test": "scripts/lib/state/storage-api.test.ts",
+          "title": "R23 — the init floor is lazy"
+        }
+      ]
+    },
+    {
+      "id": "R26",
+      "unit": "U-STOR",
+      "proves": "storage classes, close-as-resource-close, lazy per-root layout; KTD16 paths readable",
+      "fixtures": [
+        {
+          "test": "scripts/lib/state/storage-api.test.ts",
+          "title": "R25–R27 — closeRun is a resource close"
+        },
+        {
+          "test": "scripts/lib/state/storage-api.test.ts",
+          "title": "R23 — the init floor is lazy"
+        }
+      ]
+    },
+    {
+      "id": "R27",
+      "unit": "U-STOR",
+      "proves": "storage classes, close-as-resource-close, lazy per-root layout; KTD16 paths readable",
+      "fixtures": [
+        {
+          "test": "scripts/lib/state/storage-api.test.ts",
+          "title": "R25–R27 — closeRun is a resource close"
+        },
+        {
+          "test": "scripts/lib/state/storage-api.test.ts",
+          "title": "R23 — the init floor is lazy"
+        }
+      ]
+    },
+    {
+      "id": "R28",
+      "unit": "U10",
+      "proves": "plugin-local D8: README, AGENTS.md, using-guild and command help match the locked architecture",
+      "owner": "T17",
+      "pending": "plugin-local docs checks (README / AGENTS.md / using-guild / command help)"
+    },
+    {
+      "id": "R29",
+      "unit": "U-LOOP",
+      "proves": "phase start is recall: working-set card + fingerprint; BM25 before a brownfield scan",
+      "owner": "T16",
+      "pending": "no production caller (T13 rework-r3 sweep): the working-set card writer and phase-start recall (buildWorkingSetCard, searchWiki) have no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+    },
+    {
+      "id": "R30",
+      "unit": "U-LOOP",
+      "proves": "inner verify is hook-cheap; a pass adds no tokens",
+      "fixtures": [
+        {
+          "test": "hooks/__tests__/t10-hook-rungs.test.ts",
+          "title": "F1 a green verify.after_edit adds no assistant tokens and completes ≤250ms"
+        }
+      ]
+    },
+    {
+      "id": "R31",
+      "unit": "U-LOOP · U-S",
+      "proves": "research is a miss-path chapter; working files OS temp; research_packet on the run; sources/ not raw/",
+      "owner": "T16",
+      "pending": "no production caller (T13 rework-r3 sweep): writeResearchPacket / buildResearchPacket have no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+    },
+    {
+      "id": "R32",
+      "unit": "U-RSI",
+      "proves": "RSI is one gate, two homes",
+      "owner": "T16",
+      "pending": "no production caller (T13 rework-r3 sweep): applyEvolveDelta (the project/plugin RSI gate) has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+    },
+    {
+      "id": "R33",
+      "unit": "U-TIER",
+      "proves": "the orchestrator accepts only goal_status.v1",
+      "fixtures": [
+        {
+          "test": "hooks/__tests__/t10-hook-rungs.test.ts",
+          "title": "R33 · T0 holds only goal_status: an assignment or a contaminated envelope on disk never reaches the rehydrated context"
+        }
+      ]
+    },
+    {
+      "id": "R34",
+      "unit": "U-TIER · U-S",
+      "proves": "plugin agents are machinery only; specialists execute from project profiles",
+      "fixtures": [
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "F02 post-mint dispatch Reads the project profile (R34)"
+        },
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "F05 plugin.json agents glob length is 4 (R34)"
+        },
+        {
+          "lint": "agents-glob-4"
+        },
+        {
+          "lint": "no-dispatched-claude-agents"
+        }
+      ]
+    },
+    {
+      "id": "R35",
+      "unit": "U-TIER",
+      "proves": "TaskCell lifecycle: retry = new attempt; isolation is structural",
+      "fixtures": [
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "F03 projected-tool violation fails closed (R35, KTD28)"
+        },
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "F04 retry writes a NEW attempt id (R35 / D4)"
+        },
+        {
+          "test": "scripts/three-tier-production-wiring.test.ts",
+          "title": "fails closed at the PreToolUse seam, which holds only the worker's env identity"
+        }
+      ]
+    },
+    {
+      "id": "R36",
+      "unit": "U-LOOP · U5",
+      "proves": "verify.after_edit is native | wrapped | skip-recorded; skip is a recorded loss",
+      "fixtures": [
+        {
+          "test": "hooks/__tests__/t10-hook-rungs.test.ts",
+          "title": "F4 a skip-recorded rung still writes heartbeat files"
+        },
+        {
+          "test": "hooks/__tests__/t10-hook-rungs.test.ts",
+          "title": "no declared check ⇒ skip-recorded on disk, not a pass and not silence"
+        }
+      ]
+    },
+    {
+      "id": "R37",
+      "unit": "U-TIER · U-LOOP",
+      "proves": "knowledge is fingerprint + BM25; the wiki concern enum is the shipped lint default",
+      "fixtures": [
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R37 · the lint resolves concern labels against the authored enum, inert until authored"
+        }
+      ]
+    },
+    {
+      "id": "R38",
+      "unit": "U-CFG · U-STOR",
+      "proves": "config is policy + session binding; durable files carry no host or model ids",
+      "fixtures": [
+        {
+          "test": "scripts/session-binding.test.ts",
+          "title": "R38 · a Claude session then a Codex continuation writes two run bindings"
+        },
+        {
+          "test": "scripts/three-tier-production-wiring.test.ts",
+          "title": "W5 a missing session binding BLOCKS the launcher"
+        },
+        {
+          "lint": "no-host-ids-in-durable-config"
+        },
+        {
+          "lint": "plan-lanes-pin-tier-only"
+        }
+      ]
+    },
+    {
+      "id": "R39",
+      "unit": "U-UPG",
+      "proves": "existing roots upgrade on activation; future layouts refuse writes",
+      "fixtures": [
+        {
+          "test": "scripts/lib/state/layout-upgrade.test.ts",
+          "title": "1. unmarked v1 root upgrades to layout 2 with knowledge preserved"
+        },
+        {
+          "test": "scripts/lib/state/layout-upgrade.test.ts",
+          "title": "9. a layout-3 marker refuses writes against CURRENT = 2"
+        },
+        {
+          "test": "hooks/__tests__/t10-hook-rungs.test.ts",
+          "title": "KTD23 a future layout stops every write, in every wired hook"
+        },
+        {
+          "lint": "write-entry-calls-ensure-storage-layout"
+        }
+      ]
+    },
+    {
+      "id": "R40",
+      "unit": "U1 · U-S",
+      "proves": "instruction rank + thin commands (<=40 lines) + a closed failure enum",
+      "fixtures": [
+        {
+          "lint": "command-max-40-lines"
+        },
+        {
+          "test": "tests/universal-host/t04-command-dispatch-shape.test.ts",
+          "title": "every dispatcher is <= 40 lines (KTD24)"
+        },
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R40 · the instruction rank is shipped and the cell failure enum is closed"
+        },
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "a failure outside the enum voids the ledger, so the settled cell is refused"
+        },
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "CONTROL: an in-enum failure keeps the ledger, and the settled cell is accepted"
+        }
+      ]
+    },
+    {
+      "id": "R41",
+      "unit": "U-S",
+      "proves": "three-stage disclosure; principles folded into using-guild; catalog and per-skill budgets",
+      "fixtures": [
+        {
+          "budget": "catalog"
+        },
+        {
+          "budget": "per-skill"
+        },
+        {
+          "lint": "skills-glob-17"
+        },
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R41 · principles are folded into using-guild, not a skill"
+        }
+      ]
+    },
+    {
+      "id": "R42",
+      "unit": "U-LOOP · U5",
+      "proves": "context firewall: lane bundle <=1200 cited; tool results truncated; compaction rehydrates from disk",
+      "fixtures": [
+        {
+          "test": "hooks/__tests__/t10-hook-rungs.test.ts",
+          "title": "F2 a 50k test log reaching T1 is a truncated pointer"
+        },
+        {
+          "test": "hooks/__tests__/t10-hook-rungs.test.ts",
+          "title": "F3 the compaction fixture rehydrates from disk, never from a transcript summary"
+        }
+      ]
+    },
+    {
+      "id": "R43",
+      "unit": "U1 · U3 · U8",
+      "proves": "domain index-only imports; no TypeScript workflows/ tree; tests colocated",
+      "fixtures": [
+        {
+          "test": "scripts/t12-domain-fold.test.ts",
+          "title": "R43 — domain index-only imports (KTD4/KTD27)"
+        },
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R43 · tests are colocated: no scripts/__tests__ tree remains"
+        },
+        {
+          "lint": "no-ts-workflows-dir"
+        },
+        {
+          "lint": "index-only-domain-imports"
+        }
+      ]
+    },
+    {
+      "id": "R43",
+      "unit": "U3",
+      "proves": "every domain index loads from any entry",
+      "owner": "T16",
+      "pending": "break the domain import cycle knowledge/distribution -> state -> lifecycle -> teams -> evolve/dispatch; today a suite entering through knowledge or distribution reads a binding before init (the bun preload enters through lifecycle)"
+    },
+    {
+      "id": "R44",
+      "unit": "U5 · U7",
+      "proves": "adapter matrix: closed rungs; projection-only packages; no-spawn -> lead_only",
+      "owner": "T14",
+      "pending": "adapter-matrix fixtures (closed rungs, projection-only packages, lead_only)"
+    },
+    {
+      "id": "R45",
+      "unit": "U2 · U6",
+      "proves": "compile hot path: marker-read start, after_edit <=250ms, cheap entrypoints load no unused domain",
+      "fixtures": [
+        {
+          "test": "hooks/__tests__/t10-hook-rungs.test.ts",
+          "title": "F1 a green verify.after_edit adds no assistant tokens and completes ≤250ms"
+        },
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R45 · the status entrypoint does not load unused domains"
+        }
+      ]
+    },
+    {
+      "id": "R46",
+      "unit": "U-TIER",
+      "proves": "cell completion: done_when oracles, ledger on disk, default 4 instances",
+      "fixtures": [
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "F06 a cell without oracles cannot go done (R46)"
+        },
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "F07 the fifth instance is refused at the default cap (R46)"
+        },
+        {
+          "test": "scripts/three-tier-production-wiring.test.ts",
+          "title": "refuses the fifth spawn ACROSS two runtime objects"
+        },
+        {
+          "test": "scripts/three-tier-production-wiring.test.ts",
+          "title": "refuses acceptance of an oracle-less dispatch through the real runtime"
+        }
+      ]
+    },
+    {
+      "id": "R47",
+      "unit": "U-CFG · U5",
+      "proves": "deterministic prompt compose; no concrete model ids in overlays; dialect <=200 tokens",
+      "fixtures": [
+        {
+          "test": "scripts/session-binding.test.ts",
+          "title": "R47 · dialect fragments are ≤200 tokens and compose stays runtime-only"
+        },
+        {
+          "lint": "dialect-fragment-budget"
+        }
+      ]
+    },
+    {
+      "id": "R47",
+      "unit": "U5",
+      "proves": "model-family dialect composed at session bind",
+      "owner": "T14",
+      "pending": "dialect composition at session bind (host family + model family)"
+    },
+    {
+      "id": "R48",
+      "unit": "U5 · U-UPG",
+      "proves": "Guild always loads on a Guild root; plugin missing fails closed",
+      "owner": "T14",
+      "pending": "SessionStart bootstrap on a Guild root; fail closed when the plugin or compile outputs are missing"
+    },
+    {
+      "id": "R49",
+      "unit": "U-RSI · U-S",
+      "proves": "context files are latest-only",
+      "fixtures": [
+        {
+          "lint": "latest-only-context-files"
+        }
+      ]
+    },
+    {
+      "id": "R50",
+      "unit": "U-LOOP",
+      "proves": "auto-harvest on redirect >=3, methodology repeat and new features",
+      "owner": "T16",
+      "pending": "no production caller (T13 rework-r3 sweep): routeRedirect, the redirect-threshold harvest trigger, has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+    },
+    {
+      "id": "R51",
+      "unit": "U-STOR · U-LOOP",
+      "proves": "scratch is OS temp; no hardcoded /tmp in domain code",
+      "fixtures": [
+        {
+          "test": "scripts/lib/state/storage-api.test.ts",
+          "title": "R51 / KTD34 — research working files are OS temp, never durable"
+        },
+        {
+          "lint": "no-hardcoded-tmp-in-domain-ts"
+        }
+      ]
+    },
+    {
+      "id": "R52",
+      "unit": "U3 · U-S",
+      "proves": "preserve-and-fold: coverage domains[] is bijective",
+      "fixtures": [
+        {
+          "test": "scripts/t12-domain-fold.test.ts",
+          "title": "R52 — coverage domains[] bijection (KTD36)"
+        }
+      ]
+    },
+    {
+      "id": "R53",
+      "unit": "U-LOOP · U-STOR",
+      "proves": "harvest is security-gated and observable on the KTD16 JSONL",
+      "owner": "T16",
+      "pending": "no production caller (T13 rework-r3 sweep): harvestDecision is reached only from routeRedirect, which has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+    },
+    {
+      "id": "R54",
+      "unit": "U-LOOP · U-S",
+      "proves": "harvest is resumable and reversible; scratch janitor",
+      "owner": "T16",
+      "pending": "no production caller (T13 rework-r3 sweep): the harvest journal is written only by harvestDecision, which has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+    },
+    {
+      "id": "R55",
+      "unit": "U-LOOP",
+      "proves": "high-level work is one of five closed class graphs; overlays cannot drop required nodes",
+      "fixtures": [
+        {
+          "lint": "no-sixth-workflow-class"
+        },
+        {
+          "lint": "overlay-cannot-drop-required-nodes"
+        }
+      ]
+    },
+    {
+      "id": "R56",
+      "unit": "U-LOOP · U-RSI",
+      "proves": "one promotion law: the checkpoint classifies and never writes the wiki",
+      "fixtures": [
+        {
+          "lint": "checkpoint-never-writes-wiki"
+        }
+      ]
+    },
+    {
+      "id": "R57",
+      "unit": "U-LOOP · U5",
+      "proves": "two context sizes; glossary matching is assignment-scoped",
+      "owner": "T16",
+      "pending": "no production caller (T13 rework-r3 sweep): buildLaneBundle and glossary term matching have no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+    },
+    {
+      "id": "R58",
+      "unit": "U-S · U10",
+      "proves": "bare /guild is T0; no verb -> six-way intake",
+      "fixtures": [
+        {
+          "test": "scripts/codex-guild-prompt-bridge.test.ts",
+          "title": "maps bare /guild to the root Guild command"
+        },
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R58 · using-guild names bare /guild as T0"
+        }
+      ]
+    },
+    {
+      "id": "R59",
+      "unit": "U-STOR",
+      "proves": "ingested blobs are durable sources, not .guild/raw",
+      "fixtures": [
+        {
+          "test": "scripts/lib/state/storage-api.test.ts",
+          "title": "R59 / KTD47 — ingested blobs are durable sources"
+        },
+        {
+          "lint": "no-guild-raw-writes"
+        }
+      ]
+    },
+    {
+      "id": "R60",
+      "unit": "U-RSI · U-UPG",
+      "proves": "compact history replaces skill-versions/",
+      "fixtures": [
+        {
+          "lint": "no-durable-skill-versions"
+        }
+      ]
+    },
+    {
+      "id": "R61",
+      "unit": "U-LOOP",
+      "proves": "the research class writes guild.research_packet.v1 on the run",
+      "owner": "T16",
+      "pending": "no production caller (T13 rework-r3 sweep): the research-class packet writer has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+    },
+    {
+      "id": "R62",
+      "unit": "U-LOOP",
+      "proves": "refreshTouched rebuilds only the card, BM25 and touched links",
+      "fixtures": [
+        {
+          "lint": "refresh-touched-scope"
+        }
+      ]
+    },
+    {
+      "id": "R63",
+      "unit": "U-TIER · U-LOOP",
+      "proves": "goal nouns: goal.v1 intent, goal_status.v1 roll-up",
+      "fixtures": [
+        {
+          "test": "hooks/__tests__/t10-hook-rungs.test.ts",
+          "title": "R33 · T0 holds only goal_status: an assignment or a contaminated envelope on disk never reaches the rehydrated context"
+        },
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "refuses a cell whose goal is not a valid guild.goal.v1 for its goal_id"
+        }
+      ]
+    },
+    {
+      "id": "R64",
+      "unit": "U-LOOP · U-S",
+      "proves": "adversarial wrappers are L3, not graph nodes",
+      "owner": "T16",
+      "pending": "no production caller (T13 rework-r3 sweep): the class-graph router and loader (routeWorkflowDecision, loadClassGraph) have no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+    },
+    {
+      "id": "R65",
+      "unit": "U-LOOP",
+      "proves": "a harvest pin hit forces a replan",
+      "owner": "T16",
+      "pending": "no production caller (T13 rework-r3 sweep): the harvest pin-hit replan is reached only through harvestDecision, which has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+    },
+    {
+      "id": "R66",
+      "unit": "U-S",
+      "proves": "the concern enum is the shipped lint default; harvest never stamps labels",
+      "fixtures": [
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R37 · the lint resolves concern labels against the authored enum, inert until authored"
+        }
+      ]
+    },
+    {
+      "id": "R67",
+      "unit": "U-TIER · U-LOOP",
+      "proves": "roster mint is class-scoped: every .guild/agents creator goes through one seam",
+      "fixtures": [
+        {
+          "test": "scripts/lib/roster-and-project-dispatch.test.ts",
+          "title": "a debug / research / ops run is refused with the recorded reason; a product run mints"
+        },
+        {
+          "test": "scripts/lib/roster-and-project-dispatch.test.ts",
+          "title": "CONTROL: a class-less mint is refused through the API and the CLI"
+        },
+        {
+          "test": "scripts/lib/roster-and-project-dispatch.test.ts",
+          "title": "R67: a debug-class migration never CREATES an absent profile; product still does; existing profiles re-link"
+        },
+        {
+          "test": "scripts/lib/capability/adoption-migrate.test.ts",
+          "title": "a debug-bound run with the shipped qa entry and no profile creates nothing and refuses"
+        },
+        {
+          "test": "scripts/lib/capability/adoption-migrate.test.ts",
+          "title": "a run with no bound class cannot create the profile either"
+        },
+        {
+          "test": "scripts/lib/capability/adoption-migrate.test.ts",
+          "title": "the same plan on a product-bound run creates the profile"
+        },
+        {
+          "test": "src/domains/teams/profile-create.test.ts",
+          "title": "every live writer of the agents tree calls gateProfileCreation or is a reviewed non-creator"
+        },
+        {
+          "test": "src/domains/teams/profile-create.test.ts",
+          "title": "PLANTED: a new writer of the agents tree with no seam call is flagged"
+        },
+        {
+          "test": "src/domains/teams/profile-create.test.ts",
+          "title": "PLANTED CONTROL: adoption with its seam call removed is flagged; a commented-out call does not count"
+        }
+      ]
+    },
+    {
+      "id": "R68",
+      "unit": "U-S · U-UPG",
+      "proves": "one authored graph per class; registries are not source of truth",
+      "fixtures": [
+        {
+          "lint": "no-authored-registry-sot"
+        },
+        {
+          "lint": "no-sixth-workflow-class"
+        }
+      ]
+    },
+    {
+      "id": "R69",
+      "unit": "U-LOOP · U-S",
+      "proves": "the checkpoint is a domain function, not an indexed skill",
+      "fixtures": [
+        {
+          "lint": "learning-checkpoint-not-indexed"
+        }
+      ]
+    },
+    {
+      "id": "R70",
+      "unit": "U-LOOP · U5",
+      "proves": "one review gate; loop-round events land on the KTD16 JSONL",
+      "fixtures": [
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "refuses the Team Lead as its own reviewer, accepts an independent reviewer, and records the round"
+        },
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "CONTROL: with review.independence off, the same self-review is accepted"
+        }
+      ]
+    },
+    {
+      "id": "R71",
+      "unit": "U3 · U2 · U10",
+      "proves": "coverage includes eval ids; D-PROBE gate; incomplete-run detection; MCP hash pins",
+      "fixtures": [
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R71 · every Verification Contract row is an eval id in the coverage map"
+        },
+        {
+          "test": "hooks/__tests__/t10-hook-rungs.test.ts",
+          "title": "incomplete-run detection is the run RECORD plus env, not a sentinel"
+        },
+        {
+          "test": "scripts/lib/ingest-similarity.test.ts",
+          "title": "D-PROBE directive-probe gate (fail-closed)"
+        },
+        {
+          "test": "hooks/__tests__/security-mcp-hash-pin.test.ts",
+          "title": "verifyMcpDescription"
+        }
+      ]
+    },
+    {
+      "id": "R72",
+      "unit": "U-TIER · U-CFG",
+      "proves": "budget is enforced: exhaustion blocks with next_need: budget",
+      "fixtures": [
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "F08 advisorRounds exhausted blocks with next_need: budget (R72)"
+        },
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "F09 D-PROBE does not decrement the advisor cap (R72/KTD61)"
+        },
+        {
+          "test": "scripts/three-tier-production-wiring.test.ts",
+          "title": "W7 the advisor budget survives re-init and blocks in production"
+        }
+      ]
+    },
+    {
+      "id": "R73",
+      "unit": "U-TIER",
+      "proves": "team compose is per-phase; per-goal is a roster slice",
+      "fixtures": [
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "binds an assignment to a sliced role and refuses a minted role outside the slice"
+        },
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "never slices in a role with no profile in .guild/agents/, and the slice never mints it"
+        },
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "CONTROL: the same minted role binds on a cell that carries no goal"
+        }
+      ]
+    },
+    {
+      "id": "R74",
+      "unit": "U-RSI",
+      "proves": "machinery TS evolves only through the human gate",
+      "owner": "T16",
+      "pending": "no production caller (T13 rework-r3 sweep): applyEvolveDelta (the human gate for machinery) has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+    },
+    {
+      "id": "R75",
+      "unit": "U-LOOP",
+      "proves": "explicit learn Stage-2 is extract-structural; refreshTouched never runs it",
+      "owner": "T16",
+      "pending": "no production caller (T13 rework-r3 sweep): refreshTouched has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+    },
+    {
+      "id": "R76",
+      "unit": "U10",
+      "proves": "plugin imports no website/benchmark source; producer + dashboard launcher kept",
+      "owner": "T17",
+      "pending": "plugin-local D8 docs + producer/launcher checks"
+    },
+    {
+      "id": "R77",
+      "unit": "U-LOOP · U-CFG",
+      "proves": "recall backend bm25 | hybrid; hybrid fails open to BM25",
+      "owner": "T16",
+      "pending": "no production caller (T13 rework-r3 sweep): searchWiki (hybrid recall with BM25 fail-open) has no production caller; recall.backend is settable but never read. Wire it or delete it; the helper tests stay in the suite, unmapped."
+    },
+    {
+      "id": "R78",
+      "unit": "U-TIER · U-LOOP",
+      "proves": "the critic is the advisor, round-capped; review.critic is off | advisor",
+      "fixtures": [
+        {
+          "test": "scripts/lib/three-tier-dispatch.test.ts",
+          "title": "F08 advisorRounds exhausted blocks with next_need: budget (R72)"
+        },
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R78 · config set accepts review.critic off | advisor and refuses anything else"
+        }
+      ]
+    },
+    {
+      "id": "R79",
+      "unit": "U-S · U-LOOP",
+      "proves": "/guild research and /guild debug are sub-verbs that bind a class",
+      "fixtures": [
+        {
+          "lint": "no-14th-command-file"
+        }
+      ]
+    },
+    {
+      "id": "R80",
+      "unit": "U-LOOP · U-UPG · U-S",
+      "proves": "every Guild root has a glossary in context, never in the always-on prefix",
+      "fixtures": [
+        {
+          "test": "src/domains/state/t09-working-set-recall.test.ts",
+          "title": "the shipped glossary feedstock (KTD70 / R80)"
+        },
+        {
+          "test": "scripts/lib/state/layout-upgrade.test.ts",
+          "title": "10. the glossary is created when missing and kept when present"
+        },
+        {
+          "lint": "glossary-not-indexed-skill"
+        },
+        {
+          "lint": "glossary-not-in-always-on-prefix"
+        }
+      ]
+    },
+    {
+      "id": "KTD1",
+      "unit": "U3",
+      "proves": "twelve domains; twelve index.ts",
+      "fixtures": [
+        {
+          "test": "scripts/t12-domain-fold.test.ts",
+          "title": "the fold is a closed twelve and every module has a home"
+        },
+        {
+          "test": "scripts/t12-domain-fold.test.ts",
+          "title": "a thirteenth domain is REFUSED"
+        }
+      ]
+    },
+    {
+      "id": "KTD2",
+      "unit": "U3 · U9",
+      "proves": "flat src/surfaces/ is the only authoring home",
+      "owner": "T16",
+      "pending": "one authoring home under src/surfaces (with R22's clone and deletion greps)"
+    },
+    {
+      "id": "KTD3",
+      "unit": "U6",
+      "proves": "two D-MCP ids (wiki | trace), one runtime/guild-mcp.js",
+      "owner": "T14",
+      "pending": "MCP id fixtures for the one binary / two ids"
+    },
+    {
+      "id": "KTD4",
+      "unit": "U3",
+      "proves": "host maps live in src/adapters; domains never import an adapter",
+      "fixtures": [
+        {
+          "test": "scripts/t12-domain-fold.test.ts",
+          "title": "R43 — domain index-only imports (KTD4/KTD27)"
+        },
+        {
+          "lint": "no-domain-adapter-import"
+        }
+      ]
+    },
+    {
+      "id": "KTD5",
+      "unit": "U7",
+      "proves": "per-cell inferred rungs; unverified rungs fail closed",
+      "fixtures": [
+        {
+          "test": "scripts/three-tier-production-wiring.test.ts",
+          "title": "W2 lead_only binds the parent and spawns nothing"
+        },
+        {
+          "test": "hooks/__tests__/t10-hook-rungs.test.ts",
+          "title": "the rung resolvers are three- and two-valued and never guess upward"
+        }
+      ]
+    },
+    {
+      "id": "KTD6",
+      "unit": "U2",
+      "proves": "three planes: Bun author, CI compile, Node on the user path",
+      "fixtures": [
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "KTD6 · Bun authors and CI compiles; the user path is Node with no Bun"
+        }
+      ]
+    },
+    {
+      "id": "KTD7",
+      "unit": "U2",
+      "proves": "compile outputs are committed; users run node",
+      "fixtures": [
+        {
+          "test": "tests/universal-host/t04-command-dispatch-shape.test.ts",
+          "title": "no command spawns through npx / tsx (KTD7, KTD10)"
+        },
+        {
+          "test": "scripts/check-bundle-determinism.test.ts",
+          "title": "output set ↔ committed bundle set (real fixture trees on disk)"
+        }
+      ]
+    },
+    {
+      "id": "KTD8",
+      "unit": "U1",
+      "proves": "pattern lock: a new host-visible skill is an assembler or a playbook",
+      "fixtures": [
+        {
+          "lint": "skills-glob-17"
+        },
+        {
+          "lint": "learning-checkpoint-not-indexed"
+        }
+      ]
+    },
+    {
+      "id": "KTD9",
+      "unit": "U9",
+      "proves": "no dual-home mirrors; no shipping plugin/_archive/",
+      "owner": "T16",
+      "pending": "clone and deletion greps (no mirrors, no _archive)"
+    },
+    {
+      "id": "KTD10",
+      "unit": "U2",
+      "proves": "no Bun on the user PATH; runtime fails closed without compile outputs",
+      "fixtures": [
+        {
+          "test": "tests/universal-host/t04-command-dispatch-shape.test.ts",
+          "title": "no command spawns through npx / tsx (KTD7, KTD10)"
+        },
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "KTD6 · Bun authors and CI compiles; the user path is Node with no Bun"
+        }
+      ]
+    },
+    {
+      "id": "KTD11",
+      "unit": "U8",
+      "proves": "the test runner is bun test; the spawn path is compiled Node",
+      "fixtures": [
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R24 · bun test is the blocking runner, isolated per file, in a hermetic cwd"
+        }
+      ]
+    },
+    {
+      "id": "KTD28",
+      "unit": "U5",
+      "proves": "projection-only host packages; unprojected tools never reach an isolated worker",
+      "owner": "T14",
+      "pending": "projection matrix fixtures across hosts"
+    },
+    {
+      "id": "F9",
+      "unit": "U10",
+      "proves": "plugin README / AGENTS.md / using-guild / command help carry the corrected sentences",
+      "owner": "T17",
+      "pending": "colliding-sentence docs checks"
+    },
+    {
+      "id": "F2",
+      "unit": "T15",
+      "proves": "security on the real path: scrubbedWrite, D-PROBE, D-RECALL, template curator, security_event kinds (KTD37)",
+      "owner": "T15",
+      "pending": "adversarial pass: every security step is deterministic code on the real path"
+    },
+    {
+      "id": "F12",
+      "unit": "T15",
+      "proves": "assignment-projected tools AND the PreToolUse AND-mask; compile pins MCP hashes (KTD60 + KTD28)",
+      "owner": "T15",
+      "pending": "isolation fixtures for the projected-tools AND PreToolUse AND-mask"
+    },
+    {
+      "id": "D5",
+      "unit": "T15",
+      "proves": "the D5 permission carve-out cannot be overridden or evolved",
+      "owner": "T15",
+      "pending": "D5 poison fixture on the real path"
+    }
+  ]
+}

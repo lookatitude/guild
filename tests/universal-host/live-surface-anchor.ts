@@ -275,7 +275,7 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  *        surface), carried in `guild.inventory.json`, named as the executor by
  *        `skills/knowledge/learn-graph/SKILL.md`, and bound to
  *        `scripts/lib/capability/context-manager-contract.ts` by the F5 suite
- *        (`scripts/__tests__/context-manager-contract.test.ts` asserts the
+ *        (`scripts/lib/capability/context-manager-contract.test.ts` asserts the
  *        frontmatter `tools:`/`name:`/`model:` ARE the contract's values).
  *        `check-roster-consistency` green.
  *   The `.claude-plugin/**` FILE SET is UNCHANGED (still exactly the two
@@ -654,7 +654,18 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // else: `commands` does NOT move and neither manifest hash does. ANTI-VACUITY:
   // check-surface-pins was observed RED against the prior pin on this exact tree and
   // named ONLY `skills/skills`, before this value was ratified.
-  skills: "f47b4dbefe872d119d9b2782745c449fd830e41f",
+  // Re-ratified 2026-09-26 (T13): five dead chapter links in the evolve assembler's
+  // references/ (evolve-targets.md x4, rollback-skill.md x1) drop a doubled
+  // `references/` prefix so skill-link-integrity, now a blocking CI leg, resolves them.
+  // ANTI-VACUITY: check-surface-pins, SC-W2-5 and SC-W3-6 were RED against the T12
+  // pin on this tree and named ONLY `skills/skills`, before this value was ratified.
+  // Re-ratified 2026-09-26 (T13 rework-r1): the three skill lines that tell an agent
+  // to run `roster-resolve.ts mint` (team-compose SKILL.md x2, create-specialist
+  // SKILL.md + workflow.md) now pass `--class <run class>`, because mint is
+  // class-scoped (R67) and a class-less mint is refused. ANTI-VACUITY:
+  // check-surface-pins, SC-W2-5 and SC-W3-6 were RED against the prior pin on this
+  // tree and named ONLY `skills/skills`, before this value was ratified.
+  skills: "6514190bc7cc6fe458e86d54f2ef6039ffb569f3",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

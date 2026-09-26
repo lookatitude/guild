@@ -40,6 +40,7 @@ import {
   type WikiWriter,
 } from "../knowledge";
 import { scrubbedWrite } from "../security";
+import { gateProfileCreation } from "../teams";
 import {
   assertCheapCurator,
   planEvolveDelta,
@@ -350,6 +351,17 @@ export function applyEvolveDelta(
 
   assertProjectHome(storage, delta.target, abs);
   assertNotRuntimeTree(path.dirname(abs), ctx.pluginRoot ?? cwd, cwd);
+
+  // Project RSI edits a profile; it never CREATES one. Creation is class-scoped
+  // (R67) and this writer has no bound class, so the one creation seam refuses.
+  if (delta.target === "profile" && !fs.existsSync(abs)) {
+    const gate = gateProfileCreation({
+      workflow_class: null,
+      role: path.basename(abs, path.extname(abs)),
+      writer: "evolve.apply",
+    });
+    if (!gate.ok) throw new EvolveTargetRefusal(gate.reason, "scope");
+  }
 
   // ── file class beats the token (codex r1 #2) ─────────────────────────────
   //

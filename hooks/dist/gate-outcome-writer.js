@@ -16293,8 +16293,8 @@ var init_config_defaults = __esm({
         // own contract, stated in the module doc comment above, is to stay free of
         // internal runtime imports so core settings code can load it before the
         // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
-        // roster (host-registry-schema.ts) enumerated by hand; a jest test
-        // (scripts/__tests__/config-defaults-tiers-host-ids.test.ts) asserts the two
+        // roster (host-registry-schema.ts) enumerated by hand; a test
+        // (scripts/lib/config-defaults-tiers-host-ids.test.ts) asserts the two
         // stay in sync so this can never silently drift again the way it had (7 of
         // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
         // non-null model — every other host's registry row carries `models.<tier>.model:
@@ -27321,6 +27321,7 @@ var IN_SESSION_PORT;
 var init_task_cell_runtime = __esm({
   "src/domains/dispatch/task-cell-runtime.ts"() {
     init_artifact_bus();
+    init_teams();
     init_telemetry();
     init_task_cell_contract();
     init_task_assignment_v2();
@@ -30571,6 +30572,15 @@ var init_redirect_ledger = __esm({
   }
 });
 
+// src/domains/knowledge/redirect-route.ts
+var init_redirect_route = __esm({
+  "src/domains/knowledge/redirect-route.ts"() {
+    init_lifecycle();
+    init_harvest();
+    init_redirect_ledger();
+  }
+});
+
 // src/domains/knowledge/refresh-touched.ts
 var init_refresh_touched = __esm({
   "src/domains/knowledge/refresh-touched.ts"() {
@@ -31913,6 +31923,7 @@ var init_knowledge = __esm({
     init_harvest_journal();
     init_lane_bundle();
     init_redirect_ledger();
+    init_redirect_route();
     init_refresh_touched();
     init_research_packet();
     init_wiki_index();
@@ -32374,6 +32385,15 @@ var init_compose_scope = __esm({
   }
 });
 
+// src/domains/teams/profile-create.ts
+var init_profile_create = __esm({
+  "src/domains/teams/profile-create.ts"() {
+    init_state();
+    init_compose_scope();
+    init_goal_contract();
+  }
+});
+
 // src/domains/teams/specialist-roster.ts
 var MACHINERY_AGENT_IDS, SPECIALIST_TEMPLATE_IDS, SPECIALIST_SKILL_PREFIXES;
 var init_specialist_roster = __esm({
@@ -32605,6 +32625,7 @@ var init_evolve_apply = __esm({
     init_kernel();
     init_knowledge();
     init_security();
+    init_teams();
     init_evolve_delta();
     init_evolve_targets();
     init_compact_history();
@@ -32707,6 +32728,7 @@ var init_teams = __esm({
     init_station_signals();
     init_goal_contract();
     init_compose_scope();
+    init_profile_create();
     init_specialist_roster();
     init_roster_contract();
     init_template_schema();

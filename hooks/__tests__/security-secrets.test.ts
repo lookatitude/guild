@@ -5,6 +5,7 @@
  * (hooks/lib/security/secrets.ts).
  */
 
+import { describe, it, expect } from "bun:test";
 import {
   applySecretsPolicy,
   resolveTelemetryField,

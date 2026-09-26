@@ -15,6 +15,7 @@
  * (`guild.command.v1`), so the gate that gates the cutover is proven on both surfaces.
  */
 
+import { describe, it, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 

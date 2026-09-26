@@ -14,6 +14,7 @@
  * (lane T2b). Reference hashing controls (team-contracts §1) pass today.
  */
 
+import { describe, test, expect } from "bun:test";
 import { requireContractModule, selfRefHash, seededRng, rngInt } from "./_helpers";
 
 const DECISION_MODULE = "src/domains/teams/team-decision";

@@ -27,6 +27,7 @@
  * Status at authoring: GREEN (P1-L0 shipped the schema + rows).
  */
 
+import { describe, it, expect } from "bun:test";
 import {
   HOST_IDS,
   HOST_FAMILIES,

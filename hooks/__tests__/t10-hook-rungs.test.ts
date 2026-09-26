@@ -16,6 +16,7 @@
  *   F7  hook source edits are rebuilt into dist (dist grep proves it)
  */
 
+import { describe, it, expect, afterEach } from "bun:test";
 import { spawn, spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
@@ -774,6 +775,44 @@ describe("F3 the compaction fixture rehydrates from disk, never from a transcrip
       logicalTaskId: "T10-x",
     });
     expect(estimateTokens(renderRehydrateInstructions(full))).toBeLessThanOrEqual(KTD26_TOKEN_CAP);
+  });
+
+  it("R33 · T0 holds only goal_status: an assignment or a contaminated envelope on disk never reaches the rehydrated context", () => {
+    tmp = makeRoot();
+    seedRehydrateSources(tmp);
+    const dir = path.join(runDirOf(tmp), "goal-status");
+    const marker = "SMUGGLED-ASSIGNMENT-7c1e";
+    // A raw assignment dropped into the goal-status channel...
+    fs.writeFileSync(
+      path.join(dir, "008-cell-8.json"),
+      `${JSON.stringify({ schema_version: "guild.task_assignment.v2", logical_task_id: marker })}\n`,
+    );
+    // ...and a schema-valid goal_status carrying a nested assignment.
+    fs.writeFileSync(
+      path.join(dir, "009-cell-9.json"),
+      `${JSON.stringify({
+        schema_version: "guild.goal_status.v1",
+        run_id: RUN,
+        goal_id: "g1",
+        phase_id: "build",
+        cell_id: "cell-9",
+        team_id: "t1",
+        state: "running",
+        progress: 0.5,
+        worker_count: 1,
+        handoff_ids: [],
+        summary: "cell 9 running",
+        detail: { inner: { schema_version: "guild.task_assignment.v2", logical_task_id: marker } },
+      })}\n`,
+    );
+    const s = rehydrateFromDisk({ runDir: runDirOf(tmp), cwd: tmp, runId: RUN });
+    expect(s.goal_status.recent.map((e) => e.cell_id)).toEqual(["cell-3", "cell-4", "cell-5", "cell-6", "cell-7"]);
+    expect(JSON.stringify(s.goal_status)).not.toContain(marker);
+    const r = runHook(PRE_COMPACT, JSON.stringify({ session_id: "t10" }), { GUILD_RUN_ID: RUN, GUILD_CWD: tmp });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("cell-7=done");
+    expect(r.stdout).not.toContain("cell-9");
+    expect(r.stdout).not.toContain(marker);
   });
 
   it("writeRehydrateHeartbeat is latest-only — a second heartbeat REPLACES the first", () => {

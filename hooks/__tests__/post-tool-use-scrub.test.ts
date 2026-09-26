@@ -16,6 +16,7 @@
  * Tests prove the on-disk EFFECT, not just "scrubber called".
  */
 
+import { describe, it, test, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";

@@ -49,7 +49,7 @@ const MAX_LIMIT = 50;
 // Re-arch WAVE 1: the scorers were moved to the canonical single-source module
 // scripts/lib/shared/graph-scoring.ts (recall.ts shares the same primitives).
 // Re-exported here so kg-query.ts's historical export surface (consumed by
-// scripts/__tests__/kg-query-ranking.test.ts) is unchanged.
+// scripts/learn/kg-query-ranking.test.ts) is unchanged.
 // ---------------------------------------------------------------------------
 
 export {

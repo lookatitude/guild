@@ -12,6 +12,7 @@
  * [control] tests pass today and prove the assertions are non-vacuous.
  */
 
+import { describe, test, expect, afterEach } from "bun:test";
 import { resolveAuthorHost } from "../../src/adapters/provider-detect";
 import { defaultResolveHost } from "../../hooks/lib/run-trace";
 

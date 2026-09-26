@@ -1,4 +1,5 @@
-# test-suites.yml — run the plugin's six Jest projects on every PR/push to next & main.
+# test-suites.yml — the dependency audits (blocking) and the six legacy Jest
+# projects (ADVISORY since T13; `bun test` in compile-gates.yml is the runner).
 #
 # WHY THIS EXISTS (plugin-audit-remediation, 2026-07-12): the plugin ships six independent
 # Jest projects (~290 test files) but NOTHING in CI ran them — only clra-conformance
@@ -62,9 +63,13 @@ jobs:
           npm audit --package-lock-only --omit=dev --audit-level=high
 
   jest:
-    name: jest (${{ matrix.project }})
+    name: jest (${{ matrix.project }}) — ADVISORY
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # ADVISORY since T13: `bun test` is the blocking runner (compile-gates.yml) and
+    # the suites import from "bun:test", which Jest cannot load. T16 deletes this
+    # job together with Jest and ts-jest.
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:

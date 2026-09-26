@@ -1,6 +1,6 @@
 # compile-gates.yml — the U2 transitional rails for the plugin layout reshape (rev 20).
 #
-# Three gates, added in T02 and held until T13/T16 flip and delete them:
+# Four gates, added in T02/T13 and held until T16 deletes the transitional ones:
 #
 #   1. compile --check      BLOCKING. The committed Node graph (hooks/dist/**,
 #                           runtime/**) must be byte-identical to a fresh compile.
@@ -11,9 +11,11 @@
 #                           baseline entries; any NEW violation fails. The raw and
 #                           anti-vacuity passes run alongside so a check that stops
 #                           detecting anything fails loudly rather than passing.
-#   3. bun test             ADVISORY. Jest stays blocking in test-suites.yml until
-#                           T13 flips the two; T16 deletes Jest. `continue-on-error`
-#                           is the flip switch — T13 removes that one line.
+#   3. bun test             BLOCKING since T13, sharded, `--isolate` (see the job).
+#                           The Jest legs in test-suites.yml are advisory until T16
+#                           deletes Jest.
+#   4. skill-link-integrity BLOCKING since T13: every relative link under skills/
+#                           resolves (a dead link in prompt text never throws).
 #
 # Bun is the AUTHOR and CI runtime (P1/P2). It is never on a user's PATH (KTD10):
 # the user path is plain `node` on the committed outputs, which the
@@ -125,30 +127,48 @@ jobs:
         working-directory: scripts
         run: npx tsx lint/description-budget.ts --root .. --advisory-prefix
 
+      - name: skill-link-integrity (every relative link under skills/ resolves)
+        working-directory: scripts
+        run: npx tsx lint/skill-link-integrity.ts --root ..
+
   bun-test:
-    name: bun test (ADVISORY until T13)
+    name: bun test (blocking · shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # T13 flips the runner: delete this line to make bun test blocking, and make
-    # the Jest legs in test-suites.yml advisory in the same PR.
-    continue-on-error: true
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # drift guards resolve pinned baseline SHAs from history
+
+      # Suites spawn the compiled Node outputs and tsx CLIs; Bun only runs them.
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
+      # The same install list the Jest legs used: suites import across these trees
+      # and spawn their CLIs, and the determinism suite bundles both MCP servers.
       - name: Install test inputs
         run: |
-          for dir in scripts hooks; do
+          for dir in scripts hooks hooks/agent-team mcp-servers/guild-memory mcp-servers/guild-telemetry tests; do
             (cd "$dir" && (npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline))
           done
 
-      - name: bun test
-        run: bun test
+      # TRAP: `--isolate` is not optional. Without it Bun runs every file in ONE
+      # global and module registry, so env, mocks and module state leak between
+      # suites (Jest gave each file its own). bunfig.toml has no key for it.
+      - name: bun test --isolate
+        run: bun test --isolate --shard=${{ matrix.shard }}/4
 
   node-only-runtime:
     name: user path runs on node with bun absent

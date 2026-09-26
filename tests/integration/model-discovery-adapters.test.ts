@@ -10,6 +10,7 @@
  * doc-derived).
  */
 
+import { describe, test, expect } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -52,7 +53,7 @@ import {
   appendEvidenceEvent,
   evidenceStateForListing,
   normalizeDiscovery,
-} from "../../src/domains/config/model-catalog";
+} from "../../src/domains/config";
 
 const FIXTURES = path.join(__dirname, "fixtures");
 const NOW = "2026-07-30T13:13:34Z";

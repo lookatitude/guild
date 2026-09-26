@@ -14,6 +14,7 @@
  * T3b (hook leg). Deterministic: real fs in tmp dirs, no clocks, no network.
  */
 
+import { describe, test, expect } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 
