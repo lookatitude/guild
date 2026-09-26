@@ -17,8 +17,9 @@ import {
 describe("verify installer dry-runs", () => {
   it("passes for every supported install.sh host without requiring host binaries", () => {
     const result = verifyInstallerDryRuns({ root: PLUGIN_ROOT, pathEnv: "/usr/bin:/bin" });
-    expect(result.ok).toBe(true);
+    // errors first: a red CI log then names the cause, not just `ok`.
     expect(result.errors).toEqual([]);
+    expect(result.ok).toBe(true);
     expect(result.checks).toEqual(
       INSTALLER_HOST_EXPECTATIONS.map((entry) => `${entry.host}:install.sh --dry-run`)
     );
@@ -26,8 +27,8 @@ describe("verify installer dry-runs", () => {
 
   it("executes every supported install.sh host against isolated fake host binaries", () => {
     const result = verifyInstallerFixtureExecutions({ root: PLUGIN_ROOT });
-    expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
+    expect(result.ok).toBe(true);
     expect(result.checks).toEqual(
       INSTALLER_HOST_EXPECTATIONS.map((entry) => `${entry.host}:install.sh fixture execution`)
     );

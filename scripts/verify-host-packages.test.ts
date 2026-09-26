@@ -29,8 +29,9 @@ describe("verify generated host packages", () => {
     const distRoot = buildTempDist();
     try {
       const result = verifyGeneratedHostPackages({ root: PLUGIN_ROOT, distRoot });
-      expect(result.ok).toBe(true);
+      // errors first: a red CI log then names the cause, not just `ok`.
       expect(result.errors).toEqual([]);
+      expect(result.ok).toBe(true);
       expect(result.checks).toContain("agents:bin/guild-run --dry-run");
       expect(result.checks).toContain("codex:bin/guild-run --dry-run");
       expect(result.checks).toContain("pi:bin/guild-run --dry-run");
