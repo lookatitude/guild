@@ -372,7 +372,7 @@ export function verifyInstallerDryRuns(options: VerifyOptions = {}): InstallerVe
       encoding: "utf8",
       env: spawnEnvWithoutPwd({
         PATH: options.pathEnv ?? "/usr/bin:/bin",
-        npm_config_cache: process.env["npm_config_cache"] ?? "/private/tmp/guild-npm-cache",
+        npm_config_cache: process.env["npm_config_cache"] ?? path.join(os.tmpdir(), "guild-npm-cache"),
       }),
       maxBuffer: 10 * 1024 * 1024,
     });
@@ -430,7 +430,7 @@ export function verifyInstallerFixtureExecutions(options: VerifyOptions = {}): I
           XDG_CONFIG_HOME: fakeConfig,
           GUILD_INSTALL_FAKE_HOST_LOG: logFile,
           PATH: `${fakeBin}${path.delimiter}${options.pathEnv ?? process.env.PATH ?? "/usr/bin:/bin"}`,
-          npm_config_cache: process.env["npm_config_cache"] ?? "/private/tmp/guild-npm-cache",
+          npm_config_cache: process.env["npm_config_cache"] ?? path.join(os.tmpdir(), "guild-npm-cache"),
         },
         maxBuffer: 20 * 1024 * 1024,
       });
@@ -506,7 +506,7 @@ export function verifyInstallerLiveIsolatedExecutions(options: VerifyOptions = {
           XDG_DATA_HOME: data,
           XDG_STATE_HOME: state,
           PATH: pathEnv,
-          npm_config_cache: process.env["npm_config_cache"] ?? "/private/tmp/guild-npm-cache",
+          npm_config_cache: process.env["npm_config_cache"] ?? path.join(os.tmpdir(), "guild-npm-cache"),
         },
         timeout: 120_000,
         maxBuffer: 30 * 1024 * 1024,
