@@ -28,10 +28,7 @@ import * as path from "path";
 
 import { surfaceCapabilityCandidates } from "../lib/capability/candidate-surface";
 import { emitCapabilityProfile, type DerivedFacts } from "../lib/capability/profile-emit";
-import {
-  CAPABILITY_AUTO_CREATE_POLICIES,
-  CAPABILITY_RESOLVER_MODE_DEFAULT,
-} from "../../src/modules/config/workflows/config-defaults";
+import { CAPABILITY_AUTO_CREATE_POLICIES, CAPABILITY_RESOLVER_MODE_DEFAULT } from "../../src/domains/config";
 import { mayReconcileWrite } from "../lib/config-reconcile-contract";
 
 const repoRoot = path.resolve(__dirname, "../..");

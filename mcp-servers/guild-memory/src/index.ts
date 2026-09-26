@@ -49,13 +49,13 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 // Pure fence-splitting logic shared with the rest of the plugin's frontmatter
-// readers (src/modules/state/workflows/frontmatter.ts). Zero runtime deps —
+// readers (src/domains/state/frontmatter.ts). Zero runtime deps —
 // esbuild --bundle inlines it exactly like the shared bm25 module (./bm25.ts).
-import { splitFrontmatter } from "../../../src/modules/state/workflows/frontmatter";
+import { splitFrontmatter } from "../../../src/domains/state/frontmatter";
 // The §10.1.1 wiki-page frontmatter field vocabulary — single source of truth
 // for the `type:` enum (context|standard|product|entity|concept|decision|source).
 // Zero runtime deps (pure constants), inlined by esbuild like the imports above.
-import { WikiPageType, isWikiPageType } from "../../../src/modules/knowledge/workflows/wiki-frontmatter-contract";
+import { WikiPageType, isWikiPageType } from "../../../src/domains/knowledge/wiki-frontmatter-contract";
 
 // ─── Wiki root resolution ────────────────────────────────────────────────
 

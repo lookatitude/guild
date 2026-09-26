@@ -805,7 +805,7 @@ function scanPendingGradeReview(corpus: string[]) {
 }
 
 // ---- 6. Secrets grep -------------------------------------------------------
-// SECRET_PATTERNS moved to src/modules/security/workflows/secret-patterns.ts
+// SECRET_PATTERNS moved to src/domains/security/secret-patterns.ts
 // (audit remediation item 16 — the security module was importing UPWARD from
 // this self-build docs scanner; imported + re-exported here unchanged so this
 // file's own existing consumers — sanitized-run-export.ts, config-render.ts —

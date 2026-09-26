@@ -5,4 +5,4 @@
  * move internals without breaking existing imports from scripts/lib/run-lifecycle.
  */
 
-export * from "../../src/modules/lifecycle/workflows/run-lifecycle";
+export * from "../../src/domains/lifecycle/run-lifecycle";

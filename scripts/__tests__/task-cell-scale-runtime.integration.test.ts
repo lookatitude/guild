@@ -2,19 +2,16 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import {
-  FilesystemTaskCellRuntime,
-  type TaskCellWorkerPort,
-} from "../../src/modules/dispatch/workflows/task-cell-runtime";
-import { auditTaskCellScaleRecords, type TaskCellCapabilityIndex } from "../../src/modules/dispatch/workflows/task-cell-scale-audit";
-import { acknowledgeAssignment } from "../../src/modules/dispatch/workflows/task-assignment-v2";
-import { publishSubmittedHandoffPointer } from "../../src/modules/dispatch/workflows/task-cell-acceptance";
+import { FilesystemTaskCellRuntime, type TaskCellWorkerPort } from "../../src/domains/dispatch";
+import { auditTaskCellScaleRecords, type TaskCellCapabilityIndex } from "../../src/domains/dispatch";
+import { acknowledgeAssignment } from "../../src/domains/dispatch";
+import { publishSubmittedHandoffPointer } from "../../src/domains/dispatch/task-cell-acceptance";
 import {
   initProgressLedger,
   readProgressLedger,
   recordOracleOutcome,
-} from "../../src/modules/dispatch/workflows/progress-ledger";
-import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+} from "../../src/domains/dispatch/progress-ledger";
+import { mintRunBinding } from "../../src/domains/lifecycle/run-binding";
 import {
   assignmentId,
   buildTaskAssignmentV2,

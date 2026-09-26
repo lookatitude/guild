@@ -1,5 +1,5 @@
 import * as shim from "../build-inventory";
-import * as moduleImpl from "../../src/modules/distribution/workflows/build-inventory";
+import * as moduleImpl from "../../src/domains/distribution/build-inventory";
 
 describe("build-inventory compatibility shim", () => {
   test("scripts/build-inventory re-exports src/modules/distribution", () => {

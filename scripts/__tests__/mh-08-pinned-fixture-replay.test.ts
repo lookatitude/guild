@@ -11,7 +11,7 @@ import { execFileSync, spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { mintRunBinding } from "../../src/domains/lifecycle";
 
 const REPO = path.resolve(__dirname, "../..");
 const SCRIPTS = path.join(REPO, "scripts");
@@ -431,7 +431,7 @@ describe("MH-08 pinned historical fixture replay", () => {
   it("refuses a foreign execution contract version without fallback or launch", () => {
     const adapters = path.join(
       REPO,
-      "src/modules/dispatch/workflows/execution-transport-adapters.ts"
+      "src/domains/dispatch/execution-transport-adapters.ts"
     );
     const probe = [
       `import { createHostExecutionRuntime } from ${JSON.stringify(adapters)};`,

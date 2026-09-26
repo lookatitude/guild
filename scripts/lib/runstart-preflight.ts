@@ -5,4 +5,4 @@
  * internals without breaking existing imports from scripts/lib/runstart-preflight.
  */
 
-export * from "../../src/modules/lifecycle/workflows/runstart-preflight";
+export * from "../../src/domains/lifecycle/runstart-preflight";

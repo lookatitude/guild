@@ -39,7 +39,7 @@ import {
   scanHtmlForActivePayloads,
   validateDocumentRecord,
   verifyRenderedDocumentBinding,
-} from "../../src/modules/documents";
+} from "../../src/domains/lifecycle";
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const CONTENT_HASH_PATTERN = new RegExp("^sha256" + ":[0-9a-f]{64}$");
@@ -855,7 +855,7 @@ describe("DC-08 service boundaries", () => {
   it("requires external parsers to stay behind a public module seam", () => {
     const report = evaluateDocumentServiceBoundary([
       {
-        path: "src/modules/documents/workflows/x.ts",
+        path: "src/domains/lifecycle/x.ts",
         text:
           'import * as yaml from "js-yaml";\n' +
           'import { load } from "js-yaml/lib/loader";\n',
@@ -863,13 +863,13 @@ describe("DC-08 service boundaries", () => {
     ]);
     expect(report.violations).toEqual([
       {
-        path: "src/modules/documents/workflows/x.ts",
+        path: "src/domains/lifecycle/x.ts",
         line: 1,
         specifier: "js-yaml",
         reason: "external_package_import",
       },
       {
-        path: "src/modules/documents/workflows/x.ts",
+        path: "src/domains/lifecycle/x.ts",
         line: 2,
         specifier: "js-yaml/lib/loader",
         reason: "external_package_import",
@@ -880,7 +880,7 @@ describe("DC-08 service boundaries", () => {
   it("detects a host-internal import", () => {
     const report = evaluateDocumentServiceBoundary([
       {
-        path: "src/modules/documents/workflows/x.ts",
+        path: "src/domains/lifecycle/x.ts",
         text: 'import { hostRegistry } from "../../host-runtime/workflows/lib/host-registry";\n',
       },
     ]);
@@ -891,8 +891,8 @@ describe("DC-08 service boundaries", () => {
   it("detects a private import of an otherwise allowed module", () => {
     const report = evaluateDocumentServiceBoundary([
       {
-        path: "src/modules/documents/workflows/x.ts",
-        text: 'import { sweepLaneLiveness } from "../../lifecycle/workflows/check-lane-liveness";\n',
+        path: "src/domains/lifecycle/x.ts",
+        text: 'import { emit } from "../telemetry/trace-emit";\n',
       },
     ]);
     expect(report.violations[0]!.reason).toBe("private_module_import");
@@ -901,17 +901,18 @@ describe("DC-08 service boundaries", () => {
   it("allows a public entrypoint import of an allowed module", () => {
     const report = evaluateDocumentServiceBoundary([
       {
-        path: "src/modules/documents/workflows/x.ts",
-        text: 'import { emit } from "../../telemetry";\nimport * as fs from "node:fs";\n',
+        path: "src/domains/lifecycle/x.ts",
+        text: 'import { emit } from "../telemetry";\nimport { x } from "./document-hash";\nimport * as fs from "node:fs";\n',
       },
     ]);
-    expect(report.ok).toBe(true);
+    expect(report.violations).toEqual([]);
+    expect(report.scanned).toBe(1);
   });
 
   it("flags a constructed specifier instead of silently missing it (F-01)", () => {
     const report = evaluateDocumentServiceBoundary([
       {
-        path: "src/modules/documents/workflows/x.ts",
+        path: "src/domains/lifecycle/x.ts",
         text: 'const specifier = "../../host-runtime";\nvoid import(specifier);\n',
       },
     ]);
@@ -922,7 +923,7 @@ describe("DC-08 service boundaries", () => {
   it("does not raise phantom violations from commented-out code", () => {
     const report = evaluateDocumentServiceBoundary([
       {
-        path: "src/modules/documents/workflows/x.ts",
+        path: "src/domains/lifecycle/x.ts",
         text: '// import { x } from "../../host-runtime/workflows/y";\n/* require(dynamic) */\n',
       },
     ]);
@@ -941,7 +942,7 @@ describe("DC-08 service boundaries", () => {
       'export {\n  hostRegistry,\n} from "../../host-runtime/workflows/lib/host-registry";\n',
     ]) {
       const report = evaluateDocumentServiceBoundary([
-        { path: "src/modules/documents/workflows/x.ts", text },
+        { path: "src/domains/lifecycle/x.ts", text },
       ]);
       expect(report.ok).toBe(false);
       expect(report.violations[0]!.reason).toBe("host_internal_import");
@@ -953,14 +954,15 @@ describe("DC-08 service boundaries", () => {
 
   it("classifies a re-export exactly as it classifies the matching import", () => {
     const cases: Array<[string, string]> = [
-      ["../../lifecycle/workflows/check-lane-liveness", "private_module_import"],
-      ["../../review", "undeclared_module_import"],
+      ["../telemetry/trace-emit", "private_module_import"],
+      ["../review", "undeclared_module_import"],
+      ["../../adapters/host-registry", "host_internal_import"],
       ["yaml", "external_package_import"],
     ];
     for (const [specifier, reason] of cases) {
       const report = evaluateDocumentServiceBoundary([
         {
-          path: "src/modules/documents/workflows/x.ts",
+          path: "src/domains/lifecycle/x.ts",
           text: `export { thing } from "${specifier}";\n`,
         },
       ]);
@@ -971,7 +973,7 @@ describe("DC-08 service boundaries", () => {
   it("sees a specifier through a string-named binding clause", () => {
     const report = evaluateDocumentServiceBoundary([
       {
-        path: "src/modules/documents/workflows/x.ts",
+        path: "src/domains/lifecycle/x.ts",
         text: 'import { "host registry" as registry } from "../../host-runtime/workflows/x";\n',
       },
     ]);
@@ -983,7 +985,7 @@ describe("DC-08 service boundaries", () => {
   it("does not read a specifier out of an ordinary string that ends in from", () => {
     const report = evaluateDocumentServiceBoundary([
       {
-        path: "src/modules/documents/workflows/x.ts",
+        path: "src/domains/lifecycle/x.ts",
         text:
           'export const NOTE = "this record was derived from ";\n' +
           'export const OTHER = \'and also from \';\n',
@@ -995,7 +997,7 @@ describe("DC-08 service boundaries", () => {
   it("attributes a specifier to real code, never to prose that mentions import", () => {
     const report = evaluateDocumentServiceBoundary([
       {
-        path: "src/modules/documents/workflows/x.ts",
+        path: "src/domains/lifecycle/x.ts",
         text:
           'const sentence = "import x from ";\n' +
           'import { bad } from "../../host-runtime/a";\n',
@@ -1005,7 +1007,7 @@ describe("DC-08 service boundaries", () => {
     // import is still found, with its own specifier and reason.
     expect(report.violations).toEqual([
       {
-        path: "src/modules/documents/workflows/x.ts",
+        path: "src/domains/lifecycle/x.ts",
         line: 2,
         specifier: "../../host-runtime/a",
         reason: "host_internal_import",
@@ -1026,7 +1028,7 @@ describe("DC-08 service boundaries", () => {
   it("detects an aliased require and resolves the call made through it (F-01)", () => {
     const report = evaluateDocumentServiceBoundary([
       {
-        path: "src/modules/documents/workflows/x.ts",
+        path: "src/domains/lifecycle/x.ts",
         text: 'const load = require;\nload("../../host-runtime/workflows/secret");\n',
       },
     ]);
@@ -1050,7 +1052,7 @@ describe("DC-08 service boundaries", () => {
       "export const boot = require;\n",
     ]) {
       const report = evaluateDocumentServiceBoundary([
-        { path: "src/modules/documents/workflows/x.ts", text },
+        { path: "src/domains/lifecycle/x.ts", text },
       ]);
       expect(report.violations.map((violation) => violation.reason)).toContain(
         "indirect_specifier"
@@ -1061,7 +1063,7 @@ describe("DC-08 service boundaries", () => {
   it("detects a require built at runtime through createRequire", () => {
     const report = evaluateDocumentServiceBoundary([
       {
-        path: "src/modules/documents/workflows/x.ts",
+        path: "src/domains/lifecycle/x.ts",
         text:
           'import { createRequire } from "node:module";\n' +
           'const load = createRequire(import.meta.url);\n' +
@@ -1077,7 +1079,7 @@ describe("DC-08 service boundaries", () => {
   it("does not flag require property reads or the word require in a string", () => {
     const report = evaluateDocumentServiceBoundary([
       {
-        path: "src/modules/documents/workflows/x.ts",
+        path: "src/domains/lifecycle/x.ts",
         text:
           "if (require.main === module) main();\n" +
           'const help = "callers must require nothing at runtime";\n' +

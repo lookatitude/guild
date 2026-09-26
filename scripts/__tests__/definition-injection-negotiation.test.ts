@@ -16,18 +16,7 @@
  *              failure the additive path exists to prevent.
  */
 
-import {
-  EXECUTION_OPERATIONS,
-  EXECUTION_OUTCOME_STATUSES,
-  EXECUTION_REASON_CODES,
-  EXECUTION_TRANSPORT_CONTRACT_VERSION,
-  isExecutionContractCompatible,
-  resolveInjectionSupport,
-  type DefinitionRefLike,
-  type ExecutionSpawnRequest,
-  type ExecutionTransportPort,
-  type PaneSpecLike,
-} from "../../src/modules/dispatch/workflows/execution-transport-ports";
+import { EXECUTION_OPERATIONS, EXECUTION_OUTCOME_STATUSES, EXECUTION_REASON_CODES, EXECUTION_TRANSPORT_CONTRACT_VERSION, isExecutionContractCompatible, resolveInjectionSupport, type DefinitionRefLike, type ExecutionSpawnRequest, type ExecutionTransportPort, type PaneSpecLike } from "../../src/domains/dispatch";
 
 const DEF_BODY = "You are the plugin-runtime-architect. Adopt these boundaries.";
 
@@ -274,13 +263,9 @@ describe("resolveInjectionSupport is pure and total", () => {
 // the production spawn path, these go red — the isolation tests above would not.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import {
-  PaneExecutionTransport,
-  InProcessExecutionTransport,
-  recordingObservationSink,
-} from "../../src/modules/dispatch/workflows/execution-transport-adapters";
+import { PaneExecutionTransport, InProcessExecutionTransport, recordingObservationSink } from "../../src/domains/dispatch";
 import { ClaudePaneAdapter } from "../lib/pane-adapter";
-import { portHonoredInjection } from "../../src/modules/dispatch/workflows/execution-transport-ports";
+import { portHonoredInjection } from "../../src/domains/dispatch";
 
 const REAL_PANE: PaneSpecLike = {
   name: "architect",

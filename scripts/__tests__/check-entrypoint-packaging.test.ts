@@ -36,7 +36,6 @@ import {
 } from "../check-entrypoint-packaging";
 import { buildInventory, PLUGIN_ROOT, UNSTAMPED_GENERATED_AT } from "../build-inventory";
 import { writeClaudeTree } from "../build-host-packages";
-import { syncModuleResources } from "../lib/module-resources";
 
 const SCRIPT = path.resolve(__dirname, "../check-entrypoint-packaging.ts");
 
@@ -416,12 +415,9 @@ describe("CLI: check-entrypoint-packaging.ts", () => {
             "npx tsx ${GUILD_PLUGIN_ROOT}/hooks/comms-format-lint.ts\n",
           "utf8"
         );
-        // Re-derive the fixture's module-resources.json (sha256 manifest) so the
-        // appended-to live skill file and its mirror stay consistent — the render
-        // must fail for the REAL reason (a genuinely unshipped entrypoint), not an
-        // unrelated resource-drift error caused by editing only the live copy.
-        const resync = syncModuleResources({ root: fixtureRoot, check: false });
-        expect(resync.ok).toBe(true);
+        // T12: the render reads the live file directly, so appending to the skill
+        // body is the whole fixture — there is no mirror to keep consistent, and
+        // therefore no resource-drift error that could mask the real failure.
 
         const { exitCode, stderr } = runScript(["--cwd", fixtureRoot]);
         expect(exitCode).toBe(1);

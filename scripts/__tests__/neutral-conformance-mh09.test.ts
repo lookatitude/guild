@@ -3,7 +3,7 @@
  *
  * FIC-153 / A21-MH09 (RED-FIRST) — the executable contract for the not-yet-written
  * production evaluator
- * `src/modules/distribution/workflows/release-conformance-evaluator.ts`, exported
+ * `src/domains/distribution/release-conformance-evaluator.ts`, exported
  * through the distribution module's public index, plus the not-yet-written
  * external one-time signer `scripts/sign-release-attestation.ts`.
  *
@@ -77,14 +77,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import {
-  NEUTRAL_DISPOSITIONS,
-  NEUTRAL_OUTCOME_TYPES,
-  NEUTRAL_REASON_CODES,
-  neutralCanonicalJson,
-  neutralFreeze,
-  neutralSha256Hex,
-} from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
+import { NEUTRAL_DISPOSITIONS, NEUTRAL_OUTCOME_TYPES, NEUTRAL_REASON_CODES, neutralCanonicalJson, neutralFreeze, neutralSha256Hex } from "../../src/domains/lifecycle";
 import {
   NEUTRAL_ATTESTATION_CHAINS,
   NEUTRAL_ATTESTATION_CHAIN_LENGTH,
@@ -103,26 +96,16 @@ import {
   deriveNeutralSupportClaim,
   neutralAttestorVerificationKey,
   neutralVerifyAttestationSignature,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
+} from "../../src/domains/lifecycle/neutral-conformance-core";
 import type {
   NeutralEvidenceIdentity,
   NeutralScenarioResult,
   NeutralSupportRecord,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
-import {
-  NEUTRAL_ASSEMBLY_PACKET_SCHEMA,
-  NEUTRAL_CONFORMANCE_OWNER_SCENARIO_COUNTS,
-  NEUTRAL_OWNER_SCENARIO_IDS,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-assembly";
-import type { NeutralOwnerConformancePacket } from "../../src/modules/lifecycle/workflows/neutral-conformance-assembly";
-import {
-  ACCEPTED_CONFORMANCE_ARTIFACTS,
-  OPERATION_KINDS,
-  buildOperationEvidence,
-  buildReleaseClaim,
-  verifyReleaseClaim,
-} from "../../src/modules/distribution/workflows/release-distribution-contract";
-import type { OperationEvidence, ReleaseClaim } from "../../src/modules/distribution/workflows/release-distribution-contract";
+} from "../../src/domains/lifecycle/neutral-conformance-core";
+import { NEUTRAL_ASSEMBLY_PACKET_SCHEMA, NEUTRAL_CONFORMANCE_OWNER_SCENARIO_COUNTS, NEUTRAL_OWNER_SCENARIO_IDS } from "../../src/domains/lifecycle";
+import type { NeutralOwnerConformancePacket } from "../../src/domains/lifecycle";
+import { ACCEPTED_CONFORMANCE_ARTIFACTS, OPERATION_KINDS, buildOperationEvidence, buildReleaseClaim, verifyReleaseClaim } from "../../src/domains/distribution";
+import type { OperationEvidence, ReleaseClaim } from "../../src/domains/distribution";
 
 // ---------------------------------------------------------------------------
 // The modules under contract
@@ -130,12 +113,12 @@ import type { OperationEvidence, ReleaseClaim } from "../../src/modules/distribu
 
 const PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
 
-const EVALUATOR_REQUEST = "../../src/modules/distribution/workflows/release-conformance-evaluator";
+const EVALUATOR_REQUEST = "../../src/domains/distribution/release-conformance-evaluator";
 const EVALUATOR_SOURCE_PATH = path.resolve(
   __dirname,
-  "../../src/modules/distribution/workflows/release-conformance-evaluator.ts"
+  "../../src/domains/distribution/release-conformance-evaluator.ts"
 );
-const DISTRIBUTION_INDEX_PATH = path.resolve(__dirname, "../../src/modules/distribution/index.ts");
+const DISTRIBUTION_INDEX_PATH = path.resolve(__dirname, "../../src/domains/distribution/index.ts");
 
 const SIGNER_REQUEST = "../sign-release-attestation";
 const SIGNER_SOURCE_PATH = path.resolve(__dirname, "../sign-release-attestation.ts");
@@ -1686,7 +1669,7 @@ describe("the production external one-time signer", () => {
       // so the REAL production-mode body can traverse its complete success
       // path; it adds no signer option or production trust override.
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const neutralCore = require("../../src/modules/lifecycle/workflows/neutral-conformance-core") as {
+      const neutralCore = require("../../src/domains/lifecycle/neutral-conformance-core") as {
         neutralAttestorVerificationKey: (attestorId: string) => string | null;
       };
       const originalAuthorityLookup = neutralCore.neutralAttestorVerificationKey;
@@ -2948,14 +2931,14 @@ describe("the FU04 public root-admission bridge", () => {
 
     let rotatedSigner: Record<string, unknown> | undefined;
     jest.isolateModules(() => {
-      jest.doMock("../../src/modules/lifecycle/workflows/neutral-conformance-core", () => ({
-        ...jest.requireActual("../../src/modules/lifecycle/workflows/neutral-conformance-core"),
+      jest.doMock("../../src/domains/lifecycle/neutral-conformance-core", () => ({
+        ...jest.requireActual("../../src/domains/lifecycle/neutral-conformance-core"),
         NEUTRAL_ATTESTOR_TRUST_ROOT: rotatedTrustRoot,
       }));
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       rotatedSigner = require("../sign-release-attestation") as Record<string, unknown>;
     });
-    jest.dontMock("../../src/modules/lifecycle/workflows/neutral-conformance-core");
+    jest.dontMock("../../src/domains/lifecycle/neutral-conformance-core");
 
     expect(() =>
       (rotatedSigner?.signRootAdmissionProof as (options: unknown) => unknown)({

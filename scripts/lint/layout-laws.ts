@@ -957,12 +957,16 @@ const GUILD_JOIN_ALLOWLIST = [
   // purpose — every entry here is a file that provably needs the exemption today,
   // never a directory added "in case". `scripts/lib/state/` is the live shim home
   // for the GuildStorage entrypoints.
-  "src/modules/state/workflows/storage-",
-  "src/modules/state/workflows/guild-root.ts",
-  "src/modules/state/workflows/guild-discovery.ts",
+  "src/domains/state/storage-",
+  "src/domains/state/guild-root.ts",
+  "src/domains/state/guild-discovery.ts",
   "scripts/lib/state/",
-  // storage-v2 / layout migration: must name the legacy shape in order to move it
-  "src/modules/migrations/",
+  // storage-v2 / layout migration: must name the legacy shape in order to move it.
+  // T12 folded `migrations` into the state domain, so the exemption is now the
+  // four migration files by name rather than a whole module directory.
+  "src/domains/state/index-migrate.ts",
+  "src/domains/state/wiki-importance.ts",
+  "src/domains/state/host-cutover-controller.ts",
   "scripts/dot-guild/",
 ];
 
@@ -1408,7 +1412,7 @@ function declaresImportedEnsure(sym: ts.Symbol | undefined, wantNamespace: boole
 }
 
 /** The one file allowed to BE the scrubbing writer rather than call it. */
-const CANONICAL_SCRUBBED_WRITE = "src/modules/security/workflows/scrubbed-write.ts";
+const CANONICAL_SCRUBBED_WRITE = "src/domains/security/scrubbed-write.ts";
 
 /** True when `rel` exports a function declaration named `name` with a real body. */
 function exportsNamed(root: string, rel: string, name: string): boolean {
@@ -1869,14 +1873,20 @@ const CHECKS: Check[] = [
   {
     id: "index-only-domain-imports",
     ktd: "KTD27",
-    title: "cross-domain imports resolve to src/<tree>/<domain>/index only",
+    title: "every consumer imports a domain through src/<tree>/<domain>/index only",
+    // KTD27: surfaces, hooks, scripts, tests, MCP servers and adapters reach a
+    // domain only through its index.ts. Scanning src/ alone let a hook or script
+    // import a private domain file unseen. Compiled output is not a consumer.
     run(ctx) {
       const v: Violation[] = [];
       const domainOf = (f: string) => {
         const m = f.match(/^src\/(modules|domains)\/([^/]+)\//);
         return m ? { tree: m[1], name: m[2] } : null;
       };
-      for (const f of tsFiles(ctx, ["src/"])) {
+      const consumers = tsFiles(ctx, ["src/", "hooks/", "scripts/", "tests/", "mcp-servers/"]).filter(
+        (f) => !/(^|\/)(node_modules|dist)\//.test(f),
+      );
+      for (const f of consumers) {
         const self = domainOf(f);
         // import / export-from / require() / dynamic import(), via the AST.
         for (const spec of moduleSpecifiers(ctx.root, f)) {
@@ -1894,6 +1904,36 @@ const CHECKS: Check[] = [
             check: "index-only-domain-imports",
             path: f,
             detail: `imports '${spec}' past ${target.name}/index`,
+          });
+        }
+      }
+      return v;
+    },
+  },
+  {
+    id: "no-domain-adapter-import",
+    ktd: "KTD4",
+    title: "a domain never imports src/adapters (host maps flow the other way)",
+    // KTD4/KTD1: host family maps live in src/adapters and are NOT a thirteenth
+    // domain. Adapters may read a domain index; a domain reaching back into the
+    // adapter tree binds business logic to a host family. T12 relocated the tree
+    // and recorded the existing consumers as a baselined worklist for T14 (the
+    // adapter-matrix lane); what this check buys NOW is that no NEW one appears.
+    run(ctx) {
+      const v: Violation[] = [];
+      for (const f of tsFiles(ctx, ["src/domains/"])) {
+        if (isFixturePath(f)) continue;
+        for (const spec of moduleSpecifiers(ctx.root, f)) {
+          if (!spec.startsWith(".")) continue;
+          const resolved = path
+            .normalize(path.join(path.dirname(f), spec))
+            .replace(/\\/g, "/")
+            .replace(/\.(ts|tsx|js)$/, "");
+          if (resolved !== "src/adapters" && !resolved.startsWith("src/adapters/")) continue;
+          v.push({
+            check: "no-domain-adapter-import",
+            path: f,
+            detail: `imports '${spec}' — a domain must not depend on the adapter tree`,
           });
         }
       }
@@ -2507,7 +2547,14 @@ async function runFixtures(root: string): Promise<number> {
   return failed === 0 ? 0 : 1;
 }
 
-main(process.argv.slice(2)).then((code) => process.exit(code), (err) => {
-  console.error(err);
-  process.exit(2);
-});
+// `process.exitCode`, never `process.exit()`: on a pipe, exiting truncates any
+// stdout still buffered, which silently cut `--json` off mid-object at 64 KiB.
+main(process.argv.slice(2)).then(
+  (code) => {
+    process.exitCode = code;
+  },
+  (err) => {
+    console.error(err);
+    process.exitCode = 2;
+  },
+);

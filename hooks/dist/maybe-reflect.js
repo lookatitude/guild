@@ -57,11 +57,11 @@ function resolveGuildRoot(startCwd) {
   }
 }
 
-// src/modules/lifecycle/workflows/run-binding.ts
+// src/domains/lifecycle/run-binding.ts
 var fsReal = __toESM(require("fs"));
 var path3 = __toESM(require("path"));
 
-// src/modules/kernel/workflows/module-manifest.ts
+// src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "commands",
   "skills",
@@ -71,7 +71,7 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "scripts"
 ]);
 
-// src/modules/kernel/workflows/sealed-collections.ts
+// src/domains/kernel/sealed-collections.ts
 function regExpWritesLastIndex(re) {
   return re.global || re.sticky;
 }
@@ -159,7 +159,7 @@ function frozenList(items, options = {}) {
   return deepFreeze(items.slice(), options);
 }
 
-// src/modules/kernel/workflows/path-containment.ts
+// src/domains/kernel/path-containment.ts
 var fs2 = __toESM(require("node:fs"));
 var path2 = __toESM(require("node:path"));
 var CONTAINMENT_REFUSAL_CODES = Object.freeze([
@@ -382,7 +382,7 @@ function writeContainedFile(root, target, bytes, options = {}) {
   }
 }
 
-// src/modules/kernel/workflows/runtime-tree-guard.ts
+// src/domains/kernel/runtime-tree-guard.ts
 var RUNTIME_SUBTREE_SEGMENTS = sealSet(
   [
     "skills",
@@ -397,7 +397,7 @@ var RUNTIME_SUBTREE_SEGMENTS = sealSet(
   "RUNTIME_SUBTREE_SEGMENTS"
 );
 
-// src/modules/kernel/workflows/tier-bus.ts
+// src/domains/kernel/tier-bus.ts
 var BUS_TIERS = frozenList(["T0", "T1", "T2"]);
 var LEAD_ROLE_IDS = frozenList(["team-lead", "lead", "orchestrator"]);
 var TIER_BUS_CONTRACT = deepFreeze({
@@ -407,7 +407,7 @@ var TIER_BUS_CONTRACT = deepFreeze({
   tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
 });
 
-// src/modules/lifecycle/workflows/run-binding.ts
+// src/domains/lifecycle/run-binding.ts
 function realBindingFs() {
   return {
     mkdirp: (p) => fsReal.mkdirSync(p, { recursive: true }),
@@ -543,7 +543,7 @@ var import_node_child_process = require("node:child_process");
 var fs5 = __toESM(require("node:fs"));
 var path6 = __toESM(require("node:path"));
 
-// src/modules/state/workflows/guild-root.ts
+// src/domains/state/guild-root.ts
 var fs4 = __toESM(require("node:fs"));
 var path5 = __toESM(require("node:path"));
 function resolveGuildRoot2(startDir) {

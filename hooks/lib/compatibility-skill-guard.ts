@@ -17,8 +17,8 @@ import {
 } from "../../scripts/lib/capability/compatibility-catalog";
 import { readCompatibilityAsset } from "../../scripts/lib/capability/compatibility-loader";
 import { resolveSettings } from "../../scripts/lib/settings-resolver";
-import type { CapabilityResolverMode } from "../../src/modules/config";
-import { readHookBindingEnvelope } from "../../src/modules/lifecycle/workflows/run-binding";
+import type { CapabilityResolverMode } from "../../src/domains/config";
+import { readHookBindingEnvelope } from "../../src/domains/lifecycle/run-binding";
 import type { GuildHookEvent } from "./guild-hook-event";
 
 export type CompatibilitySkillGuardResult =

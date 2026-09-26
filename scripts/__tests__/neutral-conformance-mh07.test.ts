@@ -81,56 +81,21 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import {
-  NEUTRAL_DISPOSITIONS,
-  NEUTRAL_OUTCOME_TYPES,
-  NEUTRAL_REASON_CODES,
-  neutralCanonicalJson,
-  neutralFreeze,
-  neutralOutcome,
-} from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
-import type { NeutralOutcome } from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
-import {
-  NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS,
-  NEUTRAL_EVIDENCE_IDENTITY_FIELDS,
-  NEUTRAL_EVIDENCE_PROFILES,
-  NEUTRAL_RECOGNIZED_HOST_IDS,
-  NEUTRAL_SCENARIO_SUITE_ID,
-  NEUTRAL_SCENARIO_SUITE_VERSION,
-  validateNeutralScenarioRegistry,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
-import type {
-  NeutralEvidenceIdentity,
-  NeutralScenarioDefinition,
-  NeutralScenarioResult,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
-import {
-  NEUTRAL_ASSEMBLY_PACKET_SCHEMA,
-  assembleNeutralConformanceEvidence,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-assembly";
+import { NEUTRAL_DISPOSITIONS, NEUTRAL_OUTCOME_TYPES, NEUTRAL_REASON_CODES, neutralCanonicalJson, neutralFreeze, neutralOutcome } from "../../src/domains/lifecycle";
+import type { NeutralOutcome } from "../../src/domains/lifecycle";
+import { NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS, NEUTRAL_EVIDENCE_IDENTITY_FIELDS, NEUTRAL_EVIDENCE_PROFILES, NEUTRAL_RECOGNIZED_HOST_IDS, NEUTRAL_SCENARIO_SUITE_ID, NEUTRAL_SCENARIO_SUITE_VERSION, validateNeutralScenarioRegistry } from "../../src/domains/lifecycle";
+import type { NeutralEvidenceIdentity, NeutralScenarioDefinition, NeutralScenarioResult } from "../../src/domains/lifecycle";
+import { NEUTRAL_ASSEMBLY_PACKET_SCHEMA, assembleNeutralConformanceEvidence } from "../../src/domains/lifecycle";
 
 // The REAL production boundary this owner evaluates. Imported for two distinct
 // purposes: to drive the disposable oracle over genuinely production behaviour,
 // and to prove by IDENTITY (`===`) that the evaluator's declared production port
 // holds these exact functions rather than look-alikes.
-import {
-  NEUTRAL_CORE_MEMBERS,
-  evaluateNeutralCoreBoundary,
-  extractNeutralImportEdges,
-  tokenizeNeutralSource,
-} from "../../src/modules/lifecycle/workflows/neutral-core-boundary";
-import type { NeutralImportEdge } from "../../src/modules/lifecycle/workflows/neutral-core-boundary";
-import {
-  loadModuleManifests,
-  validateModuleBoundaries,
-  validateModuleHealth,
-  validateModuleOwnership,
-} from "../../src/modules/kernel/workflows/module-manifest";
-import type {
-  ModuleBoundaryViolation,
-  ModuleManifest,
-} from "../../src/modules/kernel/workflows/module-manifest";
-import { buildInventory } from "../../src/modules/distribution/workflows/build-inventory";
+import { NEUTRAL_CORE_MEMBERS, evaluateNeutralCoreBoundary, extractNeutralImportEdges, tokenizeNeutralSource } from "../../src/domains/lifecycle";
+import type { NeutralImportEdge } from "../../src/domains/lifecycle";
+import { loadModuleManifests, validateModuleBoundaries, validateModuleHealth, validateModuleOwnership } from "../../src/domains/kernel";
+import type { ModuleBoundaryViolation, ModuleManifest } from "../../src/domains/kernel";
+import { buildInventory } from "../../src/domains/distribution";
 
 // ---------------------------------------------------------------------------
 // The module under contract
@@ -138,10 +103,10 @@ import { buildInventory } from "../../src/modules/distribution/workflows/build-i
 
 /** The ONE pinned production module path. See §"WHY THE MODULE LIVES IN lifecycle". */
 const EVALUATOR_REQUEST =
-  "../../src/modules/lifecycle/workflows/module-boundary-conformance-evaluator";
+  "../../src/domains/lifecycle/module-boundary-conformance-evaluator";
 const EVALUATOR_SOURCE_PATH = path.resolve(
   __dirname,
-  "../../src/modules/lifecycle/workflows/module-boundary-conformance-evaluator.ts"
+  "../../src/domains/lifecycle/module-boundary-conformance-evaluator.ts"
 );
 
 const PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
@@ -586,7 +551,7 @@ function conformingFiles(): Record<string, string> {
     2
   )}\n`;
 
-  const coreDir = path.join(PLUGIN_ROOT, "src", "modules", "lifecycle", "workflows");
+  const coreDir = path.join(PLUGIN_ROOT, "src", "domains", "lifecycle");
   const coreWorkflows: Record<string, string> = {};
   for (const member of NEUTRAL_CORE_MEMBERS) {
     coreWorkflows[member] = fs.readFileSync(path.join(coreDir, member), "utf8");

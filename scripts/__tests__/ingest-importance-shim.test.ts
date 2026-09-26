@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/ingest-importance";
-import * as moduleImpl from "../../src/modules/knowledge/workflows/ingest-importance";
+import * as moduleImpl from "../../src/domains/knowledge/ingest-importance";
 
 describe("ingest-importance compatibility shim", () => {
   test("scripts/lib/ingest-importance re-exports src/modules/knowledge", () => {
@@ -19,14 +19,14 @@ describe("ingest-importance compatibility shim", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/ingest-importance.ts"), "utf8");
     const modulePath = fs.readFileSync(
-      path.join(repoRoot, "src/modules/knowledge/workflows/ingest-importance.ts"),
+      path.join(repoRoot, "src/domains/knowledge/ingest-importance.ts"),
       "utf8",
     );
 
-    expect(oldPath).toMatch(/src\/modules\/knowledge\/workflows\/ingest-importance/);
+    expect(oldPath).toMatch(/src\/domains\/knowledge\/ingest-importance/);
     expect(oldPath).not.toMatch(/export\s+function\s+ingestImportanceScore/);
     expect(modulePath).toMatch(/export\s+function\s+ingestImportanceScore/);
-    expect(modulePath).toMatch(/from\s+["']\.\.\/\.\.\/state["']/);
-    expect(modulePath).not.toMatch(/state\/workflows\/frontmatter/);
+    expect(modulePath).toMatch(/from\s+["']\.\.\/state["']/);
+    expect(modulePath).not.toMatch(/state\/frontmatter/);
   });
 });

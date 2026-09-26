@@ -14,14 +14,15 @@
  *      compiler), so they are an explicit, allowed exception to the layering floor.
  *      A RUNTIME (value) upward import is a strict violation → pass:false.
  *
- *      Compatibility shims are allowed to re-export implementations from src/modules
+ *      Compatibility shims are allowed to re-export implementations from src/domains
+ *      (or src/adapters; src/modules until T16 deletes it)
  *      when they contain no local logic. A runtime `import { x } from "../../learn/…"`
  *      MUST still fail.
  *
  * Anti-vacuity: `--prove` runs the pure layering detector against (a) a synthetic shared
  * module with a RUNTIME upward import → flagged, (b) a clean one → not flagged, and
  * (c) a `import type` upward import → NOT flagged (the type-only exception), and
- * (d) a pure src/modules re-export shim → NOT flagged.
+ * (d) a pure src/domains re-export shim → NOT flagged.
  */
 import { REPO, RailResult, report, walk, read, rel, proveAssert } from "./_common";
 import { execFileSync } from "child_process";
@@ -72,7 +73,9 @@ export function detectUpwardImports(sharedRel: string, content: string): string[
 
 function isPureModuleShim(sharedRel: string, content: string, spec: string, resolved: string): boolean {
   if (!sharedRel.replace(/\\/g, "/").startsWith(SHARED_FLOOR)) return false;
-  if (!resolved.startsWith("src/modules/")) return false;
+  // T12 folded src/modules into src/domains (+ src/adapters); a shim may re-export
+  // from any of the three, and from nothing else.
+  if (!/^src\/(modules|domains|adapters)\//.test(resolved)) return false;
   const trimmed = content.trim();
   const escapedSpec = spec.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const shimRe = new RegExp(`^(?:/\\*[\\s\\S]*?\\*/\\s*)?export\\s+\\*\\s+from\\s+["']${escapedSpec}["'];?$`);
@@ -195,13 +198,13 @@ function prove(): void {
 
   const moduleShim = detectUpwardImports(
     "scripts/lib/shared/graph-scoring.ts",
-    'export * from "../../../src/modules/knowledge/workflows/graph-scoring";\n',
+    'export * from "../../../src/domains/knowledge/graph-scoring";\n',
   );
-  proveAssert(moduleShim.length === 0, "layering detector ALLOWS a pure shared/ compatibility shim to src/modules");
+  proveAssert(moduleShim.length === 0, "layering detector ALLOWS a pure shared/ compatibility shim to src/domains");
 
   const impureModuleShim = detectUpwardImports(
     "scripts/lib/shared/graph-scoring.ts",
-    'const local = 1;\nexport * from "../../../src/modules/knowledge/workflows/graph-scoring";\n',
+    'const local = 1;\nexport * from "../../../src/domains/knowledge/graph-scoring";\n',
   );
   proveAssert(impureModuleShim.length === 1, "PLANTED CONTROL: a shared/ shim with local logic still TRIPS the layer rail");
 

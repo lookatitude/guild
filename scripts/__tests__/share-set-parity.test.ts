@@ -20,7 +20,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { inShareSet as canonicalInShareSet } from "../lib/shared/share-set";
 import * as shareSetShim from "../lib/shared/share-set";
-import * as shareSetModule from "../../src/modules/security/workflows/share-set";
+import * as shareSetModule from "../../src/domains/security/share-set";
 
 const sep = path.sep;
 
@@ -113,7 +113,7 @@ describe("WAVE-1 Unit 3 — scrub share-set single-source parity", () => {
     }
     for (const r of roots) walk(r);
 
-    expect(inShareSetDefiners).toEqual(["src/modules/security/workflows/share-set.ts"]);
+    expect(inShareSetDefiners).toEqual(["src/domains/security/share-set.ts"]);
     expect(mirrorOffenders).toEqual([]);
   });
 });

@@ -5,4 +5,12 @@
  * communication module owns its executable workflows. Keep this path stable for
  * existing imports from scripts/comms and hook bundles.
  */
-export * from "../../src/modules/communication/workflows/comms-format-lint";
+export {
+  lintCommsFormat,
+  printFindings,
+  parseArgs,
+  POLICY_EFFECTIVE_DATE,
+  type CommsLintFinding,
+  type CommsLintOpts,
+  ALLOWED_ENVELOPE_KEYS,
+} from "../../src/domains/dispatch";

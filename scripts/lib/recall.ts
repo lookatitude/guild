@@ -6,7 +6,7 @@
  * `npx tsx scripts/lib/recall.ts`.
  */
 
-import * as recallImpl from "../../src/modules/context/workflows/recall";
+import * as recallImpl from "../../src/domains/knowledge/recall";
 
 export const DEFAULT_RECALL_HALF_LIFE_DAYS = recallImpl.DEFAULT_RECALL_HALF_LIFE_DAYS;
 export const recencyDecay = recallImpl.recencyDecay;
@@ -20,7 +20,7 @@ export type {
   RecallResult,
   RecallOpts,
   CompositeConfig,
-} from "../../src/modules/context/workflows/recall";
+} from "../../src/domains/knowledge/recall";
 
 if (typeof module !== "undefined" && require.main === module) {
   runRecallCli();

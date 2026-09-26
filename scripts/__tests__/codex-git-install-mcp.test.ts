@@ -52,7 +52,7 @@ import { buildInventory } from "../build-inventory";
 import {
   renderCodexGitInstallManifest,
   renderCodexPluginJson,
-} from "../../src/modules/distribution/workflows/per-host-packaging";
+} from "../../src/domains/distribution/per-host-packaging";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
 const MANIFEST_REL = path.join(".codex-plugin", "plugin.json");

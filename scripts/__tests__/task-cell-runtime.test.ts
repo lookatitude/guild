@@ -2,24 +2,17 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import {
-  FilesystemTaskCellRuntime,
-  ExecutionTransportTaskCellWorkerPort,
-  type TaskCellWorkerPort,
-} from "../../src/modules/dispatch/workflows/task-cell-runtime";
-import { auditTaskCellArtifactJoin } from "../../src/modules/dispatch/workflows/task-cell-artifact-join";
-import { acknowledgeAssignment } from "../../src/modules/dispatch/workflows/task-assignment-v2";
-import {
-  initProgressLedger,
-  recordOracleOutcome,
-} from "../../src/modules/dispatch/workflows/progress-ledger";
-import { publishSubmittedHandoffPointer } from "../../src/modules/dispatch/workflows/task-cell-acceptance";
+import { FilesystemTaskCellRuntime, ExecutionTransportTaskCellWorkerPort, type TaskCellWorkerPort } from "../../src/domains/dispatch";
+import { auditTaskCellArtifactJoin } from "../../src/domains/dispatch";
+import { acknowledgeAssignment } from "../../src/domains/dispatch";
+import { initProgressLedger, recordOracleOutcome } from "../../src/domains/dispatch";
+import { publishSubmittedHandoffPointer } from "../../src/domains/dispatch/task-cell-acceptance";
 import { assignmentId, buildTaskAssignmentV2, taskCellPaths } from "../lib/core/contracts/task-cell-backend";
-import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
-import type { ExecutionTransportPort } from "../../src/modules/dispatch/workflows/execution-transport-ports";
-import { readTaskCellLifecycleEvents } from "../../src/modules/telemetry/workflows/task-cell-telemetry";
-import { reconcileTaskCellLifecycleTelemetry } from "../../src/modules/dispatch/workflows/task-cell-telemetry-reconcile";
-import { composeStationTeam, writeTeamPlan, writeTeamResult } from "../../src/modules/teams";
+import { mintRunBinding } from "../../src/domains/lifecycle/run-binding";
+import type { ExecutionTransportPort } from "../../src/domains/dispatch/execution-transport-ports";
+import { readTaskCellLifecycleEvents } from "../../src/domains/telemetry/task-cell-telemetry";
+import { reconcileTaskCellLifecycleTelemetry } from "../../src/domains/dispatch/task-cell-telemetry-reconcile";
+import { composeStationTeam, writeTeamPlan, writeTeamResult } from "../../src/domains/teams";
 
 const NOW = () => "2026-08-10T17:00:00.000Z";
 

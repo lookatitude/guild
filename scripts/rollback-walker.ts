@@ -36,11 +36,7 @@
 
 import * as path from "path";
 
-import {
-  readCompactHistory,
-  rollbackEvolve,
-  type EvolveHistoryEntry,
-} from "../src/modules/evolution/workflows/compact-history";
+import { readCompactHistory, rollbackEvolve, type EvolveHistoryEntry } from "../src/domains/evolve";
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
 

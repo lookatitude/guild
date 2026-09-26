@@ -33,23 +33,16 @@ import * as os from "os";
 import * as path from "path";
 
 import { upsertLane } from "../../hooks/lib/run-state";
-import {
-  findBoundAdjudications,
-  loadWrittenAdjudications,
-  persistIndependenceAdjudication,
-} from "../../src/modules/capability/workflows/independence-record";
-import { validateWrittenAdjudication } from "../../src/modules/capability/workflows/independence-predicates";
-import { persistInspectionReport } from "../../src/modules/capability/workflows/inspection-persist";
-import {
-  BindingRejectedError,
-  mintRunBinding,
-} from "../../src/modules/lifecycle/workflows/run-binding";
+import { findBoundAdjudications, loadWrittenAdjudications, persistIndependenceAdjudication } from "../../src/domains/config";
+import { validateWrittenAdjudication } from "../../src/domains/config";
+import { persistInspectionReport } from "../../src/domains/config";
+import { BindingRejectedError, mintRunBinding } from "../../src/domains/lifecycle";
 import {
   claimConfirmation,
   loadConfirmationEntries,
   previewConfirmation,
   recordConfirmationDecision,
-} from "../../src/modules/dispatch/workflows/confirmation-gate";
+} from "../../src/domains/dispatch/confirmation-gate";
 
 const RUN_ID = "run-t7-remediation";
 
@@ -415,7 +408,7 @@ describe("T7-M3 - inspection persistence verifies and writes on the SAME real fs
 
   test("the fs seam is GONE from the module source (no reintroduction by accident)", () => {
     const src = fs.readFileSync(
-      path.resolve(__dirname, "../../src/modules/capability/workflows/inspection-persist.ts"),
+      path.resolve(__dirname, "../../src/domains/config/inspection-persist.ts"),
       "utf8",
     );
     // Scan CODE lines only — the module's own header explains the removed seam.
@@ -562,22 +555,23 @@ describe("T7-M4 - the exact-key confirmation arbiter is wired and never leaks ap
     // The audit's exact grep: `claimPrompt|createRunLocalState|confirmation-arbiter`
     // outside tests/resources returned only a re-export and a doc comment.
     const gateSrc = fs.readFileSync(
-      path.resolve(__dirname, "../../src/modules/dispatch/workflows/confirmation-gate.ts"),
+      path.resolve(__dirname, "../../src/domains/dispatch/confirmation-gate.ts"),
       "utf8",
     );
-    // T8R/F2: the caller now reaches the arbiter through capability's PUBLIC
-    // entrypoint (src/modules/capability/index.ts) — the module-boundary rail
-    // rejects a private cross-module workflow import. What must stay true is
-    // that the REAL arbiter API is imported, not merely that some path matches,
-    // so pin the named bindings inside that exact import statement.
-    const capabilityImport = /import\s*\{([\s\S]*?)\}\s*from\s*"\.\.\/\.\.\/capability";/.exec(gateSrc);
+    // T8R/F2: the caller reaches the arbiter through the PUBLIC domain index —
+    // index-only-domain-imports (KTD27) rejects a private sibling import. T12
+    // folded `capability` into the `config` domain, so that entrypoint is now
+    // src/domains/config/index.ts. What must stay true is that the REAL arbiter
+    // API is imported, not merely that some path matches, so pin the named
+    // bindings inside that exact import statement.
+    const capabilityImport = /import\s*\{([\s\S]*?)\}\s*from\s*"\.\.\/config";/.exec(gateSrc);
     expect(capabilityImport).not.toBeNull();
     const importedNames = String(capabilityImport?.[1] ?? "");
     for (const api of ["claimPrompt", "createRunLocalState", "recordDecision", "decisionFor"]) {
       expect(importedNames).toContain(api);
     }
     const productionSrc = fs.readFileSync(
-      path.resolve(__dirname, "../../src/modules/dispatch/workflows/task-assignment-v2.ts"),
+      path.resolve(__dirname, "../../src/domains/dispatch/task-assignment-v2.ts"),
       "utf8",
     );
     expect(productionSrc).toMatch(/claimConfirmation\(/);

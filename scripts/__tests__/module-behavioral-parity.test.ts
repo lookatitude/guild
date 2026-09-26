@@ -4,12 +4,12 @@ import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { gunzipSync } from "node:zlib";
 
-import { appendEvent } from "../../src/modules/lifecycle/workflows/event-log";
+import { appendEvent } from "../../src/domains/lifecycle";
 import {
   markLaneDead,
   type RunStateV1,
-} from "../../src/modules/lifecycle/workflows/run-state";
-import { scrubbedWrite } from "../../src/modules/security/workflows/scrubbed-write";
+} from "../../src/domains/lifecycle/run-state";
+import { scrubbedWrite } from "../../src/domains/security/scrubbed-write";
 
 function tempRoot(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -83,7 +83,7 @@ describe("MH-07 module behavioral parity", () => {
       roots.push(root);
       const runDir = path.join(root, ".guild", "runs", "run-parity");
       const worker = `
-        import { appendEvent } from "./src/modules/lifecycle/workflows/event-log.ts";
+        import { appendEvent } from "./src/domains/lifecycle/event-log.ts";
         for (let n = 0; n < 20; n++) appendEvent(process.env.MH07_RUN_DIR!, {
           ts: new Date().toISOString(), event: "loop_round_start",
           run_id: "run-parity", lane_id: process.env.MH07_LANE!,
@@ -162,7 +162,7 @@ describe("MH-07 module behavioral parity", () => {
       roots.push(root);
       const runDir = path.join(root, ".guild", "runs", "run-parity");
       const worker = `
-        import { upsertLane } from "./src/modules/lifecycle/workflows/run-state.ts";
+        import { upsertLane } from "./src/domains/lifecycle/run-state.ts";
         upsertLane(process.env.MH07_RUN_DIR!, { runId: "run-parity" }, process.env.MH07_LANE!, {
           status: "done", attempt: 1, tier: "mid"
         });

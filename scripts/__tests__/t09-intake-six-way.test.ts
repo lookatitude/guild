@@ -8,14 +8,8 @@
  *   - low confidence asks the operator instead of guessing
  */
 
-import {
-  CLASS_THRESHOLD,
-  TYPED_VERB_CLASS,
-  WORK_CLASSES,
-  bindWorkClass,
-  classifyWorkClass,
-} from "../../src/modules/intake/workflows/work-class";
-import { classifyIntake } from "../../src/modules/intake/workflows/classify-intake";
+import { CLASS_THRESHOLD, TYPED_VERB_CLASS, WORK_CLASSES, bindWorkClass, classifyWorkClass } from "../../src/domains/lifecycle";
+import { classifyIntake } from "../../src/domains/lifecycle";
 
 describe("six-way intake classification", () => {
   it('binds debug for "fix this crash"', () => {

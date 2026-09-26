@@ -38,7 +38,7 @@ module.exports = __toCommonJS(ensure_storage_layout_exports);
 var fs2 = __toESM(require("node:fs"));
 var path2 = __toESM(require("node:path"));
 
-// src/modules/state/workflows/guild-root.ts
+// src/domains/state/guild-root.ts
 var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
 function resolveGuildRoot(startDir) {

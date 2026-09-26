@@ -3,9 +3,14 @@
  * Stable CLI shim. The implementation lives in src/modules/distribution.
  */
 
-import { runVerifyHostPackagesCli } from "../src/modules/distribution/workflows/verify-host-packages";
+import { runVerifyHostPackagesCli } from "../src/domains/distribution";
 
-export * from "../src/modules/distribution/workflows/verify-host-packages";
+export {
+  verifyGeneratedHostPackages,
+  parseVerifyHostPackagesArgs,
+  runVerifyHostPackagesCli,
+  type HostPackageVerification,
+} from "../src/domains/distribution";
 
 if (require.main === module) {
   process.exit(runVerifyHostPackagesCli());

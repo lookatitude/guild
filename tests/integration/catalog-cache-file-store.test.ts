@@ -18,7 +18,7 @@ import * as path from "path";
 import * as crypto from "crypto";
 import * as yaml from "js-yaml";
 
-import * as catalogCache from "../../src/modules/capability/workflows/catalog-cache";
+import * as catalogCache from "../../src/domains/config/catalog-cache";
 import {
   CACHED_INSPECTION_BUDGET_MS,
   CacheKeyIdentity,
@@ -44,7 +44,7 @@ import {
   runScopeFor,
   singleflight,
   singleflightDiscover,
-} from "../../src/modules/capability/workflows/catalog-cache";
+} from "../../src/domains/config/catalog-cache";
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "guild-catalog-cache-"));

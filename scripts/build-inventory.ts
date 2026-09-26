@@ -6,9 +6,18 @@
  * move internals without breaking imports or `npx tsx scripts/build-inventory.ts`.
  */
 
-export * from "../src/modules/distribution/workflows/build-inventory";
+export {
+  discoverSurfaces,
+  buildInventory,
+  serializeInventory,
+  parseArgs,
+  main,
+  PLUGIN_ROOT,
+  UNSTAMPED_GENERATED_AT,
+  type DiscoveryOutput,
+} from "../src/domains/distribution";
 
-import { main } from "../src/modules/distribution/workflows/build-inventory";
+import { main } from "../src/domains/distribution";
 
 if (require.main === module) {
   process.exit(main());

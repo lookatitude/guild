@@ -4,7 +4,7 @@
  * Usage: import { createGuildStorage } from "./lib/state/storage"
  *
  * Stable entrypoint for the `GuildStorage` API so `scripts/` callers do not reach
- * into `src/modules/state/workflows/**` (KTD27: the domain index is the API).
+ * into `src/domains/state/**` (KTD27: the domain index is the API).
  *
  * This is the ONLY path a script should use to name a durable, cache, runtime,
  * worktree or temp location. Building the durable directory path by hand is a
@@ -39,7 +39,7 @@ export {
   STORAGE_ARTIFACT_REGISTRY,
   STORAGE_ARTIFACT_REGISTRY_SCHEMA,
   GUILD_NAMESPACE,
-} from "../../../src/modules/state";
+} from "../../../src/domains/state";
 
 export type {
   GuildStorage,
@@ -58,4 +58,4 @@ export type {
   GcReport,
   DurableFinding,
   SweepEntry,
-} from "../../../src/modules/state";
+} from "../../../src/domains/state";

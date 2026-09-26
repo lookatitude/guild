@@ -48,16 +48,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import {
-  CONTAINMENT_REFUSAL_CODES,
-  assertContained,
-  checkContained,
-  prepareContainedWrite,
-  writeContainedFile,
-  type ContainmentRefused,
-  type ContainmentResult,
-  type PrepareResult,
-} from "../../src/modules/kernel/workflows/path-containment";
+import { CONTAINMENT_REFUSAL_CODES, assertContained, checkContained, prepareContainedWrite, writeContainedFile, type ContainmentRefused, type ContainmentResult, type PrepareResult } from "../../src/domains/kernel";
 
 // ───────────────────────────────────────────────────────────────────────────────
 // The historical implementations, transcribed VERBATIM from the lanes that

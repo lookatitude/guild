@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/degradation-trace";
-import * as moduleImpl from "../../src/modules/host-runtime/workflows/degradation-trace";
+import * as moduleImpl from "../../src/adapters/degradation-trace";
 
 describe("degradation-trace compatibility shim", () => {
   test("scripts/lib/degradation-trace re-exports src/modules/host-runtime", () => {
@@ -41,9 +41,9 @@ describe("degradation-trace compatibility shim", () => {
   test("only the module file defines degradation trace builders", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/degradation-trace.ts"), "utf8");
-    const modulePath = fs.readFileSync(path.join(repoRoot, "src/modules/host-runtime/workflows/degradation-trace.ts"), "utf8");
+    const modulePath = fs.readFileSync(path.join(repoRoot, "src/adapters/degradation-trace.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/modules\/host-runtime\/workflows\/degradation-trace["']/);
+    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/adapters\/degradation-trace["']/);
     expect(oldPath).not.toMatch(/export\s+function\s+makeDegradationRow/);
     expect(modulePath).toMatch(/export\s+function\s+makeDegradationRow/);
     expect(modulePath).toMatch(/export\s+const\s+DEGRADATION_KINDS/);

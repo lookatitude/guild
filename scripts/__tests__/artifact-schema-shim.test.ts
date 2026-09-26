@@ -1,7 +1,7 @@
 import * as defineShim from "../lib/define-schema";
 import * as exploreShim from "../lib/explore-schema";
-import * as defineModule from "../../src/modules/evals/workflows/define-schema";
-import * as exploreModule from "../../src/modules/evals/workflows/explore-schema";
+import * as defineModule from "../../src/domains/evolve/define-schema";
+import * as exploreModule from "../../src/domains/evolve/explore-schema";
 
 describe("artifact schema compatibility shims", () => {
   test("scripts/lib/explore-schema re-exports src/modules/evals", () => {

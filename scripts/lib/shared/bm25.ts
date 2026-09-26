@@ -5,4 +5,4 @@
  * internals without breaking existing imports from scripts/lib/shared/*.
  */
 
-export * from "../../../src/modules/knowledge/workflows/bm25";
+export * from "../../../src/domains/knowledge/bm25";

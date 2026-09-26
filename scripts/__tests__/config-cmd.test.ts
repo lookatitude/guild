@@ -14,7 +14,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import { POLICY_KEYS } from "../../src/modules/config/workflows/policy-keys";
+import { POLICY_KEYS } from "../../src/domains/config";
 
 const SCRIPT = path.resolve(__dirname, "..", "config-cmd.ts");
 const ENV = { ...process.env, NODE_NO_WARNINGS: "1" } as NodeJS.ProcessEnv;

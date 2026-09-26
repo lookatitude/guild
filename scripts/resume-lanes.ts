@@ -6,9 +6,15 @@
  * internals without breaking existing script paths.
  */
 
-import { runResumeLanesCli } from "../src/modules/lifecycle/workflows/resume-lanes";
+import { runResumeLanesCli } from "../src/domains/lifecycle";
 
-export * from "../src/modules/lifecycle/workflows/resume-lanes";
+export {
+  parseResumeLanesArgs,
+  scanResumableLanes,
+  runResumeLanesCli,
+  type ResumableLane,
+  type ResumeLanesArgs,
+} from "../src/domains/lifecycle";
 
 if (require.main === module) {
   runResumeLanesCli();

@@ -47,7 +47,7 @@ import {
   HOST_IDS,
   HOST_REGISTRY_ROWS,
   type HostId,
-} from "../../src/modules/host-runtime";
+} from "../../src/adapters";
 
 import {
   NEUTRAL_EVENT_NAMES,
@@ -64,7 +64,7 @@ import {
   type NeutralCapabilitySnapshot,
   type NeutralGate,
   type NeutralPolicy,
-} from "../../src/modules/lifecycle";
+} from "../../src/domains/lifecycle";
 
 import { createHostAdapter as createRealHostAdapter } from "../lib/host-adapter-factory";
 import { createHostAdapter as createFailClosedDefaultAdapter } from "../lib/host-adapter-contract";
@@ -72,17 +72,17 @@ import { createHostAdapter as createFailClosedDefaultAdapter } from "../lib/host
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 
 const MH03_SOURCES = [
-  "src/modules/host-runtime/workflows/host-adapter-boundary.ts",
-  "src/modules/host-runtime/workflows/host-capability-snapshot.ts",
-  "src/modules/host-runtime/workflows/host-event-normalizer.ts",
+  "src/adapters/host-adapter-boundary.ts",
+  "src/adapters/host-capability-snapshot.ts",
+  "src/adapters/host-event-normalizer.ts",
 ];
 
 const NEUTRAL_CORE_SOURCES = [
-  "src/modules/lifecycle/workflows/neutral-runtime-contracts.ts",
-  "src/modules/lifecycle/workflows/neutral-gate-policy.ts",
-  "src/modules/lifecycle/workflows/neutral-lifecycle-machine.ts",
-  "src/modules/lifecycle/workflows/neutral-conformance-core.ts",
-  "src/modules/lifecycle/workflows/neutral-core-boundary.ts",
+  "src/domains/lifecycle/neutral-runtime-contracts.ts",
+  "src/domains/lifecycle/neutral-gate-policy.ts",
+  "src/domains/lifecycle/neutral-lifecycle-machine.ts",
+  "src/domains/lifecycle/neutral-conformance-core.ts",
+  "src/domains/lifecycle/neutral-core-boundary.ts",
 ];
 
 function readSource(relPath: string): string {
@@ -1052,11 +1052,11 @@ describe("MH-03 acceptance 6 — the boundary validates the COMPLETE adapter int
 
 describe("MH-03 public surface", () => {
   test("the module index re-exports every MH-03 boundary symbol", () => {
-    const index = readSource("src/modules/host-runtime/index.ts");
+    const index = readSource("src/adapters/index.ts");
     for (const workflow of [
-      "./workflows/host-adapter-boundary",
-      "./workflows/host-capability-snapshot",
-      "./workflows/host-event-normalizer",
+      "./host-adapter-boundary",
+      "./host-capability-snapshot",
+      "./host-event-normalizer",
     ]) {
       expect(index).toContain(workflow);
     }

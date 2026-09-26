@@ -10,13 +10,13 @@
  * append-only outcome finalized exactly once; unfinalized-on-resume receipts
  * finalize as `interrupted`.
  *
- * EXPECTED TO FAIL TODAY: src/modules/capability/workflows/model-resolver.ts
+ * EXPECTED TO FAIL TODAY: src/domains/config/model-resolver.ts
  * does not exist (lane T5).
  */
 
 import { requireContractModule, FAILURE_TAXONOMY, selfRefHash, canonicalYaml, sha256 } from "./_helpers";
 
-const RESOLVER_MODULE = "src/modules/capability/workflows/model-resolver";
+const RESOLVER_MODULE = "src/domains/config/model-resolver";
 const LANE = "T5-policy-resolver";
 
 describe("C6 model_resolution — resolver + receipts", () => {

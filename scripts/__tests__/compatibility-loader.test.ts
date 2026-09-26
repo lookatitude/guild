@@ -3,8 +3,8 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildCompatibilityCatalog } from "../lib/capability/compatibility-catalog";
 import { collectCompatibilityUsageWindow, readCompatibilityAsset, writeFrozenCompatibilityCatalog } from "../lib/capability/compatibility-loader";
-import { scanReceiptJournal } from "../../src/modules/telemetry";
-import { closeRunBinding, mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { scanReceiptJournal } from "../../src/domains/telemetry";
+import { closeRunBinding, mintRunBinding } from "../../src/domains/lifecycle";
 
 function openBinding(projectRoot: string, runId: string): string {
   return mintRunBinding({ root: projectRoot, run_id: runId }).binding_ref;

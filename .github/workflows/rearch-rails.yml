@@ -87,26 +87,22 @@ jobs:
         run: |
           cd scripts && npm run check:inventory -- --root ..
 
-      # Dual-home mirror-sync gate (gap-audit C5).
+      # Domain-ownership gate (KTD1/KTD27/KTD36).
       #
-      # Several contract files are DUAL-HOMED: the live path (e.g. scripts/lib/core/contracts/
-      # specialist-identity.ts, scripts/lib/host-capabilities-schema.ts, src/modules/dispatch/
-      # workflows/execution-transport-ports.ts) is the source of truth, and each module's
-      # src/modules/<module>/resources/** carries a byte-identical mirror recorded in that
-      # module's resources/module-resources.json with a sha256 per entry. A hand-edit to only
-      # one home silently reverts the next time the mirror is re-synced.
+      # T12 folded 29 modules into 12 domains and RETIRED the src/modules/**/resources
+      # byte mirrors together with sync-module-resources / sync-live-resources. Host
+      # packages are now a projection of the live surface, so "mirror drift" is not a
+      # state that can exist and the old dual-home gate has nothing left to compare.
       #
-      # `sync-module-resources.ts --check` (npm check:module-resources) already diffed every
-      # mirrored pair against its recorded sha256, and check-module-ownership.ts already proved
-      # every inventory item is owned by exactly one module manifest — but NEITHER was wired
-      # into any workflow or git hook, so the dual-home hazard the audit flagged was ungated.
-      # (The sibling legs of check:module-source-of-truth — check:live-resources and
-      # check:claude-install — are already gated by verify:host-packages below.)
+      # What replaces it: every domain file is owned exactly once, src/modules holds
+      # re-export shims only (a non-shim file there is a second copy of a moved
+      # implementation), the twelve-domain list is closed, and every inventory item is
+      # still owned by exactly one module manifest.
       #
-      # Read-only: --check never writes, so this cannot perturb the steps that follow.
-      - name: Dual-home mirror-sync gate (src/modules/**/resources mirrors match their live sources)
+      # Read-only.
+      - name: Domain-ownership gate (twelve domains, each file owned once, shims only)
         run: |
-          cd scripts && npm run check:modules -- --root .. && npm run check:module-resources -- --root ..
+          cd scripts && npm run check:modules -- --root ..
 
       # Path-containment rail (task #28).
       #
@@ -116,12 +112,11 @@ jobs:
       # places (six of which climbed with `existsSync`, so six carried the same
       # dangling-symlink hole). Fixing any one of them would have left five.
       #
-      # This rail is a TypeScript AST scan of src/**, scripts/**, hooks/** AND every
-      # resources/ mirror, joined against a registry. It fails when a NEW containment home
-      # appears unregistered, when a registered site drops the primitive, when a registered
-      # site RE-GROWS a private climb while keeping the import, or when a resources mirror
-      # of an unregistered file surfaces — the last being how the S3 lane's second mirror
-      # escaped every gate and showed up in `git status` instead.
+      # This rail is a TypeScript AST scan of src/**, scripts/** and hooks/**, joined
+      # against a registry. It fails when a NEW containment home appears unregistered,
+      # when a registered site drops the primitive, or when a registered site RE-GROWS a
+      # private climb while keeping the import. (T12 retired the resources/ mirrors, so
+      # the fourth case — an unregistered file surfacing as a mirror — is gone with them.)
       #
       # Read-only.
       - name: Path-containment rail (no unregistered home for the containment primitive)

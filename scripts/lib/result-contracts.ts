@@ -5,4 +5,4 @@
  * move internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/modules/distribution/workflows/result-contracts";
+export * from "../../src/domains/distribution/result-contracts";

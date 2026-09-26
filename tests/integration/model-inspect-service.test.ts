@@ -30,25 +30,13 @@ import * as path from "path";
 import {
   buildModelInspection,
   MODEL_INSPECTION_SCHEMA,
-} from "../../src/modules/capability/workflows/model-inspect";
-import { persistInspectionReport } from "../../src/modules/capability/workflows/inspection-persist";
-import { buildIndependenceAdjudication } from "../../src/modules/capability/workflows/independence-predicates";
-import {
-  readRoutingFlags,
-  ROUTING_FLAG_DEFAULTS,
-  type RoutingFlags,
-} from "../../src/modules/capability/workflows/routing-rollout";
-import { buildSessionContext } from "../../src/modules/host-runtime/workflows/session-context";
-import {
-  finalizeReceipt,
-  recordAttempt,
-  resolve as resolveModel,
-  type ResolutionReceipt,
-} from "../../src/modules/capability/workflows/model-resolver";
-import {
-  BindingRejectedError,
-  mintRunBinding,
-} from "../../src/modules/lifecycle/workflows/run-binding";
+} from "../../src/domains/config/model-inspect";
+import { persistInspectionReport } from "../../src/domains/config";
+import { buildIndependenceAdjudication } from "../../src/domains/config";
+import { readRoutingFlags, ROUTING_FLAG_DEFAULTS, type RoutingFlags } from "../../src/domains/config";
+import { buildSessionContext } from "../../src/adapters/session-context";
+import { finalizeReceipt, recordAttempt, resolve as resolveModel, type ResolutionReceipt } from "../../src/domains/config";
+import { BindingRejectedError, mintRunBinding } from "../../src/domains/lifecycle";
 
 const NOW = "2026-07-30T14:00:00Z";
 
@@ -709,7 +697,7 @@ describe("model-inspect — M0 read-only inspection service (lane T6)", () => {
 
     test("STATIC PROBE: the inspection module imports no fs/telemetry-emit surface and exports no emit function", () => {
       const src = fs.readFileSync(
-        path.join(__dirname, "../../src/modules/capability/workflows/model-inspect.ts"),
+        path.join(__dirname, "../../src/domains/config/model-inspect.ts"),
         "utf8"
       );
       expect(src).not.toMatch(/from ["'](node:)?fs["']/);
@@ -717,7 +705,7 @@ describe("model-inspect — M0 read-only inspection service (lane T6)", () => {
       expect(src).not.toMatch(/from ["'].*guild-trace-emit["']/);
       expect(src).not.toMatch(/export function emitInspectionTrace/);
       expect(src).not.toMatch(/emitTraceEvent\(/);
-      const mod = require("../../src/modules/capability/workflows/model-inspect");
+      const mod = require("../../src/domains/config/model-inspect");
       expect("emitInspectionTrace" in mod).toBe(false);
     });
   });

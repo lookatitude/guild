@@ -41,14 +41,21 @@ For full architecture and design documentation see **https://guildstack.dev/docs
   host actually runs (`cd hooks && npm run build` after any hook edit — source
   edits are a no-op until rebuilt). Other hosts consume equivalent behavior
   through host adapters and graceful fallback.
-- `src/modules/<module>/` — the module source-of-truth layer. Each module owns its
-  `workflows/` code plus a `resources/` mirror that generated host packages copy
-  from; `scripts/lib/*` are thin re-export shims over these workflows. The
-  module-resource sync (`syncModuleResources`) + drift gates keep the live surface,
-  the `resources/` mirror, and the per-host `dist/` copies byte-identical. **Edit
-  the live source (`scripts/lib`, `src/modules/*/workflows`, `hooks/*.ts`); never
-  hand-edit a `resources/` or `dist/` mirror** — run the sync + host-package build
-  to propagate.
+- `src/domains/<id>/` — the twelve domains (KTD1/KTD36): `kernel`, `state`,
+  `security`, `config`, `lifecycle`, `knowledge`, `teams`, `dispatch`, `review`,
+  `telemetry`, `evolve`, `distribution`. Each has ONE public `index.ts` — nothing
+  outside the domain may reach a sibling file — with internals and colocated tests
+  beside it. The KTD36 fold map is data, at
+  `src/domains/distribution/domain-fold.ts`, and is recorded in the coverage file.
+- `src/adapters/` — host family maps and the remaining host-runtime projection
+  (KTD4). Not a thirteenth domain: adapters may read a domain index, a domain must
+  not import adapters.
+- `src/modules/<module>/` — transitional re-export shims over the domains, kept so
+  existing importers keep working; T16 deletes them. **Edit the domain file, never
+  a shim.** A non-shim file here fails `npm run check:modules`.
+- Host packages are a PROJECTION of the live surface (KTD28): `build-host-packages`
+  copies straight from `commands/`, `skills/`, `agents/`, `hooks/`, `scripts/`.
+  There are no `resources/` byte mirrors and no mirror-sync step.
 - `scripts/`, `mcp-servers/` — evolve loop, telemetry, optional MCP servers.
 - `dist/` — committed per-host packages (`claude-code`, `codex`, `pi`, …) rendered
   by `scripts/build-host-packages.ts`; regenerated, never hand-edited.
@@ -96,7 +103,7 @@ cannot carry the ref refuses before launch. Agents never commit themselves.
 
 | Changed path / concern | Dev-team definition |
 |---|---|
-| `scripts/`, `src/modules/**` (module SoT + sync scripts + drift gates), `mcp-servers/`, `.mcp.json` | `tooling-engineer` |
+| `scripts/`, `src/domains/**`, `src/adapters/**` (domain SoT + projector + drift gates), `mcp-servers/`, `.mcp.json` | `tooling-engineer` |
 | `hooks/` (hooks.json + hook scripts) | `hook-engineer` |
 | `commands/` | `command-builder` |
 | `skills/**` (bodies + per-skill evals.json) | `skill-author` |

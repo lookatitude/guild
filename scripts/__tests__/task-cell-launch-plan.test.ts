@@ -9,8 +9,8 @@ import {
 } from "../lib/task-cell-launch-plan";
 import type { Specialist } from "../lib/core/contracts/team-backend";
 import { buildTaskAssignmentV2, taskCellPaths } from "../lib/core/contracts/task-cell-backend";
-import { STATIONS, validateTeamResultV1 } from "../../src/modules/teams/workflows/station-composer";
-import { readTeamResult, writeTeamResult } from "../../src/modules/teams/workflows/station-signals";
+import { STATIONS, validateTeamResultV1 } from "../../src/domains/teams";
+import { readTeamResult, writeTeamResult } from "../../src/domains/teams";
 
 const backend: Specialist = { name: "backend", scope: "API", dependsOn: [] };
 

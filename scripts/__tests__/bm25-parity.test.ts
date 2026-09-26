@@ -25,7 +25,7 @@ import {
   bm25Score as canonicalBm25Score,
 } from "../lib/shared/bm25";
 import * as bm25Shim from "../lib/shared/bm25";
-import * as bm25Module from "../../src/modules/knowledge/workflows/bm25";
+import * as bm25Module from "../../src/domains/knowledge/bm25";
 
 // ── Frozen reference: the verbatim algorithm that lived in ingest-similarity.ts
 //    and guild-memory/src/bm25.ts BEFORE the WAVE-1 single-source collapse.
@@ -171,6 +171,6 @@ describe("WAVE-1 Unit 1 — BM25 single-source parity", () => {
     }
     for (const r of roots) walk(r);
 
-    expect(definers).toEqual(["src/modules/knowledge/workflows/bm25.ts"]);
+    expect(definers).toEqual(["src/domains/knowledge/bm25.ts"]);
   });
 });

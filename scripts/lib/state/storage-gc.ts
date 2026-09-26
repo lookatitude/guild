@@ -15,7 +15,7 @@
  */
 
 import { ensureStorageLayout } from "./ensure-storage-layout";
-import { formatGcReport, runStorageGc } from "../../../src/modules/state";
+import { formatGcReport, runStorageGc } from "../../../src/domains/state";
 
 export { formatGcReport, runStorageGc };
 

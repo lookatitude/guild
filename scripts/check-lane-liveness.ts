@@ -6,9 +6,23 @@
  * internals without breaking existing script paths.
  */
 
-import { runCheckLaneLivenessCli } from "../src/modules/lifecycle/workflows/check-lane-liveness";
+import { runCheckLaneLivenessCli } from "../src/domains/lifecycle";
 
-export * from "../src/modules/lifecycle/workflows/check-lane-liveness";
+export {
+  readRunStateLanes,
+  readHeartbeatAges,
+  readReceiptEvidence,
+  readReceiptStems,
+  isStalled,
+  sweepLaneLiveness,
+  resolveTimeoutMs,
+  runCheckLaneLivenessCli,
+  DEFAULT_HEARTBEAT_TIMEOUT_MS,
+  type HeartbeatRecord,
+  type LaneLiveness,
+  type ReceiptEvidence,
+  type LivenessReport,
+} from "../src/domains/lifecycle";
 
 if (require.main === module) {
   process.exit(runCheckLaneLivenessCli());

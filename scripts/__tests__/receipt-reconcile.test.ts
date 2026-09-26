@@ -2,7 +2,7 @@
  * scripts/__tests__/receipt-reconcile.test.ts
  *
  * MH-06 — interruption reconciliation
- * (src/modules/telemetry/workflows/receipt-reconcile.ts).
+ * (src/domains/telemetry/receipt-reconcile.ts).
  *
  * Pins the W1/MH-06 slice of the frozen W0 conformance contract:
  *
@@ -17,23 +17,8 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { spawnSync } from "child_process";
-import {
-  appendReceipt,
-  sealReceiptRecord,
-  makeReceiptInput,
-  readCheckpoint,
-  readCheckpointState,
-  scanReceiptJournal,
-  compareCheckpointToJournal,
-  journalLockPath,
-  canonicalJournalPath,
-  defaultJournalIo,
-  RECEIPT_CONTRACT_VERSION,
-  type JournalIo,
-  type ReceiptAppendInput,
-  type ReceiptRecordV1,
-} from "../../src/modules/telemetry/workflows/receipt-journal";
-import { reconcileReceiptJournal } from "../../src/modules/telemetry/workflows/receipt-reconcile";
+import { appendReceipt, sealReceiptRecord, makeReceiptInput, readCheckpoint, readCheckpointState, scanReceiptJournal, compareCheckpointToJournal, journalLockPath, canonicalJournalPath, defaultJournalIo, RECEIPT_CONTRACT_VERSION, type JournalIo, type ReceiptAppendInput, type ReceiptRecordV1 } from "../../src/domains/telemetry";
+import { reconcileReceiptJournal } from "../../src/domains/telemetry";
 
 const VERSIONS = {
   host_id: "codex-local",
@@ -1396,7 +1381,7 @@ describe("MH-06-R2-B3 — a checkpoint must actually describe the journal", () =
 
 describe("MH-06-R3-B2 — repair locks before it scans, and verifies against the current journal", () => {
   const TSX = path.join(__dirname, "..", "node_modules", ".bin", "tsx");
-  const JOURNAL_MODULE = path.join(__dirname, "..", "..", "src", "modules", "telemetry", "workflows", "receipt-journal");
+  const JOURNAL_MODULE = path.join(__dirname, "..", "..", "src", "domains", "telemetry", "receipt-journal");
 
   /** A genuinely separate OS process that appends ONE record and exits. */
   function landRecordFromAnotherProcess(root: string, seq: number): Record<string, unknown> {

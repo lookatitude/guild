@@ -5,4 +5,4 @@
  * the reorg can move internals without breaking imports from scripts/lib/shared/*.
  */
 
-export * from "../../../src/modules/knowledge/workflows/graph-scoring";
+export * from "../../../src/domains/knowledge/graph-scoring";

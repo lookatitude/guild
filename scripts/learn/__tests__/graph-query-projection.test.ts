@@ -46,7 +46,7 @@ import {
   DEFAULT_INDEX_BLOCK,
   ensureKgProjectionIndex,
   type IndexBlock,
-} from "../../../src/modules/state/workflows/index-cache";
+} from "../../../src/domains/state/index-cache";
 
 const FIXTURE_ROOT = path.join(__dirname, "fixtures", "clra-fixture");
 const REL_FILES = [

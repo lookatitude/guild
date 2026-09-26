@@ -23,18 +23,9 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import { casVerify, publish, readBusLog } from "../../src/modules/communication";
-import { STATIONS, validateTeamPlanV1 } from "../../src/modules/teams/workflows/station-composer";
-import {
-  STATION_SIGNALS_SCHEMA,
-  emptyStationSignalsV1,
-  readTeamPlan,
-  readTeamResult,
-  signalsOf,
-  validateStationSignalsV1,
-  writeTeamPlan,
-  writeTeamResult,
-} from "../../src/modules/teams/workflows/station-signals";
+import { casVerify, publish, readBusLog } from "../../src/domains/dispatch";
+import { STATIONS, validateTeamPlanV1 } from "../../src/domains/teams";
+import { STATION_SIGNALS_SCHEMA, emptyStationSignalsV1, readTeamPlan, readTeamResult, signalsOf, validateStationSignalsV1, writeTeamPlan, writeTeamResult } from "../../src/domains/teams";
 
 const SCRIPT = path.resolve(__dirname, "../station-compose.ts");
 

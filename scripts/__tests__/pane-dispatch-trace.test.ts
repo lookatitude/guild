@@ -38,10 +38,10 @@ import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
 import * as yaml from "js-yaml";
-import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
-import { sessionBindingPath } from "../../src/modules/config/workflows/session-binding";
+import { mintRunBinding } from "../../src/domains/lifecycle";
+import { sessionBindingPath } from "../../src/domains/config";
 import { createExactClaudePluginFixture } from "./fixtures/exact-claude-plugin-fixture";
-import { hostCapabilityCacheFile } from "../../src/modules/state";
+import { hostCapabilityCacheFile } from "../../src/domains/state";
 
 const SUMMARIZER = path.resolve(__dirname, "../trace-summarize.ts");
 const PANE_TRACE_CLI = path.resolve(__dirname, "../lib/host/pane-dispatch-trace.ts");
@@ -735,9 +735,9 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
   // ───────────────────────────────────────────────────────────────────────────
   describe("guild.trace.dispatch.v1 contract edges", () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const events = require("../../src/modules/telemetry/workflows/guild-trace-events");
+    const events = require("../../src/domains/telemetry/guild-trace-events");
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const emit = require("../../src/modules/telemetry/workflows/guild-trace-emit");
+    const emit = require("../../src/domains/telemetry/guild-trace-emit");
 
     const valid = () =>
       events.makeDispatchEvent({

@@ -40,22 +40,22 @@
 import * as fs from "fs";
 import * as path from "path";
 import { probeTmuxAvailable } from "./lib/team-backend";
-import { atomicWrite, hostCapabilityCacheDir, hostCapabilityCacheFile } from "../src/modules/state";
+import { atomicWrite, hostCapabilityCacheDir, hostCapabilityCacheFile } from "../src/domains/state";
 // G-11 (SC-6): models.tiers values are a union (string | {model,effort?,verbosity?} | null);
 // resolveTierModel is the ONLY place the union is unpacked. It also tolerates the
 // legacy flat form (tiers.cheap = "model-name") this writer historically accepted.
-import { resolveTierModel } from "../src/modules/config/workflows/tier-model";
+import { resolveTierModel } from "../src/domains/config";
 
 // ── Schema (guild.host_capability.v1) ────────────────────────────────────────
 
 import type {
   HostCapabilityManifest,
   HostKind,
-} from "../src/modules/host-runtime/workflows/host-capability-manifest";
+} from "../src/adapters/host-capability-manifest";
 export type {
   HostCapabilityManifest,
   HostKind,
-} from "../src/modules/host-runtime/workflows/host-capability-manifest";
+} from "../src/adapters/host-capability-manifest";
 // W4 D1: registry-bridge predicates replace `=== "claude"` literals in this file.
 // Both sites gate on a CLI-NATIVE capability (in-process independent agents, native PreToolUse
 // ask) that the claude desktop/web/app variants do NOT share — so they use the EXACT isClaudeCli,

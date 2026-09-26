@@ -63,7 +63,7 @@ import {
 import { validateGraph } from "./lib/schema";
 import type { GraphEdge, GraphNode } from "./lib/schema";
 import * as fs from "fs";
-import { assertContained as assertSharedContained } from "../../src/modules/kernel/workflows/path-containment";
+import { assertContained as assertSharedContained } from "../../src/domains/kernel/path-containment";
 
 /**
  * FIX-T4.1-1: resolve `p` and PROVE it stays within `root` before any read/write.

@@ -657,7 +657,7 @@ describe("the real repository", () => {
     // said 168 once passed, because 168 > 160. Under a superset assertion, one
     // identity disappearing fails BY NAME.
     const MUST_COVER = [
-      "src/modules/kernel/workflows/path-containment.ts",
+      "src/domains/kernel/path-containment.ts",
       "scripts/lib/command-registry.ts",
       "scripts/lib/skill-source-transform.ts",
       // scripts/instantiate-template.ts left this list with T11: its climb
@@ -667,7 +667,7 @@ describe("the real repository", () => {
       "scripts/learn/extract-structural.ts",
       "scripts/lib/roster.ts",
       "scripts/learn/lib/similarity.ts",
-      "src/modules/teams/workflows/station-signals.ts",
+      "src/domains/teams/station-signals.ts",
     ];
     const registered = new Set(CONTAINMENT_SITES.map((s) => s.path));
     for (const p of MUST_COVER) {
@@ -705,16 +705,14 @@ describe("the real repository", () => {
     }
   });
 
-  test("every resources mirror the scan sees resolves to a registered live source", () => {
-    // The S3 lane's second mirror surfaced through `git status`. This is the gate
-    // that would have caught it.
+  test("no resources mirror survives the T12 fold", () => {
+    // The S3 lane's second mirror surfaced through `git status`; this gate caught
+    // that class. T12 retired the mirrors entirely (host packages project from the
+    // live surface), so the assertion flips: the scan must find NONE. The pure
+    // `mirrorSourceOf` mapping stays pinned below so the rule is still executable
+    // if a mirror tree is ever reintroduced.
     const { sites } = scanRepo(REPO);
-    const registered = new Set(CONTAINMENT_SITES.map((s) => s.path));
-    const mirrors = sites.filter((s) => s.mirrorOf);
-    expect(mirrors.length).toBeGreaterThan(0); // non-vacuity: mirrors ARE scanned
-    for (const m of mirrors) {
-      expect(registered.has(m.mirrorOf as string)).toBe(true);
-    }
+    expect(sites.filter((s) => s.mirrorOf)).toEqual([]);
   });
 
   test("mirrorSourceOf understands both mirror shapes this repo produces", () => {
@@ -722,8 +720,8 @@ describe("the real repository", () => {
       "scripts/lib/x.ts"
     );
     expect(
-      mirrorSourceOf("src/modules/host-runtime/resources/src/modules/kernel/workflows/x.ts")
-    ).toBe("src/modules/kernel/workflows/x.ts");
+      mirrorSourceOf("src/modules/host-runtime/resources/src/domains/kernel/x.ts")
+    ).toBe("src/domains/kernel/x.ts");
     expect(mirrorSourceOf("scripts/lib/x.ts")).toBeUndefined();
   });
 

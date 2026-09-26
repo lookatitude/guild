@@ -15,10 +15,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { recall } from "../lib/recall";
-import {
-  validateRecallDecisionEvent,
-  makeRecallDecisionEvent,
-} from "../../src/modules/telemetry/workflows/guild-trace-events";
+import { validateRecallDecisionEvent, makeRecallDecisionEvent } from "../../src/domains/telemetry";
 import { computeRecallStats, readRecallDecisionEvents } from "../recall-stats";
 
 const TEMP_DIRS: string[] = [];

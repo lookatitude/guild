@@ -28,10 +28,7 @@ import { redactShareableFile } from "../lib/shared/scrub-redact";
 // a cache entry can never reach a shared tree unredacted. audit.ts carries the
 // matching CI-gating coverage leg (both scrub-policy legs updated together).
 import { spawnSync } from "child_process";
-import {
-  MODEL_CATALOG_CACHE_REL,
-  modelCatalogCacheDir,
-} from "../../src/modules/capability/workflows/catalog-cache";
+import { MODEL_CATALOG_CACHE_REL, modelCatalogCacheDir } from "../../src/domains/config";
 
 function walkDir(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];

@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/index-cache";
-import * as moduleImpl from "../../src/modules/state/workflows/index-cache";
+import * as moduleImpl from "../../src/domains/state/index-cache";
 
 describe("index-cache compatibility shim", () => {
   test("scripts/lib/index-cache re-exports src/modules/state", () => {
@@ -16,14 +16,16 @@ describe("index-cache compatibility shim", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/index-cache.ts"), "utf8");
     const modulePath = fs.readFileSync(
-      path.join(repoRoot, "src/modules/state/workflows/index-cache.ts"),
+      path.join(repoRoot, "src/domains/state/index-cache.ts"),
       "utf8",
     );
 
-    expect(oldPath).toMatch(/src\/modules\/state\/workflows\/index-cache/);
+    expect(oldPath).toMatch(/src\/domains\/state\/index-cache/);
     expect(oldPath).not.toMatch(/export\s+function\s+ensureWikiFtsIndex/);
     expect(modulePath).toMatch(/export\s+function\s+ensureWikiFtsIndex/);
-    expect(modulePath).toMatch(/from\s+["']\.\.\/\.\.\/migrations["']/);
-    expect(modulePath).not.toMatch(/migrations\/workflows\/index-migrate/);
+    // T12 folded `migrations` into the state domain, so this is now a sibling
+    // file import inside one domain rather than a cross-module barrel hop.
+    expect(modulePath).toMatch(/from\s+["']\.\/index-migrate["']/);
+    expect(modulePath).not.toMatch(/\.\.\/\.\.\/migrations/);
   });
 });

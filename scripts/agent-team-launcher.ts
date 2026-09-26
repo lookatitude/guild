@@ -51,7 +51,7 @@ import { spawnSync } from "child_process";
 import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import { hostCapabilityCacheDir, hostCapabilityCacheFile } from "../src/modules/state";
+import { hostCapabilityCacheDir, hostCapabilityCacheFile } from "../src/domains/state";
 // RE-4: the tmux spawn logic now lives behind the TeamBackend seam. The
 // launcher is the CLI front-end (arg parse + D5 ladder + collision UX +
 // manifest + attach) and delegates compose/probe/spawn to TmuxTeamBackend.
@@ -78,7 +78,7 @@ import {
   expandTaskCellLaunchLanes,
   type TaskCellLaunchLane,
 } from "./lib/task-cell-launch-plan";
-import { writeTeamResult } from "../src/modules/teams/workflows/station-signals";
+import { writeTeamResult } from "../src/domains/teams";
 import type { TaskCellSubstrate } from "./lib/core/contracts/task-cell-backend";
 import { validateProjectDefinitionRefV1 } from "./lib/core/contracts/project-definition-ref";
 import {
@@ -104,8 +104,8 @@ import {
   readRunBindingRecord,
   stagePendingSubstantiveOperation,
   withRunBindingExclusion,
-} from "../src/modules/lifecycle/workflows/run-binding";
-import type { CapabilityResolverMode } from "../src/modules/config";
+} from "../src/domains/lifecycle/run-binding";
+import type { CapabilityResolverMode } from "../src/domains/config";
 // P1-3 A2b: force-reap of dead panes. (Receipt-based `detectDismissible` is
 // retired from the dismiss path — dismissal is acceptance-gated in G4, below.)
 import {
@@ -132,9 +132,9 @@ import {
   markAttemptOrphaned,
   type RunAcceptance,
   type TaskCellInstanceIds,
-} from "../src/modules/dispatch/workflows/task-cell-acceptance";
+} from "../src/domains/dispatch/task-cell-acceptance";
 
-import { reconcileTaskCellLifecycleTelemetry } from "../src/modules/dispatch/workflows/task-cell-telemetry-reconcile";
+import { reconcileTaskCellLifecycleTelemetry } from "../src/domains/dispatch/task-cell-telemetry-reconcile";
 // CH-1/CH-2: mixed-host pane adapters (claude + codex) for a mixed `host:` team.
 import { resolveAdapter } from "./lib/pane-adapter";
 // CH-1: route each specialist to its backend (local tmux vs remote) via the
@@ -153,8 +153,8 @@ import { resolveSettings, isPlainObject } from "./lib/settings-resolver";
 import {
   loadRunBinding,
   readHookBindingEnvelope,
-} from "../src/modules/lifecycle/workflows/run-binding";
-import { assertCanonicalRunId } from "../src/modules/lifecycle/workflows/run-lifecycle";
+} from "../src/domains/lifecycle/run-binding";
+import { assertCanonicalRunId } from "../src/domains/lifecycle/run-lifecycle";
 // MH-04: the substrate DECISION lives behind the versioned execution port
 // (`guild.execution.transports.v1`), never in this launcher. The launcher reads
 // host FACTS through the capability probe below and reports what the port decided.
@@ -170,11 +170,11 @@ import {
   type ExecutionTransportPort,
   type HostExecutionRuntime,
   type TeamDispatchPort,
-} from "../src/modules/dispatch/workflows/execution-transport-ports";
+} from "../src/domains/dispatch/execution-transport-ports";
 import {
   TeamDispatchExecutionTransport,
   createHostExecutionRuntime,
-} from "../src/modules/dispatch/workflows/execution-transport-adapters";
+} from "../src/domains/dispatch/execution-transport-adapters";
 // task-cell-runtime G3: the authoritative `guild.task_assignment.v2` channel
 // (per-attempt, one immutable file per task a specialist owns; no representative-
 // first-task collapse). Replaces v1 as the PRODUCTION write; v1 is retained above
@@ -184,28 +184,28 @@ import {
   planProductionDispatchModel,
   writeTaskCell,
   type ProductionDispatchModelOutcome,
-} from "../src/modules/dispatch/workflows/task-assignment-v2";
-import { createPreviewConfirmationSession } from "../src/modules/dispatch/workflows/confirmation-gate";
+} from "../src/domains/dispatch/task-assignment-v2";
+import { createPreviewConfirmationSession } from "../src/domains/dispatch/confirmation-gate";
 // T8R F3: the PRODUCTION writer for M0 inspection evidence. `persistInspectionReport`
 // previously had no production caller at all — `guild models inspect` is read-only by
 // contract — so the M2 gate's evidence dir was always empty in a real run and the
 // derived resolver inputs were always null. Recording happens HERE, once per run on the
 // real dispatch path, and is inert at the ADR defaults (v2 flags off ⇒ no write).
-import { recordRunInspectionEvidence } from "../src/modules/capability/workflows/inspection-record";
-import { readRoutingFlags } from "../src/modules/capability/workflows/routing-rollout";
+import { recordRunInspectionEvidence } from "../src/domains/config/inspection-record";
+import { readRoutingFlags } from "../src/domains/config/routing-rollout";
 // T6 rework F5: the legacy tier→model label for the shadow comparison comes
 // from the SAME unpack point the legacy path uses (models.tiers), never a
 // parallel implementation.
-import { resolveTierModel } from "../src/modules/config/workflows/tier-model";
-import { readSessionBinding } from "../src/modules/config/workflows/session-binding";
+import { resolveTierModel } from "../src/domains/config/tier-model";
+import { readSessionBinding } from "../src/domains/config/session-binding";
 import { createGuildStorage } from "./lib/state/storage";
-import { resolvePolicy } from "../src/modules/config/workflows/policy-resolver";
-import { resolveAssignmentBinding } from "../src/modules/dispatch/workflows/assignment-binding";
+import { resolvePolicy } from "../src/domains/config/policy-resolver";
+import { resolveAssignmentBinding } from "../src/domains/dispatch/assignment-binding";
 import {
   reserveInstanceBatch,
   reserveRefused,
   resolveMaxInstances,
-} from "../src/modules/dispatch/workflows/instance-cap";
+} from "../src/domains/dispatch/instance-cap";
 // R-016a: bounded retry for the ONE TS-level dispatch call site (RemoteTeamBackend.launch).
 import { runWithRetry, loadRetryOpts } from "./retry-lane";
 // R-016 bridge: on retry exhaustion, mark each remote lane dead via the shared writer.
@@ -226,12 +226,12 @@ import { slugFromTeamPath, phaseFromTeamPath, readActivePhase, resolveDeadLaneKe
 import {
   assertDispatchApproved,
   resolveApprovalOverride,
-} from "../src/modules/teams/workflows/dispatch-approval";
+} from "../src/domains/teams/dispatch-approval";
 // TE-01 CONSOLIDATED (cluster-a-rev2-CONSOLIDATED.md): launcher owns EDIT-3 (tmux/remote);
 // execute-plan SKILL owns EDIT-4 (subagent/in-process) — mutually exclusive, no double-write.
 import { writeTaskRun, readTaskRunCapReqs } from "./write-task-run";
 import { emitReadbackDegradation } from "./lib/emit-readback-degradation"; // W2-A2(d)
-import { captureHostCapabilitySnapshot } from "../src/modules/host-runtime";
+import { captureHostCapabilitySnapshot } from "../src/adapters";
 
 export interface TerminalSubstantiveReconciliation {
   readonly attempted: number;

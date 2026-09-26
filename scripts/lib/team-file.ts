@@ -6,4 +6,4 @@
  * imports from scripts/lib/team-file.
  */
 
-export * from "../../src/modules/teams/workflows/team-file";
+export * from "../../src/domains/teams/team-file";

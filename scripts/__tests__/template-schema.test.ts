@@ -29,7 +29,7 @@ import {
   runSelfCheck,
 } from "../lib/template-schema";
 import * as templateShim from "../lib/template-schema";
-import * as templateModule from "../../src/modules/templates/workflows/template-schema";
+import * as templateModule from "../../src/domains/teams/template-schema";
 import { EXPLORE_SCHEMA_VERSION, validateExploreV1 } from "../lib/explore-schema";
 import { DEFINE_SCHEMA_VERSION, validateDefineV1 } from "../lib/define-schema";
 

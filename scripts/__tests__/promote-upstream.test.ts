@@ -730,10 +730,7 @@ describe("promote-upstream — check ordering (variant 2a)", () => {
     __dirname,
     "..",
     "..",
-    "src",
-    "modules",
-    "workspace",
-    "workflows",
+    "src", "domains", "state",
     "promote-upstream.ts",
   );
 

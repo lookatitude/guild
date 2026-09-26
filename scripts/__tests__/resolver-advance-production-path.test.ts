@@ -37,7 +37,7 @@ import * as os from "os";
 import * as path from "path";
 
 import { applyAdoptionPlan, buildAdoptionReport } from "../lib/capability/adoption-migrate";
-import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { mintRunBinding } from "../../src/domains/lifecycle";
 import {
   RESOLVER_ADVANCE_TARGET,
   applyResolverModeAdvanceOnApproval,

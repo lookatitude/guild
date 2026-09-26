@@ -119,7 +119,7 @@ describe("guild.handoff.v2 allowed-key parity", () => {
 
   it("keeps comms-format-lint's effective allowed-key set equal to the canonical set", () => {
     expectExactKeyParity(
-      "src/modules/communication/workflows/comms-format-lint.ts",
+      "src/domains/dispatch/comms-format-lint.ts",
       COMMS_ALLOWED_ENVELOPE_KEYS
     );
   });

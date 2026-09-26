@@ -1,7 +1,4 @@
-import {
-  evaluateTaskCellPolicyPromotion,
-  type TaskCellPolicyEvalObservationV1,
-} from "../../src/modules/evals/workflows/task-cell-policy-eval";
+import { evaluateTaskCellPolicyPromotion, type TaskCellPolicyEvalObservationV1 } from "../../src/domains/evolve";
 
 function observation(
   scenario_id: string,

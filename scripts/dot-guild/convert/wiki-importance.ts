@@ -35,7 +35,7 @@
  */
 
 import * as path from "path";
-import { sealSet } from "../../../src/modules/kernel/workflows/sealed-collections";
+import { sealSet } from "../../../src/domains/kernel";
 import type { Fs, WikiGradeRecord, ImportanceGrade } from "./types";
 import { parseYaml } from "../../lib/frontmatter";
 

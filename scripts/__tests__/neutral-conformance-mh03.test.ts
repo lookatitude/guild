@@ -3,7 +3,7 @@
  *
  * FIC-114 / A21-3 (RED-FIRST) — the executable contract for the not-yet-written
  * pure production module
- * `src/modules/host-runtime/workflows/host-adapter-conformance-evaluator.ts`.
+ * `src/adapters/host-adapter-conformance-evaluator.ts`.
  *
  * WHAT THIS BINDS
  *   `guild.conformance_scenarios.v1` assigns exactly FOUR of its 31 scenarios to
@@ -56,31 +56,11 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import {
-  NEUTRAL_DISPOSITIONS,
-  NEUTRAL_OUTCOME_TYPES,
-  NEUTRAL_REASON_CODES,
-  neutralCanonicalJson,
-  neutralFreeze,
-  neutralOutcome,
-} from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
-import type { NeutralOutcome } from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
-import {
-  NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS,
-  NEUTRAL_EVIDENCE_IDENTITY_FIELDS,
-  NEUTRAL_SCENARIO_SUITE_ID,
-  NEUTRAL_SCENARIO_SUITE_VERSION,
-  validateNeutralScenarioRegistry,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
-import type {
-  NeutralEvidenceIdentity,
-  NeutralScenarioDefinition,
-  NeutralScenarioResult,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
-import {
-  NEUTRAL_ASSEMBLY_PACKET_SCHEMA,
-  assembleNeutralConformanceEvidence,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-assembly";
+import { NEUTRAL_DISPOSITIONS, NEUTRAL_OUTCOME_TYPES, NEUTRAL_REASON_CODES, neutralCanonicalJson, neutralFreeze, neutralOutcome } from "../../src/domains/lifecycle";
+import type { NeutralOutcome } from "../../src/domains/lifecycle";
+import { NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS, NEUTRAL_EVIDENCE_IDENTITY_FIELDS, NEUTRAL_SCENARIO_SUITE_ID, NEUTRAL_SCENARIO_SUITE_VERSION, validateNeutralScenarioRegistry } from "../../src/domains/lifecycle";
+import type { NeutralEvidenceIdentity, NeutralScenarioDefinition, NeutralScenarioResult } from "../../src/domains/lifecycle";
+import { NEUTRAL_ASSEMBLY_PACKET_SCHEMA, assembleNeutralConformanceEvidence } from "../../src/domains/lifecycle";
 
 // The REAL production boundary. Imported here for two distinct purposes: to
 // recompute, independently of the evaluator, what the boundary actually answers
@@ -89,20 +69,20 @@ import {
 import {
   bindHostRuntimeAdapter,
   hostRuntimeBoundaryOwnership,
-} from "../../src/modules/host-runtime/workflows/host-adapter-boundary";
-import type { HostRuntimeBindingResult } from "../../src/modules/host-runtime/workflows/host-adapter-boundary";
-import { HOST_ADAPTER_OPERATIONS } from "../../src/modules/host-runtime/workflows/host-adapter-contract";
+} from "../../src/adapters/host-adapter-boundary";
+import type { HostRuntimeBindingResult } from "../../src/adapters/host-adapter-boundary";
+import { HOST_ADAPTER_OPERATIONS } from "../../src/adapters/host-adapter-contract";
 import {
   createHostCapabilitySnapshotStore,
   type HostCapabilityFact,
   type HostCapabilitySnapshot,
   type HostCapabilitySnapshotStore,
-} from "../../src/modules/host-runtime/workflows/host-capability-snapshot";
+} from "../../src/adapters/host-capability-snapshot";
 import {
   normalizeHostEvent,
   type HostEventNormalizationResult,
-} from "../../src/modules/host-runtime/workflows/host-event-normalizer";
-import { HOST_REGISTRY_ROWS } from "../../src/modules/host-runtime/workflows/host-registry-schema";
+} from "../../src/adapters/host-event-normalizer";
+import { HOST_REGISTRY_ROWS } from "../../src/adapters/host-registry-schema";
 
 // ---------------------------------------------------------------------------
 // The module under contract
@@ -116,10 +96,10 @@ import { HOST_REGISTRY_ROWS } from "../../src/modules/host-runtime/workflows/hos
  * in the lifecycle module would have to re-describe the adapter surface to reach
  * them — which is the drift the owner split exists to prevent.
  */
-const EVALUATOR_REQUEST = "../../src/modules/host-runtime/workflows/host-adapter-conformance-evaluator";
+const EVALUATOR_REQUEST = "../../src/adapters/host-adapter-conformance-evaluator";
 const EVALUATOR_SOURCE_PATH = path.resolve(
   __dirname,
-  "../../src/modules/host-runtime/workflows/host-adapter-conformance-evaluator.ts"
+  "../../src/adapters/host-adapter-conformance-evaluator.ts"
 );
 
 const RED = "A21-3 RED: production module not implemented yet";

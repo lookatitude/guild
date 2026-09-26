@@ -5,4 +5,4 @@
  * can move internals without breaking existing imports from scripts/lib/shared/*.
  */
 
-export * from "../../../src/modules/security/workflows/scrub-redact";
+export * from "../../../src/domains/security/scrub-redact";

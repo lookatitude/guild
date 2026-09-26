@@ -128,7 +128,7 @@ describe("resolveModel — null tier-slot fill merge precedence", () => {
     // models.powerful.model === null, so the built-in default is HONESTLY null —
     // a codex lane no longer silently gets handed "opus" (the host-reachability
     // audit's "router hands a codex lane model:'sonnet'" finding, same bug at the
-    // powerful tier). See src/modules/capability/workflows/tier-defaults.ts.
+    // powerful tier). See src/domains/config/tier-defaults.ts.
     const h = codexHost({ tier_models: { cheap: "", mid: "", powerful: "" } });
     expect(resolveModel("powerful", h)).toBeNull();
   });

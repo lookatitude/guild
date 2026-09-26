@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/guild-discovery";
-import * as moduleImpl from "../../src/modules/state/workflows/guild-discovery";
+import * as moduleImpl from "../../src/domains/state/guild-discovery";
 
 describe("guild-discovery compatibility shim", () => {
   test("scripts/lib/guild-discovery re-exports src/modules/state", () => {
@@ -16,11 +16,11 @@ describe("guild-discovery compatibility shim", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/guild-discovery.ts"), "utf8");
     const modulePath = fs.readFileSync(
-      path.join(repoRoot, "src/modules/state/workflows/guild-discovery.ts"),
+      path.join(repoRoot, "src/domains/state/guild-discovery.ts"),
       "utf8",
     );
 
-    expect(oldPath).toMatch(/src\/modules\/state\/workflows\/guild-discovery/);
+    expect(oldPath).toMatch(/src\/domains\/state\/guild-discovery/);
     expect(oldPath).not.toMatch(/export\s+function\s+discoverGuild/);
     expect(modulePath).toMatch(/export\s+function\s+discoverGuild/);
     expect(modulePath).toMatch(/export\s+function\s+workspaceReadThroughSources/);

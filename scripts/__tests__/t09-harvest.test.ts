@@ -23,39 +23,12 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { createGuildStorage, type GuildStorage } from "../../src/modules/state/workflows/storage-layout";
-import {
-  HARVEST_WRITER_ID,
-  HarvestRefusal,
-  assertScrubbedWriter,
-  assertThisCwdPlaybook,
-  assertThisCwdWiki,
-  harvestCasLockDir,
-  guardWikiWrite,
-  harvestDecision,
-  renderDecisionPage,
-  playbooksRoot,
-  replacePlaybookSpan,
-  revertHarvest,
-  scrubbedWikiWriter,
-  type WikiWriter,
-} from "../../src/modules/knowledge/workflows/harvest";
-import {
-  REDIRECT_HARVEST_THRESHOLD,
-  RedirectLedgerError,
-  recordRedirect,
-} from "../../src/modules/knowledge/workflows/redirect-ledger";
-import {
-  findOp,
-  harvestJournalPath,
-  readHarvestJournal,
-  readInverse,
-  recordInverse,
-  resumableOps,
-  upsertOp,
-} from "../../src/modules/knowledge/workflows/harvest-journal";
-import { searchWiki } from "../../src/modules/knowledge/workflows/wiki-index";
-import { learningCheckpoint } from "../../src/modules/lifecycle/workflows/learning-checkpoint-5";
+import { createGuildStorage, type GuildStorage } from "../../src/domains/state";
+import { HARVEST_WRITER_ID, HarvestRefusal, assertScrubbedWriter, assertThisCwdPlaybook, assertThisCwdWiki, harvestCasLockDir, guardWikiWrite, harvestDecision, renderDecisionPage, playbooksRoot, replacePlaybookSpan, revertHarvest, scrubbedWikiWriter, type WikiWriter } from "../../src/domains/knowledge";
+import { REDIRECT_HARVEST_THRESHOLD, RedirectLedgerError, recordRedirect } from "../../src/domains/knowledge";
+import { findOp, harvestJournalPath, readHarvestJournal, readInverse, recordInverse, resumableOps, upsertOp } from "../../src/domains/knowledge";
+import { searchWiki } from "../../src/domains/knowledge";
+import { learningCheckpoint } from "../../src/domains/lifecycle";
 
 const RUN_ID = "run-t09";
 
@@ -209,7 +182,7 @@ describe("the third redirect harvests (R50 / R53)", () => {
     const pb = playbook("backend.md", "# Backend\n\n## Retries\n\nold\n");
 
     // T0 mirrors the ledger advance onto the trace.
-    const { appendEvent } = require("../../src/modules/lifecycle/workflows/event-log-writer") as typeof import("../../src/modules/lifecycle/workflows/event-log-writer");
+    const { appendEvent } = require("../../src/domains/lifecycle/event-log-writer") as typeof import("../../src/domains/lifecycle/event-log-writer");
     appendEvent(runDir, {
       ts: new Date().toISOString(),
       event: "redirect_event",

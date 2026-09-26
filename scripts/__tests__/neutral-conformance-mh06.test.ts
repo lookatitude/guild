@@ -3,7 +3,7 @@
  *
  * FIC-115 / A21-6 (RED-FIRST) — the executable contract for the not-yet-written
  * pure production module
- * `src/modules/telemetry/workflows/receipt-journal-conformance-evaluator.ts`.
+ * `src/domains/telemetry/receipt-journal-conformance-evaluator.ts`.
  *
  * WHAT THIS BINDS
  *   `guild.conformance_scenarios.v1` assigns exactly FIVE of its 31 scenarios to
@@ -72,60 +72,20 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import {
-  NEUTRAL_DISPOSITIONS,
-  NEUTRAL_OUTCOME_TYPES,
-  NEUTRAL_REASON_CODES,
-  neutralCanonicalJson,
-  neutralFreeze,
-  neutralOutcome,
-} from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
-import type { NeutralOutcome } from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
-import {
-  NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS,
-  NEUTRAL_EVIDENCE_IDENTITY_FIELDS,
-  NEUTRAL_SCENARIO_SUITE_ID,
-  NEUTRAL_SCENARIO_SUITE_VERSION,
-  validateNeutralScenarioRegistry,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
-import type {
-  NeutralEvidenceIdentity,
-  NeutralScenarioDefinition,
-  NeutralScenarioResult,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
-import {
-  NEUTRAL_ASSEMBLY_PACKET_SCHEMA,
-  NEUTRAL_CONFORMANCE_OWNER_KEYS,
-  NEUTRAL_CONFORMANCE_OWNER_SCENARIO_COUNTS,
-  NEUTRAL_OWNER_SCENARIO_IDS,
-  NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS,
-  assembleNeutralConformanceEvidence,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-assembly";
+import { NEUTRAL_DISPOSITIONS, NEUTRAL_OUTCOME_TYPES, NEUTRAL_REASON_CODES, neutralCanonicalJson, neutralFreeze, neutralOutcome } from "../../src/domains/lifecycle";
+import type { NeutralOutcome } from "../../src/domains/lifecycle";
+import { NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS, NEUTRAL_EVIDENCE_IDENTITY_FIELDS, NEUTRAL_SCENARIO_SUITE_ID, NEUTRAL_SCENARIO_SUITE_VERSION, validateNeutralScenarioRegistry } from "../../src/domains/lifecycle";
+import type { NeutralEvidenceIdentity, NeutralScenarioDefinition, NeutralScenarioResult } from "../../src/domains/lifecycle";
+import { NEUTRAL_ASSEMBLY_PACKET_SCHEMA, NEUTRAL_CONFORMANCE_OWNER_KEYS, NEUTRAL_CONFORMANCE_OWNER_SCENARIO_COUNTS, NEUTRAL_OWNER_SCENARIO_IDS, NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS, assembleNeutralConformanceEvidence } from "../../src/domains/lifecycle";
 
 // The REAL production journal. Imported here for two distinct purposes: to drive
 // the same paths the evaluator must drive, and to prove by IDENTITY (`===`) that
 // the evaluator's declared production port holds these exact functions rather
 // than look-alikes.
-import {
-  acquireJournalLock,
-  appendReceipt,
-  defaultJournalIo,
-  journalLockPath,
-  makeReceiptInput,
-  readCheckpointState,
-  releaseJournalLock,
-  scanReceiptJournal,
-  sealReceiptRecord,
-} from "../../src/modules/telemetry/workflows/receipt-journal";
-import type {
-  JournalIo,
-  JournalScanResult,
-  ReceiptAppendInput,
-  ReceiptAppendOutcome,
-  ReceiptRecordV1,
-} from "../../src/modules/telemetry/workflows/receipt-journal";
-import { reconcileReceiptJournal } from "../../src/modules/telemetry/workflows/receipt-reconcile";
-import type { ReconciliationOutcomeV1 } from "../../src/modules/telemetry/workflows/receipt-reconcile";
+import { acquireJournalLock, appendReceipt, defaultJournalIo, journalLockPath, makeReceiptInput, readCheckpointState, releaseJournalLock, scanReceiptJournal, sealReceiptRecord } from "../../src/domains/telemetry";
+import type { JournalIo, JournalScanResult, ReceiptAppendInput, ReceiptAppendOutcome, ReceiptRecordV1 } from "../../src/domains/telemetry";
+import { reconcileReceiptJournal } from "../../src/domains/telemetry";
+import type { ReconciliationOutcomeV1 } from "../../src/domains/telemetry";
 
 // ---------------------------------------------------------------------------
 // The module under contract
@@ -139,10 +99,10 @@ import type { ReconciliationOutcomeV1 } from "../../src/modules/telemetry/workfl
  * lifecycle module would have to re-describe the durability surface to reach them
  * — which is the drift the owner split exists to prevent.
  */
-const EVALUATOR_REQUEST = "../../src/modules/telemetry/workflows/receipt-journal-conformance-evaluator";
+const EVALUATOR_REQUEST = "../../src/domains/telemetry/receipt-journal-conformance-evaluator";
 const EVALUATOR_SOURCE_PATH = path.resolve(
   __dirname,
-  "../../src/modules/telemetry/workflows/receipt-journal-conformance-evaluator.ts"
+  "../../src/domains/telemetry/receipt-journal-conformance-evaluator.ts"
 );
 
 const RED = "A21-6 RED: production module not implemented yet";
@@ -1407,7 +1367,7 @@ const CONTROLS: readonly Mh06Control[] = [
     title: "the evaluator works only inside the caller's disposable root, and refuses an unusable one",
     run: (subject) => {
       const pluginRoot = path.resolve(__dirname, "../..");
-      const telemetryDir = path.resolve(pluginRoot, "src/modules/telemetry/workflows");
+      const telemetryDir = path.resolve(pluginRoot, "src/domains/telemetry");
       const before = {
         cwd: fs.readdirSync(process.cwd()).sort(),
         plugin: fs.readdirSync(pluginRoot).sort(),

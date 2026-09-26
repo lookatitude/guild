@@ -50,7 +50,7 @@
 // rf-wi-01 (G1 codex-review round-2 fix): readRuntimePermissionConfig now delegates
 // to the canonical resolveSettings() (see its own doc comment) instead of hand-rolled
 // fs reads, so this file no longer touches the filesystem directly.
-import { resolveSettings } from "../../src/modules/config/workflows/settings-reader";
+import { resolveSettings } from "../../src/domains/config/settings-reader";
 
 import {
   type HostMode,

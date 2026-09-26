@@ -1,1 +1,1 @@
-export * from "../../../src/modules/security/workflows/events.js";
+export * from "../../../src/domains/security/events.js";

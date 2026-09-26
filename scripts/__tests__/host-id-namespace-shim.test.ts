@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/host-id-namespace";
-import * as moduleImpl from "../../src/modules/host-runtime/workflows/host-id-namespace";
+import * as moduleImpl from "../../src/adapters/host-id-namespace";
 
 describe("host-id-namespace compatibility shim", () => {
   test("scripts/lib/host-id-namespace re-exports src/modules/host-runtime", () => {
@@ -24,9 +24,9 @@ describe("host-id-namespace compatibility shim", () => {
   test("only the module file defines the namespace bridge body", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/host-id-namespace.ts"), "utf8");
-    const modulePath = fs.readFileSync(path.join(repoRoot, "src/modules/host-runtime/workflows/host-id-namespace.ts"), "utf8");
+    const modulePath = fs.readFileSync(path.join(repoRoot, "src/adapters/host-id-namespace.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/modules\/host-runtime\/workflows\/host-id-namespace["']/);
+    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/adapters\/host-id-namespace["']/);
     expect(oldPath).not.toMatch(/export\s+const\s+HOSTKIND_TO_REGISTRY_ID/);
     expect(modulePath).toMatch(/export\s+const\s+HOSTKIND_TO_REGISTRY_ID/);
     expect(modulePath).toMatch(/from\s+["']\.\/host-types["']/);

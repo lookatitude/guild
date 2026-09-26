@@ -122,20 +122,8 @@ import { CLI_NATIVE_HOSTS } from "./lib/host-open-preflight";
 // settings resolver, which reaches the host-runtime barrel and closes an import
 // cycle that fails at load (`HOST_ADAPTER_CONTRACT_VERSION` of undefined). These
 // two files import nothing but node builtins and each other.
-import {
-  policyFilesFor,
-  policyOverlayFile,
-  policyValue,
-  resolvePolicy,
-} from "../src/modules/config/workflows/policy-resolver";
-import {
-  POLICY_KEYS,
-  POLICY_KEY_ALIASES,
-  PolicyRejectedError,
-  assertPolicyWrite,
-  isPolicyKey,
-  scanHostIdentity,
-} from "../src/modules/config/workflows/policy-keys";
+import { policyFilesFor, policyOverlayFile, policyValue, resolvePolicy } from "../src/domains/config";
+import { POLICY_KEYS, POLICY_KEY_ALIASES, PolicyRejectedError, assertPolicyWrite, isPolicyKey, scanHostIdentity } from "../src/domains/config";
 
 // ---------------------------------------------------------------------------
 // Prototype-pollution guard — PROTO_POISON_KEYS is the canonical single-source

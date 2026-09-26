@@ -2,12 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import {
-  buildTaskCellHostConformanceMatrix,
-  runTaskCellHostConformance,
-  verifyTaskCellHostConformanceReceipt,
-  type HostProbeRunner,
-} from "../../src/modules/dispatch/workflows/task-cell-host-conformance";
+import { buildTaskCellHostConformanceMatrix, runTaskCellHostConformance, verifyTaskCellHostConformanceReceipt, type HostProbeRunner } from "../../src/domains/dispatch";
 
 const NOW = "2026-08-10T18:00:00.000Z";
 

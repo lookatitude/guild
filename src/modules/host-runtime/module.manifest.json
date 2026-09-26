@@ -5,11 +5,11 @@
   "kind": "substrate",
   "implementation_mode": "workflow-backed",
   "description": "Owns host registry, adapters, wrapper launch planning, host capability files, fallback ladders, and degradation normalization.",
-  "depends_on": ["config", "kernel", "lifecycle", "state"],
-  "resource_projection_entrypoints": [
-    "lib/host-adapters/claude-code-cli",
-    "lib/host-adapters/codex-cli",
-    "lib/host-adapters/pi-cli"
+  "depends_on": [
+    "config",
+    "kernel",
+    "lifecycle",
+    "state"
   ],
   "owns": {
     "scripts": [
@@ -41,6 +41,8 @@
       "host-smoke",
       "generate-support-matrix"
     ],
-    "script_id_prefixes": ["lib/host-adapters/"]
+    "script_id_prefixes": [
+      "lib/host-adapters/"
+    ]
   }
 }

@@ -29,9 +29,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { canonicalYaml } from "../../src/modules/teams/workflows/canonical-hash";
-import { recordDecision, writeDecision } from "../../src/modules/teams/workflows/team-decision";
-import { composeProposal, writeProposal } from "../../src/modules/teams/workflows/team-proposal";
+import { canonicalYaml } from "../../src/domains/teams";
+import { recordDecision, writeDecision } from "../../src/domains/teams/team-decision";
+import { composeProposal, writeProposal } from "../../src/domains/teams/team-proposal";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 const COMMANDS = path.join(PLUGIN_ROOT, "commands");
@@ -316,9 +316,6 @@ function runCompiledCli(script: string, args: string[]): { code: number; stdout:
 // ---------------------------------------------------------------------------
 
 const EVOLVE_SKILL = path.join(PLUGIN_ROOT, "skills", "meta", "evolve", "SKILL.md");
-const EVOLVE_MIRROR = path.join(
-  PLUGIN_ROOT, "src", "modules", "evolution", "resources", "skills", "meta", "evolve", "SKILL.md"
-);
 
 /** token -> the chapter path the assembler routes it to, relative to the evolve dir. */
 const MAINTAIN_ROUTES: Record<string, string | null> = {
@@ -463,8 +460,10 @@ describe("T04 R3-3 — the evolve assembler carries the routing table", () => {
     expect(bare).toMatch(/never re-inserts the token/);
   });
 
-  it("the module mirror is byte-identical", () => {
-    expect(fs.readFileSync(EVOLVE_MIRROR, "utf8")).toBe(fs.readFileSync(EVOLVE_SKILL, "utf8"));
+  it("has no module-resource mirror to drift from (T12: one projector, live surface)", () => {
+    expect(
+      fs.existsSync(path.join(PLUGIN_ROOT, "src", "modules", "evolution", "resources"))
+    ).toBe(false);
   });
 });
 
@@ -495,14 +494,13 @@ describe("T04 P4 — the goal sub-verb has a real route", () => {
     const src = planSkill();
     expect(src).toContain("guild.goal.v1");
     expect(src).toContain("guild.task_group.v1");
-    expect(src).toContain("src/modules/evals/workflows/goal-task-schema.ts");
+    expect(src).toContain("src/domains/evolve/goal-task-schema.ts");
   });
 
-  it("the module mirror is byte-identical to the live assembler", () => {
-    const mirror = path.join(
-      PLUGIN_ROOT, "src", "modules", "lifecycle", "resources", "skills", "meta", "plan", "SKILL.md"
-    );
-    expect(fs.readFileSync(mirror, "utf8")).toBe(planSkill());
+  it("has no module-resource mirror to drift from (T12: one projector, live surface)", () => {
+    expect(
+      fs.existsSync(path.join(PLUGIN_ROOT, "src", "modules", "lifecycle", "resources"))
+    ).toBe(false);
   });
 
   it("the goal command file is a print-only alias pointing at /guild:plan goal", () => {
@@ -599,9 +597,6 @@ function stripFences(src: string): string {
 }
 
 const PLAN_SKILL = path.join(PLUGIN_ROOT, "skills", "meta", "plan", "SKILL.md");
-const PLAN_MIRROR = path.join(
-  PLUGIN_ROOT, "src", "modules", "lifecycle", "resources", "skills", "meta", "plan", "SKILL.md"
-);
 
 describe("T04 R2-1 — the plan assembler's goal route is a real section, not fenced text", () => {
   it("every fence in the assembler is balanced (an odd count would swallow the tail)", () => {
@@ -621,7 +616,7 @@ describe("T04 R2-1 — the plan assembler's goal route is a real section, not fe
     }
     // The route column points at files that exist — a dead pointer is not a route.
     for (const route of [
-      "src/modules/evals/workflows/goal-task-schema.ts",
+      "src/domains/evolve/goal-task-schema.ts",
       "skills/meta/plan/references/product-define.md",
     ]) {
       const rel = route.startsWith("skills/") ? route : route;
@@ -643,8 +638,10 @@ describe("T04 R2-1 — the plan assembler's goal route is a real section, not fe
     expect(stripFences("a\n## Sub-verbs\nb")).toContain("## Sub-verbs");
   });
 
-  it("the module mirror is byte-identical", () => {
-    expect(fs.readFileSync(PLAN_MIRROR, "utf8")).toBe(fs.readFileSync(PLAN_SKILL, "utf8"));
+  it("has no module-resource mirror beside the plan assembler (T12)", () => {
+    expect(
+      fs.existsSync(path.join(PLUGIN_ROOT, "src", "modules", "lifecycle", "resources"))
+    ).toBe(false);
   });
 });
 

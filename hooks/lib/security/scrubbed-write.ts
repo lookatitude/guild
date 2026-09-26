@@ -1,1 +1,1 @@
-export * from "../../../src/modules/security/workflows/scrubbed-write.js";
+export * from "../../../src/domains/security/scrubbed-write.js";

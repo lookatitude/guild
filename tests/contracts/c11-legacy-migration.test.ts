@@ -17,11 +17,11 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import { resolveTierModel } from "../../src/modules/config/workflows/tier-model";
+import { resolveTierModel } from "../../src/domains/config";
 import { requireContractModule, mkTmpWorkspace, PLUGIN_ROOT } from "./_helpers";
 
-const POLICY_MIGRATION_MODULE = "src/modules/capability/workflows/policy-migration";
-const TEAM_PLAN_READER_MODULE = "src/modules/teams/workflows/team-plan-compat";
+const POLICY_MIGRATION_MODULE = "src/domains/config/policy-migration";
+const TEAM_PLAN_READER_MODULE = "src/domains/teams/team-plan-compat";
 const LANE_T5 = "T5-policy-resolver";
 const LANE_T2B = "T2b-unbounded-team-composer";
 

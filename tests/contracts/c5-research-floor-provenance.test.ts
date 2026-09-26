@@ -8,7 +8,7 @@
  * generic sub-dispatch. Descendants may RAISE floors, never lower or erase
  * one. Missing authoritative purpose metadata fails closed (purpose_unbound).
  *
- * EXPECTED TO FAIL TODAY: src/modules/capability/workflows/purpose-provenance.ts
+ * EXPECTED TO FAIL TODAY: src/domains/config/purpose-provenance.ts
  * does not exist (lanes T1b+T5). The work_class pin tests are REAL-path and
  * pass today (T1a/T1b landed the metadata) — they anchor the authoritative
  * source the runtime must read.
@@ -19,7 +19,7 @@ import * as path from "path";
 
 import { requireContractModule, PLUGIN_ROOT } from "./_helpers";
 
-const PROVENANCE_MODULE = "src/modules/capability/workflows/purpose-provenance";
+const PROVENANCE_MODULE = "src/domains/config/purpose-provenance";
 const LANE = "T5-policy-resolver";
 
 /**
@@ -114,8 +114,8 @@ describe("C5 model_policy §2–§3 — research floor + transitive provenance",
   });
 
   describe("T5-R1-F1 — the research powerful-TIER floor is enforced, not just the complexity label", () => {
-    const POLICY_MODULE = "src/modules/capability/workflows/model-policy";
-    const RESOLVER_MODULE = "src/modules/capability/workflows/model-resolver";
+    const POLICY_MODULE = "src/domains/config/model-policy";
+    const RESOLVER_MODULE = "src/domains/config/model-resolver";
 
     /** Structurally valid research policy preferring a cheap-tier catalog id. */
     const cheapResearchPolicy = () => ({
@@ -210,10 +210,12 @@ describe("C5 model_policy §2–§3 — research floor + transitive provenance",
   });
 
   describe("[control] authoritative work_class metadata is on disk (T1a/T1b real-path anchor)", () => {
+    // T12 retired the src/modules/**/resources mirrors (host packages project from
+    // the live surface), so the real-path anchor is the authored file itself.
     const researcherSkills = [
-      "src/modules/specialists/resources/skills/specialists/researcher-deep-dive/SKILL.md",
-      "src/modules/specialists/resources/skills/specialists/researcher-comparison-table/SKILL.md",
-      "src/modules/specialists/resources/skills/specialists/researcher-paper-digest/SKILL.md",
+      "skills/specialists/researcher-deep-dive/SKILL.md",
+      "skills/specialists/researcher-comparison-table/SKILL.md",
+      "skills/specialists/researcher-paper-digest/SKILL.md",
     ];
 
     test.each(researcherSkills)("[control] %s carries work_class: research frontmatter", (rel) => {

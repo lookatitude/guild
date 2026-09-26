@@ -32,7 +32,7 @@
  */
 
 import * as fs from "fs";
-import { deepFreeze } from "../../src/modules/kernel/workflows/sealed-collections";
+import { deepFreeze } from "../../src/domains/kernel";
 import * as path from "path";
 import { spawnSync } from "child_process";
 // Canonical single-source share-set membership (re-arch WAVE 1) — the former
@@ -48,10 +48,7 @@ import { redact } from "../lib/shared/scrub-redact";
 // tracked/trackable cache file is an actionable flag (CI fail). This is the
 // audit.ts half of the two-leg scrub-policy update (scrub.ts warns at scrub
 // time with the same canonical path constants).
-import {
-  MODEL_CATALOG_CACHE_REL,
-  legacyModelCatalogCacheDir,
-} from "../../src/modules/capability/workflows/catalog-cache";
+import { MODEL_CATALOG_CACHE_REL, legacyModelCatalogCacheDir } from "../../src/domains/config";
 
 const args = process.argv.slice(2);
 const wsArg   = args.find(a => a.startsWith("--workspace="));

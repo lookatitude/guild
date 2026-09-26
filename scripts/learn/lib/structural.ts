@@ -28,7 +28,7 @@
  */
 
 import { loadTsAliases, resolveImportSpec } from "./import-map";
-import { sealSet } from "../../../src/modules/kernel/workflows/sealed-collections";
+import { sealSet } from "../../../src/domains/kernel/sealed-collections";
 import { detectLanguage, isCodeLanguage } from "./languages";
 import { analyzeSource } from "./extract";
 import { contentHash } from "./fingerprint";

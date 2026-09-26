@@ -23,69 +23,14 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import {
-  NEUTRAL_CORE_MEMBERS,
-  NEUTRAL_FORBIDDEN_BOUNDARY_MATCHERS,
-  NEUTRAL_PURE_INTRINSIC_ROOTS,
-  analyzeNeutralCapabilityUse,
-  evaluateNeutralCoreBoundary,
-  extractNeutralImportSpecifiers,
-  tokenizeNeutralSource,
-} from "../../src/modules/lifecycle/workflows/neutral-core-boundary";
+import { NEUTRAL_CORE_MEMBERS, NEUTRAL_FORBIDDEN_BOUNDARY_MATCHERS, NEUTRAL_PURE_INTRINSIC_ROOTS, analyzeNeutralCapabilityUse, evaluateNeutralCoreBoundary, extractNeutralImportSpecifiers, tokenizeNeutralSource } from "../../src/domains/lifecycle";
 
-import {
-  NEUTRAL_ATTESTATION_CHAIN_LENGTH,
-  NEUTRAL_ATTESTATION_CHAINS,
-  NEUTRAL_ATTESTATION_CHECKSUM_CHAINS,
-  NEUTRAL_ATTESTATION_MESSAGE_CHAINS,
-  NEUTRAL_ATTESTATION_REF_SCHEMA,
-  NEUTRAL_ATTESTATION_SCHEME,
-  NEUTRAL_ATTESTATION_TREE_HEIGHT,
-  NEUTRAL_ATTESTOR_TRUST_ROOT,
-  NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
-  NEUTRAL_CORE_SCENARIOS,
-  NEUTRAL_CORE_WAVE_OWNER,
-  NEUTRAL_EVIDENCE_IDENTITY_FIELDS,
-  NEUTRAL_EVIDENCE_PROFILES,
-  NEUTRAL_MINIMUM_ATTESTOR_QUORUM,
-  NEUTRAL_RECEIPT_REF_SCHEMA,
-  NEUTRAL_RECOGNIZED_ADAPTER_MAJOR,
-  NEUTRAL_RECOGNIZED_HOST_IDS,
-  NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS,
-  NEUTRAL_RECOGNIZED_PLATFORMS,
-  NEUTRAL_RECOGNIZED_RUNTIME_MAJOR,
-  NEUTRAL_REQUIRED_CORE_SCENARIO_IDS,
-  NEUTRAL_SCENARIO_SUITE_ID,
-  NEUTRAL_SCENARIO_SUITE_VERSION,
-  NEUTRAL_SUPPORT_TRANSITIONS,
-  NEUTRAL_UNEVALUATED_SUPPORT,
-  applyNeutralSupportTransition,
-  deriveNeutralSupportClaim,
-  evaluateNeutralConformanceDecision,
-  neutralAttestationDigest,
-  neutralAttestationReference,
-  neutralAttestationVerifies,
-  neutralAttestorVerificationKey,
-  neutralJournalEntryCommitment,
-  neutralJournalGenesis,
-  neutralReceiptReference,
-  neutralVerifyAttestationSignature,
-  validateNeutralScenarioRegistry,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
-import type {
-  NeutralConformanceAuthority,
-  NeutralConformanceEvidence,
-  NeutralEvidenceFreshnessVerdict,
-  NeutralEvidenceIdentity,
-  NeutralJournalAttestation,
-  NeutralReceiptJournalEntry,
-  NeutralScenarioResult,
-  NeutralSupportRecord,
-} from "../../src/modules/lifecycle/workflows/neutral-conformance-core";
+import { NEUTRAL_ATTESTATION_CHAIN_LENGTH, NEUTRAL_ATTESTATION_CHAINS, NEUTRAL_ATTESTATION_CHECKSUM_CHAINS, NEUTRAL_ATTESTATION_MESSAGE_CHAINS, NEUTRAL_ATTESTATION_REF_SCHEMA, NEUTRAL_ATTESTATION_SCHEME, NEUTRAL_ATTESTATION_TREE_HEIGHT, NEUTRAL_ATTESTOR_TRUST_ROOT, NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA, NEUTRAL_CORE_SCENARIOS, NEUTRAL_CORE_WAVE_OWNER, NEUTRAL_EVIDENCE_IDENTITY_FIELDS, NEUTRAL_EVIDENCE_PROFILES, NEUTRAL_MINIMUM_ATTESTOR_QUORUM, NEUTRAL_RECEIPT_REF_SCHEMA, NEUTRAL_RECOGNIZED_ADAPTER_MAJOR, NEUTRAL_RECOGNIZED_HOST_IDS, NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS, NEUTRAL_RECOGNIZED_PLATFORMS, NEUTRAL_RECOGNIZED_RUNTIME_MAJOR, NEUTRAL_REQUIRED_CORE_SCENARIO_IDS, NEUTRAL_SCENARIO_SUITE_ID, NEUTRAL_SCENARIO_SUITE_VERSION, NEUTRAL_SUPPORT_TRANSITIONS, NEUTRAL_UNEVALUATED_SUPPORT, applyNeutralSupportTransition, deriveNeutralSupportClaim, evaluateNeutralConformanceDecision, neutralAttestationDigest, neutralAttestationReference, neutralAttestationVerifies, neutralAttestorVerificationKey, neutralJournalEntryCommitment, neutralJournalGenesis, neutralReceiptReference, neutralVerifyAttestationSignature, validateNeutralScenarioRegistry } from "../../src/domains/lifecycle";
+import type { NeutralConformanceAuthority, NeutralConformanceEvidence, NeutralEvidenceFreshnessVerdict, NeutralEvidenceIdentity, NeutralJournalAttestation, NeutralReceiptJournalEntry, NeutralScenarioResult, NeutralSupportRecord } from "../../src/domains/lifecycle";
 
-import { NEUTRAL_LIFECYCLE_PHASES } from "../../src/modules/lifecycle/workflows/neutral-runtime-contracts";
+import { NEUTRAL_LIFECYCLE_PHASES } from "../../src/domains/lifecycle";
 
-const CORE_DIR = path.resolve(__dirname, "..", "..", "src", "modules", "lifecycle", "workflows");
+const CORE_DIR = path.resolve(__dirname, "..", "..", "src", "domains", "lifecycle");
 
 function readCoreFiles(): Array<{ path: string; source: string }> {
   return NEUTRAL_CORE_MEMBERS.map((member) => ({

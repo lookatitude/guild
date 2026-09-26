@@ -19,16 +19,16 @@ import {
   type ResolveResult,
 } from "../lib/settings-resolver"; // ORIGINAL path — the shim
 import * as settingsResolverExports from "../lib/settings-resolver";
-import * as settingsResolverModule from "../../src/modules/config/workflows/settings-resolver";
+import * as settingsResolverModule from "../../src/domains/config/settings-resolver";
 import * as settingsReaderShim from "../lib/core/settings-reader";
-import * as settingsReaderModule from "../../src/modules/config/workflows/settings-reader";
+import * as settingsReaderModule from "../../src/domains/config/settings-reader";
 
 import {
   DEFAULT_ESCALATION_MARKERS,
   NON_INHERITABLE_KEYS,
 } from "../lib/shared/config-defaults"; // shared constants
 import * as configDefaultsShim from "../lib/shared/config-defaults";
-import * as configDefaultsModule from "../../src/modules/config/workflows/config-defaults";
+import * as configDefaultsModule from "../../src/domains/config/config-defaults";
 
 import * as os from "os";
 import * as path from "path";
@@ -170,9 +170,9 @@ describe("settings-resolver shim — parity after W3 split", () => {
     const readScripts = (rel: string) => fs.readFileSync(path.join(__dirname, "..", rel), "utf8");
     const readRepo = (rel: string) => fs.readFileSync(path.join(__dirname, "../..", rel), "utf8");
     const shared = readScripts("lib/shared/config-defaults.ts");
-    const module = readRepo("src/modules/config/workflows/config-defaults.ts");
-    const settingsReader = readRepo("src/modules/config/workflows/settings-reader.ts");
-    expect(shared).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/\.\.\/src\/modules\/config\/workflows\/config-defaults["']/);
+    const module = readRepo("src/domains/config/config-defaults.ts");
+    const settingsReader = readRepo("src/domains/config/settings-reader.ts");
+    expect(shared).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/\.\.\/src\/domains\/config\/config-defaults["']/);
     expect(shared).not.toMatch(/export\s+const\s+DEFAULTS\s*=/);
     expect(module).toMatch(/compositeRecall/); // module owns the real object, not just a few constants
     expect(module).toMatch(/importanceGate/);

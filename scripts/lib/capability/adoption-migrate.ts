@@ -52,7 +52,7 @@
  * Report building is READ-ONLY by construction — it never receives a write path.
  *
  * PLACEMENT: this lives in `scripts/lib/capability/` rather than
- * `src/modules/capability/workflows/` because it composes three contracts owned by
+ * `src/domains/config/` because it composes three contracts owned by
  * the `dispatch` module (adoption-manifest, project-definition-ref,
  * specialist-identity) plus `state`'s frontmatter reader. A module workflow may not
  * import the `scripts/` layer (check-module-ownership enforces it), and routing
@@ -80,7 +80,7 @@ import {
 import {
   checkContained,
   isRefused,
-} from "../../../src/modules/kernel/workflows/path-containment";
+} from "../../../src/domains/kernel/path-containment";
 import {
   PROJECT_DEFINITION_REF_SCHEMA,
   validateProjectDefinitionRefV1,
@@ -104,12 +104,12 @@ import {
   type CompatibilityCatalogEntry,
 } from "./compatibility-catalog";
 import { readCompatibilityAsset, readRuntimeVersion } from "./compatibility-loader";
-import { assertWritableBinding } from "../../../src/modules/lifecycle/workflows/run-binding";
+import { assertWritableBinding } from "../../../src/domains/lifecycle/run-binding";
 import {
   appendReceipt,
   makeReceiptInput,
   type ReceiptAppendOutcome,
-} from "../../../src/modules/telemetry";
+} from "../../../src/domains/telemetry";
 
 /** The catalog envelope key set, for the nested-object snapshot (CODEX #10). */
 const CATALOG_KEYS = [

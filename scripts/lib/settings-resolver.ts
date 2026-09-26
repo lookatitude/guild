@@ -5,4 +5,4 @@
  * internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/modules/config/workflows/settings-resolver";
+export * from "../../src/domains/config/settings-resolver";

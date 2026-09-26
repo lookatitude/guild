@@ -17,14 +17,14 @@ import {
   validateTaskAssignmentV1,
   writeTaskAssignment,
   type TaskAssignmentV1,
-} from "../../src/modules/dispatch/workflows/task-assignment";
+} from "../../src/domains/dispatch/task-assignment";
 import {
   BindingRejectedError,
   closeRunBinding,
   loadRunBinding,
   mintRunBinding,
   runBindingPath,
-} from "../../src/modules/lifecycle/workflows/run-binding";
+} from "../../src/domains/lifecycle/run-binding";
 
 const FIXED_NOW = () => "2026-06-27T00:00:00.000Z";
 

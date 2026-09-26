@@ -11,9 +11,9 @@ export {
   ensureKgIndex,
   ensureKgProjectionIndex,
   ensureWikiFtsIndex,
-} from "../../src/modules/state/workflows/index-cache";
+} from "../../src/domains/state/index-cache";
 export type {
   IndexBlock,
   CacheStatus,
   CacheResult,
-} from "../../src/modules/state/workflows/index-cache";
+} from "../../src/domains/state/index-cache";

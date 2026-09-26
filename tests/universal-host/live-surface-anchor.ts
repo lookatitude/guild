@@ -620,6 +620,9 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // `maintain rollback` rows on commands/maintain.md, the evolve assembler + chapters
   // (evolve-targets.md, rollback-skill.md, audit.md). ANTI-VACUITY: check-surface-pins,
   // SC-W2-5 and SC-W3-6 were RED against the T10 pins before these values.
+  // Re-ratified 2026-09-26 (T12 domain fold): skill/command bodies repoint spawn paths
+  // from the retired module mirrors to the domain tree. ANTI-VACUITY: SC-W2-5 and
+  // SC-W3-6 were RED against the T11 pins before these values.
   commands: "ecd95ee87f922d1ab9ba49326c2771f498e42058",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
@@ -642,7 +645,16 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified (codex G-lane round 6, lead fix): the evolve assembler's `wiki revert`
   // row no longer points at wiki-ingest.md (no revert handler there); it names the
   // pending harvest-journal inverse (R54) and stops. One row changed.
-  skills: "89c57815792032c93a0d1d88ab6ca98aeb996746",
+  // Re-ratified 2026-09-26 (T12 domain fold): the shipped skill bodies that cite an
+  // internal source path now cite the DOMAIN path, because the module tree they named
+  // no longer holds the code (KTD36). The surface delta is exactly eight files —
+  // skills/meta/{plan,execute-plan}/SKILL.md, skills/meta/evolve/references/evolve-targets.md,
+  // skills/operations/{SKILL.md,operations-contract.md},
+  // skills/quality/{SKILL.md,quality-contract.md,quality-mechanics.md} — and nothing
+  // else: `commands` does NOT move and neither manifest hash does. ANTI-VACUITY:
+  // check-surface-pins was observed RED against the prior pin on this exact tree and
+  // named ONLY `skills/skills`, before this value was ratified.
+  skills: "f47b4dbefe872d119d9b2782745c449fd830e41f",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

@@ -6,9 +6,14 @@
  * internals without breaking existing script paths.
  */
 
-import { runMarkLaneDeadCli } from "../src/modules/lifecycle/workflows/mark-lane-dead";
+import { runMarkLaneDeadCli } from "../src/domains/lifecycle";
 
-export * from "../src/modules/lifecycle/workflows/mark-lane-dead";
+export {
+  parseMarkLaneDeadArgs,
+  markLaneDeadFromArgs,
+  runMarkLaneDeadCli,
+  type MarkLaneDeadArgs,
+} from "../src/domains/lifecycle";
 
 if (require.main === module) {
   runMarkLaneDeadCli();

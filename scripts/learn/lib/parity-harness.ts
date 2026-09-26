@@ -30,7 +30,7 @@
 import {
   DEFAULT_INDEX_BLOCK,
   type IndexBlock,
-} from "../../../src/modules/state/workflows/index-cache";
+} from "../../../src/domains/state/index-cache";
 
 export type IndexMode = "off" | "on";
 

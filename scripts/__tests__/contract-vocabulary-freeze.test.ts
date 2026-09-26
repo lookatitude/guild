@@ -53,20 +53,11 @@ import {
   LEGACY_HOMES,
   validateLegacyLocator,
 } from "../lib/core/contracts/adoption-manifest";
-import {
-  EXECUTION_DISPATCH_MODES,
-  EXECUTION_OPERATIONS,
-  EXECUTION_OUTCOME_STATUSES,
-  EXECUTION_REASON_CODES,
-  EXECUTION_TRANSPORT_IDS,
-  TEAM_DISPATCH_SCOPES,
-  isExecutionOperation,
-  isExecutionReasonCode,
-} from "../../src/modules/dispatch/workflows/execution-transport-ports";
+import { EXECUTION_DISPATCH_MODES, EXECUTION_OPERATIONS, EXECUTION_OUTCOME_STATUSES, EXECUTION_REASON_CODES, EXECUTION_TRANSPORT_IDS, TEAM_DISPATCH_SCOPES, isExecutionOperation, isExecutionReasonCode } from "../../src/domains/dispatch";
 import {
   INJECTION_SUPPORT,
   REQUIRED_HOOK_EVENTS,
-} from "../../src/modules/host-runtime/workflows/host-capabilities-schema";
+} from "../../src/adapters/host-capabilities-schema";
 
 /** Every exported vocabulary across the four contract surfaces this lane owns. */
 const REGISTRIES: ReadonlyArray<readonly [string, readonly unknown[]]> = [

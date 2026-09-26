@@ -1,8 +1,4 @@
-import {
-  ANALYSIS_EVENT_CLASSES,
-  makeAnalysisTraceEvent,
-  validateGuildTraceEvent,
-} from "../../src/modules/telemetry/workflows/guild-trace-events";
+import { ANALYSIS_EVENT_CLASSES, makeAnalysisTraceEvent, validateGuildTraceEvent } from "../../src/domains/telemetry";
 
 describe("guild.trace.analysis.v2", () => {
   it("accepts every closed event class with the analysis identity envelope", () => {

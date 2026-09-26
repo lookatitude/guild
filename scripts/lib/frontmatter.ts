@@ -5,7 +5,7 @@
  * move internals without breaking imports from scripts/lib/frontmatter.
  */
 
-import * as frontmatterImpl from "../../src/modules/state/workflows/frontmatter";
+import * as frontmatterImpl from "../../src/domains/state/frontmatter";
 
 export const splitFrontmatter = frontmatterImpl.splitFrontmatter;
 export const parseYaml = frontmatterImpl.parseYaml;
@@ -18,4 +18,4 @@ export const replaceTopLevelLine = frontmatterImpl.replaceTopLevelLine;
 export type {
   FrontmatterSplit,
   ParseOpts,
-} from "../../src/modules/state/workflows/frontmatter";
+} from "../../src/domains/state/frontmatter";

@@ -5,4 +5,4 @@
  * internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/modules/host-runtime/workflows/host-capabilities-schema";
+export * from "../../src/adapters/host-capabilities-schema";

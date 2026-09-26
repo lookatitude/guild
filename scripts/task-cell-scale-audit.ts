@@ -6,7 +6,7 @@ import * as path from "node:path";
 import {
   auditTaskCellScaleRecords,
   type TaskCellScaleAuditInput,
-} from "../src/modules/dispatch";
+} from "../src/domains/dispatch";
 
 function fail(message: string): never {
   process.stderr.write(`[task-cell-scale-audit] ${message}\n`);

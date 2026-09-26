@@ -156,7 +156,7 @@ describe("Section B2 — createIgnoreFilter excludes generated module-resource m
 
   it("M4 (non-vacuity): real module source is KEPT — workflows/index, not under resources/", () => {
     const filter = createIgnoreFilter(repo);
-    expect(filter.isIgnored("src/modules/kernel/workflows/identifier-tokenize.ts")).toBe(false);
+    expect(filter.isIgnored("src/domains/kernel/identifier-tokenize.ts")).toBe(false);
     expect(filter.isIgnored("src/modules/knowledge/index.ts")).toBe(false);
     expect(filter.isIgnored("src/modules/knowledge/module.manifest.json")).toBe(false);
   });

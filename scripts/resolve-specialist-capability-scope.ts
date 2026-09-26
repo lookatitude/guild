@@ -16,10 +16,7 @@ import * as path from "node:path";
 import { createHash } from "node:crypto";
 
 import { parseYaml } from "./agent-team-launcher";
-import {
-  checkContained,
-  isRefused,
-} from "../src/modules/kernel/workflows/path-containment";
+import { checkContained, isRefused } from "../src/domains/kernel";
 
 export interface CliArgs {
   team: string;

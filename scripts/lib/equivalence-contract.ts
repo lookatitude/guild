@@ -5,4 +5,4 @@
  * reorg can move internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/modules/distribution/workflows/equivalence-contract";
+export * from "../../src/domains/distribution/equivalence-contract";

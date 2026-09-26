@@ -15,4 +15,4 @@ export {
   rankScore,
   backendForMode,
   getDefaultModelTierMap,
-} from "../../../src/modules/capability/workflows/rank";
+} from "../../../src/domains/config/rank";

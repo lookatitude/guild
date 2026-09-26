@@ -136,7 +136,7 @@ validator, two callers).
 2. **G-operations review — two distinct, both-kept mechanisms**
    (https://guildstack.dev/docs/adversarial-review):
    - **In-phase advisory panel.** Challengers sourced from the station composer's
-     **`ops` station `advisory_panel`** (SoT: `src/modules/teams/workflows/station-composer.ts`
+     **`ops` station `advisory_panel`** (SoT: `src/domains/teams/station-composer.ts`
      `STATION_POLICY.ops.advisory_panel`, resolved by `composeStationTeam`) — not a
      hardcoded `[security, …]` list: `security` (BASELINE — always present) + `architect`
      (GATED on the `multi_component` signal; recorded as `chal:ops:architect`). Producer

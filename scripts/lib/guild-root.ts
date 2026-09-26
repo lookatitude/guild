@@ -19,4 +19,4 @@
  * Decision: .guild/wiki/decisions/telemetry-anchors-to-repo-root-not-cwd.md
  */
 
-export { resolveGuildRoot } from "../../src/modules/state/workflows/guild-root";
+export { resolveGuildRoot } from "../../src/domains/state/guild-root";

@@ -36,7 +36,7 @@ import {
   CAPABILITY_RESOLVER_MODE_AFTER_F7,
   CAPABILITY_RESOLVER_MODE_DEFAULT,
   type CapabilityResolverMode,
-} from "../../src/modules/config";
+} from "../../src/domains/config";
 
 const AGENT_LOCAL = ".guild/agents/qa.md";
 const TEMPLATE = "templates/specialists/qa.md";

@@ -11,7 +11,7 @@
  *
  * KTD48: there is NO version-snapshot tree. The pre-edit record is the baseline
  * hash here plus the inverse span compact history records at apply time
- * (`src/modules/evolution/workflows/compact-history.ts`). A full copy of the old
+ * (`src/domains/evolve/compact-history.ts`). A full copy of the old
  * body bought nothing rollback needs and put derived data in durable `.guild/`.
  *
  * Usage:

@@ -14,27 +14,7 @@
 
 import * as path from "path";
 
-import {
-  COMPOSITION_TRACE_SCHEMA,
-  COST_GATE_POLICY,
-  IMPLIED_RULES,
-  STATIONS,
-  STATION_POLICY,
-  TEAM_SIZE_POLICY,
-  buildTierIndex,
-  composeStationTeam,
-  deriveDecompositionSignals,
-  isStation,
-  scoreFanoutMode,
-  validateTeamPlanV1,
-  validateTeamResultV1,
-  type FanoutSignalsFired,
-  type StationComposeConfig,
-  type StationId,
-  type StationSignals,
-  type TeamPlanV1,
-  type TeamResultV1,
-} from "../../src/modules/teams/workflows/station-composer";
+import { COMPOSITION_TRACE_SCHEMA, COST_GATE_POLICY, IMPLIED_RULES, STATIONS, STATION_POLICY, TEAM_SIZE_POLICY, buildTierIndex, composeStationTeam, deriveDecompositionSignals, isStation, scoreFanoutMode, validateTeamPlanV1, validateTeamResultV1, type FanoutSignalsFired, type StationComposeConfig, type StationId, type StationSignals, type TeamPlanV1, type TeamResultV1 } from "../../src/domains/teams";
 import { resolveRoster } from "../lib/roster";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────

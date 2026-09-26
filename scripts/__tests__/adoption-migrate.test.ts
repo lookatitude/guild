@@ -34,7 +34,7 @@ import {
   readAdoptionManifest,
   rollbackAdoption,
 } from "../lib/capability/adoption-migrate";
-import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { mintRunBinding } from "../../src/domains/lifecycle";
 import {
   manifestCommitment,
   resolveHistorical,

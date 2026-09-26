@@ -36,7 +36,7 @@ import {
   lazyEntriesFor,
   requiredEntriesFor,
   scaffoldFor,
-} from "../../src/modules/config/workflows/init-scaffold-manifest";
+} from "../../src/domains/config/init-scaffold-manifest";
 
 const REPO = path.resolve(__dirname, "..", "..");
 

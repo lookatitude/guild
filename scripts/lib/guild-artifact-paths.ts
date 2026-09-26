@@ -33,11 +33,11 @@ function safeSlug(raw: string): string {
  * iff `absPath` resolves under a plugin install root (an explicit
  * `pluginInstallRoot`, else `GUILD_PLUGIN_ROOT`/`CLAUDE_PLUGIN_ROOT`/`CODEX_PLUGIN_ROOT`).
  * This is the one check every write path can call cheaply — no discovery, no cwd
- * threading — which is why `atomicWrite` (src/modules/state/workflows/atomic-write.ts)
+ * threading — which is why `atomicWrite` (src/domains/state/atomic-write.ts)
  * calls it on every write: R6 stops being prose-only the moment the shared write
  * choke-point enforces it.
  */
-import { assertNotUnderPluginInstall } from "../../src/modules/state/workflows/plugin-install-guard";
+import { assertNotUnderPluginInstall } from "../../src/domains/state/plugin-install-guard";
 export { assertNotUnderPluginInstall };
 
 export function resolveGuildArtifactPath(req: ArtifactPathRequest): string {

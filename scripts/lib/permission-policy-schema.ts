@@ -33,7 +33,7 @@
 // ---------------------------------------------------------------------------
 
 /** Host autonomy modes (host tool/edit/sandbox). Mirrors PermissionMode in host-capabilities-schema. */
-import { sealSet } from "../../src/modules/kernel/workflows/sealed-collections";
+import { sealSet } from "../../src/domains/kernel/sealed-collections";
 
 export const HOST_MODES = Object.freeze(["read_only", "ask", "accept_edits", "auto", "bypass_all"] as const);
 export type HostMode = (typeof HOST_MODES)[number];

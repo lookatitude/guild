@@ -28,7 +28,7 @@ import {
   writeTaskAttemptV1,
   writeTaskCell,
   type TaskCellDispatchInput,
-} from "../../src/modules/dispatch/workflows/task-assignment-v2";
+} from "../../src/domains/dispatch/task-assignment-v2";
 import {
   assignmentId,
   taskCellPaths,
@@ -43,11 +43,11 @@ import {
   loadRunBinding,
   mintRunBinding,
   runBindingPath,
-} from "../../src/modules/lifecycle/workflows/run-binding";
+} from "../../src/domains/lifecycle/run-binding";
 import {
   createPreviewConfirmationSession,
   previewConfirmation,
-} from "../../src/modules/dispatch/workflows/confirmation-gate";
+} from "../../src/domains/dispatch/confirmation-gate";
 
 /** T3 F3: mint-or-load the run's binding under this test root (writers verify it). */
 function bindFor(cwd: string, runId: string): { binding_ref: string } {

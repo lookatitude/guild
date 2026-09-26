@@ -33,17 +33,17 @@
  */
 
 import * as fs from "fs";
-import { sealSet } from "../../../src/modules/kernel/workflows/sealed-collections";
+import { sealSet } from "../../../src/domains/kernel/sealed-collections";
 import * as path from "path";
 import * as crypto from "crypto";
 import type {
   GraphNode,
   GraphEdge,
-} from "../../../src/modules/learning/workflows/knowledge-graph-contract";
+} from "../../../src/domains/knowledge/knowledge-graph-contract";
 export type {
   GraphNode,
   GraphEdge,
-} from "../../../src/modules/learning/workflows/knowledge-graph-contract";
+} from "../../../src/domains/knowledge/knowledge-graph-contract";
 
 // ---------------------------------------------------------------------------
 // v1 — closed node type set (frozen)

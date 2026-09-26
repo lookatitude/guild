@@ -27,12 +27,12 @@ import {
   buildTaskCell,
   writeTaskCell,
   type TaskCellDispatchInput,
-} from "../../src/modules/dispatch/workflows/task-assignment-v2";
+} from "../../src/domains/dispatch/task-assignment-v2";
 import {
   ExecutionTransportTaskCellWorkerPort,
   FilesystemTaskCellRuntime,
   type TaskCellWorkerPort,
-} from "../../src/modules/dispatch/workflows/task-cell-runtime";
+} from "../../src/domains/dispatch/task-cell-runtime";
 import {
   assignmentId,
 } from "../lib/core/contracts/task-cell-backend";
@@ -45,33 +45,33 @@ import {
   DEFAULT_MAX_INSTANCES,
   countLiveRunInstances,
   reserveInstance,
-} from "../../src/modules/dispatch/workflows/instance-cap";
+} from "../../src/domains/dispatch/instance-cap";
 import {
   cellCanGoDone,
   initProgressLedger,
   readDoneWhen,
   readProgressLedger,
   recordOracleOutcome,
-} from "../../src/modules/dispatch/workflows/progress-ledger";
-import { checkBusMessage } from "../../src/modules/dispatch/workflows/isolation-guard";
+} from "../../src/domains/dispatch/progress-ledger";
+import { checkBusMessage } from "../../src/domains/dispatch/isolation-guard";
 import {
   consumeConsult,
   initAdvisorBudget,
   resolveAdvisorRounds,
-} from "../../src/modules/dispatch/workflows/advisor-budget";
-import { resolveAssignmentBinding } from "../../src/modules/dispatch/workflows/assignment-binding";
-import { publishSubmittedHandoffPointer } from "../../src/modules/dispatch/workflows/task-cell-acceptance";
-import { acknowledgeAssignment } from "../../src/modules/dispatch/workflows/task-assignment-v2";
+} from "../../src/domains/dispatch/advisor-budget";
+import { resolveAssignmentBinding } from "../../src/domains/dispatch/assignment-binding";
+import { publishSubmittedHandoffPointer } from "../../src/domains/dispatch/task-cell-acceptance";
+import { acknowledgeAssignment } from "../../src/domains/dispatch/task-assignment-v2";
 import {
   foldOrchestratorContext,
   lintOrchestratorContext,
   validateGoalStatusV1,
   validateGoalV1,
-} from "../../src/modules/teams/workflows/goal-contract";
-import { sliceRosterForGoal } from "../../src/modules/teams/workflows/compose-scope";
-import { resolveTeamFile } from "../../src/modules/teams/workflows/team-file";
+} from "../../src/domains/teams/goal-contract";
+import { sliceRosterForGoal } from "../../src/domains/teams/compose-scope";
+import { resolveTeamFile } from "../../src/domains/teams/team-file";
 import { mintFromTemplate, resolveRoster } from "../lib/roster";
-import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { mintRunBinding } from "../../src/domains/lifecycle/run-binding";
 import { taskCellPaths } from "../lib/core/contracts/task-cell-backend";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
@@ -351,7 +351,7 @@ describe("F01 orchestrator context has goal_status, not assignments (R33)", () =
   it("rejects paths, diffs, and specialist names inside the envelope", () => {
     const codes = lintOrchestratorContext({
       envelopes: [
-        goalStatus({ summary: "edited src/modules/dispatch/workflows/task-cell-runtime.ts" }),
+        goalStatus({ summary: "edited src/domains/dispatch/task-cell-runtime.ts" }),
         goalStatus({ summary: "applied\n@@ -1,4 +1,9 @@\nchange" }),
         goalStatus({ summary: "backend finished the lane" }),
       ],

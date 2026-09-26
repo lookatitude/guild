@@ -1,18 +1,67 @@
-export const MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1" as const;
+/**
+ * Transitional re-export shim (T12 fold, KTD36).
+ *
+ * The implementation moved once into src/domains/security/. This file republishes the exact
+ * pre-fold public surface of src/modules/security so existing importers keep working;
+ * T16 deletes it. New code imports src/domains/security directly.
+ */
 
-export * from "./workflows/safe-object";
-export * from "./workflows/injection-guard";
-export * from "./workflows/scrubbed-write";
-export * from "./workflows/redact-log";
-export * from "./workflows/share-set";
-// T6b: the canonical redaction applier + its pattern SoT are published so
-// consuming modules (e.g. capability's `guild models inspect` emit path) scrub
-// through the SAME code as the share scrubber and the package leak audit,
-// instead of re-spelling patterns or wiring a private import.
-export * from "./workflows/scrub-redact";
-export * from "./workflows/secret-patterns";
-// T09 (R53): the D-AUDIT security-event record + writer. Harvest is the one
-// UNATTENDED durable-write path in Guild, so the knowledge domain must be able to
-// emit its audit twin through this module's public entrypoint rather than
-// reaching into `workflows/`.
-export * from "./workflows/events";
+export {
+  CANONICAL_RUN_LOG,
+  FIELD_SIZE_CAP_BYTES,
+  HIGH_ENTROPY_PATTERN,
+  HIGH_ENTROPY_REDACTED,
+  HOME_DIR_PATTERN,
+  KNOWN_GUILD_HOST_KINDS,
+  KV_REDACTED,
+  KV_SECRET_PATTERN,
+  MODULE_PUBLIC_API_VERSION,
+  PATH_REDACTED,
+  PROTO_POISON_KEYS,
+  REDACTABLE_FIELDS,
+  SECRET_PATTERNS,
+  SECURITY_EVENT_SCHEMA_VERSION,
+  SENSITIVE_HOME_DIRS,
+  SHARED_SCRUBBED_NAMES,
+  TOKEN_REDACTED,
+  TOKEN_SHAPE_PATTERNS,
+  TRUNCATION_SUFFIX,
+  appendSecurityEvent,
+  buildSecurityEvent,
+  classifyEnvelope,
+  emitRecallQuarantine,
+  inShareSet,
+  isCanonicalRunLog,
+  isHandoffFile,
+  isPayloadFile,
+  isProtoPoisonKey,
+  isRelativePathToken,
+  isWhitelistedHighEntropy,
+  redact,
+  redactEventFields,
+  redactField,
+  redactHighEntropy,
+  redactHomeDirPaths,
+  redactKeyValueSecrets,
+  redactShareableFile,
+  redactTokenShapes,
+  resolveHostResolution,
+  resolveRunDir,
+  sanitizeForInjection,
+  scrubbedWrite,
+  truncateToCap,
+  writeScrubApprovalRequest,
+} from "../../domains/security";
+export type {
+  HostResolution,
+  InjectionClean,
+  RedactResult,
+  SanitizeResult,
+  ScrubSurface,
+  ScrubbedWriteResult,
+  SecretHit,
+  SecurityDecision,
+  SecurityEventInput,
+  SecurityEventType,
+  SecurityEventV1,
+} from "../../domains/security";

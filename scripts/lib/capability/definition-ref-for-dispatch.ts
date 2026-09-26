@@ -8,7 +8,7 @@ import {
 import type { ProjectDefinitionRefV1 } from "../core/contracts/project-definition-ref";
 import { resolveDefinitionArtifact } from "../definition-artifact-resolver";
 import { resolveWorkspaceProjectRoot } from "../workspace-project-root";
-import { scanReceiptJournal } from "../../../src/modules/telemetry";
+import { scanReceiptJournal } from "../../../src/domains/telemetry";
 import {
   adoptionCommitmentJournalRelpath,
   readAdoptionManifest,

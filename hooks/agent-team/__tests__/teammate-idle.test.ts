@@ -13,12 +13,12 @@ import {
   buildTaskCell,
   writeTaskCell,
   type TaskCellDispatchInput,
-} from "../../../src/modules/dispatch/workflows/task-assignment-v2";
+} from "../../../src/domains/dispatch/task-assignment-v2";
 import {
   buildAcceptance,
   runDeterministicFloor,
   writeAcceptanceRecord,
-} from "../../../src/modules/dispatch/workflows/task-cell-acceptance";
+} from "../../../src/domains/dispatch/task-cell-acceptance";
 
 const SCRIPT = path.resolve(__dirname, "../teammate-idle.ts");
 const FIXTURES = path.resolve(__dirname, "../fixtures");
@@ -72,8 +72,8 @@ function seedAcceptance(cwd: string, runId: string, logicalTaskId: string, worke
   const cell = buildTaskCell(disp);
   // T3 F3: descriptor writers fail closed without the run's minted binding.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const rb = require("../../../src/modules/lifecycle/workflows/run-binding") as
-    typeof import("../../../src/modules/lifecycle/workflows/run-binding");
+  const rb = require("../../../src/domains/lifecycle/run-binding") as
+    typeof import("../../../src/domains/lifecycle/run-binding");
   const existing = rb.loadRunBinding({ root: cwd, run_id: cell.assignment.run_id });
   const bindingRef =
     (existing ?? rb.mintRunBinding({ root: cwd, run_id: cell.assignment.run_id })).binding_ref;

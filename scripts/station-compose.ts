@@ -48,13 +48,13 @@ import {
   type DecompositionSignals,
   type FanoutOverride,
   type StationSignals,
-} from "../src/modules/teams/workflows/station-composer";
+} from "../src/domains/teams/station-composer";
 import {
   emptyStationSignalsV1,
   signalsOf,
   validateStationSignalsV1,
   writeTeamPlan,
-} from "../src/modules/teams/workflows/station-signals";
+} from "../src/domains/teams/station-signals";
 
 function fail(msg: string): never {
   process.stderr.write(`[station-compose] ${msg}\n`);

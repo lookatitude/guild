@@ -32,7 +32,7 @@ describe("group 4 — repo-relative path exemption", () => {
 
   it("preserves paths embedded in prose and markdown links", () => {
     const input =
-      "See [initiative-workitems.ts](src/modules/initiatives/workflows/initiative-workitems.ts:42) " +
+      "See [initiative-workitems.ts](src/domains/lifecycle/initiative-workitems.ts:42) " +
       "and hooks/lib/security/scrubbed-write.ts for the choke-point.";
     expect(redactHighEntropy(input)).toBe(input);
   });

@@ -13,8 +13,8 @@ import {
   buildCompatibilityCatalog,
   SHIPPED_DOMAIN_SKILL_IDS,
 } from "../../scripts/lib/capability/compatibility-catalog";
-import { scanReceiptJournal } from "../../src/modules/telemetry";
-import { mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
+import { scanReceiptJournal } from "../../src/domains/telemetry";
+import { mintRunBinding } from "../../src/domains/lifecycle";
 
 const SCRIPT = path.resolve(__dirname, "../pre-tool-use.ts");
 const DIST_SCRIPT = path.resolve(__dirname, "../dist/pre-tool-use.js");

@@ -5,7 +5,7 @@
  * move internals without breaking imports from scripts/lib/memory-adapter.
  */
 
-import * as memoryAdapterImpl from "../../src/modules/context/workflows/memory-adapter";
+import * as memoryAdapterImpl from "../../src/domains/knowledge/memory-adapter";
 
 export const selectMemoryTransport = memoryAdapterImpl.selectMemoryTransport;
 export const queryGuildMemory = memoryAdapterImpl.queryGuildMemory;
@@ -15,4 +15,4 @@ export type {
   MemoryQuery,
   MemoryPayload,
   MemoryReceipt,
-} from "../../src/modules/context/workflows/memory-adapter";
+} from "../../src/domains/knowledge/memory-adapter";

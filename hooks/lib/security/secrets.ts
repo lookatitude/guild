@@ -1,1 +1,1 @@
-export * from "../../../src/modules/security/workflows/secrets.js";
+export * from "../../../src/domains/security/secrets.js";

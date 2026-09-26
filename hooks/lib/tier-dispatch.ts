@@ -49,7 +49,7 @@
  * session, so this module reads `.guild/settings.json` with `fs` + `JSON.parse`
  * instead of importing `scripts/lib/settings-resolver.ts` (whose graph would pull
  * the whole config layer into the hook bundle), and restates the Claude tier
- * ladder rather than importing `src/modules/capability/workflows/tier-defaults.ts`
+ * ladder rather than importing `src/domains/config/tier-defaults.ts`
  * (which pulls the host registry). Exactly as `backend-degradation.ts` restates
  * `probeTmuxAvailable` and `dispatch-attribution.ts` restates
  * `GENERIC_SUBAGENT_TYPE`. Keep the semantics identical.
@@ -91,7 +91,7 @@ const TIERS: readonly Tier[] = ["cheap", "mid", "powerful"];
 
 /**
  * The Claude tier ladder, restated from
- * `src/modules/capability/workflows/tier-defaults.ts CLAUDE_TIER_FALLBACK`
+ * `src/domains/config/tier-defaults.ts CLAUDE_TIER_FALLBACK`
  * (see the bundle-weight note in the module header). Used ONLY as the fallback
  * when the project has no `models.tiers` config AND the host is a Claude host —
  * see `readConfiguredTierModels` for why the fallback is host-gated.

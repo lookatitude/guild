@@ -24,11 +24,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { CURRENT_LAYOUT_VERSION, detect, ensureStorageLayout } from "../lib/state/ensure-storage-layout";
-import {
-  canonicalPolicyKey,
-  findHostIdentity,
-  isPolicyKey,
-} from "../../src/modules/config/workflows/policy-keys";
+import { canonicalPolicyKey, findHostIdentity, isPolicyKey } from "../../src/domains/config";
 import {
   createGuildStorage,
   formatUpgradeReport,
@@ -38,7 +34,7 @@ import {
   validateUpgrade,
   UPGRADE_STEP_IDS,
   type GuildStorage,
-} from "../../src/modules/state";
+} from "../../src/domains/state";
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
 
@@ -301,7 +297,7 @@ describe("6. an existing specialist profile is never replaced by feedstock", () 
     write(path.join(f.guildDir, "agents", "backend.md"), "original\n");
     // Simulate the defect the validation exists to catch.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const state = require("../../src/modules/state") as typeof import("../../src/modules/state");
+    const state = require("../../src/domains/state") as typeof import("../../src/domains/state");
     const errors = state.validateUpgrade(f.guildDir, {
       profiles: new Map([["backend.md", "a DIFFERENT original"]]),
       knowledgePages: 1,
@@ -926,7 +922,7 @@ describe("rework-r3 · a block scalar's indent comes from its KEY, not the dash"
 });
 
 describe("codex r4 · the trailing-comment scanner honours YAML quoting and tabs", () => {
-  const { splitInlineValue } = require("../../src/modules/state/workflows/upgrade-steps") as typeof import("../../src/modules/state/workflows/upgrade-steps");
+  const { splitInlineValue } = require("../../src/domains/state/upgrade-steps") as typeof import("../../src/domains/state/upgrade-steps");
   it("a doubled apostrophe inside a single-quoted value does not end the value", () => {
     const { value, comment } = splitInlineValue("'codex-cli''s binding' # operator: approval required");
     expect(value).toBe("codex-cli''s binding");
@@ -982,7 +978,7 @@ describe("rework-r3 · a removed entry's trailing comment survives", () => {
 describe("rework-r3 · the comment self-check fails the step rather than losing a comment", () => {
   it("reports every comment in the document, block-scalar prose excluded", () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const steps = require("../../src/modules/state/workflows/upgrade-steps") as typeof import("../../src/modules/state/workflows/upgrade-steps");
+    const steps = require("../../src/domains/state/upgrade-steps") as typeof import("../../src/domains/state/upgrade-steps");
     const text = [
       "# top",
       "notes: |",
@@ -995,7 +991,7 @@ describe("rework-r3 · the comment self-check fails the step rather than losing 
 
   it("an injected reader that loses a comment makes the strip refuse and report it", () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const steps = require("../../src/modules/state/workflows/upgrade-steps") as typeof import("../../src/modules/state/workflows/upgrade-steps");
+    const steps = require("../../src/domains/state/upgrade-steps") as typeof import("../../src/domains/state/upgrade-steps");
     const text = ["id: demo", "host: codex-cli # must survive", "role: qa", ""].join("\n");
 
     // Healthy reader: the strip proceeds and the comment is kept.

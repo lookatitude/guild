@@ -6,4 +6,4 @@
  * breaking existing imports from scripts/lib/capability/*.
  */
 
-export * from "../../../src/modules/capability/workflows/resolver-mode";
+export * from "../../../src/domains/config/resolver-mode";

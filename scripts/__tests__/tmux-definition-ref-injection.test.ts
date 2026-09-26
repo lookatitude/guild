@@ -26,8 +26,8 @@
 
 import { dispatchPlanFromTmuxPlan, paneCommand, TmuxTeamBackend } from "../lib/host/tmux-backend";
 import type { ParsedTmuxCommand, RunFn, Specialist, TeamLaunchRequest } from "../lib/core/contracts/team-backend";
-import { TeamDispatchExecutionTransport } from "../../src/modules/dispatch/workflows/execution-transport-adapters";
-import { isTeamLaunchRequestLike } from "../../src/modules/dispatch/workflows/execution-transport-ports";
+import { TeamDispatchExecutionTransport } from "../../src/domains/dispatch";
+import { isTeamLaunchRequestLike } from "../../src/domains/dispatch";
 import {
   validateProjectDefinitionRefV1,
   type ProjectDefinitionRefV1,

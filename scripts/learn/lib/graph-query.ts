@@ -1,2 +1,26 @@
 /** Generated host compatibility shim; implementation is module-owned. */
-export * from "../../../src/modules/learning/workflows/graph-query";
+export {
+  simpleName,
+  nodeRelPath,
+  isEntryPoint,
+  resolveSeeds,
+  kgTrace,
+  kgNeighbors,
+  kgDeadCode,
+  kgEntryPoints,
+  resolveEntryPointConfig,
+  type GraphNode,
+  type GraphEdge,
+  type Direction,
+  EVIDENCE_TIER,
+  type EvidenceTier,
+  ENTRY_POINT_NAMES,
+  type GraphView,
+  type EvidenceNode,
+  type TraceEdge,
+  type TraceResult,
+  type NeighborsResult,
+  type DeadCodeResult,
+  type DeadCodeOptions,
+  type EntryPointSources,
+} from "../../../src/domains/knowledge";

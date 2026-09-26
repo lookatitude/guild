@@ -5,4 +5,4 @@
  * module layer owns it; this shim keeps the stable scripts/lib import path.
  */
 
-export * from "../../src/modules/lifecycle/workflows/run-record-validate";
+export * from "../../src/domains/lifecycle/run-record-validate";

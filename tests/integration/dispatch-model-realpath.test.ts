@@ -31,16 +31,16 @@ import * as path from "path";
 import {
   deriveResolveInputsFromM0Evidence,
   planProductionDispatchModel,
-} from "../../src/modules/dispatch/workflows/task-assignment-v2";
-import { persistInspectionReport } from "../../src/modules/capability/workflows/inspection-persist";
+} from "../../src/domains/dispatch/task-assignment-v2";
+import { persistInspectionReport } from "../../src/domains/config/inspection-persist";
 import {
   buildModelInspection,
   MODEL_INSPECTION_SCHEMA,
-} from "../../src/modules/capability/workflows/model-inspect";
+} from "../../src/domains/config/model-inspect";
 import {
   loadVerifiedM0Reports,
   ROUTING_FLAG_DEFAULTS,
-} from "../../src/modules/capability/workflows/routing-rollout";
+} from "../../src/domains/config/routing-rollout";
 // T8R/F3: the run-identity artifacts a real run owns (frozen session context +
 // content-addressed catalog cache entry) are seeded through the SAME key
 // builder production reads with — a hand-picked filename would prove nothing.
@@ -48,12 +48,12 @@ import {
   createCacheKey,
   MODEL_CATALOG_SCHEMA_VERSION,
   modelCatalogCacheDir,
-} from "../../src/modules/capability/workflows/catalog-cache";
-import { loadRunBinding, mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
-import { sessionBindingPath, type SessionBinding } from "../../src/modules/config/workflows/session-binding";
-import { selfReferentialHash } from "../../src/modules/teams/workflows/canonical-hash";
-import { recordDecision, writeDecision } from "../../src/modules/teams/workflows/team-decision";
-import { composeProposal, writeProposal } from "../../src/modules/teams/workflows/team-proposal";
+} from "../../src/domains/config/catalog-cache";
+import { loadRunBinding, mintRunBinding } from "../../src/domains/lifecycle/run-binding";
+import { sessionBindingPath, type SessionBinding } from "../../src/domains/config/session-binding";
+import { selfReferentialHash } from "../../src/domains/teams/canonical-hash";
+import { recordDecision, writeDecision } from "../../src/domains/teams/team-decision";
+import { composeProposal, writeProposal } from "../../src/domains/teams/team-proposal";
 import { createExactClaudePluginFixture } from "../../scripts/__tests__/fixtures/exact-claude-plugin-fixture";
 
 const SESSION_CONTEXT_SCHEMA = "guild.session_context.v1";

@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { CapabilityResolverMode } from "../../../src/modules/config";
-import { planModeTransition } from "../../../src/modules/capability/workflows/resolver-mode";
-import { checkContained, isRefused, writeContainedFile } from "../../../src/modules/kernel/workflows/path-containment";
+import type { CapabilityResolverMode } from "../../../src/domains/config";
+import { planModeTransition } from "../../../src/domains/config/resolver-mode";
+import { checkContained, isRefused, writeContainedFile } from "../../../src/domains/kernel/path-containment";
 import {
   FEATURE_GATE_REGISTRY_SCHEMA,
   FEATURE_GATE_RELPATH,

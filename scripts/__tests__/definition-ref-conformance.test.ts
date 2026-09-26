@@ -5,7 +5,7 @@
  *
  * `guild.project_definition_ref.v1` is declared once in
  * `scripts/lib/core/contracts/project-definition-ref.ts` and MIRRORED STRUCTURALLY as
- * `DefinitionRefLike` in `src/modules/dispatch/workflows/execution-transport-ports.ts`.
+ * `DefinitionRefLike` in `src/domains/dispatch/execution-transport-ports.ts`.
  * The duplication is deliberate and correct: that module owns a public transport
  * boundary and stays free of contract imports (BR-04 / MH-01A), so it describes the
  * shape it carries rather than importing it.
@@ -29,10 +29,7 @@ import {
   validateProjectDefinitionRefV1,
   type ProjectDefinitionRefV1,
 } from "../lib/core/contracts/project-definition-ref";
-import {
-  portHonoredInjection,
-  type DefinitionRefLike,
-} from "../../src/modules/dispatch/workflows/execution-transport-ports";
+import { portHonoredInjection, type DefinitionRefLike } from "../../src/domains/dispatch";
 
 const H = (c: string) => `sha256:${c.repeat(64)}`;
 const IDENT = (c: string) => c.repeat(64);

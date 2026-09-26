@@ -5,4 +5,4 @@
  * move internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/modules/distribution/workflows/parity-contract";
+export * from "../../src/domains/distribution/parity-contract";

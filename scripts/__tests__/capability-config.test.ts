@@ -385,7 +385,7 @@ describe("S5 — UI metadata (CI-gated by config-ui-metadata-coverage.test.ts)",
 describe("S5 codex-round — the RUNTIME resolver must honor the block (BLOCKER)", () => {
   // The schema, the CLI loader and the UI all knew about `capability`, but the
   // resolver every runtime consumer actually reads — settings-resolver, backed by
-  // src/modules/config/workflows/settings-reader.ts — has its OWN closed TIER1 key
+  // src/domains/config/settings-reader.ts — has its OWN closed TIER1 key
   // set and its own ResolvedConfig. It omitted `capability`, so a project that
   // configured `resolver_mode: "strict"` silently resolved to the shipped default.
   // Config that cannot be read is config that does not exist.

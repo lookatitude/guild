@@ -29,45 +29,16 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import {
-  gateM2,
-  readRoutingFlags,
-  rollbackV2Routing,
-  ROUTING_FLAG_DEFAULTS,
-  type M2EvidenceRefs,
-  type RoutingFlags,
-} from "../../src/modules/capability/workflows/routing-rollout";
-import {
-  confirmationKeyForReceipt,
-  persistShadowArtifacts,
-  planDispatchModel,
-  runShadowResolution,
-  selectDispatchModel,
-  servedEvidenceFromReceipt,
-  SHADOW_COMPARISON_SCHEMA,
-} from "../../src/modules/dispatch/workflows/shadow-routing";
-import { buildModelInspection } from "../../src/modules/capability/workflows/model-inspect";
-import { persistInspectionReport } from "../../src/modules/capability/workflows/inspection-persist";
-import {
-  claimPrompt,
-  createRunLocalState,
-  recordDecision,
-} from "../../src/modules/capability/workflows/confirmation-arbiter";
-import {
-  finalizeReceipt,
-  recordAttempt,
-  resolve as resolveModel,
-  type ResolveInputs,
-} from "../../src/modules/capability/workflows/model-resolver";
-import {
-  BindingRejectedError,
-  mintRunBinding,
-} from "../../src/modules/lifecycle/workflows/run-binding";
-import {
-  selfReferentialHash,
-} from "../../src/modules/teams/workflows/canonical-hash";
-import { planReviewPairing } from "../../src/modules/review/workflows/review-pairing";
-import type { SpecialistDispatchContract } from "../../src/modules/dispatch/workflows/specialist-contract";
+import { gateM2, readRoutingFlags, rollbackV2Routing, ROUTING_FLAG_DEFAULTS, type M2EvidenceRefs, type RoutingFlags } from "../../src/domains/config";
+import { confirmationKeyForReceipt, persistShadowArtifacts, planDispatchModel, runShadowResolution, selectDispatchModel, servedEvidenceFromReceipt, SHADOW_COMPARISON_SCHEMA } from "../../src/domains/dispatch";
+import { buildModelInspection } from "../../src/domains/config";
+import { persistInspectionReport } from "../../src/domains/config";
+import { claimPrompt, createRunLocalState, recordDecision } from "../../src/domains/config";
+import { finalizeReceipt, recordAttempt, resolve as resolveModel, type ResolveInputs } from "../../src/domains/config";
+import { BindingRejectedError, mintRunBinding } from "../../src/domains/lifecycle";
+import { selfReferentialHash } from "../../src/domains/teams";
+import { planReviewPairing } from "../../src/domains/review";
+import type { SpecialistDispatchContract } from "../../src/domains/dispatch";
 
 // ── Shared fixtures ──────────────────────────────────────────────────────────
 

@@ -85,7 +85,7 @@ describe("C2 session_context §5 — run binding + sentinel demotion", () => {
   });
 
   describe("run-binding core (T3 — mint/verify/fail-closed writers)", () => {
-    const BINDING_MODULE = "src/modules/lifecycle/workflows/run-binding";
+    const BINDING_MODULE = "src/domains/lifecycle/run-binding";
 
     test("FAILING-TODAY: run-binding module exists with mint/verify surface", () => {
       const mod = requireContractModule(BINDING_MODULE, "T3-session-identity-binding");

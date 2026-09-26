@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/guild-trace-events";
-import * as moduleImpl from "../../src/modules/telemetry/workflows/guild-trace-events";
+import * as moduleImpl from "../../src/domains/telemetry/guild-trace-events";
 
 describe("guild-trace-events compatibility shim", () => {
   test("scripts/lib/guild-trace-events re-exports src/modules/telemetry", () => {
@@ -23,11 +23,11 @@ describe("guild-trace-events compatibility shim", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/guild-trace-events.ts"), "utf8");
     const modulePath = fs.readFileSync(
-      path.join(repoRoot, "src/modules/telemetry/workflows/guild-trace-events.ts"),
+      path.join(repoRoot, "src/domains/telemetry/guild-trace-events.ts"),
       "utf8",
     );
 
-    expect(oldPath).toMatch(/src\/modules\/telemetry\/workflows\/guild-trace-events/);
+    expect(oldPath).toMatch(/src\/domains\/telemetry\/guild-trace-events/);
     expect(oldPath).not.toMatch(/export\s+function\s+validateRecallEvent/);
     expect(modulePath).toMatch(/export\s+function\s+validateRecallEvent/);
     expect(modulePath).toMatch(/export\s+function\s+makeSecurityDecisionEvent/);

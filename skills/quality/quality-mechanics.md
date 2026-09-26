@@ -72,7 +72,7 @@ P6-quality-002`.*
 *`P6-quality-003` deliverable.*
 
 1. **Composer-derived, signal-gated panel.** The trail is the station composer's
-   **`qa` station `advisory_panel`** (SoT: `src/modules/teams/workflows/station-composer.ts`
+   **`qa` station `advisory_panel`** (SoT: `src/domains/teams/station-composer.ts`
    `STATION_POLICY.qa.advisory_panel`, resolved by `composeStationTeam`) — no longer a
    hardcoded fixed pair. Producer `qa-test-strategy` (matches the composer); challengers
    `security` (BASELINE — always present, the safety floor) + `architect` (GATED — present

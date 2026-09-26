@@ -16,8 +16,8 @@
 
 import { requireContractModule, selfRefHash, seededRng, rngInt } from "./_helpers";
 
-const DECISION_MODULE = "src/modules/teams/workflows/team-decision";
-const SCHEDULE_MODULE = "src/modules/teams/workflows/team-schedule";
+const DECISION_MODULE = "src/domains/teams/team-decision";
+const SCHEDULE_MODULE = "src/domains/teams/team-schedule";
 const LANE = "T2b-unbounded-team-composer";
 
 function referenceProposal(): Record<string, unknown> {

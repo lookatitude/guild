@@ -31069,7 +31069,7 @@ var StdioServerTransport = class {
   }
 };
 
-// src/modules/kernel/workflows/module-manifest.ts
+// src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "commands",
   "skills",
@@ -31079,10 +31079,10 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "scripts"
 ]);
 
-// src/modules/kernel/workflows/identifier-tokenize.ts
+// src/domains/kernel/identifier-tokenize.ts
 var TOKEN_RE = /[A-Za-z0-9]+/g;
 
-// src/modules/kernel/workflows/sealed-collections.ts
+// src/domains/kernel/sealed-collections.ts
 function regExpWritesLastIndex(re) {
   return re.global || re.sticky;
 }
@@ -31170,7 +31170,7 @@ function frozenList(items, options = {}) {
   return deepFreeze(items.slice(), options);
 }
 
-// src/modules/kernel/workflows/path-containment.ts
+// src/domains/kernel/path-containment.ts
 var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "root-unresolvable",
   "no-existing-ancestor",
@@ -31183,7 +31183,7 @@ var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "destination-moved"
 ]);
 
-// src/modules/kernel/workflows/runtime-tree-guard.ts
+// src/domains/kernel/runtime-tree-guard.ts
 var RUNTIME_SUBTREE_SEGMENTS = sealSet(
   [
     "skills",
@@ -31198,7 +31198,7 @@ var RUNTIME_SUBTREE_SEGMENTS = sealSet(
   "RUNTIME_SUBTREE_SEGMENTS"
 );
 
-// src/modules/kernel/workflows/tier-bus.ts
+// src/domains/kernel/tier-bus.ts
 var BUS_TIERS = frozenList(["T0", "T1", "T2"]);
 var LEAD_ROLE_IDS = frozenList(["team-lead", "lead", "orchestrator"]);
 var TIER_BUS_CONTRACT = deepFreeze({
@@ -31208,7 +31208,7 @@ var TIER_BUS_CONTRACT = deepFreeze({
   tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
 });
 
-// src/modules/state/workflows/frontmatter.ts
+// src/domains/state/frontmatter.ts
 var OPEN_FENCE = /^---[ \t]*\r?\n/;
 var CLOSE_FENCE = /\r?\n---[ \t]*(?:\r?\n|$)/;
 function splitFrontmatter(content) {
@@ -31222,7 +31222,7 @@ function splitFrontmatter(content) {
   return { frontmatter, body };
 }
 
-// src/modules/knowledge/workflows/wiki-frontmatter-contract.ts
+// src/domains/knowledge/wiki-frontmatter-contract.ts
 var WIKI_PAGE_TYPES = Object.freeze([
   "context",
   "standard",
@@ -31249,7 +31249,7 @@ var WIKI_FRONTMATTER_FIELDS = Object.freeze([
   "sensitivity"
 ]);
 
-// src/modules/knowledge/workflows/bm25.ts
+// src/domains/knowledge/bm25.ts
 function tokenize(s) {
   const out = [];
   const m = s.toLowerCase().match(TOKEN_RE);

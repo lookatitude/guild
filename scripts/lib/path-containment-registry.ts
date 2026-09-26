@@ -14,7 +14,7 @@
  *   - `scripts/learn/extract-structural.ts`     (`assertContained`, same climb)
  *   - `scripts/lib/roster.ts`                   (the same inline climb, THREE times)
  *   - `scripts/learn/lib/similarity.ts`         (`resolveUnderRoot`, leaf-only)
- *   - `src/modules/teams/workflows/station-signals.ts` (the full pre/post pairing)
+ *   - `src/domains/teams/station-signals.ts` (the full pre/post pairing)
  *   - plus the `resources/` MIRROR of each of the above
  *
  * Six of those climbed with `existsSync`, which follows symlinks — so six copies
@@ -85,7 +85,7 @@ export interface ContainmentSite {
  * bounding a write, and the rail's own `registration-without-site` rule is what
  * forced this note rather than a comfortable-looking waiver:
  *
- *   - `src/modules/telemetry/workflows/receipt-journal.ts` canonicalizes a journal
+ *   - `src/domains/telemetry/receipt-journal.ts` canonicalizes a journal
  *     path for LOCK IDENTITY (two names for one file must take one lock). It is
  *     not asking whether a write is contained.
  *   - `scripts/lib/update-check.ts` realpaths the plugin root to IDENTIFY the
@@ -97,7 +97,7 @@ export interface ContainmentSite {
  */
 export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
   Object.freeze({
-    path: "src/modules/kernel/workflows/path-containment.ts",
+    path: "src/domains/kernel/path-containment.ts",
     status: "home",
     note: "THE primitive. Kernel is the substrate module — placing it in any of the four discovering modules (capability, learning, teams, distribution) would make it that module's property and re-create the problem it solves.",
   }),
@@ -132,12 +132,12 @@ export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
     note: "VARIANT 3's production adoption. A symlinked hooks/node_modules baked out-of-package paths into 66 committed bundles; this rail found it only from the fingerprint left behind. It now asks the primitive up front, with `policy: \"physical\"`. The esbuild METAFILE paths it checks afterwards are recorded strings with nothing on disk to resolve, and are deliberately left alone.",
   }),
   Object.freeze({
-    path: "src/modules/lifecycle/workflows/run-lifecycle.ts",
+    path: "src/domains/lifecycle/run-lifecycle.ts",
     status: "adopted",
     note: "THE TENTH HOME, and the rail found it — not a human sweep. Its `assertContained` was PURELY LEXICAL (path.resolve + startsWith(base + sep)), guarding a mkdirSync + write into `.guild/runs`: a symlinked runs directory walked straight through it while it reported success. Its own docstring said it mirrored a further copy in `promote-upstream.ts`. Now `policy: \"physical\"`, since a run tree whose realpath is load-bearing provenance must be physically real; the strict-subdirectory half stays local because containment permits equality.",
   }),
   Object.freeze({
-    path: "src/modules/workspace/workflows/promote-upstream.ts",
+    path: "src/domains/state/promote-upstream.ts",
     status: "adopted",
     note: "THE ELEVENTH HOME — the one run-lifecycle.ts named in its own docstring (\"mirrors the containment assertion in promote-upstream.ts\") and that the rail could not see, because this copy was INLINE rather than factored into a named helper. Purely lexical, guarding a mkdirSync into `.guild/runs`. Now `prepareContainedWrite` with `policy: \"physical\"`, which replaces the bare mkdir too; the strict-subdirectory rule stays local because containment permits equality.",
   }),
@@ -147,7 +147,7 @@ export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
     note: "WAIVER: its boolean-returning path helper classifies LEAK CANDIDATES for a read-only audit — a verdict about whether a file is exposed, not about whether a write is contained. There is no root-bounded write in this file. Unlike the two waivers this registry rejected earlier, this one has something to feel it: the scanner DOES see the site, so `registration-without-site` keeps the waiver honest.",
   }),
   Object.freeze({
-    path: "src/modules/teams/workflows/station-signals.ts",
+    path: "src/domains/teams/station-signals.ts",
     status: "adopted",
     note: "Had already rebuilt the whole pre/post pairing locally, in a comment saying it was doing so 'without widening the shared helper's contract'. Now a caller, with `policy: \"physical\"` preserving its stricter stance.",
   }),
@@ -197,24 +197,24 @@ export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
     note: "WAIVER: activated-host capture owns a stricter multi-file evidence transaction inside a process-created private stage: nofollow regular-file reads, exclusive creation, descriptor-bound executable copies, pre/post package and consumer snapshots, atomic directory rename, and directory fsync. Its path-relative checks classify the Codex cache/workspace separation rule; replacing the transaction with the shared single-file bounded writer would discard the atomic triple-publication and sealed-runtime guarantees. Adversarial tests pin symlink refusal, package/consumer drift, partial-write rollback, and durability failures.",
   }),
   Object.freeze({
-    path: "src/modules/dispatch/workflows/task-assignment-v2.ts",
+    path: "src/domains/dispatch/task-assignment-v2.ts",
     status: "adopted",
     note: "TaskCell assignment, attempt, instance, and acknowledgment reads/writes use the shared physical containment primitive so a symlinked run-tree channel cannot escape the project.",
   }),
   Object.freeze({
-    path: "src/modules/telemetry/workflows/task-cell-telemetry.ts",
+    path: "src/domains/telemetry/task-cell-telemetry.ts",
     status: "adopted",
     note: "TaskCell telemetry and usage directories are created only through the shared physical prepareContainedWrite pairing.",
   }),
   Object.freeze({
-    path: "src/modules/telemetry/workflows/run-analysis.ts",
+    path: "src/domains/telemetry/run-analysis.ts",
     status: "waived",
     note: "WAIVER: the analyzer intentionally owns a stricter transactional containment layer: symlink-refusing input walks, O_EXCL temporary files, atomic rename, inode-owned locks, and a validated multi-file recovery journal. Replacing it with the single-file primitive would discard transaction and lock guarantees; adversarial analyzer tests pin escape, symlink, journal, and recovery behavior.",
   }),
 ]);
 
 /** Repo-relative path of the one file that may hold `status: "home"`. */
-export const CONTAINMENT_HOME = "src/modules/kernel/workflows/path-containment.ts";
+export const CONTAINMENT_HOME = "src/domains/kernel/path-containment.ts";
 
 /**
  * Directories the scanner sweeps. `resources/` mirrors live UNDER these, and are

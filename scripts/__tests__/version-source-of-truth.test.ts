@@ -36,7 +36,7 @@ import {
   renderClaudeMarketplacePackage,
   renderClaudePluginPackage,
   renderCodexPluginJson,
-} from "../../src/modules/distribution/workflows/per-host-packaging";
+} from "../../src/domains/distribution/per-host-packaging";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "..", "..");
 const MARKETPLACE = path.join(PLUGIN_ROOT, ".claude-plugin", "marketplace.json");

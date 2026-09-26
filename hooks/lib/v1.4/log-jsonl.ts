@@ -1,1 +1,1 @@
-export * from "../../../src/modules/lifecycle/workflows/event-log.js";
+export * from "../../../src/domains/lifecycle/event-log.js";

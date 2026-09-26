@@ -70,7 +70,7 @@ import {
   type HostRuntimeBinding,
   type HostRuntimeBindingDisposition,
   type HostRuntimeBindingResult,
-} from "../src/modules/host-runtime";
+} from "../src/adapters";
 // W4 D1: registry-bridge predicate replaces `plan.host === "claude"` literal.
 import { isClaudeCli } from "./lib/capability/rank";
 import type { HostKind } from "./lib/host-types";

@@ -17,7 +17,7 @@
  */
 
 import { spawnSync } from "child_process";
-import { hostCapabilityCacheFile } from "../../src/modules/state";
+import { hostCapabilityCacheFile } from "../../src/domains/state";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";

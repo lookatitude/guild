@@ -1,12 +1,92 @@
-export * from "./workflows/module-manifest";
-export * from "./workflows/yaml-loader";
-export * from "./workflows/identifier-tokenize";
-export * from "./workflows/sealed-collections";
-export * from "./workflows/path-containment";
-// U-RSI (T11): the AC37 no-self-edit guard. Here, not in `templates`, because every
-// evolve writer asks the same question and a second copy is a second place to forget
-// a newly-forbidden tree.
-export * from "./workflows/runtime-tree-guard";
-// U-TIER (T08): the T0/T1/T2 bus contract. Here rather than in `dispatch` so the
-// communication domain's artifact bus can enforce it without a dependency cycle.
-export * from "./workflows/tier-bus";
+/**
+ * Transitional re-export shim (T12 fold, KTD36).
+ *
+ * The implementation moved once into src/domains/kernel/. This file republishes the exact
+ * pre-fold public surface of src/modules/kernel so existing importers keep working;
+ * T16 deletes it. New code imports src/domains/kernel directly.
+ */
+
+export {
+  BUS_TIERS,
+  CONTAINMENT_REFUSAL_CODES,
+  LEAD_ROLE_IDS,
+  MODULE_MANIFEST_SCHEMA_VERSION,
+  OWNED_INVENTORY_CATEGORIES,
+  RUNTIME_SUBTREE_SEGMENTS,
+  TIER_BUS_CONTRACT,
+  TOKEN_RE,
+  assertContained,
+  assertNotRuntimeTree,
+  authenticateBusTier,
+  busAuthFailed,
+  busRefused,
+  busTierForRole,
+  busTierForTopic,
+  canonSegment,
+  canonicalizeRealPath,
+  checkBusMessage,
+  checkBusPublish,
+  checkContained,
+  deepFreeze,
+  formatBoundaryValidation,
+  formatModuleHealthValidation,
+  formatOwnershipValidation,
+  freezeRegExpSafely,
+  frozenList,
+  isForbiddenRuntimeSubtree,
+  isRefused,
+  isSealedCollection,
+  isWithin,
+  loadModuleManifests,
+  loadYamlApi,
+  ownersFor,
+  prepareContainedWrite,
+  regExpWritesLastIndex,
+  sealMap,
+  sealSet,
+  sealedCollectionValues,
+  splitCamel,
+  tokenizeIdentifierAware,
+  validateModuleBoundaries,
+  validateModuleHealth,
+  validateModuleOwnership,
+  writeContainedFile,
+} from "../../domains/kernel";
+export type {
+  BusAuthResult,
+  BusDefect,
+  BusIdentity,
+  BusIdentityFacts,
+  BusMessage,
+  BusTier,
+  BusVerdict,
+  ContainedWriteResult,
+  ContainmentOk,
+  ContainmentOptions,
+  ContainmentPolicy,
+  ContainmentRefusalCode,
+  ContainmentRefused,
+  ContainmentResult,
+  DeepFreezeOptions,
+  ModuleBoundaryValidationResult,
+  ModuleBoundaryViolation,
+  ModuleHealthFinding,
+  ModuleHealthFindingReason,
+  ModuleHealthSummary,
+  ModuleHealthValidationResult,
+  ModuleImplementationMode,
+  ModuleInventory,
+  ModuleInventoryCategory,
+  ModuleInventoryEntry,
+  ModuleKind,
+  ModuleManifest,
+  ModuleOwns,
+  ModuleValidationResult,
+  OwnedInventoryCategory,
+  OwnershipFinding,
+  OwnershipValidationResult,
+  PrepareResult,
+  PreparedWrite,
+  RegExpFreezePolicy,
+  YamlApi,
+} from "../../domains/kernel";

@@ -93,7 +93,7 @@ import {
 // Rework F1 mint-origin seam (see mintOriginBindingRef below) — NOT an
 // authorization-recovery import: authorizeHookWrite never touches it.
 import { loadRunBinding } from "../../scripts/lib/run-binding.js";
-import type { HostKind } from "../../src/modules/host-runtime/workflows/host-types.js";
+import type { HostKind } from "../../src/adapters/host-types.js";
 import { baselineBinding, snapshotTreeHashes } from "../../scripts/lib/capability/profile-emit.js";
 import {
   appendReceipt,
@@ -101,8 +101,8 @@ import {
   makeReceiptInput,
   readCheckpointState,
   scanReceiptJournal,
-} from "../../src/modules/telemetry/workflows/receipt-journal.js";
-import { reconcileReceiptJournal } from "../../src/modules/telemetry/workflows/receipt-reconcile.js";
+} from "../../src/domains/telemetry/receipt-journal.js";
+import { reconcileReceiptJournal } from "../../src/domains/telemetry/receipt-reconcile.js";
 
 import { writeCheckpoint } from "../emit-learning-checkpoint.js";
 import { PHASE_TOKEN_TO_CHECKPOINT } from "./learning-backstop.js";
@@ -292,7 +292,7 @@ export function resolveRunIdForTrace(
  * it by guessing (§3). This retires the pre-contract behavior where
  * unrecognized values resolved to claude.
  */
-// The full canonical HostKind union (src/modules/host-runtime/workflows/
+// The full canonical HostKind union (src/adapters/
 // host-types.ts) — `satisfies` keeps this list from drifting off the union.
 const KNOWN_HOST_KINDS = [
   "claude",

@@ -70,12 +70,12 @@ guide to getting set up, understanding the repo layout, and submitting changes.
 - `commands/` — the v2 flat-token command files (`/guild:<verb>`).
 - `hooks/` — Claude Code hook `.ts` sources + `hooks.json` manifest, plus the
   committed esbuild bundles under `hooks/dist/` the host actually runs.
-- `src/modules/` — the module source-of-truth layer: each module owns its
-  workflow code plus a `resources/` mirror that generated host packages copy
-  from. `scripts/lib/*` are thin re-export shims over these workflows; the
-  module-resource sync + drift gates keep `scripts/lib` ↔ `resources` ↔ `dist`
-  byte-identical (never hand-edit a `resources/` or `dist/` mirror — edit the
-  live source and let the sync propagate).
+- `src/domains/` — the twelve domains, each with one public `index.ts`; nothing
+  outside a domain may reach a sibling file. `src/adapters/` holds the host family
+  maps and is not a thirteenth domain. `src/modules/` is now re-export shims only
+  (T16 deletes them) and `scripts/lib/*` likewise — edit the domain file.
+  Generated host packages are a projection of the live surface, so there is no
+  `resources/` mirror to keep in sync; never hand-edit a `dist/` package.
 - `scripts/` — tooling (evolve loop, flip report, shadow mode,
   description optimizer, rollback walker, trace summarizer,
   agent-team launcher, docs-hygiene scanner, dot-guild migrator).

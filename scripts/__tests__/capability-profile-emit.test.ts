@@ -32,8 +32,8 @@ import {
   type DerivedFacts,
 } from "../lib/capability/profile-emit";
 import { validateProjectCapabilityProfileV1 } from "../lib/core/contracts/project-capability-profile";
-import { appendReceipt, makeReceiptInput } from "../../src/modules/telemetry/workflows/receipt-journal";
-import { CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, capabilityRunStartIdentityHash } from "../../src/modules/lifecycle/workflows/run-lifecycle";
+import { appendReceipt, makeReceiptInput } from "../../src/domains/telemetry";
+import { CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, capabilityRunStartIdentityHash } from "../../src/domains/lifecycle";
 
 const CLI = path.join(__dirname, "..", "capability-profile.ts");
 const RUN_ID = "run-20260801-120000-cap-profile";

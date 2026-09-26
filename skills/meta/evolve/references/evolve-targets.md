@@ -10,7 +10,7 @@ type: meta
 Every evolve names exactly one target from a closed set of eleven. The target decides
 the home, and the home decides whether anything is written at all.
 
-The enum is sealed in `src/modules/evolution/workflows/evolve-targets.ts`. A twelfth
+The enum is sealed in `src/domains/evolve/evolve-targets.ts`. A twelfth
 target is a code change, not a config key.
 
 ## The eleven

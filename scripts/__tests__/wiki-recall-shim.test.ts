@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../lib/wiki-recall";
-import * as moduleImpl from "../../src/modules/context/workflows/wiki-recall";
+import * as moduleImpl from "../../src/domains/knowledge/wiki-recall";
 
 describe("wiki-recall compatibility shim", () => {
   test("scripts/lib/wiki-recall re-exports src/modules/context", () => {
@@ -19,9 +19,9 @@ describe("wiki-recall compatibility shim", () => {
   test("legacy path stays a thin public and CLI wrapper", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/wiki-recall.ts"), "utf8");
-    const modulePath = fs.readFileSync(path.join(repoRoot, "src/modules/context/workflows/wiki-recall.ts"), "utf8");
+    const modulePath = fs.readFileSync(path.join(repoRoot, "src/domains/knowledge/wiki-recall.ts"), "utf8");
 
-    expect(oldPath).toMatch(/src\/modules\/context\/workflows\/wiki-recall/);
+    expect(oldPath).toMatch(/src\/domains\/knowledge\/wiki-recall/);
     expect(oldPath).not.toMatch(/export\s+function\s+wikiRecall/);
     expect(oldPath).not.toMatch(/function\s+main/);
     expect(oldPath).toMatch(/runWikiRecallCli\(\)/);

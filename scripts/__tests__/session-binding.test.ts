@@ -23,25 +23,10 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import {
-  bindSession,
-  detectSession,
-  isUnknownHost,
-  readSessionBinding,
-} from "../../src/modules/config/workflows/session-binding";
-import {
-  PolicyRejectedError,
-  assertPolicyWrite,
-  isPolicyKey,
-} from "../../src/modules/config/workflows/policy-keys";
-import { resolvePolicy } from "../../src/modules/config/workflows/policy-resolver";
-import {
-  DIALECT_TOKEN_BUDGET,
-  approxTokens,
-  composePrompt,
-  loadPromptExtensions,
-  PromptRejectedError,
-} from "../../src/modules/prompting/workflows/compose-prompt";
+import { bindSession, detectSession, isUnknownHost, readSessionBinding } from "../../src/domains/config";
+import { PolicyRejectedError, assertPolicyWrite, isPolicyKey } from "../../src/domains/config";
+import { resolvePolicy } from "../../src/domains/config";
+import { DIALECT_TOKEN_BUDGET, approxTokens, composePrompt, loadPromptExtensions, PromptRejectedError } from "../../src/domains/config";
 
 const CONFIG_CMD = path.resolve(__dirname, "..", "config-cmd.ts");
 

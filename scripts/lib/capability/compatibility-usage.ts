@@ -5,4 +5,4 @@
  * move internals without breaking existing imports from scripts/lib/capability/*.
  */
 
-export * from "../../../src/modules/capability/workflows/compatibility-usage";
+export * from "../../../src/domains/config/compatibility-usage";

@@ -2,14 +2,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import {
-  appendTaskCellLifecycleEvent,
-  importTaskCellUsageFromTrace,
-  readTaskCellLifecycleEvents,
-  recordTaskCellUsage,
-  summarizeTaskCellTelemetry,
-  type TaskCellLifecycleEventInput,
-} from "../../src/modules/telemetry/workflows/task-cell-telemetry";
+import { appendTaskCellLifecycleEvent, importTaskCellUsageFromTrace, readTaskCellLifecycleEvents, recordTaskCellUsage, summarizeTaskCellTelemetry, type TaskCellLifecycleEventInput } from "../../src/domains/telemetry";
 
 function event(
   event_id: string,

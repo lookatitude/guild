@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { buildSync } from "esbuild";
 
-import { NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS } from "../../src/modules/lifecycle";
+import { NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS } from "../../src/domains/lifecycle";
 import { snapshotMigrationRuntimePackage } from "../lib/capability/migration-evidence";
 import { buildHostPackages } from "../build-host-packages";
 

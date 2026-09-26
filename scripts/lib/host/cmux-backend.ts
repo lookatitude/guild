@@ -7,7 +7,7 @@
  * operator. A partial launch is rolled back synchronously and reported.
  */
 
-import { buildPrompt } from "../../../src/modules/prompting/workflows/team-prompt";
+import { buildPrompt } from "../../../src/domains/config/team-prompt";
 import type {
   AdapterResolver,
   GuildDispatchDescriptor,

@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "../index-migrate";
-import * as moduleImpl from "../../src/modules/migrations/workflows/index-migrate";
+import * as moduleImpl from "../../src/domains/state/index-migrate";
 
 describe("index-migrate compatibility shim", () => {
   test("scripts/index-migrate re-exports src/modules/migrations", () => {
@@ -15,11 +15,11 @@ describe("index-migrate compatibility shim", () => {
     const repoRoot = path.resolve(__dirname, "../..");
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/index-migrate.ts"), "utf8");
     const modulePath = fs.readFileSync(
-      path.join(repoRoot, "src/modules/migrations/workflows/index-migrate.ts"),
+      path.join(repoRoot, "src/domains/state/index-migrate.ts"),
       "utf8",
     );
 
-    expect(oldPath).toMatch(/src\/modules\/migrations\/workflows\/index-migrate/);
+    expect(oldPath).toMatch(/src\/domains\/state\/index-migrate/);
     expect(oldPath).not.toMatch(/export\s+function\s+runMigrations/);
     expect(oldPath).toMatch(/runIndexMigrateCli\(\)/);
     expect(modulePath).toMatch(/export\s+function\s+runMigrations/);

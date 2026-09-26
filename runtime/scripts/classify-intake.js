@@ -30,7 +30,7 @@ __export(classify_intake_exports, {
 });
 module.exports = __toCommonJS(classify_intake_exports);
 
-// src/modules/kernel/workflows/module-manifest.ts
+// src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "commands",
   "skills",
@@ -40,7 +40,7 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "scripts"
 ]);
 
-// src/modules/kernel/workflows/sealed-collections.ts
+// src/domains/kernel/sealed-collections.ts
 function regExpWritesLastIndex(re) {
   return re.global || re.sticky;
 }
@@ -128,7 +128,7 @@ function frozenList(items, options = {}) {
   return deepFreeze(items.slice(), options);
 }
 
-// src/modules/kernel/workflows/path-containment.ts
+// src/domains/kernel/path-containment.ts
 var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "root-unresolvable",
   "no-existing-ancestor",
@@ -141,7 +141,7 @@ var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "destination-moved"
 ]);
 
-// src/modules/kernel/workflows/runtime-tree-guard.ts
+// src/domains/kernel/runtime-tree-guard.ts
 var RUNTIME_SUBTREE_SEGMENTS = sealSet(
   [
     "skills",
@@ -156,7 +156,7 @@ var RUNTIME_SUBTREE_SEGMENTS = sealSet(
   "RUNTIME_SUBTREE_SEGMENTS"
 );
 
-// src/modules/kernel/workflows/tier-bus.ts
+// src/domains/kernel/tier-bus.ts
 var BUS_TIERS = frozenList(["T0", "T1", "T2"]);
 var LEAD_ROLE_IDS = frozenList(["team-lead", "lead", "orchestrator"]);
 var TIER_BUS_CONTRACT = deepFreeze({
@@ -166,7 +166,7 @@ var TIER_BUS_CONTRACT = deepFreeze({
   tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
 });
 
-// src/modules/intake/workflows/classify-intake.ts
+// src/domains/lifecycle/classify-intake.ts
 var THRESHOLD = 1;
 var W_STRONG_IDEA = 1;
 var W_OPENER = 0.6;
@@ -388,7 +388,7 @@ function runClassifyIntakeCli(argv = process.argv.slice(2)) {
     process.stdin.on("end", () => emit(buf));
   }
 }
-if (require.main === module) runClassifyIntakeCli();
+if (typeof module !== "undefined" && require.main === module && /^classify-intake\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) runClassifyIntakeCli();
 
 // scripts/lib/classify-intake.ts
 if (require.main === module) runClassifyIntakeCli();
