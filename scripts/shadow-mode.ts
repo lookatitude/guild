@@ -47,6 +47,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { loadRunEvents, RunEvent } from "./lib/run-events";
+import { readCompactHistory } from "../src/modules/evolution/workflows/compact-history";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -269,7 +270,14 @@ function evaluateRun(
 function formatReport(
   skillSlug: string,
   spec: ProposedSpec,
-  outcomes: ShadowOutcome[]
+  outcomes: ShadowOutcome[],
+  /**
+   * How many deltas this skill already carries in compact history (KTD48). Shadow
+   * mode reports it so the gate reads the divergence rate against a skill whose
+   * recent edits are visible — the retired design asked a per-version snapshot tree
+   * the same question.
+   */
+  recordedDeltas: number
 ): string {
   const totalPrompts = outcomes.reduce((a, o) => a + o.prompts, 0);
   const totalDivergences = outcomes.reduce((a, o) => a + o.divergences, 0);
@@ -284,6 +292,7 @@ function formatReport(
   lines.push(`total_prompts: ${totalPrompts}`);
   lines.push(`total_divergences: ${totalDivergences}`);
   lines.push(`divergence_rate: ${divergenceRate.toFixed(3)}`);
+  lines.push(`recorded_deltas: ${recordedDeltas}`);
   lines.push("---");
   lines.push("");
   lines.push(`# Shadow-mode report — ${skillSlug}`);
@@ -363,7 +372,15 @@ function main(): void {
     outcomes.push(evaluateRun(r, events, spec, skill!));
   }
 
-  const report = formatReport(skill!, spec, outcomes);
+  // A history that cannot be read is reported as 0, never as a crash: shadow mode is
+  // gate EVIDENCE, and losing the whole report over a bookkeeping file is the wrong trade.
+  let recordedDeltas = 0;
+  try {
+    recordedDeltas = readCompactHistory(skill!, { cwd }).entries.length;
+  } catch {
+    recordedDeltas = 0;
+  }
+  const report = formatReport(skill!, spec, outcomes, recordedDeltas);
   const outFile = path.join(
     cwd,
     ".guild",

@@ -616,7 +616,11 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // the evolve skill's revert pointer, and skills/meta/evolve/references/wiki-revert.md (KTD39).
   // ANTI-VACUITY: SC-W2-5, SC-W3-6 and check-surface-pins were RED on guild#197 CI against
   // the prior pins and named exactly commands/** and skills/**.
-  commands: "c42004c1286c413fd2742152e0e314d28b2c86f3",
+  // Re-ratified 2026-09-16 (T11 plugin-wide RSI): `maintain evolve --target=<enum>` and
+  // `maintain rollback` rows on commands/maintain.md, the evolve assembler + chapters
+  // (evolve-targets.md, rollback-skill.md, audit.md). ANTI-VACUITY: check-surface-pins,
+  // SC-W2-5 and SC-W3-6 were RED against the T10 pins before these values.
+  commands: "ecd95ee87f922d1ab9ba49326c2771f498e42058",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
   // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
@@ -638,7 +642,7 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified (codex G-lane round 6, lead fix): the evolve assembler's `wiki revert`
   // row no longer points at wiki-ingest.md (no revert handler there); it names the
   // pending harvest-journal inverse (R54) and stops. One row changed.
-  skills: "47e258a5dd797fbaa9449ebd21c054a62b55e2a9",
+  skills: "89c57815792032c93a0d1d88ab6ca98aeb996746",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

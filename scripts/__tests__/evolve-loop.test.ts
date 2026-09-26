@@ -3,7 +3,8 @@
  *
  * TDD for evolve-loop.ts — §11.2 top-level orchestration wrapper.
  * Verifies:
- *  - Happy: snapshots skills/meta/<slug>/ → .guild/skill-versions/<slug>/vN/.
+ *  - Happy: records the live body's baseline_sha256 in pipeline.md and writes NO
+ *    version tree (KTD48 — compact history replaced it).
  *  - Writes pipeline.md to .guild/evolve/<run-id>/.
  *  - Does NOT promote (stops before the gate).
  *  - Missing --skill → exit 1.
@@ -11,6 +12,7 @@
  */
 
 import { spawnSync } from "child_process";
+import * as crypto from "crypto";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
@@ -70,60 +72,33 @@ describe("evolve-loop.ts", () => {
       expect(exitCode).toBe(0);
     });
 
-    it("creates v1 snapshot in .guild/skill-versions/<slug>/", () => {
-      seedLiveSkill(tmpDir, "guild-brainstorm");
-      runScript([
-        "--skill",
-        "guild-brainstorm",
-        "--run-id",
-        "run-x",
-        "--cwd",
-        tmpDir,
-      ]);
-      const snap = path.join(
-        tmpDir,
-        ".guild",
-        "skill-versions",
-        "guild-brainstorm",
-        "v1",
-        "SKILL.md"
+    it("records the live body's baseline_sha256 in pipeline.md", () => {
+      const live = seedLiveSkill(tmpDir, "guild-brainstorm");
+      runScript(["--skill", "guild-brainstorm", "--run-id", "run-x", "--cwd", tmpDir]);
+      const pipeline = fs.readFileSync(
+        path.join(tmpDir, ".guild", "evolve", "run-x", "pipeline.md"),
+        "utf8"
       );
-      expect(fs.existsSync(snap)).toBe(true);
+      const expected = crypto
+        .createHash("sha256")
+        .update(fs.readFileSync(path.join(live, "SKILL.md"), "utf8"), "utf8")
+        .digest("hex");
+      expect(pipeline).toContain(`baseline_sha256: ${expected}`);
     });
 
-    it("increments version when prior snapshots exist", () => {
+    it("writes NO version tree — compact history replaced it (KTD48)", () => {
       seedLiveSkill(tmpDir, "guild-brainstorm");
-      // pre-seed v1
-      const pre = path.join(
-        tmpDir,
-        ".guild",
-        "skill-versions",
-        "guild-brainstorm",
-        "v1"
-      );
-      fs.mkdirSync(pre, { recursive: true });
-      fs.copyFileSync(
-        path.join(FIXTURES, "skill-v1", "SKILL.md"),
-        path.join(pre, "SKILL.md")
-      );
-
-      runScript([
-        "--skill",
-        "guild-brainstorm",
-        "--run-id",
-        "run-y",
-        "--cwd",
-        tmpDir,
-      ]);
-      const v2 = path.join(
-        tmpDir,
-        ".guild",
-        "skill-versions",
-        "guild-brainstorm",
-        "v2",
-        "SKILL.md"
-      );
-      expect(fs.existsSync(v2)).toBe(true);
+      runScript(["--skill", "guild-brainstorm", "--run-id", "run-y", "--cwd", tmpDir]);
+      const seen: string[] = [];
+      const walk = (dir: string) => {
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+          const abs = path.join(dir, e.name);
+          if (e.name === "skill-versions") seen.push(abs);
+          if (e.isDirectory()) walk(abs);
+        }
+      };
+      walk(tmpDir);
+      expect(seen).toEqual([]);
     });
 
     it("writes pipeline.md to .guild/evolve/<run-id>/", () => {
@@ -214,8 +189,11 @@ describe("evolve-loop.ts", () => {
 
       const { exitCode } = runScript(["--skill", "guild-quality", "--run-id", "run-x", "--cwd", tmpDir]);
       expect(exitCode).toBe(0);
-      const snap = path.join(tmpDir, ".guild", "skill-versions", "guild-quality", "v1", "SKILL.md");
-      expect(fs.existsSync(snap)).toBe(true);
+      const pipeline = fs.readFileSync(
+        path.join(tmpDir, ".guild", "evolve", "run-x", "pipeline.md"),
+        "utf8"
+      );
+      expect(pipeline).toMatch(/baseline_sha256: [0-9a-f]{64}/);
     });
 
     it("resolves a knowledge-tier slug (skills/knowledge/<slug>/SKILL.md)", () => {
@@ -225,8 +203,11 @@ describe("evolve-loop.ts", () => {
 
       const { exitCode } = runScript(["--skill", "wiki-ingest", "--run-id", "run-x", "--cwd", tmpDir]);
       expect(exitCode).toBe(0);
-      const snap = path.join(tmpDir, ".guild", "skill-versions", "wiki-ingest", "v1", "SKILL.md");
-      expect(fs.existsSync(snap)).toBe(true);
+      const pipeline = fs.readFileSync(
+        path.join(tmpDir, ".guild", "evolve", "run-x", "pipeline.md"),
+        "utf8"
+      );
+      expect(pipeline).toMatch(/baseline_sha256: [0-9a-f]{64}/);
     });
 
     it("a made-up future tier dir is picked up without any code change", () => {
@@ -265,7 +246,7 @@ describe("evolve-loop.ts", () => {
       );
     }
 
-    it("snapshots the .guild instance, not the plugin-tree baseline, when both exist", () => {
+    it("baselines the .guild instance, not the plugin-tree copy, when both exist", () => {
       // Plugin-tree baseline (stale) + a live .guild project instance (evolved).
       seedLiveSkill(tmpDir, "guild-brainstorm");
       seedGuildInstance(tmpDir, "guild-brainstorm", "GUILD-INSTANCE-LIVE");
@@ -280,19 +261,23 @@ describe("evolve-loop.ts", () => {
       ]);
       expect(exitCode).toBe(0);
 
-      const snap = fs.readFileSync(
-        path.join(tmpDir, ".guild", "skill-versions", "guild-brainstorm", "v1", "SKILL.md"),
-        "utf8"
-      );
-      // The snapshot must carry the .guild-instance marker, proving the project
-      // instance won over the plugin tree.
-      expect(snap).toContain("GUILD-INSTANCE-LIVE");
-
-      // pipeline.md records the resolved tier as "project".
+      // pipeline.md records the resolved tier as "project", and the baseline hashes
+      // the .guild instance body — proving the project instance won over the plugin tree.
       const pipeline = fs.readFileSync(
         path.join(tmpDir, ".guild", "evolve", "run-dh3", "pipeline.md"),
         "utf8"
       );
+      const instanceHash = crypto
+        .createHash("sha256")
+        .update(
+          fs.readFileSync(
+            path.join(tmpDir, ".guild", "skills", "guild-brainstorm", "SKILL.md"),
+            "utf8"
+          ),
+          "utf8"
+        )
+        .digest("hex");
+      expect(pipeline).toContain(`baseline_sha256: ${instanceHash}`);
       // plain substring (not a line-anchored key regex): pipeline.md is prose+
       // frontmatter; the comms-format policy reserves YAML-key extraction for
       // the shared js-yaml reader, and this assertion only needs presence.
@@ -312,16 +297,21 @@ describe("evolve-loop.ts", () => {
         tmpDir,
       ]);
       expect(exitCode).toBe(0);
-      const snap = path.join(
-        tmpDir,
-        ".guild",
-        "skill-versions",
-        "guild-brainstorm",
-        "v1",
-        "SKILL.md"
+      const pipeline = fs.readFileSync(
+        path.join(tmpDir, ".guild", "evolve", "run-dh3b", "pipeline.md"),
+        "utf8"
       );
-      expect(fs.existsSync(snap)).toBe(true);
-      expect(fs.readFileSync(snap, "utf8")).toContain("ONLY-GUILD-INSTANCE");
+      const instanceHash = crypto
+        .createHash("sha256")
+        .update(
+          fs.readFileSync(
+            path.join(tmpDir, ".guild", "skills", "guild-brainstorm", "SKILL.md"),
+            "utf8"
+          ),
+          "utf8"
+        )
+        .digest("hex");
+      expect(pipeline).toContain(`baseline_sha256: ${instanceHash}`);
     });
   });
 

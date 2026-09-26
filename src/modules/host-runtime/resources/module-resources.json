@@ -1332,7 +1332,7 @@
       "id": "projection:src/modules/kernel/index.ts",
       "source_path": "src/modules/kernel/index.ts",
       "resource_path": "resources/src/modules/kernel/index.ts",
-      "sha256": "ae8dc41c894634c18b5e13d2b0245c2a0c3d344f9a92f9fa22e5341492b73213",
+      "sha256": "d17e2f9d058deaf66d2b16b3c0d25a4e0385bbaaba276add0305f68e4b843609",
       "projection_dependency": true
     },
     {
@@ -1357,6 +1357,14 @@
       "source_path": "src/modules/kernel/workflows/path-containment.ts",
       "resource_path": "resources/src/modules/kernel/workflows/path-containment.ts",
       "sha256": "94aa6f35e8c85099fa293e824d3eb38d3f57fdc14845dfca31ce8b09c0b38e6f",
+      "projection_dependency": true
+    },
+    {
+      "category": "scripts",
+      "id": "projection:src/modules/kernel/workflows/runtime-tree-guard.ts",
+      "source_path": "src/modules/kernel/workflows/runtime-tree-guard.ts",
+      "resource_path": "resources/src/modules/kernel/workflows/runtime-tree-guard.ts",
+      "sha256": "f85047151f5f704db12a68099376ef77e5be16dcccb8e372512f26cd9db5e401",
       "projection_dependency": true
     },
     {
@@ -2060,7 +2068,7 @@
       "id": "projection:src/modules/state/workflows/storage-artifact-registry.ts",
       "source_path": "src/modules/state/workflows/storage-artifact-registry.ts",
       "resource_path": "resources/src/modules/state/workflows/storage-artifact-registry.ts",
-      "sha256": "e3db59d8b99a02be496cc921c5cf7e7e261581de82cedff2f1f95bbcce4eae6f",
+      "sha256": "ee80ed1a40cced7b9e6bb9aa18cc22ac127f9f0a7aa5e4ee6fb024b8985a36a6",
       "projection_dependency": true
     },
     {

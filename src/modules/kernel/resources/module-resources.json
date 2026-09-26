@@ -22,7 +22,7 @@
       "id": "SessionStart:update-check.js",
       "source_path": "hooks/dist/update-check.js",
       "resource_path": "resources/hooks/dist/update-check.js",
-      "sha256": "c95bb2f5c0e416fc205218f2e831ec256550a69424331d84b5c55433204aa8c0"
+      "sha256": "a3b8a6aef9379ff52a0b5daa243240a38c5480b1a945feab42fb850bdef038b2"
     },
     {
       "category": "hooks",
@@ -57,7 +57,7 @@
       "id": "lib/path-containment-registry",
       "source_path": "scripts/lib/path-containment-registry.ts",
       "resource_path": "resources/scripts/lib/path-containment-registry.ts",
-      "sha256": "60a8dd67094731ed30943ffd5899547629a51f21dc4fa3b610fed189fc00d654"
+      "sha256": "06044e5cb96ece07eb4ba9edae7ac42e9548e1970974d43a622515f647c404ea"
     },
     {
       "category": "scripts",

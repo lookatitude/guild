@@ -81,6 +81,34 @@ function freezeRegExpSafely(re) {
   return true;
 }
 var SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
+function refuseMutator(label, method) {
+  return () => {
+    throw new TypeError(
+      `${label} is a sealed collection: ${method}() would silently change a closed vocabulary`
+    );
+  };
+}
+function sealSet(values, label = "this Set") {
+  const inner = new Set(values);
+  const facade = {
+    [SEALED_BRAND]: "set",
+    // A data property, not a getter: `inner` is unreachable from outside these closures,
+    // so the size is constant for the life of the value.
+    size: inner.size,
+    has: (value) => inner.has(value),
+    keys: () => inner.keys(),
+    values: () => inner.values(),
+    entries: () => inner.entries(),
+    forEach: (callback, thisArg) => {
+      inner.forEach((value, value2) => callback.call(thisArg, value, value2, facade));
+    },
+    [Symbol.iterator]: () => inner[Symbol.iterator](),
+    add: refuseMutator(label, "add"),
+    delete: refuseMutator(label, "delete"),
+    clear: refuseMutator(label, "clear")
+  };
+  return Object.freeze(facade);
+}
 function isSealedCollection(value) {
   if (value === null || typeof value !== "object") return false;
   if (value instanceof Set || value instanceof Map) return false;
@@ -353,6 +381,21 @@ function writeContainedFile(root, target, bytes, options = {}) {
     }
   }
 }
+
+// src/modules/kernel/workflows/runtime-tree-guard.ts
+var RUNTIME_SUBTREE_SEGMENTS = sealSet(
+  [
+    "skills",
+    "agents",
+    "commands",
+    "hooks",
+    ".claude-plugin",
+    "dist",
+    "src",
+    "templates"
+  ],
+  "RUNTIME_SUBTREE_SEGMENTS"
+);
 
 // src/modules/kernel/workflows/tier-bus.ts
 var BUS_TIERS = frozenList(["T0", "T1", "T2"]);
