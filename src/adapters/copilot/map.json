@@ -1,0 +1,22 @@
+{
+  "schema_version": "guild.adapter_map.v1",
+  "family": "copilot",
+  "host_ids": [
+    "github-copilot"
+  ],
+  "package_trees": [
+    "github-copilot"
+  ],
+  "projects": {
+    "manifest": "github-copilot-manifest.json",
+    "instructions": ".agents/skills/guild/"
+  },
+  "runtime": [
+    "runtime/",
+    "hooks/dist/"
+  ],
+  "never_projects": [
+    "src/domains/**/*.ts"
+  ],
+  "rungs": "src/adapters/adapter.lock.json#/families/copilot"
+}

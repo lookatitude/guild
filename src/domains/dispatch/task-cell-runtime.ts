@@ -80,6 +80,7 @@ import {
   projectionNarrowsOnly,
   projectionRefused,
 } from "./isolation-guard";
+import { rungLossesAsRecordedLosses, type RungPlan } from "./adapter-rungs";
 import {
   consumeConsult,
   initAdvisorBudget,
@@ -133,6 +134,16 @@ export interface FilesystemTaskCellRuntimeOpts {
   maxInstances?: number;
   /** `advisorRounds` policy for cells on this runtime (KTD61). Default 2. */
   advisorRounds?: number;
+  /**
+   * The host family's adapter rung plan (KTD28), resolved by the composition
+   * root from src/adapters/adapter.lock.json. Required: a runtime that cannot
+   * say which rungs it has would be guessing. A missing spawn or tool_projection
+   * rung collapses every cell to `lead_only`, and every lost rung is recorded on
+   * each instance's projection. `"conformance_probe"` is the one opt-out: the
+   * live-host probe measures the mechanics a rung claims, so it must not be
+   * pre-collapsed by the claim it is testing.
+   */
+  rungPlan: RungPlan | "conformance_probe";
 }
 
 export interface ExecutionTransportTaskCellWorkerPortOpts {
@@ -289,6 +300,9 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
   private telemetrySeq = 0;
   readonly maxInstances: number;
   readonly advisorRounds: number;
+  readonly rungPlan: RungPlan | "conformance_probe";
+  /** Cells the rung plan collapsed from an isolated fanout to `lead_only`. */
+  private readonly rungCollapsed = new Set<string>();
 
   constructor(opts: FilesystemTaskCellRuntimeOpts) {
     if (!Number.isInteger(opts.parallelism) || opts.parallelism < 1) throw new Error("parallelism must be >= 1");
@@ -305,6 +319,10 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     if (!Number.isInteger(cap) || cap < 1) throw new Error("maxInstances must be an integer >= 1");
     this.maxInstances = cap;
     this.advisorRounds = opts.advisorRounds ?? resolveAdvisorRounds(null);
+    if (opts.rungPlan === undefined || opts.rungPlan === null) {
+      throw new Error("rungPlan is required: pass the host family's adapter rung plan (KTD28)");
+    }
+    this.rungPlan = opts.rungPlan;
   }
 
 
@@ -326,7 +344,17 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
     if (req.goal !== undefined && (validateGoalV1(req.goal) === null || req.goal.id !== req.goal_id)) {
       throw new Error(`cell ${req.cell_id} carries a goal that is not a valid guild.goal.v1 for goal_id ${req.goal_id}`);
     }
-    const cell: CellHandle = Object.freeze({ ...req, instance_ids: Object.freeze([] as string[]) });
+    // KTD28: a host that cannot spawn, or cannot project a reduced tool set,
+    // never fakes isolation. The cell collapses to `lead_only` in the parent and
+    // the loss is recorded on every instance it later spawns.
+    const collapse =
+      this.rungPlan !== "conformance_probe" && this.rungPlan.spawn === "lead_only" && req.fanout !== "lead_only";
+    if (collapse) this.rungCollapsed.add(req.cell_id);
+    const cell: CellHandle = Object.freeze({
+      ...req,
+      fanout: collapse ? ("lead_only" as const) : req.fanout,
+      instance_ids: Object.freeze([] as string[]),
+    });
     this.cells.set(req.cell_id, cell);
     return cell;
   }
@@ -403,22 +431,26 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
       // `lead_only` collapses isolation into the parent. The loss is RECORDED on
       // the instance's own projection — the contract's home for recorded losses —
       // so a reader of the run tree sees it without consulting a log.
-      projection: leadOnlyCell
-        ? {
-            ...req.projection,
-            recorded_losses: [
-              ...req.projection.recorded_losses,
-              {
-                capability: "task_cell.isolation",
-                mapping: "lead_only",
-                loss:
-                  `cell ${cell.cell_id} bound to lead_binding_id ` +
-                  `${known.lead.lead_binding_id ?? "unset"}; no worker process spawned, ` +
-                  `the parent's context runs the lane`,
-              },
-            ],
-          }
-        : req.projection,
+      projection: {
+        ...req.projection,
+        recorded_losses: [
+          ...req.projection.recorded_losses,
+          ...(leadOnlyCell
+            ? [
+                {
+                  capability: "task_cell.isolation",
+                  mapping: "lead_only",
+                  loss:
+                    `cell ${cell.cell_id} bound to lead_binding_id ` +
+                    `${known.lead.lead_binding_id ?? "unset"}; no worker process spawned, ` +
+                    `the parent's context runs the lane` +
+                    (this.rungCollapsed.has(cell.cell_id) ? " (collapsed by the adapter rung plan)" : ""),
+                },
+              ]
+            : []),
+          ...(this.rungPlan === "conformance_probe" ? [] : rungLossesAsRecordedLosses(this.rungPlan)),
+        ],
+      },
       budgets: req.budgets,
       created_at: createdAt,
       started_at: null,

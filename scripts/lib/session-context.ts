@@ -5,4 +5,4 @@
  * src/modules/host-runtime so the reorg can move internals without breaking
  * imports from scripts/lib/*.
  */
-export * from "../../src/adapters/session-context";
+export * from "../../src/domains/config/session-context";

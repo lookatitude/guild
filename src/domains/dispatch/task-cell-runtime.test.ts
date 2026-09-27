@@ -14,6 +14,7 @@ import type { ExecutionTransportPort } from "./execution-transport-ports";
 import { readTaskCellLifecycleEvents } from "../telemetry";
 import { reconcileTaskCellLifecycleTelemetry } from "./task-cell-telemetry-reconcile";
 import { composeStationTeam, writeTeamPlan, writeTeamResult } from "../teams";
+import { ADAPTER_RUNG_NAMES, resolveRungPlan, type AdapterRungCell, type AdapterRungName } from "./adapter-rungs";
 
 const NOW = () => "2026-08-10T17:00:00.000Z";
 
@@ -50,6 +51,7 @@ function setup() {
   const worker = new FakeWorkerPort();
   let seq = 0;
   const runtime = new FilesystemTaskCellRuntime({
+    rungPlan: FULL_RUNGS,
     cwd,
     substrate: "tmux",
     parallelism: 4,
@@ -60,6 +62,17 @@ function setup() {
   });
   return { cwd, runId, worker, runtime };
 }
+
+/** A verified all-native host: these cases exercise isolation, so no rung is lost. */
+const FULL_RUNGS = resolveRungPlan(
+  {
+    family: "test-native",
+    rungs: Object.fromEntries(
+      ADAPTER_RUNG_NAMES.map((n) => [n, { rung: "native", evidence: "verified", verified_by: "test fixture" }]),
+    ) as Record<AdapterRungName, AdapterRungCell>,
+  },
+  { verify_check_available: false },
+);
 
 describe("FilesystemTaskCellRuntime production seam", () => {
   it("drives the production lifecycle and leaves a reconstructable bus join", async () => {

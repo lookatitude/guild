@@ -8,6 +8,7 @@
 
 export {
   ADAPTER_TREE,
+  installHostAdapterConformanceOwner,
   checkDomainBijection,
   DOMAIN_IDS,
   MODULE_TO_DOMAIN,
@@ -138,3 +139,4 @@ export type {
   TransportedReleaseDecision,
   ValidatorKind,
 } from "../../domains/distribution";
+export type { HostAdapterConformanceOwner, HostAdapterConformanceOwnerRequest } from "../../domains/distribution";

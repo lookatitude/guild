@@ -8,7 +8,7 @@
  * Depends: core/contracts (via host-registry), shared/ — no host/ imports.
  */
 
-import type { HostKind } from "../../adapters";
+import type { HostKind } from "./host-types";
 import { isClaudeHost } from "./rank";
 
 /**

@@ -42,15 +42,9 @@ import { tierDefaultsForHost } from "../config";
 import * as fsNode from "fs";
 import * as path from "path";
 
-import type { HostKind } from "../../adapters";
+import type { HostKind } from "../config";
 import { checkContained, isRefused, isWithin } from "../kernel";
-import {
-  buildSessionContext,
-  writeSessionContext,
-  type ExecutionTargetBlock,
-  type HostHandshakeIdentity,
-  type NativeAdapterIdentity,
-} from "../../adapters";
+import { buildSessionContext, writeSessionContext, type ExecutionTargetBlock, type HostHandshakeIdentity, type NativeAdapterIdentity } from "../config";
 import { resolveSettings } from "../config";
 import { parseYaml, replaceTopLevelLine, resolveGuildRoot } from "../state";
 import {

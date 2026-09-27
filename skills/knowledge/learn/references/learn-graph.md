@@ -65,8 +65,8 @@ never copy a schema into this body.
 
 # Workflow steps
 
-Each stage = deterministic **script half** (`plugin/scripts/learn/`, run
-`npx tsx … --cwd <root>`) then an **LLM semantic half** under the strict
+Each stage = deterministic **script half** (compiled Node, run
+`node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/<stage>.js --cwd <root>`) then an **LLM semantic half** under the strict
 *"trust the script, do not re-read source"* constraint:
 
 **Who executes the LLM halves (load-bearing).** They are **universal learning
@@ -87,7 +87,7 @@ the bootstrap circular (you would need a learned project to compose the team
 that learns the project). If a matching specialist *does* exist in the roster it
 may be dispatched as an optimization, but it is never a prerequisite.
 
-2. **Analyze.** `analyze-structural.ts --cwd <root>` →
+2. **Analyze.** `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/analyze-structural.js --cwd <root>` →
    `understand-partial-graph.json` (file/function/class nodes +
    contains/imports edges, `confidence:high` with `path#Lx-Ly` refs, plus
    `_merge_report`). LLM (bounded fan-out, `mid` tier): **semantic
@@ -96,19 +96,19 @@ may be dispatched as an optimization, but it is never a prerequisite.
    edges. Do not re-read source.
 3. **Assemble-review.** The existing **G-init challenger** reads `_merge_report`
    (dropped nodes / dangling edges) and recovers salvageable items — no new
-   agent type. Then `validate-graph.ts --cwd <root>` runs the tolerant ladder
+   agent type. Then `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/validate-graph.js --cwd <root>` runs the tolerant ladder
    (sanitize → normalize aliases → auto-fix → drop-invalid-individually; **fatal
    only on zero valid nodes**) and writes the final `knowledge-graph.json`.
-4. **Architecture.** `assign-layers.ts --cwd <root>` partitions every file node
+4. **Architecture.** `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/assign-layers.js --cwd <root>` partitions every file node
    into exactly one of 3–10 layers (LOCKED invariant) and **persists the
    `component` label**. LLM (`mid` tier): rename layers to meaningful
    names — **must not** re-partition.
-5. **Domain.** `derive-domain.ts --cwd <root> --run-id <id>` splices the
+5. **Domain.** `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/derive-domain.js --cwd <root> --run-id <id>` splices the
    Domain→Flow→Step scaffold (monotone `flow_step` weights), **persists the
    `domain` label**, and appends the initial `knowledge-links.json` projection
    batch. LLM (`mid` tier): name/narrate domains & flows; emit
    `wiki/concepts/` page **candidates**. **Run the D-INGEST-GATE on each concept
-   candidate** before emitting it: call `scripts/lib/ingest-similarity.ts`
+   candidate** before emitting it: call `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/ingest-similarity.js`
    (`--category concepts`, candidate title+content) and consume `should_pause`
    verbatim — on `should_pause: true` (BM25 `top_score ≥ models.ingestSimilarityGate`),
    do **not** emit a fresh near-duplicate concept page; instead flag the collision
@@ -117,7 +117,7 @@ may be dispatched as an optimization, but it is never a prerequisite.
    pointer — do not re-spell). Candidates remain candidates (promotion still goes
    through `guild:wiki-ingest`, which re-gates); this catches near-dup concept
    spam at emission instead of letting it pile up.
-6. **Tour skeleton.** `build-tour.ts --cwd <root>` → dependency-BFS-ordered
+6. **Tour skeleton.** `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/build-tour.js --cwd <root>` → dependency-BFS-ordered
    5–15-step `tour[]` skeleton in the graph. **Narration + `languageLesson` +
    the `onboarding-tour.md` artifact are produced by `guild:learn-onboard`** —
    hand off, do not narrate here.

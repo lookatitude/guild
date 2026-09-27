@@ -121,6 +121,7 @@ import { validateRunId } from "../../scripts/lib/run-lifecycle.js";
 // `config validate/resolve/show` report as the documented default. Pure data, zero
 // internal deps (config-defaults.ts's own contract) — safe to bundle into hooks/dist/.
 import { DEFAULTS as CONFIG_DEFAULTS } from "../../scripts/lib/shared/config-defaults.js";
+import { runDirOverride } from "./run-dir-override.js";
 
 /** Stable marker string — pinned by tests and the dist-grep rail. */
 export const LEAN_LEAD_MARKER = "[GUILD LEAN-LEAD]";
@@ -429,7 +430,7 @@ export async function evaluateLeanLeadGuard(
   const config = readLeanLeadConfig(guildRoot);
   if (!config.enabled || isOverridden(env)) return { advisory: null };
 
-  const runDir = env["GUILD_RUN_DIR"] ?? path.join(guildRoot, ".guild", "runs", safeRunId);
+  const runDir = runDirOverride(env) ?? path.join(guildRoot, ".guild", "runs", safeRunId);
   const openLanes = countOpenLanes(runDir);
   if (openLanes === 0) return { advisory: null };
 

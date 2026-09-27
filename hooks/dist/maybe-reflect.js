@@ -23,8 +23,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // hooks/maybe-reflect.ts
-var fs6 = __toESM(require("fs"));
-var path8 = __toESM(require("path"));
+var fs7 = __toESM(require("fs"));
+var path9 = __toESM(require("path"));
 var import_child_process = require("child_process");
 
 // hooks/lib/guild-root.ts
@@ -59,7 +59,7 @@ function resolveGuildRoot(startCwd) {
 
 // src/domains/lifecycle/run-binding.ts
 var fsReal = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
+var path4 = __toESM(require("path"));
 
 // src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
@@ -70,6 +70,10 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "mcp_servers",
   "scripts"
 ]);
+
+// src/domains/kernel/plugin-root.ts
+var path2 = __toESM(require("node:path"));
+var PLUGIN_ROOT_MARKER = path2.join("runtime", "guild-mcp.js");
 
 // src/domains/kernel/sealed-collections.ts
 function regExpWritesLastIndex(re) {
@@ -161,7 +165,7 @@ function frozenList(items, options = {}) {
 
 // src/domains/kernel/path-containment.ts
 var fs2 = __toESM(require("node:fs"));
-var path2 = __toESM(require("node:path"));
+var path3 = __toESM(require("node:path"));
 var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "root-unresolvable",
   "no-existing-ancestor",
@@ -177,7 +181,7 @@ function isRefused(r) {
   return "code" in r;
 }
 function escapes(rel) {
-  return rel === ".." || rel.startsWith(`..${path2.sep}`) || path2.isAbsolute(rel);
+  return rel === ".." || rel.startsWith(`..${path3.sep}`) || path3.isAbsolute(rel);
 }
 function refuse(code, detail) {
   return Object.freeze({ contained: false, code, detail });
@@ -196,7 +200,7 @@ function checkContained(root, target, options = {}) {
   const policy = options.policy ?? "resolve";
   let realRoot;
   try {
-    realRoot = fs2.realpathSync(path2.resolve(root));
+    realRoot = fs2.realpathSync(path3.resolve(root));
   } catch {
     return refuse("root-unresolvable", `project root ${root} does not resolve`);
   }
@@ -206,13 +210,13 @@ function checkContained(root, target, options = {}) {
       `refusing a path spelled with a ".." segment (${target}) \u2014 parent traversal cannot be resolved before symlinks`
     );
   }
-  const abs = path2.isAbsolute(target) ? path2.resolve(target) : path2.resolve(realRoot, target);
+  const abs = path3.isAbsolute(target) ? path3.resolve(target) : path3.resolve(realRoot, target);
   let probe = abs;
   let probeStat = null;
   for (; ; ) {
     probeStat = lstatOrNull(probe);
     if (probeStat !== null) break;
-    const parent = path2.dirname(probe);
+    const parent = path3.dirname(probe);
     if (parent === probe) {
       return refuse("no-existing-ancestor", `no existing ancestor of ${abs}`);
     }
@@ -234,16 +238,16 @@ function checkContained(root, target, options = {}) {
       `${probe} is a symlink that does not resolve; refusing to write through it`
     );
   }
-  const rel = path2.relative(realRoot, realProbe);
+  const rel = path3.relative(realRoot, realProbe);
   if (rel !== "" && escapes(rel)) {
     return refuse("outside-root", `${abs} resolves outside the project root (${realProbe})`);
   }
   if (policy === "physical") {
-    const parsed = path2.parse(abs);
+    const parsed = path3.parse(abs);
     let walk = parsed.root;
-    for (const seg of abs.slice(parsed.root.length).split(path2.sep)) {
+    for (const seg of abs.slice(parsed.root.length).split(path3.sep)) {
       if (seg === "" || seg === ".") continue;
-      walk = path2.join(walk, seg);
+      walk = path3.join(walk, seg);
       const st = lstatOrNull(walk);
       if (st === null || !st.isSymbolicLink()) continue;
       let segReal;
@@ -252,15 +256,15 @@ function checkContained(root, target, options = {}) {
       } catch {
         return refuse("dangling-symlink", `${walk} is a symlink that does not resolve`);
       }
-      const segRel = path2.relative(realRoot, segReal);
+      const segRel = path3.relative(realRoot, segReal);
       const strictlyInside = segRel !== "" && !escapes(segRel);
       if (strictlyInside) {
         return refuse("physical-symlink", `refusing \u2014 symlinked path segment: ${walk}`);
       }
     }
   }
-  const tail = path2.relative(probe, abs);
-  const realPath = tail === "" ? realProbe : path2.join(realProbe, tail);
+  const tail = path3.relative(probe, abs);
+  const realPath = tail === "" ? realProbe : path3.join(realProbe, tail);
   return Object.freeze({ contained: true, realRoot, realPath });
 }
 function prepareContainedWrite(root, target, options = {}) {
@@ -272,12 +276,12 @@ function prepareContainedWrite(root, target, options = {}) {
   }
   let canonRoot;
   try {
-    canonRoot = fs2.realpathSync(path2.resolve(root));
+    canonRoot = fs2.realpathSync(path3.resolve(root));
   } catch {
     return refuse("root-unresolvable", `project root ${root} does not resolve`);
   }
-  const abs = path2.isAbsolute(target) ? path2.resolve(target) : path2.resolve(canonRoot, target);
-  const dir = path2.dirname(abs);
+  const abs = path3.isAbsolute(target) ? path3.resolve(target) : path3.resolve(canonRoot, target);
+  const dir = path3.dirname(abs);
   const pre = checkContained(root, dir, { policy: options.policy });
   if (isRefused(pre)) return pre;
   try {
@@ -419,7 +423,7 @@ function realBindingFs() {
       }
     },
     writeFileExclusive: (p, c) => {
-      fsReal.mkdirSync(path3.dirname(p), { recursive: true });
+      fsReal.mkdirSync(path4.dirname(p), { recursive: true });
       try {
         fsReal.writeFileSync(p, c, { encoding: "utf8", flag: "wx" });
         return true;
@@ -433,7 +437,7 @@ function realBindingFs() {
   };
 }
 function runBindingPath(root, runId) {
-  return path3.join(root, ".guild", "runs", runId, "binding.json");
+  return path4.join(root, ".guild", "runs", runId, "binding.json");
 }
 function validateRunBindingRecord(parsed, expectedRunId) {
   if (parsed === null || typeof parsed !== "object") return null;
@@ -451,8 +455,8 @@ function validateRunBindingRecord(parsed, expectedRunId) {
   };
 }
 function readRunBindingRecord(opts) {
-  const fs7 = opts.fs ?? realBindingFs();
-  const raw = fs7.readFile(runBindingPath(opts.root, opts.run_id));
+  const fs8 = opts.fs ?? realBindingFs();
+  const raw = fs8.readFile(runBindingPath(opts.root, opts.run_id));
   if (raw === null) return { status: "absent" };
   let parsed;
   try {
@@ -517,7 +521,7 @@ function formatBindingRejected(hook, auth) {
 
 // hooks/lib/self-build.ts
 var fs3 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
+var path5 = __toESM(require("path"));
 var SELF_BUILD_MARKER = "Guild \u2014 repo orientation";
 function fileContainsMarker(p) {
   try {
@@ -528,38 +532,39 @@ function fileContainsMarker(p) {
   }
 }
 function detectSelfBuild(root) {
-  const directPath = path4.join(root, "AGENTS.md");
+  const directPath = path5.join(root, "AGENTS.md");
   if (fileContainsMarker(directPath)) return { armed: true, path: directPath };
-  const nestedPath = path4.join(root, "plugin", "AGENTS.md");
+  const nestedPath = path5.join(root, "plugin", "AGENTS.md");
   if (fileContainsMarker(nestedPath)) return { armed: true, path: nestedPath };
   return { armed: false, path: null };
 }
 
 // hooks/lib/ensure-layout.ts
-var path7 = __toESM(require("node:path"));
+var fs6 = __toESM(require("node:fs"));
+var path8 = __toESM(require("node:path"));
 var import_node_child_process = require("node:child_process");
 
 // scripts/lib/state/ensure-storage-layout.ts
 var fs5 = __toESM(require("node:fs"));
-var path6 = __toESM(require("node:path"));
+var path7 = __toESM(require("node:path"));
 
 // src/domains/state/guild-root.ts
 var fs4 = __toESM(require("node:fs"));
-var path5 = __toESM(require("node:path"));
+var path6 = __toESM(require("node:path"));
 function resolveGuildRoot2(startDir) {
-  const resolvedStart = path5.resolve(startDir);
+  const resolvedStart = path6.resolve(startDir);
   let current = resolvedStart;
   let nearestGuildDir = null;
   for (; ; ) {
-    if (fs4.existsSync(path5.join(current, ".git"))) return current;
+    if (fs4.existsSync(path6.join(current, ".git"))) return current;
     if (nearestGuildDir === null) {
-      const guildDir = path5.join(current, ".guild");
+      const guildDir = path6.join(current, ".guild");
       try {
         if (fs4.existsSync(guildDir) && fs4.statSync(guildDir).isDirectory()) nearestGuildDir = current;
       } catch {
       }
     }
-    const parent = path5.dirname(current);
+    const parent = path6.dirname(current);
     if (parent === current) return nearestGuildDir ?? resolvedStart;
     current = parent;
   }
@@ -568,12 +573,12 @@ function resolveGuildRoot2(startDir) {
 // scripts/lib/state/ensure-storage-layout.ts
 var CURRENT_LAYOUT_VERSION = 2;
 function markerPath(root) {
-  return path6.join(root, ".guild", "storage-layout.json");
+  return path7.join(root, ".guild", "storage-layout.json");
 }
 function detect(cwd = process.cwd()) {
   const root = resolveGuildRoot2(cwd);
   const marker = markerPath(root);
-  if (!fs5.existsSync(path6.join(root, ".guild"))) {
+  if (!fs5.existsSync(path7.join(root, ".guild"))) {
     return { state: "absent", version: null, root, marker };
   }
   let version = null;
@@ -591,9 +596,9 @@ var upgradeChunk = null;
 function upgradeChain() {
   if (upgradeChunk === null) {
     const candidates = [
-      path6.join(__dirname, "upgrade-chain.js"),
-      path6.join(__dirname, "lib", "state", "upgrade-chain"),
-      path6.join(__dirname, "upgrade-chain")
+      path7.join(__dirname, "upgrade-chain.js"),
+      path7.join(__dirname, "lib", "state", "upgrade-chain"),
+      path7.join(__dirname, "upgrade-chain")
     ];
     const spec = candidates.find((c) => fs5.existsSync(c) || fs5.existsSync(`${c}.ts`)) ?? candidates[2];
     upgradeChunk = require(spec);
@@ -650,13 +655,19 @@ if (isProcessEntry()) {
 var memo = /* @__PURE__ */ new Map();
 function runColdBootstrapOutOfProcess(cwd) {
   const pluginRoot = process.env["CLAUDE_PLUGIN_ROOT"] ?? process.env["GUILD_PLUGIN_ROOT"];
-  if (pluginRoot === void 0 || pluginRoot.length === 0) return false;
-  const cli = path7.join(pluginRoot, "runtime", "scripts", "ensure-storage-layout.js");
-  const r = (0, import_node_child_process.spawnSync)(process.execPath, [cli, `--cwd=${cwd}`], {
-    encoding: "utf8",
-    timeout: 6e4
-  });
-  return r.status === 0;
+  if (pluginRoot === void 0 || pluginRoot.length === 0) return "unavailable";
+  const cli = path8.join(pluginRoot, "runtime", "scripts", "ensure-storage-layout.js");
+  if (!fs6.existsSync(cli)) return "unavailable";
+  const rawTimeout = Number(process.env["GUILD_LAYOUT_CLI_TIMEOUT_MS"]);
+  const timeoutMs = Number.isInteger(rawTimeout) && rawTimeout > 0 ? rawTimeout : 6e4;
+  let r;
+  try {
+    r = (0, import_node_child_process.spawnSync)(process.execPath, [cli, `--cwd=${cwd}`], { encoding: "utf8", timeout: timeoutMs });
+  } catch {
+    return "failed";
+  }
+  if (r.error) return "failed";
+  return r.status === 0 ? "ran" : "failed";
 }
 function ensureStorageLayout2(cwd, hookName = "hook") {
   void hookName;
@@ -678,26 +689,34 @@ function ensureStorageLayout2(cwd, hookName = "hook") {
     try {
       return { ok: true, status: ensureStorageLayout(cwd), refused: null, reason: null };
     } catch {
-      runColdBootstrapOutOfProcess(cwd);
+      const cold = runColdBootstrapOutOfProcess(cwd);
+      if (cold === "failed") {
+        return {
+          ok: false,
+          status: null,
+          refused: "bootstrap-failed",
+          reason: "the compiled layout bootstrap exited non-zero (KTD10: compile outputs missing or broken)"
+        };
+      }
       return { ok: true, status: detect(cwd), refused: null, reason: null };
     }
   })();
-  memo.set(cwd, gate);
+  if (!(gate.ok === false && gate.refused === "bootstrap-failed")) memo.set(cwd, gate);
   return gate;
 }
 
 // hooks/maybe-reflect.ts
 async function readStdin() {
-  return new Promise((resolve5) => {
+  return new Promise((resolve6) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve5(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve5(""));
+    process.stdin.on("end", () => resolve6(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve6(""));
   });
 }
 function loadEvents(eventsFile) {
-  if (!fs6.existsSync(eventsFile)) return [];
-  const content = fs6.readFileSync(eventsFile, "utf8");
+  if (!fs7.existsSync(eventsFile)) return [];
+  const content = fs7.readFileSync(eventsFile, "utf8");
   const events = [];
   for (const line of content.split("\n")) {
     const trimmed = line.trim();
@@ -732,20 +751,20 @@ function devteamSubagentGateCheck(events, cwd) {
       reason: `dispatch count ${dispatchCount} < 3`
     };
   }
-  const specDir = path8.join(resolveGuildRoot(cwd), ".guild", "spec");
+  const specDir = path9.join(resolveGuildRoot(cwd), ".guild", "spec");
   const slug = process.env["GUILD_SPEC_SLUG"];
   if (slug && slug.trim().length > 0) {
-    const specPath = path8.join(specDir, `${slug}.md`);
-    if (!fs6.existsSync(specPath)) {
+    const specPath = path9.join(specDir, `${slug}.md`);
+    if (!fs7.existsSync(specPath)) {
       return { passed: false, reason: `spec not found: ${specPath}` };
     }
   } else {
-    if (!fs6.existsSync(specDir)) {
+    if (!fs7.existsSync(specDir)) {
       return { passed: false, reason: `spec dir not found: ${specDir}` };
     }
     let anySpec = false;
     try {
-      const entries = fs6.readdirSync(specDir);
+      const entries = fs7.readdirSync(specDir);
       anySpec = entries.some((name) => name.endsWith(".md"));
     } catch {
       anySpec = false;
@@ -784,15 +803,15 @@ function writeStubSummary(runDir, runId, events) {
     "",
     "<!-- fallback summary from maybe-reflect.ts \u2014 scripts/trace-summarize.ts was unavailable at this cwd. Install/restore scripts/trace-summarize.ts for the richer summary that guild:reflect prefers. -->"
   ];
-  const summaryPath = path8.join(runDir, "summary.md");
-  fs6.writeFileSync(summaryPath, lines.join("\n") + "\n", "utf8");
+  const summaryPath = path9.join(runDir, "summary.md");
+  fs7.writeFileSync(summaryPath, lines.join("\n") + "\n", "utf8");
   process.stderr.write(`[maybe-reflect] wrote fallback summary to ${summaryPath}
 `);
 }
 function tryRealSummarizer(cwd, runId) {
-  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path8.resolve(__dirname, "..", "..");
-  const summarizerPath = path8.join(pluginRoot, "runtime", "scripts", "trace-summarize.js");
-  if (!fs6.existsSync(summarizerPath)) return false;
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path9.resolve(__dirname, "..", "..");
+  const summarizerPath = path9.join(pluginRoot, "runtime", "scripts", "trace-summarize.js");
+  if (!fs7.existsSync(summarizerPath)) return false;
   const result = (0, import_child_process.spawnSync)(
     process.execPath,
     [summarizerPath, "--run-id", runId, "--cwd", cwd],
@@ -825,12 +844,12 @@ function evaluateCodexSkipGuard(guildRoot) {
   try {
     const { armed } = detectSelfBuild(guildRoot);
     if (!armed) return { armed: false, streak: 0 };
-    const reflectionsDir = path8.join(guildRoot, ".guild", "reflections");
-    if (!fs6.existsSync(reflectionsDir)) return { armed: true, streak: 0 };
-    const files = fs6.readdirSync(reflectionsDir).filter((f) => f.endsWith(".md")).map((f) => path8.join(reflectionsDir, f)).map((p) => {
+    const reflectionsDir = path9.join(guildRoot, ".guild", "reflections");
+    if (!fs7.existsSync(reflectionsDir)) return { armed: true, streak: 0 };
+    const files = fs7.readdirSync(reflectionsDir).filter((f) => f.endsWith(".md")).map((f) => path9.join(reflectionsDir, f)).map((p) => {
       let mtime = 0;
       try {
-        mtime = fs6.statSync(p).mtimeMs;
+        mtime = fs7.statSync(p).mtimeMs;
       } catch {
         mtime = 0;
       }
@@ -840,7 +859,7 @@ function evaluateCodexSkipGuard(guildRoot) {
     for (const { path: p } of files) {
       let content = "";
       try {
-        content = fs6.readFileSync(p, "utf8");
+        content = fs7.readFileSync(p, "utf8");
       } catch {
         break;
       }
@@ -857,9 +876,9 @@ function evaluateCodexSkipGuard(guildRoot) {
 }
 function clearCodexSkipSentinel(guildRoot) {
   try {
-    const sentinel = path8.join(guildRoot, ".guild", "codex-skip-streak.json");
-    if (!fs6.existsSync(sentinel)) return;
-    fs6.rmSync(sentinel);
+    const sentinel = path9.join(guildRoot, ".guild", "codex-skip-streak.json");
+    if (!fs7.existsSync(sentinel)) return;
+    fs7.rmSync(sentinel);
     process.stderr.write(
       `[maybe-reflect] codex-skip streak broken \u2014 cleared stale sentinel: ${sentinel}
 `
@@ -873,9 +892,9 @@ function clearCodexSkipSentinel(guildRoot) {
 }
 function writeCodexSkipSentinel(guildRoot, streak) {
   try {
-    const guildDir = path8.join(guildRoot, ".guild");
-    fs6.mkdirSync(guildDir, { recursive: true });
-    const sentinel = path8.join(guildDir, "codex-skip-streak.json");
+    const guildDir = path9.join(guildRoot, ".guild");
+    fs7.mkdirSync(guildDir, { recursive: true });
+    const sentinel = path9.join(guildDir, "codex-skip-streak.json");
     const data = {
       schema_version: "guild.codex_skip_streak.v1",
       streak,
@@ -885,7 +904,7 @@ function writeCodexSkipSentinel(guildRoot, streak) {
       reason: "codex adversarial review skipped on >= 3 consecutive self-build reflections (FU-E)",
       clear_by: "run guild:codex-review at the next gate, OR record a reflection without a codex_review: SKIPPED marker, OR delete this file after an explicit operator override"
     };
-    fs6.writeFileSync(sentinel, JSON.stringify(data, null, 2) + "\n", "utf8");
+    fs7.writeFileSync(sentinel, JSON.stringify(data, null, 2) + "\n", "utf8");
     process.stderr.write(
       `[maybe-reflect] wrote codex-skip sentinel: ${sentinel}
 `
@@ -947,10 +966,10 @@ async function main() {
     process.exit(0);
   }
   const runId = reflectAuth.run_id;
-  const eventsRunDir = path8.join(guildRoot, ".guild", "runs", runId);
-  const canonicalEventsFile = path8.join(eventsRunDir, "logs", "v1.4-events.jsonl");
-  const legacyEventsFile = path8.join(eventsRunDir, "events.ndjson");
-  const eventsFile = fs6.existsSync(canonicalEventsFile) ? canonicalEventsFile : legacyEventsFile;
+  const eventsRunDir = path9.join(guildRoot, ".guild", "runs", runId);
+  const canonicalEventsFile = path9.join(eventsRunDir, "logs", "v1.4-events.jsonl");
+  const legacyEventsFile = path9.join(eventsRunDir, "events.ndjson");
+  const eventsFile = fs7.existsSync(canonicalEventsFile) ? canonicalEventsFile : legacyEventsFile;
   const events = loadEvents(eventsFile);
   const hookEvent = payload.hook_event_name ?? "Stop";
   if (hookEvent === "SubagentStop") {
@@ -971,7 +990,7 @@ async function main() {
       process.exit(0);
     }
   }
-  const runDir = path8.join(guildRoot, ".guild", "runs", runId);
+  const runDir = path9.join(guildRoot, ".guild", "runs", runId);
   const usedRealSummarizer = tryRealSummarizer(cwd, runId);
   if (!usedRealSummarizer) {
     writeStubSummary(runDir, runId, events);

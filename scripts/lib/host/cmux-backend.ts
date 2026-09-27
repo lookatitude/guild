@@ -36,6 +36,7 @@ import {
 import { readRuntimePermissionConfig } from "../permission-policy";
 import { validateProjectDefinitionRefV1 } from "../core/contracts/project-definition-ref";
 import * as path from "node:path";
+import { ownPluginRoot } from "../../../src/domains/kernel";
 
 function definitionRefCarriage(
   value: unknown,
@@ -162,7 +163,7 @@ export class CmuxTeamBackend implements TeamBackend {
     this.run = opts.run ?? defaultRun;
     this.resolveAdapter = opts.resolveAdapter;
     this.env = opts.env ?? process.env;
-    this.pluginOwnerRoot = opts.pluginOwnerRoot ?? path.resolve(__dirname, "../../..");
+    this.pluginOwnerRoot = opts.pluginOwnerRoot ?? ownPluginRoot(__dirname);
     this.resolveClaudeActivation = opts.resolveClaudeActivation ?? resolveClaudePluginActivation;
   }
 

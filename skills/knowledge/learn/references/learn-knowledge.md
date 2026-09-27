@@ -103,7 +103,7 @@ staleness state (that lives only in step 1) — which is what makes SC-8
 byte-identity unconditional.
 
 0. **Lazy consent + cost gate (SC-15) — BEFORE any deep work.** Run
-   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/learn/cost-gate.ts --cwd <root> --json`.
+   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/cost-gate.js --cwd <root> --json`.
    Consume `gate` verbatim: `pass` → proceed silently; `confirm` → surface the
    `estimate` (`files`, `tokens_est`) + `reason` to the operator and continue
    only on approval; `abort` (exit 1) → hard-stop and surface `reason` — never a
@@ -111,7 +111,7 @@ byte-identity unconditional.
 
 1. **Staleness gate (SC-14) — this skill's coarse gate is the ONLY staleness
    mechanism.** Run
-   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/learn/k-stage-staleness.ts --cwd <root> --json`
+   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/k-stage-staleness.js --cwd <root> --json`
    and consume the booleans `{ k1..k6, structuralSkip }` to decide **whether to
    run the knowledge tier at all**: if **no** K-stage is stale (e.g. a code-only
    change → all `k1..k6` false), **skip** the orchestrator entirely (the
@@ -126,10 +126,10 @@ byte-identity unconditional.
    idempotent** (SC-11), never a partial per-stage skip; the per-stage booleans
    are advisory and surface to the operator *which* content changed. No baseline
    → all-stale (first run does everything). After a successful run, re-seed with
-   `k-stage-staleness.ts --baseline`.
+   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/k-stage-staleness.js --baseline`.
 
 2. **Round 1 — emit candidates** (deterministic, no LLM). Run
-   `knowledge-orchestrator.ts --phase=round1 --cwd <root> --run-id <id>`. It
+   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/knowledge-orchestrator.js --phase=round1 --cwd <root> --run-id <id>`. It
    writes four candidate files into `…/knowledge/`: `k1-candidates.json`
    (doc-comment / claim-section / heading candidates, keyed by anchor),
    `k2-candidates.json` (the **authoritative** wiki_page descriptor set —
@@ -187,7 +187,7 @@ byte-identity unconditional.
 
 7. **Emit `wiki/concepts/*` candidates** (this skill's job; human-gated). For each
    named topic/domain, run the **D-INGEST similarity gate**
-   (`scripts/lib/ingest-similarity.ts --category concepts`); consume
+   (`node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/ingest-similarity.js --category concepts`); consume
    `should_pause` verbatim — on `top_score ≥ models.ingestSimilarityGate` flag the
    collision (`top_path`, `top_score`) instead of emitting a near-duplicate, the
    same contract as `guild:wiki-ingest §"Ingest anomaly gate"`. Candidates stay

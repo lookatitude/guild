@@ -35,7 +35,7 @@ import {
 import { persistInspectionReport } from "../../src/domains/config";
 import { buildIndependenceAdjudication } from "../../src/domains/config";
 import { readRoutingFlags, ROUTING_FLAG_DEFAULTS, type RoutingFlags } from "../../src/domains/config";
-import { buildSessionContext } from "../../src/adapters/session-context";
+import { buildSessionContext } from "../../src/domains/config";
 import { finalizeReceipt, recordAttempt, resolve as resolveModel, type ResolutionReceipt } from "../../src/domains/config";
 import { BindingRejectedError, mintRunBinding } from "../../src/domains/lifecycle";
 

@@ -44,10 +44,10 @@ describe("verify generated host packages", () => {
   it("CONTROL: fails when the generated package omits the hook runtime used by guild-run", () => {
     const distRoot = buildTempDist();
     try {
-      fs.rmSync(path.join(distRoot, "codex", "hooks", "lib", "handoff-v2.ts"), { force: true });
+      fs.rmSync(path.join(distRoot, "codex", "runtime", "scripts", "guild-run.js"), { force: true });
       const result = verifyGeneratedHostPackages({ root: PLUGIN_ROOT, distRoot });
       expect(result.ok).toBe(false);
-      expect(result.errors).toContain("missing generated package file: codex/hooks/lib/handoff-v2.ts");
+      expect(result.errors).toContain("missing generated package file: codex/runtime/scripts/guild-run.js");
       expect(result.errors.join("\n")).toContain("codex: guild-run dry-run failed");
     } finally {
       fs.rmSync(distRoot, { recursive: true, force: true });

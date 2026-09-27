@@ -3065,8 +3065,8 @@ var require_js_yaml = __commonJS({
 });
 
 // scripts/dot-guild/migrate-guild.ts
-var fs4 = __toESM(require("fs"));
-var path6 = __toESM(require("path"));
+var fs5 = __toESM(require("fs"));
+var path7 = __toESM(require("path"));
 
 // scripts/dot-guild/convert/seams.ts
 var fs = __toESM(require("fs"));
@@ -3105,7 +3105,7 @@ var realFs = {
 };
 
 // scripts/dot-guild/convert/wiki-importance.ts
-var path3 = __toESM(require("path"));
+var path4 = __toESM(require("path"));
 
 // src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
@@ -3118,16 +3118,35 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
 ]);
 
 // src/domains/kernel/yaml-loader.ts
+var path3 = __toESM(require("node:path"));
+
+// src/domains/kernel/plugin-root.ts
+var fs2 = __toESM(require("node:fs"));
 var path2 = __toESM(require("node:path"));
+var PLUGIN_ROOT_MARKER = path2.join("runtime", "guild-mcp.js");
+function findPluginRoot(fromDir) {
+  let dir = path2.resolve(fromDir);
+  for (; ; ) {
+    if (fs2.existsSync(path2.join(dir, PLUGIN_ROOT_MARKER))) return dir;
+    const parent = path2.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+// src/domains/kernel/yaml-loader.ts
 function pluginLocalScriptsRoots() {
+  const own = findPluginRoot(__dirname);
   return [
+    // The package this code shipped in, whatever the bundle depth (runtime/scripts).
+    ...own === null ? [] : [path3.join(own, "scripts")],
     // Source TS layout (src/domains/<id>) and the bundled agent-team hook layout
     // (hooks/agent-team/dist) both sit three levels under plugin/.
-    path2.resolve(__dirname, "..", "..", "..", "scripts"),
+    path3.resolve(__dirname, "..", "..", "..", "scripts"),
     // Bundled hook layout (hooks/dist) and src/adapters both sit two levels under.
-    path2.resolve(__dirname, "..", "..", "scripts"),
+    path3.resolve(__dirname, "..", "..", "scripts"),
     // src/adapters/model-discovery and any deeper nesting.
-    path2.resolve(__dirname, "..", "..", "..", "..", "scripts")
+    path3.resolve(__dirname, "..", "..", "..", "..", "scripts")
   ];
 }
 function tryScriptsRoot(scriptsRoot) {
@@ -3148,7 +3167,7 @@ function loadYamlApi() {
     return require_js_yaml();
   } catch {
   }
-  const cwdRoot = path2.resolve(process.cwd(), "scripts");
+  const cwdRoot = path3.resolve(process.cwd(), "scripts");
   tried.push(cwdRoot);
   const api = tryScriptsRoot(cwdRoot);
   if (api) return api;
@@ -3322,17 +3341,17 @@ function fmValue(fmLines, key) {
   const v = doc[key];
   return v === void 0 || v === null ? null : String(v);
 }
-function walkWiki(fs5, wikiDir) {
+function walkWiki(fs6, wikiDir) {
   const out = [];
   const recur = (dir) => {
     let entries;
     try {
-      entries = fs5.readdirSync(dir);
+      entries = fs6.readdirSync(dir);
     } catch {
       return;
     }
     for (const e of [...entries].sort((a, b) => a.name.localeCompare(b.name))) {
-      const full = path3.join(dir, e.name);
+      const full = path4.join(dir, e.name);
       if (e.isDirectory) recur(full);
       else if (e.isFile && e.name.endsWith(".md")) out.push(full);
     }
@@ -3340,24 +3359,24 @@ function walkWiki(fs5, wikiDir) {
   recur(wikiDir);
   return out.sort();
 }
-function acceptGrades(fs5, guildDir) {
-  const wikiDir = path3.join(guildDir, "wiki");
+function acceptGrades(fs6, guildDir) {
+  const wikiDir = path4.join(guildDir, "wiki");
   const accepted = [];
-  if (!fs5.existsSync(wikiDir)) return accepted;
-  for (const p of walkWiki(fs5, wikiDir)) {
-    const content = fs5.readFileSync(p);
+  if (!fs6.existsSync(wikiDir)) return accepted;
+  for (const p of walkWiki(fs6, wikiDir)) {
+    const content = fs6.readFileSync(p);
     const { fmLines, body } = splitFrontmatter2(content);
     if (fmLines === null) continue;
     if (fmValue(fmLines, "importance_draft") !== "true") continue;
     const kept = fmLines.filter(
       (l) => !/^importance_draft\s*:/.test(l) && !/^graded_by\s*:/.test(l)
     );
-    fs5.writeFileSync(p, `---
+    fs6.writeFileSync(p, `---
 ${kept.join("\n")}
 ---
 ${body}`);
     accepted.push({
-      rel: path3.relative(guildDir, p),
+      rel: path4.relative(guildDir, p),
       grade: fmValue(fmLines, "importance") ?? "(none)"
     });
   }
@@ -3365,26 +3384,26 @@ ${body}`);
 }
 
 // scripts/lib/state/ensure-storage-layout.ts
-var fs3 = __toESM(require("node:fs"));
-var path5 = __toESM(require("node:path"));
+var fs4 = __toESM(require("node:fs"));
+var path6 = __toESM(require("node:path"));
 
 // src/domains/state/guild-root.ts
-var fs2 = __toESM(require("node:fs"));
-var path4 = __toESM(require("node:path"));
+var fs3 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
 function resolveGuildRoot(startDir) {
-  const resolvedStart = path4.resolve(startDir);
+  const resolvedStart = path5.resolve(startDir);
   let current = resolvedStart;
   let nearestGuildDir = null;
   for (; ; ) {
-    if (fs2.existsSync(path4.join(current, ".git"))) return current;
+    if (fs3.existsSync(path5.join(current, ".git"))) return current;
     if (nearestGuildDir === null) {
-      const guildDir = path4.join(current, ".guild");
+      const guildDir = path5.join(current, ".guild");
       try {
-        if (fs2.existsSync(guildDir) && fs2.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+        if (fs3.existsSync(guildDir) && fs3.statSync(guildDir).isDirectory()) nearestGuildDir = current;
       } catch {
       }
     }
-    const parent = path4.dirname(current);
+    const parent = path5.dirname(current);
     if (parent === current) return nearestGuildDir ?? resolvedStart;
     current = parent;
   }
@@ -3393,17 +3412,17 @@ function resolveGuildRoot(startDir) {
 // scripts/lib/state/ensure-storage-layout.ts
 var CURRENT_LAYOUT_VERSION = 2;
 function markerPath(root) {
-  return path5.join(root, ".guild", "storage-layout.json");
+  return path6.join(root, ".guild", "storage-layout.json");
 }
 function detect2(cwd = process.cwd()) {
   const root = resolveGuildRoot(cwd);
   const marker = markerPath(root);
-  if (!fs3.existsSync(path5.join(root, ".guild"))) {
+  if (!fs4.existsSync(path6.join(root, ".guild"))) {
     return { state: "absent", version: null, root, marker };
   }
   let version = null;
   try {
-    const parsed = JSON.parse(fs3.readFileSync(marker, "utf8"));
+    const parsed = JSON.parse(fs4.readFileSync(marker, "utf8"));
     if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
   } catch {
     version = null;
@@ -3416,11 +3435,11 @@ var upgradeChunk = null;
 function upgradeChain() {
   if (upgradeChunk === null) {
     const candidates = [
-      path5.join(__dirname, "upgrade-chain.js"),
-      path5.join(__dirname, "lib", "state", "upgrade-chain"),
-      path5.join(__dirname, "upgrade-chain")
+      path6.join(__dirname, "upgrade-chain.js"),
+      path6.join(__dirname, "lib", "state", "upgrade-chain"),
+      path6.join(__dirname, "upgrade-chain")
     ];
-    const spec = candidates.find((c) => fs3.existsSync(c) || fs3.existsSync(`${c}.ts`)) ?? candidates[2];
+    const spec = candidates.find((c) => fs4.existsSync(c) || fs4.existsSync(`${c}.ts`)) ?? candidates[2];
     upgradeChunk = require(spec);
   }
   return upgradeChunk;
@@ -3475,17 +3494,17 @@ if (isProcessEntry()) {
 function childGuildRoots(root) {
   let names = [];
   try {
-    names = fs4.readdirSync(root);
+    names = fs5.readdirSync(root);
   } catch {
     return [];
   }
   const out = [];
   for (const name of names) {
     if (name.startsWith(".")) continue;
-    const child = path6.join(root, name);
+    const child = path7.join(root, name);
     try {
-      if (!fs4.lstatSync(child).isDirectory()) continue;
-      if (fs4.existsSync(path6.join(child, ".guild"))) out.push(child);
+      if (!fs5.lstatSync(child).isDirectory()) continue;
+      if (fs5.existsSync(path7.join(child, ".guild"))) out.push(child);
     } catch {
     }
   }
@@ -3537,9 +3556,9 @@ function main() {
   const rootArg = args.find((a) => a.startsWith("--root="));
   const modeArg = args.find((a) => a.startsWith("--mode="));
   const workspace = args.includes("--workspace");
-  const root = rootArg ? path6.resolve(rootArg.split("=").slice(1).join("=")) : process.cwd();
+  const root = rootArg ? path7.resolve(rootArg.split("=").slice(1).join("=")) : process.cwd();
   if (args.includes("--accept-grades")) {
-    const accepted = acceptGrades(realFs, path6.join(root, ".guild"));
+    const accepted = acceptGrades(realFs, path7.join(root, ".guild"));
     if (accepted.length === 0) {
       process.stdout.write(`No drafted wiki importance grades pending \u2014 nothing to accept.
 `);

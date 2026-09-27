@@ -3080,8 +3080,8 @@ __export(initiative_gate_exports, {
   runDocsWorkitems: () => runDocsWorkitems
 });
 module.exports = __toCommonJS(initiative_gate_exports);
-var fs = __toESM(require("node:fs"));
-var path2 = __toESM(require("node:path"));
+var fs2 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
 
 // src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
@@ -3094,16 +3094,35 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
 ]);
 
 // src/domains/kernel/yaml-loader.ts
+var path2 = __toESM(require("node:path"));
+
+// src/domains/kernel/plugin-root.ts
+var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
+var PLUGIN_ROOT_MARKER = path.join("runtime", "guild-mcp.js");
+function findPluginRoot(fromDir) {
+  let dir = path.resolve(fromDir);
+  for (; ; ) {
+    if (fs.existsSync(path.join(dir, PLUGIN_ROOT_MARKER))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+// src/domains/kernel/yaml-loader.ts
 function pluginLocalScriptsRoots() {
+  const own = findPluginRoot(__dirname);
   return [
+    // The package this code shipped in, whatever the bundle depth (runtime/scripts).
+    ...own === null ? [] : [path2.join(own, "scripts")],
     // Source TS layout (src/domains/<id>) and the bundled agent-team hook layout
     // (hooks/agent-team/dist) both sit three levels under plugin/.
-    path.resolve(__dirname, "..", "..", "..", "scripts"),
+    path2.resolve(__dirname, "..", "..", "..", "scripts"),
     // Bundled hook layout (hooks/dist) and src/adapters both sit two levels under.
-    path.resolve(__dirname, "..", "..", "scripts"),
+    path2.resolve(__dirname, "..", "..", "scripts"),
     // src/adapters/model-discovery and any deeper nesting.
-    path.resolve(__dirname, "..", "..", "..", "..", "scripts")
+    path2.resolve(__dirname, "..", "..", "..", "..", "scripts")
   ];
 }
 function tryScriptsRoot(scriptsRoot) {
@@ -3124,7 +3143,7 @@ function loadYamlApi() {
     return require_js_yaml();
   } catch {
   }
-  const cwdRoot = path.resolve(process.cwd(), "scripts");
+  const cwdRoot = path2.resolve(process.cwd(), "scripts");
   tried.push(cwdRoot);
   const api = tryScriptsRoot(cwdRoot);
   if (api) return api;
@@ -3381,11 +3400,11 @@ function populateReleaseDocsWorkItems(initiativeId, d8, documentationStatus) {
 // scripts/initiative-gate.ts
 function loadInitiativeManifest(root, id) {
   for (const bucket of ["active", "archived"]) {
-    const p = path2.join(root, ".guild", "initiatives", bucket, id, "initiative.yaml");
-    if (!fs.existsSync(p)) continue;
+    const p = path3.join(root, ".guild", "initiatives", bucket, id, "initiative.yaml");
+    if (!fs2.existsSync(p)) continue;
     let text;
     try {
-      text = fs.readFileSync(p, "utf8");
+      text = fs2.readFileSync(p, "utf8");
     } catch {
       return null;
     }
@@ -3454,7 +3473,7 @@ function buildD8Input(raw, execVerified) {
   return { input, warnings };
 }
 function isPathContained(rootPath, candidatePath) {
-  return candidatePath === rootPath || candidatePath.startsWith(rootPath + path2.sep);
+  return candidatePath === rootPath || candidatePath.startsWith(rootPath + path3.sep);
 }
 function evidencePathToken(rawRef) {
   if (/[\u0000-\u001f\u007f]/.test(rawRef)) return null;
@@ -3471,15 +3490,15 @@ function classifyEvidenceRef(root, source, rawRef) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be a path, not prose/control text" } };
   }
   const fileRef = normalizedRef.split("#", 1)[0];
-  if (!fileRef || path2.isAbsolute(fileRef)) {
+  if (!fileRef || path3.isAbsolute(fileRef)) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be repository-relative" } };
   }
   const segments = fileRef.split(/[\\/]/);
   if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be a canonical contained path" } };
   }
-  const rootAbs = path2.resolve(root);
-  const resolved = path2.resolve(rootAbs, fileRef);
+  const rootAbs = path3.resolve(root);
+  const resolved = path3.resolve(rootAbs, fileRef);
   if (!isPathContained(rootAbs, resolved)) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref escapes repository root" } };
   }
@@ -3504,14 +3523,14 @@ function checkInitiativeEvidenceRefs(root, initiativeDir, manifest) {
         invalid.push(classified.record);
         continue;
       }
-      if (!fs.existsSync(classified.record.resolved_path)) {
+      if (!fs2.existsSync(classified.record.resolved_path)) {
         checked.push(classified.record);
         missing.push(classified.record);
         continue;
       }
       try {
-        const rootReal = fs.realpathSync.native(path2.resolve(root));
-        const evidenceReal = fs.realpathSync.native(classified.record.resolved_path);
+        const rootReal = fs2.realpathSync.native(path3.resolve(root));
+        const evidenceReal = fs2.realpathSync.native(classified.record.resolved_path);
         if (!isPathContained(rootReal, evidenceReal)) {
           invalid.push({
             ref: classified.record.ref,
@@ -3520,7 +3539,7 @@ function checkInitiativeEvidenceRefs(root, initiativeDir, manifest) {
           });
           continue;
         }
-        if (!fs.statSync(evidenceReal).isFile()) {
+        if (!fs2.statSync(evidenceReal).isFile()) {
           invalid.push({
             ref: classified.record.ref,
             source,
@@ -3547,11 +3566,11 @@ function checkInitiativeEvidenceRefs(root, initiativeDir, manifest) {
       consume("initiative.yaml#close_gate.evidence", closeGate["evidence"]);
     }
   }
-  const workItemsDir = path2.join(initiativeDir, "work-items");
-  if (fs.existsSync(workItemsDir)) {
+  const workItemsDir = path3.join(initiativeDir, "work-items");
+  if (fs2.existsSync(workItemsDir)) {
     let names;
     try {
-      const entries = fs.readdirSync(workItemsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+      const entries = fs2.readdirSync(workItemsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
       names = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".yaml")).map((entry) => entry.name).sort();
       for (const entry of entries) {
         if (entry.name.endsWith(".yaml") && !entry.isFile()) {
@@ -3579,7 +3598,7 @@ function checkInitiativeEvidenceRefs(root, initiativeDir, manifest) {
       const source = `work-items/${name}`;
       let parsed;
       try {
-        parsed = parseYaml2(fs.readFileSync(path2.join(workItemsDir, name), "utf8"));
+        parsed = parseYaml2(fs2.readFileSync(path3.join(workItemsDir, name), "utf8"));
       } catch {
         invalid.push({ ref: name, source, reason: "work item is unreadable or malformed YAML" });
         continue;
@@ -3619,16 +3638,16 @@ ${USAGE}` };
   }
   if (!initiative) return { error: `missing --initiative <id>
 ${USAGE}` };
-  return { command, initiative, root: path2.resolve(root), execVerified };
+  return { command, initiative, root: path3.resolve(root), execVerified };
 }
 function runCloseCheck(root, initiativeId, execVerified) {
   const manifest = loadInitiativeManifest(root, initiativeId);
   if (manifest === null) {
-    return { error: `no initiative.yaml found for "${initiativeId}" under ${path2.join(root, ".guild", "initiatives")}/{active,archived}/${initiativeId}/` };
+    return { error: `no initiative.yaml found for "${initiativeId}" under ${path3.join(root, ".guild", "initiatives")}/{active,archived}/${initiativeId}/` };
   }
   const { input, warnings } = buildD8Input(manifest.raw, execVerified);
   const result = d8CloseGate(input);
-  const evidence = checkInitiativeEvidenceRefs(root, path2.dirname(manifest.path), manifest.raw);
+  const evidence = checkInitiativeEvidenceRefs(root, path3.dirname(manifest.path), manifest.raw);
   return {
     initiative_id: initiativeId,
     manifest_path: manifest.path,
@@ -3642,7 +3661,7 @@ function runCloseCheck(root, initiativeId, execVerified) {
 function runDocsWorkitems(root, initiativeId, execVerified) {
   const manifest = loadInitiativeManifest(root, initiativeId);
   if (manifest === null) {
-    return { error: `no initiative.yaml found for "${initiativeId}" under ${path2.join(root, ".guild", "initiatives")}/{active,archived}/${initiativeId}/` };
+    return { error: `no initiative.yaml found for "${initiativeId}" under ${path3.join(root, ".guild", "initiatives")}/{active,archived}/${initiativeId}/` };
   }
   const { input, warnings } = buildD8Input(manifest.raw, execVerified);
   const result = d8CloseGate(input);

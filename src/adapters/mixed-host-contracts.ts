@@ -48,7 +48,7 @@ if (
  * Owned by tooling-engineer.
  */
 
-import type { HostKind } from "./host-types";
+import type { HostKind } from "../domains/config";
 
 // ── Schema version constants ──────────────────────────────────────────────────
 

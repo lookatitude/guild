@@ -123,6 +123,7 @@ import { validateEvent } from "../../scripts/v1.4-log-validator.js";
 // `config validate/resolve/show` report as the documented default. Pure data, zero
 // internal deps (config-defaults.ts's own contract) — safe to bundle into hooks/dist/.
 import { DEFAULTS as CONFIG_DEFAULTS } from "../../scripts/lib/shared/config-defaults.js";
+import { runDirOverride } from "./run-dir-override.js";
 
 /** Stable marker strings — pinned by tests and the dist-grep rail. */
 export const LIFECYCLE_GATE_MARKER = "[GUILD LIFECYCLE GATE]";
@@ -969,7 +970,7 @@ async function resolveGateContext(
   if (!isRunActive(guildRoot, safeRunId, facts.status)) return null;
 
   const phase = safePhase(facts.phase);
-  const runDir = env["GUILD_RUN_DIR"] ?? path.join(guildRoot, ".guild", "runs", safeRunId);
+  const runDir = runDirOverride(env) ?? path.join(guildRoot, ".guild", "runs", safeRunId);
   const runState = readValidatedRunState(runDir, safeRunId);
   const events = await readTraceEvents(runDir);
   if (!isPastBuildStart(phase, events, runState?.laneStatuses.length ?? 0)) return null;

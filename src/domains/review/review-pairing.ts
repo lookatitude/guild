@@ -2,7 +2,7 @@ import {
   adjudicateIndependence,
   type ReviewPartyFacts,
 } from "../config";
-import { getRegistryEntry, resolveRung, type HostId } from "../../adapters";
+import { getRegistryEntry, resolveRung, type HostId } from "../config";
 import {
   makePolicySkipProgress,
   makeReviewProgressEvent,

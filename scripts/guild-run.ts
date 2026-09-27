@@ -59,21 +59,24 @@ import type { HostAdapterResult } from "./lib/host-adapter-contract";
 // keeping the dependency one-way is what stops the two from recursing.
 import {
   HOST_ADAPTER_BOUNDARY_SCHEMA,
-  HOST_ADAPTER_CONTRACT_VERSION,
   HOST_CAPABILITY_SNAPSHOT_SCHEMA,
   HOST_RUNTIME_BINDING_RESULT_SCHEMA,
   HOST_RUNTIME_BINDING_SCHEMA,
   bindHostRuntimeAdapter,
-  normalizeHostId,
   type HostAdapterProvider,
   type HostCapabilitySnapshotStore,
   type HostRuntimeBinding,
   type HostRuntimeBindingDisposition,
   type HostRuntimeBindingResult,
 } from "../src/adapters";
+import {
+  HOST_ADAPTER_CONTRACT_VERSION,
+  normalizeHostId,
+} from "../src/domains/config";
 // W4 D1: registry-bridge predicate replaces `plan.host === "claude"` literal.
 import { isClaudeCli } from "./lib/capability/rank";
 import type { HostKind } from "./lib/host-types";
+import { ownPluginRoot } from "../src/domains/kernel";
 
 // ---------------------------------------------------------------------------
 // Arg parsing
@@ -505,13 +508,13 @@ function main(): number {
 
   // `guild-run update` — wrapper-host self-update (plugin-update-lifecycle G1-ALL).
   if (parsed.update) {
-    return runSelfUpdate({ pkgRoot: path.resolve(__dirname, ".."), force: parsed.force });
+    return runSelfUpdate({ pkgRoot: ownPluginRoot(__dirname), force: parsed.force });
   }
 
   // Offline launch notice (AC-3): one stderr line when the machine cache says
   // this package's channel has moved. Never blocks, never touches the network.
   try {
-    const pkgRoot = path.resolve(__dirname, "..");
+    const pkgRoot = ownPluginRoot(__dirname);
     const state = resolveInstallState(pkgRoot);
     if (state.channel !== "dev") {
       // The receipt names the host so the AC-7 row supplies the right command

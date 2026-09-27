@@ -1,0 +1,25 @@
+{
+  "schema_version": "guild.adapter_map.v1",
+  "family": "codex",
+  "host_ids": [
+    "codex-cli",
+    "codex-app"
+  ],
+  "package_trees": [
+    "codex"
+  ],
+  "projects": {
+    "manifest": ".codex-plugin/plugin.json",
+    "skills": "skills/",
+    "hooks": "hooks/",
+    "instructions": ".agents/skills/guild/"
+  },
+  "runtime": [
+    "runtime/",
+    "hooks/dist/"
+  ],
+  "never_projects": [
+    "src/domains/**/*.ts"
+  ],
+  "rungs": "src/adapters/adapter.lock.json#/families/codex"
+}

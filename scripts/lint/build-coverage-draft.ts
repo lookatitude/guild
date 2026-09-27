@@ -528,6 +528,20 @@ function shimAliases(moduleId: string): Map<string, string> {
   return out;
 }
 
+/** Shim name -> the domain a named `export { … } from "../../domains/<d>"` points at. */
+function shimDomainSources(file: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const sf = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  for (const st of sf.statements) {
+    if (!ts.isExportDeclaration(st) || !st.moduleSpecifier || !ts.isStringLiteral(st.moduleSpecifier)) continue;
+    if (!st.exportClause || !ts.isNamedExports(st.exportClause)) continue;
+    const domain = /(?:^|\/)domains\/([^/]+)$/.exec(st.moduleSpecifier.text)?.[1];
+    if (!domain) continue;
+    for (const el of st.exportClause.elements) out.set(el.name.text, domain);
+  }
+  return out;
+}
+
 /** Public surface of every domain index, plus the adapter tree (not a domain). */
 function domainSurfaces(): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
@@ -558,12 +572,17 @@ function moduleExports(): Entry[] {
     // file path. Symbols keep the file they come from, which is what U3 has to move.
     const symbols = collectExports(idx, new Set());
     const aliases = shimAliases(m);
+    const sources = shimDomainSources(idx);
     for (const [name, from] of [...symbols.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
       const rel = path.relative(ROOT, from).replace(/\\/g, "/");
+      // host-runtime folds into the adapter tree, except the host identity truth
+      // T14 moved into a domain (KTD27): that row targets the domain its shim
+      // re-exports it from.
+      const target = domain === "adapters" ? (sources.get(name) ?? domain) : domain;
       out.push({
         id: `module:${m}#${name}`,
         kind: "module_export",
-        target: `domain:${domain}#${aliases.get(name) ?? name}`,
+        target: `domain:${target}#${aliases.get(name) ?? name}`,
         disposition: "domain-fold",
         note: rel === `src/modules/${m}/index.ts` ? undefined : `declared in ${rel}`,
       });

@@ -58,7 +58,7 @@ Mirror `EXPLORE_V1_EXAMPLE` for the exact shape. Emit ONLY the allowed keys (str
 3. Choose a slug and write `.guild/explore/<slug>.json` with the shape above.
 4. **Self-validate (fail closed)** — run the real validator on the file you wrote:
    ```
-   npx tsx -e 'const root=process.env.GUILD_PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT;const {validateExploreV1}=require(root+"/scripts/lib/explore-schema.ts");const fs=require("fs");console.log(JSON.stringify(validateExploreV1(JSON.parse(fs.readFileSync(process.argv[1],"utf8"))),null,2))' .guild/explore/<slug>.json
+   node -e 'const root=process.env.GUILD_PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT;const {validateExploreV1}=require(root+"/runtime/scripts/explore-schema.js");const fs=require("fs");console.log(JSON.stringify(validateExploreV1(JSON.parse(fs.readFileSync(process.argv[1],"utf8"))),null,2))' .guild/explore/<slug>.json
    ```
    If `valid` is not `true`, fix the reported field(s) and re-validate. Do NOT hand off an
    artifact that fails validation.

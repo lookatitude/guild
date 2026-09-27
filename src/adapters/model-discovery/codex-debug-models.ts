@@ -21,7 +21,7 @@ import {
   RawDiscoveryResult,
   RawModelEntry,
   failureResult,
-} from "./adapter-contract";
+} from "../../domains/config";
 
 export const CODEX_DEBUG_MODELS_ADAPTER_ID = "codex-debug-models";
 export const CODEX_DEBUG_MODELS_ADAPTER_VERSION = "1.0.0";

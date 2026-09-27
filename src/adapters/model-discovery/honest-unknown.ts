@@ -24,7 +24,7 @@ import {
   DiscoveryIo,
   RawDiscoveryResult,
   RawModelEntry,
-} from "./adapter-contract";
+} from "../../domains/config";
 
 export const HONEST_UNKNOWN_ADAPTER_VERSION = "1.0.0";
 

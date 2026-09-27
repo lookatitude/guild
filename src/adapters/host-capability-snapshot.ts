@@ -64,8 +64,8 @@ import { createHash } from "node:crypto";
 // uses a WeakSet visited-guard and seals Sets/Maps instead of merely freezing them.
 import { deepFreeze } from "../domains/kernel";
 
-import { normalizeHostId } from "./host-id-namespace";
-import { HOST_REGISTRY_ROWS, type HostId, type HostRegistryEntry } from "./host-registry-schema";
+import { normalizeHostId } from "../domains/config";
+import { HOST_REGISTRY_ROWS, type HostId, type HostRegistryEntry } from "../domains/config";
 // TYPE-ONLY. The adapter boundary binds to the core's vocabulary at COMPILE time
 // and holds no runtime edge to it, so the one-way dependency direction the MH-01A
 // boundary contract declares (adapters -> core) cannot become a load-time cycle.

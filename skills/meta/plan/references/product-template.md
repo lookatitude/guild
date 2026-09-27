@@ -47,10 +47,10 @@ template or a skeleton that would not pass `validateExploreV1` / `validateDefine
 
 ```
 # write .guild/explore/<slug>.json + .guild/define/<slug>.json (slug defaults to the template id)
-npx tsx "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/instantiate-template.ts" <template-id> --slug=<slug> --cwd="$PWD"
+node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/instantiate-template.js" <template-id> --slug=<slug> --cwd="$PWD"
 
 # or preview the pair without writing:
-npx tsx "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/instantiate-template.ts" <template-id> --stdout
+node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/instantiate-template.js" <template-id> --stdout
 ```
 
 - `<template-id>` — a stable id (e.g. `cli-tool`, `web-app`), OR an explicit path to a

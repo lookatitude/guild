@@ -37,6 +37,7 @@ function compileStrict(cwd: string, inputs: string[]) {
       "--moduleResolution",
       "node",
       "--esModuleInterop",
+      "--resolveJsonModule",
       "--types",
       "node,jest",
       "--typeRoots",

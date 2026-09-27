@@ -6,8 +6,8 @@
  * differences in assignment instructions.
  */
 
-import { hostKindToRegistryId } from "../../adapters";
-import type { HostKind } from "../../adapters";
+import { hostKindToRegistryId } from "./host-id-namespace";
+import type { HostKind } from "./host-types";
 
 export interface TeamPromptSpecialist {
   name: string;

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
+var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __export = (target, all) => {
   for (var name in all)
@@ -15,6 +17,14 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // scripts/lib/classify-intake.ts
@@ -39,6 +49,10 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "mcp_servers",
   "scripts"
 ]);
+
+// src/domains/kernel/plugin-root.ts
+var path = __toESM(require("node:path"));
+var PLUGIN_ROOT_MARKER = path.join("runtime", "guild-mcp.js");
 
 // src/domains/kernel/sealed-collections.ts
 function regExpWritesLastIndex(re) {
@@ -391,7 +405,7 @@ function runClassifyIntakeCli(argv = process.argv.slice(2)) {
 if (typeof module !== "undefined" && require.main === module && /^classify-intake\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) runClassifyIntakeCli();
 
 // scripts/lib/classify-intake.ts
-if (require.main === module) runClassifyIntakeCli();
+if (require.main === module && /\.[cm]?ts$/.test(process.argv[1] ?? "")) runClassifyIntakeCli();
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   INTAKE_SMOKE_FIXTURE,

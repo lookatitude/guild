@@ -26,6 +26,7 @@ import {
   type NeutralConformanceEvidence,
 } from "../src/domains/lifecycle";
 import { evaluateTransportedReleaseConformance, runNeutralConformanceReleaseIntegration } from "../src/domains/distribution";
+import { bindHostRuntimePorts } from "../src/adapters";
 import {
   loadAttestedMigrationBoundary,
   snapshotMigrationRuntimePackage,
@@ -35,6 +36,9 @@ import {
 } from "./lib/capability/migration-evidence";
 import { readScalarField } from "./lib/frontmatter";
 import { redactShareableFile } from "./lib/shared/scrub-redact";
+
+// Composition root: bind the host-runtime ports the distribution domain names (KTD4).
+bindHostRuntimePorts();
 
 export const ACTIVATED_HOST_CONFORMANCE_SCHEMA = "guild.activated_host_conformance.v1" as const;
 export const ACTIVATED_HOST_WORKER_SCHEMA = "guild.activated_host_conformance_worker.v1" as const;

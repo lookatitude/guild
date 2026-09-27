@@ -35,7 +35,7 @@ __export(capability_profile_exports, {
 });
 module.exports = __toCommonJS(capability_profile_exports);
 var fs10 = __toESM(require("fs"));
-var path11 = __toESM(require("path"));
+var path12 = __toESM(require("path"));
 
 // scripts/lib/capability/candidate-surface.ts
 var fs = __toESM(require("fs"));
@@ -57,8 +57,8 @@ var DEFINITION_LAYERS = Object.freeze([
   "umbrella-guild"
 ]);
 var DEFINITION_LAYER_SET = new Set(DEFINITION_LAYERS);
-function layerAgreesWithPath(layer, path12) {
-  const segments = path12.split("/");
+function layerAgreesWithPath(layer, path13) {
+  const segments = path13.split("/");
   const hasClaude = segments.includes(".claude");
   const hasGuild = segments.includes(".guild");
   if (hasClaude && hasGuild) return false;
@@ -1162,7 +1162,7 @@ if (isProcessEntry()) {
 
 // src/domains/state/storage-layout.ts
 var fs7 = __toESM(require("node:fs"));
-var path9 = __toESM(require("node:path"));
+var path10 = __toESM(require("node:path"));
 
 // src/domains/state/guild-discovery.ts
 var fs4 = __toESM(require("node:fs"));
@@ -1336,7 +1336,7 @@ function removeContainedEmptyDir(abs, root) {
 }
 
 // src/domains/state/storage-policy.ts
-var path7 = __toESM(require("node:path"));
+var path8 = __toESM(require("node:path"));
 
 // src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
@@ -1347,6 +1347,10 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "mcp_servers",
   "scripts"
 ]);
+
+// src/domains/kernel/plugin-root.ts
+var path6 = __toESM(require("node:path"));
+var PLUGIN_ROOT_MARKER = path6.join("runtime", "guild-mcp.js");
 
 // src/domains/kernel/sealed-collections.ts
 function regExpWritesLastIndex(re) {
@@ -1438,7 +1442,7 @@ function frozenList(items, options = {}) {
 
 // src/domains/kernel/path-containment.ts
 var fs6 = __toESM(require("node:fs"));
-var path6 = __toESM(require("node:path"));
+var path7 = __toESM(require("node:path"));
 var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "root-unresolvable",
   "no-existing-ancestor",
@@ -1454,7 +1458,7 @@ function isRefused(r) {
   return "code" in r;
 }
 function escapes(rel) {
-  return rel === ".." || rel.startsWith(`..${path6.sep}`) || path6.isAbsolute(rel);
+  return rel === ".." || rel.startsWith(`..${path7.sep}`) || path7.isAbsolute(rel);
 }
 function refuse(code, detail) {
   return Object.freeze({ contained: false, code, detail });
@@ -1473,7 +1477,7 @@ function checkContained(root, target, options = {}) {
   const policy = options.policy ?? "resolve";
   let realRoot;
   try {
-    realRoot = fs6.realpathSync(path6.resolve(root));
+    realRoot = fs6.realpathSync(path7.resolve(root));
   } catch {
     return refuse("root-unresolvable", `project root ${root} does not resolve`);
   }
@@ -1483,13 +1487,13 @@ function checkContained(root, target, options = {}) {
       `refusing a path spelled with a ".." segment (${target}) \u2014 parent traversal cannot be resolved before symlinks`
     );
   }
-  const abs = path6.isAbsolute(target) ? path6.resolve(target) : path6.resolve(realRoot, target);
+  const abs = path7.isAbsolute(target) ? path7.resolve(target) : path7.resolve(realRoot, target);
   let probe = abs;
   let probeStat = null;
   for (; ; ) {
     probeStat = lstatOrNull(probe);
     if (probeStat !== null) break;
-    const parent = path6.dirname(probe);
+    const parent = path7.dirname(probe);
     if (parent === probe) {
       return refuse("no-existing-ancestor", `no existing ancestor of ${abs}`);
     }
@@ -1511,16 +1515,16 @@ function checkContained(root, target, options = {}) {
       `${probe} is a symlink that does not resolve; refusing to write through it`
     );
   }
-  const rel = path6.relative(realRoot, realProbe);
+  const rel = path7.relative(realRoot, realProbe);
   if (rel !== "" && escapes(rel)) {
     return refuse("outside-root", `${abs} resolves outside the project root (${realProbe})`);
   }
   if (policy === "physical") {
-    const parsed = path6.parse(abs);
+    const parsed = path7.parse(abs);
     let walk = parsed.root;
-    for (const seg of abs.slice(parsed.root.length).split(path6.sep)) {
+    for (const seg of abs.slice(parsed.root.length).split(path7.sep)) {
       if (seg === "" || seg === ".") continue;
-      walk = path6.join(walk, seg);
+      walk = path7.join(walk, seg);
       const st = lstatOrNull(walk);
       if (st === null || !st.isSymbolicLink()) continue;
       let segReal;
@@ -1529,15 +1533,15 @@ function checkContained(root, target, options = {}) {
       } catch {
         return refuse("dangling-symlink", `${walk} is a symlink that does not resolve`);
       }
-      const segRel = path6.relative(realRoot, segReal);
+      const segRel = path7.relative(realRoot, segReal);
       const strictlyInside = segRel !== "" && !escapes(segRel);
       if (strictlyInside) {
         return refuse("physical-symlink", `refusing \u2014 symlinked path segment: ${walk}`);
       }
     }
   }
-  const tail = path6.relative(probe, abs);
-  const realPath = tail === "" ? realProbe : path6.join(realProbe, tail);
+  const tail = path7.relative(probe, abs);
+  const realPath = tail === "" ? realProbe : path7.join(realProbe, tail);
   return Object.freeze({ contained: true, realRoot, realPath });
 }
 
@@ -1581,8 +1585,8 @@ var KTD16_FROZEN_PREFIXES = deepFreeze([
   "recommendations"
 ]);
 function isUnderDurable(abs, guildDir) {
-  const rel = path7.relative(path7.resolve(guildDir), path7.resolve(abs));
-  return rel === "" || !rel.startsWith("..") && !path7.isAbsolute(rel);
+  const rel = path8.relative(path8.resolve(guildDir), path8.resolve(abs));
+  return rel === "" || !rel.startsWith("..") && !path8.isAbsolute(rel);
 }
 var StoragePlacementError = class extends Error {
   constructor(storageClass, resolvedPath, detail) {
@@ -1617,7 +1621,7 @@ function assertSafeSegments(segments) {
     if (typeof raw !== "string" || raw.trim() === "") {
       throw new Error("guild storage: empty path segment");
     }
-    if (path7.isAbsolute(raw) || /^[A-Za-z]:/.test(raw) || raw.startsWith("\\\\")) {
+    if (path8.isAbsolute(raw) || /^[A-Za-z]:/.test(raw) || raw.startsWith("\\\\")) {
       throw new Error(`guild storage: absolute path segment is refused: ${raw}`);
     }
     if (raw.includes("\0")) {
@@ -1641,7 +1645,7 @@ var DURABLE_SUBTREES = deepFreeze({
    * `definition("sources", id)` — the one logical name that maps elsewhere, onto
    * the durable sources tree that already exists, so R59 does not invent a third home.
    */
-  sources: path7.join("knowledge", "sources"),
+  sources: path8.join("knowledge", "sources"),
   initiatives: "initiatives",
   /** KTD16 freeze. */
   runs: "runs",
@@ -1651,7 +1655,7 @@ var DURABLE_SUBTREES = deepFreeze({
 // src/domains/state/storage-roots.ts
 var crypto = __toESM(require("node:crypto"));
 var os = __toESM(require("node:os"));
-var path8 = __toESM(require("node:path"));
+var path9 = __toESM(require("node:path"));
 var OVERRIDE_KEYS = {
   state: "GUILD_STATE_HOME",
   cache: "GUILD_CACHE_HOME",
@@ -1662,29 +1666,29 @@ var GUILD_NAMESPACE = "guild";
 function platformStateRoot(platform, env, home) {
   if (platform === "win32") {
     const local = env.LOCALAPPDATA;
-    return local ? path8.join(local, "Guild", "state") : path8.join(home, "AppData", "Local", "Guild", "state");
+    return local ? path9.join(local, "Guild", "state") : path9.join(home, "AppData", "Local", "Guild", "state");
   }
   if (platform === "darwin") {
-    return path8.join(home, "Library", "Application Support", "Guild", "state");
+    return path9.join(home, "Library", "Application Support", "Guild", "state");
   }
   const xdg = env.XDG_STATE_HOME;
-  return xdg ? path8.join(xdg, GUILD_NAMESPACE) : path8.join(home, ".local", "state", GUILD_NAMESPACE);
+  return xdg ? path9.join(xdg, GUILD_NAMESPACE) : path9.join(home, ".local", "state", GUILD_NAMESPACE);
 }
 function platformCacheRoot(platform, env, home) {
   if (platform === "win32") {
     const local = env.LOCALAPPDATA;
-    return local ? path8.join(local, "Guild", "cache") : path8.join(home, "AppData", "Local", "Guild", "cache");
+    return local ? path9.join(local, "Guild", "cache") : path9.join(home, "AppData", "Local", "Guild", "cache");
   }
   if (platform === "darwin") {
-    return path8.join(home, "Library", "Caches", "Guild");
+    return path9.join(home, "Library", "Caches", "Guild");
   }
   const xdg = env.XDG_CACHE_HOME;
-  return xdg ? path8.join(xdg, GUILD_NAMESPACE) : path8.join(home, ".cache", GUILD_NAMESPACE);
+  return xdg ? path9.join(xdg, GUILD_NAMESPACE) : path9.join(home, ".cache", GUILD_NAMESPACE);
 }
 function guildRootId(activeRoot) {
-  const abs = path8.resolve(activeRoot);
+  const abs = path9.resolve(activeRoot);
   const digest = crypto.createHash("sha256").update(abs).digest("hex").slice(0, 12);
-  const base = path8.basename(abs).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "root";
+  const base = path9.basename(abs).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "root";
   return `${base}-${digest}`;
 }
 function resolveStorageRoots(opts) {
@@ -1692,19 +1696,19 @@ function resolveStorageRoots(opts) {
   const platform = opts.platform ?? process.platform;
   const home = opts.homedir ?? os.homedir();
   const tmp = opts.tmpdir ?? os.tmpdir();
-  const activeRoot = path8.resolve(opts.activeRoot);
+  const activeRoot = path9.resolve(opts.activeRoot);
   const override = (key) => {
     const raw = env[OVERRIDE_KEYS[key]];
-    return raw && raw.trim() ? path8.resolve(raw.trim()) : null;
+    return raw && raw.trim() ? path9.resolve(raw.trim()) : null;
   };
   const state = override("state") ?? platformStateRoot(platform, env, home);
   const cache = override("cache") ?? platformCacheRoot(platform, env, home);
   return {
-    durable: path8.join(activeRoot, ".guild"),
+    durable: path9.join(activeRoot, ".guild"),
     state,
     cache,
-    worktrees: override("worktrees") ?? path8.join(cache, "worktrees"),
-    temp: override("temp") ?? path8.join(tmp, GUILD_NAMESPACE)
+    worktrees: override("worktrees") ?? path9.join(cache, "worktrees"),
+    temp: override("temp") ?? path9.join(tmp, GUILD_NAMESPACE)
   };
 }
 
@@ -1717,7 +1721,7 @@ function scopedPaths(guildDir, _scope, configFile) {
   const durable = (cls, ...segments) => {
     const parts = segments.filter((s) => s !== "");
     assertSafeSegments(parts);
-    const abs = path9.join(guildDir, ...parts);
+    const abs = path10.join(guildDir, ...parts);
     assertClassPlacement(cls, abs, guildDir);
     return abs;
   };
@@ -1739,13 +1743,13 @@ function scopedPaths(guildDir, _scope, configFile) {
 function detectProfile(cwd, activeRoot) {
   const d = discoverGuild(cwd);
   if (d.level === "workspace") {
-    const own = path9.join(activeRoot, ".guild", DURABLE_SUBTREES.knowledge);
+    const own = path10.join(activeRoot, ".guild", DURABLE_SUBTREES.knowledge);
     return fs7.existsSync(own) ? "hybrid" : "workspace-only";
   }
   return d.workspaceRoot ? "child" : "standalone";
 }
 function createGuildStorage(cwd = process.cwd(), opts = {}) {
-  const activeRoot = path9.resolve(opts.activeRoot ?? discoverGuild(cwd).activeRoot);
+  const activeRoot = path10.resolve(opts.activeRoot ?? discoverGuild(cwd).activeRoot);
   const roots = resolveStorageRoots({
     activeRoot,
     platform: opts.platform,
@@ -1758,16 +1762,16 @@ function createGuildStorage(cwd = process.cwd(), opts = {}) {
   const profile = opts.profile ?? detectProfile(cwd, activeRoot);
   const external = (cls, base, ...segments) => {
     assertSafeSegments(segments);
-    const abs = path9.join(base, ...segments);
+    const abs = path10.join(base, ...segments);
     assertClassPlacement(cls, abs, guildDir);
     return abs;
   };
   const project = profile === "workspace-only" ? void 0 : scopedPaths(guildDir, "project", POLICY_CONFIG_FILES.project);
   const workspace = profile === "workspace-only" || profile === "hybrid" ? scopedPaths(guildDir, "workspace", POLICY_CONFIG_FILES.workspace) : void 0;
   const activeScope = project ?? workspace;
-  const runtimeBase = path9.join(roots.state, "roots", rootId);
-  const cacheBase = path9.join(roots.cache, "roots", rootId);
-  const tempBase = path9.join(roots.temp, rootId);
+  const runtimeBase = path10.join(roots.state, "roots", rootId);
+  const cacheBase = path10.join(roots.cache, "roots", rootId);
+  const tempBase = path10.join(roots.temp, rootId);
   const storage = {
     activeRoot,
     rootId,
@@ -1802,11 +1806,11 @@ function createGuildStorage(cwd = process.cwd(), opts = {}) {
         const gone = removeContainedTree(dir, owningRoot);
         if (gone) removed.push(dir);
       }
-      const worktreeRoot = path9.join(roots.worktrees, rootId);
-      const runWorktrees = path9.join(worktreeRoot, runId);
+      const worktreeRoot = path10.join(roots.worktrees, rootId);
+      const runWorktrees = path10.join(worktreeRoot, runId);
       if (isContainedRealDir(runWorktrees, worktreeRoot)) {
         for (const lane of readdirSafe(runWorktrees)) {
-          const laneDir = path9.join(runWorktrees, lane);
+          const laneDir = path10.join(runWorktrees, lane);
           if (!isContainedRealDir(laneDir, runWorktrees)) {
             preserved.push({ path: laneDir, reason: "not a real directory Guild owns (symlink or special file)" });
             continue;
@@ -1856,7 +1860,7 @@ var LOCK_STALE_MS = 15 * 60 * 1e3;
 // scripts/lib/capability/profile-emit.ts
 var import_crypto = require("crypto");
 var fs9 = __toESM(require("fs"));
-var path10 = __toESM(require("path"));
+var path11 = __toESM(require("path"));
 var import_util4 = require("util");
 
 // scripts/lib/capability/context-manager-contract.ts
@@ -1942,9 +1946,9 @@ function isCanonicalRelPath(v) {
   }
   return true;
 }
-function isUnderRoot(path12, root) {
-  if (path12 === root) return true;
-  const p = path12.split("/");
+function isUnderRoot(path13, root) {
+  if (path13 === root) return true;
+  const p = path13.split("/");
   const r = root.split("/");
   if (p.length <= r.length) return false;
   for (let i = 0; i < r.length; i++) if (p[i] !== r[i]) return false;
@@ -2006,7 +2010,7 @@ function listTree(absRoot, rel = "", depth = 0) {
       out.push({ rel: childRel, kind: "symlink" });
     } else if (e.isDirectory()) {
       out.push({ rel: childRel, kind: "dir" });
-      const child = listTree(path10.join(absRoot, e.name), childRel, depth + 1);
+      const child = listTree(path11.join(absRoot, e.name), childRel, depth + 1);
       if (child === null) return null;
       out.push(...child);
     } else if (e.isFile()) {
@@ -2018,7 +2022,7 @@ function listTree(absRoot, rel = "", depth = 0) {
   return out.sort((a, b) => a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
 }
 function hashTree(projectRoot, relRoot) {
-  const abs = path10.join(projectRoot, relRoot);
+  const abs = path11.join(projectRoot, relRoot);
   try {
     const st = fs9.lstatSync(abs);
     if (st.isSymbolicLink()) return null;
@@ -2037,7 +2041,7 @@ function hashTree(projectRoot, relRoot) {
 `);
       continue;
     }
-    const fileHash = sha256File(path10.join(abs, e.rel));
+    const fileHash = sha256File(path11.join(abs, e.rel));
     if (fileHash === null) return null;
     h.update(`${e.rel}\0${fileHash}
 `);
@@ -2048,7 +2052,7 @@ function hashFileSet(projectRoot, relPaths) {
   const h = (0, import_crypto.createHash)("sha256");
   let any = false;
   for (const rel of [...relPaths].sort()) {
-    const abs = path10.join(projectRoot, rel);
+    const abs = path11.join(projectRoot, rel);
     let exists;
     try {
       const st = fs9.lstatSync(abs);
@@ -2093,7 +2097,7 @@ function snapshotFeedstock(projectRoot) {
   const absent = [];
   const hashes = {};
   for (const input of FEEDSTOCK_INPUTS) {
-    const h = sha256File(path10.join(projectRoot, input.rel));
+    const h = sha256File(path11.join(projectRoot, input.rel));
     if (h === null) absent.push(input.name);
     hashes[input.name] = h;
   }
@@ -2419,17 +2423,17 @@ function emitCapabilityProfile(opts) {
         detail: `context-manager contract refused "${rel}": ${verdict.reason}`
       };
     }
-    const abs = path10.join(root, rel);
+    const abs = path11.join(root, rel);
     let prior = { kind: "absent" };
     try {
-      if (!isContainedRealPath(root, path10.dirname(abs))) {
+      if (!isContainedRealPath(root, path11.dirname(abs))) {
         return {
           status: "refused",
           code: "escapes_project_root",
           detail: `"${rel}" has an ancestor that resolves outside the project root`
         };
       }
-      fs9.mkdirSync(path10.dirname(abs), { recursive: true });
+      fs9.mkdirSync(path11.dirname(abs), { recursive: true });
       if (!isContainedRealPath(root, abs)) {
         return {
           status: "refused",
@@ -2720,8 +2724,8 @@ var evidenceChunk = null;
 function evidence() {
   if (evidenceChunk === null) {
     const candidates = [
-      path11.join(__dirname, "capability-profile-evidence.js"),
-      path11.join(__dirname, "lib", "capability", "capability-profile-evidence")
+      path12.join(__dirname, "capability-profile-evidence.js"),
+      path12.join(__dirname, "lib", "capability", "capability-profile-evidence")
     ];
     const spec = candidates.find((c) => fs10.existsSync(c) || fs10.existsSync(`${c}.ts`)) ?? candidates[1];
     evidenceChunk = require(spec);
@@ -2771,7 +2775,7 @@ function readFacts(file) {
   return parsed;
 }
 function cmdHashTree(argv) {
-  const root = path11.resolve(flag(argv, "cwd") ?? process.cwd());
+  const root = path12.resolve(flag(argv, "cwd") ?? process.cwd());
   const h = snapshotTreeHashes(root);
   if (h === null) fail("hash_incomplete", "the agents/skills/registry trees could not be hashed");
   if (has(argv, "json")) {
@@ -2793,7 +2797,7 @@ function cmdHashTree(argv) {
 }
 function cmdBaseline(argv) {
   if (has(argv, "captured-at")) fail("unknown_option", "--captured-at is forbidden; baseline capture time belongs to the lifecycle start transaction");
-  const root = path11.resolve(flag(argv, "cwd") ?? process.cwd());
+  const root = path12.resolve(flag(argv, "cwd") ?? process.cwd());
   const runId = flag(argv, "run-id");
   if (runId === null) fail("missing_arg", "--run-id is required");
   try {
@@ -2806,7 +2810,7 @@ function cmdBaseline(argv) {
 }
 function cmdEmit(argv) {
   if (has(argv, "generated-at")) fail("unknown_option", "--generated-at is forbidden; profile emission time comes from the tool clock");
-  const root = path11.resolve(flag(argv, "cwd") ?? process.cwd());
+  const root = path12.resolve(flag(argv, "cwd") ?? process.cwd());
   const runId = flag(argv, "run-id");
   const projectId = flag(argv, "project-id");
   const generatedAt = (/* @__PURE__ */ new Date()).toISOString();
@@ -2862,7 +2866,7 @@ function cmdEmit(argv) {
   );
 }
 function cmdCandidates(argv) {
-  const root = path11.resolve(flag(argv, "cwd") ?? process.cwd());
+  const root = path12.resolve(flag(argv, "cwd") ?? process.cwd());
   const budgetRaw = flag(argv, "budget");
   const budget = budgetRaw === null ? void 0 : parseCount(budgetRaw);
   if (budgetRaw !== null && budget === null) fail("bad_budget", `"${budgetRaw}" is not a count`);

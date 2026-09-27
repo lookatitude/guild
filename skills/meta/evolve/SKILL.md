@@ -25,7 +25,7 @@ Two fields:
    (or regenerate it on demand if stale/absent):
 
    ```
-   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/analyze-runs.ts --cwd <repo-root>
+   node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/analyze-runs.js --cwd <repo-root>
    ```
 
    Its `proposals[]` entries name each skill at or above `--min-runs` (default 3)
@@ -37,7 +37,7 @@ Two fields:
 
 Ten ordered steps. Each step's input and output is explicit so a later step can re-read the prior artifact without re-executing.
 
-1. **Snapshot current skill.** Delegates to `scripts/evolve-loop.ts`: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/evolve-loop.ts --skill <skill> --run-id <run-id> --cwd <cwd> [--proposed-edit <path>]`. The CLI resolves the live dir via `findLiveSkillDir` — `.guild/skills/<skill>/` when a project instance exists, else the plugin tree `skills/<tier>/<skill>/` (self-build cwd or `GUILD_PLUGIN_ROOT`/`CLAUDE_PLUGIN_ROOT`) — records the live body's pre-edit `baseline_sha256` (KTD48: no version tree is written; the inverse span lands in compact history when the delta is applied), and writes `.guild/evolve/<run-id>/pipeline.md` (the 10-step run plan steps 2-10 read from). Exits non-zero if the slug resolves nowhere. Input: `--skill`/`--proposed-edit`. Output: `.guild/evolve/<run-id>/pipeline.md` (carrying `baseline_sha256`).
+1. **Snapshot current skill.** Delegates to `scripts/evolve-loop.ts`: `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/evolve-loop.js --skill <skill> --run-id <run-id> --cwd <cwd> [--proposed-edit <path>]`. The CLI resolves the live dir via `findLiveSkillDir` — `.guild/skills/<skill>/` when a project instance exists, else the plugin tree `skills/<tier>/<skill>/` (self-build cwd or `GUILD_PLUGIN_ROOT`/`CLAUDE_PLUGIN_ROOT`) — records the live body's pre-edit `baseline_sha256` (KTD48: no version tree is written; the inverse span lands in compact history when the delta is applied), and writes `.guild/evolve/<run-id>/pipeline.md` (the 10-step run plan steps 2-10 read from). Exits non-zero if the slug resolves nowhere. Input: `--skill`/`--proposed-edit`. Output: `.guild/evolve/<run-id>/pipeline.md` (carrying `baseline_sha256`).
 
    **Resolution verification (mandatory, defense-in-depth).** `findLiveSkillDir` can resolve DIFFERENT dirs (project instance, source tree, or a rendered plugin-install path), and the orchestrator must never assume the resolved dir was the intended one. Immediately after the CLI runs, confirm `live_skill_path` in `pipeline.md` is the dir you meant and that `baseline_sha256` matches the `SKILL.md` you are about to evolve; on any mismatch, stop and re-run against the right dir before step 2 proceeds. The check costs one `shasum`; an unverified baseline silently corrupts every downstream A-variant artifact.
 

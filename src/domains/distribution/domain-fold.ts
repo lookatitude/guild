@@ -66,7 +66,9 @@ export const MODULE_TO_DOMAIN: ReadonlyMap<string, string> = sealMap(
     ["dashboard", "telemetry"],
     ["distribution", "distribution"],
     ["docs-sync", "distribution"],
-    // Not a domain: the host maps project into src/adapters (KTD1/KTD4).
+    // Not a domain: the host maps project into src/adapters (KTD1/KTD4). Host
+    // identity (registry, detection, session context, the adapter contracts) is
+    // truth and lives in config; the coverage row follows the declaring file.
     ["host-runtime", "adapters"],
   ],
   "MODULE_TO_DOMAIN",

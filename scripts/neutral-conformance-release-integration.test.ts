@@ -89,6 +89,10 @@ import {
   MANIFEST_PATH,
 } from "./check-channel-integrity";
 import type { PromotionGitOps } from "./check-channel-integrity";
+import { bindHostRuntimePorts } from "../src/adapters";
+
+// The MH-03 owner is host runtime; this test is a composition root (KTD4).
+bindHostRuntimePorts();
 
 // ---------------------------------------------------------------------------
 // The module under contract (lazy binder — the ONE tolerated RED diagnostic)

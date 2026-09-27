@@ -5,7 +5,7 @@
  *   string | { model, effort?, reasoning?, thinking?, verbosity? } | null.
  */
 
-import { normalizeHostId } from "../../adapters";
+import { normalizeHostId } from "./host-id-namespace";
 
 /** Object form of a tier->host model value. Closed key set: model, effort, reasoning, thinking, verbosity. */
 export interface TierModelSpec {

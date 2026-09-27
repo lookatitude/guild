@@ -130,21 +130,66 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   { id: "read-guild-config", entry: "scripts/read-guild-config.ts" },
   { id: "resume-lanes", entry: "scripts/resume-lanes.ts" },
   { id: "team-decide", entry: "scripts/team-decide.ts" },
+  // T14 (KTD11/KTD28): every script a shipped surface spawns runs as compiled
+  // Node, so a package ships these bundles and no domain TypeScript. Two are
+  // libraries a skill `require`s for one validator (explore/define schema).
+  { id: "agent-team-launcher", entry: "scripts/agent-team-launcher.ts" },
+  { id: "analyze-runs", entry: "scripts/analyze-runs.ts" },
+  { id: "analyze-structural", entry: "scripts/learn/analyze-structural.ts" },
+  { id: "assign-layers", entry: "scripts/learn/assign-layers.ts" },
+  { id: "audit-run-sinks", entry: "scripts/audit-run-sinks.ts" },
+  { id: "build-tour", entry: "scripts/learn/build-tour.ts" },
+  { id: "check-lane-liveness", entry: "scripts/check-lane-liveness.ts" },
+  { id: "cost-gate", entry: "scripts/learn/cost-gate.ts" },
+  { id: "define-schema", entry: "scripts/lib/define-schema.ts" },
+  { id: "definition-ref-for-dispatch", entry: "scripts/definition-ref-for-dispatch.ts" },
+  { id: "derive-domain", entry: "scripts/learn/derive-domain.ts" },
+  { id: "diff-learn", entry: "scripts/learn/diff-learn.ts" },
+  { id: "emit-loop-event", entry: "scripts/emit-loop-event.ts" },
+  { id: "explore-schema", entry: "scripts/lib/explore-schema.ts" },
+  { id: "feedback-triage", entry: "scripts/feedback-triage.ts" },
+  { id: "guild-run", entry: "scripts/guild-run.ts" },
+  { id: "ideation-min-build-cli", entry: "scripts/ideation-min-build-cli.ts" },
+  { id: "ingest-similarity", entry: "scripts/lib/ingest-similarity.ts" },
+  { id: "instantiate-template", entry: "scripts/instantiate-template.ts" },
+  { id: "k-stage-staleness", entry: "scripts/learn/k-stage-staleness.ts" },
+  { id: "kb-snapshot", entry: "scripts/lib/kb-snapshot.ts" },
+  { id: "knowledge-links-builder", entry: "scripts/knowledge-links-builder.ts" },
+  { id: "knowledge-links-traverse", entry: "scripts/knowledge-links-traverse.ts" },
+  { id: "knowledge-orchestrator", entry: "scripts/learn/knowledge-orchestrator.ts" },
+  { id: "learn-scan", entry: "scripts/learn/scan.ts" },
+  { id: "learn-staleness", entry: "scripts/learn/staleness.ts" },
+  { id: "lint-context-bundle", entry: "scripts/lint-context-bundle.ts" },
+  { id: "mark-lane-dead", entry: "scripts/mark-lane-dead.ts" },
+  { id: "pane-dispatch-trace", entry: "scripts/lib/host/pane-dispatch-trace.ts" },
+  { id: "recall", entry: "scripts/lib/recall.ts" },
+  { id: "registry-rollup", entry: "scripts/registry-rollup.ts" },
+  { id: "resolve-specialist-capability-scope", entry: "scripts/resolve-specialist-capability-scope.ts" },
+  { id: "retention", entry: "scripts/lib/retention.ts" },
+  { id: "roster-resolve", entry: "scripts/roster-resolve.ts" },
+  { id: "run-lifecycle", entry: "scripts/lib/run-lifecycle.ts" },
+  { id: "score-tier", entry: "scripts/score-tier.ts" },
+  { id: "stamp-recall-importance", entry: "scripts/stamp-recall-importance.ts" },
+  { id: "station-compose", entry: "scripts/station-compose.ts" },
+  { id: "task-cell-audit", entry: "scripts/task-cell-audit.ts" },
+  { id: "task-cell-team-result", entry: "scripts/task-cell-team-result.ts" },
+  { id: "validate-graph", entry: "scripts/learn/validate-graph.ts" },
+  { id: "verify-gate-pass", entry: "scripts/verify-gate-pass.ts" },
+  { id: "wiki-lint-checks", entry: "scripts/wiki-lint-checks.ts" },
+  { id: "workspace-detect", entry: "scripts/workspace/detect.ts" },
+  { id: "workspace-federated-query", entry: "scripts/workspace/federated-query.ts" },
+  { id: "workspace-promote-upstream", entry: "scripts/workspace/promote-upstream.ts" },
+  { id: "workspace-write-manifest", entry: "scripts/workspace/write-manifest.ts" },
+  { id: "write-knowledge-links", entry: "scripts/learn/write-knowledge-links.ts" },
+  { id: "write-task-run", entry: "scripts/write-task-run.ts" },
 ];
 
-/** The two D-MCP ids the single binary serves (KTD3). Never a union of the two. */
-const MCP_IDS = ["wiki", "trace"] as const;
-type McpId = (typeof MCP_IDS)[number];
-const MCP_SOURCES: Record<McpId, { server: string; src: string }> = {
-  wiki: { server: "guild-memory", src: "mcp-servers/guild-memory/src/index" },
-  trace: { server: "guild-telemetry", src: "mcp-servers/guild-telemetry/src/index" },
-};
-
-/** Fixed path so the entry name esbuild records in the bundle is deterministic. */
-// The name deliberately avoids the dot-guild token: layout-laws decides
-// write-capability on RAW TEXT including comments, so spelling it here would
-// make this build script look like a write-capable entry.
-const MCP_ENTRY = "mcp-servers/.compile-entry-mcp.ts";
+/**
+ * The single Guild MCP binary's authored entry (KTD3): the two D-MCP ids
+ * (wiki | trace), the `--describe` pin oracle and the `--call` in-process
+ * fallback. Nothing is generated.
+ */
+const MCP_ENTRY = "src/runtime/mcp.ts";
 const MCP_OUT = "runtime/guild-mcp.js";
 const PINS_OUT = "runtime/mcp-descriptions.pins.json";
 
@@ -232,65 +277,6 @@ function normalizeShebang(outAbs: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Generated MCP entry (KTD3)
-// ---------------------------------------------------------------------------
-
-/**
- * One binary, one server per process, selected by argv[2]. `--describe` prints the
- * tool descriptions the pin step hashes — the binary is its own description oracle,
- * so a pin can never describe a build other than the one that ships.
- */
-function mcpEntrySource(): string {
-  const imports = MCP_IDS.map((id) => {
-    const rel = "./" + path.relative("mcp-servers", MCP_SOURCES[id].src).replace(/\\/g, "/");
-    return `import { buildServer as build_${id}, runAsEntry as run_${id} } from "${rel}";`;
-  }).join("\n");
-  const cases = MCP_IDS.map(
-    (id) => `  ${id}: { server: ${JSON.stringify(MCP_SOURCES[id].server)}, build: build_${id}, run: run_${id} },`,
-  ).join("\n");
-  return `// GENERATED by scripts/compile.ts — do not edit, do not commit.
-// Single Guild MCP binary (KTD3): two D-MCP ids, one runtime/guild-mcp.js.
-// Each id delegates to its own module's entry, so the stdio transport, the
-// ready line, and the fatal handler stay byte-for-byte what they were.
-${imports}
-
-const REGISTRY: Record<string, { server: string; build: () => any; run: () => void }> = {
-${cases}
-};
-
-const IDS = Object.keys(REGISTRY);
-
-function describe(): void {
-  const out: Record<string, { server: string; tools: Record<string, string> }> = {};
-  for (const id of IDS) {
-    const { server, build } = REGISTRY[id];
-    const tools: Record<string, string> = {};
-    const registered = (build() as any)._registeredTools;
-    if (!registered || Object.keys(registered).length === 0) {
-      process.stderr.write(\`[guild-mcp] describe: no registered tools for "\${id}" — SDK shape changed\\n\`);
-      process.exit(2);
-    }
-    for (const [name, def] of Object.entries(registered as Record<string, any>)) {
-      tools[name] = typeof def?.description === "string" ? def.description : "";
-    }
-    out[id] = { server, tools };
-  }
-  process.stdout.write(JSON.stringify(out, null, 2) + "\\n");
-}
-
-const arg = process.argv[2];
-if (arg === "--describe") {
-  describe();
-} else if (!arg || !REGISTRY[arg]) {
-  process.stderr.write(\`[guild-mcp] usage: guild-mcp <\${IDS.join("|")}> | --describe\\n\`);
-  process.exit(2);
-} else {
-  REGISTRY[arg].run();
-}
-`;
-}
-
-// ---------------------------------------------------------------------------
 // MCP description pins (KTD60)
 // ---------------------------------------------------------------------------
 
@@ -337,22 +323,16 @@ function writePins(binaryAbs: string, pinsAbs: string): void {
 
 function compileAll(outRoot: string, only?: string): string[] {
   const written: string[] = [];
-  const entryAbs = path.join(ROOT, MCP_ENTRY);
-  fs.writeFileSync(entryAbs, mcpEntrySource());
-  try {
-    for (const t of targets()) {
-      if (only && t.group !== only) continue;
-      const outAbs = path.join(outRoot, t.out);
-      fs.mkdirSync(path.dirname(outAbs), { recursive: true });
-      buildOne(t, outAbs);
-      written.push(t.out);
-    }
-    if (!only || only === "mcp") {
-      writePins(path.join(outRoot, MCP_OUT), path.join(outRoot, PINS_OUT));
-      written.push(PINS_OUT);
-    }
-  } finally {
-    fs.rmSync(entryAbs, { force: true });
+  for (const t of targets()) {
+    if (only && t.group !== only) continue;
+    const outAbs = path.join(outRoot, t.out);
+    fs.mkdirSync(path.dirname(outAbs), { recursive: true });
+    buildOne(t, outAbs);
+    written.push(t.out);
+  }
+  if (!only || only === "mcp") {
+    writePins(path.join(outRoot, MCP_OUT), path.join(outRoot, PINS_OUT));
+    written.push(PINS_OUT);
   }
   return written;
 }

@@ -44,19 +44,7 @@ import {
   type ResolveResult,
   type Source,
 } from "../config";
-import {
-  HOST_ADAPTER_CONTRACT_VERSION,
-  detectProviders,
-  defaultProbeEnv,
-  recommendProvider,
-  selectReviewer,
-  type AuthorIdentityTrust,
-  type DetectionResult,
-  type DetectedProvider,
-  type HostFamily,
-  type NativeAdapterIdentity,
-  type ProbeEnv,
-} from "../../adapters";
+import { HOST_ADAPTER_CONTRACT_VERSION, detectProviders, defaultProbeEnv, recommendProvider, selectReviewer, type AuthorIdentityTrust, type DetectionResult, type DetectedProvider, type HostFamily, type NativeAdapterIdentity, type ProbeEnv } from "../config";
 // P1-L8: resolve the three per-run roles (host/advisory/adversarial) from the live
 // detection and record them in the snapshot (capability-matrix-driven, not host-name).
 import { resolveRolesForRun, type RoleResolutionSet } from "../config";

@@ -21,7 +21,7 @@ import {
   RawDiscoveryResult,
   RawModelEntry,
   failureResult,
-} from "./adapter-contract";
+} from "../../domains/config";
 
 export const CLAUDE_API_ADAPTER_ID = "claude-api-models";
 export const CLAUDE_API_ADAPTER_VERSION = "1.0.0";

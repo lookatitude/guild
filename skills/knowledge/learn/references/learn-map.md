@@ -93,19 +93,18 @@ copy a schema into a skill body. The architecture-map stub is emitted as a
 
 # Workflow steps
 
-Each stage = a deterministic **script half** (shipped under
-`plugin/scripts/learn/`, run via `npx tsx … --cwd <repo-root>`) followed
+Each stage = a deterministic **script half** (compiled Node, run via
+`node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/<stage>.js --cwd <repo-root>`) followed
 by an **LLM semantic half** under the strict *"trust the script, do not re-read
 source"* constraint.
 
-0. **Check children first (workspace detection, before any scan).** Run `npx
-   tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/workspace/detect.ts --cwd <root>` — a bounded `.git/`/`.guild/`
+0. **Check children first (workspace detection, before any scan).** Run `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-detect.js --cwd <root>` — a bounded `.git/`/`.guild/`
    stat over **immediate children only** (depth fixed at 1; no nesting, no
    knob), honoring `settings.json` `workspace.mode: auto | on | off`. If the
    root is a **workspace** (≥1 child has a nested `.git/` or `.guild/`; plain
    dirs like `docs/` are ignored), do **not** scan the union as one monolithic
    repo: register the detected sub-guilds and write the federation manifest with
-   `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/workspace/write-manifest.ts --cwd <root>` →
+   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-write-manifest.js --cwd <root>` →
    `.guild/workspace.json` (`guild.workspace.v1`, by pointer — see the
    output-locations table). For the cheap-map sub-verb (`/guild:learn map`),
    deep per-sub-repo learn is **delegated/offered** (run `/guild:learn map
@@ -123,7 +122,7 @@ source"* constraint.
    for them), stage the cross-cutting ones for the workspace-knowledge-flow
    human gate (AGENTS.md §Cross-project knowledge rules, rule 3) by running:
    ```
-   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/workspace/promote-upstream.ts \
+   node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-promote-upstream.js \
      --workspace-root <root> [--child <name>] [--run-id <id>]
    ```
    This only STAGES a `guild.upstream_candidates.v1` manifest at
@@ -131,7 +130,7 @@ source"* constraint.
    copying candidate bodies); it writes nothing under `.guild/wiki/`. Landing a
    candidate in the umbrella wiki still requires the separate `guild:wiki-ingest`
    human gate — this CLI never auto-promotes.
-1. **Scan.** Script: `scan.ts --cwd <root> [--gen-ignore]` →
+1. **Scan.** Script: `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/learn-scan.js --cwd <root> [--gen-ignore]` →
    `codebase-map.json`. LLM: a **1–2 sentence project description** only (later
    written onto `KnowledgeGraph.project.description` by `guild:learn-graph`).
 2. **Architecture-map stub.** Write the confidence-tagged
@@ -140,7 +139,7 @@ source"* constraint.
    full pipeline is triggered (`/guild:learn` or `init --learn` /
    `auto_learn`).
 
-**Refresh / staleness (gated, never auto-rebuild):** `staleness.ts --cwd
+**Refresh / staleness (gated, never auto-rebuild):** `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/learn-staleness.js --cwd
 <root>` classifies `SKIP | PARTIAL | ARCHITECTURE | FULL`; `--baseline`
 re-seeds the fingerprint after a build. Act on the verdict only when a user or
 reflection trigger asks — never silently rebuild mid-task. Staleness

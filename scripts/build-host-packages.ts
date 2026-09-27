@@ -78,6 +78,7 @@ import {
   type ExpectedSurfaces,
 } from "./lib/equivalence-contract";
 import { checkSubset, type PackageReferences } from "./lib/parity-contract";
+import { adapterLockFamilies, checkPackageAgainstMap } from "../src/adapters";
 import { renderLauncherScript } from "./lib/guild-run-wrapper";
 import {
   buildModuleResourcePlan,
@@ -415,133 +416,62 @@ function copyDirExcludingNodeModules(srcDir: string, destDir: string): boolean {
 const stableJson = (v: unknown): string => JSON.stringify(v, null, 2) + "\n";
 
 /**
- * KTD28: a host package is a projection, never a copy of the domain tree. Three
- * parts of src/ still ship, and only these:
- *   - src/surfaces/** — runtime DATA (the class graphs workflow-graph-load reads);
+ * KTD28: a host package is a projection, never a copy of the domain tree. Two
+ * parts of src/ ship, and only these:
+ *   - src/surfaces/** — runtime DATA (class graphs, prompt dialects);
  *   - src/modules/** — module manifests + index shims, which the shipped
- *     activated-host-conformance worker evaluates in place (--module-boundary-root);
- *   - the src/ TypeScript that a shipped .ts file imports, transitively. Skill
- *     bodies run shipped scripts with `tsx`, and those scripts import domain
- *     files; without their closure the user-path command fails on import.
- * Call it LAST, after every other .ts file has landed in `dest`.
+ *     activated-host-conformance worker reads in place (--module-boundary-root).
+ * No src/domains TypeScript ships: every CLI a surface spawns is compiled Node
+ * under runtime/ (KTD11), so nothing on the user path imports a domain file.
  */
 function copyModuleRuntime(root: string, dest: string): void {
   copyDirExcludingNodeModules(path.join(root, "src", "surfaces"), path.join(dest, "src", "surfaces"));
   copyDirExcludingNodeModules(path.join(root, "src", "modules"), path.join(dest, "src", "modules"));
-  for (const rel of srcImportClosure(root, dest)) {
-    copyFileEnsured(path.join(root, rel), path.join(dest, rel));
-  }
 }
 
 const TS_SOURCE = /\.(ts|tsx|mts|cts)$/;
 
-function walkShippedTs(dir: string, out: string[]): string[] {
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return out;
-  }
-  for (const e of entries) {
-    if (e.name === "node_modules" || e.isSymbolicLink()) continue;
-    const p = path.join(dir, e.name);
-    if (e.isDirectory()) walkShippedTs(p, out);
-    else if (TS_SOURCE.test(e.name) && !e.name.endsWith(".d.ts")) out.push(p);
-  }
-  return out;
-}
-
-/** Every relative string literal is a candidate specifier. Over-matching only
- *  tries to resolve a path that is not a module; it catches `require` hidden
- *  behind `eval("require")`, which a syntax-aware scan would miss. */
-function relativeSpecifiers(text: string): string[] {
-  const out: string[] = [];
-  const re = /["'](\.{1,2}\/[^"'\n]*)["']/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) out.push(m[1]);
-  return out;
-}
-
-function resolveSourceModule(root: string, fromRel: string, spec: string): string | null {
-  const base = path.resolve(path.dirname(path.join(root, fromRel)), spec);
-  const stem = base.replace(/\.(js|mjs|cjs)$/, "");
-  for (const c of [base, `${stem}.ts`, `${stem}.tsx`, path.join(base, "index.ts")]) {
-    try {
-      if (fs.statSync(c).isFile()) return path.relative(root, c).split(path.sep).join("/");
-    } catch {
-      /* try the next candidate */
-    }
-  }
-  return null;
-}
-
-/** The src/ TypeScript files reachable from the .ts files already in `dest`. */
-export function srcImportClosure(root: string, dest: string): string[] {
-  const shipped = walkShippedTs(dest, [])
-    .map((abs) => path.relative(dest, abs).split(path.sep).join("/"))
-    .filter((rel) => !rel.startsWith("src/") || rel.startsWith("src/modules/"));
-  const closure = new Set<string>();
-  const queue = [...shipped];
-  const seen = new Set(queue);
-  while (queue.length > 0) {
-    const rel = queue.pop() as string;
-    let text: string;
-    try {
-      text = fs.readFileSync(path.join(root, rel), "utf8");
-    } catch {
-      continue; // generated in dest only (launcher, bridge): nothing to follow
-    }
-    for (const spec of relativeSpecifiers(text)) {
-      const target = resolveSourceModule(root, rel, spec);
-      if (!target || seen.has(target) || !TS_SOURCE.test(target)) continue;
-      seen.add(target);
-      queue.push(target);
-      if (/^src\/(?!surfaces\/|modules\/)/.test(target)) closure.add(target);
-    }
-  }
-  return [...closure].sort();
-}
-
-// The full production closure of scripts/package.json: js-yaml@4 plus its one
-// dependency. (esprima/sprintf-js were js-yaml@3-era strays — a prod install
-// never materializes them, so listing them would fail the closed vendor check.)
-const SCRIPT_RUNTIME_DEPENDENCIES = ["js-yaml", "argparse"] as const;
-
-/** Copy the vendored script runtime deps, failing CLOSED when one is missing.
- * A silent skip here ships packages whose tsx scripts crash on import
- * (issue #14: fresh `git clone` renders had no scripts/node_modules). */
-function copyScriptRuntimeDependencies(scriptsSrcRoot: string, scriptsDestRoot: string): void {
-  for (const name of SCRIPT_RUNTIME_DEPENDENCIES) {
-    const srcDir = path.join(scriptsSrcRoot, "node_modules", name);
-    if (!copyDirExcludingNodeModules(srcDir, path.join(scriptsDestRoot, "node_modules", name))) {
-      throw new Error(
-        `script runtime dependency "${name}" missing at ${srcDir} — ` +
-          `run \`npm ci --prefix ${scriptsSrcRoot}\` before rendering host packages ` +
-          `(install.sh does this automatically)`
-      );
-    }
-  }
-}
-
-/** Scripts are shipped as runnable TypeScript. Bundle their small production
- * runtime dependency closure so generated packages do not depend on ambient
- * node_modules from the source checkout. */
+/**
+ * KTD28/KTD11: a package ships compiled Node, never authoring TypeScript. Every
+ * CLI a shipped surface spawns is a `runtime/scripts/*.js` bundle (copied by
+ * copyCompiledRuntime); the only other script artifact is the compiled
+ * activated-host conformance CLI.
+ */
 function copyScriptRuntime(root: string, dest: string): void {
-  copyFileEnsured(path.join(root, "scripts", "package.json"), path.join(dest, "scripts", "package.json"));
-  const lock = path.join(root, "scripts", "package-lock.json");
-  if (fs.existsSync(lock)) {
-    copyFileEnsured(lock, path.join(dest, "scripts", "package-lock.json"));
-  }
-  copyScriptRuntimeDependencies(path.join(root, "scripts"), path.join(dest, "scripts"));
   copyFileRequired(
     path.join(root, "scripts", "dist", "activated-host-conformance.js"),
     path.join(dest, "scripts", "dist", "activated-host-conformance.js"),
     "scripts/dist/activated-host-conformance.js",
   );
-  // Some script modules reuse hook-side runtime libraries, notably
-  // result-contracts -> hooks/lib/handoff-v2. Packages that bundle scripts must
-  // carry those libraries or guild-run fails before its dry-run path can load.
-  copyDirExcludingNodeModules(path.join(root, "hooks", "lib"), path.join(dest, "hooks", "lib"));
+}
+
+/**
+ * The inventory's script entries a package carries: the compiled hook CLI bundles
+ * (`hooks/dist/*.js` a command shells out to). Authoring `scripts/**.ts` stay in
+ * the repo; their spawnable form is the compiled runtime.
+ */
+function copyShippedScripts(inv: GuildInventoryV1, dest: string, resources: ModuleResourceResolver): void {
+  for (const s of inv.scripts) {
+    if (TS_SOURCE.test(s.source_path)) continue;
+    resources.copy("scripts", s, path.join(dest, s.source_path));
+  }
+}
+
+/**
+ * The script surface a package exposes, for the SC-2 equivalence: the compiled
+ * `runtime/scripts/*.js` ids plus the hook CLI bundles. Computed the same way for
+ * the committed tree and a generated package, so equivalence compares the
+ * spawnable surface, not the authoring TypeScript.
+ */
+export function shippedScriptRefs(root: string, inv: Pick<GuildInventoryV1, "scripts">): string[] {
+  const dir = path.join(root, "runtime", "scripts");
+  const compiled = fs.existsSync(dir)
+    ? fs.readdirSync(dir).filter((f) => f.endsWith(".js")).map((f) => `runtime/scripts/${f.replace(/\.js$/, "")}`)
+    : [];
+  const bundles = inv.scripts
+    .filter((s) => !TS_SOURCE.test(s.source_path) && fs.existsSync(path.join(root, s.source_path)))
+    .map((s) => s.id);
+  return [...compiled, ...bundles].sort();
 }
 
 // ---------------------------------------------------------------------------
@@ -646,16 +576,16 @@ export function loadLogicalPackage(root: string): LogicalPackage {
     hooks_json: fs.existsSync(hooksJsonPath) ? readJson(hooksJsonPath) : {},
     bootstrap_sh: fs.existsSync(bootstrapPath) ? readText(bootstrapPath) : "",
     mcp_json: fs.existsSync(mcpPath) ? readJson(mcpPath) : {},
-    script_refs: d.scripts.map((s) => s.id),
+    script_refs: shippedScriptRefs(root, d),
   };
 }
 
-function expectedSurfaces(inv: GuildInventoryV1): ExpectedSurfaces {
+function expectedSurfaces(inv: GuildInventoryV1, root: string): ExpectedSurfaces {
   return {
     commands: inv.commands.map((c) => c.id),
     skills: inv.skills.map((s) => s.id),
     agents: inv.agents.map((a) => a.id),
-    script_refs: inv.scripts.map((s) => s.id),
+    script_refs: shippedScriptRefs(root, inv),
   };
 }
 
@@ -693,7 +623,6 @@ const STANDALONE_HOOK_CLI_ENTRYPOINTS: ReadonlyArray<{ ts: string; js: string }>
 /** Ship every standalone hook CLI entrypoint into a rendered package tree. Fails CLOSED. */
 function copyStandaloneHookEntrypoints(root: string, dest: string): void {
   for (const e of STANDALONE_HOOK_CLI_ENTRYPOINTS) {
-    copyFileRequired(path.join(root, e.ts), path.join(dest, e.ts), e.ts);
     copyFileRequired(path.join(root, e.js), path.join(dest, e.js), e.js);
   }
 }
@@ -770,7 +699,7 @@ export function writeClaudeTree(
     resources.copyBySourcePath("skills", sp, path.join(dest, sp));
   }
   for (const e of inv.agents) resources.copy("agents", e, path.join(dest, e.source_path));
-  for (const e of inv.scripts) resources.copy("scripts", e, path.join(dest, e.source_path));
+  copyShippedScripts(inv, dest, resources);
   copyClaudeHooks(root, dest, inv, resources);
   if (inv.mcp_servers.length > 0) {
     resources.copy("mcp_servers", inv.mcp_servers[0], path.join(dest, ".mcp.json"));
@@ -780,8 +709,7 @@ export function writeClaudeTree(
   copyFileEnsured(path.join(root, "AGENTS.md"), path.join(dest, "AGENTS.md"));
   copyFileEnsured(path.join(root, "CLAUDE.md"), path.join(dest, "CLAUDE.md"));
   copyScriptRuntime(root, dest);
-  // MCP server runtime referenced by .mcp.json (so the package is self-contained).
-  copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+  // .mcp.json starts runtime/guild-mcp.js; the compiled graph carries it (KTD3).
   copyCompiledRuntime(root, dest);
   copyTemplates(root, dest);
   copyModuleRuntime(root, dest);
@@ -874,13 +802,10 @@ export function writeCodexTree(
     resources.copyBySourcePath("skills", sp, path.join(dest, CODEX_NATIVE_SKILL_ROOT, underSkills));
     resources.copyBySourcePath("skills", sp, path.join(dest, AGENTS_SKILL_ROOT, underSkills));
   }
-  // Bundle the guild-run CLI (scripts/) so the Codex launcher is self-contained,
-  // plus the stdio MCP server runtime Codex can bundle.
-  for (const s of inv.scripts) {
-    resources.copy("scripts", s, path.join(dest, s.source_path));
-  }
+  // The guild-run CLI and the MCP binary ship compiled (runtime/), so the Codex
+  // launcher is self-contained without authoring TypeScript.
+  copyShippedScripts(inv, dest, resources);
   copyScriptRuntime(root, dest);
-  copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
   copyCompiledRuntime(root, dest);
   copyTemplates(root, dest);
   copyStandaloneHookEntrypoints(root, dest);
@@ -896,7 +821,6 @@ export function writeCodexMarketplaceTree(codexDir: string, distRoot: string): s
   rmrf(dest);
   const pluginDest = path.join(dest, "plugins", "guild");
   copyDirExcludingNodeModules(codexDir, pluginDest);
-  copyScriptRuntimeDependencies(path.join(codexDir, "scripts"), path.join(pluginDest, "scripts"));
   writeFileEnsured(
     path.join(dest, ".agents", "plugins", "marketplace.json"),
     stableJson({
@@ -931,11 +855,8 @@ function exposeGuildSkillTree(root: string, inv: GuildInventoryV1, dest: string,
     const underSkills = sp.replace(/^skills\//, "");
     resources.copyBySourcePath("skills", sp, path.join(dest, AGENTS_SKILL_ROOT, underSkills));
   }
-  for (const s of inv.scripts) {
-    resources.copy("scripts", s, path.join(dest, s.source_path));
-  }
+  copyShippedScripts(inv, dest, resources);
   copyScriptRuntime(root, dest);
-  copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
   copyCompiledRuntime(root, dest);
   copyTemplates(root, dest);
   copyStandaloneHookEntrypoints(root, dest);
@@ -1263,7 +1184,7 @@ export function buildHostPackages(opts: {
     // SC-2 — Claude full-tree equivalence with the anti-vacuity floor.
     const committed = loadLogicalPackage(opts.root);
     const generated = loadLogicalPackage(claudeDir);
-    const eq = checkClaudeEquivalence(committed, generated, expectedSurfaces(inv));
+    const eq = checkClaudeEquivalence(committed, generated, expectedSurfaces(inv, opts.root));
     if (!eq.ok) reasons.push(...eq.reasons);
 
     // SC-7b / SC-2-per-new-host — subset: every rendered reference exists in the inventory.
@@ -1294,6 +1215,12 @@ export function buildHostPackages(opts: {
       subsets.push(checkSubset(newHostPackageRefs(hostId, inv, (pkg.commands ?? []).map((c) => c.name)), inv));
     }
     for (const s of subsets) if (!s.ok) reasons.push(...s.reasons);
+
+    // KTD28: each family's package is its adapter map's projection — the named
+    // surfaces are present and no src/domains TypeScript was copied.
+    for (const family of adapterLockFamilies()) {
+      reasons.push(...checkPackageAgainstMap(opts.distRoot, family));
+    }
   }
 
   return {

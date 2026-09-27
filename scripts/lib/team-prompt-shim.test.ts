@@ -47,7 +47,8 @@ describe("team prompt module compatibility", () => {
     expect(tmuxBackend).toMatch(/src\/domains\/config\/team-prompt/);
     expect(tmuxBackend).not.toMatch(/export\s+function\s+buildPrompt/);
     expect(moduleFile).toMatch(/export\s+function\s+buildPrompt/);
-    expect(moduleFile).toMatch(/from\s+["']\.\.\/\.\.\/adapters["']/);
+    expect(moduleFile).toMatch(/from\s+["']\.\/host-id-namespace["']/);
+    expect(moduleFile).not.toMatch(/src\/adapters|\.\.\/\.\.\/adapters/);
     expect(moduleFile).not.toMatch(/adapters\/host-registry/);
   });
 });

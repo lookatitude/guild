@@ -847,7 +847,12 @@ function scanSecrets(corpus: string[]) {
 // files in any cwd the scrub touches (observed: benchmark + website during
 // the share-dot-guild commit).
 // ---------------------------------------------------------------------------
-if (require.main === module) {
+// Gate on the exact argv basename: esbuild inlines this module into other
+// bundles, where `require.main === module` is true for every inlined module.
+if (
+  require.main === module &&
+  /^scan\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")
+) {
 
 // ---------------------------------------------------------------------------
 // Collect corpora

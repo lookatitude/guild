@@ -83,6 +83,17 @@ import {
   type TaskAssignmentV2,
 } from "./lib/core/contracts/task-cell-backend";
 import type { TaskCellLaunchLane } from "./lib/task-cell-launch-plan";
+import { adapterLockProblems, rungKeyForSession, rungPlanForFamily, rungRowForFamily } from "../src/adapters";
+import { planWrapperInvocation } from "./lib/guild-run-wrapper";
+import {
+  ADAPTER_RUNG_NAMES,
+  MISSING_RUNG_BEHAVIOUR,
+  recordRungLosses,
+  resolveRungPlan,
+  type AdapterRungCell,
+  type AdapterRungName,
+  type AdapterRungRow,
+} from "../src/domains/dispatch";
 
 const FIXED_NOW = () => "2026-09-15T00:00:00.000Z";
 const RUN_ID = "run-t08rw";
@@ -233,6 +244,7 @@ async function spawnOne(input: {
   const runtime =
     input.runtime ??
     new FilesystemTaskCellRuntime({
+      rungPlan: CLAUDE_RUNGS,
       cwd: input.cwd,
       substrate: "tmux",
       parallelism: 8,
@@ -281,6 +293,9 @@ async function spawnOne(input: {
 }
 
 // ── W1 ───────────────────────────────────────────────────────────────────────
+
+/** The verified Claude row from adapter.lock.json: isolation is available. */
+const CLAUDE_RUNGS = rungPlanForFamily("claude", { verify_check_available: false });
 
 describe("W1 the projection is fixed at spawn and the tool gate fails closed", () => {
   it("refuses an assignment that WIDENS the instance's projection", async () => {
@@ -423,6 +438,7 @@ describe("W2 lead_only binds the parent and spawns nothing", () => {
     // starts from the moment the lifecycle does.
     calls.length = 0;
     const runtime = new FilesystemTaskCellRuntime({
+      rungPlan: CLAUDE_RUNGS,
       cwd,
       substrate: "tmux",
       parallelism: 4,
@@ -666,6 +682,7 @@ describe("W4 the instance cap is run-scoped and counted from disk", () => {
     const bindingRef = bindingRefFor(cwd);
     const makeRuntime = () =>
       new FilesystemTaskCellRuntime({
+        rungPlan: CLAUDE_RUNGS,
         cwd,
         substrate: "tmux",
         parallelism: 8,
@@ -765,6 +782,7 @@ describe("W4 the instance cap is run-scoped and counted from disk", () => {
     const cwd = tmpRoot("cap-concurrent-spawn");
     const bindingRef = bindingRefFor(cwd);
     const runtime = new FilesystemTaskCellRuntime({
+      rungPlan: CLAUDE_RUNGS,
       cwd,
       substrate: "tmux",
       parallelism: 8,
@@ -818,6 +836,7 @@ describe("W4 the instance cap is run-scoped and counted from disk", () => {
     const failing = recordingWorker();
     failing.spawn = () => ({ ok: false, reason: "pane refused" });
     const runtime = new FilesystemTaskCellRuntime({
+      rungPlan: CLAUDE_RUNGS,
       cwd,
       substrate: "tmux",
       parallelism: 8,
@@ -978,12 +997,27 @@ describe("W5 a missing session binding BLOCKS the launcher", () => {
     ).toThrow(/binding_blocked.*never resolves to Claude/s);
   });
 
-  it("copies the bound host and tier model onto the emitted assignment", () => {
-    const cwd = tmpRoot("binding-copy");
+  it("a bound Codex run is refused an isolated spawn: its spawn rung is inferred (KTD28)", () => {
+    const cwd = tmpRoot("binding-codex");
     writeSessionBinding(cwd, RUN_ID, {
       host_family: "codex-cli",
       model_family: "gpt",
       models: { cheap: "gpt-mini", mid: "gpt-mid", powerful: "gpt-max" },
+    });
+    writeLaneContexts(cwd, ["L1"]);
+    const bindingRef = bindingRefFor(cwd);
+    expect(() =>
+      emitTaskCellsV2(cwd, RUN_ID, "plr", [lane("L1")], "build", "tmux", bindingRef, false),
+    ).toThrow(/isolated_spawn_refused.*spawn \+ tool_projection/s);
+    expect(fs.existsSync(path.join(cwd, ".guild", "runs", RUN_ID, "task-cells"))).toBe(false);
+  });
+
+  it("copies the bound host and tier model onto the emitted assignment", () => {
+    const cwd = tmpRoot("binding-copy");
+    writeSessionBinding(cwd, RUN_ID, {
+      host_family: "claude-code-cli",
+      model_family: "anthropic",
+      models: { cheap: "bound-cheap", mid: "bound-mid", powerful: "bound-max" },
     });
     writeLaneContexts(cwd, ["L1"]);
     const bindingRef = bindingRefFor(cwd);
@@ -999,11 +1033,11 @@ describe("W5 a missing session binding BLOCKS the launcher", () => {
     const assignment = JSON.parse(
       fs.readFileSync(path.join(cwd, paths.assignment_path), "utf8"),
     ) as TaskAssignmentV2;
-    expect(assignment.host_id).toBe("codex-cli");
+    expect(assignment.host_id).toBe("claude-code-cli");
     const instance = JSON.parse(fs.readFileSync(path.join(cwd, paths.instance_path), "utf8")) as {
       model_id: string;
     };
-    expect(instance.model_id).toBe("gpt-mid");
+    expect(instance.model_id).toBe("bound-mid");
   });
 });
 
@@ -1414,3 +1448,269 @@ describe("W9 an empty minted slice returns nothing, never templates", () => {
     expect(res.roster).toHaveLength(2);
   });
 });
+
+// ── R44 / KTD28 — the closed adapter rung matrix on the real spawn path ─────────
+
+/** A verified all-native row, with `lost` rungs downgraded to an INFERRED claim. */
+function rowLosing(lost: readonly AdapterRungName[]): AdapterRungRow {
+  const rungs = Object.fromEntries(
+    ADAPTER_RUNG_NAMES.map((n): [AdapterRungName, AdapterRungCell] => [
+      n,
+      lost.includes(n)
+        ? { rung: "native", evidence: "inferred", verified_by: null }
+        : { rung: "native", evidence: "verified", verified_by: "fixture" },
+    ]),
+  ) as Record<AdapterRungName, AdapterRungCell>;
+  return { family: "fixture", rungs };
+}
+
+function degradationLines(cwd: string): Array<Record<string, unknown>> {
+  const log = path.join(cwd, ".guild", "runs", RUN_ID, "logs", "v1.4-events.jsonl");
+  if (!fs.existsSync(log)) return [];
+  return fs
+    .readFileSync(log, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as Record<string, unknown>)
+    .filter((e) => e.schema_version === "guild.trace.degradation.v1");
+}
+
+describe("R44 / KTD28 the closed adapter rung matrix", () => {
+  it("R44 · adapter.lock.json is the closed matrix: one row per registry family, seven rungs, no new host", () => {
+    expect(adapterLockProblems()).toEqual([]);
+    for (const n of ADAPTER_RUNG_NAMES) expect(rungRowForFamily("claude")!.rungs[n].evidence).toBe("verified");
+  });
+
+  const STATED: Record<AdapterRungName, (p: ReturnType<typeof resolveRungPlan>) => unknown> = {
+    spawn: (p) => p.spawn === "lead_only",
+    hooks: (p) => p.after_edit === "skip-recorded",
+    skills: (p) => p.skills === "read_when_named",
+    commands: (p) => p.commands === "prompt_names_assembler",
+    mcp: (p) => p.mcp === "in_process",
+    compaction: (p) => p.compaction === "skip-recorded",
+    tool_projection: (p) => p.tool_projection === "refused" && p.spawn === "lead_only",
+  };
+
+  it("R44 · each missing rung produces its stated behaviour and a recorded loss", () => {
+    for (const rung of ADAPTER_RUNG_NAMES) {
+      const cwd = tmpRoot(`rung-${rung}`);
+      const plan = resolveRungPlan(rowLosing([rung]), { verify_check_available: false });
+      expect({ rung, stated: STATED[rung](plan) }).toEqual({ rung, stated: true });
+      expect(plan.losses.map((l) => [l.rung, l.behaviour])).toEqual([[rung, MISSING_RUNG_BEHAVIOUR[rung]]]);
+      const runDir = path.join(cwd, ".guild", "runs", RUN_ID);
+      expect(recordRungLosses({ runDir, run_id: RUN_ID, plan, ts: FIXED_NOW() })).toBe(1);
+      const [line] = degradationLines(cwd);
+      expect(line).toMatchObject({
+        surface: "host-capability",
+        attempted: `${rung}: native (inferred)`,
+        fallback: MISSING_RUNG_BEHAVIOUR[rung],
+      });
+    }
+  });
+
+  it("R44 · a missing hooks rung still runs after_edit wrapped when a check command exists", () => {
+    const plan = resolveRungPlan(rowLosing(["hooks"]), { verify_check_available: true });
+    expect(plan.after_edit).toBe("wrapped");
+    expect(plan.losses.map((l) => l.rung)).toEqual(["hooks"]);
+  });
+
+  it("R44 · an inferred rung fails closed even when it claims native (Codex mcp)", () => {
+    const codex = rungRowForFamily("codex")!;
+    expect(codex.rungs.mcp).toMatchObject({ rung: "native", evidence: "inferred" });
+    expect(rungPlanForFamily("codex", { verify_check_available: false }).mcp).toBe("in_process");
+    expect(rungPlanForFamily("no-such-host", { verify_check_available: false }).losses).toHaveLength(7);
+  });
+
+  it("R44 · an inferred host id inherits no verified cell from its family row (claude-code-web)", () => {
+    expect(rungRowForFamily("claude-code-cli")!.rungs.spawn.evidence).toBe("verified");
+    const web = rungRowForFamily("claude-code-web")!;
+    for (const cell of Object.values(web.rungs)) expect(cell).toMatchObject({ evidence: "inferred", verified_by: null });
+    const plan = rungPlanForFamily("claude-code-web", { verify_check_available: false });
+    expect(plan.spawn).toBe("lead_only");
+    expect(plan.losses).toHaveLength(7);
+    expect(rungKeyForSession({ host_family: "claude", surface: "claude-code-web" })).toBe("claude-code-web");
+    expect(rungKeyForSession({ host_family: "claude", surface: "claude" })).toBe("claude");
+    expect(rungKeyForSession({ host_family: "codex", surface: "claude-code-web" })).toBe("codex");
+  });
+
+  it("R44 · a missing spawn rung collapses the cell to lead_only on the TaskCell spawn path", async () => {
+    const cwd = tmpRoot("rung-spawn-runtime");
+    const worker = recordingWorker();
+    const runtime = new FilesystemTaskCellRuntime({
+      rungPlan: resolveRungPlan(rowLosing(["spawn"]), { verify_check_available: false }),
+      cwd,
+      substrate: "tmux",
+      parallelism: 2,
+      binding: { binding_ref: bindingRefFor(cwd) },
+      worker,
+      now: FIXED_NOW,
+      idFactory: (kind) => `${kind}-${++idSeq}`,
+    });
+    const { instance } = await spawnOne({ cwd, logicalTaskId: "R44-spawn", fanout: "lead_plus_one", runtime, worker });
+    expect(worker.spawned).toEqual([]);
+    const paths = taskCellPaths({
+      run_id: RUN_ID,
+      logical_task_id: "R44-spawn",
+      attempt: 1,
+      instance_id: instance.instance_id,
+    });
+    const record = JSON.parse(fs.readFileSync(path.join(cwd, paths.instance_path), "utf8")) as {
+      projection: { recorded_losses: Array<{ capability: string; mapping: string }> };
+    };
+    const caps = record.projection.recorded_losses.map((l) => `${l.capability}:${l.mapping}`);
+    expect(caps).toContain("task_cell.isolation:lead_only");
+    expect(caps).toContain("adapter.spawn:missing");
+  });
+
+  it("KTD28 · a missing tool_projection rung refuses the isolated worker; the lane runs lead_only", async () => {
+    const cwd = tmpRoot("rung-projection-runtime");
+    const worker = recordingWorker();
+    const runtime = new FilesystemTaskCellRuntime({
+      rungPlan: resolveRungPlan(rowLosing(["tool_projection"]), { verify_check_available: false }),
+      cwd,
+      substrate: "tmux",
+      parallelism: 2,
+      binding: { binding_ref: bindingRefFor(cwd) },
+      worker,
+      now: FIXED_NOW,
+      idFactory: (kind) => `${kind}-${++idSeq}`,
+    });
+    const { instance } = await spawnOne({
+      cwd,
+      logicalTaskId: "KTD28-proj",
+      fanout: "lead_plus_one",
+      projection: ["Read"],
+      runtime,
+      worker,
+    });
+    // No isolated worker exists, so no worker can hold an unprojected tool set.
+    expect(worker.spawned).toEqual([]);
+    const paths = taskCellPaths({
+      run_id: RUN_ID,
+      logical_task_id: "KTD28-proj",
+      attempt: 1,
+      instance_id: instance.instance_id,
+    });
+    const record = JSON.parse(fs.readFileSync(path.join(cwd, paths.instance_path), "utf8")) as {
+      projection: { recorded_losses: Array<{ capability: string }> };
+    };
+    expect(record.projection.recorded_losses.map((l) => l.capability)).toContain("adapter.tool_projection");
+  });
+
+  it("KTD28 · the launcher refuses isolated panes on a family without tool projection, and records the loss", () => {
+    const cwd = tmpRoot("rung-launcher");
+    writeSessionBinding(cwd, RUN_ID, { host_family: "pi", model_family: "unknown", models: {} });
+    writeLaneContexts(cwd, ["L1"]);
+    const bindingRef = bindingRefFor(cwd);
+    expect(() =>
+      emitTaskCellsV2(cwd, RUN_ID, "plr", [lane("L1")], "build", "tmux", bindingRef, false),
+    ).toThrow(/isolated_spawn_refused.*tool_projection/s);
+    expect(fs.existsSync(path.join(cwd, ".guild", "runs", RUN_ID, "task-cells"))).toBe(false);
+    const lost = degradationLines(cwd).map((e) => String(e.attempted).split(":")[0]);
+    expect(lost).toEqual(expect.arrayContaining(["spawn", "tool_projection", "mcp", "compaction"]));
+  });
+
+  it("KTD28 · an unwritable event log: the launcher reports recorded: false and refuses isolated spawn", () => {
+    const cwd = tmpRoot("rung-unrecorded");
+    writeSessionBinding(cwd, RUN_ID, { host_family: "pi", model_family: "unknown", models: {} });
+    writeLaneContexts(cwd, ["L1"]);
+    const bindingRef = bindingRefFor(cwd);
+    // logs/ is a regular file, so no degradation line can be appended.
+    fs.writeFileSync(path.join(cwd, ".guild", "runs", RUN_ID, "logs"), "not a directory\n");
+    expect(() =>
+      emitTaskCellsV2(cwd, RUN_ID, "plr", [lane("L1")], "build", "tmux", bindingRef, false),
+    ).toThrow(/isolated_spawn_refused: recorded: false — \d+ of \d+ rung losses/);
+    expect(fs.existsSync(path.join(cwd, ".guild", "runs", RUN_ID, "task-cells"))).toBe(false);
+  });
+
+  it("CONTROL: the same run with a writable log refuses with recorded: true, so the check above is not vacuous", () => {
+    const cwd = tmpRoot("rung-recorded");
+    writeSessionBinding(cwd, RUN_ID, { host_family: "pi", model_family: "unknown", models: {} });
+    writeLaneContexts(cwd, ["L1"]);
+    const bindingRef = bindingRefFor(cwd);
+    let message = "";
+    try {
+      emitTaskCellsV2(cwd, RUN_ID, "plr", [lane("L1")], "build", "tmux", bindingRef, false);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain("recorded: true");
+    expect(message).not.toContain("recorded: false");
+  });
+
+  it("KTD22 · the launcher refuses a run bound to another host family instead of dispatching under the stale binding", () => {
+    const cwd = tmpRoot("rung-host-changed");
+    writeSessionBinding(cwd, RUN_ID, { host_family: "claude", model_family: "anthropic", models: {} });
+    writeLaneContexts(cwd, ["L1"]);
+    const bindingRef = bindingRefFor(cwd);
+    const prior = process.env["GUILD_HOST_FAMILY"];
+    process.env["GUILD_HOST_FAMILY"] = "codex";
+    try {
+      expect(() =>
+        emitTaskCellsV2(cwd, RUN_ID, "plr", [lane("L1")], "build", "tmux", bindingRef, false),
+      ).toThrow(/binding_blocked: .*bound to host family claude; this session is codex/s);
+    } finally {
+      if (prior === undefined) delete process.env["GUILD_HOST_FAMILY"];
+      else process.env["GUILD_HOST_FAMILY"] = prior;
+    }
+    expect(fs.existsSync(path.join(cwd, ".guild", "runs", RUN_ID, "task-cells"))).toBe(false);
+  });
+
+  it("KTD22 · CODEX_HOME does not name the session, and does not hide a real host signal behind it", () => {
+    const cwd = tmpRoot("rung-codex-home");
+    writeSessionBinding(cwd, RUN_ID, { host_family: "claude", model_family: "anthropic", models: {} });
+    writeLaneContexts(cwd, ["L1"]);
+    const bindingRef = bindingRefFor(cwd);
+    const keys = ["GUILD_HOST_FAMILY", "CLAUDE_PLUGIN_ROOT", "CLAUDECODE", "CODEX_HOME", "CODEX_SANDBOX"] as const;
+    const prior = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+    for (const k of keys) delete process.env[k];
+    process.env["CODEX_HOME"] = "/tmp/codex-home";
+    process.env["CODEX_SANDBOX"] = "seatbelt";
+    try {
+      expect(() =>
+        emitTaskCellsV2(cwd, RUN_ID, "plr", [lane("L1")], "build", "tmux", bindingRef, false),
+      ).toThrow(/binding_blocked: .*this session is codex/s);
+    } finally {
+      for (const k of keys) {
+        if (prior[k] === undefined) delete process.env[k];
+        else process.env[k] = prior[k];
+      }
+    }
+  });
+
+  it("R44 · a CLI-bound run resumed on an inferred surface of the same family takes the stricter rung plan", () => {
+    const cwd = tmpRoot("rung-surface-resume");
+    writeSessionBinding(cwd, RUN_ID, { host_family: "claude", surface: "claude-code-cli" });
+    writeLaneContexts(cwd, ["L1"]);
+    const bindingRef = bindingRefFor(cwd);
+    const prior = { family: process.env["GUILD_HOST_FAMILY"], surface: process.env["GUILD_HOST_SURFACE"] };
+    process.env["GUILD_HOST_FAMILY"] = "claude";
+    process.env["GUILD_HOST_SURFACE"] = "claude-code-web";
+    try {
+      expect(() =>
+        emitTaskCellsV2(cwd, RUN_ID, "plr", [lane("L1")], "build", "tmux", bindingRef, false),
+      ).toThrow(/isolated_spawn_refused/);
+    } finally {
+      for (const [k, v] of [["GUILD_HOST_FAMILY", prior.family], ["GUILD_HOST_SURFACE", prior.surface]] as const) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+    expect(fs.existsSync(path.join(cwd, ".guild", "runs", RUN_ID, "task-cells"))).toBe(false);
+  });
+
+  it("R44 · a wrapped host's guild-run plan states its verify and compaction rungs; Claude states none", () => {
+    const envOf = (host: string) =>
+      (planWrapperInvocation({ host, prompt: "p", cwd: "/tmp" } as never) as { env: Record<string, string> }).env;
+    expect(envOf("codex")).toMatchObject({ GUILD_VERIFY_RUNG: "skip-recorded", GUILD_COMPACTION_RUNG: "skip-recorded" });
+    expect(envOf("claude").GUILD_VERIFY_RUNG).toBeUndefined();
+    expect(envOf("claude").GUILD_COMPACTION_RUNG).toBeUndefined();
+  });
+
+  it("KTD28 · a verified family still spawns isolated workers with its projected tools only", async () => {
+    const cwd = tmpRoot("rung-claude");
+    const { worker, instance } = await spawnOne({ cwd, logicalTaskId: "KTD28-claude", projection: ["Read"] });
+    expect(worker.spawned).toEqual([instance.instance_id]);
+  });
+});
+

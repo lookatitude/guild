@@ -67,7 +67,7 @@ import {
 } from "./lib/security/events.js";
 // ISSUE #94: the manifest-absent fallback for `pre_tool_use_ask` reads the same
 // capability rows the manifest is rendered from — see hostSupportsPreToolUseAsk.
-import { HOST_REGISTRY_ROWS } from "../src/adapters/host-registry-schema.js";
+import { HOST_REGISTRY_ROWS } from "../src/domains/config/host-registry-schema.js";
 import { authorizeProjectedToolCall } from "../src/domains/dispatch";
 import {
   effectiveBypassPolicy,
@@ -140,6 +140,7 @@ import {
   type GuildHookEvent,
 } from "./lib/guild-hook-event.js";
 import { evaluateCompatibilitySkillUse } from "./lib/compatibility-skill-guard.js";
+import { runDirOverride } from "./lib/run-dir-override.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -737,7 +738,7 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
 
   const runId = resolveRunId(cwd);
   const runDir =
-    runId !== undefined ? (process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId)) : undefined;
+    runId !== undefined ? (runDirOverride() ?? resolveRunDir(cwd, runId)) : undefined;
   const laneEnv = process.env["GUILD_LANE_ID"];
   const laneId =
     typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv) ? laneEnv : undefined;
@@ -983,7 +984,7 @@ function runDispatchIntegrityGuard(payload: GuildHookEvent, cwd: string): boolea
 
   // Best-effort audit record — never gate on the write.
   try {
-    const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+    const runDir = runDirOverride() ?? resolveRunDir(cwd, runId);
     const laneEnv = process.env["GUILD_LANE_ID"];
     const laneId =
       typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv)
@@ -1143,7 +1144,7 @@ function evaluateBackendDegradation(
     typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv)
       ? laneEnv
       : undefined;
-  const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+  const runDir = runDirOverride() ?? resolveRunDir(cwd, runId);
   try {
     appendBackendDegradationEvent(
       runDir,
@@ -1307,7 +1308,7 @@ function evaluateTierDispatch(
     typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv)
       ? laneEnv
       : undefined;
-  const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+  const runDir = runDirOverride() ?? resolveRunDir(cwd, runId);
   try {
     appendTierDispatchEvent(
       runDir,
@@ -1482,7 +1483,7 @@ export async function main(): Promise<void> {
     const bgRunId = resolveRunId(cwd);
     const bgRunDir =
       bgRunId !== undefined
-        ? (process.env["GUILD_RUN_DIR"] ??
+        ? (runDirOverride() ??
             path.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId))
         : undefined;
     const bgLaneEnv = process.env["GUILD_LANE_ID"];
@@ -1526,7 +1527,7 @@ export async function main(): Promise<void> {
   }
 
   const runDir =
-    process.env["GUILD_RUN_DIR"] ??
+    runDirOverride() ??
     path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
   const laneId = process.env["GUILD_LANE_ID"];
 

@@ -70,7 +70,7 @@ mixed_or_uncertain      children found but ambiguous (some have .git/, some have
                         .guild/, workspace/detect.ts reports "uncertain")
 ```
 
-Detection script: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/workspace/detect.ts --cwd <root>` (depth-1
+Detection script: `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-detect.js --cwd <root>` (depth-1
 fixed, no knob). For `mixed_or_uncertain` surface one targeted question before
 proceeding; never silent-proceed on uncertainty. Mirror the bare `/guild:guild`
 §5.1 confirm contract: show detection → ask proceed / pick / explain.
@@ -78,7 +78,7 @@ proceeding; never silent-proceed on uncertainty. Mirror the bare `/guild:guild`
 After user confirmation, start the run before scanning:
 
 ```
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/lib/run-lifecycle.ts startRun
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/run-lifecycle.js startRun
   --command "/guild:learn"
   --args ""
   --cwd <root>
@@ -101,7 +101,7 @@ Implements brief §178-201 ordered flow, SC-A:
    id—and before any scan or compatibility operation—publish that frozen fact:
 
    ```bash
-   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/capability-profile.ts baseline \
+   node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/capability-profile.js baseline \
      --cwd <root> --run-id <run-id>
    ```
 
@@ -118,11 +118,11 @@ Implements brief §178-201 ordered flow, SC-A:
 2. **Resolve project root.** Worktree-redirect via `lib/paths.ts`.
 3. **Load existing wiki and indexes.** Read `.guild/settings.json`;
    read existing `.guild/indexes/codebase-map.json` if present.
-4. **Inventory every project-owned file.** Run `scan.ts --cwd <root>
+4. **Inventory every project-owned file.** Run `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/learn-scan.js --cwd <root>
    [--gen-ignore]`. Apply the SC-G always-skip policy (see §"Skipped-file
    policy" below).
 5. **Emit skipped-file manifest.** Pipe skip decisions via B3's
-   `run-trace.ts skipped --run-id <id> --cwd <root> < entries.json`
+   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js skipped --run-id <id> --cwd <root> < entries.json`
    (entry shape: `{path, reason, rule, can_manually_include,
    summary_produced}` per SC-G / B3 handoff §4). Wire
    `provenance.coverage.{scanned_count, skipped_count, skipped_files_ref}`
@@ -162,7 +162,7 @@ Implements brief §178-201 ordered flow, SC-A:
     `guild.project_capability_profile.v1` for this run:
 
     ```bash
-    npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/capability-profile.ts emit \
+    node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/capability-profile.js emit \
       --cwd <root> --run-id <id> --project-id <id> \
       [--facts .guild/runs/<run-id>/learn/capability-facts.json] \
       --baseline .guild/runs/<run-id>/capability/run-start-baseline.json \
@@ -331,7 +331,7 @@ Workspace flow:
 2. **Detect immediate child repos and child `.guild/` roots.** Depth-1 stat
    only (`workspace/detect.ts`). Record in `.guild/workspace.json`
    (`guild.workspace.v1`).
-3. **Refresh `.guild/workspace.json`.**  `write-manifest.ts --cwd <root>`.
+3. **Refresh `.guild/workspace.json`.**  `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-write-manifest.js --cwd <root>`.
 4. **Learn the workspace root as coordination context only.** Run the
    regular-project flow SCOPED to root-level artifacts per the
    **Workspace-root scope contract** above (umbrella-own surface: `docs/v2/**`,

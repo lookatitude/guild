@@ -29,7 +29,7 @@ import * as path from "node:path";
 // The SHARED parser (OD-3). `loadYamlApi` resolves js-yaml plugin-locally first,
 // so a generated host package parses graphs with its own vendored copy rather
 // than whatever a consumer repo happens to have installed.
-import { loadYamlApi } from "../kernel";
+import { loadYamlApi, resolvePluginRoot } from "../kernel";
 import { createGuildStorage, type GuildStorage } from "../state";
 import {
   WORKFLOW_CLASSES,
@@ -61,12 +61,8 @@ export interface LoadGraphOptions {
 
 export class WorkflowGraphLoadError extends Error {}
 
-function resolvePluginRoot(explicit?: string): string {
-  if (explicit) return explicit;
-  const env = process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
-  if (env) return env;
-  // The author plane: this file lives at src/domains/lifecycle/.
-  return path.resolve(__dirname, "..", "..", "..");
+function pluginRootFor(explicit?: string): string {
+  return explicit ? explicit : resolvePluginRoot(__dirname);
 }
 
 function readYamlGraph(file: string): WorkflowGraph {
@@ -90,7 +86,7 @@ function readYamlGraph(file: string): WorkflowGraph {
 
 /** Absolute path of the plugin default for one class, or null when absent. */
 export function pluginGraphPath(klass: WorkflowClass, pluginRoot?: string): string | null {
-  const root = resolvePluginRoot(pluginRoot);
+  const root = pluginRootFor(pluginRoot);
   for (const dir of PLUGIN_GRAPH_DIRS) {
     for (const ext of [".yaml", ".yml"]) {
       const p = path.join(root, dir, `${klass}${ext}`);

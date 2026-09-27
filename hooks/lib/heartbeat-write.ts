@@ -37,6 +37,7 @@ import * as path from "node:path";
 import { resolveGuildRoot } from "./guild-root.js";
 import { heartbeatPath } from "./heartbeat.js";
 import { authorizeHookWrite, type HookWriteAuth } from "./hook-binding.js";
+import { runDirOverride } from "./run-dir-override.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -172,9 +173,9 @@ export function writeHeartbeatFromEnv(
       return { written: false, path: null, reason: `binding_rejected:${auth.reason}` };
     }
 
-    const envRunDir = env["GUILD_RUN_DIR"];
+    const envRunDir = runDirOverride(env);
     const runDir =
-      typeof envRunDir === "string" && envRunDir.length > 0
+      envRunDir !== undefined
         ? envRunDir
         : path.join(root, ".guild", "runs", runId);
 

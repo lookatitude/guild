@@ -83,7 +83,7 @@ function packageFixture(host: HostId): {
   fs.mkdirSync(path.join(root, "hooks", "dist"), { recursive: true });
   if (host === "codex-cli") fs.mkdirSync(path.join(root, ".agents", "skills", "guild", "meta", "verify-done"), { recursive: true });
   fs.writeFileSync(path.join(root, manifest), `${JSON.stringify({ name: "guild", version: RELEASE })}\n`);
-  fs.writeFileSync(path.join(root, "scripts", "lib", "capability", "compatibility-loader.ts"), "export {};\n");
+  fs.writeFileSync(path.join(root, "hooks", "dist", "pre-tool-use.js"), "module.exports = {};\n");
   fs.writeFileSync(path.join(root, "scripts", "activated-host-conformance.ts"), "export {};\n");
   fs.writeFileSync(path.join(root, "scripts", "dist", "activated-host-conformance.js"), "console.log('sealed fixture');\n");
   fs.writeFileSync(path.join(root, "hooks", "dist", "runtime.cjs"), "module.exports = {};\n");
@@ -97,7 +97,7 @@ function packageFixture(host: HostId): {
 function packageFixtureWithInstallSubset(host: HostId) {
   const fixture = packageFixture(host);
   const supportedInstallRoot = fs.mkdtempSync(path.join(os.tmpdir(), `guild-activated-install-${host}-`));
-  for (const relative of [fixture.runtimePackage.manifest_path, "scripts/lib/capability/compatibility-loader.ts"]) {
+  for (const relative of [fixture.runtimePackage.manifest_path, "hooks/dist/pre-tool-use.js"]) {
     fs.mkdirSync(path.join(supportedInstallRoot, path.dirname(relative)), { recursive: true });
     fs.copyFileSync(path.join(fixture.root, relative), path.join(supportedInstallRoot, relative));
   }
@@ -245,7 +245,7 @@ function productionWorkerFixture(host: HostId = "claude-code-cli") {
   fs.cpSync(path.resolve(__dirname, "../src/modules"), path.join(plugin, "src", "modules"), { recursive: true });
   fs.mkdirSync(path.join(plugin, "scripts", "lib", "capability"), { recursive: true });
   fs.mkdirSync(path.join(plugin, "hooks", "dist"), { recursive: true });
-  fs.cpSync(path.resolve(__dirname, "lib/capability/compatibility-loader.ts"), path.join(plugin, "scripts", "lib", "capability", "compatibility-loader.ts"));
+  fs.cpSync(path.resolve(__dirname, "../hooks/dist/pre-tool-use.js"), path.join(plugin, "hooks", "dist", "pre-tool-use.js"));
   fs.cpSync(path.resolve(__dirname, "activated-host-conformance.ts"), path.join(plugin, "scripts", "activated-host-conformance.ts"));
   fs.writeFileSync(path.join(plugin, "hooks", "dist", "runtime.cjs"), "module.exports = {};\n");
   fs.mkdirSync(path.join(website, "src"), { recursive: true });
@@ -375,7 +375,7 @@ describe("activated-host conformance capture", () => {
     const rawWorker = workerBytes("claude-code-cli", fixture.runtimePackage);
     const rawTranscript = transcript("claude-code-cli", fixture.root, command, fixture.runtimePackage, rawWorker);
     const value = receipt("claude-code-cli", fixture.runtimePackage, fixture.root, rawTranscript, rawWorker);
-    fs.appendFileSync(path.join(fixture.root, "scripts", "lib", "capability", "compatibility-loader.ts"), "// planted install drift\n");
+    fs.appendFileSync(path.join(fixture.root, "hooks", "dist", "pre-tool-use.js"), "// planted install drift\n");
     const result = verifyActivatedHostConformanceReceipt({
       receipt: value,
       transcript: rawTranscript,
@@ -608,7 +608,7 @@ describe("activated-host conformance capture", () => {
     fs.cpSync(path.resolve(__dirname, "../src/modules"), path.join(plugin, "src", "modules"), { recursive: true });
     fs.mkdirSync(path.join(plugin, "scripts", "lib", "capability"), { recursive: true });
     fs.mkdirSync(path.join(plugin, "hooks", "dist"), { recursive: true });
-    fs.cpSync(path.resolve(__dirname, "lib/capability/compatibility-loader.ts"), path.join(plugin, "scripts", "lib", "capability", "compatibility-loader.ts"));
+    fs.cpSync(path.resolve(__dirname, "../hooks/dist/pre-tool-use.js"), path.join(plugin, "hooks", "dist", "pre-tool-use.js"));
     fs.cpSync(path.resolve(__dirname, "activated-host-conformance.ts"), path.join(plugin, "scripts", "activated-host-conformance.ts"));
     fs.writeFileSync(path.join(plugin, "hooks", "dist", "runtime.cjs"), "module.exports = {};\n");
     fs.mkdirSync(path.join(website, "src"), { recursive: true });
@@ -657,7 +657,7 @@ describe("activated-host conformance capture", () => {
     fs.cpSync(path.resolve(__dirname, "../src/modules"), path.join(plugin, "src", "modules"), { recursive: true });
     fs.mkdirSync(path.join(plugin, "scripts", "lib", "capability"), { recursive: true });
     fs.mkdirSync(path.join(plugin, "hooks", "dist"), { recursive: true });
-    fs.cpSync(path.resolve(__dirname, "lib/capability/compatibility-loader.ts"), path.join(plugin, "scripts", "lib", "capability", "compatibility-loader.ts"));
+    fs.cpSync(path.resolve(__dirname, "../hooks/dist/pre-tool-use.js"), path.join(plugin, "hooks", "dist", "pre-tool-use.js"));
     fs.cpSync(path.resolve(__dirname, "activated-host-conformance.ts"), path.join(plugin, "scripts", "activated-host-conformance.ts"));
     fs.writeFileSync(path.join(plugin, "hooks", "dist", "runtime.cjs"), "module.exports = {};\n");
     fs.mkdirSync(path.join(website, "src"), { recursive: true });

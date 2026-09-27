@@ -623,6 +623,9 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-09-26 (T12 domain fold): skill/command bodies repoint spawn paths
   // from the retired module mirrors to the domain tree. ANTI-VACUITY: SC-W2-5 and
   // SC-W3-6 were RED against the T11 pins before these values.
+  // Re-ratified 2026-09-27 (T14 adapters + MCP): skill bodies spawn the compiled
+  // runtime/scripts entries instead of npx tsx (KTD11). ANTI-VACUITY: the pin guards
+  // were RED against the T13 pins before these values.
   commands: "ecd95ee87f922d1ab9ba49326c2771f498e42058",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
@@ -665,7 +668,11 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // class-scoped (R67) and a class-less mint is refused. ANTI-VACUITY:
   // check-surface-pins, SC-W2-5 and SC-W3-6 were RED against the prior pin on this
   // tree and named ONLY `skills/skills`, before this value was ratified.
-  skills: "6514190bc7cc6fe458e86d54f2ef6039ffb569f3",
+  // Re-ratified 2026-09-26 (T14 adapters): every skill-body spawn of a `.ts`
+  // script through tsx becomes `node …/runtime/scripts/<id>.js` (KTD11/KTD28), and
+  // the WAVE2 registry was re-extracted with it; the learn stage calls follow. ANTI-VACUITY:
+  // check-surface-pins was RED (registry_stale ×4, tree_pin_stale skills) against the T12 pins.
+  skills: "21a146f0a47d1ddd411d2569649560673f18cfb9",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

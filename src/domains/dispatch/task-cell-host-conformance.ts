@@ -445,6 +445,9 @@ export async function runTaskCellHostConformance(
     worker,
     now,
     idFactory: (kind) => `${hostSlug}-${kind}-${++idSeq}`,
+    // The probe measures the mechanics a rung claims; it must not be
+    // pre-collapsed by the inferred rung it exists to test (KTD28).
+    rungPlan: "conformance_probe",
   });
   const contextRel = `.guild/context/${input.run_id}/${hostSlug}-probe.txt`;
   const context = input.nonceFactory?.(1) ?? `guild-host-probe-${hostSlug}-${sha256(`${input.run_id}:${hostSlug}`).slice(0, 16)}`;

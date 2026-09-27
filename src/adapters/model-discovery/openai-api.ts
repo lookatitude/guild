@@ -18,7 +18,7 @@ import {
   RawDiscoveryResult,
   RawModelEntry,
   failureResult,
-} from "./adapter-contract";
+} from "../../domains/config";
 
 export const OPENAI_API_ADAPTER_ID = "openai-api-models";
 export const OPENAI_API_ADAPTER_VERSION = "1.0.0";

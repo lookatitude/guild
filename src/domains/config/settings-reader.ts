@@ -44,10 +44,10 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { HOST_IDS, HOST_REGISTRY_ROWS, type HostId } from "../../adapters";
-import { normalizeHostId } from "../../adapters";
+import { HOST_IDS, HOST_REGISTRY_ROWS, type HostId } from "./host-registry-schema";
+import { normalizeHostId } from "./host-id-namespace";
 // host_profiles strict entry-shape filter — single SoT (same rules as `config validate`).
-import { filterHostProfiles } from "../../adapters";
+import { filterHostProfiles } from "./host-profiles-validate";
 // Canonical single-source prototype-pollution guard (re-arch WAVE 1).
 import { PROTO_POISON_KEYS } from "../security";
 import {

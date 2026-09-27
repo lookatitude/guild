@@ -7,28 +7,11 @@
 
 
 // ── from src/modules/host-runtime ──────────────────────────────────────────
-export type { HostCapabilityManifest } from "./host-capability-manifest";
-export { HOSTKIND_TO_REGISTRY_ID, normalizeHostId } from "./host-id-namespace";
-export {
-  resolveRung,
-  type DegradationReceipt,
-} from "./adapter-fallback-ladders";
-export { filterHostProfiles } from "./host-profiles-validate";
-export { getRegistryEntry, hostKindToRegistryId } from "./host-registry";
-export {
-  HOST_IDS,
-  HOST_REGISTRY_ROWS,
-  type AdapterBinding,
-  type AuthProbe,
-  type HostFamilyId,
-  type HostId,
-  type HostRegistryEntry,
-  type Installability,
-} from "./host-registry-schema";
-export * from "./provider-detect";
-export * from "./session-context";
+// Host identity (registry, id namespace, detection, session context, the
+// host-adapter and model-discovery contracts) is truth and lives in
+// src/domains/config (KTD27). This tree keeps the per-host runtime that
+// implements those contracts, and it reaches config only through its index.
 export * from "./model-discovery/index";
-export type { HostKind } from "./host-types";
 
 // ---------------------------------------------------------------------------
 // MH-03 host-adapter boundary (`guild.host_adapter_boundary.v1`)
@@ -42,28 +25,8 @@ export type { HostKind } from "./host-types";
 // ---------------------------------------------------------------------------
 
 export {
-  HOST_ADAPTER_OPERATIONS,
-  type BootstrapRequest,
-  type CollectRequest,
-  type DispatchRequest,
-  type HostAdapter,
-  type HostAdapterCapabilityProfile,
-  type HostAdapterOperation,
-  type HostAdapterReceipt,
-  type HostAdapterResult,
-  type HostAdapterStatus,
-  type MemoryRequest,
-  type PreflightRequest,
-  type RenderCommandSurfaceRequest,
-  type RenderPackageRequest,
-  type RenderPermissionDecisionRequest,
-  type ResolveModelParamsRequest,
-} from "./host-adapter-contract";
-
-export {
   HOST_ADAPTER_BOUNDARY_MAJOR,
   HOST_ADAPTER_BOUNDARY_SCHEMA,
-  HOST_ADAPTER_CONTRACT_VERSION,
   HOST_ADAPTER_NOT_OWNED_CONCERNS,
   HOST_ADAPTER_OWNED_CONCERNS,
   HOST_ADAPTER_OWNERSHIP_SCHEMA,
@@ -129,3 +92,24 @@ export {
 // module dependency — it consumes the MH-03 boundary files beside it plus the
 // already-declared `lifecycle` public contract.
 export * from "./host-adapter-conformance-evaluator";
+
+// Composition-root binding of the domain ports this tree implements (KTD4).
+export { bindHostRuntimePorts } from "./composition";
+
+// The closed rung matrix + per-family adapter maps (KTD4, KTD28).
+export {
+  ADAPTER_LOCK_SCHEMA,
+  ADAPTER_MAP_SCHEMA,
+  adapterLockFamilies,
+  adapterLockProblems,
+  adapterMapForFamily,
+  checkPackageAgainstMap,
+  familyForHostId,
+  rungPlanForFamily,
+  rungRowForFamily,
+  rungKeyForSession,
+  type AdapterMap,
+} from "./rung-matrix";
+
+// Session-start surface projection (KTD31).
+export { projectSurfaces, type SurfaceProjection } from "./session-start";
