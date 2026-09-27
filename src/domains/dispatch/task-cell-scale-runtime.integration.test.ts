@@ -21,6 +21,7 @@ import {
   type InstanceHandle,
   type TaskCellSubstrate,
 } from "./task-cell-backend";
+import { ADAPTER_RUNG_NAMES, resolveRungPlan, type AdapterRungCell, type AdapterRungName } from "./adapter-rungs";
 
 const NOW = () => "2026-08-10T13:00:00.000Z";
 const SUBSTRATES: TaskCellSubstrate[] = ["tmux", "in-process", "serial", "remote"];
@@ -35,6 +36,17 @@ class ScaleWorker implements TaskCellWorkerPort {
   terminate(): { ok: true; reason: null } { return { ok: true, reason: null }; }
 }
 
+/** A verified all-native host: these cases exercise isolation, so no rung is lost. */
+const FULL_RUNGS = resolveRungPlan(
+  {
+    family: "test-native",
+    rungs: Object.fromEntries(
+      ADAPTER_RUNG_NAMES.map((n) => [n, { rung: "native", evidence: "verified", verified_by: "test fixture" }]),
+    ) as Record<AdapterRungName, AdapterRungCell>,
+  },
+  { verify_check_available: false },
+);
+
 describe("TaskCell production record-runtime scale proof", () => {
   it("executes 256 tasks plus a retry under four substrate profiles through a deterministic worker port", async () => {
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "guild-task-cell-runtime-scale-"));
@@ -43,6 +55,7 @@ describe("TaskCell production record-runtime scale proof", () => {
     const runtimes = SUBSTRATES.map((substrate, substrateIndex) => {
       let sequence = 0;
       return new FilesystemTaskCellRuntime({
+        rungPlan: FULL_RUNGS,
         cwd,
         substrate,
         parallelism: substrate === "serial" ? 1 : 32,

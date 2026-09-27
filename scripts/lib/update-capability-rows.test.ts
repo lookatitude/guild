@@ -16,8 +16,8 @@ import * as path from "path";
 import {
   HOST_REGISTRY_ROWS,
   type HostId,
-} from "../../src/adapters/host-registry-schema";
-import { UPDATE_COMMANDS } from "../../src/adapters/host-capabilities-schema";
+} from "../../src/domains/config";
+import { UPDATE_COMMANDS } from "../../src/domains/config/host-capabilities-schema";
 import { computeSignal, updateCapsForHost, CACHE_SCHEMA, RECEIPT_BASENAME, RECEIPT_SCHEMA } from "./update-check";
 import { runSelfUpdate } from "./self-update";
 
@@ -131,7 +131,7 @@ describe("runtime wiring — the row is the SoT", () => {
   });
 
   it("the schema validator rejects a row missing or violating the update shape (AC-7 fail-closed)", () => {
-    const { validateHostCapabilitiesV1 } = require("../../src/adapters/host-capabilities-schema");
+    const { validateHostCapabilitiesV1 } = require("../../src/domains/config/host-capabilities-schema");
     const good = JSON.parse(JSON.stringify(HOST_REGISTRY_ROWS["claude-code-cli"].capabilities));
     expect(validateHostCapabilitiesV1(good).valid).toBe(true);
     const missing = JSON.parse(JSON.stringify(good));

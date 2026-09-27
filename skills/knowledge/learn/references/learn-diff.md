@@ -47,7 +47,7 @@ graph nodes/layers, not printing hunks.
 # Workflow steps
 
 1. Assert the knowledge graph exists and is readable; escalate if not.
-2. Run `diff-learn.ts --cwd <root> --base <sha> [--head <sha>]
+2. Run `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/diff-learn.js --cwd <root> --base <sha> [--head <sha>]
    [--run-id <id>]` (under `plugin/scripts/learn/`) → the deterministic
    diff→node mapping.
 3. LLM half (bounded, *trust the script — do not re-read source*): confirm the

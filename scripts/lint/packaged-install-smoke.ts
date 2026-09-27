@@ -7,18 +7,20 @@
  * binary it did not contain. Nothing caught it, because every other test runs in a
  * CHECKOUT, where `runtime/` is always present.
  *
- * The rule this asserts: any host package that ships `mcp-servers/` must also ship
- * the compile graph, and the binary in THAT DIRECTORY must start under plain node
- * with Bun absent from PATH (KTD7/KTD10).
+ * The rule this asserts: every host package ships the compile graph, and the
+ * binary in THAT DIRECTORY must start under plain node with Bun absent from PATH
+ * (KTD7/KTD10).
  *
  * Usage:
  *   packaged-install-smoke.ts                 build packages into a temp dir, check all
  *   packaged-install-smoke.ts --dir <path>    check an already-built package tree
  *
- * KTD28: a package is a projection. Its src/ holds only src/surfaces/** (runtime
- * data), src/modules/** (manifests + shims the conformance worker evaluates) and
- * the domain TypeScript a shipped .ts file imports; an unreachable domain file
- * there is a domain copy, and a missing closure file breaks a user-path script.
+ * KTD28: a package is a projection. It ships compiled Node and markdown, never
+ * authoring TypeScript: its src/ holds only src/surfaces/** (runtime data) and
+ * src/modules/** (manifests + shims the conformance worker reads as text), with NO
+ * src/domains/** TypeScript at all; no scripts/**.ts, hooks/**.ts or mcp-servers/
+ * ship; and every `runtime/scripts/*.js` / `hooks/dist/*.js` a shipped markdown
+ * surface spawns is present in the package.
  *
  * Exit 0 all good · 1 a package is incomplete or its binary will not start · 2 the
  * packages could not be built (the reason is printed; not a pass).
@@ -29,11 +31,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { srcImportClosure } from "../build-host-packages";
+import { checkPackageAgainstMap } from "../../src/adapters";
 
 const ROOT = path.resolve(__dirname, "..", "..");
 
-/** Files a package MUST carry once it carries `mcp-servers/`. */
+/** Files every package MUST carry. */
 const REQUIRED_RUNTIME = [
   "runtime/guild-mcp.js",
   "runtime/mcp-descriptions.pins.json",
@@ -50,7 +52,7 @@ function packageDirs(outRoot: string): string[] {
     .readdirSync(outRoot, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => path.join(outRoot, e.name))
-    .filter((d) => fs.existsSync(path.join(d, "mcp-servers")))
+    .filter((d) => fs.existsSync(path.join(d, "runtime")))
     .sort();
 }
 
@@ -88,27 +90,76 @@ function walkFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** src/ in a package = src/surfaces/** + the import closure of its shipped .ts. */
-export function checkPackagedSource(pkgDir: string, sourceRoot: string = ROOT): string[] {
+const TS_SOURCE = /\.(ts|tsx|mts|cts)$/;
+
+/**
+ * KTD28: no authoring TypeScript outside src/surfaces + src/modules, and no
+ * src/domains copy at all. A package is surfaces + adapter map + compiled output.
+ */
+export function checkPackagedSource(pkgDir: string): string[] {
   const name = path.basename(pkgDir);
-  const closure = new Set(srcImportClosure(sourceRoot, pkgDir));
   const problems: string[] = [];
-  for (const abs of walkFiles(path.join(pkgDir, "src"))) {
+  for (const abs of walkFiles(pkgDir)) {
     const rel = path.relative(pkgDir, abs).split(path.sep).join("/");
-    if (rel.startsWith("src/surfaces/") || rel.startsWith("src/modules/")) continue;
-    if (!closure.has(rel)) problems.push(`${name}: ships ${rel}, which no shipped script imports (a domain copy, KTD28)`);
+    if (rel.split("/").includes("node_modules")) continue;
+    if (rel.startsWith("src/domains/") || rel.startsWith("src/adapters/") || rel.startsWith("src/runtime/")) {
+      problems.push(`${name}: ships ${rel} — a package never copies a domain (KTD28)`);
+      continue;
+    }
+    if (!TS_SOURCE.test(rel) || rel.startsWith("src/surfaces/") || rel.startsWith("src/modules/")) continue;
+    // A skill may carry a TypeScript EXAMPLE as reference data; what may not ship
+    // is runnable authoring code, or anything that reaches for a domain.
+    const runnable = /^(scripts|hooks|mcp-servers|src)\//.test(rel);
+    if (runnable || fs.readFileSync(abs, "utf8").includes("src/domains")) {
+      problems.push(`${name}: ships authoring TypeScript ${rel} — the user path is compiled Node (KTD11)`);
+    }
   }
-  for (const rel of closure) {
-    if (!fs.existsSync(path.join(pkgDir, rel))) problems.push(`${name}: a shipped script imports ${rel}, which the package lacks`);
+  if (fs.existsSync(path.join(pkgDir, "mcp-servers"))) {
+    problems.push(`${name}: ships mcp-servers/ — the MCP binary is runtime/guild-mcp.js (KTD3)`);
   }
   return problems;
 }
 
+/** Every compiled CLI a shipped markdown surface spawns must be in the package. */
+export function checkSpawnedBundles(pkgDir: string): string[] {
+  const name = path.basename(pkgDir);
+  const problems: string[] = [];
+  const spawn = /(runtime\/scripts\/[a-z0-9-]+\.js|hooks\/dist\/[a-z0-9-]+\.js)/g;
+  const tsxSpawn = /\btsx\s+"?\$\{GUILD_PLUGIN_ROOT[^\s"]*\/(?:scripts|hooks)\/[A-Za-z0-9_/.-]+\.ts/;
+  // A bare `stage.ts --flag` tells the model to run TypeScript the package does not ship.
+  const bareTsCall = /`(?:npx tsx |[a-z0-9-]+\.ts --)/;
+  for (const abs of walkFiles(pkgDir)) {
+    if (!abs.endsWith(".md")) continue;
+    const rel = path.relative(pkgDir, abs).split(path.sep).join("/");
+    const body = fs.readFileSync(abs, "utf8");
+    if (tsxSpawn.test(body)) problems.push(`${name}: ${rel} still spawns a .ts script through tsx`);
+    if (bareTsCall.test(body)) problems.push(`${name}: ${rel} tells the model to run a .ts script the package does not ship`);
+    for (const m of body.matchAll(spawn)) {
+      if (!fs.existsSync(path.join(pkgDir, m[1]))) problems.push(`${name}: ${rel} spawns ${m[1]}, which the package lacks`);
+    }
+  }
+  return [...new Set(problems)];
+}
+
+const FAMILY_FOR_TREE: Readonly<Record<string, string>> = {
+  "claude-code": "claude",
+  codex: "codex",
+  agents: "agents",
+  pi: "pi",
+  antigravity: "antigravity",
+  cursor: "cursor",
+  "github-copilot": "copilot",
+  opencode: "opencode",
+  "rovo-dev": "rovo",
+};
+
 function checkPackage(pkgDir: string): string[] {
-  const problems: string[] = [...checkPackagedSource(pkgDir)];
+  const problems: string[] = [...checkPackagedSource(pkgDir), ...checkSpawnedBundles(pkgDir)];
+  const family = FAMILY_FOR_TREE[path.basename(pkgDir)];
+  if (family) problems.push(...checkPackageAgainstMap(path.dirname(pkgDir), family));
   for (const rel of REQUIRED_RUNTIME) {
     if (!fs.existsSync(path.join(pkgDir, rel))) {
-      problems.push(`${path.basename(pkgDir)}: ships mcp-servers/ but not ${rel}`);
+      problems.push(`${path.basename(pkgDir)}: does not ship ${rel}`);
     }
   }
   if (problems.length > 0) return problems; // no point starting a binary that is absent
@@ -152,7 +203,7 @@ function main(argv: string[]): number {
   try {
     const dirs = packageDirs(outRoot);
     if (dirs.length === 0) {
-      process.stdout.write(`packaged-install-smoke: no package under ${outRoot} ships mcp-servers/\n`);
+      process.stdout.write(`packaged-install-smoke: no package under ${outRoot} ships runtime/\n`);
       return 1;
     }
     const problems: string[] = [];

@@ -7,8 +7,8 @@
  * Depends: host-registry (via tiebreak layer), shared/ — no host/ imports.
  */
 
-import { hostKindToRegistryId } from "../../adapters";
-import type { HostKind } from "../../adapters";
+import { hostKindToRegistryId } from "./host-id-namespace";
+import type { HostKind } from "./host-types";
 import type { LaneRequest, RoutableHost, Tier, AgentMode, BackendCapability, WorkType } from "./router";
 // W4 D2: tierDefaults() is the runtime-computed single source for tier→model defaults.
 // Replaces the hand-typed `claudeDefaults` switch that was duplicated ×3 (audit A2).

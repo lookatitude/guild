@@ -53,6 +53,6 @@ describe("mixed-host-contracts compatibility shim", () => {
     expect(oldPath).not.toMatch(/export\s+function\s+validateTmuxTeam/);
     expect(modulePath).toMatch(/export\s+function\s+validateTmuxTeam/);
     expect(modulePath).toMatch(/export\s+function\s+validateLaneStatus/);
-    expect(modulePath).toMatch(/from\s+["']\.\/host-types["']/);
+    expect(modulePath).toMatch(/from\s+["']\.\.\/domains\/config["']/);
   });
 });

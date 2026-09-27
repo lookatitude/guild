@@ -110,8 +110,7 @@ import type {
   NeutralReceiptJournalEntry,
   NeutralScenarioResult,
 } from "../lifecycle";
-import { evaluateMh03HostAdapterConformance, HOST_ADAPTER_OPERATIONS } from "../../adapters";
-import type { Mh03ConformanceRequest } from "../../adapters";
+import { HOST_ADAPTER_OPERATIONS } from "../config";
 import { evaluateReceiptJournalConformance } from "../telemetry";
 import type { Mh06ConformanceRequest } from "../telemetry";
 import { evaluateHostCutoverConformance } from "../state";
@@ -858,6 +857,32 @@ function mh03InertAdapterProvider(host: string): unknown {
   return adapter;
 }
 
+/**
+ * The MH-03 owner evaluator is host runtime: it lives in src/adapters, and a
+ * domain never imports that tree (KTD4). The domain names the port; the adapter
+ * tree implements it; each composition root binds it (`bindHostAdapterConformanceOwner`
+ * from src/adapters). Unbound, the MH-03 owner refuses instead of passing.
+ */
+export interface HostAdapterConformanceOwnerRequest {
+  readonly run_id: string;
+  readonly evidence_identity: NeutralEvidenceIdentity;
+  readonly receipt_refs: Readonly<Record<string, string>>;
+  readonly evidence_freshness: Readonly<Record<string, string>>;
+  readonly adapter_provider: (host: string) => unknown;
+}
+export type HostAdapterConformanceOwner = (request: HostAdapterConformanceOwnerRequest) => { packet: unknown };
+
+let hostAdapterConformanceOwner: HostAdapterConformanceOwner | null = null;
+
+/** Bind (or, with `null`, unbind) the MH-03 owner port. Returns the previous binding. */
+export function installHostAdapterConformanceOwner(
+  owner: HostAdapterConformanceOwner | null,
+): HostAdapterConformanceOwner | null {
+  const previous = hostAdapterConformanceOwner;
+  hostAdapterConformanceOwner = owner;
+  return previous;
+}
+
 interface OwnerEvaluationInputs {
   readonly runId: string;
   readonly claimantId: string;
@@ -885,13 +910,16 @@ function evaluateOwner(ownerKey: string, inputs: OwnerEvaluationInputs): OwnerEv
       return evaluateMh02CoreConformance(runId, identity, receiptRefs, freshness);
     }
     if (ownerKey === NEUTRAL_CONFORMANCE_OWNER_KEYS[1]) {
-      const result = evaluateMh03HostAdapterConformance({
+      if (!hostAdapterConformanceOwner) {
+        return { packet: null, detail: "the host-adapter owner is not bound at this composition root" };
+      }
+      const result = hostAdapterConformanceOwner({
         run_id: runId,
         evidence_identity: identity,
         receipt_refs: receiptRefs,
         evidence_freshness: freshness,
         adapter_provider: mh03InertAdapterProvider,
-      } as Mh03ConformanceRequest);
+      });
       return packetOrDetail(result, "the host-adapter owner evaluation refused its request");
     }
     if (ownerKey === NEUTRAL_CONFORMANCE_OWNER_KEYS[2]) {

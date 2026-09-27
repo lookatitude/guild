@@ -1,4 +1,4 @@
-import type { DegradationReceipt } from "../../adapters";
+import type { DegradationReceipt } from "../config";
 
 export const REVIEW_PROGRESS_SCHEMA = "guild.review_progress.v1" as const;
 

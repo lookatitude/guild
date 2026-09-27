@@ -236,21 +236,21 @@ describe("PACKAGE_MISSING (real renderer, anti-vacuity)", () => {
       const dest = writeClaudeTree(PLUGIN_ROOT, inv, tmpDist, UNSTAMPED_GENERATED_AT);
 
       // Sanity: the real, current renderer DOES ship it (the fix under test).
-      expect(findMissingInRenderedTree(["hooks/emit-learning-checkpoint.ts"], dest)).toHaveLength(0);
+      expect(findMissingInRenderedTree(["hooks/dist/emit-learning-checkpoint.js"], dest)).toHaveLength(0);
 
       // Simulate the exact issue #55 regression: the source exists, the doc
       // still references it, but the rendered package output lacks it.
-      fs.rmSync(path.join(dest, "hooks", "emit-learning-checkpoint.ts"));
+      fs.rmSync(path.join(dest, "hooks", "dist", "emit-learning-checkpoint.js"));
 
-      const missing = findMissingInRenderedTree(["hooks/emit-learning-checkpoint.ts"], dest);
-      expect(missing).toEqual(["hooks/emit-learning-checkpoint.ts"]);
+      const missing = findMissingInRenderedTree(["hooks/dist/emit-learning-checkpoint.js"], dest);
+      expect(missing).toEqual(["hooks/dist/emit-learning-checkpoint.js"]);
     } finally {
       fs.rmSync(tmpDist, { recursive: true, force: true });
     }
   });
 
   it("checkHostPackages is clean against the live plugin root (every host ships every skill-documented entrypoint)", () => {
-    const missingByHost = checkHostPackages(PLUGIN_ROOT, ["hooks/emit-learning-checkpoint.ts"]);
+    const missingByHost = checkHostPackages(PLUGIN_ROOT, ["hooks/dist/emit-learning-checkpoint.js"]);
     expect(missingByHost.length).toBeGreaterThan(0); // proves it actually checked something
     for (const { host, missing, renderError } of missingByHost) {
       expect(renderError).toBeUndefined();
@@ -276,7 +276,7 @@ describe("PACKAGE_MISSING (real renderer, anti-vacuity)", () => {
       "opencode",
       "rovo-dev",
     ];
-    const missingByHost = checkHostPackages(PLUGIN_ROOT, ["hooks/emit-learning-checkpoint.ts"]);
+    const missingByHost = checkHostPackages(PLUGIN_ROOT, ["hooks/dist/emit-learning-checkpoint.js"]);
     expect(missingByHost.map((r) => r.host).sort()).toEqual([...EXPECTED_HOST_IDS].sort());
     expect([...ALL_CHECKED_HOST_IDS].sort()).toEqual([...EXPECTED_HOST_IDS].sort());
   }, 60_000);
@@ -288,7 +288,7 @@ describe("PACKAGE_MISSING (real renderer, anti-vacuity)", () => {
     // zero, checkHostPackages() short-circuits and PACKAGE_MISSING silently stops
     // running — this test forces that regression to be visible and fixed instead.
     const refs = collectSkillEntrypointRefs(PLUGIN_ROOT);
-    expect(refs.some((r) => r.entrypoint === "hooks/emit-learning-checkpoint.ts")).toBe(true);
+    expect(refs.some((r) => r.entrypoint === "hooks/dist/emit-learning-checkpoint.js")).toBe(true);
   });
 });
 

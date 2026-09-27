@@ -40,14 +40,16 @@ import { planWrapperInvocation, type WrapperPlan, type WrapperRequest } from "./
 import { DERIVED_HOST_CAPABILITY_ROWS } from "./lib/host-registry";
 import {
   HOST_ADAPTER_BOUNDARY_SCHEMA,
-  HOST_ADAPTER_CONTRACT_VERSION,
   HOST_CAPABILITY_SNAPSHOT_SCHEMA,
   HOST_RUNTIME_BINDING_RESULT_SCHEMA,
   HOST_RUNTIME_BINDING_SCHEMA,
   createHostCapabilitySnapshotStore,
-  type HostAdapter,
   type HostAdapterProvider,
 } from "../src/adapters";
+import {
+  HOST_ADAPTER_CONTRACT_VERSION,
+  type HostAdapter,
+} from "../src/domains/config";
 
 const REPO_ROOT = path.resolve(__dirname, "..");
 const LIVE_GUILD_RUN = path.join(REPO_ROOT, "scripts", "guild-run.ts");
@@ -56,7 +58,7 @@ const LIVE_GUILD_RUN = path.join(REPO_ROOT, "scripts", "guild-run.ts");
 function shippedGuildRun(): string {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), "guild-mh03-pkg-"));
   const pkg = writeClaudeTree(REPO_ROOT, buildInventory(REPO_ROOT), out, "2026-01-01T00:00:00.000Z");
-  return path.join(pkg, "scripts", "guild-run.ts");
+  return pkg;
 }
 
 /** The hosts the shipped wrapper can actually plan an invocation for. */
@@ -161,14 +163,18 @@ describe("acceptance 1: the shipped guild-run caller routes through the public b
     expect(specifiers.filter((s) => s.includes("scripts/"))).toEqual([]);
   });
 
-  test("the projector reads the live guild-run.ts and the shipped package copy is byte-identical", () => {
+  test("the projector reads the live guild-run.ts and the package ships its compiled bundle, not the source", () => {
     const live = fs.readFileSync(LIVE_GUILD_RUN);
     const entry = buildModuleResourcePlan(REPO_ROOT)
       .flatMap((plan) => plan.entries)
       .find((e) => e.source_path === "scripts/guild-run.ts");
     expect(entry).toBeDefined();
     expect(entry!.sha256).toBe(crypto.createHash("sha256").update(live).digest("hex"));
-    expect(fs.readFileSync(shippedGuildRun())).toEqual(live);
+    const pkg = shippedGuildRun();
+    expect(fs.existsSync(path.join(pkg, "scripts", "guild-run.ts"))).toBe(false);
+    expect(fs.readFileSync(path.join(pkg, "runtime", "scripts", "guild-run.js"))).toEqual(
+      fs.readFileSync(path.join(REPO_ROOT, "runtime", "scripts", "guild-run.js")),
+    );
   });
 });
 

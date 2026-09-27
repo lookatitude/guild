@@ -46,6 +46,7 @@ import { evaluateG5 } from "./lib/capability/compatibility-usage";
 import { collectCompatibilityUsageWindow, writeFrozenCompatibilityCatalog } from "./lib/capability/compatibility-loader";
 import { createMigrationObservation, sealMigrationObservationRun, verifySubstantiveMigrationObservation, writeMigrationObservation } from "./lib/capability/migration-evidence";
 import { advanceMigrationWindow, inspectMigrationWindow, legacyRemovalEligibility, recordMigrationRelease, restartMigrationWindow, startMigrationWindow } from "./lib/capability/migration-window";
+import { ownPluginRoot } from "../src/domains/kernel";
 
 const USAGE = `
 capability-adopt — project capability adoption migration (D6)
@@ -113,8 +114,8 @@ function main(argv: readonly string[]): number {
   const args = parseArgs(argv.slice(1));
   const json = args["json"] === true;
 
-  // Default the plugin root to this file's repo, so the common case needs no flag.
-  const pluginRoot = path.resolve(str(args, "plugin-root") ?? path.join(__dirname, ".."));
+  // Default the plugin root to this file's package, so the common case needs no flag.
+  const pluginRoot = path.resolve(str(args, "plugin-root") ?? ownPluginRoot(__dirname));
   const projectRoot = path.resolve(str(args, "project-root") ?? process.cwd());
 
   if (verb === "catalog") {

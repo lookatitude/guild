@@ -35,8 +35,8 @@
  * Pure library module; reached through the host-runtime module's public index.
  */
 
-import { normalizeHostId } from "./host-id-namespace";
-import { HOST_REGISTRY_ROWS, type HostId, type HostRegistryEntry } from "./host-registry-schema";
+import { normalizeHostId } from "../domains/config";
+import { HOST_REGISTRY_ROWS, type HostId, type HostRegistryEntry } from "../domains/config";
 import type { NeutralEventName, NeutralReasonCode } from "../domains/lifecycle";
 
 // ---------------------------------------------------------------------------

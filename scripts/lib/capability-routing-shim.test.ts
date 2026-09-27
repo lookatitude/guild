@@ -107,8 +107,10 @@ describe("capability routing compatibility shims", () => {
     expect(rank).toMatch(/export\s+function\s+affinityBoost/);
     expect(tiebreak).toMatch(/export\s+function\s+hostKindRank/);
     expect(tierDefaults).toMatch(/export\s+function\s+tierDefaults/);
-    expect(rank).toMatch(/from\s+["']\.\.\/\.\.\/adapters["']/);
-    expect(tierDefaults).toMatch(/from\s+["']\.\.\/\.\.\/adapters["']/);
+    expect(rank).toMatch(/from\s+["']\.\/host-id-namespace["']/);
+    expect(rank).not.toMatch(/\.\.\/\.\.\/adapters/);
+    expect(tierDefaults).toMatch(/from\s+["']\.\/host-registry-schema["']/);
+    expect(tierDefaults).not.toMatch(/\.\.\/\.\.\/adapters/);
     expect(rank).not.toMatch(/\.\.\/\.\.\/adapters\//);
     expect(tierDefaults).not.toMatch(/\.\.\/\.\.\/adapters\//);
   });

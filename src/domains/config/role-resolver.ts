@@ -18,10 +18,10 @@
  * CONTRACT: pure. No I/O, no clock, never throws. Owned by tooling-engineer (P1-L8).
  */
 
-import { HOST_IDS, HOST_REGISTRY_ROWS, type HostRegistryEntry } from "../../adapters";
+import { HOST_IDS, HOST_REGISTRY_ROWS, type HostRegistryEntry } from "./host-registry-schema";
 import { resolveRoles, type RoleResolutionSet } from "./role-model-schema";
 import { ADVISORY_SUBSTRATES, type AdvisorySubstrate } from "../review";
-import type { DetectionResult } from "../../adapters";
+import type { DetectionResult } from "./provider-detect";
 
 /**
  * The registry rows AVAILABLE on this box, in registry/preference order. A row's

@@ -57,6 +57,7 @@ import {
   resolveRoster,
 } from "./lib/roster";
 import type { WorkflowClass } from "../src/domains/teams";
+import { resolvePluginRoot } from "../src/domains/kernel";
 
 function main(): void {
   const argv = process.argv.slice(2);
@@ -93,11 +94,7 @@ function main(): void {
     }
   }
 
-  const resolvedPluginRoot =
-    pluginRoot ??
-    process.env["GUILD_PLUGIN_ROOT"] ??
-    process.env["CLAUDE_PLUGIN_ROOT"] ??
-    path.resolve(__dirname, "..");
+  const resolvedPluginRoot = pluginRoot ?? resolvePluginRoot(__dirname);
 
   if (checkWorkspaceScopes) {
     if (mintName !== null || migrateTeams || writeRegistry || check || force || hostNative || dryRun) {

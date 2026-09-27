@@ -24,7 +24,7 @@
  * Owned by plugin-architect (P1-L0); consumed by L8 (resolver+wiring), Ltest (SC-5).
  */
 
-import { type HostId, HOST_IDS, type HostRegistryEntry } from "../../adapters";
+import { type HostId, HOST_IDS, type HostRegistryEntry } from "./host-registry-schema";
 
 // ---------------------------------------------------------------------------
 // Role + strength types

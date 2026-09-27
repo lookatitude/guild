@@ -34,6 +34,7 @@
  *     unmarked root is still upgraded.
  */
 
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -66,7 +67,7 @@ export type { LayoutStatus, LayoutState };
  */
 export type LayoutGate =
   | { ok: true; status: LayoutStatus; refused: null; reason: null }
-  | { ok: false; status: null; refused: "future"; reason: string };
+  | { ok: false; status: null; refused: "future" | "bootstrap-failed"; reason: string };
 
 const memo = new Map<string, LayoutGate>();
 
@@ -84,20 +85,37 @@ const memo = new Map<string, LayoutGate>();
  * Only ever reached OFF the budgeted path: a current root returns from the
  * marker read before this is considered.
  */
-function runColdBootstrapOutOfProcess(cwd: string): boolean {
+type ColdBootstrapOutcome = "ran" | "unavailable" | "failed";
+
+function runColdBootstrapOutOfProcess(cwd: string): ColdBootstrapOutcome {
   const pluginRoot = process.env["CLAUDE_PLUGIN_ROOT"] ?? process.env["GUILD_PLUGIN_ROOT"];
-  if (pluginRoot === undefined || pluginRoot.length === 0) return false;
+  if (pluginRoot === undefined || pluginRoot.length === 0) return "unavailable";
   const cli = path.join(pluginRoot, "runtime", "scripts", "ensure-storage-layout.js");
-  const r = spawnSync(process.execPath, [cli, `--cwd=${cwd}`], {
-    encoding: "utf8",
-    timeout: 60_000,
-  });
+  // No CLI at all is the "cannot run" case (an un-upgraded root stays readable);
+  // a CLI that EXISTS and exits non-zero is a broken compile output set, which
+  // KTD10 says fails closed — the two must not collapse into one `false`
+  // (codex lead round 2).
+  if (!fs.existsSync(cli)) return "unavailable";
+  // The timeout is a test seam only: a CLI that traps SIGTERM and exits 0 on a
+  // timeout reports {status: 0, error: ETIMEDOUT} and must still count as
+  // failed (codex lead round 3), which a fixture can only drive with a short bound.
+  const rawTimeout = Number(process.env["GUILD_LAYOUT_CLI_TIMEOUT_MS"]);
+  const timeoutMs = Number.isInteger(rawTimeout) && rawTimeout > 0 ? rawTimeout : 60_000;
+  let r: ReturnType<typeof spawnSync<string>>;
+  try {
+    r = spawnSync(process.execPath, [cli, `--cwd=${cwd}`], { encoding: "utf8", timeout: timeoutMs });
+  } catch {
+    // A synchronous spawn failure (an invalid option, an unspawnable execPath)
+    // is a failed bootstrap, never an exception out of the silent gate.
+    return "failed";
+  }
+  if (r.error) return "failed"; // spawn failure or timeout, whatever `status` says
   // The CLI's own stderr is DISCARDED here, deliberately. Its blocked-upgrade
   // report is ~1.2 KB and several hooks are budgeted to 0 bytes of stderr, so
   // forwarding it would trade a layout problem for an output-budget failure.
   // SessionStart runs the same CLI and prints the report where an operator is
   // actually reading; from a hook the useful outcome is that the chain RAN.
-  return r.status === 0;
+  return r.status === 0 ? "ran" : "failed";
 }
 
 /**
@@ -150,11 +168,24 @@ export function ensureStorageLayout(cwd: string, hookName = "hook"): LayoutGate 
     try {
       return { ok: true, status: ensureStorageLayoutImpl(cwd), refused: null, reason: null };
     } catch {
-      runColdBootstrapOutOfProcess(cwd);
+      const cold = runColdBootstrapOutOfProcess(cwd);
+      if (cold === "failed") {
+        // The compiled CLI exists and could not run the chain: a broken compile
+        // output set (KTD10). Nothing may proceed as if Guild had bootstrapped.
+        return {
+          ok: false,
+          status: null,
+          refused: "bootstrap-failed",
+          reason: "the compiled layout bootstrap exited non-zero (KTD10: compile outputs missing or broken)",
+        };
+      }
       return { ok: true, status: detect(cwd), refused: null, reason: null };
     }
   })();
-  memo.set(cwd, gate);
+  // A refusal for a FAILED bootstrap is not memoized: a repaired CLI in the same
+  // process must be seen on the next call (codex lead round 3). `future` stays
+  // memoized — the layout version does not change under a running process.
+  if (!(gate.ok === false && gate.refused === "bootstrap-failed")) memo.set(cwd, gate);
   return gate;
 }
 

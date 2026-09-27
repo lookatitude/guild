@@ -5,4 +5,4 @@
  * move internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/adapters/host-registry-schema";
+export * from "../../src/domains/config/host-registry-schema";

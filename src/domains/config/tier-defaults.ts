@@ -26,14 +26,9 @@
  * score-tier.ts.
  */
 
-import {
-  HOST_REGISTRY_ROWS,
-  HOST_IDS,
-  type HostId,
-  type HostRegistryEntry,
-} from "../../adapters";
-import { HOSTKIND_TO_REGISTRY_ID } from "../../adapters";
-import type { HostKind } from "../../adapters";
+import { HOST_REGISTRY_ROWS, HOST_IDS, type HostId, type HostRegistryEntry } from "./host-registry-schema";
+import { HOSTKIND_TO_REGISTRY_ID } from "./host-id-namespace";
+import type { HostKind } from "./host-types";
 import type { Tier } from "./router";
 
 // ---------------------------------------------------------------------------

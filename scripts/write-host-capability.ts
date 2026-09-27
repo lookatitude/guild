@@ -51,11 +51,11 @@ import { resolveTierModel } from "../src/domains/config";
 import type {
   HostCapabilityManifest,
   HostKind,
-} from "../src/adapters/host-capability-manifest";
+} from "../src/domains/config";
 export type {
   HostCapabilityManifest,
   HostKind,
-} from "../src/adapters/host-capability-manifest";
+} from "../src/domains/config";
 // W4 D1: registry-bridge predicates replace `=== "claude"` literals in this file.
 // Both sites gate on a CLI-NATIVE capability (in-process independent agents, native PreToolUse
 // ask) that the claude desktop/web/app variants do NOT share — so they use the EXACT isClaudeCli,

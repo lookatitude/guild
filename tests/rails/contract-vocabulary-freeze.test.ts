@@ -58,7 +58,7 @@ import { EXECUTION_DISPATCH_MODES, EXECUTION_OPERATIONS, EXECUTION_OUTCOME_STATU
 import {
   INJECTION_SUPPORT,
   REQUIRED_HOOK_EVENTS,
-} from "../../src/adapters/host-capabilities-schema";
+} from "../../src/domains/config/host-capabilities-schema";
 
 /** Every exported vocabulary across the four contract surfaces this lane owns. */
 const REGISTRIES: ReadonlyArray<readonly [string, readonly unknown[]]> = [

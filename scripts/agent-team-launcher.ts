@@ -197,7 +197,7 @@ import { readRoutingFlags } from "../src/domains/config/routing-rollout";
 // from the SAME unpack point the legacy path uses (models.tiers), never a
 // parallel implementation.
 import { resolveTierModel } from "../src/domains/config/tier-model";
-import { readSessionBinding } from "../src/domains/config/session-binding";
+import { detectSession, isUnknownHost, readSessionBinding } from "../src/domains/config/session-binding";
 import { createGuildStorage } from "./lib/state/storage";
 import { resolvePolicy } from "../src/domains/config/policy-resolver";
 import { resolveAssignmentBinding } from "../src/domains/dispatch/assignment-binding";
@@ -231,7 +231,9 @@ import {
 // execute-plan SKILL owns EDIT-4 (subagent/in-process) — mutually exclusive, no double-write.
 import { writeTaskRun, readTaskRunCapReqs } from "./write-task-run";
 import { emitReadbackDegradation } from "./lib/emit-readback-degradation"; // W2-A2(d)
-import { captureHostCapabilitySnapshot } from "../src/adapters";
+import { captureHostCapabilitySnapshot, familyForHostId, rungKeyForSession, rungPlanForFamily } from "../src/adapters";
+import { recordRungLosses, rungLossesAsRecordedLosses } from "../src/domains/dispatch";
+import { resolvePluginRoot } from "../src/domains/kernel";
 
 export interface TerminalSubstantiveReconciliation {
   readonly attempted: number;
@@ -1187,8 +1189,7 @@ function specialistIdentity(
   const refProfileHash = ref?.specialist_profile_hash ?? null;
   const refIsComplete = refTypeHash !== null && refProfileHash !== null;
 
-  const runtimeRoot = process.env["GUILD_PLUGIN_ROOT"] ??
-    process.env["CLAUDE_PLUGIN_ROOT"] ?? path.resolve(__dirname, "..");
+  const runtimeRoot = resolvePluginRoot(__dirname);
 
   // PCL-FU-20: the shipped-template compatibility read is LOAD-BEARING and must
   // run BEFORE the complete-ref shortcut. Pre-fix, a lane whose committed
@@ -1380,13 +1381,53 @@ export function emitTaskCellsV2(
   // binding, which is the "unknown host quietly becomes Claude" path KTD22
   // exists to close — the absence of a binding is exactly the case where nobody
   // established which host this run is on.
-  if (readSessionBinding(runDir) === null) {
+  const sessionBinding = readSessionBinding(runDir);
+  if (sessionBinding === null) {
     throw new Error(
       `binding_blocked: run ${runId} carries no guild.session_binding.v1 — ` +
         `refusing to emit guild.task_assignment.v2 cells. Assignment host and ` +
         `model ids are copied from the run binding; bind the run first (KTD22).`,
     );
   }
+  // KTD28: the bound host family's rung plan decides whether an isolated worker
+  // may exist at all. Every lost rung is recorded before anything else happens;
+  // a family that cannot spawn or cannot project tools refuses here, so no pane
+  // or process is ever launched with isolation it does not have.
+  // The run may resume on another surface of the same family: the stricter plan wins.
+  // CODEX_HOME alone is a config location this launcher also exports for codex lanes,
+  // so it never names the session; every other host signal still does.
+  const here = detectSession({ ...process.env, CODEX_HOME: undefined });
+  const sameFamily = (familyForHostId(here.host_family) ?? here.host_family) === (familyForHostId(sessionBinding.host_family) ?? sessionBinding.host_family);
+  const rungPlan = [sessionBinding, ...(sameFamily ? [here] : [])]
+    .map((s) => rungPlanForFamily(rungKeyForSession(s), { verify_check_available: false }))
+    .reduce((a, b) => (b.losses.length > a.losses.length ? b : a));
+  const lossesWritten = recordRungLosses({ runDir, run_id: runId, plan: rungPlan });
+  // A loss that did not reach the log is not recorded, whatever the plan says.
+  if (lossesWritten !== rungPlan.losses.length) {
+    throw new Error(
+      `isolated_spawn_refused: recorded: false — ${rungPlan.losses.length - lossesWritten} of ` +
+        `${rungPlan.losses.length} rung losses for host family ${sessionBinding.host_family} could not be ` +
+        `written to the run's event log; no isolated worker runs on unrecorded losses (KTD28).`,
+    );
+  }
+  // An unknown host has no row at all; it is refused below with the more specific
+  // binding_blocked reason (KTD22), so this refusal covers the known families.
+  if (rungPlan.spawn === "lead_only" && rungPlan.family !== null) {
+    throw new Error(
+      `isolated_spawn_refused: host family ${sessionBinding.host_family} has no verified ` +
+        `${rungPlan.losses.filter((l) => l.rung === "spawn" || l.rung === "tool_projection").map((l) => l.rung).join(" + ")} rung — ` +
+        `run the lanes lead_only in the parent session (KTD28). recorded: true — the loss is on the run's event log.`,
+    );
+  }
+  // SessionStart only notes a refused rebind; dispatch is where it must hold.
+  // A known host other than the bound one never dispatches under the old binding.
+  if (!isUnknownHost(here) && !sameFamily) {
+    throw new Error(
+      `binding_blocked: run ${runId} is bound to host family ${sessionBinding.host_family}; ` +
+        `this session is ${here.host_family}. Continue as a new run on this host: guild resume --new-run`,
+    );
+  }
+  const rungLosses = rungLossesAsRecordedLosses(rungPlan);
   // R46: THE admission entry, the same one `spawnInstance` uses. Each lane's slot
   // is CLAIMED here — the claim is the lane's own `attempt.json`, which the cell
   // records below complete — so two interleaved launcher passes over one run
@@ -1477,7 +1518,7 @@ export function emitTaskCellsV2(
           logical_task_id: d,
           accepted_artifact_ref: null,
         })),
-        projection: { tools, permissions: [], recorded_losses: [] },
+        projection: { tools, permissions: [], recorded_losses: [...rungLosses] },
         autonomyPolicy: "supervised",
         budgets: { tokens: null, wall_clock_ms: null, cost_usd: null },
         deadline: null,
@@ -4074,7 +4115,12 @@ async function main(): Promise<void> {
   process.exit(attach.status ?? 0);
 }
 
-if (require.main === module) {
+// Gate on the exact argv basename: esbuild inlines this module into other
+// bundles, where `require.main === module` is true for every inlined module.
+if (
+  require.main === module &&
+  /^agent-team-launcher\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")
+) {
   main().catch((err) => {
     process.stderr.write(`[agent-team-launcher] FATAL: ${(err as Error).message}\n`);
     process.exit(1);

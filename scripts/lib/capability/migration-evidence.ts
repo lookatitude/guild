@@ -1312,7 +1312,7 @@ export function hashRuntimePackage(packageRoot: string): string {
 }
 
 const COMPATIBILITY_PRODUCER_PATHS = Object.freeze([
-  "scripts/lib/capability/compatibility-loader.ts",
+  "hooks/dist/pre-tool-use.js", // the compatibility loader ships compiled in this bundle (KTD11)
 ]);
 
 export function hashCompatibilityRuntimeProducer(packageRoot: string, hostId: MigrationRuntimeHost): string {

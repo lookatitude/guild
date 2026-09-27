@@ -3,7 +3,7 @@
  *
  * Contract: unset/"auto"/malformed host input resolves family "unknown" —
  * NEVER defaults to claude. This retires:
- *   - src/adapters/provider-detect.ts:246
+ *   - src/domains/config/provider-detect.ts:246
  *     (resolveAuthorHost: "auto"/unset/"" ⇒ "claude")
  *   - hooks/lib/run-trace.ts:204 (defaultResolveHost: unrecognized ⇒ "claude")
  *
@@ -13,7 +13,7 @@
  */
 
 import { describe, test, expect, afterEach } from "bun:test";
-import { resolveAuthorHost } from "../../src/adapters/provider-detect";
+import { resolveAuthorHost } from "../../src/domains/config";
 import { defaultResolveHost } from "../../hooks/lib/run-trace";
 
 describe("C1 session_context §3 — unknown-safe identity", () => {
@@ -82,12 +82,12 @@ describe("C1 session_context §3 — unknown-safe identity", () => {
 
   describe("consumers must never 'repair' unknown (session_context §3 terminal-value rule)", () => {
     test("FAILING-TODAY: session-context builder module exists and exposes buildSessionContext", () => {
-      // Owning lane T3 — src/adapters/session-context.ts
+      // Owning lane T3 — src/domains/config/session-context.ts
       // (module-map §1). Fails today with CONTRACT-MODULE-MISSING by design.
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { requireContractModule } = require("./_helpers");
       const mod = requireContractModule(
-        "src/adapters/session-context",
+        "src/domains/config/session-context",
         "T3-session-identity-binding"
       );
       expect(typeof mod.buildSessionContext).toBe("function");

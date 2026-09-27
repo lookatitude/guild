@@ -31,6 +31,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // mcp-servers/guild-memory/node_modules/ajv/dist/compile/codegen/code.js
 var require_code = __commonJS({
@@ -112,13 +113,13 @@ var require_code = __commonJS({
       return new _Code(expr);
     }
     exports2.str = str2;
-    function addCodeArg(code, arg2) {
-      if (arg2 instanceof _Code)
-        code.push(...arg2._items);
-      else if (arg2 instanceof Name)
-        code.push(arg2);
+    function addCodeArg(code, arg) {
+      if (arg instanceof _Code)
+        code.push(...arg._items);
+      else if (arg instanceof Name)
+        code.push(arg);
       else
-        code.push(interpolate(arg2));
+        code.push(interpolate(arg));
     }
     exports2.addCodeArg = addCodeArg;
     function optimize(expr) {
@@ -2983,7 +2984,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve3.call(this, root, ref);
+      let _sch = resolve4.call(this, root, ref);
       if (_sch === void 0) {
         const schema2 = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3010,7 +3011,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve3(root, ref) {
+    function resolve4(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3228,8 +3229,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path3) {
-      let input = path3;
+    function removeDotSegments(path4) {
+      let input = path4;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3481,8 +3482,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path3, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path3 && path3 !== "/" ? path3 : void 0;
+        const [path4, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path4 && path4 !== "/" ? path4 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -3641,7 +3642,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve3(baseURI, relativeURI, options) {
+    function resolve4(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const { parsed: baseParsed, malformedAuthorityOrPort: baseMalformed } = parseWithStatus(baseURI, schemelessOptions);
       const { parsed: relativeParsed, malformedAuthorityOrPort: relativeMalformed } = parseWithStatus(relativeURI, schemelessOptions);
@@ -3925,7 +3926,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve3,
+      resolve: resolve4,
       resolveComponent,
       equal,
       serialize,
@@ -10029,13 +10030,13 @@ var require_code3 = __commonJS({
       return new _Code(expr);
     }
     exports2.str = str2;
-    function addCodeArg(code, arg2) {
-      if (arg2 instanceof _Code)
-        code.push(...arg2._items);
-      else if (arg2 instanceof Name)
-        code.push(arg2);
+    function addCodeArg(code, arg) {
+      if (arg instanceof _Code)
+        code.push(...arg._items);
+      else if (arg instanceof Name)
+        code.push(arg);
       else
-        code.push(interpolate(arg2));
+        code.push(interpolate(arg));
     }
     exports2.addCodeArg = addCodeArg;
     function optimize(expr) {
@@ -12900,7 +12901,7 @@ var require_compile2 = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve3.call(this, root, ref);
+      let _sch = resolve4.call(this, root, ref);
       if (_sch === void 0) {
         const schema2 = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -12927,7 +12928,7 @@ var require_compile2 = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve3(root, ref) {
+    function resolve4(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -13145,8 +13146,8 @@ var require_utils2 = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path3) {
-      let input = path3;
+    function removeDotSegments(path4) {
+      let input = path4;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -13398,8 +13399,8 @@ var require_schemes2 = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path3, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path3 && path3 !== "/" ? path3 : void 0;
+        const [path4, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path4 && path4 !== "/" ? path4 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -13558,7 +13559,7 @@ var require_fast_uri2 = __commonJS({
       }
       return uri;
     }
-    function resolve3(baseURI, relativeURI, options) {
+    function resolve4(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const { parsed: baseParsed, malformedAuthorityOrPort: baseMalformed } = parseWithStatus(baseURI, schemelessOptions);
       const { parsed: relativeParsed, malformedAuthorityOrPort: relativeMalformed } = parseWithStatus(relativeURI, schemelessOptions);
@@ -13842,7 +13843,7 @@ var require_fast_uri2 = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve3,
+      resolve: resolve4,
       resolveComponent,
       equal,
       serialize,
@@ -16831,9 +16832,21 @@ var require_dist2 = __commonJS({
   }
 });
 
+// src/runtime/mcp.ts
+var mcp_exports = {};
+__export(mcp_exports, {
+  MCP_IDS: () => MCP_IDS,
+  callInProcess: () => callInProcess,
+  describeMcp: () => describeMcp,
+  isMcpId: () => isMcpId,
+  main: () => main3,
+  mcpServerFor: () => mcpServerFor
+});
+module.exports = __toCommonJS(mcp_exports);
+
 // mcp-servers/guild-memory/src/index.ts
 var fs = __toESM(require("fs"));
-var path = __toESM(require("path"));
+var path2 = __toESM(require("path"));
 
 // mcp-servers/guild-memory/node_modules/zod/v3/external.js
 var external_exports = {};
@@ -17313,8 +17326,8 @@ function getErrorMap() {
 
 // mcp-servers/guild-memory/node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path3, errorMaps, issueData } = params;
-  const fullPath = [...path3, ...issueData.path || []];
+  const { data, path: path4, errorMaps, issueData } = params;
+  const fullPath = [...path4, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -17430,11 +17443,11 @@ var errorUtil;
 
 // mcp-servers/guild-memory/node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path3, key) {
+  constructor(parent, value, path4, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path3;
+    this._path = path4;
     this._key = key;
   }
   get path() {
@@ -20398,9 +20411,9 @@ var ZodEffects = class extends ZodType {
     const { status, ctx } = this._processInputParams(input);
     const effect = this._def.effect || null;
     const checkCtx = {
-      addIssue: (arg2) => {
-        addIssueToContext(ctx, arg2);
-        if (arg2.fatal) {
+      addIssue: (arg) => {
+        addIssueToContext(ctx, arg);
+        if (arg.fatal) {
           status.abort();
         } else {
           status.dirty();
@@ -20865,14 +20878,14 @@ var ostring = () => stringType().optional();
 var onumber = () => numberType().optional();
 var oboolean = () => booleanType().optional();
 var coerce = {
-  string: ((arg2) => ZodString.create({ ...arg2, coerce: true })),
-  number: ((arg2) => ZodNumber.create({ ...arg2, coerce: true })),
-  boolean: ((arg2) => ZodBoolean.create({
-    ...arg2,
+  string: ((arg) => ZodString.create({ ...arg, coerce: true })),
+  number: ((arg) => ZodNumber.create({ ...arg, coerce: true })),
+  boolean: ((arg) => ZodBoolean.create({
+    ...arg,
     coerce: true
   })),
-  bigint: ((arg2) => ZodBigInt.create({ ...arg2, coerce: true })),
-  date: ((arg2) => ZodDate.create({ ...arg2, coerce: true }))
+  bigint: ((arg) => ZodBigInt.create({ ...arg, coerce: true })),
+  date: ((arg) => ZodDate.create({ ...arg, coerce: true }))
 };
 var NEVER = INVALID;
 
@@ -21071,10 +21084,10 @@ function assignProp(target, prop, value) {
     configurable: true
   });
 }
-function getElementAtPath(obj, path3) {
-  if (!path3)
+function getElementAtPath(obj, path4) {
+  if (!path4)
     return obj;
-  return path3.reduce((acc, key) => acc?.[key], obj);
+  return path4.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -21394,11 +21407,11 @@ function aborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path3, issues) {
+function prefixIssues(path4, issues) {
   return issues.map((iss) => {
     var _a;
     (_a = iss).path ?? (_a.path = []);
-    iss.path.unshift(path3);
+    iss.path.unshift(path4);
     return iss;
   });
 }
@@ -22039,13 +22052,13 @@ var Doc = class {
     fn(this);
     this.indent -= 1;
   }
-  write(arg2) {
-    if (typeof arg2 === "function") {
-      arg2(this, { execution: "sync" });
-      arg2(this, { execution: "async" });
+  write(arg) {
+    if (typeof arg === "function") {
+      arg(this, { execution: "sync" });
+      arg(this, { execution: "async" });
       return;
     }
-    const content = arg2;
+    const content = arg;
     const lines = content.split("\n").filter((x) => x);
     const minIndent = Math.min(...lines.map((x) => x.length - x.trimStart().length));
     const dedented = lines.map((x) => x.slice(minIndent)).map((x) => " ".repeat(this.indent * 2) + x);
@@ -24809,11 +24822,11 @@ function normalizeObjectSchema(schema2) {
   }
   return void 0;
 }
-function getDotPath(path3) {
-  if (path3.length === 0) {
+function getDotPath(path4) {
+  if (path4.length === 0) {
     return "object root";
   }
-  return path3.reduce((acc, seg, index) => {
+  return path4.reduce((acc, seg, index) => {
     if (index === 0) {
       return String(seg);
     }
@@ -25002,8 +25015,8 @@ var ZodType2 = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
   inst.nullish = () => optional(nullable(inst));
   inst.nonoptional = (params) => nonoptional(inst, params);
   inst.array = () => array(inst);
-  inst.or = (arg2) => union([inst, arg2]);
-  inst.and = (arg2) => intersection(inst, arg2);
+  inst.or = (arg) => union([inst, arg]);
+  inst.and = (arg) => intersection(inst, arg);
   inst.transform = (tx) => pipe(inst, transform(tx));
   inst.default = (def2) => _default(inst, def2);
   inst.prefault = (def2) => prefault(inst, def2);
@@ -28349,13 +28362,13 @@ var zodToJsonSchema = (schema2, options) => {
     }, true) ?? parseAnyDef(refs)
   }), {}) : void 0;
   const name = typeof options === "string" ? options : options?.nameStrategy === "title" ? void 0 : options?.name;
-  const main3 = parseDef(schema2._def, name === void 0 ? refs : {
+  const main4 = parseDef(schema2._def, name === void 0 ? refs : {
     ...refs,
     currentPath: [...refs.basePath, refs.definitionPath, name]
   }, false) ?? parseAnyDef(refs);
   const title = typeof options === "object" && options.name !== void 0 && options.nameStrategy === "title" ? options.name : void 0;
   if (title !== void 0) {
-    main3.title = title;
+    main4.title = title;
   }
   if (refs.flags.hasReferencedOpenAiAnyType) {
     if (!definitions) {
@@ -28376,9 +28389,9 @@ var zodToJsonSchema = (schema2, options) => {
     }
   }
   const combined = name === void 0 ? definitions ? {
-    ...main3,
+    ...main4,
     [refs.definitionPath]: definitions
-  } : main3 : {
+  } : main4 : {
     $ref: [
       ...refs.$refStrategy === "relative" ? [] : refs.basePath,
       refs.definitionPath,
@@ -28386,7 +28399,7 @@ var zodToJsonSchema = (schema2, options) => {
     ].join("/"),
     [refs.definitionPath]: {
       ...definitions,
-      [name]: main3
+      [name]: main4
     }
   };
   if (refs.target === "jsonSchema7") {
@@ -28942,7 +28955,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
+        await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error3) {
@@ -28959,7 +28972,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       const earlyReject = (error3) => {
         reject(error3);
       };
@@ -29037,7 +29050,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve3(parseResult.data);
+            resolve4(parseResult.data);
           }
         } catch (error3) {
           reject(error3);
@@ -29298,12 +29311,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve3, interval);
+      const timeoutId = setTimeout(resolve4, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -30394,7 +30407,7 @@ var McpServer = class {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5e3;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
+      await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError(ErrorCode.InternalError, `Task ${taskId} not found during polling`);
@@ -31058,12 +31071,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve3) => {
+    return new Promise((resolve4) => {
       const json2 = serializeMessage(message);
       if (this._stdout.write(json2)) {
-        resolve3();
+        resolve4();
       } else {
-        this._stdout.once("drain", resolve3);
+        this._stdout.once("drain", resolve4);
       }
     });
   }
@@ -31078,6 +31091,10 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
   "mcp_servers",
   "scripts"
 ]);
+
+// src/domains/kernel/plugin-root.ts
+var path = __toESM(require("node:path"));
+var PLUGIN_ROOT_MARKER = path.join("runtime", "guild-mcp.js");
 
 // src/domains/kernel/identifier-tokenize.ts
 var TOKEN_RE = /[A-Za-z0-9]+/g;
@@ -31333,15 +31350,15 @@ var PAYLOAD_FS_CASE_INSENSITIVE = (() => {
   }
 })();
 function realpathOrSelf(p) {
-  let cur = path.resolve(p);
+  let cur = path2.resolve(p);
   const tail = [];
   for (; ; ) {
     try {
-      return path.join(fs.realpathSync(cur), ...tail.reverse());
+      return path2.join(fs.realpathSync(cur), ...tail.reverse());
     } catch {
-      const parent = path.dirname(cur);
-      if (parent === cur) return path.resolve(p);
-      tail.push(path.basename(cur));
+      const parent = path2.dirname(cur);
+      if (parent === cur) return path2.resolve(p);
+      tail.push(path2.basename(cur));
       cur = parent;
     }
   }
@@ -31363,39 +31380,39 @@ function assertNotPayloadScoped(candidate, source) {
     if (sameDirectory(cur, PAYLOAD_ROOT)) {
       throw new PayloadScopedRootError(source, candidate);
     }
-    const parent = path.dirname(cur);
+    const parent = path2.dirname(cur);
     if (parent === cur) break;
     cur = parent;
   }
   const compare = (v) => PAYLOAD_FS_CASE_INSENSITIVE ? v.toLowerCase() : v;
   const c = compare(real);
   const pay = compare(PAYLOAD_ROOT);
-  if (c === pay || c.startsWith(pay + path.sep)) {
+  if (c === pay || c.startsWith(pay + path2.sep)) {
     throw new PayloadScopedRootError(source, candidate);
   }
 }
 function resolveWikiRoot(cwdArg) {
   if (cwdArg) {
-    if (NO_CWD_FALLBACK && !path.isAbsolute(cwdArg)) {
+    if (NO_CWD_FALLBACK && !path2.isAbsolute(cwdArg)) {
       throw new RelativeProjectRootError("cwd", cwdArg);
     }
-    const wikiRoot = path.join(path.resolve(cwdArg), ".guild", "wiki");
+    const wikiRoot = path2.join(path2.resolve(cwdArg), ".guild", "wiki");
     assertNotPayloadScoped(wikiRoot, "cwd");
     return wikiRoot;
   }
   const envRoot = process.env.GUILD_MEMORY_WIKI_ROOT;
   if (envRoot) {
-    if (NO_CWD_FALLBACK && !path.isAbsolute(envRoot)) {
+    if (NO_CWD_FALLBACK && !path2.isAbsolute(envRoot)) {
       throw new RelativeProjectRootError("GUILD_MEMORY_WIKI_ROOT", envRoot);
     }
-    const envWiki = path.resolve(envRoot);
+    const envWiki = path2.resolve(envRoot);
     assertNotPayloadScoped(envWiki, "GUILD_MEMORY_WIKI_ROOT");
     return envWiki;
   }
   if (NO_CWD_FALLBACK) {
     throw new UnresolvedProjectRootError();
   }
-  return path.join(process.cwd(), ".guild", "wiki");
+  return path2.join(process.cwd(), ".guild", "wiki");
 }
 var yaml = require_js_yaml();
 function parseFrontmatter(content) {
@@ -31434,7 +31451,7 @@ function walkDir(dir) {
     return out;
   }
   for (const e of entries) {
-    const full = path.join(dir, e.name);
+    const full = path2.join(dir, e.name);
     if (e.isDirectory()) out.push(...walkDir(full));
     else if (e.isFile() && e.name.endsWith(".md")) out.push(full);
   }
@@ -31447,7 +31464,7 @@ function loadAllPages(wikiRoot) {
   const files = walkDir(wikiRoot).sort();
   const pages = [];
   for (const abs of files) {
-    const rel = path.relative(wikiRoot, abs).split(path.sep).join("/");
+    const rel = path2.relative(wikiRoot, abs).split(path2.sep).join("/");
     const category = rel.includes("/") ? rel.split("/")[0] : "index";
     const content = fs.readFileSync(abs, "utf8");
     const { frontmatter, body } = parseFrontmatter(content);
@@ -31489,9 +31506,9 @@ function excerpt(body, queryTokens, maxLen = 160) {
   return body.slice(start, start + maxLen).replace(/\s+/g, " ").trim();
 }
 function resolveInsideWiki(wikiRoot, rel) {
-  const full = path.resolve(wikiRoot, rel);
-  const relCheck = path.relative(wikiRoot, full);
-  if (relCheck.startsWith("..") || path.isAbsolute(relCheck)) return null;
+  const full = path2.resolve(wikiRoot, rel);
+  const relCheck = path2.relative(wikiRoot, full);
+  if (relCheck.startsWith("..") || path2.isAbsolute(relCheck)) return null;
   return full;
 }
 function jsonResult(value) {
@@ -31631,7 +31648,7 @@ function runAsEntry() {
 
 // mcp-servers/guild-telemetry/src/index.ts
 var fs2 = __toESM(require("fs"));
-var path2 = __toESM(require("path"));
+var path3 = __toESM(require("path"));
 
 // mcp-servers/guild-telemetry/node_modules/js-yaml/dist/js-yaml.mjs
 function getDefaultExportFromCjs(x) {
@@ -35169,8 +35186,8 @@ function getErrorMap2() {
 
 // mcp-servers/guild-telemetry/node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue2 = (params) => {
-  const { data, path: path3, errorMaps, issueData } = params;
-  const fullPath = [...path3, ...issueData.path || []];
+  const { data, path: path4, errorMaps, issueData } = params;
+  const fullPath = [...path4, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -35286,11 +35303,11 @@ var errorUtil2;
 
 // mcp-servers/guild-telemetry/node_modules/zod/v3/types.js
 var ParseInputLazyPath2 = class {
-  constructor(parent, value, path3, key) {
+  constructor(parent, value, path4, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path3;
+    this._path = path4;
     this._key = key;
   }
   get path() {
@@ -38254,9 +38271,9 @@ var ZodEffects2 = class extends ZodType3 {
     const { status, ctx } = this._processInputParams(input);
     const effect = this._def.effect || null;
     const checkCtx = {
-      addIssue: (arg2) => {
-        addIssueToContext2(ctx, arg2);
-        if (arg2.fatal) {
+      addIssue: (arg) => {
+        addIssueToContext2(ctx, arg);
+        if (arg.fatal) {
           status.abort();
         } else {
           status.dirty();
@@ -38721,14 +38738,14 @@ var ostring2 = () => stringType2().optional();
 var onumber2 = () => numberType2().optional();
 var oboolean2 = () => booleanType2().optional();
 var coerce2 = {
-  string: ((arg2) => ZodString3.create({ ...arg2, coerce: true })),
-  number: ((arg2) => ZodNumber3.create({ ...arg2, coerce: true })),
-  boolean: ((arg2) => ZodBoolean3.create({
-    ...arg2,
+  string: ((arg) => ZodString3.create({ ...arg, coerce: true })),
+  number: ((arg) => ZodNumber3.create({ ...arg, coerce: true })),
+  boolean: ((arg) => ZodBoolean3.create({
+    ...arg,
     coerce: true
   })),
-  bigint: ((arg2) => ZodBigInt2.create({ ...arg2, coerce: true })),
-  date: ((arg2) => ZodDate2.create({ ...arg2, coerce: true }))
+  bigint: ((arg) => ZodBigInt2.create({ ...arg, coerce: true })),
+  date: ((arg) => ZodDate2.create({ ...arg, coerce: true }))
 };
 var NEVER3 = INVALID2;
 
@@ -38927,10 +38944,10 @@ function assignProp2(target, prop, value) {
     configurable: true
   });
 }
-function getElementAtPath2(obj, path3) {
-  if (!path3)
+function getElementAtPath2(obj, path4) {
+  if (!path4)
     return obj;
-  return path3.reduce((acc, key) => acc?.[key], obj);
+  return path4.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject2(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -39250,11 +39267,11 @@ function aborted2(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues2(path3, issues) {
+function prefixIssues2(path4, issues) {
   return issues.map((iss) => {
     var _a;
     (_a = iss).path ?? (_a.path = []);
-    iss.path.unshift(path3);
+    iss.path.unshift(path4);
     return iss;
   });
 }
@@ -39895,13 +39912,13 @@ var Doc2 = class {
     fn(this);
     this.indent -= 1;
   }
-  write(arg2) {
-    if (typeof arg2 === "function") {
-      arg2(this, { execution: "sync" });
-      arg2(this, { execution: "async" });
+  write(arg) {
+    if (typeof arg === "function") {
+      arg(this, { execution: "sync" });
+      arg(this, { execution: "async" });
       return;
     }
-    const content = arg2;
+    const content = arg;
     const lines = content.split("\n").filter((x) => x);
     const minIndent = Math.min(...lines.map((x) => x.length - x.trimStart().length));
     const dedented = lines.map((x) => x.slice(minIndent)).map((x) => " ".repeat(this.indent * 2) + x);
@@ -42665,11 +42682,11 @@ function normalizeObjectSchema2(schema2) {
   }
   return void 0;
 }
-function getDotPath2(path3) {
-  if (path3.length === 0) {
+function getDotPath2(path4) {
+  if (path4.length === 0) {
     return "object root";
   }
-  return path3.reduce((acc, seg, index) => {
+  return path4.reduce((acc, seg, index) => {
     if (index === 0) {
       return String(seg);
     }
@@ -42858,8 +42875,8 @@ var ZodType4 = /* @__PURE__ */ $constructor2("ZodType", (inst, def) => {
   inst.nullish = () => optional2(nullable2(inst));
   inst.nonoptional = (params) => nonoptional2(inst, params);
   inst.array = () => array2(inst);
-  inst.or = (arg2) => union2([inst, arg2]);
-  inst.and = (arg2) => intersection2(inst, arg2);
+  inst.or = (arg) => union2([inst, arg]);
+  inst.and = (arg) => intersection2(inst, arg);
   inst.transform = (tx) => pipe2(inst, transform2(tx));
   inst.default = (def2) => _default3(inst, def2);
   inst.prefault = (def2) => prefault2(inst, def2);
@@ -46205,13 +46222,13 @@ var zodToJsonSchema2 = (schema2, options) => {
     }, true) ?? parseAnyDef2(refs)
   }), {}) : void 0;
   const name = typeof options === "string" ? options : options?.nameStrategy === "title" ? void 0 : options?.name;
-  const main3 = parseDef2(schema2._def, name === void 0 ? refs : {
+  const main4 = parseDef2(schema2._def, name === void 0 ? refs : {
     ...refs,
     currentPath: [...refs.basePath, refs.definitionPath, name]
   }, false) ?? parseAnyDef2(refs);
   const title = typeof options === "object" && options.name !== void 0 && options.nameStrategy === "title" ? options.name : void 0;
   if (title !== void 0) {
-    main3.title = title;
+    main4.title = title;
   }
   if (refs.flags.hasReferencedOpenAiAnyType) {
     if (!definitions) {
@@ -46232,9 +46249,9 @@ var zodToJsonSchema2 = (schema2, options) => {
     }
   }
   const combined = name === void 0 ? definitions ? {
-    ...main3,
+    ...main4,
     [refs.definitionPath]: definitions
-  } : main3 : {
+  } : main4 : {
     $ref: [
       ...refs.$refStrategy === "relative" ? [] : refs.basePath,
       refs.definitionPath,
@@ -46242,7 +46259,7 @@ var zodToJsonSchema2 = (schema2, options) => {
     ].join("/"),
     [refs.definitionPath]: {
       ...definitions,
-      [name]: main3
+      [name]: main4
     }
   };
   if (refs.target === "jsonSchema7") {
@@ -46798,7 +46815,7 @@ var Protocol2 = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
+        await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error3) {
@@ -46815,7 +46832,7 @@ var Protocol2 = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       const earlyReject = (error3) => {
         reject(error3);
       };
@@ -46893,7 +46910,7 @@ var Protocol2 = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve3(parseResult.data);
+            resolve4(parseResult.data);
           }
         } catch (error3) {
           reject(error3);
@@ -47154,12 +47171,12 @@ var Protocol2 = class {
       }
     } catch {
     }
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       if (signal.aborted) {
         reject(new McpError2(ErrorCode2.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve3, interval);
+      const timeoutId = setTimeout(resolve4, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError2(ErrorCode2.InvalidRequest, "Request cancelled"));
@@ -48250,7 +48267,7 @@ var McpServer2 = class {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5e3;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
+      await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError2(ErrorCode2.InternalError, `Task ${taskId} not found during polling`);
@@ -48914,12 +48931,12 @@ var StdioServerTransport2 = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve3) => {
+    return new Promise((resolve4) => {
       const json2 = serializeMessage2(message);
       if (this._stdout.write(json2)) {
-        resolve3();
+        resolve4();
       } else {
-        this._stdout.once("drain", resolve3);
+        this._stdout.once("drain", resolve4);
       }
     });
   }
@@ -48966,15 +48983,15 @@ var PAYLOAD_FS_CASE_INSENSITIVE2 = (() => {
   }
 })();
 function realpathOrSelf2(p) {
-  let cur = path2.resolve(p);
+  let cur = path3.resolve(p);
   const tail = [];
   for (; ; ) {
     try {
-      return path2.join(fs2.realpathSync(cur), ...tail.reverse());
+      return path3.join(fs2.realpathSync(cur), ...tail.reverse());
     } catch {
-      const parent = path2.dirname(cur);
-      if (parent === cur) return path2.resolve(p);
-      tail.push(path2.basename(cur));
+      const parent = path3.dirname(cur);
+      if (parent === cur) return path3.resolve(p);
+      tail.push(path3.basename(cur));
       cur = parent;
     }
   }
@@ -48996,33 +49013,33 @@ function assertNotPayloadScoped2(candidate, source) {
     if (sameDirectory2(cur, PAYLOAD_ROOT2)) {
       throw new PayloadScopedRootError2(source, candidate);
     }
-    const parent = path2.dirname(cur);
+    const parent = path3.dirname(cur);
     if (parent === cur) break;
     cur = parent;
   }
   const compare = (v) => PAYLOAD_FS_CASE_INSENSITIVE2 ? v.toLowerCase() : v;
   const c = compare(real);
   const pay = compare(PAYLOAD_ROOT2);
-  if (c === pay || c.startsWith(pay + path2.sep)) {
+  if (c === pay || c.startsWith(pay + path3.sep)) {
     throw new PayloadScopedRootError2(source, candidate);
   }
 }
 function resolveCwd(cwdArg) {
   if (cwdArg) {
-    if (NO_CWD_FALLBACK2 && !path2.isAbsolute(cwdArg)) {
+    if (NO_CWD_FALLBACK2 && !path3.isAbsolute(cwdArg)) {
       throw new RelativeProjectRootError2("cwd", cwdArg);
     }
-    const root = path2.resolve(cwdArg);
-    assertNotPayloadScoped2(path2.join(root, ".guild", "runs"), "cwd");
+    const root = path3.resolve(cwdArg);
+    assertNotPayloadScoped2(path3.join(root, ".guild", "runs"), "cwd");
     return root;
   }
   const envRoot = process.env.GUILD_TELEMETRY_CWD;
   if (envRoot) {
-    if (NO_CWD_FALLBACK2 && !path2.isAbsolute(envRoot)) {
+    if (NO_CWD_FALLBACK2 && !path3.isAbsolute(envRoot)) {
       throw new RelativeProjectRootError2("GUILD_TELEMETRY_CWD", envRoot);
     }
-    const envRootAbs = path2.resolve(envRoot);
-    assertNotPayloadScoped2(path2.join(envRootAbs, ".guild", "runs"), "GUILD_TELEMETRY_CWD");
+    const envRootAbs = path3.resolve(envRoot);
+    assertNotPayloadScoped2(path3.join(envRootAbs, ".guild", "runs"), "GUILD_TELEMETRY_CWD");
     return envRootAbs;
   }
   if (NO_CWD_FALLBACK2) {
@@ -49031,12 +49048,12 @@ function resolveCwd(cwdArg) {
   return process.cwd();
 }
 function runsDir(cwd) {
-  return path2.join(cwd, ".guild", "runs");
+  return path3.join(cwd, ".guild", "runs");
 }
 function eventsFilePath(runDir) {
-  const v14 = path2.join(runDir, "logs", "v1.4-events.jsonl");
+  const v14 = path3.join(runDir, "logs", "v1.4-events.jsonl");
   if (fs2.existsSync(v14)) return v14;
-  const legacy = path2.join(runDir, "events.ndjson");
+  const legacy = path3.join(runDir, "events.ndjson");
   if (fs2.existsSync(legacy)) return legacy;
   return null;
 }
@@ -49301,11 +49318,11 @@ function buildServer2() {
     },
     async ({ run_id, cwd }) => {
       const base = resolveCwd(cwd);
-      const runDir = path2.join(runsDir(base), run_id);
+      const runDir = path3.join(runsDir(base), run_id);
       if (!fs2.existsSync(runDir)) {
         return errorResult2(`Run not found: ${run_id}`);
       }
-      const existing = path2.join(runDir, "summary.md");
+      const existing = path3.join(runDir, "summary.md");
       if (fs2.existsSync(existing)) {
         const summary2 = fs2.readFileSync(existing, "utf8");
         if (summaryHasDispatchFrontmatter(summary2)) {
@@ -49345,7 +49362,7 @@ function buildServer2() {
       const cutoff = since ? new Date(since).getTime() : null;
       const all = [];
       for (const rid of runIds) {
-        const runDir = path2.join(runsDir(base), rid);
+        const runDir = path3.join(runsDir(base), rid);
         if (!fs2.existsSync(runDir)) {
           if (run_id) return errorResult2(`Run not found: ${rid}`);
           continue;
@@ -49388,7 +49405,7 @@ function buildServer2() {
       const ids = listRunIds(base);
       const cutoff = since ? new Date(since).getTime() : null;
       const runs = ids.map((rid) => {
-        const events = readEvents(path2.join(runsDir(base), rid));
+        const events = readEvents(path3.join(runsDir(base), rid));
         const started = events[0]?.ts ?? "";
         const ended = events[events.length - 1]?.ts ?? "";
         return {
@@ -49430,7 +49447,7 @@ function buildServer2() {
       let eventCount = 0;
       let llmEventCount = 0;
       for (const rid of runIds) {
-        const runDir = path2.join(runsDir(base), rid);
+        const runDir = path3.join(runsDir(base), rid);
         if (!fs2.existsSync(runDir)) {
           if (run_id) return errorResult2(`Run not found: ${rid}`);
           continue;
@@ -49483,37 +49500,95 @@ function runAsEntry2() {
   });
 }
 
-// mcp-servers/.compile-entry-mcp.ts
-var REGISTRY = {
+// src/runtime/mcp.ts
+var MCP_IDS = Object.freeze(["wiki", "trace"]);
+var REGISTRY = Object.freeze({
   wiki: { server: "guild-memory", build: buildServer, run: runAsEntry },
   trace: { server: "guild-telemetry", build: buildServer2, run: runAsEntry2 }
-};
-var IDS = Object.keys(REGISTRY);
-function describe() {
+});
+function isMcpId(value) {
+  return typeof value === "string" && MCP_IDS.includes(value);
+}
+function mcpServerFor(id) {
+  return { server: REGISTRY[id].server };
+}
+function registeredTools(id) {
+  const tools = REGISTRY[id].build()._registeredTools;
+  if (!tools || Object.keys(tools).length === 0) {
+    throw new Error(`[guild-mcp] no registered tools for "${id}" \u2014 SDK shape changed`);
+  }
+  return tools;
+}
+function describeMcp() {
   const out = {};
-  for (const id of IDS) {
-    const { server, build } = REGISTRY[id];
+  for (const id of MCP_IDS) {
     const tools = {};
-    const registered = build()._registeredTools;
-    if (!registered || Object.keys(registered).length === 0) {
-      process.stderr.write(`[guild-mcp] describe: no registered tools for "${id}" \u2014 SDK shape changed
-`);
-      process.exit(2);
-    }
-    for (const [name, def] of Object.entries(registered)) {
+    for (const [name, def] of Object.entries(registeredTools(id))) {
       tools[name] = typeof def?.description === "string" ? def.description : "";
     }
-    out[id] = { server, tools };
+    out[id] = { server: REGISTRY[id].server, tools };
   }
-  process.stdout.write(JSON.stringify(out, null, 2) + "\n");
+  return out;
 }
-var arg = process.argv[2];
-if (arg === "--describe") {
-  describe();
-} else if (!arg || !REGISTRY[arg]) {
-  process.stderr.write(`[guild-mcp] usage: guild-mcp <${IDS.join("|")}> | --describe
+async function callInProcess(id, tool, args) {
+  if (!isMcpId(id)) throw new Error(`unknown D-MCP id "${String(id)}" (closed: ${MCP_IDS.join("|")})`);
+  const server = REGISTRY[id].build();
+  const registered = server._registeredTools?.[tool];
+  if (!registered) throw new Error(`[guild-mcp] ${id} has no tool "${tool}"`);
+  if (registered.enabled === false) throw new Error(`[guild-mcp] ${id} tool "${tool}" is disabled`);
+  const validated = await server.validateToolInput(registered, args ?? {}, tool);
+  const controller = new AbortController();
+  return server.executeToolHandler(registered, validated, {
+    signal: controller.signal,
+    requestId: 0,
+    sendNotification: async () => {
+    },
+    sendRequest: async () => {
+      throw new Error("in-process fallback cannot issue MCP requests");
+    }
+  });
+}
+function usage() {
+  process.stderr.write(`[guild-mcp] usage: guild-mcp <${MCP_IDS.join("|")}> | --describe | --call <id> <tool> [json]
 `);
   process.exit(2);
-} else {
+}
+function main3(argv) {
+  const [arg, ...rest] = argv;
+  if (arg === "--describe") {
+    process.stdout.write(JSON.stringify(describeMcp(), null, 2) + "\n");
+    return;
+  }
+  if (arg === "--call") {
+    const [id, tool, json2] = rest;
+    if (!isMcpId(id) || !tool) usage();
+    let args = {};
+    try {
+      args = json2 ? JSON.parse(json2) : {};
+    } catch {
+      process.stderr.write("[guild-mcp] --call: arguments are not JSON\n");
+      process.exit(2);
+    }
+    callInProcess(id, tool, args).then(
+      (result) => process.stdout.write(JSON.stringify(result) + "\n"),
+      (err) => {
+        process.stderr.write(`[guild-mcp] --call failed: ${err instanceof Error ? err.message : String(err)}
+`);
+        process.exit(1);
+      }
+    );
+    return;
+  }
+  if (!isMcpId(arg)) usage();
   REGISTRY[arg].run();
 }
+if (require.main === module) main3(process.argv.slice(2));
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  MCP_IDS,
+  callInProcess,
+  describeMcp,
+  isMcpId,
+  main,
+  mcpServerFor
+});

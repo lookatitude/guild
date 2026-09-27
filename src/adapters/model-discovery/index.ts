@@ -14,7 +14,7 @@ import {
   DiscoveryStatus,
   RawDiscoveryResult,
   runAdapter,
-} from "./adapter-contract";
+} from "../../domains/config";
 import { claudeApiAdapter } from "./claude-api";
 import { codexAppServerAdapter } from "./codex-app-server";
 import { codexDebugModelsAdapter } from "./codex-debug-models";
@@ -29,7 +29,6 @@ import {
   codexCliApiKeyAdapter,
 } from "./honest-unknown";
 
-export * from "./adapter-contract";
 export {
   CODEX_APP_SERVER_ADAPTER_ID,
   CODEX_APP_SERVER_ADAPTER_VERSION,

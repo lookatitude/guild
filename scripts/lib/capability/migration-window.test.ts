@@ -13,7 +13,7 @@ import { FEATURE_GATE_RELPATH, readFeatureGateRegistry } from "./strangler-contr
 import { appendReceipt, defaultJournalIo, makeReceiptInput, scanReceiptJournal, sealReceiptRecord } from "../../../src/domains/telemetry";
 import { CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, capabilityRunStartIdentityHash } from "../../../src/domains/lifecycle";
 import { closeRunBinding, loadRunBinding, mintRunBinding, reopenRunBinding } from "../../../src/domains/lifecycle";
-import { buildSessionContext, writeSessionContext } from "../../../src/adapters/session-context";
+import { buildSessionContext, writeSessionContext } from "../../../src/domains/config";
 import { buildTaskAssignmentV2, taskCellPaths } from "../../../src/domains/dispatch";
 
 let mockGhFailure = false;
@@ -45,14 +45,14 @@ function boundaryFixture(version: string, pushedAt: number) {
   git(root, "config", "user.email", "guild@example.invalid");
   mkdirSync(join(root, ".claude-plugin"), { recursive: true });
   mkdirSync(join(root, ".codex-plugin"), { recursive: true });
-  mkdirSync(join(root, "scripts/lib/capability"), { recursive: true });
+  mkdirSync(join(root, "hooks/dist"), { recursive: true });
   const claudeManifest = `${JSON.stringify({ name: "guild", version })}\n`;
   const codexManifest = `${JSON.stringify({ name: "guild", version, host: "codex" })}\n`;
   writeFileSync(join(root, ".claude-plugin/plugin.json"), claudeManifest);
   writeFileSync(join(root, ".codex-plugin/plugin.json"), codexManifest);
   writeFileSync(join(root, "payload.txt"), `${version}\n`);
-  writeFileSync(join(root, "scripts/lib/capability/compatibility-loader.ts"), "// runtime producer\n");
-  git(root, "add", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "scripts/lib/capability/compatibility-loader.ts", "payload.txt");
+  writeFileSync(join(root, "hooks/dist/pre-tool-use.js"), "// runtime producer\n");
+  git(root, "add", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "hooks/dist/pre-tool-use.js", "payload.txt");
   git(root, "commit", "-qm", version);
   const commit = git(root, "rev-parse", "HEAD");
   git(root, "update-ref", "refs/remotes/origin/next", commit);
@@ -61,15 +61,15 @@ function boundaryFixture(version: string, pushedAt: number) {
   const codexPackageRoot = join(root, "runtime-packages", "codex");
   const assetPath = "templates/specialists/researcher.md";
   mkdirSync(dirname(join(claudePackageRoot, assetPath)), { recursive: true });
-  mkdirSync(join(claudePackageRoot, "scripts/lib/capability"), { recursive: true });
+  mkdirSync(join(claudePackageRoot, "hooks/dist"), { recursive: true });
   mkdirSync(join(claudePackageRoot, ".claude-plugin"), { recursive: true });
   mkdirSync(join(codexPackageRoot, ".codex-plugin"), { recursive: true });
-  mkdirSync(join(codexPackageRoot, "scripts/lib/capability"), { recursive: true });
+  mkdirSync(join(codexPackageRoot, "hooks/dist"), { recursive: true });
   writeFileSync(join(claudePackageRoot, assetPath), "# researcher\n");
-  writeFileSync(join(claudePackageRoot, "scripts/lib/capability/compatibility-loader.ts"), "// runtime producer\n");
+  writeFileSync(join(claudePackageRoot, "hooks/dist/pre-tool-use.js"), "// runtime producer\n");
   writeFileSync(join(claudePackageRoot, ".claude-plugin/plugin.json"), claudeManifest);
   writeFileSync(join(codexPackageRoot, ".codex-plugin/plugin.json"), codexManifest);
-  writeFileSync(join(codexPackageRoot, "scripts/lib/capability/compatibility-loader.ts"), "// runtime producer\n");
+  writeFileSync(join(codexPackageRoot, "hooks/dist/pre-tool-use.js"), "// runtime producer\n");
   const boundary = createMigrationBoundary({ pluginRoot: root, claudePackageRoot, codexPackageRoot, eventPath, repository: "lookatitude/guild", runId: String(pushedAt), runAttempt: 1 });
   return { root, claudePackageRoot, codexPackageRoot, boundary, boundaryPath: writeMigrationBoundary(join(root, "boundaries"), boundary) };
 }
@@ -1445,7 +1445,7 @@ describe("D03 evidence-bound migration window", () => {
     const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
     try {
       startMigrationWindow({ projectRoot, projectId: "fx-project", mode: "observe", boundaryPath: fixture.boundaryPath, actor: "operator" });
-      writeFileSync(join(fixture.claudePackageRoot, "scripts/lib/capability/compatibility-loader.ts"), "// modified runtime producer\n");
+      writeFileSync(join(fixture.claudePackageRoot, "hooks/dist/pre-tool-use.js"), "// modified runtime producer\n");
       expect(() => observationFixture(projectRoot, fixture, "run-20260821-090000-wrong-build", false, "observe", "2026-08-21T09:00:00.000Z")).toThrow(/runtime package.*attested/i);
     } finally { rmSync(projectRoot, { recursive: true, force: true }); rmSync(fixture.root, { recursive: true, force: true }); }
   });

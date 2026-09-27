@@ -11,7 +11,7 @@ import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { PLUGIN_ROOT } from "./build-inventory";
-import { HOST_REGISTRY_ROWS } from "../../adapters";
+import { HOST_REGISTRY_ROWS } from "../config";
 
 /**
  * The 4 new-CLI installable hosts (verified-multi-host-support L0 §1.1/§2.3). They
@@ -335,8 +335,8 @@ export function verifyGeneratedHostPackages(options: VerifyOptions = {}): HostPa
     "codex/hooks/codex-guild-prompt-bridge.js",
     "codex/command-src/command-registry.json",
     "codex/bin/guild-run",
-    "codex/hooks/lib/handoff-v2.ts",
-    "codex/scripts/guild-run.ts",
+    // The compiled guild-run CLI the launcher forwards to (KTD11: plain node).
+    "codex/runtime/scripts/guild-run.js",
     "codex-marketplace/.agents/plugins/marketplace.json",
     "codex-marketplace/plugins/guild/.codex-plugin/plugin.json",
     "agents/AGENTS.md",
@@ -420,8 +420,8 @@ export function verifyGeneratedHostPackages(options: VerifyOptions = {}): HostPa
     // The Guild skill tree (incl. the using-guild bootstrap) is exposed under
     // .agents/skills/guild/** — the L2 packaging contract's agents_skill_root.
     requireFile(distRoot, `${hostId}/.agents/skills/guild/meta/using-guild/SKILL.src.md`, checks, errors);
-    // The bundled guild-run CLI the launcher forwards to (the 11th concern).
-    requireFile(distRoot, `${hostId}/scripts/guild-run.ts`, checks, errors);
+    // The compiled guild-run CLI the launcher forwards to (the 11th concern).
+    requireFile(distRoot, `${hostId}/runtime/scripts/guild-run.js`, checks, errors);
     // Template feedstock (machinery-vs-template-library ADR) — mint is host-neutral.
     requireFile(distRoot, `${hostId}/templates/specialists/architect.md`, checks, errors);
     // The manifest is self-identifying from the registry row's manifest_format, and

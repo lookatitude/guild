@@ -20,7 +20,7 @@ import {
   RawDiscoveryResult,
   RawModelEntry,
   failureResult,
-} from "./adapter-contract";
+} from "../../domains/config";
 
 export const CODEX_APP_SERVER_ADAPTER_ID = "codex-app-server-model-list";
 export const CODEX_APP_SERVER_ADAPTER_VERSION = "1.0.0";

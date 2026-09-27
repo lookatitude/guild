@@ -55,7 +55,7 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 
-import { loadSessionContext } from "../../adapters";
+import { loadSessionContext } from "./session-context";
 import { redact } from "../security";
 import {
   createCacheKey,

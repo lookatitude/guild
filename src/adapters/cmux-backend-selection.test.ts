@@ -38,7 +38,9 @@ import {
   resolveRunStartDispatchBackend,
   type PreflightProbe,
 } from "../domains/lifecycle";
-import type { ProbeEnv } from ".";
+import type {
+  ProbeEnv,
+} from "../domains/config";
 import * as fs from "fs";
 import * as os from "os";
 import * as nodePath from "path";

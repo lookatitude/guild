@@ -6,6 +6,7 @@
  */
 
 import * as path from "node:path";
+import { findPluginRoot } from "./plugin-root";
 
 export interface YamlApi {
   JSON_SCHEMA: unknown;
@@ -15,7 +16,10 @@ export interface YamlApi {
 }
 
 function pluginLocalScriptsRoots(): string[] {
+  const own = findPluginRoot(__dirname);
   return [
+    // The package this code shipped in, whatever the bundle depth (runtime/scripts).
+    ...(own === null ? [] : [path.join(own, "scripts")]),
     // Source TS layout (src/domains/<id>) and the bundled agent-team hook layout
     // (hooks/agent-team/dist) both sit three levels under plugin/.
     path.resolve(__dirname, "..", "..", "..", "scripts"),

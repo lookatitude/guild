@@ -127,10 +127,10 @@ describe("instrumented compatibility loader", () => {
       const canonicalRoot = join(__dirname, "../../..");
       const entry = buildCompatibilityCatalog({ pluginRoot: canonicalRoot }).entries[0];
       mkdirSync(join(pluginRoot, ".claude-plugin"), { recursive: true });
-      mkdirSync(join(pluginRoot, "scripts/lib/capability"), { recursive: true });
+      mkdirSync(join(pluginRoot, "hooks/dist"), { recursive: true });
       writeFileSync(join(pluginRoot, ".claude-plugin/plugin.json"), JSON.stringify({ version: "2.7.0-beta.2" }));
       if (shape === "symlink") {
-        symlinkSync(join(canonicalRoot, "scripts/lib/capability/compatibility-loader.ts"), join(pluginRoot, "scripts/lib/capability/compatibility-loader.ts"));
+        symlinkSync(join(canonicalRoot, "hooks/dist/pre-tool-use.js"), join(pluginRoot, "hooks/dist/pre-tool-use.js"));
       }
       const compatibilityPath = join(pluginRoot, entry.path);
       mkdirSync(dirname(compatibilityPath), { recursive: true });
@@ -154,9 +154,9 @@ describe("instrumented compatibility loader", () => {
       const canonicalRoot = join(__dirname, "../../..");
       const entry = buildCompatibilityCatalog({ pluginRoot: canonicalRoot }).entries[0];
       mkdirSync(join(pluginRoot, ".claude-plugin"), { recursive: true });
-      mkdirSync(join(pluginRoot, "scripts/lib/capability"), { recursive: true });
+      mkdirSync(join(pluginRoot, "hooks/dist"), { recursive: true });
       writeFileSync(join(pluginRoot, ".claude-plugin/plugin.json"), JSON.stringify({ version: "2.7.0-beta.2" }));
-      writeFileSync(join(pluginRoot, "scripts/lib/capability/compatibility-loader.ts"), "// runtime producer\n");
+      writeFileSync(join(pluginRoot, "hooks/dist/pre-tool-use.js"), "// runtime producer\n");
       const compatibilityPath = join(pluginRoot, entry.path);
       mkdirSync(dirname(compatibilityPath), { recursive: true });
       writeFileSync(compatibilityPath, readFileSync(join(canonicalRoot, entry.path)));
@@ -179,9 +179,9 @@ describe("instrumented compatibility loader", () => {
       const canonicalRoot = join(__dirname, "../../..");
       const entry = buildCompatibilityCatalog({ pluginRoot: canonicalRoot }).entries[0];
       mkdirSync(join(pluginRoot, ".codex-plugin"), { recursive: true });
-      mkdirSync(join(pluginRoot, "scripts/lib/capability"), { recursive: true });
+      mkdirSync(join(pluginRoot, "hooks/dist"), { recursive: true });
       writeFileSync(join(pluginRoot, ".codex-plugin", "plugin.json"), JSON.stringify({ version: "9.8.7-beta.6" }));
-      writeFileSync(join(pluginRoot, "scripts/lib/capability/compatibility-loader.ts"), "// runtime producer\n");
+      writeFileSync(join(pluginRoot, "hooks/dist/pre-tool-use.js"), "// runtime producer\n");
       const compatibilityPath = join(pluginRoot, entry.path);
       mkdirSync(dirname(compatibilityPath), { recursive: true });
       writeFileSync(compatibilityPath, readFileSync(join(canonicalRoot, entry.path)));

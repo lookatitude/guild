@@ -72,7 +72,7 @@ import {
   hostRuntimeBoundaryOwnership,
 } from "./host-adapter-boundary";
 import type { HostRuntimeBindingResult } from "./host-adapter-boundary";
-import { HOST_ADAPTER_OPERATIONS } from "./host-adapter-contract";
+import { HOST_ADAPTER_OPERATIONS } from "../domains/config";
 import {
   createHostCapabilitySnapshotStore,
   type HostCapabilityFact,
@@ -83,7 +83,7 @@ import {
   normalizeHostEvent,
   type HostEventNormalizationResult,
 } from "./host-event-normalizer";
-import { HOST_REGISTRY_ROWS } from "./host-registry-schema";
+import { HOST_REGISTRY_ROWS } from "../domains/config";
 
 // ---------------------------------------------------------------------------
 // The module under contract

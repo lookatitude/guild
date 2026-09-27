@@ -1,0 +1,409 @@
+{
+  "schema_version": "guild.adapter_lock.v1",
+  "note": "The closed rung matrix per host family (KTD28). Declared rungs are derived from each family's guild.host_capabilities.v1 row; an inferred cell fails closed (KTD5). Marking a cell verified needs operator confirmation and a proof path in verified_by. No new hosts this cut.",
+  "rung_names": [
+    "spawn",
+    "hooks",
+    "skills",
+    "commands",
+    "mcp",
+    "compaction",
+    "tool_projection"
+  ],
+  "families": {
+    "claude": {
+      "host_ids": [
+        "claude-code-cli",
+        "claude-code-app",
+        "claude-code-web",
+        "claude-ai-connector"
+      ],
+      "map": "src/adapters/claude/map.json",
+      "rungs": {
+        "spawn": {
+          "rung": "native",
+          "evidence": "verified",
+          "verified_by": "src/domains/config/host-capabilities-schema.ts#CLAUDE_CAPABILITIES (ADR capability matrix, installability verified) + evidence/host-smoke/claude-code-cli/operator-local-macos.json"
+        },
+        "hooks": {
+          "rung": "native",
+          "evidence": "verified",
+          "verified_by": "src/domains/config/host-capabilities-schema.ts#CLAUDE_CAPABILITIES (ADR capability matrix, installability verified) + evidence/host-smoke/claude-code-cli/operator-local-macos.json"
+        },
+        "skills": {
+          "rung": "native",
+          "evidence": "verified",
+          "verified_by": "src/domains/config/host-capabilities-schema.ts#CLAUDE_CAPABILITIES (ADR capability matrix, installability verified) + evidence/host-smoke/claude-code-cli/operator-local-macos.json"
+        },
+        "commands": {
+          "rung": "native",
+          "evidence": "verified",
+          "verified_by": "src/domains/config/host-capabilities-schema.ts#CLAUDE_CAPABILITIES (ADR capability matrix, installability verified) + evidence/host-smoke/claude-code-cli/operator-local-macos.json"
+        },
+        "mcp": {
+          "rung": "native",
+          "evidence": "verified",
+          "verified_by": "src/domains/config/host-capabilities-schema.ts#CLAUDE_CAPABILITIES (ADR capability matrix, installability verified) + evidence/host-smoke/claude-code-cli/operator-local-macos.json"
+        },
+        "compaction": {
+          "rung": "native",
+          "evidence": "verified",
+          "verified_by": "src/domains/config/host-capabilities-schema.ts#CLAUDE_CAPABILITIES (ADR capability matrix, installability verified) + evidence/host-smoke/claude-code-cli/operator-local-macos.json"
+        },
+        "tool_projection": {
+          "rung": "wrapped",
+          "evidence": "verified",
+          "verified_by": "src/domains/config/host-capabilities-schema.ts#CLAUDE_CAPABILITIES (ADR capability matrix, installability verified) + evidence/host-smoke/claude-code-cli/operator-local-macos.json"
+        }
+      }
+    },
+    "codex": {
+      "host_ids": [
+        "codex-cli",
+        "codex-app"
+      ],
+      "map": "src/adapters/codex/map.json",
+      "rungs": {
+        "spawn": {
+          "rung": "wrapped",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "hooks": {
+          "rung": "wrapped",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "skills": {
+          "rung": "emulated",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "commands": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "mcp": {
+          "rung": "native",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "compaction": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "tool_projection": {
+          "rung": "wrapped",
+          "evidence": "inferred",
+          "verified_by": null
+        }
+      }
+    },
+    "pi": {
+      "host_ids": [
+        "pi-cli"
+      ],
+      "map": "src/adapters/pi/map.json",
+      "rungs": {
+        "spawn": {
+          "rung": "wrapped",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "hooks": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "skills": {
+          "rung": "emulated",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "commands": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "mcp": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "compaction": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "tool_projection": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        }
+      }
+    },
+    "antigravity": {
+      "host_ids": [
+        "antigravity-cli"
+      ],
+      "map": "src/adapters/antigravity/map.json",
+      "rungs": {
+        "spawn": {
+          "rung": "wrapped",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "hooks": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "skills": {
+          "rung": "emulated",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "commands": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "mcp": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "compaction": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "tool_projection": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        }
+      }
+    },
+    "agents": {
+      "host_ids": [
+        "agents-file",
+        "kiro",
+        "qoder",
+        "trae"
+      ],
+      "map": "src/adapters/agents/map.json",
+      "rungs": {
+        "spawn": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "hooks": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "skills": {
+          "rung": "bridged",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "commands": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "mcp": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "compaction": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "tool_projection": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        }
+      }
+    },
+    "cursor": {
+      "host_ids": [
+        "cursor"
+      ],
+      "map": "src/adapters/cursor/map.json",
+      "rungs": {
+        "spawn": {
+          "rung": "wrapped",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "hooks": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "skills": {
+          "rung": "emulated",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "commands": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "mcp": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "compaction": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "tool_projection": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        }
+      }
+    },
+    "copilot": {
+      "host_ids": [
+        "github-copilot"
+      ],
+      "map": "src/adapters/copilot/map.json",
+      "rungs": {
+        "spawn": {
+          "rung": "wrapped",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "hooks": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "skills": {
+          "rung": "emulated",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "commands": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "mcp": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "compaction": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "tool_projection": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        }
+      }
+    },
+    "opencode": {
+      "host_ids": [
+        "opencode"
+      ],
+      "map": "src/adapters/opencode/map.json",
+      "rungs": {
+        "spawn": {
+          "rung": "wrapped",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "hooks": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "skills": {
+          "rung": "emulated",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "commands": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "mcp": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "compaction": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "tool_projection": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        }
+      }
+    },
+    "rovo": {
+      "host_ids": [
+        "rovo-dev"
+      ],
+      "map": "src/adapters/rovo/map.json",
+      "rungs": {
+        "spawn": {
+          "rung": "wrapped",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "hooks": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "skills": {
+          "rung": "emulated",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "commands": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "mcp": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "compaction": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        },
+        "tool_projection": {
+          "rung": "missing",
+          "evidence": "inferred",
+          "verified_by": null
+        }
+      }
+    }
+  }
+}

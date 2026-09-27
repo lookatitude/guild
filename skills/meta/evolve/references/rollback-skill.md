@@ -32,7 +32,7 @@ There is no version tree, and nothing in this flow creates one.
 Delegates to `scripts/rollback-walker.ts`. Without `--apply` it writes nothing:
 
 ```
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/rollback-walker.ts --skill <key> --steps <n> --cwd <repo-root>
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/rollback-walker.js --skill <key> --steps <n> --cwd <repo-root>
 ```
 
 It prints the recorded deltas newest-first (entry id, timestamp, target, span, proposer)

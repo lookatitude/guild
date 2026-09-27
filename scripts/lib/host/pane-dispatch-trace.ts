@@ -254,7 +254,13 @@ const USAGE =
   "         [--target <session-or-workspace>] [--backend cmux|tmux|remote|agent] \\\n" +
   "         [--phase <phase>] --lane <specialist>[:<task-id>[:<pane-id>]] ...\n";
 
-if (require.main === module) {
+// esbuild inlines this module into other bundles (agent-team-launcher), where
+// `require.main === module` is true for EVERY inlined module — gate on the
+// exact argv basename so only a direct invocation runs the CLI.
+if (
+  require.main === module &&
+  /^pane-dispatch-trace\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")
+) {
   const parsed = parseCliArgs(process.argv.slice(2));
   if ("error" in parsed) {
     process.stderr.write(`[pane-dispatch-trace] ERROR: ${parsed.error}\n${USAGE}`);

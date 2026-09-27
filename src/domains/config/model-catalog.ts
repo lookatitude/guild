@@ -19,13 +19,7 @@
  *  - Eligibility is the closed, purpose-aware §5 matrix.
  */
 
-import {
-  DiscoveryMethod,
-  DiscoveryStatus,
-  FailureReason,
-  RawDiscoveryResult,
-  RawModelEntry,
-} from "../../adapters";
+import { DiscoveryMethod, DiscoveryStatus, FailureReason, RawDiscoveryResult, RawModelEntry } from "./model-discovery-contract";
 import {
   DEFAULT_CATALOG_TTL_SECONDS,
   MODEL_CATALOG_SCHEMA_VERSION,

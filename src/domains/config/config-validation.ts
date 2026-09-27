@@ -4,7 +4,7 @@
  * The host CLI consumes the same public API; this file must never re-export a
  * generated resource mirror because doing so reverses module ownership.
  */
-import { normalizeHostId } from "../../adapters";
+import { normalizeHostId } from "./host-id-namespace";
 
 const MODEL_KEYS = new Set([
   "enabled", "tiers", "scoreWeights", "thresholds", "advisorRounds",

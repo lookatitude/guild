@@ -55,6 +55,7 @@ import {
   validateStationSignalsV1,
   writeTeamPlan,
 } from "../src/domains/teams/station-signals";
+import { resolvePluginRoot } from "../src/domains/kernel";
 
 function fail(msg: string): never {
   process.stderr.write(`[station-compose] ${msg}\n`);
@@ -159,11 +160,7 @@ function main(): void {
   }
 
   // (2) Tier index — REUSE the roster enumeration (D4); never re-enumerate.
-  const resolvedPluginRoot =
-    pluginRoot ??
-    process.env["GUILD_PLUGIN_ROOT"] ??
-    process.env["CLAUDE_PLUGIN_ROOT"] ??
-    path.resolve(__dirname, "..");
+  const resolvedPluginRoot = pluginRoot ?? resolvePluginRoot(__dirname);
   const resolution = resolveRoster({
     projectRoot: path.resolve(cwd),
     pluginRoot: resolvedPluginRoot,

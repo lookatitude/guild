@@ -65,9 +65,10 @@ import {
   type DiscoveredSurfaces,
 } from "./parity-contract";
 import { RESULT_CONTRACTS } from "./result-contracts";
+import { findPluginRoot } from "../kernel";
 
 /** Default plugin root. */
-export const PLUGIN_ROOT = path.resolve(__dirname, "../../..");
+export const PLUGIN_ROOT = findPluginRoot(__dirname) ?? path.resolve(__dirname, "../../..");
 
 /** Epoch sentinel: an unstamped, deterministic provenance default. */
 export const UNSTAMPED_GENERATED_AT = "1970-01-01T00:00:00.000Z";

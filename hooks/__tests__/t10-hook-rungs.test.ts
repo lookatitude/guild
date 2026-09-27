@@ -401,6 +401,85 @@ describe("KTD23 the bootstrap runs from a hook entry, including its cold half", 
   });
 });
 
+describe("KTD10 a compiled layout CLI that FAILS refuses the gate (codex T14 lead round 2)", () => {
+  /** A plugin root whose layout CLI exists but cannot run its chain (exits 1). */
+  function makeBrokenPluginRoot(): string {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-t10-broken-plugin-"));
+    const cli = path.join(root, "runtime", "scripts", "ensure-storage-layout.js");
+    fs.mkdirSync(path.dirname(cli), { recursive: true });
+    // Stands in for a bundle whose sibling chunk (upgrade-chain.js) is missing:
+    // the real CLI exits 1 with "Cannot find module" in that state.
+    fs.writeFileSync(cli, 'console.error("Cannot find module upgrade-chain.js"); process.exit(1);\n');
+    return root;
+  }
+
+  it("PostToolUse writes NOTHING when the cold bootstrap exits non-zero", () => {
+    tmp = makeUnmarkedRoot();
+    const plugin = makeBrokenPluginRoot();
+    declareCheck(tmp, "process.exitCode = 0;");
+    const r = runHook(POST_TOOL_USE, editPayload(tmp), {
+      GUILD_RUN_ID: RUN,
+      GUILD_CWD: tmp,
+      CLAUDE_PLUGIN_ROOT: plugin,
+      GUILD_PLUGIN_ROOT: plugin,
+    });
+    expect(r.status).toBe(0); // a hook may not break the user's edit
+    expect(r.stdout).toBe("");
+    // The gate refused: no rung record, no marker written.
+    expect(fs.existsSync(path.join(runDirOf(tmp), "rungs", "verify-after-edit.json"))).toBe(false);
+    expect(fs.existsSync(path.join(tmp, ".guild", "storage-layout.json"))).toBe(false);
+  });
+
+  it("a cold bootstrap that TIMES OUT while trapping SIGTERM (exit 0) still refuses the gate", () => {
+    tmp = makeUnmarkedRoot();
+    const plugin = fs.mkdtempSync(path.join(os.tmpdir(), "guild-t10-hang-plugin-"));
+    const cli = path.join(plugin, "runtime", "scripts", "ensure-storage-layout.js");
+    fs.mkdirSync(path.dirname(cli), { recursive: true });
+    fs.writeFileSync(cli, 'process.on("SIGTERM", () => process.exit(0)); setInterval(() => {}, 1000);\n');
+    declareCheck(tmp, "process.exitCode = 0;");
+    const r = runHook(POST_TOOL_USE, editPayload(tmp), {
+      GUILD_RUN_ID: RUN,
+      GUILD_CWD: tmp,
+      CLAUDE_PLUGIN_ROOT: plugin,
+      GUILD_PLUGIN_ROOT: plugin,
+      GUILD_LAYOUT_CLI_TIMEOUT_MS: "1000",
+    });
+    expect(r.status).toBe(0);
+    expect(fs.existsSync(path.join(runDirOf(tmp), "rungs", "verify-after-edit.json"))).toBe(false);
+  });
+
+  it("a non-integer timeout override never throws out of the gate (silent, never-throws contract)", () => {
+    tmp = makeUnmarkedRoot();
+    const plugin = makeBrokenPluginRoot();
+    declareCheck(tmp, "process.exitCode = 0;");
+    const r = runHook(POST_TOOL_USE, editPayload(tmp), {
+      GUILD_RUN_ID: RUN,
+      GUILD_CWD: tmp,
+      CLAUDE_PLUGIN_ROOT: plugin,
+      GUILD_PLUGIN_ROOT: plugin,
+      GUILD_LAYOUT_CLI_TIMEOUT_MS: "0.5",
+    });
+    expect(r.status).toBe(0);
+    expect(r.stderr).not.toMatch(/ERR_OUT_OF_RANGE|TypeError|RangeError/);
+    // The override is ignored (not a positive integer); the broken CLI still refuses.
+    expect(fs.existsSync(path.join(runDirOf(tmp), "rungs", "verify-after-edit.json"))).toBe(false);
+  });
+
+  it("SessionStart fails CLOSED (non-zero, names the cause) when the cold bootstrap exits non-zero", () => {
+    const SESSION_START = path.join(ROOT, "hooks", "dist", "using-guild-bootstrap.js");
+    expect(fs.existsSync(SESSION_START)).toBe(true);
+    tmp = makeUnmarkedRoot();
+    const plugin = makeBrokenPluginRoot();
+    const r = runHook(SESSION_START, JSON.stringify({ session_id: "t10", cwd: tmp, hook_event_name: "SessionStart", source: "startup" }), {
+      GUILD_CWD: tmp,
+      CLAUDE_PLUGIN_ROOT: plugin,
+      GUILD_PLUGIN_ROOT: plugin,
+    });
+    expect(r.status).not.toBe(0);
+    expect(`${r.stdout}\n${r.stderr}`).toMatch(/bootstrap|compile outputs|layout/i);
+  });
+});
+
 // ── a FUTURE layout fails closed (rework-r1 P1 #2) ──────────────────────────
 
 describe("KTD23 a future layout stops every write, in every wired hook", () => {

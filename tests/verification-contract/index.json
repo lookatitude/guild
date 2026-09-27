@@ -128,7 +128,7 @@
         },
         {
           "test": "scripts/t12-domain-fold.test.ts",
-          "title": "the built Claude package carries only surfaces, module shims + the closure, and its runtime starts"
+          "title": "the built Claude package carries only surfaces, module shims and compiled runtime, and its runtime starts"
         }
       ]
     },
@@ -498,8 +498,28 @@
       "id": "R44",
       "unit": "U5 · U7",
       "proves": "adapter matrix: closed rungs; projection-only packages; no-spawn -> lead_only",
-      "owner": "T14",
-      "pending": "adapter-matrix fixtures (closed rungs, projection-only packages, lead_only)"
+      "fixtures": [
+        {
+          "test": "scripts/three-tier-production-wiring.test.ts",
+          "title": "R44 · adapter.lock.json is the closed matrix: one row per registry family, seven rungs, no new host"
+        },
+        {
+          "test": "scripts/three-tier-production-wiring.test.ts",
+          "title": "R44 · each missing rung produces its stated behaviour and a recorded loss"
+        },
+        {
+          "test": "scripts/three-tier-production-wiring.test.ts",
+          "title": "R44 · a missing spawn rung collapses the cell to lead_only on the TaskCell spawn path"
+        },
+        {
+          "test": "scripts/three-tier-production-wiring.test.ts",
+          "title": "R44 · an inferred rung fails closed even when it claims native (Codex mcp)"
+        },
+        {
+          "test": "scripts/t12-domain-fold.test.ts",
+          "title": "the built Claude package carries only surfaces, module shims and compiled runtime, and its runtime starts"
+        }
+      ]
     },
     {
       "id": "R45",
@@ -557,15 +577,37 @@
       "id": "R47",
       "unit": "U5",
       "proves": "model-family dialect composed at session bind",
-      "owner": "T14",
-      "pending": "dialect composition at session bind (host family + model family)"
+      "fixtures": [
+        {
+          "test": "hooks/__tests__/session-start-bootstrap.test.ts",
+          "title": "R47 · the dialect composed at bind follows the model family, fits 200 tokens, and changes the bound hash"
+        },
+        {
+          "lint": "dialect-fragment-budget"
+        }
+      ]
     },
     {
       "id": "R48",
       "unit": "U5 · U-UPG",
       "proves": "Guild always loads on a Guild root; plugin missing fails closed",
-      "owner": "T14",
-      "pending": "SessionStart bootstrap on a Guild root; fail closed when the plugin or compile outputs are missing"
+      "fixtures": [
+        {
+          "test": "hooks/__tests__/session-start-bootstrap.test.ts",
+          "title": "R48 · SessionStart on a Guild root bootstraps layout, projects the surface, composes, and binds the run"
+        },
+        {
+          "test": "hooks/__tests__/session-start-bootstrap.test.ts",
+          "title": "R48 · plugin missing or compile outputs missing on a Guild root fails closed"
+        },
+        {
+          "test": "hooks/__tests__/session-start-bootstrap.test.ts",
+          "title": "R48 · a layout newer than this build fails closed instead of starting a vanilla session"
+        },
+        {
+          "lint": "sessionstart-projects-guild"
+        }
+      ]
     },
     {
       "id": "R49",
@@ -991,8 +1033,20 @@
       "id": "KTD3",
       "unit": "U6",
       "proves": "two D-MCP ids (wiki | trace), one runtime/guild-mcp.js",
-      "owner": "T14",
-      "pending": "MCP id fixtures for the one binary / two ids"
+      "fixtures": [
+        {
+          "test": "src/runtime/mcp.test.ts",
+          "title": "KTD3 · one runtime/guild-mcp.js serves exactly two D-MCP ids and refuses a third"
+        },
+        {
+          "test": "src/runtime/mcp.test.ts",
+          "title": "KTD3 · the in-process fallback answers wiki and trace calls without an MCP transport"
+        },
+        {
+          "test": "src/runtime/mcp.test.ts",
+          "title": "KTD3 · a missing mcp rung routes retrieval in-process and records the MCP path as a loss"
+        }
+      ]
     },
     {
       "id": "KTD4",
@@ -1099,8 +1153,20 @@
       "id": "KTD28",
       "unit": "U5",
       "proves": "projection-only host packages; unprojected tools never reach an isolated worker",
-      "owner": "T14",
-      "pending": "projection matrix fixtures across hosts"
+      "fixtures": [
+        {
+          "test": "scripts/three-tier-production-wiring.test.ts",
+          "title": "KTD28 · a missing tool_projection rung refuses the isolated worker; the lane runs lead_only"
+        },
+        {
+          "test": "scripts/three-tier-production-wiring.test.ts",
+          "title": "KTD28 · the launcher refuses isolated panes on a family without tool projection, and records the loss"
+        },
+        {
+          "test": "scripts/t12-domain-fold.test.ts",
+          "title": "the built Claude package carries only surfaces, module shims and compiled runtime, and its runtime starts"
+        }
+      ]
     },
     {
       "id": "F9",

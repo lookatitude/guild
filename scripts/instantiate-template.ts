@@ -40,7 +40,12 @@ import * as path from "node:path";
 import { instantiateTemplate, type InstantiateResult } from "./lib/template-schema";
 import { validateExploreV1 } from "./lib/explore-schema";
 import { validateDefineV1 } from "./lib/define-schema";
-import { RUNTIME_SUBTREE_SEGMENTS, assertNotRuntimeTree, isForbiddenRuntimeSubtree } from "../src/domains/kernel";
+import {
+  RUNTIME_SUBTREE_SEGMENTS,
+  assertNotRuntimeTree,
+  isForbiddenRuntimeSubtree,
+  resolvePluginRoot,
+} from "../src/domains/kernel";
 
 // ---------------------------------------------------------------------------
 // Pure core (no IO — exported for tests / the eval harness)
@@ -265,11 +270,7 @@ function main(): void {
 
   // Environment defaults are resolved HERE (parseProducerArgs stays pure).
   const cwd = args.cwd ?? process.env.PWD ?? process.cwd();
-  const pluginRoot =
-    args.pluginRoot ??
-    process.env.GUILD_PLUGIN_ROOT ??
-    process.env.CLAUDE_PLUGIN_ROOT ??
-    path.resolve(__dirname, "..");
+  const pluginRoot = args.pluginRoot ?? resolvePluginRoot(__dirname);
   const templatePath = resolveTemplatePath(args.ref, pluginRoot, cwd);
 
   try {

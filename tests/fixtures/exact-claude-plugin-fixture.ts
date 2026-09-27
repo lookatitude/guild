@@ -20,7 +20,7 @@ export function createExactClaudePluginFixture(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-exact-claude-plugin-"));
   const archive = execFileSync("git", ["-C", pluginRoot, "archive", "--format=tar", "HEAD"], {
     encoding: null,
-    maxBuffer: 128 * 1024 * 1024,
+    maxBuffer: 512 * 1024 * 1024, // the tree carries the compiled runtime bundles
   });
   const extracted = spawnSync("tar", ["-xf", "-", "-C", root], {
     input: archive,

@@ -45,15 +45,17 @@
  * Pure library module; reached through the host-runtime module's public index.
  */
 
-import { HOST_ADAPTER_OPERATIONS, type HostAdapter } from "./host-adapter-contract";
-import { normalizeHostId } from "./host-id-namespace";
+import { HOST_ADAPTER_CONTRACT_VERSION, HOST_ADAPTER_OPERATIONS, type HostAdapter } from "../domains/config";
+
+export { HOST_ADAPTER_CONTRACT_VERSION };
+import { normalizeHostId } from "../domains/config";
 import {
   HOST_IDS,
   HOST_REGISTRY_ROWS,
   type AdapterBinding,
   type AuthProbe,
   type HostId,
-} from "./host-registry-schema";
+} from "../domains/config";
 import {
   createHostCapabilitySnapshotStore,
   type HostAuthenticationObservation,
@@ -81,11 +83,6 @@ export const HOST_ADAPTER_BOUNDARY_SCHEMA = "guild.host_adapter_boundary.v1";
  */
 export const HOST_ADAPTER_BOUNDARY_MAJOR = 1;
 
-/**
- * The adapter contract version, spelled in the exact form the core's conformance
- * evidence binds to (`guild.host_adapter.v<major>.<minor>.<patch>`).
- */
-export const HOST_ADAPTER_CONTRACT_VERSION = "guild.host_adapter.v1.0.0";
 
 export const HOST_ENTRY_POINT_SCHEMA = "guild.host_entry_point.v1";
 export const HOST_RUNTIME_BINDING_SCHEMA = "guild.host_runtime_binding.v1";

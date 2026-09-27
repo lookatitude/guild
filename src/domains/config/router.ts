@@ -21,7 +21,8 @@
  * Layer: capability/ — imports from core/contracts + shared/, never host/*.
  */
 
-import type { HostCapabilityManifest, HostKind } from "../../adapters";
+import type { HostCapabilityManifest } from "./host-capability-manifest";
+import type { HostKind } from "./host-types";
 import type { SpecialistDispatchContract } from "../dispatch";
 import { resolveTierModel } from "./tier-model";
 import type { ResolvedTierModel, TierHostValue } from "./tier-model";

@@ -76,6 +76,7 @@ import { mintFromTemplate, resolveRoster } from "./roster";
 import { mintRunBinding, readAllEvents } from "../../src/domains/lifecycle";
 import { validateEvent } from "../v1.4-log-validator";
 import { taskCellPaths } from "./core/contracts/task-cell-backend";
+import { rungPlanForFamily } from "../../src/adapters";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 const FIXED_NOW = () => "2026-09-15T00:00:00.000Z";
@@ -134,6 +135,7 @@ async function driveToValidated(input: {
     },
   };
   const runtime = new FilesystemTaskCellRuntime({
+    rungPlan: CLAUDE_RUNGS,
     cwd,
     substrate: "tmux",
     parallelism: 4,
@@ -342,6 +344,9 @@ function goalStatus(over: Record<string, unknown> = {}): Record<string, unknown>
 
 // ── F01 ──────────────────────────────────────────────────────────────────────
 
+/** The verified Claude row from adapter.lock.json: isolation is available. */
+const CLAUDE_RUNGS = rungPlanForFamily("claude", { verify_check_available: false });
+
 describe("F01 orchestrator context has goal_status, not assignments (R33)", () => {
   it("accepts a clean goal_status envelope and rejects an assignment in the same slot", () => {
     expect(validateGoalStatusV1(goalStatus())).not.toBeNull();
@@ -418,6 +423,7 @@ describe("F03 projected-tool violation fails closed (R35, KTD28)", () => {
     const runId = "run-t08";
     const binding = mintRunBinding({ root: cwd, run_id: runId });
     const runtime = new FilesystemTaskCellRuntime({
+      rungPlan: CLAUDE_RUNGS,
       cwd,
       substrate: "tmux",
       parallelism: 4,
@@ -478,6 +484,7 @@ describe("F03 projected-tool violation fails closed (R35, KTD28)", () => {
     const runId = "run-t08";
     const binding = mintRunBinding({ root: cwd, run_id: runId });
     const runtime = new FilesystemTaskCellRuntime({
+      rungPlan: CLAUDE_RUNGS,
       cwd,
       substrate: "tmux",
       parallelism: 4,
@@ -843,6 +850,7 @@ describe("F07 the fifth instance is refused at the default cap (R46)", () => {
     const runId = "run-t08";
     const binding = mintRunBinding({ root: cwd, run_id: runId });
     const runtime = new FilesystemTaskCellRuntime({
+      rungPlan: CLAUDE_RUNGS,
       cwd,
       substrate: "tmux",
       parallelism: 8,
@@ -1015,6 +1023,7 @@ describe("F12 dispatch binds only a role in the cell's goal slice of minted prof
     }
     const binding = mintRunBinding({ root: cwd, run_id: RUN });
     const runtime = new FilesystemTaskCellRuntime({
+      rungPlan: CLAUDE_RUNGS,
       cwd,
       substrate: "tmux",
       parallelism: 4,

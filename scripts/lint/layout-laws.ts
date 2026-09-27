@@ -901,11 +901,16 @@ function pathToFileUrl(abs: string): string {
   return `file://${p.startsWith("/") ? "" : "/"}${p}`;
 }
 
-/** SessionStart must bootstrap AND project the Guild surface (KTD31 / R48). */
+/**
+ * SessionStart must bootstrap AND project the Guild surface (KTD31 / R48). Pinned
+ * by T14 to the four calls hooks/using-guild-bootstrap.ts makes, one exact name
+ * each: a loose alias (`compose`, `project`) matched unrelated calls.
+ */
 const SESSION_START_REQUIRED_CALLS: Array<{ names: string[]; label: string }> = [
   { names: ["ensureStorageLayout"], label: "ensureStorageLayout (layout bootstrap)" },
-  { names: ["composePrompt", "compose"], label: "composePrompt (prompt compose at bind)" },
-  { names: ["projectSurfaces", "project"], label: "projectSurfaces (surface projection)" },
+  { names: ["bindSession"], label: "bindSession (session binding on the run)" },
+  { names: ["projectSurfaces"], label: "projectSurfaces (surface projection)" },
+  { names: ["composeSessionPrompt"], label: "composeSessionPrompt (prompt compose at bind)" },
 ];
 
 // ------------------------------------------------------------- shared derivations

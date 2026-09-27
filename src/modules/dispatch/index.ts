@@ -321,3 +321,23 @@ export type {
   ToolProjectionVerdict,
   WaitOptions,
 } from "../../domains/dispatch";
+export {
+  ADAPTER_RUNG_EVIDENCE,
+  ADAPTER_RUNG_NAMES,
+  ADAPTER_RUNG_VALUES,
+  MISSING_RUNG_BEHAVIOUR,
+  effectiveRung,
+  recordRungLosses,
+  resolveRungPlan,
+  rungLossesAsRecordedLosses,
+  validateAdapterRungRow,
+} from "../../domains/dispatch";
+export type {
+  AdapterRungCell,
+  AdapterRungEvidence,
+  AdapterRungName,
+  AdapterRungRow,
+  AdapterRungValue,
+  RungLoss,
+  RungPlan,
+} from "../../domains/dispatch";

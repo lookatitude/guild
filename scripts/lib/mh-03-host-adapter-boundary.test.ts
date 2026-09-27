@@ -21,14 +21,11 @@ import {
   // MH-03 boundary
   HOST_ADAPTER_BOUNDARY_SCHEMA,
   HOST_ADAPTER_BOUNDARY_MAJOR,
-  HOST_ADAPTER_CONTRACT_VERSION,
   HOST_ADAPTER_OWNED_CONCERNS,
   HOST_ADAPTER_NOT_OWNED_CONCERNS,
-  HOST_ADAPTER_OPERATIONS,
   HOST_ADAPTER_REASON_CODES,
   HOST_ENTRY_POINTS,
   bindHostRuntimeAdapter,
-  type HostAdapter,
   hostRuntimeBoundaryOwnership,
   reconcileHostRegistryWithCoreClaimVocabulary,
   resolveHostEntryPoint,
@@ -44,11 +41,15 @@ import {
   WRAPPER_NATIVE_EVENT_BINDINGS,
   hostEventSource,
   normalizeHostEvent,
-  // pre-existing public host-runtime surface
+} from "../../src/adapters";
+import {
+  HOST_ADAPTER_CONTRACT_VERSION,
+  HOST_ADAPTER_OPERATIONS,
+  type HostAdapter,
   HOST_IDS,
   HOST_REGISTRY_ROWS,
   type HostId,
-} from "../../src/adapters";
+} from "../../src/domains/config";
 
 import {
   NEUTRAL_EVENT_NAMES,

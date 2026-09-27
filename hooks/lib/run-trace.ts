@@ -93,7 +93,7 @@ import {
 // Rework F1 mint-origin seam (see mintOriginBindingRef below) — NOT an
 // authorization-recovery import: authorizeHookWrite never touches it.
 import { loadRunBinding } from "../../scripts/lib/run-binding.js";
-import type { HostKind } from "../../src/adapters/host-types.js";
+import type { HostKind } from "../../src/domains/config";
 import { baselineBinding, snapshotTreeHashes } from "../../scripts/lib/capability/profile-emit.js";
 import {
   appendReceipt,

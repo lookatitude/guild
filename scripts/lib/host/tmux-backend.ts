@@ -55,6 +55,7 @@ import {
   type RuntimePermissionConfig,
 } from "../permission-policy";
 import type { HostMode } from "../permission-policy-schema";
+import { ownPluginRoot } from "../../../src/domains/kernel";
 
 // ── Pure command composition helpers ─────────────────────────────────────────
 
@@ -328,7 +329,7 @@ export interface ClaudePluginActivation {
 
 export function resolveClaudePluginActivation(
   env: NodeJS.ProcessEnv = process.env,
-  ownerPluginRoot: string = path.resolve(__dirname, "../../.."),
+  ownerPluginRoot: string = ownPluginRoot(__dirname),
 ): ClaudePluginActivation {
   let ownerRealRoot: string;
   try {
@@ -446,7 +447,7 @@ export function resolveClaudePluginActivation(
 /** Backward-compatible argv-only view used by callers that do not spawn a shell. */
 export function resolveClaudePluginActivationArgs(
   env: NodeJS.ProcessEnv = process.env,
-  ownerPluginRoot: string = path.resolve(__dirname, "../../.."),
+  ownerPluginRoot: string = ownPluginRoot(__dirname),
 ): string[] {
   return resolveClaudePluginActivation(env, ownerPluginRoot).args;
 }
@@ -1144,7 +1145,7 @@ export class TmuxTeamBackend implements TeamBackend {
     this.run = opts.run ?? defaultRun;
     this.resolveAdapter = opts.resolveAdapter;
     this.env = opts.env ?? process.env;
-    this.pluginOwnerRoot = opts.pluginOwnerRoot ?? path.resolve(__dirname, "../../..");
+    this.pluginOwnerRoot = opts.pluginOwnerRoot ?? ownPluginRoot(__dirname);
   }
 
   isAvailable(): boolean {

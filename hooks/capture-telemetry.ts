@@ -136,6 +136,7 @@ import {
 } from "./lib/trace-v2.js";
 // T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
 import { ensureStorageLayout } from "./lib/ensure-layout.js";
+import { runDirOverride } from "./lib/run-dir-override.js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -283,7 +284,7 @@ async function main(): Promise<void> {
         `[capture-telemetry] WARN: secrets_policy redaction_patterns failure on prompt (fail_mode_telemetry=${secPolicy.fail_mode_telemetry}): ${scrub.failures.join("; ")}\n`,
       );
       try {
-        const evRunDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+        const evRunDir = runDirOverride() ?? resolveRunDir(cwd, runId);
         appendSecurityEvent(
           evRunDir,
           buildSecurityEvent({

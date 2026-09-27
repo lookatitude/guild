@@ -535,6 +535,36 @@ var init_module_manifest = __esm({
   }
 });
 
+// src/domains/kernel/plugin-root.ts
+function findPluginRoot(fromDir) {
+  let dir = path2.resolve(fromDir);
+  for (; ; ) {
+    if (fs2.existsSync(path2.join(dir, PLUGIN_ROOT_MARKER))) return dir;
+    const parent = path2.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+function resolvePluginRoot(fromDir, env = process.env) {
+  for (const key of ["GUILD_PLUGIN_ROOT", "CLAUDE_PLUGIN_ROOT"]) {
+    const value = env[key];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  const found = findPluginRoot(fromDir);
+  if (found === null) {
+    throw new Error(`Guild plugin root not found above ${fromDir} (no ${PLUGIN_ROOT_MARKER}); set GUILD_PLUGIN_ROOT`);
+  }
+  return found;
+}
+var fs2, path2, PLUGIN_ROOT_MARKER;
+var init_plugin_root = __esm({
+  "src/domains/kernel/plugin-root.ts"() {
+    fs2 = __toESM(require("node:fs"));
+    path2 = __toESM(require("node:path"));
+    PLUGIN_ROOT_MARKER = path2.join("runtime", "guild-mcp.js");
+  }
+});
+
 // hooks/node_modules/js-yaml/lib/common.js
 var require_common = __commonJS({
   "hooks/node_modules/js-yaml/lib/common.js"(exports2, module2) {
@@ -3572,14 +3602,17 @@ var require_js_yaml = __commonJS({
 
 // src/domains/kernel/yaml-loader.ts
 function pluginLocalScriptsRoots() {
+  const own = findPluginRoot(__dirname);
   return [
+    // The package this code shipped in, whatever the bundle depth (runtime/scripts).
+    ...own === null ? [] : [path3.join(own, "scripts")],
     // Source TS layout (src/domains/<id>) and the bundled agent-team hook layout
     // (hooks/agent-team/dist) both sit three levels under plugin/.
-    path2.resolve(__dirname, "..", "..", "..", "scripts"),
+    path3.resolve(__dirname, "..", "..", "..", "scripts"),
     // Bundled hook layout (hooks/dist) and src/adapters both sit two levels under.
-    path2.resolve(__dirname, "..", "..", "scripts"),
+    path3.resolve(__dirname, "..", "..", "scripts"),
     // src/adapters/model-discovery and any deeper nesting.
-    path2.resolve(__dirname, "..", "..", "..", "..", "scripts")
+    path3.resolve(__dirname, "..", "..", "..", "..", "scripts")
   ];
 }
 function tryScriptsRoot(scriptsRoot) {
@@ -3600,7 +3633,7 @@ function loadYamlApi() {
     return require_js_yaml();
   } catch {
   }
-  const cwdRoot = path2.resolve(process.cwd(), "scripts");
+  const cwdRoot = path3.resolve(process.cwd(), "scripts");
   tried.push(cwdRoot);
   const api = tryScriptsRoot(cwdRoot);
   if (api) return api;
@@ -3608,10 +3641,11 @@ function loadYamlApi() {
     `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
   );
 }
-var path2;
+var path3;
 var init_yaml_loader = __esm({
   "src/domains/kernel/yaml-loader.ts"() {
-    path2 = __toESM(require("node:path"));
+    path3 = __toESM(require("node:path"));
+    init_plugin_root();
   }
 });
 
@@ -3761,7 +3795,7 @@ function isRefused(r) {
   return "code" in r;
 }
 function escapes(rel2) {
-  return rel2 === ".." || rel2.startsWith(`..${path3.sep}`) || path3.isAbsolute(rel2);
+  return rel2 === ".." || rel2.startsWith(`..${path4.sep}`) || path4.isAbsolute(rel2);
 }
 function refuse(code, detail) {
   return Object.freeze({ contained: false, code, detail });
@@ -3771,20 +3805,20 @@ function hasParentSegment(p) {
 }
 function lstatOrNull(p) {
   try {
-    return fs2.lstatSync(p);
+    return fs3.lstatSync(p);
   } catch {
     return null;
   }
 }
 function isWithin(child, parent) {
-  const rel2 = path3.relative(parent, child);
+  const rel2 = path4.relative(parent, child);
   return rel2 === "" || !escapes(rel2);
 }
 function checkContained(root, target, options = {}) {
   const policy = options.policy ?? "resolve";
   let realRoot2;
   try {
-    realRoot2 = fs2.realpathSync(path3.resolve(root));
+    realRoot2 = fs3.realpathSync(path4.resolve(root));
   } catch {
     return refuse("root-unresolvable", `project root ${root} does not resolve`);
   }
@@ -3794,13 +3828,13 @@ function checkContained(root, target, options = {}) {
       `refusing a path spelled with a ".." segment (${target}) \u2014 parent traversal cannot be resolved before symlinks`
     );
   }
-  const abs = path3.isAbsolute(target) ? path3.resolve(target) : path3.resolve(realRoot2, target);
+  const abs = path4.isAbsolute(target) ? path4.resolve(target) : path4.resolve(realRoot2, target);
   let probe = abs;
   let probeStat = null;
   for (; ; ) {
     probeStat = lstatOrNull(probe);
     if (probeStat !== null) break;
-    const parent = path3.dirname(probe);
+    const parent = path4.dirname(probe);
     if (parent === probe) {
       return refuse("no-existing-ancestor", `no existing ancestor of ${abs}`);
     }
@@ -3815,40 +3849,40 @@ function checkContained(root, target, options = {}) {
   }
   let realProbe;
   try {
-    realProbe = fs2.realpathSync(probe);
+    realProbe = fs3.realpathSync(probe);
   } catch {
     return refuse(
       "dangling-symlink",
       `${probe} is a symlink that does not resolve; refusing to write through it`
     );
   }
-  const rel2 = path3.relative(realRoot2, realProbe);
+  const rel2 = path4.relative(realRoot2, realProbe);
   if (rel2 !== "" && escapes(rel2)) {
     return refuse("outside-root", `${abs} resolves outside the project root (${realProbe})`);
   }
   if (policy === "physical") {
-    const parsed = path3.parse(abs);
+    const parsed = path4.parse(abs);
     let walk = parsed.root;
-    for (const seg of abs.slice(parsed.root.length).split(path3.sep)) {
+    for (const seg of abs.slice(parsed.root.length).split(path4.sep)) {
       if (seg === "" || seg === ".") continue;
-      walk = path3.join(walk, seg);
+      walk = path4.join(walk, seg);
       const st = lstatOrNull(walk);
       if (st === null || !st.isSymbolicLink()) continue;
       let segReal;
       try {
-        segReal = fs2.realpathSync(walk);
+        segReal = fs3.realpathSync(walk);
       } catch {
         return refuse("dangling-symlink", `${walk} is a symlink that does not resolve`);
       }
-      const segRel = path3.relative(realRoot2, segReal);
+      const segRel = path4.relative(realRoot2, segReal);
       const strictlyInside = segRel !== "" && !escapes(segRel);
       if (strictlyInside) {
         return refuse("physical-symlink", `refusing \u2014 symlinked path segment: ${walk}`);
       }
     }
   }
-  const tail = path3.relative(probe, abs);
-  const realPath = tail === "" ? realProbe : path3.join(realProbe, tail);
+  const tail = path4.relative(probe, abs);
+  const realPath = tail === "" ? realProbe : path4.join(realProbe, tail);
   return Object.freeze({ contained: true, realRoot: realRoot2, realPath });
 }
 function prepareContainedWrite(root, target, options = {}) {
@@ -3860,16 +3894,16 @@ function prepareContainedWrite(root, target, options = {}) {
   }
   let canonRoot;
   try {
-    canonRoot = fs2.realpathSync(path3.resolve(root));
+    canonRoot = fs3.realpathSync(path4.resolve(root));
   } catch {
     return refuse("root-unresolvable", `project root ${root} does not resolve`);
   }
-  const abs = path3.isAbsolute(target) ? path3.resolve(target) : path3.resolve(canonRoot, target);
-  const dir = path3.dirname(abs);
+  const abs = path4.isAbsolute(target) ? path4.resolve(target) : path4.resolve(canonRoot, target);
+  const dir = path4.dirname(abs);
   const pre = checkContained(root, dir, { policy: options.policy });
   if (isRefused(pre)) return pre;
   try {
-    fs2.mkdirSync(dir, { recursive: true });
+    fs3.mkdirSync(dir, { recursive: true });
   } catch (err) {
     return refuse("mkdir-failed", `could not create ${dir}: ${err?.message ?? "unknown"}`);
   }
@@ -3877,7 +3911,7 @@ function prepareContainedWrite(root, target, options = {}) {
   if (isRefused(post)) return post;
   let realDir;
   try {
-    realDir = fs2.realpathSync(dir);
+    realDir = fs3.realpathSync(dir);
   } catch {
     return refuse("dangling-symlink", `${dir} stopped resolving between the check and the write`);
   }
@@ -3900,20 +3934,20 @@ function writeContainedFile(root, target, bytes, options = {}) {
   const tmp = `${dest}.tmp-${process.pid}`;
   let provenDir;
   try {
-    provenDir = fs2.statSync(prepared.realDir);
+    provenDir = fs3.statSync(prepared.realDir);
   } catch (err) {
     return { written: false, code: "write-failed", detail: err?.message ?? "unknown" };
   }
   let fd = null;
   let created = false;
   try {
-    fd = fs2.openSync(
+    fd = fs3.openSync(
       tmp,
-      fs2.constants.O_WRONLY | fs2.constants.O_CREAT | fs2.constants.O_EXCL | fs2.constants.O_NOFOLLOW,
+      fs3.constants.O_WRONLY | fs3.constants.O_CREAT | fs3.constants.O_EXCL | fs3.constants.O_NOFOLLOW,
       384
     );
     created = true;
-    const nowDir = fs2.statSync(prepared.realDir);
+    const nowDir = fs3.statSync(prepared.realDir);
     if (nowDir.dev !== provenDir.dev || nowDir.ino !== provenDir.ino) {
       return {
         written: false,
@@ -3923,26 +3957,26 @@ function writeContainedFile(root, target, bytes, options = {}) {
     }
     let off = 0;
     while (off < bytes.length) {
-      const n = fs2.writeSync(fd, bytes, off, bytes.length - off);
+      const n = fs3.writeSync(fd, bytes, off, bytes.length - off);
       if (n <= 0) return { written: false, code: "write-failed", detail: "no progress on write" };
       off += n;
     }
-    const writtenId = fs2.fstatSync(fd);
-    fs2.fsyncSync(fd);
-    fs2.closeSync(fd);
+    const writtenId = fs3.fstatSync(fd);
+    fs3.fsyncSync(fd);
+    fs3.closeSync(fd);
     fd = null;
-    fs2.renameSync(tmp, dest);
+    fs3.renameSync(tmp, dest);
     created = false;
     let landedId = null;
     try {
-      landedId = fs2.lstatSync(dest);
+      landedId = fs3.lstatSync(dest);
     } catch {
       landedId = null;
     }
     const after = checkContained(root, dest, { policy: options.policy });
     if (isRefused(after) || landedId === null || landedId.dev !== writtenId.dev || landedId.ino !== writtenId.ino) {
       try {
-        fs2.rmSync(dest, { force: true });
+        fs3.rmSync(dest, { force: true });
       } catch {
       }
       return {
@@ -3957,23 +3991,23 @@ function writeContainedFile(root, target, bytes, options = {}) {
   } finally {
     if (fd !== null) {
       try {
-        fs2.closeSync(fd);
+        fs3.closeSync(fd);
       } catch {
       }
     }
     if (created) {
       try {
-        fs2.rmSync(tmp, { force: true });
+        fs3.rmSync(tmp, { force: true });
       } catch {
       }
     }
   }
 }
-var fs2, path3, CONTAINMENT_REFUSAL_CODES;
+var fs3, path4, CONTAINMENT_REFUSAL_CODES;
 var init_path_containment = __esm({
   "src/domains/kernel/path-containment.ts"() {
-    fs2 = __toESM(require("node:fs"));
-    path3 = __toESM(require("node:path"));
+    fs3 = __toESM(require("node:fs"));
+    path4 = __toESM(require("node:path"));
     CONTAINMENT_REFUSAL_CODES = Object.freeze([
       "root-unresolvable",
       "no-existing-ancestor",
@@ -4036,13 +4070,14 @@ var init_kernel = __esm({
     init_path_containment();
     init_runtime_tree_guard();
     init_tier_bus();
+    init_plugin_root();
   }
 });
 
-// src/adapters/host-capabilities-schema.ts
+// src/domains/config/host-capabilities-schema.ts
 var UPDATE_COMMANDS, INJECTION_SUPPORT, INJECTION_SUPPORT_SET, CLAUDE_CAPABILITIES, CODEX_CAPABILITIES, NO_HOOKS, AGENTS_FILE_CAPABILITIES, REQUIRED_HOOK_EVENTS;
 var init_host_capabilities_schema = __esm({
-  "src/adapters/host-capabilities-schema.ts"() {
+  "src/domains/config/host-capabilities-schema.ts"() {
     UPDATE_COMMANDS = {
       marketplace_cli: "claude plugin marketplace update guild && claude plugin update guild@guild",
       self_update: "guild-run update",
@@ -4447,7 +4482,7 @@ var init_host_capabilities_schema = __esm({
   }
 });
 
-// src/adapters/host-registry-schema.ts
+// src/domains/config/host-registry-schema.ts
 function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectable = surface_kind === "cli") {
   return {
     schema_version: "guild.host_capabilities.v1",
@@ -4557,7 +4592,7 @@ function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectab
 }
 var HOST_IDS, HOST_FAMILIES, AUTH_PROBES, CLAUDE_ENTRY, CODEX_ENTRY, AGENTS_FILE_ENTRY, PI_ENTRY, ANTIGRAVITY_ENTRY, CLAUDE_APP_ENTRY, CLAUDE_WEB_ENTRY, CODEX_APP_ENTRY, CLAUDE_AI_CONNECTOR_ENTRY, CURSOR_ENTRY, GITHUB_COPILOT_ENTRY, OPENCODE_ENTRY, ROVO_DEV_ENTRY, KIRO_ENTRY, QODER_ENTRY, TRAE_ENTRY, HOST_REGISTRY_ROWS, HOST_ID_SET, FAMILY_SET, AUTH_PROBE_SET;
 var init_host_registry_schema = __esm({
-  "src/adapters/host-registry-schema.ts"() {
+  "src/domains/config/host-registry-schema.ts"() {
     init_kernel();
     init_host_capabilities_schema();
     HOST_IDS = Object.freeze([
@@ -4954,7 +4989,7 @@ var init_host_registry_schema = __esm({
   }
 });
 
-// src/adapters/host-id-namespace.ts
+// src/domains/config/host-id-namespace.ts
 function hostKindToRegistryId(hk) {
   if (hk in HOSTKIND_TO_REGISTRY_ID) {
     return HOSTKIND_TO_REGISTRY_ID[hk];
@@ -4974,7 +5009,7 @@ function normalizeHostId(value) {
 }
 var HOSTKIND_TO_REGISTRY_ID, HOST_ID_SET2, LEGACY_HOST_ALIASES, PREFIX_COLLAPSE;
 var init_host_id_namespace = __esm({
-  "src/adapters/host-id-namespace.ts"() {
+  "src/domains/config/host-id-namespace.ts"() {
     init_host_registry_schema();
     HOSTKIND_TO_REGISTRY_ID = {
       claude: "claude-code-cli",
@@ -5014,14 +5049,147 @@ var init_host_id_namespace = __esm({
   }
 });
 
-// src/adapters/adapter-fallback-ladders.ts
-var RUNGS, ADAPTER_SURFACES, INFERRED_HOSTS, RUNG_SET, SURFACE_SET;
+// src/domains/config/adapter-fallback-ladders.ts
+function rungLoss(r) {
+  return RUNGS.indexOf(r);
+}
+function isHostInferred(host) {
+  return INFERRED_HOSTS.has(host);
+}
+function resolveRung(surface, host) {
+  const known2 = HOST_IDS.includes(host);
+  if (!known2) {
+    return {
+      schema_version: "guild.degradation_receipt.v1",
+      surface,
+      host,
+      rung: "degraded",
+      degraded: true,
+      inferred: false,
+      reason: `unknown host "${host}" - no ladder entry; degraded + recorded (minimum-loss rule)`
+    };
+  }
+  const hid = host;
+  const rung = FALLBACK_LADDER_TABLE[surface][hid];
+  const inferred = isHostInferred(hid);
+  return {
+    schema_version: "guild.degradation_receipt.v1",
+    surface,
+    host: hid,
+    rung,
+    degraded: rungLoss(rung) > 0,
+    inferred,
+    reason: `${surface}@${hid} resolves to "${rung}"${inferred ? " (INFERRED - verify at live-host availability)" : ""}`
+  };
+}
+var RUNGS, ADAPTER_SURFACES, FALLBACK_LADDER_TABLE, INFERRED_HOSTS, RUNG_SET, SURFACE_SET;
 var init_adapter_fallback_ladders = __esm({
-  "src/adapters/adapter-fallback-ladders.ts"() {
+  "src/domains/config/adapter-fallback-ladders.ts"() {
     init_host_registry_schema();
     init_kernel();
     RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"]);
     ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"]);
+    FALLBACK_LADDER_TABLE = {
+      interaction: {
+        "claude-code-cli": "native",
+        // AskUserQuestion
+        "codex-cli": "wrapped",
+        // CLI prompt
+        "agents-file": "bridged",
+        // file-bus / instruction file
+        "pi-cli": "wrapped",
+        // VERIFIED on-host 2026-06-16: print mode
+        "antigravity-cli": "wrapped",
+        // VERIFIED on-host 2026-06-16: print mode
+        "claude-code-app": "degraded",
+        "claude-code-web": "degraded",
+        "codex-app": "degraded",
+        "claude-ai-connector": "degraded",
+        // new-CLI (INFERRED) — wrapper CLI prompt
+        cursor: "wrapped",
+        "github-copilot": "wrapped",
+        opencode: "wrapped",
+        "rovo-dev": "wrapped",
+        // new-IDE (INFERRED) — dereference agents-file (bridged file-bus / instruction file)
+        kiro: "bridged",
+        qoder: "bridged",
+        trae: "bridged"
+      },
+      session: {
+        "claude-code-cli": "native",
+        // session id/resume
+        "codex-cli": "wrapped",
+        // run-dir state
+        "agents-file": "emulated",
+        // re-bootstrap through instruction file
+        "pi-cli": "native",
+        // VERIFIED on-host 2026-06-16: --resume/-r + --session-id + --fork
+        "antigravity-cli": "wrapped",
+        // VERIFIED on-host 2026-06-16: --continue/-c + --conversation <id>
+        "claude-code-app": "degraded",
+        "claude-code-web": "degraded",
+        "codex-app": "degraded",
+        "claude-ai-connector": "degraded",
+        // new-CLI (INFERRED) — no native session in the inferred caps row; re-bootstrap
+        cursor: "emulated",
+        "github-copilot": "emulated",
+        opencode: "emulated",
+        "rovo-dev": "emulated",
+        // new-IDE (INFERRED) — mirror agents-file (re-bootstrap through the instruction file)
+        kiro: "emulated",
+        qoder: "emulated",
+        trae: "emulated"
+      },
+      semantic_tool: {
+        "claude-code-cli": "native",
+        // tool names
+        "codex-cli": "bridged",
+        // name map
+        "agents-file": "bridged",
+        // instruction/file-bus name map
+        "pi-cli": "bridged",
+        // VERIFIED on-host 2026-06-16: read/bash/edit/write + --tools allowlist
+        "antigravity-cli": "bridged",
+        "claude-code-app": "degraded",
+        "claude-code-web": "degraded",
+        "codex-app": "degraded",
+        "claude-ai-connector": "degraded",
+        // new-CLI (INFERRED) — tool-name map over the wrapper
+        cursor: "bridged",
+        "github-copilot": "bridged",
+        opencode: "bridged",
+        "rovo-dev": "bridged",
+        // new-IDE (INFERRED) — mirror agents-file (instruction/file-bus name map)
+        kiro: "bridged",
+        qoder: "bridged",
+        trae: "bridged"
+      },
+      browser: {
+        "claude-code-cli": "bridged",
+        // chrome-devtools MCP
+        "codex-cli": "bridged",
+        // MCP
+        "agents-file": "degraded",
+        // none
+        "pi-cli": "degraded",
+        // VERIFIED on-host 2026-06-16: no browser tool in help output
+        "antigravity-cli": "native",
+        // host browser control - still inferred until live-host confirmation
+        "claude-code-app": "degraded",
+        "claude-code-web": "degraded",
+        "codex-app": "degraded",
+        "claude-ai-connector": "degraded",
+        // new-CLI (INFERRED) — inferred caps row has no browser tool
+        cursor: "degraded",
+        "github-copilot": "degraded",
+        opencode: "degraded",
+        "rovo-dev": "degraded",
+        // new-IDE (INFERRED) — mirror agents-file (none)
+        kiro: "degraded",
+        qoder: "degraded",
+        trae: "degraded"
+      }
+    };
     INFERRED_HOSTS = sealSet([
       "agents-file",
       "pi-cli",
@@ -5044,7 +5212,7 @@ var init_adapter_fallback_ladders = __esm({
   }
 });
 
-// src/adapters/host-profiles-validate.ts
+// src/domains/config/host-profiles-validate.ts
 function isPlainObject2(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -5104,7 +5272,7 @@ function filterHostProfiles(raw) {
 }
 var KNOWN_HOST_IDS, VALID_HOST_PROFILE_ENTRY_KEYS, VALID_HOST_PROFILE_MODEL_KEYS;
 var init_host_profiles_validate = __esm({
-  "src/adapters/host-profiles-validate.ts"() {
+  "src/domains/config/host-profiles-validate.ts"() {
     init_host_registry_schema();
     init_kernel();
     init_host_id_namespace();
@@ -5114,16 +5282,19 @@ var init_host_profiles_validate = __esm({
   }
 });
 
-// src/adapters/host-registry.ts
+// src/domains/config/host-registry.ts
 function deriveCapabilityRow(row) {
   return row.capabilities;
+}
+function getRegistryEntry(id) {
+  return HOST_REGISTRY_ROWS[id] ?? null;
 }
 function resultAdapterForFamily(family) {
   return FAMILY_TO_ROW[family]?.result_adapter ?? false;
 }
 var DERIVED_HOST_CAPABILITY_ROWS, FAMILY_TO_ROW;
 var init_host_registry = __esm({
-  "src/adapters/host-registry.ts"() {
+  "src/domains/config/host-registry.ts"() {
     init_host_registry_schema();
     init_host_id_namespace();
     DERIVED_HOST_CAPABILITY_ROWS = (() => {
@@ -5149,6 +5320,29 @@ var init_host_registry = __esm({
       }
       return out;
     })();
+  }
+});
+
+// src/domains/config/host-adapter-contract.ts
+var HOST_ADAPTER_CONTRACT_VERSION, HOST_ADAPTER_OPERATIONS;
+var init_host_adapter_contract = __esm({
+  "src/domains/config/host-adapter-contract.ts"() {
+    init_host_registry_schema();
+    init_host_id_namespace();
+    init_adapter_fallback_ladders();
+    HOST_ADAPTER_CONTRACT_VERSION = "guild.host_adapter.v1.0.0";
+    HOST_ADAPTER_OPERATIONS = Object.freeze([
+      "capabilities",
+      "bootstrap",
+      "preflight",
+      "dispatch",
+      "collect",
+      "renderCommandSurface",
+      "renderPackage",
+      "renderPermissionDecision",
+      "resolveModelParams",
+      "memory"
+    ]);
   }
 });
 
@@ -6781,8 +6975,8 @@ function guildRootId(activeRoot) {
 function resolveStorageRoots(opts) {
   const env = opts.env ?? process.env;
   const platform = opts.platform ?? process.platform;
-  const home = opts.homedir ?? os2.homedir();
-  const tmp = opts.tmpdir ?? os2.tmpdir();
+  const home = opts.homedir ?? os.homedir();
+  const tmp = opts.tmpdir ?? os.tmpdir();
   const activeRoot = path14.resolve(opts.activeRoot);
   const override = (key) => {
     const raw = env[OVERRIDE_KEYS[key]];
@@ -6798,11 +6992,11 @@ function resolveStorageRoots(opts) {
     temp: override("temp") ?? path14.join(tmp, GUILD_NAMESPACE)
   };
 }
-var crypto2, os2, path14, OVERRIDE_KEYS, GUILD_NAMESPACE;
+var crypto2, os, path14, OVERRIDE_KEYS, GUILD_NAMESPACE;
 var init_storage_roots = __esm({
   "src/domains/state/storage-roots.ts"() {
     crypto2 = __toESM(require("node:crypto"));
-    os2 = __toESM(require("node:os"));
+    os = __toESM(require("node:os"));
     path14 = __toESM(require("node:path"));
     OVERRIDE_KEYS = {
       state: "GUILD_STATE_HOME",
@@ -14744,12 +14938,12 @@ function safeArrayLength(value) {
 function isObjectLike(value) {
   return typeof value === "object" && value !== null && !safeIsArray(value);
 }
-function issue(path74, code, message) {
-  return { path: path74, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
+function issue(path75, code, message) {
+  return { path: path75, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
 }
-function pushIssue(issues, path74, code, message) {
+function pushIssue(issues, path75, code, message) {
   if (issues.length >= MAX_ISSUES) return;
-  issues.push(issue(path74, code, message));
+  issues.push(issue(path75, code, message));
 }
 function sortIssues(issues) {
   return [...issues].sort(
@@ -14760,15 +14954,15 @@ function canonicalDocumentJson(value) {
   const errors = [];
   const active = /* @__PURE__ */ new Set();
   let nodes = 0;
-  const walk = (node, path74, depth) => {
+  const walk = (node, path75, depth) => {
     if (errors.length >= MAX_ISSUES) return null;
     if (depth > MAX_CANONICAL_DEPTH) {
-      pushIssue(errors, path74, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
+      pushIssue(errors, path75, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
       return null;
     }
     nodes += 1;
     if (nodes > MAX_CANONICAL_NODES) {
-      pushIssue(errors, path74, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
+      pushIssue(errors, path75, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
       return null;
     }
     if (node === null) return "null";
@@ -14777,7 +14971,7 @@ function canonicalDocumentJson(value) {
     if (kind === "string") {
       const text = node;
       if (text.length > MAX_STRING_LENGTH) {
-        pushIssue(errors, path74, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
+        pushIssue(errors, path75, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
         return null;
       }
       return JSON.stringify(text);
@@ -14785,17 +14979,17 @@ function canonicalDocumentJson(value) {
     if (kind === "number") {
       const num = node;
       if (!Number.isFinite(num)) {
-        pushIssue(errors, path74, "non_finite_number", "numbers must be finite");
+        pushIssue(errors, path75, "non_finite_number", "numbers must be finite");
         return null;
       }
       return Object.is(num, -0) ? "0" : String(num);
     }
     if (kind !== "object") {
-      pushIssue(errors, path74, "unsupported_type", `${kind} has no canonical JSON form`);
+      pushIssue(errors, path75, "unsupported_type", `${kind} has no canonical JSON form`);
       return null;
     }
     if (active.has(node)) {
-      pushIssue(errors, path74, "cycle_detected", "value contains a cycle");
+      pushIssue(errors, path75, "cycle_detected", "value contains a cycle");
       return null;
     }
     active.add(node);
@@ -14803,26 +14997,26 @@ function canonicalDocumentJson(value) {
       if (safeIsArray(node)) {
         const length = safeArrayLength(node);
         if (length.ok === false) {
-          pushIssue(errors, path74, "array_length_unreadable", length.reason);
+          pushIssue(errors, path75, "array_length_unreadable", length.reason);
           return null;
         }
         if (length.length > MAX_ARRAY_ITEMS) {
-          pushIssue(errors, path74, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
+          pushIssue(errors, path75, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
           return null;
         }
         const parts2 = [];
         for (let index = 0; index < length.length; index += 1) {
           const key = String(index);
           if (!safeHasOwn(node, key)) {
-            pushIssue(errors, `${path74}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
+            pushIssue(errors, `${path75}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
             return null;
           }
           const read = safeGet(node, key);
           if (read.ok === false) {
-            pushIssue(errors, `${path74}[${index}]`, "property_read_threw", read.reason);
+            pushIssue(errors, `${path75}[${index}]`, "property_read_threw", read.reason);
             return null;
           }
-          const encoded = walk(read.value, `${path74}[${index}]`, depth + 1);
+          const encoded = walk(read.value, `${path75}[${index}]`, depth + 1);
           if (encoded === null) return null;
           parts2.push(encoded);
         }
@@ -14830,11 +15024,11 @@ function canonicalDocumentJson(value) {
       }
       const keys = safeOwnKeys(node);
       if (keys.ok === false) {
-        pushIssue(errors, path74, "own_keys_threw", keys.reason);
+        pushIssue(errors, path75, "own_keys_threw", keys.reason);
         return null;
       }
       if (keys.keys.length > MAX_OBJECT_KEYS) {
-        pushIssue(errors, path74, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
+        pushIssue(errors, path75, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
         return null;
       }
       const sorted = [...keys.keys].sort();
@@ -14842,14 +15036,14 @@ function canonicalDocumentJson(value) {
       for (const key of sorted) {
         const read = safeGet(node, key);
         if (read.ok === false) {
-          pushIssue(errors, `${path74}.${key}`, "property_read_threw", read.reason);
+          pushIssue(errors, `${path75}.${key}`, "property_read_threw", read.reason);
           return null;
         }
         if (read.value === void 0) {
-          pushIssue(errors, `${path74}.${key}`, "undefined_value", "undefined has no canonical JSON form");
+          pushIssue(errors, `${path75}.${key}`, "undefined_value", "undefined has no canonical JSON form");
           return null;
         }
-        const encoded = walk(read.value, `${path74}.${key}`, depth + 1);
+        const encoded = walk(read.value, `${path75}.${key}`, depth + 1);
         if (encoded === null) return null;
         parts.push(`${JSON.stringify(key)}:${encoded}`);
       }
@@ -14906,38 +15100,38 @@ var init_document_safe = __esm({
 });
 
 // src/domains/lifecycle/document-records.ts
-function readShape(issues, value, path74, allowed) {
+function readShape(issues, value, path75, allowed) {
   if (value === null || typeof value !== "object") {
-    pushIssue(issues, path74, "not_an_object", `${path74} must be an object`);
+    pushIssue(issues, path75, "not_an_object", `${path75} must be an object`);
     return false;
   }
   if (safeIsArray(value)) {
-    pushIssue(issues, path74, "not_an_object", `${path74} must be an object, not an array`);
+    pushIssue(issues, path75, "not_an_object", `${path75} must be an object, not an array`);
     return false;
   }
   const keys = safeOwnKeys(value);
   if (keys.ok === false) {
-    pushIssue(issues, path74, "own_keys_threw", `${path74}: ${keys.reason}`);
+    pushIssue(issues, path75, "own_keys_threw", `${path75}: ${keys.reason}`);
     return false;
   }
   const allowedSet = new Set(allowed);
   let ok = true;
   for (const key of [...keys.keys].sort()) {
     if (!allowedSet.has(key)) {
-      pushIssue(issues, `${path74}.${key}`, "unexpected_key", `${path74}.${key} is not part of the closed schema`);
+      pushIssue(issues, `${path75}.${key}`, "unexpected_key", `${path75}.${key} is not part of the closed schema`);
       ok = false;
     }
   }
   for (const key of allowed) {
     if (!safeHasOwn(value, key)) {
-      pushIssue(issues, `${path74}.${key}`, "missing_field", `${path74}.${key} is required`);
+      pushIssue(issues, `${path75}.${key}`, "missing_field", `${path75}.${key} is required`);
       ok = false;
     }
   }
   return ok;
 }
-function readString(issues, parent, path74, key, options = {}) {
-  const fieldPath = `${path74}.${key}`;
+function readString(issues, parent, path75, key, options = {}) {
+  const fieldPath = `${path75}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -14972,8 +15166,8 @@ function readString(issues, parent, path74, key, options = {}) {
   }
   return value;
 }
-function readArray(issues, parent, path74, key, options = {}) {
-  const fieldPath = `${path74}.${key}`;
+function readArray(issues, parent, path75, key, options = {}) {
+  const fieldPath = `${path75}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -15016,10 +15210,10 @@ function readArray(issues, parent, path74, key, options = {}) {
   }
   return ok ? items : null;
 }
-function readStringArray(issues, parent, path74, key, options = {}) {
-  const items = readArray(issues, parent, path74, key, options);
+function readStringArray(issues, parent, path75, key, options = {}) {
+  const items = readArray(issues, parent, path75, key, options);
   if (items === null) return null;
-  const fieldPath = `${path74}.${key}`;
+  const fieldPath = `${path75}.${key}`;
   const out = [];
   let ok = true;
   for (let index = 0; index < items.length; index += 1) {
@@ -15045,10 +15239,10 @@ function readStringArray(issues, parent, path74, key, options = {}) {
   }
   return ok ? out : null;
 }
-function readItemArray(issues, parent, path74, key, options, readItem) {
-  const items = readArray(issues, parent, path74, key, options);
+function readItemArray(issues, parent, path75, key, options, readItem) {
+  const items = readArray(issues, parent, path75, key, options);
   if (items === null) return null;
-  const fieldPath = `${path74}.${key}`;
+  const fieldPath = `${path75}.${key}`;
   const out = [];
   const firstIndexById = /* @__PURE__ */ new Map();
   let ok = true;
@@ -15075,13 +15269,13 @@ function readItemArray(issues, parent, path74, key, options, readItem) {
   }
   return ok ? out : null;
 }
-function readProvenance(issues, parent, path74) {
+function readProvenance(issues, parent, path75) {
   const read = safeGet(parent, "provenance");
   if (read.ok === false) {
-    pushIssue(issues, `${path74}.provenance`, "property_read_threw", `${path74}.provenance: property read threw`);
+    pushIssue(issues, `${path75}.provenance`, "property_read_threw", `${path75}.provenance: property read threw`);
     return null;
   }
-  const provenancePath2 = `${path74}.provenance`;
+  const provenancePath2 = `${path75}.provenance`;
   if (!readShape(issues, read.value, provenancePath2, PROVENANCE_KEYS)) return null;
   const source = read.value;
   const authorId = readString(issues, source, provenancePath2, "author_id", {
@@ -15122,10 +15316,10 @@ function readProvenance(issues, parent, path74) {
     source: provenanceSource
   };
 }
-function readPlanBody(issues, body, path74) {
-  if (!readShape(issues, body, path74, ["objectives", "steps"])) return null;
-  const objectives = readStringArray(issues, body, path74, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
-  const steps = readItemArray(issues, body, path74, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
+function readPlanBody(issues, body, path75) {
+  if (!readShape(issues, body, path75, ["objectives", "steps"])) return null;
+  const objectives = readStringArray(issues, body, path75, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
+  const steps = readItemArray(issues, body, path75, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
     if (!readShape(itemIssues, item, itemPath, ["id", "title", "status"])) return null;
     const id = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
     const title = readString(itemIssues, item, itemPath, "title", { maxLength: 500 });
@@ -15136,12 +15330,12 @@ function readPlanBody(issues, body, path74) {
   if (objectives === null || steps === null) return null;
   return { objectives, steps };
 }
-function readSpecBody(issues, body, path74) {
-  if (!readShape(issues, body, path74, ["requirements"])) return null;
+function readSpecBody(issues, body, path75) {
+  if (!readShape(issues, body, path75, ["requirements"])) return null;
   const requirements = readItemArray(
     issues,
     body,
-    path74,
+    path75,
     "requirements",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -15158,22 +15352,22 @@ function readSpecBody(issues, body, path74) {
   if (requirements === null) return null;
   return { requirements };
 }
-function readHandoffBody(issues, body, path74) {
-  if (!readShape(issues, body, path74, ["task_id", "status", "artifacts", "issues"])) return null;
-  const taskId = readString(issues, body, path74, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
-  const status = readString(issues, body, path74, "status", { enumOf: HANDOFF_STATUSES });
-  const artifacts = readStringArray(issues, body, path74, "artifacts", { max: 256, itemMaxLength: 1e3 });
-  const handoffIssues = readStringArray(issues, body, path74, "issues", { max: 256, itemMaxLength: 1e3 });
+function readHandoffBody(issues, body, path75) {
+  if (!readShape(issues, body, path75, ["task_id", "status", "artifacts", "issues"])) return null;
+  const taskId = readString(issues, body, path75, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+  const status = readString(issues, body, path75, "status", { enumOf: HANDOFF_STATUSES });
+  const artifacts = readStringArray(issues, body, path75, "artifacts", { max: 256, itemMaxLength: 1e3 });
+  const handoffIssues = readStringArray(issues, body, path75, "issues", { max: 256, itemMaxLength: 1e3 });
   if (taskId === null || status === null || artifacts === null || handoffIssues === null) return null;
   return { task_id: taskId, status, artifacts, issues: handoffIssues };
 }
-function readReviewBody(issues, body, path74) {
-  if (!readShape(issues, body, path74, ["verdict", "findings"])) return null;
-  const verdict = readString(issues, body, path74, "verdict", { enumOf: REVIEW_VERDICTS });
+function readReviewBody(issues, body, path75) {
+  if (!readShape(issues, body, path75, ["verdict", "findings"])) return null;
+  const verdict = readString(issues, body, path75, "verdict", { enumOf: REVIEW_VERDICTS });
   const findings = readItemArray(
     issues,
     body,
-    path74,
+    path75,
     "findings",
     { max: 256 },
     (itemIssues, item, itemPath) => {
@@ -15188,13 +15382,13 @@ function readReviewBody(issues, body, path74) {
   if (verdict === null || findings === null) return null;
   return { verdict, findings };
 }
-function readVerifyBody(issues, body, path74) {
-  if (!readShape(issues, body, path74, ["outcome", "checks"])) return null;
-  const outcome = readString(issues, body, path74, "outcome", { enumOf: VERIFY_OUTCOMES });
+function readVerifyBody(issues, body, path75) {
+  if (!readShape(issues, body, path75, ["outcome", "checks"])) return null;
+  const outcome = readString(issues, body, path75, "outcome", { enumOf: VERIFY_OUTCOMES });
   const checks = readItemArray(
     issues,
     body,
-    path74,
+    path75,
     "checks",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -15729,10 +15923,10 @@ function requiredRecord(errors, parent, key) {
   }
   return value;
 }
-function requiredString(errors, parent, path74, key) {
+function requiredString(errors, parent, path75, key) {
   const value = parent[key];
   if (typeof value !== "string" || value.length === 0) {
-    pushIssue(errors, `${path74}.${key}`, "missing_field", `${key} must be a non-empty string`);
+    pushIssue(errors, `${path75}.${key}`, "missing_field", `${key} must be a non-empty string`);
     return null;
   }
   return value;
@@ -15745,23 +15939,23 @@ function requiredArray(errors, parent, key) {
   }
   return value;
 }
-function validateStringArray(errors, values, path74) {
+function validateStringArray(errors, values, path75) {
   if (values === null) return;
   values.forEach((value, index) => {
     if (typeof value !== "string" || value.length === 0) {
-      pushIssue(errors, `${path74}[${index}]`, "wrong_type", `${path74} entries must be non-empty strings`);
+      pushIssue(errors, `${path75}[${index}]`, "wrong_type", `${path75} entries must be non-empty strings`);
     }
   });
 }
-function canonicalReceiptInstant(errors, value, path74) {
+function canonicalReceiptInstant(errors, value, path75) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
-    pushIssue(errors, path74, "invalid_timestamp", `${path74} must be an ISO-8601 timestamp`);
+    pushIssue(errors, path75, "invalid_timestamp", `${path75} must be an ISO-8601 timestamp`);
     return null;
   }
   const parsed = Date.parse(value);
   const expectedCanonical = value.includes(".") ? value : value.replace(/Z$/, ".000Z");
   if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== expectedCanonical) {
-    pushIssue(errors, path74, "invalid_timestamp", `${path74} must name a real UTC calendar instant`);
+    pushIssue(errors, path75, "invalid_timestamp", `${path75} must name a real UTC calendar instant`);
     return null;
   }
   return expectedCanonical;
@@ -17146,11 +17340,11 @@ function exclusionSentinelPath(runDir3) {
   return (0, import_node_path.join)(runDir3, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir3) {
-  const path74 = stableLockPath(runDir3);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path74), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path74)) return;
+  const path75 = stableLockPath(runDir3);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path75), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path75)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path74, "wx");
+    const fd = (0, import_node_fs.openSync)(path75, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -17304,9 +17498,9 @@ function appendEvent(runDir3, event, opts = {}) {
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId2 = opts.laneId ?? "global";
-    const path74 = laneFallbackPath(runDir3, laneId2);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path74), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path74, "a");
+    const path75 = laneFallbackPath(runDir3, laneId2);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path75), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path75, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -17404,9 +17598,9 @@ function listArchives(runDir3) {
   entries.sort((a, b) => a.n - b.n);
   return entries.map((e) => e.path);
 }
-async function readArchive(path74) {
+async function readArchive(path75) {
   const chunks = [];
-  const src = (0, import_node_fs2.createReadStream)(path74);
+  const src = (0, import_node_fs2.createReadStream)(path75);
   const gunzip = (0, import_node_zlib.createGunzip)();
   src.pipe(gunzip);
   for await (const chunk of gunzip) {
@@ -17487,13 +17681,13 @@ function appendParsedLines(text, source, out, opts) {
   }
 }
 function lockfileInode(runDir3) {
-  const path74 = lockPath(runDir3);
-  if (!(0, import_node_fs2.existsSync)(path74)) return null;
-  return (0, import_node_fs2.statSync)(path74).ino;
+  const path75 = lockPath(runDir3);
+  if (!(0, import_node_fs2.existsSync)(path75)) return null;
+  return (0, import_node_fs2.statSync)(path75).ino;
 }
 function lockfileSize(runDir3) {
-  const path74 = lockPath(runDir3);
-  return (0, import_node_fs2.statSync)(path74).size;
+  const path75 = lockPath(runDir3);
+  return (0, import_node_fs2.statSync)(path75).size;
 }
 var import_node_fs2, import_node_path2, import_node_zlib, ROTATION_THRESHOLD_BYTES;
 var init_event_log_writer = __esm({
@@ -18410,6701 +18604,6 @@ var init_specialist_contract = __esm({
   }
 });
 
-// src/domains/config/config-defaults.ts
-function isCanonicalRoleSlug(v) {
-  return typeof v === "string" && v.length > 0 && v.length <= CAPABILITY_ROLE_SLUG_MAX_LEN && !CONTROL_CHARS.test(v) && ROLE_SLUG.test(v);
-}
-function roleSlugDedupKey(slug) {
-  return slug.toLowerCase();
-}
-function isValidCapabilityValue(key, value) {
-  switch (key) {
-    case "capability.resolver_mode":
-      return CAPABILITY_RESOLVER_MODES.includes(value);
-    case "capability.auto_create_policy":
-      return CAPABILITY_AUTO_CREATE_POLICIES.includes(value);
-    case "capability.suggestion_budget":
-      return typeof value === "number" && Number.isInteger(value) && value >= CAPABILITY_SUGGESTION_BUDGET_MIN && value <= CAPABILITY_SUGGESTION_BUDGET_MAX;
-    case "capability.starter_roles": {
-      if (!Array.isArray(value)) return false;
-      const seen = /* @__PURE__ */ new Set();
-      for (const entry of value) {
-        if (!isCanonicalRoleSlug(entry)) return false;
-        const key2 = roleSlugDedupKey(entry);
-        if (seen.has(key2)) return false;
-        seen.add(key2);
-      }
-      return true;
-    }
-    default:
-      return void 0;
-  }
-}
-var DEFAULT_ESCALATION_MARKERS, NON_INHERITABLE_KEYS, LOG_ROTATION_THRESHOLD_BYTES, SIDECAR_MAX_BYTES3, CAPABILITY_RESOLVER_MODES, CAPABILITY_AUTO_CREATE_POLICIES, CAPABILITY_RESOLVER_MODE_AFTER_F7, CAPABILITY_RESOLVER_MODE_DEFAULT, CAPABILITY_SUGGESTION_BUDGET_MIN, CAPABILITY_SUGGESTION_BUDGET_MAX, CAPABILITY_ROLE_SLUG_MAX_LEN, ROLE_SLUG, CONTROL_CHARS, DEFAULTS;
-var init_config_defaults = __esm({
-  "src/domains/config/config-defaults.ts"() {
-    init_kernel();
-    DEFAULT_ESCALATION_MARKERS = Object.freeze([
-      "I'm not sure",
-      "unclear",
-      "cannot determine",
-      "I don't know",
-      "ambiguous",
-      "uncertain",
-      "not enough information"
-    ]);
-    NON_INHERITABLE_KEYS = sealSet([
-      "initiative_default",
-      // OD-1: attach-to-wrong-initiative risk
-      "workspace"
-      // workspace.mode is root-detection-only
-    ], "NON_INHERITABLE_KEYS");
-    LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
-    SIDECAR_MAX_BYTES3 = 1024 * 1024;
-    CAPABILITY_RESOLVER_MODES = Object.freeze([
-      "legacy",
-      "observe",
-      "shadow",
-      "project-local",
-      "strict"
-    ]);
-    CAPABILITY_AUTO_CREATE_POLICIES = Object.freeze(["never", "on_approval"]);
-    CAPABILITY_RESOLVER_MODE_AFTER_F7 = "observe";
-    CAPABILITY_RESOLVER_MODE_DEFAULT = CAPABILITY_RESOLVER_MODE_AFTER_F7;
-    CAPABILITY_SUGGESTION_BUDGET_MIN = 0;
-    CAPABILITY_SUGGESTION_BUDGET_MAX = 4;
-    CAPABILITY_ROLE_SLUG_MAX_LEN = 64;
-    ROLE_SLUG = /^[a-z0-9][a-z0-9._-]*$/;
-    CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
-    DEFAULTS = deepFreeze({
-      rigor: "standard",
-      auto_approve: [],
-      review: "local",
-      host: "auto",
-      /**
-       * rf-wi-01 (v23x-deferred-followups G1) — the sanctioned P1-L10 host-autonomy
-       * override (host_mode × guild_gates orthogonality invariant, permission-policy-schema.ts).
-       * null (default) = no override; the host's own default ("ask", lifted to "bypass_all" for
-       * unattended team panes per issue #54) applies. NOT under `security.` — the #54 lane
-       * explicitly reverted an ad-hoc `security.host_mode` key because it bypassed this schema;
-       * this top-level placement (sibling of the `host` dispatch selector) is the registered
-       * replacement. One of only three keys ever legitimately null-typed at the top level.
-       */
-      host_mode: null,
-      roles: { host: null, advisory: null, adversarial: null },
-      host_profiles: {},
-      initiative_default: null,
-      index: "auto",
-      record_status_runs: true,
-      codex_skip_enforcement: "warn",
-      agent_mode: "auto",
-      workspace: { mode: "auto" },
-      models: {
-        enabled: true,
-        // G4b (host-reachability): every host in the registry's HOST_IDS gets an
-        // explicit tier slot — NOT generated by importing HOST_IDS here (this file's
-        // own contract, stated in the module doc comment above, is to stay free of
-        // internal runtime imports so core settings code can load it before the
-        // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
-        // roster (host-registry-schema.ts) enumerated by hand; a test
-        // (scripts/lib/config-defaults-tiers-host-ids.test.ts) asserts the two
-        // stay in sync so this can never silently drift again the way it had (7 of
-        // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
-        // non-null model — every other host's registry row carries `models.<tier>.model:
-        // null` (no Guild-mapped model), so `null` here is the HONEST default, not a
-        // gap (see tier-defaults.ts's `tierDefaults()` for the runtime-computed
-        // equivalent this static scaffold mirrors).
-        tiers: {
-          cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
-          mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
-          powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null }
-        },
-        scoreWeights: {
-          workType: 0,
-          blastRadius: 1,
-          dependsOn: 1,
-          security: 1,
-          priorEscalation: 1
-        },
-        thresholds: { mid: 1, powerful: 3 },
-        advisorRounds: 2,
-        escalationMarkers: DEFAULT_ESCALATION_MARKERS,
-        recallBeforeRead: true,
-        recallScoreThreshold: 0.4,
-        structuredOutputRequired: true,
-        cacheTTL: { coordinator: "1h", leaf: "5m" },
-        importanceGate: 3,
-        compositeRecall: true,
-        importanceAtIngest: true,
-        ingestSimilarityGate: 0.8,
-        shortOutputThreshold: {},
-        knowledge: {
-          maxDepth: 8,
-          maxBranching: 12,
-          minTopicImportance: 0.4,
-          relMinConf: 0.5,
-          maxFiles: 3e3,
-          maxTokens: 1e6,
-          batchSize: 20
-        }
-      },
-      security: {
-        bypass_permissions_policy: "audit"
-      },
-      secrets_policy: {
-        env_allowlist: [],
-        redaction_patterns: [],
-        fail_mode_durable: "closed",
-        fail_mode_telemetry: "open"
-      },
-      mcp: {
-        tool_description_hashes: {},
-        stdio_available: true,
-        http_available: false,
-        bridge_package: null
-      },
-      /**
-       * Project-capability localization (spec S5; decisions cap-loc-D04 new-install
-       * policy, cap-loc-D03 migration window). Closes audit gaps D12 (no config keys
-       * existed), F3 (resolver-mode ownership undefined) and F10 (budget "3–4").
-       *
-       * These keys select WHICH DEFINITIONS RESOLVE — they are deliberately NOT
-       * security-sensitive (`isSecuritySensitiveKey` matches none of them, correctly).
-       * What a lane may DO stays with `capability_scope` and the permission keys.
-       *
-       * Scope is `project` for all four, which is what the CONFIG_SCHEMA generator
-       * already emits unconditionally — capability ownership is per project by
-       * definition (the umbrella and each child answer "what roles do I need"
-       * independently, and D03 has the four repos migrating at different rates). Per
-       * S5 spec-call #2, per-key `scope` is NOT introduced here: the right values fall
-       * out with zero generator change, and adding it would touch every existing key.
-       */
-      capability: {
-        /**
-         * Which resolver mode this project is in on D03's migration ladder. Config
-         * records WHERE WE ARE, never WHETHER WE MAY MOVE — advance conditions are
-         * gate criteria the initiative evaluates, and a mode change is a deliberate
-         * write.
-         *
-         * DEFAULT IS `observe` (D04), unlocked by F7 landing — see
-         * CAPABILITY_RESOLVER_MODE_DEFAULT above for what would revert it. Never
-         * silently defaulted: an unset value resolves with provenance `default`, so
-         * `config show --sources` shows it was never chosen.
-         */
-        resolver_mode: CAPABILITY_RESOLVER_MODE_DEFAULT,
-        /**
-         * Max capability proposals surfaced per project (D04/F10: fixed at 4, not
-         * "3–4"). Range [0, 4] — the same ceiling S1's profile validator enforces, so
-         * the two cannot disagree. 0 is legal: "profile but never propose".
-         */
-        suggestion_budget: 4,
-        /**
-         * Roles a new install starts with. EMPTY BY DESIGN — a non-empty default would
-         * ship a roster, which is precisely what localization exists to stop. Empty ⇒
-         * Learn proposes.
-         */
-        starter_roles: [],
-        /** Whether an approved proposal may auto-advance the resolver mode (D04). */
-        auto_create_policy: "on_approval"
-      },
-      statusline: false,
-      adversarial_review_provider: "auto",
-      loops: null,
-      loop_cap: 16,
-      codex_cap: 5,
-      // guild.model_policy.v2 (dynamic-host-model-routing T5): durable operator model
-      // routing intent. null = not configured — v2 routing stays off and the legacy
-      // tier maps drive generic preferences for the §6 migration window. When set, the
-      // object must pass the §5 closed-key validator (config-cli validateModelPolicy).
-      model_policy: null,
-      defaults: {
-        auto_learn: false,
-        adversarial: "on",
-        team: { size: null, always_include: [] },
-        review_workflow: "standard",
-        skill_policy: "standard",
-        gates: { auto_approve: [] },
-        wiki: { share_mode: "team", autopromote: false },
-        quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
-        reporting: "standard",
-        index: {
-          enabled: true,
-          kg_node_threshold: 2e3,
-          kg_size_threshold_mb: 1,
-          links_edge_threshold: 2e3,
-          runs_threshold: 20,
-          wiki_file_threshold: 500
-        },
-        cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
-        retry: { max_attempts: 1, backoff: "exponential" },
-        resume: { enabled: true },
-        heartbeat_timeout_ms: 6e5,
-        capability_manifest_ttl_s: 3600,
-        // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
-        // the SessionStart signal; `auto` additionally stages the host apply path;
-        // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
-        update: { mode: "notify", cadence_hours: 24 },
-        allowed_tools: [],
-        /**
-         * rf-wi-01 (G1) — registers the guard hooks/lib/lean-lead-guard.ts already reads
-         * tolerantly. enabled: advisory master toggle. hands_on_edit_threshold: direct lead
-         * Edit/Write ops before the inline-shortcut-expired advisory fires (SKILL.md
-         * "Inline shortcut under high autonomy").
-         */
-        lean_lead: { enabled: true, hands_on_edit_threshold: 8 },
-        /**
-         * rf-wi-01 (G1) — registers the guard hooks/lib/lifecycle-gate.ts already reads
-         * tolerantly. enabled: master toggle. adhoc_activity_threshold: ad-hoc (non-skill)
-         * activity count before the lifecycle gate advisory fires.
-         */
-        lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 },
-        /**
-         * Issue #93 — dispatch-safety knobs for the #56 backend-degradation guard
-         * (hooks/lib/backend-degradation.ts).
-         *
-         * `block_unmarked_lanes` engages STRICT mode: a Guild lane dispatch carrying
-         * NO structured producer marker (`prompt_only` evidence — the hand-rolled
-         * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded.
-         *
-         * DEFAULT IS `false` ON PURPOSE, and that is load-bearing rather than
-         * timidity. `classifyLaneEvidence` grades a fully-substituted lane brief that
-         * was merely QUOTED in a prompt as `prompt_only` too — by text it is
-         * indistinguishable from the real dispatch (backend-degradation.ts's
-         * lane-brief signature note, adversarial review round 3). So strict mode
-         * trades the no-false-positive-on-a-quoted-brief invariant for tighter drift
-         * coverage, which is an operator's call to make, never a shipped default.
-         *
-         * PR #85 (G3) shipped this rung as the env flag `GUILD_BLOCK_UNMARKED_LANES`
-         * only, deliberately deferring schema registration to avoid colliding with
-         * rf-wi-01's closed-schema work. That work landed (PR #87), so this is the
-         * promised followup: the key is now discoverable and validated, and the env
-         * var survives as a per-session OVERRIDE (both directions) on top of it.
-         */
-        dispatch: { block_unmarked_lanes: false }
-      }
-    });
-  }
-});
-
-// src/domains/config/policy-keys.ts
-function canonicalPolicyKey(dotted) {
-  return POLICY_KEY_ALIASES[dotted] ?? dotted;
-}
-function isPolicyKey(dotted) {
-  return BY_KEY.has(canonicalPolicyKey(dotted));
-}
-function policyKeySpec(dotted) {
-  return BY_KEY.get(canonicalPolicyKey(dotted));
-}
-function policyDefaults() {
-  const out = {};
-  for (const spec of POLICY_KEYS) setByPath2(out, spec.key, spec.default);
-  return out;
-}
-function matchesHostFamily(text) {
-  for (const fam of HOST_FAMILY_TOKENS) {
-    if (new RegExp(`(^|[^a-z0-9])${fam}([^a-z0-9]|$)`, "i").test(text)) return fam;
-  }
-  return null;
-}
-function matchesModelName(text) {
-  for (const re of MODEL_NAME_PATTERNS) {
-    const m = re.exec(text);
-    if (m) return m[0];
-  }
-  return null;
-}
-function findHostIdentity(key, value, knownHostIds = []) {
-  for (const re of INVENTORY_KEY_PATTERNS) {
-    if (re.test(key)) return { kind: "model-inventory", key, token: key };
-  }
-  const segments = key.split(".");
-  for (const seg of segments) {
-    if (MODEL_FAMILY_TOKENS.includes(seg.toLowerCase())) continue;
-    const fam = matchesHostFamily(seg);
-    if (fam) return { kind: "host-family", key, token: fam };
-    if (knownHostIds.some((h) => h.toLowerCase() === seg.toLowerCase())) {
-      return { kind: "host-id", key, token: seg };
-    }
-    const model = matchesModelName(seg);
-    if (model) return { kind: "model-name", key, token: model };
-  }
-  if (typeof value === "string") {
-    const model = matchesModelName(value);
-    if (model) return { kind: "model-name", key, token: model };
-    if (knownHostIds.some((h) => h.toLowerCase() === value.toLowerCase())) {
-      return { kind: "host-id", key, token: value };
-    }
-    if (!MODEL_FAMILY_TOKENS.includes(value.toLowerCase())) {
-      const fam = matchesHostFamily(value);
-      if (fam) return { kind: "host-family", key, token: fam };
-    }
-  }
-  return null;
-}
-function scanHostIdentity(obj, knownHostIds = [], prefix = "") {
-  const out = [];
-  if (Array.isArray(obj)) {
-    obj.forEach((item, i) => {
-      out.push(...scanHostIdentity(item, knownHostIds, `${prefix}[${i}]`));
-    });
-    return out;
-  }
-  if (obj === null || typeof obj !== "object") {
-    const hit = findHostIdentity(prefix, obj, knownHostIds);
-    if (hit) out.push(hit);
-    return out;
-  }
-  for (const [k, v] of Object.entries(obj)) {
-    const dotted = prefix === "" ? k : `${prefix}.${k}`;
-    const keyHit = findHostIdentity(dotted, void 0, knownHostIds);
-    if (keyHit) {
-      out.push(keyHit);
-      continue;
-    }
-    out.push(...scanHostIdentity(v, knownHostIds, dotted));
-  }
-  return out;
-}
-function findModelNameInText(text) {
-  return matchesModelName(text);
-}
-function identityMessage(hit, where) {
-  const what = hit.kind === "model-inventory" ? `'${hit.key}' persists per-host model inventory` : hit.kind === "host-family" ? `'${hit.key}' carries the host family '${hit.token}'` : hit.kind === "host-id" ? `'${hit.key}' carries the host id '${hit.token}'` : `'${hit.key}' carries the concrete model name '${hit.token}'`;
-  return `${where}: ${what}. Durable config is policy only (KTD22) \u2014 host and models are bound per session on the run record (guild.session_binding.v1). Run \`guild config models\` to inspect this session's binding.`;
-}
-function assertPolicyWrite(key, value, opts = {}) {
-  const where = opts.where ?? "config set";
-  const hit = findHostIdentity(key, value, opts.knownHostIds ?? []);
-  if (hit) throw new PolicyRejectedError(hit.kind, key, identityMessage(hit, where));
-  const canonical = canonicalPolicyKey(key);
-  const spec = BY_KEY.get(canonical);
-  if (!spec) {
-    throw new PolicyRejectedError(
-      "not-policy",
-      key,
-      `${where}: '${key}' is not a policy key. Durable config holds the closed policy set only (KTD22): ${POLICY_KEYS.map((s) => s.key).join(", ")}.`
-    );
-  }
-  const valueErr = validatePolicyValue(spec, value);
-  if (valueErr) throw new PolicyRejectedError("not-policy", key, `${where}: ${valueErr}`);
-  return canonical;
-}
-function validatePolicyValue(spec, value) {
-  if (value === null) {
-    return spec.default === null ? null : `'${spec.key}' does not accept null`;
-  }
-  switch (spec.type) {
-    case "enum":
-      return typeof value === "string" && spec.values.includes(value) ? null : `'${spec.key}' must be one of: ${spec.values.join(" | ")}`;
-    case "boolean":
-      return typeof value === "boolean" ? null : `'${spec.key}' must be true or false`;
-    case "integer":
-      if (typeof value !== "number" || !Number.isInteger(value)) {
-        return `'${spec.key}' must be an integer`;
-      }
-      break;
-    case "number":
-      if (typeof value !== "number" || !Number.isFinite(value)) {
-        return `'${spec.key}' must be a number`;
-      }
-      break;
-  }
-  const n = value;
-  if (spec.min !== void 0 && n < spec.min) return `'${spec.key}' must be >= ${spec.min}`;
-  if (spec.max !== void 0 && n > spec.max) return `'${spec.key}' must be <= ${spec.max}`;
-  return null;
-}
-function setByPath2(obj, dotted, value) {
-  const parts = dotted.split(".");
-  let cur = obj;
-  for (const p of parts.slice(0, -1)) {
-    const next = cur[p];
-    if (next === void 0 || next === null || typeof next !== "object" || Array.isArray(next)) {
-      cur[p] = {};
-    }
-    cur = cur[p];
-  }
-  cur[parts[parts.length - 1]] = value;
-}
-function getByPath2(obj, dotted) {
-  let cur = obj;
-  for (const p of dotted.split(".")) {
-    if (cur === null || typeof cur !== "object") return void 0;
-    cur = cur[p];
-  }
-  return cur;
-}
-var POLICY_KEYS, BY_KEY, POLICY_KEY_ALIASES, HOST_FAMILY_TOKENS, MODEL_FAMILY_TOKENS, MODEL_NAME_PATTERNS, INVENTORY_KEY_PATTERNS, PolicyRejectedError;
-var init_policy_keys = __esm({
-  "src/domains/config/policy-keys.ts"() {
-    init_kernel();
-    POLICY_KEYS = deepFreeze([
-      // Tier SELECTORS — which tier a lane starts at, never which model serves it.
-      {
-        key: "tiers.default",
-        type: "enum",
-        values: ["cheap", "mid", "powerful"],
-        default: "mid",
-        note: "tier a lane starts at when its score names none; the adapter maps tier\u2192model at dispatch"
-      },
-      // Score floors — the complexity score at which a lane is promoted a tier.
-      {
-        key: "tiers.floors.mid",
-        type: "number",
-        min: 0,
-        max: 10,
-        default: 3,
-        note: "complexity-score floor at which a lane resolves to the mid tier"
-      },
-      {
-        key: "tiers.floors.powerful",
-        type: "number",
-        min: 0,
-        max: 10,
-        default: 6,
-        note: "complexity-score floor at which a lane resolves to the powerful tier"
-      },
-      {
-        key: "advisorRounds",
-        type: "integer",
-        min: 0,
-        max: 10,
-        default: 2,
-        note: "advisor escalation rounds a cell may spend before it blocks with next_need: budget (R72)"
-      },
-      {
-        key: "budget.tokens",
-        type: "integer",
-        min: 0,
-        default: null,
-        note: "optional per-run token cap; null = uncapped. D-PROBE and inner verify do not decrement it"
-      },
-      {
-        key: "budget.usd",
-        type: "number",
-        min: 0,
-        default: null,
-        note: "optional per-run spend cap in USD; null = uncapped"
-      },
-      {
-        key: "team.compose_scope",
-        type: "enum",
-        values: ["phase", "goal"],
-        default: "phase",
-        note: "whether team-compose mints per phase or slices a roster per goal (KTD62)"
-      },
-      {
-        key: "recall.backend",
-        type: "enum",
-        values: ["bm25", "hybrid"],
-        default: "bm25",
-        note: "recall backend; embeddings are cache only and a missing model fails open to bm25 (KTD67)"
-      },
-      {
-        key: "recall.thresholds.min_score",
-        type: "number",
-        min: 0,
-        max: 1,
-        default: 0.2,
-        note: "minimum BM25 score a recall hit needs to enter a bundle"
-      },
-      {
-        key: "recall.thresholds.max_hits",
-        type: "integer",
-        min: 1,
-        max: 100,
-        default: 8,
-        note: "maximum recall hits a lane bundle may carry"
-      },
-      {
-        key: "review.critic",
-        type: "enum",
-        values: ["off", "advisor"],
-        default: "advisor",
-        note: "who plays critic; `advisor` is the machinery agent, never a new model family (KTD68)"
-      },
-      {
-        key: "review.independence",
-        type: "boolean",
-        default: true,
-        note: "a Team Lead may not review its own cell (KTD58); false only for single-agent local runs"
-      },
-      {
-        key: "wiki.autopromote",
-        type: "boolean",
-        default: true,
-        note: "harvest auto-promotes decisions on this cwd; false = candidates-only (KTD35)"
-      },
-      {
-        key: "agent_mode",
-        type: "enum",
-        values: ["auto", "team", "agent", "subagent"],
-        default: "auto",
-        note: "dispatch backend PREFERENCE only; never a statement about which host is running"
-      },
-      {
-        key: "dispatch.max_instances",
-        type: "integer",
-        min: 1,
-        max: 32,
-        default: 4,
-        note: "live worker instances one run may hold at once; CONCURRENCY, not a roster cap (R46/KTD30)"
-      }
-    ]);
-    BY_KEY = new Map(POLICY_KEYS.map((s) => [s.key, s]));
-    POLICY_KEY_ALIASES = Object.freeze({
-      "defaults.wiki.autopromote": "wiki.autopromote",
-      "defaults.agent_mode": "agent_mode",
-      "defaults.team.compose_scope": "team.compose_scope",
-      "defaults.recall.backend": "recall.backend",
-      "defaults.review.critic": "review.critic",
-      "defaults.advisorRounds": "advisorRounds"
-    });
-    HOST_FAMILY_TOKENS = Object.freeze([
-      "claude",
-      "codex",
-      "cursor",
-      "gemini",
-      "copilot",
-      "windsurf",
-      "aider",
-      "antigravity",
-      "pi",
-      "cline",
-      "continue",
-      "zed"
-    ]);
-    MODEL_FAMILY_TOKENS = Object.freeze([
-      "anthropic",
-      "openai",
-      "google"
-    ]);
-    MODEL_NAME_PATTERNS = Object.freeze([
-      /\bopus\b/i,
-      /\bsonnet\b/i,
-      /\bhaiku\b/i,
-      /\bfable\b/i,
-      /\bgpt-?[0-9]/i,
-      /\bo[1-9](?:-(?:mini|pro|preview))?\b/i,
-      /\bgemini-[0-9]/i,
-      /\bclaude-[a-z0-9]/i,
-      /\bllama-?[0-9]/i,
-      /\bmistral\b/i,
-      /\bgrok-?[0-9]/i,
-      /\bdeepseek\b/i,
-      /\bqwen\b/i
-    ]);
-    INVENTORY_KEY_PATTERNS = Object.freeze([
-      /^models(\.|$)/,
-      /^defaults\.models(\.|$)/,
-      /^host_profiles(\.|$)/,
-      /^defaults\.host_profiles(\.|$)/,
-      /^host(\.|$)/,
-      /^defaults\.host(\.|$)/,
-      /^roles\.[^.]+\.host(\.|$)/,
-      /^defaults\.cross_host(\.|$)/
-    ]);
-    PolicyRejectedError = class extends Error {
-      constructor(reason, key, message) {
-        super(message);
-        this.reason = reason;
-        this.key = key;
-        this.name = "PolicyRejectedError";
-      }
-      reason;
-      key;
-    };
-  }
-});
-
-// src/domains/config/policy-resolver.ts
-function readJsonFile(file) {
-  let raw;
-  try {
-    raw = fs25.readFileSync(file, "utf8");
-  } catch {
-    return null;
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    throw new PolicyRejectedError(
-      "not-policy",
-      file,
-      `policy config: ${file} is not valid JSON (${e.message}). Refusing to resolve policy from a file Guild cannot parse.`
-    );
-  }
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new PolicyRejectedError("not-policy", file, `policy config: ${file} must be a JSON object`);
-  }
-  return parsed;
-}
-function readLayer(file, layer, knownHostIds) {
-  const parsed = readJsonFile(file);
-  if (parsed === null) return null;
-  const identity = scanHostIdentity(parsed, knownHostIds);
-  if (identity.length > 0) {
-    const hit = identity[0];
-    throw new PolicyRejectedError(
-      hit.kind,
-      hit.key,
-      `policy config (${layer}, ${file}): key '${hit.key}' carries ${hit.kind === "model-inventory" ? "per-host model inventory" : `'${hit.token}'`}. Durable config is policy only (KTD22); host and model are bound per session on the run record. Remove the key, or inspect the session with \`guild config models\`.`
-    );
-  }
-  const out = /* @__PURE__ */ new Map();
-  const aliases = [];
-  for (const spec of POLICY_KEYS) {
-    const canonical = getByPath2(parsed, spec.key);
-    if (canonical !== void 0) {
-      const err = validatePolicyValue(spec, canonical);
-      if (err) {
-        throw new PolicyRejectedError("not-policy", spec.key, `policy config (${layer}, ${file}): ${err}`);
-      }
-      out.set(spec.key, canonical);
-    }
-    for (const legacy of aliasesFor(spec.key)) {
-      const v = getByPath2(parsed, legacy);
-      if (v === void 0) continue;
-      const err = validatePolicyValue(spec, v);
-      if (err) {
-        throw new PolicyRejectedError("not-policy", spec.key, `policy config (${layer}, ${file}): ${err}`);
-      }
-      const shadowed = out.has(spec.key);
-      if (!shadowed) out.set(spec.key, v);
-      aliases.push({ key: spec.key, legacy, layer, file, shadowed });
-    }
-  }
-  const known2 = /* @__PURE__ */ new Set();
-  for (const spec of POLICY_KEYS) {
-    known2.add(spec.key);
-    for (const a of aliasesFor(spec.key)) known2.add(a);
-  }
-  for (const dotted of leafPaths(parsed)) {
-    if (known2.has(dotted)) continue;
-    if ([...known2].some((k) => k.startsWith(`${dotted}.`))) continue;
-    throw new PolicyRejectedError(
-      "not-policy",
-      dotted,
-      `policy config (${layer}, ${file}): '${dotted}' is not a policy key. The closed set is: ${POLICY_KEYS.map((s) => s.key).join(", ")}.`
-    );
-  }
-  return { values: out, aliases };
-}
-function aliasesFor(canonical) {
-  return ALIASES_BY_CANONICAL.get(canonical) ?? [];
-}
-function leafPaths(obj, prefix = "", out = []) {
-  if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
-    if (prefix !== "") out.push(prefix);
-    return out;
-  }
-  for (const [k, v] of Object.entries(obj)) {
-    leafPaths(v, prefix === "" ? k : `${prefix}.${k}`, out);
-  }
-  return out;
-}
-function policyFilesFor(root, scope) {
-  const { createGuildStorage: createGuildStorage2 } = (init_state(), __toCommonJS(state_exports));
-  const storage = createGuildStorage2(root, {
-    profile: scope === "workspace" ? "workspace-only" : "standalone"
-  });
-  const scoped = scope === "workspace" ? storage.workspace : storage.project;
-  if (!scoped) return null;
-  const config = scoped.config();
-  return { config, local: config.replace(/\.json$/, ".local.json") };
-}
-function policyOverlayFile(cwd) {
-  try {
-    const { createGuildStorage: createGuildStorage2 } = (init_state(), __toCommonJS(state_exports));
-    return createGuildStorage2(cwd).runtime(POLICY_OVERLAY_FILE);
-  } catch {
-    return null;
-  }
-}
-function resolvePolicy(opts) {
-  const knownHostIds = opts.knownHostIds ?? [];
-  const policy = policyDefaults();
-  const sources = {};
-  for (const spec of POLICY_KEYS) sources[spec.key] = "builtin";
-  const files = [];
-  const legacyAliases = [];
-  const layers = [];
-  if (opts.workspaceRoot) {
-    const ws = policyFilesFor(opts.workspaceRoot, "workspace");
-    if (ws) {
-      layers.push({ layer: "workspace", file: ws.config });
-      layers.push({ layer: "workspace-local", file: ws.local });
-    }
-  }
-  const project = policyFilesFor(opts.cwd, "project");
-  if (project) {
-    layers.push({ layer: "project", file: project.config });
-    layers.push({ layer: "project-local", file: project.local });
-  }
-  const overlay = opts.overlayFile === void 0 ? policyOverlayFile(opts.cwd) : opts.overlayFile;
-  if (overlay) layers.push({ layer: "overlay", file: overlay });
-  for (const { layer, file } of layers) {
-    const sparse = readLayer(file, layer, knownHostIds);
-    if (sparse === null) continue;
-    files.push({ layer, file });
-    legacyAliases.push(...sparse.aliases);
-    for (const [key, value] of sparse.values) {
-      setByPath2(policy, key, value);
-      sources[key] = layer;
-    }
-  }
-  for (const [key, value] of Object.entries(opts.rigor ?? {})) {
-    const spec = policyKeySpec(key);
-    if (!spec) continue;
-    setByPath2(policy, spec.key, value);
-    sources[spec.key] = "rigor";
-  }
-  for (const [key, value] of Object.entries(opts.flags ?? {})) {
-    if (value === void 0) continue;
-    const canonical = canonicalPolicyKey(key);
-    const spec = policyKeySpec(canonical);
-    if (!spec) continue;
-    const err = validatePolicyValue(spec, value);
-    if (err) throw new PolicyRejectedError("not-policy", canonical, `policy config (cli): ${err}`);
-    setByPath2(policy, spec.key, value);
-    sources[spec.key] = "cli";
-  }
-  return { policy, sources, files, legacyAliases };
-}
-function policyValue(resolved, dotted) {
-  return getByPath2(resolved.policy, canonicalPolicyKey(dotted));
-}
-function writePolicyOverlay(overlayFile, key, value, knownHostIds = []) {
-  const canonical = assertPolicyWrite(key, value, { where: "policy overlay", knownHostIds });
-  let existing = {};
-  const parsed = readJsonFile(overlayFile);
-  if (parsed !== null) existing = parsed;
-  setByPath2(existing, canonical, value);
-  fs25.mkdirSync(path31.dirname(overlayFile), { recursive: true });
-  const tmp = `${overlayFile}.tmp`;
-  fs25.writeFileSync(tmp, `${JSON.stringify(existing, null, 2)}
-`, "utf8");
-  fs25.renameSync(tmp, overlayFile);
-}
-var fs25, path31, POLICY_FILES, POLICY_OVERLAY_FILE, ALIASES_BY_CANONICAL;
-var init_policy_resolver = __esm({
-  "src/domains/config/policy-resolver.ts"() {
-    fs25 = __toESM(require("node:fs"));
-    path31 = __toESM(require("node:path"));
-    init_policy_keys();
-    POLICY_FILES = Object.freeze({
-      project: "config/project.json",
-      projectLocal: "config/project.local.json",
-      workspace: "config/workspace.json",
-      workspaceLocal: "config/workspace.local.json"
-    });
-    POLICY_OVERLAY_FILE = "policy-overlay.json";
-    ALIASES_BY_CANONICAL = (() => {
-      const m = /* @__PURE__ */ new Map();
-      for (const [legacy, target] of Object.entries(POLICY_KEY_ALIASES)) {
-        m.set(target, [...m.get(target) ?? [], legacy]);
-      }
-      return m;
-    })();
-  }
-});
-
-// src/domains/config/session-binding.ts
-function detectSession(env = process.env) {
-  for (const sig of ENV_SIGNALS) {
-    const raw = env[sig.env];
-    if (raw === void 0 || raw === "") continue;
-    const family = sig.fromValue ? raw.trim().toLowerCase() : sig.family;
-    if (sig.fromValue && !KNOWN_FAMILIES.has(family)) {
-      return unknownSession(`${sig.env}=${raw} (unrecognised family)`);
-    }
-    return {
-      host_family: family,
-      surface: env["GUILD_HOST_SURFACE"]?.trim() || family,
-      model_family: HOST_TO_MODEL_FAMILY[family] ?? UNKNOWN_MODEL_FAMILY,
-      // Family detection alone is `advertised`: the host says what it is. A live
-      // catalog probe is what upgrades a tier to `available` (capability domain).
-      evidence: { cheap: "advertised", mid: "advertised", powerful: "advertised" },
-      signal: sig.env
-    };
-  }
-  return unknownSession("none");
-}
-function unknownSession(signal) {
-  return {
-    host_family: UNKNOWN_HOST_FAMILY,
-    surface: UNKNOWN_HOST_FAMILY,
-    model_family: UNKNOWN_MODEL_FAMILY,
-    evidence: { cheap: "unknown", mid: "unknown", powerful: "unknown" },
-    signal
-  };
-}
-function isUnknownHost(d) {
-  return d.host_family === UNKNOWN_HOST_FAMILY;
-}
-function sessionBindingPath(runDir3) {
-  return path32.join(runDir3, SESSION_BINDING_FILE);
-}
-function readSessionBinding(runDir3) {
-  try {
-    const parsed = JSON.parse(fs26.readFileSync(sessionBindingPath(runDir3), "utf8"));
-    return parsed?.schema_version === "guild.session_binding.v1" ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-function refusal(existing, thisHost) {
-  return `run ${existing.run_id} is bound to host family '${existing.host_family}'; this session is '${thisHost}'. Guild does not rebind a run in flight \u2014 in-flight assignments already named a host.
-  Continue as a NEW run on this host:  guild resume --new-run
-  Or return to the original host ('${existing.host_family}') and resume this run.`;
-}
-function bindSession(opts) {
-  const existing = readSessionBinding(opts.runDir);
-  if (existing) {
-    if (existing.host_family !== opts.detected.host_family) {
-      return {
-        ok: false,
-        reason: "host_changed_mid_run",
-        existing,
-        message: refusal(existing, opts.detected.host_family)
-      };
-    }
-    return { ok: true, binding: existing, created: false };
-  }
-  const now = (opts.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
-  const binding = {
-    schema_version: "guild.session_binding.v1",
-    run_id: opts.runId,
-    host_family: opts.detected.host_family,
-    surface: opts.detected.surface,
-    detected_at: now,
-    // An unknown host gets NO tier map. An empty map is a blocked dispatch; a
-    // guessed map is a wrong one.
-    models: isUnknownHost(opts.detected) ? {} : opts.models ?? {},
-    model_family: opts.detected.model_family,
-    prompt_compose: opts.promptCompose,
-    evidence: opts.detected.evidence
-  };
-  fs26.mkdirSync(opts.runDir, { recursive: true });
-  const created = createExclusive(sessionBindingPath(opts.runDir), binding);
-  if (created) return { ok: true, binding, created: true };
-  const winner = readSessionBinding(opts.runDir);
-  if (winner === null) {
-    return {
-      ok: false,
-      reason: "host_changed_mid_run",
-      existing: binding,
-      message: `run ${opts.runId} already has a session binding that cannot be read. Guild will not overwrite it. Inspect ${sessionBindingPath(opts.runDir)}, or continue as a NEW run on this host: guild resume --new-run`
-    };
-  }
-  if (winner.host_family !== opts.detected.host_family) {
-    return { ok: false, reason: "host_changed_mid_run", existing: winner, message: refusal(winner, opts.detected.host_family) };
-  }
-  return { ok: true, binding: winner, created: false };
-}
-function createExclusive(file, binding) {
-  try {
-    fs26.writeFileSync(file, `${JSON.stringify(binding, null, 2)}
-`, { encoding: "utf8", flag: "wx" });
-    return true;
-  } catch (e) {
-    if (e.code === "EEXIST") return false;
-    throw e;
-  }
-}
-function bindSessionForRun(opts) {
-  const detected = detectSession(opts.env ?? process.env);
-  const promptCompose = opts.promptCompose ?? { dialect_id: "dialect:none", overlay_ids: [], hash: "" };
-  const seam = opts.fs;
-  if (seam === void 0) {
-    return bindSession({ runDir: opts.runDir, runId: opts.runId, detected, promptCompose, models: opts.models });
-  }
-  const file = sessionBindingPath(opts.runDir);
-  if (seam.exists(file)) {
-    const raw = seam.readFile?.(file) ?? null;
-    let existing = null;
-    try {
-      const parsed = raw === null ? null : JSON.parse(raw);
-      existing = parsed?.schema_version === "guild.session_binding.v1" ? parsed : null;
-    } catch {
-      existing = null;
-    }
-    if (existing && existing.host_family !== detected.host_family) {
-      return { ok: false, reason: "host_changed_mid_run", existing, message: refusal(existing, detected.host_family) };
-    }
-    if (existing) return { ok: true, binding: existing, created: false };
-  }
-  const binding = {
-    schema_version: "guild.session_binding.v1",
-    run_id: opts.runId,
-    host_family: detected.host_family,
-    surface: detected.surface,
-    detected_at: (/* @__PURE__ */ new Date()).toISOString(),
-    models: isUnknownHost(detected) ? {} : opts.models ?? {},
-    model_family: detected.model_family,
-    prompt_compose: promptCompose,
-    evidence: detected.evidence
-  };
-  seam.writeFile(file, `${JSON.stringify(binding, null, 2)}
-`);
-  return { ok: true, binding, created: true };
-}
-var fs26, path32, SESSION_BINDING_FILE, UNKNOWN_HOST_FAMILY, UNKNOWN_MODEL_FAMILY, HOST_TO_MODEL_FAMILY, ENV_SIGNALS, KNOWN_FAMILIES;
-var init_session_binding = __esm({
-  "src/domains/config/session-binding.ts"() {
-    fs26 = __toESM(require("node:fs"));
-    path32 = __toESM(require("node:path"));
-    SESSION_BINDING_FILE = "session-binding.json";
-    UNKNOWN_HOST_FAMILY = "unknown";
-    UNKNOWN_MODEL_FAMILY = "unknown";
-    HOST_TO_MODEL_FAMILY = Object.freeze({
-      claude: "anthropic",
-      codex: "openai",
-      copilot: "openai",
-      cursor: "openai",
-      gemini: "google",
-      antigravity: "google"
-    });
-    ENV_SIGNALS = Object.freeze([
-      { env: "GUILD_HOST_FAMILY", fromValue: true },
-      { env: "CLAUDE_PLUGIN_ROOT", family: "claude" },
-      { env: "CLAUDECODE", family: "claude" },
-      { env: "CODEX_HOME", family: "codex" },
-      { env: "CODEX_SANDBOX", family: "codex" },
-      { env: "CURSOR_TRACE_ID", family: "cursor" },
-      { env: "GEMINI_CLI", family: "gemini" }
-    ]);
-    KNOWN_FAMILIES = /* @__PURE__ */ new Set([...Object.keys(HOST_TO_MODEL_FAMILY), "cline", "zed", "aider", "windsurf", "pi"]);
-  }
-});
-
-// src/domains/config/config-validation.ts
-function object(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function rejectUnknown(value, allowed, label) {
-  return Object.keys(value).filter((key) => !allowed.has(key)).map((key) => `unknown ${label} key "${key}" (closed key set)`);
-}
-function validateModels(models) {
-  const rejects = rejectUnknown(models, MODEL_KEYS, "models");
-  const tiers = models["tiers"];
-  if (object(tiers)) {
-    const tierKeys = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
-    const specKeys = /* @__PURE__ */ new Set(["model", "effort", "reasoning", "thinking", "verbosity"]);
-    for (const [tier, rawHosts] of Object.entries(tiers)) {
-      if (!tierKeys.has(tier)) {
-        rejects.push(`unknown models.tiers key "${tier}" (valid: cheap|mid|powerful)`);
-        continue;
-      }
-      if (!object(rawHosts)) continue;
-      const canonical = /* @__PURE__ */ new Map();
-      for (const [host, value] of Object.entries(rawHosts)) {
-        const hostId = normalizeHostId(host);
-        if (!hostId) {
-          rejects.push(`unknown models.tiers.${tier} host key "${host}" (closed key set)`);
-          continue;
-        }
-        const prior = canonical.get(hostId);
-        if (prior && prior !== host) {
-          rejects.push(
-            `duplicate models.tiers.${tier} host keys "${prior}" and "${host}" both normalize to "${hostId}"`
-          );
-          continue;
-        }
-        canonical.set(hostId, host);
-        if (value === null || typeof value === "string") continue;
-        if (!object(value)) {
-          rejects.push(
-            `models.tiers.${tier}.${host} must be a string, null, or {model, effort?, reasoning?, thinking?, verbosity?}`
-          );
-          continue;
-        }
-        for (const key of Object.keys(value)) {
-          if (!specKeys.has(key)) {
-            rejects.push(`unknown models.tiers.${tier}.${host} key "${key}" (object form is a closed key set)`);
-          }
-        }
-        if (typeof value["model"] !== "string" || !value["model"].trim()) {
-          rejects.push(`models.tiers.${tier}.${host}.model is required and must be a non-empty string in the object form`);
-        }
-        for (const key of ["effort", "reasoning", "thinking", "verbosity"]) {
-          if (value[key] !== void 0 && typeof value[key] !== "string") {
-            rejects.push(`models.tiers.${tier}.${host}.${key} must be a string (got ${JSON.stringify(value[key])})`);
-          }
-        }
-      }
-    }
-  }
-  if (object(models["thresholds"])) {
-    for (const key of Object.keys(models["thresholds"])) {
-      if (key !== "mid" && key !== "powerful") rejects.push(`unknown models.thresholds key "${key}" \u2014 only mid and powerful are valid`);
-    }
-  }
-  if (object(models["cacheTTL"])) {
-    const ttl = models["cacheTTL"];
-    for (const key of Object.keys(ttl)) {
-      if (key !== "coordinator" && key !== "leaf") rejects.push(`unknown models.cacheTTL key "${key}" \u2014 only coordinator and leaf are valid`);
-    }
-    for (const key of ["coordinator", "leaf"]) {
-      if (ttl[key] !== void 0 && !["1h", "5m", "off"].includes(String(ttl[key]))) {
-        rejects.push(`models.cacheTTL.${key} "${ttl[key]}" is invalid \u2014 valid: 1h|5m|off`);
-      }
-    }
-  }
-  const integerRange = (key, min, max) => {
-    const value = models[key];
-    if (value !== void 0 && (typeof value !== "number" || !Number.isInteger(value) || value < min || max !== void 0 && value > max)) {
-      rejects.push(`models.${key} must be an integer ${min}${max === void 0 ? "+" : `\u2013${max}`} (got ${JSON.stringify(value)})`);
-    }
-  };
-  integerRange("importanceGate", 1, 5);
-  integerRange("advisorRounds", 1);
-  for (const key of ["compositeRecall", "importanceAtIngest"]) {
-    if (models[key] !== void 0 && typeof models[key] !== "boolean") {
-      rejects.push(`models.${key} must be a boolean (got ${JSON.stringify(models[key])})`);
-    }
-  }
-  for (const key of ["recallScoreThreshold", "ingestSimilarityGate"]) {
-    const value = models[key];
-    if (value !== void 0 && (typeof value !== "number" || value < 0 || value > 1)) {
-      rejects.push(`models.${key} must be a float 0\u20131 (got ${JSON.stringify(value)})`);
-    }
-  }
-  return rejects;
-}
-function validateSecurity(value) {
-  const rejects = rejectUnknown(value, SECURITY_KEYS, "security");
-  const policy = value["bypass_permissions_policy"];
-  if (policy !== void 0 && !["deny", "audit", "allow"].includes(String(policy))) {
-    rejects.push(`security.bypass_permissions_policy "${policy}" is invalid \u2014 valid: deny|audit|allow`);
-  }
-  return rejects;
-}
-function validateSecretsPolicy(value) {
-  const rejects = rejectUnknown(value, SECRETS_KEYS, "secrets_policy");
-  for (const key of ["fail_mode_durable", "fail_mode_telemetry"]) {
-    if (value[key] !== void 0 && value[key] !== "closed" && value[key] !== "open") {
-      rejects.push(`secrets_policy.${key} "${value[key]}" is invalid \u2014 valid: closed|open`);
-    }
-  }
-  for (const key of ["env_allowlist", "redaction_patterns"]) {
-    if (value[key] !== void 0 && !Array.isArray(value[key])) rejects.push(`secrets_policy.${key} must be an array`);
-  }
-  return rejects;
-}
-function validateMcp(value) {
-  const rejects = rejectUnknown(value, MCP_KEYS, "mcp");
-  if (value["tool_description_hashes"] !== void 0 && !object(value["tool_description_hashes"])) {
-    rejects.push("mcp.tool_description_hashes must be an object (tool-name \u2192 SHA-256 hash)");
-  }
-  for (const key of ["stdio_available", "http_available"]) {
-    if (value[key] !== void 0 && typeof value[key] !== "boolean") rejects.push(`mcp.${key} must be a boolean (got ${JSON.stringify(value[key])})`);
-  }
-  if (value["bridge_package"] !== void 0 && value["bridge_package"] !== null && typeof value["bridge_package"] !== "string") {
-    rejects.push(`mcp.bridge_package must be a string or null (got ${JSON.stringify(value["bridge_package"])})`);
-  }
-  return rejects;
-}
-function validateCrossHostBlock(value) {
-  const rejects = rejectUnknown(value, /* @__PURE__ */ new Set(["enabled", "hosts", "fallback_to_claude"]), "defaults.cross_host");
-  for (const key of ["enabled", "fallback_to_claude"]) {
-    if (value[key] !== void 0 && typeof value[key] !== "boolean") rejects.push(`defaults.cross_host.${key} must be a boolean (got ${JSON.stringify(value[key])})`);
-  }
-  if (value["hosts"] !== void 0 && !object(value["hosts"])) {
-    rejects.push("defaults.cross_host.hosts must be an object { host_id: { address, port?, user? } }");
-  } else if (object(value["hosts"])) {
-    for (const [host, raw] of Object.entries(value["hosts"])) {
-      if (!object(raw)) {
-        rejects.push(`defaults.cross_host.hosts["${host}"] must be an object { address, port?, user? }`);
-        continue;
-      }
-      for (const key of Object.keys(raw)) {
-        if (!["address", "port", "user", "login_shell"].includes(key)) rejects.push(`unknown defaults.cross_host.hosts["${host}"] key "${key}" (closed key set)`);
-      }
-      if (!raw["address"] || typeof raw["address"] !== "string") rejects.push(`defaults.cross_host.hosts["${host}"].address is required and must be a string`);
-      const port = raw["port"];
-      if (port !== void 0 && (typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > 65535)) rejects.push(`defaults.cross_host.hosts["${host}"].port must be an integer 1\u201365535 (got ${JSON.stringify(port)})`);
-      for (const key of ["user", "login_shell"]) {
-        if (raw[key] !== void 0 && typeof raw[key] !== "string") rejects.push(`defaults.cross_host.hosts["${host}"].${key} must be a string (got ${JSON.stringify(raw[key])})`);
-      }
-    }
-  }
-  return rejects;
-}
-function validateDefaults(value, selfBuild) {
-  const rejects = rejectUnknown(value, DEFAULT_KEYS, "defaults");
-  if (value["adversarial"] === "off" && selfBuild) rejects.push("defaults.adversarial: off is REJECTED for Guild self-build");
-  if (object(value["wiki"]) && value["wiki"]["autopromote"] === true) rejects.push("defaults.wiki.autopromote: true is REJECTED always (agents emit candidates only)");
-  if (object(value["cross_host"])) rejects.push(...validateCrossHostBlock(value["cross_host"]));
-  if (object(value["quality"]) && object(value["quality"]["budget"])) {
-    for (const key of Object.keys(value["quality"]["budget"])) {
-      if (!["per_class_minutes", "total_minutes"].includes(key)) rejects.push(`unknown defaults.quality.budget key "${key}"`);
-    }
-  }
-  if (object(value["retry"])) {
-    const retry = value["retry"];
-    rejects.push(...rejectUnknown(retry, /* @__PURE__ */ new Set(["max_attempts", "backoff"]), "defaults.retry"));
-    if (retry["max_attempts"] !== void 0 && (typeof retry["max_attempts"] !== "number" || !Number.isInteger(retry["max_attempts"]) || retry["max_attempts"] < 1)) rejects.push(`defaults.retry.max_attempts must be an integer \u2265 1 (got ${JSON.stringify(retry["max_attempts"])})`);
-    if (retry["backoff"] !== void 0 && !["immediate", "linear", "exponential"].includes(String(retry["backoff"]))) rejects.push(`defaults.retry.backoff must be "immediate"|"linear"|"exponential" (got ${JSON.stringify(retry["backoff"])})`);
-  }
-  if (object(value["resume"])) {
-    rejects.push(...rejectUnknown(value["resume"], /* @__PURE__ */ new Set(["enabled"]), "defaults.resume"));
-    if (value["resume"]["enabled"] !== void 0 && typeof value["resume"]["enabled"] !== "boolean") rejects.push(`defaults.resume.enabled must be a boolean (got ${JSON.stringify(value["resume"]["enabled"])})`);
-  }
-  for (const key of ["heartbeat_timeout_ms", "capability_manifest_ttl_s"]) {
-    const number = value[key];
-    if (number !== void 0 && (typeof number !== "number" || number <= 0 || key === "heartbeat_timeout_ms" && !Number.isInteger(number))) rejects.push(`defaults.${key} must be a positive ${key === "heartbeat_timeout_ms" ? "integer" : "number"} (got ${JSON.stringify(number)})`);
-  }
-  if (value["allowed_tools"] !== void 0 && !Array.isArray(value["allowed_tools"])) rejects.push("defaults.allowed_tools must be an array of strings");
-  if (value["lean_lead"] !== void 0 && !object(value["lean_lead"])) {
-    rejects.push(`defaults.lean_lead must be an object { enabled?, hands_on_edit_threshold? } (got ${JSON.stringify(value["lean_lead"])})`);
-  } else if (object(value["lean_lead"])) {
-    const leanLead = value["lean_lead"];
-    rejects.push(...rejectUnknown(leanLead, /* @__PURE__ */ new Set(["enabled", "hands_on_edit_threshold"]), "defaults.lean_lead"));
-    if (leanLead["enabled"] !== void 0 && typeof leanLead["enabled"] !== "boolean") {
-      rejects.push(`defaults.lean_lead.enabled must be a boolean (got ${JSON.stringify(leanLead["enabled"])})`);
-    }
-    const threshold = leanLead["hands_on_edit_threshold"];
-    if (threshold !== void 0 && (typeof threshold !== "number" || !Number.isInteger(threshold) || threshold < 1)) {
-      rejects.push(`defaults.lean_lead.hands_on_edit_threshold must be a positive integer (got ${JSON.stringify(threshold)})`);
-    }
-  }
-  if (value["lifecycle_gate"] !== void 0 && !object(value["lifecycle_gate"])) {
-    rejects.push(`defaults.lifecycle_gate must be an object { enabled?, adhoc_activity_threshold? } (got ${JSON.stringify(value["lifecycle_gate"])})`);
-  } else if (object(value["lifecycle_gate"])) {
-    const lifecycleGate = value["lifecycle_gate"];
-    rejects.push(...rejectUnknown(lifecycleGate, /* @__PURE__ */ new Set(["enabled", "adhoc_activity_threshold"]), "defaults.lifecycle_gate"));
-    if (lifecycleGate["enabled"] !== void 0 && typeof lifecycleGate["enabled"] !== "boolean") {
-      rejects.push(`defaults.lifecycle_gate.enabled must be a boolean (got ${JSON.stringify(lifecycleGate["enabled"])})`);
-    }
-    const threshold = lifecycleGate["adhoc_activity_threshold"];
-    if (threshold !== void 0 && (typeof threshold !== "number" || !Number.isInteger(threshold) || threshold < 1)) {
-      rejects.push(`defaults.lifecycle_gate.adhoc_activity_threshold must be a positive integer (got ${JSON.stringify(threshold)})`);
-    }
-  }
-  if (value["dispatch"] !== void 0 && !object(value["dispatch"])) {
-    rejects.push(`defaults.dispatch must be an object { block_unmarked_lanes? } (got ${JSON.stringify(value["dispatch"])})`);
-  } else if (object(value["dispatch"])) {
-    const dispatch = value["dispatch"];
-    rejects.push(...rejectUnknown(dispatch, /* @__PURE__ */ new Set(["block_unmarked_lanes"]), "defaults.dispatch"));
-    if (dispatch["block_unmarked_lanes"] !== void 0 && typeof dispatch["block_unmarked_lanes"] !== "boolean") {
-      rejects.push(`defaults.dispatch.block_unmarked_lanes must be a boolean (got ${JSON.stringify(dispatch["block_unmarked_lanes"])})`);
-    }
-  }
-  if (object(value["update"])) {
-    const update = value["update"];
-    rejects.push(...rejectUnknown(update, /* @__PURE__ */ new Set(["mode", "cadence_hours"]), "defaults.update"));
-    if (update["mode"] !== void 0 && !["auto", "notify", "off"].includes(String(update["mode"]))) rejects.push(`defaults.update.mode must be "auto" | "notify" | "off" (got ${JSON.stringify(update["mode"])})`);
-    if (update["cadence_hours"] !== void 0 && (typeof update["cadence_hours"] !== "number" || update["cadence_hours"] <= 0)) rejects.push(`defaults.update.cadence_hours must be a positive number of hours (got ${JSON.stringify(update["cadence_hours"])})`);
-  } else if (value["update"] !== void 0) {
-    rejects.push(`defaults.update must be an object { mode, cadence_hours } (got ${JSON.stringify(value["update"])})`);
-  }
-  if (object(value["index"])) {
-    const index = value["index"];
-    rejects.push(...rejectUnknown(index, INDEX_KEYS, "defaults.index"));
-    if (index["enabled"] !== void 0 && typeof index["enabled"] !== "boolean") rejects.push(`defaults.index.enabled must be a boolean (got ${JSON.stringify(index["enabled"])})`);
-    for (const key of ["kg_node_threshold", "links_edge_threshold", "runs_threshold", "wiki_file_threshold"]) {
-      const number = index[key];
-      if (number !== void 0 && (typeof number !== "number" || !Number.isInteger(number) || number < 1)) rejects.push(`defaults.index.${key} must be a positive integer (got ${JSON.stringify(number)})`);
-    }
-    const size = index["kg_size_threshold_mb"];
-    if (size !== void 0 && (typeof size !== "number" || size <= 0)) rejects.push(`defaults.index.kg_size_threshold_mb must be a positive number (got ${JSON.stringify(size)})`);
-  }
-  return rejects;
-}
-var MODEL_KEYS, SECURITY_KEYS, SECRETS_KEYS, MCP_KEYS, DEFAULT_KEYS, INDEX_KEYS;
-var init_config_validation = __esm({
-  "src/domains/config/config-validation.ts"() {
-    init_adapters();
-    MODEL_KEYS = /* @__PURE__ */ new Set([
-      "enabled",
-      "tiers",
-      "scoreWeights",
-      "thresholds",
-      "advisorRounds",
-      "escalationMarkers",
-      "recallBeforeRead",
-      "recallScoreThreshold",
-      "structuredOutputRequired",
-      "cacheTTL",
-      "importanceGate",
-      "compositeRecall",
-      "importanceAtIngest",
-      "ingestSimilarityGate",
-      "shortOutputThreshold",
-      "knowledge"
-    ]);
-    SECURITY_KEYS = /* @__PURE__ */ new Set(["bypass_permissions_policy"]);
-    SECRETS_KEYS = /* @__PURE__ */ new Set([
-      "env_allowlist",
-      "redaction_patterns",
-      "fail_mode_durable",
-      "fail_mode_telemetry"
-    ]);
-    MCP_KEYS = /* @__PURE__ */ new Set([
-      "tool_description_hashes",
-      "stdio_available",
-      "http_available",
-      "bridge_package"
-    ]);
-    DEFAULT_KEYS = /* @__PURE__ */ new Set([
-      "auto_learn",
-      "adversarial",
-      "team",
-      "review_workflow",
-      "skill_policy",
-      "gates",
-      "wiki",
-      "quality",
-      "reporting",
-      "index",
-      "cross_host",
-      "retry",
-      "resume",
-      "heartbeat_timeout_ms",
-      "capability_manifest_ttl_s",
-      "update",
-      "allowed_tools",
-      "lean_lead",
-      "lifecycle_gate",
-      "dispatch"
-    ]);
-    INDEX_KEYS = /* @__PURE__ */ new Set([
-      "enabled",
-      "kg_node_threshold",
-      "kg_size_threshold_mb",
-      "links_edge_threshold",
-      "runs_threshold",
-      "wiki_file_threshold"
-    ]);
-  }
-});
-
-// src/domains/config/tier-model.ts
-function normalizeTierValue(v) {
-  if (typeof v === "string") {
-    const t = v.trim();
-    return t ? { model: t } : { model: null };
-  }
-  if (typeof v === "object" && v !== null && !Array.isArray(v)) {
-    const o = v;
-    if (typeof o["model"] === "string" && o["model"].trim()) {
-      const out = { model: o["model"].trim() };
-      if (typeof o["effort"] === "string") out.effort = o["effort"];
-      if (typeof o["reasoning"] === "string") out.reasoning = o["reasoning"];
-      if (typeof o["thinking"] === "string") out.thinking = o["thinking"];
-      if (typeof o["verbosity"] === "string") out.verbosity = o["verbosity"];
-      return out;
-    }
-  }
-  return { model: null };
-}
-function resolveTierModel(tiers, tier, host) {
-  if (typeof tiers !== "object" || tiers === null || Array.isArray(tiers)) {
-    return { model: null };
-  }
-  const entry = tiers[tier];
-  if (entry === null || entry === void 0) return { model: null };
-  if (typeof entry === "string") return normalizeTierValue(entry);
-  if (typeof entry !== "object" || Array.isArray(entry)) return { model: null };
-  const hostMap = entry;
-  const canonical = normalizeHostId(host);
-  if (canonical && canonical in hostMap) return normalizeTierValue(hostMap[canonical]);
-  return normalizeTierValue(hostMap[host]);
-}
-var init_tier_model = __esm({
-  "src/domains/config/tier-model.ts"() {
-    init_adapters();
-  }
-});
-
-// src/domains/config/catalog-cache.ts
-function modelCatalogCacheDir(workspaceRoot) {
-  return modelCatalogCacheHome(workspaceRoot);
-}
-function legacyModelCatalogCacheDir(workspaceRoot) {
-  return path33.join(workspaceRoot, ...MODEL_CATALOG_CACHE_REL_SEGMENTS);
-}
-function isModelCatalogCachePath(rel2) {
-  const norm = rel2.split(path33.sep).join("/");
-  return norm === MODEL_CATALOG_CACHE_REL || norm.startsWith(`${MODEL_CATALOG_CACHE_REL}/`);
-}
-function needsQuote(value) {
-  if (value.length === 0) return true;
-  if (YAML_KEYWORD.test(value) || YAML_NUMBER.test(value) || YAML_SEXAGESIMAL.test(value)) return true;
-  if (/^[\s\-?:,[\]{}#&*!|>'"%@`]/.test(value)) return true;
-  if (/\s$/.test(value)) return true;
-  if (value.includes(": ") || value.endsWith(":")) return true;
-  if (value.includes(" #")) return true;
-  if (/[\n\t\x00-\x1f\x7f-\x9f\u00a0\u2028\u2029]/.test(value)) return true;
-  return false;
-}
-function yamlScalar(value) {
-  if (!needsQuote(value)) return value;
-  return `'${value.replace(/'/g, "''")}'`;
-}
-function canonicalYamlFlat(map) {
-  const keys = Object.keys(map).sort();
-  return keys.map((k) => `${k}: ${yamlScalar(map[k])}
-`).join("");
-}
-function sha256Hex2(text) {
-  return crypto6.createHash("sha256").update(text, "utf8").digest("hex");
-}
-function runScopeFor(input) {
-  if (orgIsUnknown(input.org_fingerprint ?? void 0)) return input.run_id;
-  return "shared";
-}
-function orgIsUnknown(org) {
-  return org == null || org === "" || org === "unknown";
-}
-function isReusableCacheKey(key) {
-  return MINTED_KEYS.has(key) && key.kind === "reusable";
-}
-function isRunLocalCacheKey(key) {
-  return MINTED_KEYS.has(key) && key.kind === "run_local";
-}
-function assertMintedKey(key) {
-  if (key == null || typeof key !== "object" || !MINTED_KEYS.has(key)) {
-    throw new Error(
-      "catalog-cache: not a minted CatalogCacheKey \u2014 keys are constructed ONLY by createCacheKey (T4-R2-002); raw strings, structural clones, and casts are rejected"
-    );
-  }
-}
-function snapshotIdentity(identity) {
-  const snap = {};
-  for (const component of CACHE_KEY_COMPONENTS) {
-    if (component === "run_scope") continue;
-    const desc = Object.getOwnPropertyDescriptor(identity, component);
-    if (desc !== void 0 && (desc.get !== void 0 || desc.set !== void 0)) {
-      throw new UnknownOrgQuarantineViolation(
-        `identity component ${JSON.stringify(component)} is accessor-backed \u2014 a cache identity must be plain data so classification and hashing cannot observe different values`
-      );
-    }
-    const value = identity[component];
-    if (value == null || value === "") {
-      snap[component] = "unknown";
-      continue;
-    }
-    if (typeof value !== "string") {
-      throw new UnknownOrgQuarantineViolation(
-        `identity component ${JSON.stringify(component)} must be a plain string`
-      );
-    }
-    snap[component] = value;
-  }
-  return Object.freeze(snap);
-}
-function hashKeyTuple(snapshot, runScope) {
-  const hashed = { v: MODEL_CATALOG_SCHEMA_VERSION };
-  for (const component of CACHE_KEY_COMPONENTS) {
-    hashed[component] = component === "run_scope" ? runScope : snapshot[component];
-  }
-  return sha256Hex2(canonicalYamlFlat(hashed));
-}
-function createCacheKey(identity, runId) {
-  for (const smuggled of NON_IDENTITY_KEYS) {
-    const value = identity[smuggled];
-    if (value != null && value !== "") {
-      throw new UnknownOrgQuarantineViolation(
-        `${JSON.stringify(smuggled)} is not an identity component \u2014 run_scope is derived internally (literal \`shared\` for a known org; the run id under quarantine) and can never be caller-supplied`
-      );
-    }
-  }
-  const snapshot = snapshotIdentity(identity);
-  if (snapshot.org_fingerprint === "unknown") {
-    if (runId == null || runId === "") {
-      throw new UnknownOrgQuarantineViolation("an unknown-org identity requires a non-empty run_id");
-    }
-    const key2 = Object.freeze({
-      kind: "run_local",
-      hash: hashKeyTuple(snapshot, runId),
-      run_scope: runId,
-      [CATALOG_CACHE_KEY_BRAND]: true
-    });
-    MINTED_KEYS.add(key2);
-    return key2;
-  }
-  const key = Object.freeze({
-    kind: "reusable",
-    hash: hashKeyTuple(snapshot, "shared"),
-    run_scope: "shared",
-    [CATALOG_CACHE_KEY_BRAND]: true
-  });
-  MINTED_KEYS.add(key);
-  return key;
-}
-function createStore(rootDir, opts) {
-  return rootDir ? new FileStore(rootDir, opts) : new MemoryStore();
-}
-function stampScope(key, snapshot) {
-  const meta2 = snapshot.cache_meta;
-  return { ...snapshot, cache_meta: { ...meta2 ?? {}, run_scope: key.run_scope } };
-}
-function publishSnapshot(store, key, snapshot) {
-  assertMintedKey(key);
-  return store.casPublish(key.hash, stampScope(key, snapshot));
-}
-function readSnapshot(store, key) {
-  assertMintedKey(key);
-  return store.read(key.hash);
-}
-function nextGeneration(store, key) {
-  assertMintedKey(key);
-  const current = store.read(key.hash);
-  return (current?.generation ?? 0) + 1;
-}
-function singleflight(store, key, discoverers) {
-  assertMintedKey(key);
-  if (discoverers.length === 0) return [];
-  const existing = store.read(key.hash);
-  if (existing) return discoverers.map(() => existing);
-  if (!store.tryLock(key.hash)) {
-    const degraded = degradedRead(store, key.hash);
-    return discoverers.map(() => degraded);
-  }
-  try {
-    const recheck = store.read(key.hash);
-    if (recheck) return discoverers.map(() => recheck);
-    const discovered = discoverers[0]();
-    store.casPublish(key.hash, stampScope(key, discovered));
-    const shared = store.read(key.hash) ?? discovered;
-    return discoverers.map(() => shared);
-  } finally {
-    store.unlock(key.hash);
-  }
-}
-async function singleflightDiscover(store, key, discover, opts = {}) {
-  assertMintedKey(key);
-  const hash = key.hash;
-  const lockWaitMs = opts.lockWaitMs ?? UNCACHED_DISCOVERY_BUDGET_MS;
-  const pollIntervalMs = opts.pollIntervalMs ?? 25;
-  const isFresh = opts.isFresh ?? (() => true);
-  const now = opts.now ?? Date.now;
-  const sleep = opts.sleep ?? defaultSleep;
-  const fresh = () => {
-    const snap = store.read(hash);
-    return snap && isFresh(snap) ? snap : null;
-  };
-  const cached = fresh();
-  if (cached) return { snapshot: cached, role: "cached", discovery_ran: false };
-  const deadline = now() + lockWaitMs;
-  let locked = store.tryLock(hash);
-  while (!locked) {
-    const published = fresh();
-    if (published) return { snapshot: published, role: "coalesced", discovery_ran: false };
-    if (now() >= deadline) return { snapshot: degradedRead(store, hash), role: "degraded", discovery_ran: false };
-    await sleep(pollIntervalMs);
-    locked = store.tryLock(hash);
-  }
-  try {
-    const published = fresh();
-    if (published) return { snapshot: published, role: "coalesced", discovery_ran: false };
-    const discovered = await discover();
-    const current = store.read(hash);
-    const snapshot = stampScope(key, {
-      ...discovered,
-      generation: (current?.generation ?? 0) + 1
-    });
-    store.casPublish(hash, snapshot);
-    const shared = store.read(hash) ?? snapshot;
-    return { snapshot: shared, role: "winner", discovery_ran: true };
-  } finally {
-    store.unlock(hash);
-  }
-}
-function degradedRead(store, hash) {
-  const cached = store.read(hash);
-  if (cached) return { ...cached, degraded: true, probe_issued: false };
-  return { degraded: true, probe_issued: false, evidence_state: "unknown" };
-}
-function readUnderLockTimeout(store, key) {
-  assertMintedKey(key);
-  return degradedRead(store, key.hash);
-}
-function isSnapshotStale(snapshot, nowIso) {
-  const at = snapshot.discovery?.discovered_at;
-  if (!at) return true;
-  const discoveredMs = Date.parse(at);
-  const nowMs = Date.parse(nowIso);
-  if (!Number.isFinite(discoveredMs) || !Number.isFinite(nowMs)) return true;
-  const ttl = (snapshot.discovery?.ttl_seconds ?? DEFAULT_CATALOG_TTL_SECONDS) * 1e3;
-  return nowMs - discoveredMs > ttl;
-}
-function invalidateKey(store, key) {
-  assertMintedKey(key);
-  store.remove(key.hash);
-}
-function purgeRunLocalEntries(store, runId) {
-  let purged = 0;
-  for (const key of store.listKeys()) {
-    const snap = store.read(key);
-    const scope = snap?.cache_meta?.run_scope;
-    if (scope === runId) {
-      store.remove(key);
-      purged += 1;
-    }
-  }
-  return purged;
-}
-var crypto6, fs27, path33, MODEL_CATALOG_SCHEMA_VERSION, DEFAULT_CATALOG_TTL_SECONDS, UNCACHED_DISCOVERY_BUDGET_MS, CACHED_INSPECTION_BUDGET_MS, MODEL_CATALOG_CACHE_DIRNAME, MODEL_CATALOG_CACHE_REL_SEGMENTS, MODEL_CATALOG_CACHE_REL, YAML_KEYWORD, YAML_NUMBER, YAML_SEXAGESIMAL, CACHE_KEY_COMPONENTS, UnknownOrgQuarantineViolation, CATALOG_CACHE_KEY_BRAND, MINTED_KEYS, NON_IDENTITY_KEYS, MemoryStore, tmpSequence, SAFE_KEY, FileStore, defaultSleep;
-var init_catalog_cache = __esm({
-  "src/domains/config/catalog-cache.ts"() {
-    crypto6 = __toESM(require("crypto"));
-    fs27 = __toESM(require("fs"));
-    path33 = __toESM(require("path"));
-    init_state();
-    MODEL_CATALOG_SCHEMA_VERSION = "guild.model_catalog.v1";
-    DEFAULT_CATALOG_TTL_SECONDS = 600;
-    UNCACHED_DISCOVERY_BUDGET_MS = 3e3;
-    CACHED_INSPECTION_BUDGET_MS = 500;
-    MODEL_CATALOG_CACHE_DIRNAME = "model-catalog";
-    MODEL_CATALOG_CACHE_REL_SEGMENTS = Object.freeze([".guild", "indexes", MODEL_CATALOG_CACHE_DIRNAME]);
-    MODEL_CATALOG_CACHE_REL = MODEL_CATALOG_CACHE_REL_SEGMENTS.join("/");
-    YAML_KEYWORD = /^(?:null|Null|NULL|~|true|True|TRUE|false|False|FALSE|yes|Yes|YES|no|No|NO|on|On|ON|off|Off|OFF)$/;
-    YAML_NUMBER = /^[-+]?(?:0b[0-1_]+|0o[0-7_]+|0x[0-9a-fA-F_]+|[0-9][0-9_]*(?:\.[0-9_]*)?(?:[eE][-+]?[0-9]+)?|\.[0-9_]+(?:[eE][-+]?[0-9]+)?|\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))$/;
-    YAML_SEXAGESIMAL = /^[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+(?:\.[0-9_]*)?$/;
-    CACHE_KEY_COMPONENTS = Object.freeze([
-      "target_id",
-      "family",
-      "surface",
-      "provider_kind",
-      "auth_mode",
-      "account_fingerprint",
-      "endpoint_fingerprint",
-      "org_fingerprint",
-      "tool_version",
-      "adapter_id",
-      "adapter_version",
-      "run_scope"
-    ]);
-    UnknownOrgQuarantineViolation = class extends Error {
-      constructor(detail) {
-        super(
-          `catalog-cache: unknown-org quarantine (\xA77) \u2014 ${detail}. An unknown org_fingerprint must never participate in a reusable cache identity; supply run_id so the key is run-local.`
-        );
-        this.name = "UnknownOrgQuarantineViolation";
-      }
-    };
-    CATALOG_CACHE_KEY_BRAND = /* @__PURE__ */ Symbol("guild.catalog-cache.key");
-    MINTED_KEYS = /* @__PURE__ */ new WeakSet();
-    NON_IDENTITY_KEYS = ["run_scope", "run_id", "v"];
-    MemoryStore = class {
-      kind = "memory";
-      entries = /* @__PURE__ */ new Map();
-      locked = /* @__PURE__ */ new Set();
-      read(key) {
-        return this.entries.get(key) ?? null;
-      }
-      casPublish(key, snapshot) {
-        if (typeof snapshot?.generation !== "number" || !Number.isFinite(snapshot.generation)) {
-          return { published: false, reason: "invalid_snapshot" };
-        }
-        const current = this.entries.get(key);
-        if (current && current.generation >= snapshot.generation) {
-          return { published: false, reason: "stale_writer" };
-        }
-        this.entries.set(key, snapshot);
-        return { published: true };
-      }
-      remove(key) {
-        this.entries.delete(key);
-      }
-      listKeys() {
-        return [...this.entries.keys()];
-      }
-      tryLock(key) {
-        if (this.locked.has(key)) return false;
-        this.locked.add(key);
-        return true;
-      }
-      unlock(key) {
-        this.locked.delete(key);
-      }
-    };
-    tmpSequence = 0;
-    SAFE_KEY = /^[A-Za-z0-9._-]+$/;
-    FileStore = class {
-      constructor(rootDir, opts = {}) {
-        this.rootDir = rootDir;
-        this.lockStealAgeMs = opts.lockStealAgeMs ?? 3e4;
-        this.now = opts.now ?? Date.now;
-        fs27.mkdirSync(rootDir, { recursive: true });
-      }
-      rootDir;
-      kind = "file";
-      lockStealAgeMs;
-      now;
-      /** Keys whose cross-process lock THIS instance currently holds. */
-      held = /* @__PURE__ */ new Set();
-      entryPath(key) {
-        if (!SAFE_KEY.test(key)) throw new Error(`catalog-cache: unsafe cache key ${JSON.stringify(key)}`);
-        return path33.join(this.rootDir, `${key}.json`);
-      }
-      lockPath(key) {
-        return `${this.entryPath(key)}.lock`;
-      }
-      tryLock(key) {
-        if (this.held.has(key)) return false;
-        const lock = this.lockPath(key);
-        try {
-          fs27.mkdirSync(lock);
-          this.held.add(key);
-          return true;
-        } catch {
-          try {
-            const age = this.now() - fs27.statSync(lock).mtimeMs;
-            if (age > this.lockStealAgeMs) {
-              fs27.rmdirSync(lock);
-              fs27.mkdirSync(lock);
-              this.held.add(key);
-              return true;
-            }
-          } catch {
-            try {
-              fs27.mkdirSync(lock);
-              this.held.add(key);
-              return true;
-            } catch {
-              return false;
-            }
-          }
-          return false;
-        }
-      }
-      unlock(key) {
-        if (!this.held.has(key)) return;
-        this.held.delete(key);
-        try {
-          fs27.rmdirSync(this.lockPath(key));
-        } catch {
-        }
-      }
-      read(key) {
-        try {
-          const raw = fs27.readFileSync(this.entryPath(key), "utf8");
-          const parsed = JSON.parse(raw);
-          if (typeof parsed?.generation !== "number") return null;
-          return parsed;
-        } catch {
-          return null;
-        }
-      }
-      casPublish(key, snapshot) {
-        if (typeof snapshot?.generation !== "number" || !Number.isFinite(snapshot.generation)) {
-          return { published: false, reason: "invalid_snapshot" };
-        }
-        const alreadyHeld = this.held.has(key);
-        if (!alreadyHeld && !this.tryLock(key)) return { published: false, reason: "lock_timeout" };
-        try {
-          const current = this.read(key);
-          if (current && current.generation >= snapshot.generation) {
-            return { published: false, reason: "stale_writer" };
-          }
-          tmpSequence += 1;
-          const tmp = path33.join(this.rootDir, `.tmp-${process.pid}-${tmpSequence}-${key}`);
-          fs27.writeFileSync(tmp, `${JSON.stringify(snapshot, null, 2)}
-`, "utf8");
-          fs27.renameSync(tmp, this.entryPath(key));
-          return { published: true };
-        } finally {
-          if (!alreadyHeld) this.unlock(key);
-        }
-      }
-      remove(key) {
-        try {
-          fs27.rmSync(this.entryPath(key), { force: true });
-        } catch {
-        }
-      }
-      listKeys() {
-        try {
-          return fs27.readdirSync(this.rootDir).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -".json".length));
-        } catch {
-          return [];
-        }
-      }
-    };
-    defaultSleep = (ms) => new Promise((resolve33) => setTimeout(resolve33, ms));
-  }
-});
-
-// src/domains/config/compatibility-usage.ts
-function isCanonicalRelPath(v) {
-  if (v.length === 0 || v.length > MAX_SCALAR_LEN) return false;
-  if (CONTROL_CHARS2.test(v)) return false;
-  if (v.includes("\\")) return false;
-  if (v.startsWith("/")) return false;
-  if (v.includes("//")) return false;
-  const segs = v.split("/");
-  return segs.every((seg) => seg !== "" && seg !== "." && seg !== "..");
-}
-function isBoundedStr(v) {
-  return typeof v === "string" && v.length > 0 && v.length <= MAX_SCALAR_LEN && !CONTROL_CHARS2.test(v);
-}
-function isCanonicalId(v) {
-  return isBoundedStr(v) && SLUG.test(v);
-}
-function readOptions(value, allowedKeys) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-  if (import_util.types.isProxy(value)) return null;
-  const proto = Object.getPrototypeOf(value);
-  if (proto !== Object.prototype && proto !== null) return null;
-  if (Object.getOwnPropertySymbols(value).length > 0) return null;
-  const out = /* @__PURE__ */ Object.create(null);
-  for (const key of Object.getOwnPropertyNames(value)) {
-    if (!allowedKeys.includes(key)) return null;
-    const desc = Object.getOwnPropertyDescriptor(value, key);
-    if (!desc || !("value" in desc)) return null;
-    out[key] = desc.value;
-  }
-  return out;
-}
-function readArray2(value) {
-  if (!Array.isArray(value) || import_util.types.isProxy(value)) return null;
-  const lenDesc = Object.getOwnPropertyDescriptor(value, "length");
-  if (!lenDesc || !("value" in lenDesc) || !isCount(lenDesc.value)) return null;
-  const out = [];
-  for (let i = 0; i < lenDesc.value; i++) {
-    const d = Object.getOwnPropertyDescriptor(value, i);
-    if (!d || !("value" in d)) return null;
-    out.push(d.value);
-  }
-  return out;
-}
-function isCount(v) {
-  return typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
-}
-function isPlainDataObject(v) {
-  if (v === null || typeof v !== "object" || Array.isArray(v)) return false;
-  if (import_util.types.isProxy(v)) return false;
-  const proto = Object.getPrototypeOf(v);
-  return proto === Object.prototype || proto === null;
-}
-function ownDataProp(o, key) {
-  const desc = Object.getOwnPropertyDescriptor(o, key);
-  if (!desc) return { kind: "absent" };
-  if (!("value" in desc)) return { kind: "accessor" };
-  return { kind: "data", value: desc.value };
-}
-function ownValue(o, key) {
-  const p = ownDataProp(o, key);
-  return p.kind === "data" ? p.value : void 0;
-}
-function parseCompatibilityUsageV1(value) {
-  try {
-    if (!isPlainDataObject(value)) return null;
-    if (Object.getOwnPropertySymbols(value).length > 0) return null;
-    for (const key of Object.getOwnPropertyNames(value)) {
-      if (!COMPATIBILITY_USAGE_KEYS.includes(key)) return null;
-    }
-    if (ownValue(value, "schema_version") !== COMPATIBILITY_USAGE_SCHEMA) return null;
-    const assetKind = ownValue(value, "asset_kind");
-    if (typeof assetKind !== "string" || !ASSET_KIND_SET.has(assetKind)) return null;
-    const assetId = ownValue(value, "asset_id");
-    if (!isCanonicalId(assetId)) return null;
-    const assetPath = ownValue(value, "asset_path");
-    if (!isBoundedStr(assetPath) || !isCanonicalRelPath(assetPath)) return null;
-    const contentHash = ownValue(value, "content_hash");
-    if (!isNonEmptyStr(contentHash) || !SHA256_HEX.test(contentHash)) return null;
-    const reason = ownValue(value, "reason");
-    if (typeof reason !== "string" || !READ_REASON_SET.has(reason)) return null;
-    const resolverMode = ownValue(value, "resolver_mode");
-    if (typeof resolverMode !== "string" || !RESOLVER_MODE_SET.has(resolverMode)) return null;
-    const synthetic = ownValue(value, "synthetic");
-    if (typeof synthetic !== "boolean") return null;
-    const specialistIdRaw = ownValue(value, "specialist_id");
-    let specialistId;
-    if (specialistIdRaw === null) specialistId = null;
-    else if (isCanonicalId(specialistIdRaw)) specialistId = specialistIdRaw;
-    else return null;
-    return Object.freeze({
-      schema_version: COMPATIBILITY_USAGE_SCHEMA,
-      asset_kind: assetKind,
-      asset_id: assetId,
-      asset_path: assetPath,
-      content_hash: contentHash,
-      reason,
-      resolver_mode: resolverMode,
-      synthetic,
-      specialist_id: specialistId
-    });
-  } catch {
-    return null;
-  }
-}
-function isCompatibilityUsageV1(value) {
-  return parseCompatibilityUsageV1(value) !== null;
-}
-function isDependenceRead(record) {
-  if (record.synthetic) return false;
-  return !BENIGN_REASON_SET.has(record.reason);
-}
-function unusableRollup(reason) {
-  return Object.freeze({
-    window_start_release: "",
-    window_end_release: "",
-    by_asset: Object.freeze({}),
-    // NaN, deliberately: an unusable rollup must never read as "zero dependence".
-    // evaluateG5 rejects a non-count and blocks, so this cannot become a false clean.
-    total_dependence_reads: Number.NaN,
-    observed_asset_ids: Object.freeze([]),
-    removable: Object.freeze([]),
-    unreadable: Number.NaN,
-    unusable_reason: reason
-  });
-}
-function rollupCompatibilityUsage(input) {
-  const opts = readOptions(input, ROLLUP_INPUT_KEYS);
-  if (opts === null) return unusableRollup("options object rejected (proxy/accessor/unknown key)");
-  const startRelease = opts["window_start_release"];
-  const endRelease = opts["window_end_release"];
-  if (!isBoundedStr(startRelease) || !isBoundedStr(endRelease)) {
-    return unusableRollup("window release identifiers must be bounded plain strings");
-  }
-  const unreadable = opts["unreadable"];
-  if (!isCount(unreadable)) return unusableRollup("unreadable must be a non-negative safe integer");
-  const knownIds = readArray2(opts["known_asset_ids"]);
-  if (knownIds === null) return unusableRollup("known_asset_ids must be a dense plain array");
-  const seenKnown = /* @__PURE__ */ new Set();
-  for (const id of knownIds) {
-    if (!isCanonicalId(id)) return unusableRollup(`known_asset_ids entry is not a canonical id: ${String(id)}`);
-    if (seenKnown.has(id)) return unusableRollup(`known_asset_ids contains duplicate id: ${id}`);
-    seenKnown.add(id);
-  }
-  const records = readArray2(opts["records"]);
-  if (records === null) return unusableRollup("records must be a dense plain array");
-  const byAsset = {};
-  for (const id of seenKnown) byAsset[id] = 0;
-  const observed = /* @__PURE__ */ new Set();
-  let total = 0;
-  for (const raw of records) {
-    const record = parseCompatibilityUsageV1(raw);
-    if (record === null) return unusableRollup("records contains an entry that is not a valid guild.compatibility_usage.v1");
-    observed.add(record.asset_id);
-    if (!isDependenceRead(record)) continue;
-    byAsset[record.asset_id] = (byAsset[record.asset_id] ?? 0) + 1;
-    total += 1;
-  }
-  const removable = [...seenKnown].filter((id) => (byAsset[id] ?? 0) === 0).sort();
-  return Object.freeze({
-    window_start_release: startRelease,
-    window_end_release: endRelease,
-    by_asset: Object.freeze(byAsset),
-    total_dependence_reads: total,
-    observed_asset_ids: Object.freeze([...observed].sort()),
-    removable: Object.freeze(removable),
-    unreadable
-  });
-}
-function evaluateG5(input) {
-  const blockers = [];
-  const blocked = (reason) => Object.freeze({ passed: false, blockers: Object.freeze([reason]), removable: Object.freeze([]) });
-  const opts = readOptions(input, G5_INPUT_KEYS);
-  if (opts === null) return blocked("G5 input rejected (proxy/accessor/unknown key)");
-  const requiredRaw = readArray2(opts["required_asset_ids"]);
-  if (requiredRaw === null) return blocked("required_asset_ids must be a dense plain array");
-  const required = [];
-  const seenRequired = /* @__PURE__ */ new Set();
-  for (const id of requiredRaw) {
-    if (!isCanonicalId(id)) return blocked(`required_asset_ids entry is not a canonical id: ${String(id)}`);
-    if (seenRequired.has(id)) return blocked(`required_asset_ids contains duplicate id: ${id}`);
-    seenRequired.add(id);
-    required.push(id);
-  }
-  if (required.length === 0) {
-    blockers.push("empty required_asset_ids \u2014 a removal gate over zero assets cannot pass");
-  }
-  const rollupsRaw = readArray2(opts["rollups"]);
-  if (rollupsRaw === null) return blocked("rollups must be a dense plain array");
-  const snapshots = [];
-  for (const raw of rollupsRaw) {
-    const r = readOptions(raw, ROLLUP_KEYS);
-    if (r === null) return blocked("a rollup was rejected (proxy/accessor/unknown key)");
-    const start = r["window_start_release"];
-    const end = r["window_end_release"];
-    if (typeof start !== "string" || typeof end !== "string") {
-      return blocked("a rollup carries a non-string release identifier");
-    }
-    const byAssetRaw = r["by_asset"];
-    const byAsset = readOptionsAsCounts(byAssetRaw);
-    snapshots.push({
-      label: `${start}..${end}`,
-      unreadable: r["unreadable"],
-      total: r["total_dependence_reads"],
-      byAsset,
-      observed: readArray2(r["observed_asset_ids"]),
-      unusable: r["unusable_reason"]
-    });
-  }
-  if (snapshots.length < G5_MIN_CLEAN_RELEASES) {
-    blockers.push(
-      `insufficient window: ${snapshots.length} release(s) of evidence, need >= ${G5_MIN_CLEAN_RELEASES}`
-    );
-  }
-  const labels = snapshots.map((s) => s.label);
-  if (new Set(labels).size !== labels.length) {
-    blockers.push("duplicate release windows \u2014 the same evidence submitted twice is one release, not two");
-  }
-  for (const snap of snapshots) {
-    if (typeof snap.unusable === "string") {
-      blockers.push(`release ${snap.label}: rollup is unusable \u2014 ${snap.unusable}`);
-    }
-    if (!isCount(snap.unreadable)) {
-      blockers.push(`release ${snap.label}: unreadable is not a valid count (${String(snap.unreadable)})`);
-    } else if (snap.unreadable > 0) {
-      blockers.push(
-        `release ${snap.label}: ${snap.unreadable} unreadable record(s) \u2014 a partially-readable journal is not evidence of zero usage`
-      );
-    }
-    if (snap.byAsset === null) {
-      blockers.push(`release ${snap.label}: by_asset is not a plain own-data object`);
-    } else {
-      let derived = 0;
-      for (const [assetId, count] of Object.entries(snap.byAsset)) {
-        if (!isCount(count)) {
-          blockers.push(`release ${snap.label}: by_asset[${assetId}] is not a valid count (${String(count)})`);
-          continue;
-        }
-        derived += count;
-      }
-      if (!isCount(snap.total)) {
-        blockers.push(
-          `release ${snap.label}: total_dependence_reads is not a valid count (${String(snap.total)})`
-        );
-      } else if (snap.total !== derived) {
-        blockers.push(
-          `release ${snap.label}: total_dependence_reads ${snap.total} disagrees with by_asset sum ${derived}`
-        );
-      }
-      if (derived > 0) blockers.push(`release ${snap.label}: ${derived} dependence read(s)`);
-    }
-    if (snap.observed === null) {
-      blockers.push(`release ${snap.label}: observed_asset_ids is not a dense plain array`);
-    }
-  }
-  const observed = /* @__PURE__ */ new Set();
-  for (const snap of snapshots) {
-    for (const id of snap.observed ?? []) if (typeof id === "string") observed.add(id);
-  }
-  const uninstrumented = required.filter((id) => !observed.has(id)).sort();
-  if (uninstrumented.length > 0) {
-    blockers.push(
-      `${uninstrumented.length} required asset(s) never instrumented (a false zero): ${uninstrumented.join(", ")}`
-    );
-  }
-  const passed = blockers.length === 0;
-  const removable = passed ? [...required].sort() : [];
-  return Object.freeze({
-    passed,
-    blockers: Object.freeze(blockers),
-    removable: Object.freeze(removable)
-  });
-}
-function readOptionsAsCounts(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-  if (import_util.types.isProxy(value)) return null;
-  const proto = Object.getPrototypeOf(value);
-  if (proto !== Object.prototype && proto !== null) return null;
-  if (Object.getOwnPropertySymbols(value).length > 0) return null;
-  const out = /* @__PURE__ */ Object.create(null);
-  for (const key of Object.getOwnPropertyNames(value)) {
-    const desc = Object.getOwnPropertyDescriptor(value, key);
-    if (!desc || !("value" in desc)) return null;
-    out[key] = desc.value;
-  }
-  return out;
-}
-var import_util, COMPATIBILITY_USAGE_SCHEMA, COMPATIBILITY_USAGE_EVENT_NAME, COMPATIBILITY_USAGE_OUTCOME_TYPE, COMPATIBILITY_USAGE_DISPOSITION, COMPATIBILITY_ASSET_KINDS, COMPATIBILITY_READ_REASONS, BENIGN_COMPATIBILITY_READ_REASONS, DEPENDENCE_COMPATIBILITY_READ_REASONS, BENIGN_REASON_SET, READ_REASON_SET, ASSET_KIND_SET, RESOLVER_MODE_SET, SHA256_HEX, MAX_SCALAR_LEN, CONTROL_CHARS2, SLUG, isNonEmptyStr, COMPATIBILITY_USAGE_KEYS, ROLLUP_INPUT_KEYS, G5_MIN_CLEAN_RELEASES, G5_INPUT_KEYS, ROLLUP_KEYS;
-var init_compatibility_usage = __esm({
-  "src/domains/config/compatibility-usage.ts"() {
-    import_util = require("util");
-    init_config_defaults();
-    COMPATIBILITY_USAGE_SCHEMA = "guild.compatibility_usage.v1";
-    COMPATIBILITY_USAGE_EVENT_NAME = "task.dispatch";
-    COMPATIBILITY_USAGE_OUTCOME_TYPE = "guild.capability_outcome.v1";
-    COMPATIBILITY_USAGE_DISPOSITION = "degraded";
-    COMPATIBILITY_ASSET_KINDS = Object.freeze([
-      "shipped_template",
-      "shipped_domain_skill"
-    ]);
-    COMPATIBILITY_READ_REASONS = Object.freeze([
-      "no_project_definition",
-      "explicit_legacy_mode",
-      "rollback",
-      "mint_source",
-      "shadow_comparison"
-    ]);
-    BENIGN_COMPATIBILITY_READ_REASONS = Object.freeze(["mint_source", "shadow_comparison"]);
-    DEPENDENCE_COMPATIBILITY_READ_REASONS = Object.freeze(
-      COMPATIBILITY_READ_REASONS.filter(
-        (r) => !BENIGN_COMPATIBILITY_READ_REASONS.includes(r)
-      )
-    );
-    BENIGN_REASON_SET = new Set(BENIGN_COMPATIBILITY_READ_REASONS);
-    READ_REASON_SET = new Set(COMPATIBILITY_READ_REASONS);
-    ASSET_KIND_SET = new Set(COMPATIBILITY_ASSET_KINDS);
-    RESOLVER_MODE_SET = new Set(CAPABILITY_RESOLVER_MODES);
-    SHA256_HEX = /^[0-9a-f]{64}$/;
-    MAX_SCALAR_LEN = 512;
-    CONTROL_CHARS2 = /[\u0000-\u001f\u007f]/;
-    SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-    isNonEmptyStr = (v) => typeof v === "string" && v.length > 0;
-    COMPATIBILITY_USAGE_KEYS = [
-      "schema_version",
-      "asset_kind",
-      "asset_id",
-      "asset_path",
-      "content_hash",
-      "reason",
-      "resolver_mode",
-      "synthetic",
-      "specialist_id"
-    ];
-    ROLLUP_INPUT_KEYS = [
-      "window_start_release",
-      "window_end_release",
-      "records",
-      "known_asset_ids",
-      "unreadable"
-    ];
-    G5_MIN_CLEAN_RELEASES = 2;
-    G5_INPUT_KEYS = ["rollups", "required_asset_ids"];
-    ROLLUP_KEYS = [
-      "window_start_release",
-      "window_end_release",
-      "by_asset",
-      "total_dependence_reads",
-      "observed_asset_ids",
-      "removable",
-      "unreadable",
-      "unusable_reason"
-    ];
-  }
-});
-
-// src/domains/config/resolver-mode.ts
-function describe(v) {
-  try {
-    if (typeof v === "bigint") return `${v}n`;
-    if (typeof v === "string") return v.length > 120 ? `"${v.slice(0, 117)}..."` : `"${v}"`;
-    if (typeof v === "symbol") return "Symbol()";
-    if (typeof v === "function") return "[function]";
-    if (v === null) return "null";
-    if (typeof v === "object") return Array.isArray(v) ? "[array]" : "[object]";
-    return String(v);
-  } catch {
-    return "[unprintable]";
-  }
-}
-function isCanonicalId2(v) {
-  return typeof v === "string" && v.length > 0 && v.length <= MAX_ID_LEN && !CONTROL_CHARS3.test(v) && CANONICAL_ID.test(v);
-}
-function isCanonicalRelPath2(v) {
-  if (typeof v !== "string" || v.length === 0 || v.length > MAX_SCALAR_LEN2) return false;
-  if (CONTROL_CHARS3.test(v)) return false;
-  if (v.includes("\\")) return false;
-  if (/^[A-Za-z]:/.test(v)) return false;
-  if (v.startsWith("/")) return false;
-  if (v.endsWith("/")) return false;
-  for (const seg of v.split("/")) {
-    if (seg.length === 0) return false;
-    if (seg === "." || seg === "..") return false;
-    if (/[. ]$/.test(seg)) return false;
-  }
-  return true;
-}
-function readOptions2(value, allowedKeys) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-  if (import_util2.types.isProxy(value)) return null;
-  const proto = Object.getPrototypeOf(value);
-  if (proto !== Object.prototype && proto !== null) return null;
-  if (Object.getOwnPropertySymbols(value).length > 0) return null;
-  const out = /* @__PURE__ */ Object.create(null);
-  for (const key of Object.getOwnPropertyNames(value)) {
-    if (!allowedKeys.includes(key)) return null;
-    const desc = Object.getOwnPropertyDescriptor(value, key);
-    if (!desc || !("value" in desc)) return null;
-    out[key] = desc.value;
-  }
-  return out;
-}
-function resolverModePolicy(mode) {
-  if (typeof mode !== "string") return null;
-  return MODE_POLICIES.get(mode) ?? null;
-}
-function resolverModeRank(mode) {
-  if (typeof mode !== "string") return -1;
-  return MODE_RANK.get(mode) ?? -1;
-}
-function isResolverModeFailure(v) {
-  return typeof v === "string" && RESOLVER_MODE_FAILURE_SET.has(v);
-}
-function isCompatibilityReadReason(value) {
-  return COMPATIBILITY_READ_REASONS.indexOf(value) !== -1;
-}
-function classifyCompatibilityRead(request) {
-  const opts = readOptions2(request, ["mode", "intent"]);
-  if (opts === null) {
-    return {
-      status: "refused",
-      failure: "invalid_request",
-      detail: "classification request rejected (proxy/accessor/symbol/unknown key)"
-    };
-  }
-  const policy = resolverModePolicy(opts["mode"]);
-  if (policy === null) {
-    return {
-      status: "refused",
-      failure: "unknown_mode",
-      detail: `not a resolver mode: ${describe(opts["mode"])}`
-    };
-  }
-  const intent = opts["intent"];
-  if (typeof intent !== "string" || !CAPABILITY_RESOLUTION_INTENTS.includes(intent)) {
-    return {
-      status: "refused",
-      failure: "invalid_request",
-      detail: `not a resolution intent: ${describe(intent)}`
-    };
-  }
-  const typedIntent = intent;
-  if (!policy.compatibility_available) {
-    return {
-      status: "refused",
-      failure: "compatibility_unavailable_in_mode",
-      detail: `mode ${policy.mode} has no compatibility surface`
-    };
-  }
-  if (!policy.compatibility_intents.includes(typedIntent)) {
-    return {
-      status: "refused",
-      failure: "intent_not_permitted_in_mode",
-      detail: `mode ${policy.mode} does not permit a compatibility read for intent ${typedIntent}`
-    };
-  }
-  if (typedIntent === "mint" && !policy.capability_writes_permitted) {
-    return {
-      status: "refused",
-      failure: "write_not_permitted_in_mode",
-      detail: `mode ${policy.mode} does not permit capability writes, so a "mint" read cannot occur`
-    };
-  }
-  let reason = INTENT_REASON.get(typedIntent);
-  if (reason === void 0) {
-    reason = policy.authority === "legacy" ? "explicit_legacy_mode" : "no_project_definition";
-  }
-  if (!isCompatibilityReadReason(reason)) {
-    return {
-      status: "refused",
-      failure: "invalid_request",
-      detail: `classified reason ${describe(reason)} is not a guild.compatibility_usage.v1 reason`
-    };
-  }
-  return Object.freeze({
-    status: "classified",
-    reason,
-    counts_as_dependence: !BENIGN_REASONS.has(reason)
-  });
-}
-function unresolved(failure2, detail, ctx) {
-  return Object.freeze({
-    schema_version: RESOLVER_MODE_OUTCOME_SCHEMA,
-    status: "unresolved",
-    mode: ctx?.mode ?? null,
-    kind: ctx?.kind ?? null,
-    capability_id: ctx?.capability_id ?? null,
-    failure: failure2,
-    detail
-  });
-}
-function resolveCapability(request) {
-  const opts = readOptions2(request, RESOLUTION_REQUEST_KEYS);
-  if (opts === null) {
-    return unresolved(
-      "invalid_request",
-      "resolution request rejected (proxy/accessor/symbol/unknown key)"
-    );
-  }
-  const policy = resolverModePolicy(opts["mode"]);
-  if (policy === null) {
-    return unresolved("unknown_mode", `not a resolver mode: ${describe(opts["mode"])}`);
-  }
-  const mode = policy.mode;
-  const kindRaw = opts["kind"];
-  if (kindRaw !== "agent" && kindRaw !== "skill") {
-    return unresolved("invalid_request", `kind must be "agent" or "skill"`, { mode });
-  }
-  const kind = kindRaw;
-  const capabilityId = opts["capability_id"];
-  if (!isCanonicalId2(capabilityId)) {
-    return unresolved(
-      "invalid_request",
-      `capability_id is not a canonical id: ${describe(capabilityId)}`,
-      { mode, kind }
-    );
-  }
-  const intentRaw = opts["intent"];
-  if (typeof intentRaw !== "string" || !CAPABILITY_RESOLUTION_INTENTS.includes(intentRaw)) {
-    return unresolved("invalid_request", `not a resolution intent: ${describe(intentRaw)}`, {
-      mode,
-      kind,
-      capability_id: capabilityId
-    });
-  }
-  const intent = intentRaw;
-  const projectDefRaw = opts["project_definition"];
-  let projectDef;
-  if (projectDefRaw === null) projectDef = null;
-  else if (isCanonicalRelPath2(projectDefRaw)) projectDef = projectDefRaw;
-  else {
-    return unresolved(
-      "invalid_request",
-      `project_definition is not a canonical relative path: ${describe(projectDefRaw)}`,
-      { mode, kind, capability_id: capabilityId }
-    );
-  }
-  const compatRaw = opts["compatibility_asset"];
-  let compatAsset;
-  if (compatRaw === null) compatAsset = null;
-  else if (isCanonicalRelPath2(compatRaw)) compatAsset = compatRaw;
-  else {
-    return unresolved(
-      "invalid_request",
-      `compatibility_asset is not a canonical relative path: ${describe(compatRaw)}`,
-      { mode, kind, capability_id: capabilityId }
-    );
-  }
-  const ctx = { mode, kind, capability_id: capabilityId };
-  if (intent === "mint" && !policy.capability_writes_permitted) {
-    return unresolved(
-      "write_not_permitted_in_mode",
-      `mode ${mode} does not permit capability writes, so intent "mint" cannot be served`,
-      ctx
-    );
-  }
-  if (policy.project_resolver_runs && projectDef !== null && intent !== "shadow_compare") {
-    return Object.freeze({
-      schema_version: RESOLVER_MODE_OUTCOME_SCHEMA,
-      status: "resolved",
-      mode,
-      kind,
-      capability_id: capabilityId,
-      source: "project",
-      path: projectDef,
-      authority: policy.authority,
-      // In shadow, the project side may not originate a side effect even when it
-      // has the better answer. That is the phase's whole safety property.
-      side_effects_permitted: policy.project_side_effects_permitted,
-      compatibility_read: null
-    });
-  }
-  if (compatAsset === null) {
-    return unresolved(
-      projectDef === null ? "no_definition_anywhere" : "no_project_definition",
-      projectDef === null ? `no project definition and no compatibility asset for ${kind} "${capabilityId}"` : `mode ${mode} did not consult the project definition for intent "${intent}", and no compatibility asset was supplied`,
-      ctx
-    );
-  }
-  const classification = classifyCompatibilityRead({ mode, intent });
-  if (classification.status === "refused") {
-    return unresolved(classification.failure, classification.detail, ctx);
-  }
-  return Object.freeze({
-    schema_version: RESOLVER_MODE_OUTCOME_SCHEMA,
-    status: "resolved",
-    mode,
-    kind,
-    capability_id: capabilityId,
-    source: "compatibility",
-    path: compatAsset,
-    authority: policy.authority,
-    // CODEX #11: derived from authority ALONE, this returned `true` for a
-    // `shadow_compare` read — a comparison-only answer a caller could act on,
-    // which is exactly the side effect shadow mode exists to withhold. A
-    // comparison never authorizes action, in any mode.
-    side_effects_permitted: intent !== "shadow_compare" && policy.authority === "legacy",
-    compatibility_read: Object.freeze({
-      reason: classification.reason,
-      counts_as_dependence: classification.counts_as_dependence
-    })
-  });
-}
-function rejectedTransition(failure2, detail, from, to) {
-  return Object.freeze({
-    schema_version: RESOLVER_MODE_OUTCOME_SCHEMA,
-    status: "rejected",
-    from,
-    to,
-    failure: failure2,
-    detail
-  });
-}
-function planModeTransition(request) {
-  const opts = readOptions2(request, TRANSITION_KEYS);
-  if (opts === null) {
-    return rejectedTransition(
-      "invalid_request",
-      "transition request rejected (proxy/accessor/symbol/unknown key)",
-      null,
-      null
-    );
-  }
-  const fromPolicy = resolverModePolicy(opts["from"]);
-  if (fromPolicy === null) {
-    return rejectedTransition(
-      "unknown_mode",
-      `"from" is not a resolver mode: ${describe(opts["from"])}`,
-      null,
-      null
-    );
-  }
-  const toPolicy = resolverModePolicy(opts["to"]);
-  if (toPolicy === null) {
-    return rejectedTransition(
-      "unknown_mode",
-      `"to" is not a resolver mode: ${describe(opts["to"])}`,
-      fromPolicy.mode,
-      null
-    );
-  }
-  const from = fromPolicy.mode;
-  const to = toPolicy.mode;
-  const reasonRaw = opts["reason"];
-  if (typeof reasonRaw !== "string" || reasonRaw.length === 0 || reasonRaw.length > MAX_SCALAR_LEN2 || CONTROL_CHARS3.test(reasonRaw)) {
-    return rejectedTransition(
-      "invalid_request",
-      "reason must be a non-empty, control-character-free string within bounds",
-      from,
-      to
-    );
-  }
-  const reason = reasonRaw;
-  const allowSkipRaw = opts["allow_skip"];
-  if (allowSkipRaw !== void 0 && typeof allowSkipRaw !== "boolean") {
-    return rejectedTransition("invalid_request", "allow_skip must be a boolean", from, to);
-  }
-  const allowSkip = allowSkipRaw === true;
-  const fromRank = resolverModeRank(from);
-  const toRank = resolverModeRank(to);
-  if (fromRank === toRank) {
-    return rejectedTransition(
-      "transition_is_noop",
-      `already in mode ${from} \u2014 a no-op change must not be recorded as a migration step`,
-      from,
-      to
-    );
-  }
-  const direction = toRank > fromRank ? "advance" : "regress";
-  const rungs = Math.abs(toRank - fromRank);
-  if (direction === "advance" && rungs > 1 && !allowSkip) {
-    return rejectedTransition(
-      "transition_skips_rungs",
-      `${from} \u2192 ${to} skips ${rungs - 1} rung(s); pass allow_skip: true to acknowledge that the skipped phase's evidence will not exist`,
-      from,
-      to
-    );
-  }
-  return Object.freeze({
-    schema_version: RESOLVER_MODE_OUTCOME_SCHEMA,
-    status: "allowed",
-    from,
-    to,
-    direction,
-    rungs,
-    reason
-  });
-}
-var import_util2, RESOLVER_MODE_OUTCOME_SCHEMA, MAX_SCALAR_LEN2, CONTROL_CHARS3, CANONICAL_ID, MAX_ID_LEN, RESOLVER_AUTHORITIES, CAPABILITY_RESOLUTION_INTENTS, MODE_POLICIES, RESOLVER_MODE_POLICIES, MODE_RANK, RESOLVER_MODE_FAILURES, RESOLVER_MODE_FAILURE_SET, INTENT_REASON, BENIGN_REASONS, RESOLUTION_REQUEST_KEYS, MODE_TRANSITION_DIRECTIONS, TRANSITION_KEYS;
-var init_resolver_mode = __esm({
-  "src/domains/config/resolver-mode.ts"() {
-    import_util2 = require("util");
-    init_compatibility_usage();
-    RESOLVER_MODE_OUTCOME_SCHEMA = "guild.resolver_mode_outcome.v1";
-    MAX_SCALAR_LEN2 = 1024;
-    CONTROL_CHARS3 = /[\u0000-\u001f\u007f]/;
-    CANONICAL_ID = /^[a-z0-9][a-z0-9._-]*$/;
-    MAX_ID_LEN = 128;
-    RESOLVER_AUTHORITIES = Object.freeze(["legacy", "project-local"]);
-    CAPABILITY_RESOLUTION_INTENTS = Object.freeze([
-      /** A live lane needs this definition to run. */
-      "dispatch",
-      /** Minting a project-local role FROM a shipped template. The migration WORKING. */
-      "mint",
-      /** The A-side of a shadow comparison. Also the migration working. */
-      "shadow_compare",
-      /** Replaying a historical run record against the compatibility surface. */
-      "replay",
-      /** A deliberate return to the legacy path after a failed adoption. */
-      "rollback"
-    ]);
-    MODE_POLICIES = /* @__PURE__ */ new Map([
-      [
-        "legacy",
-        Object.freeze({
-          mode: "legacy",
-          authority: "legacy",
-          project_resolver_runs: false,
-          capability_writes_permitted: false,
-          project_side_effects_permitted: false,
-          compatibility_available: true,
-          compatibility_intents: Object.freeze([
-            "dispatch",
-            "mint",
-            "replay",
-            "rollback"
-          ]),
-          local_creation_permitted: false,
-          profiles_emitted: false
-        })
-      ],
-      [
-        "observe",
-        Object.freeze({
-          mode: "observe",
-          authority: "legacy",
-          project_resolver_runs: true,
-          // THE defining constraint of observe. D03's advance condition is a
-          // before/after tree hash proving zero live writes; a policy that permitted
-          // writes here would make that condition unprovable by construction.
-          capability_writes_permitted: false,
-          project_side_effects_permitted: false,
-          compatibility_available: true,
-          compatibility_intents: Object.freeze([
-            "dispatch",
-            "mint",
-            "replay",
-            "rollback"
-          ]),
-          local_creation_permitted: false,
-          profiles_emitted: true
-        })
-      ],
-      [
-        "shadow",
-        Object.freeze({
-          mode: "shadow",
-          authority: "legacy",
-          project_resolver_runs: true,
-          // Local creation is a HUMAN authority event, so it is permitted; but the
-          // project-local RESOLVER still may not originate a mint or a dispatch. The
-          // two are deliberately separate flags: collapsing them would either block
-          // the approvals the phase exists to collect, or let the shadow side act.
-          capability_writes_permitted: true,
-          project_side_effects_permitted: false,
-          compatibility_available: true,
-          compatibility_intents: Object.freeze([
-            "dispatch",
-            "mint",
-            "shadow_compare",
-            "replay",
-            "rollback"
-          ]),
-          local_creation_permitted: true,
-          profiles_emitted: true
-        })
-      ],
-      [
-        "project-local",
-        Object.freeze({
-          mode: "project-local",
-          authority: "project-local",
-          project_resolver_runs: true,
-          capability_writes_permitted: true,
-          project_side_effects_permitted: true,
-          compatibility_available: true,
-          // NOT `dispatch`. A live dispatch with no project definition must FAIL
-          // TYPED, not quietly read a shipped template — that silent read is the
-          // exact behaviour the mode exists to end.
-          compatibility_intents: Object.freeze(["replay", "rollback", "mint"]),
-          local_creation_permitted: true,
-          profiles_emitted: true
-        })
-      ],
-      [
-        "strict",
-        Object.freeze({
-          mode: "strict",
-          authority: "project-local",
-          project_resolver_runs: true,
-          capability_writes_permitted: true,
-          project_side_effects_permitted: true,
-          // The end state: the surface is gone. No intent reaches it, including
-          // replay — a strict project that still needs to replay history must step
-          // back down the ladder deliberately, which is a recorded mode change.
-          compatibility_available: false,
-          compatibility_intents: Object.freeze([]),
-          local_creation_permitted: true,
-          profiles_emitted: true
-        })
-      ]
-    ]);
-    RESOLVER_MODE_POLICIES = Object.freeze(
-      // Built from the PRIVATE policy map's own keys, NOT from the mutable exported
-      // ladder — same reasoning as MODE_RANK below (CODEX #8).
-      Object.fromEntries([...MODE_POLICIES].map(([m, p]) => [m, p]))
-    );
-    MODE_RANK = new Map(
-      [...MODE_POLICIES.keys()].map((m, i) => [m, i])
-    );
-    RESOLVER_MODE_FAILURES = Object.freeze([
-      /** The request itself was malformed (proxy, accessor, unknown key, bad scalar). */
-      "invalid_request",
-      /** `mode` is not a member of the ladder. NEVER coerced to the default. */
-      "unknown_mode",
-      /** No project-local definition exists, and the mode does not permit a compatibility read. */
-      "no_project_definition",
-      /** The mode has no compatibility surface at all (strict). */
-      "compatibility_unavailable_in_mode",
-      /** The surface exists, but not for this intent (e.g. `dispatch` under project-local). */
-      "intent_not_permitted_in_mode",
-      /** Neither a project definition nor a compatibility asset was supplied. */
-      "no_definition_anywhere",
-      /** The mode forbids the write this request would require. */
-      "write_not_permitted_in_mode",
-      /** A mode transition that skips rungs without an explicit acknowledgement. */
-      "transition_skips_rungs",
-      /** A downward transition without a recorded reason. */
-      "transition_regresses_without_reason",
-      /** Source and target are the same rung. */
-      "transition_is_noop"
-    ]);
-    RESOLVER_MODE_FAILURE_SET = new Set(RESOLVER_MODE_FAILURES);
-    INTENT_REASON = /* @__PURE__ */ new Map([
-      ["mint", "mint_source"],
-      ["shadow_compare", "shadow_comparison"],
-      ["rollback", "rollback"],
-      ["replay", "explicit_legacy_mode"]
-    ]);
-    BENIGN_REASONS = /* @__PURE__ */ new Set([
-      "mint_source",
-      "shadow_comparison"
-    ]);
-    RESOLUTION_REQUEST_KEYS = [
-      "mode",
-      "kind",
-      "capability_id",
-      "project_definition",
-      "compatibility_asset",
-      "intent"
-    ];
-    MODE_TRANSITION_DIRECTIONS = Object.freeze(["advance", "regress"]);
-    TRANSITION_KEYS = ["from", "to", "reason", "allow_skip"];
-  }
-});
-
-// src/domains/config/compatibility-catalog.ts
-function isCanonicalId3(v) {
-  return typeof v === "string" && v.length > 0 && v.length <= MAX_ID_LEN2 && !CONTROL_CHARS4.test(v) && CANONICAL_ID2.test(v);
-}
-function readOptions3(value, allowedKeys) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-  if (import_util3.types.isProxy(value)) return null;
-  const proto = Object.getPrototypeOf(value);
-  if (proto !== Object.prototype && proto !== null) return null;
-  if (Object.getOwnPropertySymbols(value).length > 0) return null;
-  const out = /* @__PURE__ */ Object.create(null);
-  for (const key of Object.getOwnPropertyNames(value)) {
-    if (!allowedKeys.includes(key)) return null;
-    const desc = Object.getOwnPropertyDescriptor(value, key);
-    if (!desc || !("value" in desc)) return null;
-    out[key] = desc.value;
-  }
-  return out;
-}
-function readArray3(value) {
-  if (!Array.isArray(value) || import_util3.types.isProxy(value)) return null;
-  const lenDesc = Object.getOwnPropertyDescriptor(value, "length");
-  if (!lenDesc || !("value" in lenDesc) || typeof lenDesc.value !== "number" || !Number.isSafeInteger(lenDesc.value) || lenDesc.value < 0) {
-    return null;
-  }
-  const out = [];
-  for (let i = 0; i < lenDesc.value; i++) {
-    const d = Object.getOwnPropertyDescriptor(value, i);
-    if (!d || !("value" in d)) return null;
-    out.push(d.value);
-  }
-  return out;
-}
-function toCanonicalRelPath(absPath, root) {
-  const rel2 = path34.relative(root, absPath);
-  if (rel2.length === 0 || rel2.startsWith("..") || path34.isAbsolute(rel2)) return null;
-  const posix = rel2.split(path34.sep).join("/");
-  if (posix.length > MAX_SCALAR_LEN3 || CONTROL_CHARS4.test(posix)) return null;
-  for (const seg of posix.split("/")) {
-    if (seg.length === 0 || seg === "." || seg === "..") return null;
-  }
-  return posix;
-}
-function describe2(v) {
-  try {
-    if (typeof v === "bigint") return `${v}n`;
-    if (typeof v === "string") return v.length > 120 ? `"${v.slice(0, 117)}..."` : `"${v}"`;
-    if (typeof v === "symbol") return "Symbol()";
-    if (typeof v === "function") return "[function]";
-    if (v === null) return "null";
-    if (typeof v === "object") return Array.isArray(v) ? "[array]" : "[object]";
-    return String(v);
-  } catch {
-    return "[unprintable]";
-  }
-}
-function emptyCatalog(problem) {
-  return Object.freeze({
-    schema_version: COMPATIBILITY_CATALOG_SCHEMA,
-    entries: Object.freeze([]),
-    template_count: 0,
-    domain_skill_count: 0,
-    census_matches: false,
-    problems: Object.freeze([problem])
-  });
-}
-function buildCompatibilityCatalog(opts) {
-  const o = readOptions3(opts, BUILD_KEYS);
-  if (o === null) {
-    return emptyCatalog("options object rejected (proxy/accessor/symbol/unknown key)");
-  }
-  const pluginRoot = o["pluginRoot"];
-  if (typeof pluginRoot !== "string" || pluginRoot.length === 0 || CONTROL_CHARS4.test(pluginRoot)) {
-    return emptyCatalog("pluginRoot must be a non-empty, control-character-free path");
-  }
-  const deprecationRaw = o["deprecation"] ?? "active";
-  if (typeof deprecationRaw !== "string" || !DEPRECATION_STATE_SET.has(deprecationRaw)) {
-    return emptyCatalog(`not a deprecation state: ${describe2(deprecationRaw)}`);
-  }
-  const deprecation = deprecationRaw;
-  const deprecatedByRaw = o["deprecatedBy"] ?? null;
-  if (deprecatedByRaw !== null && (typeof deprecatedByRaw !== "string" || deprecatedByRaw.length === 0 || deprecatedByRaw.length > MAX_ID_LEN2 || CONTROL_CHARS4.test(deprecatedByRaw))) {
-    return emptyCatalog("deprecatedBy must be null or a bounded, control-character-free token");
-  }
-  if (deprecation !== "active" && deprecatedByRaw === null) {
-    return emptyCatalog(`deprecation "${deprecation}" requires a deprecatedBy decision record`);
-  }
-  const deprecatedBy = deprecatedByRaw;
-  const root = path34.resolve(pluginRoot);
-  const problems = [];
-  const entries = [];
-  const push = (kind, id, abs) => {
-    const rel2 = toCanonicalRelPath(abs, root);
-    if (rel2 === null) {
-      problems.push(`${kind} "${id}": path is not canonical plugin-relative (${abs})`);
-      return;
-    }
-    let bytes;
-    try {
-      const st = fs28.lstatSync(abs);
-      if (st.isSymbolicLink()) {
-        problems.push(`${kind} "${id}": symlink, refusing to catalog`);
-        return;
-      }
-      if (!st.isFile()) {
-        problems.push(`${kind} "${id}": not a regular file`);
-        return;
-      }
-      bytes = fs28.readFileSync(abs);
-    } catch (err) {
-      problems.push(`${kind} "${id}": unreadable (${err.message})`);
-      return;
-    }
-    entries.push(
-      Object.freeze({
-        kind,
-        id,
-        path: rel2,
-        content_hash: crypto7.createHash("sha256").update(bytes).digest("hex"),
-        deprecation,
-        deprecated_by: deprecatedBy
-      })
-    );
-  };
-  const templateDir = path34.join(root, COMPATIBILITY_ASSET_ROOTS.shipped_template);
-  try {
-    for (const e of fs28.readdirSync(templateDir, { withFileTypes: true }).sort(
-      (a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0
-    )) {
-      if (!e.isFile() || !e.name.endsWith(".md")) continue;
-      const id = e.name.slice(0, -3);
-      if (!isCanonicalId3(id)) {
-        problems.push(`shipped_template "${e.name}": file stem is not a canonical id`);
-        continue;
-      }
-      push("shipped_template", id, path34.join(templateDir, e.name));
-    }
-  } catch (err) {
-    problems.push(`templates/specialists unreadable (${err.message})`);
-  }
-  const skillDir = path34.join(root, COMPATIBILITY_ASSET_ROOTS.shipped_domain_skill);
-  try {
-    for (const e of fs28.readdirSync(skillDir, { withFileTypes: true }).sort(
-      (a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0
-    )) {
-      if (!e.isDirectory()) continue;
-      if (!isCanonicalId3(e.name)) {
-        problems.push(`shipped_domain_skill "${e.name}": directory name is not a canonical id`);
-        continue;
-      }
-      push("shipped_domain_skill", e.name, path34.join(skillDir, e.name, "SKILL.md"));
-    }
-  } catch (err) {
-    problems.push(`skills/specialists unreadable (${err.message})`);
-  }
-  entries.sort(
-    (a, b) => a.kind !== b.kind ? a.kind < b.kind ? -1 : 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-  );
-  const templateCount = entries.filter((e) => e.kind === "shipped_template").length;
-  const skillIds = entries.filter((e) => e.kind === "shipped_domain_skill").map((e) => e.id);
-  const skillCount = skillIds.length;
-  const frozenSkillIds = new Set(SHIPPED_DOMAIN_SKILL_IDS);
-  const missingSkillIds = SHIPPED_DOMAIN_SKILL_IDS.filter((id) => !skillIds.includes(id));
-  const unexpectedSkillIds = skillIds.filter((id) => !frozenSkillIds.has(id));
-  if (missingSkillIds.length > 0) {
-    problems.push(`shipped_domain_skill census missing frozen id(s): ${missingSkillIds.join(", ")}`);
-  }
-  if (unexpectedSkillIds.length > 0) {
-    problems.push(`shipped_domain_skill census has unexpected id(s): ${unexpectedSkillIds.join(", ")}`);
-  }
-  return Object.freeze({
-    schema_version: COMPATIBILITY_CATALOG_SCHEMA,
-    entries: Object.freeze(entries),
-    template_count: templateCount,
-    domain_skill_count: skillCount,
-    census_matches: problems.length === 0 && templateCount === SHIPPED_TEMPLATE_COUNT && skillCount === SHIPPED_DOMAIN_SKILL_COUNT,
-    problems: Object.freeze(problems)
-  });
-}
-function readCatalogEntry(raw) {
-  const e = readOptions3(raw, ENTRY_KEYS);
-  if (e === null) return null;
-  const kind = e["kind"];
-  if (kind !== "shipped_template" && kind !== "shipped_domain_skill") return null;
-  const id = e["id"];
-  if (!isCanonicalId3(id)) return null;
-  const p = e["path"];
-  if (typeof p !== "string" || !isCanonicalCatalogPath(p)) return null;
-  const hash = e["content_hash"];
-  if (typeof hash !== "string" || !SHA256_HEX2.test(hash)) return null;
-  const dep = e["deprecation"];
-  if (typeof dep !== "string" || !DEPRECATION_STATE_SET.has(dep)) return null;
-  const by = e["deprecated_by"];
-  if (by !== null && (typeof by !== "string" || by.length === 0 || by.length > MAX_ID_LEN2 || CONTROL_CHARS4.test(by))) {
-    return null;
-  }
-  if (dep !== "active" && by === null) return null;
-  return Object.freeze({
-    kind,
-    id,
-    path: p,
-    content_hash: hash,
-    deprecation: dep,
-    deprecated_by: by
-  });
-}
-function isCanonicalCatalogPath(v) {
-  if (v.length === 0 || v.length > MAX_SCALAR_LEN3) return false;
-  if (CONTROL_CHARS4.test(v)) return false;
-  if (v.includes("\\")) return false;
-  if (/^[A-Za-z]:/.test(v)) return false;
-  if (v.startsWith("/")) return false;
-  if (v.endsWith("/")) return false;
-  for (const seg of v.split("/")) {
-    if (seg.length === 0) return false;
-    if (seg === "." || seg === "..") return false;
-    if (/[. ]$/.test(seg)) return false;
-  }
-  return true;
-}
-function suggestableAssets(request) {
-  const o = readOptions3(request, SUGGESTABLE_KEYS);
-  if (o === null) {
-    return {
-      status: "refused",
-      failure: "invalid_request",
-      detail: "request rejected (proxy/accessor/symbol/unknown key)"
-    };
-  }
-  const migrated = o["project_migrated"];
-  if (typeof migrated !== "boolean") {
-    return {
-      status: "refused",
-      failure: "invalid_request",
-      // Not defaulted to `false`: a missing flag reading as "not migrated" would
-      // silently re-open the menu on exactly the projects the rule protects.
-      detail: "project_migrated must be an explicit boolean"
-    };
-  }
-  const catalog = o["catalog"];
-  const catalogOpts = readOptions3(catalog, [
-    "schema_version",
-    "entries",
-    "template_count",
-    "domain_skill_count",
-    "census_matches",
-    "problems"
-  ]);
-  if (catalogOpts === null || catalogOpts["schema_version"] !== COMPATIBILITY_CATALOG_SCHEMA) {
-    return { status: "refused", failure: "invalid_request", detail: "catalog is not a guild.compatibility_catalog.v1" };
-  }
-  const rawEntries = readArray3(catalogOpts["entries"]);
-  if (rawEntries === null) {
-    return { status: "refused", failure: "invalid_request", detail: "catalog.entries is not a dense plain array" };
-  }
-  if (migrated) return { status: "ok", entries: Object.freeze([]) };
-  const out = [];
-  for (const raw of rawEntries) {
-    const entry = readCatalogEntry(raw);
-    if (entry === null) {
-      return {
-        status: "refused",
-        failure: "invalid_request",
-        detail: "catalog contains an entry that is not a well-formed guild.compatibility_catalog.v1 entry"
-      };
-    }
-    if (entry.deprecation !== "active") continue;
-    out.push(entry);
-  }
-  return { status: "ok", entries: Object.freeze(out) };
-}
-function compatibilityUsageForRead(request) {
-  const o = readOptions3(request, EMISSION_KEYS);
-  if (o === null) {
-    return {
-      status: "refused",
-      failure: "invalid_request",
-      detail: "emission request rejected (proxy/accessor/symbol/unknown key)"
-    };
-  }
-  const entry = readCatalogEntry(o["entry"]);
-  if (entry === null) {
-    return {
-      status: "refused",
-      failure: "invalid_request",
-      detail: "entry is not a well-formed guild.compatibility_catalog.v1 entry"
-    };
-  }
-  const synthetic = o["synthetic"];
-  if (typeof synthetic !== "boolean") {
-    return {
-      status: "refused",
-      failure: "invalid_request",
-      // Never defaulted: "missing" reading as "not synthetic" would pull tooling
-      // reads into the dependence count and make the gate unreachable.
-      detail: "synthetic must be an explicit boolean set at the emission point"
-    };
-  }
-  const specialistIdRaw = o["specialist_id"] ?? null;
-  if (specialistIdRaw !== null && !isCanonicalId3(specialistIdRaw)) {
-    return { status: "refused", failure: "invalid_request", detail: "specialist_id must be null or a canonical id" };
-  }
-  const classification = classifyCompatibilityRead({
-    mode: o["mode"],
-    intent: o["intent"]
-  });
-  if (classification.status === "refused") {
-    return { status: "refused", failure: classification.failure, detail: classification.detail };
-  }
-  const candidate = {
-    schema_version: COMPATIBILITY_USAGE_SCHEMA,
-    asset_kind: entry.kind,
-    asset_id: entry.id,
-    asset_path: entry.path,
-    content_hash: entry.content_hash,
-    reason: classification.reason,
-    resolver_mode: o["mode"],
-    synthetic,
-    specialist_id: specialistIdRaw
-  };
-  const payload = parseCompatibilityUsageV1(candidate);
-  if (payload === null) {
-    return {
-      status: "refused",
-      failure: "invalid_request",
-      detail: "constructed payload failed guild.compatibility_usage.v1 validation (check entry id/path/content_hash)"
-    };
-  }
-  return { status: "ok", payload };
-}
-function requiredAssetIdsForG5(catalog, opts) {
-  const o = readOptions3(opts, ["pluginRoot"]);
-  if (o === null) {
-    return { status: "refused", detail: "options rejected (proxy/accessor/symbol/unknown key)" };
-  }
-  const pluginRoot = o["pluginRoot"];
-  if (typeof pluginRoot !== "string" || pluginRoot.length === 0 || CONTROL_CHARS4.test(pluginRoot)) {
-    return {
-      status: "refused",
-      detail: "pluginRoot is required \u2014 a G5 required set must be verified against the real shipped tree"
-    };
-  }
-  const c = readOptions3(catalog, [
-    "schema_version",
-    "entries",
-    "template_count",
-    "domain_skill_count",
-    "census_matches",
-    "problems"
-  ]);
-  if (c === null || c["schema_version"] !== COMPATIBILITY_CATALOG_SCHEMA) {
-    return { status: "refused", detail: "not a guild.compatibility_catalog.v1" };
-  }
-  const raw = readArray3(c["entries"]);
-  if (raw === null) return { status: "refused", detail: "entries is not a dense plain array" };
-  const ids = [];
-  const seen = /* @__PURE__ */ new Set();
-  const byId = /* @__PURE__ */ new Map();
-  let templates = 0;
-  let skills = 0;
-  for (const item of raw) {
-    const e = readCatalogEntry(item);
-    if (e === null) {
-      return {
-        status: "refused",
-        detail: "catalog contains an entry that is not a well-formed catalog entry"
-      };
-    }
-    if (seen.has(e.id)) {
-      return { status: "refused", detail: `catalog contains a duplicate asset id: ${e.id}` };
-    }
-    seen.add(e.id);
-    byId.set(e.id, e);
-    ids.push(e.id);
-    if (e.kind === "shipped_template") templates += 1;
-    else skills += 1;
-  }
-  if (templates !== SHIPPED_TEMPLATE_COUNT || skills !== SHIPPED_DOMAIN_SKILL_COUNT) {
-    return {
-      status: "refused",
-      detail: `catalog holds ${templates} template(s) and ${skills} domain skill(s); the shipped surface is ${SHIPPED_TEMPLATE_COUNT} and ${SHIPPED_DOMAIN_SKILL_COUNT} \u2014 refusing to derive a G5 required set from an incomplete enumeration`
-    };
-  }
-  if (c["template_count"] !== templates || c["domain_skill_count"] !== skills) {
-    return { status: "refused", detail: "catalog declares counts that disagree with its own entries" };
-  }
-  const problems = readArray3(c["problems"]);
-  if (problems === null) return { status: "refused", detail: "problems is not a dense plain array" };
-  if (problems.length > 0) {
-    return {
-      status: "refused",
-      detail: `catalog reported ${problems.length} problem(s); an incomplete scan is not an accountability set`
-    };
-  }
-  if (c["census_matches"] !== true) {
-    return { status: "refused", detail: "catalog does not claim a matching census" };
-  }
-  const truth = buildCompatibilityCatalog({ pluginRoot });
-  if (!truth.census_matches) {
-    return {
-      status: "refused",
-      detail: `the shipped tree at ${pluginRoot} does not itself enumerate cleanly (${truth.problems.length} problem(s)); a G5 required set cannot be anchored to it`
-    };
-  }
-  const truthById = new Map(truth.entries.map((e) => [e.id, e]));
-  for (const [id, entry] of byId) {
-    const real = truthById.get(id);
-    if (real === void 0) {
-      return { status: "refused", detail: `catalog names "${id}", which the shipped tree does not contain` };
-    }
-    if (real.content_hash !== entry.content_hash || real.path !== entry.path || real.kind !== entry.kind) {
-      return {
-        status: "refused",
-        detail: `catalog entry "${id}" does not match the shipped asset (path/kind/content_hash disagree)`
-      };
-    }
-  }
-  for (const id of truthById.keys()) {
-    if (!byId.has(id)) {
-      return { status: "refused", detail: `the shipped tree contains "${id}", which the catalog omits` };
-    }
-  }
-  ids.sort();
-  return { status: "ok", ids: Object.freeze(ids) };
-}
-var crypto7, fs28, path34, import_util3, COMPATIBILITY_CATALOG_SCHEMA, SHIPPED_TEMPLATE_COUNT, SHIPPED_DOMAIN_SKILL_IDS, SHIPPED_DOMAIN_SKILL_COUNT, SHIPPED_COMPATIBILITY_ASSET_COUNT, COMPATIBILITY_ASSET_ROOTS, COMPATIBILITY_DEPRECATION_STATES, DEPRECATION_STATE_SET, MAX_SCALAR_LEN3, MAX_ID_LEN2, CONTROL_CHARS4, CANONICAL_ID2, SHA256_HEX2, BUILD_KEYS, ENTRY_KEYS, SUGGESTABLE_KEYS, EMISSION_KEYS;
-var init_compatibility_catalog = __esm({
-  "src/domains/config/compatibility-catalog.ts"() {
-    crypto7 = __toESM(require("crypto"));
-    fs28 = __toESM(require("fs"));
-    path34 = __toESM(require("path"));
-    import_util3 = require("util");
-    init_compatibility_usage();
-    init_resolver_mode();
-    COMPATIBILITY_CATALOG_SCHEMA = "guild.compatibility_catalog.v1";
-    SHIPPED_TEMPLATE_COUNT = 15;
-    SHIPPED_DOMAIN_SKILL_IDS = Object.freeze([
-      "architect-adr-writer",
-      "architect-systems-design",
-      "architect-tradeoff-matrix",
-      "backend-api-contract",
-      "backend-data-layer",
-      "backend-migration-writer",
-      "backend-service-integration",
-      "copywriter-email-sequences",
-      "copywriter-long-form",
-      "copywriter-product-microcopy",
-      "copywriter-voice-guide",
-      "devops-ci-cd-pipeline",
-      "devops-incident-runbook",
-      "devops-infrastructure-as-code",
-      "devops-observability-setup",
-      "doc-writer-doc-site",
-      "doc-writer-onboarding-doc",
-      "doc-writer-product-guide",
-      "doc-writer-readme",
-      "frontend-a11y",
-      "frontend-bundler-config",
-      "frontend-react",
-      "frontend-state-management",
-      "marketing-ab-copy-variants",
-      "marketing-campaign-brief",
-      "marketing-launch-plan",
-      "marketing-positioning",
-      "mobile-android-kotlin",
-      "mobile-ios-swift",
-      "mobile-performance-tuning",
-      "mobile-react-native",
-      "qa-flaky-test-hunter",
-      "qa-property-based-tests",
-      "qa-snapshot-tests",
-      "qa-test-strategy",
-      "researcher-comparison-table",
-      "researcher-deep-dive",
-      "researcher-paper-digest",
-      "sales-cold-outreach",
-      "sales-discovery-framework",
-      "sales-follow-up-sequence",
-      "sales-proposal-writer",
-      "security-auth-flow-review",
-      "security-dependency-audit",
-      "security-secrets-scan",
-      "security-threat-modeling",
-      "seo-internal-linking",
-      "seo-keyword-research",
-      "seo-on-page-optimization",
-      "seo-technical-audit",
-      "social-media-content-calendar",
-      "social-media-engagement-templates",
-      "social-media-platform-post",
-      "social-media-thread",
-      "technical-writer-api-docs",
-      "technical-writer-release-notes",
-      "technical-writer-tutorial",
-      "technical-writer-user-manual"
-    ]);
-    SHIPPED_DOMAIN_SKILL_COUNT = SHIPPED_DOMAIN_SKILL_IDS.length;
-    SHIPPED_COMPATIBILITY_ASSET_COUNT = SHIPPED_TEMPLATE_COUNT + SHIPPED_DOMAIN_SKILL_COUNT;
-    COMPATIBILITY_ASSET_ROOTS = Object.freeze({
-      shipped_template: "templates/specialists",
-      shipped_domain_skill: "skills/specialists"
-    });
-    COMPATIBILITY_DEPRECATION_STATES = Object.freeze([
-      "active",
-      "deprecated",
-      "removal_cleared"
-    ]);
-    DEPRECATION_STATE_SET = new Set(COMPATIBILITY_DEPRECATION_STATES);
-    MAX_SCALAR_LEN3 = 1024;
-    MAX_ID_LEN2 = 128;
-    CONTROL_CHARS4 = /[\u0000-\u001f\u007f]/;
-    CANONICAL_ID2 = /^[a-z0-9][a-z0-9._-]*$/;
-    SHA256_HEX2 = /^[0-9a-f]{64}$/;
-    BUILD_KEYS = ["pluginRoot", "deprecation", "deprecatedBy"];
-    ENTRY_KEYS = [
-      "kind",
-      "id",
-      "path",
-      "content_hash",
-      "deprecation",
-      "deprecated_by"
-    ];
-    SUGGESTABLE_KEYS = ["catalog", "project_migrated"];
-    EMISSION_KEYS = ["entry", "mode", "intent", "synthetic", "specialist_id"];
-  }
-});
-
-// src/domains/config/confirmation-arbiter.ts
-function canonicalKey(key) {
-  const parts = [];
-  for (const component of CONFIRMATION_KEY_COMPONENTS) {
-    const v = key?.[component];
-    if (typeof v !== "string" || v.length === 0) {
-      throw new Error(
-        `confirmation_key_incomplete: component "${component}" is required \u2014 a partial key can never claim a confirmation (\xA76 exact-key rule)`
-      );
-    }
-    parts.push(`${component}=${v.length}:${v}`);
-  }
-  return parts.join("|");
-}
-function createRunLocalState(runId) {
-  if (typeof runId !== "string" || runId.length === 0) {
-    throw new Error("confirmation state requires a run_id (run-local, \xA76)");
-  }
-  return { run_id: runId, prompts: /* @__PURE__ */ new Map(), decisions: /* @__PURE__ */ new Map(), next_prompt_id: 0 };
-}
-function claimPrompt(state, key) {
-  const ck = canonicalKey(key);
-  if (!state.prompts.has(ck)) {
-    state.prompts.set(ck, state.next_prompt_id);
-    state.next_prompt_id += 1;
-  }
-  return {
-    prompt_id: state.prompts.get(ck),
-    already_decided: state.decisions.has(ck)
-  };
-}
-function recordDecision(state, key, decision) {
-  const ck = canonicalKey(key);
-  const existing = state.decisions.get(ck);
-  if (existing) {
-    if (existing.decision !== decision.decision) {
-      throw new Error(
-        `contradictory_decision: key already decided "${existing.decision}" \u2014 refusing "${decision.decision}" (one key, one decision; \xA76)`
-      );
-    }
-    return existing;
-  }
-  const record = {
-    key: { ...key },
-    decision: decision.decision,
-    at: decision.at ?? null
-  };
-  state.decisions.set(ck, record);
-  return record;
-}
-function decisionFor(state, key) {
-  return state.decisions.get(canonicalKey(key)) ?? null;
-}
-var CONFIRMATION_KEY_COMPONENTS;
-var init_confirmation_arbiter = __esm({
-  "src/domains/config/confirmation-arbiter.ts"() {
-    CONFIRMATION_KEY_COMPONENTS = Object.freeze([
-      "run_id",
-      "purpose",
-      "target_id",
-      "policy_hash",
-      "catalog_hash",
-      "fallback_hash"
-    ]);
-  }
-});
-
-// src/domains/config/independence-predicates.ts
-function finalServed(p) {
-  return p.finalized === true && (p.status === "served" || p.status === "fallback_served");
-}
-function boundActual(p) {
-  return finalServed(p) && known(p.served_model);
-}
-function verified(p) {
-  return p.host_trust === "verified";
-}
-function adjudicateIndependence(input) {
-  const p = input?.producer ?? {};
-  const r = input?.reviewer ?? {};
-  const terms = [
-    { name: "bound_actual(producer)", pass: boundActual(p) },
-    { name: "bound_actual(reviewer)", pass: boundActual(r) },
-    { name: "verified(host(producer))", pass: verified(p) },
-    { name: "verified(host(reviewer))", pass: verified(r) },
-    { name: "known(host_family(producer))", pass: known(p.host_family) },
-    { name: "known(host_family(reviewer))", pass: known(r.host_family) },
-    {
-      name: "host_family(producer) != host_family(reviewer)",
-      pass: known(p.host_family) && known(r.host_family) && p.host_family !== r.host_family
-    },
-    { name: "known(served_family(producer))", pass: known(p.served_model_family) },
-    { name: "known(served_family(reviewer))", pass: known(r.served_model_family) },
-    {
-      name: "served_family(producer) != served_family(reviewer)",
-      pass: known(p.served_model_family) && known(r.served_model_family) && p.served_model_family !== r.served_model_family
-    }
-  ];
-  const allPass = terms.every((t) => t.pass);
-  const trace = terms.map((t) => `${t.name}=${t.pass ? "PASS" : "FAIL"}`).join("; ");
-  return {
-    independence: allPass ? "strong" : "weak",
-    predicate_trace: `${trace} => ${allPass ? "strong" : "weak"}`,
-    producer_served_model: known(p.served_model) ? p.served_model : "unknown",
-    reviewer_served_model: known(r.served_model) ? r.served_model : "unknown",
-    producer_model_family: known(p.served_model_family) ? p.served_model_family : "unknown",
-    reviewer_model_family: known(r.served_model_family) ? r.served_model_family : "unknown"
-  };
-}
-function asAdjudicationRecord(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v) ? v : null;
-}
-function validateAdjudicationRef(v) {
-  const o = asAdjudicationRecord(v);
-  if (!o) return null;
-  const dispatch_id = o["dispatch_id"];
-  const receipt_hash = o["receipt_hash"];
-  if (typeof dispatch_id !== "string" || dispatch_id.length === 0) return null;
-  if (typeof receipt_hash !== "string" || !ADJUDICATION_SHA256_HEX.test(receipt_hash)) return null;
-  return { dispatch_id, receipt_hash };
-}
-function validateWrittenAdjudication(v) {
-  const o = asAdjudicationRecord(v);
-  if (!o) return null;
-  const producer_ref = validateAdjudicationRef(o["producer_ref"]);
-  const reviewer_ref = validateAdjudicationRef(o["reviewer_ref"]);
-  if (!producer_ref || !reviewer_ref) return null;
-  const independence = o["independence"];
-  if (independence !== "strong" && independence !== "weak") return null;
-  const predicate_trace = o["predicate_trace"];
-  if (typeof predicate_trace !== "string" || predicate_trace.length === 0) return null;
-  return { producer_ref, reviewer_ref, independence, predicate_trace };
-}
-function buildIndependenceAdjudication(input) {
-  if (!input.producer.finalized || !input.reviewer.finalized) {
-    throw new Error(
-      "adjudication_premature: the \xA77a block is written ONLY after BOTH receipts are finalized"
-    );
-  }
-  const verdict = adjudicateIndependence({ producer: input.producer, reviewer: input.reviewer });
-  return {
-    producer_ref: input.producer_ref,
-    reviewer_ref: input.reviewer_ref,
-    producer_served_model: verdict.producer_served_model,
-    reviewer_served_model: verdict.reviewer_served_model,
-    producer_model_family: verdict.producer_model_family,
-    reviewer_model_family: verdict.reviewer_model_family,
-    requested_independence: input.requested_independence,
-    independence: verdict.independence,
-    predicate_trace: verdict.predicate_trace
-  };
-}
-var known, ADJUDICATION_SHA256_HEX;
-var init_independence_predicates = __esm({
-  "src/domains/config/independence-predicates.ts"() {
-    known = (x) => typeof x === "string" && x.length > 0 && x !== "unknown";
-    ADJUDICATION_SHA256_HEX = /^[0-9a-f]{64}$/;
-  }
-});
-
-// src/domains/config/independence-record.ts
-function lifecycleApi() {
-  return init_lifecycle(), __toCommonJS(lifecycle_exports);
-}
-function independenceDirForRunDir(runDir3) {
-  return path35.join(runDir3, INDEPENDENCE_DIR);
-}
-function loadWrittenAdjudications(runDir3) {
-  const dir = independenceDirForRunDir(runDir3);
-  let names;
-  try {
-    names = fs29.readdirSync(dir).filter((n) => n.endsWith(".json")).sort();
-  } catch {
-    return [];
-  }
-  const out = [];
-  for (const name of names) {
-    let parsed;
-    try {
-      parsed = JSON.parse(fs29.readFileSync(path35.join(dir, name), "utf8"));
-    } catch {
-      continue;
-    }
-    const block = validateWrittenAdjudication(parsed);
-    if (block) out.push(block);
-  }
-  return out;
-}
-function validateIndependenceBinding(v) {
-  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
-  const o = v;
-  const lane_id = o["lane_id"];
-  if (typeof lane_id !== "string" || lane_id.length === 0) return null;
-  const producer_ref = validateAdjudicationRef(o["producer_ref"]);
-  const reviewer_ref = validateAdjudicationRef(o["reviewer_ref"]);
-  if (!producer_ref || !reviewer_ref) return null;
-  return { lane_id, producer_ref, reviewer_ref };
-}
-function sameRef(a, b) {
-  return a.dispatch_id === b.dispatch_id && a.receipt_hash === b.receipt_hash;
-}
-function findBoundAdjudications(runDir3, binding) {
-  return loadWrittenAdjudications(runDir3).filter(
-    (b) => sameRef(b.producer_ref, binding.producer_ref) && sameRef(b.reviewer_ref, binding.reviewer_ref)
-  );
-}
-function assertPersistableIndependence(runDir3, independence, context, binding) {
-  if (independence !== "strong") return;
-  const where = independenceDirForRunDir(runDir3);
-  const bound = validateIndependenceBinding(binding);
-  if (!bound) {
-    throw new Error(
-      `independence_binding_missing: refusing to persist independence:"strong" for ${context} \u2014 the record declares no valid \xA77a binding {lane_id, producer_ref:{dispatch_id,receipt_hash}, reviewer_ref:{dispatch_id,receipt_hash}} (receipt hashes must be sha256 hex). A strong verdict is persistable only as a claim ON a specific adjudication, never as a bare string. Record the adjudication first (persistIndependenceAdjudication) or persist "weak".`
-    );
-  }
-  if (bound.producer_ref.dispatch_id !== bound.lane_id) {
-    throw new Error(
-      `independence_binding_lane_mismatch: refusing to persist independence:"strong" for ${context} \u2014 the declared adjudication's producer dispatch is "${bound.producer_ref.dispatch_id}" but the record being written is lane "${bound.lane_id}". An adjudication of ANOTHER lane's dispatch never authorizes this one, however valid it is. Adjudicate THIS lane's own producer/reviewer receipts or persist "weak".`
-    );
-  }
-  const matches = findBoundAdjudications(runDir3, bound);
-  if (matches.length === 0) {
-    throw new Error(
-      `independence_not_adjudicated: refusing to persist independence:"strong" for ${context} \u2014 no WRITTEN, hash-bound guild.model_resolution.v1 \xA77a independence_adjudication block under ${where} matches this record's binding (producer ${bound.producer_ref.dispatch_id}@${bound.producer_ref.receipt_hash.slice(0, 12)}\u2026, reviewer ${bound.reviewer_ref.dispatch_id}@${bound.reviewer_ref.receipt_hash.slice(0, 12)}\u2026). \xA77a admits NO provisional strong: a strong review verdict exists only as an adjudicated block binding BOTH parties' finalized receipts. Record the adjudication first (persistIndependenceAdjudication) or persist "weak".`
-    );
-  }
-  if (matches.length > 1) {
-    throw new Error(
-      `independence_adjudication_ambiguous: refusing to persist independence:"strong" for ${context} \u2014 ${matches.length} written \xA77a blocks under ${where} bind the SAME producer/reviewer receipt pair. Which verdict applies is ambiguous, and filename order never decides. Resolve the duplicate blocks and re-adjudicate.`
-    );
-  }
-  if (matches[0].independence !== "strong") {
-    throw new Error(
-      `independence_not_adjudicated: refusing to persist independence:"strong" for ${context} \u2014 the \xA77a block bound to this record adjudicated "${matches[0].independence}", not "strong" (${matches[0].predicate_trace}). The persisted value must be the ADJUDICATED one; a caller never upgrades a verdict.`
-    );
-  }
-}
-function persistIndependenceAdjudication(input) {
-  const { root, binding, label } = input;
-  if (!SAFE_LABEL.test(label)) {
-    throw new Error(`adjudication label "${label}" is not a safe path segment \u2014 refusing`);
-  }
-  const block = buildIndependenceAdjudication({
-    producer_ref: input.producer_ref,
-    reviewer_ref: input.reviewer_ref,
-    producer: input.producer,
-    reviewer: input.reviewer,
-    requested_independence: input.requested_independence
-  });
-  const validated = validateWrittenAdjudication(block);
-  if (!validated) {
-    throw new Error(
-      "adjudication_shape_invalid: buildIndependenceAdjudication produced a block that does not validate as a written \xA77a adjudication \u2014 refusing to persist"
-    );
-  }
-  const verified2 = lifecycleApi().assertWritableBinding({
-    root,
-    run_id: binding.run_id,
-    binding_ref: binding.binding_ref
-  });
-  const dir = path35.join(root, ".guild", "runs", verified2.run_id, INDEPENDENCE_DIR);
-  fs29.mkdirSync(dir, { recursive: true });
-  const target = path35.join(dir, `${label}.json`);
-  const tmp = `${target}.tmp-${process.pid}`;
-  fs29.writeFileSync(tmp, JSON.stringify(block, null, 2) + "\n", "utf8");
-  fs29.renameSync(tmp, target);
-  return {
-    absPath: target,
-    ref: path35.join(INDEPENDENCE_DIR, `${label}.json`),
-    independence: validated.independence
-  };
-}
-var fs29, path35, INDEPENDENCE_DIR, SAFE_LABEL;
-var init_independence_record = __esm({
-  "src/domains/config/independence-record.ts"() {
-    fs29 = __toESM(require("fs"));
-    path35 = __toESM(require("path"));
-    init_independence_predicates();
-    INDEPENDENCE_DIR = "independence";
-    SAFE_LABEL = /^[A-Za-z0-9_.-]+$/;
-  }
-});
-
-// src/domains/config/model-catalog.ts
-function purposeClassFor(purpose) {
-  if (purpose === "research") return "research";
-  if (["advisory", "adversarial", "security", "adversarial-security", "review"].includes(purpose)) {
-    return "review";
-  }
-  return "general";
-}
-function eligibleForPurpose(input) {
-  if (input.evidence_state === "available") return true;
-  if (input.evidence_state === "advertised") {
-    return purposeClassFor(input.purpose_class) === "general" && input.allow_advertised_attempt === true;
-  }
-  return false;
-}
-function listingAuthorityFor(targetId) {
-  if (targetId === void 0) return NO_LISTING_GROUNDING;
-  return LISTING_AUTHORITY[targetId] ?? NO_LISTING_GROUNDING;
-}
-function isPresent(value) {
-  return typeof value === "string" && value.length > 0;
-}
-function listingCanGroundAvailable(input) {
-  const grounding = listingAuthorityFor(input.target_id).available_grounding;
-  if (!grounding) return false;
-  return grounding.source === input.source && grounding.adapter_id === input.adapter_id;
-}
-function evidenceStateForListing(input) {
-  if (!isPresent(input.source) || !isPresent(input.target_id) || !isPresent(input.adapter_id)) {
-    throw new Error(
-      "model-catalog: evidenceStateForListing requires the complete (target_id, adapter_id, source) authority triple \u2014 the bare source-only form was removed (T4-R2-001)"
-    );
-  }
-  if (METADATA_ONLY_SOURCES.has(input.source)) return "advertised";
-  if (!AUTHENTICATED_LISTING_SOURCES.has(input.source)) return "advertised";
-  if (input.contract_states_availability !== true) return "advertised";
-  return listingCanGroundAvailable({
-    target_id: input.target_id,
-    adapter_id: input.adapter_id,
-    source: input.source
-  }) ? "available" : "advertised";
-}
-function confidenceForListing(source) {
-  return AUTHENTICATED_LISTING_SOURCES.has(source) ? "high" : "low";
-}
-function dispatchUpgrade(input) {
-  const served = input.actual_model;
-  if (input.result !== "served" || served == null || served === "" || served === "unknown") {
-    return { upgrades: false, model: null };
-  }
-  return { upgrades: true, model: served };
-}
-function deepFreeze3(value) {
-  if (value && typeof value === "object" && !Object.isFrozen(value)) {
-    Object.freeze(value);
-    for (const key of Object.getOwnPropertyNames(value)) {
-      deepFreeze3(value[key]);
-    }
-  }
-  return value;
-}
-function freezeSnapshot(snapshot) {
-  const log = [];
-  const frozen = { ...snapshot, target_log: log };
-  for (const key of Object.keys(snapshot)) {
-    deepFreeze3(frozen[key]);
-  }
-  Object.freeze(frozen);
-  return frozen;
-}
-function appendEvidenceEvent(log, event) {
-  if (!Array.isArray(log)) throw new Error("model-catalog: target_log is not an array");
-  if (!LEGAL_EVIDENCE_TRANSITIONS.has(event.transition)) {
-    throw new Error(`model-catalog: illegal evidence transition ${JSON.stringify(event.transition)}`);
-  }
-  if (event.transition.endsWith("->available")) {
-    const source = event.source;
-    const targetId = event.target_id;
-    const adapterId = event.adapter_id;
-    if (!isPresent(source)) {
-      throw new Error(
-        "model-catalog: ->available requires grounding evidence \u2014 a sourceless promotion is illegal (T4-R2-001)"
-      );
-    }
-    if (!isPresent(targetId)) {
-      throw new Error(
-        `model-catalog: ->available is target-row-scoped \u2014 event source ${JSON.stringify(source)} carries no target_id (T4-R2-001)`
-      );
-    }
-    if (source !== "dispatch_receipt") {
-      if (!isPresent(adapterId)) {
-        throw new Error(
-          `model-catalog: a listing-sourced ->available requires the complete (target_id, adapter_id, source) authority triple \u2014 ${JSON.stringify(source)} for target ${JSON.stringify(targetId)} carries no adapter_id (T4-R2-001); only a dispatch receipt or the row's contract-availability listing grounds available`
-        );
-      }
-      if (!listingCanGroundAvailable({ target_id: targetId, adapter_id: adapterId, source })) {
-        throw new Error(
-          `model-catalog: ->available requires a dispatch receipt or the target row's contract-availability listing, got ${JSON.stringify(source)} via adapter ${JSON.stringify(adapterId)} for target ${JSON.stringify(targetId)}`
-        );
-      }
-    }
-  }
-  log.push(event);
-  return log;
-}
-function projectionAllowed(input) {
-  return input.from_target === input.to_target;
-}
-function defaultEvidenceStateForTarget(_targetId) {
-  return "unknown";
-}
-function tierForCanonicalId(canonicalId) {
-  for (const row of TIER_MAP) {
-    if (canonicalId.startsWith(row.prefix)) return row.tier;
-  }
-  return "unknown";
-}
-function normalizeModel(raw, index, asOf, row) {
-  const state = evidenceStateForListing({
-    source: raw.evidence_source,
-    contract_states_availability: raw.contract_states_availability,
-    target_id: row.target_id,
-    adapter_id: row.adapter_id
-  });
-  return {
-    canonical_id: raw.canonical_id,
-    aliases: raw.aliases ?? [],
-    model_family: raw.model_family ?? "unknown",
-    capabilities: raw.capabilities ?? {},
-    reasoning_efforts: raw.reasoning_efforts ?? [],
-    // provider order VERBATIM
-    default_effort: raw.default_effort ?? null,
-    tier: tierForCanonicalId(raw.canonical_id),
-    provider_priority: raw.provider_priority ?? null,
-    catalog_index: index,
-    // 0-based provider listing position, as returned
-    provider_default: raw.provider_default === true,
-    visibility: raw.visibility ?? "listed",
-    deprecation: raw.deprecation ?? { upgrade_to: null, migration_note: null },
-    evidence: {
-      state,
-      source: raw.evidence_source,
-      confidence: confidenceForListing(raw.evidence_source),
-      as_of: asOf
-    },
-    dispatch_evidence: null
-  };
-}
-function normalizeDiscovery(raw, opts) {
-  if (raw.target_id !== opts.target.target_id) {
-    throw new Error(
-      `model-catalog: discovery target ${JSON.stringify(raw.target_id)} does not match snapshot target ${JSON.stringify(opts.target.target_id)}`
-    );
-  }
-  return {
-    schema_version: MODEL_CATALOG_SCHEMA_VERSION,
-    target: {
-      ...opts.target,
-      adapter_id: raw.adapter_id,
-      adapter_version: raw.adapter_version
-    },
-    discovery: {
-      method: raw.method,
-      source_ref: raw.source_ref,
-      discovered_at: opts.discoveredAt,
-      ttl_seconds: opts.ttlSeconds ?? DEFAULT_CATALOG_TTL_SECONDS,
-      status: raw.status,
-      latency_ms: raw.latency_ms,
-      failure_reason: raw.failure_reason
-    },
-    generation: opts.generation,
-    models: raw.models.map(
-      (m, i) => normalizeModel(m, i, opts.discoveredAt, {
-        target_id: opts.target.target_id,
-        adapter_id: raw.adapter_id
-      })
-    )
-  };
-}
-var EVIDENCE_STATES, AUTHENTICATED_LISTING_SOURCES, METADATA_ONLY_SOURCES, NO_LISTING_GROUNDING, LISTING_AUTHORITY, LEGAL_EVIDENCE_TRANSITIONS, TIER_MAPPING_VERSION, TIER_MAP;
-var init_model_catalog = __esm({
-  "src/domains/config/model-catalog.ts"() {
-    init_catalog_cache();
-    init_kernel();
-    EVIDENCE_STATES = Object.freeze(["available", "advertised", "unknown", "unavailable"]);
-    AUTHENTICATED_LISTING_SOURCES = /* @__PURE__ */ new Set(["contract_api_list", "native_list", "debug_catalog", "picker"]);
-    METADATA_ONLY_SOURCES = /* @__PURE__ */ new Set(["static_hint", "public_doc", "unauthenticated_list"]);
-    NO_LISTING_GROUNDING = Object.freeze({
-      ceiling: "advertised",
-      available_grounding: null
-    });
-    LISTING_AUTHORITY = Object.freeze({
-      // The ONLY row carrying the /v1/models availability contract (matrix §3 [C2]).
-      "claude-api": Object.freeze({
-        ceiling: "available",
-        available_grounding: Object.freeze({ adapter_id: "claude-api-models", source: "contract_api_list" })
-      }),
-      // Interactive-only picker; honest-unknown row — a picker listing can NEVER ground available.
-      "claude-cli-subscription": NO_LISTING_GROUNDING,
-      "claude-app": NO_LISTING_GROUNDING,
-      "claude-web": NO_LISTING_GROUNDING,
-      // Gateways: gateway-NATIVE evidence only, none evidenced today (§6 gateway rule) —
-      // a listing caps at static-hint/native advertised; only §4 dispatch evidence upgrades.
-      "claude-gateway-bedrock": NO_LISTING_GROUNDING,
-      "claude-gateway-vertex": NO_LISTING_GROUNDING,
-      "claude-gateway-foundry": NO_LISTING_GROUNDING,
-      // Codex auth-list surfaces: entitlement semantics contractually undefined.
-      "codex-app-server": NO_LISTING_GROUNDING,
-      "codex-cli-chatgpt": NO_LISTING_GROUNDING,
-      "codex-cli-api-key": NO_LISTING_GROUNDING,
-      "openai-api": NO_LISTING_GROUNDING
-    });
-    LEGAL_EVIDENCE_TRANSITIONS = sealSet([
-      "unknown->advertised",
-      "unknown->available",
-      "advertised->available",
-      "advertised->unavailable",
-      "available->unavailable",
-      "advertised->unknown",
-      "available->unknown",
-      "unavailable->unknown"
-    ]);
-    TIER_MAPPING_VERSION = "tier-map-v1-2026-07-30";
-    TIER_MAP = [
-      { prefix: "claude-haiku-", tier: "cheap" },
-      { prefix: "claude-sonnet-", tier: "mid" },
-      { prefix: "claude-opus-", tier: "powerful" },
-      { prefix: "claude-fable-", tier: "powerful" },
-      { prefix: "claude-fable", tier: "powerful" },
-      { prefix: "gpt-5.6-sol", tier: "powerful" },
-      { prefix: "gpt-5.6-terra", tier: "mid" },
-      { prefix: "gpt-5.6-luna", tier: "cheap" },
-      { prefix: "gpt-5.5", tier: "powerful" },
-      { prefix: "gpt-5.4-mini", tier: "cheap" },
-      { prefix: "gpt-5.4", tier: "mid" },
-      { prefix: "gpt-5.3-codex-spark", tier: "cheap" }
-    ];
-  }
-});
-
-// src/domains/config/model-policy.ts
-function isReviewClassPurpose(p) {
-  return REVIEW_CLASS_PURPOSES.includes(p);
-}
-function parseSelector(raw) {
-  if (typeof raw !== "string" || raw.length === 0) {
-    throw new Error(`selector_malformed: empty or non-string selector`);
-  }
-  if (raw.startsWith("id:")) {
-    const id = raw.slice(3);
-    if (!id) throw new Error(`selector_malformed: "id:" needs a canonical_id (got "${raw}")`);
-    return { form: "id", canonical_id: id };
-  }
-  if (raw.startsWith("alias:")) {
-    const alias = raw.slice(6);
-    if (!alias) throw new Error(`selector_malformed: "alias:" needs an alias (got "${raw}")`);
-    return { form: "alias", alias };
-  }
-  if (raw.startsWith("expr:")) {
-    const body = raw.slice(5);
-    if (!body) throw new Error(`selector_malformed: "expr:" needs conjuncts (got "${raw}")`);
-    const out = {};
-    for (const conjunct of body.split(";")) {
-      const eq = conjunct.indexOf("=");
-      if (eq <= 0) throw new Error(`selector_malformed: bad conjunct "${conjunct}" in "${raw}"`);
-      const key = conjunct.slice(0, eq);
-      const value = conjunct.slice(eq + 1);
-      if (key === "model_family") {
-        if (out.model_family !== void 0)
-          throw new Error(`selector_malformed: duplicate conjunct key "model_family" in "${raw}"`);
-        if (!value) throw new Error(`selector_malformed: empty model_family in "${raw}"`);
-        out.model_family = value;
-      } else if (key === "tier") {
-        if (out.tier !== void 0)
-          throw new Error(`selector_malformed: duplicate conjunct key "tier" in "${raw}"`);
-        if (!POLICY_TIERS.includes(value)) {
-          throw new Error(
-            `selector_malformed: tier "${value}" invalid in "${raw}" (cheap|mid|powerful; tier=unknown is invalid)`
-          );
-        }
-        out.tier = value;
-      } else {
-        throw new Error(`selector_malformed: unknown expr key "${key}" in "${raw}" (closed: model_family, tier)`);
-      }
-    }
-    if (out.model_family === void 0 && out.tier === void 0) {
-      throw new Error(`selector_malformed: expr needs at least one conjunct ("${raw}")`);
-    }
-    return { form: "expr", ...out };
-  }
-  throw new Error(
-    `selector_malformed: "${raw}" is not id:/alias:/expr: (bare strings and unknown prefixes are rejected)`
-  );
-}
-function maxComplexity(a, b) {
-  return COMPLEXITY_ORDER[a] >= COMPLEXITY_ORDER[b] ? a : b;
-}
-function purposeComplexityFloor(purpose) {
-  return purpose === "research" ? "hard" : "easy";
-}
-function purposeTierFloor(purpose) {
-  if (purpose === "research" || isReviewClassPurpose(purpose)) return "powerful";
-  return null;
-}
-function tierForComplexity(c) {
-  return c === "easy" ? "cheap" : c === "medium" ? "mid" : "powerful";
-}
-function reachableComplexities(purpose, minEffectiveComplexity) {
-  const floor = maxComplexity(purposeComplexityFloor(purpose), minEffectiveComplexity);
-  return COMPLEXITIES.filter((c) => COMPLEXITY_ORDER[c] >= COMPLEXITY_ORDER[floor]);
-}
-function isPlainObject6(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function rejectUnknownKeys2(obj, allowed, where, rejects) {
-  for (const k of Object.keys(obj)) {
-    if (!allowed.includes(k)) {
-      rejects.push(`${where}: unknown key "${k}" (closed key set: ${allowed.join(", ")})`);
-    }
-  }
-}
-function validateSelectorEntry(entry, where, rejects) {
-  if (!isPlainObject6(entry)) {
-    rejects.push(`${where}: selector entry must be an object with a "selector" key`);
-    return;
-  }
-  rejectUnknownKeys2(entry, ["selector", "effort", "capabilities"], where, rejects);
-  if (typeof entry["selector"] !== "string") {
-    rejects.push(`${where}: "selector" must be a string (bare/missing selectors are rejected)`);
-  } else {
-    try {
-      parseSelector(entry["selector"]);
-    } catch (e) {
-      rejects.push(`${where}: ${e.message}`);
-    }
-  }
-  if (entry["effort"] !== void 0 && entry["effort"] !== null && typeof entry["effort"] !== "string") {
-    rejects.push(`${where}: "effort" must be a string or null`);
-  }
-  if (entry["capabilities"] !== void 0) {
-    const caps = entry["capabilities"];
-    if (!Array.isArray(caps) || caps.some((c) => typeof c !== "string")) {
-      rejects.push(`${where}: "capabilities" must be an array of capability-key strings`);
-    }
-  }
-}
-function validateModelPolicy(input, opts) {
-  const rejects = [];
-  if (!isPlainObject6(input)) {
-    return [`model_policy: must be an object (guild.model_policy.v2)`];
-  }
-  rejectUnknownKeys2(input, ["version", "allow_advertised_attempt", "purposes"], "model_policy", rejects);
-  if (input["version"] !== 2) {
-    rejects.push(`model_policy.version: must be 2 (got ${JSON.stringify(input["version"])})`);
-  }
-  if (input["allow_advertised_attempt"] !== void 0 && typeof input["allow_advertised_attempt"] !== "boolean") {
-    rejects.push(`model_policy.allow_advertised_attempt: must be a boolean (default false)`);
-  }
-  const purposes = input["purposes"];
-  if (!isPlainObject6(purposes)) {
-    rejects.push(`model_policy.purposes: must be an object keyed by the closed purpose enum`);
-    return rejects;
-  }
-  for (const [purposeKey, rawPurpose] of Object.entries(purposes)) {
-    const where = `model_policy.purposes.${purposeKey}`;
-    if (!POLICY_PURPOSES.includes(purposeKey)) {
-      rejects.push(`${where}: unknown purpose (closed enum: ${POLICY_PURPOSES.join(", ")})`);
-      continue;
-    }
-    const purpose = purposeKey;
-    if (!isPlainObject6(rawPurpose)) {
-      rejects.push(`${where}: must be an object`);
-      continue;
-    }
-    rejectUnknownKeys2(
-      rawPurpose,
-      ["min_effective_complexity", "independence", "confirm_on_degradation", "routes"],
-      where,
-      rejects
-    );
-    const minC = rawPurpose["min_effective_complexity"];
-    if (!COMPLEXITIES.includes(minC)) {
-      rejects.push(`${where}.min_effective_complexity: must be easy|medium|hard`);
-    }
-    if (purpose === "research" && minC !== "hard") {
-      rejects.push(
-        `${where}.min_effective_complexity: research is ALWAYS hard/powerful (research_always_hard); "${String(minC)}" lowers the non-downgradable floor`
-      );
-    }
-    const independence = rawPurpose["independence"];
-    if (!INDEPENDENCE_LEVELS.includes(independence)) {
-      rejects.push(`${where}.independence: must be none|prefer_cross_family|require_cross_family`);
-    }
-    if (typeof rawPurpose["confirm_on_degradation"] !== "boolean") {
-      rejects.push(`${where}.confirm_on_degradation: must be a boolean`);
-    }
-    if (independence === "require_cross_family" && rawPurpose["confirm_on_degradation"] === false) {
-      rejects.push(
-        `${where}: independence require_cross_family requires confirm_on_degradation:true (a same-family fallback must take the explicit weak-degradation labelling path, never silent)`
-      );
-    }
-    const routes = rawPurpose["routes"];
-    if (!Array.isArray(routes) || routes.length === 0) {
-      rejects.push(`${where}.routes: must be a non-empty array (closed route table, \xA71b)`);
-      continue;
-    }
-    routes.forEach((rawRoute, i) => {
-      const rWhere = `${where}.routes[${i}]`;
-      if (!isPlainObject6(rawRoute)) {
-        rejects.push(`${rWhere}: must be an object`);
-        return;
-      }
-      rejectUnknownKeys2(
-        rawRoute,
-        ["complexity", "condition", "preferred", "fallbacks", "provider_default"],
-        rWhere,
-        rejects
-      );
-      const complexity = rawRoute["complexity"];
-      if (complexity !== "any" && !COMPLEXITIES.includes(complexity)) {
-        rejects.push(`${rWhere}.complexity: must be easy|medium|hard|any`);
-      }
-      const condition = rawRoute["condition"];
-      if (condition !== void 0) {
-        if (!isPlainObject6(condition)) {
-          rejects.push(`${rWhere}.condition: must be an object {kind, model_family}`);
-        } else {
-          rejectUnknownKeys2(condition, ["kind", "model_family"], `${rWhere}.condition`, rejects);
-          const kind = condition["kind"];
-          if (!CONDITION_KINDS.includes(kind)) {
-            rejects.push(`${rWhere}.condition.kind: must be always|producer_model_family_is|producer_model_family_is_not`);
-          } else if (kind === "always") {
-            if (condition["model_family"] !== null && condition["model_family"] !== void 0) {
-              rejects.push(`${rWhere}.condition.model_family: MUST be null when kind = always`);
-            }
-          } else {
-            if (typeof condition["model_family"] !== "string" || condition["model_family"].length === 0) {
-              rejects.push(`${rWhere}.condition.model_family: REQUIRED (non-empty string) when kind \u2260 always`);
-            }
-            if (!isReviewClassPurpose(purpose)) {
-              rejects.push(
-                `${rWhere}.condition: non-always conditions are valid ONLY on review-class purposes (advisory, adversarial, security, adversarial-security) \u2014 "${purpose}" has no producer`
-              );
-            }
-          }
-        }
-      }
-      const preferred = rawRoute["preferred"];
-      if (!Array.isArray(preferred) || preferred.length === 0) {
-        rejects.push(`${rWhere}.preferred: must be a non-empty ordered selector list`);
-      } else {
-        preferred.forEach((entry, j) => validateSelectorEntry(entry, `${rWhere}.preferred[${j}]`, rejects));
-        if (purpose === "security") {
-          preferred.forEach((entry, j) => {
-            if (isPlainObject6(entry) && typeof entry["selector"] === "string" && !entry["selector"].startsWith("id:")) {
-              rejects.push(
-                `${rWhere}.preferred[${j}]: security-purpose preferred selectors must be pinned "id:" selectors (got "${entry["selector"]}")`
-              );
-            }
-          });
-        }
-      }
-      const fallbacks = rawRoute["fallbacks"];
-      if (!Array.isArray(fallbacks)) {
-        rejects.push(`${rWhere}.fallbacks: must be an array (may be empty)`);
-      } else {
-        fallbacks.forEach((entry, j) => validateSelectorEntry(entry, `${rWhere}.fallbacks[${j}]`, rejects));
-      }
-      const tierFloor = purposeTierFloor(purpose);
-      if (tierFloor !== null) {
-        const checkSelectorFloor = (entry, sWhere) => {
-          if (!isPlainObject6(entry) || typeof entry["selector"] !== "string") return;
-          let parsed;
-          try {
-            parsed = parseSelector(entry["selector"]);
-          } catch {
-            return;
-          }
-          if (parsed.form === "expr" && parsed.tier !== void 0 && parsed.tier !== tierFloor) {
-            rejects.push(
-              `${sWhere}: "${entry["selector"]}" names tier "${parsed.tier}" on a "${purpose}" route \u2014 the \xA73 purpose tier floor is "${tierFloor}" (non-downgradable)`
-            );
-            return;
-          }
-          const catalog = opts?.catalog_models;
-          if (!catalog) return;
-          for (const m of catalog) {
-            const matches = parsed.form === "id" ? m.canonical_id === parsed.canonical_id : parsed.form === "alias" ? Array.isArray(m.aliases) && m.aliases.includes(parsed.alias) : (parsed.model_family === void 0 || m.model_family === parsed.model_family) && (parsed.tier === void 0 || m.tier === parsed.tier);
-            if (matches && m.tier !== tierFloor) {
-              rejects.push(
-                `${sWhere}: "${entry["selector"]}" resolves to catalog model "${String(m.canonical_id)}" at tier "${m.tier ?? "unknown"}" \u2014 "${purpose}" routes must stay at the "${tierFloor}" floor (\xA73; research_always_hard forces hard AND powerful)`
-              );
-            }
-          }
-        };
-        if (Array.isArray(preferred)) {
-          preferred.forEach((entry, j) => checkSelectorFloor(entry, `${rWhere}.preferred[${j}]`));
-        }
-        if (Array.isArray(fallbacks)) {
-          fallbacks.forEach((entry, j) => checkSelectorFloor(entry, `${rWhere}.fallbacks[${j}]`));
-        }
-      }
-      const providerDefault = rawRoute["provider_default"];
-      if (providerDefault !== void 0 && providerDefault !== "forbid" && providerDefault !== "allow_last_resort") {
-        rejects.push(`${rWhere}.provider_default: must be forbid|allow_last_resort (default forbid)`);
-      }
-      if (providerDefault === "allow_last_resort" && (purpose === "research" || isReviewClassPurpose(purpose))) {
-        rejects.push(
-          `${rWhere}.provider_default: allow_last_resort is rejected on "${purpose}" routes (research and review-class purposes must be forbid)`
-        );
-      }
-    });
-    if (COMPLEXITIES.includes(minC)) {
-      const reachable = reachableComplexities(purpose, minC);
-      for (const c of reachable) {
-        const covered = routes.some((r) => {
-          if (!isPlainObject6(r)) return false;
-          const rc = r["complexity"];
-          const cond = r["condition"];
-          const isAlways = cond === void 0 || isPlainObject6(cond) && cond["kind"] === "always";
-          return (rc === c || rc === "any") && isAlways;
-        });
-        if (!covered) {
-          rejects.push(
-            `${where}.routes: route_incomplete \u2014 reachable effective_complexity "${c}" has no matching always-condition row (\xA71b coverage)`
-          );
-        }
-      }
-    }
-  }
-  return rejects;
-}
-var POLICY_PURPOSES, REVIEW_CLASS_PURPOSES, COMPLEXITIES, CONDITION_KINDS, INDEPENDENCE_LEVELS, POLICY_TIERS, COMPLEXITY_ORDER, OPERATOR_BASELINE_POLICY;
-var init_model_policy = __esm({
-  "src/domains/config/model-policy.ts"() {
-    init_kernel();
-    POLICY_PURPOSES = Object.freeze([
-      "general",
-      "implementation",
-      "planning",
-      "research",
-      "advisory",
-      "adversarial",
-      "security",
-      "adversarial-security"
-    ]);
-    REVIEW_CLASS_PURPOSES = Object.freeze([
-      "advisory",
-      "adversarial",
-      "security",
-      "adversarial-security"
-    ]);
-    COMPLEXITIES = Object.freeze(["easy", "medium", "hard"]);
-    CONDITION_KINDS = Object.freeze([
-      "always",
-      "producer_model_family_is",
-      "producer_model_family_is_not"
-    ]);
-    INDEPENDENCE_LEVELS = Object.freeze(["none", "prefer_cross_family", "require_cross_family"]);
-    POLICY_TIERS = Object.freeze(["cheap", "mid", "powerful"]);
-    COMPLEXITY_ORDER = { easy: 0, medium: 1, hard: 2 };
-    OPERATOR_BASELINE_POLICY = deepFreeze({
-      version: 2,
-      allow_advertised_attempt: false,
-      purposes: {
-        general: {
-          min_effective_complexity: "easy",
-          independence: "none",
-          confirm_on_degradation: true,
-          routes: [
-            {
-              complexity: "easy",
-              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "expr:tier=cheap" }],
-              provider_default: "allow_last_resort"
-            },
-            {
-              complexity: "medium",
-              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "expr:tier=mid" }],
-              provider_default: "allow_last_resort"
-            },
-            {
-              complexity: "hard",
-              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
-              provider_default: "allow_last_resort"
-            }
-          ]
-        },
-        implementation: {
-          min_effective_complexity: "easy",
-          independence: "none",
-          confirm_on_degradation: true,
-          routes: [
-            {
-              complexity: "easy",
-              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "expr:tier=cheap" }],
-              provider_default: "allow_last_resort"
-            },
-            {
-              complexity: "medium",
-              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "expr:tier=mid" }],
-              provider_default: "allow_last_resort"
-            },
-            {
-              complexity: "hard",
-              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
-              provider_default: "allow_last_resort"
-            }
-          ]
-        },
-        planning: {
-          min_effective_complexity: "easy",
-          independence: "none",
-          confirm_on_degradation: true,
-          routes: [
-            {
-              complexity: "easy",
-              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "expr:tier=cheap" }],
-              provider_default: "allow_last_resort"
-            },
-            {
-              complexity: "medium",
-              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "expr:tier=mid" }],
-              provider_default: "allow_last_resort"
-            },
-            {
-              complexity: "hard",
-              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
-              provider_default: "allow_last_resort"
-            }
-          ]
-        },
-        research: {
-          // Redundant with the §3 forced floor; stated for closure.
-          min_effective_complexity: "hard",
-          independence: "none",
-          confirm_on_degradation: true,
-          routes: [
-            {
-              complexity: "hard",
-              // the ONLY reachable value (research_always_hard, §3)
-              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
-              provider_default: "forbid"
-            }
-          ]
-        },
-        advisory: {
-          min_effective_complexity: "easy",
-          independence: "prefer_cross_family",
-          confirm_on_degradation: true,
-          routes: [
-            {
-              complexity: "any",
-              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
-              fallbacks: [{ selector: "expr:model_family=gpt;tier=powerful" }],
-              provider_default: "forbid"
-            }
-          ]
-        },
-        adversarial: {
-          min_effective_complexity: "easy",
-          // Same-family fallback allowed but ALWAYS weak-labelled (resolution §7a).
-          independence: "prefer_cross_family",
-          confirm_on_degradation: true,
-          routes: [
-            {
-              // Producer is not gpt-family → gpt reviewer is cross-family.
-              complexity: "any",
-              condition: { kind: "producer_model_family_is_not", model_family: "gpt" },
-              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
-              fallbacks: [{ selector: "id:claude-opus-4-8" }],
-              // may be same-family as producer ⇒ weak, labelled
-              provider_default: "forbid"
-            },
-            {
-              // Producer IS gpt-family → claude reviewer restores independence.
-              complexity: "any",
-              condition: { kind: "producer_model_family_is", model_family: "gpt" },
-              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "expr:model_family=claude;tier=powerful" }],
-              provider_default: "forbid"
-            },
-            {
-              // Producer family unknown → weak either way (resolution §7a); review still runs.
-              complexity: "any",
-              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
-              fallbacks: [{ selector: "id:claude-opus-4-8" }],
-              provider_default: "forbid"
-            }
-          ]
-        },
-        security: {
-          min_effective_complexity: "easy",
-          independence: "none",
-          // same-family claude is deliberate (pinned-model rationale)
-          confirm_on_degradation: true,
-          routes: [
-            {
-              complexity: "any",
-              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
-              // pinned id REQUIRED (§5)
-              fallbacks: [{ selector: "expr:model_family=claude;tier=powerful" }],
-              provider_default: "forbid"
-            }
-          ]
-        },
-        "adversarial-security": {
-          min_effective_complexity: "easy",
-          independence: "require_cross_family",
-          // adjudicated weak ⇒ NO strong sign-off (resolution §7a)
-          confirm_on_degradation: true,
-          routes: [
-            {
-              // Producer not gpt-family → gpt reviewer is cross-family.
-              complexity: "any",
-              condition: { kind: "producer_model_family_is_not", model_family: "gpt" },
-              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
-              // Cannot restore independence on this branch ⇒ weak ⇒ NO strong sign-off.
-              fallbacks: [{ selector: "id:claude-opus-4-8" }],
-              provider_default: "forbid"
-            },
-            {
-              // Producer IS gpt-family → claude restores family independence.
-              complexity: "any",
-              condition: { kind: "producer_model_family_is", model_family: "gpt" },
-              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
-              fallbacks: [],
-              // nothing further — beyond this there is NO strong sign-off
-              provider_default: "forbid"
-            },
-            {
-              // Producer family unknown → weak regardless; NO strong sign-off.
-              complexity: "any",
-              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
-              fallbacks: [{ selector: "id:claude-opus-4-8" }],
-              provider_default: "forbid"
-            }
-          ]
-        }
-      }
-    });
-  }
-});
-
-// src/domains/config/model-resolver.ts
-function totalCatalogOrder(models) {
-  return [...models].sort((a, b) => {
-    const pa = a.provider_priority ?? null;
-    const pb = b.provider_priority ?? null;
-    if (pa !== pb) {
-      if (pa === null) return 1;
-      if (pb === null) return -1;
-      return pa - pb;
-    }
-    const ia = a.catalog_index ?? Number.MAX_SAFE_INTEGER;
-    const ib = b.catalog_index ?? Number.MAX_SAFE_INTEGER;
-    if (ia !== ib) return ia - ib;
-    return codePointCompare(a.canonical_id ?? "", b.canonical_id ?? "");
-  });
-}
-function expandSelector(parsed, orderedModels) {
-  if (parsed.form === "id") {
-    return orderedModels.filter((m) => m.canonical_id === parsed.canonical_id);
-  }
-  if (parsed.form === "alias") {
-    return orderedModels.filter((m) => Array.isArray(m.aliases) && m.aliases.includes(parsed.alias));
-  }
-  return orderedModels.filter((m) => {
-    if (parsed.model_family !== void 0 && m.model_family !== parsed.model_family) return false;
-    if (parsed.tier !== void 0 && m.tier !== parsed.tier) return false;
-    return true;
-  });
-}
-function evaluateCondition(condition, producerModelFamily) {
-  if (!condition || condition.kind === "always") return true;
-  if (producerModelFamily === void 0 || producerModelFamily === null || producerModelFamily === "unknown") {
-    return false;
-  }
-  if (condition.kind === "producer_model_family_is") {
-    return producerModelFamily === condition.model_family;
-  }
-  if (condition.kind === "producer_model_family_is_not") {
-    return producerModelFamily !== condition.model_family;
-  }
-  return false;
-}
-function selectRoute(input) {
-  const evaluations = [];
-  const conditionInput = input.producer_model_family === void 0 ? null : input.producer_model_family;
-  for (let i = 0; i < input.routes.length; i++) {
-    const row = input.routes[i];
-    const complexityMatch = row.complexity === "any" || row.complexity === input.effective_complexity;
-    const conditionResult = evaluateCondition(
-      row.condition,
-      input.producer_model_family
-    );
-    evaluations.push({ index: i, complexity_match: complexityMatch, condition_result: conditionResult });
-    if (complexityMatch && conditionResult) {
-      return { index: i, route: row, evaluations, condition_input: conditionInput };
-    }
-  }
-  throw new Error(
-    `route_unbound: no route row matches effective_complexity "${input.effective_complexity}" (fail closed \u2014 a validator-accepted policy cannot reach this; contract violation)`
-  );
-}
-function simulateCatalogChange(change) {
-  if (change.remove) liveCatalog.delete(change.remove);
-  if (change.upsert) liveCatalog.set(change.upsert.canonical_id, change.upsert);
-}
-function fallbackHash(fallbacks) {
-  return sha256Hex(canonicalYaml(fallbacks));
-}
-function freezeChain(input) {
-  const frozenFallbacks = JSON.parse(JSON.stringify(input.fallbacks ?? []));
-  const receipt = {
-    ...input,
-    fallbacks: frozenFallbacks,
-    fallback_hash: fallbackHash(frozenFallbacks),
-    outcome: { attempted: [] },
-    finalized_at: null,
-    receipt_hash: null
-  };
-  Object.freeze(receipt.fallbacks);
-  receipt.fallbacks.forEach((f) => Object.freeze(f));
-  return receipt;
-}
-function chainModels(receipt) {
-  const models = /* @__PURE__ */ new Set();
-  const sel = receipt.selection;
-  if (sel && typeof sel.model === "string") models.add(sel.model);
-  for (const f of receipt.fallbacks ?? []) models.add(f.model);
-  return models;
-}
-function assertNotFinalized(receipt, action) {
-  if (receipt.finalized_at) {
-    throw new Error(`receipt is finalized and immutable \u2014 cannot ${action} (\xA78 lifecycle)`);
-  }
-}
-function advanceChain(receipt, failure2) {
-  const advances = FALLBACK_FAILURE_TAXONOMY[failure2.failure_class];
-  if (advances === void 0) {
-    throw new Error(
-      `failure_class "${failure2.failure_class}" is outside the closed \xA74 taxonomy \u2014 fail closed`
-    );
-  }
-  const attemptedModels = new Set((receipt.outcome?.attempted ?? []).map((a) => a.model));
-  const chain = receipt.fallbacks ?? [];
-  const next = advances ? chain.find((f) => !attemptedModels.has(f.model)) ?? null : null;
-  return {
-    advanced: advances,
-    failure_class: failure2.failure_class,
-    next_model: next ? next.model : null
-  };
-}
-function assertServedTripleConsistent(attempt, where) {
-  const cls = attempt.substitution_class;
-  if (cls === void 0 || cls === null) {
-    throw new Error(
-      `${where}: served attempt for "${attempt.model}" has no substitution_class \u2014 every served attempt carries exactly one closed \xA75 class (${SUBSTITUTION_CLASSES.join("|")}); an unreported substitution is provider_silent, never an omitted field`
-    );
-  }
-  if (!SUBSTITUTION_CLASSES.includes(cls)) {
-    throw new Error(`${where}: substitution_class "${String(cls)}" is outside the closed \xA75 set`);
-  }
-  const actual = attempt.actual_model ?? "unknown";
-  if (cls === "none" && actual !== attempt.model) {
-    throw new Error(
-      `${where}: substitution_class "none" asserts actual_model === requested ("${attempt.model}") but actual_model is "${actual}" \u2014 a substitution the provider did not report is provider_silent with actual_model "unknown" (\xA75)`
-    );
-  }
-  if (cls === "provider_silent" && actual !== "unknown") {
-    throw new Error(
-      `${where}: provider_silent means the provider did not report the served model \u2014 actual_model must be the literal "unknown", got "${actual}" (\xA75)`
-    );
-  }
-  if ((cls === "provider_content_fallback" || cls === "provider_server_fallback") && (actual === "unknown" || actual === attempt.model)) {
-    throw new Error(
-      `${where}: ${cls} requires a provider-reported actual_model differing from the requested "${attempt.model}" (got "${actual}") \u2014 unreported is provider_silent, unchanged is none (\xA75)`
-    );
-  }
-}
-function recordAttempt(receipt, attempt) {
-  assertNotFinalized(receipt, "record an attempt");
-  if (!chainModels(receipt).has(attempt.model)) {
-    throw new Error(
-      `out-of-receipt substitution: model "${attempt.model}" is not in the frozen fallback chain \u2014 any model change must advance the frozen chain or be a recorded provider-side substitution (\xA73)`
-    );
-  }
-  if (attempt.result !== "served" && attempt.result !== "failed") {
-    throw new Error(`attempt.result must be served|failed (got "${String(attempt.result)}")`);
-  }
-  if (attempt.result === "failed") {
-    const fc = attempt.failure_class;
-    if (!fc || FALLBACK_FAILURE_TAXONOMY[fc] === void 0) {
-      throw new Error(`failed attempts REQUIRE a closed \xA74 failure_class (got "${String(fc)}")`);
-    }
-  }
-  const entry = {
-    model: attempt.model,
-    effort: attempt.effort ?? null,
-    result: attempt.result,
-    failure_class: attempt.result === "failed" ? attempt.failure_class : null,
-    substitution_class: attempt.result === "served" ? attempt.substitution_class ?? null : null,
-    actual_model: attempt.result === "served" ? attempt.actual_model ?? "unknown" : null
-  };
-  if (entry.result === "served") {
-    assertServedTripleConsistent(entry, "recordAttempt");
-  }
-  receipt.outcome.attempted.push(entry);
-  return receipt;
-}
-function classifyServedAttempt(input) {
-  const reported = input.provider_reported_model;
-  if (reported === null || reported === void 0 || reported === "") {
-    return {
-      requested_model: input.requested_model,
-      substitution_class: "provider_silent",
-      actual_model: "unknown"
-    };
-  }
-  if (reported === input.requested_model) {
-    return { requested_model: input.requested_model, substitution_class: "none", actual_model: reported };
-  }
-  const mechanism = input.mechanism ?? "";
-  const cls = mechanism === "content_classifier" ? "provider_content_fallback" : mechanism === "fallbacks_param" || mechanism === "server_fallback" ? "provider_server_fallback" : (
-    // A reported substitution with no stated mechanism is still a
-    // provider-side substitution; classify by the conservative content
-    // class so it is never masked as `none`.
-    "provider_content_fallback"
-  );
-  return { requested_model: input.requested_model, substitution_class: cls, actual_model: reported };
-}
-function finalizeReceipt(receipt, opts) {
-  if (receipt.finalized_at) {
-    throw new Error("receipt already finalized \u2014 finalization happens exactly once (\xA78)");
-  }
-  if (!RESOLUTION_STATUSES.includes(opts.status)) {
-    throw new Error(`outcome.status "${String(opts.status)}" outside the closed union`);
-  }
-  (receipt.outcome.attempted ?? []).forEach((a, i) => {
-    if (a.result === "served") {
-      assertServedTripleConsistent(a, `finalizeReceipt: outcome.attempted[${i}]`);
-    }
-  });
-  receipt.outcome.status = opts.status;
-  const served = [...receipt.outcome.attempted].reverse().find((a) => a.result === "served");
-  if (served && receipt.outcome.actual_model === void 0) {
-    receipt.outcome.actual_model = served.actual_model ?? "unknown";
-  }
-  receipt.finalized_at = opts.at ?? (/* @__PURE__ */ new Date()).toISOString();
-  receipt.receipt_hash_algorithm = "sha256";
-  receipt.receipt_hash_scope = "canonical_yaml_with_receipt_hash_field_omitted";
-  delete receipt["receipt_hash"];
-  receipt.receipt_hash = selfReferentialHash(
-    receipt,
-    "receipt_hash"
-  );
-  return receipt;
-}
-function finalizeInterrupted(receipt, opts) {
-  return finalizeReceipt(receipt, { status: "interrupted", at: opts?.at });
-}
-function verifyResolutionReceipt(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return { ok: false, reason: "not_an_object" };
-  }
-  const r = value;
-  if (r.schema_version !== "guild.model_resolution.v1") {
-    return { ok: false, reason: "schema_version_mismatch" };
-  }
-  if (typeof r.resolution_core_hash !== "string" || r.resolution_core_hash.length === 0) {
-    return { ok: false, reason: "core_hash_absent" };
-  }
-  if (coreHash(r) !== r.resolution_core_hash) {
-    return { ok: false, reason: "core_hash_mismatch" };
-  }
-  const finalizedAt = r.finalized_at;
-  const receiptHash = r.receipt_hash;
-  const claimsFinalization = finalizedAt !== null && finalizedAt !== void 0 || receiptHash !== null && receiptHash !== void 0;
-  if (!claimsFinalization) return { ok: true, receipt: r, finalized: false };
-  if (typeof finalizedAt !== "string" || typeof receiptHash !== "string") {
-    return { ok: false, reason: "finalization_partial" };
-  }
-  const recomputed = selfReferentialHash(
-    r,
-    "receipt_hash"
-  );
-  if (recomputed !== receiptHash) return { ok: false, reason: "receipt_hash_mismatch" };
-  return { ok: true, receipt: r, finalized: true };
-}
-function contentRef(name, value) {
-  const bytes = typeof value === "string" ? value : canonicalYaml(value);
-  return { path_or_id: `inline:${name}`, sha256: sha256Hex(bytes) };
-}
-function asObject(value) {
-  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-        return parsed;
-      }
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-function coreHash(receipt) {
-  const core = {};
-  for (const [k, v] of Object.entries(receipt)) {
-    if (k === "outcome" || k === "finalized_at" || k === "receipt_hash" || k === "receipt_hash_algorithm" || k === "receipt_hash_scope" || k === "resolution_core_hash")
-      continue;
-    if (v === void 0) continue;
-    core[k] = v;
-  }
-  return sha256Hex(canonicalYaml(core));
-}
-function failClosedCore(inputs, reason, rulePath) {
-  const receipt = {
-    schema_version: "guild.model_resolution.v1",
-    run_id: inputs.run_id ?? "unbound",
-    dispatch_id: inputs.dispatch_id ?? "unbound",
-    refs: {
-      session_context: contentRef("session_context", inputs.session_context),
-      catalog_snapshot: contentRef("catalog_snapshot", inputs.catalog_snapshot),
-      policy: contentRef("policy", inputs.policy)
-    },
-    request: null,
-    selection: null,
-    fallbacks: [],
-    fallback_hash: fallbackHash([]),
-    rejections: [],
-    rule_path: [...rulePath, `fail_closed:${reason}`],
-    failed_closed: reason,
-    outcome: { attempted: [] },
-    finalized_at: null,
-    receipt_hash: null
-  };
-  receipt.resolution_core_hash_algorithm = "sha256";
-  receipt.resolution_core_hash_scope = "canonical_yaml_with_resolution_core_hash_field_omitted";
-  receipt.resolution_core_hash = coreHash(receipt);
-  return receipt;
-}
-function resolve17(inputs) {
-  const rulePath = [];
-  const policyObj = asObject(inputs.policy);
-  if (policyObj === null) {
-    return failClosedCore(inputs, "policy_unparsable", rulePath);
-  }
-  const policyRejects = validateModelPolicy(policyObj);
-  if (policyRejects.length > 0) {
-    return failClosedCore(inputs, "policy_invalid", [
-      ...rulePath,
-      ...policyRejects.slice(0, 5).map((r) => `policy_reject:${r}`)
-    ]);
-  }
-  const policy = policyObj;
-  const request = inputs.request;
-  if (!request || typeof request.purpose !== "string") {
-    return failClosedCore(inputs, "purpose_unbound", rulePath);
-  }
-  const purposePolicy = policy.purposes[request.purpose];
-  if (!purposePolicy) {
-    return failClosedCore(inputs, `purpose_unconfigured:${request.purpose}`, rulePath);
-  }
-  const catalogObj = asObject(inputs.catalog_snapshot);
-  const models = Array.isArray(catalogObj?.["models"]) ? catalogObj["models"] : null;
-  if (!models) {
-    return failClosedCore(inputs, "catalog_snapshot_unparsable", rulePath);
-  }
-  const catalogRejects = validateModelPolicy(policyObj, { catalog_models: models });
-  if (catalogRejects.length > 0) {
-    return failClosedCore(inputs, "policy_invalid", [
-      ...rulePath,
-      ...catalogRejects.slice(0, 5).map((r) => `policy_reject:${r}`)
-    ]);
-  }
-  const requested = request.requested_complexity ?? "easy";
-  const effective = maxComplexity(
-    maxComplexity(requested, purposeComplexityFloor(request.purpose)),
-    purposePolicy.min_effective_complexity
-  );
-  const producerFamily = inputs.producer?.model_family ?? (isReviewClassPurpose(request.purpose) ? "unknown" : void 0);
-  let routeSel;
-  try {
-    routeSel = selectRoute({
-      routes: purposePolicy.routes,
-      effective_complexity: effective,
-      producer_model_family: producerFamily
-    });
-  } catch (e) {
-    return failClosedCore(inputs, "route_unbound", [
-      ...rulePath,
-      `route_selection:${e.message}`
-    ]);
-  }
-  for (const ev of routeSel.evaluations) {
-    rulePath.push(
-      `route[${ev.index}]:complexity_match=${ev.complexity_match},condition=${ev.condition_result}`
-    );
-  }
-  rulePath.push(`route_selected:${routeSel.index}`);
-  const route2 = routeSel.route;
-  const ordered = totalCatalogOrder(models);
-  const candidates = [];
-  const expandList = (entries, source) => {
-    entries.forEach((sel, idx) => {
-      const parsed = parseSelector(sel.selector);
-      const matches = expandSelector(parsed, ordered);
-      rulePath.push(`${source}[${idx}]:${sel.selector}->${matches.length}`);
-      for (const m of matches) {
-        candidates.push({
-          entry: m,
-          source,
-          selectorIndex: idx,
-          selectorEffort: sel.effort ?? null,
-          requiredCapabilities: sel.capabilities ?? []
-        });
-      }
-    });
-  };
-  expandList(route2.preferred ?? [], "preferred");
-  expandList(route2.fallbacks ?? [], "fallback");
-  if ((route2.provider_default ?? "forbid") === "allow_last_resort") {
-    const pd = ordered.find((m) => m.provider_default === true);
-    if (pd) {
-      rulePath.push(`provider_default:${pd.canonical_id}`);
-      candidates.push({
-        entry: pd,
-        source: "provider_default",
-        selectorIndex: -1,
-        selectorEffort: null,
-        requiredCapabilities: []
-      });
-    }
-  }
-  const seen = /* @__PURE__ */ new Set();
-  const deduped = candidates.filter((c) => {
-    if (seen.has(c.entry.canonical_id)) return false;
-    seen.add(c.entry.canonical_id);
-    return true;
-  });
-  const rejections = [];
-  const survivors = [];
-  const tierFloor = purposeTierFloor(request.purpose);
-  for (const c of deduped) {
-    if (tierFloor !== null && c.entry.tier !== tierFloor) {
-      rejections.push({ model: c.entry.canonical_id, reason: "policy" });
-      continue;
-    }
-    const caps = c.entry.capabilities ?? {};
-    const missingCap = c.requiredCapabilities.find((k) => !caps[k]);
-    if (missingCap !== void 0) {
-      rejections.push({ model: c.entry.canonical_id, reason: "capability" });
-      continue;
-    }
-    const evidenceState = c.entry.evidence?.state ?? "unknown";
-    const eligible = eligibleForPurpose({
-      evidence_state: evidenceState,
-      purpose_class: request.purpose,
-      allow_advertised_attempt: policy.allow_advertised_attempt === true
-    });
-    if (!eligible) {
-      rejections.push({ model: c.entry.canonical_id, reason: "evidence" });
-      continue;
-    }
-    survivors.push(c);
-  }
-  if (survivors.length === 0) {
-    return failClosedCore(inputs, "no_eligible_candidate", [
-      ...rulePath,
-      ...rejections.map((r) => `reject:${r.model}:${r.reason}`)
-    ]);
-  }
-  const first = survivors[0];
-  const efforts = first.entry.reasoning_efforts ?? [];
-  let effort;
-  let effortDegraded = false;
-  if (first.selectorEffort && efforts.includes(first.selectorEffort)) {
-    effort = first.selectorEffort;
-  } else if (first.selectorEffort) {
-    effort = first.entry.default_effort ?? null;
-    effortDegraded = true;
-  } else {
-    effort = first.entry.default_effort ?? null;
-  }
-  const independenceNote = (candidateFamily) => {
-    if (!isReviewClassPurpose(request.purpose)) return null;
-    const fam = candidateFamily ?? "unknown";
-    if (producerFamily === void 0 || producerFamily === null || producerFamily === "unknown" || fam === "unknown") {
-      return "producer_or_candidate_family_unknown:weak";
-    }
-    return fam === producerFamily ? "same_family_as_producer:weak" : "cross_family";
-  };
-  const frozenFallbacks = survivors.slice(1).map((c) => ({
-    model: c.entry.canonical_id,
-    effort: c.selectorEffort && (c.entry.reasoning_efforts ?? []).includes(c.selectorEffort) ? c.selectorEffort : c.entry.default_effort ?? null,
-    evidence_state: c.entry.evidence?.state ?? "unknown",
-    source: c.source,
-    independence_note: independenceNote(c.entry.model_family)
-  }));
-  const receipt = {
-    schema_version: "guild.model_resolution.v1",
-    run_id: inputs.run_id ?? "unbound",
-    dispatch_id: inputs.dispatch_id ?? "unbound",
-    refs: {
-      session_context: contentRef("session_context", inputs.session_context),
-      catalog_snapshot: contentRef("catalog_snapshot", inputs.catalog_snapshot),
-      policy: contentRef("policy", inputs.policy)
-    },
-    request: {
-      purpose: request.purpose,
-      purpose_origin: request.purpose_origin ?? "unbound",
-      dispatch_ancestry: request.dispatch_ancestry ?? [],
-      rejected_labels: request.rejected_labels ?? [],
-      requested_complexity: requested,
-      effective_complexity: effective,
-      forced_floor_reason: request.forced_floor_reason ?? null
-    },
-    selection: {
-      target_id: asObject(inputs.session_context)?.["target_id"] ?? "unknown",
-      model: first.entry.canonical_id,
-      effort,
-      evidence_state: first.entry.evidence?.state ?? "unknown",
-      route: {
-        index: routeSel.index,
-        complexity: route2.complexity,
-        condition_kind: route2.condition?.kind ?? "always",
-        condition_model_family: route2.condition?.model_family ?? null,
-        condition_input: routeSel.condition_input
-      },
-      source: first.source
-    },
-    fallbacks: frozenFallbacks,
-    fallback_hash: fallbackHash(frozenFallbacks),
-    rejections,
-    rule_path: [
-      ...rulePath,
-      `selected:${first.entry.canonical_id}:${first.source}[${first.selectorIndex}]`
-    ],
-    outcome: { attempted: [] },
-    finalized_at: null,
-    receipt_hash: null
-  };
-  if (isReviewClassPurpose(request.purpose)) {
-    receipt.review = {
-      requested_independence: purposePolicy.independence,
-      producer: {
-        host_family: inputs.producer?.host_family ?? "unknown",
-        host_family_trust: inputs.producer?.host_family_trust ?? "asserted",
-        model_family: inputs.producer?.model_family ?? "unknown",
-        model_family_source: inputs.producer?.model_family_source ?? "unknown",
-        resolution_ref: inputs.producer?.resolution_ref ?? null
-      }
-    };
-  }
-  if (effortDegraded) {
-    receipt.outcome.degradation = {
-      kind: "effort",
-      note: `selector effort "${first.selectorEffort}" not in entry reasoning_efforts; used default`
-    };
-  }
-  Object.freeze(receipt.fallbacks);
-  receipt.fallbacks.forEach((f) => Object.freeze(f));
-  receipt.resolution_core_hash_algorithm = "sha256";
-  receipt.resolution_core_hash_scope = "canonical_yaml_with_resolution_core_hash_field_omitted";
-  receipt.resolution_core_hash = coreHash(receipt);
-  return receipt;
-}
-function persistResolutionReceipt(runDir3, receipt) {
-  const runId = path36.basename(runDir3);
-  if (!receipt.run_id || receipt.run_id !== runId) {
-    throw new Error(
-      `run_binding_mismatch: receipt.run_id "${String(receipt.run_id)}" does not match the bound run dir "${runId}" \u2014 refusing to write`
-    );
-  }
-  if (!receipt.dispatch_id || receipt.dispatch_id === "unbound") {
-    throw new Error("run_binding_mismatch: receipt has no dispatch_id \u2014 refusing to write");
-  }
-  const dir = path36.join(runDir3, "resolution");
-  fs30.mkdirSync(dir, { recursive: true });
-  const target = path36.join(dir, `${receipt.dispatch_id}.receipt.yaml`);
-  const tmp = `${target}.tmp-${process.pid}`;
-  fs30.writeFileSync(tmp, canonicalYaml(receipt), "utf8");
-  fs30.renameSync(tmp, target);
-  return target;
-}
-var fs30, path36, FALLBACK_FAILURE_TAXONOMY, RESOLUTION_STATUSES, liveCatalog, SUBSTITUTION_CLASSES;
-var init_model_resolver = __esm({
-  "src/domains/config/model-resolver.ts"() {
-    fs30 = __toESM(require("fs"));
-    path36 = __toESM(require("path"));
-    init_teams();
-    init_model_catalog();
-    init_model_policy();
-    FALLBACK_FAILURE_TAXONOMY = Object.freeze({
-      model_overloaded: true,
-      model_unavailable: true,
-      server_nonretryable: true,
-      auth_error: false,
-      billing_error: false,
-      rate_limited: false,
-      request_invalid: false,
-      transport_error: false,
-      policy_refusal: false
-    });
-    RESOLUTION_STATUSES = Object.freeze([
-      "served",
-      "fallback_served",
-      "exhausted",
-      "user_declined",
-      "failed_closed",
-      "interrupted"
-    ]);
-    liveCatalog = /* @__PURE__ */ new Map();
-    SUBSTITUTION_CLASSES = [
-      "none",
-      "provider_content_fallback",
-      "provider_server_fallback",
-      "provider_silent"
-    ];
-  }
-});
-
-// src/domains/config/model-inspect.ts
-function asRecord(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v) ? v : null;
-}
-function str(v, fallback) {
-  return typeof v === "string" && v.length > 0 ? v : fallback;
-}
-function deepFreeze4(value) {
-  if (value && typeof value === "object") {
-    for (const v of Object.values(value)) deepFreeze4(v);
-    Object.freeze(value);
-  }
-  return value;
-}
-function parseRfc3339Seconds(s) {
-  if (typeof s !== "string") return null;
-  const ms = Date.parse(s);
-  return Number.isFinite(ms) ? Math.floor(ms / 1e3) : null;
-}
-function buildModelInspection(input) {
-  const unknowns = [];
-  const flags = { ...input.flags };
-  const sc = asRecord(input.session_context) ?? {};
-  const runId = str(sc["run_id"], "unknown");
-  if (runId === "unknown") unknowns.push("run_id");
-  const hostBlock = asRecord(sc["host"]);
-  const host = {
-    family: str(hostBlock?.["family"], "unknown"),
-    surface: str(hostBlock?.["surface"], "unknown")
-  };
-  if (host.family === "unknown") unknowns.push("host");
-  const idBlock = asRecord(sc["identity"]);
-  const identity = {
-    source: str(idBlock?.["source"], "none"),
-    // Unknown-safe: absent trust degrades to asserted, never upgrades (T3).
-    trust: idBlock?.["trust"] === "verified" ? "verified" : "asserted",
-    confidence: str(idBlock?.["confidence"], "low"),
-    evidence: str(idBlock?.["evidence"], "unknown")
-  };
-  if (!idBlock) unknowns.push("identity");
-  const targetBlock = asRecord(sc["execution_target"]);
-  const target = {
-    target_id: str(targetBlock?.["target_id"], "unknown"),
-    provider_kind: str(targetBlock?.["provider_kind"], "unknown"),
-    auth_mode: str(targetBlock?.["auth_mode"], "unknown")
-  };
-  if (target.target_id === "unknown") unknowns.push("target");
-  const inspectOff = flags["model_routing.inspect"] !== "on";
-  if (inspectOff) {
-    return deepFreeze4({
-      schema_version: MODEL_INSPECTION_SCHEMA,
-      state: "inspect_disabled",
-      generated_at: input.now,
-      run_id: runId,
-      host,
-      identity,
-      target,
-      catalog: {
-        state: "inspect_disabled",
-        target_id: null,
-        discovered_at: null,
-        age_seconds: null,
-        ttl_seconds: null,
-        stale: null,
-        generation: null,
-        models: null
-      },
-      policy: { present: false, policy_hash: null, rule_path: null },
-      selection: null,
-      fallbacks: null,
-      outcome: { finalized: false, status: "not_inspected", actual_model: "unknown" },
-      independence: {
-        adjudicated: false,
-        independence: null,
-        note: "inspection disabled (model_routing.inspect off)"
-      },
-      degradation: null,
-      flags,
-      unknowns: ["inspection_disabled"]
-    });
-  }
-  let catalog;
-  const snapshot = asRecord(input.catalog_snapshot);
-  if (flags["model_routing.discovery"] !== "on") {
-    catalog = {
-      state: "discovery_disabled",
-      target_id: null,
-      discovered_at: null,
-      age_seconds: null,
-      ttl_seconds: null,
-      stale: null,
-      generation: null,
-      models: null
-    };
-    unknowns.push("catalog");
-  } else if (!snapshot) {
-    catalog = {
-      state: "absent",
-      target_id: null,
-      discovered_at: null,
-      age_seconds: null,
-      ttl_seconds: null,
-      stale: null,
-      generation: null,
-      models: null
-    };
-    unknowns.push("catalog");
-  } else {
-    const discovery = asRecord(snapshot["discovery"]);
-    const discoveredAt = typeof discovery?.["discovered_at"] === "string" ? discovery["discovered_at"] : null;
-    const ttl = typeof discovery?.["ttl_seconds"] === "number" ? discovery["ttl_seconds"] : null;
-    const nowS = parseRfc3339Seconds(input.now);
-    const thenS = parseRfc3339Seconds(discoveredAt);
-    const age = nowS !== null && thenS !== null ? nowS - thenS : null;
-    if (age === null) unknowns.push("catalog_age");
-    const models = Array.isArray(snapshot["models"]) ? snapshot["models"].map((m) => {
-      const row = asRecord(m) ?? {};
-      const evidence = asRecord(row["evidence"]);
-      return {
-        canonical_id: str(row["canonical_id"], "unknown"),
-        tier: str(row["tier"], "unknown"),
-        evidence_state: str(evidence?.["state"], "unknown")
-      };
-    }) : null;
-    catalog = {
-      state: "ok",
-      target_id: str(asRecord(snapshot["target"])?.["target_id"], "unknown"),
-      discovered_at: discoveredAt,
-      age_seconds: age,
-      ttl_seconds: ttl,
-      stale: age !== null && ttl !== null ? age > ttl : null,
-      generation: typeof snapshot["generation"] === "number" ? snapshot["generation"] : null,
-      models
-    };
-  }
-  let receipt = null;
-  let receiptFinalized = false;
-  let verifiedReceiptHash = null;
-  if (input.receipt !== null && input.receipt !== void 0) {
-    const verdict = verifyResolutionReceipt(input.receipt);
-    if (verdict.ok === true) {
-      receipt = verdict.receipt;
-      receiptFinalized = verdict.finalized;
-      verifiedReceiptHash = verdict.finalized ? verdict.receipt.receipt_hash : null;
-    } else {
-      const rejected = verdict;
-      unknowns.push(`receipt_unverified:${rejected.reason}`);
-    }
-  }
-  const refs = asRecord(receipt?.["refs"]);
-  const policyRef = asRecord(refs?.["policy"]);
-  const policyPresent = input.policy !== null && input.policy !== void 0;
-  const policy = {
-    present: policyPresent,
-    policy_hash: str(policyRef?.["sha256"], "") || null,
-    rule_path: Array.isArray(receipt?.["rule_path"]) ? receipt["rule_path"] : null
-  };
-  if (!policyPresent) unknowns.push("policy");
-  const selectionBlock = asRecord(receipt?.["selection"]);
-  const selection = selectionBlock ? {
-    model: str(selectionBlock["model"], "unknown"),
-    effort: typeof selectionBlock["effort"] === "string" ? selectionBlock["effort"] : null,
-    evidence_state: str(selectionBlock["evidence_state"], "unknown")
-  } : null;
-  if (!selection) unknowns.push("selection");
-  const fallbacks = receipt && Array.isArray(receipt["fallbacks"]) && typeof receipt["fallback_hash"] === "string" ? { chain: receipt["fallbacks"], fallback_hash: receipt["fallback_hash"] } : null;
-  const outcomeBlock = asRecord(receipt?.["outcome"]);
-  const outcome = receiptFinalized ? {
-    finalized: true,
-    status: str(outcomeBlock?.["status"], "unknown"),
-    actual_model: str(outcomeBlock?.["actual_model"], "unknown")
-  } : { finalized: false, status: "pending", actual_model: "unknown" };
-  if (outcome.actual_model === "unknown") unknowns.push("actual_model");
-  const adjudicationBlock = validateAdjudicationBlock(input.adjudication);
-  let independence;
-  if (input.adjudication === null || input.adjudication === void 0) {
-    independence = {
-      adjudicated: false,
-      independence: null,
-      note: "no adjudication block written \u2014 no independence value exists (\xA77a: never provisional)"
-    };
-  } else if (!adjudicationBlock) {
-    independence = {
-      adjudicated: false,
-      independence: null,
-      note: "supplied independence value rejected: not a written \xA77a adjudication block (closed shape with producer_ref/reviewer_ref receipt hashes + predicate_trace)"
-    };
-  } else if (verifiedReceiptHash === null) {
-    independence = {
-      adjudicated: false,
-      independence: null,
-      note: "adjudication block rejected: no verified finalized receipt to bind it to (\xA77a blocks are written only after both receipts verify as finalized)"
-    };
-  } else if (adjudicationBlock.producer_ref.receipt_hash !== verifiedReceiptHash && adjudicationBlock.reviewer_ref.receipt_hash !== verifiedReceiptHash) {
-    independence = {
-      adjudicated: false,
-      independence: null,
-      note: "adjudication block rejected: neither backward ref matches this dispatch's verified receipt_hash (hash-bound \xA77a adjudication required)"
-    };
-  } else {
-    independence = {
-      adjudicated: true,
-      independence: adjudicationBlock.independence,
-      note: adjudicationBlock.predicate_trace
-    };
-  }
-  if (!independence.adjudicated) unknowns.push("independence");
-  const degradationBlock = asRecord(outcomeBlock?.["degradation"]);
-  const degradation = receiptFinalized && degradationBlock ? { kind: str(degradationBlock["kind"], "unknown"), note: str(degradationBlock["note"], "") } : null;
-  return deepFreeze4({
-    schema_version: MODEL_INSPECTION_SCHEMA,
-    state: "ok",
-    generated_at: input.now,
-    run_id: runId,
-    host,
-    identity,
-    target,
-    catalog,
-    policy,
-    selection,
-    fallbacks,
-    outcome,
-    independence,
-    degradation,
-    flags,
-    unknowns
-  });
-}
-var MODEL_INSPECTION_SCHEMA, validateAdjudicationBlock;
-var init_model_inspect = __esm({
-  "src/domains/config/model-inspect.ts"() {
-    init_model_resolver();
-    init_independence_predicates();
-    MODEL_INSPECTION_SCHEMA = "guild.model_inspection.v1";
-    validateAdjudicationBlock = validateWrittenAdjudication;
-  }
-});
-
-// src/domains/config/inspection-persist.ts
-function lifecycleApi2() {
-  return init_lifecycle(), __toCommonJS(lifecycle_exports);
-}
-function persistInspectionReport(input) {
-  const { root, report, binding, label } = input;
-  if (report.schema_version !== MODEL_INSPECTION_SCHEMA) {
-    throw new Error(
-      "refusing to persist a non-guild.model_inspection.v1 object as inspection evidence"
-    );
-  }
-  if (!SAFE_LABEL2.test(label)) {
-    throw new Error(`inspection label "${label}" is not a safe path segment \u2014 refusing`);
-  }
-  if (report.run_id !== binding.run_id) {
-    throw new Error(
-      `run_binding_mismatch: inspection report for run "${report.run_id}" cannot be persisted under run "${binding.run_id}" \u2014 refusing`
-    );
-  }
-  const verified2 = lifecycleApi2().assertWritableBinding({
-    root,
-    run_id: binding.run_id,
-    binding_ref: binding.binding_ref
-  });
-  const dir = path37.join(root, ".guild", "runs", verified2.run_id, "inspection");
-  fs31.mkdirSync(dir, { recursive: true });
-  const target = path37.join(dir, `${label}.json`);
-  const tmp = `${target}.tmp-${process.pid}`;
-  fs31.writeFileSync(tmp, JSON.stringify(report, null, 2) + "\n", "utf8");
-  fs31.renameSync(tmp, target);
-  return { absPath: target, ref: path37.join("inspection", `${label}.json`) };
-}
-var fs31, path37, SAFE_LABEL2;
-var init_inspection_persist = __esm({
-  "src/domains/config/inspection-persist.ts"() {
-    fs31 = __toESM(require("fs"));
-    path37 = __toESM(require("path"));
-    init_model_inspect();
-    SAFE_LABEL2 = /^[A-Za-z0-9_.-]+$/;
-  }
-});
-
-// src/domains/config/routing-rollout.ts
-function lifecycleApi3() {
-  return init_lifecycle(), __toCommonJS(lifecycle_exports);
-}
-function readRoutingFlags(settings) {
-  const flags = { ...ROUTING_FLAG_DEFAULTS };
-  const rejects = [];
-  if (settings !== void 0 && settings !== null && (typeof settings !== "object" || Array.isArray(settings))) {
-    rejects.push("settings root is not an object \u2014 using ADR defaults for every rollout flag");
-    return { flags, rejects };
-  }
-  const root = settings ?? {};
-  for (const [group, keys] of Object.entries(FLAG_GROUPS)) {
-    const groupValue = root[group];
-    if (groupValue === void 0 || groupValue === null) continue;
-    if (typeof groupValue !== "object" || Array.isArray(groupValue)) {
-      rejects.push(`settings.${group} is not an object \u2014 ${group}.* flags keep their defaults`);
-      continue;
-    }
-    const groupObj = groupValue;
-    for (const [k, v] of Object.entries(groupObj)) {
-      if (!keys.includes(k)) {
-        if (group === "model_routing") {
-          rejects.push(`unknown key under closed group: ${group}.${k}`);
-        }
-        continue;
-      }
-      const flagKey = `${group}.${k}`;
-      if (v === "on" || v === "off") {
-        flags[flagKey] = v;
-      } else {
-        rejects.push(
-          `${flagKey}: expected "on" | "off", got ${JSON.stringify(v)} \u2014 keeping default "${ROUTING_FLAG_DEFAULTS[flagKey]}"`
-        );
-      }
-    }
-  }
-  return { flags, rejects };
-}
-function resolveInRunDir(runDir3, ref) {
-  const abs = path38.resolve(runDir3, ref);
-  return abs === runDir3 || abs.startsWith(runDir3 + path38.sep) ? abs : null;
-}
-function loadJson(absPath) {
-  try {
-    const parsed = JSON.parse(fs32.readFileSync(absPath, "utf8"));
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-function loadVerifiedM0Reports(evidence) {
-  if (!evidence || typeof evidence.root !== "string" || typeof evidence.run_id !== "string") {
-    return [];
-  }
-  const binding = lifecycleApi3().readRunBindingRecord({ root: evidence.root, run_id: evidence.run_id });
-  if (binding.status !== "ok") return [];
-  const runDir3 = path38.resolve(evidence.root, ".guild", "runs", evidence.run_id);
-  const refs = Array.isArray(evidence.m0?.inspection_report_refs) ? evidence.m0.inspection_report_refs : [];
-  const out = [];
-  for (const ref of refs) {
-    if (typeof ref !== "string") continue;
-    const abs = resolveInRunDir(runDir3, ref);
-    if (!abs) continue;
-    const report = loadJson(abs);
-    if (!report) continue;
-    if (report["schema_version"] !== "guild.model_inspection.v1") continue;
-    if (report["state"] !== "ok") continue;
-    if (report["run_id"] !== evidence.run_id) continue;
-    out.push(report);
-  }
-  return out;
-}
-function gateM2(flags, evidence) {
-  if (flags["model_routing.enabled"] !== "on") {
-    return { active: false, reason: "model_routing.enabled is off (M2 is opt-in)" };
-  }
-  if (!evidence || typeof evidence.root !== "string" || typeof evidence.run_id !== "string") {
-    return {
-      active: false,
-      reason: "M0 not evidenced: no evidence refs supplied \u2014 v2 routing stays off"
-    };
-  }
-  const binding = lifecycleApi3().readRunBindingRecord({ root: evidence.root, run_id: evidence.run_id });
-  if (binding.status !== "ok") {
-    return {
-      active: false,
-      reason: `run binding ${binding.status} for ${evidence.run_id}: evidence in an unbound run tree proves nothing \u2014 v2 routing stays off`
-    };
-  }
-  const runDir3 = path38.resolve(evidence.root, ".guild", "runs", evidence.run_id);
-  const m0Refs = Array.isArray(evidence.m0?.inspection_report_refs) ? evidence.m0.inspection_report_refs : [];
-  const m0Valid = loadVerifiedM0Reports(evidence).length;
-  if (m0Valid === 0) {
-    return {
-      active: false,
-      reason: `M0 not evidenced: 0 of ${m0Refs.length} inspection ref(s) loaded as a valid guild.model_inspection.v1 report bound to ${evidence.run_id} \u2014 v2 routing stays off`
-    };
-  }
-  const m1Refs = Array.isArray(evidence.m1?.shadow_comparison_refs) ? evidence.m1.shadow_comparison_refs : [];
-  let m1Valid = 0;
-  for (const ref of m1Refs) {
-    if (typeof ref !== "string") continue;
-    const abs = resolveInRunDir(runDir3, ref);
-    if (!abs) continue;
-    const cmp = loadJson(abs);
-    if (!cmp) continue;
-    if (cmp["schema_version"] !== "guild.shadow_comparison.v1") continue;
-    if (cmp["run_id"] !== evidence.run_id) continue;
-    if (cmp["comparable"] !== true) continue;
-    const storedHash = cmp["comparison_hash"];
-    if (typeof storedHash !== "string" || !/^[0-9a-f]{64}$/.test(storedHash)) continue;
-    if (selfReferentialHash(cmp, "comparison_hash") !== storedHash) continue;
-    m1Valid += 1;
-  }
-  if (m1Valid === 0) {
-    return {
-      active: false,
-      reason: `M1 not evidenced: 0 of ${m1Refs.length} shadow-comparison ref(s) loaded as a comparable, hash-verified guild.shadow_comparison.v1 record bound to ${evidence.run_id} \u2014 v2 routing stays off`
-    };
-  }
-  return {
-    active: true,
-    reason: `M2 active: opt-in flag on; M0 evidenced (${m0Valid} verified inspection report(s)); M1 evidenced (${m1Valid} verified comparable shadow comparison(s))`
-  };
-}
-function rollbackV2Routing(flags) {
-  return { ...flags, "model_routing.shadow": "off", "model_routing.enabled": "off" };
-}
-var fs32, path38, ROUTING_FLAG_KEYS, ROUTING_FLAG_DEFAULTS, FLAG_GROUPS;
-var init_routing_rollout = __esm({
-  "src/domains/config/routing-rollout.ts"() {
-    fs32 = __toESM(require("fs"));
-    path38 = __toESM(require("path"));
-    init_teams();
-    ROUTING_FLAG_KEYS = Object.freeze([
-      "model_routing.identity_v2",
-      "model_routing.binding_enforce",
-      "model_routing.discovery",
-      "model_routing.inspect",
-      "model_routing.shadow",
-      "model_routing.enabled",
-      "teams.proposal_v2"
-    ]);
-    ROUTING_FLAG_DEFAULTS = Object.freeze({
-      "model_routing.identity_v2": "on",
-      "model_routing.binding_enforce": "on",
-      "model_routing.discovery": "on",
-      "model_routing.inspect": "on",
-      "model_routing.shadow": "off",
-      "model_routing.enabled": "off",
-      "teams.proposal_v2": "on"
-    });
-    FLAG_GROUPS = Object.freeze({
-      model_routing: [
-        "identity_v2",
-        "binding_enforce",
-        "discovery",
-        "inspect",
-        "shadow",
-        "enabled"
-      ],
-      teams: ["proposal_v2"]
-    });
-  }
-});
-
-// src/domains/config/models-command.ts
-function readJson2(p) {
-  try {
-    if (!fs33.existsSync(p)) return null;
-    return JSON.parse(fs33.readFileSync(p, "utf8"));
-  } catch {
-    return null;
-  }
-}
-function loadVerifiedCatalogSnapshot(root, runId, sessionContext) {
-  const sc = sessionContext;
-  const target = sc?.["execution_target"];
-  const host = sc?.["host"];
-  if (!target || !host) {
-    return { snapshot: null, note: "no execution target on the session context - catalog unbound" };
-  }
-  let key;
-  try {
-    key = createCacheKey(
-      {
-        target_id: String(target.target_id ?? "unknown"),
-        family: String(host.family ?? "unknown"),
-        surface: String(host.surface ?? "unknown"),
-        provider_kind: String(target.provider_kind ?? "unknown"),
-        auth_mode: String(target.auth_mode ?? "unknown"),
-        account_fingerprint: String(target.account_fingerprint ?? "unknown"),
-        endpoint_fingerprint: String(target.endpoint_fingerprint ?? "unknown"),
-        org_fingerprint: String(target.org_fingerprint ?? "unknown"),
-        tool_version: String(target.tool_version ?? "unknown"),
-        adapter_id: String(host.adapter_id ?? "unknown"),
-        adapter_version: String(host.adapter_version ?? "unknown")
-      },
-      runId
-    );
-  } catch (err) {
-    return {
-      snapshot: null,
-      note: "catalog cache identity could not be constructed: " + err.message
-    };
-  }
-  const entry = readJson2(path39.join(modelCatalogCacheDir(root), key.hash + ".json"));
-  if (entry === null) {
-    return { snapshot: null, note: "no catalog cache entry for this run's target identity" };
-  }
-  if (entry["schema_version"] !== MODEL_CATALOG_SCHEMA_VERSION) {
-    return {
-      snapshot: null,
-      note: "catalog cache entry is not a " + MODEL_CATALOG_SCHEMA_VERSION + " snapshot - ignored"
-    };
-  }
-  return { snapshot: entry, note: null };
-}
-function loadVerifiedSources(root, runId) {
-  const notes = [];
-  const session_context = loadSessionContext(root, runId);
-  if (session_context === null) {
-    notes.push(
-      "no verified guild.session_context.v1 record for this run - identity, host and target are honest unknowns"
-    );
-  }
-  const { snapshot, note } = loadVerifiedCatalogSnapshot(root, runId, session_context);
-  if (note !== null) notes.push(note);
-  notes.push(
-    "policy / resolution receipt / \xA77a adjudication have no verified reader in this module yet - they are rendered as honest unknowns rather than copied from a persisted report"
-  );
-  return { session_context, catalog_snapshot: snapshot, notes };
-}
-function loadRoutingFlags(root) {
-  const p = path39.join(root, ".guild", "settings.json");
-  const settings = readJson2(p);
-  if (settings === null) {
-    const { flags: flags2, rejects: rejects2 } = readRoutingFlags(null);
-    return { flags: flags2, source: "defaults (no .guild/settings.json)", rejects: rejects2 };
-  }
-  const { flags, rejects } = readRoutingFlags(settings);
-  return { flags, source: ".guild/settings.json", rejects };
-}
-var fs33, path39, MODELS_COMMAND_USAGE;
-var init_models_command = __esm({
-  "src/domains/config/models-command.ts"() {
-    fs33 = __toESM(require("fs"));
-    path39 = __toESM(require("path"));
-    init_adapters();
-    init_security();
-    init_catalog_cache();
-    init_model_inspect();
-    init_session_binding();
-    init_routing_rollout();
-    MODELS_COMMAND_USAGE = [
-      "usage: guild models inspect [--cwd <repo-root>] [--run-id <id>] [--json]",
-      "",
-      "  inspect   READ-ONLY view of this run's model routing: identity trust, target",
-      "            evidence, catalog age, policy path, selection, fallbacks, actual",
-      "            model, independence and degradation - with honest unknowns.",
-      "",
-      "  --cwd     repo root that owns .guild/ (default: process cwd)",
-      "  --run-id  inspect this run (default: the intake candidate run, labeled)",
-      "  --json    emit the same view model as JSON instead of text"
-    ].join("\n");
-  }
-});
-
-// src/domains/config/inspection-record.ts
-function recordRunInspectionEvidence(input) {
-  const { root, binding, now } = input;
-  const label = input.label ?? DEFAULT_INSPECTION_LABEL;
-  const { flags } = loadRoutingFlags(root);
-  const v2OptedIn = flags["model_routing.shadow"] === "on" || flags["model_routing.enabled"] === "on";
-  if (!v2OptedIn) {
-    return {
-      recorded: false,
-      ref: null,
-      absPath: null,
-      reason: "v2 routing is not opted in (model_routing.shadow and model_routing.enabled are both off) \u2014 M0 defaults record no inspection evidence and the dispatch path is unchanged",
-      notes: []
-    };
-  }
-  if (flags["model_routing.inspect"] !== "on") {
-    return {
-      recorded: false,
-      ref: null,
-      absPath: null,
-      reason: "model_routing.inspect is off \u2014 the inspection surface is rolled back, so no report is built or recorded",
-      notes: []
-    };
-  }
-  const sources = loadVerifiedSources(root, binding.run_id);
-  if (sources.session_context === null) {
-    return {
-      recorded: false,
-      ref: null,
-      absPath: null,
-      reason: `no verified guild.session_context.v1 record for run ${binding.run_id} \u2014 refusing to record an inspection report with an unknown identity`,
-      notes: sources.notes
-    };
-  }
-  const report = buildModelInspection({
-    session_context: sources.session_context,
-    catalog_snapshot: sources.catalog_snapshot,
-    // Policy / receipt / §7a adjudication have no verified reader in this
-    // module (see loadVerifiedSources) — they stay honest unknowns rather than
-    // being copied from anywhere untrusted.
-    policy: null,
-    receipt: null,
-    adjudication: null,
-    flags,
-    now
-  });
-  if (report.state !== "ok") {
-    return {
-      recorded: false,
-      ref: null,
-      absPath: null,
-      reason: `inspection report came back state "${report.state}" \u2014 not recorded as evidence`,
-      notes: sources.notes
-    };
-  }
-  const written = persistInspectionReport({ root, report, binding, label });
-  return {
-    recorded: true,
-    ref: written.ref,
-    absPath: written.absPath,
-    reason: `recorded M0 inspection evidence for run ${binding.run_id} under label "${label}" (catalog ${report.catalog.state})`,
-    notes: sources.notes
-  };
-}
-var DEFAULT_INSPECTION_LABEL;
-var init_inspection_record = __esm({
-  "src/domains/config/inspection-record.ts"() {
-    init_model_inspect();
-    init_inspection_persist();
-    init_models_command();
-    DEFAULT_INSPECTION_LABEL = "dispatch";
-  }
-});
-
-// src/domains/config/policy-migration.ts
-function legacyModelFor(legacyTiers, tier) {
-  const v = legacyTiers?.[tier];
-  if (typeof v === "string" && v.length > 0) return v;
-  if (v && typeof v === "object" && !Array.isArray(v)) {
-    for (const hostValue of Object.values(v)) {
-      if (typeof hostValue === "string" && hostValue.length > 0) return hostValue;
-    }
-  }
-  return null;
-}
-function findRoute(policy, purpose, complexity) {
-  const routes = policy?.purposes?.[purpose]?.routes;
-  if (!Array.isArray(routes)) return null;
-  for (const r of routes) {
-    if (r && (r.complexity === complexity || r.complexity === "any")) return r;
-  }
-  return null;
-}
-function resolveWithLegacy(input) {
-  const { purpose, effective_complexity } = input;
-  const tier = tierForComplexity(effective_complexity);
-  const legacyModel = legacyModelFor(input.legacy_tiers, tier);
-  const conflicts = [];
-  const guidance = [];
-  const v2Route = findRoute(input.v2_policy, purpose, effective_complexity);
-  if (v2Route) {
-    if (legacyModel) {
-      conflicts.push({
-        purpose,
-        effective_complexity,
-        tier,
-        v2_selectors: (v2Route.preferred ?? []).map((s) => s.selector),
-        legacy_model: legacyModel
-      });
-      guidance.push(
-        `legacy models.tiers.${tier} ("${legacyModel}") is shadowed by the explicit v2 model_policy for ${purpose}/${effective_complexity}; remove the legacy key before the migration window closes`
-      );
-    }
-    return { source: "v2_policy", route: v2Route, conflicts, guidance };
-  }
-  const isGeneric = LEGACY_FILLABLE_PURPOSES.includes(purpose);
-  if (isGeneric && legacyModel) {
-    guidance.push(
-      `legacy models.tiers.${tier} fills the unset generic ${purpose}/${effective_complexity} preference for the migration window only; migrate it to model_policy.purposes.${purpose}`
-    );
-    return {
-      source: "legacy",
-      route: {
-        complexity: effective_complexity,
-        preferred: [{ selector: `id:${legacyModel}`, effort: null, capabilities: [] }],
-        fallbacks: [],
-        provider_default: "forbid"
-      },
-      conflicts,
-      guidance
-    };
-  }
-  if (!isGeneric && legacyModel) {
-    guidance.push(
-      `legacy models.tiers.${tier} is IGNORED for ${purpose} \u2014 legacy maps never bind research/review/security purposes (\xA76)`
-    );
-  }
-  const baselineRoute = findRoute(OPERATOR_BASELINE_POLICY, purpose, effective_complexity);
-  return { source: "baseline_default", route: baselineRoute, conflicts, guidance };
-}
-function migrationPreview(input) {
-  const settingsPath = path40.join(input.root, ".guild", "settings.json");
-  let parsed = {};
-  if (fs34.existsSync(settingsPath)) {
-    try {
-      const raw = JSON.parse(fs34.readFileSync(settingsPath, "utf8"));
-      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-        parsed = raw;
-      }
-    } catch {
-      parsed = {};
-    }
-  }
-  const models = parsed["models"];
-  const legacyTiers = models && typeof models === "object" && !Array.isArray(models) ? models["tiers"] : void 0;
-  const v2Policy = parsed["model_policy"];
-  const conflicts = [];
-  const guidance = [];
-  const proposed = JSON.parse(
-    JSON.stringify(OPERATOR_BASELINE_POLICY)
-  );
-  for (const purpose of LEGACY_FILLABLE_PURPOSES) {
-    for (const complexity of ["easy", "medium", "hard"]) {
-      const resolved = resolveWithLegacy({
-        v2_policy: v2Policy,
-        legacy_tiers: legacyTiers,
-        purpose,
-        effective_complexity: complexity
-      });
-      conflicts.push(...resolved.conflicts);
-      guidance.push(...resolved.guidance);
-      if (resolved.source === "legacy" && resolved.route) {
-        const purposeBlock = proposed.purposes[purpose];
-        if (purposeBlock) {
-          const idx = purposeBlock.routes.findIndex(
-            (r) => r.complexity === complexity || r.complexity === "any"
-          );
-          if (idx >= 0) purposeBlock.routes[idx] = resolved.route;
-        }
-      }
-    }
-  }
-  return {
-    proposed_model_policy: proposed,
-    legacy_sources: legacyTiers ? { "models.tiers": legacyTiers } : {},
-    conflicts,
-    guidance,
-    writes_performed: false
-  };
-}
-var fs34, path40, LEGACY_FILLABLE_PURPOSES;
-var init_policy_migration = __esm({
-  "src/domains/config/policy-migration.ts"() {
-    fs34 = __toESM(require("fs"));
-    path40 = __toESM(require("path"));
-    init_model_policy();
-    LEGACY_FILLABLE_PURPOSES = Object.freeze(["general", "implementation"]);
-  }
-});
-
-// src/domains/config/purpose-provenance.ts
-function isComplexity(v) {
-  return COMPLEXITIES.includes(v);
-}
-function purposeForWorkClass(workClass) {
-  return POLICY_PURPOSES.includes(workClass) ? workClass : null;
-}
-function resolveEffectivePurpose(input) {
-  const events = input?.events;
-  if (!Array.isArray(events) || events.length === 0) {
-    throw new Error("purpose_unbound: empty dispatch chain \u2014 no authoritative purpose metadata");
-  }
-  const root = events[0];
-  if (root.kind !== "dispatch") {
-    throw new Error(
-      `purpose_unbound: chain root must be an authoritative dispatch (got kind "${root.kind}")`
-    );
-  }
-  const source = typeof root.source === "string" ? root.source : "";
-  if (!AUTHORITATIVE_PURPOSE_SOURCES.includes(source)) {
-    throw new Error(
-      `purpose_unbound: dispatch source "${source || "<absent>"}" is not an authoritative purpose source (${AUTHORITATIVE_PURPOSE_SOURCES.join(", ")}) \u2014 refusing to default to general work`
-    );
-  }
-  const boundLabel = typeof root.work_class === "string" ? root.work_class : typeof root.purpose === "string" ? root.purpose : null;
-  if (boundLabel === null) {
-    throw new Error(
-      `purpose_unbound: authoritative source "${source}" carries no work_class/purpose binding`
-    );
-  }
-  const purpose = purposeForWorkClass(boundLabel);
-  if (purpose === null) {
-    throw new Error(
-      `purpose_unbound: work_class "${boundLabel}" is outside the closed purpose enum \u2014 fail closed`
-    );
-  }
-  const requested = isComplexity(root.complexity) ? root.complexity : "easy";
-  let floor = maxComplexity(requested, purposeComplexityFloor(purpose));
-  const rejected = [];
-  const ancestry = [`dispatch:0:${source}`];
-  for (let i = 1; i < events.length; i++) {
-    const ev = events[i];
-    ancestry.push(`${ev.kind}:${i}`);
-    if (isComplexity(ev.raises_floor)) {
-      floor = maxComplexity(floor, ev.raises_floor);
-    }
-    if (typeof ev.declared_purpose === "string" && ev.declared_purpose !== purpose) {
-      rejected.push({
-        source: `${ev.kind}:${i}`,
-        label: `purpose=${ev.declared_purpose}`,
-        reason: "inherited_purpose_non_downgradable"
-      });
-    }
-    const label = ev.caller_label;
-    if (label && typeof label === "object") {
-      const labelPurpose = label["purpose"];
-      if (typeof labelPurpose === "string" && labelPurpose !== purpose) {
-        rejected.push({
-          source: `${ev.kind}:${i}`,
-          label: `purpose=${labelPurpose}`,
-          reason: "inherited_purpose_non_downgradable"
-        });
-      }
-      const labelComplexity = label["complexity"];
-      if (isComplexity(labelComplexity)) {
-        if (COMPLEXITY_RANK[labelComplexity] < COMPLEXITY_RANK[floor]) {
-          rejected.push({
-            source: `${ev.kind}:${i}`,
-            label: `complexity=${labelComplexity}`,
-            reason: "floor_non_downgradable"
-          });
-        } else {
-          floor = maxComplexity(floor, labelComplexity);
-        }
-      }
-    }
-  }
-  const effective = floor;
-  const tierFloor = purposeTierFloor(purpose);
-  const tier = tierFloor === "powerful" ? "powerful" : tierForComplexity(effective);
-  const forcedFloorReason = purpose === "research" ? "research_always_hard" : isReviewClassPurpose(purpose) ? "purpose_floor_powerful" : null;
-  return {
-    purpose,
-    requested_complexity: requested,
-    effective_complexity: effective,
-    tier,
-    forced_floor_reason: forcedFloorReason,
-    purpose_origin: source,
-    dispatch_ancestry: ancestry,
-    rejected_labels: rejected
-  };
-}
-var AUTHORITATIVE_PURPOSE_SOURCES, COMPLEXITY_RANK;
-var init_purpose_provenance = __esm({
-  "src/domains/config/purpose-provenance.ts"() {
-    init_model_policy();
-    AUTHORITATIVE_PURPOSE_SOURCES = Object.freeze([
-      "skill_metadata",
-      "registry_metadata",
-      "lane_lock",
-      "broker_gate"
-    ]);
-    COMPLEXITY_RANK = { easy: 0, medium: 1, hard: 2 };
-  }
-});
-
-// src/domains/config/tier-defaults.ts
-function tierDefaults(descriptors = HOST_REGISTRY_ROWS) {
-  const result = {};
-  for (const [hk, registryId] of Object.entries(HOSTKIND_TO_REGISTRY_ID)) {
-    const row = registryId !== null ? descriptors[registryId] : void 0;
-    if (!row) {
-      result[hk] = { ...CLAUDE_TIER_FALLBACK };
-      continue;
-    }
-    result[hk] = {
-      cheap: row.capabilities?.models?.cheap?.model ?? null,
-      mid: row.capabilities?.models?.mid?.model ?? null,
-      powerful: row.capabilities?.models?.powerful?.model ?? null
-    };
-  }
-  return result;
-}
-function tierDefaultsForHost(host, descriptors = HOST_REGISTRY_ROWS) {
-  const computed = tierDefaults(descriptors);
-  return computed[host] ?? { ...CLAUDE_TIER_FALLBACK };
-}
-function defaultTierModels(descriptors = HOST_REGISTRY_ROWS) {
-  const row = descriptors["claude-code-cli"];
-  return {
-    cheap: row?.capabilities?.models?.cheap?.model ?? CLAUDE_TIER_FALLBACK.cheap,
-    mid: row?.capabilities?.models?.mid?.model ?? CLAUDE_TIER_FALLBACK.mid,
-    powerful: row?.capabilities?.models?.powerful?.model ?? CLAUDE_TIER_FALLBACK.powerful
-  };
-}
-function defaultTiersMap(descriptors = HOST_REGISTRY_ROWS) {
-  const hostMap = Object.entries(HOSTKIND_TO_REGISTRY_ID);
-  const tiers = ["cheap", "mid", "powerful"];
-  const result = {};
-  for (const tier of tiers) {
-    result[tier] = {};
-    for (const [hk, registryId] of hostMap) {
-      const row = registryId !== null ? descriptors[registryId] : void 0;
-      const model = row?.capabilities?.models?.[tier]?.model ?? null;
-      result[tier][hk] = model;
-    }
-  }
-  return result;
-}
-var CLAUDE_TIER_FALLBACK;
-var init_tier_defaults = __esm({
-  "src/domains/config/tier-defaults.ts"() {
-    init_adapters();
-    init_adapters();
-    CLAUDE_TIER_FALLBACK = {
-      cheap: "haiku",
-      mid: "sonnet",
-      powerful: "opus"
-    };
-  }
-});
-
-// src/domains/config/rank.ts
-function isClaudeHost(hostKind) {
-  return hostKindToRegistryId(hostKind)?.startsWith("claude-") ?? false;
-}
-function isCodexHost(hostKind) {
-  return hostKindToRegistryId(hostKind)?.startsWith("codex-") ?? false;
-}
-function isClaudeCli(hostKind) {
-  return hostKindToRegistryId(hostKind) === "claude-code-cli";
-}
-function isCodexCli(hostKind) {
-  return hostKindToRegistryId(hostKind) === "codex-cli";
-}
-function isPiCli(hostKind) {
-  return hostKindToRegistryId(hostKind) === "pi-cli";
-}
-function isAntigravityCli(hostKind) {
-  return hostKindToRegistryId(hostKind) === "antigravity-cli";
-}
-function affinityBoost(workType, hostKind) {
-  switch (workType) {
-    case "interactive_lifecycle":
-      return isClaudeHost(hostKind) ? AFFINITY_BOOST : 0;
-    case "adversarial_review":
-      return !isClaudeHost(hostKind) ? AFFINITY_BOOST : 0;
-    case "background_implementation":
-      return isCodexHost(hostKind) ? AFFINITY_BOOST : 0;
-    case "parallel_local_lanes":
-      return isClaudeHost(hostKind) ? AFFINITY_BOOST : 0;
-    case "graph_extraction":
-    case void 0:
-    default:
-      return 0;
-  }
-}
-function rankScore(host, lane) {
-  let s = 0;
-  if (lane.preferredHostKind && host.host_kind === lane.preferredHostKind) s += 100;
-  s += affinityBoost(lane.workType, host.host_kind);
-  return s;
-}
-function backendForMode(mode) {
-  switch (mode) {
-    case "team":
-      return "agent_team";
-    case "agent":
-      return "independent_agents";
-    case "subagent":
-      return "subagent";
-    case "auto":
-    default:
-      return null;
-  }
-}
-function getDefaultModelTierMap(host) {
-  return tierDefaultsForHost(host);
-}
-var AFFINITY_BOOST;
-var init_rank = __esm({
-  "src/domains/config/rank.ts"() {
-    init_adapters();
-    init_tier_defaults();
-    AFFINITY_BOOST = 10;
-  }
-});
-
-// src/domains/config/role-model-schema.ts
-function isHostCapable(e) {
-  return e.installability !== "none" && e.dispatch_selectable;
-}
-function resolveRoles(input) {
-  const avail = input.available;
-  const hostEntry = avail.find(isHostCapable) ?? null;
-  const host = hostEntry ? {
-    role: "host",
-    substrate: hostEntry.host_id,
-    strength: "strong",
-    reason: `strongest installable+dispatch_selectable substrate (${hostEntry.host_id})`
-  } : {
-    role: "host",
-    substrate: null,
-    strength: "weak",
-    reason: "no installable+dispatch_selectable substrate available"
-  };
-  const advisoryEntry = avail.find((e) => e.dispatch_selectable) ?? hostEntry;
-  const advisory = advisoryEntry ? {
-    role: "advisory",
-    substrate: advisoryEntry.host_id,
-    strength: "strong",
-    reason: advisoryEntry === hostEntry ? `advisory defaults to the host substrate (${advisoryEntry.host_id}, local advisor)` : `strongest dispatch_selectable advisory substrate (${advisoryEntry.host_id})`
-  } : {
-    role: "advisory",
-    substrate: null,
-    strength: "weak",
-    reason: "no dispatch_selectable advisory substrate available"
-  };
-  const hostFamily = hostEntry?.family ?? null;
-  const diffFamily = avail.find((e) => e.result_adapter && e.family !== hostFamily) ?? null;
-  const sameFamily = avail.find((e) => e.result_adapter && e.family === hostFamily) ?? null;
-  let adversarial;
-  if (diffFamily) {
-    adversarial = {
-      role: "adversarial",
-      substrate: diffFamily.host_id,
-      strength: "strong",
-      reason: `different-family result_adapter substrate (${diffFamily.host_id}) \u2014 cross-host independence`
-    };
-  } else if (sameFamily) {
-    adversarial = {
-      role: "adversarial",
-      substrate: sameFamily.host_id,
-      strength: "weak",
-      reason: `only a same-family result_adapter (${sameFamily.host_id}) \u2014 independence lost (weak)`
-    };
-  } else {
-    adversarial = {
-      role: "adversarial",
-      substrate: null,
-      strength: "weak",
-      reason: "no result_adapter substrate available \u2014 adversarial review degrades"
-    };
-  }
-  return {
-    schema_version: "guild.role_resolution.v1",
-    host,
-    advisory,
-    adversarial
-  };
-}
-function validateRoleResolution(x, expectedRole, errors) {
-  if (typeof x !== "object" || x === null || Array.isArray(x)) {
-    errors.push(`${expectedRole} must be a present object`);
-    return;
-  }
-  const r = x;
-  if (r["role"] !== expectedRole || !ROLE_SET.has(r["role"])) {
-    errors.push(`${expectedRole}.role must be "${expectedRole}"; got ${JSON.stringify(r["role"])}`);
-  }
-  if (!(r["substrate"] === null || typeof r["substrate"] === "string" && HOST_ID_SET3.has(r["substrate"]))) {
-    errors.push(
-      `${expectedRole}.substrate must be one of ${HOST_IDS.join("|")} or null; got ${JSON.stringify(r["substrate"])}`
-    );
-  }
-  if (typeof r["strength"] !== "string" || !STRENGTH_SET.has(r["strength"])) {
-    errors.push(`${expectedRole}.strength must be strong|weak; got ${JSON.stringify(r["strength"])}`);
-  }
-  if (typeof r["reason"] !== "string" || r["reason"].trim() === "") {
-    errors.push(`${expectedRole}.reason must be a non-empty string`);
-  }
-}
-function validateRoleResolutionSet(value) {
-  const errors = [];
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return { valid: false, errors: ["role resolution set must be a non-null object"] };
-  }
-  const o = value;
-  if (o["schema_version"] !== "guild.role_resolution.v1") {
-    errors.push(
-      `schema_version must be "guild.role_resolution.v1"; got ${JSON.stringify(o["schema_version"])}`
-    );
-  }
-  validateRoleResolution(o["host"], "host", errors);
-  validateRoleResolution(o["advisory"], "advisory", errors);
-  validateRoleResolution(o["adversarial"], "adversarial", errors);
-  return { valid: errors.length === 0, errors };
-}
-var ROLES, ROLE_STRENGTHS, ROLE_SET, STRENGTH_SET, HOST_ID_SET3;
-var init_role_model_schema = __esm({
-  "src/domains/config/role-model-schema.ts"() {
-    init_adapters();
-    ROLES = Object.freeze(["host", "advisory", "adversarial"]);
-    ROLE_STRENGTHS = Object.freeze(["strong", "weak"]);
-    ROLE_SET = new Set(ROLES);
-    STRENGTH_SET = new Set(ROLE_STRENGTHS);
-    HOST_ID_SET3 = new Set(HOST_IDS);
-  }
-});
-
-// src/domains/review/review-progress.ts
-var REVIEW_PROGRESS_STATES, STATE_SET;
-var init_review_progress = __esm({
-  "src/domains/review/review-progress.ts"() {
-    REVIEW_PROGRESS_STATES = Object.freeze([
-      "launched",
-      "running",
-      "heartbeat",
-      "activity",
-      "no_output",
-      "reviewer_error",
-      "tool_error",
-      "cancelled",
-      "skipped",
-      "succeeded"
-    ]);
-    STATE_SET = new Set(REVIEW_PROGRESS_STATES);
-  }
-});
-
-// src/domains/review/review-pairing.ts
-var init_review_pairing = __esm({
-  "src/domains/review/review-pairing.ts"() {
-    init_config2();
-    init_adapters();
-    init_review_progress();
-  }
-});
-
-// src/domains/review/advisory-record.ts
-var ADVISORY_BACKENDS, ADVISORY_SUBSTRATES, ADVISORY_CONFIDENCE, ADVISORY_PHASES, BACKEND_SET, CONFIDENCE_SET, SUBSTRATE_SET;
-var init_advisory_record = __esm({
-  "src/domains/review/advisory-record.ts"() {
-    ADVISORY_BACKENDS = Object.freeze([
-      "tmux_team",
-      "host_subagents",
-      "single_agent"
-    ]);
-    ADVISORY_SUBSTRATES = Object.freeze([
-      "claude-code-cli",
-      "codex-cli",
-      "pi-cli",
-      "antigravity-cli",
-      "agents-file",
-      "claude-code-app",
-      "claude-code-web",
-      "codex-app",
-      "claude-ai-connector",
-      // Legacy substrate labels accepted for older records.
-      "claude",
-      "codex",
-      ".agents",
-      "pi",
-      "antigravity"
-    ]);
-    ADVISORY_CONFIDENCE = Object.freeze(["high", "medium", "low"]);
-    ADVISORY_PHASES = Object.freeze([
-      "init",
-      "ideation",
-      "planning",
-      "execution",
-      "review",
-      "ops",
-      "reflect"
-    ]);
-    BACKEND_SET = new Set(ADVISORY_BACKENDS);
-    CONFIDENCE_SET = new Set(ADVISORY_CONFIDENCE);
-    SUBSTRATE_SET = new Set(ADVISORY_SUBSTRATES);
-  }
-});
-
-// src/domains/review/advisory-contract.ts
-var init_advisory_contract = __esm({
-  "src/domains/review/advisory-contract.ts"() {
-    init_advisory_record();
-  }
-});
-
-// src/domains/review/quality-catalog.ts
-var init_quality_catalog = __esm({
-  "src/domains/review/quality-catalog.ts"() {
-  }
-});
-
-// src/domains/review/index.ts
-var init_review = __esm({
-  "src/domains/review/index.ts"() {
-    init_review_pairing();
-    init_review_progress();
-    init_advisory_contract();
-    init_quality_catalog();
-  }
-});
-
-// src/domains/config/role-resolver.ts
-function availableRegistryRows(detection) {
-  const families = /* @__PURE__ */ new Set();
-  if (detection.authorHost && detection.authorHost !== "unknown") {
-    families.add(detection.authorHost);
-  }
-  for (const p of detection.providers) {
-    if (p.selectable || p.detected && p.kind !== "host") families.add(p.family);
-  }
-  return HOST_IDS.map((id) => HOST_REGISTRY_ROWS[id]).filter((row) => families.has(row.family));
-}
-function resolveRolesForRun(detection) {
-  const roles = resolveRoles({ available: availableRegistryRows(detection) });
-  if (detection.authorTrust !== "verified" && roles.adversarial.strength === "strong") {
-    return {
-      ...roles,
-      adversarial: {
-        ...roles.adversarial,
-        strength: "weak",
-        reason: `${roles.adversarial.reason}; DOWNGRADED to weak \u2014 author host identity is not verified (trust: ${detection.authorTrust ?? "absent"}), so cross-family independence is unprovable (session_context \xA73: asserted \u21D2 weak)`
-      }
-    };
-  }
-  return roles;
-}
-function advisorySubstrateFromRoles(roles) {
-  const s = roles.advisory.substrate;
-  if (s !== null && ADVISORY_SUBSTRATES.includes(s)) {
-    return s;
-  }
-  return void 0;
-}
-var init_role_resolver = __esm({
-  "src/domains/config/role-resolver.ts"() {
-    init_adapters();
-    init_role_model_schema();
-    init_review();
-  }
-});
-
-// src/domains/config/tiebreak.ts
-function hostKindRank(hostKind) {
-  return isClaudeHost(hostKind) ? 0 : 1;
-}
-var init_tiebreak = __esm({
-  "src/domains/config/tiebreak.ts"() {
-    init_rank();
-  }
-});
-
-// src/domains/config/router.ts
-function manifestTimestamp(host) {
-  const raw = host.advertised_at ?? host.detected_at;
-  if (!raw) return null;
-  const t = Date.parse(raw);
-  return Number.isNaN(t) ? null : t;
-}
-function isStale(host, now, ttlS) {
-  const ts = manifestTimestamp(host);
-  if (ts === null) return true;
-  return now - ts > ttlS * 1e3;
-}
-function supportsTier(host, tier) {
-  if (Array.isArray(host.supported_tiers)) {
-    return host.supported_tiers.includes(tier);
-  }
-  const model = host.tier_models?.[tier] ?? host.tiers?.[tier];
-  return typeof model === "string" && model.trim().length > 0;
-}
-function toolGap(host, requiredTools) {
-  if (!requiredTools || requiredTools.length === 0) return [];
-  if (!Array.isArray(host.tool_permissions)) return [];
-  const allow = new Set(host.tool_permissions);
-  return requiredTools.filter((t) => !allow.has(t));
-}
-function capabilityGap(host, reqs) {
-  if (!reqs) return [];
-  const gaps = [];
-  const cs = host.capability_set;
-  if (reqs.needs_parallel === true) {
-    const canParallel = cs?.needs_parallel ?? Boolean(host.tool_support?.agent_team || host.tool_support?.independent_agents);
-    if (!canParallel) gaps.push("needs_parallel");
-  }
-  if (cs) {
-    if (reqs.needs_pr === true && !cs.needs_pr) gaps.push("needs_pr");
-    if (reqs.needs_network === true && !cs.needs_network) gaps.push("needs_network");
-    if (reqs.isolation === "worktree" && cs.isolation !== "worktree") {
-      gaps.push("isolation:worktree");
-    }
-  }
-  return gaps;
-}
-function toModelParams(resolved) {
-  if (resolved.model === null) return null;
-  const params = { model: resolved.model };
-  if (resolved.effort !== void 0) params.effort = resolved.effort;
-  if (resolved.reasoning !== void 0) params.reasoning = resolved.reasoning;
-  if (resolved.thinking !== void 0) params.thinking = resolved.thinking;
-  if (resolved.verbosity !== void 0) params.verbosity = resolved.verbosity;
-  return params;
-}
-function resolveModel(tier, host, settingsOverride) {
-  return resolveModelParams(tier, host, settingsOverride).model ?? null;
-}
-function resolveModelParams(tier, host, settingsOverride) {
-  const overrideResolved = resolveTierModel(settingsOverride, tier, host.host_kind);
-  const overrideParams = toModelParams(overrideResolved);
-  if (overrideParams !== null) return overrideParams;
-  const fromManifest = host.tier_models?.[tier] ?? host.tiers?.[tier];
-  if (typeof fromManifest === "string" && fromManifest.trim()) return { model: fromManifest.trim() };
-  const builtIn = getDefaultModelTierMap(host.host_kind)[tier];
-  return builtIn === null ? {} : { model: builtIn };
-}
-function hostDiversityOf(preferred, selected) {
-  if (preferred === void 0) return "unknown";
-  return preferred === selected ? "same" : "distinct";
-}
-function route(lane, hosts, opts = {}) {
-  const now = opts.now ?? Date.now();
-  const ttlS = opts.manifestTtlS ?? DEFAULT_TTL_S;
-  const crossHostEnabled = opts.crossHostEnabled ?? false;
-  const fallbackToClaude = opts.fallbackToClaude ?? true;
-  const requiredBackend = lane.requiredBackend ?? backendForMode(lane.mode);
-  const rejected = [];
-  const policyEligible = [];
-  const qualifying = [];
-  for (const host of hosts) {
-    const tag = (reason) => rejected.push({ hostId: host.host_id, hostKind: host.host_kind, reason });
-    if (!crossHostEnabled && !isClaudeHost(host.host_kind)) {
-      tag("cross-host disabled (defaults.cross_host.enabled=false)");
-      continue;
-    }
-    if (isStale(host, now, ttlS)) {
-      tag(`stale manifest (older than ${ttlS}s TTL)`);
-      continue;
-    }
-    policyEligible.push(host);
-    if (!supportsTier(host, lane.tier)) {
-      tag(`tier "${lane.tier}" not supported`);
-      continue;
-    }
-    if (requiredBackend && !host.tool_support?.[requiredBackend]) {
-      tag(`backend "${requiredBackend}" not supported`);
-      continue;
-    }
-    const gap = toolGap(host, lane.requiredTools);
-    if (gap.length > 0) {
-      tag(`missing required tools: ${gap.join(", ")}`);
-      continue;
-    }
-    const capGap = capabilityGap(host, lane.capabilityRequirements);
-    if (capGap.length > 0) {
-      tag(`capability requirements not met: ${capGap.join(", ")}`);
-      continue;
-    }
-    qualifying.push(host);
-  }
-  if (qualifying.length === 0) {
-    if (policyEligible.length === 0) {
-      throw new RouteError(lane.taskId, rejected);
-    }
-    const leastBad = [...policyEligible].sort((a, b) => {
-      const sa = rankScore(a, lane);
-      const sb = rankScore(b, lane);
-      if (sb !== sa) return sb - sa;
-      const ka = hostKindRank(a.host_kind);
-      const kb = hostKindRank(b.host_kind);
-      if (ka !== kb) return ka - kb;
-      return a.host_id < b.host_id ? -1 : a.host_id > b.host_id ? 1 : 0;
-    })[0];
-    const degradedDecision = {
-      taskId: lane.taskId,
-      host: leastBad.host_id,
-      hostKind: leastBad.host_kind,
-      tier: lane.tier,
-      model: resolveModel(lane.tier, leastBad, opts.settingsOverride),
-      modelParams: resolveModelParams(lane.tier, leastBad, opts.settingsOverride),
-      fallbackChain: [],
-      affinityScore: rankScore(leastBad, lane),
-      degraded: true,
-      independence: "weak",
-      hostDiversity: hostDiversityOf(lane.preferredHostKind, leastBad.host_kind),
-      reason: `DEGRADED: no host fully qualified for task "${lane.taskId}"; routed to least-bad candidate ${leastBad.host_id}(${leastBad.host_kind}); ${rejected.length} rejection(s) recorded; backend=${requiredBackend ?? "any"}; workType=${lane.workType ?? "none"}`,
-      rejected,
-      notes: [
-        "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub",
-        "degraded: true \u2014 no fully-qualifying host found; weak-independence recorded (doc 08 \xA72, TE-02/TE-03)"
-      ]
-    };
-    opts.onDecision?.(degradedDecision);
-    return degradedDecision;
-  }
-  const ranked = [...qualifying].sort((a, b) => {
-    const sa = rankScore(a, lane);
-    const sb = rankScore(b, lane);
-    if (sb !== sa) return sb - sa;
-    const ka = hostKindRank(a.host_kind);
-    const kb = hostKindRank(b.host_kind);
-    if (ka !== kb) return ka - kb;
-    return a.host_id < b.host_id ? -1 : a.host_id > b.host_id ? 1 : 0;
-  });
-  const toTarget = (h) => ({
-    host: h.host_id,
-    hostKind: h.host_kind,
-    tier: lane.tier,
-    // SAME tier across the whole chain — CR-3 no silent downgrade
-    model: resolveModel(lane.tier, h, opts.settingsOverride),
-    modelParams: resolveModelParams(lane.tier, h, opts.settingsOverride)
-  });
-  const primaryHost = ranked[0];
-  const primary = toTarget(primaryHost);
-  const rest = ranked.slice(1);
-  let fallbackChain = rest.map(toTarget);
-  if (fallbackToClaude) {
-    const claudeIdx = fallbackChain.findIndex((t) => isClaudeHost(t.hostKind));
-    if (claudeIdx >= 0) {
-      const [claudeLast] = fallbackChain.splice(claudeIdx, 1);
-      fallbackChain.push(claudeLast);
-    }
-  }
-  const decision = {
-    taskId: lane.taskId,
-    host: primary.host,
-    hostKind: primary.hostKind,
-    tier: primary.tier,
-    model: primary.model,
-    modelParams: primary.modelParams,
-    fallbackChain,
-    affinityScore: rankScore(primaryHost, lane),
-    degraded: false,
-    // T7-H2: NEVER "strong" here. Finding a fully-qualifying host is not a
-    // review-independence verdict; only a written §7a adjudication is.
-    independence: "weak",
-    hostDiversity: hostDiversityOf(lane.preferredHostKind, primary.hostKind),
-    reason: `primary=${primary.host}(${primary.hostKind}) tier=${primary.tier} model=${primary.model ?? "(host default \u2014 no Guild-mapped model)"}; ${fallbackChain.length} fallback(s); backend=${requiredBackend ?? "any"}; workType=${lane.workType ?? "none"}`,
-    rejected,
-    notes: [
-      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub",
-      "independence is ALWAYS weak from the router (T7-H2): finding a fully-qualifying host is a host-selection fact (see hostDiversity), never a review verdict; strong exists only as a written \xA77a independence_adjudication block over both parties' finalized receipts"
-    ]
-  };
-  opts.onDecision?.(decision);
-  return decision;
-}
-function planTeamRouting(specialists, hosts, opts) {
-  const { localHostId, tier = "mid", mode = "auto", ...routeOpts } = opts;
-  return specialists.map((s) => {
-    const laneTier = s.tier ?? tier;
-    const decision = route(
-      {
-        taskId: s.name,
-        tier: laneTier,
-        mode,
-        preferredHostKind: s.host_kind,
-        capabilityRequirements: s.capabilityRequirements
-      },
-      hosts,
-      routeOpts
-    );
-    return {
-      specialist: s.name,
-      hostKind: decision.hostKind,
-      decision,
-      backend: decision.host === localHostId ? "tmux" : "remote"
-    };
-  });
-}
-var RouteError, DEFAULT_TTL_S;
-var init_router = __esm({
-  "src/domains/config/router.ts"() {
-    init_tier_model();
-    init_rank();
-    init_tiebreak();
-    RouteError = class extends Error {
-      taskId;
-      rejected;
-      constructor(taskId, rejected) {
-        const detail = rejected.length ? rejected.map((r) => `${r.hostId} (${r.hostKind}): ${r.reason}`).join("; ") : "no host manifests supplied";
-        super(`No host can route task "${taskId}" \u2014 ${detail}`);
-        this.name = "RouteError";
-        this.taskId = taskId;
-        this.rejected = rejected;
-      }
-    };
-    DEFAULT_TTL_S = 3600;
-  }
-});
-
-// src/domains/config/compose-prompt.ts
-function approxTokens(text) {
-  const words = text.trim().split(/\s+/).filter(Boolean).length;
-  return Math.ceil(Math.max(words * 1.3, text.length / 4));
-}
-function concreteModelNameIn(text) {
-  const m = MODEL_NAME_RE.exec(text);
-  return m ? m[0] : null;
-}
-function skipReasonFor(hit) {
-  return hit.kind === "model-name" ? "concrete-model-name" : "host-identity";
-}
-function promptIdentityIn(text) {
-  const prose = YOU_ARE_HOST_RE.exec(text);
-  if (prose) return { kind: "you-are-host", token: prose[0] };
-  const model = MODEL_NAME_RE.exec(text);
-  if (model) return { kind: "model-name", token: model[0] };
-  const fam = HOST_FAMILY_RE.exec(text);
-  if (fam) return { kind: "host-family", token: fam[0] };
-  return null;
-}
-function composePrompt(base, extensions, host_family, model_family) {
-  const skipped = [];
-  const parts = [{ id: "base:using-guild", text: base }];
-  const byId = /* @__PURE__ */ new Map();
-  for (const f of extensions.workspace ?? []) byId.set(f.id, f);
-  for (const f of extensions.project ?? []) byId.set(f.id, f);
-  for (const f of byId.values()) {
-    const hit = promptIdentityIn(f.text);
-    if (hit) {
-      skipped.push({ id: f.id, reason: skipReasonFor(hit) });
-      continue;
-    }
-    parts.push(f);
-  }
-  if (extensions.hostOverlay) {
-    const o = extensions.hostOverlay;
-    if (concreteModelNameIn(o.text)) skipped.push({ id: o.id, reason: "concrete-model-name" });
-    else parts.push(o);
-  }
-  let dialect_id = "dialect:none";
-  const d = extensions.dialect;
-  if (d) {
-    const declared = d.id.replace(/^dialect:/, "");
-    if (MODEL_FAMILIES.includes(declared) && declared !== model_family) {
-      skipped.push({ id: d.id, reason: "wrong-family" });
-    } else if (promptIdentityIn(d.text)) {
-      skipped.push({ id: d.id, reason: skipReasonFor(promptIdentityIn(d.text)) });
-    } else if (approxTokens(d.text) > DIALECT_TOKEN_BUDGET) {
-      skipped.push({ id: d.id, reason: "dialect-over-budget" });
-    } else {
-      parts.push(d);
-      dialect_id = `dialect:${model_family}`;
-    }
-  }
-  const text = parts.map((p) => p.text.trimEnd()).join("\n\n");
-  const hash = crypto8.createHash("sha256").update(`${host_family}\0${model_family}\0${text}`).digest("hex");
-  return { text, dialect_id, overlay_ids: parts.map((p) => p.id), hash, skipped };
-}
-function loadPromptExtensions(guildDir, model_family) {
-  const dir = path41.join(guildDir, PROMPTS_DIRNAME);
-  const overlays = [];
-  let dialect = null;
-  const overlayFile = path41.join(dir, USING_GUILD_OVERLAY);
-  const overlayText = readIfFile2(overlayFile);
-  if (overlayText !== null) {
-    assertNoModelName(overlayFile, overlayText);
-    overlays.push({ id: `overlay:${USING_GUILD_OVERLAY}`, text: overlayText });
-  }
-  if (MODEL_FAMILIES.includes(model_family)) {
-    const dialectFile = path41.join(dir, DIALECTS_DIRNAME, `${model_family}.md`);
-    const dialectText = readIfFile2(dialectFile);
-    if (dialectText !== null) {
-      assertNoModelName(dialectFile, dialectText);
-      dialect = { id: `dialect:${model_family}`, text: dialectText };
-    }
-  }
-  return { overlays, dialect };
-}
-function readIfFile2(file) {
-  try {
-    return fs35.statSync(file).isFile() ? fs35.readFileSync(file, "utf8") : null;
-  } catch {
-    return null;
-  }
-}
-function assertNoModelName(file, text) {
-  const hit = promptIdentityIn(text);
-  if (hit === null) return;
-  const what = hit.kind === "you-are-host" ? `says '${hit.token}'` : hit.kind === "model-name" ? `names the concrete model '${hit.token}'` : `names the host family '${hit.token}'`;
-  throw new PromptRejectedError(
-    file,
-    hit.token,
-    `prompt extension ${file} ${what}. Prompt overlays and dialects key on a model FAMILY (${MODEL_FAMILIES.join(" \xB7 ")}) and never name a host or a product \u2014 host and model are bound per session on the run record (KTD22/KTD31).`
-  );
-}
-function composeSessionPrompt(input) {
-  let base = "";
-  if (input.pluginRoot) {
-    for (const rel2 of USING_GUILD_BASE_RELS) {
-      const text = readIfFile2(path41.join(input.pluginRoot, rel2));
-      if (text !== null) {
-        base = text;
-        break;
-      }
-    }
-  }
-  const project = input.guildDir ? loadPromptExtensions(input.guildDir, input.model_family) : null;
-  let dialect = project?.dialect ?? null;
-  if (dialect === null && input.pluginRoot && MODEL_FAMILIES.includes(input.model_family)) {
-    const shipped = readIfFile2(
-      path41.join(input.pluginRoot, PLUGIN_DIALECTS_REL, `${input.model_family}.md`)
-    );
-    if (shipped !== null) dialect = { id: `dialect:${input.model_family}`, text: shipped };
-  }
-  return composePrompt(
-    base,
-    { project: project?.overlays ?? [], dialect },
-    input.host_family,
-    input.model_family
-  );
-}
-var crypto8, fs35, path41, DIALECT_TOKEN_BUDGET, MODEL_NAME_RE, MODEL_FAMILIES, HOST_FAMILY_TOKENS_PROMPT, HOST_FAMILY_RE, YOU_ARE_HOST_RE, PromptRejectedError, PROMPTS_DIRNAME, USING_GUILD_OVERLAY, DIALECTS_DIRNAME, USING_GUILD_BASE_RELS, PLUGIN_DIALECTS_REL;
-var init_compose_prompt = __esm({
-  "src/domains/config/compose-prompt.ts"() {
-    crypto8 = __toESM(require("node:crypto"));
-    fs35 = __toESM(require("node:fs"));
-    path41 = __toESM(require("node:path"));
-    DIALECT_TOKEN_BUDGET = 200;
-    MODEL_NAME_RE = /\b(opus|sonnet|haiku|fable|gpt-?[0-9][^\s]*|o[1-9](?:-(?:mini|pro|preview))?|gemini-[0-9][^\s]*|claude-[a-z0-9][^\s]*|llama-?[0-9][^\s]*|mistral|grok-?[0-9][^\s]*|deepseek|qwen)\b/i;
-    MODEL_FAMILIES = Object.freeze(["anthropic", "openai", "google"]);
-    HOST_FAMILY_TOKENS_PROMPT = Object.freeze([
-      "claude",
-      "codex",
-      "cursor",
-      "gemini",
-      "copilot",
-      "windsurf",
-      "aider",
-      "antigravity",
-      "cline",
-      "zed"
-    ]);
-    HOST_FAMILY_RE = new RegExp(`\\b(${HOST_FAMILY_TOKENS_PROMPT.join("|")})\\b`, "i");
-    YOU_ARE_HOST_RE = new RegExp(
-      `\\byou(?:'re| are)\\s+(?:an?\\s+)?(${HOST_FAMILY_TOKENS_PROMPT.join("|")})\\b`,
-      "i"
-    );
-    PromptRejectedError = class extends Error {
-      constructor(file, token, message) {
-        super(message);
-        this.file = file;
-        this.token = token;
-        this.name = "PromptRejectedError";
-      }
-      file;
-      token;
-    };
-    PROMPTS_DIRNAME = "prompts";
-    USING_GUILD_OVERLAY = "using-guild.overlay.md";
-    DIALECTS_DIRNAME = "dialects";
-    USING_GUILD_BASE_RELS = Object.freeze([
-      "skills/meta/using-guild/SKILL.md",
-      "skills/meta/using-guild/SKILL.src.md"
-    ]);
-    PLUGIN_DIALECTS_REL = "src/surfaces/prompts/dialects";
-  }
-});
-
-// src/domains/config/team-prompt.ts
-function isClaudeCli2(hostKind) {
-  return hostKindToRegistryId(hostKind) === "claude-code-cli";
-}
-function producerMarkerLine(role) {
-  return `${DISPATCH_PRODUCER_ENV}=${DISPATCH_PRODUCER_TOKEN} role=${role}
-`;
-}
-function buildPrompt(slug, runId, specialist, teamPath, paneHostKind = "claude") {
-  if (!specialist) {
-    const teamRef = teamPath ?? `.guild/team/${slug}.yaml`;
-    const coordination = isClaudeCli2(paneHostKind) ? `Dispatch specialists via TaskCreated events when their plan dependencies clear, then aggregate handoffs and invoke guild:review \u2192 guild:verify-done \u2192 guild:reflect.` : `Dispatch specialists through the file-based agent bus when their plan dependencies clear; write dispatch/brief records under \`.guild/runs/${runId}/agent-bus/\`, then aggregate handoffs and invoke guild:review \u2192 guild:verify-done \u2192 guild:reflect.`;
-    return producerMarkerLine("orchestrator") + `You are the Team Lead for team \`${slug}\`, run-id \`${runId}\`. The spec is at \`.guild/spec/${slug}.md\`, the team at \`${teamRef}\`, and the approved plan at \`.guild/plan/${slug}.md\`. Per-specialist context bundles are under \`.guild/context/${runId}/<specialist>-<task-id>.md\` (build them via guild:context-assemble before dispatch). Teammate handoff receipts will land at \`.guild/runs/${runId}/handoffs/<specialist>-<task-id>.md\`. ` + coordination;
-  }
-  const waitInstruction = isClaudeCli2(paneHostKind) ? `Wait for a \`TaskCreated\` event from the orchestrator before starting.` : `Watch the file-based agent bus at \`.guild/runs/${runId}/agent-bus/\` for your dispatch/brief record before starting; do not wait for host-native event callbacks.`;
-  const readAckInstruction = `Before doing any work, read your assignment file at \`$GUILD_TASK_ASSIGNMENT\` and validate it (guild.task_assignment schema, fail-closed). If it is missing or malformed, STOP and report a hard dispatch failure \u2014 do not start. Otherwise write your acknowledgment beside it (an \`assignment-ack.json\` marker in the instance directory) and only then begin your lane: you enter \`running\` only after the assignment is acknowledged (D5). `;
-  const definitionPath = typeof specialist.definition === "string" ? specialist.definition.trim() : void 0;
-  const definitionInstruction = specialist.definition_source === "project" && definitionPath ? `Your role definition is at \`${definitionPath}\` \u2014 read it FIRST and adopt it fully (persona, boundaries, TRIGGER / DO NOT TRIGGER limits). For each skill listed in its frontmatter \`skills:\`, load the project-local instance at \`.guild/skills/<skill>/SKILL.md\` when it exists before starting your lane. ` : "";
-  const isProjectSpecialist = specialist.definition_source === "project" && Boolean(definitionPath);
-  const definitionMarker = isProjectSpecialist ? `GUILD_AGENT_DEFINITION=${definitionPath}
-` : "";
-  const line1Marker = isProjectSpecialist ? definitionMarker : producerMarkerLine(specialist.name);
-  return line1Marker + `You are the \`${specialist.name}\` teammate for run-id \`${runId}\`. ` + definitionInstruction + `Your lane scope: \`${specialist.scope}\`. Read the exact \`context_bundle_id\` named by your assignment \u2014 it is authoritative; privilege it over any ambient CLAUDE.md / auto-memory (\xA79.1). When you finish, write your \xA78.2 handoff receipt with all 5 fields (changed_files, opens_for, assumptions, evidence, followups) to the canonical lane receipt path \`.guild/runs/${runId}/handoffs/<worker_role>-<logical_task_id>.md\`, using the values in your assignment. Do not write the assignment's \`handoff_path\`; TaskCompleted publishes the separate \`handoff_path\` pointer after validating and hashing the canonical receipt. ` + readAckInstruction + waitInstruction;
-}
-var DISPATCH_PRODUCER_ENV, DISPATCH_PRODUCER_TOKEN;
-var init_team_prompt = __esm({
-  "src/domains/config/team-prompt.ts"() {
-    init_adapters();
-    DISPATCH_PRODUCER_ENV = "GUILD_DISPATCH_PRODUCER";
-    DISPATCH_PRODUCER_TOKEN = "guild.dispatch.v1";
-  }
-});
-
-// src/domains/config/index.ts
-var config_exports = {};
-__export(config_exports, {
-  AUTHORITATIVE_PURPOSE_SOURCES: () => AUTHORITATIVE_PURPOSE_SOURCES,
-  BENIGN_COMPATIBILITY_READ_REASONS: () => BENIGN_COMPATIBILITY_READ_REASONS,
-  CACHED_INSPECTION_BUDGET_MS: () => CACHED_INSPECTION_BUDGET_MS,
-  CACHE_KEY_COMPONENTS: () => CACHE_KEY_COMPONENTS,
-  CAPABILITY_AUTO_CREATE_POLICIES: () => CAPABILITY_AUTO_CREATE_POLICIES,
-  CAPABILITY_RESOLUTION_INTENTS: () => CAPABILITY_RESOLUTION_INTENTS,
-  CAPABILITY_RESOLVER_MODES: () => CAPABILITY_RESOLVER_MODES,
-  CAPABILITY_RESOLVER_MODE_AFTER_F7: () => CAPABILITY_RESOLVER_MODE_AFTER_F7,
-  CAPABILITY_RESOLVER_MODE_DEFAULT: () => CAPABILITY_RESOLVER_MODE_DEFAULT,
-  CAPABILITY_ROLE_SLUG_MAX_LEN: () => CAPABILITY_ROLE_SLUG_MAX_LEN,
-  CAPABILITY_SUGGESTION_BUDGET_MAX: () => CAPABILITY_SUGGESTION_BUDGET_MAX,
-  CAPABILITY_SUGGESTION_BUDGET_MIN: () => CAPABILITY_SUGGESTION_BUDGET_MIN,
-  CLAUDE_TIER_FALLBACK: () => CLAUDE_TIER_FALLBACK,
-  COMPATIBILITY_ASSET_KINDS: () => COMPATIBILITY_ASSET_KINDS,
-  COMPATIBILITY_ASSET_ROOTS: () => COMPATIBILITY_ASSET_ROOTS,
-  COMPATIBILITY_CATALOG_SCHEMA: () => COMPATIBILITY_CATALOG_SCHEMA,
-  COMPATIBILITY_DEPRECATION_STATES: () => COMPATIBILITY_DEPRECATION_STATES,
-  COMPATIBILITY_READ_REASONS: () => COMPATIBILITY_READ_REASONS,
-  COMPATIBILITY_USAGE_DISPOSITION: () => COMPATIBILITY_USAGE_DISPOSITION,
-  COMPATIBILITY_USAGE_EVENT_NAME: () => COMPATIBILITY_USAGE_EVENT_NAME,
-  COMPATIBILITY_USAGE_OUTCOME_TYPE: () => COMPATIBILITY_USAGE_OUTCOME_TYPE,
-  COMPATIBILITY_USAGE_SCHEMA: () => COMPATIBILITY_USAGE_SCHEMA,
-  COMPLEXITIES: () => COMPLEXITIES,
-  CONDITION_KINDS: () => CONDITION_KINDS,
-  CONFIRMATION_KEY_COMPONENTS: () => CONFIRMATION_KEY_COMPONENTS,
-  DEFAULTS: () => DEFAULTS,
-  DEFAULT_CATALOG_TTL_SECONDS: () => DEFAULT_CATALOG_TTL_SECONDS,
-  DEFAULT_ESCALATION_MARKERS: () => DEFAULT_ESCALATION_MARKERS,
-  DEFAULT_INSPECTION_LABEL: () => DEFAULT_INSPECTION_LABEL,
-  DEPENDENCE_COMPATIBILITY_READ_REASONS: () => DEPENDENCE_COMPATIBILITY_READ_REASONS,
-  DIALECTS_DIRNAME: () => DIALECTS_DIRNAME,
-  DIALECT_TOKEN_BUDGET: () => DIALECT_TOKEN_BUDGET,
-  EVIDENCE_STATES: () => EVIDENCE_STATES,
-  FALLBACK_FAILURE_TAXONOMY: () => FALLBACK_FAILURE_TAXONOMY,
-  G5_MIN_CLEAN_RELEASES: () => G5_MIN_CLEAN_RELEASES,
-  HOST_FAMILY_TOKENS: () => HOST_FAMILY_TOKENS,
-  INDEPENDENCE_DIR: () => INDEPENDENCE_DIR,
-  INDEPENDENCE_LEVELS: () => INDEPENDENCE_LEVELS,
-  LEGACY_FILLABLE_PURPOSES: () => LEGACY_FILLABLE_PURPOSES,
-  LEGAL_EVIDENCE_TRANSITIONS: () => LEGAL_EVIDENCE_TRANSITIONS,
-  LISTING_AUTHORITY: () => LISTING_AUTHORITY,
-  LOG_ROTATION_THRESHOLD_BYTES: () => LOG_ROTATION_THRESHOLD_BYTES,
-  MODEL_CATALOG_CACHE_DIRNAME: () => MODEL_CATALOG_CACHE_DIRNAME,
-  MODEL_CATALOG_CACHE_REL: () => MODEL_CATALOG_CACHE_REL,
-  MODEL_CATALOG_CACHE_REL_SEGMENTS: () => MODEL_CATALOG_CACHE_REL_SEGMENTS,
-  MODEL_CATALOG_SCHEMA_VERSION: () => MODEL_CATALOG_SCHEMA_VERSION,
-  MODEL_FAMILIES: () => MODEL_FAMILIES,
-  MODEL_FAMILY_TOKENS: () => MODEL_FAMILY_TOKENS,
-  MODEL_INSPECTION_SCHEMA: () => MODEL_INSPECTION_SCHEMA,
-  MODE_TRANSITION_DIRECTIONS: () => MODE_TRANSITION_DIRECTIONS,
-  MODULE_PUBLIC_API_VERSION: () => MODULE_PUBLIC_API_VERSION,
-  NON_INHERITABLE_KEYS: () => NON_INHERITABLE_KEYS,
-  OPERATOR_BASELINE_POLICY: () => OPERATOR_BASELINE_POLICY,
-  PLUGIN_DIALECTS_REL: () => PLUGIN_DIALECTS_REL,
-  POLICY_FILES: () => POLICY_FILES,
-  POLICY_KEYS: () => POLICY_KEYS,
-  POLICY_KEY_ALIASES: () => POLICY_KEY_ALIASES,
-  POLICY_OVERLAY_FILE: () => POLICY_OVERLAY_FILE,
-  POLICY_PURPOSES: () => POLICY_PURPOSES,
-  POLICY_TIERS: () => POLICY_TIERS,
-  PROMPTS_DIRNAME: () => PROMPTS_DIRNAME,
-  PolicyRejectedError: () => PolicyRejectedError,
-  PromptRejectedError: () => PromptRejectedError,
-  RESOLUTION_STATUSES: () => RESOLUTION_STATUSES,
-  RESOLVER_AUTHORITIES: () => RESOLVER_AUTHORITIES,
-  RESOLVER_MODE_FAILURES: () => RESOLVER_MODE_FAILURES,
-  RESOLVER_MODE_OUTCOME_SCHEMA: () => RESOLVER_MODE_OUTCOME_SCHEMA,
-  RESOLVER_MODE_POLICIES: () => RESOLVER_MODE_POLICIES,
-  RESOLVER_TIER1_KEYS: () => RESOLVER_TIER1_KEYS,
-  REVIEW_CLASS_PURPOSES: () => REVIEW_CLASS_PURPOSES,
-  ROLES: () => ROLES,
-  ROLE_STRENGTHS: () => ROLE_STRENGTHS,
-  ROUTING_FLAG_DEFAULTS: () => ROUTING_FLAG_DEFAULTS,
-  ROUTING_FLAG_KEYS: () => ROUTING_FLAG_KEYS,
-  RouteError: () => RouteError,
-  SESSION_BINDING_FILE: () => SESSION_BINDING_FILE,
-  SHIPPED_COMPATIBILITY_ASSET_COUNT: () => SHIPPED_COMPATIBILITY_ASSET_COUNT,
-  SHIPPED_DOMAIN_SKILL_COUNT: () => SHIPPED_DOMAIN_SKILL_COUNT,
-  SHIPPED_DOMAIN_SKILL_IDS: () => SHIPPED_DOMAIN_SKILL_IDS,
-  SHIPPED_TEMPLATE_COUNT: () => SHIPPED_TEMPLATE_COUNT,
-  SIDECAR_MAX_BYTES: () => SIDECAR_MAX_BYTES3,
-  TIER_MAPPING_VERSION: () => TIER_MAPPING_VERSION,
-  UNCACHED_DISCOVERY_BUDGET_MS: () => UNCACHED_DISCOVERY_BUDGET_MS,
-  UNKNOWN_HOST_FAMILY: () => UNKNOWN_HOST_FAMILY,
-  UNKNOWN_MODEL_FAMILY: () => UNKNOWN_MODEL_FAMILY,
-  USING_GUILD_BASE_RELS: () => USING_GUILD_BASE_RELS,
-  USING_GUILD_OVERLAY: () => USING_GUILD_OVERLAY,
-  UnknownOrgQuarantineViolation: () => UnknownOrgQuarantineViolation,
-  adjudicateIndependence: () => adjudicateIndependence,
-  advanceChain: () => advanceChain,
-  advisorySubstrateFromRoles: () => advisorySubstrateFromRoles,
-  affinityBoost: () => affinityBoost,
-  appendEvidenceEvent: () => appendEvidenceEvent,
-  approxTokens: () => approxTokens,
-  assertPersistableIndependence: () => assertPersistableIndependence,
-  assertPolicyWrite: () => assertPolicyWrite,
-  availableRegistryRows: () => availableRegistryRows,
-  backendForMode: () => backendForMode,
-  bindSession: () => bindSession,
-  bindSessionForRun: () => bindSessionForRun,
-  buildCompatibilityCatalog: () => buildCompatibilityCatalog,
-  buildIndependenceAdjudication: () => buildIndependenceAdjudication,
-  buildModelInspection: () => buildModelInspection,
-  buildPrompt: () => buildPrompt,
-  canonicalPolicyKey: () => canonicalPolicyKey,
-  canonicalYamlFlat: () => canonicalYamlFlat,
-  claimPrompt: () => claimPrompt,
-  classifyCompatibilityRead: () => classifyCompatibilityRead,
-  classifyServedAttempt: () => classifyServedAttempt,
-  compatibilityUsageForRead: () => compatibilityUsageForRead,
-  composePrompt: () => composePrompt,
-  composeSessionPrompt: () => composeSessionPrompt,
-  concreteModelNameIn: () => concreteModelNameIn,
-  confidenceForListing: () => confidenceForListing,
-  createCacheKey: () => createCacheKey,
-  createRunLocalState: () => createRunLocalState,
-  createStore: () => createStore,
-  decisionFor: () => decisionFor,
-  deepMerge: () => deepMerge,
-  defaultEvidenceStateForTarget: () => defaultEvidenceStateForTarget,
-  defaultTierModels: () => defaultTierModels,
-  defaultTiersMap: () => defaultTiersMap,
-  detectSession: () => detectSession,
-  dispatchUpgrade: () => dispatchUpgrade,
-  eligibleForPurpose: () => eligibleForPurpose,
-  evaluateG5: () => evaluateG5,
-  evidenceStateForListing: () => evidenceStateForListing,
-  expandSelector: () => expandSelector,
-  fallbackHash: () => fallbackHash,
-  finalizeInterrupted: () => finalizeInterrupted,
-  finalizeReceipt: () => finalizeReceipt,
-  findBoundAdjudications: () => findBoundAdjudications,
-  findHostIdentity: () => findHostIdentity,
-  findModelNameInText: () => findModelNameInText,
-  freezeChain: () => freezeChain,
-  freezeSnapshot: () => freezeSnapshot,
-  gateM2: () => gateM2,
-  getByPath: () => getByPath2,
-  getDefaultModelTierMap: () => getDefaultModelTierMap,
-  hostKindRank: () => hostKindRank,
-  independenceDirForRunDir: () => independenceDirForRunDir,
-  initiativeIsWorkspaceScoped: () => initiativeIsWorkspaceScoped,
-  invalidateKey: () => invalidateKey,
-  isAntigravityCli: () => isAntigravityCli,
-  isCanonicalRoleSlug: () => isCanonicalRoleSlug,
-  isClaudeCli: () => isClaudeCli,
-  isClaudeHost: () => isClaudeHost,
-  isCodexCli: () => isCodexCli,
-  isCodexHost: () => isCodexHost,
-  isCompatibilityUsageV1: () => isCompatibilityUsageV1,
-  isDependenceRead: () => isDependenceRead,
-  isModelCatalogCachePath: () => isModelCatalogCachePath,
-  isPiCli: () => isPiCli,
-  isPlainObject: () => isPlainObject7,
-  isPolicyKey: () => isPolicyKey,
-  isResolverModeFailure: () => isResolverModeFailure,
-  isReusableCacheKey: () => isReusableCacheKey,
-  isReviewClassPurpose: () => isReviewClassPurpose,
-  isRunLocalCacheKey: () => isRunLocalCacheKey,
-  isSnapshotStale: () => isSnapshotStale,
-  isUnknownHost: () => isUnknownHost,
-  isValidCapabilityValue: () => isValidCapabilityValue,
-  legacyModelCatalogCacheDir: () => legacyModelCatalogCacheDir,
-  listingAuthorityFor: () => listingAuthorityFor,
-  loadPromptExtensions: () => loadPromptExtensions,
-  loadVerifiedM0Reports: () => loadVerifiedM0Reports,
-  loadWrittenAdjudications: () => loadWrittenAdjudications,
-  maxComplexity: () => maxComplexity,
-  migrationPreview: () => migrationPreview,
-  modelCatalogCacheDir: () => modelCatalogCacheDir,
-  nextGeneration: () => nextGeneration,
-  normalizeDiscovery: () => normalizeDiscovery,
-  parseCompatibilityUsageV1: () => parseCompatibilityUsageV1,
-  parseSelector: () => parseSelector,
-  persistIndependenceAdjudication: () => persistIndependenceAdjudication,
-  persistInspectionReport: () => persistInspectionReport,
-  persistResolutionReceipt: () => persistResolutionReceipt,
-  planModeTransition: () => planModeTransition,
-  planTeamRouting: () => planTeamRouting,
-  policyDefaults: () => policyDefaults,
-  policyFilesFor: () => policyFilesFor,
-  policyKeySpec: () => policyKeySpec,
-  policyOverlayFile: () => policyOverlayFile,
-  policyValue: () => policyValue,
-  projectionAllowed: () => projectionAllowed,
-  promptIdentityIn: () => promptIdentityIn,
-  publishSnapshot: () => publishSnapshot,
-  purgeRunLocalEntries: () => purgeRunLocalEntries,
-  purposeClassFor: () => purposeClassFor,
-  purposeComplexityFloor: () => purposeComplexityFloor,
-  purposeTierFloor: () => purposeTierFloor,
-  rankScore: () => rankScore,
-  reachableComplexities: () => reachableComplexities,
-  readCatalogEntry: () => readCatalogEntry,
-  readRoutingFlags: () => readRoutingFlags,
-  readSessionBinding: () => readSessionBinding,
-  readSnapshot: () => readSnapshot,
-  readUnderLockTimeout: () => readUnderLockTimeout,
-  recordAttempt: () => recordAttempt,
-  recordDecision: () => recordDecision,
-  recordRunInspectionEvidence: () => recordRunInspectionEvidence,
-  requiredAssetIdsForG5: () => requiredAssetIdsForG5,
-  resolve: () => resolve17,
-  resolveCapability: () => resolveCapability,
-  resolveEffectivePurpose: () => resolveEffectivePurpose,
-  resolveModel: () => resolveModel,
-  resolveModelParams: () => resolveModelParams,
-  resolvePolicy: () => resolvePolicy,
-  resolveRoles: () => resolveRoles,
-  resolveRolesForRun: () => resolveRolesForRun,
-  resolveSettings: () => resolveSettings,
-  resolveTierModel: () => resolveTierModel,
-  resolveWithLegacy: () => resolveWithLegacy,
-  resolverModePolicy: () => resolverModePolicy,
-  resolverModeRank: () => resolverModeRank,
-  rigorProfile: () => rigorProfile,
-  roleSlugDedupKey: () => roleSlugDedupKey,
-  rollbackV2Routing: () => rollbackV2Routing,
-  rollupCompatibilityUsage: () => rollupCompatibilityUsage,
-  route: () => route,
-  runScopeFor: () => runScopeFor,
-  scanHostIdentity: () => scanHostIdentity,
-  selectRoute: () => selectRoute,
-  sessionBindingPath: () => sessionBindingPath,
-  setByPath: () => setByPath2,
-  sha256Hex: () => sha256Hex2,
-  simulateCatalogChange: () => simulateCatalogChange,
-  singleflight: () => singleflight,
-  singleflightDiscover: () => singleflightDiscover,
-  suggestableAssets: () => suggestableAssets,
-  tierDefaults: () => tierDefaults,
-  tierDefaultsForHost: () => tierDefaultsForHost,
-  tierForCanonicalId: () => tierForCanonicalId,
-  tierForComplexity: () => tierForComplexity,
-  totalCatalogOrder: () => totalCatalogOrder,
-  validateAdjudicationRef: () => validateAdjudicationRef,
-  validateCrossHostBlock: () => validateCrossHostBlock,
-  validateDefaults: () => validateDefaults,
-  validateIndependenceBinding: () => validateIndependenceBinding,
-  validateMcp: () => validateMcp,
-  validateModelPolicy: () => validateModelPolicy,
-  validateModels: () => validateModels,
-  validatePolicyValue: () => validatePolicyValue,
-  validateRoleResolutionSet: () => validateRoleResolutionSet,
-  validateSecretsPolicy: () => validateSecretsPolicy,
-  validateSecurity: () => validateSecurity,
-  validateWrittenAdjudication: () => validateWrittenAdjudication,
-  verifyResolutionReceipt: () => verifyResolutionReceipt,
-  writePolicyOverlay: () => writePolicyOverlay
-});
-var MODULE_PUBLIC_API_VERSION;
-var init_config2 = __esm({
-  "src/domains/config/index.ts"() {
-    init_config_defaults();
-    init_policy_keys();
-    init_policy_resolver();
-    init_session_binding();
-    init_config_validation();
-    init_settings_resolver();
-    init_tier_model();
-    init_catalog_cache();
-    init_compatibility_catalog();
-    init_compatibility_usage();
-    init_confirmation_arbiter();
-    init_independence_predicates();
-    init_independence_record();
-    init_inspection_persist();
-    init_inspection_record();
-    init_model_catalog();
-    init_model_inspect();
-    init_model_policy();
-    init_model_resolver();
-    init_policy_migration();
-    init_purpose_provenance();
-    init_resolver_mode();
-    init_rank();
-    init_role_model_schema();
-    init_routing_rollout();
-    init_role_resolver();
-    init_router();
-    init_tiebreak();
-    init_tier_defaults();
-    init_compose_prompt();
-    init_team_prompt();
-    MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1";
-  }
-});
-
 // src/domains/dispatch/shadow-routing.ts
 var init_shadow_routing = __esm({
   "src/domains/dispatch/shadow-routing.ts"() {
@@ -25245,7 +18744,7 @@ function canonicalJson(value) {
   return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(",")}}`;
 }
 function sha2563(text) {
-  return `sha256:${crypto9.createHash("sha256").update(text, "utf8").digest("hex")}`;
+  return `sha256:${crypto6.createHash("sha256").update(text, "utf8").digest("hex")}`;
 }
 function sealReceiptRecord(input) {
   const body = {
@@ -25345,16 +18844,16 @@ function writeAllSync(fd, text) {
   const buf = Buffer.from(text, "utf8");
   let written = 0;
   while (written < buf.length) {
-    written += fs36.writeSync(fd, buf, written, buf.length - written);
+    written += fs25.writeSync(fd, buf, written, buf.length - written);
   }
 }
 function readAllSync(fd) {
-  const size = fs36.fstatSync(fd).size;
+  const size = fs25.fstatSync(fd).size;
   if (size === 0) return "";
   const buf = Buffer.allocUnsafe(size);
   let read = 0;
   while (read < size) {
-    const n = fs36.readSync(fd, buf, read, size - read, read);
+    const n = fs25.readSync(fd, buf, read, size - read, read);
     if (n <= 0) break;
     read += n;
   }
@@ -25362,39 +18861,39 @@ function readAllSync(fd) {
 }
 function realpathOrNull(target) {
   try {
-    return (fs36.realpathSync.native ?? fs36.realpathSync)(target);
+    return (fs25.realpathSync.native ?? fs25.realpathSync)(target);
   } catch {
     return null;
   }
 }
 function readlinkOrNull(target) {
   try {
-    return fs36.readlinkSync(target);
+    return fs25.readlinkSync(target);
   } catch {
     return null;
   }
 }
 function canonicalJournalPath(journalPath2) {
-  let current = path42.resolve(journalPath2);
+  let current = path31.resolve(journalPath2);
   for (let hop = 0; hop < CANONICAL_PATH_MAX_LINK_HOPS; hop += 1) {
     const real = realpathOrNull(current);
     if (real !== null) return real;
     const link = readlinkOrNull(current);
     if (link !== null) {
-      const next = path42.resolve(path42.dirname(current), link);
+      const next = path31.resolve(path31.dirname(current), link);
       if (next === current) return current;
       current = next;
       continue;
     }
-    const parent = path42.dirname(current);
+    const parent = path31.dirname(current);
     if (parent === current) return current;
-    return path42.join(canonicalJournalPath(parent), path42.basename(current));
+    return path31.join(canonicalJournalPath(parent), path31.basename(current));
   }
   return current;
 }
 function lstatOrNull2(target) {
   try {
-    return fs36.lstatSync(target);
+    return fs25.lstatSync(target);
   } catch {
     return null;
   }
@@ -25544,21 +19043,21 @@ function releaseJournalLock(lockPath2, io = defaultJournalIo) {
 }
 function statOrNull(target) {
   try {
-    return fs36.statSync(target);
+    return fs25.statSync(target);
   } catch {
     return null;
   }
 }
 function fstatOrNull(fd) {
   try {
-    return fs36.fstatSync(fd);
+    return fs25.fstatSync(fd);
   } catch {
     return null;
   }
 }
 function closeQuietly(fd) {
   try {
-    fs36.closeSync(fd);
+    fs25.closeSync(fd);
   } catch {
   }
 }
@@ -25569,12 +19068,12 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
   const acquisition = acquireJournalLockHeld(identity.lock, io, lockOptions);
   if (acquisition.failure !== null) return { ok: false, authority: null, identity, failure: acquisition.failure };
   const grant = acquisition.grant;
-  const journalParent = path42.dirname(identity.path);
+  const journalParent = path31.dirname(identity.path);
   const parentStat = statOrNull(journalParent);
   const parentDevice = parentStat !== null ? parentStat.dev : null;
   const parentInode = parentStat !== null ? parentStat.ino : null;
-  const checkpointParentPath = checkpointPath === null ? null : canonicalJournalPath(path42.dirname(checkpointPath));
-  const checkpointCanonical = checkpointParentPath === null || checkpointPath === null ? null : path42.join(checkpointParentPath, path42.basename(checkpointPath));
+  const checkpointParentPath = checkpointPath === null ? null : canonicalJournalPath(path31.dirname(checkpointPath));
+  const checkpointCanonical = checkpointParentPath === null || checkpointPath === null ? null : path31.join(checkpointParentPath, path31.basename(checkpointPath));
   const checkpointParent = checkpointParentPath === null || checkpointParentPath === journalParent ? null : checkpointParentPath;
   let checkpointParentPin = null;
   let handle = null;
@@ -25590,14 +19089,14 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
     let fd = null;
     let writable = false;
     try {
-      fd = fs36.openSync(identity.path, JOURNAL_ACCESS_FLAGS[access]);
+      fd = fs25.openSync(identity.path, JOURNAL_ACCESS_FLAGS[access]);
       writable = access !== "read";
     } catch {
       fd = null;
     }
     if (fd === null) {
       try {
-        fd = fs36.openSync(identity.path, "r");
+        fd = fs25.openSync(identity.path, "r");
         writable = false;
       } catch (err) {
         return unstable(
@@ -25623,7 +19122,7 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
     if (checkpointParent === null || checkpointParentPin !== null) return;
     let fd = null;
     try {
-      fd = fs36.openSync(checkpointParent, "r");
+      fd = fs25.openSync(checkpointParent, "r");
     } catch {
       fd = null;
     }
@@ -25674,7 +19173,7 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
       }
     }
     if (parentInode !== null && parentDevice !== null) {
-      const parentNow = statOrNull(path42.dirname(identity.path));
+      const parentNow = statOrNull(path31.dirname(identity.path));
       if (parentNow === null || parentNow.dev !== parentDevice || parentNow.ino !== parentInode) {
         return unstable(
           `the directory holding "${identity.path}" and its lock was replaced ${stage} \u2014 this writer's exclusion moved with the old directory and no longer covers this path`
@@ -25718,7 +19217,7 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
           );
         }
       }
-      const parentNamedNow = canonicalJournalPath(path42.dirname(checkpointPath));
+      const parentNamedNow = canonicalJournalPath(path31.dirname(checkpointPath));
       if (parentNamedNow !== checkpointParentPath) {
         return unstable(
           `the checkpoint "${checkpointPath}" now resolves into "${parentNamedNow}" rather than "${checkpointParentPath}" ${stage} \u2014 this writer holds the directory it was granted, not that one`
@@ -26136,12 +19635,12 @@ function appendLocked(paths, input, io, authority, options) {
     failure: null
   };
 }
-var fs36, path42, crypto9, RECEIPT_CONTRACT_VERSION, RECEIPT_DISPOSITIONS, OBSERVATION_STATES, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES, UNPINNED_FD, JournalAuthorityDetachedError, ACTIVE_LOCK_PUBLICATION, defaultJournalIo, CANONICAL_PATH_MAX_LINK_HOPS, JournalIdentityError, JOURNAL_LOCK_MAX_ATTEMPTS, JOURNAL_LOCK_WAIT_MS, JOURNAL_ACCESS_FLAGS, REQUIRED_STRING_FIELDS;
+var fs25, path31, crypto6, RECEIPT_CONTRACT_VERSION, RECEIPT_DISPOSITIONS, OBSERVATION_STATES, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES, UNPINNED_FD, JournalAuthorityDetachedError, ACTIVE_LOCK_PUBLICATION, defaultJournalIo, CANONICAL_PATH_MAX_LINK_HOPS, JournalIdentityError, JOURNAL_LOCK_MAX_ATTEMPTS, JOURNAL_LOCK_WAIT_MS, JOURNAL_ACCESS_FLAGS, REQUIRED_STRING_FIELDS;
 var init_receipt_journal = __esm({
   "src/domains/telemetry/receipt-journal.ts"() {
-    fs36 = __toESM(require("node:fs"));
-    path42 = __toESM(require("node:path"));
-    crypto9 = __toESM(require("node:crypto"));
+    fs25 = __toESM(require("node:fs"));
+    path31 = __toESM(require("node:path"));
+    crypto6 = __toESM(require("node:crypto"));
     init_state();
     RECEIPT_CONTRACT_VERSION = "guild.observability.v1";
     RECEIPT_DISPOSITIONS = Object.freeze([
@@ -26205,16 +19704,16 @@ var init_receipt_journal = __esm({
         bound?.guard?.("immediately before the append syscall");
         if (bound && bound.writable && bound.fd >= 0) {
           writeAllSync(bound.fd, text);
-          fs36.fsyncSync(bound.fd);
+          fs25.fsyncSync(bound.fd);
           return;
         }
-        fs36.mkdirSync(path42.dirname(journalPath2), { recursive: true });
-        const fd = fs36.openSync(journalPath2, "a");
+        fs25.mkdirSync(path31.dirname(journalPath2), { recursive: true });
+        const fd = fs25.openSync(journalPath2, "a");
         try {
-          fs36.writeSync(fd, text, null, "utf8");
-          fs36.fsyncSync(fd);
+          fs25.writeSync(fd, text, null, "utf8");
+          fs25.fsyncSync(fd);
         } finally {
-          fs36.closeSync(fd);
+          fs25.closeSync(fd);
         }
       },
       readAll(journalPath2, bound) {
@@ -26226,7 +19725,7 @@ var init_receipt_journal = __esm({
           }
         }
         try {
-          return fs36.readFileSync(journalPath2, "utf8");
+          return fs25.readFileSync(journalPath2, "utf8");
         } catch {
           return null;
         }
@@ -26238,26 +19737,26 @@ var init_receipt_journal = __esm({
       truncate(journalPath2, size, bound) {
         bound?.guard?.("immediately before the truncation syscall");
         if (bound && bound.writable && bound.fd >= 0) {
-          fs36.ftruncateSync(bound.fd, size);
+          fs25.ftruncateSync(bound.fd, size);
           return;
         }
-        fs36.truncateSync(journalPath2, size);
+        fs25.truncateSync(journalPath2, size);
       },
       // `mkdir` is the portable atomic test-and-set: it either creates the
       // directory or fails EEXIST, with no window in between. `open(O_CREAT|O_EXCL)`
       // has the same guarantee locally but is famously unreliable over NFS, and
       // Guild journals can live on a shared volume.
       acquireLock(lockPath2) {
-        fs36.mkdirSync(path42.dirname(lockPath2), { recursive: true });
+        fs25.mkdirSync(path31.dirname(lockPath2), { recursive: true });
         try {
-          fs36.mkdirSync(lockPath2);
+          fs25.mkdirSync(lockPath2);
         } catch (err) {
           if (err.code === "EEXIST") return false;
           throw err;
         }
         let fd = null;
         try {
-          fd = fs36.openSync(lockPath2, "r");
+          fd = fs25.openSync(lockPath2, "r");
         } catch {
           fd = null;
         }
@@ -26272,7 +19771,7 @@ var init_receipt_journal = __esm({
       },
       releaseLock(lockPath2) {
         try {
-          fs36.rmdirSync(lockPath2);
+          fs25.rmdirSync(lockPath2);
         } catch {
         }
       }
@@ -26600,8 +20099,8 @@ function reconcileWithin(opts, io, denial, journalPath2, authority) {
   };
   const lostAuthority = checkpoint_repair.requested && !denial && authority !== null ? authority.verify("before the checkpoint repair") : null;
   if (checkpoint_repair.requested && (denial || lostAuthority)) {
-    const refusal3 = denial ?? identityDenial(lostAuthority);
-    checkpoint_repair.failure = { code: refusal3.code, message: refusal3.message };
+    const refusal2 = denial ?? identityDenial(lostAuthority);
+    checkpoint_repair.failure = { code: refusal2.code, message: refusal2.message };
   } else if (checkpoint_repair.requested) {
     const blockers = [];
     if (hardFailure) blockers.push("conflicting or invalid records");
@@ -26789,9 +20288,9 @@ function defineScenario(stableId, title, eventName, preconditions, outcomeAssert
   };
 }
 function makeProbePaths(parent, name) {
-  const dir = path43.join(parent, name);
-  fs37.mkdirSync(dir, { recursive: true });
-  return { dir, journal: path43.join(dir, JOURNAL_LEAF), checkpoint: path43.join(dir, CHECKPOINT_LEAF) };
+  const dir = path32.join(parent, name);
+  fs26.mkdirSync(dir, { recursive: true });
+  return { dir, journal: path32.join(dir, JOURNAL_LEAF), checkpoint: path32.join(dir, CHECKPOINT_LEAF) };
 }
 function probeInput(identity, runId, over) {
   const base = makeReceiptInput({
@@ -26848,7 +20347,7 @@ function tornAppendIo(realIo, cutAfterBytes) {
   };
 }
 function layDownSealedJournal(port, paths, records, runId) {
-  fs37.writeFileSync(paths.journal, `${records.map((record) => JSON.stringify(record)).join("\n")}
+  fs26.writeFileSync(paths.journal, `${records.map((record) => JSON.stringify(record)).join("\n")}
 `, "utf8");
   const last = records[records.length - 1];
   const checkpoint = {};
@@ -26859,7 +20358,7 @@ function layDownSealedJournal(port, paths, records, runId) {
   checkpoint["record_count"] = records.length;
   checkpoint["updated_at"] = last.recorded_at;
   checkpoint["contract_version"] = RECEIPT_CONTRACT_VERSION;
-  fs37.writeFileSync(paths.checkpoint, `${JSON.stringify(checkpoint, null, 2)}
+  fs26.writeFileSync(paths.checkpoint, `${JSON.stringify(checkpoint, null, 2)}
 `, "utf8");
   const read = port.readCheckpointState(paths.checkpoint);
   if (read.state !== "present") {
@@ -27283,14 +20782,14 @@ function identityIsComplete3(identity) {
 }
 function isExistingDirectory(target) {
   try {
-    return fs37.statSync(target).isDirectory();
+    return fs26.statSync(target).isDirectory();
   } catch {
     return false;
   }
 }
 function removeQuietly(target) {
   try {
-    fs37.rmSync(target, { recursive: true, force: true });
+    fs26.rmSync(target, { recursive: true, force: true });
   } catch {
   }
 }
@@ -27334,7 +20833,7 @@ function evaluateReceiptJournalConformance(request) {
     }
   }
   const root = request.journal_root;
-  const usableRoot = typeof root === "string" && root.length > 0 && path43.isAbsolute(root) && isExistingDirectory(root);
+  const usableRoot = typeof root === "string" && root.length > 0 && path32.isAbsolute(root) && isExistingDirectory(root);
   if (!usableRoot) {
     return refuseEvaluation(MH06_REFUSAL_CONTROLS.journalRootUnusable, "scenario_evidence_incomplete", [
       "conformance evaluation writes journals, so it requires an absolute, existing, disposable root",
@@ -27343,7 +20842,7 @@ function evaluateReceiptJournalConformance(request) {
   }
   const port = request.journal === void 0 ? MH06_PRODUCTION_JOURNAL : request.journal;
   const identity = request.evidence_identity;
-  const workspace = fs37.mkdtempSync(path43.join(root, PROBE_WORKSPACE_PREFIX));
+  const workspace = fs26.mkdtempSync(path32.join(root, PROBE_WORKSPACE_PREFIX));
   const verdicts = {};
   try {
     for (const stableId of MH06_SCENARIO_IDS) {
@@ -27402,11 +20901,11 @@ function evaluateReceiptJournalConformance(request) {
     packet: freezeDeep(packet)
   };
 }
-var fs37, path43, OUTCOME_ENVELOPE_SCHEMA, OUTCOME_CONTRACT_VERSION, MH06_SUITE_ID, MH06_SUITE_VERSION, MH06_OWNER_KEY, MH06_PACKET_SCHEMA, MH06_SCENARIO_IDS, MH06_CATEGORY, MH06_EVIDENCE_PROFILE, MH06_EXPECTED_OUTCOMES, SCENARIO_RESULT_MISMATCH, EVIDENCE_FRESHNESS_VERDICTS, EVIDENCE_IDENTITY_FIELDS, MH06_WAVE_OWNER, MH06_SCENARIOS, MH06_PRODUCTION_JOURNAL, MH06_REFUSAL_CONTROLS, MH06_SOURCE_VERSION, PROBE_RECORDED_AT, PROBE_RECONCILED_AT, PROBE_WORKSPACE_PREFIX, TORN_APPEND_CUT_BYTES, PROBE_DIRS, JOURNAL_LEAF, CHECKPOINT_LEAF, CHECKPOINT_SCHEMA, PROBES;
+var fs26, path32, OUTCOME_ENVELOPE_SCHEMA, OUTCOME_CONTRACT_VERSION, MH06_SUITE_ID, MH06_SUITE_VERSION, MH06_OWNER_KEY, MH06_PACKET_SCHEMA, MH06_SCENARIO_IDS, MH06_CATEGORY, MH06_EVIDENCE_PROFILE, MH06_EXPECTED_OUTCOMES, SCENARIO_RESULT_MISMATCH, EVIDENCE_FRESHNESS_VERDICTS, EVIDENCE_IDENTITY_FIELDS, MH06_WAVE_OWNER, MH06_SCENARIOS, MH06_PRODUCTION_JOURNAL, MH06_REFUSAL_CONTROLS, MH06_SOURCE_VERSION, PROBE_RECORDED_AT, PROBE_RECONCILED_AT, PROBE_WORKSPACE_PREFIX, TORN_APPEND_CUT_BYTES, PROBE_DIRS, JOURNAL_LEAF, CHECKPOINT_LEAF, CHECKPOINT_SCHEMA, PROBES;
 var init_receipt_journal_conformance_evaluator = __esm({
   "src/domains/telemetry/receipt-journal-conformance-evaluator.ts"() {
-    fs37 = __toESM(require("node:fs"));
-    path43 = __toESM(require("node:path"));
+    fs26 = __toESM(require("node:fs"));
+    path32 = __toESM(require("node:path"));
     init_receipt_journal();
     init_receipt_reconcile();
     OUTCOME_ENVELOPE_SCHEMA = "guild.runtime.contracts.v1";
@@ -28054,7 +21553,7 @@ var init_guild_trace_events = __esm({
 
 // src/domains/telemetry/guild-trace-emit.ts
 function liveLogPath2(runDir3) {
-  return path44.join(runDir3, "logs", "v1.4-events.jsonl");
+  return path33.join(runDir3, "logs", "v1.4-events.jsonl");
 }
 function emitTraceEvent(event, runDir3) {
   if (!runDir3) return false;
@@ -28070,10 +21569,10 @@ function emitTraceEvent(event, runDir3) {
   }
   try {
     const live = liveLogPath2(runDir3);
-    const dir = path44.dirname(live);
-    fs38.mkdirSync(dir, { recursive: true });
+    const dir = path33.dirname(live);
+    fs27.mkdirSync(dir, { recursive: true });
     const line = JSON.stringify(event) + "\n";
-    fs38.appendFileSync(live, line, "utf8");
+    fs27.appendFileSync(live, line, "utf8");
     return true;
   } catch (err) {
     process.stderr.write(
@@ -28083,11 +21582,11 @@ function emitTraceEvent(event, runDir3) {
     return false;
   }
 }
-var fs38, path44;
+var fs27, path33;
 var init_guild_trace_emit = __esm({
   "src/domains/telemetry/guild-trace-emit.ts"() {
-    fs38 = __toESM(require("node:fs"));
-    path44 = __toESM(require("node:path"));
+    fs27 = __toESM(require("node:fs"));
+    path33 = __toESM(require("node:path"));
     init_guild_trace_events();
   }
 });
@@ -28291,6 +21790,42 @@ var init_isolation_guard = __esm({
   }
 });
 
+// src/domains/dispatch/adapter-rungs.ts
+var ADAPTER_RUNG_NAMES, ADAPTER_RUNG_VALUES, ADAPTER_RUNG_EVIDENCE, MISSING_RUNG_BEHAVIOUR;
+var init_adapter_rungs = __esm({
+  "src/domains/dispatch/adapter-rungs.ts"() {
+    init_kernel();
+    init_telemetry();
+    ADAPTER_RUNG_NAMES = frozenList([
+      "spawn",
+      "hooks",
+      "skills",
+      "commands",
+      "mcp",
+      "compaction",
+      "tool_projection"
+    ]);
+    ADAPTER_RUNG_VALUES = frozenList([
+      "native",
+      "wrapped",
+      "bridged",
+      "emulated",
+      "skip-recorded",
+      "missing"
+    ]);
+    ADAPTER_RUNG_EVIDENCE = frozenList(["verified", "inferred"]);
+    MISSING_RUNG_BEHAVIOUR = deepFreeze({
+      spawn: "lead_only: bind the parent as lead; no worker process, no extra model",
+      hooks: "verify.after_edit runs wrapped when a check command exists, else skip-recorded",
+      skills: "AGENTS.md + using-guild only; assembler bodies are Read when a command names them",
+      commands: "a typed verb becomes a prompt that names the assembler",
+      mcp: "in-process wiki/trace retrieval; the MCP path is skip-recorded; no third MCP id",
+      compaction: "skip-recorded; disk files are still written and the next session rehydrates",
+      tool_projection: "isolated spawn refused; lead_only in the parent with the isolation loss recorded"
+    });
+  }
+});
+
 // src/domains/dispatch/advisor-budget.ts
 var ADVISOR_BUDGET_SCHEMA, DEFAULT_ADVISOR_ROUNDS, CONSULT_KINDS, ADVISOR_BUDGET_CONTRACT;
 var init_advisor_budget = __esm({
@@ -28335,6 +21870,7 @@ var init_task_cell_runtime = __esm({
     init_progress_ledger();
     init_instance_cap();
     init_isolation_guard();
+    init_adapter_rungs();
     init_advisor_budget();
     IN_SESSION_PORT = Object.freeze({
       mode: "degraded",
@@ -28694,15 +22230,16 @@ var init_result_contracts = __esm({
 });
 
 // src/domains/distribution/build-inventory.ts
-var path45, PLUGIN_ROOT;
+var path34, PLUGIN_ROOT;
 var init_build_inventory = __esm({
   "src/domains/distribution/build-inventory.ts"() {
-    path45 = __toESM(require("node:path"));
+    path34 = __toESM(require("node:path"));
     init_inventory_schema();
     init_state();
     init_parity_contract();
     init_result_contracts();
-    PLUGIN_ROOT = path45.resolve(__dirname, "../../..");
+    init_kernel();
+    PLUGIN_ROOT = findPluginRoot(__dirname) ?? path34.resolve(__dirname, "../../..");
   }
 });
 
@@ -28760,7 +22297,9 @@ var init_domain_fold = __esm({
         ["dashboard", "telemetry"],
         ["distribution", "distribution"],
         ["docs-sync", "distribution"],
-        // Not a domain: the host maps project into src/adapters (KTD1/KTD4).
+        // Not a domain: the host maps project into src/adapters (KTD1/KTD4). Host
+        // identity (registry, detection, session context, the adapter contracts) is
+        // truth and lives in config; the coverage row follows the declaring file.
         ["host-runtime", "adapters"]
       ],
       "MODULE_TO_DOMAIN"
@@ -28834,7 +22373,7 @@ var init_per_host_packaging = __esm({
 
 // src/domains/distribution/release-distribution-contract.ts
 function sha2564(value) {
-  return crypto10.createHash("sha256").update(value).digest("hex");
+  return crypto7.createHash("sha256").update(value).digest("hex");
 }
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
@@ -28876,10 +22415,10 @@ function verifyReleaseClaim(claim, archive) {
   if (claim.host_support.supported !== false) errors.push("unsupported host cannot be promoted");
   return errors;
 }
-var crypto10, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
+var crypto7, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
 var init_release_distribution_contract = __esm({
   "src/domains/distribution/release-distribution-contract.ts"() {
-    crypto10 = __toESM(require("node:crypto"));
+    crypto7 = __toESM(require("node:crypto"));
     RELEASE_CLAIM_SCHEMA = "guild.release_claim.v1";
     OPERATION_KINDS = Object.freeze(["render", "install", "activate", "update", "uninstall", "verify"]);
     ACCEPTED_CONFORMANCE_ARTIFACTS = Object.freeze([
@@ -29679,7 +23218,10 @@ function evaluateOwner(ownerKey, inputs) {
       return evaluateMh02CoreConformance(runId, identity, receiptRefs, freshness);
     }
     if (ownerKey === NEUTRAL_CONFORMANCE_OWNER_KEYS[1]) {
-      const result2 = evaluateMh03HostAdapterConformance({
+      if (!hostAdapterConformanceOwner) {
+        return { packet: null, detail: "the host-adapter owner is not bound at this composition root" };
+      }
+      const result2 = hostAdapterConformanceOwner({
         run_id: runId,
         evidence_identity: identity,
         receipt_refs: receiptRefs,
@@ -29872,10 +23414,10 @@ function buildBatteryModuleWorkspace(base) {
     2
   )}
 `;
-  const coreDir = path46.resolve(__dirname, "../lifecycle");
+  const coreDir = path35.resolve(__dirname, "../lifecycle");
   const coreWorkflows = {};
   for (const member of NEUTRAL_CORE_MEMBERS) {
-    coreWorkflows[member] = fs39.readFileSync(path46.join(coreDir, member), "utf8");
+    coreWorkflows[member] = fs28.readFileSync(path35.join(coreDir, member), "utf8");
   }
   coreWorkflows["lifecycle-ports.ts"] = [
     'export const LIFECYCLE_PORT_VERSION = "guild.lifecycle.ports.v1" as const;',
@@ -29985,27 +23527,27 @@ function buildBatteryModuleWorkspace(base) {
     ""
   ].join("\n");
   for (const [rel2, content] of Object.entries(files)) {
-    const target = path46.join(base, rel2);
-    fs39.mkdirSync(path46.dirname(target), { recursive: true });
-    fs39.writeFileSync(target, content);
+    const target = path35.join(base, rel2);
+    fs28.mkdirSync(path35.dirname(target), { recursive: true });
+    fs28.writeFileSync(target, content);
   }
 }
 function batteryWorkspace() {
   if (batteryWorkspaceSingleton !== null) return batteryWorkspaceSingleton;
-  const base = fs39.mkdtempSync(path46.join(os3.tmpdir(), "a21x-integration-battery-"));
-  const journalRoot = path46.join(base, "journal-root");
-  const migrationJournalRoot = path46.join(base, "migration-journal-root");
-  fs39.mkdirSync(journalRoot, { recursive: true });
-  fs39.mkdirSync(migrationJournalRoot, { recursive: true });
-  const moduleBase = path46.join(base, "module-workspace");
+  const base = fs28.mkdtempSync(path35.join(os2.tmpdir(), "a21x-integration-battery-"));
+  const journalRoot = path35.join(base, "journal-root");
+  const migrationJournalRoot = path35.join(base, "migration-journal-root");
+  fs28.mkdirSync(journalRoot, { recursive: true });
+  fs28.mkdirSync(migrationJournalRoot, { recursive: true });
+  const moduleBase = path35.join(base, "module-workspace");
   buildBatteryModuleWorkspace(moduleBase);
   batteryWorkspaceSingleton = {
     journalRoot,
     migrationJournalRoot,
-    pluginRoot: path46.join(moduleBase, "plugin"),
+    pluginRoot: path35.join(moduleBase, "plugin"),
     consumerRoots: {
-      website: path46.join(moduleBase, "website"),
-      benchmark: path46.join(moduleBase, "benchmark")
+      website: path35.join(moduleBase, "website"),
+      benchmark: path35.join(moduleBase, "benchmark")
     }
   };
   return batteryWorkspaceSingleton;
@@ -30177,14 +23719,14 @@ function refusesWithControl(implementation, request, control) {
   if (!isRecord2(result.outcome) || result.outcome.disposition !== "refused") return false;
   return ownField(result.outcome.facts, "refusal_control") === control;
 }
-var fs39, os3, path46, RELEASE_INTEGRATION_REQUEST_MEMBERS, RELEASE_INTEGRATION_OWNER_BOUNDARIES, CONTROL_NOT_TEXT, CONTROL_CALLER_PACKETS, CONTROL_CALLER_REQUIRED_SET2, CONTROL_CALLER_OUTCOMES, CONTROL_OWNER_FAILED, CONTROL_CLAIM_INCOMPLETE, CONTROL_ASSEMBLY_REFUSED, RELEASE_INTEGRATION_REFUSAL_CONTROLS, RELEASE_INTEGRATION_OWNER_INPUT_MEMBERS, FORBIDDEN_OWNER_INPUT_KEYS, MH02_SNAPSHOT_HASH, MH02_SUPPORTED_CAPABILITY, MH02_ABSENT_CAPABILITY, MH02_DENIED_OPERATION, MH02_ALLOWED_OPERATION, MH02_CONDITION_GATE, MH02_OPEN_GATE, MH02_OBSERVATION, MH02_POLICY, MH02_GATES, MH02_HOST_PROBES, MH02_PROBES, batteryWorkspaceSingleton, BATTERY_MODULE_PUBLIC_API, BATTERY_IDENTITY, BATTERY_CLAIMANT, BATTERY_RUN_ID, BATTERY_CLAIM, batteryRecomputedPacketsSingleton, RELEASE_INTEGRATION_CONTROL_BATTERY, RELEASE_INTEGRATION_CONTROLS;
+var fs28, os2, path35, RELEASE_INTEGRATION_REQUEST_MEMBERS, RELEASE_INTEGRATION_OWNER_BOUNDARIES, CONTROL_NOT_TEXT, CONTROL_CALLER_PACKETS, CONTROL_CALLER_REQUIRED_SET2, CONTROL_CALLER_OUTCOMES, CONTROL_OWNER_FAILED, CONTROL_CLAIM_INCOMPLETE, CONTROL_ASSEMBLY_REFUSED, RELEASE_INTEGRATION_REFUSAL_CONTROLS, RELEASE_INTEGRATION_OWNER_INPUT_MEMBERS, FORBIDDEN_OWNER_INPUT_KEYS, MH02_SNAPSHOT_HASH, MH02_SUPPORTED_CAPABILITY, MH02_ABSENT_CAPABILITY, MH02_DENIED_OPERATION, MH02_ALLOWED_OPERATION, MH02_CONDITION_GATE, MH02_OPEN_GATE, MH02_OBSERVATION, MH02_POLICY, MH02_GATES, MH02_HOST_PROBES, MH02_PROBES, hostAdapterConformanceOwner, batteryWorkspaceSingleton, BATTERY_MODULE_PUBLIC_API, BATTERY_IDENTITY, BATTERY_CLAIMANT, BATTERY_RUN_ID, BATTERY_CLAIM, batteryRecomputedPacketsSingleton, RELEASE_INTEGRATION_CONTROL_BATTERY, RELEASE_INTEGRATION_CONTROLS;
 var init_release_conformance_integration = __esm({
   "src/domains/distribution/release-conformance-integration.ts"() {
-    fs39 = __toESM(require("node:fs"));
-    os3 = __toESM(require("node:os"));
-    path46 = __toESM(require("node:path"));
+    fs28 = __toESM(require("node:fs"));
+    os2 = __toESM(require("node:os"));
+    path35 = __toESM(require("node:path"));
     init_lifecycle();
-    init_adapters();
+    init_config2();
     init_telemetry();
     init_state();
     init_release_conformance_evaluator();
@@ -30279,6 +23821,7 @@ var init_release_conformance_integration = __esm({
       mh02ProbeEvidenceGatedClose,
       mh02ProbePolicyDistinction
     ];
+    hostAdapterConformanceOwner = null;
     batteryWorkspaceSingleton = null;
     BATTERY_MODULE_PUBLIC_API = 'export const MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1" as const;';
     BATTERY_IDENTITY = {
@@ -30622,7 +24165,7 @@ var init_surface_manifest = __esm({
 var init_verify_host_packages = __esm({
   "src/domains/distribution/verify-host-packages.ts"() {
     init_build_inventory();
-    init_adapters();
+    init_config2();
   }
 });
 
@@ -30799,7 +24342,7 @@ function evaluateCommandCoverage(commandTokens, knowledgeText) {
   return { covered, uncovered };
 }
 function collectCommandTokens(commandsDir) {
-  const entries = fs40.readdirSync(commandsDir, { withFileTypes: true });
+  const entries = fs29.readdirSync(commandsDir, { withFileTypes: true });
   return entries.filter((e) => e.isFile() && e.name.endsWith(".md")).map((e) => e.name.slice(0, -".md".length)).sort();
 }
 function decodeEntities(s) {
@@ -30922,8 +24465,8 @@ function skipTemplate(html, start) {
 function gatherKnowledgeText(knowledgeDir2) {
   const parts = [];
   const walk = (dir) => {
-    for (const e of fs40.readdirSync(dir, { withFileTypes: true })) {
-      const abs = path47.join(dir, e.name);
+    for (const e of fs29.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path36.join(dir, e.name);
       if (e.isDirectory()) {
         walk(abs);
         continue;
@@ -30931,7 +24474,7 @@ function gatherKnowledgeText(knowledgeDir2) {
       if (!e.isFile()) continue;
       const lower = e.name.toLowerCase();
       if (!KNOWLEDGE_EXTENSIONS.some((ext) => lower.endsWith(ext))) continue;
-      const raw = fs40.readFileSync(abs, "utf8");
+      const raw = fs29.readFileSync(abs, "utf8");
       parts.push(lower.endsWith(".md") ? raw : htmlToText(raw));
     }
   };
@@ -30960,12 +24503,12 @@ function main(argv) {
     );
     return 2;
   }
-  if (!fs40.existsSync(commandsDir) || !fs40.statSync(commandsDir).isDirectory()) {
+  if (!fs29.existsSync(commandsDir) || !fs29.statSync(commandsDir).isDirectory()) {
     process.stderr.write(`[command-coverage] ERROR: commands dir not found: ${commandsDir}
 `);
     return 2;
   }
-  if (!fs40.existsSync(knowledgeDir2) || !fs40.statSync(knowledgeDir2).isDirectory()) {
+  if (!fs29.existsSync(knowledgeDir2) || !fs29.statSync(knowledgeDir2).isDirectory()) {
     process.stderr.write(`[command-coverage] ERROR: knowledge dir not found: ${knowledgeDir2}
 `);
     return 2;
@@ -30992,11 +24535,11 @@ function main(argv) {
   );
   return warn2 ? 0 : 1;
 }
-var fs40, path47, TOKEN_START, TOKEN_END, KNOWLEDGE_EXTENSIONS, NAMED_ENTITIES, HTML_SPACE;
+var fs29, path36, TOKEN_START, TOKEN_END, KNOWLEDGE_EXTENSIONS, NAMED_ENTITIES, HTML_SPACE;
 var init_check_command_coverage = __esm({
   "src/domains/distribution/check-command-coverage.ts"() {
-    fs40 = __toESM(require("fs"));
-    path47 = __toESM(require("path"));
+    fs29 = __toESM(require("fs"));
+    path36 = __toESM(require("path"));
     TOKEN_START = "(?<![A-Za-z0-9-])";
     TOKEN_END = "(?![A-Za-z0-9-])";
     KNOWLEDGE_EXTENSIONS = [".md", ".html", ".htm"];
@@ -31074,7 +24617,7 @@ function evaluateDocSync(input) {
 }
 function getChangedFilesResult(range, cwd) {
   try {
-    const out = (0, import_child_process2.execFileSync)("git", ["diff", "--name-only", range], {
+    const out = (0, import_child_process.execFileSync)("git", ["diff", "--name-only", range], {
       cwd,
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
@@ -31089,7 +24632,7 @@ function getChangedFilesResult(range, cwd) {
 function getCommitMessagesResult(range, cwd) {
   const logRange = range.includes("...") ? range.replace("...", "..") : range;
   try {
-    const out = (0, import_child_process2.execFileSync)("git", ["log", logRange, "--format=%B"], {
+    const out = (0, import_child_process.execFileSync)("git", ["log", logRange, "--format=%B"], {
       cwd,
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
@@ -31103,7 +24646,7 @@ function getCommitMessagesResult(range, cwd) {
 }
 function isOriginMainReachable(cwd) {
   try {
-    (0, import_child_process2.execFileSync)("git", ["rev-parse", "--verify", "origin/main"], {
+    (0, import_child_process.execFileSync)("git", ["rev-parse", "--verify", "origin/main"], {
       cwd,
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
@@ -31145,10 +24688,10 @@ function resolveUserFacingSkillPaths(changedFiles, cwd) {
   const skillFiles = changedFiles.filter((f) => f.endsWith("SKILL.md"));
   const result = [];
   for (const rel2 of skillFiles) {
-    const abs = path48.resolve(cwd, rel2);
-    if (!fs41.existsSync(abs)) continue;
+    const abs = path37.resolve(cwd, rel2);
+    if (!fs30.existsSync(abs)) continue;
     try {
-      const contents = fs41.readFileSync(abs, "utf8");
+      const contents = fs30.readFileSync(abs, "utf8");
       if (isUserFacingSkill(rel2, contents)) {
         result.push(rel2);
       }
@@ -31215,18 +24758,18 @@ function parseArgs3(argv) {
 function main2(argv = process.argv.slice(2)) {
   const args = parseArgs3(argv);
   const { strict, workspaceRoot } = args;
-  if (!fs41.existsSync(workspaceRoot) || !fs41.statSync(workspaceRoot).isDirectory()) {
+  if (!fs30.existsSync(workspaceRoot) || !fs30.statSync(workspaceRoot).isDirectory()) {
     process.stderr.write(
       `[check-doc-sync] ERROR: --workspace-root "${workspaceRoot}" is not a directory
 `
     );
     process.exit(2);
   }
-  const pluginRepo = args.pluginRepo ?? path48.join(workspaceRoot, "plugin");
+  const pluginRepo = args.pluginRepo ?? path37.join(workspaceRoot, "plugin");
   const rootRepo = args.rootRepo ?? workspaceRoot;
   const effectiveRootRange = args.rootRange ?? args.pluginRange;
-  const pluginRepoExists = fs41.existsSync(pluginRepo) && fs41.statSync(pluginRepo).isDirectory();
-  const rootRepoExists = fs41.existsSync(rootRepo) && fs41.statSync(rootRepo).isDirectory();
+  const pluginRepoExists = fs30.existsSync(pluginRepo) && fs30.statSync(pluginRepo).isDirectory();
+  const rootRepoExists = fs30.existsSync(rootRepo) && fs30.statSync(rootRepo).isDirectory();
   if (!rootRepoExists) {
     process.stderr.write(
       `[check-doc-sync] ERROR: root-repo "${rootRepo}" is not a directory
@@ -31267,12 +24810,12 @@ function main2(argv = process.argv.slice(2)) {
     );
   }
 }
-var fs41, path48, import_child_process2;
+var fs30, path37, import_child_process;
 var init_check_doc_sync = __esm({
   "src/domains/distribution/check-doc-sync.ts"() {
-    fs41 = __toESM(require("fs"));
-    path48 = __toESM(require("path"));
-    import_child_process2 = require("child_process");
+    fs30 = __toESM(require("fs"));
+    path37 = __toESM(require("path"));
+    import_child_process = require("child_process");
     init_state();
     if (typeof module !== "undefined" && require.main === module && /^check-doc-sync\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
       main2();
@@ -31606,16 +25149,16 @@ var init_research_packet = __esm({
 // src/domains/knowledge/fs-scanner.ts
 function safeReadDir(dir) {
   try {
-    return fs42.readdirSync(dir, { withFileTypes: true });
+    return fs31.readdirSync(dir, { withFileTypes: true });
   } catch {
     return [];
   }
 }
 function safeReadFile(p) {
   try {
-    const stat = fs42.statSync(p);
+    const stat = fs31.statSync(p);
     if (stat.size > MAX_FILE_BYTES) return null;
-    return fs42.readFileSync(p, "utf8");
+    return fs31.readFileSync(p, "utf8");
   } catch {
     return null;
   }
@@ -31623,11 +25166,11 @@ function safeReadFile(p) {
 function walkFiles(dir, extensions) {
   const out = [];
   for (const entry of safeReadDir(dir)) {
-    const full = path49.join(dir, entry.name);
+    const full = path38.join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...walkFiles(full, extensions));
     } else if (entry.isFile()) {
-      const ext = path49.extname(entry.name).toLowerCase();
+      const ext = path38.extname(entry.name).toLowerCase();
       if (extensions.includes(ext)) out.push(full);
     }
   }
@@ -31639,7 +25182,7 @@ function extractTitle2(content, filePath) {
     const m = line.match(/^#\s+(.+?)\s*$/);
     if (m) return m[1].trim();
   }
-  return path49.basename(filePath, path49.extname(filePath));
+  return path38.basename(filePath, path38.extname(filePath));
 }
 function queryTerms(query) {
   return query.toLowerCase().split(/\s+/).map((t) => t.trim()).filter((t) => t.length > 0);
@@ -31669,12 +25212,12 @@ function fsScan(query, guildRoot, opts = {}) {
   const dirs = opts.dirs ?? DEFAULT_DIRS;
   const extensions = (opts.extensions ?? DEFAULT_EXTENSIONS).map((e) => e.toLowerCase());
   const terms = queryTerms(query);
-  const guildDir = path49.join(guildRoot, ".guild");
+  const guildDir = path38.join(guildRoot, ".guild");
   const existingDirs = [];
   for (const rel2 of dirs) {
-    const abs = path49.join(guildDir, rel2);
+    const abs = path38.join(guildDir, rel2);
     try {
-      if (fs42.statSync(abs).isDirectory()) existingDirs.push(abs);
+      if (fs31.statSync(abs).isDirectory()) existingDirs.push(abs);
     } catch {
     }
   }
@@ -31745,11 +25288,11 @@ function runFsScannerCli() {
   }
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
 }
-var fs42, path49, DEFAULT_LIMIT, DEFAULT_DIRS, DEFAULT_EXTENSIONS, MAX_FILE_BYTES;
+var fs31, path38, DEFAULT_LIMIT, DEFAULT_DIRS, DEFAULT_EXTENSIONS, MAX_FILE_BYTES;
 var init_fs_scanner = __esm({
   "src/domains/knowledge/fs-scanner.ts"() {
-    fs42 = __toESM(require("fs"));
-    path49 = __toESM(require("path"));
+    fs31 = __toESM(require("fs"));
+    path38 = __toESM(require("path"));
     DEFAULT_LIMIT = 10;
     DEFAULT_DIRS = ["wiki", "runs"];
     DEFAULT_EXTENSIONS = [".md", ".txt", ".yaml", ".yml"];
@@ -31792,8 +25335,8 @@ function classifyTrustTier(relPath, content, opts = {}) {
 }
 function emitRecallQuarantineEvent(runDir3, runId, sourcePath, patterns, tool) {
   try {
-    const logsDir2 = path50.join(runDir3, "logs");
-    fs43.mkdirSync(logsDir2, { recursive: true });
+    const logsDir2 = path39.join(runDir3, "logs");
+    fs32.mkdirSync(logsDir2, { recursive: true });
     const host = (process.env["GUILD_HOST_ID"] ?? "").trim() || (process.env["GUILD_HOST"] ?? "").trim().toLowerCase() || "claude";
     const record = {
       schema_version: "guild.security_event.v1",
@@ -31802,11 +25345,11 @@ function emitRecallQuarantineEvent(runDir3, runId, sourcePath, patterns, tool) {
       event_type: "recall_quarantine",
       decision: "blocked",
       tool,
-      detail: `Recalled chunk from ${path50.basename(sourcePath)} quarantined \u2014 injection probe flagged (patterns: ${patterns.join(", ")})`,
+      detail: `Recalled chunk from ${path39.basename(sourcePath)} quarantined \u2014 injection probe flagged (patterns: ${patterns.join(", ")})`,
       host
     };
-    fs43.appendFileSync(
-      path50.join(logsDir2, "security-events.jsonl"),
+    fs32.appendFileSync(
+      path39.join(logsDir2, "security-events.jsonl"),
       JSON.stringify(record) + "\n",
       "utf8"
     );
@@ -31822,7 +25365,7 @@ function protectChunks(rawHits, opts = {}) {
     const probe = sanitizeForInjection(content);
     if (probe.result === "flagged") {
       const patterns = probe.matchedPatterns.join(", ");
-      const marker = `[QUARANTINED: recalled chunk from ${path50.basename(source_path)} flagged for injection (patterns: ${patterns}) \u2014 excluded]`;
+      const marker = `[QUARANTINED: recalled chunk from ${path39.basename(source_path)} flagged for injection (patterns: ${patterns}) \u2014 excluded]`;
       chunks.push({
         source_path,
         trust_tier: "untrusted",
@@ -31872,11 +25415,11 @@ function protectChunks(rawHits, opts = {}) {
   const directive = wrappedCount > 0 ? RECALL_INTEGRITY_DIRECTIVE : null;
   return { chunks, directive };
 }
-var fs43, path50, RECALL_INTEGRITY_DIRECTIVE, OPERATOR_PATH_PATTERNS;
+var fs32, path39, RECALL_INTEGRITY_DIRECTIVE, OPERATOR_PATH_PATTERNS;
 var init_recall_protect = __esm({
   "src/domains/knowledge/recall-protect.ts"() {
-    fs43 = __toESM(require("node:fs"));
-    path50 = __toESM(require("node:path"));
+    fs32 = __toESM(require("node:fs"));
+    path39 = __toESM(require("node:path"));
     init_security();
     init_state();
     init_telemetry();
@@ -31929,10 +25472,10 @@ function wikiRecall(query, cwd, config, opts = {}) {
     const rawHits = [];
     for (const r of rows) {
       const relPath = typeof r["path"] === "string" ? r["path"] : "";
-      const absPath = path51.join(cwd, relPath);
+      const absPath = path40.join(cwd, relPath);
       let content;
       try {
-        content = fs44.readFileSync(absPath, "utf8");
+        content = fs33.readFileSync(absPath, "utf8");
       } catch {
         content = typeof r["snippet"] === "string" ? r["snippet"] : "";
       }
@@ -32004,7 +25547,7 @@ function runWikiRecallCli() {
     process.exit(1);
   }
   if (runId && !runDir3) {
-    runDir3 = path51.join(cwd, ".guild", "runs", runId);
+    runDir3 = path40.join(cwd, ".guild", "runs", runId);
   }
   const indexOff = (process.env["GUILD_INDEX"] ?? "auto") === "off";
   const thresholdOverride = parseInt(process.env["GUILD_WIKI_THRESHOLD"] ?? "", 10);
@@ -32027,11 +25570,11 @@ function runWikiRecallCli() {
   };
   process.stdout.write(JSON.stringify(safeResult, null, 2) + "\n");
 }
-var fs44, path51, DEFAULT_LIMIT2;
+var fs33, path40, DEFAULT_LIMIT2;
 var init_wiki_recall = __esm({
   "src/domains/knowledge/wiki-recall.ts"() {
-    fs44 = __toESM(require("node:fs"));
-    path51 = __toESM(require("node:path"));
+    fs33 = __toESM(require("node:fs"));
+    path40 = __toESM(require("node:path"));
     init_state();
     init_recall_protect();
     init_recall_protect();
@@ -32271,10 +25814,10 @@ function resolveRecallBeforeRead(cwd) {
   return true;
 }
 function hashQuery(query) {
-  return crypto11.createHash("sha256").update(query).digest("hex").slice(0, 16);
+  return crypto8.createHash("sha256").update(query).digest("hex").slice(0, 16);
 }
 function categoryFromWikiPath(absPath, wikiBase) {
-  const segs = path52.relative(wikiBase, absPath).split(path52.sep);
+  const segs = path41.relative(wikiBase, absPath).split(path41.sep);
   return segs.length > 1 ? segs[0] : void 0;
 }
 function rankWikiDocs(docs, wikiBase, limit, composite) {
@@ -32287,26 +25830,26 @@ function rankWikiDocs(docs, wikiBase, limit, composite) {
     const importance = resolveRecallImportance(d.content, categoryFromWikiPath(d.path, wikiBase));
     let ageMs = 0;
     try {
-      ageMs = now - fs45.statSync(d.path).mtimeMs;
+      ageMs = now - fs34.statSync(d.path).mtimeMs;
     } catch {
     }
     return { d, importance, comp: compositeScore(d.score, importance, ageMs, composite.halfLifeDays) };
   }).filter((x) => x.importance >= composite.importanceGate).sort((a, b) => b.comp - a.comp).slice(0, limit).map((x) => x.d);
 }
 function walkMdFiles(dir) {
-  if (!fs45.existsSync(dir)) return [];
+  if (!fs34.existsSync(dir)) return [];
   const result = [];
   const stack = [dir];
   while (stack.length > 0) {
     const cur = stack.pop();
     let entries;
     try {
-      entries = fs45.readdirSync(cur, { withFileTypes: true });
+      entries = fs34.readdirSync(cur, { withFileTypes: true });
     } catch {
       continue;
     }
     for (const ent of entries) {
-      const full = path52.join(cur, ent.name);
+      const full = path41.join(cur, ent.name);
       if (ent.isDirectory()) {
         stack.push(full);
       } else if (ent.isFile() && ent.name.endsWith(".md")) {
@@ -32329,8 +25872,8 @@ function sqliteBranch(query, cwd, indexConfig, limit, runDir3, runId) {
   return { source: "sqlite", chunks, directive: result.directive };
 }
 function fileBm25Branch(query, cwd, category, limit, runDir3, runId, composite) {
-  const wikiBase = path52.join(cwd, ".guild", "wiki");
-  const scanDir = category ? path52.join(wikiBase, category) : wikiBase;
+  const wikiBase = path41.join(cwd, ".guild", "wiki");
+  const scanDir = category ? path41.join(wikiBase, category) : wikiBase;
   const files = walkMdFiles(scanDir);
   if (files.length === 0) return null;
   const queryTokens = tokenizeIdentifierAware(query);
@@ -32338,7 +25881,7 @@ function fileBm25Branch(query, cwd, category, limit, runDir3, runId, composite) 
   const docs = files.map((f) => {
     let content = "";
     try {
-      content = fs45.readFileSync(f, "utf8");
+      content = fs34.readFileSync(f, "utf8");
     } catch {
     }
     return { path: f, content, tokens: tokenizeIdentifierAware(content) };
@@ -32353,7 +25896,7 @@ function fileBm25Branch(query, cwd, category, limit, runDir3, runId, composite) 
   );
   if (ranked.length === 0) return null;
   const rawHits = ranked.map((d) => ({
-    source_path: path52.relative(cwd, d.path),
+    source_path: path41.relative(cwd, d.path),
     content: d.content
   }));
   const { chunks, directive } = protectChunks(rawHits, {
@@ -32375,10 +25918,10 @@ function fsScanBranch(query, cwd, category, limit, runDir3, runId) {
   }
   const rawHits = scanResult.hits.map((hit) => {
     const absPath = hit.path;
-    const relPath = path52.relative(cwd, absPath);
+    const relPath = path41.relative(cwd, absPath);
     let content;
     try {
-      content = fs45.readFileSync(absPath, "utf8");
+      content = fs34.readFileSync(absPath, "utf8");
     } catch {
       content = hit.snippet;
     }
@@ -32392,11 +25935,11 @@ function fsScanBranch(query, cwd, category, limit, runDir3, runId) {
   return { source: "fs-scan", chunks, directive };
 }
 function kgQueryBranch(query, cwd, limit, runDir3, runId, category) {
-  const projPath = path52.join(cwd, ".guild", "indexes", "knowledge-recall.json");
-  if (!fs45.existsSync(projPath)) return null;
+  const projPath = path41.join(cwd, ".guild", "indexes", "knowledge-recall.json");
+  if (!fs34.existsSync(projPath)) return null;
   let proj = null;
   try {
-    proj = JSON.parse(fs45.readFileSync(projPath, "utf8"));
+    proj = JSON.parse(fs34.readFileSync(projPath, "utf8"));
   } catch {
     return null;
   }
@@ -32481,11 +26024,11 @@ structural node (hop ${n.depth}) \u2014 no line provenance, untrusted
 function structuralBranch(query, cwd, category, limit, runDir3, runId) {
   const intent = classifyStructuralIntent(query);
   if (!intent) return null;
-  const graphPath = path52.join(cwd, ".guild", "indexes", "knowledge-graph.json");
-  if (!fs45.existsSync(graphPath)) return null;
+  const graphPath = path41.join(cwd, ".guild", "indexes", "knowledge-graph.json");
+  if (!fs34.existsSync(graphPath)) return null;
   let doc = null;
   try {
-    doc = JSON.parse(fs45.readFileSync(graphPath, "utf8"));
+    doc = JSON.parse(fs34.readFileSync(graphPath, "utf8"));
   } catch {
     return null;
   }
@@ -32526,16 +26069,16 @@ function structuralBranch(query, cwd, category, limit, runDir3, runId) {
   return { source: "structural", chunks, directive };
 }
 function corpusForcesIdentifierBypass(query, cwd, category, wikiFileThreshold) {
-  const globalWikiBase = path52.join(resolveMainRepoRoot(cwd), ".guild", "wiki");
+  const globalWikiBase = path41.join(resolveMainRepoRoot(cwd), ".guild", "wiki");
   if (walkMdFiles(globalWikiBase).length <= wikiFileThreshold) return false;
   const querySet = new Set(tokenizeIdentifierAware(query));
   if (querySet.size === 0) return false;
-  const wikiBase = path52.join(cwd, ".guild", "wiki");
-  const scanDir = category ? path52.join(wikiBase, category) : wikiBase;
+  const wikiBase = path41.join(cwd, ".guild", "wiki");
+  const scanDir = category ? path41.join(wikiBase, category) : wikiBase;
   for (const f of walkMdFiles(scanDir)) {
     let content;
     try {
-      content = fs45.readFileSync(f, "utf8");
+      content = fs34.readFileSync(f, "utf8");
     } catch {
       continue;
     }
@@ -32566,7 +26109,7 @@ function recall(query, opts) {
     laneOutcome = "unknown"
   } = opts;
   const _traceStart = Date.now();
-  const runDir3 = rawRunDir ?? (runId ? path52.join(cwd, ".guild", "runs", runId) : void 0);
+  const runDir3 = rawRunDir ?? (runId ? path41.join(cwd, ".guild", "runs", runId) : void 0);
   const indexConfig = { ...DEFAULT_INDEX_BLOCK, ..._indexConfig };
   const structuralResult = structuralBranch(
     query,
@@ -32607,7 +26150,7 @@ function recall(query, opts) {
   const _traceBranch = allChunks.length === 0 ? "empty" : source === "combined" ? "combined" : source === "structural" ? "structural" : source;
   try {
     const _analysisTs = (/* @__PURE__ */ new Date()).toISOString();
-    const _spanId = crypto11.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
+    const _spanId = crypto8.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
     emitTraceEvent(
       makeAnalysisTraceEvent({
         ts: new Date(_traceStart).toISOString(),
@@ -32752,12 +26295,12 @@ function runRecallCli() {
   });
   process.stdout.write(JSON.stringify(result) + "\n");
 }
-var fs45, path52, crypto11, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
+var fs34, path41, crypto8, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
 var init_recall = __esm({
   "src/domains/knowledge/recall.ts"() {
-    fs45 = __toESM(require("node:fs"));
-    path52 = __toESM(require("node:path"));
-    crypto11 = __toESM(require("node:crypto"));
+    fs34 = __toESM(require("node:fs"));
+    path41 = __toESM(require("node:path"));
+    crypto8 = __toESM(require("node:crypto"));
     init_state();
     init_wiki_recall();
     init_fs_scanner();
@@ -32862,11 +26405,11 @@ function lintKnowledgeNodes(nodes) {
   }
   return findings;
 }
-var fs46, path53, KNOWLEDGE_NODE_TYPES, IMPORTANCE_LINTABLE_TYPES, VALID_IMPORTANCE;
+var fs35, path42, KNOWLEDGE_NODE_TYPES, IMPORTANCE_LINTABLE_TYPES, VALID_IMPORTANCE;
 var init_wiki_lint_knowledge = __esm({
   "src/domains/knowledge/wiki-lint-knowledge.ts"() {
-    fs46 = __toESM(require("fs"));
-    path53 = __toESM(require("path"));
+    fs35 = __toESM(require("fs"));
+    path42 = __toESM(require("path"));
     init_knowledge_graph_contract();
     KNOWLEDGE_NODE_TYPES = /* @__PURE__ */ new Set([
       "topic",
@@ -32890,7 +26433,7 @@ var init_wiki_lint_knowledge = __esm({
       const useJson = argv.includes("--json");
       let graph;
       try {
-        graph = JSON.parse(fs46.readFileSync(path53.resolve(graphPath), "utf8"));
+        graph = JSON.parse(fs35.readFileSync(path42.resolve(graphPath), "utf8"));
       } catch (err) {
         process.stderr.write(`[wiki-lint-knowledge] ERROR reading graph: ${err}
 `);
@@ -32947,11 +26490,11 @@ var init_knowledge = __esm({
 
 // src/domains/distribution/wiki-lint-checks.ts
 function readLabelTaxonomy(root) {
-  const p = path54.join(root, ".guild", "project.yaml");
-  if (!fs47.existsSync(p)) return null;
+  const p = path43.join(root, ".guild", "project.yaml");
+  if (!fs36.existsSync(p)) return null;
   let parsed;
   try {
-    parsed = yaml.load(fs47.readFileSync(p, "utf8"));
+    parsed = yaml.load(fs36.readFileSync(p, "utf8"));
   } catch {
     return null;
   }
@@ -33004,26 +26547,26 @@ function parseArgs4(argv) {
   let root = process.cwd();
   let json = false;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--root" && argv[i + 1]) root = path54.resolve(argv[++i]);
+    if (argv[i] === "--root" && argv[i + 1]) root = path43.resolve(argv[++i]);
     else if (argv[i] === "--json") json = true;
   }
   return { root, json };
 }
 function lintWiki(root) {
-  const wiki = path54.join(root, ".guild", "wiki");
+  const wiki = path43.join(root, ".guild", "wiki");
   const findings = [];
   const taxonomy = readLabelTaxonomy(root);
-  if (fs47.existsSync(wiki)) {
-    const walk = (dir) => fs47.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-      const p = path54.join(dir, e.name);
+  if (fs36.existsSync(wiki)) {
+    const walk = (dir) => fs36.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const p = path43.join(dir, e.name);
       return e.isDirectory() ? walk(p) : e.name.endsWith(".md") ? [p] : [];
     });
     for (const f of walk(wiki)) {
-      const rel2 = path54.relative(root, f);
-      const relInWiki = path54.relative(wiki, f);
-      const base = path54.basename(f).toLowerCase();
+      const rel2 = path43.relative(root, f);
+      const relInWiki = path43.relative(wiki, f);
+      const base = path43.basename(f).toLowerCase();
       if (base.startsWith("lint-")) continue;
-      const { fmLines } = splitFrontmatter2(fs47.readFileSync(f, "utf8"));
+      const { fmLines } = splitFrontmatter2(fs36.readFileSync(f, "utf8"));
       const frontmatterLines = fmLines ?? [];
       const importance = fmValue(frontmatterLines, "importance");
       const durable = !STRUCTURAL_BASENAMES.has(base) && !isProvenance(relInWiki, frontmatterLines);
@@ -33049,10 +26592,10 @@ function lintWiki(root) {
       }
     }
   }
-  const kgPath = path54.join(root, ".guild", "indexes", "knowledge-graph.json");
-  if (fs47.existsSync(kgPath)) {
+  const kgPath = path43.join(root, ".guild", "indexes", "knowledge-graph.json");
+  if (fs36.existsSync(kgPath)) {
     try {
-      const kg = JSON.parse(fs47.readFileSync(kgPath, "utf8"));
+      const kg = JSON.parse(fs36.readFileSync(kgPath, "utf8"));
       const nodes = Array.isArray(kg.nodes) ? kg.nodes : [];
       for (const kf of lintKnowledgeNodes(nodes)) {
         findings.push({
@@ -33082,11 +26625,11 @@ function main3(argv = process.argv.slice(2)) {
   }
   process.exit(findings.length ? 2 : 0);
 }
-var fs47, path54, yaml, DEFAULT_CONCERN_ENUM;
+var fs36, path43, yaml, DEFAULT_CONCERN_ENUM;
 var init_wiki_lint_checks = __esm({
   "src/domains/distribution/wiki-lint-checks.ts"() {
-    fs47 = __toESM(require("fs"));
-    path54 = __toESM(require("path"));
+    fs36 = __toESM(require("fs"));
+    path43 = __toESM(require("path"));
     init_state();
     init_knowledge();
     init_kernel();
@@ -33305,6 +26848,7 @@ var init_dispatch = __esm({
     init_progress_ledger();
     init_instance_cap();
     init_isolation_guard();
+    init_adapter_rungs();
     init_advisor_budget();
     init_assignment_binding();
     init_comms_format_lint();
@@ -33533,10 +27077,10 @@ var init_goal_task_schema = __esm({
 });
 
 // src/domains/evolve/task-cell-policy-eval.ts
-var POLICY_KEYS2;
+var POLICY_KEYS;
 var init_task_cell_policy_eval = __esm({
   "src/domains/evolve/task-cell-policy-eval.ts"() {
-    POLICY_KEYS2 = Object.freeze([
+    POLICY_KEYS = Object.freeze([
       "max_cost_multiplier",
       "max_latency_multiplier",
       "max_risk_increase",
@@ -33762,17 +27306,17 @@ function parseResumeLanesArgs(argv) {
   return { runDir: runDir3, json, cwd, slug };
 }
 function repoRootFromRunDir2(runDir3) {
-  return path55.resolve(runDir3, "..", "..", "..");
+  return path44.resolve(runDir3, "..", "..", "..");
 }
 function scanResumableLanes(runDir3, cwd, slug) {
   const repoRoot = cwd ?? repoRootFromRunDir2(runDir3);
   if (!readResumeEnabled(repoRoot)) {
     return [];
   }
-  const lanesDir = path55.join(runDir3, "lanes");
+  const lanesDir = path44.join(runDir3, "lanes");
   let entries;
   try {
-    entries = fs48.readdirSync(lanesDir, { withFileTypes: true });
+    entries = fs37.readdirSync(lanesDir, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -33836,11 +27380,11 @@ function runResumeLanesCli() {
   }
   process.exit(0);
 }
-var fs48, path55;
+var fs37, path44;
 var init_resume_lanes = __esm({
   "src/domains/lifecycle/resume-lanes.ts"() {
-    fs48 = __toESM(require("fs"));
-    path55 = __toESM(require("path"));
+    fs37 = __toESM(require("fs"));
+    path44 = __toESM(require("path"));
     init_run_state();
     init_teams();
     if (require.main === module && new RegExp("[\\\\/]resume-lanes\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
@@ -33942,7 +27486,7 @@ function realBindingFs() {
       }
     },
     writeFileExclusive: (p, c) => {
-      fsReal.mkdirSync(path56.dirname(p), { recursive: true });
+      fsReal.mkdirSync(path45.dirname(p), { recursive: true });
       try {
         fsReal.writeFileSync(p, c, { encoding: "utf8", flag: "wx" });
         return true;
@@ -33956,13 +27500,13 @@ function realBindingFs() {
   };
 }
 function runBindingPath(root, runId) {
-  return path56.join(root, ".guild", "runs", runId, "binding.json");
+  return path45.join(root, ".guild", "runs", runId, "binding.json");
 }
 function pendingSubstantiveOperationPath(root, runId) {
-  return path56.join(root, ".guild", "runs", runId, "capability", "pending-substantive-operation.json");
+  return path45.join(root, ".guild", "runs", runId, "capability", "pending-substantive-operation.json");
 }
-function readPendingSubstantiveOperation(root, runId, fs63 = realBindingFs()) {
-  const raw = fs63.readFile(pendingSubstantiveOperationPath(root, runId));
+function readPendingSubstantiveOperation(root, runId, fs64 = realBindingFs()) {
+  const raw = fs64.readFile(pendingSubstantiveOperationPath(root, runId));
   if (raw === null) return null;
   let value;
   try {
@@ -33977,20 +27521,20 @@ function readPendingSubstantiveOperation(root, runId, fs63 = realBindingFs()) {
   }
   return record;
 }
-function writePendingSubstantiveOperation(root, record, fs63) {
+function writePendingSubstantiveOperation(root, record, fs64) {
   const target = pendingSubstantiveOperationPath(root, record.run_id);
   const serialized = `${JSON.stringify(record, null, 2)}
 `;
-  if (fs63.writeFileAtomicContained) {
-    fs63.writeFileAtomicContained(root, target, serialized);
+  if (fs64.writeFileAtomicContained) {
+    fs64.writeFileAtomicContained(root, target, serialized);
     return;
   }
-  fs63.mkdirp(path56.dirname(target));
-  fs63.writeFile(target, serialized);
+  fs64.mkdirp(path45.dirname(target));
+  fs64.writeFile(target, serialized);
 }
 function stagePendingSubstantiveOperation(opts) {
-  const fs63 = opts.fs ?? realBindingFs();
-  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs63);
+  const fs64 = opts.fs ?? realBindingFs();
+  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs64);
   if (prior?.state === "pending" && prior.task_id !== opts.task_id) {
     throw new Error(`pending substantive operation for ${prior.task_id} must be recovered before ${opts.task_id}`);
   }
@@ -34000,14 +27544,14 @@ function stagePendingSubstantiveOperation(opts) {
     state: "pending",
     run_id: opts.run_id,
     task_id: opts.task_id
-  }, fs63);
+  }, fs64);
 }
 function completePendingSubstantiveOperation(opts) {
-  const fs63 = opts.fs ?? realBindingFs();
-  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs63);
+  const fs64 = opts.fs ?? realBindingFs();
+  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs64);
   if (!prior || prior.task_id !== opts.task_id) throw new Error("pending substantive operation completion has no matching transaction");
   if (prior.state === "complete") return;
-  writePendingSubstantiveOperation(opts.root, { ...prior, state: "complete" }, fs63);
+  writePendingSubstantiveOperation(opts.root, { ...prior, state: "complete" }, fs64);
 }
 function assertNoPendingSubstantiveOperation(opts) {
   const record = readPendingSubstantiveOperation(opts.root, opts.run_id, opts.fs ?? realBindingFs());
@@ -34022,18 +27566,18 @@ function withRunBindingExclusion(root, runId, fn) {
   const persisted = readRunBindingRecord({ root, run_id: runId });
   if (persisted.status === "absent") throw new BindingRejectedError("binding_not_minted", runId);
   if (persisted.status === "malformed") throw new BindingRejectedError("binding_malformed", runId);
-  return withStableLock(path56.join(root, ".guild", "runs", runId), fn);
+  return withStableLock(path45.join(root, ".guild", "runs", runId), fn);
 }
 function initializeRunBindingExclusion(root, runId) {
   if (!/^run-[A-Za-z0-9][A-Za-z0-9._-]{0,191}$/.test(runId)) {
     throw new Error(`run-binding exclusion: invalid run id ${JSON.stringify(runId)}`);
   }
-  initStableLockfile(path56.join(root, ".guild", "runs", runId));
+  initStableLockfile(path45.join(root, ".guild", "runs", runId));
 }
 function mintRunBinding(opts) {
-  const fs63 = opts.fs ?? realBindingFs();
+  const fs64 = opts.fs ?? realBindingFs();
   const p = runBindingPath(opts.root, opts.run_id);
-  if (fs63.exists(p)) {
+  if (fs64.exists(p)) {
     throw new Error(
       `run-binding: a binding for ${opts.run_id} is already minted \u2014 resume restores it (loadRunBinding); it is never re-minted`
     );
@@ -34041,12 +27585,12 @@ function mintRunBinding(opts) {
   const record = {
     schema_version: "guild.run_binding.v1",
     run_id: opts.run_id,
-    binding_ref: `rb-${crypto12.randomBytes(16).toString("hex")}`,
+    binding_ref: `rb-${crypto9.randomBytes(16).toString("hex")}`,
     state: "open"
   };
-  fs63.mkdirp(path56.dirname(p));
+  fs64.mkdirp(path45.dirname(p));
   const contents = JSON.stringify(record, null, 2) + "\n";
-  const created = fs63.writeFileExclusive ? fs63.writeFileExclusive(p, contents) : !fs63.exists(p) && (fs63.writeFile(p, contents), true);
+  const created = fs64.writeFileExclusive ? fs64.writeFileExclusive(p, contents) : !fs64.exists(p) && (fs64.writeFile(p, contents), true);
   if (!created) {
     throw new Error(
       `run-binding: a binding for ${opts.run_id} is already minted \u2014 resume restores it (loadRunBinding); it is never re-minted`
@@ -34070,8 +27614,8 @@ function validateRunBindingRecord(parsed, expectedRunId) {
   };
 }
 function readRunBindingRecord(opts) {
-  const fs63 = opts.fs ?? realBindingFs();
-  const raw = fs63.readFile(runBindingPath(opts.root, opts.run_id));
+  const fs64 = opts.fs ?? realBindingFs();
+  const raw = fs64.readFile(runBindingPath(opts.root, opts.run_id));
   if (raw === null) return { status: "absent" };
   let parsed;
   try {
@@ -34088,10 +27632,10 @@ function loadRunBinding(opts) {
   return read.status === "ok" ? read.record : null;
 }
 function closeRunBinding(opts) {
-  const fs63 = opts.fs ?? realBindingFs();
+  const fs64 = opts.fs ?? realBindingFs();
   const record = loadRunBinding(opts);
   if (record === null || record.state === "closed") return;
-  fs63.writeFile(
+  fs64.writeFile(
     runBindingPath(opts.root, opts.run_id),
     JSON.stringify({ ...record, state: "closed" }, null, 2) + "\n"
   );
@@ -34100,7 +27644,7 @@ function reopenRunBinding(opts, binding_ref) {
   return withRunBindingExclusion(opts.root, opts.run_id, () => reopenRunBindingUnderExclusion(opts, binding_ref));
 }
 function reopenRunBindingUnderExclusion(opts, binding_ref) {
-  const fs63 = opts.fs ?? realBindingFs();
+  const fs64 = opts.fs ?? realBindingFs();
   const read = readRunBindingRecord(opts);
   if (read.status === "absent") throw new BindingRejectedError("binding_not_minted", opts.run_id);
   if (read.status === "malformed") throw new BindingRejectedError("binding_malformed", opts.run_id);
@@ -34110,7 +27654,7 @@ function reopenRunBindingUnderExclusion(opts, binding_ref) {
   }
   if (record.state === "open") return record;
   const reopened = { ...record, state: "open" };
-  fs63.writeFile(runBindingPath(opts.root, opts.run_id), JSON.stringify(reopened, null, 2) + "\n");
+  fs64.writeFile(runBindingPath(opts.root, opts.run_id), JSON.stringify(reopened, null, 2) + "\n");
   return reopened;
 }
 function verifyRunBinding(input) {
@@ -34136,11 +27680,11 @@ function assertWritableBinding(input) {
   if (verdict.ok === false) throw new BindingRejectedError(verdict.reason, input.run_id);
   return verdict.binding;
 }
-function locateCandidateRunId(root, fs63) {
-  const f = fs63 ?? realBindingFs();
+function locateCandidateRunId(root, fs64) {
+  const f = fs64 ?? realBindingFs();
   const candidates = [
-    [path56.join(root, ".guild", "runs", "current-run-id"), "sentinel-legacy"],
-    [path56.join(root, ".guild", "current-run-id"), "sentinel-b2"]
+    [path45.join(root, ".guild", "runs", "current-run-id"), "sentinel-legacy"],
+    [path45.join(root, ".guild", "current-run-id"), "sentinel-b2"]
   ];
   for (const [p, source] of candidates) {
     const raw = f.readFile(p);
@@ -34155,12 +27699,12 @@ function readHookBindingEnvelope(env) {
   if (!run_id || !binding_ref) return null;
   return { run_id, binding_ref };
 }
-var crypto12, fsReal, path56, BindingRejectedError, PENDING_SUBSTANTIVE_OPERATION_SCHEMA, HOOK_BINDING_ENV_RUN_ID, HOOK_BINDING_ENV_BINDING_REF;
+var crypto9, fsReal, path45, BindingRejectedError, PENDING_SUBSTANTIVE_OPERATION_SCHEMA, HOOK_BINDING_ENV_RUN_ID, HOOK_BINDING_ENV_BINDING_REF;
 var init_run_binding = __esm({
   "src/domains/lifecycle/run-binding.ts"() {
-    crypto12 = __toESM(require("crypto"));
+    crypto9 = __toESM(require("crypto"));
     fsReal = __toESM(require("fs"));
-    path56 = __toESM(require("path"));
+    path45 = __toESM(require("path"));
     init_kernel();
     init_stable_lock();
     BindingRejectedError = class extends Error {
@@ -34184,38 +27728,38 @@ var init_run_binding = __esm({
 function canonicalRecord(value) {
   return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${JSON.stringify(value[key])}`).join(",")}}`;
 }
-function capabilityRunStartIdentityHash(runId, startedAt, snapshotHash2) {
+function capabilityRunStartIdentityHash(runId, startedAt, snapshotHash) {
   const body = canonicalRecord({
     schema_version: "guild.run.v1",
     run_id: runId,
     started_at: startedAt,
-    capability_start_snapshot_sha256: snapshotHash2
+    capability_start_snapshot_sha256: snapshotHash
   });
-  return `sha256:${crypto13.createHash("sha256").update(body).digest("hex")}`;
+  return `sha256:${crypto10.createHash("sha256").update(body).digest("hex")}`;
 }
 function runDir2(root, runId) {
-  return path57.join(root, ".guild", "runs", runId);
+  return path46.join(root, ".guild", "runs", runId);
 }
 function runYamlPath(root, runId) {
-  return path57.join(runDir2(root, runId), "run.yaml");
+  return path46.join(runDir2(root, runId), "run.yaml");
 }
 function provenancePath(root, runId) {
-  return path57.join(runDir2(root, runId), "provenance.json");
+  return path46.join(runDir2(root, runId), "provenance.json");
 }
 function logsDir(root, runId) {
-  return path57.join(runDir2(root, runId), "logs");
+  return path46.join(runDir2(root, runId), "logs");
 }
 function resolvedSettingsPath(root, runId) {
-  return path57.join(runDir2(root, runId), "resolved-settings.json");
+  return path46.join(runDir2(root, runId), "resolved-settings.json");
 }
 function pluginConfigSnapshotPath(root, runId) {
-  return path57.join(runDir2(root, runId), "plugin-config-snapshot.json");
+  return path46.join(runDir2(root, runId), "plugin-config-snapshot.json");
 }
 function capabilityRunStartSnapshotPath(root, runId) {
-  return path57.join(runDir2(root, runId), "capability", "run-start-snapshot.json");
+  return path46.join(runDir2(root, runId), "capability", "run-start-snapshot.json");
 }
 function sentinelPath(root) {
-  return path57.join(root, ".guild", "runs", "current-run-id");
+  return path46.join(root, ".guild", "runs", "current-run-id");
 }
 function logRefFor(runId) {
   return `.guild/runs/${runId}/logs/v1.4-events.jsonl`;
@@ -34259,16 +27803,16 @@ function deriveRunSlug(opts) {
     const slug = runSlug(candidate);
     if (slug) return slug;
   }
-  return crypto13.randomUUID();
+  return crypto10.randomUUID();
 }
 function makeCanonicalRunId(nowIso, slugSource) {
-  const slug = runSlug(slugSource) || crypto13.randomUUID();
+  const slug = runSlug(slugSource) || crypto10.randomUUID();
   return assertCanonicalRunId(`run-${utcCompact(nowIso)}-${slug}`);
 }
 function makeRunId(opts, nowIso) {
   return makeCanonicalRunId(nowIso, deriveRunSlug(opts));
 }
-function yamlScalar2(v) {
+function yamlScalar(v) {
   if (v === null) return "null";
   if (typeof v === "boolean" || typeof v === "number") return String(v);
   if (v === "") return '""';
@@ -34286,7 +27830,7 @@ function serializeRunYaml(rec) {
         if (val.length === 0) {
           lines.push(`${pad}${k}: []`);
         } else if (val.every((x) => typeof x !== "object" || x === null)) {
-          lines.push(`${pad}${k}: [${val.map((x) => yamlScalar2(x)).join(", ")}]`);
+          lines.push(`${pad}${k}: [${val.map((x) => yamlScalar(x)).join(", ")}]`);
         } else {
           lines.push(`${pad}${k}:`);
           for (const item of val) {
@@ -34294,10 +27838,10 @@ function serializeRunYaml(rec) {
               const entries = Object.entries(item);
               entries.forEach(([ik, iv], i) => {
                 const prefix = i === 0 ? `${pad}  - ` : `${pad}    `;
-                lines.push(`${prefix}${ik}: ${yamlScalar2(iv)}`);
+                lines.push(`${prefix}${ik}: ${yamlScalar(iv)}`);
               });
             } else {
-              lines.push(`${pad}  - ${yamlScalar2(item)}`);
+              lines.push(`${pad}  - ${yamlScalar(item)}`);
             }
           }
         }
@@ -34310,7 +27854,7 @@ function serializeRunYaml(rec) {
           emit(val, indent + 1);
         }
       } else {
-        lines.push(`${pad}${k}: ${yamlScalar2(val)}`);
+        lines.push(`${pad}${k}: ${yamlScalar(val)}`);
       }
     }
   };
@@ -34319,7 +27863,7 @@ function serializeRunYaml(rec) {
 }
 function bindRunSession(env, root, runId) {
   const dir = runDir2(root, runId);
-  const errorPath = path57.join(dir, "session-binding.error");
+  const errorPath = path46.join(dir, "session-binding.error");
   const fail = (message, cause) => {
     const detail = cause instanceof Error ? `
 ${cause.message}` : "";
@@ -34522,7 +28066,7 @@ function createRunLifecycle(env) {
       const nowIso = env.now();
       const preferredRunId = makeRunId(opts, nowIso);
       const root = opts.root;
-      const runId = env.fs.exists(runDir2(root, preferredRunId)) ? makeCanonicalRunId(nowIso, `${deriveRunSlug(opts)}-${crypto13.randomUUID()}`) : preferredRunId;
+      const runId = env.fs.exists(runDir2(root, preferredRunId)) ? makeCanonicalRunId(nowIso, `${deriveRunSlug(opts)}-${crypto10.randomUUID()}`) : preferredRunId;
       const runClass = opts.run_class ?? "full";
       const capabilityBaseline = runClass === "full" ? env.captureCapabilityBaseline?.(root, runId) ?? null : null;
       if (runClass === "full" && env.captureCapabilityBaseline && (!capabilityBaseline || capabilityBaseline.bound_run_id !== runId)) {
@@ -34570,7 +28114,7 @@ function createRunLifecycle(env) {
             ...capabilityBaseline
           }, null, 2)}
 `;
-          capabilityBaselineHash = crypto13.createHash("sha256").update(snapshotBytes).digest("hex");
+          capabilityBaselineHash = crypto10.createHash("sha256").update(snapshotBytes).digest("hex");
           env.fs.writeFile(capabilityRunStartSnapshotPath(root, runId), snapshotBytes);
         }
         let resolvedSettingsWritten = false;
@@ -34684,7 +28228,7 @@ function createRunLifecycle(env) {
         const now = env.now();
         const finalCheckpoint = runClass === "lightweight" ? null : opts.final_learning_checkpoint ?? null;
         const terminalTraceEvent = {
-          event_id: `evt-${crypto13.randomUUID()}`,
+          event_id: `evt-${crypto10.randomUUID()}`,
           event_name: "run_closed",
           at: now,
           log_ref: logRefFor(runId)
@@ -34710,7 +28254,7 @@ function createRunLifecycle(env) {
         const provPath = provenancePath(root, runId);
         const provenanceContent = JSON.stringify(provenance, null, 2) + "\n";
         if (env.fs.scrubbedWriteDurable) {
-          const runDir3 = path57.join(root, ".guild", "runs", runId);
+          const runDir3 = path46.join(root, ".guild", "runs", runId);
           const result = env.fs.scrubbedWriteDurable(provPath, provenanceContent, "provenance", runDir3, runId);
           if (result.blocked) {
             process.stderr.write(
@@ -34761,11 +28305,11 @@ function createRealEnv(root, resolveHost, captureCapabilityBaseline, recordCapab
         fsNode.mkdirSync(absPath, { recursive: true });
       },
       writeFile(absPath, contents) {
-        fsNode.mkdirSync(path57.dirname(absPath), { recursive: true });
+        fsNode.mkdirSync(path46.dirname(absPath), { recursive: true });
         fsNode.writeFileSync(absPath, contents, "utf8");
       },
       writeFileExclusive(absPath, contents) {
-        fsNode.mkdirSync(path57.dirname(absPath), { recursive: true });
+        fsNode.mkdirSync(path46.dirname(absPath), { recursive: true });
         try {
           fsNode.writeFileSync(absPath, contents, { encoding: "utf8", flag: "wx" });
           return true;
@@ -34816,11 +28360,11 @@ function assertContained(target, cwd, label) {
   const r = checkContained(cwd, target, { policy: "physical" });
   if (isRefused(r)) {
     throw new Error(
-      `[run-lifecycle] ${label}: resolved path "${path57.resolve(target)}" escapes the project root "${path57.resolve(cwd)}" [${r.code}] \u2014 ${r.detail}`
+      `[run-lifecycle] ${label}: resolved path "${path46.resolve(target)}" escapes the project root "${path46.resolve(cwd)}" [${r.code}] \u2014 ${r.detail}`
     );
   }
-  const runsBase = path57.resolve(cwd, ".guild", "runs");
-  const resolvedTarget = path57.resolve(target);
+  const runsBase = path46.resolve(cwd, ".guild", "runs");
+  const resolvedTarget = path46.resolve(target);
   if (resolvedTarget === runsBase || !isWithin(resolvedTarget, runsBase)) {
     throw new Error(
       `[run-lifecycle] ${label}: resolved path "${resolvedTarget}" is not a strict subdirectory of the runs base "${runsBase}"`
@@ -34830,7 +28374,7 @@ function assertContained(target, cwd, label) {
 function realProvenanceFsSeam() {
   return {
     writeFile(absPath, contents) {
-      fsNode.mkdirSync(path57.dirname(absPath), { recursive: true });
+      fsNode.mkdirSync(path46.dirname(absPath), { recursive: true });
       fsNode.writeFileSync(absPath, contents, "utf8");
     },
     readFile(absPath) {
@@ -34853,18 +28397,18 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
     );
   }
   const { cwd, fs: fsSeam, resolvedAtRef } = opts;
-  const fs63 = fsSeam ?? realProvenanceFsSeam();
+  const fs64 = fsSeam ?? realProvenanceFsSeam();
   const outPath = resolvedSettingsPath(cwd, runId);
-  const runsBase = path57.resolve(cwd, ".guild", "runs");
+  const runsBase = path46.resolve(cwd, ".guild", "runs");
   assertContained(outPath, cwd, "writeResolvedSettingsSnapshot");
   const onDisk = {
     ...snapshot,
     resolved_at_ref: resolvedAtRef ?? runId
   };
   const serialized = JSON.stringify(onDisk, null, 2) + "\n";
-  if (fs63.scrubbedWriteDurable) {
-    const runDir3 = path57.join(cwd, ".guild", "runs", runId);
-    const result = fs63.scrubbedWriteDurable(outPath, serialized, "config", runDir3, runId);
+  if (fs64.scrubbedWriteDurable) {
+    const runDir3 = path46.join(cwd, ".guild", "runs", runId);
+    const result = fs64.scrubbedWriteDurable(outPath, serialized, "config", runDir3, runId);
     if (result.blocked) {
       process.stderr.write(
         `[run-lifecycle] WARN: resolved-settings.json write BLOCKED by secret scrub (fail-CLOSED) for run ${runId}. Security event emitted.
@@ -34872,16 +28416,16 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
       );
     }
   } else {
-    fs63.writeFile(outPath, serialized);
+    fs64.writeFile(outPath, serialized);
   }
   return outPath;
 }
 function hashOptionalFile(env, file) {
   const raw = env.fs.readFile(file);
-  return raw === null ? null : crypto13.createHash("sha256").update(raw).digest("hex");
+  return raw === null ? null : crypto10.createHash("sha256").update(raw).digest("hex");
 }
 function derivePluginIdentity(start, env) {
-  const pluginManifestPath = path57.join(start.root, ".claude-plugin", "plugin.json");
+  const pluginManifestPath = path46.join(start.root, ".claude-plugin", "plugin.json");
   const pluginManifest = env.fs.readFile(pluginManifestPath);
   let manifestVersion = null;
   if (pluginManifest !== null) {
@@ -34891,8 +28435,8 @@ function derivePluginIdentity(start, env) {
     } catch {
     }
   }
-  const manifestHash = pluginManifest === null ? null : crypto13.createHash("sha256").update(pluginManifest).digest("hex");
-  const commandSurfaceHash = hashOptionalFile(env, path57.join(start.root, "command-src", "command-registry.json"));
+  const manifestHash = pluginManifest === null ? null : crypto10.createHash("sha256").update(pluginManifest).digest("hex");
+  const commandSurfaceHash = hashOptionalFile(env, path46.join(start.root, "command-src", "command-registry.json"));
   return {
     version: start.plugin_identity?.version ?? manifestVersion ?? "unknown",
     ref: start.plugin_identity?.ref ?? (manifestHash ? `sha256:${manifestHash}` : "unknown"),
@@ -34924,8 +28468,8 @@ function writePluginConfigSnapshot(runId, snapshot, start, env) {
       capabilities_ref: host.capabilities_ref ?? null
     },
     registry_hashes: {
-      skills: hashOptionalFile(env, path57.join(start.root, ".guild", "skills", "registry.yaml")),
-      agents: hashOptionalFile(env, path57.join(start.root, ".guild", "agents", "registry.yaml"))
+      skills: hashOptionalFile(env, path46.join(start.root, ".guild", "skills", "registry.yaml")),
+      agents: hashOptionalFile(env, path46.join(start.root, ".guild", "agents", "registry.yaml"))
     },
     command_surface_version: pluginIdentity.commandSurfaceVersion,
     redaction_policy: "scrubbed-config-v1",
@@ -34965,15 +28509,15 @@ function writePluginConfigSnapshot(runId, snapshot, start, env) {
 function readResolvedSettingsSnapshot(runId, opts) {
   if (!validateRunId(runId)) return null;
   const { cwd, fs: fsSeam } = opts;
-  const fs63 = fsSeam ?? realProvenanceFsSeam();
+  const fs64 = fsSeam ?? realProvenanceFsSeam();
   const filePath = resolvedSettingsPath(cwd, runId);
-  const runsBase = path57.resolve(cwd, ".guild", "runs");
+  const runsBase = path46.resolve(cwd, ".guild", "runs");
   try {
     assertContained(filePath, cwd, "readResolvedSettingsSnapshot");
   } catch {
     return null;
   }
-  const raw = fs63.readFile(filePath);
+  const raw = fs64.readFile(filePath);
   if (raw === null) return null;
   try {
     return JSON.parse(raw);
@@ -34984,7 +28528,7 @@ function readResolvedSettingsSnapshot(runId, opts) {
 function readWorkspaceKnowledgeConfig(root) {
   let parsed = {};
   try {
-    const raw = fsNode.readFileSync(path57.join(root, ".guild", "workspace.json"), "utf8");
+    const raw = fsNode.readFileSync(path46.join(root, ".guild", "workspace.json"), "utf8");
     const obj = JSON.parse(raw);
     if (obj && typeof obj === "object") parsed = obj;
   } catch {
@@ -35009,9 +28553,9 @@ function writeGateBlock(raw, gate, rec) {
   const idx = lines.findIndex((l) => l.startsWith("gates:"));
   if (idx === -1) return null;
   const entryLines = [
-    `    posture: ${yamlScalar2(rec.posture)}`,
-    `    outcome: ${yamlScalar2(rec.outcome)}`,
-    `    codex_review: ${yamlScalar2(rec.codex_review)}`
+    `    posture: ${yamlScalar(rec.posture)}`,
+    `    outcome: ${yamlScalar(rec.outcome)}`,
+    `    codex_review: ${yamlScalar(rec.codex_review)}`
   ];
   const gateKeyLine = `  ${gate}:`;
   if (lines[idx].slice("gates:".length).trim() === "{}") {
@@ -35032,14 +28576,14 @@ function writeGateBlock(raw, gate, rec) {
   lines.splice(end, 0, gateKeyLine, ...entryLines);
   return lines.join("\n");
 }
-function appendGateOutcome(fs63, root, runId, gate, record) {
+function appendGateOutcome(fs64, root, runId, gate, record) {
   if (!GATE_TOKEN.test(gate)) return false;
   const p = runYamlPath(root, runId);
-  const raw = fs63.readFile(p);
+  const raw = fs64.readFile(p);
   if (raw === null) return false;
   const next = writeGateBlock(raw, gate, record);
   if (next === null) return false;
-  fs63.writeFile(p, next);
+  fs64.writeFile(p, next);
   return true;
 }
 function readRunStartedAt(runDir3, readFile = (p) => {
@@ -35049,7 +28593,7 @@ function readRunStartedAt(runDir3, readFile = (p) => {
     return null;
   }
 }) {
-  const p = path57.join(runDir3, "run.yaml");
+  const p = path46.join(runDir3, "run.yaml");
   const raw = readFile(p);
   if (raw === null) return null;
   const doc = parseYaml(raw);
@@ -35058,17 +28602,17 @@ function readRunStartedAt(runDir3, readFile = (p) => {
   if (v === void 0 || v === null) return null;
   return String(v).trim() || null;
 }
-var crypto13, fsNode, path57, CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, CANONICAL_RUN_ID_RE, HOST_FAMILY_TO_KIND, CANONICAL_PHASES, WORKSPACE_KNOWLEDGE_DEFAULTS, GATE_TOKEN;
+var crypto10, fsNode, path46, CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, CANONICAL_RUN_ID_RE, HOST_FAMILY_TO_KIND, CANONICAL_PHASES, WORKSPACE_KNOWLEDGE_DEFAULTS, GATE_TOKEN;
 var init_run_lifecycle = __esm({
   "src/domains/lifecycle/run-lifecycle.ts"() {
-    crypto13 = __toESM(require("crypto"));
+    crypto10 = __toESM(require("crypto"));
     init_config2();
     init_config2();
     init_config2();
     fsNode = __toESM(require("fs"));
-    path57 = __toESM(require("path"));
+    path46 = __toESM(require("path"));
     init_kernel();
-    init_adapters();
+    init_config2();
     init_config2();
     init_state();
     init_run_binding();
@@ -35092,11 +28636,11 @@ var init_run_lifecycle = __esm({
 
 // src/domains/lifecycle/write-run-manifest.ts
 function manifestPathFor(cwd, slug) {
-  return path58.join(cwd, ".guild", "programs", slug, "manifest.json");
+  return path47.join(cwd, ".guild", "programs", slug, "manifest.json");
 }
 function readRunManifest(cwd, slug) {
   try {
-    const raw = fs49.readFileSync(manifestPathFor(cwd, slug), "utf8");
+    const raw = fs38.readFileSync(manifestPathFor(cwd, slug), "utf8");
     return JSON.parse(raw);
   } catch {
     return null;
@@ -35207,7 +28751,7 @@ function runWriteRunManifestCli(argv = process.argv.slice(2)) {
     process.stderr.write("[write-run-manifest] ERROR: --slug <slug> is required.\n");
     process.exit(1);
   }
-  if (!fs49.existsSync(args.cwd) || !fs49.statSync(args.cwd).isDirectory()) {
+  if (!fs38.existsSync(args.cwd) || !fs38.statSync(args.cwd).isDirectory()) {
     process.stderr.write(`[write-run-manifest] ERROR: --cwd "${args.cwd}" is not a directory
 `);
     process.exit(1);
@@ -35250,11 +28794,11 @@ function runWriteRunManifestCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var fs49, path58, WAVE_STATUSES, PROGRAM_STATUSES;
+var fs38, path47, WAVE_STATUSES, PROGRAM_STATUSES;
 var init_write_run_manifest = __esm({
   "src/domains/lifecycle/write-run-manifest.ts"() {
-    fs49 = __toESM(require("fs"));
-    path58 = __toESM(require("path"));
+    fs38 = __toESM(require("fs"));
+    path47 = __toESM(require("path"));
     init_state();
     WAVE_STATUSES = /* @__PURE__ */ new Set(["pending", "active", "completed", "failed"]);
     PROGRAM_STATUSES = /* @__PURE__ */ new Set(["active", "completed", "paused", "aborted"]);
@@ -35670,7 +29214,7 @@ function runStartPreflight(opts) {
 function defaultPreflightProbe(cwd) {
   return {
     tmuxOnPath: () => safeProbe(() => {
-      (0, import_child_process3.execSync)("command -v tmux", { stdio: "ignore" });
+      (0, import_child_process2.execSync)("command -v tmux", { stdio: "ignore" });
       return true;
     }, false),
     // W4: the cmux workspace fact — a cheap host-set env marker, no subprocess.
@@ -35702,14 +29246,14 @@ function safeProbe(fn, fallback) {
     return fallback;
   }
 }
-var import_child_process3, import_fs, import_path, CLAUDE_CODE_NATIVE_ADAPTER_VERSION;
+var import_child_process2, import_fs, import_path, CLAUDE_CODE_NATIVE_ADAPTER_VERSION;
 var init_runstart_preflight = __esm({
   "src/domains/lifecycle/runstart-preflight.ts"() {
     init_config2();
-    init_adapters();
     init_config2();
     init_config2();
-    import_child_process3 = require("child_process");
+    init_config2();
+    import_child_process2 = require("child_process");
     import_fs = require("fs");
     import_path = require("path");
     CLAUDE_CODE_NATIVE_ADAPTER_VERSION = HOST_ADAPTER_CONTRACT_VERSION;
@@ -35718,12 +29262,12 @@ var init_runstart_preflight = __esm({
 
 // src/domains/lifecycle/write-task-run.ts
 function taskRunPath(cwd, runId, taskId) {
-  return path59.join(cwd, ".guild", "runs", runId, "task-runs", `${taskId}.yaml`);
+  return path48.join(cwd, ".guild", "runs", runId, "task-runs", `${taskId}.yaml`);
 }
 function readTaskRunCapReqs(cwd, runId, taskId) {
   try {
     const p = taskRunPath(cwd, runId, taskId);
-    const raw = fs50.readFileSync(p, "utf8");
+    const raw = fs39.readFileSync(p, "utf8");
     const doc = loadYamlApi().load(raw);
     const cr = doc?.task_run?.host?.capability_requirements;
     if (!cr) return void 0;
@@ -35809,7 +29353,7 @@ function writeTaskRun(cwd, runId, taskId, params) {
   });
   atomicWrite(outPath, yamlStr);
   try {
-    const _traceRunDir = path59.join(cwd, ".guild", "runs", runId);
+    const _traceRunDir = path48.join(cwd, ".guild", "runs", runId);
     const _traceTs = (/* @__PURE__ */ new Date()).toISOString();
     const _traceBackend = "unknown";
     emitTraceEvent(
@@ -35987,11 +29531,11 @@ function runWriteTaskRunCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var fs50, path59;
+var fs39, path48;
 var init_write_task_run = __esm({
   "src/domains/lifecycle/write-task-run.ts"() {
-    fs50 = __toESM(require("fs"));
-    path59 = __toESM(require("path"));
+    fs39 = __toESM(require("fs"));
+    path48 = __toESM(require("path"));
     init_telemetry();
     init_kernel();
     init_state();
@@ -36503,16 +30047,13 @@ var init_learning_checkpoint_5 = __esm({
 });
 
 // src/domains/lifecycle/workflow-graph-load.ts
-function resolvePluginRoot(explicit) {
-  if (explicit) return explicit;
-  const env = process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
-  if (env) return env;
-  return path60.resolve(__dirname, "..", "..", "..");
+function pluginRootFor(explicit) {
+  return explicit ? explicit : resolvePluginRoot(__dirname);
 }
 function readYamlGraph(file) {
   let text;
   try {
-    text = fs51.readFileSync(file, "utf8");
+    text = fs40.readFileSync(file, "utf8");
   } catch (err) {
     throw new WorkflowGraphLoadError(`cannot read class graph at ${file}: ${err.message}`);
   }
@@ -36528,11 +30069,11 @@ function readYamlGraph(file) {
   return parsed;
 }
 function pluginGraphPath(klass, pluginRoot) {
-  const root = resolvePluginRoot(pluginRoot);
+  const root = pluginRootFor(pluginRoot);
   for (const dir of PLUGIN_GRAPH_DIRS) {
     for (const ext of [".yaml", ".yml"]) {
-      const p = path60.join(root, dir, `${klass}${ext}`);
-      if (fs51.existsSync(p)) return p;
+      const p = path49.join(root, dir, `${klass}${ext}`);
+      if (fs40.existsSync(p)) return p;
     }
   }
   return null;
@@ -36546,7 +30087,7 @@ function overlayGraphPath(klass, opts = {}) {
   }
   for (const ext of [".yaml", ".yml"]) {
     const p = storage.definition(OVERLAY_GRAPH_SEGMENT, `${klass}${ext}`);
-    if (fs51.existsSync(p)) return p;
+    if (fs40.existsSync(p)) return p;
   }
   return null;
 }
@@ -36586,16 +30127,16 @@ function loadAllClassGraphs(opts = {}) {
   }
   return out;
 }
-var fs51, path60, PLUGIN_GRAPH_DIRS, OVERLAY_GRAPH_SEGMENT, WorkflowGraphLoadError;
+var fs40, path49, PLUGIN_GRAPH_DIRS, OVERLAY_GRAPH_SEGMENT, WorkflowGraphLoadError;
 var init_workflow_graph_load = __esm({
   "src/domains/lifecycle/workflow-graph-load.ts"() {
-    fs51 = __toESM(require("node:fs"));
-    path60 = __toESM(require("node:path"));
+    fs40 = __toESM(require("node:fs"));
+    path49 = __toESM(require("node:path"));
     init_kernel();
     init_state();
     init_workflow_graph_overlay();
     PLUGIN_GRAPH_DIRS = Object.freeze([
-      path60.join("src", "surfaces", "graphs"),
+      path49.join("src", "surfaces", "graphs"),
       "graphs"
     ]);
     OVERLAY_GRAPH_SEGMENT = "graphs";
@@ -36606,21 +30147,21 @@ var init_workflow_graph_load = __esm({
 
 // src/domains/lifecycle/workflow-router.ts
 function workflowCursorPath(runDir3) {
-  return path61.join(runDir3, "workflow-cursor.json");
+  return path50.join(runDir3, "workflow-cursor.json");
 }
 function readWorkflowCursor(runDir3) {
   const p = workflowCursorPath(runDir3);
   try {
-    if (!fs52.existsSync(p)) return null;
-    const parsed = JSON.parse(fs52.readFileSync(p, "utf8"));
+    if (!fs41.existsSync(p)) return null;
+    const parsed = JSON.parse(fs41.readFileSync(p, "utf8"));
     return parsed && parsed.schema_version === WORKFLOW_CURSOR_SCHEMA ? parsed : null;
   } catch {
     return null;
   }
 }
 function writeWorkflowCursor(runDir3, cursor) {
-  fs52.mkdirSync(runDir3, { recursive: true });
-  fs52.writeFileSync(workflowCursorPath(runDir3), JSON.stringify(cursor, null, 2) + "\n", "utf8");
+  fs41.mkdirSync(runDir3, { recursive: true });
+  fs41.writeFileSync(workflowCursorPath(runDir3), JSON.stringify(cursor, null, 2) + "\n", "utf8");
 }
 function bindWorkflowCursor(input) {
   const entry = typeof input.graph.entry === "string" && input.graph.entry !== "" ? input.graph.entry : CLASS_DEFAULT_ENTRIES[input.class];
@@ -36770,11 +30311,11 @@ function routeWorkflowDecisionAtRun(runDir3, input) {
 function currentNode(graph, cursor) {
   return (graph.nodes ?? []).find((n) => n?.id === cursor.node_id);
 }
-var fs52, path61, WORKFLOW_CURSOR_SCHEMA, WORKFLOW_DECISION_SCHEMA;
+var fs41, path50, WORKFLOW_CURSOR_SCHEMA, WORKFLOW_DECISION_SCHEMA;
 var init_workflow_router = __esm({
   "src/domains/lifecycle/workflow-router.ts"() {
-    fs52 = __toESM(require("node:fs"));
-    path61 = __toESM(require("node:path"));
+    fs41 = __toESM(require("node:fs"));
+    path50 = __toESM(require("node:path"));
     init_workflow_graph_overlay();
     WORKFLOW_CURSOR_SCHEMA = "guild.workflow_cursor.v1";
     WORKFLOW_DECISION_SCHEMA = "guild.workflow_decision.v1";
@@ -37750,13 +31291,13 @@ function appendActivity(activityFile, row) {
   if (!isValidActivityRow(row)) {
     throw new Error(`[initiative-activity] refusing to append an invalid ${ACTIVITY_SCHEMA} row`);
   }
-  fs53.mkdirSync(path62.dirname(activityFile), { recursive: true });
-  fs53.appendFileSync(activityFile, JSON.stringify(row) + "\n", "utf8");
+  fs42.mkdirSync(path51.dirname(activityFile), { recursive: true });
+  fs42.appendFileSync(activityFile, JSON.stringify(row) + "\n", "utf8");
 }
 function readActivity(activityFile) {
   let raw = "";
   try {
-    raw = fs53.readFileSync(activityFile, "utf8");
+    raw = fs42.readFileSync(activityFile, "utf8");
   } catch {
     return [];
   }
@@ -37771,11 +31312,11 @@ function readActivity(activityFile) {
   }
   return rows;
 }
-var fs53, path62, ACTIVITY_SCHEMA, ACTIVITY_EVENTS, SET2;
+var fs42, path51, ACTIVITY_SCHEMA, ACTIVITY_EVENTS, SET2;
 var init_initiative_activity = __esm({
   "src/domains/lifecycle/initiative-activity.ts"() {
-    fs53 = __toESM(require("fs"));
-    path62 = __toESM(require("path"));
+    fs42 = __toESM(require("fs"));
+    path51 = __toESM(require("path"));
     ACTIVITY_SCHEMA = "guild.initiative_activity.v1";
     ACTIVITY_EVENTS = Object.freeze([
       "created",
@@ -39120,55 +32661,55 @@ function compareMigrationOutcomes(legacyText, candidateText) {
   });
 }
 function journalPath(root) {
-  return path63.join(root, "journal.ndjson");
+  return path52.join(root, "journal.ndjson");
 }
 function assertNoSymlinkComponents(base, resolved) {
-  const rel2 = path63.relative(base, resolved);
+  const rel2 = path52.relative(base, resolved);
   if (rel2.length === 0) return;
   let current = base;
-  for (const segment of rel2.split(path63.sep)) {
+  for (const segment of rel2.split(path52.sep)) {
     if (segment.length === 0) continue;
-    current = path63.join(current, segment);
-    const stat = fs54.lstatSync(current);
+    current = path52.join(current, segment);
+    const stat = fs43.lstatSync(current);
     if (stat.isSymbolicLink()) {
       throw new Error(`journal root path contains a symlink component: ${current}`);
     }
   }
 }
 function nearestProjectRoot(startDir) {
-  const resolvedStart = path63.resolve(startDir);
+  const resolvedStart = path52.resolve(startDir);
   let current = resolvedStart;
   let nearestGuildDir = null;
   for (; ; ) {
-    if (fs54.existsSync(path63.join(current, ".git"))) return current;
+    if (fs43.existsSync(path52.join(current, ".git"))) return current;
     if (nearestGuildDir === null) {
-      const guildDir = path63.join(current, ".guild");
+      const guildDir = path52.join(current, ".guild");
       try {
-        if (fs54.existsSync(guildDir) && fs54.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+        if (fs43.existsSync(guildDir) && fs43.statSync(guildDir).isDirectory()) nearestGuildDir = current;
       } catch {
       }
     }
-    const parent = path63.dirname(current);
+    const parent = path52.dirname(current);
     if (parent === current) return nearestGuildDir ?? resolvedStart;
     current = parent;
   }
 }
 function trustedDurableBases() {
   const bases = /* @__PURE__ */ new Set();
-  bases.add(path63.resolve(nearestProjectRoot(process.cwd()), ".guild", "runs"));
+  bases.add(path52.resolve(nearestProjectRoot(process.cwd()), ".guild", "runs"));
   const guildCwd = process.env["GUILD_CWD"];
   if (typeof guildCwd === "string" && guildCwd.length > 0) {
-    bases.add(path63.resolve(nearestProjectRoot(guildCwd), ".guild", "runs"));
+    bases.add(path52.resolve(nearestProjectRoot(guildCwd), ".guild", "runs"));
   }
   return [...bases];
 }
 function matchTrustedBase(resolved) {
-  const tmpBase = path63.resolve(os4.tmpdir());
-  if (resolved === tmpBase || resolved.indexOf(tmpBase + path63.sep) === 0) {
+  const tmpBase = path52.resolve(os3.tmpdir());
+  if (resolved === tmpBase || resolved.indexOf(tmpBase + path52.sep) === 0) {
     return tmpBase;
   }
   for (const durableBase of trustedDurableBases()) {
-    if (resolved === durableBase || resolved.indexOf(durableBase + path63.sep) === 0) {
+    if (resolved === durableBase || resolved.indexOf(durableBase + path52.sep) === 0) {
       return durableBase;
     }
   }
@@ -39178,10 +32719,10 @@ function openMigrationJournal(root) {
   if (typeof root !== "string" || root.length === 0) {
     throw new Error("openMigrationJournal: journal root must be a non-empty string");
   }
-  const resolved = path63.resolve(root);
+  const resolved = path52.resolve(root);
   let stat;
   try {
-    stat = fs54.lstatSync(resolved);
+    stat = fs43.lstatSync(resolved);
   } catch {
     throw new Error(
       `openMigrationJournal: journal root does not exist or escapes the controller-owned containment boundary (traversal refused): ${resolved}`
@@ -39205,12 +32746,12 @@ function openMigrationJournal(root) {
   return handle;
 }
 function computeRecordHash(input) {
-  return `sha256:${crypto14.createHash("sha256").update(neutralCanonicalJson(input)).digest("hex")}`;
+  return `sha256:${crypto11.createHash("sha256").update(neutralCanonicalJson(input)).digest("hex")}`;
 }
 function readMigrationJournal(handle) {
   authenticateJournalHandle(handle);
   const root = handle.root;
-  const entries = fs54.existsSync(root) ? fs54.readdirSync(root) : [];
+  const entries = fs43.existsSync(root) ? fs43.readdirSync(root) : [];
   const partialWrites = entries.filter((name) => /^journal\.ndjson\.\d+\.tmp$/.test(name));
   if (partialWrites.length > 0) {
     throw new Error(
@@ -39220,7 +32761,7 @@ function readMigrationJournal(handle) {
   const file = journalPath(root);
   let fileStat;
   try {
-    fileStat = fs54.lstatSync(file);
+    fileStat = fs43.lstatSync(file);
   } catch {
     return neutralFreeze([]);
   }
@@ -39230,13 +32771,13 @@ function readMigrationJournal(handle) {
   if (!fileStat.isFile()) {
     throw new Error(`readMigrationJournal: journal.ndjson is not a regular file: ${file}`);
   }
-  const noFollow = typeof fs54.constants.O_NOFOLLOW === "number" ? fs54.constants.O_NOFOLLOW : 0;
-  const fd = fs54.openSync(file, fs54.constants.O_RDONLY | noFollow);
+  const noFollow = typeof fs43.constants.O_NOFOLLOW === "number" ? fs43.constants.O_NOFOLLOW : 0;
+  const fd = fs43.openSync(file, fs43.constants.O_RDONLY | noFollow);
   let content;
   try {
-    content = fs54.readFileSync(fd, "utf8");
+    content = fs43.readFileSync(fd, "utf8");
   } finally {
-    fs54.closeSync(fd);
+    fs43.closeSync(fd);
   }
   const lines = content.split("\n").filter((line) => line.length > 0);
   const records = lines.map((line) => JSON.parse(line));
@@ -39280,7 +32821,7 @@ function appendMigrationDecision(handle, input) {
   const lockPath2 = `${file}.lock`;
   let lockFd;
   try {
-    lockFd = fs54.openSync(lockPath2, "wx");
+    lockFd = fs43.openSync(lockPath2, "wx");
   } catch {
     throw new Error(
       `appendMigrationDecision: concurrent journal write in progress on this root, refusing (fail-closed): ${handle.root}`
@@ -39320,14 +32861,14 @@ function appendMigrationDecision(handle, input) {
       record_hash: hash
     });
     const tmp = `${file}.${sequence}.tmp`;
-    const priorContent = fs54.existsSync(file) ? fs54.readFileSync(file, "utf8") : "";
-    fs54.writeFileSync(tmp, `${priorContent}${JSON.stringify(record)}
+    const priorContent = fs43.existsSync(file) ? fs43.readFileSync(file, "utf8") : "";
+    fs43.writeFileSync(tmp, `${priorContent}${JSON.stringify(record)}
 `);
-    fs54.renameSync(tmp, file);
+    fs43.renameSync(tmp, file);
     return record;
   } finally {
-    fs54.closeSync(lockFd);
-    fs54.rmSync(lockPath2, { force: true });
+    fs43.closeSync(lockFd);
+    fs43.rmSync(lockPath2, { force: true });
   }
 }
 function sameScope(a, b) {
@@ -39558,13 +33099,13 @@ function evaluateHostCutoverConformance(request) {
     packet
   };
 }
-var crypto14, fs54, os4, path63, MH08_OWNER_KEY, MH08_SCENARIO_IDS, MH08_DECISION_SCHEMA, MH08_DIVERGENCE_REASON_CODE, MH08_MODES, MH08_SCOPE_FIELDS, AUTHENTICATED_JOURNAL_HANDLES, MH08_PROVENANCE_ALLOWLIST, MH08_DEFAULT_SCOPE, MH08_COMPARISON_MAX_TEXT_LENGTH, MH08_COMPARISON_MAX_DEPTH, MH08_EVIDENCE_INCOMPLETE_REASON_CODE, MH08_RESULT_MISMATCH_REASON_CODE;
+var crypto11, fs43, os3, path52, MH08_OWNER_KEY, MH08_SCENARIO_IDS, MH08_DECISION_SCHEMA, MH08_DIVERGENCE_REASON_CODE, MH08_MODES, MH08_SCOPE_FIELDS, AUTHENTICATED_JOURNAL_HANDLES, MH08_PROVENANCE_ALLOWLIST, MH08_DEFAULT_SCOPE, MH08_COMPARISON_MAX_TEXT_LENGTH, MH08_COMPARISON_MAX_DEPTH, MH08_EVIDENCE_INCOMPLETE_REASON_CODE, MH08_RESULT_MISMATCH_REASON_CODE;
 var init_host_cutover_controller = __esm({
   "src/domains/state/host-cutover-controller.ts"() {
-    crypto14 = __toESM(require("node:crypto"));
-    fs54 = __toESM(require("node:fs"));
-    os4 = __toESM(require("node:os"));
-    path63 = __toESM(require("node:path"));
+    crypto11 = __toESM(require("node:crypto"));
+    fs43 = __toESM(require("node:fs"));
+    os3 = __toESM(require("node:os"));
+    path52 = __toESM(require("node:path"));
     init_lifecycle();
     MH08_OWNER_KEY = "W4/MH-08";
     MH08_SCENARIO_IDS = Object.freeze([
@@ -39605,10 +33146,10 @@ function readSettingsMode(root) {
   }
 }
 function readRemote(childPath) {
-  const gitConfig = path64.join(childPath, ".git", "config");
-  if (!fs55.existsSync(gitConfig)) return null;
+  const gitConfig = path53.join(childPath, ".git", "config");
+  if (!fs44.existsSync(gitConfig)) return null;
   try {
-    const content = fs55.readFileSync(gitConfig, "utf8");
+    const content = fs44.readFileSync(gitConfig, "utf8");
     const match = content.match(/url\s*=\s*(.+)/);
     if (!match) return null;
     const url = match[1].trim();
@@ -39619,7 +33160,7 @@ function readRemote(childPath) {
 }
 function readHead(childPath) {
   try {
-    const result = (0, import_child_process4.execSync)("git rev-parse HEAD", {
+    const result = (0, import_child_process3.execSync)("git rev-parse HEAD", {
       cwd: childPath,
       encoding: "utf8",
       stdio: ["pipe", "pipe", "pipe"],
@@ -39631,20 +33172,20 @@ function readHead(childPath) {
   }
 }
 function classifyChild(root, name) {
-  const childPath = path64.join(root, name);
+  const childPath = path53.join(root, name);
   let stat;
   try {
-    stat = fs55.statSync(childPath);
+    stat = fs44.statSync(childPath);
   } catch {
     return null;
   }
   if (!stat.isDirectory()) return null;
-  const hasGit = fs55.existsSync(path64.join(childPath, ".git"));
-  const hasGuild = fs55.existsSync(path64.join(childPath, ".guild"));
+  const hasGit = fs44.existsSync(path53.join(childPath, ".git"));
+  const hasGuild = fs44.existsSync(path53.join(childPath, ".guild"));
   if (!hasGit && !hasGuild) return null;
   const kind = hasGuild ? "sub-guild" : "sub-project";
-  const has_wiki = fs55.existsSync(path64.join(childPath, ".guild", "wiki"));
-  const has_indexes = fs55.existsSync(path64.join(childPath, ".guild", "indexes"));
+  const has_wiki = fs44.existsSync(path53.join(childPath, ".guild", "wiki"));
+  const has_indexes = fs44.existsSync(path53.join(childPath, ".guild", "indexes"));
   const remote = hasGit ? readRemote(childPath) : null;
   const last_seen_commit = hasGit ? readHead(childPath) : null;
   return {
@@ -39664,7 +33205,7 @@ function detect(root, modeOverride) {
   const RULE = "immediate child has .git/ OR .guild/";
   let subGuilds = [];
   try {
-    const entries = fs55.readdirSync(root);
+    const entries = fs44.readdirSync(root);
     for (const name of entries) {
       const sg = classifyChild(root, name);
       if (sg !== null) subGuilds.push(sg);
@@ -39703,7 +33244,7 @@ function parseArgs7(argv) {
 function runWorkspaceDetectCli(argv = process.argv.slice(2)) {
   const { cwd: cwdArg, mode } = parseArgs7(argv);
   const cwd = cwdArg ?? process.env["GUILD_CWD"] ?? process.cwd();
-  if (!fs55.existsSync(cwd) || !fs55.statSync(cwd).isDirectory()) {
+  if (!fs44.existsSync(cwd) || !fs44.statSync(cwd).isDirectory()) {
     process.stderr.write(`[workspace/detect] ERROR: --cwd "${cwd}" is not a directory
 `);
     process.exit(1);
@@ -39717,12 +33258,12 @@ function runWorkspaceDetectCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var fs55, path64, import_child_process4;
+var fs44, path53, import_child_process3;
 var init_detect = __esm({
   "src/domains/state/detect.ts"() {
-    fs55 = __toESM(require("fs"));
-    path64 = __toESM(require("path"));
-    import_child_process4 = require("child_process");
+    fs44 = __toESM(require("fs"));
+    path53 = __toESM(require("path"));
+    import_child_process3 = require("child_process");
     init_config2();
     if (typeof module !== "undefined" && require.main === module && /^detect\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
       runWorkspaceDetectCli();
@@ -39732,11 +33273,11 @@ var init_detect = __esm({
 
 // src/domains/state/federated-query.ts
 function federatedQuery(root, query, scope) {
-  const manifestPath = path65.join(root, ".guild", "workspace.json");
-  if (!fs56.existsSync(manifestPath)) {
+  const manifestPath = path54.join(root, ".guild", "workspace.json");
+  if (!fs45.existsSync(manifestPath)) {
     throw new Error(`workspace.json not found at ${manifestPath}`);
   }
-  const manifest = JSON.parse(fs56.readFileSync(manifestPath, "utf8"));
+  const manifest = JSON.parse(fs45.readFileSync(manifestPath, "utf8"));
   let candidates = manifest.sub_guilds.filter((sg) => sg.has_wiki);
   if (scope !== void 0) {
     const named = candidates.find((sg) => sg.name === scope);
@@ -39758,7 +33299,7 @@ function federatedQuery(root, query, scope) {
   }
   const steps = [];
   for (const sg of candidates) {
-    const subAbsPath = path65.resolve(root, sg.path);
+    const subAbsPath = path54.resolve(root, sg.path);
     steps.push({
       type: "query",
       sub_guild: sg.name,
@@ -39793,9 +33334,9 @@ function runFederatedQueryCli(argv = process.argv.slice(2)) {
 `);
     process.exit(1);
   }
-  if (!fs56.existsSync(path65.join(cwd, ".guild", "workspace.json"))) {
+  if (!fs45.existsSync(path54.join(cwd, ".guild", "workspace.json"))) {
     process.stderr.write(
-      `[workspace/federated-query] ERROR: no workspace.json at ${path65.join(cwd, ".guild", "workspace.json")}
+      `[workspace/federated-query] ERROR: no workspace.json at ${path54.join(cwd, ".guild", "workspace.json")}
 `
     );
     process.exit(1);
@@ -39809,11 +33350,11 @@ function runFederatedQueryCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var fs56, path65;
+var fs45, path54;
 var init_federated_query = __esm({
   "src/domains/state/federated-query.ts"() {
-    fs56 = __toESM(require("fs"));
-    path65 = __toESM(require("path"));
+    fs45 = __toESM(require("fs"));
+    path54 = __toESM(require("path"));
     if (typeof module !== "undefined" && require.main === module && /^federated-query\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
       runFederatedQueryCli();
     }
@@ -39837,10 +33378,10 @@ function isCrossCutting(candidate) {
   return false;
 }
 function readSubGuilds(workspaceRoot) {
-  const manifestPath = path66.join(workspaceRoot, ".guild", "workspace.json");
-  if (!fs57.existsSync(manifestPath)) return [];
+  const manifestPath = path55.join(workspaceRoot, ".guild", "workspace.json");
+  if (!fs46.existsSync(manifestPath)) return [];
   try {
-    const raw = JSON.parse(fs57.readFileSync(manifestPath, "utf8"));
+    const raw = JSON.parse(fs46.readFileSync(manifestPath, "utf8"));
     const sgs = raw["sub_guilds"];
     if (!Array.isArray(sgs)) return [];
     return sgs.map((sg) => ({
@@ -39852,14 +33393,14 @@ function readSubGuilds(workspaceRoot) {
   }
 }
 function findHarvestFiles(childDir) {
-  const runsDir = path66.join(childDir, ".guild", "runs");
-  if (!fs57.existsSync(runsDir)) return [];
+  const runsDir = path55.join(childDir, ".guild", "runs");
+  if (!fs46.existsSync(runsDir)) return [];
   const results = [];
   try {
-    const runIds = fs57.readdirSync(runsDir);
+    const runIds = fs46.readdirSync(runsDir);
     for (const runId of runIds) {
-      const candidate = path66.join(runsDir, runId, "learn", "harvest-candidates.json");
-      if (fs57.existsSync(candidate)) {
+      const candidate = path55.join(runsDir, runId, "learn", "harvest-candidates.json");
+      if (fs46.existsSync(candidate)) {
         results.push(candidate);
       }
     }
@@ -39870,11 +33411,11 @@ function findHarvestFiles(childDir) {
 function extractFromHarvestFile(harvestPath, childName, workspaceRoot) {
   let raw;
   try {
-    raw = JSON.parse(fs57.readFileSync(harvestPath, "utf8"));
+    raw = JSON.parse(fs46.readFileSync(harvestPath, "utf8"));
   } catch {
     return [];
   }
-  const sourcePath = path66.relative(workspaceRoot, harvestPath);
+  const sourcePath = path55.relative(workspaceRoot, harvestPath);
   const staged = [];
   const wikiCandidates = Array.isArray(raw.wiki_candidates) ? raw.wiki_candidates : [];
   const decisionCandidates = Array.isArray(raw.decision_candidates) ? raw.decision_candidates : [];
@@ -39920,7 +33461,7 @@ function collectUpstreamCandidates(opts) {
   }
   const all = [];
   for (const child of children) {
-    const childDir = path66.join(workspaceRoot, child.path);
+    const childDir = path55.join(workspaceRoot, child.path);
     const harvestFiles = findHarvestFiles(childDir);
     for (const hf of harvestFiles) {
       const from = extractFromHarvestFile(hf, child.name, workspaceRoot);
@@ -39954,7 +33495,7 @@ function parseArgs9(argv) {
 function runPromoteUpstreamCli(argv = process.argv.slice(2)) {
   const { workspaceRoot: rootArg, child, runId: runIdArg } = parseArgs9(argv);
   const workspaceRoot = rootArg ?? process.env["GUILD_CWD"] ?? process.cwd();
-  if (!fs57.existsSync(workspaceRoot) || !fs57.statSync(workspaceRoot).isDirectory()) {
+  if (!fs46.existsSync(workspaceRoot) || !fs46.statSync(workspaceRoot).isDirectory()) {
     process.stderr.write(
       `[promote-upstream] ERROR: --workspace-root "${workspaceRoot}" is not a directory
 `
@@ -39971,10 +33512,10 @@ function runPromoteUpstreamCli(argv = process.argv.slice(2)) {
   }
   try {
     const candidates = collectUpstreamCandidates({ workspaceRoot, child });
-    const runsBase = path66.resolve(workspaceRoot, ".guild", "runs");
-    const runsDir = path66.join(runsBase, runId);
-    const manifestPath = path66.join(runsDir, "upstream-candidates.json");
-    const resolvedRunsDir = path66.resolve(runsDir);
+    const runsBase = path55.resolve(workspaceRoot, ".guild", "runs");
+    const runsDir = path55.join(runsBase, runId);
+    const manifestPath = path55.join(runsDir, "upstream-candidates.json");
+    const resolvedRunsDir = path55.resolve(runsDir);
     if (!isWithin(resolvedRunsDir, runsBase) || resolvedRunsDir === runsBase) {
       process.stderr.write(
         `[promote-upstream] ERROR: resolved run dir "${resolvedRunsDir}" is not a strict subdirectory of the runs base
@@ -40026,11 +33567,11 @@ function runPromoteUpstreamCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var fs57, path66;
+var fs46, path55;
 var init_promote_upstream = __esm({
   "src/domains/state/promote-upstream.ts"() {
-    fs57 = __toESM(require("fs"));
-    path66 = __toESM(require("path"));
+    fs46 = __toESM(require("fs"));
+    path55 = __toESM(require("path"));
     init_atomic_write();
     init_kernel();
     if (typeof module !== "undefined" && require.main === module && /^promote-upstream\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
@@ -40042,12 +33583,12 @@ var init_promote_upstream = __esm({
 // src/domains/state/write-manifest.ts
 function hasTopLevelCode(root) {
   try {
-    const entries = fs58.readdirSync(root);
+    const entries = fs47.readdirSync(root);
     for (const name of entries) {
-      const ext = path67.extname(name).toLowerCase();
+      const ext = path56.extname(name).toLowerCase();
       if (CODE_EXTENSIONS.has(ext)) {
         try {
-          const stat = fs58.statSync(path67.join(root, name));
+          const stat = fs47.statSync(path56.join(root, name));
           if (stat.isFile()) return true;
         } catch {
         }
@@ -40073,9 +33614,9 @@ function writeManifest(root, modeOverride) {
       example: "wiki_search({ query: '<q>', cwd: 'plugin' })"
     }
   };
-  const guildDir = path67.join(root, ".guild");
-  fs58.mkdirSync(guildDir, { recursive: true });
-  const manifestPath = path67.join(guildDir, "workspace.json");
+  const guildDir = path56.join(root, ".guild");
+  fs47.mkdirSync(guildDir, { recursive: true });
+  const manifestPath = path56.join(guildDir, "workspace.json");
   atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   return manifestPath;
 }
@@ -40096,7 +33637,7 @@ function parseArgs10(argv) {
 function runWriteWorkspaceManifestCli(argv = process.argv.slice(2)) {
   const { cwd: cwdArg, mode } = parseArgs10(argv);
   const cwd = cwdArg ?? process.env["GUILD_CWD"] ?? process.cwd();
-  if (!fs58.existsSync(cwd) || !fs58.statSync(cwd).isDirectory()) {
+  if (!fs47.existsSync(cwd) || !fs47.statSync(cwd).isDirectory()) {
     process.stderr.write(`[workspace/write-manifest] ERROR: --cwd "${cwd}" is not a directory
 `);
     process.exit(1);
@@ -40110,11 +33651,11 @@ function runWriteWorkspaceManifestCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var fs58, path67, CODE_EXTENSIONS;
+var fs47, path56, CODE_EXTENSIONS;
 var init_write_manifest = __esm({
   "src/domains/state/write-manifest.ts"() {
-    fs58 = __toESM(require("fs"));
-    path67 = __toESM(require("path"));
+    fs47 = __toESM(require("fs"));
+    path56 = __toESM(require("path"));
     init_detect();
     init_atomic_write();
     CODE_EXTENSIONS = /* @__PURE__ */ new Set([
@@ -40163,7 +33704,7 @@ __export(state_exports, {
   MH08_PROVENANCE_ALLOWLIST: () => MH08_PROVENANCE_ALLOWLIST,
   MH08_SCENARIO_IDS: () => MH08_SCENARIO_IDS,
   MH08_SCOPE_FIELDS: () => MH08_SCOPE_FIELDS,
-  MODULE_PUBLIC_API_VERSION: () => MODULE_PUBLIC_API_VERSION2,
+  MODULE_PUBLIC_API_VERSION: () => MODULE_PUBLIC_API_VERSION,
   NON_DURABLE_CLASSES: () => NON_DURABLE_CLASSES,
   NO_CLASSIFIER: () => NO_CLASSIFIER,
   POLICY_CONFIG_FILES: () => POLICY_CONFIG_FILES,
@@ -40267,7 +33808,7 @@ __export(state_exports, {
   workspaceReadThroughSources: () => workspaceReadThroughSources,
   writeManifest: () => writeManifest
 });
-var MODULE_PUBLIC_API_VERSION2;
+var MODULE_PUBLIC_API_VERSION;
 var init_state = __esm({
   "src/domains/state/index.ts"() {
     init_atomic_write();
@@ -40294,17 +33835,17 @@ var init_state = __esm({
     init_federated_query();
     init_promote_upstream();
     init_write_manifest();
-    MODULE_PUBLIC_API_VERSION2 = "guild.module.public-api.v1";
+    MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1";
   }
 });
 
-// src/adapters/provider-detect.ts
+// src/domains/config/provider-detect.ts
 function resolveAuthorHost(host) {
   if (host === void 0 || host === "auto" || host === "") return "unknown";
   if (host.startsWith("antigravity")) return "antigravity";
   if (host.startsWith("claude")) return "claude";
   if (host.startsWith("codex")) return "codex";
-  if (KNOWN_FAMILIES2.has(host)) return host;
+  if (KNOWN_FAMILIES.has(host)) return host;
   return "unknown";
 }
 function probeAuth(spec, probe) {
@@ -40341,7 +33882,7 @@ function detectProviders(opts) {
     const detected = spec.kind === "plugin-adapter" ? byPlugin || byManifest : versionOk || byManifest;
     const authed = detected ? safe(() => probeAuth(spec, probe), false) : false;
     const selectable = spec.hasAdapter && detected && (!spec.requiresAuth || authed);
-    const detail = describe3(spec, { onPath, versionOk, byManifest, byPlugin, authed, selectable });
+    const detail = describe(spec, { onPath, versionOk, byManifest, byPlugin, authed, selectable });
     return {
       id: spec.id,
       kind: spec.kind,
@@ -40361,7 +33902,7 @@ function detectProviders(opts) {
     providers
   };
 }
-function describe3(spec, s) {
+function describe(spec, s) {
   const bits = [];
   if (s.byPlugin) bits.push(`native plugin adapter '${spec.id}' installed`);
   if (s.versionOk) bits.push(`${spec.bin} on PATH (version ok)`);
@@ -40505,17 +34046,17 @@ function rankReviewers(detection) {
 function defaultProbeEnv(cwd) {
   return {
     commandOnPath: (bin) => safe(() => {
-      (0, import_child_process5.execSync)(`command -v ${shellSafe(bin)}`, { stdio: "ignore" });
+      (0, import_child_process4.execSync)(`command -v ${shellSafe(bin)}`, { stdio: "ignore" });
       return true;
     }, false),
     probeVersion: (bin) => safe(() => {
-      (0, import_child_process5.execSync)(`${shellSafe(bin)} --version`, { stdio: "ignore", timeout: 5e3 });
+      (0, import_child_process4.execSync)(`${shellSafe(bin)} --version`, { stdio: "ignore", timeout: 5e3 });
       return true;
     }, false),
     readStoredCodexAuth: () => safe(() => {
-      const home = process.env["CODEX_HOME"] || path68.join(os5.homedir(), ".codex");
-      const authFile = path68.join(home, "auth.json");
-      const st = fs59.statSync(authFile);
+      const home = process.env["CODEX_HOME"] || path57.join(os4.homedir(), ".codex");
+      const authFile = path57.join(home, "auth.json");
+      const st = fs48.statSync(authFile);
       return st.isFile() && st.size > 0;
     }, false),
     readEnv: (name) => process.env[name],
@@ -40526,7 +34067,7 @@ function defaultProbeEnv(cwd) {
       // CLI being installed. A future host could expose a richer plugin-registry
       // probe; this default is the best signal available without one.
       adapterId === "codex-plugin" ? safe(() => {
-        (0, import_child_process5.execSync)(`command -v codex`, { stdio: "ignore" });
+        (0, import_child_process4.execSync)(`command -v codex`, { stdio: "ignore" });
         return true;
       }, false) : false
     )
@@ -40535,21 +34076,21 @@ function defaultProbeEnv(cwd) {
 function readCapabilityManifests(cwd) {
   const { hostCapabilityCacheDir: hostCapabilityCacheDir2 } = (init_state(), __toCommonJS(state_exports));
   const hostsDir = hostCapabilityCacheDir2(cwd);
-  if (!fs59.existsSync(hostsDir)) return [];
+  if (!fs48.existsSync(hostsDir)) return [];
   const out = /* @__PURE__ */ new Set();
   const walk = (dir) => {
     let entries;
     try {
-      entries = fs59.readdirSync(dir, { withFileTypes: true });
+      entries = fs48.readdirSync(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const e of entries) {
-      const full = path68.join(dir, e.name);
+      const full = path57.join(dir, e.name);
       if (e.isDirectory()) walk(full);
       else if (e.isFile() && e.name === "capability.json") {
         try {
-          const m = JSON.parse(fs59.readFileSync(full, "utf8"));
+          const m = JSON.parse(fs48.readFileSync(full, "utf8"));
           for (const key of ["provider", "id", "family"]) {
             if (typeof m[key] === "string") out.add(m[key]);
           }
@@ -40577,13 +34118,13 @@ function shellSafe(bin) {
   }
   return bin;
 }
-var import_child_process5, fs59, os5, path68, PROVIDER_REGISTRY, KNOWN_FAMILIES2;
+var import_child_process4, fs48, os4, path57, PROVIDER_REGISTRY, KNOWN_FAMILIES;
 var init_provider_detect = __esm({
-  "src/adapters/provider-detect.ts"() {
-    import_child_process5 = require("child_process");
-    fs59 = __toESM(require("fs"));
-    os5 = __toESM(require("os"));
-    path68 = __toESM(require("path"));
+  "src/domains/config/provider-detect.ts"() {
+    import_child_process4 = require("child_process");
+    fs48 = __toESM(require("fs"));
+    os4 = __toESM(require("os"));
+    path57 = __toESM(require("path"));
     init_host_registry();
     PROVIDER_REGISTRY = [
       // The author host itself — always "detected on the host", never a cross reviewer
@@ -40598,7 +34139,7 @@ var init_provider_detect = __esm({
       // VERIFIED on-host 2026-06-16: the Antigravity CLI is `agy` (1.0.8), not `antigravity` — detection must probe `agy` or it never finds the host.
       { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
     ];
-    KNOWN_FAMILIES2 = /* @__PURE__ */ new Set([
+    KNOWN_FAMILIES = /* @__PURE__ */ new Set([
       "claude",
       "codex",
       "pi",
@@ -40607,7 +34148,7 @@ var init_provider_detect = __esm({
   }
 });
 
-// src/adapters/session-context.ts
+// src/domains/config/session-context.ts
 function buildSessionContext(input) {
   const asserted = input.envelope_host !== void 0 && input.envelope_host !== "" ? { value: input.envelope_host, source: "invocation_envelope" } : input.env?.["GUILD_HOST_ID"] ? { value: input.env["GUILD_HOST_ID"], source: "env_guild_host_id" } : null;
   const verified2 = input.native_adapter ? { id: input.native_adapter, source: "native_adapter" } : input.handshake ? { id: input.handshake, source: "host_handshake" } : null;
@@ -40682,6 +34223,18 @@ function blockFromVerified(id) {
     adapter_version: asAdapter.adapter_version ?? "unknown"
   };
 }
+function makeFingerprint(raw, salt) {
+  return "fp-" + crypto12.createHash("sha256").update(`${salt}
+${raw}`, "utf8").digest("hex");
+}
+function loadOrCreateFingerprintSalt(root) {
+  const p = path58.join(root, ".guild", "indexes", "model-catalog", ".fp-salt");
+  if (fsReal2.existsSync(p)) return fsReal2.readFileSync(p, "utf8").trim();
+  const salt = crypto12.randomBytes(32).toString("hex");
+  fsReal2.mkdirSync(path58.dirname(p), { recursive: true });
+  fsReal2.writeFileSync(p, salt + "\n", { encoding: "utf8", mode: 384 });
+  return salt;
+}
 function realFs() {
   return {
     mkdirp: (p) => fsReal2.mkdirSync(p, { recursive: true }),
@@ -40691,10 +34244,10 @@ function realFs() {
   };
 }
 function sessionContextPath(root, runId) {
-  return path69.join(root, ".guild", "runs", runId, "session-context.json");
+  return path58.join(root, ".guild", "runs", runId, "session-context.json");
 }
-function writeSessionContext(root, ctx, fs63) {
-  const f = fs63 ?? realFs();
+function writeSessionContext(root, ctx, fs64) {
+  const f = fs64 ?? realFs();
   const p = sessionContextPath(root, ctx.run_id);
   const serialized = JSON.stringify(ctx, null, 2) + "\n";
   const existing = f.readFile(p);
@@ -40704,11 +34257,11 @@ function writeSessionContext(root, ctx, fs63) {
       `session-context: refusing to overwrite the frozen record for ${ctx.run_id} \u2014 session_context is written once at run start and never mutated`
     );
   }
-  f.mkdirp(path69.dirname(p));
+  f.mkdirp(path58.dirname(p));
   f.writeFile(p, serialized);
 }
-function loadSessionContext(root, runId, fs63) {
-  const f = fs63 ?? realFs();
+function loadSessionContext(root, runId, fs64) {
+  const f = fs64 ?? realFs();
   const raw = f.readFile(sessionContextPath(root, runId));
   if (raw === null) return null;
   try {
@@ -40720,11 +34273,21 @@ function loadSessionContext(root, runId, fs63) {
     return null;
   }
 }
-var fsReal2, path69, UNKNOWN_TARGET;
+function restoreSessionContext(root, runId, fs64) {
+  const ctx = loadSessionContext(root, runId, fs64);
+  if (ctx === null) {
+    throw new Error(
+      `session-context: no frozen record for ${runId} \u2014 resume restores the run's own snapshot; it never re-detects into an existing run`
+    );
+  }
+  return ctx;
+}
+var crypto12, fsReal2, path58, UNKNOWN_TARGET;
 var init_session_context = __esm({
-  "src/adapters/session-context.ts"() {
+  "src/domains/config/session-context.ts"() {
+    crypto12 = __toESM(require("crypto"));
     fsReal2 = __toESM(require("fs"));
-    path69 = __toESM(require("path"));
+    path58 = __toESM(require("path"));
     init_provider_detect();
     UNKNOWN_TARGET = {
       target_id: "unknown",
@@ -40738,9 +34301,39 @@ var init_session_context = __esm({
   }
 });
 
-// src/adapters/model-discovery/adapter-contract.ts
+// src/domains/config/model-discovery-contract.ts
 function isFailureReason(value) {
   return typeof value === "string" && FAILURE_REASONS.includes(value);
+}
+function nullIo(nowIso = "1970-01-01T00:00:00Z") {
+  return { nowIso: () => nowIso, monotonicMs: () => 0 };
+}
+async function withBudget(work, budgetMs) {
+  let timer;
+  try {
+    return await Promise.race([
+      work,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new DiscoveryBudgetExceeded()), budgetMs);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+function compareVersions(a, b) {
+  const pa = a.replace(/^[^0-9]*/, "").split(".").map((s) => parseInt(s, 10) || 0);
+  const pb = b.replace(/^[^0-9]*/, "").split(".").map((s) => parseInt(s, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
+function toolVersionInRange(toolVersion, range) {
+  if (!range) return true;
+  if (!toolVersion) return false;
+  return compareVersions(toolVersion, range.min) >= 0 && compareVersions(toolVersion, range.maxExclusive) < 0;
 }
 function failureResult(adapter, status, failureReason, latencyMs, sourceRef) {
   if (!isFailureReason(failureReason)) throw new Error("failure_reason outside the closed vocabulary");
@@ -40756,9 +34349,32 @@ function failureResult(adapter, status, failureReason, latencyMs, sourceRef) {
     models: []
   };
 }
-var FAILURE_REASONS, DiscoveryParseRejected;
-var init_adapter_contract = __esm({
-  "src/adapters/model-discovery/adapter-contract.ts"() {
+async function runAdapter(adapter, io, opts = {}) {
+  const budgetMs = opts.budgetMs ?? DEFAULT_DISCOVERY_BUDGET_MS;
+  const started = io.monotonicMs();
+  const elapsed = () => Math.max(0, io.monotonicMs() - started);
+  if (!toolVersionInRange(opts.toolVersion, adapter.tool_versions)) {
+    return failureResult(adapter, "unsupported", "tool_version_out_of_range", elapsed(), adapter.adapter_id);
+  }
+  try {
+    return await withBudget(adapter.discover(io, { ...opts, budgetMs }), budgetMs);
+  } catch (err) {
+    if (err instanceof DiscoveryBudgetExceeded) {
+      return failureResult(adapter, "timeout", "timeout_budget_exceeded", elapsed(), adapter.adapter_id);
+    }
+    if (err instanceof DiscoveryParseRejected) {
+      return failureResult(adapter, "error", "parse_rejected", elapsed(), adapter.adapter_id);
+    }
+    return failureResult(adapter, "error", "subprocess_failed", elapsed(), adapter.adapter_id);
+  }
+}
+function fingerprintOrUnknown(raw, salt) {
+  if (raw == null || raw === "") return "unknown";
+  return makeFingerprint(raw, salt);
+}
+var FAILURE_REASONS, DiscoveryBudgetExceeded, DiscoveryParseRejected, DEFAULT_DISCOVERY_BUDGET_MS;
+var init_model_discovery_contract = __esm({
+  "src/domains/config/model-discovery-contract.ts"() {
     init_session_context();
     FAILURE_REASONS = Object.freeze([
       "timeout_budget_exceeded",
@@ -40770,1667 +34386,1291 @@ var init_adapter_contract = __esm({
       "auth_unavailable",
       "surface_absent"
     ]);
+    DiscoveryBudgetExceeded = class extends Error {
+      constructor() {
+        super("discovery budget exceeded");
+        this.name = "DiscoveryBudgetExceeded";
+      }
+    };
     DiscoveryParseRejected = class extends Error {
       constructor(detail) {
         super(`provider output rejected by schema validation: ${detail}`);
         this.name = "DiscoveryParseRejected";
       }
     };
+    DEFAULT_DISCOVERY_BUDGET_MS = 3e3;
   }
 });
 
-// src/adapters/model-discovery/claude-api.ts
-function isRecord3(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
+// src/domains/config/config-defaults.ts
+function isCanonicalRoleSlug(v) {
+  return typeof v === "string" && v.length > 0 && v.length <= CAPABILITY_ROLE_SLUG_MAX_LEN && !CONTROL_CHARS.test(v) && ROLE_SLUG.test(v);
 }
-function parseClaudeModelsPage(raw) {
-  if (!isRecord3(raw)) throw new DiscoveryParseRejected("response is not an object");
-  if (!Array.isArray(raw.data)) throw new DiscoveryParseRejected("response.data is not an array");
-  const models = [];
-  raw.data.forEach((entry, i) => {
-    if (!isRecord3(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
-    if (typeof entry.id !== "string" || entry.id.length === 0) {
-      throw new DiscoveryParseRejected(`data[${i}].id is not a non-empty string`);
-    }
-    if (entry.capabilities !== void 0 && !isRecord3(entry.capabilities)) {
-      throw new DiscoveryParseRejected(`data[${i}].capabilities is not an object`);
-    }
-    models.push(entry);
-  });
-  return {
-    models,
-    hasMore: raw.has_more === true,
-    lastId: typeof raw.last_id === "string" ? raw.last_id : null
-  };
+function roleSlugDedupKey(slug) {
+  return slug.toLowerCase();
 }
-function effortsFromCapabilities(capabilities) {
-  const effort = capabilities?.effort;
-  if (!isRecord3(effort)) return [];
-  return CLAUDE_EFFORT_LEVELS.filter((level) => effort[level] === true);
-}
-function normalizeClaudeApiModels(models) {
-  return models.map((m) => ({
-    canonical_id: m.id,
-    display_name: typeof m.display_name === "string" ? m.display_name : void 0,
-    model_family: "claude",
-    // this authenticated first-party catalog lists Claude models
-    reasoning_efforts: effortsFromCapabilities(m.capabilities),
-    default_effort: null,
-    // the listing carries support flags, not a default
-    provider_priority: null,
-    provider_default: false,
-    visibility: "listed",
-    deprecation: { upgrade_to: null, migration_note: null },
-    capabilities: isRecord3(m.capabilities) ? m.capabilities : {},
-    evidence_source: "contract_api_list",
-    // The one row whose contract states availability for the requesting target.
-    contract_states_availability: true
-  }));
-}
-var CLAUDE_API_ADAPTER_ID, CLAUDE_API_ADAPTER_VERSION, CLAUDE_API_MODELS_URL, CLAUDE_API_VERSION_HEADER, CLAUDE_API_MAX_PAGES, CLAUDE_EFFORT_LEVELS, claudeApiAdapter;
-var init_claude_api = __esm({
-  "src/adapters/model-discovery/claude-api.ts"() {
-    init_adapter_contract();
-    CLAUDE_API_ADAPTER_ID = "claude-api-models";
-    CLAUDE_API_ADAPTER_VERSION = "1.0.0";
-    CLAUDE_API_MODELS_URL = "https://api.anthropic.com/v1/models";
-    CLAUDE_API_VERSION_HEADER = "2023-06-01";
-    CLAUDE_API_MAX_PAGES = 5;
-    CLAUDE_EFFORT_LEVELS = Object.freeze(["low", "medium", "high", "xhigh", "max"]);
-    claudeApiAdapter = {
-      adapter_id: CLAUDE_API_ADAPTER_ID,
-      adapter_version: CLAUDE_API_ADAPTER_VERSION,
-      target_id: "claude-api",
-      method: "contract_api_list",
-      tool_versions: null,
-      // versioned REST surface; gated by anthropic-version header, not CLI version
-      async discover(io) {
-        const started = io.monotonicMs();
-        const elapsed = () => Math.max(0, io.monotonicMs() - started);
-        if (!io.httpGetJson) {
-          return failureResult(this, "unsupported", "io_unavailable", elapsed(), CLAUDE_API_ADAPTER_ID);
-        }
-        const all = [];
-        let url = `${CLAUDE_API_MODELS_URL}?limit=1000`;
-        for (let page = 0; page < CLAUDE_API_MAX_PAGES; page += 1) {
-          const raw = await io.httpGetJson(url, { "anthropic-version": CLAUDE_API_VERSION_HEADER });
-          const { models, hasMore, lastId } = parseClaudeModelsPage(raw);
-          all.push(...normalizeClaudeApiModels(models));
-          if (!hasMore || !lastId) {
-            return {
-              adapter_id: CLAUDE_API_ADAPTER_ID,
-              adapter_version: CLAUDE_API_ADAPTER_VERSION,
-              target_id: "claude-api",
-              method: "contract_api_list",
-              source_ref: "claude-api GET /v1/models",
-              status: "ok",
-              latency_ms: elapsed(),
-              failure_reason: null,
-              models: all
-            };
-          }
-          url = `${CLAUDE_API_MODELS_URL}?limit=1000&after_id=${encodeURIComponent(lastId)}`;
-        }
-        return {
-          adapter_id: CLAUDE_API_ADAPTER_ID,
-          adapter_version: CLAUDE_API_ADAPTER_VERSION,
-          target_id: "claude-api",
-          method: "contract_api_list",
-          source_ref: "claude-api GET /v1/models",
-          status: "partial",
-          latency_ms: elapsed(),
-          failure_reason: null,
-          models: all
-        };
+function isValidCapabilityValue(key, value) {
+  switch (key) {
+    case "capability.resolver_mode":
+      return CAPABILITY_RESOLVER_MODES.includes(value);
+    case "capability.auto_create_policy":
+      return CAPABILITY_AUTO_CREATE_POLICIES.includes(value);
+    case "capability.suggestion_budget":
+      return typeof value === "number" && Number.isInteger(value) && value >= CAPABILITY_SUGGESTION_BUDGET_MIN && value <= CAPABILITY_SUGGESTION_BUDGET_MAX;
+    case "capability.starter_roles": {
+      if (!Array.isArray(value)) return false;
+      const seen = /* @__PURE__ */ new Set();
+      for (const entry of value) {
+        if (!isCanonicalRoleSlug(entry)) return false;
+        const key2 = roleSlugDedupKey(entry);
+        if (seen.has(key2)) return false;
+        seen.add(key2);
       }
-    };
-  }
-});
-
-// src/adapters/model-discovery/codex-app-server.ts
-function isRecord4(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function parseModelListResult(raw) {
-  if (!isRecord4(raw)) throw new DiscoveryParseRejected("result is not an object");
-  const data = raw.data;
-  if (!Array.isArray(data)) throw new DiscoveryParseRejected("result.data is not an array");
-  const models = [];
-  data.forEach((entry, i) => {
-    if (!isRecord4(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
-    if (typeof entry.model !== "string" || entry.model.length === 0) {
-      throw new DiscoveryParseRejected(`data[${i}].model is not a non-empty string`);
+      return true;
     }
-    if (entry.supportedReasoningEfforts !== void 0) {
-      if (!Array.isArray(entry.supportedReasoningEfforts)) {
-        throw new DiscoveryParseRejected(`data[${i}].supportedReasoningEfforts is not an array`);
-      }
-      for (const [j, eff] of entry.supportedReasoningEfforts.entries()) {
-        if (!isRecord4(eff) || typeof eff.reasoningEffort !== "string") {
-          throw new DiscoveryParseRejected(`data[${i}].supportedReasoningEfforts[${j}].reasoningEffort missing`);
-        }
-      }
-    }
-    if (entry.hidden !== void 0 && typeof entry.hidden !== "boolean") {
-      throw new DiscoveryParseRejected(`data[${i}].hidden is not a boolean`);
-    }
-    models.push(entry);
-  });
-  return models;
-}
-function normalizeAppServerModels(models) {
-  return models.map((m) => ({
-    canonical_id: m.model,
-    display_name: typeof m.displayName === "string" ? m.displayName : void 0,
-    // No family field is provider-stated on this surface.
-    reasoning_efforts: (m.supportedReasoningEfforts ?? []).map((e) => e.reasoningEffort),
-    default_effort: typeof m.defaultReasoningEffort === "string" ? m.defaultReasoningEffort : null,
-    provider_priority: null,
-    // app-server exposes order, not a numeric priority field
-    provider_default: m.isDefault === true,
-    visibility: m.hidden === true ? "hidden" : "listed",
-    deprecation: {
-      upgrade_to: typeof m.upgrade === "string" ? m.upgrade : null,
-      migration_note: typeof m.upgradeInfo?.migrationMarkdown === "string" ? m.upgradeInfo.migrationMarkdown : null
-    },
-    capabilities: {
-      image_input: Array.isArray(m.inputModalities) ? m.inputModalities.includes("image") : void 0,
-      // Superset-schema extensions preserved from the provider listing:
-      service_tiers: Array.isArray(m.serviceTiers) ? m.serviceTiers.map((t) => t.id) : [],
-      additional_speed_tiers: Array.isArray(m.additionalSpeedTiers) ? m.additionalSpeedTiers : [],
-      default_service_tier: typeof m.defaultServiceTier === "string" ? m.defaultServiceTier : null
-    },
-    evidence_source: "native_list",
-    contract_states_availability: false
-    // entitlement semantics contractually undefined
-  }));
-}
-var CODEX_APP_SERVER_ADAPTER_ID, CODEX_APP_SERVER_ADAPTER_VERSION, CODEX_APP_SERVER_TOOL_VERSIONS, codexAppServerAdapter;
-var init_codex_app_server = __esm({
-  "src/adapters/model-discovery/codex-app-server.ts"() {
-    init_adapter_contract();
-    CODEX_APP_SERVER_ADAPTER_ID = "codex-app-server-model-list";
-    CODEX_APP_SERVER_ADAPTER_VERSION = "1.0.0";
-    CODEX_APP_SERVER_TOOL_VERSIONS = { min: "0.144.0", maxExclusive: "2.0.0" };
-    codexAppServerAdapter = {
-      adapter_id: CODEX_APP_SERVER_ADAPTER_ID,
-      adapter_version: CODEX_APP_SERVER_ADAPTER_VERSION,
-      target_id: "codex-app-server",
-      method: "native_list",
-      tool_versions: CODEX_APP_SERVER_TOOL_VERSIONS,
-      async discover(io, opts = {}) {
-        const started = io.monotonicMs();
-        const elapsed = () => Math.max(0, io.monotonicMs() - started);
-        if (!io.jsonRpcCall) {
-          return failureResult(this, "unsupported", "io_unavailable", elapsed(), CODEX_APP_SERVER_ADAPTER_ID);
-        }
-        const includeHidden = opts.includeHidden === true;
-        const result = await io.jsonRpcCall("model/list", includeHidden ? { includeHidden: true } : {});
-        const models = normalizeAppServerModels(parseModelListResult(result));
-        return {
-          adapter_id: CODEX_APP_SERVER_ADAPTER_ID,
-          adapter_version: CODEX_APP_SERVER_ADAPTER_VERSION,
-          target_id: "codex-app-server",
-          method: "native_list",
-          source_ref: "codex-app-server model/list",
-          status: "ok",
-          latency_ms: elapsed(),
-          failure_reason: null,
-          models
-        };
-      }
-    };
+    default:
+      return void 0;
   }
-});
-
-// src/adapters/model-discovery/codex-debug-models.ts
-function isRecord5(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
-function parseDebugModelsOutput(stdout) {
-  let parsed;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch {
-    throw new DiscoveryParseRejected("stdout is not valid JSON");
-  }
-  if (!isRecord5(parsed) || !Array.isArray(parsed.models)) {
-    throw new DiscoveryParseRejected("payload.models is not an array");
-  }
-  const entries = [];
-  parsed.models.forEach((entry, i) => {
-    if (!isRecord5(entry)) throw new DiscoveryParseRejected(`models[${i}] is not an object`);
-    if (typeof entry.slug !== "string" || entry.slug.length === 0) {
-      throw new DiscoveryParseRejected(`models[${i}].slug is not a non-empty string`);
-    }
-    if (entry.supported_reasoning_levels !== void 0) {
-      if (!Array.isArray(entry.supported_reasoning_levels)) {
-        throw new DiscoveryParseRejected(`models[${i}].supported_reasoning_levels is not an array`);
-      }
-      for (const [j, lvl] of entry.supported_reasoning_levels.entries()) {
-        if (!isRecord5(lvl) || typeof lvl.effort !== "string") {
-          throw new DiscoveryParseRejected(`models[${i}].supported_reasoning_levels[${j}].effort missing`);
-        }
-      }
-    }
-    entries.push(entry);
-  });
-  return entries;
-}
-function normalizeDebugModels(entries) {
-  return entries.map((m) => ({
-    canonical_id: m.slug,
-    display_name: typeof m.display_name === "string" ? m.display_name : void 0,
-    reasoning_efforts: (m.supported_reasoning_levels ?? []).map((l) => l.effort),
-    default_effort: typeof m.default_reasoning_level === "string" ? m.default_reasoning_level : null,
-    provider_priority: typeof m.priority === "number" ? m.priority : null,
-    provider_default: false,
-    // the debug catalog carries no default flag
-    visibility: m.visibility === "hide" ? "hidden" : "listed",
-    deprecation: { upgrade_to: null, migration_note: null },
-    capabilities: {
-      // Advertised subscription-catalog metadata about the API target (F5):
-      // preserved verbatim as metadata, never treated as dispatch evidence.
-      supported_in_api: typeof m.supported_in_api === "boolean" ? m.supported_in_api : void 0,
-      service_tiers: Array.isArray(m.service_tiers) ? m.service_tiers.map((t) => t.id) : [],
-      additional_speed_tiers: Array.isArray(m.additional_speed_tiers) ? m.additional_speed_tiers : []
-    },
-    evidence_source: "debug_catalog",
-    contract_states_availability: false
-  }));
-}
-var CODEX_DEBUG_MODELS_ADAPTER_ID, CODEX_DEBUG_MODELS_ADAPTER_VERSION, CODEX_DEBUG_MODELS_TOOL_VERSIONS, codexDebugModelsAdapter;
-var init_codex_debug_models = __esm({
-  "src/adapters/model-discovery/codex-debug-models.ts"() {
-    init_adapter_contract();
-    CODEX_DEBUG_MODELS_ADAPTER_ID = "codex-debug-models";
-    CODEX_DEBUG_MODELS_ADAPTER_VERSION = "1.0.0";
-    CODEX_DEBUG_MODELS_TOOL_VERSIONS = { min: "0.144.0", maxExclusive: "0.147.0" };
-    codexDebugModelsAdapter = {
-      adapter_id: CODEX_DEBUG_MODELS_ADAPTER_ID,
-      adapter_version: CODEX_DEBUG_MODELS_ADAPTER_VERSION,
-      target_id: "codex-cli-chatgpt",
-      method: "debug_catalog",
-      tool_versions: CODEX_DEBUG_MODELS_TOOL_VERSIONS,
-      async discover(io) {
-        const started = io.monotonicMs();
-        const elapsed = () => Math.max(0, io.monotonicMs() - started);
-        if (!io.execCapture) {
-          return failureResult(this, "unsupported", "io_unavailable", elapsed(), CODEX_DEBUG_MODELS_ADAPTER_ID);
-        }
-        const { stdout } = await io.execCapture(["codex", "debug", "models"]);
-        const models = normalizeDebugModels(parseDebugModelsOutput(stdout));
-        return {
-          adapter_id: CODEX_DEBUG_MODELS_ADAPTER_ID,
-          adapter_version: CODEX_DEBUG_MODELS_ADAPTER_VERSION,
-          target_id: "codex-cli-chatgpt",
-          method: "debug_catalog",
-          source_ref: "codex debug models",
-          status: "ok",
-          latency_ms: elapsed(),
-          failure_reason: null,
-          models
-        };
-      }
-    };
-  }
-});
-
-// src/adapters/model-discovery/openai-api.ts
-function isRecord6(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function openAiFamilyFor(id) {
-  if (id.startsWith("gpt-")) return "gpt";
-  return "unknown";
-}
-function parseOpenAiModelsResponse(raw) {
-  if (!isRecord6(raw)) throw new DiscoveryParseRejected("response is not an object");
-  if (!Array.isArray(raw.data)) throw new DiscoveryParseRejected("response.data is not an array");
-  const models = [];
-  raw.data.forEach((entry, i) => {
-    if (!isRecord6(entry)) throw new DiscoveryParseRejected(`data[${i}] is not an object`);
-    if (typeof entry.id !== "string" || entry.id.length === 0) {
-      throw new DiscoveryParseRejected(`data[${i}].id is not a non-empty string`);
-    }
-    models.push(entry);
-  });
-  return models;
-}
-function normalizeOpenAiModels(models) {
-  return models.map((m) => ({
-    canonical_id: m.id,
-    model_family: openAiFamilyFor(m.id),
-    reasoning_efforts: [],
-    // not stated on this surface — never copied from other targets
-    default_effort: null,
-    provider_priority: null,
-    provider_default: false,
-    visibility: "listed",
-    deprecation: { upgrade_to: null, migration_note: null },
-    capabilities: {},
-    evidence_source: "native_list",
-    contract_states_availability: false
-    // scope-ambiguous contract ⇒ advertised at most
-  }));
-}
-var OPENAI_API_ADAPTER_ID, OPENAI_API_ADAPTER_VERSION, OPENAI_API_MODELS_URL, openAiApiAdapter;
-var init_openai_api = __esm({
-  "src/adapters/model-discovery/openai-api.ts"() {
-    init_adapter_contract();
-    OPENAI_API_ADAPTER_ID = "openai-api-models";
-    OPENAI_API_ADAPTER_VERSION = "1.0.0";
-    OPENAI_API_MODELS_URL = "https://api.openai.com/v1/models";
-    openAiApiAdapter = {
-      adapter_id: OPENAI_API_ADAPTER_ID,
-      adapter_version: OPENAI_API_ADAPTER_VERSION,
-      target_id: "openai-api",
-      method: "native_list",
-      tool_versions: null,
-      async discover(io) {
-        const started = io.monotonicMs();
-        const elapsed = () => Math.max(0, io.monotonicMs() - started);
-        if (!io.httpGetJson) {
-          return failureResult(this, "unsupported", "io_unavailable", elapsed(), OPENAI_API_ADAPTER_ID);
-        }
-        const raw = await io.httpGetJson(OPENAI_API_MODELS_URL, {});
-        const models = normalizeOpenAiModels(parseOpenAiModelsResponse(raw));
-        return {
-          adapter_id: OPENAI_API_ADAPTER_ID,
-          adapter_version: OPENAI_API_ADAPTER_VERSION,
-          target_id: "openai-api",
-          method: "native_list",
-          source_ref: "openai-api GET /v1/models",
-          status: "ok",
-          latency_ms: elapsed(),
-          failure_reason: null,
-          models
-        };
-      }
-    };
-  }
-});
-
-// src/adapters/model-discovery/honest-unknown.ts
-function staticHintEntries(hints) {
-  return hints.map((h) => ({
-    canonical_id: h.canonical_id,
-    display_name: h.display_name,
-    aliases: h.aliases,
-    model_family: h.model_family,
-    reasoning_efforts: [],
-    default_effort: null,
-    provider_priority: null,
-    provider_default: false,
-    visibility: "listed",
-    deprecation: { upgrade_to: null, migration_note: null },
-    capabilities: {},
-    evidence_source: "static_hint",
-    contract_states_availability: false
-  }));
-}
-function makeHonestUnknownAdapter(targetId, opts = {}) {
-  const hints = opts.staticHints ?? [];
-  const adapterId = `honest-unknown-${targetId}`;
-  return {
-    adapter_id: adapterId,
-    adapter_version: HONEST_UNKNOWN_ADAPTER_VERSION,
-    target_id: targetId,
-    method: hints.length > 0 ? "static_hint" : "none",
-    tool_versions: null,
-    async discover(io) {
-      const started = io.monotonicMs();
-      return {
-        adapter_id: adapterId,
-        adapter_version: HONEST_UNKNOWN_ADAPTER_VERSION,
-        target_id: targetId,
-        method: hints.length > 0 ? "static_hint" : "none",
-        source_ref: opts.surfaceNote ?? "no evidenced availability-listing surface",
-        // The receipt itself is honest: no listing surface exists for this
-        // target, so discovery is `unsupported` and the target-level evidence
-        // state stays `unknown` (static hints only fill model metadata).
-        status: "unsupported",
-        latency_ms: Math.max(0, io.monotonicMs() - started),
-        failure_reason: "surface_absent",
-        models: staticHintEntries(hints)
-      };
-    }
-  };
-}
-var HONEST_UNKNOWN_ADAPTER_VERSION, claudeCliSubscriptionAdapter, claudeAppAdapter, claudeWebAdapter, claudeGatewayBedrockAdapter, claudeGatewayVertexAdapter, claudeGatewayFoundryAdapter, codexCliApiKeyAdapter;
-var init_honest_unknown = __esm({
-  "src/adapters/model-discovery/honest-unknown.ts"() {
-    HONEST_UNKNOWN_ADAPTER_VERSION = "1.0.0";
-    claudeCliSubscriptionAdapter = makeHonestUnknownAdapter("claude-cli-subscription", {
-      surfaceNote: "picker is interactive-only; headless entitlement unprovable pre-dispatch"
-    });
-    claudeAppAdapter = makeHonestUnknownAdapter("claude-app", {
-      surfaceNote: "no programmatic discovery surface exists"
-    });
-    claudeWebAdapter = makeHonestUnknownAdapter("claude-web", {
-      surfaceNote: "no programmatic discovery surface exists"
-    });
-    claudeGatewayBedrockAdapter = makeHonestUnknownAdapter("claude-gateway-bedrock", {
-      surfaceNote: "gateway-native evidence only; no availability listing evidenced"
-    });
-    claudeGatewayVertexAdapter = makeHonestUnknownAdapter("claude-gateway-vertex", {
-      surfaceNote: "gateway-native evidence only; no availability listing evidenced"
-    });
-    claudeGatewayFoundryAdapter = makeHonestUnknownAdapter("claude-gateway-foundry", {
-      surfaceNote: "gateway-native evidence only; no availability listing evidenced"
-    });
-    codexCliApiKeyAdapter = makeHonestUnknownAdapter("codex-cli-api-key", {
-      surfaceNote: "no listing evidenced under API-key auth (distinct target from codex-cli-chatgpt)"
-    });
-  }
-});
-
-// src/adapters/model-discovery/index.ts
-var DISCOVERY_ADAPTER_REGISTRY, CODEX_SEAM_PREFERENCE, CODEX_SEAM_ADAPTERS;
-var init_model_discovery = __esm({
-  "src/adapters/model-discovery/index.ts"() {
-    init_adapter_contract();
-    init_claude_api();
-    init_codex_app_server();
-    init_codex_debug_models();
-    init_openai_api();
-    init_honest_unknown();
-    init_adapter_contract();
-    init_codex_app_server();
-    init_codex_debug_models();
-    init_claude_api();
-    init_openai_api();
-    init_honest_unknown();
-    DISCOVERY_ADAPTER_REGISTRY = Object.freeze({
-      "claude-cli-subscription": claudeCliSubscriptionAdapter,
-      "claude-app": claudeAppAdapter,
-      "claude-web": claudeWebAdapter,
-      "claude-api": claudeApiAdapter,
-      "claude-gateway-bedrock": claudeGatewayBedrockAdapter,
-      "claude-gateway-vertex": claudeGatewayVertexAdapter,
-      "claude-gateway-foundry": claudeGatewayFoundryAdapter,
-      "codex-cli-chatgpt": codexDebugModelsAdapter,
-      "codex-app-server": codexAppServerAdapter,
-      "codex-cli-api-key": codexCliApiKeyAdapter,
-      "openai-api": openAiApiAdapter
-    });
-    CODEX_SEAM_PREFERENCE = Object.freeze(["app-server", "debug-models"]);
-    CODEX_SEAM_ADAPTERS = Object.freeze({
-      "app-server": codexAppServerAdapter,
-      "debug-models": codexDebugModelsAdapter
-    });
-  }
-});
-
-// src/adapters/host-adapter-contract.ts
-var HOST_ADAPTER_OPERATIONS;
-var init_host_adapter_contract = __esm({
-  "src/adapters/host-adapter-contract.ts"() {
-    init_host_registry_schema();
-    init_host_id_namespace();
-    init_adapter_fallback_ladders();
-    HOST_ADAPTER_OPERATIONS = Object.freeze([
-      "capabilities",
-      "bootstrap",
-      "preflight",
-      "dispatch",
-      "collect",
-      "renderCommandSurface",
-      "renderPackage",
-      "renderPermissionDecision",
-      "resolveModelParams",
-      "memory"
-    ]);
-  }
-});
-
-// src/adapters/host-capability-snapshot.ts
-function canonicalJson2(value) {
-  if (value === null) return "null";
-  const kind = typeof value;
-  if (kind === "number") return Number.isFinite(value) ? JSON.stringify(value) : "null";
-  if (kind === "boolean" || kind === "string") return JSON.stringify(value);
-  if (kind === "undefined" || kind === "function" || kind === "symbol") return "null";
-  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson2(item)).join(",")}]`;
-  const record = value;
-  const parts = [];
-  for (const key of Object.keys(record).sort()) {
-    if (record[key] === void 0) continue;
-    parts.push(`${JSON.stringify(key)}:${canonicalJson2(record[key])}`);
-  }
-  return `{${parts.join(",")}}`;
-}
-function snapshotHash(hostId, hostVersion, facts) {
-  const digest = (0, import_node_crypto3.createHash)("sha256").update(
-    canonicalJson2({
-      schema_version: HOST_CAPABILITY_SNAPSHOT_SCHEMA,
-      host_id: hostId,
-      host_version: hostVersion,
-      capabilities: facts.map((fact) => ({
-        capability_id: fact.capability_id,
-        supported: fact.supported,
-        authenticated: fact.authenticated
-      }))
-    })
-  ).digest("hex");
-  return `sha256:${digest}`;
-}
-function authenticatedFor(entry, supported, observation) {
-  if (!supported) return false;
-  if (observation === "unauthenticated") return false;
-  if (!entry.detection.requires_auth) return true;
-  return observation === "authenticated";
-}
-function buildFacts(entry, observation) {
-  return HOST_CAPABILITY_IDS.map((capabilityId) => {
-    const supported = CAPABILITY_READERS[capabilityId](entry);
-    return {
-      capability_id: capabilityId,
-      supported,
-      authenticated: authenticatedFor(entry, supported, observation)
-    };
-  });
-}
-function unsupportedResult(request) {
-  return deepFreeze({
-    schema_version: HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA,
-    disposition: "unsupported",
-    reason_code: "capability_absent",
-    host: request.host,
-    host_id: null,
-    run_id: request.runId,
-    snapshot: null,
-    unsupported_capability_ids: [...HOST_CAPABILITY_IDS],
-    assertions: [
-      "an unrecognized host has no capability truth to snapshot",
-      "no snapshot is minted and no capability is assumed present",
-      "no fallback is implied and no side effect occurs"
-    ]
-  });
-}
-function createHostCapabilitySnapshotStore() {
-  const minted = /* @__PURE__ */ new Map();
-  function keyFor(runId, hostId) {
-    return `${runId}\0${hostId}`;
-  }
-  return {
-    capture(request) {
-      const hostId = normalizeHostId(String(request.host ?? ""));
-      const entry = hostId ? HOST_REGISTRY_ROWS[hostId] : void 0;
-      if (!hostId || !entry) return unsupportedResult(request);
-      const hostVersion = request.hostVersion ?? UNKNOWN_HOST_VERSION;
-      const observation = request.authentication ?? "not_observed";
-      const inputHash = canonicalJson2({ host_id: hostId, host_version: hostVersion, authentication: observation });
-      const key = keyFor(request.runId, hostId);
-      const existing = minted.get(key);
-      if (existing !== void 0) {
-        if (existing.inputHash === inputHash) return existing.result;
-        return deepFreeze({
-          schema_version: HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA,
-          disposition: "refused",
-          reason_code: "capability_snapshot_mismatch",
-          host: request.host,
-          host_id: hostId,
-          run_id: request.runId,
-          snapshot: null,
-          unsupported_capability_ids: [],
-          assertions: [
-            "exactly one capability snapshot binds a run",
-            "the bound snapshot is returned unchanged and is not replaced",
-            "no second snapshot is minted and no side effect occurs"
-          ]
-        });
-      }
-      const facts = buildFacts(entry, observation);
-      const snapshot = deepFreeze({
-        schema_version: HOST_CAPABILITY_SNAPSHOT_SCHEMA,
-        snapshot_hash: snapshotHash(hostId, hostVersion, facts),
-        host_id: hostId,
-        host_version: hostVersion,
-        capabilities: facts
-      });
-      const result = deepFreeze({
-        schema_version: HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA,
-        disposition: "succeeded",
-        reason_code: null,
-        host: request.host,
-        host_id: hostId,
-        run_id: request.runId,
-        snapshot,
-        unsupported_capability_ids: facts.filter((fact) => !fact.supported).map((fact) => fact.capability_id),
-        assertions: [
-          "every declared capability id carries an explicit fact",
-          "an unsupported capability is reported, never defaulted to supported",
-          "the snapshot is immutable and bound to exactly one host and run"
-        ]
-      });
-      minted.set(key, { result, inputHash });
-      return result;
-    },
-    release(runId) {
-      const prefix = `${runId}\0`;
-      const doomed = [];
-      minted.forEach((_stored, key) => {
-        if (key.startsWith(prefix)) doomed.push(key);
-      });
-      doomed.forEach((key) => minted.delete(key));
-    },
-    size() {
-      return minted.size;
-    }
-  };
-}
-var import_node_crypto3, HOST_CAPABILITY_SNAPSHOT_SCHEMA, HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA, HOST_CAPABILITY_IDS, CAPABILITY_READERS, UNKNOWN_HOST_VERSION, DEFAULT_STORE;
-var init_host_capability_snapshot = __esm({
-  "src/adapters/host-capability-snapshot.ts"() {
-    import_node_crypto3 = require("node:crypto");
+var DEFAULT_ESCALATION_MARKERS, NON_INHERITABLE_KEYS, LOG_ROTATION_THRESHOLD_BYTES, SIDECAR_MAX_BYTES3, CAPABILITY_RESOLVER_MODES, CAPABILITY_AUTO_CREATE_POLICIES, CAPABILITY_RESOLVER_MODE_AFTER_F7, CAPABILITY_RESOLVER_MODE_DEFAULT, CAPABILITY_SUGGESTION_BUDGET_MIN, CAPABILITY_SUGGESTION_BUDGET_MAX, CAPABILITY_ROLE_SLUG_MAX_LEN, ROLE_SLUG, CONTROL_CHARS, DEFAULTS;
+var init_config_defaults = __esm({
+  "src/domains/config/config-defaults.ts"() {
     init_kernel();
-    init_host_id_namespace();
-    init_host_registry_schema();
-    HOST_CAPABILITY_SNAPSHOT_SCHEMA = "guild.host_capability_snapshot.v1";
-    HOST_CAPABILITY_SNAPSHOT_RESULT_SCHEMA = "guild.host_capability_snapshot_result.v1";
-    HOST_CAPABILITY_IDS = Object.freeze([
-      "host.artifacts.direct_filesystem",
-      "host.artifacts.file_bus",
-      "host.bootstrap.context_injection",
-      "host.bootstrap.skill_autoload",
-      "host.bootstrap.wrapper_injection",
-      "host.commands.command_files",
-      "host.commands.slash_commands",
-      "host.dispatch.selectable",
-      "host.hooks.post_tool_use",
-      "host.hooks.pre_compact",
-      "host.hooks.pre_tool_use",
-      "host.hooks.session_start",
-      "host.hooks.stop",
-      "host.hooks.subagent_stop",
-      "host.hooks.task_completed",
-      "host.hooks.task_created",
-      "host.hooks.teammate_idle",
-      "host.hooks.user_prompt_submit",
-      "host.interaction.native_questions",
-      "host.mcp.http",
-      "host.mcp.stdio",
-      "host.models.tier_map",
-      "host.package.install",
-      "host.package.render",
-      "host.package.update",
-      "host.permissions.ask",
-      "host.permissions.deny",
-      "host.result_adapter",
-      "host.sessions.resume_by_id",
-      "host.structured_output.native_json"
+    DEFAULT_ESCALATION_MARKERS = Object.freeze([
+      "I'm not sure",
+      "unclear",
+      "cannot determine",
+      "I don't know",
+      "ambiguous",
+      "uncertain",
+      "not enough information"
     ]);
-    CAPABILITY_READERS = {
-      "host.artifacts.direct_filesystem": (entry) => entry.capabilities.artifacts.direct_filesystem,
-      "host.artifacts.file_bus": (entry) => entry.capabilities.artifacts.file_bus,
-      "host.bootstrap.context_injection": (entry) => {
-        const injection = entry.capabilities.bootstrap.context_injection;
-        return typeof injection === "string" && injection.length > 0 && injection !== "none";
-      },
-      "host.bootstrap.skill_autoload": (entry) => entry.capabilities.bootstrap.skill_autoload,
-      "host.bootstrap.wrapper_injection": (entry) => entry.capabilities.bootstrap.wrapper_injection,
-      "host.commands.command_files": (entry) => entry.capabilities.commands.command_files !== "none",
-      "host.commands.slash_commands": (entry) => entry.capabilities.commands.slash_commands,
-      "host.dispatch.selectable": (entry) => entry.dispatch_selectable,
-      "host.hooks.post_tool_use": (entry) => entry.capabilities.hooks.post_tool_use,
-      "host.hooks.pre_compact": (entry) => entry.capabilities.hooks.pre_compact,
-      "host.hooks.pre_tool_use": (entry) => entry.capabilities.hooks.pre_tool_use,
-      "host.hooks.session_start": (entry) => entry.capabilities.hooks.session_start,
-      "host.hooks.stop": (entry) => entry.capabilities.hooks.stop,
-      "host.hooks.subagent_stop": (entry) => entry.capabilities.hooks.subagent_stop,
-      "host.hooks.task_completed": (entry) => entry.capabilities.hooks.task_completed,
-      "host.hooks.task_created": (entry) => entry.capabilities.hooks.task_created,
-      "host.hooks.teammate_idle": (entry) => entry.capabilities.hooks.teammate_idle,
-      "host.hooks.user_prompt_submit": (entry) => entry.capabilities.hooks.user_prompt_submit,
-      "host.interaction.native_questions": (entry) => entry.capabilities.interaction.native_questions,
-      "host.mcp.http": (entry) => entry.capabilities.mcp.http,
-      "host.mcp.stdio": (entry) => entry.capabilities.mcp.stdio,
-      "host.models.tier_map": (entry) => {
-        const models = entry.capabilities.models;
-        return Boolean(models.cheap.model || models.mid.model || models.powerful.model);
-      },
-      // `installability` is the REGISTRY column, and it is the one that decides
-      // whether an install is proven. A renderer that exists but was never installed
-      // is `target`, which is render-capable and install-INCAPABLE — collapsing the
-      // two is precisely the optimistic default this snapshot exists to prevent.
-      "host.package.install": (entry) => entry.installability === "native" && entry.capabilities.package.installable,
-      "host.package.render": (entry) => entry.installability !== "none",
-      "host.package.update": (entry) => entry.capabilities.package.update.apply !== "none",
-      "host.permissions.ask": (entry) => entry.capabilities.permissions.ask,
-      "host.permissions.deny": (entry) => entry.capabilities.permissions.deny,
-      "host.result_adapter": (entry) => entry.result_adapter,
-      "host.sessions.resume_by_id": (entry) => entry.capabilities.sessions.resume_by_id,
-      "host.structured_output.native_json": (entry) => entry.capabilities.structured_output.native_json
-    };
-    UNKNOWN_HOST_VERSION = "unknown";
-    DEFAULT_STORE = createHostCapabilitySnapshotStore();
-  }
-});
-
-// src/adapters/host-event-normalizer.ts
-function advertisesNativeHooks(entry) {
-  return Object.values(entry.capabilities.hooks).some(Boolean);
-}
-function hostEventSource(host) {
-  const hostId = normalizeHostId(String(host ?? ""));
-  const entry = hostId ? HOST_REGISTRY_ROWS[hostId] : void 0;
-  if (!hostId || !entry) return NO_SOURCE;
-  const familyBindings = NATIVE_BINDINGS_BY_FAMILY[entry.family];
-  if (advertisesNativeHooks(entry) && familyBindings !== void 0) {
-    return Object.freeze({
-      schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
-      host_id: hostId,
-      kind: "native_hooks",
-      bindings: familyBindings
-    });
-  }
-  if (entry.surface_kind === "app") {
-    return Object.freeze({
-      schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
-      host_id: hostId,
-      kind: "none",
-      bindings: Object.freeze([])
-    });
-  }
-  if (entry.surface_kind === "file" || entry.adapter_binding === "agents-file") {
-    return Object.freeze({
-      schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
-      host_id: hostId,
-      kind: "instruction_file",
-      bindings: Object.freeze([])
-    });
-  }
-  return Object.freeze({
-    schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
-    host_id: hostId,
-    kind: "wrapper",
-    bindings: WRAPPER_NATIVE_EVENT_BINDINGS
-  });
-}
-function refusal2(hostId, nativeEvent, sourceKind, disposition, reasonCode, assertions) {
-  return Object.freeze({
-    schema_version: HOST_EVENT_NORMALIZATION_RESULT_SCHEMA,
-    disposition,
-    reason_code: reasonCode,
-    host_id: hostId,
-    native_event: nativeEvent,
-    source_kind: sourceKind,
-    event: null,
-    candidates: Object.freeze([]),
-    assertions: Object.freeze([...assertions])
-  });
-}
-function normalizeHostEvent(host, nativeEvent) {
-  const native = String(nativeEvent ?? "");
-  const source = hostEventSource(host);
-  if (source.host_id === null) {
-    return refusal2(null, native, source.kind, "unsupported", "capability_absent", [
-      "an unrecognized host advertises no event surface",
-      "no normalized event is produced and none is inferred"
+    NON_INHERITABLE_KEYS = sealSet([
+      "initiative_default",
+      // OD-1: attach-to-wrong-initiative risk
+      "workspace"
+      // workspace.mode is root-detection-only
+    ], "NON_INHERITABLE_KEYS");
+    LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
+    SIDECAR_MAX_BYTES3 = 1024 * 1024;
+    CAPABILITY_RESOLVER_MODES = Object.freeze([
+      "legacy",
+      "observe",
+      "shadow",
+      "project-local",
+      "strict"
     ]);
-  }
-  if (source.kind === "none" || source.kind === "instruction_file") {
-    return refusal2(source.host_id, native, source.kind, "unsupported", "capability_absent", [
-      "the host exposes no runtime event surface for Guild to bind",
-      "the absence is reported, not filled with a default event"
-    ]);
-  }
-  const binding = source.bindings.find((candidate) => candidate.native_event === native);
-  if (binding === void 0) {
-    return refusal2(source.host_id, native, source.kind, "refused", "unknown_event", [
-      "the host-native event vocabulary is closed",
-      "an unrecognized native event is refused, never silently dropped",
-      "no normative name is chosen by resemblance"
-    ]);
-  }
-  if (binding.normalized_event === null) {
-    return refusal2(source.host_id, native, source.kind, "refused", "unknown_event", [
-      "the native event is DECLARED to have no normative image",
-      "no substitute normative name is offered"
-    ]);
-  }
-  return Object.freeze({
-    schema_version: HOST_EVENT_NORMALIZATION_RESULT_SCHEMA,
-    disposition: "succeeded",
-    reason_code: null,
-    host_id: source.host_id,
-    native_event: native,
-    source_kind: source.kind,
-    event: Object.freeze({
-      schema_version: NORMALIZED_HOST_EVENT_SCHEMA,
-      name: binding.normalized_event,
-      vocabulary_version: NORMALIZED_EVENT_VOCABULARY_VERSION,
-      host_native: Object.freeze({
-        host_id: source.host_id,
-        native_event: native,
-        source_kind: source.kind
-      })
-    }),
-    candidates: Object.freeze([]),
-    assertions: Object.freeze([
-      "the normalized name is a member of the normative vocabulary",
-      "host-native provenance travels beside the normalized name, never inside it"
-    ])
-  });
-}
-var HOST_EVENT_NORMALIZATION_SCHEMA, HOST_EVENT_NORMALIZATION_RESULT_SCHEMA, NORMALIZED_HOST_EVENT_SCHEMA, NORMALIZED_EVENT_VOCABULARY_VERSION, CLAUDE_NATIVE_EVENT_BINDINGS, WRAPPER_NATIVE_EVENT_BINDINGS, NATIVE_BINDINGS_BY_FAMILY, NO_SOURCE;
-var init_host_event_normalizer = __esm({
-  "src/adapters/host-event-normalizer.ts"() {
-    init_host_id_namespace();
-    init_host_registry_schema();
-    HOST_EVENT_NORMALIZATION_SCHEMA = "guild.host_event_normalization.v1";
-    HOST_EVENT_NORMALIZATION_RESULT_SCHEMA = "guild.host_event_normalization_result.v1";
-    NORMALIZED_HOST_EVENT_SCHEMA = "guild.normalized_host_event.v1";
-    NORMALIZED_EVENT_VOCABULARY_VERSION = "guild.normalized_event.v2";
-    CLAUDE_NATIVE_EVENT_BINDINGS = Object.freeze([
-      Object.freeze({
-        native_event: "PostToolUse",
-        normalized_event: "tool.after",
-        rationale: "fires after a tool call completes"
-      }),
-      Object.freeze({
-        native_event: "PreCompact",
-        normalized_event: "context.compact",
-        rationale: "fires before the host compacts its context window"
-      }),
-      Object.freeze({
-        native_event: "PreToolUse",
-        normalized_event: "tool.before",
-        rationale: "fires before a tool call is admitted"
-      }),
-      Object.freeze({
-        native_event: "SessionStart",
-        normalized_event: "session.start",
-        rationale: "fires once when the host session opens"
-      }),
-      Object.freeze({
-        native_event: "Stop",
-        normalized_event: "run.stop",
-        rationale: "Guild's state model is run-centric, so the host's session stop is the run stop the core names"
-      }),
-      Object.freeze({
-        native_event: "SubagentStop",
-        normalized_event: null,
-        rationale: "a subagent finishing is not a task collection: the normative vocabulary has no subagent lifecycle name, and reusing the task-collection name would report a collection that never happened. Declared unmapped rather than approximated."
-      }),
-      Object.freeze({
-        native_event: "TaskCompleted",
-        normalized_event: "task.collect",
-        rationale: "the shipped task-completion producer the normative vocabulary was chosen to keep distinct"
-      }),
-      Object.freeze({
-        native_event: "TaskCreated",
-        normalized_event: "task.dispatch",
-        rationale: "the shipped task-creation producer the normative vocabulary was chosen to keep distinct"
-      }),
-      Object.freeze({
-        native_event: "TeammateIdle",
-        normalized_event: null,
-        rationale: "teammate idleness is a scheduling signal, not a lifecycle transition; the normative vocabulary declares no image for it. Declared unmapped rather than approximated."
-      }),
-      Object.freeze({
-        native_event: "UserPromptSubmit",
-        normalized_event: "prompt.submit",
-        rationale: "fires when the operator submits a prompt"
-      })
-    ]);
-    WRAPPER_NATIVE_EVENT_BINDINGS = Object.freeze([
-      Object.freeze({
-        native_event: "guild.wrapper.context_compact",
-        normalized_event: "context.compact",
-        rationale: "the wrapper reports a context reduction it performed on the host's behalf"
-      }),
-      Object.freeze({
-        native_event: "guild.wrapper.prompt_submit",
-        normalized_event: "prompt.submit",
-        rationale: "the wrapper hands the host an operator prompt"
-      }),
-      Object.freeze({
-        native_event: "guild.wrapper.run_resume",
-        normalized_event: "run.resume",
-        rationale: "the wrapper re-enters an existing run"
-      }),
-      Object.freeze({
-        native_event: "guild.wrapper.run_stop",
-        normalized_event: "run.stop",
-        rationale: "the wrapper observes the host process closing the run"
-      }),
-      Object.freeze({
-        native_event: "guild.wrapper.session_start",
-        normalized_event: "session.start",
-        rationale: "the wrapper opens the host process for this run"
-      }),
-      Object.freeze({
-        native_event: "guild.wrapper.task_collect",
-        normalized_event: "task.collect",
-        rationale: "the wrapper collects a finished task run"
-      }),
-      Object.freeze({
-        native_event: "guild.wrapper.task_dispatch",
-        normalized_event: "task.dispatch",
-        rationale: "the wrapper dispatches a task run onto the host"
-      }),
-      Object.freeze({
-        native_event: "guild.wrapper.tool_after",
-        normalized_event: "tool.after",
-        rationale: "the wrapper observes a completed tool call"
-      }),
-      Object.freeze({
-        native_event: "guild.wrapper.tool_before",
-        normalized_event: "tool.before",
-        rationale: "the wrapper observes a tool call about to run"
-      })
-    ]);
-    NATIVE_BINDINGS_BY_FAMILY = Object.freeze({
-      claude: CLAUDE_NATIVE_EVENT_BINDINGS
-    });
-    NO_SOURCE = Object.freeze({
-      schema_version: HOST_EVENT_NORMALIZATION_SCHEMA,
-      host_id: null,
-      kind: "none",
-      bindings: Object.freeze([])
-    });
-  }
-});
-
-// src/adapters/host-adapter-boundary.ts
-function entryPointFor(hostId) {
-  const row = HOST_REGISTRY_ROWS[hostId];
-  const subcommand = row.detection.subcommand ?? null;
-  const kind = row.surface_kind === "app" ? "app_surface" : row.surface_kind === "file" || row.adapter_binding === "agents-file" ? "instruction_file" : subcommand ? "cli_subcommand" : "cli_binary";
-  return Object.freeze({
-    schema_version: HOST_ENTRY_POINT_SCHEMA,
-    host_id: hostId,
-    kind,
-    surface_kind: row.surface_kind,
-    adapter_binding: row.adapter_binding,
-    bin: row.detection.bin,
-    subcommand,
-    instruction_file: row.detection.marker?.agents_placement ?? (kind === "instruction_file" ? DEFAULT_INSTRUCTION_FILE : null),
-    requires_auth: row.detection.requires_auth,
-    auth_probe: row.detection.auth_probe,
-    event_source: hostEventSource(hostId).kind,
-    dispatch_selectable: row.dispatch_selectable
-  });
-}
-function bindingFailure(host, disposition, reasonCode, assertions, facts) {
-  return Object.freeze({
-    schema_version: HOST_RUNTIME_BINDING_RESULT_SCHEMA,
-    disposition,
-    reason_code: reasonCode,
-    host,
-    binding: null,
-    assertions: Object.freeze([...assertions]),
-    facts: Object.freeze({ ...facts })
-  });
-}
-function expectedAdapterHostId(hostId) {
-  return HOST_REGISTRY_ROWS[hostId].adapter_binding === "agents-file" ? "agents-file" : hostId;
-}
-function ownDataProperty(candidate, key) {
-  try {
-    const descriptor = Object.getOwnPropertyDescriptor(candidate, key);
-    if (descriptor === void 0) return { present: false, value: void 0 };
-    if (typeof descriptor.get === "function" || typeof descriptor.set === "function") {
-      return { present: false, value: void 0 };
-    }
-    return { present: true, value: descriptor.value };
-  } catch {
-    return { present: false, value: void 0 };
-  }
-}
-function inspectAdapterShape(candidate) {
-  try {
-    if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) {
-      return { valid: false, invalidMembers: Object.freeze([SHAPE_NOT_AN_OBJECT]), hostId: null };
-    }
-    const invalid = [];
-    const host = ownDataProperty(candidate, "host");
-    if (!host.present || typeof host.value !== "string" || host.value.length === 0) invalid.push("host");
-    const declaredId = ownDataProperty(candidate, "hostId");
-    const hostIdWellFormed = declaredId.present && (typeof declaredId.value === "string" || declaredId.value === null);
-    if (!hostIdWellFormed) invalid.push("hostId");
-    for (const operation of HOST_ADAPTER_OPERATIONS) {
-      const member = ownDataProperty(candidate, operation);
-      if (!member.present || typeof member.value !== "function") invalid.push(operation);
-    }
-    return {
-      valid: invalid.length === 0,
-      invalidMembers: Object.freeze([...invalid]),
-      hostId: typeof declaredId.value === "string" ? declaredId.value : null
-    };
-  } catch {
-    return { valid: false, invalidMembers: Object.freeze([SHAPE_UNINSPECTABLE]), hostId: null };
-  }
-}
-function bindHostRuntimeAdapter(request) {
-  const host = String(request.host ?? "");
-  const hostId = normalizeHostId(host);
-  if (hostId === null || HOST_REGISTRY_ROWS[hostId] === void 0) {
-    return bindingFailure(
-      host,
-      "unsupported",
-      "capability_absent",
-      [
-        "the host is not a member of the adapter registry",
-        "no entry point is bound and no capability is assumed",
-        "no fallback is implied and no side effect occurs"
-      ],
-      { requested_host: host, host_id: null }
-    );
-  }
-  const store = request.snapshots ?? BOUNDARY_STORE;
-  const captured = store.capture({
-    host: hostId,
-    runId: request.runId,
-    hostVersion: request.hostVersion,
-    authentication: request.authentication
-  });
-  if (captured.disposition !== "succeeded" || captured.snapshot === null) {
-    return bindingFailure(
-      host,
-      captured.disposition === "refused" ? "refused" : "unsupported",
-      captured.reason_code ?? "capability_absent",
-      [
-        "a binding requires the run's one capability snapshot",
-        "no adapter is reached when the snapshot cannot be established"
-      ],
-      { requested_host: host, host_id: hostId, snapshot_disposition: captured.disposition }
-    );
-  }
-  let adapter;
-  try {
-    adapter = request.provider(host);
-  } catch (error) {
-    return bindingFailure(
-      host,
-      "failed",
-      "execution_failed",
-      [
-        "the adapter provider raised rather than returning an adapter",
-        "the failure is reported as failed, never as unsupported",
-        "no partial binding is returned"
-      ],
-      {
-        requested_host: host,
-        host_id: hostId,
-        provider_error: error instanceof Error ? error.message : String(error)
-      }
-    );
-  }
-  const shape = inspectAdapterShape(adapter);
-  if (!shape.valid) {
-    return bindingFailure(
-      host,
-      "refused",
-      "boundary_membership_mismatch",
-      [
-        "the provider returned a value that does not implement the public HostAdapter interface",
-        "the interface was proven by inspection only: no adapter operation ran and no accessor was read",
-        "no partial binding is returned and no side effect occurs"
-      ],
-      {
-        requested_host: host,
-        host_id: hostId,
-        adapter_shape_valid: false,
-        invalid_adapter_members: shape.invalidMembers
-      }
-    );
-  }
-  const boundHostId = shape.hostId === null ? null : normalizeHostId(shape.hostId);
-  const expected = expectedAdapterHostId(hostId);
-  if (boundHostId === null || boundHostId !== expected) {
-    return bindingFailure(
-      host,
-      "refused",
-      "boundary_membership_mismatch",
-      [
-        "the adapter returned by the provider is not this host's adapter",
-        "an adapter is bound only when its own identity matches the declared binding",
-        "no side effect occurs"
-      ],
-      {
-        requested_host: host,
-        expected_host_id: expected,
-        bound_host_id: boundHostId
-      }
-    );
-  }
-  const entryPoint = HOST_ENTRY_POINTS[hostId];
-  const binding = Object.freeze({
-    schema_version: HOST_RUNTIME_BINDING_SCHEMA,
-    boundary_version: HOST_ADAPTER_BOUNDARY_SCHEMA,
-    adapter_contract_version: HOST_ADAPTER_CONTRACT_VERSION,
-    host_id: hostId,
-    run_id: request.runId,
-    entry_point: entryPoint,
-    adapter,
-    snapshot: captured.snapshot,
-    event_source: entryPoint.event_source,
-    normalizeEvent(nativeEvent) {
-      return normalizeHostEvent(hostId, nativeEvent);
-    }
-  });
-  return Object.freeze({
-    schema_version: HOST_RUNTIME_BINDING_RESULT_SCHEMA,
-    disposition: "succeeded",
-    reason_code: null,
-    host,
-    binding,
-    assertions: Object.freeze([
-      "the bound adapter implements every member of the public HostAdapter interface",
-      "the bound adapter's own identity matches the requested host's declared binding",
-      "the binding carries exactly one immutable capability snapshot for this run",
-      "the entry point is the registry's declared host surface, not an inferred one"
-    ]),
-    facts: Object.freeze({
-      requested_host: host,
-      host_id: hostId,
-      bound_host_id: expected,
-      adapter_shape_valid: true,
-      entry_point_kind: entryPoint.kind,
-      capability_snapshot_hash: captured.snapshot.snapshot_hash
-    })
-  });
-}
-var HOST_ADAPTER_BOUNDARY_SCHEMA, HOST_ADAPTER_CONTRACT_VERSION, HOST_ENTRY_POINT_SCHEMA, HOST_RUNTIME_BINDING_SCHEMA, HOST_RUNTIME_BINDING_RESULT_SCHEMA, HOST_ADAPTER_OWNERSHIP_SCHEMA, HOST_ADAPTER_REASON_CODES, HOST_ADAPTER_OWNED_CONCERNS, HOST_ADAPTER_NOT_OWNED_CONCERNS, CONCERN_OWNERS, OWNERSHIP, DEFAULT_INSTRUCTION_FILE, HOST_ENTRY_POINTS, BOUNDARY_STORE, SHAPE_NOT_AN_OBJECT, SHAPE_UNINSPECTABLE;
-var init_host_adapter_boundary = __esm({
-  "src/adapters/host-adapter-boundary.ts"() {
-    init_host_adapter_contract();
-    init_host_id_namespace();
-    init_host_registry_schema();
-    init_host_capability_snapshot();
-    init_host_event_normalizer();
-    HOST_ADAPTER_BOUNDARY_SCHEMA = "guild.host_adapter_boundary.v1";
-    HOST_ADAPTER_CONTRACT_VERSION = "guild.host_adapter.v1.0.0";
-    HOST_ENTRY_POINT_SCHEMA = "guild.host_entry_point.v1";
-    HOST_RUNTIME_BINDING_SCHEMA = "guild.host_runtime_binding.v1";
-    HOST_RUNTIME_BINDING_RESULT_SCHEMA = "guild.host_runtime_binding_result.v1";
-    HOST_ADAPTER_OWNERSHIP_SCHEMA = "guild.host_adapter_ownership.v1";
-    HOST_ADAPTER_REASON_CODES = Object.freeze([
-      "boundary_membership_mismatch",
-      "capability_absent",
-      "capability_snapshot_mismatch",
-      "execution_failed",
-      "unknown_event"
-    ]);
-    HOST_ADAPTER_OWNED_CONCERNS = Object.freeze([
-      "host_identity_resolution",
-      "host_entry_point_binding",
-      "host_capability_snapshot",
-      "host_native_event_normalization"
-    ]);
-    HOST_ADAPTER_NOT_OWNED_CONCERNS = Object.freeze([
-      "lifecycle_state",
-      "gate_policy",
-      "artifact_semantics",
-      "document_rendering",
-      "transport_execution"
-    ]);
-    CONCERN_OWNERS = Object.freeze({
-      host_identity_resolution: "host-adapters",
-      host_entry_point_binding: "host-adapters",
-      host_capability_snapshot: "host-adapters",
-      host_native_event_normalization: "host-adapters",
-      lifecycle_state: "host-neutral-core",
-      gate_policy: "host-neutral-core",
-      artifact_semantics: "artifact-document-services",
-      document_rendering: "artifact-document-services",
-      transport_execution: "execution-transports"
-    });
-    OWNERSHIP = Object.freeze({
-      schema_version: HOST_ADAPTER_OWNERSHIP_SCHEMA,
-      boundary_version: HOST_ADAPTER_BOUNDARY_SCHEMA,
-      owned: Object.freeze([...HOST_ADAPTER_OWNED_CONCERNS]),
-      not_owned: Object.freeze([...HOST_ADAPTER_NOT_OWNED_CONCERNS]),
-      owners: CONCERN_OWNERS
-    });
-    DEFAULT_INSTRUCTION_FILE = "AGENTS.md";
-    HOST_ENTRY_POINTS = Object.freeze(
-      HOST_IDS.reduce(
-        (accumulator, hostId) => {
-          accumulator[hostId] = entryPointFor(hostId);
-          return accumulator;
+    CAPABILITY_AUTO_CREATE_POLICIES = Object.freeze(["never", "on_approval"]);
+    CAPABILITY_RESOLVER_MODE_AFTER_F7 = "observe";
+    CAPABILITY_RESOLVER_MODE_DEFAULT = CAPABILITY_RESOLVER_MODE_AFTER_F7;
+    CAPABILITY_SUGGESTION_BUDGET_MIN = 0;
+    CAPABILITY_SUGGESTION_BUDGET_MAX = 4;
+    CAPABILITY_ROLE_SLUG_MAX_LEN = 64;
+    ROLE_SLUG = /^[a-z0-9][a-z0-9._-]*$/;
+    CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+    DEFAULTS = deepFreeze({
+      rigor: "standard",
+      auto_approve: [],
+      review: "local",
+      host: "auto",
+      /**
+       * rf-wi-01 (v23x-deferred-followups G1) — the sanctioned P1-L10 host-autonomy
+       * override (host_mode × guild_gates orthogonality invariant, permission-policy-schema.ts).
+       * null (default) = no override; the host's own default ("ask", lifted to "bypass_all" for
+       * unattended team panes per issue #54) applies. NOT under `security.` — the #54 lane
+       * explicitly reverted an ad-hoc `security.host_mode` key because it bypassed this schema;
+       * this top-level placement (sibling of the `host` dispatch selector) is the registered
+       * replacement. One of only three keys ever legitimately null-typed at the top level.
+       */
+      host_mode: null,
+      roles: { host: null, advisory: null, adversarial: null },
+      host_profiles: {},
+      initiative_default: null,
+      index: "auto",
+      record_status_runs: true,
+      codex_skip_enforcement: "warn",
+      agent_mode: "auto",
+      workspace: { mode: "auto" },
+      models: {
+        enabled: true,
+        // G4b (host-reachability): every host in the registry's HOST_IDS gets an
+        // explicit tier slot — NOT generated by importing HOST_IDS here (this file's
+        // own contract, stated in the module doc comment above, is to stay free of
+        // internal runtime imports so core settings code can load it before the
+        // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
+        // roster (host-registry-schema.ts) enumerated by hand; a test
+        // (scripts/lib/config-defaults-tiers-host-ids.test.ts) asserts the two
+        // stay in sync so this can never silently drift again the way it had (7 of
+        // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
+        // non-null model — every other host's registry row carries `models.<tier>.model:
+        // null` (no Guild-mapped model), so `null` here is the HONEST default, not a
+        // gap (see tier-defaults.ts's `tierDefaults()` for the runtime-computed
+        // equivalent this static scaffold mirrors).
+        tiers: {
+          cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+          mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+          powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null }
         },
-        {}
-      )
-    );
-    BOUNDARY_STORE = createHostCapabilitySnapshotStore();
-    SHAPE_NOT_AN_OBJECT = "<not an adapter object>";
-    SHAPE_UNINSPECTABLE = "<adapter shape could not be inspected>";
+        scoreWeights: {
+          workType: 0,
+          blastRadius: 1,
+          dependsOn: 1,
+          security: 1,
+          priorEscalation: 1
+        },
+        thresholds: { mid: 1, powerful: 3 },
+        advisorRounds: 2,
+        escalationMarkers: DEFAULT_ESCALATION_MARKERS,
+        recallBeforeRead: true,
+        recallScoreThreshold: 0.4,
+        structuredOutputRequired: true,
+        cacheTTL: { coordinator: "1h", leaf: "5m" },
+        importanceGate: 3,
+        compositeRecall: true,
+        importanceAtIngest: true,
+        ingestSimilarityGate: 0.8,
+        shortOutputThreshold: {},
+        knowledge: {
+          maxDepth: 8,
+          maxBranching: 12,
+          minTopicImportance: 0.4,
+          relMinConf: 0.5,
+          maxFiles: 3e3,
+          maxTokens: 1e6,
+          batchSize: 20
+        }
+      },
+      security: {
+        bypass_permissions_policy: "audit"
+      },
+      secrets_policy: {
+        env_allowlist: [],
+        redaction_patterns: [],
+        fail_mode_durable: "closed",
+        fail_mode_telemetry: "open"
+      },
+      mcp: {
+        tool_description_hashes: {},
+        stdio_available: true,
+        http_available: false,
+        bridge_package: null
+      },
+      /**
+       * Project-capability localization (spec S5; decisions cap-loc-D04 new-install
+       * policy, cap-loc-D03 migration window). Closes audit gaps D12 (no config keys
+       * existed), F3 (resolver-mode ownership undefined) and F10 (budget "3–4").
+       *
+       * These keys select WHICH DEFINITIONS RESOLVE — they are deliberately NOT
+       * security-sensitive (`isSecuritySensitiveKey` matches none of them, correctly).
+       * What a lane may DO stays with `capability_scope` and the permission keys.
+       *
+       * Scope is `project` for all four, which is what the CONFIG_SCHEMA generator
+       * already emits unconditionally — capability ownership is per project by
+       * definition (the umbrella and each child answer "what roles do I need"
+       * independently, and D03 has the four repos migrating at different rates). Per
+       * S5 spec-call #2, per-key `scope` is NOT introduced here: the right values fall
+       * out with zero generator change, and adding it would touch every existing key.
+       */
+      capability: {
+        /**
+         * Which resolver mode this project is in on D03's migration ladder. Config
+         * records WHERE WE ARE, never WHETHER WE MAY MOVE — advance conditions are
+         * gate criteria the initiative evaluates, and a mode change is a deliberate
+         * write.
+         *
+         * DEFAULT IS `observe` (D04), unlocked by F7 landing — see
+         * CAPABILITY_RESOLVER_MODE_DEFAULT above for what would revert it. Never
+         * silently defaulted: an unset value resolves with provenance `default`, so
+         * `config show --sources` shows it was never chosen.
+         */
+        resolver_mode: CAPABILITY_RESOLVER_MODE_DEFAULT,
+        /**
+         * Max capability proposals surfaced per project (D04/F10: fixed at 4, not
+         * "3–4"). Range [0, 4] — the same ceiling S1's profile validator enforces, so
+         * the two cannot disagree. 0 is legal: "profile but never propose".
+         */
+        suggestion_budget: 4,
+        /**
+         * Roles a new install starts with. EMPTY BY DESIGN — a non-empty default would
+         * ship a roster, which is precisely what localization exists to stop. Empty ⇒
+         * Learn proposes.
+         */
+        starter_roles: [],
+        /** Whether an approved proposal may auto-advance the resolver mode (D04). */
+        auto_create_policy: "on_approval"
+      },
+      statusline: false,
+      adversarial_review_provider: "auto",
+      loops: null,
+      loop_cap: 16,
+      codex_cap: 5,
+      // guild.model_policy.v2 (dynamic-host-model-routing T5): durable operator model
+      // routing intent. null = not configured — v2 routing stays off and the legacy
+      // tier maps drive generic preferences for the §6 migration window. When set, the
+      // object must pass the §5 closed-key validator (config-cli validateModelPolicy).
+      model_policy: null,
+      defaults: {
+        auto_learn: false,
+        adversarial: "on",
+        team: { size: null, always_include: [] },
+        review_workflow: "standard",
+        skill_policy: "standard",
+        gates: { auto_approve: [] },
+        wiki: { share_mode: "team", autopromote: false },
+        quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
+        reporting: "standard",
+        index: {
+          enabled: true,
+          kg_node_threshold: 2e3,
+          kg_size_threshold_mb: 1,
+          links_edge_threshold: 2e3,
+          runs_threshold: 20,
+          wiki_file_threshold: 500
+        },
+        cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
+        retry: { max_attempts: 1, backoff: "exponential" },
+        resume: { enabled: true },
+        heartbeat_timeout_ms: 6e5,
+        capability_manifest_ttl_s: 3600,
+        // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
+        // the SessionStart signal; `auto` additionally stages the host apply path;
+        // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
+        update: { mode: "notify", cadence_hours: 24 },
+        allowed_tools: [],
+        /**
+         * rf-wi-01 (G1) — registers the guard hooks/lib/lean-lead-guard.ts already reads
+         * tolerantly. enabled: advisory master toggle. hands_on_edit_threshold: direct lead
+         * Edit/Write ops before the inline-shortcut-expired advisory fires (SKILL.md
+         * "Inline shortcut under high autonomy").
+         */
+        lean_lead: { enabled: true, hands_on_edit_threshold: 8 },
+        /**
+         * rf-wi-01 (G1) — registers the guard hooks/lib/lifecycle-gate.ts already reads
+         * tolerantly. enabled: master toggle. adhoc_activity_threshold: ad-hoc (non-skill)
+         * activity count before the lifecycle gate advisory fires.
+         */
+        lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 },
+        /**
+         * Issue #93 — dispatch-safety knobs for the #56 backend-degradation guard
+         * (hooks/lib/backend-degradation.ts).
+         *
+         * `block_unmarked_lanes` engages STRICT mode: a Guild lane dispatch carrying
+         * NO structured producer marker (`prompt_only` evidence — the hand-rolled
+         * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded.
+         *
+         * DEFAULT IS `false` ON PURPOSE, and that is load-bearing rather than
+         * timidity. `classifyLaneEvidence` grades a fully-substituted lane brief that
+         * was merely QUOTED in a prompt as `prompt_only` too — by text it is
+         * indistinguishable from the real dispatch (backend-degradation.ts's
+         * lane-brief signature note, adversarial review round 3). So strict mode
+         * trades the no-false-positive-on-a-quoted-brief invariant for tighter drift
+         * coverage, which is an operator's call to make, never a shipped default.
+         *
+         * PR #85 (G3) shipped this rung as the env flag `GUILD_BLOCK_UNMARKED_LANES`
+         * only, deliberately deferring schema registration to avoid colliding with
+         * rf-wi-01's closed-schema work. That work landed (PR #87), so this is the
+         * promised followup: the key is now discoverable and validated, and the env
+         * var survives as a per-session OVERRIDE (both directions) on top of it.
+         */
+        dispatch: { block_unmarked_lanes: false }
+      }
+    });
   }
 });
 
-// src/adapters/host-adapter-conformance-evaluator.ts
-function declaresCallerScenarioSet(request) {
-  if (request === null || typeof request !== "object") return false;
-  if (!("stable_ids" in request)) return false;
-  const descriptor = Object.getOwnPropertyDescriptor(request, "stable_ids");
-  if (descriptor === void 0) return true;
-  if (descriptor.get !== void 0 || descriptor.set !== void 0) return true;
-  return descriptor.value !== void 0;
+// src/domains/config/policy-keys.ts
+function canonicalPolicyKey(dotted) {
+  return POLICY_KEY_ALIASES[dotted] ?? dotted;
 }
-function identityIsComplete5(identity) {
-  if (identity === null || typeof identity !== "object") return false;
-  const record = identity;
-  for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
-    const value = record[field];
-    if (field === "contract_version") {
-      if (typeof value !== "number" || !Number.isFinite(value)) return false;
+function isPolicyKey(dotted) {
+  return BY_KEY.has(canonicalPolicyKey(dotted));
+}
+function policyKeySpec(dotted) {
+  return BY_KEY.get(canonicalPolicyKey(dotted));
+}
+function policyDefaults() {
+  const out = {};
+  for (const spec of POLICY_KEYS2) setByPath2(out, spec.key, spec.default);
+  return out;
+}
+function matchesHostFamily(text) {
+  for (const fam of HOST_FAMILY_TOKENS) {
+    if (new RegExp(`(^|[^a-z0-9])${fam}([^a-z0-9]|$)`, "i").test(text)) return fam;
+  }
+  return null;
+}
+function matchesModelName(text) {
+  for (const re of MODEL_NAME_PATTERNS) {
+    const m = re.exec(text);
+    if (m) return m[0];
+  }
+  return null;
+}
+function findHostIdentity(key, value, knownHostIds = []) {
+  for (const re of INVENTORY_KEY_PATTERNS) {
+    if (re.test(key)) return { kind: "model-inventory", key, token: key };
+  }
+  const segments = key.split(".");
+  for (const seg of segments) {
+    if (MODEL_FAMILY_TOKENS.includes(seg.toLowerCase())) continue;
+    const fam = matchesHostFamily(seg);
+    if (fam) return { kind: "host-family", key, token: fam };
+    if (knownHostIds.some((h) => h.toLowerCase() === seg.toLowerCase())) {
+      return { kind: "host-id", key, token: seg };
+    }
+    const model = matchesModelName(seg);
+    if (model) return { kind: "model-name", key, token: model };
+  }
+  if (typeof value === "string") {
+    const model = matchesModelName(value);
+    if (model) return { kind: "model-name", key, token: model };
+    if (knownHostIds.some((h) => h.toLowerCase() === value.toLowerCase())) {
+      return { kind: "host-id", key, token: value };
+    }
+    if (!MODEL_FAMILY_TOKENS.includes(value.toLowerCase())) {
+      const fam = matchesHostFamily(value);
+      if (fam) return { kind: "host-family", key, token: fam };
+    }
+  }
+  return null;
+}
+function scanHostIdentity(obj, knownHostIds = [], prefix = "") {
+  const out = [];
+  if (Array.isArray(obj)) {
+    obj.forEach((item, i) => {
+      out.push(...scanHostIdentity(item, knownHostIds, `${prefix}[${i}]`));
+    });
+    return out;
+  }
+  if (obj === null || typeof obj !== "object") {
+    const hit = findHostIdentity(prefix, obj, knownHostIds);
+    if (hit) out.push(hit);
+    return out;
+  }
+  for (const [k, v] of Object.entries(obj)) {
+    const dotted = prefix === "" ? k : `${prefix}.${k}`;
+    const keyHit = findHostIdentity(dotted, void 0, knownHostIds);
+    if (keyHit) {
+      out.push(keyHit);
       continue;
     }
-    if (typeof value !== "string" || value.length === 0) return false;
+    out.push(...scanHostIdentity(v, knownHostIds, dotted));
   }
-  return true;
+  return out;
 }
-function copyIdentity3(identity) {
-  const source = identity;
-  const copy = {};
-  for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) copy[field] = source[field];
-  return copy;
+function findModelNameInText(text) {
+  return matchesModelName(text);
 }
-function refuseEvaluation2(control, reasonCode, assertions) {
-  return {
-    outcome: neutralOutcome({
-      type: "guild.boundary_outcome.v1",
-      disposition: "refused",
-      reason_code: reasonCode,
-      assertions: [...assertions],
-      facts: {
-        refusal_control: control,
-        owner_key: MH03_CONFORMANCE_OWNER_KEY,
-        suite_id: NEUTRAL_SCENARIO_SUITE_ID,
-        suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
-        evidence: []
-      }
-    }),
-    packet: null
-  };
+function identityMessage(hit, where) {
+  const what = hit.kind === "model-inventory" ? `'${hit.key}' persists per-host model inventory` : hit.kind === "host-family" ? `'${hit.key}' carries the host family '${hit.token}'` : hit.kind === "host-id" ? `'${hit.key}' carries the host id '${hit.token}'` : `'${hit.key}' carries the concrete model name '${hit.token}'`;
+  return `${where}: ${what}. Durable config is policy only (KTD22) \u2014 host and models are bound per session on the run record (guild.session_binding.v1). Run \`guild config models\` to inspect this session's binding.`;
 }
-function bindProbe(port, store, runId, provider, probe) {
-  const result = port.bindHostRuntimeAdapter({
-    host: probe.host_id,
-    runId,
-    provider,
-    hostVersion: probe.host_version,
-    authentication: probe.authentication,
-    snapshots: store
-  });
-  const binding = result.disposition === "succeeded" ? result.binding : null;
-  return { probe, result, binding };
-}
-function normalizeThrough(bound, nativeEvent) {
-  return bound.binding === null ? null : bound.binding.normalizeEvent(nativeEvent);
-}
-function snapshotOf(bound) {
-  return bound.binding === null ? null : bound.binding.snapshot;
-}
-function factOf(snapshot, capabilityId) {
-  if (snapshot === null) return null;
-  const found = snapshot.capabilities.find((fact) => fact.capability_id === capabilityId);
-  return found === void 0 ? null : found;
-}
-function hostIdOf(bound) {
-  return bound.binding === null ? bound.probe.host_id : bound.binding.host_id;
-}
-function hostVersionOf(bound) {
-  const snapshot = snapshotOf(bound);
-  return snapshot === null ? bound.probe.host_version : snapshot.host_version;
-}
-function requiresAuth(bound) {
-  return bound.binding === null ? false : bound.binding.entry_point.requires_auth === true;
-}
-function evaluateMh03HostAdapterConformance(request) {
-  if (declaresCallerScenarioSet(request)) {
-    return refuseEvaluation2(
-      MH03_REFUSAL_CONTROL_CALLER_SUPPLIED_IDS,
-      "scenario_required_set_mismatch",
-      [
-        "the covered scenario set has exactly one source, and it is this module",
-        "an agreeing caller-supplied set is refused too, because accepting a matching copy accepts the channel"
-      ]
+function assertPolicyWrite(key, value, opts = {}) {
+  const where = opts.where ?? "config set";
+  const hit = findHostIdentity(key, value, opts.knownHostIds ?? []);
+  if (hit) throw new PolicyRejectedError(hit.kind, key, identityMessage(hit, where));
+  const canonical = canonicalPolicyKey(key);
+  const spec = BY_KEY.get(canonical);
+  if (!spec) {
+    throw new PolicyRejectedError(
+      "not-policy",
+      key,
+      `${where}: '${key}' is not a policy key. Durable config holds the closed policy set only (KTD22): ${POLICY_KEYS2.map((s) => s.key).join(", ")}.`
     );
   }
-  if (!identityIsComplete5(request.evidence_identity)) {
-    return refuseEvaluation2(MH03_REFUSAL_CONTROL_IDENTITY_INCOMPLETE, "scenario_evidence_incomplete", [
-      "evidence that names no complete identity is bound to no runtime"
-    ]);
-  }
-  for (const stableId of MH03_CONFORMANCE_SCENARIO_IDS) {
-    const receiptRef = request.receipt_refs === void 0 ? void 0 : request.receipt_refs[stableId];
-    const freshness = request.evidence_freshness === void 0 ? void 0 : request.evidence_freshness[stableId];
-    if (typeof receiptRef !== "string" || receiptRef.length === 0) {
-      return refuseEvaluation2(MH03_REFUSAL_CONTROL_EVIDENCE_BINDING_MISSING, "scenario_receipt_reference_missing", [
-        "every scenario result commits to a receipt reference"
-      ]);
-    }
-    if (NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS.indexOf(freshness) === -1) {
-      return refuseEvaluation2(MH03_REFUSAL_CONTROL_EVIDENCE_BINDING_MISSING, "scenario_evidence_incomplete", [
-        "every scenario result carries a typed freshness verdict"
-      ]);
-    }
-  }
-  const port = request.boundary === void 0 ? MH03_PRODUCTION_BOUNDARY : request.boundary;
-  const runId = String(request.run_id === void 0 || request.run_id === null ? "" : request.run_id);
-  const store = port.createHostCapabilitySnapshotStore();
-  const nativeHookHost = bindProbe(port, store, runId, request.adapter_provider, MH03_NATIVE_HOOK_PROBE);
-  const wrapperHost = bindProbe(port, store, runId, request.adapter_provider, MH03_WRAPPER_PROBE);
-  const boundFor = (probe) => probe === MH03_WRAPPER_PROBE ? wrapperHost : nativeHookHost;
-  const evt001Bindings = MH03_EVENT_BINDING_PROBES.map((probe) => {
-    const bound = boundFor(probe.host);
-    const normalized = normalizeThrough(bound, probe.native_event);
-    const event = normalized === null ? null : normalized.event;
-    return {
-      host_id: hostIdOf(bound),
-      native_event: probe.native_event,
-      source_kind: normalized === null ? "none" : normalized.source_kind,
-      normalized_event: event === null || event === void 0 ? null : event.name,
-      succeeded: normalized !== null && normalized.disposition === "succeeded",
-      provenance_host_id: event === null || event === void 0 ? null : event.host_native.host_id,
-      provenance_native_event: event === null || event === void 0 ? null : event.host_native.native_event
-    };
-  });
-  const evt001SourceKinds = evt001Bindings.map((entry) => entry.source_kind).filter((kind, index, all) => all.indexOf(kind) === index);
-  const evt001Satisfied = evt001Bindings.length >= 2 && evt001SourceKinds.length >= 2 && evt001Bindings.every(
-    (entry) => entry.succeeded && entry.normalized_event === MH03_SHARED_SEMANTIC_EVENT && entry.provenance_host_id === entry.host_id && entry.provenance_native_event === entry.native_event
-  );
-  const evt002Normalized = normalizeThrough(nativeHookHost, MH03_UNREGISTERED_NATIVE_EVENT);
-  const evt002Event = evt002Normalized === null ? null : evt002Normalized.event;
-  const evt002ReasonCode = evt002Normalized === null ? null : evt002Normalized.reason_code;
-  const evt002Satisfied = evt002Normalized !== null && evt002Normalized.disposition !== "succeeded" && evt002ReasonCode === MH03_SATISFIED_REASON_CODES["MHRC-EVT-002"] && (evt002Event === null || evt002Event === void 0);
-  const uns001Snapshot = snapshotOf(nativeHookHost);
-  const uns001Fact = factOf(uns001Snapshot, MH03_ABSENT_CAPABILITY_ID);
-  const uns001Satisfied = uns001Fact !== null && uns001Fact.supported === false;
-  const uns003Snapshot = snapshotOf(wrapperHost);
-  const uns003Fact = factOf(uns003Snapshot, MH03_CREDENTIALED_CAPABILITY_ID);
-  const uns003RequiresAuth = requiresAuth(wrapperHost);
-  const uns003Satisfied = uns003Fact !== null && uns003Fact.supported === true && uns003Fact.authenticated === false && uns003RequiresAuth;
-  const observations = {
-    "MHRC-EVT-001": {
-      normalized_event: evt001Satisfied ? MH03_SHARED_SEMANTIC_EVENT : null,
-      bindings: evt001Bindings.map((entry) => ({
-        host_id: entry.host_id,
-        native_event: entry.native_event,
-        source_kind: entry.source_kind,
-        normalized_event: entry.normalized_event,
-        provenance_host_id: entry.provenance_host_id,
-        provenance_native_event: entry.provenance_native_event
-      })),
-      source_kinds: [...evt001SourceKinds]
-    },
-    "MHRC-EVT-002": {
-      host_id: hostIdOf(nativeHookHost),
-      native_event: MH03_UNREGISTERED_NATIVE_EVENT,
-      normalized_event: evt002Event === null || evt002Event === void 0 ? null : evt002Event.name,
-      boundary_disposition: evt002Normalized === null ? null : evt002Normalized.disposition,
-      boundary_reason_code: evt002ReasonCode
-    },
-    "MHRC-UNS-001": {
-      host_id: hostIdOf(nativeHookHost),
-      host_version: hostVersionOf(nativeHookHost),
-      authentication: nativeHookHost.probe.authentication,
-      capability_id: MH03_ABSENT_CAPABILITY_ID,
-      supported: uns001Fact === null ? null : uns001Fact.supported,
-      authenticated: uns001Fact === null ? null : uns001Fact.authenticated,
-      snapshot_hash: uns001Snapshot === null ? null : uns001Snapshot.snapshot_hash,
-      fallback_selected: false
-    },
-    "MHRC-UNS-003": {
-      host_id: hostIdOf(wrapperHost),
-      host_version: hostVersionOf(wrapperHost),
-      authentication: wrapperHost.probe.authentication,
-      capability_id: MH03_CREDENTIALED_CAPABILITY_ID,
-      supported: uns003Fact === null ? null : uns003Fact.supported,
-      authenticated: uns003Fact === null ? null : uns003Fact.authenticated,
-      requires_auth: uns003RequiresAuth,
-      snapshot_hash: uns003Snapshot === null ? null : uns003Snapshot.snapshot_hash,
-      fallback_selected: false
-    }
-  };
-  const satisfaction = {
-    "MHRC-EVT-001": evt001Satisfied,
-    "MHRC-EVT-002": evt002Satisfied,
-    "MHRC-UNS-001": uns001Satisfied,
-    "MHRC-UNS-003": uns003Satisfied
-  };
-  const evidence = MH03_CONFORMANCE_SCENARIO_IDS.map((stableId) => ({
-    stable_id: stableId,
-    satisfied: satisfaction[stableId] === true,
-    observed: observations[stableId]
-  }));
-  const results = MH03_CONFORMANCE_SCENARIOS.map((scenario) => {
-    const stableId = scenario.stable_id;
-    const satisfied = satisfaction[stableId] === true;
-    return {
-      stable_id: stableId,
-      outcome_type: scenario.expected_typed_outcome.type,
-      disposition: satisfied ? scenario.expected_typed_outcome.disposition : "failed",
-      reason_code: satisfied ? MH03_SATISFIED_REASON_CODES[stableId] : MH03_UNSATISFIED_REASON_CODE,
-      receipt_ref: request.receipt_refs[stableId],
-      evidence_identity: copyIdentity3(request.evidence_identity),
-      evidence_freshness: request.evidence_freshness[stableId]
-    };
-  });
-  const allSatisfied = evidence.every((entry) => entry.satisfied);
-  const packet = {
-    schema_version: MH03_CONFORMANCE_PACKET_SCHEMA,
-    suite_id: NEUTRAL_SCENARIO_SUITE_ID,
-    suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
-    owner_key: MH03_CONFORMANCE_OWNER_KEY,
-    evidence_identity: copyIdentity3(request.evidence_identity),
-    stable_ids: [...MH03_CONFORMANCE_SCENARIO_IDS],
-    results
-  };
-  return {
-    outcome: neutralOutcome({
-      type: "guild.boundary_outcome.v1",
-      disposition: allSatisfied ? "succeeded" : "failed",
-      reason_code: allSatisfied ? null : MH03_UNSATISFIED_REASON_CODE,
-      assertions: [
-        "each of the four W2/MH-03 scenarios was evaluated against the real host-adapter boundary",
-        "two host-native producers were normalized through their own bindings, provenance retained",
-        "an unregistered native event is reported unsupported and synthesizes no success event",
-        "an unusable credential on a supported capability is failed, never unsupported",
-        "no lifecycle policy, promotion decision, assembly, or signature verification happens here"
-      ],
-      binding: { run_id: runId },
-      facts: {
-        owner_key: MH03_CONFORMANCE_OWNER_KEY,
-        suite_id: NEUTRAL_SCENARIO_SUITE_ID,
-        suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
-        evidence,
-        evaluated_hosts: [hostIdOf(nativeHookHost), hostIdOf(wrapperHost)],
-        binding_dispositions: {
-          [hostIdOf(nativeHookHost)]: nativeHookHost.result.disposition,
-          [hostIdOf(wrapperHost)]: wrapperHost.result.disposition
-        }
-      }
-    }),
-    packet: neutralFreeze(packet)
-  };
+  const valueErr = validatePolicyValue(spec, value);
+  if (valueErr) throw new PolicyRejectedError("not-policy", key, `${where}: ${valueErr}`);
+  return canonical;
 }
-var MH03_CONFORMANCE_OWNER_KEY, MH03_CONFORMANCE_PACKET_SCHEMA, MH03_AUTHENTICATION_FAILURE_REASON_CODE, MH03_UNSATISFIED_REASON_CODE, MH03_REFUSAL_CONTROL_CALLER_SUPPLIED_IDS, MH03_REFUSAL_CONTROL_IDENTITY_INCOMPLETE, MH03_REFUSAL_CONTROL_EVIDENCE_BINDING_MISSING, MH03_WAVE_OWNER, MH03_CONFORMANCE_SCENARIOS, MH03_CONFORMANCE_SCENARIO_IDS, MH03_SATISFIED_REASON_CODES, MH03_PRODUCTION_BOUNDARY, MH03_PROBE_HOST_VERSION, MH03_NATIVE_HOOK_PROBE, MH03_WRAPPER_PROBE, MH03_SHARED_SEMANTIC_EVENT, MH03_EVENT_BINDING_PROBES, MH03_UNREGISTERED_NATIVE_EVENT, MH03_ABSENT_CAPABILITY_ID, MH03_CREDENTIALED_CAPABILITY_ID;
-var init_host_adapter_conformance_evaluator = __esm({
-  "src/adapters/host-adapter-conformance-evaluator.ts"() {
-    init_host_adapter_boundary();
-    init_host_capability_snapshot();
-    init_host_event_normalizer();
-    init_lifecycle();
-    MH03_CONFORMANCE_OWNER_KEY = "W2/MH-03";
-    MH03_CONFORMANCE_PACKET_SCHEMA = NEUTRAL_ASSEMBLY_PACKET_SCHEMA;
-    MH03_AUTHENTICATION_FAILURE_REASON_CODE = "authentication_failed";
-    MH03_UNSATISFIED_REASON_CODE = "scenario_result_mismatch";
-    MH03_REFUSAL_CONTROL_CALLER_SUPPLIED_IDS = "caller_supplied_scenario_ids";
-    MH03_REFUSAL_CONTROL_IDENTITY_INCOMPLETE = "evidence_identity_incomplete";
-    MH03_REFUSAL_CONTROL_EVIDENCE_BINDING_MISSING = "evidence_binding_missing";
-    MH03_WAVE_OWNER = Object.freeze({
-      wave_id: "W2",
-      work_item_id: "MH-03",
-      key: MH03_CONFORMANCE_OWNER_KEY
-    });
-    MH03_CONFORMANCE_SCENARIOS = neutralFreeze([
+function validatePolicyValue(spec, value) {
+  if (value === null) {
+    return spec.default === null ? null : `'${spec.key}' does not accept null`;
+  }
+  switch (spec.type) {
+    case "enum":
+      return typeof value === "string" && spec.values.includes(value) ? null : `'${spec.key}' must be one of: ${spec.values.join(" | ")}`;
+    case "boolean":
+      return typeof value === "boolean" ? null : `'${spec.key}' must be true or false`;
+    case "integer":
+      if (typeof value !== "number" || !Number.isInteger(value)) {
+        return `'${spec.key}' must be an integer`;
+      }
+      break;
+    case "number":
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        return `'${spec.key}' must be a number`;
+      }
+      break;
+  }
+  const n = value;
+  if (spec.min !== void 0 && n < spec.min) return `'${spec.key}' must be >= ${spec.min}`;
+  if (spec.max !== void 0 && n > spec.max) return `'${spec.key}' must be <= ${spec.max}`;
+  return null;
+}
+function setByPath2(obj, dotted, value) {
+  const parts = dotted.split(".");
+  let cur = obj;
+  for (const p of parts.slice(0, -1)) {
+    const next = cur[p];
+    if (next === void 0 || next === null || typeof next !== "object" || Array.isArray(next)) {
+      cur[p] = {};
+    }
+    cur = cur[p];
+  }
+  cur[parts[parts.length - 1]] = value;
+}
+function getByPath2(obj, dotted) {
+  let cur = obj;
+  for (const p of dotted.split(".")) {
+    if (cur === null || typeof cur !== "object") return void 0;
+    cur = cur[p];
+  }
+  return cur;
+}
+var POLICY_KEYS2, BY_KEY, POLICY_KEY_ALIASES, HOST_FAMILY_TOKENS, MODEL_FAMILY_TOKENS, MODEL_NAME_PATTERNS, INVENTORY_KEY_PATTERNS, PolicyRejectedError;
+var init_policy_keys = __esm({
+  "src/domains/config/policy-keys.ts"() {
+    init_kernel();
+    POLICY_KEYS2 = deepFreeze([
+      // Tier SELECTORS — which tier a lane starts at, never which model serves it.
       {
-        stable_id: "MHRC-EVT-001",
-        category: "normalized_event",
-        title: "Host-native events normalize to the same semantic event",
-        preconditions: [
-          "two adapter bindings declare the same semantic event coverage",
-          "native payloads represent the same operator action",
-          "adapter versions are recorded"
-        ],
-        action_event: { name: "prompt.submit", input: { native_event_matrix: "host-specific equivalent payloads" } },
-        expected_typed_outcome: {
-          type: "guild.normalized_event_outcome.v1",
-          disposition: "succeeded",
-          assertions: [
-            "normalized event name and semantic payload are equal",
-            "host-native provenance remains attributable",
-            "normalization does not add lifecycle policy"
-          ]
-        },
-        evidence_requirements: [
-          {
-            profile: "E-LIFECYCLE",
-            assertions: [
-              "native-input hash and normalized-output hash recorded per host",
-              "semantic comparison excludes declared provenance fields only"
-            ]
-          }
-        ],
-        implementation_wave_owner: MH03_WAVE_OWNER
+        key: "tiers.default",
+        type: "enum",
+        values: ["cheap", "mid", "powerful"],
+        default: "mid",
+        note: "tier a lane starts at when its score names none; the adapter maps tier\u2192model at dispatch"
+      },
+      // Score floors — the complexity score at which a lane is promoted a tier.
+      {
+        key: "tiers.floors.mid",
+        type: "number",
+        min: 0,
+        max: 10,
+        default: 3,
+        note: "complexity-score floor at which a lane resolves to the mid tier"
       },
       {
-        stable_id: "MHRC-EVT-002",
-        category: "normalized_event",
-        title: "Unknown native event is explicit and non-mutating",
-        preconditions: [
-          "the adapter receives an unregistered native event",
-          "the immutable capability snapshot does not declare a mapping"
-        ],
-        action_event: { name: "tool.after", input: { native_event: "unmapped" } },
-        expected_typed_outcome: {
-          type: "guild.normalized_event_outcome.v1",
-          disposition: "unsupported",
-          assertions: [
-            "reason code identifies unmapped_event",
-            "lifecycle state is unchanged",
-            "unsupported observation is durably recorded"
-          ]
-        },
-        evidence_requirements: [
-          {
-            profile: "E-REFUSAL",
-            assertions: ["native event provenance is retained", "no synthesized success event exists"]
-          }
-        ],
-        implementation_wave_owner: MH03_WAVE_OWNER
+        key: "tiers.floors.powerful",
+        type: "number",
+        min: 0,
+        max: 10,
+        default: 6,
+        note: "complexity-score floor at which a lane resolves to the powerful tier"
       },
       {
-        stable_id: "MHRC-UNS-001",
-        category: "unsupported_refusal",
-        title: "Unsupported capability returns a typed outcome",
-        preconditions: [
-          "the immutable capability snapshot marks the operation unsupported",
-          "the caller requests that operation"
-        ],
-        action_event: { name: "task.dispatch", input: { required_capability: "absent" } },
-        expected_typed_outcome: {
-          type: "guild.capability_outcome.v1",
-          disposition: "unsupported",
-          assertions: ["reason code and capability id are present", "no fallback is implied", "no side effect occurs"]
-        },
-        evidence_requirements: [
-          {
-            profile: "E-REFUSAL",
-            assertions: ["snapshot hash proves capability absence", "unsupported receipt is durable"]
-          }
-        ],
-        implementation_wave_owner: MH03_WAVE_OWNER
+        key: "advisorRounds",
+        type: "integer",
+        min: 0,
+        max: 10,
+        default: 2,
+        note: "advisor escalation rounds a cell may spend before it blocks with next_need: budget (R72)"
       },
       {
-        stable_id: "MHRC-UNS-003",
-        category: "unsupported_refusal",
-        title: "Authentication failure is explicit and non-degrading by default",
-        preconditions: [
-          "the capability exists",
-          "host authentication is unavailable or invalid",
-          "no approved fallback host is selected"
-        ],
-        action_event: { name: "task.dispatch", input: { auth_state: "invalid" } },
-        expected_typed_outcome: {
-          type: "guild.capability_outcome.v1",
-          disposition: "failed",
-          assertions: [
-            "reason code identifies authentication failure",
-            "the outcome is not reported as unsupported",
-            "silent fallback is prohibited"
-          ]
-        },
-        evidence_requirements: [
-          {
-            profile: "E-REFUSAL",
-            assertions: [
-              "sensitive credentials are redacted",
-              "failure receipt records selected host and no side effect"
-            ]
-          }
-        ],
-        implementation_wave_owner: MH03_WAVE_OWNER
+        key: "budget.tokens",
+        type: "integer",
+        min: 0,
+        default: null,
+        note: "optional per-run token cap; null = uncapped. D-PROBE and inner verify do not decrement it"
+      },
+      {
+        key: "budget.usd",
+        type: "number",
+        min: 0,
+        default: null,
+        note: "optional per-run spend cap in USD; null = uncapped"
+      },
+      {
+        key: "team.compose_scope",
+        type: "enum",
+        values: ["phase", "goal"],
+        default: "phase",
+        note: "whether team-compose mints per phase or slices a roster per goal (KTD62)"
+      },
+      {
+        key: "recall.backend",
+        type: "enum",
+        values: ["bm25", "hybrid"],
+        default: "bm25",
+        note: "recall backend; embeddings are cache only and a missing model fails open to bm25 (KTD67)"
+      },
+      {
+        key: "recall.thresholds.min_score",
+        type: "number",
+        min: 0,
+        max: 1,
+        default: 0.2,
+        note: "minimum BM25 score a recall hit needs to enter a bundle"
+      },
+      {
+        key: "recall.thresholds.max_hits",
+        type: "integer",
+        min: 1,
+        max: 100,
+        default: 8,
+        note: "maximum recall hits a lane bundle may carry"
+      },
+      {
+        key: "review.critic",
+        type: "enum",
+        values: ["off", "advisor"],
+        default: "advisor",
+        note: "who plays critic; `advisor` is the machinery agent, never a new model family (KTD68)"
+      },
+      {
+        key: "review.independence",
+        type: "boolean",
+        default: true,
+        note: "a Team Lead may not review its own cell (KTD58); false only for single-agent local runs"
+      },
+      {
+        key: "wiki.autopromote",
+        type: "boolean",
+        default: true,
+        note: "harvest auto-promotes decisions on this cwd; false = candidates-only (KTD35)"
+      },
+      {
+        key: "agent_mode",
+        type: "enum",
+        values: ["auto", "team", "agent", "subagent"],
+        default: "auto",
+        note: "dispatch backend PREFERENCE only; never a statement about which host is running"
+      },
+      {
+        key: "dispatch.max_instances",
+        type: "integer",
+        min: 1,
+        max: 32,
+        default: 4,
+        note: "live worker instances one run may hold at once; CONCURRENCY, not a roster cap (R46/KTD30)"
       }
     ]);
-    MH03_CONFORMANCE_SCENARIO_IDS = Object.freeze(
-      MH03_CONFORMANCE_SCENARIOS.map((scenario) => scenario.stable_id)
-    );
-    MH03_SATISFIED_REASON_CODES = Object.freeze({
-      "MHRC-EVT-001": null,
-      "MHRC-EVT-002": "unknown_event",
-      "MHRC-UNS-001": "capability_absent",
-      "MHRC-UNS-003": MH03_AUTHENTICATION_FAILURE_REASON_CODE
+    BY_KEY = new Map(POLICY_KEYS2.map((s) => [s.key, s]));
+    POLICY_KEY_ALIASES = Object.freeze({
+      "defaults.wiki.autopromote": "wiki.autopromote",
+      "defaults.agent_mode": "agent_mode",
+      "defaults.team.compose_scope": "team.compose_scope",
+      "defaults.recall.backend": "recall.backend",
+      "defaults.review.critic": "review.critic",
+      "defaults.advisorRounds": "advisorRounds"
     });
-    MH03_PRODUCTION_BOUNDARY = Object.freeze({
-      bindHostRuntimeAdapter,
-      createHostCapabilitySnapshotStore,
-      normalizeHostEvent
-    });
-    MH03_PROBE_HOST_VERSION = "0.0.0-mh03-probe";
-    MH03_NATIVE_HOOK_PROBE = Object.freeze({
-      host_id: "claude-code-cli",
-      host_version: MH03_PROBE_HOST_VERSION,
-      authentication: "not_observed"
-    });
-    MH03_WRAPPER_PROBE = Object.freeze({
-      host_id: "codex-cli",
-      host_version: MH03_PROBE_HOST_VERSION,
-      authentication: "unauthenticated"
-    });
-    MH03_SHARED_SEMANTIC_EVENT = "prompt.submit";
-    MH03_EVENT_BINDING_PROBES = Object.freeze([
-      Object.freeze({ host: MH03_NATIVE_HOOK_PROBE, native_event: "UserPromptSubmit" }),
-      Object.freeze({ host: MH03_WRAPPER_PROBE, native_event: "guild.wrapper.prompt_submit" })
+    HOST_FAMILY_TOKENS = Object.freeze([
+      "claude",
+      "codex",
+      "cursor",
+      "gemini",
+      "copilot",
+      "windsurf",
+      "aider",
+      "antigravity",
+      "pi",
+      "cline",
+      "continue",
+      "zed"
     ]);
-    MH03_UNREGISTERED_NATIVE_EVENT = "guild.mh03.probe.unregistered-native-event";
-    MH03_ABSENT_CAPABILITY_ID = "host.mcp.http";
-    MH03_CREDENTIALED_CAPABILITY_ID = "host.dispatch.selectable";
+    MODEL_FAMILY_TOKENS = Object.freeze([
+      "anthropic",
+      "openai",
+      "google"
+    ]);
+    MODEL_NAME_PATTERNS = Object.freeze([
+      /\bopus\b/i,
+      /\bsonnet\b/i,
+      /\bhaiku\b/i,
+      /\bfable\b/i,
+      /\bgpt-?[0-9]/i,
+      /\bo[1-9](?:-(?:mini|pro|preview))?\b/i,
+      /\bgemini-[0-9]/i,
+      /\bclaude-[a-z0-9]/i,
+      /\bllama-?[0-9]/i,
+      /\bmistral\b/i,
+      /\bgrok-?[0-9]/i,
+      /\bdeepseek\b/i,
+      /\bqwen\b/i
+    ]);
+    INVENTORY_KEY_PATTERNS = Object.freeze([
+      /^models(\.|$)/,
+      /^defaults\.models(\.|$)/,
+      /^host_profiles(\.|$)/,
+      /^defaults\.host_profiles(\.|$)/,
+      /^host(\.|$)/,
+      /^defaults\.host(\.|$)/,
+      /^roles\.[^.]+\.host(\.|$)/,
+      /^defaults\.cross_host(\.|$)/
+    ]);
+    PolicyRejectedError = class extends Error {
+      constructor(reason, key, message) {
+        super(message);
+        this.reason = reason;
+        this.key = key;
+        this.name = "PolicyRejectedError";
+      }
+      reason;
+      key;
+    };
   }
 });
 
-// src/adapters/index.ts
-var init_adapters = __esm({
-  "src/adapters/index.ts"() {
+// src/domains/config/policy-resolver.ts
+function readJsonFile(file) {
+  let raw;
+  try {
+    raw = fs49.readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new PolicyRejectedError(
+      "not-policy",
+      file,
+      `policy config: ${file} is not valid JSON (${e.message}). Refusing to resolve policy from a file Guild cannot parse.`
+    );
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new PolicyRejectedError("not-policy", file, `policy config: ${file} must be a JSON object`);
+  }
+  return parsed;
+}
+function readLayer(file, layer, knownHostIds) {
+  const parsed = readJsonFile(file);
+  if (parsed === null) return null;
+  const identity = scanHostIdentity(parsed, knownHostIds);
+  if (identity.length > 0) {
+    const hit = identity[0];
+    throw new PolicyRejectedError(
+      hit.kind,
+      hit.key,
+      `policy config (${layer}, ${file}): key '${hit.key}' carries ${hit.kind === "model-inventory" ? "per-host model inventory" : `'${hit.token}'`}. Durable config is policy only (KTD22); host and model are bound per session on the run record. Remove the key, or inspect the session with \`guild config models\`.`
+    );
+  }
+  const out = /* @__PURE__ */ new Map();
+  const aliases = [];
+  for (const spec of POLICY_KEYS2) {
+    const canonical = getByPath2(parsed, spec.key);
+    if (canonical !== void 0) {
+      const err = validatePolicyValue(spec, canonical);
+      if (err) {
+        throw new PolicyRejectedError("not-policy", spec.key, `policy config (${layer}, ${file}): ${err}`);
+      }
+      out.set(spec.key, canonical);
+    }
+    for (const legacy of aliasesFor(spec.key)) {
+      const v = getByPath2(parsed, legacy);
+      if (v === void 0) continue;
+      const err = validatePolicyValue(spec, v);
+      if (err) {
+        throw new PolicyRejectedError("not-policy", spec.key, `policy config (${layer}, ${file}): ${err}`);
+      }
+      const shadowed = out.has(spec.key);
+      if (!shadowed) out.set(spec.key, v);
+      aliases.push({ key: spec.key, legacy, layer, file, shadowed });
+    }
+  }
+  const known2 = /* @__PURE__ */ new Set();
+  for (const spec of POLICY_KEYS2) {
+    known2.add(spec.key);
+    for (const a of aliasesFor(spec.key)) known2.add(a);
+  }
+  for (const dotted of leafPaths(parsed)) {
+    if (known2.has(dotted)) continue;
+    if ([...known2].some((k) => k.startsWith(`${dotted}.`))) continue;
+    throw new PolicyRejectedError(
+      "not-policy",
+      dotted,
+      `policy config (${layer}, ${file}): '${dotted}' is not a policy key. The closed set is: ${POLICY_KEYS2.map((s) => s.key).join(", ")}.`
+    );
+  }
+  return { values: out, aliases };
+}
+function aliasesFor(canonical) {
+  return ALIASES_BY_CANONICAL.get(canonical) ?? [];
+}
+function leafPaths(obj, prefix = "", out = []) {
+  if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
+    if (prefix !== "") out.push(prefix);
+    return out;
+  }
+  for (const [k, v] of Object.entries(obj)) {
+    leafPaths(v, prefix === "" ? k : `${prefix}.${k}`, out);
+  }
+  return out;
+}
+function policyFilesFor(root, scope) {
+  const { createGuildStorage: createGuildStorage2 } = (init_state(), __toCommonJS(state_exports));
+  const storage = createGuildStorage2(root, {
+    profile: scope === "workspace" ? "workspace-only" : "standalone"
+  });
+  const scoped = scope === "workspace" ? storage.workspace : storage.project;
+  if (!scoped) return null;
+  const config = scoped.config();
+  return { config, local: config.replace(/\.json$/, ".local.json") };
+}
+function policyOverlayFile(cwd) {
+  try {
+    const { createGuildStorage: createGuildStorage2 } = (init_state(), __toCommonJS(state_exports));
+    return createGuildStorage2(cwd).runtime(POLICY_OVERLAY_FILE);
+  } catch {
+    return null;
+  }
+}
+function resolvePolicy(opts) {
+  const knownHostIds = opts.knownHostIds ?? [];
+  const policy = policyDefaults();
+  const sources = {};
+  for (const spec of POLICY_KEYS2) sources[spec.key] = "builtin";
+  const files = [];
+  const legacyAliases = [];
+  const layers = [];
+  if (opts.workspaceRoot) {
+    const ws = policyFilesFor(opts.workspaceRoot, "workspace");
+    if (ws) {
+      layers.push({ layer: "workspace", file: ws.config });
+      layers.push({ layer: "workspace-local", file: ws.local });
+    }
+  }
+  const project = policyFilesFor(opts.cwd, "project");
+  if (project) {
+    layers.push({ layer: "project", file: project.config });
+    layers.push({ layer: "project-local", file: project.local });
+  }
+  const overlay = opts.overlayFile === void 0 ? policyOverlayFile(opts.cwd) : opts.overlayFile;
+  if (overlay) layers.push({ layer: "overlay", file: overlay });
+  for (const { layer, file } of layers) {
+    const sparse = readLayer(file, layer, knownHostIds);
+    if (sparse === null) continue;
+    files.push({ layer, file });
+    legacyAliases.push(...sparse.aliases);
+    for (const [key, value] of sparse.values) {
+      setByPath2(policy, key, value);
+      sources[key] = layer;
+    }
+  }
+  for (const [key, value] of Object.entries(opts.rigor ?? {})) {
+    const spec = policyKeySpec(key);
+    if (!spec) continue;
+    setByPath2(policy, spec.key, value);
+    sources[spec.key] = "rigor";
+  }
+  for (const [key, value] of Object.entries(opts.flags ?? {})) {
+    if (value === void 0) continue;
+    const canonical = canonicalPolicyKey(key);
+    const spec = policyKeySpec(canonical);
+    if (!spec) continue;
+    const err = validatePolicyValue(spec, value);
+    if (err) throw new PolicyRejectedError("not-policy", canonical, `policy config (cli): ${err}`);
+    setByPath2(policy, spec.key, value);
+    sources[spec.key] = "cli";
+  }
+  return { policy, sources, files, legacyAliases };
+}
+function policyValue(resolved, dotted) {
+  return getByPath2(resolved.policy, canonicalPolicyKey(dotted));
+}
+function writePolicyOverlay(overlayFile, key, value, knownHostIds = []) {
+  const canonical = assertPolicyWrite(key, value, { where: "policy overlay", knownHostIds });
+  let existing = {};
+  const parsed = readJsonFile(overlayFile);
+  if (parsed !== null) existing = parsed;
+  setByPath2(existing, canonical, value);
+  fs49.mkdirSync(path59.dirname(overlayFile), { recursive: true });
+  const tmp = `${overlayFile}.tmp`;
+  fs49.writeFileSync(tmp, `${JSON.stringify(existing, null, 2)}
+`, "utf8");
+  fs49.renameSync(tmp, overlayFile);
+}
+var fs49, path59, POLICY_FILES, POLICY_OVERLAY_FILE, ALIASES_BY_CANONICAL;
+var init_policy_resolver = __esm({
+  "src/domains/config/policy-resolver.ts"() {
+    fs49 = __toESM(require("node:fs"));
+    path59 = __toESM(require("node:path"));
+    init_policy_keys();
+    POLICY_FILES = Object.freeze({
+      project: "config/project.json",
+      projectLocal: "config/project.local.json",
+      workspace: "config/workspace.json",
+      workspaceLocal: "config/workspace.local.json"
+    });
+    POLICY_OVERLAY_FILE = "policy-overlay.json";
+    ALIASES_BY_CANONICAL = (() => {
+      const m = /* @__PURE__ */ new Map();
+      for (const [legacy, target] of Object.entries(POLICY_KEY_ALIASES)) {
+        m.set(target, [...m.get(target) ?? [], legacy]);
+      }
+      return m;
+    })();
+  }
+});
+
+// src/domains/config/session-binding.ts
+function detectSession(env = process.env) {
+  for (const sig of ENV_SIGNALS) {
+    const raw = env[sig.env];
+    if (raw === void 0 || raw === "") continue;
+    const family = sig.fromValue ? raw.trim().toLowerCase() : sig.family;
+    if (sig.fromValue && !KNOWN_FAMILIES2.has(family)) {
+      return unknownSession(`${sig.env}=${raw} (unrecognised family)`);
+    }
+    return {
+      host_family: family,
+      surface: env["GUILD_HOST_SURFACE"]?.trim() || family,
+      model_family: HOST_TO_MODEL_FAMILY[family] ?? UNKNOWN_MODEL_FAMILY,
+      // Family detection alone is `advertised`: the host says what it is. A live
+      // catalog probe is what upgrades a tier to `available` (capability domain).
+      evidence: { cheap: "advertised", mid: "advertised", powerful: "advertised" },
+      signal: sig.env
+    };
+  }
+  return unknownSession("none");
+}
+function unknownSession(signal) {
+  return {
+    host_family: UNKNOWN_HOST_FAMILY,
+    surface: UNKNOWN_HOST_FAMILY,
+    model_family: UNKNOWN_MODEL_FAMILY,
+    evidence: { cheap: "unknown", mid: "unknown", powerful: "unknown" },
+    signal
+  };
+}
+function isUnknownHost(d) {
+  return d.host_family === UNKNOWN_HOST_FAMILY;
+}
+function sessionBindingPath(runDir3) {
+  return path60.join(runDir3, SESSION_BINDING_FILE);
+}
+function readSessionBinding(runDir3) {
+  try {
+    const parsed = JSON.parse(fs50.readFileSync(sessionBindingPath(runDir3), "utf8"));
+    return parsed?.schema_version === "guild.session_binding.v1" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function refusal(existing, thisHost) {
+  return `run ${existing.run_id} is bound to host family '${existing.host_family}'; this session is '${thisHost}'. Guild does not rebind a run in flight \u2014 in-flight assignments already named a host.
+  Continue as a NEW run on this host:  guild resume --new-run
+  Or return to the original host ('${existing.host_family}') and resume this run.`;
+}
+function bindSession(opts) {
+  const existing = readSessionBinding(opts.runDir);
+  if (existing) {
+    if (existing.host_family !== opts.detected.host_family) {
+      return {
+        ok: false,
+        reason: "host_changed_mid_run",
+        existing,
+        message: refusal(existing, opts.detected.host_family)
+      };
+    }
+    return { ok: true, binding: existing, created: false };
+  }
+  const now = (opts.now ?? (() => /* @__PURE__ */ new Date()))().toISOString();
+  const binding = {
+    schema_version: "guild.session_binding.v1",
+    run_id: opts.runId,
+    host_family: opts.detected.host_family,
+    surface: opts.detected.surface,
+    detected_at: now,
+    // An unknown host gets NO tier map. An empty map is a blocked dispatch; a
+    // guessed map is a wrong one.
+    models: isUnknownHost(opts.detected) ? {} : opts.models ?? {},
+    model_family: opts.detected.model_family,
+    prompt_compose: opts.promptCompose,
+    evidence: opts.detected.evidence
+  };
+  fs50.mkdirSync(opts.runDir, { recursive: true });
+  const created = createExclusive(sessionBindingPath(opts.runDir), binding);
+  if (created) return { ok: true, binding, created: true };
+  const winner = readSessionBinding(opts.runDir);
+  if (winner === null) {
+    return {
+      ok: false,
+      reason: "host_changed_mid_run",
+      existing: binding,
+      message: `run ${opts.runId} already has a session binding that cannot be read. Guild will not overwrite it. Inspect ${sessionBindingPath(opts.runDir)}, or continue as a NEW run on this host: guild resume --new-run`
+    };
+  }
+  if (winner.host_family !== opts.detected.host_family) {
+    return { ok: false, reason: "host_changed_mid_run", existing: winner, message: refusal(winner, opts.detected.host_family) };
+  }
+  return { ok: true, binding: winner, created: false };
+}
+function createExclusive(file, binding) {
+  try {
+    fs50.writeFileSync(file, `${JSON.stringify(binding, null, 2)}
+`, { encoding: "utf8", flag: "wx" });
+    return true;
+  } catch (e) {
+    if (e.code === "EEXIST") return false;
+    throw e;
+  }
+}
+function bindSessionForRun(opts) {
+  const detected = detectSession(opts.env ?? process.env);
+  const promptCompose = opts.promptCompose ?? { dialect_id: "dialect:none", overlay_ids: [], hash: "" };
+  const seam = opts.fs;
+  if (seam === void 0) {
+    return bindSession({ runDir: opts.runDir, runId: opts.runId, detected, promptCompose, models: opts.models });
+  }
+  const file = sessionBindingPath(opts.runDir);
+  if (seam.exists(file)) {
+    const raw = seam.readFile?.(file) ?? null;
+    let existing = null;
+    try {
+      const parsed = raw === null ? null : JSON.parse(raw);
+      existing = parsed?.schema_version === "guild.session_binding.v1" ? parsed : null;
+    } catch {
+      existing = null;
+    }
+    if (existing && existing.host_family !== detected.host_family) {
+      return { ok: false, reason: "host_changed_mid_run", existing, message: refusal(existing, detected.host_family) };
+    }
+    if (existing) return { ok: true, binding: existing, created: false };
+  }
+  const binding = {
+    schema_version: "guild.session_binding.v1",
+    run_id: opts.runId,
+    host_family: detected.host_family,
+    surface: detected.surface,
+    detected_at: (/* @__PURE__ */ new Date()).toISOString(),
+    models: isUnknownHost(detected) ? {} : opts.models ?? {},
+    model_family: detected.model_family,
+    prompt_compose: promptCompose,
+    evidence: detected.evidence
+  };
+  seam.writeFile(file, `${JSON.stringify(binding, null, 2)}
+`);
+  return { ok: true, binding, created: true };
+}
+var fs50, path60, SESSION_BINDING_FILE, UNKNOWN_HOST_FAMILY, UNKNOWN_MODEL_FAMILY, HOST_TO_MODEL_FAMILY, ENV_SIGNALS, KNOWN_FAMILIES2;
+var init_session_binding = __esm({
+  "src/domains/config/session-binding.ts"() {
+    fs50 = __toESM(require("node:fs"));
+    path60 = __toESM(require("node:path"));
+    SESSION_BINDING_FILE = "session-binding.json";
+    UNKNOWN_HOST_FAMILY = "unknown";
+    UNKNOWN_MODEL_FAMILY = "unknown";
+    HOST_TO_MODEL_FAMILY = Object.freeze({
+      claude: "anthropic",
+      codex: "openai",
+      copilot: "openai",
+      cursor: "openai",
+      gemini: "google",
+      antigravity: "google"
+    });
+    ENV_SIGNALS = Object.freeze([
+      { env: "GUILD_HOST_FAMILY", fromValue: true },
+      { env: "CLAUDE_PLUGIN_ROOT", family: "claude" },
+      { env: "CLAUDECODE", family: "claude" },
+      { env: "CODEX_HOME", family: "codex" },
+      { env: "CODEX_SANDBOX", family: "codex" },
+      { env: "CURSOR_TRACE_ID", family: "cursor" },
+      { env: "GEMINI_CLI", family: "gemini" }
+    ]);
+    KNOWN_FAMILIES2 = /* @__PURE__ */ new Set([...Object.keys(HOST_TO_MODEL_FAMILY), "cline", "zed", "aider", "windsurf", "pi"]);
+  }
+});
+
+// src/domains/config/config-validation.ts
+function object(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function rejectUnknown(value, allowed, label) {
+  return Object.keys(value).filter((key) => !allowed.has(key)).map((key) => `unknown ${label} key "${key}" (closed key set)`);
+}
+function validateModels(models) {
+  const rejects = rejectUnknown(models, MODEL_KEYS, "models");
+  const tiers = models["tiers"];
+  if (object(tiers)) {
+    const tierKeys = /* @__PURE__ */ new Set(["cheap", "mid", "powerful"]);
+    const specKeys = /* @__PURE__ */ new Set(["model", "effort", "reasoning", "thinking", "verbosity"]);
+    for (const [tier, rawHosts] of Object.entries(tiers)) {
+      if (!tierKeys.has(tier)) {
+        rejects.push(`unknown models.tiers key "${tier}" (valid: cheap|mid|powerful)`);
+        continue;
+      }
+      if (!object(rawHosts)) continue;
+      const canonical = /* @__PURE__ */ new Map();
+      for (const [host, value] of Object.entries(rawHosts)) {
+        const hostId = normalizeHostId(host);
+        if (!hostId) {
+          rejects.push(`unknown models.tiers.${tier} host key "${host}" (closed key set)`);
+          continue;
+        }
+        const prior = canonical.get(hostId);
+        if (prior && prior !== host) {
+          rejects.push(
+            `duplicate models.tiers.${tier} host keys "${prior}" and "${host}" both normalize to "${hostId}"`
+          );
+          continue;
+        }
+        canonical.set(hostId, host);
+        if (value === null || typeof value === "string") continue;
+        if (!object(value)) {
+          rejects.push(
+            `models.tiers.${tier}.${host} must be a string, null, or {model, effort?, reasoning?, thinking?, verbosity?}`
+          );
+          continue;
+        }
+        for (const key of Object.keys(value)) {
+          if (!specKeys.has(key)) {
+            rejects.push(`unknown models.tiers.${tier}.${host} key "${key}" (object form is a closed key set)`);
+          }
+        }
+        if (typeof value["model"] !== "string" || !value["model"].trim()) {
+          rejects.push(`models.tiers.${tier}.${host}.model is required and must be a non-empty string in the object form`);
+        }
+        for (const key of ["effort", "reasoning", "thinking", "verbosity"]) {
+          if (value[key] !== void 0 && typeof value[key] !== "string") {
+            rejects.push(`models.tiers.${tier}.${host}.${key} must be a string (got ${JSON.stringify(value[key])})`);
+          }
+        }
+      }
+    }
+  }
+  if (object(models["thresholds"])) {
+    for (const key of Object.keys(models["thresholds"])) {
+      if (key !== "mid" && key !== "powerful") rejects.push(`unknown models.thresholds key "${key}" \u2014 only mid and powerful are valid`);
+    }
+  }
+  if (object(models["cacheTTL"])) {
+    const ttl = models["cacheTTL"];
+    for (const key of Object.keys(ttl)) {
+      if (key !== "coordinator" && key !== "leaf") rejects.push(`unknown models.cacheTTL key "${key}" \u2014 only coordinator and leaf are valid`);
+    }
+    for (const key of ["coordinator", "leaf"]) {
+      if (ttl[key] !== void 0 && !["1h", "5m", "off"].includes(String(ttl[key]))) {
+        rejects.push(`models.cacheTTL.${key} "${ttl[key]}" is invalid \u2014 valid: 1h|5m|off`);
+      }
+    }
+  }
+  const integerRange = (key, min, max) => {
+    const value = models[key];
+    if (value !== void 0 && (typeof value !== "number" || !Number.isInteger(value) || value < min || max !== void 0 && value > max)) {
+      rejects.push(`models.${key} must be an integer ${min}${max === void 0 ? "+" : `\u2013${max}`} (got ${JSON.stringify(value)})`);
+    }
+  };
+  integerRange("importanceGate", 1, 5);
+  integerRange("advisorRounds", 1);
+  for (const key of ["compositeRecall", "importanceAtIngest"]) {
+    if (models[key] !== void 0 && typeof models[key] !== "boolean") {
+      rejects.push(`models.${key} must be a boolean (got ${JSON.stringify(models[key])})`);
+    }
+  }
+  for (const key of ["recallScoreThreshold", "ingestSimilarityGate"]) {
+    const value = models[key];
+    if (value !== void 0 && (typeof value !== "number" || value < 0 || value > 1)) {
+      rejects.push(`models.${key} must be a float 0\u20131 (got ${JSON.stringify(value)})`);
+    }
+  }
+  return rejects;
+}
+function validateSecurity(value) {
+  const rejects = rejectUnknown(value, SECURITY_KEYS, "security");
+  const policy = value["bypass_permissions_policy"];
+  if (policy !== void 0 && !["deny", "audit", "allow"].includes(String(policy))) {
+    rejects.push(`security.bypass_permissions_policy "${policy}" is invalid \u2014 valid: deny|audit|allow`);
+  }
+  return rejects;
+}
+function validateSecretsPolicy(value) {
+  const rejects = rejectUnknown(value, SECRETS_KEYS, "secrets_policy");
+  for (const key of ["fail_mode_durable", "fail_mode_telemetry"]) {
+    if (value[key] !== void 0 && value[key] !== "closed" && value[key] !== "open") {
+      rejects.push(`secrets_policy.${key} "${value[key]}" is invalid \u2014 valid: closed|open`);
+    }
+  }
+  for (const key of ["env_allowlist", "redaction_patterns"]) {
+    if (value[key] !== void 0 && !Array.isArray(value[key])) rejects.push(`secrets_policy.${key} must be an array`);
+  }
+  return rejects;
+}
+function validateMcp(value) {
+  const rejects = rejectUnknown(value, MCP_KEYS, "mcp");
+  if (value["tool_description_hashes"] !== void 0 && !object(value["tool_description_hashes"])) {
+    rejects.push("mcp.tool_description_hashes must be an object (tool-name \u2192 SHA-256 hash)");
+  }
+  for (const key of ["stdio_available", "http_available"]) {
+    if (value[key] !== void 0 && typeof value[key] !== "boolean") rejects.push(`mcp.${key} must be a boolean (got ${JSON.stringify(value[key])})`);
+  }
+  if (value["bridge_package"] !== void 0 && value["bridge_package"] !== null && typeof value["bridge_package"] !== "string") {
+    rejects.push(`mcp.bridge_package must be a string or null (got ${JSON.stringify(value["bridge_package"])})`);
+  }
+  return rejects;
+}
+function validateCrossHostBlock2(value) {
+  const rejects = rejectUnknown(value, /* @__PURE__ */ new Set(["enabled", "hosts", "fallback_to_claude"]), "defaults.cross_host");
+  for (const key of ["enabled", "fallback_to_claude"]) {
+    if (value[key] !== void 0 && typeof value[key] !== "boolean") rejects.push(`defaults.cross_host.${key} must be a boolean (got ${JSON.stringify(value[key])})`);
+  }
+  if (value["hosts"] !== void 0 && !object(value["hosts"])) {
+    rejects.push("defaults.cross_host.hosts must be an object { host_id: { address, port?, user? } }");
+  } else if (object(value["hosts"])) {
+    for (const [host, raw] of Object.entries(value["hosts"])) {
+      if (!object(raw)) {
+        rejects.push(`defaults.cross_host.hosts["${host}"] must be an object { address, port?, user? }`);
+        continue;
+      }
+      for (const key of Object.keys(raw)) {
+        if (!["address", "port", "user", "login_shell"].includes(key)) rejects.push(`unknown defaults.cross_host.hosts["${host}"] key "${key}" (closed key set)`);
+      }
+      if (!raw["address"] || typeof raw["address"] !== "string") rejects.push(`defaults.cross_host.hosts["${host}"].address is required and must be a string`);
+      const port = raw["port"];
+      if (port !== void 0 && (typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > 65535)) rejects.push(`defaults.cross_host.hosts["${host}"].port must be an integer 1\u201365535 (got ${JSON.stringify(port)})`);
+      for (const key of ["user", "login_shell"]) {
+        if (raw[key] !== void 0 && typeof raw[key] !== "string") rejects.push(`defaults.cross_host.hosts["${host}"].${key} must be a string (got ${JSON.stringify(raw[key])})`);
+      }
+    }
+  }
+  return rejects;
+}
+function validateDefaults(value, selfBuild) {
+  const rejects = rejectUnknown(value, DEFAULT_KEYS, "defaults");
+  if (value["adversarial"] === "off" && selfBuild) rejects.push("defaults.adversarial: off is REJECTED for Guild self-build");
+  if (object(value["wiki"]) && value["wiki"]["autopromote"] === true) rejects.push("defaults.wiki.autopromote: true is REJECTED always (agents emit candidates only)");
+  if (object(value["cross_host"])) rejects.push(...validateCrossHostBlock2(value["cross_host"]));
+  if (object(value["quality"]) && object(value["quality"]["budget"])) {
+    for (const key of Object.keys(value["quality"]["budget"])) {
+      if (!["per_class_minutes", "total_minutes"].includes(key)) rejects.push(`unknown defaults.quality.budget key "${key}"`);
+    }
+  }
+  if (object(value["retry"])) {
+    const retry = value["retry"];
+    rejects.push(...rejectUnknown(retry, /* @__PURE__ */ new Set(["max_attempts", "backoff"]), "defaults.retry"));
+    if (retry["max_attempts"] !== void 0 && (typeof retry["max_attempts"] !== "number" || !Number.isInteger(retry["max_attempts"]) || retry["max_attempts"] < 1)) rejects.push(`defaults.retry.max_attempts must be an integer \u2265 1 (got ${JSON.stringify(retry["max_attempts"])})`);
+    if (retry["backoff"] !== void 0 && !["immediate", "linear", "exponential"].includes(String(retry["backoff"]))) rejects.push(`defaults.retry.backoff must be "immediate"|"linear"|"exponential" (got ${JSON.stringify(retry["backoff"])})`);
+  }
+  if (object(value["resume"])) {
+    rejects.push(...rejectUnknown(value["resume"], /* @__PURE__ */ new Set(["enabled"]), "defaults.resume"));
+    if (value["resume"]["enabled"] !== void 0 && typeof value["resume"]["enabled"] !== "boolean") rejects.push(`defaults.resume.enabled must be a boolean (got ${JSON.stringify(value["resume"]["enabled"])})`);
+  }
+  for (const key of ["heartbeat_timeout_ms", "capability_manifest_ttl_s"]) {
+    const number = value[key];
+    if (number !== void 0 && (typeof number !== "number" || number <= 0 || key === "heartbeat_timeout_ms" && !Number.isInteger(number))) rejects.push(`defaults.${key} must be a positive ${key === "heartbeat_timeout_ms" ? "integer" : "number"} (got ${JSON.stringify(number)})`);
+  }
+  if (value["allowed_tools"] !== void 0 && !Array.isArray(value["allowed_tools"])) rejects.push("defaults.allowed_tools must be an array of strings");
+  if (value["lean_lead"] !== void 0 && !object(value["lean_lead"])) {
+    rejects.push(`defaults.lean_lead must be an object { enabled?, hands_on_edit_threshold? } (got ${JSON.stringify(value["lean_lead"])})`);
+  } else if (object(value["lean_lead"])) {
+    const leanLead = value["lean_lead"];
+    rejects.push(...rejectUnknown(leanLead, /* @__PURE__ */ new Set(["enabled", "hands_on_edit_threshold"]), "defaults.lean_lead"));
+    if (leanLead["enabled"] !== void 0 && typeof leanLead["enabled"] !== "boolean") {
+      rejects.push(`defaults.lean_lead.enabled must be a boolean (got ${JSON.stringify(leanLead["enabled"])})`);
+    }
+    const threshold = leanLead["hands_on_edit_threshold"];
+    if (threshold !== void 0 && (typeof threshold !== "number" || !Number.isInteger(threshold) || threshold < 1)) {
+      rejects.push(`defaults.lean_lead.hands_on_edit_threshold must be a positive integer (got ${JSON.stringify(threshold)})`);
+    }
+  }
+  if (value["lifecycle_gate"] !== void 0 && !object(value["lifecycle_gate"])) {
+    rejects.push(`defaults.lifecycle_gate must be an object { enabled?, adhoc_activity_threshold? } (got ${JSON.stringify(value["lifecycle_gate"])})`);
+  } else if (object(value["lifecycle_gate"])) {
+    const lifecycleGate = value["lifecycle_gate"];
+    rejects.push(...rejectUnknown(lifecycleGate, /* @__PURE__ */ new Set(["enabled", "adhoc_activity_threshold"]), "defaults.lifecycle_gate"));
+    if (lifecycleGate["enabled"] !== void 0 && typeof lifecycleGate["enabled"] !== "boolean") {
+      rejects.push(`defaults.lifecycle_gate.enabled must be a boolean (got ${JSON.stringify(lifecycleGate["enabled"])})`);
+    }
+    const threshold = lifecycleGate["adhoc_activity_threshold"];
+    if (threshold !== void 0 && (typeof threshold !== "number" || !Number.isInteger(threshold) || threshold < 1)) {
+      rejects.push(`defaults.lifecycle_gate.adhoc_activity_threshold must be a positive integer (got ${JSON.stringify(threshold)})`);
+    }
+  }
+  if (value["dispatch"] !== void 0 && !object(value["dispatch"])) {
+    rejects.push(`defaults.dispatch must be an object { block_unmarked_lanes? } (got ${JSON.stringify(value["dispatch"])})`);
+  } else if (object(value["dispatch"])) {
+    const dispatch = value["dispatch"];
+    rejects.push(...rejectUnknown(dispatch, /* @__PURE__ */ new Set(["block_unmarked_lanes"]), "defaults.dispatch"));
+    if (dispatch["block_unmarked_lanes"] !== void 0 && typeof dispatch["block_unmarked_lanes"] !== "boolean") {
+      rejects.push(`defaults.dispatch.block_unmarked_lanes must be a boolean (got ${JSON.stringify(dispatch["block_unmarked_lanes"])})`);
+    }
+  }
+  if (object(value["update"])) {
+    const update = value["update"];
+    rejects.push(...rejectUnknown(update, /* @__PURE__ */ new Set(["mode", "cadence_hours"]), "defaults.update"));
+    if (update["mode"] !== void 0 && !["auto", "notify", "off"].includes(String(update["mode"]))) rejects.push(`defaults.update.mode must be "auto" | "notify" | "off" (got ${JSON.stringify(update["mode"])})`);
+    if (update["cadence_hours"] !== void 0 && (typeof update["cadence_hours"] !== "number" || update["cadence_hours"] <= 0)) rejects.push(`defaults.update.cadence_hours must be a positive number of hours (got ${JSON.stringify(update["cadence_hours"])})`);
+  } else if (value["update"] !== void 0) {
+    rejects.push(`defaults.update must be an object { mode, cadence_hours } (got ${JSON.stringify(value["update"])})`);
+  }
+  if (object(value["index"])) {
+    const index = value["index"];
+    rejects.push(...rejectUnknown(index, INDEX_KEYS, "defaults.index"));
+    if (index["enabled"] !== void 0 && typeof index["enabled"] !== "boolean") rejects.push(`defaults.index.enabled must be a boolean (got ${JSON.stringify(index["enabled"])})`);
+    for (const key of ["kg_node_threshold", "links_edge_threshold", "runs_threshold", "wiki_file_threshold"]) {
+      const number = index[key];
+      if (number !== void 0 && (typeof number !== "number" || !Number.isInteger(number) || number < 1)) rejects.push(`defaults.index.${key} must be a positive integer (got ${JSON.stringify(number)})`);
+    }
+    const size = index["kg_size_threshold_mb"];
+    if (size !== void 0 && (typeof size !== "number" || size <= 0)) rejects.push(`defaults.index.kg_size_threshold_mb must be a positive number (got ${JSON.stringify(size)})`);
+  }
+  return rejects;
+}
+var MODEL_KEYS, SECURITY_KEYS, SECRETS_KEYS, MCP_KEYS, DEFAULT_KEYS, INDEX_KEYS;
+var init_config_validation = __esm({
+  "src/domains/config/config-validation.ts"() {
     init_host_id_namespace();
-    init_adapter_fallback_ladders();
-    init_host_profiles_validate();
-    init_host_registry();
-    init_host_registry_schema();
-    init_provider_detect();
-    init_session_context();
-    init_model_discovery();
-    init_host_adapter_contract();
-    init_host_adapter_boundary();
-    init_host_capability_snapshot();
-    init_host_event_normalizer();
-    init_host_adapter_conformance_evaluator();
+    MODEL_KEYS = /* @__PURE__ */ new Set([
+      "enabled",
+      "tiers",
+      "scoreWeights",
+      "thresholds",
+      "advisorRounds",
+      "escalationMarkers",
+      "recallBeforeRead",
+      "recallScoreThreshold",
+      "structuredOutputRequired",
+      "cacheTTL",
+      "importanceGate",
+      "compositeRecall",
+      "importanceAtIngest",
+      "ingestSimilarityGate",
+      "shortOutputThreshold",
+      "knowledge"
+    ]);
+    SECURITY_KEYS = /* @__PURE__ */ new Set(["bypass_permissions_policy"]);
+    SECRETS_KEYS = /* @__PURE__ */ new Set([
+      "env_allowlist",
+      "redaction_patterns",
+      "fail_mode_durable",
+      "fail_mode_telemetry"
+    ]);
+    MCP_KEYS = /* @__PURE__ */ new Set([
+      "tool_description_hashes",
+      "stdio_available",
+      "http_available",
+      "bridge_package"
+    ]);
+    DEFAULT_KEYS = /* @__PURE__ */ new Set([
+      "auto_learn",
+      "adversarial",
+      "team",
+      "review_workflow",
+      "skill_policy",
+      "gates",
+      "wiki",
+      "quality",
+      "reporting",
+      "index",
+      "cross_host",
+      "retry",
+      "resume",
+      "heartbeat_timeout_ms",
+      "capability_manifest_ttl_s",
+      "update",
+      "allowed_tools",
+      "lean_lead",
+      "lifecycle_gate",
+      "dispatch"
+    ]);
+    INDEX_KEYS = /* @__PURE__ */ new Set([
+      "enabled",
+      "kg_node_threshold",
+      "kg_size_threshold_mb",
+      "links_edge_threshold",
+      "runs_threshold",
+      "wiki_file_threshold"
+    ]);
   }
 });
 
@@ -42438,8 +35678,8 @@ var init_adapters = __esm({
 function parseWorkspaceManifest(manifestPath) {
   let raw;
   try {
-    if (!fs60.existsSync(manifestPath)) return { status: "absent" };
-    raw = fs60.readFileSync(manifestPath, "utf8");
+    if (!fs51.existsSync(manifestPath)) return { status: "absent" };
+    raw = fs51.readFileSync(manifestPath, "utf8");
   } catch (e) {
     return { status: "parse_error", error: e instanceof Error ? e.message : String(e) };
   }
@@ -42455,10 +35695,10 @@ function parseWorkspaceManifest(manifestPath) {
   return { status: "not_workspace" };
 }
 function discoverWorkspace(startDir) {
-  let current = path70.dirname(startDir);
-  const fsRoot = path70.parse(current).root;
+  let current = path61.dirname(startDir);
+  const fsRoot = path61.parse(current).root;
   while (current !== fsRoot) {
-    const manifestPath = path70.join(current, ".guild", "workspace.json");
+    const manifestPath = path61.join(current, ".guild", "workspace.json");
     const parsed = parseWorkspaceManifest(manifestPath);
     if (parsed.status === "workspace") {
       return { rootDir: current, manifest: parsed.manifest };
@@ -42466,22 +35706,22 @@ function discoverWorkspace(startDir) {
     if (parsed.status === "not_workspace") {
       return null;
     }
-    const parent = path70.dirname(current);
+    const parent = path61.dirname(current);
     if (parent === current) break;
     current = parent;
   }
   return null;
 }
-var fs60, path70;
+var fs51, path61;
 var init_workspace_manifest = __esm({
   "src/domains/config/workspace-manifest.ts"() {
-    fs60 = __toESM(require("fs"));
-    path70 = __toESM(require("path"));
+    fs51 = __toESM(require("fs"));
+    path61 = __toESM(require("path"));
   }
 });
 
 // src/domains/config/settings-reader.ts
-function validateModelPolicy2(input) {
+function validateModelPolicy(input) {
   const capability2 = (init_config2(), __toCommonJS(config_exports));
   return capability2.validateModelPolicy(input);
 }
@@ -42550,7 +35790,7 @@ function coerceCapability(raw) {
   }
   return out;
 }
-function isPlainObject7(v) {
+function isPlainObject6(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 function deepMerge(base, overlay) {
@@ -42559,7 +35799,7 @@ function deepMerge(base, overlay) {
     if (PROTO_POISON_KEYS.has(k)) continue;
     if (Array.isArray(v)) {
       result[k] = v;
-    } else if (isPlainObject7(v) && isPlainObject7(result[k])) {
+    } else if (isPlainObject6(v) && isPlainObject6(result[k])) {
       result[k] = deepMerge(
         result[k],
         v
@@ -42576,7 +35816,7 @@ function collectKeyPaths(obj, prefix = "") {
     if (PROTO_POISON_KEYS.has(k)) continue;
     const full = prefix ? `${prefix}.${k}` : k;
     paths.add(full);
-    if (isPlainObject7(v)) {
+    if (isPlainObject6(v)) {
       for (const sub of collectKeyPaths(v, full)) {
         paths.add(sub);
       }
@@ -42612,21 +35852,21 @@ function rigorProfile(rigor) {
   }
 }
 function parseSettingsFile(filePath) {
-  if (!fs61.existsSync(filePath)) return {};
+  if (!fs52.existsSync(filePath)) return {};
   let parsed;
   try {
-    parsed = JSON.parse(fs61.readFileSync(filePath, "utf8"));
+    parsed = JSON.parse(fs52.readFileSync(filePath, "utf8"));
   } catch {
     return {};
   }
   return parseSettingsFile_fromParsed(parsed);
 }
 function parseLocalFile(guildDir) {
-  const localPath = path71.join(guildDir, "settings.local.json");
-  if (!fs61.existsSync(localPath)) return {};
+  const localPath = path62.join(guildDir, "settings.local.json");
+  if (!fs52.existsSync(localPath)) return {};
   let localParsed;
   try {
-    localParsed = JSON.parse(fs61.readFileSync(localPath, "utf8"));
+    localParsed = JSON.parse(fs52.readFileSync(localPath, "utf8"));
   } catch {
     return {};
   }
@@ -42649,9 +35889,9 @@ function parseSettingsFile_fromParsed(parsed) {
   if (parsed["host_mode"] === null) out.host_mode = null;
   else if (typeof parsed["host_mode"] === "string" && HOST_MODES.includes(parsed["host_mode"]))
     out.host_mode = parsed["host_mode"];
-  if (isPlainObject7(parsed["roles"]))
+  if (isPlainObject6(parsed["roles"]))
     out.roles = sparseRoles(parsed["roles"]);
-  if (isPlainObject7(parsed["host_profiles"]))
+  if (isPlainObject6(parsed["host_profiles"]))
     out.host_profiles = sparseHostProfiles(parsed["host_profiles"]);
   if (parsed["initiative_default"] === null || typeof parsed["initiative_default"] === "string")
     out.initiative_default = parsed["initiative_default"];
@@ -42663,7 +35903,7 @@ function parseSettingsFile_fromParsed(parsed) {
     out.codex_skip_enforcement = parsed["codex_skip_enforcement"];
   if (VALID_AGENT_MODE.has(parsed["agent_mode"]))
     out.agent_mode = parsed["agent_mode"];
-  if (isPlainObject7(parsed["workspace"])) {
+  if (isPlainObject6(parsed["workspace"])) {
     const ws = parsed["workspace"];
     const wsMode = ws["mode"];
     if (wsMode === "auto" || wsMode === "on" || wsMode === "off") {
@@ -42671,29 +35911,29 @@ function parseSettingsFile_fromParsed(parsed) {
     }
   }
   if (parsed["model_policy"] === null) out.model_policy = null;
-  else if (isPlainObject7(parsed["model_policy"]) && validateModelPolicy2(parsed["model_policy"]).length === 0)
+  else if (isPlainObject6(parsed["model_policy"]) && validateModelPolicy(parsed["model_policy"]).length === 0)
     out.model_policy = parsed["model_policy"];
-  if (isPlainObject7(parsed["models"])) {
+  if (isPlainObject6(parsed["models"])) {
     const rawModels = parsed["models"];
     const sparse = {};
     if (typeof rawModels["enabled"] === "boolean") sparse.enabled = rawModels["enabled"];
-    if (isPlainObject7(rawModels["tiers"])) {
+    if (isPlainObject6(rawModels["tiers"])) {
       const rt = rawModels["tiers"];
       const sparseTiers = {};
       for (const tier of ["cheap", "mid", "powerful"]) {
-        if (isPlainObject7(rt[tier])) sparseTiers[tier] = sparseTierHostMap(rt[tier]);
+        if (isPlainObject6(rt[tier])) sparseTiers[tier] = sparseTierHostMap(rt[tier]);
       }
       sparse.tiers = sparseTiers;
     }
-    if (isPlainObject7(rawModels["scoreWeights"])) sparse.scoreWeights = rawModels["scoreWeights"];
-    if (isPlainObject7(rawModels["thresholds"])) sparse.thresholds = rawModels["thresholds"];
+    if (isPlainObject6(rawModels["scoreWeights"])) sparse.scoreWeights = rawModels["scoreWeights"];
+    if (isPlainObject6(rawModels["thresholds"])) sparse.thresholds = rawModels["thresholds"];
     if (typeof rawModels["advisorRounds"] === "number" && rawModels["advisorRounds"] >= 1)
       sparse.advisorRounds = Math.floor(rawModels["advisorRounds"]);
     if (Array.isArray(rawModels["escalationMarkers"])) sparse.escalationMarkers = rawModels["escalationMarkers"];
     if (typeof rawModels["recallBeforeRead"] === "boolean") sparse.recallBeforeRead = rawModels["recallBeforeRead"];
     if (typeof rawModels["recallScoreThreshold"] === "number") sparse.recallScoreThreshold = rawModels["recallScoreThreshold"];
     if (typeof rawModels["structuredOutputRequired"] === "boolean") sparse.structuredOutputRequired = rawModels["structuredOutputRequired"];
-    if (isPlainObject7(rawModels["cacheTTL"])) {
+    if (isPlainObject6(rawModels["cacheTTL"])) {
       const rttl = rawModels["cacheTTL"];
       const newTTL = {};
       if (VALID_CACHE_TTL.has(rttl["coordinator"])) newTTL.coordinator = rttl["coordinator"];
@@ -42708,11 +35948,11 @@ function parseSettingsFile_fromParsed(parsed) {
       sparse.importanceAtIngest = rawModels["importanceAtIngest"];
     if (typeof rawModels["ingestSimilarityGate"] === "number" && rawModels["ingestSimilarityGate"] >= 0 && rawModels["ingestSimilarityGate"] <= 1)
       sparse.ingestSimilarityGate = rawModels["ingestSimilarityGate"];
-    if (isPlainObject7(rawModels["shortOutputThreshold"])) {
+    if (isPlainObject6(rawModels["shortOutputThreshold"])) {
       const sot = rawModels["shortOutputThreshold"];
       const sotMerged = {};
       for (const taskType of Object.keys(sot)) {
-        if (!isPlainObject7(sot[taskType])) continue;
+        if (!isPlainObject6(sot[taskType])) continue;
         const innerRaw = sot[taskType];
         const innerMerged = {};
         for (const tier of Object.keys(innerRaw)) {
@@ -42722,7 +35962,7 @@ function parseSettingsFile_fromParsed(parsed) {
       }
       sparse.shortOutputThreshold = sotMerged;
     }
-    if (isPlainObject7(rawModels["knowledge"])) {
+    if (isPlainObject6(rawModels["knowledge"])) {
       const rawK = rawModels["knowledge"];
       const sparseK = {};
       if (typeof rawK["maxDepth"] === "number" && rawK["maxDepth"] >= 1)
@@ -42743,14 +35983,14 @@ function parseSettingsFile_fromParsed(parsed) {
     }
     out.models = sparse;
   }
-  if (isPlainObject7(parsed["security"])) {
+  if (isPlainObject6(parsed["security"])) {
     const rawSec = parsed["security"];
     const sparseSec = {};
     const bpp = rawSec["bypass_permissions_policy"];
     if (bpp === "deny" || bpp === "audit" || bpp === "allow") sparseSec.bypass_permissions_policy = bpp;
     out.security = sparseSec;
   }
-  if (isPlainObject7(parsed["secrets_policy"])) {
+  if (isPlainObject6(parsed["secrets_policy"])) {
     const rawSp = parsed["secrets_policy"];
     const sparseSp = {};
     if (Array.isArray(rawSp["env_allowlist"])) sparseSp.env_allowlist = rawSp["env_allowlist"];
@@ -42759,10 +35999,10 @@ function parseSettingsFile_fromParsed(parsed) {
     if (rawSp["fail_mode_telemetry"] === "open" || rawSp["fail_mode_telemetry"] === "closed") sparseSp.fail_mode_telemetry = rawSp["fail_mode_telemetry"];
     out.secrets_policy = sparseSp;
   }
-  if (isPlainObject7(parsed["mcp"])) {
+  if (isPlainObject6(parsed["mcp"])) {
     const rawMcp = parsed["mcp"];
     const sparseMcp = {};
-    if (isPlainObject7(rawMcp["tool_description_hashes"]))
+    if (isPlainObject6(rawMcp["tool_description_hashes"]))
       sparseMcp.tool_description_hashes = rawMcp["tool_description_hashes"];
     if (typeof rawMcp["stdio_available"] === "boolean") sparseMcp.stdio_available = rawMcp["stdio_available"];
     if (typeof rawMcp["http_available"] === "boolean") sparseMcp.http_available = rawMcp["http_available"];
@@ -42770,7 +36010,7 @@ function parseSettingsFile_fromParsed(parsed) {
       sparseMcp.bridge_package = rawMcp["bridge_package"];
     out.mcp = sparseMcp;
   }
-  if (isPlainObject7(parsed["capability"])) {
+  if (isPlainObject6(parsed["capability"])) {
     const rawCapability = parsed["capability"];
     const known2 = {};
     for (const k of Object.keys(rawCapability)) {
@@ -42788,7 +36028,7 @@ function parseSettingsFile_fromParsed(parsed) {
     out.loop_cap = Math.min(256, Math.max(1, parsed["loop_cap"]));
   if (typeof parsed["codex_cap"] === "number")
     out.codex_cap = Math.min(10, Math.max(1, parsed["codex_cap"]));
-  if (isPlainObject7(parsed["defaults"])) {
+  if (isPlainObject6(parsed["defaults"])) {
     const rawDefaults = parsed["defaults"];
     const sparseDefaults = {};
     for (const k of Object.keys(rawDefaults)) {
@@ -42826,28 +36066,28 @@ function isValidInitiativeId(id) {
   return true;
 }
 function isContainedIn(candidatePath, baseDir) {
-  const resolved = path71.resolve(candidatePath);
-  const resolvedBase = path71.resolve(baseDir);
-  return resolved.startsWith(resolvedBase + path71.sep);
+  const resolved = path62.resolve(candidatePath);
+  const resolvedBase = path62.resolve(baseDir);
+  return resolved.startsWith(resolvedBase + path62.sep);
 }
 function initiativeIsWorkspaceScoped(workspaceRoot, id) {
   try {
     if (!isValidInitiativeId(id)) return false;
-    const registryPath = path71.join(
+    const registryPath = path62.join(
       workspaceRoot,
       ".guild",
       "indexes",
       "initiatives-registry.yaml"
     );
-    if (fs61.existsSync(registryPath)) {
+    if (fs52.existsSync(registryPath)) {
       try {
-        const raw = fs61.readFileSync(registryPath, "utf8");
+        const raw = fs52.readFileSync(registryPath, "utf8");
         const parsed = yaml4.load(raw);
-        if (isPlainObject7(parsed)) {
+        if (isPlainObject6(parsed)) {
           const list = parsed["initiatives"];
           if (Array.isArray(list)) {
             for (const entry of list) {
-              if (!isPlainObject7(entry)) continue;
+              if (!isPlainObject6(entry)) continue;
               const rec = entry;
               if (rec["id"] === id) {
                 return rec["scope"] === "workspace";
@@ -42859,37 +36099,37 @@ function initiativeIsWorkspaceScoped(workspaceRoot, id) {
         return false;
       }
     }
-    const initiativesBase = path71.join(workspaceRoot, ".guild", "initiatives");
-    const activePath = path71.join(
+    const initiativesBase = path62.join(workspaceRoot, ".guild", "initiatives");
+    const activePath = path62.join(
       initiativesBase,
       "active",
       id,
       "initiative.yaml"
     );
-    const archivedPath = path71.join(
+    const archivedPath = path62.join(
       initiativesBase,
       "archived",
       id,
       "initiative.yaml"
     );
-    const activeBase = path71.join(initiativesBase, "active");
-    const archivedBase = path71.join(initiativesBase, "archived");
+    const activeBase = path62.join(initiativesBase, "active");
+    const archivedBase = path62.join(initiativesBase, "archived");
     if (!isContainedIn(activePath, activeBase) && !isContainedIn(archivedPath, archivedBase)) {
       return false;
     }
     let yamlPath = null;
-    if (isContainedIn(activePath, activeBase) && fs61.existsSync(activePath)) {
+    if (isContainedIn(activePath, activeBase) && fs52.existsSync(activePath)) {
       yamlPath = activePath;
-    } else if (isContainedIn(archivedPath, archivedBase) && fs61.existsSync(archivedPath)) {
+    } else if (isContainedIn(archivedPath, archivedBase) && fs52.existsSync(archivedPath)) {
       yamlPath = archivedPath;
     }
     if (yamlPath !== null) {
       try {
-        const raw = fs61.readFileSync(yamlPath, "utf8");
+        const raw = fs52.readFileSync(yamlPath, "utf8");
         const parsed = yaml4.load(raw);
-        if (isPlainObject7(parsed)) {
+        if (isPlainObject6(parsed)) {
           const doc = parsed["initiative"];
-          if (isPlainObject7(doc)) {
+          if (isPlainObject6(doc)) {
             return doc["scope"] === "workspace";
           }
         }
@@ -42916,8 +36156,8 @@ function resolveSettings2(opts) {
   let wsSettings = {};
   let wsLocalSettings = {};
   if (ws !== null) {
-    const wsGuildDir = path71.join(ws.rootDir, ".guild");
-    const rawWsSettings = parseSettingsFile(path71.join(wsGuildDir, "settings.json"));
+    const wsGuildDir = path62.join(ws.rootDir, ".guild");
+    const rawWsSettings = parseSettingsFile(path62.join(wsGuildDir, "settings.json"));
     const wsInheritable = {};
     for (const [k, v] of Object.entries(rawWsSettings)) {
       const key = k;
@@ -42953,8 +36193,8 @@ function resolveSettings2(opts) {
     } catch {
     }
   }
-  const projectGuildDir = path71.join(cwd, ".guild");
-  const projectSettings = parseSettingsFile(path71.join(projectGuildDir, "settings.json"));
+  const projectGuildDir = path62.join(cwd, ".guild");
+  const projectSettings = parseSettingsFile(path62.join(projectGuildDir, "settings.json"));
   for (const key of Object.keys(projectSettings)) {
     if (key === "workspace") {
       sources["workspace.mode"] = "project";
@@ -43084,14 +36324,14 @@ function resolveSettings2(opts) {
   }
   return { config: assembled, sources };
 }
-var fs61, path71, yaml4, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS, RESOLVER_TIER1_KEYS, VALID_CAPABILITY_KEYS;
+var fs52, path62, yaml4, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS, RESOLVER_TIER1_KEYS, VALID_CAPABILITY_KEYS;
 var init_settings_reader = __esm({
   "src/domains/config/settings-reader.ts"() {
-    fs61 = __toESM(require("fs"));
-    path71 = __toESM(require("path"));
-    init_adapters();
-    init_adapters();
-    init_adapters();
+    fs52 = __toESM(require("fs"));
+    path62 = __toESM(require("path"));
+    init_host_registry_schema();
+    init_host_id_namespace();
+    init_host_profiles_validate();
     init_security();
     init_config_defaults();
     init_kernel();
@@ -43184,7 +36424,7 @@ __export(settings_resolver_exports, {
   RESOLVER_TIER1_KEYS: () => RESOLVER_TIER1_KEYS,
   deepMerge: () => deepMerge,
   initiativeIsWorkspaceScoped: () => initiativeIsWorkspaceScoped,
-  isPlainObject: () => isPlainObject7,
+  isPlainObject: () => isPlainObject6,
   resolveSettings: () => resolveSettings,
   rigorProfile: () => rigorProfile
 });
@@ -43195,9 +36435,9 @@ function resolveSettings(opts) {
     const { cwd, flags = {} } = opts;
     const assembled = result.config;
     const _traceRunId = process.env["GUILD_RUN_ID"] ?? "";
-    const _traceRunDir = _traceRunId && cwd ? path72.join(cwd, ".guild", "runs", _traceRunId) : void 0;
+    const _traceRunDir = _traceRunId && cwd ? path63.join(cwd, ".guild", "runs", _traceRunId) : void 0;
     if (_traceRunDir) {
-      const _fingerprint = crypto15.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
+      const _fingerprint = crypto13.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
       const sources = result.sources;
       emitTraceEvent(
         makeConfigResolutionEvent({
@@ -43224,11 +36464,11 @@ function resolveSettings(opts) {
   }
   return result;
 }
-var path72, crypto15;
+var path63, crypto13;
 var init_settings_resolver = __esm({
   "src/domains/config/settings-resolver.ts"() {
-    path72 = __toESM(require("path"));
-    crypto15 = __toESM(require("crypto"));
+    path63 = __toESM(require("path"));
+    crypto13 = __toESM(require("crypto"));
     init_settings_reader();
     init_settings_reader();
     init_telemetry();
@@ -43236,18 +36476,5485 @@ var init_settings_resolver = __esm({
   }
 });
 
+// src/domains/config/tier-model.ts
+function normalizeTierValue(v) {
+  if (typeof v === "string") {
+    const t = v.trim();
+    return t ? { model: t } : { model: null };
+  }
+  if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+    const o = v;
+    if (typeof o["model"] === "string" && o["model"].trim()) {
+      const out = { model: o["model"].trim() };
+      if (typeof o["effort"] === "string") out.effort = o["effort"];
+      if (typeof o["reasoning"] === "string") out.reasoning = o["reasoning"];
+      if (typeof o["thinking"] === "string") out.thinking = o["thinking"];
+      if (typeof o["verbosity"] === "string") out.verbosity = o["verbosity"];
+      return out;
+    }
+  }
+  return { model: null };
+}
+function resolveTierModel(tiers, tier, host) {
+  if (typeof tiers !== "object" || tiers === null || Array.isArray(tiers)) {
+    return { model: null };
+  }
+  const entry = tiers[tier];
+  if (entry === null || entry === void 0) return { model: null };
+  if (typeof entry === "string") return normalizeTierValue(entry);
+  if (typeof entry !== "object" || Array.isArray(entry)) return { model: null };
+  const hostMap = entry;
+  const canonical = normalizeHostId(host);
+  if (canonical && canonical in hostMap) return normalizeTierValue(hostMap[canonical]);
+  return normalizeTierValue(hostMap[host]);
+}
+var init_tier_model = __esm({
+  "src/domains/config/tier-model.ts"() {
+    init_host_id_namespace();
+  }
+});
+
+// src/domains/config/catalog-cache.ts
+function modelCatalogCacheDir(workspaceRoot) {
+  return modelCatalogCacheHome(workspaceRoot);
+}
+function legacyModelCatalogCacheDir(workspaceRoot) {
+  return path64.join(workspaceRoot, ...MODEL_CATALOG_CACHE_REL_SEGMENTS);
+}
+function isModelCatalogCachePath(rel2) {
+  const norm = rel2.split(path64.sep).join("/");
+  return norm === MODEL_CATALOG_CACHE_REL || norm.startsWith(`${MODEL_CATALOG_CACHE_REL}/`);
+}
+function needsQuote(value) {
+  if (value.length === 0) return true;
+  if (YAML_KEYWORD.test(value) || YAML_NUMBER.test(value) || YAML_SEXAGESIMAL.test(value)) return true;
+  if (/^[\s\-?:,[\]{}#&*!|>'"%@`]/.test(value)) return true;
+  if (/\s$/.test(value)) return true;
+  if (value.includes(": ") || value.endsWith(":")) return true;
+  if (value.includes(" #")) return true;
+  if (/[\n\t\x00-\x1f\x7f-\x9f\u00a0\u2028\u2029]/.test(value)) return true;
+  return false;
+}
+function yamlScalar2(value) {
+  if (!needsQuote(value)) return value;
+  return `'${value.replace(/'/g, "''")}'`;
+}
+function canonicalYamlFlat(map) {
+  const keys = Object.keys(map).sort();
+  return keys.map((k) => `${k}: ${yamlScalar2(map[k])}
+`).join("");
+}
+function sha256Hex2(text) {
+  return crypto14.createHash("sha256").update(text, "utf8").digest("hex");
+}
+function runScopeFor(input) {
+  if (orgIsUnknown(input.org_fingerprint ?? void 0)) return input.run_id;
+  return "shared";
+}
+function orgIsUnknown(org) {
+  return org == null || org === "" || org === "unknown";
+}
+function isReusableCacheKey(key) {
+  return MINTED_KEYS.has(key) && key.kind === "reusable";
+}
+function isRunLocalCacheKey(key) {
+  return MINTED_KEYS.has(key) && key.kind === "run_local";
+}
+function assertMintedKey(key) {
+  if (key == null || typeof key !== "object" || !MINTED_KEYS.has(key)) {
+    throw new Error(
+      "catalog-cache: not a minted CatalogCacheKey \u2014 keys are constructed ONLY by createCacheKey (T4-R2-002); raw strings, structural clones, and casts are rejected"
+    );
+  }
+}
+function snapshotIdentity(identity) {
+  const snap = {};
+  for (const component of CACHE_KEY_COMPONENTS) {
+    if (component === "run_scope") continue;
+    const desc = Object.getOwnPropertyDescriptor(identity, component);
+    if (desc !== void 0 && (desc.get !== void 0 || desc.set !== void 0)) {
+      throw new UnknownOrgQuarantineViolation(
+        `identity component ${JSON.stringify(component)} is accessor-backed \u2014 a cache identity must be plain data so classification and hashing cannot observe different values`
+      );
+    }
+    const value = identity[component];
+    if (value == null || value === "") {
+      snap[component] = "unknown";
+      continue;
+    }
+    if (typeof value !== "string") {
+      throw new UnknownOrgQuarantineViolation(
+        `identity component ${JSON.stringify(component)} must be a plain string`
+      );
+    }
+    snap[component] = value;
+  }
+  return Object.freeze(snap);
+}
+function hashKeyTuple(snapshot, runScope) {
+  const hashed = { v: MODEL_CATALOG_SCHEMA_VERSION };
+  for (const component of CACHE_KEY_COMPONENTS) {
+    hashed[component] = component === "run_scope" ? runScope : snapshot[component];
+  }
+  return sha256Hex2(canonicalYamlFlat(hashed));
+}
+function createCacheKey(identity, runId) {
+  for (const smuggled of NON_IDENTITY_KEYS) {
+    const value = identity[smuggled];
+    if (value != null && value !== "") {
+      throw new UnknownOrgQuarantineViolation(
+        `${JSON.stringify(smuggled)} is not an identity component \u2014 run_scope is derived internally (literal \`shared\` for a known org; the run id under quarantine) and can never be caller-supplied`
+      );
+    }
+  }
+  const snapshot = snapshotIdentity(identity);
+  if (snapshot.org_fingerprint === "unknown") {
+    if (runId == null || runId === "") {
+      throw new UnknownOrgQuarantineViolation("an unknown-org identity requires a non-empty run_id");
+    }
+    const key2 = Object.freeze({
+      kind: "run_local",
+      hash: hashKeyTuple(snapshot, runId),
+      run_scope: runId,
+      [CATALOG_CACHE_KEY_BRAND]: true
+    });
+    MINTED_KEYS.add(key2);
+    return key2;
+  }
+  const key = Object.freeze({
+    kind: "reusable",
+    hash: hashKeyTuple(snapshot, "shared"),
+    run_scope: "shared",
+    [CATALOG_CACHE_KEY_BRAND]: true
+  });
+  MINTED_KEYS.add(key);
+  return key;
+}
+function createStore(rootDir, opts) {
+  return rootDir ? new FileStore(rootDir, opts) : new MemoryStore();
+}
+function stampScope(key, snapshot) {
+  const meta2 = snapshot.cache_meta;
+  return { ...snapshot, cache_meta: { ...meta2 ?? {}, run_scope: key.run_scope } };
+}
+function publishSnapshot(store, key, snapshot) {
+  assertMintedKey(key);
+  return store.casPublish(key.hash, stampScope(key, snapshot));
+}
+function readSnapshot(store, key) {
+  assertMintedKey(key);
+  return store.read(key.hash);
+}
+function nextGeneration(store, key) {
+  assertMintedKey(key);
+  const current = store.read(key.hash);
+  return (current?.generation ?? 0) + 1;
+}
+function singleflight(store, key, discoverers) {
+  assertMintedKey(key);
+  if (discoverers.length === 0) return [];
+  const existing = store.read(key.hash);
+  if (existing) return discoverers.map(() => existing);
+  if (!store.tryLock(key.hash)) {
+    const degraded = degradedRead(store, key.hash);
+    return discoverers.map(() => degraded);
+  }
+  try {
+    const recheck = store.read(key.hash);
+    if (recheck) return discoverers.map(() => recheck);
+    const discovered = discoverers[0]();
+    store.casPublish(key.hash, stampScope(key, discovered));
+    const shared = store.read(key.hash) ?? discovered;
+    return discoverers.map(() => shared);
+  } finally {
+    store.unlock(key.hash);
+  }
+}
+async function singleflightDiscover(store, key, discover, opts = {}) {
+  assertMintedKey(key);
+  const hash = key.hash;
+  const lockWaitMs = opts.lockWaitMs ?? UNCACHED_DISCOVERY_BUDGET_MS;
+  const pollIntervalMs = opts.pollIntervalMs ?? 25;
+  const isFresh = opts.isFresh ?? (() => true);
+  const now = opts.now ?? Date.now;
+  const sleep = opts.sleep ?? defaultSleep;
+  const fresh = () => {
+    const snap = store.read(hash);
+    return snap && isFresh(snap) ? snap : null;
+  };
+  const cached = fresh();
+  if (cached) return { snapshot: cached, role: "cached", discovery_ran: false };
+  const deadline = now() + lockWaitMs;
+  let locked = store.tryLock(hash);
+  while (!locked) {
+    const published = fresh();
+    if (published) return { snapshot: published, role: "coalesced", discovery_ran: false };
+    if (now() >= deadline) return { snapshot: degradedRead(store, hash), role: "degraded", discovery_ran: false };
+    await sleep(pollIntervalMs);
+    locked = store.tryLock(hash);
+  }
+  try {
+    const published = fresh();
+    if (published) return { snapshot: published, role: "coalesced", discovery_ran: false };
+    const discovered = await discover();
+    const current = store.read(hash);
+    const snapshot = stampScope(key, {
+      ...discovered,
+      generation: (current?.generation ?? 0) + 1
+    });
+    store.casPublish(hash, snapshot);
+    const shared = store.read(hash) ?? snapshot;
+    return { snapshot: shared, role: "winner", discovery_ran: true };
+  } finally {
+    store.unlock(hash);
+  }
+}
+function degradedRead(store, hash) {
+  const cached = store.read(hash);
+  if (cached) return { ...cached, degraded: true, probe_issued: false };
+  return { degraded: true, probe_issued: false, evidence_state: "unknown" };
+}
+function readUnderLockTimeout(store, key) {
+  assertMintedKey(key);
+  return degradedRead(store, key.hash);
+}
+function isSnapshotStale(snapshot, nowIso) {
+  const at = snapshot.discovery?.discovered_at;
+  if (!at) return true;
+  const discoveredMs = Date.parse(at);
+  const nowMs = Date.parse(nowIso);
+  if (!Number.isFinite(discoveredMs) || !Number.isFinite(nowMs)) return true;
+  const ttl = (snapshot.discovery?.ttl_seconds ?? DEFAULT_CATALOG_TTL_SECONDS) * 1e3;
+  return nowMs - discoveredMs > ttl;
+}
+function invalidateKey(store, key) {
+  assertMintedKey(key);
+  store.remove(key.hash);
+}
+function purgeRunLocalEntries(store, runId) {
+  let purged = 0;
+  for (const key of store.listKeys()) {
+    const snap = store.read(key);
+    const scope = snap?.cache_meta?.run_scope;
+    if (scope === runId) {
+      store.remove(key);
+      purged += 1;
+    }
+  }
+  return purged;
+}
+var crypto14, fs53, path64, MODEL_CATALOG_SCHEMA_VERSION, DEFAULT_CATALOG_TTL_SECONDS, UNCACHED_DISCOVERY_BUDGET_MS, CACHED_INSPECTION_BUDGET_MS, MODEL_CATALOG_CACHE_DIRNAME, MODEL_CATALOG_CACHE_REL_SEGMENTS, MODEL_CATALOG_CACHE_REL, YAML_KEYWORD, YAML_NUMBER, YAML_SEXAGESIMAL, CACHE_KEY_COMPONENTS, UnknownOrgQuarantineViolation, CATALOG_CACHE_KEY_BRAND, MINTED_KEYS, NON_IDENTITY_KEYS, MemoryStore, tmpSequence, SAFE_KEY, FileStore, defaultSleep;
+var init_catalog_cache = __esm({
+  "src/domains/config/catalog-cache.ts"() {
+    crypto14 = __toESM(require("crypto"));
+    fs53 = __toESM(require("fs"));
+    path64 = __toESM(require("path"));
+    init_state();
+    MODEL_CATALOG_SCHEMA_VERSION = "guild.model_catalog.v1";
+    DEFAULT_CATALOG_TTL_SECONDS = 600;
+    UNCACHED_DISCOVERY_BUDGET_MS = 3e3;
+    CACHED_INSPECTION_BUDGET_MS = 500;
+    MODEL_CATALOG_CACHE_DIRNAME = "model-catalog";
+    MODEL_CATALOG_CACHE_REL_SEGMENTS = Object.freeze([".guild", "indexes", MODEL_CATALOG_CACHE_DIRNAME]);
+    MODEL_CATALOG_CACHE_REL = MODEL_CATALOG_CACHE_REL_SEGMENTS.join("/");
+    YAML_KEYWORD = /^(?:null|Null|NULL|~|true|True|TRUE|false|False|FALSE|yes|Yes|YES|no|No|NO|on|On|ON|off|Off|OFF)$/;
+    YAML_NUMBER = /^[-+]?(?:0b[0-1_]+|0o[0-7_]+|0x[0-9a-fA-F_]+|[0-9][0-9_]*(?:\.[0-9_]*)?(?:[eE][-+]?[0-9]+)?|\.[0-9_]+(?:[eE][-+]?[0-9]+)?|\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN))$/;
+    YAML_SEXAGESIMAL = /^[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+(?:\.[0-9_]*)?$/;
+    CACHE_KEY_COMPONENTS = Object.freeze([
+      "target_id",
+      "family",
+      "surface",
+      "provider_kind",
+      "auth_mode",
+      "account_fingerprint",
+      "endpoint_fingerprint",
+      "org_fingerprint",
+      "tool_version",
+      "adapter_id",
+      "adapter_version",
+      "run_scope"
+    ]);
+    UnknownOrgQuarantineViolation = class extends Error {
+      constructor(detail) {
+        super(
+          `catalog-cache: unknown-org quarantine (\xA77) \u2014 ${detail}. An unknown org_fingerprint must never participate in a reusable cache identity; supply run_id so the key is run-local.`
+        );
+        this.name = "UnknownOrgQuarantineViolation";
+      }
+    };
+    CATALOG_CACHE_KEY_BRAND = /* @__PURE__ */ Symbol("guild.catalog-cache.key");
+    MINTED_KEYS = /* @__PURE__ */ new WeakSet();
+    NON_IDENTITY_KEYS = ["run_scope", "run_id", "v"];
+    MemoryStore = class {
+      kind = "memory";
+      entries = /* @__PURE__ */ new Map();
+      locked = /* @__PURE__ */ new Set();
+      read(key) {
+        return this.entries.get(key) ?? null;
+      }
+      casPublish(key, snapshot) {
+        if (typeof snapshot?.generation !== "number" || !Number.isFinite(snapshot.generation)) {
+          return { published: false, reason: "invalid_snapshot" };
+        }
+        const current = this.entries.get(key);
+        if (current && current.generation >= snapshot.generation) {
+          return { published: false, reason: "stale_writer" };
+        }
+        this.entries.set(key, snapshot);
+        return { published: true };
+      }
+      remove(key) {
+        this.entries.delete(key);
+      }
+      listKeys() {
+        return [...this.entries.keys()];
+      }
+      tryLock(key) {
+        if (this.locked.has(key)) return false;
+        this.locked.add(key);
+        return true;
+      }
+      unlock(key) {
+        this.locked.delete(key);
+      }
+    };
+    tmpSequence = 0;
+    SAFE_KEY = /^[A-Za-z0-9._-]+$/;
+    FileStore = class {
+      constructor(rootDir, opts = {}) {
+        this.rootDir = rootDir;
+        this.lockStealAgeMs = opts.lockStealAgeMs ?? 3e4;
+        this.now = opts.now ?? Date.now;
+        fs53.mkdirSync(rootDir, { recursive: true });
+      }
+      rootDir;
+      kind = "file";
+      lockStealAgeMs;
+      now;
+      /** Keys whose cross-process lock THIS instance currently holds. */
+      held = /* @__PURE__ */ new Set();
+      entryPath(key) {
+        if (!SAFE_KEY.test(key)) throw new Error(`catalog-cache: unsafe cache key ${JSON.stringify(key)}`);
+        return path64.join(this.rootDir, `${key}.json`);
+      }
+      lockPath(key) {
+        return `${this.entryPath(key)}.lock`;
+      }
+      tryLock(key) {
+        if (this.held.has(key)) return false;
+        const lock = this.lockPath(key);
+        try {
+          fs53.mkdirSync(lock);
+          this.held.add(key);
+          return true;
+        } catch {
+          try {
+            const age = this.now() - fs53.statSync(lock).mtimeMs;
+            if (age > this.lockStealAgeMs) {
+              fs53.rmdirSync(lock);
+              fs53.mkdirSync(lock);
+              this.held.add(key);
+              return true;
+            }
+          } catch {
+            try {
+              fs53.mkdirSync(lock);
+              this.held.add(key);
+              return true;
+            } catch {
+              return false;
+            }
+          }
+          return false;
+        }
+      }
+      unlock(key) {
+        if (!this.held.has(key)) return;
+        this.held.delete(key);
+        try {
+          fs53.rmdirSync(this.lockPath(key));
+        } catch {
+        }
+      }
+      read(key) {
+        try {
+          const raw = fs53.readFileSync(this.entryPath(key), "utf8");
+          const parsed = JSON.parse(raw);
+          if (typeof parsed?.generation !== "number") return null;
+          return parsed;
+        } catch {
+          return null;
+        }
+      }
+      casPublish(key, snapshot) {
+        if (typeof snapshot?.generation !== "number" || !Number.isFinite(snapshot.generation)) {
+          return { published: false, reason: "invalid_snapshot" };
+        }
+        const alreadyHeld = this.held.has(key);
+        if (!alreadyHeld && !this.tryLock(key)) return { published: false, reason: "lock_timeout" };
+        try {
+          const current = this.read(key);
+          if (current && current.generation >= snapshot.generation) {
+            return { published: false, reason: "stale_writer" };
+          }
+          tmpSequence += 1;
+          const tmp = path64.join(this.rootDir, `.tmp-${process.pid}-${tmpSequence}-${key}`);
+          fs53.writeFileSync(tmp, `${JSON.stringify(snapshot, null, 2)}
+`, "utf8");
+          fs53.renameSync(tmp, this.entryPath(key));
+          return { published: true };
+        } finally {
+          if (!alreadyHeld) this.unlock(key);
+        }
+      }
+      remove(key) {
+        try {
+          fs53.rmSync(this.entryPath(key), { force: true });
+        } catch {
+        }
+      }
+      listKeys() {
+        try {
+          return fs53.readdirSync(this.rootDir).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -".json".length));
+        } catch {
+          return [];
+        }
+      }
+    };
+    defaultSleep = (ms) => new Promise((resolve33) => setTimeout(resolve33, ms));
+  }
+});
+
+// src/domains/config/compatibility-usage.ts
+function isCanonicalRelPath(v) {
+  if (v.length === 0 || v.length > MAX_SCALAR_LEN) return false;
+  if (CONTROL_CHARS2.test(v)) return false;
+  if (v.includes("\\")) return false;
+  if (v.startsWith("/")) return false;
+  if (v.includes("//")) return false;
+  const segs = v.split("/");
+  return segs.every((seg) => seg !== "" && seg !== "." && seg !== "..");
+}
+function isBoundedStr(v) {
+  return typeof v === "string" && v.length > 0 && v.length <= MAX_SCALAR_LEN && !CONTROL_CHARS2.test(v);
+}
+function isCanonicalId(v) {
+  return isBoundedStr(v) && SLUG.test(v);
+}
+function readOptions(value, allowedKeys) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  if (import_util.types.isProxy(value)) return null;
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return null;
+  if (Object.getOwnPropertySymbols(value).length > 0) return null;
+  const out = /* @__PURE__ */ Object.create(null);
+  for (const key of Object.getOwnPropertyNames(value)) {
+    if (!allowedKeys.includes(key)) return null;
+    const desc = Object.getOwnPropertyDescriptor(value, key);
+    if (!desc || !("value" in desc)) return null;
+    out[key] = desc.value;
+  }
+  return out;
+}
+function readArray2(value) {
+  if (!Array.isArray(value) || import_util.types.isProxy(value)) return null;
+  const lenDesc = Object.getOwnPropertyDescriptor(value, "length");
+  if (!lenDesc || !("value" in lenDesc) || !isCount(lenDesc.value)) return null;
+  const out = [];
+  for (let i = 0; i < lenDesc.value; i++) {
+    const d = Object.getOwnPropertyDescriptor(value, i);
+    if (!d || !("value" in d)) return null;
+    out.push(d.value);
+  }
+  return out;
+}
+function isCount(v) {
+  return typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+}
+function isPlainDataObject(v) {
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return false;
+  if (import_util.types.isProxy(v)) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+function ownDataProp(o, key) {
+  const desc = Object.getOwnPropertyDescriptor(o, key);
+  if (!desc) return { kind: "absent" };
+  if (!("value" in desc)) return { kind: "accessor" };
+  return { kind: "data", value: desc.value };
+}
+function ownValue(o, key) {
+  const p = ownDataProp(o, key);
+  return p.kind === "data" ? p.value : void 0;
+}
+function parseCompatibilityUsageV1(value) {
+  try {
+    if (!isPlainDataObject(value)) return null;
+    if (Object.getOwnPropertySymbols(value).length > 0) return null;
+    for (const key of Object.getOwnPropertyNames(value)) {
+      if (!COMPATIBILITY_USAGE_KEYS.includes(key)) return null;
+    }
+    if (ownValue(value, "schema_version") !== COMPATIBILITY_USAGE_SCHEMA) return null;
+    const assetKind = ownValue(value, "asset_kind");
+    if (typeof assetKind !== "string" || !ASSET_KIND_SET.has(assetKind)) return null;
+    const assetId = ownValue(value, "asset_id");
+    if (!isCanonicalId(assetId)) return null;
+    const assetPath = ownValue(value, "asset_path");
+    if (!isBoundedStr(assetPath) || !isCanonicalRelPath(assetPath)) return null;
+    const contentHash = ownValue(value, "content_hash");
+    if (!isNonEmptyStr(contentHash) || !SHA256_HEX.test(contentHash)) return null;
+    const reason = ownValue(value, "reason");
+    if (typeof reason !== "string" || !READ_REASON_SET.has(reason)) return null;
+    const resolverMode = ownValue(value, "resolver_mode");
+    if (typeof resolverMode !== "string" || !RESOLVER_MODE_SET.has(resolverMode)) return null;
+    const synthetic = ownValue(value, "synthetic");
+    if (typeof synthetic !== "boolean") return null;
+    const specialistIdRaw = ownValue(value, "specialist_id");
+    let specialistId;
+    if (specialistIdRaw === null) specialistId = null;
+    else if (isCanonicalId(specialistIdRaw)) specialistId = specialistIdRaw;
+    else return null;
+    return Object.freeze({
+      schema_version: COMPATIBILITY_USAGE_SCHEMA,
+      asset_kind: assetKind,
+      asset_id: assetId,
+      asset_path: assetPath,
+      content_hash: contentHash,
+      reason,
+      resolver_mode: resolverMode,
+      synthetic,
+      specialist_id: specialistId
+    });
+  } catch {
+    return null;
+  }
+}
+function isCompatibilityUsageV1(value) {
+  return parseCompatibilityUsageV1(value) !== null;
+}
+function isDependenceRead(record) {
+  if (record.synthetic) return false;
+  return !BENIGN_REASON_SET.has(record.reason);
+}
+function unusableRollup(reason) {
+  return Object.freeze({
+    window_start_release: "",
+    window_end_release: "",
+    by_asset: Object.freeze({}),
+    // NaN, deliberately: an unusable rollup must never read as "zero dependence".
+    // evaluateG5 rejects a non-count and blocks, so this cannot become a false clean.
+    total_dependence_reads: Number.NaN,
+    observed_asset_ids: Object.freeze([]),
+    removable: Object.freeze([]),
+    unreadable: Number.NaN,
+    unusable_reason: reason
+  });
+}
+function rollupCompatibilityUsage(input) {
+  const opts = readOptions(input, ROLLUP_INPUT_KEYS);
+  if (opts === null) return unusableRollup("options object rejected (proxy/accessor/unknown key)");
+  const startRelease = opts["window_start_release"];
+  const endRelease = opts["window_end_release"];
+  if (!isBoundedStr(startRelease) || !isBoundedStr(endRelease)) {
+    return unusableRollup("window release identifiers must be bounded plain strings");
+  }
+  const unreadable = opts["unreadable"];
+  if (!isCount(unreadable)) return unusableRollup("unreadable must be a non-negative safe integer");
+  const knownIds = readArray2(opts["known_asset_ids"]);
+  if (knownIds === null) return unusableRollup("known_asset_ids must be a dense plain array");
+  const seenKnown = /* @__PURE__ */ new Set();
+  for (const id of knownIds) {
+    if (!isCanonicalId(id)) return unusableRollup(`known_asset_ids entry is not a canonical id: ${String(id)}`);
+    if (seenKnown.has(id)) return unusableRollup(`known_asset_ids contains duplicate id: ${id}`);
+    seenKnown.add(id);
+  }
+  const records = readArray2(opts["records"]);
+  if (records === null) return unusableRollup("records must be a dense plain array");
+  const byAsset = {};
+  for (const id of seenKnown) byAsset[id] = 0;
+  const observed = /* @__PURE__ */ new Set();
+  let total = 0;
+  for (const raw of records) {
+    const record = parseCompatibilityUsageV1(raw);
+    if (record === null) return unusableRollup("records contains an entry that is not a valid guild.compatibility_usage.v1");
+    observed.add(record.asset_id);
+    if (!isDependenceRead(record)) continue;
+    byAsset[record.asset_id] = (byAsset[record.asset_id] ?? 0) + 1;
+    total += 1;
+  }
+  const removable = [...seenKnown].filter((id) => (byAsset[id] ?? 0) === 0).sort();
+  return Object.freeze({
+    window_start_release: startRelease,
+    window_end_release: endRelease,
+    by_asset: Object.freeze(byAsset),
+    total_dependence_reads: total,
+    observed_asset_ids: Object.freeze([...observed].sort()),
+    removable: Object.freeze(removable),
+    unreadable
+  });
+}
+function evaluateG5(input) {
+  const blockers = [];
+  const blocked = (reason) => Object.freeze({ passed: false, blockers: Object.freeze([reason]), removable: Object.freeze([]) });
+  const opts = readOptions(input, G5_INPUT_KEYS);
+  if (opts === null) return blocked("G5 input rejected (proxy/accessor/unknown key)");
+  const requiredRaw = readArray2(opts["required_asset_ids"]);
+  if (requiredRaw === null) return blocked("required_asset_ids must be a dense plain array");
+  const required = [];
+  const seenRequired = /* @__PURE__ */ new Set();
+  for (const id of requiredRaw) {
+    if (!isCanonicalId(id)) return blocked(`required_asset_ids entry is not a canonical id: ${String(id)}`);
+    if (seenRequired.has(id)) return blocked(`required_asset_ids contains duplicate id: ${id}`);
+    seenRequired.add(id);
+    required.push(id);
+  }
+  if (required.length === 0) {
+    blockers.push("empty required_asset_ids \u2014 a removal gate over zero assets cannot pass");
+  }
+  const rollupsRaw = readArray2(opts["rollups"]);
+  if (rollupsRaw === null) return blocked("rollups must be a dense plain array");
+  const snapshots = [];
+  for (const raw of rollupsRaw) {
+    const r = readOptions(raw, ROLLUP_KEYS);
+    if (r === null) return blocked("a rollup was rejected (proxy/accessor/unknown key)");
+    const start = r["window_start_release"];
+    const end = r["window_end_release"];
+    if (typeof start !== "string" || typeof end !== "string") {
+      return blocked("a rollup carries a non-string release identifier");
+    }
+    const byAssetRaw = r["by_asset"];
+    const byAsset = readOptionsAsCounts(byAssetRaw);
+    snapshots.push({
+      label: `${start}..${end}`,
+      unreadable: r["unreadable"],
+      total: r["total_dependence_reads"],
+      byAsset,
+      observed: readArray2(r["observed_asset_ids"]),
+      unusable: r["unusable_reason"]
+    });
+  }
+  if (snapshots.length < G5_MIN_CLEAN_RELEASES) {
+    blockers.push(
+      `insufficient window: ${snapshots.length} release(s) of evidence, need >= ${G5_MIN_CLEAN_RELEASES}`
+    );
+  }
+  const labels = snapshots.map((s) => s.label);
+  if (new Set(labels).size !== labels.length) {
+    blockers.push("duplicate release windows \u2014 the same evidence submitted twice is one release, not two");
+  }
+  for (const snap of snapshots) {
+    if (typeof snap.unusable === "string") {
+      blockers.push(`release ${snap.label}: rollup is unusable \u2014 ${snap.unusable}`);
+    }
+    if (!isCount(snap.unreadable)) {
+      blockers.push(`release ${snap.label}: unreadable is not a valid count (${String(snap.unreadable)})`);
+    } else if (snap.unreadable > 0) {
+      blockers.push(
+        `release ${snap.label}: ${snap.unreadable} unreadable record(s) \u2014 a partially-readable journal is not evidence of zero usage`
+      );
+    }
+    if (snap.byAsset === null) {
+      blockers.push(`release ${snap.label}: by_asset is not a plain own-data object`);
+    } else {
+      let derived = 0;
+      for (const [assetId, count] of Object.entries(snap.byAsset)) {
+        if (!isCount(count)) {
+          blockers.push(`release ${snap.label}: by_asset[${assetId}] is not a valid count (${String(count)})`);
+          continue;
+        }
+        derived += count;
+      }
+      if (!isCount(snap.total)) {
+        blockers.push(
+          `release ${snap.label}: total_dependence_reads is not a valid count (${String(snap.total)})`
+        );
+      } else if (snap.total !== derived) {
+        blockers.push(
+          `release ${snap.label}: total_dependence_reads ${snap.total} disagrees with by_asset sum ${derived}`
+        );
+      }
+      if (derived > 0) blockers.push(`release ${snap.label}: ${derived} dependence read(s)`);
+    }
+    if (snap.observed === null) {
+      blockers.push(`release ${snap.label}: observed_asset_ids is not a dense plain array`);
+    }
+  }
+  const observed = /* @__PURE__ */ new Set();
+  for (const snap of snapshots) {
+    for (const id of snap.observed ?? []) if (typeof id === "string") observed.add(id);
+  }
+  const uninstrumented = required.filter((id) => !observed.has(id)).sort();
+  if (uninstrumented.length > 0) {
+    blockers.push(
+      `${uninstrumented.length} required asset(s) never instrumented (a false zero): ${uninstrumented.join(", ")}`
+    );
+  }
+  const passed = blockers.length === 0;
+  const removable = passed ? [...required].sort() : [];
+  return Object.freeze({
+    passed,
+    blockers: Object.freeze(blockers),
+    removable: Object.freeze(removable)
+  });
+}
+function readOptionsAsCounts(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  if (import_util.types.isProxy(value)) return null;
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return null;
+  if (Object.getOwnPropertySymbols(value).length > 0) return null;
+  const out = /* @__PURE__ */ Object.create(null);
+  for (const key of Object.getOwnPropertyNames(value)) {
+    const desc = Object.getOwnPropertyDescriptor(value, key);
+    if (!desc || !("value" in desc)) return null;
+    out[key] = desc.value;
+  }
+  return out;
+}
+var import_util, COMPATIBILITY_USAGE_SCHEMA, COMPATIBILITY_USAGE_EVENT_NAME, COMPATIBILITY_USAGE_OUTCOME_TYPE, COMPATIBILITY_USAGE_DISPOSITION, COMPATIBILITY_ASSET_KINDS, COMPATIBILITY_READ_REASONS, BENIGN_COMPATIBILITY_READ_REASONS, DEPENDENCE_COMPATIBILITY_READ_REASONS, BENIGN_REASON_SET, READ_REASON_SET, ASSET_KIND_SET, RESOLVER_MODE_SET, SHA256_HEX, MAX_SCALAR_LEN, CONTROL_CHARS2, SLUG, isNonEmptyStr, COMPATIBILITY_USAGE_KEYS, ROLLUP_INPUT_KEYS, G5_MIN_CLEAN_RELEASES, G5_INPUT_KEYS, ROLLUP_KEYS;
+var init_compatibility_usage = __esm({
+  "src/domains/config/compatibility-usage.ts"() {
+    import_util = require("util");
+    init_config_defaults();
+    COMPATIBILITY_USAGE_SCHEMA = "guild.compatibility_usage.v1";
+    COMPATIBILITY_USAGE_EVENT_NAME = "task.dispatch";
+    COMPATIBILITY_USAGE_OUTCOME_TYPE = "guild.capability_outcome.v1";
+    COMPATIBILITY_USAGE_DISPOSITION = "degraded";
+    COMPATIBILITY_ASSET_KINDS = Object.freeze([
+      "shipped_template",
+      "shipped_domain_skill"
+    ]);
+    COMPATIBILITY_READ_REASONS = Object.freeze([
+      "no_project_definition",
+      "explicit_legacy_mode",
+      "rollback",
+      "mint_source",
+      "shadow_comparison"
+    ]);
+    BENIGN_COMPATIBILITY_READ_REASONS = Object.freeze(["mint_source", "shadow_comparison"]);
+    DEPENDENCE_COMPATIBILITY_READ_REASONS = Object.freeze(
+      COMPATIBILITY_READ_REASONS.filter(
+        (r) => !BENIGN_COMPATIBILITY_READ_REASONS.includes(r)
+      )
+    );
+    BENIGN_REASON_SET = new Set(BENIGN_COMPATIBILITY_READ_REASONS);
+    READ_REASON_SET = new Set(COMPATIBILITY_READ_REASONS);
+    ASSET_KIND_SET = new Set(COMPATIBILITY_ASSET_KINDS);
+    RESOLVER_MODE_SET = new Set(CAPABILITY_RESOLVER_MODES);
+    SHA256_HEX = /^[0-9a-f]{64}$/;
+    MAX_SCALAR_LEN = 512;
+    CONTROL_CHARS2 = /[\u0000-\u001f\u007f]/;
+    SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+    isNonEmptyStr = (v) => typeof v === "string" && v.length > 0;
+    COMPATIBILITY_USAGE_KEYS = [
+      "schema_version",
+      "asset_kind",
+      "asset_id",
+      "asset_path",
+      "content_hash",
+      "reason",
+      "resolver_mode",
+      "synthetic",
+      "specialist_id"
+    ];
+    ROLLUP_INPUT_KEYS = [
+      "window_start_release",
+      "window_end_release",
+      "records",
+      "known_asset_ids",
+      "unreadable"
+    ];
+    G5_MIN_CLEAN_RELEASES = 2;
+    G5_INPUT_KEYS = ["rollups", "required_asset_ids"];
+    ROLLUP_KEYS = [
+      "window_start_release",
+      "window_end_release",
+      "by_asset",
+      "total_dependence_reads",
+      "observed_asset_ids",
+      "removable",
+      "unreadable",
+      "unusable_reason"
+    ];
+  }
+});
+
+// src/domains/config/resolver-mode.ts
+function describe2(v) {
+  try {
+    if (typeof v === "bigint") return `${v}n`;
+    if (typeof v === "string") return v.length > 120 ? `"${v.slice(0, 117)}..."` : `"${v}"`;
+    if (typeof v === "symbol") return "Symbol()";
+    if (typeof v === "function") return "[function]";
+    if (v === null) return "null";
+    if (typeof v === "object") return Array.isArray(v) ? "[array]" : "[object]";
+    return String(v);
+  } catch {
+    return "[unprintable]";
+  }
+}
+function isCanonicalId2(v) {
+  return typeof v === "string" && v.length > 0 && v.length <= MAX_ID_LEN && !CONTROL_CHARS3.test(v) && CANONICAL_ID.test(v);
+}
+function isCanonicalRelPath2(v) {
+  if (typeof v !== "string" || v.length === 0 || v.length > MAX_SCALAR_LEN2) return false;
+  if (CONTROL_CHARS3.test(v)) return false;
+  if (v.includes("\\")) return false;
+  if (/^[A-Za-z]:/.test(v)) return false;
+  if (v.startsWith("/")) return false;
+  if (v.endsWith("/")) return false;
+  for (const seg of v.split("/")) {
+    if (seg.length === 0) return false;
+    if (seg === "." || seg === "..") return false;
+    if (/[. ]$/.test(seg)) return false;
+  }
+  return true;
+}
+function readOptions2(value, allowedKeys) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  if (import_util2.types.isProxy(value)) return null;
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return null;
+  if (Object.getOwnPropertySymbols(value).length > 0) return null;
+  const out = /* @__PURE__ */ Object.create(null);
+  for (const key of Object.getOwnPropertyNames(value)) {
+    if (!allowedKeys.includes(key)) return null;
+    const desc = Object.getOwnPropertyDescriptor(value, key);
+    if (!desc || !("value" in desc)) return null;
+    out[key] = desc.value;
+  }
+  return out;
+}
+function resolverModePolicy(mode) {
+  if (typeof mode !== "string") return null;
+  return MODE_POLICIES.get(mode) ?? null;
+}
+function resolverModeRank(mode) {
+  if (typeof mode !== "string") return -1;
+  return MODE_RANK.get(mode) ?? -1;
+}
+function isResolverModeFailure(v) {
+  return typeof v === "string" && RESOLVER_MODE_FAILURE_SET.has(v);
+}
+function isCompatibilityReadReason(value) {
+  return COMPATIBILITY_READ_REASONS.indexOf(value) !== -1;
+}
+function classifyCompatibilityRead(request) {
+  const opts = readOptions2(request, ["mode", "intent"]);
+  if (opts === null) {
+    return {
+      status: "refused",
+      failure: "invalid_request",
+      detail: "classification request rejected (proxy/accessor/symbol/unknown key)"
+    };
+  }
+  const policy = resolverModePolicy(opts["mode"]);
+  if (policy === null) {
+    return {
+      status: "refused",
+      failure: "unknown_mode",
+      detail: `not a resolver mode: ${describe2(opts["mode"])}`
+    };
+  }
+  const intent = opts["intent"];
+  if (typeof intent !== "string" || !CAPABILITY_RESOLUTION_INTENTS.includes(intent)) {
+    return {
+      status: "refused",
+      failure: "invalid_request",
+      detail: `not a resolution intent: ${describe2(intent)}`
+    };
+  }
+  const typedIntent = intent;
+  if (!policy.compatibility_available) {
+    return {
+      status: "refused",
+      failure: "compatibility_unavailable_in_mode",
+      detail: `mode ${policy.mode} has no compatibility surface`
+    };
+  }
+  if (!policy.compatibility_intents.includes(typedIntent)) {
+    return {
+      status: "refused",
+      failure: "intent_not_permitted_in_mode",
+      detail: `mode ${policy.mode} does not permit a compatibility read for intent ${typedIntent}`
+    };
+  }
+  if (typedIntent === "mint" && !policy.capability_writes_permitted) {
+    return {
+      status: "refused",
+      failure: "write_not_permitted_in_mode",
+      detail: `mode ${policy.mode} does not permit capability writes, so a "mint" read cannot occur`
+    };
+  }
+  let reason = INTENT_REASON.get(typedIntent);
+  if (reason === void 0) {
+    reason = policy.authority === "legacy" ? "explicit_legacy_mode" : "no_project_definition";
+  }
+  if (!isCompatibilityReadReason(reason)) {
+    return {
+      status: "refused",
+      failure: "invalid_request",
+      detail: `classified reason ${describe2(reason)} is not a guild.compatibility_usage.v1 reason`
+    };
+  }
+  return Object.freeze({
+    status: "classified",
+    reason,
+    counts_as_dependence: !BENIGN_REASONS.has(reason)
+  });
+}
+function unresolved(failure2, detail, ctx) {
+  return Object.freeze({
+    schema_version: RESOLVER_MODE_OUTCOME_SCHEMA,
+    status: "unresolved",
+    mode: ctx?.mode ?? null,
+    kind: ctx?.kind ?? null,
+    capability_id: ctx?.capability_id ?? null,
+    failure: failure2,
+    detail
+  });
+}
+function resolveCapability(request) {
+  const opts = readOptions2(request, RESOLUTION_REQUEST_KEYS);
+  if (opts === null) {
+    return unresolved(
+      "invalid_request",
+      "resolution request rejected (proxy/accessor/symbol/unknown key)"
+    );
+  }
+  const policy = resolverModePolicy(opts["mode"]);
+  if (policy === null) {
+    return unresolved("unknown_mode", `not a resolver mode: ${describe2(opts["mode"])}`);
+  }
+  const mode = policy.mode;
+  const kindRaw = opts["kind"];
+  if (kindRaw !== "agent" && kindRaw !== "skill") {
+    return unresolved("invalid_request", `kind must be "agent" or "skill"`, { mode });
+  }
+  const kind = kindRaw;
+  const capabilityId = opts["capability_id"];
+  if (!isCanonicalId2(capabilityId)) {
+    return unresolved(
+      "invalid_request",
+      `capability_id is not a canonical id: ${describe2(capabilityId)}`,
+      { mode, kind }
+    );
+  }
+  const intentRaw = opts["intent"];
+  if (typeof intentRaw !== "string" || !CAPABILITY_RESOLUTION_INTENTS.includes(intentRaw)) {
+    return unresolved("invalid_request", `not a resolution intent: ${describe2(intentRaw)}`, {
+      mode,
+      kind,
+      capability_id: capabilityId
+    });
+  }
+  const intent = intentRaw;
+  const projectDefRaw = opts["project_definition"];
+  let projectDef;
+  if (projectDefRaw === null) projectDef = null;
+  else if (isCanonicalRelPath2(projectDefRaw)) projectDef = projectDefRaw;
+  else {
+    return unresolved(
+      "invalid_request",
+      `project_definition is not a canonical relative path: ${describe2(projectDefRaw)}`,
+      { mode, kind, capability_id: capabilityId }
+    );
+  }
+  const compatRaw = opts["compatibility_asset"];
+  let compatAsset;
+  if (compatRaw === null) compatAsset = null;
+  else if (isCanonicalRelPath2(compatRaw)) compatAsset = compatRaw;
+  else {
+    return unresolved(
+      "invalid_request",
+      `compatibility_asset is not a canonical relative path: ${describe2(compatRaw)}`,
+      { mode, kind, capability_id: capabilityId }
+    );
+  }
+  const ctx = { mode, kind, capability_id: capabilityId };
+  if (intent === "mint" && !policy.capability_writes_permitted) {
+    return unresolved(
+      "write_not_permitted_in_mode",
+      `mode ${mode} does not permit capability writes, so intent "mint" cannot be served`,
+      ctx
+    );
+  }
+  if (policy.project_resolver_runs && projectDef !== null && intent !== "shadow_compare") {
+    return Object.freeze({
+      schema_version: RESOLVER_MODE_OUTCOME_SCHEMA,
+      status: "resolved",
+      mode,
+      kind,
+      capability_id: capabilityId,
+      source: "project",
+      path: projectDef,
+      authority: policy.authority,
+      // In shadow, the project side may not originate a side effect even when it
+      // has the better answer. That is the phase's whole safety property.
+      side_effects_permitted: policy.project_side_effects_permitted,
+      compatibility_read: null
+    });
+  }
+  if (compatAsset === null) {
+    return unresolved(
+      projectDef === null ? "no_definition_anywhere" : "no_project_definition",
+      projectDef === null ? `no project definition and no compatibility asset for ${kind} "${capabilityId}"` : `mode ${mode} did not consult the project definition for intent "${intent}", and no compatibility asset was supplied`,
+      ctx
+    );
+  }
+  const classification = classifyCompatibilityRead({ mode, intent });
+  if (classification.status === "refused") {
+    return unresolved(classification.failure, classification.detail, ctx);
+  }
+  return Object.freeze({
+    schema_version: RESOLVER_MODE_OUTCOME_SCHEMA,
+    status: "resolved",
+    mode,
+    kind,
+    capability_id: capabilityId,
+    source: "compatibility",
+    path: compatAsset,
+    authority: policy.authority,
+    // CODEX #11: derived from authority ALONE, this returned `true` for a
+    // `shadow_compare` read — a comparison-only answer a caller could act on,
+    // which is exactly the side effect shadow mode exists to withhold. A
+    // comparison never authorizes action, in any mode.
+    side_effects_permitted: intent !== "shadow_compare" && policy.authority === "legacy",
+    compatibility_read: Object.freeze({
+      reason: classification.reason,
+      counts_as_dependence: classification.counts_as_dependence
+    })
+  });
+}
+function rejectedTransition(failure2, detail, from, to) {
+  return Object.freeze({
+    schema_version: RESOLVER_MODE_OUTCOME_SCHEMA,
+    status: "rejected",
+    from,
+    to,
+    failure: failure2,
+    detail
+  });
+}
+function planModeTransition(request) {
+  const opts = readOptions2(request, TRANSITION_KEYS);
+  if (opts === null) {
+    return rejectedTransition(
+      "invalid_request",
+      "transition request rejected (proxy/accessor/symbol/unknown key)",
+      null,
+      null
+    );
+  }
+  const fromPolicy = resolverModePolicy(opts["from"]);
+  if (fromPolicy === null) {
+    return rejectedTransition(
+      "unknown_mode",
+      `"from" is not a resolver mode: ${describe2(opts["from"])}`,
+      null,
+      null
+    );
+  }
+  const toPolicy = resolverModePolicy(opts["to"]);
+  if (toPolicy === null) {
+    return rejectedTransition(
+      "unknown_mode",
+      `"to" is not a resolver mode: ${describe2(opts["to"])}`,
+      fromPolicy.mode,
+      null
+    );
+  }
+  const from = fromPolicy.mode;
+  const to = toPolicy.mode;
+  const reasonRaw = opts["reason"];
+  if (typeof reasonRaw !== "string" || reasonRaw.length === 0 || reasonRaw.length > MAX_SCALAR_LEN2 || CONTROL_CHARS3.test(reasonRaw)) {
+    return rejectedTransition(
+      "invalid_request",
+      "reason must be a non-empty, control-character-free string within bounds",
+      from,
+      to
+    );
+  }
+  const reason = reasonRaw;
+  const allowSkipRaw = opts["allow_skip"];
+  if (allowSkipRaw !== void 0 && typeof allowSkipRaw !== "boolean") {
+    return rejectedTransition("invalid_request", "allow_skip must be a boolean", from, to);
+  }
+  const allowSkip = allowSkipRaw === true;
+  const fromRank = resolverModeRank(from);
+  const toRank = resolverModeRank(to);
+  if (fromRank === toRank) {
+    return rejectedTransition(
+      "transition_is_noop",
+      `already in mode ${from} \u2014 a no-op change must not be recorded as a migration step`,
+      from,
+      to
+    );
+  }
+  const direction = toRank > fromRank ? "advance" : "regress";
+  const rungs = Math.abs(toRank - fromRank);
+  if (direction === "advance" && rungs > 1 && !allowSkip) {
+    return rejectedTransition(
+      "transition_skips_rungs",
+      `${from} \u2192 ${to} skips ${rungs - 1} rung(s); pass allow_skip: true to acknowledge that the skipped phase's evidence will not exist`,
+      from,
+      to
+    );
+  }
+  return Object.freeze({
+    schema_version: RESOLVER_MODE_OUTCOME_SCHEMA,
+    status: "allowed",
+    from,
+    to,
+    direction,
+    rungs,
+    reason
+  });
+}
+var import_util2, RESOLVER_MODE_OUTCOME_SCHEMA, MAX_SCALAR_LEN2, CONTROL_CHARS3, CANONICAL_ID, MAX_ID_LEN, RESOLVER_AUTHORITIES, CAPABILITY_RESOLUTION_INTENTS, MODE_POLICIES, RESOLVER_MODE_POLICIES, MODE_RANK, RESOLVER_MODE_FAILURES, RESOLVER_MODE_FAILURE_SET, INTENT_REASON, BENIGN_REASONS, RESOLUTION_REQUEST_KEYS, MODE_TRANSITION_DIRECTIONS, TRANSITION_KEYS;
+var init_resolver_mode = __esm({
+  "src/domains/config/resolver-mode.ts"() {
+    import_util2 = require("util");
+    init_compatibility_usage();
+    RESOLVER_MODE_OUTCOME_SCHEMA = "guild.resolver_mode_outcome.v1";
+    MAX_SCALAR_LEN2 = 1024;
+    CONTROL_CHARS3 = /[\u0000-\u001f\u007f]/;
+    CANONICAL_ID = /^[a-z0-9][a-z0-9._-]*$/;
+    MAX_ID_LEN = 128;
+    RESOLVER_AUTHORITIES = Object.freeze(["legacy", "project-local"]);
+    CAPABILITY_RESOLUTION_INTENTS = Object.freeze([
+      /** A live lane needs this definition to run. */
+      "dispatch",
+      /** Minting a project-local role FROM a shipped template. The migration WORKING. */
+      "mint",
+      /** The A-side of a shadow comparison. Also the migration working. */
+      "shadow_compare",
+      /** Replaying a historical run record against the compatibility surface. */
+      "replay",
+      /** A deliberate return to the legacy path after a failed adoption. */
+      "rollback"
+    ]);
+    MODE_POLICIES = /* @__PURE__ */ new Map([
+      [
+        "legacy",
+        Object.freeze({
+          mode: "legacy",
+          authority: "legacy",
+          project_resolver_runs: false,
+          capability_writes_permitted: false,
+          project_side_effects_permitted: false,
+          compatibility_available: true,
+          compatibility_intents: Object.freeze([
+            "dispatch",
+            "mint",
+            "replay",
+            "rollback"
+          ]),
+          local_creation_permitted: false,
+          profiles_emitted: false
+        })
+      ],
+      [
+        "observe",
+        Object.freeze({
+          mode: "observe",
+          authority: "legacy",
+          project_resolver_runs: true,
+          // THE defining constraint of observe. D03's advance condition is a
+          // before/after tree hash proving zero live writes; a policy that permitted
+          // writes here would make that condition unprovable by construction.
+          capability_writes_permitted: false,
+          project_side_effects_permitted: false,
+          compatibility_available: true,
+          compatibility_intents: Object.freeze([
+            "dispatch",
+            "mint",
+            "replay",
+            "rollback"
+          ]),
+          local_creation_permitted: false,
+          profiles_emitted: true
+        })
+      ],
+      [
+        "shadow",
+        Object.freeze({
+          mode: "shadow",
+          authority: "legacy",
+          project_resolver_runs: true,
+          // Local creation is a HUMAN authority event, so it is permitted; but the
+          // project-local RESOLVER still may not originate a mint or a dispatch. The
+          // two are deliberately separate flags: collapsing them would either block
+          // the approvals the phase exists to collect, or let the shadow side act.
+          capability_writes_permitted: true,
+          project_side_effects_permitted: false,
+          compatibility_available: true,
+          compatibility_intents: Object.freeze([
+            "dispatch",
+            "mint",
+            "shadow_compare",
+            "replay",
+            "rollback"
+          ]),
+          local_creation_permitted: true,
+          profiles_emitted: true
+        })
+      ],
+      [
+        "project-local",
+        Object.freeze({
+          mode: "project-local",
+          authority: "project-local",
+          project_resolver_runs: true,
+          capability_writes_permitted: true,
+          project_side_effects_permitted: true,
+          compatibility_available: true,
+          // NOT `dispatch`. A live dispatch with no project definition must FAIL
+          // TYPED, not quietly read a shipped template — that silent read is the
+          // exact behaviour the mode exists to end.
+          compatibility_intents: Object.freeze(["replay", "rollback", "mint"]),
+          local_creation_permitted: true,
+          profiles_emitted: true
+        })
+      ],
+      [
+        "strict",
+        Object.freeze({
+          mode: "strict",
+          authority: "project-local",
+          project_resolver_runs: true,
+          capability_writes_permitted: true,
+          project_side_effects_permitted: true,
+          // The end state: the surface is gone. No intent reaches it, including
+          // replay — a strict project that still needs to replay history must step
+          // back down the ladder deliberately, which is a recorded mode change.
+          compatibility_available: false,
+          compatibility_intents: Object.freeze([]),
+          local_creation_permitted: true,
+          profiles_emitted: true
+        })
+      ]
+    ]);
+    RESOLVER_MODE_POLICIES = Object.freeze(
+      // Built from the PRIVATE policy map's own keys, NOT from the mutable exported
+      // ladder — same reasoning as MODE_RANK below (CODEX #8).
+      Object.fromEntries([...MODE_POLICIES].map(([m, p]) => [m, p]))
+    );
+    MODE_RANK = new Map(
+      [...MODE_POLICIES.keys()].map((m, i) => [m, i])
+    );
+    RESOLVER_MODE_FAILURES = Object.freeze([
+      /** The request itself was malformed (proxy, accessor, unknown key, bad scalar). */
+      "invalid_request",
+      /** `mode` is not a member of the ladder. NEVER coerced to the default. */
+      "unknown_mode",
+      /** No project-local definition exists, and the mode does not permit a compatibility read. */
+      "no_project_definition",
+      /** The mode has no compatibility surface at all (strict). */
+      "compatibility_unavailable_in_mode",
+      /** The surface exists, but not for this intent (e.g. `dispatch` under project-local). */
+      "intent_not_permitted_in_mode",
+      /** Neither a project definition nor a compatibility asset was supplied. */
+      "no_definition_anywhere",
+      /** The mode forbids the write this request would require. */
+      "write_not_permitted_in_mode",
+      /** A mode transition that skips rungs without an explicit acknowledgement. */
+      "transition_skips_rungs",
+      /** A downward transition without a recorded reason. */
+      "transition_regresses_without_reason",
+      /** Source and target are the same rung. */
+      "transition_is_noop"
+    ]);
+    RESOLVER_MODE_FAILURE_SET = new Set(RESOLVER_MODE_FAILURES);
+    INTENT_REASON = /* @__PURE__ */ new Map([
+      ["mint", "mint_source"],
+      ["shadow_compare", "shadow_comparison"],
+      ["rollback", "rollback"],
+      ["replay", "explicit_legacy_mode"]
+    ]);
+    BENIGN_REASONS = /* @__PURE__ */ new Set([
+      "mint_source",
+      "shadow_comparison"
+    ]);
+    RESOLUTION_REQUEST_KEYS = [
+      "mode",
+      "kind",
+      "capability_id",
+      "project_definition",
+      "compatibility_asset",
+      "intent"
+    ];
+    MODE_TRANSITION_DIRECTIONS = Object.freeze(["advance", "regress"]);
+    TRANSITION_KEYS = ["from", "to", "reason", "allow_skip"];
+  }
+});
+
+// src/domains/config/compatibility-catalog.ts
+function isCanonicalId3(v) {
+  return typeof v === "string" && v.length > 0 && v.length <= MAX_ID_LEN2 && !CONTROL_CHARS4.test(v) && CANONICAL_ID2.test(v);
+}
+function readOptions3(value, allowedKeys) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  if (import_util3.types.isProxy(value)) return null;
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) return null;
+  if (Object.getOwnPropertySymbols(value).length > 0) return null;
+  const out = /* @__PURE__ */ Object.create(null);
+  for (const key of Object.getOwnPropertyNames(value)) {
+    if (!allowedKeys.includes(key)) return null;
+    const desc = Object.getOwnPropertyDescriptor(value, key);
+    if (!desc || !("value" in desc)) return null;
+    out[key] = desc.value;
+  }
+  return out;
+}
+function readArray3(value) {
+  if (!Array.isArray(value) || import_util3.types.isProxy(value)) return null;
+  const lenDesc = Object.getOwnPropertyDescriptor(value, "length");
+  if (!lenDesc || !("value" in lenDesc) || typeof lenDesc.value !== "number" || !Number.isSafeInteger(lenDesc.value) || lenDesc.value < 0) {
+    return null;
+  }
+  const out = [];
+  for (let i = 0; i < lenDesc.value; i++) {
+    const d = Object.getOwnPropertyDescriptor(value, i);
+    if (!d || !("value" in d)) return null;
+    out.push(d.value);
+  }
+  return out;
+}
+function toCanonicalRelPath(absPath, root) {
+  const rel2 = path65.relative(root, absPath);
+  if (rel2.length === 0 || rel2.startsWith("..") || path65.isAbsolute(rel2)) return null;
+  const posix = rel2.split(path65.sep).join("/");
+  if (posix.length > MAX_SCALAR_LEN3 || CONTROL_CHARS4.test(posix)) return null;
+  for (const seg of posix.split("/")) {
+    if (seg.length === 0 || seg === "." || seg === "..") return null;
+  }
+  return posix;
+}
+function describe3(v) {
+  try {
+    if (typeof v === "bigint") return `${v}n`;
+    if (typeof v === "string") return v.length > 120 ? `"${v.slice(0, 117)}..."` : `"${v}"`;
+    if (typeof v === "symbol") return "Symbol()";
+    if (typeof v === "function") return "[function]";
+    if (v === null) return "null";
+    if (typeof v === "object") return Array.isArray(v) ? "[array]" : "[object]";
+    return String(v);
+  } catch {
+    return "[unprintable]";
+  }
+}
+function emptyCatalog(problem) {
+  return Object.freeze({
+    schema_version: COMPATIBILITY_CATALOG_SCHEMA,
+    entries: Object.freeze([]),
+    template_count: 0,
+    domain_skill_count: 0,
+    census_matches: false,
+    problems: Object.freeze([problem])
+  });
+}
+function buildCompatibilityCatalog(opts) {
+  const o = readOptions3(opts, BUILD_KEYS);
+  if (o === null) {
+    return emptyCatalog("options object rejected (proxy/accessor/symbol/unknown key)");
+  }
+  const pluginRoot = o["pluginRoot"];
+  if (typeof pluginRoot !== "string" || pluginRoot.length === 0 || CONTROL_CHARS4.test(pluginRoot)) {
+    return emptyCatalog("pluginRoot must be a non-empty, control-character-free path");
+  }
+  const deprecationRaw = o["deprecation"] ?? "active";
+  if (typeof deprecationRaw !== "string" || !DEPRECATION_STATE_SET.has(deprecationRaw)) {
+    return emptyCatalog(`not a deprecation state: ${describe3(deprecationRaw)}`);
+  }
+  const deprecation = deprecationRaw;
+  const deprecatedByRaw = o["deprecatedBy"] ?? null;
+  if (deprecatedByRaw !== null && (typeof deprecatedByRaw !== "string" || deprecatedByRaw.length === 0 || deprecatedByRaw.length > MAX_ID_LEN2 || CONTROL_CHARS4.test(deprecatedByRaw))) {
+    return emptyCatalog("deprecatedBy must be null or a bounded, control-character-free token");
+  }
+  if (deprecation !== "active" && deprecatedByRaw === null) {
+    return emptyCatalog(`deprecation "${deprecation}" requires a deprecatedBy decision record`);
+  }
+  const deprecatedBy = deprecatedByRaw;
+  const root = path65.resolve(pluginRoot);
+  const problems = [];
+  const entries = [];
+  const push = (kind, id, abs) => {
+    const rel2 = toCanonicalRelPath(abs, root);
+    if (rel2 === null) {
+      problems.push(`${kind} "${id}": path is not canonical plugin-relative (${abs})`);
+      return;
+    }
+    let bytes;
+    try {
+      const st = fs54.lstatSync(abs);
+      if (st.isSymbolicLink()) {
+        problems.push(`${kind} "${id}": symlink, refusing to catalog`);
+        return;
+      }
+      if (!st.isFile()) {
+        problems.push(`${kind} "${id}": not a regular file`);
+        return;
+      }
+      bytes = fs54.readFileSync(abs);
+    } catch (err) {
+      problems.push(`${kind} "${id}": unreadable (${err.message})`);
+      return;
+    }
+    entries.push(
+      Object.freeze({
+        kind,
+        id,
+        path: rel2,
+        content_hash: crypto15.createHash("sha256").update(bytes).digest("hex"),
+        deprecation,
+        deprecated_by: deprecatedBy
+      })
+    );
+  };
+  const templateDir = path65.join(root, COMPATIBILITY_ASSET_ROOTS.shipped_template);
+  try {
+    for (const e of fs54.readdirSync(templateDir, { withFileTypes: true }).sort(
+      (a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+    )) {
+      if (!e.isFile() || !e.name.endsWith(".md")) continue;
+      const id = e.name.slice(0, -3);
+      if (!isCanonicalId3(id)) {
+        problems.push(`shipped_template "${e.name}": file stem is not a canonical id`);
+        continue;
+      }
+      push("shipped_template", id, path65.join(templateDir, e.name));
+    }
+  } catch (err) {
+    problems.push(`templates/specialists unreadable (${err.message})`);
+  }
+  const skillDir = path65.join(root, COMPATIBILITY_ASSET_ROOTS.shipped_domain_skill);
+  try {
+    for (const e of fs54.readdirSync(skillDir, { withFileTypes: true }).sort(
+      (a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+    )) {
+      if (!e.isDirectory()) continue;
+      if (!isCanonicalId3(e.name)) {
+        problems.push(`shipped_domain_skill "${e.name}": directory name is not a canonical id`);
+        continue;
+      }
+      push("shipped_domain_skill", e.name, path65.join(skillDir, e.name, "SKILL.md"));
+    }
+  } catch (err) {
+    problems.push(`skills/specialists unreadable (${err.message})`);
+  }
+  entries.sort(
+    (a, b) => a.kind !== b.kind ? a.kind < b.kind ? -1 : 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  );
+  const templateCount = entries.filter((e) => e.kind === "shipped_template").length;
+  const skillIds = entries.filter((e) => e.kind === "shipped_domain_skill").map((e) => e.id);
+  const skillCount = skillIds.length;
+  const frozenSkillIds = new Set(SHIPPED_DOMAIN_SKILL_IDS);
+  const missingSkillIds = SHIPPED_DOMAIN_SKILL_IDS.filter((id) => !skillIds.includes(id));
+  const unexpectedSkillIds = skillIds.filter((id) => !frozenSkillIds.has(id));
+  if (missingSkillIds.length > 0) {
+    problems.push(`shipped_domain_skill census missing frozen id(s): ${missingSkillIds.join(", ")}`);
+  }
+  if (unexpectedSkillIds.length > 0) {
+    problems.push(`shipped_domain_skill census has unexpected id(s): ${unexpectedSkillIds.join(", ")}`);
+  }
+  return Object.freeze({
+    schema_version: COMPATIBILITY_CATALOG_SCHEMA,
+    entries: Object.freeze(entries),
+    template_count: templateCount,
+    domain_skill_count: skillCount,
+    census_matches: problems.length === 0 && templateCount === SHIPPED_TEMPLATE_COUNT && skillCount === SHIPPED_DOMAIN_SKILL_COUNT,
+    problems: Object.freeze(problems)
+  });
+}
+function readCatalogEntry(raw) {
+  const e = readOptions3(raw, ENTRY_KEYS);
+  if (e === null) return null;
+  const kind = e["kind"];
+  if (kind !== "shipped_template" && kind !== "shipped_domain_skill") return null;
+  const id = e["id"];
+  if (!isCanonicalId3(id)) return null;
+  const p = e["path"];
+  if (typeof p !== "string" || !isCanonicalCatalogPath(p)) return null;
+  const hash = e["content_hash"];
+  if (typeof hash !== "string" || !SHA256_HEX2.test(hash)) return null;
+  const dep = e["deprecation"];
+  if (typeof dep !== "string" || !DEPRECATION_STATE_SET.has(dep)) return null;
+  const by = e["deprecated_by"];
+  if (by !== null && (typeof by !== "string" || by.length === 0 || by.length > MAX_ID_LEN2 || CONTROL_CHARS4.test(by))) {
+    return null;
+  }
+  if (dep !== "active" && by === null) return null;
+  return Object.freeze({
+    kind,
+    id,
+    path: p,
+    content_hash: hash,
+    deprecation: dep,
+    deprecated_by: by
+  });
+}
+function isCanonicalCatalogPath(v) {
+  if (v.length === 0 || v.length > MAX_SCALAR_LEN3) return false;
+  if (CONTROL_CHARS4.test(v)) return false;
+  if (v.includes("\\")) return false;
+  if (/^[A-Za-z]:/.test(v)) return false;
+  if (v.startsWith("/")) return false;
+  if (v.endsWith("/")) return false;
+  for (const seg of v.split("/")) {
+    if (seg.length === 0) return false;
+    if (seg === "." || seg === "..") return false;
+    if (/[. ]$/.test(seg)) return false;
+  }
+  return true;
+}
+function suggestableAssets(request) {
+  const o = readOptions3(request, SUGGESTABLE_KEYS);
+  if (o === null) {
+    return {
+      status: "refused",
+      failure: "invalid_request",
+      detail: "request rejected (proxy/accessor/symbol/unknown key)"
+    };
+  }
+  const migrated = o["project_migrated"];
+  if (typeof migrated !== "boolean") {
+    return {
+      status: "refused",
+      failure: "invalid_request",
+      // Not defaulted to `false`: a missing flag reading as "not migrated" would
+      // silently re-open the menu on exactly the projects the rule protects.
+      detail: "project_migrated must be an explicit boolean"
+    };
+  }
+  const catalog = o["catalog"];
+  const catalogOpts = readOptions3(catalog, [
+    "schema_version",
+    "entries",
+    "template_count",
+    "domain_skill_count",
+    "census_matches",
+    "problems"
+  ]);
+  if (catalogOpts === null || catalogOpts["schema_version"] !== COMPATIBILITY_CATALOG_SCHEMA) {
+    return { status: "refused", failure: "invalid_request", detail: "catalog is not a guild.compatibility_catalog.v1" };
+  }
+  const rawEntries = readArray3(catalogOpts["entries"]);
+  if (rawEntries === null) {
+    return { status: "refused", failure: "invalid_request", detail: "catalog.entries is not a dense plain array" };
+  }
+  if (migrated) return { status: "ok", entries: Object.freeze([]) };
+  const out = [];
+  for (const raw of rawEntries) {
+    const entry = readCatalogEntry(raw);
+    if (entry === null) {
+      return {
+        status: "refused",
+        failure: "invalid_request",
+        detail: "catalog contains an entry that is not a well-formed guild.compatibility_catalog.v1 entry"
+      };
+    }
+    if (entry.deprecation !== "active") continue;
+    out.push(entry);
+  }
+  return { status: "ok", entries: Object.freeze(out) };
+}
+function compatibilityUsageForRead(request) {
+  const o = readOptions3(request, EMISSION_KEYS);
+  if (o === null) {
+    return {
+      status: "refused",
+      failure: "invalid_request",
+      detail: "emission request rejected (proxy/accessor/symbol/unknown key)"
+    };
+  }
+  const entry = readCatalogEntry(o["entry"]);
+  if (entry === null) {
+    return {
+      status: "refused",
+      failure: "invalid_request",
+      detail: "entry is not a well-formed guild.compatibility_catalog.v1 entry"
+    };
+  }
+  const synthetic = o["synthetic"];
+  if (typeof synthetic !== "boolean") {
+    return {
+      status: "refused",
+      failure: "invalid_request",
+      // Never defaulted: "missing" reading as "not synthetic" would pull tooling
+      // reads into the dependence count and make the gate unreachable.
+      detail: "synthetic must be an explicit boolean set at the emission point"
+    };
+  }
+  const specialistIdRaw = o["specialist_id"] ?? null;
+  if (specialistIdRaw !== null && !isCanonicalId3(specialistIdRaw)) {
+    return { status: "refused", failure: "invalid_request", detail: "specialist_id must be null or a canonical id" };
+  }
+  const classification = classifyCompatibilityRead({
+    mode: o["mode"],
+    intent: o["intent"]
+  });
+  if (classification.status === "refused") {
+    return { status: "refused", failure: classification.failure, detail: classification.detail };
+  }
+  const candidate = {
+    schema_version: COMPATIBILITY_USAGE_SCHEMA,
+    asset_kind: entry.kind,
+    asset_id: entry.id,
+    asset_path: entry.path,
+    content_hash: entry.content_hash,
+    reason: classification.reason,
+    resolver_mode: o["mode"],
+    synthetic,
+    specialist_id: specialistIdRaw
+  };
+  const payload = parseCompatibilityUsageV1(candidate);
+  if (payload === null) {
+    return {
+      status: "refused",
+      failure: "invalid_request",
+      detail: "constructed payload failed guild.compatibility_usage.v1 validation (check entry id/path/content_hash)"
+    };
+  }
+  return { status: "ok", payload };
+}
+function requiredAssetIdsForG5(catalog, opts) {
+  const o = readOptions3(opts, ["pluginRoot"]);
+  if (o === null) {
+    return { status: "refused", detail: "options rejected (proxy/accessor/symbol/unknown key)" };
+  }
+  const pluginRoot = o["pluginRoot"];
+  if (typeof pluginRoot !== "string" || pluginRoot.length === 0 || CONTROL_CHARS4.test(pluginRoot)) {
+    return {
+      status: "refused",
+      detail: "pluginRoot is required \u2014 a G5 required set must be verified against the real shipped tree"
+    };
+  }
+  const c = readOptions3(catalog, [
+    "schema_version",
+    "entries",
+    "template_count",
+    "domain_skill_count",
+    "census_matches",
+    "problems"
+  ]);
+  if (c === null || c["schema_version"] !== COMPATIBILITY_CATALOG_SCHEMA) {
+    return { status: "refused", detail: "not a guild.compatibility_catalog.v1" };
+  }
+  const raw = readArray3(c["entries"]);
+  if (raw === null) return { status: "refused", detail: "entries is not a dense plain array" };
+  const ids = [];
+  const seen = /* @__PURE__ */ new Set();
+  const byId = /* @__PURE__ */ new Map();
+  let templates = 0;
+  let skills = 0;
+  for (const item of raw) {
+    const e = readCatalogEntry(item);
+    if (e === null) {
+      return {
+        status: "refused",
+        detail: "catalog contains an entry that is not a well-formed catalog entry"
+      };
+    }
+    if (seen.has(e.id)) {
+      return { status: "refused", detail: `catalog contains a duplicate asset id: ${e.id}` };
+    }
+    seen.add(e.id);
+    byId.set(e.id, e);
+    ids.push(e.id);
+    if (e.kind === "shipped_template") templates += 1;
+    else skills += 1;
+  }
+  if (templates !== SHIPPED_TEMPLATE_COUNT || skills !== SHIPPED_DOMAIN_SKILL_COUNT) {
+    return {
+      status: "refused",
+      detail: `catalog holds ${templates} template(s) and ${skills} domain skill(s); the shipped surface is ${SHIPPED_TEMPLATE_COUNT} and ${SHIPPED_DOMAIN_SKILL_COUNT} \u2014 refusing to derive a G5 required set from an incomplete enumeration`
+    };
+  }
+  if (c["template_count"] !== templates || c["domain_skill_count"] !== skills) {
+    return { status: "refused", detail: "catalog declares counts that disagree with its own entries" };
+  }
+  const problems = readArray3(c["problems"]);
+  if (problems === null) return { status: "refused", detail: "problems is not a dense plain array" };
+  if (problems.length > 0) {
+    return {
+      status: "refused",
+      detail: `catalog reported ${problems.length} problem(s); an incomplete scan is not an accountability set`
+    };
+  }
+  if (c["census_matches"] !== true) {
+    return { status: "refused", detail: "catalog does not claim a matching census" };
+  }
+  const truth = buildCompatibilityCatalog({ pluginRoot });
+  if (!truth.census_matches) {
+    return {
+      status: "refused",
+      detail: `the shipped tree at ${pluginRoot} does not itself enumerate cleanly (${truth.problems.length} problem(s)); a G5 required set cannot be anchored to it`
+    };
+  }
+  const truthById = new Map(truth.entries.map((e) => [e.id, e]));
+  for (const [id, entry] of byId) {
+    const real = truthById.get(id);
+    if (real === void 0) {
+      return { status: "refused", detail: `catalog names "${id}", which the shipped tree does not contain` };
+    }
+    if (real.content_hash !== entry.content_hash || real.path !== entry.path || real.kind !== entry.kind) {
+      return {
+        status: "refused",
+        detail: `catalog entry "${id}" does not match the shipped asset (path/kind/content_hash disagree)`
+      };
+    }
+  }
+  for (const id of truthById.keys()) {
+    if (!byId.has(id)) {
+      return { status: "refused", detail: `the shipped tree contains "${id}", which the catalog omits` };
+    }
+  }
+  ids.sort();
+  return { status: "ok", ids: Object.freeze(ids) };
+}
+var crypto15, fs54, path65, import_util3, COMPATIBILITY_CATALOG_SCHEMA, SHIPPED_TEMPLATE_COUNT, SHIPPED_DOMAIN_SKILL_IDS, SHIPPED_DOMAIN_SKILL_COUNT, SHIPPED_COMPATIBILITY_ASSET_COUNT, COMPATIBILITY_ASSET_ROOTS, COMPATIBILITY_DEPRECATION_STATES, DEPRECATION_STATE_SET, MAX_SCALAR_LEN3, MAX_ID_LEN2, CONTROL_CHARS4, CANONICAL_ID2, SHA256_HEX2, BUILD_KEYS, ENTRY_KEYS, SUGGESTABLE_KEYS, EMISSION_KEYS;
+var init_compatibility_catalog = __esm({
+  "src/domains/config/compatibility-catalog.ts"() {
+    crypto15 = __toESM(require("crypto"));
+    fs54 = __toESM(require("fs"));
+    path65 = __toESM(require("path"));
+    import_util3 = require("util");
+    init_compatibility_usage();
+    init_resolver_mode();
+    COMPATIBILITY_CATALOG_SCHEMA = "guild.compatibility_catalog.v1";
+    SHIPPED_TEMPLATE_COUNT = 15;
+    SHIPPED_DOMAIN_SKILL_IDS = Object.freeze([
+      "architect-adr-writer",
+      "architect-systems-design",
+      "architect-tradeoff-matrix",
+      "backend-api-contract",
+      "backend-data-layer",
+      "backend-migration-writer",
+      "backend-service-integration",
+      "copywriter-email-sequences",
+      "copywriter-long-form",
+      "copywriter-product-microcopy",
+      "copywriter-voice-guide",
+      "devops-ci-cd-pipeline",
+      "devops-incident-runbook",
+      "devops-infrastructure-as-code",
+      "devops-observability-setup",
+      "doc-writer-doc-site",
+      "doc-writer-onboarding-doc",
+      "doc-writer-product-guide",
+      "doc-writer-readme",
+      "frontend-a11y",
+      "frontend-bundler-config",
+      "frontend-react",
+      "frontend-state-management",
+      "marketing-ab-copy-variants",
+      "marketing-campaign-brief",
+      "marketing-launch-plan",
+      "marketing-positioning",
+      "mobile-android-kotlin",
+      "mobile-ios-swift",
+      "mobile-performance-tuning",
+      "mobile-react-native",
+      "qa-flaky-test-hunter",
+      "qa-property-based-tests",
+      "qa-snapshot-tests",
+      "qa-test-strategy",
+      "researcher-comparison-table",
+      "researcher-deep-dive",
+      "researcher-paper-digest",
+      "sales-cold-outreach",
+      "sales-discovery-framework",
+      "sales-follow-up-sequence",
+      "sales-proposal-writer",
+      "security-auth-flow-review",
+      "security-dependency-audit",
+      "security-secrets-scan",
+      "security-threat-modeling",
+      "seo-internal-linking",
+      "seo-keyword-research",
+      "seo-on-page-optimization",
+      "seo-technical-audit",
+      "social-media-content-calendar",
+      "social-media-engagement-templates",
+      "social-media-platform-post",
+      "social-media-thread",
+      "technical-writer-api-docs",
+      "technical-writer-release-notes",
+      "technical-writer-tutorial",
+      "technical-writer-user-manual"
+    ]);
+    SHIPPED_DOMAIN_SKILL_COUNT = SHIPPED_DOMAIN_SKILL_IDS.length;
+    SHIPPED_COMPATIBILITY_ASSET_COUNT = SHIPPED_TEMPLATE_COUNT + SHIPPED_DOMAIN_SKILL_COUNT;
+    COMPATIBILITY_ASSET_ROOTS = Object.freeze({
+      shipped_template: "templates/specialists",
+      shipped_domain_skill: "skills/specialists"
+    });
+    COMPATIBILITY_DEPRECATION_STATES = Object.freeze([
+      "active",
+      "deprecated",
+      "removal_cleared"
+    ]);
+    DEPRECATION_STATE_SET = new Set(COMPATIBILITY_DEPRECATION_STATES);
+    MAX_SCALAR_LEN3 = 1024;
+    MAX_ID_LEN2 = 128;
+    CONTROL_CHARS4 = /[\u0000-\u001f\u007f]/;
+    CANONICAL_ID2 = /^[a-z0-9][a-z0-9._-]*$/;
+    SHA256_HEX2 = /^[0-9a-f]{64}$/;
+    BUILD_KEYS = ["pluginRoot", "deprecation", "deprecatedBy"];
+    ENTRY_KEYS = [
+      "kind",
+      "id",
+      "path",
+      "content_hash",
+      "deprecation",
+      "deprecated_by"
+    ];
+    SUGGESTABLE_KEYS = ["catalog", "project_migrated"];
+    EMISSION_KEYS = ["entry", "mode", "intent", "synthetic", "specialist_id"];
+  }
+});
+
+// src/domains/config/confirmation-arbiter.ts
+function canonicalKey(key) {
+  const parts = [];
+  for (const component of CONFIRMATION_KEY_COMPONENTS) {
+    const v = key?.[component];
+    if (typeof v !== "string" || v.length === 0) {
+      throw new Error(
+        `confirmation_key_incomplete: component "${component}" is required \u2014 a partial key can never claim a confirmation (\xA76 exact-key rule)`
+      );
+    }
+    parts.push(`${component}=${v.length}:${v}`);
+  }
+  return parts.join("|");
+}
+function createRunLocalState(runId) {
+  if (typeof runId !== "string" || runId.length === 0) {
+    throw new Error("confirmation state requires a run_id (run-local, \xA76)");
+  }
+  return { run_id: runId, prompts: /* @__PURE__ */ new Map(), decisions: /* @__PURE__ */ new Map(), next_prompt_id: 0 };
+}
+function claimPrompt(state, key) {
+  const ck = canonicalKey(key);
+  if (!state.prompts.has(ck)) {
+    state.prompts.set(ck, state.next_prompt_id);
+    state.next_prompt_id += 1;
+  }
+  return {
+    prompt_id: state.prompts.get(ck),
+    already_decided: state.decisions.has(ck)
+  };
+}
+function recordDecision(state, key, decision) {
+  const ck = canonicalKey(key);
+  const existing = state.decisions.get(ck);
+  if (existing) {
+    if (existing.decision !== decision.decision) {
+      throw new Error(
+        `contradictory_decision: key already decided "${existing.decision}" \u2014 refusing "${decision.decision}" (one key, one decision; \xA76)`
+      );
+    }
+    return existing;
+  }
+  const record = {
+    key: { ...key },
+    decision: decision.decision,
+    at: decision.at ?? null
+  };
+  state.decisions.set(ck, record);
+  return record;
+}
+function decisionFor(state, key) {
+  return state.decisions.get(canonicalKey(key)) ?? null;
+}
+var CONFIRMATION_KEY_COMPONENTS;
+var init_confirmation_arbiter = __esm({
+  "src/domains/config/confirmation-arbiter.ts"() {
+    CONFIRMATION_KEY_COMPONENTS = Object.freeze([
+      "run_id",
+      "purpose",
+      "target_id",
+      "policy_hash",
+      "catalog_hash",
+      "fallback_hash"
+    ]);
+  }
+});
+
+// src/domains/config/independence-predicates.ts
+function finalServed(p) {
+  return p.finalized === true && (p.status === "served" || p.status === "fallback_served");
+}
+function boundActual(p) {
+  return finalServed(p) && known(p.served_model);
+}
+function verified(p) {
+  return p.host_trust === "verified";
+}
+function adjudicateIndependence(input) {
+  const p = input?.producer ?? {};
+  const r = input?.reviewer ?? {};
+  const terms = [
+    { name: "bound_actual(producer)", pass: boundActual(p) },
+    { name: "bound_actual(reviewer)", pass: boundActual(r) },
+    { name: "verified(host(producer))", pass: verified(p) },
+    { name: "verified(host(reviewer))", pass: verified(r) },
+    { name: "known(host_family(producer))", pass: known(p.host_family) },
+    { name: "known(host_family(reviewer))", pass: known(r.host_family) },
+    {
+      name: "host_family(producer) != host_family(reviewer)",
+      pass: known(p.host_family) && known(r.host_family) && p.host_family !== r.host_family
+    },
+    { name: "known(served_family(producer))", pass: known(p.served_model_family) },
+    { name: "known(served_family(reviewer))", pass: known(r.served_model_family) },
+    {
+      name: "served_family(producer) != served_family(reviewer)",
+      pass: known(p.served_model_family) && known(r.served_model_family) && p.served_model_family !== r.served_model_family
+    }
+  ];
+  const allPass = terms.every((t) => t.pass);
+  const trace = terms.map((t) => `${t.name}=${t.pass ? "PASS" : "FAIL"}`).join("; ");
+  return {
+    independence: allPass ? "strong" : "weak",
+    predicate_trace: `${trace} => ${allPass ? "strong" : "weak"}`,
+    producer_served_model: known(p.served_model) ? p.served_model : "unknown",
+    reviewer_served_model: known(r.served_model) ? r.served_model : "unknown",
+    producer_model_family: known(p.served_model_family) ? p.served_model_family : "unknown",
+    reviewer_model_family: known(r.served_model_family) ? r.served_model_family : "unknown"
+  };
+}
+function asAdjudicationRecord(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v) ? v : null;
+}
+function validateAdjudicationRef(v) {
+  const o = asAdjudicationRecord(v);
+  if (!o) return null;
+  const dispatch_id = o["dispatch_id"];
+  const receipt_hash = o["receipt_hash"];
+  if (typeof dispatch_id !== "string" || dispatch_id.length === 0) return null;
+  if (typeof receipt_hash !== "string" || !ADJUDICATION_SHA256_HEX.test(receipt_hash)) return null;
+  return { dispatch_id, receipt_hash };
+}
+function validateWrittenAdjudication(v) {
+  const o = asAdjudicationRecord(v);
+  if (!o) return null;
+  const producer_ref = validateAdjudicationRef(o["producer_ref"]);
+  const reviewer_ref = validateAdjudicationRef(o["reviewer_ref"]);
+  if (!producer_ref || !reviewer_ref) return null;
+  const independence = o["independence"];
+  if (independence !== "strong" && independence !== "weak") return null;
+  const predicate_trace = o["predicate_trace"];
+  if (typeof predicate_trace !== "string" || predicate_trace.length === 0) return null;
+  return { producer_ref, reviewer_ref, independence, predicate_trace };
+}
+function buildIndependenceAdjudication(input) {
+  if (!input.producer.finalized || !input.reviewer.finalized) {
+    throw new Error(
+      "adjudication_premature: the \xA77a block is written ONLY after BOTH receipts are finalized"
+    );
+  }
+  const verdict = adjudicateIndependence({ producer: input.producer, reviewer: input.reviewer });
+  return {
+    producer_ref: input.producer_ref,
+    reviewer_ref: input.reviewer_ref,
+    producer_served_model: verdict.producer_served_model,
+    reviewer_served_model: verdict.reviewer_served_model,
+    producer_model_family: verdict.producer_model_family,
+    reviewer_model_family: verdict.reviewer_model_family,
+    requested_independence: input.requested_independence,
+    independence: verdict.independence,
+    predicate_trace: verdict.predicate_trace
+  };
+}
+var known, ADJUDICATION_SHA256_HEX;
+var init_independence_predicates = __esm({
+  "src/domains/config/independence-predicates.ts"() {
+    known = (x) => typeof x === "string" && x.length > 0 && x !== "unknown";
+    ADJUDICATION_SHA256_HEX = /^[0-9a-f]{64}$/;
+  }
+});
+
+// src/domains/config/independence-record.ts
+function lifecycleApi() {
+  return init_lifecycle(), __toCommonJS(lifecycle_exports);
+}
+function independenceDirForRunDir(runDir3) {
+  return path66.join(runDir3, INDEPENDENCE_DIR);
+}
+function loadWrittenAdjudications(runDir3) {
+  const dir = independenceDirForRunDir(runDir3);
+  let names;
+  try {
+    names = fs55.readdirSync(dir).filter((n) => n.endsWith(".json")).sort();
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const name of names) {
+    let parsed;
+    try {
+      parsed = JSON.parse(fs55.readFileSync(path66.join(dir, name), "utf8"));
+    } catch {
+      continue;
+    }
+    const block = validateWrittenAdjudication(parsed);
+    if (block) out.push(block);
+  }
+  return out;
+}
+function validateIndependenceBinding(v) {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+  const o = v;
+  const lane_id = o["lane_id"];
+  if (typeof lane_id !== "string" || lane_id.length === 0) return null;
+  const producer_ref = validateAdjudicationRef(o["producer_ref"]);
+  const reviewer_ref = validateAdjudicationRef(o["reviewer_ref"]);
+  if (!producer_ref || !reviewer_ref) return null;
+  return { lane_id, producer_ref, reviewer_ref };
+}
+function sameRef(a, b) {
+  return a.dispatch_id === b.dispatch_id && a.receipt_hash === b.receipt_hash;
+}
+function findBoundAdjudications(runDir3, binding) {
+  return loadWrittenAdjudications(runDir3).filter(
+    (b) => sameRef(b.producer_ref, binding.producer_ref) && sameRef(b.reviewer_ref, binding.reviewer_ref)
+  );
+}
+function assertPersistableIndependence(runDir3, independence, context, binding) {
+  if (independence !== "strong") return;
+  const where = independenceDirForRunDir(runDir3);
+  const bound = validateIndependenceBinding(binding);
+  if (!bound) {
+    throw new Error(
+      `independence_binding_missing: refusing to persist independence:"strong" for ${context} \u2014 the record declares no valid \xA77a binding {lane_id, producer_ref:{dispatch_id,receipt_hash}, reviewer_ref:{dispatch_id,receipt_hash}} (receipt hashes must be sha256 hex). A strong verdict is persistable only as a claim ON a specific adjudication, never as a bare string. Record the adjudication first (persistIndependenceAdjudication) or persist "weak".`
+    );
+  }
+  if (bound.producer_ref.dispatch_id !== bound.lane_id) {
+    throw new Error(
+      `independence_binding_lane_mismatch: refusing to persist independence:"strong" for ${context} \u2014 the declared adjudication's producer dispatch is "${bound.producer_ref.dispatch_id}" but the record being written is lane "${bound.lane_id}". An adjudication of ANOTHER lane's dispatch never authorizes this one, however valid it is. Adjudicate THIS lane's own producer/reviewer receipts or persist "weak".`
+    );
+  }
+  const matches = findBoundAdjudications(runDir3, bound);
+  if (matches.length === 0) {
+    throw new Error(
+      `independence_not_adjudicated: refusing to persist independence:"strong" for ${context} \u2014 no WRITTEN, hash-bound guild.model_resolution.v1 \xA77a independence_adjudication block under ${where} matches this record's binding (producer ${bound.producer_ref.dispatch_id}@${bound.producer_ref.receipt_hash.slice(0, 12)}\u2026, reviewer ${bound.reviewer_ref.dispatch_id}@${bound.reviewer_ref.receipt_hash.slice(0, 12)}\u2026). \xA77a admits NO provisional strong: a strong review verdict exists only as an adjudicated block binding BOTH parties' finalized receipts. Record the adjudication first (persistIndependenceAdjudication) or persist "weak".`
+    );
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      `independence_adjudication_ambiguous: refusing to persist independence:"strong" for ${context} \u2014 ${matches.length} written \xA77a blocks under ${where} bind the SAME producer/reviewer receipt pair. Which verdict applies is ambiguous, and filename order never decides. Resolve the duplicate blocks and re-adjudicate.`
+    );
+  }
+  if (matches[0].independence !== "strong") {
+    throw new Error(
+      `independence_not_adjudicated: refusing to persist independence:"strong" for ${context} \u2014 the \xA77a block bound to this record adjudicated "${matches[0].independence}", not "strong" (${matches[0].predicate_trace}). The persisted value must be the ADJUDICATED one; a caller never upgrades a verdict.`
+    );
+  }
+}
+function persistIndependenceAdjudication(input) {
+  const { root, binding, label } = input;
+  if (!SAFE_LABEL.test(label)) {
+    throw new Error(`adjudication label "${label}" is not a safe path segment \u2014 refusing`);
+  }
+  const block = buildIndependenceAdjudication({
+    producer_ref: input.producer_ref,
+    reviewer_ref: input.reviewer_ref,
+    producer: input.producer,
+    reviewer: input.reviewer,
+    requested_independence: input.requested_independence
+  });
+  const validated = validateWrittenAdjudication(block);
+  if (!validated) {
+    throw new Error(
+      "adjudication_shape_invalid: buildIndependenceAdjudication produced a block that does not validate as a written \xA77a adjudication \u2014 refusing to persist"
+    );
+  }
+  const verified2 = lifecycleApi().assertWritableBinding({
+    root,
+    run_id: binding.run_id,
+    binding_ref: binding.binding_ref
+  });
+  const dir = path66.join(root, ".guild", "runs", verified2.run_id, INDEPENDENCE_DIR);
+  fs55.mkdirSync(dir, { recursive: true });
+  const target = path66.join(dir, `${label}.json`);
+  const tmp = `${target}.tmp-${process.pid}`;
+  fs55.writeFileSync(tmp, JSON.stringify(block, null, 2) + "\n", "utf8");
+  fs55.renameSync(tmp, target);
+  return {
+    absPath: target,
+    ref: path66.join(INDEPENDENCE_DIR, `${label}.json`),
+    independence: validated.independence
+  };
+}
+var fs55, path66, INDEPENDENCE_DIR, SAFE_LABEL;
+var init_independence_record = __esm({
+  "src/domains/config/independence-record.ts"() {
+    fs55 = __toESM(require("fs"));
+    path66 = __toESM(require("path"));
+    init_independence_predicates();
+    INDEPENDENCE_DIR = "independence";
+    SAFE_LABEL = /^[A-Za-z0-9_.-]+$/;
+  }
+});
+
+// src/domains/config/model-catalog.ts
+function purposeClassFor(purpose) {
+  if (purpose === "research") return "research";
+  if (["advisory", "adversarial", "security", "adversarial-security", "review"].includes(purpose)) {
+    return "review";
+  }
+  return "general";
+}
+function eligibleForPurpose(input) {
+  if (input.evidence_state === "available") return true;
+  if (input.evidence_state === "advertised") {
+    return purposeClassFor(input.purpose_class) === "general" && input.allow_advertised_attempt === true;
+  }
+  return false;
+}
+function listingAuthorityFor(targetId) {
+  if (targetId === void 0) return NO_LISTING_GROUNDING;
+  return LISTING_AUTHORITY[targetId] ?? NO_LISTING_GROUNDING;
+}
+function isPresent(value) {
+  return typeof value === "string" && value.length > 0;
+}
+function listingCanGroundAvailable(input) {
+  const grounding = listingAuthorityFor(input.target_id).available_grounding;
+  if (!grounding) return false;
+  return grounding.source === input.source && grounding.adapter_id === input.adapter_id;
+}
+function evidenceStateForListing(input) {
+  if (!isPresent(input.source) || !isPresent(input.target_id) || !isPresent(input.adapter_id)) {
+    throw new Error(
+      "model-catalog: evidenceStateForListing requires the complete (target_id, adapter_id, source) authority triple \u2014 the bare source-only form was removed (T4-R2-001)"
+    );
+  }
+  if (METADATA_ONLY_SOURCES.has(input.source)) return "advertised";
+  if (!AUTHENTICATED_LISTING_SOURCES.has(input.source)) return "advertised";
+  if (input.contract_states_availability !== true) return "advertised";
+  return listingCanGroundAvailable({
+    target_id: input.target_id,
+    adapter_id: input.adapter_id,
+    source: input.source
+  }) ? "available" : "advertised";
+}
+function confidenceForListing(source) {
+  return AUTHENTICATED_LISTING_SOURCES.has(source) ? "high" : "low";
+}
+function dispatchUpgrade(input) {
+  const served = input.actual_model;
+  if (input.result !== "served" || served == null || served === "" || served === "unknown") {
+    return { upgrades: false, model: null };
+  }
+  return { upgrades: true, model: served };
+}
+function deepFreeze3(value) {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const key of Object.getOwnPropertyNames(value)) {
+      deepFreeze3(value[key]);
+    }
+  }
+  return value;
+}
+function freezeSnapshot(snapshot) {
+  const log = [];
+  const frozen = { ...snapshot, target_log: log };
+  for (const key of Object.keys(snapshot)) {
+    deepFreeze3(frozen[key]);
+  }
+  Object.freeze(frozen);
+  return frozen;
+}
+function appendEvidenceEvent(log, event) {
+  if (!Array.isArray(log)) throw new Error("model-catalog: target_log is not an array");
+  if (!LEGAL_EVIDENCE_TRANSITIONS.has(event.transition)) {
+    throw new Error(`model-catalog: illegal evidence transition ${JSON.stringify(event.transition)}`);
+  }
+  if (event.transition.endsWith("->available")) {
+    const source = event.source;
+    const targetId = event.target_id;
+    const adapterId = event.adapter_id;
+    if (!isPresent(source)) {
+      throw new Error(
+        "model-catalog: ->available requires grounding evidence \u2014 a sourceless promotion is illegal (T4-R2-001)"
+      );
+    }
+    if (!isPresent(targetId)) {
+      throw new Error(
+        `model-catalog: ->available is target-row-scoped \u2014 event source ${JSON.stringify(source)} carries no target_id (T4-R2-001)`
+      );
+    }
+    if (source !== "dispatch_receipt") {
+      if (!isPresent(adapterId)) {
+        throw new Error(
+          `model-catalog: a listing-sourced ->available requires the complete (target_id, adapter_id, source) authority triple \u2014 ${JSON.stringify(source)} for target ${JSON.stringify(targetId)} carries no adapter_id (T4-R2-001); only a dispatch receipt or the row's contract-availability listing grounds available`
+        );
+      }
+      if (!listingCanGroundAvailable({ target_id: targetId, adapter_id: adapterId, source })) {
+        throw new Error(
+          `model-catalog: ->available requires a dispatch receipt or the target row's contract-availability listing, got ${JSON.stringify(source)} via adapter ${JSON.stringify(adapterId)} for target ${JSON.stringify(targetId)}`
+        );
+      }
+    }
+  }
+  log.push(event);
+  return log;
+}
+function projectionAllowed(input) {
+  return input.from_target === input.to_target;
+}
+function defaultEvidenceStateForTarget(_targetId) {
+  return "unknown";
+}
+function tierForCanonicalId(canonicalId) {
+  for (const row of TIER_MAP) {
+    if (canonicalId.startsWith(row.prefix)) return row.tier;
+  }
+  return "unknown";
+}
+function normalizeModel(raw, index, asOf, row) {
+  const state = evidenceStateForListing({
+    source: raw.evidence_source,
+    contract_states_availability: raw.contract_states_availability,
+    target_id: row.target_id,
+    adapter_id: row.adapter_id
+  });
+  return {
+    canonical_id: raw.canonical_id,
+    aliases: raw.aliases ?? [],
+    model_family: raw.model_family ?? "unknown",
+    capabilities: raw.capabilities ?? {},
+    reasoning_efforts: raw.reasoning_efforts ?? [],
+    // provider order VERBATIM
+    default_effort: raw.default_effort ?? null,
+    tier: tierForCanonicalId(raw.canonical_id),
+    provider_priority: raw.provider_priority ?? null,
+    catalog_index: index,
+    // 0-based provider listing position, as returned
+    provider_default: raw.provider_default === true,
+    visibility: raw.visibility ?? "listed",
+    deprecation: raw.deprecation ?? { upgrade_to: null, migration_note: null },
+    evidence: {
+      state,
+      source: raw.evidence_source,
+      confidence: confidenceForListing(raw.evidence_source),
+      as_of: asOf
+    },
+    dispatch_evidence: null
+  };
+}
+function normalizeDiscovery(raw, opts) {
+  if (raw.target_id !== opts.target.target_id) {
+    throw new Error(
+      `model-catalog: discovery target ${JSON.stringify(raw.target_id)} does not match snapshot target ${JSON.stringify(opts.target.target_id)}`
+    );
+  }
+  return {
+    schema_version: MODEL_CATALOG_SCHEMA_VERSION,
+    target: {
+      ...opts.target,
+      adapter_id: raw.adapter_id,
+      adapter_version: raw.adapter_version
+    },
+    discovery: {
+      method: raw.method,
+      source_ref: raw.source_ref,
+      discovered_at: opts.discoveredAt,
+      ttl_seconds: opts.ttlSeconds ?? DEFAULT_CATALOG_TTL_SECONDS,
+      status: raw.status,
+      latency_ms: raw.latency_ms,
+      failure_reason: raw.failure_reason
+    },
+    generation: opts.generation,
+    models: raw.models.map(
+      (m, i) => normalizeModel(m, i, opts.discoveredAt, {
+        target_id: opts.target.target_id,
+        adapter_id: raw.adapter_id
+      })
+    )
+  };
+}
+var EVIDENCE_STATES, AUTHENTICATED_LISTING_SOURCES, METADATA_ONLY_SOURCES, NO_LISTING_GROUNDING, LISTING_AUTHORITY, LEGAL_EVIDENCE_TRANSITIONS, TIER_MAPPING_VERSION, TIER_MAP;
+var init_model_catalog = __esm({
+  "src/domains/config/model-catalog.ts"() {
+    init_catalog_cache();
+    init_kernel();
+    EVIDENCE_STATES = Object.freeze(["available", "advertised", "unknown", "unavailable"]);
+    AUTHENTICATED_LISTING_SOURCES = /* @__PURE__ */ new Set(["contract_api_list", "native_list", "debug_catalog", "picker"]);
+    METADATA_ONLY_SOURCES = /* @__PURE__ */ new Set(["static_hint", "public_doc", "unauthenticated_list"]);
+    NO_LISTING_GROUNDING = Object.freeze({
+      ceiling: "advertised",
+      available_grounding: null
+    });
+    LISTING_AUTHORITY = Object.freeze({
+      // The ONLY row carrying the /v1/models availability contract (matrix §3 [C2]).
+      "claude-api": Object.freeze({
+        ceiling: "available",
+        available_grounding: Object.freeze({ adapter_id: "claude-api-models", source: "contract_api_list" })
+      }),
+      // Interactive-only picker; honest-unknown row — a picker listing can NEVER ground available.
+      "claude-cli-subscription": NO_LISTING_GROUNDING,
+      "claude-app": NO_LISTING_GROUNDING,
+      "claude-web": NO_LISTING_GROUNDING,
+      // Gateways: gateway-NATIVE evidence only, none evidenced today (§6 gateway rule) —
+      // a listing caps at static-hint/native advertised; only §4 dispatch evidence upgrades.
+      "claude-gateway-bedrock": NO_LISTING_GROUNDING,
+      "claude-gateway-vertex": NO_LISTING_GROUNDING,
+      "claude-gateway-foundry": NO_LISTING_GROUNDING,
+      // Codex auth-list surfaces: entitlement semantics contractually undefined.
+      "codex-app-server": NO_LISTING_GROUNDING,
+      "codex-cli-chatgpt": NO_LISTING_GROUNDING,
+      "codex-cli-api-key": NO_LISTING_GROUNDING,
+      "openai-api": NO_LISTING_GROUNDING
+    });
+    LEGAL_EVIDENCE_TRANSITIONS = sealSet([
+      "unknown->advertised",
+      "unknown->available",
+      "advertised->available",
+      "advertised->unavailable",
+      "available->unavailable",
+      "advertised->unknown",
+      "available->unknown",
+      "unavailable->unknown"
+    ]);
+    TIER_MAPPING_VERSION = "tier-map-v1-2026-07-30";
+    TIER_MAP = [
+      { prefix: "claude-haiku-", tier: "cheap" },
+      { prefix: "claude-sonnet-", tier: "mid" },
+      { prefix: "claude-opus-", tier: "powerful" },
+      { prefix: "claude-fable-", tier: "powerful" },
+      { prefix: "claude-fable", tier: "powerful" },
+      { prefix: "gpt-5.6-sol", tier: "powerful" },
+      { prefix: "gpt-5.6-terra", tier: "mid" },
+      { prefix: "gpt-5.6-luna", tier: "cheap" },
+      { prefix: "gpt-5.5", tier: "powerful" },
+      { prefix: "gpt-5.4-mini", tier: "cheap" },
+      { prefix: "gpt-5.4", tier: "mid" },
+      { prefix: "gpt-5.3-codex-spark", tier: "cheap" }
+    ];
+  }
+});
+
+// src/domains/config/model-policy.ts
+function isReviewClassPurpose(p) {
+  return REVIEW_CLASS_PURPOSES.includes(p);
+}
+function parseSelector(raw) {
+  if (typeof raw !== "string" || raw.length === 0) {
+    throw new Error(`selector_malformed: empty or non-string selector`);
+  }
+  if (raw.startsWith("id:")) {
+    const id = raw.slice(3);
+    if (!id) throw new Error(`selector_malformed: "id:" needs a canonical_id (got "${raw}")`);
+    return { form: "id", canonical_id: id };
+  }
+  if (raw.startsWith("alias:")) {
+    const alias = raw.slice(6);
+    if (!alias) throw new Error(`selector_malformed: "alias:" needs an alias (got "${raw}")`);
+    return { form: "alias", alias };
+  }
+  if (raw.startsWith("expr:")) {
+    const body = raw.slice(5);
+    if (!body) throw new Error(`selector_malformed: "expr:" needs conjuncts (got "${raw}")`);
+    const out = {};
+    for (const conjunct of body.split(";")) {
+      const eq = conjunct.indexOf("=");
+      if (eq <= 0) throw new Error(`selector_malformed: bad conjunct "${conjunct}" in "${raw}"`);
+      const key = conjunct.slice(0, eq);
+      const value = conjunct.slice(eq + 1);
+      if (key === "model_family") {
+        if (out.model_family !== void 0)
+          throw new Error(`selector_malformed: duplicate conjunct key "model_family" in "${raw}"`);
+        if (!value) throw new Error(`selector_malformed: empty model_family in "${raw}"`);
+        out.model_family = value;
+      } else if (key === "tier") {
+        if (out.tier !== void 0)
+          throw new Error(`selector_malformed: duplicate conjunct key "tier" in "${raw}"`);
+        if (!POLICY_TIERS.includes(value)) {
+          throw new Error(
+            `selector_malformed: tier "${value}" invalid in "${raw}" (cheap|mid|powerful; tier=unknown is invalid)`
+          );
+        }
+        out.tier = value;
+      } else {
+        throw new Error(`selector_malformed: unknown expr key "${key}" in "${raw}" (closed: model_family, tier)`);
+      }
+    }
+    if (out.model_family === void 0 && out.tier === void 0) {
+      throw new Error(`selector_malformed: expr needs at least one conjunct ("${raw}")`);
+    }
+    return { form: "expr", ...out };
+  }
+  throw new Error(
+    `selector_malformed: "${raw}" is not id:/alias:/expr: (bare strings and unknown prefixes are rejected)`
+  );
+}
+function maxComplexity(a, b) {
+  return COMPLEXITY_ORDER[a] >= COMPLEXITY_ORDER[b] ? a : b;
+}
+function purposeComplexityFloor(purpose) {
+  return purpose === "research" ? "hard" : "easy";
+}
+function purposeTierFloor(purpose) {
+  if (purpose === "research" || isReviewClassPurpose(purpose)) return "powerful";
+  return null;
+}
+function tierForComplexity(c) {
+  return c === "easy" ? "cheap" : c === "medium" ? "mid" : "powerful";
+}
+function reachableComplexities(purpose, minEffectiveComplexity) {
+  const floor = maxComplexity(purposeComplexityFloor(purpose), minEffectiveComplexity);
+  return COMPLEXITIES.filter((c) => COMPLEXITY_ORDER[c] >= COMPLEXITY_ORDER[floor]);
+}
+function isPlainObject7(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function rejectUnknownKeys2(obj, allowed, where, rejects) {
+  for (const k of Object.keys(obj)) {
+    if (!allowed.includes(k)) {
+      rejects.push(`${where}: unknown key "${k}" (closed key set: ${allowed.join(", ")})`);
+    }
+  }
+}
+function validateSelectorEntry(entry, where, rejects) {
+  if (!isPlainObject7(entry)) {
+    rejects.push(`${where}: selector entry must be an object with a "selector" key`);
+    return;
+  }
+  rejectUnknownKeys2(entry, ["selector", "effort", "capabilities"], where, rejects);
+  if (typeof entry["selector"] !== "string") {
+    rejects.push(`${where}: "selector" must be a string (bare/missing selectors are rejected)`);
+  } else {
+    try {
+      parseSelector(entry["selector"]);
+    } catch (e) {
+      rejects.push(`${where}: ${e.message}`);
+    }
+  }
+  if (entry["effort"] !== void 0 && entry["effort"] !== null && typeof entry["effort"] !== "string") {
+    rejects.push(`${where}: "effort" must be a string or null`);
+  }
+  if (entry["capabilities"] !== void 0) {
+    const caps = entry["capabilities"];
+    if (!Array.isArray(caps) || caps.some((c) => typeof c !== "string")) {
+      rejects.push(`${where}: "capabilities" must be an array of capability-key strings`);
+    }
+  }
+}
+function validateModelPolicy2(input, opts) {
+  const rejects = [];
+  if (!isPlainObject7(input)) {
+    return [`model_policy: must be an object (guild.model_policy.v2)`];
+  }
+  rejectUnknownKeys2(input, ["version", "allow_advertised_attempt", "purposes"], "model_policy", rejects);
+  if (input["version"] !== 2) {
+    rejects.push(`model_policy.version: must be 2 (got ${JSON.stringify(input["version"])})`);
+  }
+  if (input["allow_advertised_attempt"] !== void 0 && typeof input["allow_advertised_attempt"] !== "boolean") {
+    rejects.push(`model_policy.allow_advertised_attempt: must be a boolean (default false)`);
+  }
+  const purposes = input["purposes"];
+  if (!isPlainObject7(purposes)) {
+    rejects.push(`model_policy.purposes: must be an object keyed by the closed purpose enum`);
+    return rejects;
+  }
+  for (const [purposeKey, rawPurpose] of Object.entries(purposes)) {
+    const where = `model_policy.purposes.${purposeKey}`;
+    if (!POLICY_PURPOSES.includes(purposeKey)) {
+      rejects.push(`${where}: unknown purpose (closed enum: ${POLICY_PURPOSES.join(", ")})`);
+      continue;
+    }
+    const purpose = purposeKey;
+    if (!isPlainObject7(rawPurpose)) {
+      rejects.push(`${where}: must be an object`);
+      continue;
+    }
+    rejectUnknownKeys2(
+      rawPurpose,
+      ["min_effective_complexity", "independence", "confirm_on_degradation", "routes"],
+      where,
+      rejects
+    );
+    const minC = rawPurpose["min_effective_complexity"];
+    if (!COMPLEXITIES.includes(minC)) {
+      rejects.push(`${where}.min_effective_complexity: must be easy|medium|hard`);
+    }
+    if (purpose === "research" && minC !== "hard") {
+      rejects.push(
+        `${where}.min_effective_complexity: research is ALWAYS hard/powerful (research_always_hard); "${String(minC)}" lowers the non-downgradable floor`
+      );
+    }
+    const independence = rawPurpose["independence"];
+    if (!INDEPENDENCE_LEVELS.includes(independence)) {
+      rejects.push(`${where}.independence: must be none|prefer_cross_family|require_cross_family`);
+    }
+    if (typeof rawPurpose["confirm_on_degradation"] !== "boolean") {
+      rejects.push(`${where}.confirm_on_degradation: must be a boolean`);
+    }
+    if (independence === "require_cross_family" && rawPurpose["confirm_on_degradation"] === false) {
+      rejects.push(
+        `${where}: independence require_cross_family requires confirm_on_degradation:true (a same-family fallback must take the explicit weak-degradation labelling path, never silent)`
+      );
+    }
+    const routes = rawPurpose["routes"];
+    if (!Array.isArray(routes) || routes.length === 0) {
+      rejects.push(`${where}.routes: must be a non-empty array (closed route table, \xA71b)`);
+      continue;
+    }
+    routes.forEach((rawRoute, i) => {
+      const rWhere = `${where}.routes[${i}]`;
+      if (!isPlainObject7(rawRoute)) {
+        rejects.push(`${rWhere}: must be an object`);
+        return;
+      }
+      rejectUnknownKeys2(
+        rawRoute,
+        ["complexity", "condition", "preferred", "fallbacks", "provider_default"],
+        rWhere,
+        rejects
+      );
+      const complexity = rawRoute["complexity"];
+      if (complexity !== "any" && !COMPLEXITIES.includes(complexity)) {
+        rejects.push(`${rWhere}.complexity: must be easy|medium|hard|any`);
+      }
+      const condition = rawRoute["condition"];
+      if (condition !== void 0) {
+        if (!isPlainObject7(condition)) {
+          rejects.push(`${rWhere}.condition: must be an object {kind, model_family}`);
+        } else {
+          rejectUnknownKeys2(condition, ["kind", "model_family"], `${rWhere}.condition`, rejects);
+          const kind = condition["kind"];
+          if (!CONDITION_KINDS.includes(kind)) {
+            rejects.push(`${rWhere}.condition.kind: must be always|producer_model_family_is|producer_model_family_is_not`);
+          } else if (kind === "always") {
+            if (condition["model_family"] !== null && condition["model_family"] !== void 0) {
+              rejects.push(`${rWhere}.condition.model_family: MUST be null when kind = always`);
+            }
+          } else {
+            if (typeof condition["model_family"] !== "string" || condition["model_family"].length === 0) {
+              rejects.push(`${rWhere}.condition.model_family: REQUIRED (non-empty string) when kind \u2260 always`);
+            }
+            if (!isReviewClassPurpose(purpose)) {
+              rejects.push(
+                `${rWhere}.condition: non-always conditions are valid ONLY on review-class purposes (advisory, adversarial, security, adversarial-security) \u2014 "${purpose}" has no producer`
+              );
+            }
+          }
+        }
+      }
+      const preferred = rawRoute["preferred"];
+      if (!Array.isArray(preferred) || preferred.length === 0) {
+        rejects.push(`${rWhere}.preferred: must be a non-empty ordered selector list`);
+      } else {
+        preferred.forEach((entry, j) => validateSelectorEntry(entry, `${rWhere}.preferred[${j}]`, rejects));
+        if (purpose === "security") {
+          preferred.forEach((entry, j) => {
+            if (isPlainObject7(entry) && typeof entry["selector"] === "string" && !entry["selector"].startsWith("id:")) {
+              rejects.push(
+                `${rWhere}.preferred[${j}]: security-purpose preferred selectors must be pinned "id:" selectors (got "${entry["selector"]}")`
+              );
+            }
+          });
+        }
+      }
+      const fallbacks = rawRoute["fallbacks"];
+      if (!Array.isArray(fallbacks)) {
+        rejects.push(`${rWhere}.fallbacks: must be an array (may be empty)`);
+      } else {
+        fallbacks.forEach((entry, j) => validateSelectorEntry(entry, `${rWhere}.fallbacks[${j}]`, rejects));
+      }
+      const tierFloor = purposeTierFloor(purpose);
+      if (tierFloor !== null) {
+        const checkSelectorFloor = (entry, sWhere) => {
+          if (!isPlainObject7(entry) || typeof entry["selector"] !== "string") return;
+          let parsed;
+          try {
+            parsed = parseSelector(entry["selector"]);
+          } catch {
+            return;
+          }
+          if (parsed.form === "expr" && parsed.tier !== void 0 && parsed.tier !== tierFloor) {
+            rejects.push(
+              `${sWhere}: "${entry["selector"]}" names tier "${parsed.tier}" on a "${purpose}" route \u2014 the \xA73 purpose tier floor is "${tierFloor}" (non-downgradable)`
+            );
+            return;
+          }
+          const catalog = opts?.catalog_models;
+          if (!catalog) return;
+          for (const m of catalog) {
+            const matches = parsed.form === "id" ? m.canonical_id === parsed.canonical_id : parsed.form === "alias" ? Array.isArray(m.aliases) && m.aliases.includes(parsed.alias) : (parsed.model_family === void 0 || m.model_family === parsed.model_family) && (parsed.tier === void 0 || m.tier === parsed.tier);
+            if (matches && m.tier !== tierFloor) {
+              rejects.push(
+                `${sWhere}: "${entry["selector"]}" resolves to catalog model "${String(m.canonical_id)}" at tier "${m.tier ?? "unknown"}" \u2014 "${purpose}" routes must stay at the "${tierFloor}" floor (\xA73; research_always_hard forces hard AND powerful)`
+              );
+            }
+          }
+        };
+        if (Array.isArray(preferred)) {
+          preferred.forEach((entry, j) => checkSelectorFloor(entry, `${rWhere}.preferred[${j}]`));
+        }
+        if (Array.isArray(fallbacks)) {
+          fallbacks.forEach((entry, j) => checkSelectorFloor(entry, `${rWhere}.fallbacks[${j}]`));
+        }
+      }
+      const providerDefault = rawRoute["provider_default"];
+      if (providerDefault !== void 0 && providerDefault !== "forbid" && providerDefault !== "allow_last_resort") {
+        rejects.push(`${rWhere}.provider_default: must be forbid|allow_last_resort (default forbid)`);
+      }
+      if (providerDefault === "allow_last_resort" && (purpose === "research" || isReviewClassPurpose(purpose))) {
+        rejects.push(
+          `${rWhere}.provider_default: allow_last_resort is rejected on "${purpose}" routes (research and review-class purposes must be forbid)`
+        );
+      }
+    });
+    if (COMPLEXITIES.includes(minC)) {
+      const reachable = reachableComplexities(purpose, minC);
+      for (const c of reachable) {
+        const covered = routes.some((r) => {
+          if (!isPlainObject7(r)) return false;
+          const rc = r["complexity"];
+          const cond = r["condition"];
+          const isAlways = cond === void 0 || isPlainObject7(cond) && cond["kind"] === "always";
+          return (rc === c || rc === "any") && isAlways;
+        });
+        if (!covered) {
+          rejects.push(
+            `${where}.routes: route_incomplete \u2014 reachable effective_complexity "${c}" has no matching always-condition row (\xA71b coverage)`
+          );
+        }
+      }
+    }
+  }
+  return rejects;
+}
+var POLICY_PURPOSES, REVIEW_CLASS_PURPOSES, COMPLEXITIES, CONDITION_KINDS, INDEPENDENCE_LEVELS, POLICY_TIERS, COMPLEXITY_ORDER, OPERATOR_BASELINE_POLICY;
+var init_model_policy = __esm({
+  "src/domains/config/model-policy.ts"() {
+    init_kernel();
+    POLICY_PURPOSES = Object.freeze([
+      "general",
+      "implementation",
+      "planning",
+      "research",
+      "advisory",
+      "adversarial",
+      "security",
+      "adversarial-security"
+    ]);
+    REVIEW_CLASS_PURPOSES = Object.freeze([
+      "advisory",
+      "adversarial",
+      "security",
+      "adversarial-security"
+    ]);
+    COMPLEXITIES = Object.freeze(["easy", "medium", "hard"]);
+    CONDITION_KINDS = Object.freeze([
+      "always",
+      "producer_model_family_is",
+      "producer_model_family_is_not"
+    ]);
+    INDEPENDENCE_LEVELS = Object.freeze(["none", "prefer_cross_family", "require_cross_family"]);
+    POLICY_TIERS = Object.freeze(["cheap", "mid", "powerful"]);
+    COMPLEXITY_ORDER = { easy: 0, medium: 1, hard: 2 };
+    OPERATOR_BASELINE_POLICY = deepFreeze({
+      version: 2,
+      allow_advertised_attempt: false,
+      purposes: {
+        general: {
+          min_effective_complexity: "easy",
+          independence: "none",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "easy",
+              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=cheap" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "medium",
+              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=mid" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "hard",
+              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+              provider_default: "allow_last_resort"
+            }
+          ]
+        },
+        implementation: {
+          min_effective_complexity: "easy",
+          independence: "none",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "easy",
+              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=cheap" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "medium",
+              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=mid" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "hard",
+              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+              provider_default: "allow_last_resort"
+            }
+          ]
+        },
+        planning: {
+          min_effective_complexity: "easy",
+          independence: "none",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "easy",
+              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=cheap" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "medium",
+              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:tier=mid" }],
+              provider_default: "allow_last_resort"
+            },
+            {
+              complexity: "hard",
+              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+              provider_default: "allow_last_resort"
+            }
+          ]
+        },
+        research: {
+          // Redundant with the §3 forced floor; stated for closure.
+          min_effective_complexity: "hard",
+          independence: "none",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "hard",
+              // the ONLY reachable value (research_always_hard, §3)
+              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+              provider_default: "forbid"
+            }
+          ]
+        },
+        advisory: {
+          min_effective_complexity: "easy",
+          independence: "prefer_cross_family",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "any",
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              fallbacks: [{ selector: "expr:model_family=gpt;tier=powerful" }],
+              provider_default: "forbid"
+            }
+          ]
+        },
+        adversarial: {
+          min_effective_complexity: "easy",
+          // Same-family fallback allowed but ALWAYS weak-labelled (resolution §7a).
+          independence: "prefer_cross_family",
+          confirm_on_degradation: true,
+          routes: [
+            {
+              // Producer is not gpt-family → gpt reviewer is cross-family.
+              complexity: "any",
+              condition: { kind: "producer_model_family_is_not", model_family: "gpt" },
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }],
+              // may be same-family as producer ⇒ weak, labelled
+              provider_default: "forbid"
+            },
+            {
+              // Producer IS gpt-family → claude reviewer restores independence.
+              complexity: "any",
+              condition: { kind: "producer_model_family_is", model_family: "gpt" },
+              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
+              fallbacks: [{ selector: "expr:model_family=claude;tier=powerful" }],
+              provider_default: "forbid"
+            },
+            {
+              // Producer family unknown → weak either way (resolution §7a); review still runs.
+              complexity: "any",
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }],
+              provider_default: "forbid"
+            }
+          ]
+        },
+        security: {
+          min_effective_complexity: "easy",
+          independence: "none",
+          // same-family claude is deliberate (pinned-model rationale)
+          confirm_on_degradation: true,
+          routes: [
+            {
+              complexity: "any",
+              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
+              // pinned id REQUIRED (§5)
+              fallbacks: [{ selector: "expr:model_family=claude;tier=powerful" }],
+              provider_default: "forbid"
+            }
+          ]
+        },
+        "adversarial-security": {
+          min_effective_complexity: "easy",
+          independence: "require_cross_family",
+          // adjudicated weak ⇒ NO strong sign-off (resolution §7a)
+          confirm_on_degradation: true,
+          routes: [
+            {
+              // Producer not gpt-family → gpt reviewer is cross-family.
+              complexity: "any",
+              condition: { kind: "producer_model_family_is_not", model_family: "gpt" },
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              // Cannot restore independence on this branch ⇒ weak ⇒ NO strong sign-off.
+              fallbacks: [{ selector: "id:claude-opus-4-8" }],
+              provider_default: "forbid"
+            },
+            {
+              // Producer IS gpt-family → claude restores family independence.
+              complexity: "any",
+              condition: { kind: "producer_model_family_is", model_family: "gpt" },
+              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
+              fallbacks: [],
+              // nothing further — beyond this there is NO strong sign-off
+              provider_default: "forbid"
+            },
+            {
+              // Producer family unknown → weak regardless; NO strong sign-off.
+              complexity: "any",
+              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+              fallbacks: [{ selector: "id:claude-opus-4-8" }],
+              provider_default: "forbid"
+            }
+          ]
+        }
+      }
+    });
+  }
+});
+
+// src/domains/config/model-resolver.ts
+function totalCatalogOrder(models) {
+  return [...models].sort((a, b) => {
+    const pa = a.provider_priority ?? null;
+    const pb = b.provider_priority ?? null;
+    if (pa !== pb) {
+      if (pa === null) return 1;
+      if (pb === null) return -1;
+      return pa - pb;
+    }
+    const ia = a.catalog_index ?? Number.MAX_SAFE_INTEGER;
+    const ib = b.catalog_index ?? Number.MAX_SAFE_INTEGER;
+    if (ia !== ib) return ia - ib;
+    return codePointCompare(a.canonical_id ?? "", b.canonical_id ?? "");
+  });
+}
+function expandSelector(parsed, orderedModels) {
+  if (parsed.form === "id") {
+    return orderedModels.filter((m) => m.canonical_id === parsed.canonical_id);
+  }
+  if (parsed.form === "alias") {
+    return orderedModels.filter((m) => Array.isArray(m.aliases) && m.aliases.includes(parsed.alias));
+  }
+  return orderedModels.filter((m) => {
+    if (parsed.model_family !== void 0 && m.model_family !== parsed.model_family) return false;
+    if (parsed.tier !== void 0 && m.tier !== parsed.tier) return false;
+    return true;
+  });
+}
+function evaluateCondition(condition, producerModelFamily) {
+  if (!condition || condition.kind === "always") return true;
+  if (producerModelFamily === void 0 || producerModelFamily === null || producerModelFamily === "unknown") {
+    return false;
+  }
+  if (condition.kind === "producer_model_family_is") {
+    return producerModelFamily === condition.model_family;
+  }
+  if (condition.kind === "producer_model_family_is_not") {
+    return producerModelFamily !== condition.model_family;
+  }
+  return false;
+}
+function selectRoute(input) {
+  const evaluations = [];
+  const conditionInput = input.producer_model_family === void 0 ? null : input.producer_model_family;
+  for (let i = 0; i < input.routes.length; i++) {
+    const row = input.routes[i];
+    const complexityMatch = row.complexity === "any" || row.complexity === input.effective_complexity;
+    const conditionResult = evaluateCondition(
+      row.condition,
+      input.producer_model_family
+    );
+    evaluations.push({ index: i, complexity_match: complexityMatch, condition_result: conditionResult });
+    if (complexityMatch && conditionResult) {
+      return { index: i, route: row, evaluations, condition_input: conditionInput };
+    }
+  }
+  throw new Error(
+    `route_unbound: no route row matches effective_complexity "${input.effective_complexity}" (fail closed \u2014 a validator-accepted policy cannot reach this; contract violation)`
+  );
+}
+function simulateCatalogChange(change) {
+  if (change.remove) liveCatalog.delete(change.remove);
+  if (change.upsert) liveCatalog.set(change.upsert.canonical_id, change.upsert);
+}
+function fallbackHash(fallbacks) {
+  return sha256Hex(canonicalYaml(fallbacks));
+}
+function freezeChain(input) {
+  const frozenFallbacks = JSON.parse(JSON.stringify(input.fallbacks ?? []));
+  const receipt = {
+    ...input,
+    fallbacks: frozenFallbacks,
+    fallback_hash: fallbackHash(frozenFallbacks),
+    outcome: { attempted: [] },
+    finalized_at: null,
+    receipt_hash: null
+  };
+  Object.freeze(receipt.fallbacks);
+  receipt.fallbacks.forEach((f) => Object.freeze(f));
+  return receipt;
+}
+function chainModels(receipt) {
+  const models = /* @__PURE__ */ new Set();
+  const sel = receipt.selection;
+  if (sel && typeof sel.model === "string") models.add(sel.model);
+  for (const f of receipt.fallbacks ?? []) models.add(f.model);
+  return models;
+}
+function assertNotFinalized(receipt, action) {
+  if (receipt.finalized_at) {
+    throw new Error(`receipt is finalized and immutable \u2014 cannot ${action} (\xA78 lifecycle)`);
+  }
+}
+function advanceChain(receipt, failure2) {
+  const advances = FALLBACK_FAILURE_TAXONOMY[failure2.failure_class];
+  if (advances === void 0) {
+    throw new Error(
+      `failure_class "${failure2.failure_class}" is outside the closed \xA74 taxonomy \u2014 fail closed`
+    );
+  }
+  const attemptedModels = new Set((receipt.outcome?.attempted ?? []).map((a) => a.model));
+  const chain = receipt.fallbacks ?? [];
+  const next = advances ? chain.find((f) => !attemptedModels.has(f.model)) ?? null : null;
+  return {
+    advanced: advances,
+    failure_class: failure2.failure_class,
+    next_model: next ? next.model : null
+  };
+}
+function assertServedTripleConsistent(attempt, where) {
+  const cls = attempt.substitution_class;
+  if (cls === void 0 || cls === null) {
+    throw new Error(
+      `${where}: served attempt for "${attempt.model}" has no substitution_class \u2014 every served attempt carries exactly one closed \xA75 class (${SUBSTITUTION_CLASSES.join("|")}); an unreported substitution is provider_silent, never an omitted field`
+    );
+  }
+  if (!SUBSTITUTION_CLASSES.includes(cls)) {
+    throw new Error(`${where}: substitution_class "${String(cls)}" is outside the closed \xA75 set`);
+  }
+  const actual = attempt.actual_model ?? "unknown";
+  if (cls === "none" && actual !== attempt.model) {
+    throw new Error(
+      `${where}: substitution_class "none" asserts actual_model === requested ("${attempt.model}") but actual_model is "${actual}" \u2014 a substitution the provider did not report is provider_silent with actual_model "unknown" (\xA75)`
+    );
+  }
+  if (cls === "provider_silent" && actual !== "unknown") {
+    throw new Error(
+      `${where}: provider_silent means the provider did not report the served model \u2014 actual_model must be the literal "unknown", got "${actual}" (\xA75)`
+    );
+  }
+  if ((cls === "provider_content_fallback" || cls === "provider_server_fallback") && (actual === "unknown" || actual === attempt.model)) {
+    throw new Error(
+      `${where}: ${cls} requires a provider-reported actual_model differing from the requested "${attempt.model}" (got "${actual}") \u2014 unreported is provider_silent, unchanged is none (\xA75)`
+    );
+  }
+}
+function recordAttempt(receipt, attempt) {
+  assertNotFinalized(receipt, "record an attempt");
+  if (!chainModels(receipt).has(attempt.model)) {
+    throw new Error(
+      `out-of-receipt substitution: model "${attempt.model}" is not in the frozen fallback chain \u2014 any model change must advance the frozen chain or be a recorded provider-side substitution (\xA73)`
+    );
+  }
+  if (attempt.result !== "served" && attempt.result !== "failed") {
+    throw new Error(`attempt.result must be served|failed (got "${String(attempt.result)}")`);
+  }
+  if (attempt.result === "failed") {
+    const fc = attempt.failure_class;
+    if (!fc || FALLBACK_FAILURE_TAXONOMY[fc] === void 0) {
+      throw new Error(`failed attempts REQUIRE a closed \xA74 failure_class (got "${String(fc)}")`);
+    }
+  }
+  const entry = {
+    model: attempt.model,
+    effort: attempt.effort ?? null,
+    result: attempt.result,
+    failure_class: attempt.result === "failed" ? attempt.failure_class : null,
+    substitution_class: attempt.result === "served" ? attempt.substitution_class ?? null : null,
+    actual_model: attempt.result === "served" ? attempt.actual_model ?? "unknown" : null
+  };
+  if (entry.result === "served") {
+    assertServedTripleConsistent(entry, "recordAttempt");
+  }
+  receipt.outcome.attempted.push(entry);
+  return receipt;
+}
+function classifyServedAttempt(input) {
+  const reported = input.provider_reported_model;
+  if (reported === null || reported === void 0 || reported === "") {
+    return {
+      requested_model: input.requested_model,
+      substitution_class: "provider_silent",
+      actual_model: "unknown"
+    };
+  }
+  if (reported === input.requested_model) {
+    return { requested_model: input.requested_model, substitution_class: "none", actual_model: reported };
+  }
+  const mechanism = input.mechanism ?? "";
+  const cls = mechanism === "content_classifier" ? "provider_content_fallback" : mechanism === "fallbacks_param" || mechanism === "server_fallback" ? "provider_server_fallback" : (
+    // A reported substitution with no stated mechanism is still a
+    // provider-side substitution; classify by the conservative content
+    // class so it is never masked as `none`.
+    "provider_content_fallback"
+  );
+  return { requested_model: input.requested_model, substitution_class: cls, actual_model: reported };
+}
+function finalizeReceipt(receipt, opts) {
+  if (receipt.finalized_at) {
+    throw new Error("receipt already finalized \u2014 finalization happens exactly once (\xA78)");
+  }
+  if (!RESOLUTION_STATUSES.includes(opts.status)) {
+    throw new Error(`outcome.status "${String(opts.status)}" outside the closed union`);
+  }
+  (receipt.outcome.attempted ?? []).forEach((a, i) => {
+    if (a.result === "served") {
+      assertServedTripleConsistent(a, `finalizeReceipt: outcome.attempted[${i}]`);
+    }
+  });
+  receipt.outcome.status = opts.status;
+  const served = [...receipt.outcome.attempted].reverse().find((a) => a.result === "served");
+  if (served && receipt.outcome.actual_model === void 0) {
+    receipt.outcome.actual_model = served.actual_model ?? "unknown";
+  }
+  receipt.finalized_at = opts.at ?? (/* @__PURE__ */ new Date()).toISOString();
+  receipt.receipt_hash_algorithm = "sha256";
+  receipt.receipt_hash_scope = "canonical_yaml_with_receipt_hash_field_omitted";
+  delete receipt["receipt_hash"];
+  receipt.receipt_hash = selfReferentialHash(
+    receipt,
+    "receipt_hash"
+  );
+  return receipt;
+}
+function finalizeInterrupted(receipt, opts) {
+  return finalizeReceipt(receipt, { status: "interrupted", at: opts?.at });
+}
+function verifyResolutionReceipt(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { ok: false, reason: "not_an_object" };
+  }
+  const r = value;
+  if (r.schema_version !== "guild.model_resolution.v1") {
+    return { ok: false, reason: "schema_version_mismatch" };
+  }
+  if (typeof r.resolution_core_hash !== "string" || r.resolution_core_hash.length === 0) {
+    return { ok: false, reason: "core_hash_absent" };
+  }
+  if (coreHash(r) !== r.resolution_core_hash) {
+    return { ok: false, reason: "core_hash_mismatch" };
+  }
+  const finalizedAt = r.finalized_at;
+  const receiptHash = r.receipt_hash;
+  const claimsFinalization = finalizedAt !== null && finalizedAt !== void 0 || receiptHash !== null && receiptHash !== void 0;
+  if (!claimsFinalization) return { ok: true, receipt: r, finalized: false };
+  if (typeof finalizedAt !== "string" || typeof receiptHash !== "string") {
+    return { ok: false, reason: "finalization_partial" };
+  }
+  const recomputed = selfReferentialHash(
+    r,
+    "receipt_hash"
+  );
+  if (recomputed !== receiptHash) return { ok: false, reason: "receipt_hash_mismatch" };
+  return { ok: true, receipt: r, finalized: true };
+}
+function contentRef(name, value) {
+  const bytes = typeof value === "string" ? value : canonicalYaml(value);
+  return { path_or_id: `inline:${name}`, sha256: sha256Hex(bytes) };
+}
+function asObject(value) {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+function coreHash(receipt) {
+  const core = {};
+  for (const [k, v] of Object.entries(receipt)) {
+    if (k === "outcome" || k === "finalized_at" || k === "receipt_hash" || k === "receipt_hash_algorithm" || k === "receipt_hash_scope" || k === "resolution_core_hash")
+      continue;
+    if (v === void 0) continue;
+    core[k] = v;
+  }
+  return sha256Hex(canonicalYaml(core));
+}
+function failClosedCore(inputs, reason, rulePath) {
+  const receipt = {
+    schema_version: "guild.model_resolution.v1",
+    run_id: inputs.run_id ?? "unbound",
+    dispatch_id: inputs.dispatch_id ?? "unbound",
+    refs: {
+      session_context: contentRef("session_context", inputs.session_context),
+      catalog_snapshot: contentRef("catalog_snapshot", inputs.catalog_snapshot),
+      policy: contentRef("policy", inputs.policy)
+    },
+    request: null,
+    selection: null,
+    fallbacks: [],
+    fallback_hash: fallbackHash([]),
+    rejections: [],
+    rule_path: [...rulePath, `fail_closed:${reason}`],
+    failed_closed: reason,
+    outcome: { attempted: [] },
+    finalized_at: null,
+    receipt_hash: null
+  };
+  receipt.resolution_core_hash_algorithm = "sha256";
+  receipt.resolution_core_hash_scope = "canonical_yaml_with_resolution_core_hash_field_omitted";
+  receipt.resolution_core_hash = coreHash(receipt);
+  return receipt;
+}
+function resolve16(inputs) {
+  const rulePath = [];
+  const policyObj = asObject(inputs.policy);
+  if (policyObj === null) {
+    return failClosedCore(inputs, "policy_unparsable", rulePath);
+  }
+  const policyRejects = validateModelPolicy2(policyObj);
+  if (policyRejects.length > 0) {
+    return failClosedCore(inputs, "policy_invalid", [
+      ...rulePath,
+      ...policyRejects.slice(0, 5).map((r) => `policy_reject:${r}`)
+    ]);
+  }
+  const policy = policyObj;
+  const request = inputs.request;
+  if (!request || typeof request.purpose !== "string") {
+    return failClosedCore(inputs, "purpose_unbound", rulePath);
+  }
+  const purposePolicy = policy.purposes[request.purpose];
+  if (!purposePolicy) {
+    return failClosedCore(inputs, `purpose_unconfigured:${request.purpose}`, rulePath);
+  }
+  const catalogObj = asObject(inputs.catalog_snapshot);
+  const models = Array.isArray(catalogObj?.["models"]) ? catalogObj["models"] : null;
+  if (!models) {
+    return failClosedCore(inputs, "catalog_snapshot_unparsable", rulePath);
+  }
+  const catalogRejects = validateModelPolicy2(policyObj, { catalog_models: models });
+  if (catalogRejects.length > 0) {
+    return failClosedCore(inputs, "policy_invalid", [
+      ...rulePath,
+      ...catalogRejects.slice(0, 5).map((r) => `policy_reject:${r}`)
+    ]);
+  }
+  const requested = request.requested_complexity ?? "easy";
+  const effective = maxComplexity(
+    maxComplexity(requested, purposeComplexityFloor(request.purpose)),
+    purposePolicy.min_effective_complexity
+  );
+  const producerFamily = inputs.producer?.model_family ?? (isReviewClassPurpose(request.purpose) ? "unknown" : void 0);
+  let routeSel;
+  try {
+    routeSel = selectRoute({
+      routes: purposePolicy.routes,
+      effective_complexity: effective,
+      producer_model_family: producerFamily
+    });
+  } catch (e) {
+    return failClosedCore(inputs, "route_unbound", [
+      ...rulePath,
+      `route_selection:${e.message}`
+    ]);
+  }
+  for (const ev of routeSel.evaluations) {
+    rulePath.push(
+      `route[${ev.index}]:complexity_match=${ev.complexity_match},condition=${ev.condition_result}`
+    );
+  }
+  rulePath.push(`route_selected:${routeSel.index}`);
+  const route2 = routeSel.route;
+  const ordered = totalCatalogOrder(models);
+  const candidates = [];
+  const expandList = (entries, source) => {
+    entries.forEach((sel, idx) => {
+      const parsed = parseSelector(sel.selector);
+      const matches = expandSelector(parsed, ordered);
+      rulePath.push(`${source}[${idx}]:${sel.selector}->${matches.length}`);
+      for (const m of matches) {
+        candidates.push({
+          entry: m,
+          source,
+          selectorIndex: idx,
+          selectorEffort: sel.effort ?? null,
+          requiredCapabilities: sel.capabilities ?? []
+        });
+      }
+    });
+  };
+  expandList(route2.preferred ?? [], "preferred");
+  expandList(route2.fallbacks ?? [], "fallback");
+  if ((route2.provider_default ?? "forbid") === "allow_last_resort") {
+    const pd = ordered.find((m) => m.provider_default === true);
+    if (pd) {
+      rulePath.push(`provider_default:${pd.canonical_id}`);
+      candidates.push({
+        entry: pd,
+        source: "provider_default",
+        selectorIndex: -1,
+        selectorEffort: null,
+        requiredCapabilities: []
+      });
+    }
+  }
+  const seen = /* @__PURE__ */ new Set();
+  const deduped = candidates.filter((c) => {
+    if (seen.has(c.entry.canonical_id)) return false;
+    seen.add(c.entry.canonical_id);
+    return true;
+  });
+  const rejections = [];
+  const survivors = [];
+  const tierFloor = purposeTierFloor(request.purpose);
+  for (const c of deduped) {
+    if (tierFloor !== null && c.entry.tier !== tierFloor) {
+      rejections.push({ model: c.entry.canonical_id, reason: "policy" });
+      continue;
+    }
+    const caps = c.entry.capabilities ?? {};
+    const missingCap = c.requiredCapabilities.find((k) => !caps[k]);
+    if (missingCap !== void 0) {
+      rejections.push({ model: c.entry.canonical_id, reason: "capability" });
+      continue;
+    }
+    const evidenceState = c.entry.evidence?.state ?? "unknown";
+    const eligible = eligibleForPurpose({
+      evidence_state: evidenceState,
+      purpose_class: request.purpose,
+      allow_advertised_attempt: policy.allow_advertised_attempt === true
+    });
+    if (!eligible) {
+      rejections.push({ model: c.entry.canonical_id, reason: "evidence" });
+      continue;
+    }
+    survivors.push(c);
+  }
+  if (survivors.length === 0) {
+    return failClosedCore(inputs, "no_eligible_candidate", [
+      ...rulePath,
+      ...rejections.map((r) => `reject:${r.model}:${r.reason}`)
+    ]);
+  }
+  const first = survivors[0];
+  const efforts = first.entry.reasoning_efforts ?? [];
+  let effort;
+  let effortDegraded = false;
+  if (first.selectorEffort && efforts.includes(first.selectorEffort)) {
+    effort = first.selectorEffort;
+  } else if (first.selectorEffort) {
+    effort = first.entry.default_effort ?? null;
+    effortDegraded = true;
+  } else {
+    effort = first.entry.default_effort ?? null;
+  }
+  const independenceNote = (candidateFamily) => {
+    if (!isReviewClassPurpose(request.purpose)) return null;
+    const fam = candidateFamily ?? "unknown";
+    if (producerFamily === void 0 || producerFamily === null || producerFamily === "unknown" || fam === "unknown") {
+      return "producer_or_candidate_family_unknown:weak";
+    }
+    return fam === producerFamily ? "same_family_as_producer:weak" : "cross_family";
+  };
+  const frozenFallbacks = survivors.slice(1).map((c) => ({
+    model: c.entry.canonical_id,
+    effort: c.selectorEffort && (c.entry.reasoning_efforts ?? []).includes(c.selectorEffort) ? c.selectorEffort : c.entry.default_effort ?? null,
+    evidence_state: c.entry.evidence?.state ?? "unknown",
+    source: c.source,
+    independence_note: independenceNote(c.entry.model_family)
+  }));
+  const receipt = {
+    schema_version: "guild.model_resolution.v1",
+    run_id: inputs.run_id ?? "unbound",
+    dispatch_id: inputs.dispatch_id ?? "unbound",
+    refs: {
+      session_context: contentRef("session_context", inputs.session_context),
+      catalog_snapshot: contentRef("catalog_snapshot", inputs.catalog_snapshot),
+      policy: contentRef("policy", inputs.policy)
+    },
+    request: {
+      purpose: request.purpose,
+      purpose_origin: request.purpose_origin ?? "unbound",
+      dispatch_ancestry: request.dispatch_ancestry ?? [],
+      rejected_labels: request.rejected_labels ?? [],
+      requested_complexity: requested,
+      effective_complexity: effective,
+      forced_floor_reason: request.forced_floor_reason ?? null
+    },
+    selection: {
+      target_id: asObject(inputs.session_context)?.["target_id"] ?? "unknown",
+      model: first.entry.canonical_id,
+      effort,
+      evidence_state: first.entry.evidence?.state ?? "unknown",
+      route: {
+        index: routeSel.index,
+        complexity: route2.complexity,
+        condition_kind: route2.condition?.kind ?? "always",
+        condition_model_family: route2.condition?.model_family ?? null,
+        condition_input: routeSel.condition_input
+      },
+      source: first.source
+    },
+    fallbacks: frozenFallbacks,
+    fallback_hash: fallbackHash(frozenFallbacks),
+    rejections,
+    rule_path: [
+      ...rulePath,
+      `selected:${first.entry.canonical_id}:${first.source}[${first.selectorIndex}]`
+    ],
+    outcome: { attempted: [] },
+    finalized_at: null,
+    receipt_hash: null
+  };
+  if (isReviewClassPurpose(request.purpose)) {
+    receipt.review = {
+      requested_independence: purposePolicy.independence,
+      producer: {
+        host_family: inputs.producer?.host_family ?? "unknown",
+        host_family_trust: inputs.producer?.host_family_trust ?? "asserted",
+        model_family: inputs.producer?.model_family ?? "unknown",
+        model_family_source: inputs.producer?.model_family_source ?? "unknown",
+        resolution_ref: inputs.producer?.resolution_ref ?? null
+      }
+    };
+  }
+  if (effortDegraded) {
+    receipt.outcome.degradation = {
+      kind: "effort",
+      note: `selector effort "${first.selectorEffort}" not in entry reasoning_efforts; used default`
+    };
+  }
+  Object.freeze(receipt.fallbacks);
+  receipt.fallbacks.forEach((f) => Object.freeze(f));
+  receipt.resolution_core_hash_algorithm = "sha256";
+  receipt.resolution_core_hash_scope = "canonical_yaml_with_resolution_core_hash_field_omitted";
+  receipt.resolution_core_hash = coreHash(receipt);
+  return receipt;
+}
+function persistResolutionReceipt(runDir3, receipt) {
+  const runId = path67.basename(runDir3);
+  if (!receipt.run_id || receipt.run_id !== runId) {
+    throw new Error(
+      `run_binding_mismatch: receipt.run_id "${String(receipt.run_id)}" does not match the bound run dir "${runId}" \u2014 refusing to write`
+    );
+  }
+  if (!receipt.dispatch_id || receipt.dispatch_id === "unbound") {
+    throw new Error("run_binding_mismatch: receipt has no dispatch_id \u2014 refusing to write");
+  }
+  const dir = path67.join(runDir3, "resolution");
+  fs56.mkdirSync(dir, { recursive: true });
+  const target = path67.join(dir, `${receipt.dispatch_id}.receipt.yaml`);
+  const tmp = `${target}.tmp-${process.pid}`;
+  fs56.writeFileSync(tmp, canonicalYaml(receipt), "utf8");
+  fs56.renameSync(tmp, target);
+  return target;
+}
+var fs56, path67, FALLBACK_FAILURE_TAXONOMY, RESOLUTION_STATUSES, liveCatalog, SUBSTITUTION_CLASSES;
+var init_model_resolver = __esm({
+  "src/domains/config/model-resolver.ts"() {
+    fs56 = __toESM(require("fs"));
+    path67 = __toESM(require("path"));
+    init_teams();
+    init_model_catalog();
+    init_model_policy();
+    FALLBACK_FAILURE_TAXONOMY = Object.freeze({
+      model_overloaded: true,
+      model_unavailable: true,
+      server_nonretryable: true,
+      auth_error: false,
+      billing_error: false,
+      rate_limited: false,
+      request_invalid: false,
+      transport_error: false,
+      policy_refusal: false
+    });
+    RESOLUTION_STATUSES = Object.freeze([
+      "served",
+      "fallback_served",
+      "exhausted",
+      "user_declined",
+      "failed_closed",
+      "interrupted"
+    ]);
+    liveCatalog = /* @__PURE__ */ new Map();
+    SUBSTITUTION_CLASSES = [
+      "none",
+      "provider_content_fallback",
+      "provider_server_fallback",
+      "provider_silent"
+    ];
+  }
+});
+
+// src/domains/config/model-inspect.ts
+function asRecord(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v) ? v : null;
+}
+function str(v, fallback) {
+  return typeof v === "string" && v.length > 0 ? v : fallback;
+}
+function deepFreeze4(value) {
+  if (value && typeof value === "object") {
+    for (const v of Object.values(value)) deepFreeze4(v);
+    Object.freeze(value);
+  }
+  return value;
+}
+function parseRfc3339Seconds(s) {
+  if (typeof s !== "string") return null;
+  const ms = Date.parse(s);
+  return Number.isFinite(ms) ? Math.floor(ms / 1e3) : null;
+}
+function buildModelInspection(input) {
+  const unknowns = [];
+  const flags = { ...input.flags };
+  const sc = asRecord(input.session_context) ?? {};
+  const runId = str(sc["run_id"], "unknown");
+  if (runId === "unknown") unknowns.push("run_id");
+  const hostBlock = asRecord(sc["host"]);
+  const host = {
+    family: str(hostBlock?.["family"], "unknown"),
+    surface: str(hostBlock?.["surface"], "unknown")
+  };
+  if (host.family === "unknown") unknowns.push("host");
+  const idBlock = asRecord(sc["identity"]);
+  const identity = {
+    source: str(idBlock?.["source"], "none"),
+    // Unknown-safe: absent trust degrades to asserted, never upgrades (T3).
+    trust: idBlock?.["trust"] === "verified" ? "verified" : "asserted",
+    confidence: str(idBlock?.["confidence"], "low"),
+    evidence: str(idBlock?.["evidence"], "unknown")
+  };
+  if (!idBlock) unknowns.push("identity");
+  const targetBlock = asRecord(sc["execution_target"]);
+  const target = {
+    target_id: str(targetBlock?.["target_id"], "unknown"),
+    provider_kind: str(targetBlock?.["provider_kind"], "unknown"),
+    auth_mode: str(targetBlock?.["auth_mode"], "unknown")
+  };
+  if (target.target_id === "unknown") unknowns.push("target");
+  const inspectOff = flags["model_routing.inspect"] !== "on";
+  if (inspectOff) {
+    return deepFreeze4({
+      schema_version: MODEL_INSPECTION_SCHEMA,
+      state: "inspect_disabled",
+      generated_at: input.now,
+      run_id: runId,
+      host,
+      identity,
+      target,
+      catalog: {
+        state: "inspect_disabled",
+        target_id: null,
+        discovered_at: null,
+        age_seconds: null,
+        ttl_seconds: null,
+        stale: null,
+        generation: null,
+        models: null
+      },
+      policy: { present: false, policy_hash: null, rule_path: null },
+      selection: null,
+      fallbacks: null,
+      outcome: { finalized: false, status: "not_inspected", actual_model: "unknown" },
+      independence: {
+        adjudicated: false,
+        independence: null,
+        note: "inspection disabled (model_routing.inspect off)"
+      },
+      degradation: null,
+      flags,
+      unknowns: ["inspection_disabled"]
+    });
+  }
+  let catalog;
+  const snapshot = asRecord(input.catalog_snapshot);
+  if (flags["model_routing.discovery"] !== "on") {
+    catalog = {
+      state: "discovery_disabled",
+      target_id: null,
+      discovered_at: null,
+      age_seconds: null,
+      ttl_seconds: null,
+      stale: null,
+      generation: null,
+      models: null
+    };
+    unknowns.push("catalog");
+  } else if (!snapshot) {
+    catalog = {
+      state: "absent",
+      target_id: null,
+      discovered_at: null,
+      age_seconds: null,
+      ttl_seconds: null,
+      stale: null,
+      generation: null,
+      models: null
+    };
+    unknowns.push("catalog");
+  } else {
+    const discovery = asRecord(snapshot["discovery"]);
+    const discoveredAt = typeof discovery?.["discovered_at"] === "string" ? discovery["discovered_at"] : null;
+    const ttl = typeof discovery?.["ttl_seconds"] === "number" ? discovery["ttl_seconds"] : null;
+    const nowS = parseRfc3339Seconds(input.now);
+    const thenS = parseRfc3339Seconds(discoveredAt);
+    const age = nowS !== null && thenS !== null ? nowS - thenS : null;
+    if (age === null) unknowns.push("catalog_age");
+    const models = Array.isArray(snapshot["models"]) ? snapshot["models"].map((m) => {
+      const row = asRecord(m) ?? {};
+      const evidence = asRecord(row["evidence"]);
+      return {
+        canonical_id: str(row["canonical_id"], "unknown"),
+        tier: str(row["tier"], "unknown"),
+        evidence_state: str(evidence?.["state"], "unknown")
+      };
+    }) : null;
+    catalog = {
+      state: "ok",
+      target_id: str(asRecord(snapshot["target"])?.["target_id"], "unknown"),
+      discovered_at: discoveredAt,
+      age_seconds: age,
+      ttl_seconds: ttl,
+      stale: age !== null && ttl !== null ? age > ttl : null,
+      generation: typeof snapshot["generation"] === "number" ? snapshot["generation"] : null,
+      models
+    };
+  }
+  let receipt = null;
+  let receiptFinalized = false;
+  let verifiedReceiptHash = null;
+  if (input.receipt !== null && input.receipt !== void 0) {
+    const verdict = verifyResolutionReceipt(input.receipt);
+    if (verdict.ok === true) {
+      receipt = verdict.receipt;
+      receiptFinalized = verdict.finalized;
+      verifiedReceiptHash = verdict.finalized ? verdict.receipt.receipt_hash : null;
+    } else {
+      const rejected = verdict;
+      unknowns.push(`receipt_unverified:${rejected.reason}`);
+    }
+  }
+  const refs = asRecord(receipt?.["refs"]);
+  const policyRef = asRecord(refs?.["policy"]);
+  const policyPresent = input.policy !== null && input.policy !== void 0;
+  const policy = {
+    present: policyPresent,
+    policy_hash: str(policyRef?.["sha256"], "") || null,
+    rule_path: Array.isArray(receipt?.["rule_path"]) ? receipt["rule_path"] : null
+  };
+  if (!policyPresent) unknowns.push("policy");
+  const selectionBlock = asRecord(receipt?.["selection"]);
+  const selection = selectionBlock ? {
+    model: str(selectionBlock["model"], "unknown"),
+    effort: typeof selectionBlock["effort"] === "string" ? selectionBlock["effort"] : null,
+    evidence_state: str(selectionBlock["evidence_state"], "unknown")
+  } : null;
+  if (!selection) unknowns.push("selection");
+  const fallbacks = receipt && Array.isArray(receipt["fallbacks"]) && typeof receipt["fallback_hash"] === "string" ? { chain: receipt["fallbacks"], fallback_hash: receipt["fallback_hash"] } : null;
+  const outcomeBlock = asRecord(receipt?.["outcome"]);
+  const outcome = receiptFinalized ? {
+    finalized: true,
+    status: str(outcomeBlock?.["status"], "unknown"),
+    actual_model: str(outcomeBlock?.["actual_model"], "unknown")
+  } : { finalized: false, status: "pending", actual_model: "unknown" };
+  if (outcome.actual_model === "unknown") unknowns.push("actual_model");
+  const adjudicationBlock = validateAdjudicationBlock(input.adjudication);
+  let independence;
+  if (input.adjudication === null || input.adjudication === void 0) {
+    independence = {
+      adjudicated: false,
+      independence: null,
+      note: "no adjudication block written \u2014 no independence value exists (\xA77a: never provisional)"
+    };
+  } else if (!adjudicationBlock) {
+    independence = {
+      adjudicated: false,
+      independence: null,
+      note: "supplied independence value rejected: not a written \xA77a adjudication block (closed shape with producer_ref/reviewer_ref receipt hashes + predicate_trace)"
+    };
+  } else if (verifiedReceiptHash === null) {
+    independence = {
+      adjudicated: false,
+      independence: null,
+      note: "adjudication block rejected: no verified finalized receipt to bind it to (\xA77a blocks are written only after both receipts verify as finalized)"
+    };
+  } else if (adjudicationBlock.producer_ref.receipt_hash !== verifiedReceiptHash && adjudicationBlock.reviewer_ref.receipt_hash !== verifiedReceiptHash) {
+    independence = {
+      adjudicated: false,
+      independence: null,
+      note: "adjudication block rejected: neither backward ref matches this dispatch's verified receipt_hash (hash-bound \xA77a adjudication required)"
+    };
+  } else {
+    independence = {
+      adjudicated: true,
+      independence: adjudicationBlock.independence,
+      note: adjudicationBlock.predicate_trace
+    };
+  }
+  if (!independence.adjudicated) unknowns.push("independence");
+  const degradationBlock = asRecord(outcomeBlock?.["degradation"]);
+  const degradation = receiptFinalized && degradationBlock ? { kind: str(degradationBlock["kind"], "unknown"), note: str(degradationBlock["note"], "") } : null;
+  return deepFreeze4({
+    schema_version: MODEL_INSPECTION_SCHEMA,
+    state: "ok",
+    generated_at: input.now,
+    run_id: runId,
+    host,
+    identity,
+    target,
+    catalog,
+    policy,
+    selection,
+    fallbacks,
+    outcome,
+    independence,
+    degradation,
+    flags,
+    unknowns
+  });
+}
+var MODEL_INSPECTION_SCHEMA, validateAdjudicationBlock;
+var init_model_inspect = __esm({
+  "src/domains/config/model-inspect.ts"() {
+    init_model_resolver();
+    init_independence_predicates();
+    MODEL_INSPECTION_SCHEMA = "guild.model_inspection.v1";
+    validateAdjudicationBlock = validateWrittenAdjudication;
+  }
+});
+
+// src/domains/config/inspection-persist.ts
+function lifecycleApi2() {
+  return init_lifecycle(), __toCommonJS(lifecycle_exports);
+}
+function persistInspectionReport(input) {
+  const { root, report, binding, label } = input;
+  if (report.schema_version !== MODEL_INSPECTION_SCHEMA) {
+    throw new Error(
+      "refusing to persist a non-guild.model_inspection.v1 object as inspection evidence"
+    );
+  }
+  if (!SAFE_LABEL2.test(label)) {
+    throw new Error(`inspection label "${label}" is not a safe path segment \u2014 refusing`);
+  }
+  if (report.run_id !== binding.run_id) {
+    throw new Error(
+      `run_binding_mismatch: inspection report for run "${report.run_id}" cannot be persisted under run "${binding.run_id}" \u2014 refusing`
+    );
+  }
+  const verified2 = lifecycleApi2().assertWritableBinding({
+    root,
+    run_id: binding.run_id,
+    binding_ref: binding.binding_ref
+  });
+  const dir = path68.join(root, ".guild", "runs", verified2.run_id, "inspection");
+  fs57.mkdirSync(dir, { recursive: true });
+  const target = path68.join(dir, `${label}.json`);
+  const tmp = `${target}.tmp-${process.pid}`;
+  fs57.writeFileSync(tmp, JSON.stringify(report, null, 2) + "\n", "utf8");
+  fs57.renameSync(tmp, target);
+  return { absPath: target, ref: path68.join("inspection", `${label}.json`) };
+}
+var fs57, path68, SAFE_LABEL2;
+var init_inspection_persist = __esm({
+  "src/domains/config/inspection-persist.ts"() {
+    fs57 = __toESM(require("fs"));
+    path68 = __toESM(require("path"));
+    init_model_inspect();
+    SAFE_LABEL2 = /^[A-Za-z0-9_.-]+$/;
+  }
+});
+
+// src/domains/config/routing-rollout.ts
+function lifecycleApi3() {
+  return init_lifecycle(), __toCommonJS(lifecycle_exports);
+}
+function readRoutingFlags(settings) {
+  const flags = { ...ROUTING_FLAG_DEFAULTS };
+  const rejects = [];
+  if (settings !== void 0 && settings !== null && (typeof settings !== "object" || Array.isArray(settings))) {
+    rejects.push("settings root is not an object \u2014 using ADR defaults for every rollout flag");
+    return { flags, rejects };
+  }
+  const root = settings ?? {};
+  for (const [group, keys] of Object.entries(FLAG_GROUPS)) {
+    const groupValue = root[group];
+    if (groupValue === void 0 || groupValue === null) continue;
+    if (typeof groupValue !== "object" || Array.isArray(groupValue)) {
+      rejects.push(`settings.${group} is not an object \u2014 ${group}.* flags keep their defaults`);
+      continue;
+    }
+    const groupObj = groupValue;
+    for (const [k, v] of Object.entries(groupObj)) {
+      if (!keys.includes(k)) {
+        if (group === "model_routing") {
+          rejects.push(`unknown key under closed group: ${group}.${k}`);
+        }
+        continue;
+      }
+      const flagKey = `${group}.${k}`;
+      if (v === "on" || v === "off") {
+        flags[flagKey] = v;
+      } else {
+        rejects.push(
+          `${flagKey}: expected "on" | "off", got ${JSON.stringify(v)} \u2014 keeping default "${ROUTING_FLAG_DEFAULTS[flagKey]}"`
+        );
+      }
+    }
+  }
+  return { flags, rejects };
+}
+function resolveInRunDir(runDir3, ref) {
+  const abs = path69.resolve(runDir3, ref);
+  return abs === runDir3 || abs.startsWith(runDir3 + path69.sep) ? abs : null;
+}
+function loadJson(absPath) {
+  try {
+    const parsed = JSON.parse(fs58.readFileSync(absPath, "utf8"));
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function loadVerifiedM0Reports(evidence) {
+  if (!evidence || typeof evidence.root !== "string" || typeof evidence.run_id !== "string") {
+    return [];
+  }
+  const binding = lifecycleApi3().readRunBindingRecord({ root: evidence.root, run_id: evidence.run_id });
+  if (binding.status !== "ok") return [];
+  const runDir3 = path69.resolve(evidence.root, ".guild", "runs", evidence.run_id);
+  const refs = Array.isArray(evidence.m0?.inspection_report_refs) ? evidence.m0.inspection_report_refs : [];
+  const out = [];
+  for (const ref of refs) {
+    if (typeof ref !== "string") continue;
+    const abs = resolveInRunDir(runDir3, ref);
+    if (!abs) continue;
+    const report = loadJson(abs);
+    if (!report) continue;
+    if (report["schema_version"] !== "guild.model_inspection.v1") continue;
+    if (report["state"] !== "ok") continue;
+    if (report["run_id"] !== evidence.run_id) continue;
+    out.push(report);
+  }
+  return out;
+}
+function gateM2(flags, evidence) {
+  if (flags["model_routing.enabled"] !== "on") {
+    return { active: false, reason: "model_routing.enabled is off (M2 is opt-in)" };
+  }
+  if (!evidence || typeof evidence.root !== "string" || typeof evidence.run_id !== "string") {
+    return {
+      active: false,
+      reason: "M0 not evidenced: no evidence refs supplied \u2014 v2 routing stays off"
+    };
+  }
+  const binding = lifecycleApi3().readRunBindingRecord({ root: evidence.root, run_id: evidence.run_id });
+  if (binding.status !== "ok") {
+    return {
+      active: false,
+      reason: `run binding ${binding.status} for ${evidence.run_id}: evidence in an unbound run tree proves nothing \u2014 v2 routing stays off`
+    };
+  }
+  const runDir3 = path69.resolve(evidence.root, ".guild", "runs", evidence.run_id);
+  const m0Refs = Array.isArray(evidence.m0?.inspection_report_refs) ? evidence.m0.inspection_report_refs : [];
+  const m0Valid = loadVerifiedM0Reports(evidence).length;
+  if (m0Valid === 0) {
+    return {
+      active: false,
+      reason: `M0 not evidenced: 0 of ${m0Refs.length} inspection ref(s) loaded as a valid guild.model_inspection.v1 report bound to ${evidence.run_id} \u2014 v2 routing stays off`
+    };
+  }
+  const m1Refs = Array.isArray(evidence.m1?.shadow_comparison_refs) ? evidence.m1.shadow_comparison_refs : [];
+  let m1Valid = 0;
+  for (const ref of m1Refs) {
+    if (typeof ref !== "string") continue;
+    const abs = resolveInRunDir(runDir3, ref);
+    if (!abs) continue;
+    const cmp = loadJson(abs);
+    if (!cmp) continue;
+    if (cmp["schema_version"] !== "guild.shadow_comparison.v1") continue;
+    if (cmp["run_id"] !== evidence.run_id) continue;
+    if (cmp["comparable"] !== true) continue;
+    const storedHash = cmp["comparison_hash"];
+    if (typeof storedHash !== "string" || !/^[0-9a-f]{64}$/.test(storedHash)) continue;
+    if (selfReferentialHash(cmp, "comparison_hash") !== storedHash) continue;
+    m1Valid += 1;
+  }
+  if (m1Valid === 0) {
+    return {
+      active: false,
+      reason: `M1 not evidenced: 0 of ${m1Refs.length} shadow-comparison ref(s) loaded as a comparable, hash-verified guild.shadow_comparison.v1 record bound to ${evidence.run_id} \u2014 v2 routing stays off`
+    };
+  }
+  return {
+    active: true,
+    reason: `M2 active: opt-in flag on; M0 evidenced (${m0Valid} verified inspection report(s)); M1 evidenced (${m1Valid} verified comparable shadow comparison(s))`
+  };
+}
+function rollbackV2Routing(flags) {
+  return { ...flags, "model_routing.shadow": "off", "model_routing.enabled": "off" };
+}
+var fs58, path69, ROUTING_FLAG_KEYS, ROUTING_FLAG_DEFAULTS, FLAG_GROUPS;
+var init_routing_rollout = __esm({
+  "src/domains/config/routing-rollout.ts"() {
+    fs58 = __toESM(require("fs"));
+    path69 = __toESM(require("path"));
+    init_teams();
+    ROUTING_FLAG_KEYS = Object.freeze([
+      "model_routing.identity_v2",
+      "model_routing.binding_enforce",
+      "model_routing.discovery",
+      "model_routing.inspect",
+      "model_routing.shadow",
+      "model_routing.enabled",
+      "teams.proposal_v2"
+    ]);
+    ROUTING_FLAG_DEFAULTS = Object.freeze({
+      "model_routing.identity_v2": "on",
+      "model_routing.binding_enforce": "on",
+      "model_routing.discovery": "on",
+      "model_routing.inspect": "on",
+      "model_routing.shadow": "off",
+      "model_routing.enabled": "off",
+      "teams.proposal_v2": "on"
+    });
+    FLAG_GROUPS = Object.freeze({
+      model_routing: [
+        "identity_v2",
+        "binding_enforce",
+        "discovery",
+        "inspect",
+        "shadow",
+        "enabled"
+      ],
+      teams: ["proposal_v2"]
+    });
+  }
+});
+
+// src/domains/config/models-command.ts
+function readJson2(p) {
+  try {
+    if (!fs59.existsSync(p)) return null;
+    return JSON.parse(fs59.readFileSync(p, "utf8"));
+  } catch {
+    return null;
+  }
+}
+function loadVerifiedCatalogSnapshot(root, runId, sessionContext) {
+  const sc = sessionContext;
+  const target = sc?.["execution_target"];
+  const host = sc?.["host"];
+  if (!target || !host) {
+    return { snapshot: null, note: "no execution target on the session context - catalog unbound" };
+  }
+  let key;
+  try {
+    key = createCacheKey(
+      {
+        target_id: String(target.target_id ?? "unknown"),
+        family: String(host.family ?? "unknown"),
+        surface: String(host.surface ?? "unknown"),
+        provider_kind: String(target.provider_kind ?? "unknown"),
+        auth_mode: String(target.auth_mode ?? "unknown"),
+        account_fingerprint: String(target.account_fingerprint ?? "unknown"),
+        endpoint_fingerprint: String(target.endpoint_fingerprint ?? "unknown"),
+        org_fingerprint: String(target.org_fingerprint ?? "unknown"),
+        tool_version: String(target.tool_version ?? "unknown"),
+        adapter_id: String(host.adapter_id ?? "unknown"),
+        adapter_version: String(host.adapter_version ?? "unknown")
+      },
+      runId
+    );
+  } catch (err) {
+    return {
+      snapshot: null,
+      note: "catalog cache identity could not be constructed: " + err.message
+    };
+  }
+  const entry = readJson2(path70.join(modelCatalogCacheDir(root), key.hash + ".json"));
+  if (entry === null) {
+    return { snapshot: null, note: "no catalog cache entry for this run's target identity" };
+  }
+  if (entry["schema_version"] !== MODEL_CATALOG_SCHEMA_VERSION) {
+    return {
+      snapshot: null,
+      note: "catalog cache entry is not a " + MODEL_CATALOG_SCHEMA_VERSION + " snapshot - ignored"
+    };
+  }
+  return { snapshot: entry, note: null };
+}
+function loadVerifiedSources(root, runId) {
+  const notes = [];
+  const session_context = loadSessionContext(root, runId);
+  if (session_context === null) {
+    notes.push(
+      "no verified guild.session_context.v1 record for this run - identity, host and target are honest unknowns"
+    );
+  }
+  const { snapshot, note } = loadVerifiedCatalogSnapshot(root, runId, session_context);
+  if (note !== null) notes.push(note);
+  notes.push(
+    "policy / resolution receipt / \xA77a adjudication have no verified reader in this module yet - they are rendered as honest unknowns rather than copied from a persisted report"
+  );
+  return { session_context, catalog_snapshot: snapshot, notes };
+}
+function loadRoutingFlags(root) {
+  const p = path70.join(root, ".guild", "settings.json");
+  const settings = readJson2(p);
+  if (settings === null) {
+    const { flags: flags2, rejects: rejects2 } = readRoutingFlags(null);
+    return { flags: flags2, source: "defaults (no .guild/settings.json)", rejects: rejects2 };
+  }
+  const { flags, rejects } = readRoutingFlags(settings);
+  return { flags, source: ".guild/settings.json", rejects };
+}
+var fs59, path70, MODELS_COMMAND_USAGE;
+var init_models_command = __esm({
+  "src/domains/config/models-command.ts"() {
+    fs59 = __toESM(require("fs"));
+    path70 = __toESM(require("path"));
+    init_session_context();
+    init_security();
+    init_catalog_cache();
+    init_model_inspect();
+    init_session_binding();
+    init_routing_rollout();
+    MODELS_COMMAND_USAGE = [
+      "usage: guild models inspect [--cwd <repo-root>] [--run-id <id>] [--json]",
+      "",
+      "  inspect   READ-ONLY view of this run's model routing: identity trust, target",
+      "            evidence, catalog age, policy path, selection, fallbacks, actual",
+      "            model, independence and degradation - with honest unknowns.",
+      "",
+      "  --cwd     repo root that owns .guild/ (default: process cwd)",
+      "  --run-id  inspect this run (default: the intake candidate run, labeled)",
+      "  --json    emit the same view model as JSON instead of text"
+    ].join("\n");
+  }
+});
+
+// src/domains/config/inspection-record.ts
+function recordRunInspectionEvidence(input) {
+  const { root, binding, now } = input;
+  const label = input.label ?? DEFAULT_INSPECTION_LABEL;
+  const { flags } = loadRoutingFlags(root);
+  const v2OptedIn = flags["model_routing.shadow"] === "on" || flags["model_routing.enabled"] === "on";
+  if (!v2OptedIn) {
+    return {
+      recorded: false,
+      ref: null,
+      absPath: null,
+      reason: "v2 routing is not opted in (model_routing.shadow and model_routing.enabled are both off) \u2014 M0 defaults record no inspection evidence and the dispatch path is unchanged",
+      notes: []
+    };
+  }
+  if (flags["model_routing.inspect"] !== "on") {
+    return {
+      recorded: false,
+      ref: null,
+      absPath: null,
+      reason: "model_routing.inspect is off \u2014 the inspection surface is rolled back, so no report is built or recorded",
+      notes: []
+    };
+  }
+  const sources = loadVerifiedSources(root, binding.run_id);
+  if (sources.session_context === null) {
+    return {
+      recorded: false,
+      ref: null,
+      absPath: null,
+      reason: `no verified guild.session_context.v1 record for run ${binding.run_id} \u2014 refusing to record an inspection report with an unknown identity`,
+      notes: sources.notes
+    };
+  }
+  const report = buildModelInspection({
+    session_context: sources.session_context,
+    catalog_snapshot: sources.catalog_snapshot,
+    // Policy / receipt / §7a adjudication have no verified reader in this
+    // module (see loadVerifiedSources) — they stay honest unknowns rather than
+    // being copied from anywhere untrusted.
+    policy: null,
+    receipt: null,
+    adjudication: null,
+    flags,
+    now
+  });
+  if (report.state !== "ok") {
+    return {
+      recorded: false,
+      ref: null,
+      absPath: null,
+      reason: `inspection report came back state "${report.state}" \u2014 not recorded as evidence`,
+      notes: sources.notes
+    };
+  }
+  const written = persistInspectionReport({ root, report, binding, label });
+  return {
+    recorded: true,
+    ref: written.ref,
+    absPath: written.absPath,
+    reason: `recorded M0 inspection evidence for run ${binding.run_id} under label "${label}" (catalog ${report.catalog.state})`,
+    notes: sources.notes
+  };
+}
+var DEFAULT_INSPECTION_LABEL;
+var init_inspection_record = __esm({
+  "src/domains/config/inspection-record.ts"() {
+    init_model_inspect();
+    init_inspection_persist();
+    init_models_command();
+    DEFAULT_INSPECTION_LABEL = "dispatch";
+  }
+});
+
+// src/domains/config/policy-migration.ts
+function legacyModelFor(legacyTiers, tier) {
+  const v = legacyTiers?.[tier];
+  if (typeof v === "string" && v.length > 0) return v;
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    for (const hostValue of Object.values(v)) {
+      if (typeof hostValue === "string" && hostValue.length > 0) return hostValue;
+    }
+  }
+  return null;
+}
+function findRoute(policy, purpose, complexity) {
+  const routes = policy?.purposes?.[purpose]?.routes;
+  if (!Array.isArray(routes)) return null;
+  for (const r of routes) {
+    if (r && (r.complexity === complexity || r.complexity === "any")) return r;
+  }
+  return null;
+}
+function resolveWithLegacy(input) {
+  const { purpose, effective_complexity } = input;
+  const tier = tierForComplexity(effective_complexity);
+  const legacyModel = legacyModelFor(input.legacy_tiers, tier);
+  const conflicts = [];
+  const guidance = [];
+  const v2Route = findRoute(input.v2_policy, purpose, effective_complexity);
+  if (v2Route) {
+    if (legacyModel) {
+      conflicts.push({
+        purpose,
+        effective_complexity,
+        tier,
+        v2_selectors: (v2Route.preferred ?? []).map((s) => s.selector),
+        legacy_model: legacyModel
+      });
+      guidance.push(
+        `legacy models.tiers.${tier} ("${legacyModel}") is shadowed by the explicit v2 model_policy for ${purpose}/${effective_complexity}; remove the legacy key before the migration window closes`
+      );
+    }
+    return { source: "v2_policy", route: v2Route, conflicts, guidance };
+  }
+  const isGeneric = LEGACY_FILLABLE_PURPOSES.includes(purpose);
+  if (isGeneric && legacyModel) {
+    guidance.push(
+      `legacy models.tiers.${tier} fills the unset generic ${purpose}/${effective_complexity} preference for the migration window only; migrate it to model_policy.purposes.${purpose}`
+    );
+    return {
+      source: "legacy",
+      route: {
+        complexity: effective_complexity,
+        preferred: [{ selector: `id:${legacyModel}`, effort: null, capabilities: [] }],
+        fallbacks: [],
+        provider_default: "forbid"
+      },
+      conflicts,
+      guidance
+    };
+  }
+  if (!isGeneric && legacyModel) {
+    guidance.push(
+      `legacy models.tiers.${tier} is IGNORED for ${purpose} \u2014 legacy maps never bind research/review/security purposes (\xA76)`
+    );
+  }
+  const baselineRoute = findRoute(OPERATOR_BASELINE_POLICY, purpose, effective_complexity);
+  return { source: "baseline_default", route: baselineRoute, conflicts, guidance };
+}
+function migrationPreview(input) {
+  const settingsPath = path71.join(input.root, ".guild", "settings.json");
+  let parsed = {};
+  if (fs60.existsSync(settingsPath)) {
+    try {
+      const raw = JSON.parse(fs60.readFileSync(settingsPath, "utf8"));
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        parsed = raw;
+      }
+    } catch {
+      parsed = {};
+    }
+  }
+  const models = parsed["models"];
+  const legacyTiers = models && typeof models === "object" && !Array.isArray(models) ? models["tiers"] : void 0;
+  const v2Policy = parsed["model_policy"];
+  const conflicts = [];
+  const guidance = [];
+  const proposed = JSON.parse(
+    JSON.stringify(OPERATOR_BASELINE_POLICY)
+  );
+  for (const purpose of LEGACY_FILLABLE_PURPOSES) {
+    for (const complexity of ["easy", "medium", "hard"]) {
+      const resolved = resolveWithLegacy({
+        v2_policy: v2Policy,
+        legacy_tiers: legacyTiers,
+        purpose,
+        effective_complexity: complexity
+      });
+      conflicts.push(...resolved.conflicts);
+      guidance.push(...resolved.guidance);
+      if (resolved.source === "legacy" && resolved.route) {
+        const purposeBlock = proposed.purposes[purpose];
+        if (purposeBlock) {
+          const idx = purposeBlock.routes.findIndex(
+            (r) => r.complexity === complexity || r.complexity === "any"
+          );
+          if (idx >= 0) purposeBlock.routes[idx] = resolved.route;
+        }
+      }
+    }
+  }
+  return {
+    proposed_model_policy: proposed,
+    legacy_sources: legacyTiers ? { "models.tiers": legacyTiers } : {},
+    conflicts,
+    guidance,
+    writes_performed: false
+  };
+}
+var fs60, path71, LEGACY_FILLABLE_PURPOSES;
+var init_policy_migration = __esm({
+  "src/domains/config/policy-migration.ts"() {
+    fs60 = __toESM(require("fs"));
+    path71 = __toESM(require("path"));
+    init_model_policy();
+    LEGACY_FILLABLE_PURPOSES = Object.freeze(["general", "implementation"]);
+  }
+});
+
+// src/domains/config/purpose-provenance.ts
+function isComplexity(v) {
+  return COMPLEXITIES.includes(v);
+}
+function purposeForWorkClass(workClass) {
+  return POLICY_PURPOSES.includes(workClass) ? workClass : null;
+}
+function resolveEffectivePurpose(input) {
+  const events = input?.events;
+  if (!Array.isArray(events) || events.length === 0) {
+    throw new Error("purpose_unbound: empty dispatch chain \u2014 no authoritative purpose metadata");
+  }
+  const root = events[0];
+  if (root.kind !== "dispatch") {
+    throw new Error(
+      `purpose_unbound: chain root must be an authoritative dispatch (got kind "${root.kind}")`
+    );
+  }
+  const source = typeof root.source === "string" ? root.source : "";
+  if (!AUTHORITATIVE_PURPOSE_SOURCES.includes(source)) {
+    throw new Error(
+      `purpose_unbound: dispatch source "${source || "<absent>"}" is not an authoritative purpose source (${AUTHORITATIVE_PURPOSE_SOURCES.join(", ")}) \u2014 refusing to default to general work`
+    );
+  }
+  const boundLabel = typeof root.work_class === "string" ? root.work_class : typeof root.purpose === "string" ? root.purpose : null;
+  if (boundLabel === null) {
+    throw new Error(
+      `purpose_unbound: authoritative source "${source}" carries no work_class/purpose binding`
+    );
+  }
+  const purpose = purposeForWorkClass(boundLabel);
+  if (purpose === null) {
+    throw new Error(
+      `purpose_unbound: work_class "${boundLabel}" is outside the closed purpose enum \u2014 fail closed`
+    );
+  }
+  const requested = isComplexity(root.complexity) ? root.complexity : "easy";
+  let floor = maxComplexity(requested, purposeComplexityFloor(purpose));
+  const rejected = [];
+  const ancestry = [`dispatch:0:${source}`];
+  for (let i = 1; i < events.length; i++) {
+    const ev = events[i];
+    ancestry.push(`${ev.kind}:${i}`);
+    if (isComplexity(ev.raises_floor)) {
+      floor = maxComplexity(floor, ev.raises_floor);
+    }
+    if (typeof ev.declared_purpose === "string" && ev.declared_purpose !== purpose) {
+      rejected.push({
+        source: `${ev.kind}:${i}`,
+        label: `purpose=${ev.declared_purpose}`,
+        reason: "inherited_purpose_non_downgradable"
+      });
+    }
+    const label = ev.caller_label;
+    if (label && typeof label === "object") {
+      const labelPurpose = label["purpose"];
+      if (typeof labelPurpose === "string" && labelPurpose !== purpose) {
+        rejected.push({
+          source: `${ev.kind}:${i}`,
+          label: `purpose=${labelPurpose}`,
+          reason: "inherited_purpose_non_downgradable"
+        });
+      }
+      const labelComplexity = label["complexity"];
+      if (isComplexity(labelComplexity)) {
+        if (COMPLEXITY_RANK[labelComplexity] < COMPLEXITY_RANK[floor]) {
+          rejected.push({
+            source: `${ev.kind}:${i}`,
+            label: `complexity=${labelComplexity}`,
+            reason: "floor_non_downgradable"
+          });
+        } else {
+          floor = maxComplexity(floor, labelComplexity);
+        }
+      }
+    }
+  }
+  const effective = floor;
+  const tierFloor = purposeTierFloor(purpose);
+  const tier = tierFloor === "powerful" ? "powerful" : tierForComplexity(effective);
+  const forcedFloorReason = purpose === "research" ? "research_always_hard" : isReviewClassPurpose(purpose) ? "purpose_floor_powerful" : null;
+  return {
+    purpose,
+    requested_complexity: requested,
+    effective_complexity: effective,
+    tier,
+    forced_floor_reason: forcedFloorReason,
+    purpose_origin: source,
+    dispatch_ancestry: ancestry,
+    rejected_labels: rejected
+  };
+}
+var AUTHORITATIVE_PURPOSE_SOURCES, COMPLEXITY_RANK;
+var init_purpose_provenance = __esm({
+  "src/domains/config/purpose-provenance.ts"() {
+    init_model_policy();
+    AUTHORITATIVE_PURPOSE_SOURCES = Object.freeze([
+      "skill_metadata",
+      "registry_metadata",
+      "lane_lock",
+      "broker_gate"
+    ]);
+    COMPLEXITY_RANK = { easy: 0, medium: 1, hard: 2 };
+  }
+});
+
+// src/domains/config/tier-defaults.ts
+function tierDefaults(descriptors = HOST_REGISTRY_ROWS) {
+  const result = {};
+  for (const [hk, registryId] of Object.entries(HOSTKIND_TO_REGISTRY_ID)) {
+    const row = registryId !== null ? descriptors[registryId] : void 0;
+    if (!row) {
+      result[hk] = { ...CLAUDE_TIER_FALLBACK };
+      continue;
+    }
+    result[hk] = {
+      cheap: row.capabilities?.models?.cheap?.model ?? null,
+      mid: row.capabilities?.models?.mid?.model ?? null,
+      powerful: row.capabilities?.models?.powerful?.model ?? null
+    };
+  }
+  return result;
+}
+function tierDefaultsForHost(host, descriptors = HOST_REGISTRY_ROWS) {
+  const computed = tierDefaults(descriptors);
+  return computed[host] ?? { ...CLAUDE_TIER_FALLBACK };
+}
+function defaultTierModels(descriptors = HOST_REGISTRY_ROWS) {
+  const row = descriptors["claude-code-cli"];
+  return {
+    cheap: row?.capabilities?.models?.cheap?.model ?? CLAUDE_TIER_FALLBACK.cheap,
+    mid: row?.capabilities?.models?.mid?.model ?? CLAUDE_TIER_FALLBACK.mid,
+    powerful: row?.capabilities?.models?.powerful?.model ?? CLAUDE_TIER_FALLBACK.powerful
+  };
+}
+function defaultTiersMap(descriptors = HOST_REGISTRY_ROWS) {
+  const hostMap = Object.entries(HOSTKIND_TO_REGISTRY_ID);
+  const tiers = ["cheap", "mid", "powerful"];
+  const result = {};
+  for (const tier of tiers) {
+    result[tier] = {};
+    for (const [hk, registryId] of hostMap) {
+      const row = registryId !== null ? descriptors[registryId] : void 0;
+      const model = row?.capabilities?.models?.[tier]?.model ?? null;
+      result[tier][hk] = model;
+    }
+  }
+  return result;
+}
+var CLAUDE_TIER_FALLBACK;
+var init_tier_defaults = __esm({
+  "src/domains/config/tier-defaults.ts"() {
+    init_host_registry_schema();
+    init_host_id_namespace();
+    CLAUDE_TIER_FALLBACK = {
+      cheap: "haiku",
+      mid: "sonnet",
+      powerful: "opus"
+    };
+  }
+});
+
+// src/domains/config/rank.ts
+function isClaudeHost(hostKind) {
+  return hostKindToRegistryId(hostKind)?.startsWith("claude-") ?? false;
+}
+function isCodexHost(hostKind) {
+  return hostKindToRegistryId(hostKind)?.startsWith("codex-") ?? false;
+}
+function isClaudeCli(hostKind) {
+  return hostKindToRegistryId(hostKind) === "claude-code-cli";
+}
+function isCodexCli(hostKind) {
+  return hostKindToRegistryId(hostKind) === "codex-cli";
+}
+function isPiCli(hostKind) {
+  return hostKindToRegistryId(hostKind) === "pi-cli";
+}
+function isAntigravityCli(hostKind) {
+  return hostKindToRegistryId(hostKind) === "antigravity-cli";
+}
+function affinityBoost(workType, hostKind) {
+  switch (workType) {
+    case "interactive_lifecycle":
+      return isClaudeHost(hostKind) ? AFFINITY_BOOST : 0;
+    case "adversarial_review":
+      return !isClaudeHost(hostKind) ? AFFINITY_BOOST : 0;
+    case "background_implementation":
+      return isCodexHost(hostKind) ? AFFINITY_BOOST : 0;
+    case "parallel_local_lanes":
+      return isClaudeHost(hostKind) ? AFFINITY_BOOST : 0;
+    case "graph_extraction":
+    case void 0:
+    default:
+      return 0;
+  }
+}
+function rankScore(host, lane) {
+  let s = 0;
+  if (lane.preferredHostKind && host.host_kind === lane.preferredHostKind) s += 100;
+  s += affinityBoost(lane.workType, host.host_kind);
+  return s;
+}
+function backendForMode(mode) {
+  switch (mode) {
+    case "team":
+      return "agent_team";
+    case "agent":
+      return "independent_agents";
+    case "subagent":
+      return "subagent";
+    case "auto":
+    default:
+      return null;
+  }
+}
+function getDefaultModelTierMap(host) {
+  return tierDefaultsForHost(host);
+}
+var AFFINITY_BOOST;
+var init_rank = __esm({
+  "src/domains/config/rank.ts"() {
+    init_host_id_namespace();
+    init_tier_defaults();
+    AFFINITY_BOOST = 10;
+  }
+});
+
+// src/domains/config/role-model-schema.ts
+function isHostCapable(e) {
+  return e.installability !== "none" && e.dispatch_selectable;
+}
+function resolveRoles(input) {
+  const avail = input.available;
+  const hostEntry = avail.find(isHostCapable) ?? null;
+  const host = hostEntry ? {
+    role: "host",
+    substrate: hostEntry.host_id,
+    strength: "strong",
+    reason: `strongest installable+dispatch_selectable substrate (${hostEntry.host_id})`
+  } : {
+    role: "host",
+    substrate: null,
+    strength: "weak",
+    reason: "no installable+dispatch_selectable substrate available"
+  };
+  const advisoryEntry = avail.find((e) => e.dispatch_selectable) ?? hostEntry;
+  const advisory = advisoryEntry ? {
+    role: "advisory",
+    substrate: advisoryEntry.host_id,
+    strength: "strong",
+    reason: advisoryEntry === hostEntry ? `advisory defaults to the host substrate (${advisoryEntry.host_id}, local advisor)` : `strongest dispatch_selectable advisory substrate (${advisoryEntry.host_id})`
+  } : {
+    role: "advisory",
+    substrate: null,
+    strength: "weak",
+    reason: "no dispatch_selectable advisory substrate available"
+  };
+  const hostFamily = hostEntry?.family ?? null;
+  const diffFamily = avail.find((e) => e.result_adapter && e.family !== hostFamily) ?? null;
+  const sameFamily = avail.find((e) => e.result_adapter && e.family === hostFamily) ?? null;
+  let adversarial;
+  if (diffFamily) {
+    adversarial = {
+      role: "adversarial",
+      substrate: diffFamily.host_id,
+      strength: "strong",
+      reason: `different-family result_adapter substrate (${diffFamily.host_id}) \u2014 cross-host independence`
+    };
+  } else if (sameFamily) {
+    adversarial = {
+      role: "adversarial",
+      substrate: sameFamily.host_id,
+      strength: "weak",
+      reason: `only a same-family result_adapter (${sameFamily.host_id}) \u2014 independence lost (weak)`
+    };
+  } else {
+    adversarial = {
+      role: "adversarial",
+      substrate: null,
+      strength: "weak",
+      reason: "no result_adapter substrate available \u2014 adversarial review degrades"
+    };
+  }
+  return {
+    schema_version: "guild.role_resolution.v1",
+    host,
+    advisory,
+    adversarial
+  };
+}
+function validateRoleResolution(x, expectedRole, errors) {
+  if (typeof x !== "object" || x === null || Array.isArray(x)) {
+    errors.push(`${expectedRole} must be a present object`);
+    return;
+  }
+  const r = x;
+  if (r["role"] !== expectedRole || !ROLE_SET.has(r["role"])) {
+    errors.push(`${expectedRole}.role must be "${expectedRole}"; got ${JSON.stringify(r["role"])}`);
+  }
+  if (!(r["substrate"] === null || typeof r["substrate"] === "string" && HOST_ID_SET3.has(r["substrate"]))) {
+    errors.push(
+      `${expectedRole}.substrate must be one of ${HOST_IDS.join("|")} or null; got ${JSON.stringify(r["substrate"])}`
+    );
+  }
+  if (typeof r["strength"] !== "string" || !STRENGTH_SET.has(r["strength"])) {
+    errors.push(`${expectedRole}.strength must be strong|weak; got ${JSON.stringify(r["strength"])}`);
+  }
+  if (typeof r["reason"] !== "string" || r["reason"].trim() === "") {
+    errors.push(`${expectedRole}.reason must be a non-empty string`);
+  }
+}
+function validateRoleResolutionSet(value) {
+  const errors = [];
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return { valid: false, errors: ["role resolution set must be a non-null object"] };
+  }
+  const o = value;
+  if (o["schema_version"] !== "guild.role_resolution.v1") {
+    errors.push(
+      `schema_version must be "guild.role_resolution.v1"; got ${JSON.stringify(o["schema_version"])}`
+    );
+  }
+  validateRoleResolution(o["host"], "host", errors);
+  validateRoleResolution(o["advisory"], "advisory", errors);
+  validateRoleResolution(o["adversarial"], "adversarial", errors);
+  return { valid: errors.length === 0, errors };
+}
+var ROLES, ROLE_STRENGTHS, ROLE_SET, STRENGTH_SET, HOST_ID_SET3;
+var init_role_model_schema = __esm({
+  "src/domains/config/role-model-schema.ts"() {
+    init_host_registry_schema();
+    ROLES = Object.freeze(["host", "advisory", "adversarial"]);
+    ROLE_STRENGTHS = Object.freeze(["strong", "weak"]);
+    ROLE_SET = new Set(ROLES);
+    STRENGTH_SET = new Set(ROLE_STRENGTHS);
+    HOST_ID_SET3 = new Set(HOST_IDS);
+  }
+});
+
+// src/domains/review/review-progress.ts
+var REVIEW_PROGRESS_STATES, STATE_SET;
+var init_review_progress = __esm({
+  "src/domains/review/review-progress.ts"() {
+    REVIEW_PROGRESS_STATES = Object.freeze([
+      "launched",
+      "running",
+      "heartbeat",
+      "activity",
+      "no_output",
+      "reviewer_error",
+      "tool_error",
+      "cancelled",
+      "skipped",
+      "succeeded"
+    ]);
+    STATE_SET = new Set(REVIEW_PROGRESS_STATES);
+  }
+});
+
+// src/domains/review/review-pairing.ts
+var init_review_pairing = __esm({
+  "src/domains/review/review-pairing.ts"() {
+    init_config2();
+    init_config2();
+    init_review_progress();
+  }
+});
+
+// src/domains/review/advisory-record.ts
+var ADVISORY_BACKENDS, ADVISORY_SUBSTRATES, ADVISORY_CONFIDENCE, ADVISORY_PHASES, BACKEND_SET, CONFIDENCE_SET, SUBSTRATE_SET;
+var init_advisory_record = __esm({
+  "src/domains/review/advisory-record.ts"() {
+    ADVISORY_BACKENDS = Object.freeze([
+      "tmux_team",
+      "host_subagents",
+      "single_agent"
+    ]);
+    ADVISORY_SUBSTRATES = Object.freeze([
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "agents-file",
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector",
+      // Legacy substrate labels accepted for older records.
+      "claude",
+      "codex",
+      ".agents",
+      "pi",
+      "antigravity"
+    ]);
+    ADVISORY_CONFIDENCE = Object.freeze(["high", "medium", "low"]);
+    ADVISORY_PHASES = Object.freeze([
+      "init",
+      "ideation",
+      "planning",
+      "execution",
+      "review",
+      "ops",
+      "reflect"
+    ]);
+    BACKEND_SET = new Set(ADVISORY_BACKENDS);
+    CONFIDENCE_SET = new Set(ADVISORY_CONFIDENCE);
+    SUBSTRATE_SET = new Set(ADVISORY_SUBSTRATES);
+  }
+});
+
+// src/domains/review/advisory-contract.ts
+var init_advisory_contract = __esm({
+  "src/domains/review/advisory-contract.ts"() {
+    init_advisory_record();
+  }
+});
+
+// src/domains/review/quality-catalog.ts
+var init_quality_catalog = __esm({
+  "src/domains/review/quality-catalog.ts"() {
+  }
+});
+
+// src/domains/review/index.ts
+var init_review = __esm({
+  "src/domains/review/index.ts"() {
+    init_review_pairing();
+    init_review_progress();
+    init_advisory_contract();
+    init_quality_catalog();
+  }
+});
+
+// src/domains/config/role-resolver.ts
+function availableRegistryRows(detection) {
+  const families = /* @__PURE__ */ new Set();
+  if (detection.authorHost && detection.authorHost !== "unknown") {
+    families.add(detection.authorHost);
+  }
+  for (const p of detection.providers) {
+    if (p.selectable || p.detected && p.kind !== "host") families.add(p.family);
+  }
+  return HOST_IDS.map((id) => HOST_REGISTRY_ROWS[id]).filter((row) => families.has(row.family));
+}
+function resolveRolesForRun(detection) {
+  const roles = resolveRoles({ available: availableRegistryRows(detection) });
+  if (detection.authorTrust !== "verified" && roles.adversarial.strength === "strong") {
+    return {
+      ...roles,
+      adversarial: {
+        ...roles.adversarial,
+        strength: "weak",
+        reason: `${roles.adversarial.reason}; DOWNGRADED to weak \u2014 author host identity is not verified (trust: ${detection.authorTrust ?? "absent"}), so cross-family independence is unprovable (session_context \xA73: asserted \u21D2 weak)`
+      }
+    };
+  }
+  return roles;
+}
+function advisorySubstrateFromRoles(roles) {
+  const s = roles.advisory.substrate;
+  if (s !== null && ADVISORY_SUBSTRATES.includes(s)) {
+    return s;
+  }
+  return void 0;
+}
+var init_role_resolver = __esm({
+  "src/domains/config/role-resolver.ts"() {
+    init_host_registry_schema();
+    init_role_model_schema();
+    init_review();
+  }
+});
+
+// src/domains/config/tiebreak.ts
+function hostKindRank(hostKind) {
+  return isClaudeHost(hostKind) ? 0 : 1;
+}
+var init_tiebreak = __esm({
+  "src/domains/config/tiebreak.ts"() {
+    init_rank();
+  }
+});
+
+// src/domains/config/router.ts
+function manifestTimestamp(host) {
+  const raw = host.advertised_at ?? host.detected_at;
+  if (!raw) return null;
+  const t = Date.parse(raw);
+  return Number.isNaN(t) ? null : t;
+}
+function isStale(host, now, ttlS) {
+  const ts = manifestTimestamp(host);
+  if (ts === null) return true;
+  return now - ts > ttlS * 1e3;
+}
+function supportsTier(host, tier) {
+  if (Array.isArray(host.supported_tiers)) {
+    return host.supported_tiers.includes(tier);
+  }
+  const model = host.tier_models?.[tier] ?? host.tiers?.[tier];
+  return typeof model === "string" && model.trim().length > 0;
+}
+function toolGap(host, requiredTools) {
+  if (!requiredTools || requiredTools.length === 0) return [];
+  if (!Array.isArray(host.tool_permissions)) return [];
+  const allow = new Set(host.tool_permissions);
+  return requiredTools.filter((t) => !allow.has(t));
+}
+function capabilityGap(host, reqs) {
+  if (!reqs) return [];
+  const gaps = [];
+  const cs = host.capability_set;
+  if (reqs.needs_parallel === true) {
+    const canParallel = cs?.needs_parallel ?? Boolean(host.tool_support?.agent_team || host.tool_support?.independent_agents);
+    if (!canParallel) gaps.push("needs_parallel");
+  }
+  if (cs) {
+    if (reqs.needs_pr === true && !cs.needs_pr) gaps.push("needs_pr");
+    if (reqs.needs_network === true && !cs.needs_network) gaps.push("needs_network");
+    if (reqs.isolation === "worktree" && cs.isolation !== "worktree") {
+      gaps.push("isolation:worktree");
+    }
+  }
+  return gaps;
+}
+function toModelParams(resolved) {
+  if (resolved.model === null) return null;
+  const params = { model: resolved.model };
+  if (resolved.effort !== void 0) params.effort = resolved.effort;
+  if (resolved.reasoning !== void 0) params.reasoning = resolved.reasoning;
+  if (resolved.thinking !== void 0) params.thinking = resolved.thinking;
+  if (resolved.verbosity !== void 0) params.verbosity = resolved.verbosity;
+  return params;
+}
+function resolveModel(tier, host, settingsOverride) {
+  return resolveModelParams(tier, host, settingsOverride).model ?? null;
+}
+function resolveModelParams(tier, host, settingsOverride) {
+  const overrideResolved = resolveTierModel(settingsOverride, tier, host.host_kind);
+  const overrideParams = toModelParams(overrideResolved);
+  if (overrideParams !== null) return overrideParams;
+  const fromManifest = host.tier_models?.[tier] ?? host.tiers?.[tier];
+  if (typeof fromManifest === "string" && fromManifest.trim()) return { model: fromManifest.trim() };
+  const builtIn = getDefaultModelTierMap(host.host_kind)[tier];
+  return builtIn === null ? {} : { model: builtIn };
+}
+function hostDiversityOf(preferred, selected) {
+  if (preferred === void 0) return "unknown";
+  return preferred === selected ? "same" : "distinct";
+}
+function route(lane, hosts, opts = {}) {
+  const now = opts.now ?? Date.now();
+  const ttlS = opts.manifestTtlS ?? DEFAULT_TTL_S;
+  const crossHostEnabled = opts.crossHostEnabled ?? false;
+  const fallbackToClaude = opts.fallbackToClaude ?? true;
+  const requiredBackend = lane.requiredBackend ?? backendForMode(lane.mode);
+  const rejected = [];
+  const policyEligible = [];
+  const qualifying = [];
+  for (const host of hosts) {
+    const tag = (reason) => rejected.push({ hostId: host.host_id, hostKind: host.host_kind, reason });
+    if (!crossHostEnabled && !isClaudeHost(host.host_kind)) {
+      tag("cross-host disabled (defaults.cross_host.enabled=false)");
+      continue;
+    }
+    if (isStale(host, now, ttlS)) {
+      tag(`stale manifest (older than ${ttlS}s TTL)`);
+      continue;
+    }
+    policyEligible.push(host);
+    if (!supportsTier(host, lane.tier)) {
+      tag(`tier "${lane.tier}" not supported`);
+      continue;
+    }
+    if (requiredBackend && !host.tool_support?.[requiredBackend]) {
+      tag(`backend "${requiredBackend}" not supported`);
+      continue;
+    }
+    const gap = toolGap(host, lane.requiredTools);
+    if (gap.length > 0) {
+      tag(`missing required tools: ${gap.join(", ")}`);
+      continue;
+    }
+    const capGap = capabilityGap(host, lane.capabilityRequirements);
+    if (capGap.length > 0) {
+      tag(`capability requirements not met: ${capGap.join(", ")}`);
+      continue;
+    }
+    qualifying.push(host);
+  }
+  if (qualifying.length === 0) {
+    if (policyEligible.length === 0) {
+      throw new RouteError(lane.taskId, rejected);
+    }
+    const leastBad = [...policyEligible].sort((a, b) => {
+      const sa = rankScore(a, lane);
+      const sb = rankScore(b, lane);
+      if (sb !== sa) return sb - sa;
+      const ka = hostKindRank(a.host_kind);
+      const kb = hostKindRank(b.host_kind);
+      if (ka !== kb) return ka - kb;
+      return a.host_id < b.host_id ? -1 : a.host_id > b.host_id ? 1 : 0;
+    })[0];
+    const degradedDecision = {
+      taskId: lane.taskId,
+      host: leastBad.host_id,
+      hostKind: leastBad.host_kind,
+      tier: lane.tier,
+      model: resolveModel(lane.tier, leastBad, opts.settingsOverride),
+      modelParams: resolveModelParams(lane.tier, leastBad, opts.settingsOverride),
+      fallbackChain: [],
+      affinityScore: rankScore(leastBad, lane),
+      degraded: true,
+      independence: "weak",
+      hostDiversity: hostDiversityOf(lane.preferredHostKind, leastBad.host_kind),
+      reason: `DEGRADED: no host fully qualified for task "${lane.taskId}"; routed to least-bad candidate ${leastBad.host_id}(${leastBad.host_kind}); ${rejected.length} rejection(s) recorded; backend=${requiredBackend ?? "any"}; workType=${lane.workType ?? "none"}`,
+      rejected,
+      notes: [
+        "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub",
+        "degraded: true \u2014 no fully-qualifying host found; weak-independence recorded (doc 08 \xA72, TE-02/TE-03)"
+      ]
+    };
+    opts.onDecision?.(degradedDecision);
+    return degradedDecision;
+  }
+  const ranked = [...qualifying].sort((a, b) => {
+    const sa = rankScore(a, lane);
+    const sb = rankScore(b, lane);
+    if (sb !== sa) return sb - sa;
+    const ka = hostKindRank(a.host_kind);
+    const kb = hostKindRank(b.host_kind);
+    if (ka !== kb) return ka - kb;
+    return a.host_id < b.host_id ? -1 : a.host_id > b.host_id ? 1 : 0;
+  });
+  const toTarget = (h) => ({
+    host: h.host_id,
+    hostKind: h.host_kind,
+    tier: lane.tier,
+    // SAME tier across the whole chain — CR-3 no silent downgrade
+    model: resolveModel(lane.tier, h, opts.settingsOverride),
+    modelParams: resolveModelParams(lane.tier, h, opts.settingsOverride)
+  });
+  const primaryHost = ranked[0];
+  const primary = toTarget(primaryHost);
+  const rest = ranked.slice(1);
+  let fallbackChain = rest.map(toTarget);
+  if (fallbackToClaude) {
+    const claudeIdx = fallbackChain.findIndex((t) => isClaudeHost(t.hostKind));
+    if (claudeIdx >= 0) {
+      const [claudeLast] = fallbackChain.splice(claudeIdx, 1);
+      fallbackChain.push(claudeLast);
+    }
+  }
+  const decision = {
+    taskId: lane.taskId,
+    host: primary.host,
+    hostKind: primary.hostKind,
+    tier: primary.tier,
+    model: primary.model,
+    modelParams: primary.modelParams,
+    fallbackChain,
+    affinityScore: rankScore(primaryHost, lane),
+    degraded: false,
+    // T7-H2: NEVER "strong" here. Finding a fully-qualifying host is not a
+    // review-independence verdict; only a written §7a adjudication is.
+    independence: "weak",
+    hostDiversity: hostDiversityOf(lane.preferredHostKind, primary.hostKind),
+    reason: `primary=${primary.host}(${primary.hostKind}) tier=${primary.tier} model=${primary.model ?? "(host default \u2014 no Guild-mapped model)"}; ${fallbackChain.length} fallback(s); backend=${requiredBackend ?? "any"}; workType=${lane.workType ?? "none"}`,
+    rejected,
+    notes: [
+      "budget-cap deferred (oc-budget-cap, CR-6); spend recorded via telemetry stub",
+      "independence is ALWAYS weak from the router (T7-H2): finding a fully-qualifying host is a host-selection fact (see hostDiversity), never a review verdict; strong exists only as a written \xA77a independence_adjudication block over both parties' finalized receipts"
+    ]
+  };
+  opts.onDecision?.(decision);
+  return decision;
+}
+function planTeamRouting(specialists, hosts, opts) {
+  const { localHostId, tier = "mid", mode = "auto", ...routeOpts } = opts;
+  return specialists.map((s) => {
+    const laneTier = s.tier ?? tier;
+    const decision = route(
+      {
+        taskId: s.name,
+        tier: laneTier,
+        mode,
+        preferredHostKind: s.host_kind,
+        capabilityRequirements: s.capabilityRequirements
+      },
+      hosts,
+      routeOpts
+    );
+    return {
+      specialist: s.name,
+      hostKind: decision.hostKind,
+      decision,
+      backend: decision.host === localHostId ? "tmux" : "remote"
+    };
+  });
+}
+var RouteError, DEFAULT_TTL_S;
+var init_router = __esm({
+  "src/domains/config/router.ts"() {
+    init_tier_model();
+    init_rank();
+    init_tiebreak();
+    RouteError = class extends Error {
+      taskId;
+      rejected;
+      constructor(taskId, rejected) {
+        const detail = rejected.length ? rejected.map((r) => `${r.hostId} (${r.hostKind}): ${r.reason}`).join("; ") : "no host manifests supplied";
+        super(`No host can route task "${taskId}" \u2014 ${detail}`);
+        this.name = "RouteError";
+        this.taskId = taskId;
+        this.rejected = rejected;
+      }
+    };
+    DEFAULT_TTL_S = 3600;
+  }
+});
+
+// src/domains/config/compose-prompt.ts
+function approxTokens(text) {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  return Math.ceil(Math.max(words * 1.3, text.length / 4));
+}
+function concreteModelNameIn(text) {
+  const m = MODEL_NAME_RE.exec(text);
+  return m ? m[0] : null;
+}
+function skipReasonFor(hit) {
+  return hit.kind === "model-name" ? "concrete-model-name" : "host-identity";
+}
+function promptIdentityIn(text) {
+  const prose = YOU_ARE_HOST_RE.exec(text);
+  if (prose) return { kind: "you-are-host", token: prose[0] };
+  const model = MODEL_NAME_RE.exec(text);
+  if (model) return { kind: "model-name", token: model[0] };
+  const fam = HOST_FAMILY_RE.exec(text);
+  if (fam) return { kind: "host-family", token: fam[0] };
+  return null;
+}
+function composePrompt(base, extensions, host_family, model_family) {
+  const skipped = [];
+  const parts = [{ id: "base:using-guild", text: base }];
+  const byId = /* @__PURE__ */ new Map();
+  for (const f of extensions.workspace ?? []) byId.set(f.id, f);
+  for (const f of extensions.project ?? []) byId.set(f.id, f);
+  for (const f of byId.values()) {
+    const hit = promptIdentityIn(f.text);
+    if (hit) {
+      skipped.push({ id: f.id, reason: skipReasonFor(hit) });
+      continue;
+    }
+    parts.push(f);
+  }
+  if (extensions.hostOverlay) {
+    const o = extensions.hostOverlay;
+    if (concreteModelNameIn(o.text)) skipped.push({ id: o.id, reason: "concrete-model-name" });
+    else parts.push(o);
+  }
+  let dialect_id = "dialect:none";
+  const d = extensions.dialect;
+  if (d) {
+    const declared = d.id.replace(/^dialect:/, "");
+    if (MODEL_FAMILIES.includes(declared) && declared !== model_family) {
+      skipped.push({ id: d.id, reason: "wrong-family" });
+    } else if (promptIdentityIn(d.text)) {
+      skipped.push({ id: d.id, reason: skipReasonFor(promptIdentityIn(d.text)) });
+    } else if (approxTokens(d.text) > DIALECT_TOKEN_BUDGET) {
+      skipped.push({ id: d.id, reason: "dialect-over-budget" });
+    } else {
+      parts.push(d);
+      dialect_id = `dialect:${model_family}`;
+    }
+  }
+  const text = parts.map((p) => p.text.trimEnd()).join("\n\n");
+  const hash = crypto16.createHash("sha256").update(`${host_family}\0${model_family}\0${text}`).digest("hex");
+  return { text, dialect_id, overlay_ids: parts.map((p) => p.id), hash, skipped };
+}
+function loadPromptExtensions(guildDir, model_family) {
+  const dir = path72.join(guildDir, PROMPTS_DIRNAME);
+  const overlays = [];
+  let dialect = null;
+  const overlayFile = path72.join(dir, USING_GUILD_OVERLAY);
+  const overlayText = readIfFile2(overlayFile);
+  if (overlayText !== null) {
+    assertNoModelName(overlayFile, overlayText);
+    overlays.push({ id: `overlay:${USING_GUILD_OVERLAY}`, text: overlayText });
+  }
+  if (MODEL_FAMILIES.includes(model_family)) {
+    const dialectFile = path72.join(dir, DIALECTS_DIRNAME, `${model_family}.md`);
+    const dialectText = readIfFile2(dialectFile);
+    if (dialectText !== null) {
+      assertNoModelName(dialectFile, dialectText);
+      dialect = { id: `dialect:${model_family}`, text: dialectText };
+    }
+  }
+  return { overlays, dialect };
+}
+function readIfFile2(file) {
+  try {
+    return fs61.statSync(file).isFile() ? fs61.readFileSync(file, "utf8") : null;
+  } catch {
+    return null;
+  }
+}
+function assertNoModelName(file, text) {
+  const hit = promptIdentityIn(text);
+  if (hit === null) return;
+  const what = hit.kind === "you-are-host" ? `says '${hit.token}'` : hit.kind === "model-name" ? `names the concrete model '${hit.token}'` : `names the host family '${hit.token}'`;
+  throw new PromptRejectedError(
+    file,
+    hit.token,
+    `prompt extension ${file} ${what}. Prompt overlays and dialects key on a model FAMILY (${MODEL_FAMILIES.join(" \xB7 ")}) and never name a host or a product \u2014 host and model are bound per session on the run record (KTD22/KTD31).`
+  );
+}
+function composeSessionPrompt(input) {
+  let base = "";
+  if (input.pluginRoot) {
+    for (const rel2 of USING_GUILD_BASE_RELS) {
+      const text = readIfFile2(path72.join(input.pluginRoot, rel2));
+      if (text !== null) {
+        base = text;
+        break;
+      }
+    }
+  }
+  const project = input.guildDir ? loadPromptExtensions(input.guildDir, input.model_family) : null;
+  let dialect = project?.dialect ?? null;
+  if (dialect === null && input.pluginRoot && MODEL_FAMILIES.includes(input.model_family)) {
+    const shipped = readIfFile2(
+      path72.join(input.pluginRoot, PLUGIN_DIALECTS_REL, `${input.model_family}.md`)
+    );
+    if (shipped !== null) dialect = { id: `dialect:${input.model_family}`, text: shipped };
+  }
+  return composePrompt(
+    base,
+    { project: project?.overlays ?? [], dialect },
+    input.host_family,
+    input.model_family
+  );
+}
+var crypto16, fs61, path72, DIALECT_TOKEN_BUDGET, MODEL_NAME_RE, MODEL_FAMILIES, HOST_FAMILY_TOKENS_PROMPT, HOST_FAMILY_RE, YOU_ARE_HOST_RE, PromptRejectedError, PROMPTS_DIRNAME, USING_GUILD_OVERLAY, DIALECTS_DIRNAME, USING_GUILD_BASE_RELS, PLUGIN_DIALECTS_REL;
+var init_compose_prompt = __esm({
+  "src/domains/config/compose-prompt.ts"() {
+    crypto16 = __toESM(require("node:crypto"));
+    fs61 = __toESM(require("node:fs"));
+    path72 = __toESM(require("node:path"));
+    DIALECT_TOKEN_BUDGET = 200;
+    MODEL_NAME_RE = /\b(opus|sonnet|haiku|fable|gpt-?[0-9][^\s]*|o[1-9](?:-(?:mini|pro|preview))?|gemini-[0-9][^\s]*|claude-[a-z0-9][^\s]*|llama-?[0-9][^\s]*|mistral|grok-?[0-9][^\s]*|deepseek|qwen)\b/i;
+    MODEL_FAMILIES = Object.freeze(["anthropic", "openai", "google"]);
+    HOST_FAMILY_TOKENS_PROMPT = Object.freeze([
+      "claude",
+      "codex",
+      "cursor",
+      "gemini",
+      "copilot",
+      "windsurf",
+      "aider",
+      "antigravity",
+      "cline",
+      "zed"
+    ]);
+    HOST_FAMILY_RE = new RegExp(`\\b(${HOST_FAMILY_TOKENS_PROMPT.join("|")})\\b`, "i");
+    YOU_ARE_HOST_RE = new RegExp(
+      `\\byou(?:'re| are)\\s+(?:an?\\s+)?(${HOST_FAMILY_TOKENS_PROMPT.join("|")})\\b`,
+      "i"
+    );
+    PromptRejectedError = class extends Error {
+      constructor(file, token, message) {
+        super(message);
+        this.file = file;
+        this.token = token;
+        this.name = "PromptRejectedError";
+      }
+      file;
+      token;
+    };
+    PROMPTS_DIRNAME = "prompts";
+    USING_GUILD_OVERLAY = "using-guild.overlay.md";
+    DIALECTS_DIRNAME = "dialects";
+    USING_GUILD_BASE_RELS = Object.freeze([
+      "skills/meta/using-guild/SKILL.md",
+      "skills/meta/using-guild/SKILL.src.md"
+    ]);
+    PLUGIN_DIALECTS_REL = "src/surfaces/prompts/dialects";
+  }
+});
+
+// src/domains/config/team-prompt.ts
+function isClaudeCli2(hostKind) {
+  return hostKindToRegistryId(hostKind) === "claude-code-cli";
+}
+function producerMarkerLine(role) {
+  return `${DISPATCH_PRODUCER_ENV}=${DISPATCH_PRODUCER_TOKEN} role=${role}
+`;
+}
+function buildPrompt(slug, runId, specialist, teamPath, paneHostKind = "claude") {
+  if (!specialist) {
+    const teamRef = teamPath ?? `.guild/team/${slug}.yaml`;
+    const coordination = isClaudeCli2(paneHostKind) ? `Dispatch specialists via TaskCreated events when their plan dependencies clear, then aggregate handoffs and invoke guild:review \u2192 guild:verify-done \u2192 guild:reflect.` : `Dispatch specialists through the file-based agent bus when their plan dependencies clear; write dispatch/brief records under \`.guild/runs/${runId}/agent-bus/\`, then aggregate handoffs and invoke guild:review \u2192 guild:verify-done \u2192 guild:reflect.`;
+    return producerMarkerLine("orchestrator") + `You are the Team Lead for team \`${slug}\`, run-id \`${runId}\`. The spec is at \`.guild/spec/${slug}.md\`, the team at \`${teamRef}\`, and the approved plan at \`.guild/plan/${slug}.md\`. Per-specialist context bundles are under \`.guild/context/${runId}/<specialist>-<task-id>.md\` (build them via guild:context-assemble before dispatch). Teammate handoff receipts will land at \`.guild/runs/${runId}/handoffs/<specialist>-<task-id>.md\`. ` + coordination;
+  }
+  const waitInstruction = isClaudeCli2(paneHostKind) ? `Wait for a \`TaskCreated\` event from the orchestrator before starting.` : `Watch the file-based agent bus at \`.guild/runs/${runId}/agent-bus/\` for your dispatch/brief record before starting; do not wait for host-native event callbacks.`;
+  const readAckInstruction = `Before doing any work, read your assignment file at \`$GUILD_TASK_ASSIGNMENT\` and validate it (guild.task_assignment schema, fail-closed). If it is missing or malformed, STOP and report a hard dispatch failure \u2014 do not start. Otherwise write your acknowledgment beside it (an \`assignment-ack.json\` marker in the instance directory) and only then begin your lane: you enter \`running\` only after the assignment is acknowledged (D5). `;
+  const definitionPath = typeof specialist.definition === "string" ? specialist.definition.trim() : void 0;
+  const definitionInstruction = specialist.definition_source === "project" && definitionPath ? `Your role definition is at \`${definitionPath}\` \u2014 read it FIRST and adopt it fully (persona, boundaries, TRIGGER / DO NOT TRIGGER limits). For each skill listed in its frontmatter \`skills:\`, load the project-local instance at \`.guild/skills/<skill>/SKILL.md\` when it exists before starting your lane. ` : "";
+  const isProjectSpecialist = specialist.definition_source === "project" && Boolean(definitionPath);
+  const definitionMarker = isProjectSpecialist ? `GUILD_AGENT_DEFINITION=${definitionPath}
+` : "";
+  const line1Marker = isProjectSpecialist ? definitionMarker : producerMarkerLine(specialist.name);
+  return line1Marker + `You are the \`${specialist.name}\` teammate for run-id \`${runId}\`. ` + definitionInstruction + `Your lane scope: \`${specialist.scope}\`. Read the exact \`context_bundle_id\` named by your assignment \u2014 it is authoritative; privilege it over any ambient CLAUDE.md / auto-memory (\xA79.1). When you finish, write your \xA78.2 handoff receipt with all 5 fields (changed_files, opens_for, assumptions, evidence, followups) to the canonical lane receipt path \`.guild/runs/${runId}/handoffs/<worker_role>-<logical_task_id>.md\`, using the values in your assignment. Do not write the assignment's \`handoff_path\`; TaskCompleted publishes the separate \`handoff_path\` pointer after validating and hashing the canonical receipt. ` + readAckInstruction + waitInstruction;
+}
+var DISPATCH_PRODUCER_ENV, DISPATCH_PRODUCER_TOKEN;
+var init_team_prompt = __esm({
+  "src/domains/config/team-prompt.ts"() {
+    init_host_id_namespace();
+    DISPATCH_PRODUCER_ENV = "GUILD_DISPATCH_PRODUCER";
+    DISPATCH_PRODUCER_TOKEN = "guild.dispatch.v1";
+  }
+});
+
+// src/domains/config/index.ts
+var config_exports = {};
+__export(config_exports, {
+  AUTHORITATIVE_PURPOSE_SOURCES: () => AUTHORITATIVE_PURPOSE_SOURCES,
+  BENIGN_COMPATIBILITY_READ_REASONS: () => BENIGN_COMPATIBILITY_READ_REASONS,
+  CACHED_INSPECTION_BUDGET_MS: () => CACHED_INSPECTION_BUDGET_MS,
+  CACHE_KEY_COMPONENTS: () => CACHE_KEY_COMPONENTS,
+  CAPABILITY_AUTO_CREATE_POLICIES: () => CAPABILITY_AUTO_CREATE_POLICIES,
+  CAPABILITY_RESOLUTION_INTENTS: () => CAPABILITY_RESOLUTION_INTENTS,
+  CAPABILITY_RESOLVER_MODES: () => CAPABILITY_RESOLVER_MODES,
+  CAPABILITY_RESOLVER_MODE_AFTER_F7: () => CAPABILITY_RESOLVER_MODE_AFTER_F7,
+  CAPABILITY_RESOLVER_MODE_DEFAULT: () => CAPABILITY_RESOLVER_MODE_DEFAULT,
+  CAPABILITY_ROLE_SLUG_MAX_LEN: () => CAPABILITY_ROLE_SLUG_MAX_LEN,
+  CAPABILITY_SUGGESTION_BUDGET_MAX: () => CAPABILITY_SUGGESTION_BUDGET_MAX,
+  CAPABILITY_SUGGESTION_BUDGET_MIN: () => CAPABILITY_SUGGESTION_BUDGET_MIN,
+  CLAUDE_TIER_FALLBACK: () => CLAUDE_TIER_FALLBACK,
+  COMPATIBILITY_ASSET_KINDS: () => COMPATIBILITY_ASSET_KINDS,
+  COMPATIBILITY_ASSET_ROOTS: () => COMPATIBILITY_ASSET_ROOTS,
+  COMPATIBILITY_CATALOG_SCHEMA: () => COMPATIBILITY_CATALOG_SCHEMA,
+  COMPATIBILITY_DEPRECATION_STATES: () => COMPATIBILITY_DEPRECATION_STATES,
+  COMPATIBILITY_READ_REASONS: () => COMPATIBILITY_READ_REASONS,
+  COMPATIBILITY_USAGE_DISPOSITION: () => COMPATIBILITY_USAGE_DISPOSITION,
+  COMPATIBILITY_USAGE_EVENT_NAME: () => COMPATIBILITY_USAGE_EVENT_NAME,
+  COMPATIBILITY_USAGE_OUTCOME_TYPE: () => COMPATIBILITY_USAGE_OUTCOME_TYPE,
+  COMPATIBILITY_USAGE_SCHEMA: () => COMPATIBILITY_USAGE_SCHEMA,
+  COMPLEXITIES: () => COMPLEXITIES,
+  CONDITION_KINDS: () => CONDITION_KINDS,
+  CONFIRMATION_KEY_COMPONENTS: () => CONFIRMATION_KEY_COMPONENTS,
+  DEFAULTS: () => DEFAULTS,
+  DEFAULT_CATALOG_TTL_SECONDS: () => DEFAULT_CATALOG_TTL_SECONDS,
+  DEFAULT_DISCOVERY_BUDGET_MS: () => DEFAULT_DISCOVERY_BUDGET_MS,
+  DEFAULT_ESCALATION_MARKERS: () => DEFAULT_ESCALATION_MARKERS,
+  DEFAULT_INSPECTION_LABEL: () => DEFAULT_INSPECTION_LABEL,
+  DEPENDENCE_COMPATIBILITY_READ_REASONS: () => DEPENDENCE_COMPATIBILITY_READ_REASONS,
+  DIALECTS_DIRNAME: () => DIALECTS_DIRNAME,
+  DIALECT_TOKEN_BUDGET: () => DIALECT_TOKEN_BUDGET,
+  DiscoveryBudgetExceeded: () => DiscoveryBudgetExceeded,
+  DiscoveryParseRejected: () => DiscoveryParseRejected,
+  EVIDENCE_STATES: () => EVIDENCE_STATES,
+  FAILURE_REASONS: () => FAILURE_REASONS,
+  FALLBACK_FAILURE_TAXONOMY: () => FALLBACK_FAILURE_TAXONOMY,
+  G5_MIN_CLEAN_RELEASES: () => G5_MIN_CLEAN_RELEASES,
+  HOSTKIND_TO_REGISTRY_ID: () => HOSTKIND_TO_REGISTRY_ID,
+  HOST_ADAPTER_CONTRACT_VERSION: () => HOST_ADAPTER_CONTRACT_VERSION,
+  HOST_ADAPTER_OPERATIONS: () => HOST_ADAPTER_OPERATIONS,
+  HOST_FAMILIES: () => HOST_FAMILIES,
+  HOST_FAMILY_TOKENS: () => HOST_FAMILY_TOKENS,
+  HOST_IDS: () => HOST_IDS,
+  HOST_REGISTRY_ROWS: () => HOST_REGISTRY_ROWS,
+  INDEPENDENCE_DIR: () => INDEPENDENCE_DIR,
+  INDEPENDENCE_LEVELS: () => INDEPENDENCE_LEVELS,
+  LEGACY_FILLABLE_PURPOSES: () => LEGACY_FILLABLE_PURPOSES,
+  LEGAL_EVIDENCE_TRANSITIONS: () => LEGAL_EVIDENCE_TRANSITIONS,
+  LISTING_AUTHORITY: () => LISTING_AUTHORITY,
+  LOG_ROTATION_THRESHOLD_BYTES: () => LOG_ROTATION_THRESHOLD_BYTES,
+  MODEL_CATALOG_CACHE_DIRNAME: () => MODEL_CATALOG_CACHE_DIRNAME,
+  MODEL_CATALOG_CACHE_REL: () => MODEL_CATALOG_CACHE_REL,
+  MODEL_CATALOG_CACHE_REL_SEGMENTS: () => MODEL_CATALOG_CACHE_REL_SEGMENTS,
+  MODEL_CATALOG_SCHEMA_VERSION: () => MODEL_CATALOG_SCHEMA_VERSION,
+  MODEL_FAMILIES: () => MODEL_FAMILIES,
+  MODEL_FAMILY_TOKENS: () => MODEL_FAMILY_TOKENS,
+  MODEL_INSPECTION_SCHEMA: () => MODEL_INSPECTION_SCHEMA,
+  MODE_TRANSITION_DIRECTIONS: () => MODE_TRANSITION_DIRECTIONS,
+  MODULE_PUBLIC_API_VERSION: () => MODULE_PUBLIC_API_VERSION2,
+  NON_INHERITABLE_KEYS: () => NON_INHERITABLE_KEYS,
+  OPERATOR_BASELINE_POLICY: () => OPERATOR_BASELINE_POLICY,
+  PLUGIN_DIALECTS_REL: () => PLUGIN_DIALECTS_REL,
+  POLICY_FILES: () => POLICY_FILES,
+  POLICY_KEYS: () => POLICY_KEYS2,
+  POLICY_KEY_ALIASES: () => POLICY_KEY_ALIASES,
+  POLICY_OVERLAY_FILE: () => POLICY_OVERLAY_FILE,
+  POLICY_PURPOSES: () => POLICY_PURPOSES,
+  POLICY_TIERS: () => POLICY_TIERS,
+  PROMPTS_DIRNAME: () => PROMPTS_DIRNAME,
+  PolicyRejectedError: () => PolicyRejectedError,
+  PromptRejectedError: () => PromptRejectedError,
+  RESOLUTION_STATUSES: () => RESOLUTION_STATUSES,
+  RESOLVER_AUTHORITIES: () => RESOLVER_AUTHORITIES,
+  RESOLVER_MODE_FAILURES: () => RESOLVER_MODE_FAILURES,
+  RESOLVER_MODE_OUTCOME_SCHEMA: () => RESOLVER_MODE_OUTCOME_SCHEMA,
+  RESOLVER_MODE_POLICIES: () => RESOLVER_MODE_POLICIES,
+  RESOLVER_TIER1_KEYS: () => RESOLVER_TIER1_KEYS,
+  REVIEW_CLASS_PURPOSES: () => REVIEW_CLASS_PURPOSES,
+  ROLES: () => ROLES,
+  ROLE_STRENGTHS: () => ROLE_STRENGTHS,
+  ROUTING_FLAG_DEFAULTS: () => ROUTING_FLAG_DEFAULTS,
+  ROUTING_FLAG_KEYS: () => ROUTING_FLAG_KEYS,
+  RouteError: () => RouteError,
+  SESSION_BINDING_FILE: () => SESSION_BINDING_FILE,
+  SHIPPED_COMPATIBILITY_ASSET_COUNT: () => SHIPPED_COMPATIBILITY_ASSET_COUNT,
+  SHIPPED_DOMAIN_SKILL_COUNT: () => SHIPPED_DOMAIN_SKILL_COUNT,
+  SHIPPED_DOMAIN_SKILL_IDS: () => SHIPPED_DOMAIN_SKILL_IDS,
+  SHIPPED_TEMPLATE_COUNT: () => SHIPPED_TEMPLATE_COUNT,
+  SIDECAR_MAX_BYTES: () => SIDECAR_MAX_BYTES3,
+  TIER_MAPPING_VERSION: () => TIER_MAPPING_VERSION,
+  UNCACHED_DISCOVERY_BUDGET_MS: () => UNCACHED_DISCOVERY_BUDGET_MS,
+  UNKNOWN_HOST_FAMILY: () => UNKNOWN_HOST_FAMILY,
+  UNKNOWN_MODEL_FAMILY: () => UNKNOWN_MODEL_FAMILY,
+  USING_GUILD_BASE_RELS: () => USING_GUILD_BASE_RELS,
+  USING_GUILD_OVERLAY: () => USING_GUILD_OVERLAY,
+  UnknownOrgQuarantineViolation: () => UnknownOrgQuarantineViolation,
+  adjudicateIndependence: () => adjudicateIndependence,
+  advanceChain: () => advanceChain,
+  advisorySubstrateFromRoles: () => advisorySubstrateFromRoles,
+  affinityBoost: () => affinityBoost,
+  appendEvidenceEvent: () => appendEvidenceEvent,
+  approxTokens: () => approxTokens,
+  assertPersistableIndependence: () => assertPersistableIndependence,
+  assertPolicyWrite: () => assertPolicyWrite,
+  availableRegistryRows: () => availableRegistryRows,
+  backendForMode: () => backendForMode,
+  bindSession: () => bindSession,
+  bindSessionForRun: () => bindSessionForRun,
+  buildCompatibilityCatalog: () => buildCompatibilityCatalog,
+  buildIndependenceAdjudication: () => buildIndependenceAdjudication,
+  buildModelInspection: () => buildModelInspection,
+  buildPrompt: () => buildPrompt,
+  buildSessionContext: () => buildSessionContext,
+  canonicalPolicyKey: () => canonicalPolicyKey,
+  canonicalYamlFlat: () => canonicalYamlFlat,
+  claimPrompt: () => claimPrompt,
+  classifyCompatibilityRead: () => classifyCompatibilityRead,
+  classifyServedAttempt: () => classifyServedAttempt,
+  compareVersions: () => compareVersions,
+  compatibilityUsageForRead: () => compatibilityUsageForRead,
+  composePrompt: () => composePrompt,
+  composeSessionPrompt: () => composeSessionPrompt,
+  concreteModelNameIn: () => concreteModelNameIn,
+  confidenceForListing: () => confidenceForListing,
+  createCacheKey: () => createCacheKey,
+  createRunLocalState: () => createRunLocalState,
+  createStore: () => createStore,
+  decisionFor: () => decisionFor,
+  deepMerge: () => deepMerge,
+  defaultEvidenceStateForTarget: () => defaultEvidenceStateForTarget,
+  defaultProbeEnv: () => defaultProbeEnv,
+  defaultTierModels: () => defaultTierModels,
+  defaultTiersMap: () => defaultTiersMap,
+  detectProviders: () => detectProviders,
+  detectSession: () => detectSession,
+  dispatchUpgrade: () => dispatchUpgrade,
+  eligibleForPurpose: () => eligibleForPurpose,
+  evaluateG5: () => evaluateG5,
+  evidenceStateForListing: () => evidenceStateForListing,
+  expandSelector: () => expandSelector,
+  failureResult: () => failureResult,
+  fallbackHash: () => fallbackHash,
+  filterHostProfiles: () => filterHostProfiles,
+  finalizeInterrupted: () => finalizeInterrupted,
+  finalizeReceipt: () => finalizeReceipt,
+  findBoundAdjudications: () => findBoundAdjudications,
+  findHostIdentity: () => findHostIdentity,
+  findModelNameInText: () => findModelNameInText,
+  fingerprintOrUnknown: () => fingerprintOrUnknown,
+  freezeChain: () => freezeChain,
+  freezeSnapshot: () => freezeSnapshot,
+  gateM2: () => gateM2,
+  getByPath: () => getByPath2,
+  getDefaultModelTierMap: () => getDefaultModelTierMap,
+  getRegistryEntry: () => getRegistryEntry,
+  hostKindRank: () => hostKindRank,
+  hostKindToRegistryId: () => hostKindToRegistryId,
+  independenceDirForRunDir: () => independenceDirForRunDir,
+  initiativeIsWorkspaceScoped: () => initiativeIsWorkspaceScoped,
+  invalidateKey: () => invalidateKey,
+  isAntigravityCli: () => isAntigravityCli,
+  isCanonicalRoleSlug: () => isCanonicalRoleSlug,
+  isClaudeCli: () => isClaudeCli,
+  isClaudeHost: () => isClaudeHost,
+  isCodexCli: () => isCodexCli,
+  isCodexHost: () => isCodexHost,
+  isCompatibilityUsageV1: () => isCompatibilityUsageV1,
+  isDependenceRead: () => isDependenceRead,
+  isFailureReason: () => isFailureReason,
+  isModelCatalogCachePath: () => isModelCatalogCachePath,
+  isPiCli: () => isPiCli,
+  isPlainObject: () => isPlainObject6,
+  isPolicyKey: () => isPolicyKey,
+  isResolverModeFailure: () => isResolverModeFailure,
+  isReusableCacheKey: () => isReusableCacheKey,
+  isReviewClassPurpose: () => isReviewClassPurpose,
+  isRunLocalCacheKey: () => isRunLocalCacheKey,
+  isSnapshotStale: () => isSnapshotStale,
+  isUnknownHost: () => isUnknownHost,
+  isValidCapabilityValue: () => isValidCapabilityValue,
+  legacyModelCatalogCacheDir: () => legacyModelCatalogCacheDir,
+  listingAuthorityFor: () => listingAuthorityFor,
+  loadOrCreateFingerprintSalt: () => loadOrCreateFingerprintSalt,
+  loadPromptExtensions: () => loadPromptExtensions,
+  loadSessionContext: () => loadSessionContext,
+  loadVerifiedM0Reports: () => loadVerifiedM0Reports,
+  loadWrittenAdjudications: () => loadWrittenAdjudications,
+  makeFingerprint: () => makeFingerprint,
+  maxComplexity: () => maxComplexity,
+  migrationPreview: () => migrationPreview,
+  modelCatalogCacheDir: () => modelCatalogCacheDir,
+  nextGeneration: () => nextGeneration,
+  normalizeDiscovery: () => normalizeDiscovery,
+  normalizeHostId: () => normalizeHostId,
+  nullIo: () => nullIo,
+  parseCompatibilityUsageV1: () => parseCompatibilityUsageV1,
+  parseSelector: () => parseSelector,
+  persistIndependenceAdjudication: () => persistIndependenceAdjudication,
+  persistInspectionReport: () => persistInspectionReport,
+  persistResolutionReceipt: () => persistResolutionReceipt,
+  planModeTransition: () => planModeTransition,
+  planTeamRouting: () => planTeamRouting,
+  policyDefaults: () => policyDefaults,
+  policyFilesFor: () => policyFilesFor,
+  policyKeySpec: () => policyKeySpec,
+  policyOverlayFile: () => policyOverlayFile,
+  policyValue: () => policyValue,
+  projectionAllowed: () => projectionAllowed,
+  promptIdentityIn: () => promptIdentityIn,
+  publishSnapshot: () => publishSnapshot,
+  purgeRunLocalEntries: () => purgeRunLocalEntries,
+  purposeClassFor: () => purposeClassFor,
+  purposeComplexityFloor: () => purposeComplexityFloor,
+  purposeTierFloor: () => purposeTierFloor,
+  rankScore: () => rankScore,
+  reachableComplexities: () => reachableComplexities,
+  readCatalogEntry: () => readCatalogEntry,
+  readRoutingFlags: () => readRoutingFlags,
+  readSessionBinding: () => readSessionBinding,
+  readSnapshot: () => readSnapshot,
+  readUnderLockTimeout: () => readUnderLockTimeout,
+  recommendProvider: () => recommendProvider,
+  recordAttempt: () => recordAttempt,
+  recordDecision: () => recordDecision,
+  recordRunInspectionEvidence: () => recordRunInspectionEvidence,
+  requiredAssetIdsForG5: () => requiredAssetIdsForG5,
+  resolve: () => resolve16,
+  resolveAuthorHost: () => resolveAuthorHost,
+  resolveCapability: () => resolveCapability,
+  resolveEffectivePurpose: () => resolveEffectivePurpose,
+  resolveModel: () => resolveModel,
+  resolveModelParams: () => resolveModelParams,
+  resolvePolicy: () => resolvePolicy,
+  resolveRoles: () => resolveRoles,
+  resolveRolesForRun: () => resolveRolesForRun,
+  resolveRung: () => resolveRung,
+  resolveSettings: () => resolveSettings,
+  resolveTierModel: () => resolveTierModel,
+  resolveWithLegacy: () => resolveWithLegacy,
+  resolverModePolicy: () => resolverModePolicy,
+  resolverModeRank: () => resolverModeRank,
+  restoreSessionContext: () => restoreSessionContext,
+  rigorProfile: () => rigorProfile,
+  roleSlugDedupKey: () => roleSlugDedupKey,
+  rollbackV2Routing: () => rollbackV2Routing,
+  rollupCompatibilityUsage: () => rollupCompatibilityUsage,
+  route: () => route,
+  runAdapter: () => runAdapter,
+  runScopeFor: () => runScopeFor,
+  scanHostIdentity: () => scanHostIdentity,
+  selectReviewer: () => selectReviewer,
+  selectRoute: () => selectRoute,
+  sessionBindingPath: () => sessionBindingPath,
+  sessionContextPath: () => sessionContextPath,
+  setByPath: () => setByPath2,
+  sha256Hex: () => sha256Hex2,
+  simulateCatalogChange: () => simulateCatalogChange,
+  singleflight: () => singleflight,
+  singleflightDiscover: () => singleflightDiscover,
+  suggestableAssets: () => suggestableAssets,
+  tierDefaults: () => tierDefaults,
+  tierDefaultsForHost: () => tierDefaultsForHost,
+  tierForCanonicalId: () => tierForCanonicalId,
+  tierForComplexity: () => tierForComplexity,
+  toolVersionInRange: () => toolVersionInRange,
+  totalCatalogOrder: () => totalCatalogOrder,
+  validateAdjudicationRef: () => validateAdjudicationRef,
+  validateCrossHostBlock: () => validateCrossHostBlock2,
+  validateDefaults: () => validateDefaults,
+  validateIndependenceBinding: () => validateIndependenceBinding,
+  validateMcp: () => validateMcp,
+  validateModelPolicy: () => validateModelPolicy2,
+  validateModels: () => validateModels,
+  validatePolicyValue: () => validatePolicyValue,
+  validateRoleResolutionSet: () => validateRoleResolutionSet,
+  validateSecretsPolicy: () => validateSecretsPolicy,
+  validateSecurity: () => validateSecurity,
+  validateWrittenAdjudication: () => validateWrittenAdjudication,
+  verifyResolutionReceipt: () => verifyResolutionReceipt,
+  withBudget: () => withBudget,
+  writePolicyOverlay: () => writePolicyOverlay,
+  writeSessionContext: () => writeSessionContext
+});
+var MODULE_PUBLIC_API_VERSION2;
+var init_config2 = __esm({
+  "src/domains/config/index.ts"() {
+    init_host_id_namespace();
+    init_adapter_fallback_ladders();
+    init_host_profiles_validate();
+    init_host_registry();
+    init_host_registry_schema();
+    init_host_adapter_contract();
+    init_provider_detect();
+    init_session_context();
+    init_model_discovery_contract();
+    init_config_defaults();
+    init_policy_keys();
+    init_policy_resolver();
+    init_session_binding();
+    init_config_validation();
+    init_settings_resolver();
+    init_tier_model();
+    init_catalog_cache();
+    init_compatibility_catalog();
+    init_compatibility_usage();
+    init_confirmation_arbiter();
+    init_independence_predicates();
+    init_independence_record();
+    init_inspection_persist();
+    init_inspection_record();
+    init_model_catalog();
+    init_model_inspect();
+    init_model_policy();
+    init_model_resolver();
+    init_policy_migration();
+    init_purpose_provenance();
+    init_resolver_mode();
+    init_rank();
+    init_role_model_schema();
+    init_routing_rollout();
+    init_role_resolver();
+    init_router();
+    init_tiebreak();
+    init_tier_defaults();
+    init_compose_prompt();
+    init_team_prompt();
+    MODULE_PUBLIC_API_VERSION2 = "guild.module.public-api.v1";
+  }
+});
+
 // hooks/update-check.ts
-var fs62 = __toESM(require("fs"));
+var fs63 = __toESM(require("fs"));
 var os6 = __toESM(require("os"));
-var path73 = __toESM(require("path"));
+var path74 = __toESM(require("path"));
 var import_child_process6 = require("child_process");
 
 // scripts/lib/update-check.ts
-var fs3 = __toESM(require("fs"));
-var os = __toESM(require("os"));
-var path4 = __toESM(require("path"));
-var import_child_process = require("child_process");
-init_host_registry_schema();
+var fs62 = __toESM(require("fs"));
+var os5 = __toESM(require("os"));
+var path73 = __toESM(require("path"));
+var import_child_process5 = require("child_process");
+init_config2();
 var SOURCE_REPO_DEFAULT = "https://github.com/lookatitude/guild.git";
 var CACHE_SCHEMA = "guild.update_check_cache.v1";
 var RECEIPT_SCHEMA = "guild.install_receipt.v1";
@@ -43315,8 +42022,8 @@ function parseLsRemote(raw) {
   return { latest_tag: latestStableTag(tags), next_head_sha: next, main_head_sha: main5 };
 }
 function readNativeHostIdentity(hostId, pluginRoot, opts = {}) {
-  const fsi = opts.fsi ?? fs3;
-  const home = opts.homedir ?? os.homedir();
+  const fsi = opts.fsi ?? fs62;
+  const home = opts.homedir ?? os5.homedir();
   const realPath = (value) => {
     try {
       return fsi.realpathSync(value);
@@ -43326,10 +42033,10 @@ function readNativeHostIdentity(hostId, pluginRoot, opts = {}) {
   };
   const isSha = (value) => typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
   if (hostId === "claude-code-cli" || hostId === "claude-code-app" || hostId === "claude-code-web") {
-    for (const configRoot of [path4.join(home, ".claude"), path4.join(home, ".config", "claude")]) {
+    for (const configRoot of [path73.join(home, ".claude"), path73.join(home, ".config", "claude")]) {
       try {
         const installed = JSON.parse(
-          fsi.readFileSync(path4.join(configRoot, "plugins", "installed_plugins.json"), "utf8")
+          fsi.readFileSync(path73.join(configRoot, "plugins", "installed_plugins.json"), "utf8")
         );
         const rawEntries = installed.plugins?.["guild@guild"];
         const entries = Array.isArray(rawEntries) ? rawEntries : rawEntries ? [rawEntries] : [];
@@ -43340,11 +42047,11 @@ function readNativeHostIdentity(hostId, pluginRoot, opts = {}) {
         });
         if (!entry || !isSha(entry.gitCommitSha)) continue;
         const known2 = JSON.parse(
-          fsi.readFileSync(path4.join(configRoot, "plugins", "known_marketplaces.json"), "utf8")
+          fsi.readFileSync(path73.join(configRoot, "plugins", "known_marketplaces.json"), "utf8")
         );
         const installLocation = known2.guild?.installLocation;
         if (typeof installLocation !== "string") continue;
-        const gitDir = resolveGitDir(path4.join(realPath(installLocation), ".git"), fsi);
+        const gitDir = resolveGitDir(path73.join(realPath(installLocation), ".git"), fsi);
         if (!gitDir) continue;
         const branch = readGitHead(gitDir, fsi).branch;
         if (branch !== "main" && branch !== "next") continue;
@@ -43356,8 +42063,8 @@ function readNativeHostIdentity(hostId, pluginRoot, opts = {}) {
   }
   if (hostId === "codex-cli" || hostId === "codex-app") {
     try {
-      const configuredCodexHome = opts.codexHome ?? process.env.CODEX_HOME ?? path4.join(home, ".codex");
-      const raw = fsi.readFileSync(path4.join(configuredCodexHome, "config.toml"), "utf8");
+      const configuredCodexHome = opts.codexHome ?? process.env.CODEX_HOME ?? path73.join(home, ".codex");
+      const raw = fsi.readFileSync(path73.join(configuredCodexHome, "config.toml"), "utf8");
       const section = /(?:^|\n)\[marketplaces\.guild\]\s*\n([\s\S]*?)(?=\n\[|$)/.exec(raw)?.[1];
       if (!section) return null;
       const field = (name) => new RegExp(`^${name}\\s*=\\s*"([^"]+)"\\s*$`, "m").exec(section)?.[1] ?? null;
@@ -43371,7 +42078,7 @@ function readNativeHostIdentity(hostId, pluginRoot, opts = {}) {
   }
   return null;
 }
-function resolveGitDir(gitPath, fsi = fs3) {
+function resolveGitDir(gitPath, fsi = fs62) {
   try {
     const st = fsi.statSync(gitPath);
     if (st.isDirectory()) return gitPath;
@@ -43379,14 +42086,14 @@ function resolveGitDir(gitPath, fsi = fs3) {
       const m = /^gitdir:\s*(.+)\s*$/m.exec(fsi.readFileSync(gitPath, "utf8"));
       if (!m) return null;
       const target = m[1].trim();
-      return path4.isAbsolute(target) ? target : path4.resolve(path4.dirname(gitPath), target);
+      return path73.isAbsolute(target) ? target : path73.resolve(path73.dirname(gitPath), target);
     }
   } catch {
   }
   return null;
 }
-function readGitHead(gitDir, fsi = fs3) {
-  const headPath = path4.join(gitDir, "HEAD");
+function readGitHead(gitDir, fsi = fs62) {
+  const headPath = path73.join(gitDir, "HEAD");
   if (!fsi.existsSync(headPath)) return { branch: null, sha: null };
   const head = fsi.readFileSync(headPath, "utf8").trim();
   const refMatch = /^ref:\s*refs\/heads\/(\S+)$/.exec(head);
@@ -43395,18 +42102,18 @@ function readGitHead(gitDir, fsi = fs3) {
   }
   const branch = refMatch[1];
   const refRoots = [gitDir];
-  const commondirFile = path4.join(gitDir, "commondir");
+  const commondirFile = path73.join(gitDir, "commondir");
   if (fsi.existsSync(commondirFile)) {
     const common = fsi.readFileSync(commondirFile, "utf8").trim();
-    refRoots.push(path4.isAbsolute(common) ? common : path4.resolve(gitDir, common));
+    refRoots.push(path73.isAbsolute(common) ? common : path73.resolve(gitDir, common));
   }
   for (const root of refRoots) {
-    const looseRef = path4.join(root, "refs", "heads", branch);
+    const looseRef = path73.join(root, "refs", "heads", branch);
     if (fsi.existsSync(looseRef)) {
       const sha = fsi.readFileSync(looseRef, "utf8").trim();
       return { branch, sha: /^[0-9a-f]{40}$/.test(sha) ? sha : null };
     }
-    const packed = path4.join(root, "packed-refs");
+    const packed = path73.join(root, "packed-refs");
     if (fsi.existsSync(packed)) {
       for (const line of fsi.readFileSync(packed, "utf8").split("\n")) {
         const m = /^([0-9a-f]{40})\s+refs\/heads\/(\S+)$/.exec(line.trim());
@@ -43421,8 +42128,8 @@ function branchToChannel(branch) {
   return "stable";
 }
 function resolveInstallState(pluginRoot, opts = {}) {
-  const fsi = opts.fsi ?? fs3;
-  const home = opts.homedir ?? os.homedir();
+  const fsi = opts.fsi ?? fs62;
+  const home = opts.homedir ?? os5.homedir();
   const real = (() => {
     try {
       return fsi.realpathSync(pluginRoot);
@@ -43432,8 +42139,8 @@ function resolveInstallState(pluginRoot, opts = {}) {
   })();
   const version = readInstalledVersion(pluginRoot, fsi);
   const managedRoots = [
-    path4.join(home, ".claude", "plugins"),
-    path4.join(home, ".config", "claude", "plugins")
+    path73.join(home, ".claude", "plugins"),
+    path73.join(home, ".config", "claude", "plugins")
   ].map((m) => {
     try {
       return fsi.realpathSync(m);
@@ -43442,9 +42149,9 @@ function resolveInstallState(pluginRoot, opts = {}) {
     }
   });
   const isManaged = managedRoots.some(
-    (m) => real === m || real.startsWith(m + path4.sep)
+    (m) => real === m || real.startsWith(m + path73.sep)
   );
-  const gitDir = resolveGitDir(path4.join(real, ".git"), fsi);
+  const gitDir = resolveGitDir(path73.join(real, ".git"), fsi);
   if (gitDir) {
     const { branch, sha } = readGitHead(gitDir, fsi);
     if (!isManaged) {
@@ -43457,7 +42164,7 @@ function resolveInstallState(pluginRoot, opts = {}) {
       source: "marketplace-clone"
     };
   }
-  const receiptPath = path4.join(real, RECEIPT_BASENAME);
+  const receiptPath = path73.join(real, RECEIPT_BASENAME);
   if (fsi.existsSync(receiptPath)) {
     try {
       const r = JSON.parse(fsi.readFileSync(receiptPath, "utf8"));
@@ -43486,20 +42193,20 @@ var PLUGIN_MANIFEST_CANDIDATES = [
   [".claude-plugin", "plugin.json"],
   [".codex-plugin", "plugin.json"]
 ];
-function readInstalledVersion(pluginRoot, fsi = fs3) {
+function readInstalledVersion(pluginRoot, fsi = fs62) {
   for (const [dir, file] of PLUGIN_MANIFEST_CANDIDATES) {
     try {
-      const manifest = JSON.parse(fsi.readFileSync(path4.join(pluginRoot, dir, file), "utf8"));
+      const manifest = JSON.parse(fsi.readFileSync(path73.join(pluginRoot, dir, file), "utf8"));
       if (typeof manifest.version === "string" && manifest.version.length > 0) return manifest.version;
     } catch {
     }
   }
   return null;
 }
-function cachePath(homedir5 = os.homedir()) {
-  return path4.join(homedir5, ".guild", "update-check.json");
+function cachePath(homedir5 = os5.homedir()) {
+  return path73.join(homedir5, ".guild", "update-check.json");
 }
-function readCache(file, fsi = fs3) {
+function readCache(file, fsi = fs62) {
   try {
     const c = JSON.parse(fsi.readFileSync(file, "utf8"));
     return c.schema_version === CACHE_SCHEMA ? c : null;
@@ -43515,8 +42222,8 @@ function cacheIsFresh(cache, ttlHours, now) {
 function refreshCache(opts) {
   const repo = opts.repo ?? SOURCE_REPO_DEFAULT;
   const file = opts.file ?? cachePath();
-  const fsi = opts.fsi ?? fs3;
-  const run = opts.runner ?? ((cmd, args) => (0, import_child_process.execFileSync)(cmd, args, { encoding: "utf8", timeout: 15e3 }));
+  const fsi = opts.fsi ?? fs62;
+  const run = opts.runner ?? ((cmd, args) => (0, import_child_process5.execFileSync)(cmd, args, { encoding: "utf8", timeout: 15e3 }));
   try {
     const raw = run("git", ["ls-remote", "--tags", "--heads", repo]);
     const cache = {
@@ -43525,7 +42232,7 @@ function refreshCache(opts) {
       source_repo: repo,
       remote: parseLsRemote(raw)
     };
-    fsi.mkdirSync(path4.dirname(file), { recursive: true });
+    fsi.mkdirSync(path73.dirname(file), { recursive: true });
     fsi.writeFileSync(file, JSON.stringify(cache, null, 2) + "\n", "utf8");
     return cache;
   } catch {
@@ -43624,11 +42331,11 @@ function readUpdateConfig(cwd) {
   }
 }
 function stagedMarkerPath() {
-  return path73.join(os6.homedir(), ".guild", "update-staged.json");
+  return path74.join(os6.homedir(), ".guild", "update-staged.json");
 }
 function alreadyStaged(target) {
   try {
-    const m = JSON.parse(fs62.readFileSync(stagedMarkerPath(), "utf8"));
+    const m = JSON.parse(fs63.readFileSync(stagedMarkerPath(), "utf8"));
     return m.target === target;
   } catch {
     return false;
@@ -43636,8 +42343,8 @@ function alreadyStaged(target) {
 }
 function markStaged(target) {
   try {
-    fs62.mkdirSync(path73.dirname(stagedMarkerPath()), { recursive: true });
-    fs62.writeFileSync(
+    fs63.mkdirSync(path74.dirname(stagedMarkerPath()), { recursive: true });
+    fs63.writeFileSync(
       stagedMarkerPath(),
       JSON.stringify({ target, staged_at: (/* @__PURE__ */ new Date()).toISOString() }) + "\n",
       "utf8"
@@ -43680,16 +42387,16 @@ function main4() {
   const versionDerivedBeta = state.version !== null && /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version);
   if (state.source === "default" && state.version && !versionDerivedBeta) {
     try {
-      const receiptPath = path73.join(pluginRoot, RECEIPT_BASENAME);
+      const receiptPath = path74.join(pluginRoot, RECEIPT_BASENAME);
       const receiptChannel = state.channel;
-      const descriptor = fs62.openSync(
+      const descriptor = fs63.openSync(
         receiptPath,
-        fs62.constants.O_WRONLY | fs62.constants.O_CREAT | fs62.constants.O_EXCL | fs62.constants.O_NOFOLLOW,
+        fs63.constants.O_WRONLY | fs63.constants.O_CREAT | fs63.constants.O_EXCL | fs63.constants.O_NOFOLLOW,
         384
       );
       try {
-        if (!fs62.fstatSync(descriptor).isFile()) throw new Error("receipt target is not a regular file");
-        fs62.writeFileSync(
+        if (!fs63.fstatSync(descriptor).isFile()) throw new Error("receipt target is not a regular file");
+        fs63.writeFileSync(
           descriptor,
           JSON.stringify(
             {
@@ -43713,9 +42420,9 @@ function main4() {
             2
           ) + "\n"
         );
-        fs62.fsyncSync(descriptor);
+        fs63.fsyncSync(descriptor);
       } finally {
-        fs62.closeSync(descriptor);
+        fs63.closeSync(descriptor);
       }
     } catch {
     }

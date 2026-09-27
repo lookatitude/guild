@@ -122,7 +122,7 @@ describe("P1-L6 guild-run wrapper path (SC-3)", () => {
       const script = renderLauncherScript(host);
       expect(script.startsWith("#!/usr/bin/env bash")).toBe(true);
       expect(script).toContain(`--host ${host}`);
-      expect(script).toContain("guild-run.ts");
+      expect(script).toContain("runtime/scripts/guild-run.js");
     }
   });
 });

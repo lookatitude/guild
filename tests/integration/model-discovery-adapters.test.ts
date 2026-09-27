@@ -20,7 +20,7 @@ import {
   fingerprintOrUnknown,
   nullIo,
   runAdapter,
-} from "../../src/adapters/model-discovery/adapter-contract";
+} from "../../src/domains/config";
 import {
   codexAppServerAdapter,
   parseModelListResult,

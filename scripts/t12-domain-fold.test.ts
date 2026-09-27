@@ -27,8 +27,8 @@ import {
   validateDomainOwnership,
 } from "../src/domains/distribution";
 import { buildInventory } from "./build-inventory";
-import { srcImportClosure, writeClaudeTree } from "./build-host-packages";
-import { checkPackagedSource } from "./lint/packaged-install-smoke";
+import { writeClaudeTree } from "./build-host-packages";
+import { checkPackagedSource, checkSpawnedBundles } from "./lint/packaged-install-smoke";
 
 const REPO = path.resolve(__dirname, "..");
 
@@ -60,7 +60,7 @@ function tmpTree(files: Record<string, string>): string {
 describe("R43 — domain index-only imports (KTD4/KTD27)", () => {
   test("a planted adapter import inside a domain is REFUSED", () => {
     const root = tmpTree({
-      "src/adapters/host-registry.ts": 'export const HOST_IDS = ["claude-code"] as const;\n',
+      "src/domains/config/host-registry.ts": 'export const HOST_IDS = ["claude-code"] as const;\n',
       "src/adapters/index.ts": 'export * from "./host-registry";\n',
       "src/domains/config/resolver.ts": 'import { HOST_IDS } from "../../adapters";\nexport const hosts = HOST_IDS;\n',
       "src/domains/config/index.ts": 'export * from "./resolver";\n',
@@ -317,37 +317,28 @@ describe("domain ownership — every domain file is owned exactly once", () => {
 
 // ------------------------------------------------- host package projection (KTD28)
 describe("host packages ship a projection, not the domain tree (KTD28)", () => {
-  test("the src/ closure follows imports, including eval(require), and skips unreachable files", () => {
-    const root = tmpTree({
-      "scripts/run.ts": 'import { used } from "../src/domains/kernel/used";\nexport const r = used;\n',
-      "src/domains/kernel/used.ts": 'import { dep } from "./dep";\nexport const used = dep;\n',
-      "src/domains/kernel/dep.ts":
-        'export const dep = () => (eval("require") as NodeRequire)("../state/lazy");\n',
-      "src/domains/state/lazy.ts": "export const lazy = 1;\n",
-      "src/domains/config/model-resolver.ts": "export const unreachable = 1;\n",
-    });
-    const dest = tmpTree({ "scripts/run.ts": fs.readFileSync(path.join(root, "scripts/run.ts"), "utf8") });
-    expect(srcImportClosure(root, dest)).toEqual([
-      "src/domains/kernel/dep.ts",
-      "src/domains/kernel/used.ts",
-      "src/domains/state/lazy.ts",
-    ]);
-  });
-
-  test("the built Claude package carries only surfaces, module shims + the closure, and its runtime starts", () => {
+  test("the built Claude package carries only surfaces, module shims and compiled runtime, and its runtime starts", () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "guild-t12-pkg-"));
     const pkg = writeClaudeTree(REPO, buildInventory(REPO), out, "2026-01-01T00:00:00.000Z");
-    expect(checkPackagedSource(pkg, REPO)).toEqual([]);
+    expect(checkPackagedSource(pkg)).toEqual([]);
+    expect(checkSpawnedBundles(pkg)).toEqual([]);
     expect(fs.existsSync(path.join(pkg, "src/surfaces/graphs/product.yaml"))).toBe(true);
-    // No retired tree and no module implementation left: only shims can be reached.
+    // No retired tree, no module implementation, no domain copy: only shims ship.
     const shipped = execFileSync("find", ["src", "-name", "*.ts"], { cwd: pkg, encoding: "utf8" }).trim().split("\n");
     expect(shipped.filter((f) => f.includes("/workflows/"))).toEqual([]);
     expect(shipped.filter((f) => f.startsWith("src/modules/") && !f.endsWith("/index.ts"))).toEqual([]);
+    expect(shipped.filter((f) => f.startsWith("src/domains/"))).toEqual([]);
 
-    // Anti-vacuity: a domain file no shipped script imports is a domain copy.
+    // Anti-vacuity: any domain file in a package is a domain copy (KTD28).
+    fs.mkdirSync(path.join(pkg, "src/domains/config"), { recursive: true });
     fs.writeFileSync(path.join(pkg, "src/domains/config/zz-planted.ts"), "export const x = 1;\n");
-    expect(checkPackagedSource(pkg, REPO)).toEqual([
-      "claude-code: ships src/domains/config/zz-planted.ts, which no shipped script imports (a domain copy, KTD28)",
+    expect(checkPackagedSource(pkg)).toEqual([
+      "claude-code: ships src/domains/config/zz-planted.ts — a package never copies a domain (KTD28)",
+    ]);
+    // Anti-vacuity: a bare stage-script call names TypeScript the package does not ship.
+    fs.writeFileSync(path.join(pkg, "zz-planted.md"), "Run `scan.ts --cwd <root>`.\n");
+    expect(checkSpawnedBundles(pkg)).toEqual([
+      "claude-code: zz-planted.md tells the model to run a .ts script the package does not ship",
     ]);
 
     const run = spawnSync(process.execPath, [path.join(pkg, "runtime/guild-mcp.js"), "wiki"], {

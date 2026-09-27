@@ -19,3 +19,4 @@ export * from "./runtime-tree-guard";
 // U-TIER (T08): the T0/T1/T2 bus contract. Here rather than in `dispatch` so the
 // communication domain's artifact bus can enforce it without a dependency cycle.
 export * from "./tier-bus";
+export * from "./plugin-root";

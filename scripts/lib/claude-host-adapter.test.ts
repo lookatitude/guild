@@ -254,25 +254,17 @@ describe("Claude HostAdapter concrete parity", () => {
     }
   });
 
-  it("generated Claude package bundles src/modules for script compatibility shims", () => {
+  it("generated Claude package ships compiled runtime and module shims, never domain TypeScript (KTD28)", () => {
     const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), "guild-r3-claude-src-"));
     try {
       const dest = writeClaudeTree(PLUGIN_ROOT, buildInventory(PLUGIN_ROOT), tmpDist, UNSTAMPED_GENERATED_AT);
-      const shim = fs.readFileSync(path.join(dest, "scripts", "lib", "module-manifest.ts"), "utf8");
-      expect(shim).toContain("../../src/domains/kernel/module-manifest");
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "kernel", "module-manifest.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "kernel", "yaml-loader.ts"))
-      ).toBe(true);
-      expect(fs.existsSync(path.join(dest, "scripts", "package.json"))).toBe(true);
-      expect(fs.existsSync(path.join(dest, "scripts", "package-lock.json"))).toBe(true);
-      expect(fs.existsSync(path.join(dest, "scripts", "node_modules", "js-yaml", "index.js"))).toBe(true);
-      expect(fs.existsSync(path.join(dest, "scripts", "node_modules", "argparse", "argparse.js"))).toBe(true);
-      expect(resolveUnderNode("js-yaml", path.join(dest, "scripts"))).toContain(
-        path.join(dest, "scripts", "node_modules", "js-yaml")
-      );
+      // Module manifests + shims ship for the conformance worker; no domain file does.
+      expect(fs.existsSync(path.join(dest, "src", "modules", "kernel", "index.ts"))).toBe(true);
+      expect(fs.existsSync(path.join(dest, "src", "domains"))).toBe(false);
+      // Authoring TypeScript and its node_modules stay in the repo (KTD11).
+      expect(fs.existsSync(path.join(dest, "scripts", "lib", "module-manifest.ts"))).toBe(false);
+      expect(fs.existsSync(path.join(dest, "scripts", "node_modules"))).toBe(false);
+      // The compiled user path runs under plain node, with js-yaml inlined.
       const hookProbe = spawnSync(process.execPath, [path.join(dest, "hooks", "dist", "learning-backstop.js")], {
         cwd: dest,
         encoding: "utf8",
@@ -280,208 +272,30 @@ describe("Claude HostAdapter concrete parity", () => {
       });
       expect(hookProbe.status).toBe(0);
       expect(hookProbe.stderr).not.toContain("Cannot resolve js-yaml");
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "domains", "distribution", "check-domain-ownership.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "domains", "distribution", "build-inventory.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "domains", "distribution", "equivalence-contract.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "domains", "distribution", "inventory-schema.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "domains", "distribution", "per-host-packaging.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "domains", "distribution", "parity-contract.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "domains", "distribution", "per-host-packaging.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "domains", "distribution", "result-contracts.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "domains", "distribution", "review-result.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "domains", "distribution", "surface-manifest.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "dispatch", "specialist-contract.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "adapters", "host-types.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "config", "router.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "config", "rank.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "config", "tiebreak.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "config", "tier-defaults.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "config", "settings-reader.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "config", "settings-resolver.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "config", "tier-model.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "config", "team-prompt.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "knowledge", "recall-protect.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "knowledge", "protect-chunks-cli.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "knowledge", "wiki-recall.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "knowledge", "recall.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "knowledge", "fs-scanner.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "knowledge", "memory-adapter.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "evolve", "define-schema.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "evolve", "explore-schema.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "knowledge", "ingest-importance.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "knowledge", "knowledge-links-contract.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "telemetry", "guild-trace-events.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "telemetry", "guild-trace-emit.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "state", "frontmatter.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "state", "guild-discovery.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "state", "guild-root.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "state", "index-cache.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "domains", "state", "index-migrate.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "adapters", "host-capabilities-schema.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "adapters", "host-capability-manifest.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "adapters", "host-registry-schema.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "adapters", "host-id-namespace.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "adapters", "host-registry.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "adapters", "adapter-fallback-ladders.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "adapters", "host-profiles-validate.ts")
-        )
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "adapters", "host-adapter-contract.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "adapters", "degradation-trace.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "adapters", "mixed-host-contracts.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(path.join(dest, "src", "adapters", "provider-detect.ts"))
-      ).toBe(true);
-      expect(
-        fs.existsSync(
-          path.join(dest, "src", "domains", "knowledge", "knowledge-graph-contract.ts")
-        )
-      ).toBe(true);
+      const cliProbe = spawnSync(process.execPath, [path.join(dest, "runtime", "scripts", "workspace-detect.js"), "--cwd", dest], {
+        cwd: dest,
+        encoding: "utf8",
+      });
+      expect(cliProbe.stderr).not.toMatch(/Cannot find module|MODULE_NOT_FOUND/);
     } finally {
       fs.rmSync(tmpDist, { recursive: true, force: true });
     }
   });
 
   it("generated Claude package ships the emit-learning-checkpoint CLI entrypoint (issue #55)", () => {
-    // hooks/emit-learning-checkpoint.ts is not a Claude hook-event binding — it's a
+    // hooks/emit-learning-checkpoint is not a Claude hook-event binding — it's a
     // standalone CLI the learning-checkpoint skill invokes directly via
-    // `npx tsx .../hooks/emit-learning-checkpoint.ts` (SKILL.md step 7.5). tsx runs the
-    // .ts SOURCE, so the raw file must be shipped, not just its bundled dist/*.js.
+    // `node .../hooks/dist/emit-learning-checkpoint.js` (compiled, KTD11).
     const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), "guild-r3-claude-checkpoint-cli-"));
     try {
       const dest = writeClaudeTree(PLUGIN_ROOT, buildInventory(PLUGIN_ROOT), tmpDist, UNSTAMPED_GENERATED_AT);
 
-      const shippedSource = path.join(dest, "hooks", "emit-learning-checkpoint.ts");
-      expect(fs.existsSync(shippedSource)).toBe(true);
-      expect(fs.readFileSync(shippedSource, "utf8")).toContain("export function writeCheckpoint");
-
       const shippedDist = path.join(dest, "hooks", "dist", "emit-learning-checkpoint.js");
       expect(fs.existsSync(shippedDist)).toBe(true);
+      expect(fs.existsSync(path.join(dest, "hooks", "emit-learning-checkpoint.ts"))).toBe(false);
 
       // The documented invocation must actually run from the shipped tree.
-      const cliProbe = spawnSync("npx", ["tsx", shippedSource], {
+      const cliProbe = spawnSync(process.execPath, [shippedDist], {
         cwd: dest,
         encoding: "utf8",
         env: {
@@ -559,7 +373,7 @@ describe("Claude HostAdapter concrete parity", () => {
     }
   });
 
-  it("generated Codex marketplace package preserves scripts runtime dependencies", () => {
+  it("generated Codex marketplace package carries the compiled runtime, not script dependencies", () => {
     const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), "guild-r3-codex-marketplace-runtime-"));
     try {
       const inv = buildInventory(PLUGIN_ROOT);
@@ -572,10 +386,8 @@ describe("Claude HostAdapter concrete parity", () => {
       expect(codexHooks.hooks.UserPromptSubmit[0].hooks[0].command).toContain("codex-guild-prompt-bridge.js");
       expect(fs.existsSync(path.join(pluginDir, "hooks", "codex-guild-prompt-bridge.js"))).toBe(true);
       expect(fs.existsSync(path.join(pluginDir, "command-src", "command-registry.json"))).toBe(true);
-      expect(fs.existsSync(path.join(pluginDir, "scripts", "node_modules", "js-yaml", "index.js"))).toBe(true);
-      expect(resolveUnderNode("js-yaml", path.join(pluginDir, "scripts"))).toContain(
-        path.join(pluginDir, "scripts", "node_modules", "js-yaml")
-      );
+      expect(fs.existsSync(path.join(pluginDir, "runtime", "scripts", "guild-run.js"))).toBe(true);
+      expect(fs.existsSync(path.join(pluginDir, "scripts", "node_modules"))).toBe(false);
     } finally {
       fs.rmSync(tmpDist, { recursive: true, force: true });
     }
