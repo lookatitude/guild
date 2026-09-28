@@ -90,12 +90,8 @@ beforeAll(() => {
   }
   const live = runCli("lint/layout-laws.ts", ["--json"]);
   const report = JSON.parse(live.stdout) as { violations: Array<{ check: string; path: string; detail: string }> };
-  const baseline = new Set(
-    (JSON.parse(read("scripts/lint/layout-baseline.json")) as { entries: string[] }).entries,
-  );
+  // T16 retired the layout baseline: every live violation is open.
   for (const v of report.violations) {
-    const key = `${v.check}::${v.path}::${v.detail}`;
-    if (baseline.has(key)) continue;
     lintOpen.set(v.check, [...(lintOpen.get(v.check) ?? []), `${v.path} — ${v.detail}`]);
   }
   const out = path.join(scratch, "coverage.yaml");
@@ -318,6 +314,15 @@ describe("authored Verification Contract fixtures", () => {
     ]);
   });
 
+  test("KTD2 · one authoring home: each surface tree lives once, at the plugin root", () => {
+    expect(surfaceHomeFindings()).toEqual([]);
+    // CONTROL: a second copy under src/surfaces and a missing root tree are visible.
+    const root = path.join(scratch, "ktd2");
+    for (const t of ["commands", "skills", "templates", "hooks"]) fs.mkdirSync(path.join(root, t), { recursive: true });
+    fs.mkdirSync(path.join(root, "src", "surfaces", "skills"), { recursive: true });
+    expect(surfaceHomeFindings(root)).toEqual(["missing home: agents", "second copy: src/surfaces/skills"]);
+  });
+
   test("KTD9 · no dual-home mirrors, no shipping _archive, every print-only alias file present", () => {
     expect(mirrorArchiveFindings()).toEqual([]);
     // CONTROL: a planted _archive, a resources mirror and a missing alias are visible.
@@ -439,6 +444,20 @@ function authoringHomeFindings(root = PLUGIN_ROOT): string[] {
 }
 
 /** KTD9: no mirrors, no _archive; KTD14 alias files stay until the stable cut. */
+/**
+ * KTD2 as amended by the operator at T16: commands/, skills/ (playbooks under
+ * skills/playbooks/), agents/, templates/ and hooks/ are authored once, at the
+ * plugin root. src/surfaces/ holds only graphs and prompts.
+ */
+function surfaceHomeFindings(root = PLUGIN_ROOT): string[] {
+  const out: string[] = [];
+  for (const t of ["agents", "commands", "hooks", "skills", "templates"]) {
+    if (!fs.existsSync(path.join(root, t))) out.push(`missing home: ${t}`);
+    if (fs.existsSync(path.join(root, "src", "surfaces", t))) out.push(`second copy: src/surfaces/${t}`);
+  }
+  return out.sort();
+}
+
 function mirrorArchiveFindings(root = PLUGIN_ROOT): string[] {
   const tree = u9Walk(root);
   const out = [...dualCopies(tree)];

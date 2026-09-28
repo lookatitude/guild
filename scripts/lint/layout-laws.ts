@@ -18,10 +18,8 @@
  * executes the validator it finds. These are KTD regression guards for a repo we
  * control -- not a sandbox, not a security boundary, and not safe against hostile code.
  *
- * Baseline semantics (T01 -> T16): scripts/lint/layout-baseline.json enumerates every
- * violation present on the tree at the start of the reshape. A later lane may only
- * REMOVE entries. A violation whose key is absent from the baseline is a regression
- * and fails the run. T16 deletes the baseline file.
+ * No baseline: T16 retired scripts/lint/layout-baseline.json, so every violation
+ * fails the run. `--no-baseline` is accepted and changes nothing.
  */
 
 import * as fs from "node:fs";
@@ -1891,6 +1889,17 @@ function hostIdentityHits(obj: unknown, prefix = "", out: string[] = []): string
 const SKILL_VERSIONS_DELETER = "src/domains/state/upgrade-steps.ts";
 
 // ---------------------------------------------------------------- the checks
+/**
+ * KTD29 outranks KTD27 for these two imports only (T16, lead decision D1 after the
+ * R43 cycle cut). Through the domain index, guild-root pulls upgrade steps and
+ * js-yaml into the SessionStart bundle, and config-defaults drags telemetry past the
+ * blocking status require-graph allowlist. Key: importer -> "<domain>/<file>".
+ */
+const KTD29_DEEP_IMPORTS: ReadonlyMap<string, string> = new Map([
+  ["scripts/lib/guild-root.ts", "state/guild-root"],
+  ["scripts/lib/shared/config-defaults.ts", "config/config-defaults"],
+]);
+
 const CHECKS: Check[] = [
   {
     id: "skills-glob-17",
@@ -2004,6 +2013,7 @@ const CHECKS: Check[] = [
           if (self && self.name === target.name && self.tree === target.tree) continue;
           const tail = resolved.slice(`src/${target.tree}/${target.name}/`.length);
           if (tail === "index" || tail === "") continue;
+          if (KTD29_DEEP_IMPORTS.get(f) === `${target.name}/${tail}`) continue;
           v.push({
             check: "index-only-domain-imports",
             path: f,
@@ -2557,14 +2567,6 @@ function repoRoot(): string {
   return path.resolve(here, "..", "..");
 }
 
-function baselinePath(root: string): string {
-  return path.join(root, "scripts/lint/layout-baseline.json");
-}
-
-function loadBaseline(root: string): Set<string> {
-  const j = readJson(baselinePath(root));
-  return new Set<string>(Array.isArray(j?.entries) ? j.entries.map(String) : []);
-}
 
 async function main(argv: string[]): Promise<number> {
   const flag = (n: string) => argv.includes(`--${n}`);
@@ -2579,19 +2581,11 @@ async function main(argv: string[]): Promise<number> {
   if (flag("fixtures")) return await runFixtures(root);
 
   const violations = await runChecks(root, only);
-  const useBaseline = !flag("no-baseline");
-  const baseline = useBaseline ? loadBaseline(root) : new Set<string>();
-
+  // The T01 baseline was retired at T16: nothing is waived.
+  const baseline = new Set<string>();
   if (flag("write-baseline")) {
-    const payload = {
-      schema: "guild.layout_baseline.v1",
-      note: "Violations present on the tree when U1 landed. Later lanes may only REMOVE entries; T16 deletes this file.",
-      checks: CHECKS.map((c) => c.id),
-      entries: violations.map(key),
-    };
-    fs.writeFileSync(baselinePath(root), `${JSON.stringify(payload, null, 2)}\n`);
-    console.log(`wrote ${violations.length} baseline entries to scripts/lint/layout-baseline.json`);
-    return 0;
+    console.error("layout-laws: the baseline was retired at T16; fix the violation instead");
+    return 2;
   }
 
   const byCheck = new Map<string, { open: Violation[]; waived: Violation[] }>();
@@ -2607,7 +2601,7 @@ async function main(argv: string[]): Promise<number> {
   if (flag("json")) {
     console.log(JSON.stringify({ violations, baselined: baseline.size, stale }, null, 2));
   } else {
-    console.log(`layout-laws — ${CHECKS.length} checks · root ${path.relative(process.cwd(), root) || "."} · baseline ${useBaseline ? `${baseline.size} entries` : "OFF"}`);
+    console.log(`layout-laws — ${CHECKS.length} checks · root ${path.relative(process.cwd(), root) || "."} · no baseline`);
     for (const c of CHECKS) {
       if (only && c.id !== only) continue;
       const b = byCheck.get(c.id)!;

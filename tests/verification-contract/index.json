@@ -1121,9 +1121,13 @@
     {
       "id": "KTD2",
       "unit": "U3 · U9",
-      "proves": "flat src/surfaces/ is the only authoring home",
-      "owner": "T16",
-      "pending": "one authoring home under src/surfaces (with R22's clone and deletion greps)"
+      "proves": "one authoring home: commands/, skills/, agents/, templates/, hooks/ at the plugin root (operator-amended at T16); src/surfaces/ holds graphs and prompts only",
+      "fixtures": [
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "KTD2 · one authoring home: each surface tree lives once, at the plugin root"
+        }
+      ]
     },
     {
       "id": "KTD3",

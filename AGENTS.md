@@ -305,7 +305,7 @@ The runnable form is `scripts/lint/layout-laws.ts` (`npm run lint:layout` in `sc
 Where a line here and the source plan disagree, the source plan wins.
 
 - **KTD1.** Twelve domains. Public API is twelve index.ts. Adapters and src/runtime are not a 13th domain.
-- **KTD2.** Flat src/surfaces/ is the only authoring home for commands, skills, playbooks, agents, templates, hooks.
+- **KTD2.** One authoring home: commands/, skills/ (playbooks under skills/playbooks/), agents/, templates/, hooks/ at the plugin root, each once. src/surfaces/ holds only graphs and prompts. (Amended by the operator at T16.)
 - **KTD3.** Two D-MCP ids (wiki | trace), one runtime/guild-mcp.js. No union of wiki+runs.
 - **KTD4.** Host maps live in src/adapters/ + adapter.lock.json. Domains must not import a host family adapter.
 - **KTD5.** Per-cell inferred rungs. Unverified rungs fail closed, never guessed. Live-host verification of unverified rungs is out of this cut.

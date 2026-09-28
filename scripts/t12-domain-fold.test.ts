@@ -123,15 +123,8 @@ describe("R43 — domain index-only imports (KTD4/KTD27)", () => {
 
   test("the live tree has no src/**/workflows/ tree and no open index-direction violation", () => {
     expect(runLayoutLaws(REPO, "no-ts-workflows-dir")).toHaveLength(0);
-    // Outside src/ the remaining private-file imports are a declared, baselined
-    // worklist (file-for-file shims, lazy requires, white-box tests). Inside src/
-    // there are none, and nothing is open.
-    const baseline = new Set<string>(
-      JSON.parse(fs.readFileSync(path.join(REPO, "scripts/lint/layout-baseline.json"), "utf8")).entries,
-    );
-    const hits = runLayoutLaws(REPO, "index-only-domain-imports");
-    expect(hits.filter((h) => h.path.startsWith("src/"))).toEqual([]);
-    expect(hits.filter((h) => !baseline.has(`${h.check}::${h.path}::${h.detail}`))).toEqual([]);
+    // T16 retired the baseline; the two KTD29 deep imports are named in the rule.
+    expect(runLayoutLaws(REPO, "index-only-domain-imports")).toEqual([]);
   });
 });
 
