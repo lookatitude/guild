@@ -4210,7 +4210,7 @@ function redactHomeDirPaths(input) {
 function redactKeyValueSecrets(input) {
   return input.replace(
     KV_SECRET_PATTERN,
-    (_match, key, sep18) => `${key}${sep18}${KV_REDACTED}`
+    (_match, key, sep19) => `${key}${sep19}${KV_REDACTED}`
   );
 }
 function allWordsWordish(words) {
@@ -23960,7 +23960,7 @@ var init_catalog_cache = __esm({
         }
       }
     };
-    defaultSleep = (ms) => new Promise((resolve41) => setTimeout(resolve41, ms));
+    defaultSleep = (ms) => new Promise((resolve40) => setTimeout(resolve40, ms));
   }
 });
 
@@ -35139,7 +35139,7 @@ function calcDelayMs(attempt, strategy, baseMs) {
 }
 function realSleep(ms) {
   if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve41) => setTimeout(resolve41, ms));
+  return new Promise((resolve40) => setTimeout(resolve40, ms));
 }
 async function runWithRetry(dispatchFn, opts) {
   const maxAttempts = Math.max(1, Math.floor(opts.maxAttempts));
@@ -43487,11 +43487,11 @@ function buildToolTurnAskReason(result, toolName) {
 
 // hooks/lib/guild-hook-event.ts
 async function readHookStdin() {
-  return new Promise((resolve41) => {
+  return new Promise((resolve40) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve41(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve41(""));
+    process.stdin.on("end", () => resolve40(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve40(""));
   });
 }
 function emitClaudeHookEvent(raw) {
@@ -44070,60 +44070,261 @@ function isLaneWorker(env) {
   const lane = env["GUILD_LANE_ID"];
   return typeof task === "string" && task.length > 0 || typeof lane === "string" && lane.length > 0;
 }
-function realpathDeep(p) {
-  let current = path85.resolve(p);
-  const rest = [];
-  for (; ; ) {
+function realpathDeep(p, depth = 0) {
+  const abs = path85.isAbsolute(p) ? p : process.cwd() + path85.sep + p;
+  let current = path85.parse(abs).root;
+  let exists = true;
+  for (const seg of abs.slice(current.length).split(/[\\/]+/)) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") {
+      current = path85.dirname(current);
+      continue;
+    }
+    const next = path85.join(current, seg);
+    if (!exists) {
+      current = next;
+      continue;
+    }
     try {
-      return path85.join(fs72.realpathSync(current), ...rest);
+      current = fs72.realpathSync(next);
+      continue;
     } catch {
-      const parent = path85.dirname(current);
-      if (parent === current) return path85.join(current, ...rest);
-      rest.unshift(path85.basename(current));
-      current = parent;
+    }
+    let link = null;
+    try {
+      if (fs72.lstatSync(next).isSymbolicLink()) link = fs72.readlinkSync(next);
+    } catch {
+    }
+    if (link !== null && depth < 40) {
+      current = realpathDeep(path85.isAbsolute(link) ? link : current + path85.sep + link, depth + 1);
+    } else {
+      exists = false;
+      current = next;
     }
   }
+  return current;
+}
+function isWithin2(root, child) {
+  const rel2 = path85.relative(root, child);
+  return rel2 === "" || rel2 !== ".." && !rel2.startsWith(".." + path85.sep) && !path85.isAbsolute(rel2);
 }
 function resolvesUnderWiki(wikiRoots, target, cwd) {
-  const expanded = target === "~" || target.startsWith("~/") ? path85.join(os5.homedir(), target.slice(1)) : target;
-  const abs = realpathDeep(path85.isAbsolute(expanded) ? expanded : path85.resolve(cwd, expanded));
-  return wikiRoots.some((root) => {
-    const rel2 = path85.relative(realpathDeep(root), abs);
-    return rel2 === "" || !rel2.startsWith("..") && !path85.isAbsolute(rel2);
-  });
+  if (target.length === 0) return false;
+  const expanded = target === "~" || target.startsWith("~/") ? os5.homedir() + target.slice(1) : target;
+  const abs = realpathDeep(path85.isAbsolute(expanded) ? expanded : cwd + path85.sep + expanded);
+  return wikiRoots.some((root) => isWithin2(realpathDeep(root), abs));
 }
-var WORD = String.raw`(?:"([^"]*)"|'([^']*)'|([^\s;|&<>()]+))`;
-var REDIRECT_RE = new RegExp(String.raw`(?:^|[^<>&|=-])(?:\d*|&)>>?\|?\s*(?!&)` + WORD, "g");
-var WORD_NC = String.raw`(?:"[^"]*"|'[^']*'|[^\s;|&<>()]+)`;
-var TEE_RE = new RegExp(String.raw`(?:^|[\s;|&(])tee((?:\s+` + WORD_NC + String.raw`)+)`, "g");
-var ARG_RE = new RegExp(WORD, "g");
-function bashWriteTargets(command) {
+var CONTROL = /* @__PURE__ */ new Set([";", "&", "|", "&&", "||", "|&", ";;", "\n", "(", ")", "`", "$(", "{", "}"]);
+function shellTokens(command) {
   const out = [];
-  for (const m of command.matchAll(REDIRECT_RE)) {
-    const t = m[1] ?? m[2] ?? m[3];
-    if (t !== void 0 && t.length > 0) out.push(t);
+  let word = "";
+  let inWord = false;
+  let quoted = false;
+  const flush = () => {
+    if (inWord) out.push({ kind: "word", value: word });
+    word = "";
+    inWord = false;
+    quoted = false;
+  };
+  const s = command;
+  let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (c === "\\") {
+      if (s[i + 1] === "\n") {
+        i += 2;
+        continue;
+      }
+      word += s[i + 1] ?? "";
+      inWord = true;
+      quoted = true;
+      i += 2;
+      continue;
+    }
+    if (c === "'" || c === "$" && s[i + 1] === "'") {
+      const start = c === "$" ? i + 2 : i + 1;
+      const end = s.indexOf("'", start);
+      word += s.slice(start, end === -1 ? s.length : end);
+      inWord = true;
+      quoted = true;
+      i = end === -1 ? s.length : end + 1;
+      continue;
+    }
+    if (c === '"') {
+      i++;
+      while (i < s.length && s[i] !== '"') {
+        if (s[i] === "\\" && i + 1 < s.length && '"\\$`\n'.includes(s[i + 1])) {
+          if (s[i + 1] !== "\n") word += s[i + 1];
+          i += 2;
+        } else {
+          word += s[i];
+          i++;
+        }
+      }
+      i++;
+      inWord = true;
+      quoted = true;
+      continue;
+    }
+    if (c === "#" && !inWord) {
+      const nl = s.indexOf("\n", i);
+      i = nl === -1 ? s.length : nl;
+      continue;
+    }
+    if (c === " " || c === "	") {
+      flush();
+      i++;
+      continue;
+    }
+    if (c === ">" || c === "<") {
+      const fd = inWord && !quoted && /^\d+$/.test(word) ? word : "";
+      if (fd !== "") {
+        word = "";
+        inWord = false;
+      }
+      flush();
+      const m = /^(<<<|<<-|<<|<>|<&|<|>>|>\||>&|>)/.exec(s.slice(i));
+      out.push({ kind: "op", value: fd + m[1] });
+      i += m[1].length;
+      continue;
+    }
+    if (c === "&" && s[i + 1] === ">") {
+      flush();
+      const op = s[i + 2] === ">" ? "&>>" : "&>";
+      out.push({ kind: "op", value: op });
+      i += op.length;
+      continue;
+    }
+    if (c === "$" && s[i + 1] === "(") {
+      flush();
+      out.push({ kind: "op", value: "$(" });
+      i += 2;
+      continue;
+    }
+    const two = s.slice(i, i + 2);
+    if (two === "&&" || two === "||" || two === "|&" || two === ";;") {
+      flush();
+      out.push({ kind: "op", value: two });
+      i += 2;
+      continue;
+    }
+    if (";&|()`\n".includes(c) || (c === "{" || c === "}") && !inWord) {
+      flush();
+      out.push({ kind: "op", value: c });
+      i++;
+      continue;
+    }
+    word += c;
+    inWord = true;
+    i++;
   }
-  for (const m of command.matchAll(TEE_RE)) {
-    for (const a of (m[1] ?? "").matchAll(ARG_RE)) {
-      const t = a[1] ?? a[2] ?? a[3];
-      if (t !== void 0 && t.length > 0 && !t.startsWith("-")) out.push(t);
+  flush();
+  return out;
+}
+var isRedirect = (op) => /^\d*(>>?|>\||>&|<>)$|^&>>?$/.test(op);
+function simpleCommands(tokens) {
+  const cmds = [];
+  let cur = { words: [], redirects: [] };
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.kind === "op" && CONTROL.has(t.value)) {
+      if (cur.words.length > 0 || cur.redirects.length > 0) cmds.push(cur);
+      cur = { words: [], redirects: [] };
+      continue;
+    }
+    if (t.kind === "op") {
+      const next = tokens[i + 1];
+      if (next?.kind !== "word") continue;
+      i++;
+      if (isRedirect(t.value) && !(t.value.endsWith(">&") && /^(\d+|-)$/.test(next.value))) {
+        cur.redirects.push(next.value);
+      }
+      continue;
+    }
+    cur.words.push(t.value);
+  }
+  if (cur.words.length > 0 || cur.redirects.length > 0) cmds.push(cur);
+  return cmds;
+}
+var READERS = /* @__PURE__ */ new Set([
+  "cat",
+  "head",
+  "tail",
+  "less",
+  "more",
+  "grep",
+  "egrep",
+  "fgrep",
+  "rg",
+  "ag",
+  "ls",
+  "wc",
+  "diff",
+  "cmp",
+  "stat",
+  "file",
+  "test",
+  "[",
+  "echo",
+  "printf",
+  "realpath",
+  "readlink",
+  "basename",
+  "dirname",
+  "jq",
+  "bat",
+  "cut",
+  "tr",
+  "nl",
+  "md5",
+  "shasum",
+  "sha256sum",
+  "du",
+  "cd",
+  "pwd",
+  "true",
+  "false"
+]);
+var GIT_READS = /* @__PURE__ */ new Set(["log", "show", "diff", "status", "blame", "grep", "ls-files", "rev-parse", "cat-file"]);
+var FIND_WRITES = /^-(delete|exec|execdir|ok|okdir|fprint|fprint0|fprintf|fls)$/;
+var WRAPPERS = /* @__PURE__ */ new Set(["env", "command", "builtin", "exec", "nohup", "time", "nice", "sudo", "stdbuf"]);
+var FRAGMENT_SPLIT = /[\s'"`(),;=<>|&{}[\]+:]+/;
+function bashWikiWriteTarget(command, inWiki) {
+  const names = (w) => inWiki(w) ? w : w.split(FRAGMENT_SPLIT).find((f) => f.length > 0 && f !== w && inWiki(f)) ?? null;
+  for (const c of simpleCommands(shellTokens(command))) {
+    const hit = c.redirects.find(inWiki);
+    if (hit !== void 0) return hit;
+    let words = c.words;
+    while (words.length > 0 && (WRAPPERS.has(path85.basename(words[0])) || /^[A-Za-z_]\w*=/.test(words[0]))) {
+      words = words.slice(1);
+    }
+    if (words.length === 0) continue;
+    const name = path85.basename(words[0]);
+    const args = words.slice(1);
+    const reader = READERS.has(name) || // sed reads unless in-place, or unless its script names a wiki path (`w FILE`).
+    name === "sed" && !args.some((a) => /^(--in-place|-[a-zA-Z]*i)/.test(a)) && !args.some((a) => !inWiki(a) && names(a) !== null) || name === "find" && !args.some((a) => FIND_WRITES.test(a)) || name === "git" && GIT_READS.has(args.find((a) => !a.startsWith("-")) ?? "");
+    if (reader) continue;
+    for (const w of words) {
+      const n = names(w);
+      if (n !== null) return n;
     }
   }
-  return out;
+  return null;
 }
 function toolWriteTargets(tool, input) {
   if (tool === "Write" || tool === "Edit" || tool === "MultiEdit" || tool === "NotebookEdit") {
     const t = typeof input["file_path"] === "string" ? input["file_path"] : input["notebook_path"];
     return typeof t === "string" && t.length > 0 ? [t] : [];
   }
-  if (tool === "Bash") {
-    return typeof input["command"] === "string" ? bashWriteTargets(input["command"]) : [];
-  }
   return [];
 }
 function laneWikiWriteTarget(env, tool, input, wikiRoots, cwd) {
   if (!isLaneWorker(env)) return null;
-  return toolWriteTargets(tool, input).find((t) => resolvesUnderWiki(wikiRoots, t, cwd)) ?? null;
+  const inWiki = (t) => resolvesUnderWiki(wikiRoots, t, cwd);
+  if (tool === "Bash") {
+    return typeof input["command"] === "string" ? bashWikiWriteTarget(input["command"], inWiki) : null;
+  }
+  return toolWriteTargets(tool, input).find(inWiki) ?? null;
 }
 
 // hooks/pre-tool-use.ts

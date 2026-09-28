@@ -14,7 +14,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import { bashWriteTargets } from "../lib/security/lane-wiki-guard";
+import { bashWikiWriteTarget, bashWriteTargets, isWithin, resolvesUnderWiki } from "../lib/security/lane-wiki-guard";
 import { createGuildStorage } from "../../src/domains/state";
 import { harvestDecision } from "../../src/domains/knowledge";
 
@@ -143,6 +143,69 @@ describe("plr-wi-15-3 · a lane worker never writes the wiki (KTD35)", () => {
       "g",
     ]);
     expect(bashWriteTargets("cat < in.md && grep -c x 2>&1")).toEqual([]);
+  });
+
+  it("G-lane r1: a symlink popped by `..` is resolved physically, not lexically", () => {
+    fs.symlinkSync(path.join(repo, ".guild", "wiki", "decisions"), path.join(repo, "alias"));
+    // alias/.. is .guild/wiki on disk; a lexical normalize would say <repo>/escape.md.
+    expect(refused(runHook("task", "Write", { file_path: "alias/../escape.md", content: "e" }))).toBe(true);
+    expect(refused(runHook("task", "Write", { file_path: `${repo}/alias/../e2.md`, content: "e" }))).toBe(true);
+    // CONTROL: a plain `..` out of a real directory still leaves the wiki.
+    expect(refused(runHook("task", "Write", { file_path: ".guild/wiki/../outside.md", content: "o" }))).toBe(false);
+  });
+
+  it("G-lane r1: a wiki child whose name starts with `..` is inside the wiki", () => {
+    expect(refused(runHook("task", "Write", { file_path: ".guild/wiki/..hidden", content: "h" }))).toBe(true);
+    const wiki = path.join(repo, ".guild", "wiki");
+    expect(isWithin(wiki, path.join(wiki, "..hidden"))).toBe(true);
+    // CONTROL: the parent and a sibling are not.
+    expect(isWithin(wiki, path.dirname(wiki))).toBe(false);
+    expect(isWithin(wiki, path.join(repo, ".guild", "wikix"))).toBe(false);
+  });
+
+  it("G-lane r1: quoted redirections, writer commands and interpreter literals into the wiki are refused", () => {
+    expect(refused(runHook("task", "Bash", { command: `printf x > .guild/"wiki"/quote.md` }))).toBe(true);
+    expect(refused(runHook("task", "Bash", { command: "cp /dev/null .guild/wiki/copy.md" }))).toBe(true);
+    expect(
+      refused(runHook("task", "Bash", { command: `node -e "require('fs').writeFileSync('.guild/wiki/n.md','x')"` })),
+    ).toBe(true);
+    // CONTROL: a lane may still read the wiki, and the lead may still write it.
+    expect(refused(runHook("task", "Bash", { command: "cat .guild/wiki/decisions/x.md | grep -c y" }))).toBe(false);
+    expect(refused(runHook("lead", "Bash", { command: "cp /dev/null .guild/wiki/copy.md" }))).toBe(false);
+  });
+
+  it("bashWikiWriteTarget: writers and redirections are refused, read-only commands pass", () => {
+    const wiki = path.join(repo, ".guild", "wiki");
+    const hit = (c: string): string | null => bashWikiWriteTarget(c, (t) => resolvesUnderWiki([wiki], t, repo));
+    for (const c of [
+      "sed -i s/a/b/ .guild/wiki/x",
+      "sed -n 'w .guild/wiki/o' in",
+      "bash -c 'echo > .guild/wiki/x'",
+      "dd if=a of=.guild/wiki/x",
+      "find .guild/wiki -delete",
+      "git checkout -- .guild/wiki/x",
+      "mv a .guild/wiki/",
+      `python3 -c "open('.guild/wiki/p','w')"`,
+      "cat a | tee .guild/wi\\ki/t",
+      "FOO=1 env cp a .guild/wiki/b",
+      "echo $(cp a .guild/wiki/c)",
+      "x 2> .guild/wiki/e",
+      "ln -s a .guild/wiki/l",
+    ]) {
+      expect(hit(c)).not.toBeNull();
+    }
+    for (const c of [
+      "echo ok > out.txt 2>&1",
+      "cat .guild/wiki/x.md",
+      "grep -r foo .guild/wiki",
+      "sed -n 1p .guild/wiki/x.md",
+      "find .guild/wiki -name x",
+      "git log .guild/wiki",
+      "ls -la .guild/wiki/ | head",
+      "bun test --isolate hooks",
+    ]) {
+      expect(hit(c)).toBeNull();
+    }
   });
 
   it("CONTROL: the in-process harvest writer is not a tool call and still promotes under a lane env", () => {
