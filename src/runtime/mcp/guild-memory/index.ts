@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 /**
- * mcp-servers/guild-memory/src/index.ts
+ * src/runtime/mcp/guild-memory/index.ts
  *
  * Optional Guild MCP server — BM25 search + read + list over .guild/wiki/.
  * See guild-plan.md §13.3 (MCP servers) and §10.5 (scale transition).
@@ -48,14 +48,15 @@ import * as path from "path";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { ensureStorageLayout } from "../../../../scripts/lib/state/ensure-storage-layout";
 // Pure fence-splitting logic shared with the rest of the plugin's frontmatter
 // readers (src/domains/state/frontmatter.ts). Zero runtime deps —
 // esbuild --bundle inlines it exactly like the shared bm25 module (./bm25.ts).
-import { splitFrontmatter } from "../../../src/domains/state/index";
+import { splitFrontmatter } from "../../../domains/state/index";
 // The §10.1.1 wiki-page frontmatter field vocabulary — single source of truth
 // for the `type:` enum (context|standard|product|entity|concept|decision|source).
 // Zero runtime deps (pure constants), inlined by esbuild like the imports above.
-import { WikiPageType, isWikiPageType } from "../../../src/domains/knowledge/index";
+import { WikiPageType, isWikiPageType } from "../../../domains/knowledge/index";
 
 // ─── Wiki root resolution ────────────────────────────────────────────────
 
@@ -262,9 +263,9 @@ function resolveWikiRoot(cwdArg?: string): string {
 // ─── Frontmatter parsing ─────────────────────────────────────────────────
 //
 // The YAML itself is parsed with js-yaml directly (declared dependency of
-// this package — see package.json — statically resolved from
-// mcp-servers/guild-memory/node_modules so esbuild --bundle inlines it into
-// dist/index.js exactly like @modelcontextprotocol/sdk and zod already are).
+// mcp-servers/guild-memory/package.json — scripts/compile.ts resolves it from
+// that node_modules so esbuild --bundle inlines it into runtime/guild-mcp.js,
+// exactly like @modelcontextprotocol/sdk and zod).
 // This intentionally does NOT go through src/modules/kernel's loadYamlApi():
 // that loader resolves js-yaml via a runtime-computed, multi-candidate
 // require.resolve(path) keyed off __dirname depths that match the scripts/
@@ -401,7 +402,7 @@ function loadAllPages(wikiRoot: string): WikiPage[] {
 // Pure BM25 utilities live in ./bm25.ts so tests can import them without
 // starting the MCP server (index.ts executes main() at module load time).
 import { tokenize, bm25Score } from "./bm25";
-import { durableGuildDir } from "../../../src/domains/state";
+import { durableGuildDir } from "../../../domains/state";
 
 interface Scored {
   page: WikiPage;
@@ -640,6 +641,8 @@ export function buildServer(): McpServer {
 // ─── Main ────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  // Read-only entry: detect the layout (a future one fails closed), never upgrade.
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const server = buildServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);

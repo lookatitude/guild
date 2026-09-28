@@ -12,7 +12,7 @@
  *     A. SQLite FTS (wiki-recall.ts):
  *          `index.enabled=true` AND file count > `wiki_file_threshold`.
  *          Returns null when below threshold or disabled → fall through.
- *     B. File-BM25 (mcp-servers/guild-memory/src/bm25.ts):
+ *     B. File-BM25 (src/runtime/mcp/guild-memory/bm25.ts):
  *          Direct in-process BM25 over .guild/wiki/ recursively (*.md files).
  *          k1=1.5/b=0.75 — same parameters as guild-memory's MCP search path.
  *          Returns null when no wiki files match query terms → fall through.
@@ -388,7 +388,7 @@ function sqliteBranch(
   return { source: "sqlite", chunks, directive: result.directive };
 }
 
-// ── Branch B: File-BM25 (mcp-servers/guild-memory/src/bm25.ts) ───────────────
+// ── Branch B: File-BM25 (src/runtime/mcp/guild-memory/bm25.ts) ───────────────
 //
 // Direct in-process BM25 over .guild/wiki/<category?>/**/*.md.
 // k1=1.5/b=0.75 — identical to guild-memory's search path.

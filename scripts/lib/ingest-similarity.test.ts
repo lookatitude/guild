@@ -33,7 +33,7 @@ import {
 import {
   tokenize as gmTokenize,
   bm25Score as gmBm25Score,
-} from "../../mcp-servers/guild-memory/src/bm25";
+} from "../../src/runtime/mcp/guild-memory/bm25";
 
 const INGEST_SIMILARITY_SCRIPT = path.resolve(__dirname, "ingest-similarity.ts");
 

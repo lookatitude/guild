@@ -199,7 +199,7 @@ const DIST_ALLOWLIST = [
   // T02: the single MCP binary statically bundles the MCP SDK and zod. Their
   // JSDoc carries `@deprecated` on THEIR symbols, not on a live Guild symbol,
   // so Marker 10 reads vendored text as a Guild violation. Guild's own MCP
-  // source stays in scope through mcp-servers/*/src in the SOURCE scan.
+  // source stays in scope through src/runtime/mcp in the SOURCE scan.
   path.join(PLUGIN_ROOT, "runtime/guild-mcp.js"),
 ];
 
@@ -231,11 +231,11 @@ function scanDistForPattern(pattern: RegExp): string[] {
 //
 // The .ts/.js SOURCE roots that compile into shipped, runnable code. Markers
 // with their OWN bespoke scan (Marker 5 metadata-write) must iterate THESE, not
-// just scripts/ + hooks/. Critically includes `mcp-servers/<name>/src` — an MCP
+// just scripts/ + hooks/. Critically includes `src/runtime/mcp` — an MCP
 // server is real shipped source; a marker there would otherwise only be caught
 // after a dist refresh.
 //
-// Markers that use scanSource() already cover mcp-servers/*/src implicitly (it
+// Markers that use scanSource() already cover src/runtime/mcp implicitly (it
 // walks the whole PLUGIN_ROOT minus node_modules/dist/allowlist). SHIPPED_SOURCE_ROOTS
 // exists for the bespoke-scan markers that do NOT use scanSource.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -243,8 +243,7 @@ function scanDistForPattern(pattern: RegExp): string[] {
 const SHIPPED_SOURCE_ROOTS = [
   path.join(PLUGIN_ROOT, "scripts"),
   path.join(PLUGIN_ROOT, "hooks"),
-  path.join(PLUGIN_ROOT, "mcp-servers/guild-memory/src"),
-  path.join(PLUGIN_ROOT, "mcp-servers/guild-telemetry/src"),
+  path.join(PLUGIN_ROOT, "src/runtime/mcp"),
 ];
 
 /** Collect all .ts source files under SHIPPED_SOURCE_ROOTS, minus allowlist + tests. */
@@ -591,7 +590,7 @@ describe("SC-VALIDATION: no v1 compat outside converter+wiring", () => {
 
   test("Marker 5: metadata.json is not written anywhere outside the converter (source)", () => {
     const hits: string[] = [];
-    // G2: iterate ALL shipped source roots (scripts/ + hooks/ + mcp-servers/*/src),
+    // G2: iterate ALL shipped source roots (scripts/ + hooks/ + src/runtime/mcp),
     // not just scripts/ + hooks/. dist handled by Marker 5b.
     for (const f of shippedSourceTsFiles()) {
       const content = fs.readFileSync(f, "utf8");

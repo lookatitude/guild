@@ -1,0 +1,39 @@
+{
+  "schema": "guild.layout_baseline.v1",
+  "note": "Violations present on the tree when U1 landed. Later lanes may only REMOVE entries; T16 deletes this file.",
+  "checks": [
+    "skills-glob-17",
+    "agents-glob-4",
+    "no-dispatched-claude-agents",
+    "no-authored-registry-sot",
+    "no-ts-workflows-dir",
+    "index-only-domain-imports",
+    "no-domain-adapter-import",
+    "no-website-benchmark-import",
+    "write-entry-calls-ensure-storage-layout",
+    "sessionstart-projects-guild",
+    "latest-only-context-files",
+    "no-direct-guild-join",
+    "no-hardcoded-tmp-in-domain-ts",
+    "specialists-never-write-wiki",
+    "harvest-writer-calls-scrubbed-write",
+    "no-sixth-workflow-class",
+    "overlay-cannot-drop-required-nodes",
+    "checkpoint-never-writes-wiki",
+    "no-durable-skill-versions",
+    "no-guild-raw-writes",
+    "refresh-touched-scope",
+    "learning-checkpoint-not-indexed",
+    "no-14th-command-file",
+    "command-max-40-lines",
+    "glossary-not-indexed-skill",
+    "no-host-ids-in-durable-config",
+    "plan-lanes-pin-tier-only",
+    "dialect-fragment-budget",
+    "glossary-not-in-always-on-prefix"
+  ],
+  "entries": [
+    "index-only-domain-imports::scripts/lib/guild-root.ts::imports '../../src/domains/state/guild-root' past state/index",
+    "index-only-domain-imports::scripts/lib/shared/config-defaults.ts::imports '../../../src/domains/config/config-defaults' past config/index"
+  ]
+}

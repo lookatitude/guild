@@ -83,7 +83,7 @@ type TelemetryEvent = RunEvent;
  * `hook_event status:"err"` (e.g. hooks/lib/context-compliance.ts) is
  * visible in buildTimeline() the same way a `tool_call` error is, keeping
  * the Timeline and the frontmatter error count in agreement. Mirrors
- * mcp-servers/guild-telemetry/src/index.ts's normalizeEvent — the same fix
+ * src/runtime/mcp/guild-telemetry/index.ts's normalizeEvent — the same fix
  * already shipped there for this issue's sibling MCP-query symptom.
  */
 function normalizeEvent(raw: TelemetryEvent): TelemetryEvent {
