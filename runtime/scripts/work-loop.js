@@ -46256,6 +46256,14 @@ if (isProcessEntry()) {
   }
 }
 
+// hooks/lib/security/lane-wiki-guard.ts
+function isLaneWorker(env) {
+  return ["GUILD_TASK_ID", "GUILD_LANE_ID", "GUILD_TASK_CELL_INSTANCE_ID"].some((k) => {
+    const v = env[k];
+    return typeof v === "string" && v.length > 0;
+  });
+}
+
 // scripts/work-loop.ts
 var USAGE2 = "usage: work-loop <bind|route|redirect|research-packet> --run-id <id> [--cwd <dir>]\n  bind            --class <product|research|debug|ops|init> [--source intake|typed_verb|class_flag]\n  route           --decision <json|@file>\n  redirect        --input <file>   {agent_id, topic_key, correction, decision:{slug,title,body,reasoning,...}}\n  research-packet --input <file>   {packet_id, questions, evidence, conclusions, confidence, ...}\n";
 var SAFE_RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -46334,6 +46342,16 @@ function runWorkLoop(argv) {
     return { code: result2.escalated ? 3 : 0, out: result2 };
   }
   if (verb === "redirect") {
+    if (isLaneWorker(process.env)) {
+      return {
+        code: 3,
+        out: {
+          refused: true,
+          reason: "lane_worker",
+          detail: "redirect harvesting is a T0-only writer; a lane worker stages a knowledge candidate instead (KTD35)"
+        }
+      };
+    }
     const input = readJsonFile2(required(argv, "input"));
     const result2 = routeRedirect({
       ...input,

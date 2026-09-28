@@ -16,6 +16,8 @@
  *       Record a T0-routed operator correction on the redirect ledger. The count
  *       that crosses the threshold harvests the distilled decision (security-gated,
  *       journaled). A harvest that supersedes a pinned decision routes `replan`.
+ *       Harvest is a T0-only writer (KTD33/KTD35/KTD43): a lane worker's env
+ *       (GUILD_TASK_ID, GUILD_LANE_ID or GUILD_TASK_CELL_INSTANCE_ID) is refused.
  *   research-packet --run-id <id> --input <file>
  *       Write `guild.research_packet.v1` on the run record.
  *
@@ -41,6 +43,7 @@ import {
 } from "../src/domains/lifecycle";
 import { routeRedirect, writeResearchPacket, type RouteRedirectInput } from "../src/domains/knowledge";
 import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
+import { isLaneWorker } from "../hooks/lib/security/lane-wiki-guard";
 
 const USAGE =
   "usage: work-loop <bind|route|redirect|research-packet> --run-id <id> [--cwd <dir>]\n" +
@@ -140,6 +143,16 @@ export function runWorkLoop(argv: readonly string[]): { code: number; out: unkno
   }
 
   if (verb === "redirect") {
+    if (isLaneWorker(process.env)) {
+      return {
+        code: 3,
+        out: {
+          refused: true,
+          reason: "lane_worker",
+          detail: "redirect harvesting is a T0-only writer; a lane worker stages a knowledge candidate instead (KTD35)",
+        },
+      };
+    }
     const input = readJsonFile(required(argv, "input"));
     const result = routeRedirect({
       ...(input as unknown as Omit<RouteRedirectInput, "run_id" | "runDir" | "storage" | "cwd">),

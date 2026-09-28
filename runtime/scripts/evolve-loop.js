@@ -11685,6 +11685,10 @@ function foldForTagScan(text) {
   }
   return { folded, from, to };
 }
+function containsRecallTag(text) {
+  RECALL_TAG_RE.lastIndex = 0;
+  return RECALL_TAG_RE.test(foldForTagScan(text).folded);
+}
 function neutralizeRecallTags(text) {
   const { folded, from, to } = foldForTagScan(text);
   const ranges = [];
@@ -45650,6 +45654,53 @@ var init_compact_history = __esm({
 function storageFor4(ctx) {
   return ctx.storage ?? createGuildStorage(ctx.cwd ?? process.cwd());
 }
+function auditRunDir(ctx, storage) {
+  if (ctx.runDir) return ctx.runDir;
+  const scope = storage.project ?? storage.workspace;
+  return scope ? scope.runRecord(ctx.runId ?? "evolve-apply") : null;
+}
+function refuseScreened(ctx, storage, kind, detail) {
+  const runDir3 = auditRunDir(ctx, storage);
+  if (runDir3) {
+    appendSecurityEvent(
+      runDir3,
+      buildSecurityEvent({
+        run_id: ctx.runId ?? "",
+        event_type: kind === "injection" ? "injection_attempt_detected" : "secret_scrub_blocked",
+        decision: "blocked",
+        tool: "evolve",
+        detail
+      })
+    );
+  } else {
+    process.stderr.write(`warn: [evolve] ${kind} refusal not logged (no run scope): ${detail}
+`);
+  }
+  throw new EvolveTargetRefusal(detail, kind);
+}
+function carriesSecret(text, storage) {
+  const policy = readSecurityConfig(storage.activeRoot).secrets_policy;
+  const scrub = applySecretsPolicy(text, policy, { noTruncate: true });
+  return !scrub.ok || scrub.value !== text;
+}
+function screenDeltaContent(delta, ctx, storage) {
+  const text = [delta.span, delta.replacement ?? ""].join("\n");
+  if (containsRecallTag(text)) {
+    refuseScreened(ctx, storage, "injection", "the evolve delta spells the <guild:recall> wrapper tag");
+  }
+  const probe = sanitizeForInjection(text);
+  if (probe.result === "flagged") {
+    refuseScreened(
+      ctx,
+      storage,
+      "injection",
+      `directive language in the evolve delta (${probe.matchedPatterns.join(", ")})`
+    );
+  }
+  if (carriesSecret(text, storage)) {
+    refuseScreened(ctx, storage, "secret", "the evolve delta carries secret material; the scrub refuses it");
+  }
+}
 function projectTargetRoot(storage, target) {
   switch (target) {
     case "skill":
@@ -45751,6 +45802,7 @@ function applyEvolveDelta(delta, ctx = {}) {
   assertNotPermissionEdit(String(delta.target));
   const home = evolveHome(delta.target);
   const storage = storageFor4(ctx);
+  screenDeltaContent(delta, ctx, storage);
   const cwd = ctx.cwd ?? storage.activeRoot;
   const abs = path81.resolve(cwd, delta.path);
   const current = fs68.existsSync(abs) ? fs68.readFileSync(abs, "utf8") : "";
@@ -45806,6 +45858,16 @@ function applyEvolveDelta(delta, ctx = {}) {
     assertCheapCurator(delta);
   }
   const plan = planEvolveDelta({ ...delta, path: abs }, current);
+  const runDir3 = auditRunDir(ctx, storage);
+  if (!runDir3) {
+    throw new EvolveTargetRefusal(
+      "this root owns no run scope; the scrubbing writer has no policy or audit record (KTD37)",
+      "scope"
+    );
+  }
+  if (carriesSecret(plan.next, storage)) {
+    refuseScreened(ctx, storage, "secret", `the scrub would change '${path81.basename(abs)}'; nothing was written`);
+  }
   const history = recordEvolveDelta(ctx.historyKey ?? path81.basename(abs, path81.extname(abs)), plan, {
     cwd,
     storage,
@@ -45814,28 +45876,18 @@ function applyEvolveDelta(delta, ctx = {}) {
     now: ctx.now
   });
   fs68.mkdirSync(path81.dirname(abs), { recursive: true });
-  if (delta.target === "glossary") {
-    if (!ctx.runDir) {
-      throw new EvolveTargetRefusal(
-        "a glossary evolve needs runDir: its bytes go out through the scrubbing wiki writer (KTD37)",
-        "scope"
-      );
-    }
-    const writer = assertScrubbedWriter(ctx.writer ?? GLOSSARY_WRITER);
-    const wrote = writer(abs, plan.next, { runDir: ctx.runDir, runId: ctx.runId ?? "" });
-    if (!wrote.written) {
-      return {
-        target: delta.target,
-        home,
-        applied: false,
-        path: abs,
-        history,
-        next_need: "operator",
-        detail: "the scrub blocked the glossary write; the span is unchanged"
-      };
-    }
-  } else {
-    atomicWriteDurable(abs, plan.next);
+  const writer = assertScrubbedWriter(ctx.writer ?? GLOSSARY_WRITER);
+  const wrote = writer(abs, plan.next, { runDir: runDir3, runId: ctx.runId ?? "" });
+  if (!wrote.written) {
+    return {
+      target: delta.target,
+      home,
+      applied: false,
+      path: abs,
+      history,
+      next_need: "operator",
+      detail: "the scrub blocked the write; the span is unchanged"
+    };
   }
   return {
     target: delta.target,
@@ -46186,7 +46238,7 @@ function applyMain(argv) {
   }
 }
 function main6() {
-  ensureStorageLayout(process.cwd(), { detectOnly: true });
+  ensureStorageLayout(path82.resolve(parseArgs13(process.argv.slice(2)).cwd), { detectOnly: true });
   if (process.argv.includes("--apply")) {
     applyMain(process.argv.slice(2));
     return;

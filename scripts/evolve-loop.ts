@@ -306,7 +306,9 @@ function applyMain(argv: string[]): void {
 }
 
 function main(): void {
-  ensureStorageLayout(process.cwd(), { detectOnly: true });
+  // The layout gate reads the root this run WRITES (--cwd), not wherever it was
+  // launched: a future layout there fails closed before any delta or history lands.
+  ensureStorageLayout(path.resolve(parseArgs(process.argv.slice(2)).cwd), { detectOnly: true });
   if (process.argv.includes("--apply")) {
     applyMain(process.argv.slice(2));
     return;

@@ -46841,9 +46841,30 @@ var fs76 = __toESM(require("node:fs"));
 var os5 = __toESM(require("node:os"));
 var path89 = __toESM(require("node:path"));
 function isLaneWorker(env) {
-  const task = env["GUILD_TASK_ID"];
-  const lane = env["GUILD_LANE_ID"];
-  return typeof task === "string" && task.length > 0 || typeof lane === "string" && lane.length > 0;
+  return ["GUILD_TASK_ID", "GUILD_LANE_ID", "GUILD_TASK_CELL_INSTANCE_ID"].some((k) => {
+    const v = env[k];
+    return typeof v === "string" && v.length > 0;
+  });
+}
+var WORK_LOOP_ENTRY = /(^|[\\/])work-loop(\.[cm]?[jt]s)?$/;
+var NON_HARVEST_VERBS = /* @__PURE__ */ new Set(["bind", "route", "research-packet"]);
+var UNREADABLE_VERB_OPS = /* @__PURE__ */ new Set(["$(", "`", "<(", ">("]);
+function bashInvokesHarvest(command) {
+  try {
+    return [command, ...quotedLiterals(command)].some((text) => {
+      const toks = shellTokens(text);
+      return toks.some((t, i) => {
+        if (t.kind !== "word" || !WORK_LOOP_ENTRY.test(t.value)) return false;
+        const next = toks[i + 1];
+        if (next === void 0) return false;
+        if (next.kind === "op") return UNREADABLE_VERB_OPS.has(next.value);
+        return !NON_HARVEST_VERBS.has(next.value);
+      });
+    });
+  } catch (err) {
+    if (err instanceof ScanExhausted) return true;
+    throw err;
+  }
 }
 function realpathDeep(p, depth = 0) {
   const abs = path89.isAbsolute(p) ? p : process.cwd() + path89.sep + p;
@@ -47083,7 +47104,9 @@ function laneWikiWriteTarget(env, tool, input, wikiRoots, cwd) {
   if (!isLaneWorker(env)) return null;
   const inWiki = (t) => resolvesUnderWiki(wikiRoots, t, cwd);
   if (tool === "Bash") {
-    return typeof input["command"] === "string" ? bashWikiPath(input["command"], inWiki) : null;
+    if (typeof input["command"] !== "string") return null;
+    if (bashInvokesHarvest(input["command"])) return "(work-loop redirect: harvest writes the wiki; T0 only)";
+    return bashWikiPath(input["command"], inWiki);
   }
   return toolWriteTargets(tool, input).find(inWiki) ?? null;
 }

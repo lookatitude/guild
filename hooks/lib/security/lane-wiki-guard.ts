@@ -2,7 +2,7 @@
  * hooks/lib/security/lane-wiki-guard.ts
  *
  * KTD35 "specialists never Write wiki", as code (plr-wi-15-3). A lane worker —
- * a session with GUILD_TASK_ID or GUILD_LANE_ID set — may not write under this
+ * a session with GUILD_TASK_ID, GUILD_LANE_ID or GUILD_TASK_CELL_INSTANCE_ID set — may not write under this
  * root's wiki (the caller passes the roots from GuildStorage `knowledge()`). It
  * stages a knowledge candidate instead and the lead promotes it through harvest. The lead / T0 session (neither var
  * set) is not a lane worker, and the harvest writer is an in-process knowledge
@@ -25,11 +25,47 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-/** True when the env names a lane worker (either id set, non-empty). */
+/** True when the env names a lane worker (any of the three ids set, non-empty). */
 export function isLaneWorker(env: NodeJS.ProcessEnv): boolean {
-  const task = env["GUILD_TASK_ID"];
-  const lane = env["GUILD_LANE_ID"];
-  return (typeof task === "string" && task.length > 0) || (typeof lane === "string" && lane.length > 0);
+  return ["GUILD_TASK_ID", "GUILD_LANE_ID", "GUILD_TASK_CELL_INSTANCE_ID"].some((k) => {
+    const v = env[k];
+    return typeof v === "string" && v.length > 0;
+  });
+}
+
+/** The work-loop entry, compiled (`runtime/scripts/work-loop.js`) or source (`scripts/work-loop.ts`). */
+const WORK_LOOP_ENTRY = /(^|[\\/])work-loop(\.[cm]?[jt]s)?$/;
+/** The work-loop verbs that do not harvest. Anything else after the entry is refused. */
+const NON_HARVEST_VERBS = new Set(["bind", "route", "research-packet"]);
+
+/** Operators that hide the verb from the scanner: a substitution computes it. */
+const UNREADABLE_VERB_OPS = new Set(["$(", "`", "<(", ">("]);
+
+/**
+ * Does a Bash command invoke the work-loop harvest path (the `redirect` verb)?
+ * Harvest writes the wiki in-process, so no path in the command names it. The
+ * token right after the entry is the verb the CLI reads: a literal non-harvest
+ * verb passes, and so does no verb at all (the entry is only read, as in
+ * `cat work-loop.ts | head`); `redirect`, a variable or a substitution is
+ * refused, never guessed. Quoted strings (`sh -c '...'`) are re-lexed so a
+ * nested call counts.
+ */
+export function bashInvokesHarvest(command: string): boolean {
+  try {
+    return [command, ...quotedLiterals(command)].some((text) => {
+      const toks = shellTokens(text);
+      return toks.some((t, i) => {
+        if (t.kind !== "word" || !WORK_LOOP_ENTRY.test(t.value)) return false;
+        const next = toks[i + 1];
+        if (next === undefined) return false;
+        if (next.kind === "op") return UNREADABLE_VERB_OPS.has(next.value);
+        return !NON_HARVEST_VERBS.has(next.value);
+      });
+    });
+  } catch (err) {
+    if (err instanceof ScanExhausted) return true;
+    throw err;
+  }
 }
 
 /**
@@ -337,7 +373,9 @@ export function laneWikiWriteTarget(
   if (!isLaneWorker(env)) return null;
   const inWiki = (t: string): boolean => resolvesUnderWiki(wikiRoots, t, cwd);
   if (tool === "Bash") {
-    return typeof input["command"] === "string" ? bashWikiPath(input["command"], inWiki) : null;
+    if (typeof input["command"] !== "string") return null;
+    if (bashInvokesHarvest(input["command"])) return "(work-loop redirect: harvest writes the wiki; T0 only)";
+    return bashWikiPath(input["command"], inWiki);
   }
   return toolWriteTargets(tool, input).find(inWiki) ?? null;
 }
