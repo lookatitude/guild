@@ -201,7 +201,7 @@ describe("the third redirect harvests (R50 / R53)", () => {
     expect(kinds).toContain("curator_event");
 
     const sec = securityLines();
-    expect(sec.some((e) => e.event_type === "harvest_auto_promote" && e.decision === "allow")).toBe(true);
+    expect(sec.some((e) => e.event_type === "harvest_promoted" && e.decision === "allow")).toBe(true);
   });
 
   it("puts the page PATH on the trace, never the page body", () => {

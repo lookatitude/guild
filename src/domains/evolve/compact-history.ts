@@ -44,6 +44,7 @@ import {
   type GuildStorage,
 } from "../state";
 import { assertNotRuntimeTree } from "../kernel";
+import { classifyPermissionContent } from "../security";
 import {
   sha256,
   type EvolveDeltaPlan,
@@ -359,6 +360,17 @@ function restoreOne(entry: EvolveHistoryEntry, cwd: string, pluginRoot: string):
       "the span drifted after the delta landed; the recorded inverse no longer describes it",
       `the span '${entry.span}' in ${entry.path} changed after this evolve. Restoring would ` +
         `discard that change. Review it, then re-run rollback.`,
+    );
+  }
+
+  // D5 on the way back too. Every recorded delta was screened when it landed, so a
+  // permission edit here means the history was not written by the evolve writer.
+  // Rollback is not a side door around proposal-only permissions.
+  const d5 = classifyPermissionContent({ span: entry.span, beforeSpan: region, replacement: entry.inverse_span });
+  if (d5.isPermissionEdit) {
+    return block(
+      `permissions are proposal-only (D5): ${d5.detail}`,
+      `rollback of '${entry.span}' in ${entry.path} would change permissions. Apply it by hand.`,
     );
   }
 

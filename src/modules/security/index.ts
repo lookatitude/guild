@@ -51,6 +51,18 @@ export {
   scrubbedWrite,
   truncateToCap,
   writeScrubApprovalRequest,
+  // T15: the D5 classifier and the closed security_event set moved/landed here.
+  SECURITY_EVENT_TYPES,
+  blockUnits,
+  classifyPermissionContent,
+  isPermissionSentence,
+  sentences,
+  INGEST_PAUSE_SCHEMA,
+  clearIngestPause,
+  ingestPauseBlocking,
+  ingestPausePath,
+  readIngestPause,
+  recordIngestPause,
 } from "../../domains/security";
 export type {
   HostResolution,
@@ -64,4 +76,9 @@ export type {
   SecurityEventInput,
   SecurityEventType,
   SecurityEventV1,
+  BlockUnit,
+  PermissionContentReason,
+  PermissionContentVerdict,
+  IngestPauseEntry,
+  IngestPauseFile,
 } from "../../domains/security";

@@ -137,6 +137,8 @@ interface WikiFrontmatter {
   source_refs?: string[];
   owner?: string;
   synthesized?: boolean;
+  /** True for a page the harvest writer rendered (`guild.decision.v1` + `trigger`). */
+  harvested?: boolean;
 }
 
 function parseFrontmatter(content: string): WikiFrontmatter {
@@ -147,6 +149,7 @@ function parseFrontmatter(content: string): WikiFrontmatter {
   if (obj["title"] != null) fm.title = String(obj["title"]);
   if (obj["confidence"] != null) fm.confidence = String(obj["confidence"]).toLowerCase();
   if (obj["owner"] != null) fm.owner = String(obj["owner"]).toLowerCase();
+  if (obj["schema_version"] === "guild.decision.v1" && obj["trigger"] != null) fm.harvested = true;
   // synthesized: js-yaml yields a real boolean; preserve the old `=== "true"`
   // truthiness for any string form too (quoted "true").
   if (typeof obj["synthesized"] === "boolean") fm.synthesized = obj["synthesized"];
@@ -174,6 +177,11 @@ const OPERATOR_PATH_PATTERNS = [
   /\bprinciples\b/i,
   /\/guild[:—][^/]+\.md$/i,
 ];
+
+/** A page under a `decisions/` directory — the tree harvest writes (KTD35). */
+function isDecisionPath(relPath: string): boolean {
+  return /(^|\/)decisions\//.test(relPath.split("\\").join("/"));
+}
 
 function isOperatorPath(relPath: string): boolean {
   return OPERATOR_PATH_PATTERNS.some((re) => re.test(relPath));
@@ -207,12 +215,18 @@ export function classifyTrustTier(
   content: string,
   opts: ClassifyOpts = {},
 ): TrustTier {
+  const fm = parseFrontmatter(content);
+
   // 1. Path layer — operator pages are authoritative regardless of frontmatter.
   //    SKIPPED in NO-OPERATOR mode so a path-shaped graph impostor can never reach
   //    "operator" via the allowlist; it must earn its tier from frontmatter below.
-  if (!opts.ignoreOperatorPath && isOperatorPath(relPath)) return "operator";
-
-  const fm = parseFrontmatter(content);
+  //    Also SKIPPED for decision pages (KTD37): harvest auto-promotes into
+  //    `decisions/`, and a slug such as `testing-principles` or `goals` must not
+  //    lift a machine-written page out of the wrapper. A snippet carries no
+  //    frontmatter, so the directory decides as well as the harvest stamp.
+  if (!opts.ignoreOperatorPath && !fm.harvested && !isDecisionPath(relPath) && isOperatorPath(relPath)) {
+    return "operator";
+  }
 
   // 2. Explicit owner field.
   // D-RECALL: frontmatter owner:operator CANNOT grant "operator" (unwrapped).
@@ -277,6 +291,97 @@ function emitRecallQuarantineEvent(
   }
 }
 
+// ── wrapper integrity: untrusted text never opens or closes <guild:recall> ────
+
+/** Characters a reader takes for `<`, `/`, `:` or a tag letter that NFKC does not fold. */
+const TAG_CONFUSABLES: Record<string, string> = {
+  "‹": "<", "〈": "<", "〈": "<", "⟨": "<", "ᐸ": "<", "˂": "<",
+  "∕": "/", "⁄": "/", "⧸": "/", "╱": "/",
+  "∶": ":", "ː": ":", "꞉": ":", "։": ":", "׃": ":",
+  "а": "a", "с": "c", "е": "e", "і": "i", "ı": "i", "ӏ": "l",
+  "ǀ": "l", "ԁ": "d", "ɡ": "g", "г": "r", "ᴦ": "r", "υ": "u", "ս": "u",
+};
+
+/** Zero-width and soft-hyphen characters a reader does not see. */
+const INVISIBLE_RE = /[­᠎​-‏⁠-⁤﻿]/;
+
+const NAMED_ENTITIES: Record<string, string> = { lt: "<", sol: "/", colon: ":" };
+
+/**
+ * Fold `text` for the tag scan, keeping for every folded character the original
+ * [start, end) range it came from. HTML entities, NFKC compatibility forms,
+ * confusables and invisible characters all fold, so every spelling a model could
+ * read as the tag is one regex match.
+ */
+function foldForTagScan(text: string): { folded: string; from: number[]; to: number[] } {
+  let folded = "";
+  const from: number[] = [];
+  const to: number[] = [];
+  let i = 0;
+  while (i < text.length) {
+    let ch = String.fromCodePoint(text.codePointAt(i)!);
+    let end = i + ch.length;
+    const entity = /^&(#x[0-9a-f]+|#[0-9]+|[a-z]+);?/i.exec(text.slice(i, i + 12));
+    if (entity) {
+      const body = entity[1].toLowerCase();
+      const code = body.startsWith("#x")
+        ? parseInt(body.slice(2), 16)
+        : body.startsWith("#")
+          ? parseInt(body.slice(1), 10)
+          : NaN;
+      const decoded = Number.isNaN(code)
+        ? NAMED_ENTITIES[body]
+        : code <= 0x10ffff
+          ? String.fromCodePoint(code)
+          : undefined;
+      if (decoded !== undefined) {
+        ch = decoded;
+        end = i + entity[0].length;
+      }
+    }
+    for (const c of ch.normalize("NFKC").toLowerCase()) {
+      if (INVISIBLE_RE.test(c)) continue;
+      folded += TAG_CONFUSABLES[c] ?? c;
+      from.push(i);
+      to.push(end);
+    }
+    i = end;
+  }
+  return { folded, from, to };
+}
+
+const RECALL_TAG_RE = /<\s*\/?\s*guild\s*:\s*recall/g;
+
+/** True when `text` holds any spelling of an opening or closing `<guild:recall` tag. */
+export function containsRecallTag(text: string): boolean {
+  RECALL_TAG_RE.lastIndex = 0;
+  return RECALL_TAG_RE.test(foldForTagScan(text).folded);
+}
+
+/**
+ * Replace every spelling of `<guild:recall` / `</guild:recall` in untrusted text
+ * with an inert marker, so the text can neither close the wrapper it sits in nor
+ * open a new one. Runs at RECALL time on every wrapped chunk, so a page that
+ * reached the wiki by any path is neutralised, not only a harvested one.
+ */
+export function neutralizeRecallTags(text: string): string {
+  const { folded, from, to } = foldForTagScan(text);
+  const ranges: Array<[number, number]> = [];
+  RECALL_TAG_RE.lastIndex = 0;
+  for (let m = RECALL_TAG_RE.exec(folded); m; m = RECALL_TAG_RE.exec(folded)) {
+    ranges.push([from[m.index], to[m.index + m[0].length - 1]]);
+  }
+  if (ranges.length === 0) return text;
+  let out = "";
+  let at = 0;
+  for (const [start, end] of ranges) {
+    if (start < at) continue;
+    out += text.slice(at, start) + "[guild-recall-tag removed]";
+    at = end;
+  }
+  return out + text.slice(at);
+}
+
 // ── protectChunks ─────────────────────────────────────────────────────────────
 
 /**
@@ -308,7 +413,7 @@ export function protectChunks(
     if (probe.result === "flagged") {
       const patterns = probe.matchedPatterns.join(", ");
       const marker =
-        `[QUARANTINED: recalled chunk from ${path.basename(source_path)} ` +
+        `[QUARANTINED: recalled chunk from ${neutralizeRecallTags(path.basename(source_path))} ` +
         `flagged for injection (patterns: ${patterns}) — excluded]`;
       chunks.push({
         source_path,
@@ -365,7 +470,7 @@ export function protectChunks(
       // Operator pages are authoritative — include without wrapping.
       rendered = content;
     } else {
-      rendered = `<guild:recall trust_tier="${tier}">${content}</guild:recall>`;
+      rendered = `<guild:recall trust_tier="${tier}">${neutralizeRecallTags(content)}</guild:recall>`;
       wrappedCount++;
     }
     chunks.push({ source_path, trust_tier: tier, quarantined: false, rendered });

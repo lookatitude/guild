@@ -70,6 +70,7 @@ It returns `{ top_score, top_path, gate, should_pause }` — real BM25 (the same
      2. **Skip** — abort ingest, return a receipt with `status: skipped` and the collision reason.
      3. **Proceed as a separate page** — ingest anyway (user explicitly accepts the overlap); note the collision in `assumptions:`.
    - Wait for the user's explicit choice before continuing. **Never silently overwrite or auto-proceed on a `should_pause` hit.**
+   - The pause is enforced, not advisory: the tool records a pause marker and PreToolUse refuses any Write/Edit to the candidate or under `.guild/wiki/` until it is cleared. After the user chooses, clear it with the same command plus `--clear-pause --content-file <path-to-candidate-text>`; the hook asks the operator to approve that command.
 3. **If `should_pause: false`** — continue to raw capture and synthesis normally (no prompt; no false-positive on novel content). Category scoping is honored by the tool: a page similar to one in a *different* category does not trip the gate.
 
 ### Instruction-detection probe (cheap-tier)

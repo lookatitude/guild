@@ -116,6 +116,11 @@ export interface HarvestInverseFile {
   /** Bytes BEFORE the op. `null` means "did not exist". */
   before: string | null;
   /**
+   * sha256 of `before`, recorded with it. Revert restores `before` only while it
+   * still hashes to this: an edited inverse is refused, never written back.
+   */
+  before_sha256?: string;
+  /**
    * Bytes the op WROTE, exactly as they landed on disk (POST-scrub). A
    * convenience copy filled in after the write; revert never needs it, because
    * `after_sha256` alone identifies what the op put there. Absent on a
@@ -139,6 +144,8 @@ export interface HarvestInverseFile {
     anchor: string;
     /** The region as it was before the op, INCLUDING the anchor line. */
     before_span: string;
+    /** sha256 of `before_span`. Missing or mismatched ⇒ revert refuses. */
+    before_sha256?: string;
     /**
      * The region the op wrote, INCLUDING the anchor line, read back from disk
      * after the write. A convenience copy — `after_len` + `after_sha256` are

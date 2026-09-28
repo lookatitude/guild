@@ -29752,18 +29752,24 @@ function parseFrontmatter2(content) {
   if (obj["title"] != null) fm.title = String(obj["title"]);
   if (obj["confidence"] != null) fm.confidence = String(obj["confidence"]).toLowerCase();
   if (obj["owner"] != null) fm.owner = String(obj["owner"]).toLowerCase();
+  if (obj["schema_version"] === "guild.decision.v1" && obj["trigger"] != null) fm.harvested = true;
   if (typeof obj["synthesized"] === "boolean") fm.synthesized = obj["synthesized"];
   else if (obj["synthesized"] != null) fm.synthesized = String(obj["synthesized"]) === "true";
   const refs = obj["source_refs"];
   if (Array.isArray(refs)) fm.source_refs = refs.map((r) => String(r));
   return fm;
 }
+function isDecisionPath(relPath) {
+  return /(^|\/)decisions\//.test(relPath.split("\\").join("/"));
+}
 function isOperatorPath(relPath) {
   return OPERATOR_PATH_PATTERNS.some((re) => re.test(relPath));
 }
 function classifyTrustTier(relPath, content, opts = {}) {
-  if (!opts.ignoreOperatorPath && isOperatorPath(relPath)) return "operator";
   const fm = parseFrontmatter2(content);
+  if (!opts.ignoreOperatorPath && !fm.harvested && !isDecisionPath(relPath) && isOperatorPath(relPath)) {
+    return "operator";
+  }
   if (fm.owner === "operator") return "trusted";
   if (fm.owner === "reviewed") return "trusted";
   if (fm.owner === "synthesized") return "untrusted";
@@ -31538,6 +31544,7 @@ var EVOLVE_TARGETS, PROJECT_TARGETS, HUMAN_ONLY_TARGETS, AUTO_PATH_TARGETS, EXEC
 var init_evolve_targets = __esm({
   "../src/domains/evolve/evolve-targets.ts"() {
     init_kernel();
+    init_security();
     EVOLVE_TARGETS = frozenList([
       // project home
       "skill",
@@ -31602,6 +31609,7 @@ var init_compact_history = __esm({
   "../src/domains/evolve/compact-history.ts"() {
     init_state();
     init_kernel();
+    init_security();
     init_evolve_delta();
     init_evolve_targets();
   }
@@ -35924,13 +35932,33 @@ function appendSecurityEvent(runDir3, record) {
     return false;
   }
 }
-var fs52, path59, SECURITY_EVENT_SCHEMA_VERSION, KNOWN_GUILD_HOST_KINDS, KNOWN_GUILD_HOST_ID_SET, LEGACY_HOST_ALIASES2;
+var fs52, path59, SECURITY_EVENT_TYPES, SECURITY_EVENT_SCHEMA_VERSION, KNOWN_GUILD_HOST_KINDS, KNOWN_GUILD_HOST_ID_SET, LEGACY_HOST_ALIASES2;
 var init_events = __esm({
   "../src/domains/security/events.ts"() {
     fs52 = __toESM(require("node:fs"));
     path59 = __toESM(require("node:path"));
     init_state();
     init_redact_log();
+    SECURITY_EVENT_TYPES = Object.freeze([
+      "capability_scope_violation",
+      "capability_scope_degrade",
+      "bypass_permission_allowed",
+      "mcp_description_mismatch",
+      "mcp_description_unverifiable",
+      "mcp_description_unpinned",
+      "secret_scrub_failure",
+      "injection_attempt_detected",
+      "secret_scrub_blocked",
+      "recall_quarantine",
+      "dispatch_attribution_missing",
+      "backend_degradation",
+      "tier_dispatch_untiered",
+      "harvest_promoted",
+      "harvest_refused",
+      "playbook_auto_replace",
+      "wiki_cas_conflict",
+      "harvest_reverted"
+    ]);
     SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
     KNOWN_GUILD_HOST_KINDS = Object.freeze([
       "claude-code-cli",
@@ -36445,6 +36473,12 @@ var init_scrub_redact = __esm({
   }
 });
 
+// ../src/domains/security/d5-permission-content.ts
+var init_d5_permission_content = __esm({
+  "../src/domains/security/d5-permission-content.ts"() {
+  }
+});
+
 // ../src/domains/security/index.ts
 var init_security = __esm({
   "../src/domains/security/index.ts"() {
@@ -36456,6 +36490,7 @@ var init_security = __esm({
     init_scrub_redact();
     init_secret_patterns();
     init_events();
+    init_d5_permission_content();
   }
 });
 

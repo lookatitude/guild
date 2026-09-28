@@ -91,14 +91,47 @@ export type SecurityEventType =
    */
   | "tier_dispatch_untiered"
   /**
-   * R53 (T09): the knowledge domain's harvest writer performed an AUTOMATIC
-   * durable write to this root's wiki — a canonical `guild.decision.v1` page no
-   * human clicked. Harvest is the only auto wiki writer there is, so this is the
-   * audit rail for the one unattended durable-write path in Guild. `decision`
-   * is "allow" on a promote, "blocked" when the probe, the injection guard, the
-   * secret scrub, or the wiki CAS refused it.
+   * KTD37 harvest audit kinds. Harvest is the one UNATTENDED durable-write path in
+   * Guild (knowledge domain), so each of its outcomes has its own kind:
+   * a canonical decision page landed (`harvest_promoted`, allow); an op was refused
+   * or a resume could not account for its bytes (`harvest_refused`, blocked); a
+   * project playbook span was replaced (`playbook_auto_replace`, allow); a second
+   * writer lost the wiki compare-and-swap (`wiki_cas_conflict`, blocked); an op was
+   * reverted (`harvest_reverted`, allow).
    */
-  | "harvest_auto_promote";
+  | "harvest_promoted"
+  | "harvest_refused"
+  | "playbook_auto_replace"
+  | "wiki_cas_conflict"
+  | "harvest_reverted"
+  /** KTD60: a Guild-owned MCP tool whose shipped pin is unusable (missing, malformed, stale binary). */
+  | "mcp_description_unpinned";
+
+/**
+ * The closed set of `event_type` values, as data. Every emitter in the tree uses
+ * one of these; `security-event-closed-set.test.ts` greps the source for any
+ * other literal and fails.
+ */
+export const SECURITY_EVENT_TYPES: readonly SecurityEventType[] = Object.freeze([
+  "capability_scope_violation",
+  "capability_scope_degrade",
+  "bypass_permission_allowed",
+  "mcp_description_mismatch",
+  "mcp_description_unverifiable",
+  "mcp_description_unpinned",
+  "secret_scrub_failure",
+  "injection_attempt_detected",
+  "secret_scrub_blocked",
+  "recall_quarantine",
+  "dispatch_attribution_missing",
+  "backend_degradation",
+  "tier_dispatch_untiered",
+  "harvest_promoted",
+  "harvest_refused",
+  "playbook_auto_replace",
+  "wiki_cas_conflict",
+  "harvest_reverted",
+] as const);
 
 /** The action Guild took for the gated tool call. */
 export type SecurityDecision = "ask" | "deny" | "allow" | "pass"

@@ -70,6 +70,11 @@ import {
 import { HOST_REGISTRY_ROWS } from "../src/domains/config/host-registry-schema.js";
 import { authorizeProjectedToolCall } from "../src/domains/dispatch";
 import {
+  ingestPauseBlocking,
+  readIngestPause,
+  type IngestPauseEntry,
+} from "../src/domains/security";
+import {
   effectiveBypassPolicy,
   readScopeContext,
   readScopeFile,
@@ -669,12 +674,103 @@ function runProjectionGate(payload: GuildHookEvent, cwd: string): boolean {
     verdict = { ok: false, reason: `projection could not be resolved for ${taskId}` };
   }
   if (verdict.ok) return false;
+  // Audit twin, best-effort: the deny never depends on the log write.
+  if (isSafeRunId(runId)) try {
+    appendSecurityEvent(
+      runDirOverride() ?? resolveRunDir(cwd, runId),
+      buildSecurityEvent({
+        run_id: runId,
+        event_type: "capability_scope_violation",
+        decision: "deny",
+        tool: toolName,
+        detail: verdict.reason ?? "tool is outside this assignment's projection",
+      }),
+    );
+  } catch {
+    /* observability only */
+  }
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "deny",
         permissionDecisionReason: verdict.reason ?? "tool is outside this assignment's projection",
+      },
+    }),
+  );
+  return true;
+}
+
+/**
+ * D-PROBE (ingest side): a paused wiki-ingest candidate cannot be written.
+ *
+ * `ingest-similarity` records the pause marker when it answers `should_pause`.
+ * While any entry stands, a Write/Edit to the candidate or under this root's wiki
+ * is denied, and so is a Bash command that names either. The operator clears the
+ * pause with `ingest-similarity --clear-pause`, which this gate routes to `ask`
+ * (deny on a host with no ask: the operator runs it from their own shell).
+ */
+function runIngestPauseGate(payload: GuildHookEvent, cwd: string): boolean {
+  const tool = payload.tool_name ?? "";
+  const ti = (payload.tool_input ?? {}) as Record<string, unknown>;
+  const root = resolveGuildRoot(cwd);
+  let blocking: IngestPauseEntry | null = null;
+  let decision: "deny" | "ask" = "deny";
+  let reason = "";
+  try {
+    if (tool === "Write" || tool === "Edit" || tool === "MultiEdit" || tool === "NotebookEdit") {
+      const target = typeof ti["file_path"] === "string" ? ti["file_path"] : ti["notebook_path"];
+      if (typeof target !== "string" || target.length === 0) return false;
+      blocking = ingestPauseBlocking(root, target);
+      if (blocking === null) return false;
+      reason =
+        `wiki-ingest is paused (${blocking.pause_reason}) on ${blocking.candidate_path}; ` +
+        `the operator must choose supersede / skip / proceed and clear the pause first`;
+    } else if (tool === "Bash") {
+      const command = typeof ti["command"] === "string" ? ti["command"] : "";
+      const entries = readIngestPause(root);
+      if (entries.length === 0) return false;
+      if (/ingest-similarity/.test(command) && /--clear-pause/.test(command)) {
+        blocking = entries[0];
+        decision = hostSupportsPreToolUseAsk(cwd) ? "ask" : "deny";
+        reason =
+          decision === "ask"
+            ? "clearing a wiki-ingest pause is the operator's decision"
+            : "clearing a wiki-ingest pause is the operator's decision; run it from your own shell";
+      } else {
+        blocking =
+          entries.find((e) => command.includes(e.candidate_path)) ??
+          (/\.guild\/wiki\b/.test(command) ? entries[0] : null);
+        if (blocking === null) return false;
+        reason = `wiki-ingest is paused on ${blocking.candidate_path}; a shell write to the wiki is refused`;
+      }
+    } else {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  const runId = resolveRunId(cwd);
+  if (runId !== undefined && isSafeRunId(runId)) try {
+    appendSecurityEvent(
+      runDirOverride() ?? resolveRunDir(cwd, runId),
+      buildSecurityEvent({
+        run_id: runId,
+        event_type: "injection_attempt_detected",
+        decision,
+        tool,
+        detail: reason,
+      }),
+    );
+  } catch {
+    /* observability only */
+  }
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: decision,
+        permissionDecisionReason: reason,
       },
     }),
   );
@@ -1461,15 +1557,20 @@ export async function main(): Promise<void> {
     return;
   }
 
+  // KTD28 — the assignment's tool projection. A hard DENY, so it runs BEFORE the
+  // security enforcement below: that gate can answer `ask`, and an operator
+  // approving the ask must never run a tool the worker was not granted (the same
+  // reason PCL-09 runs first).
+  if (runProjectionGate(payload, cwd)) return;
+
+  // D-PROBE ingest pause — a hard deny on a paused candidate, before any gate
+  // that could answer an approvable `ask` for the same write.
+  if (runIngestPauseGate(payload, cwd)) return;
+
   // v2 security ADR — capability-scope enforcement + MCP description hash-pin.
   // Runs BEFORE the boundary guard so a security gate owns stdout for this
   // event. If it emits a permission decision, skip everything else and return.
   if (runSecurityEnforcement(payload, cwd)) return;
-
-  // KTD28 — the assignment's tool projection. AFTER the security enforcement so
-  // the security gate still owns stdout when it fires, and before anything that
-  // would let an off-projection call proceed.
-  if (runProjectionGate(payload, cwd)) return;
 
   // P5-boundary-001 — additive Guild-owned-file boundary guard. Runs for
   // EVERY Write/Edit regardless of the telemetry run-id gating below. If it

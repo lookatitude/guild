@@ -1179,22 +1179,134 @@
       "id": "F2",
       "unit": "T15",
       "proves": "security on the real path: scrubbedWrite, D-PROBE, D-RECALL, template curator, security_event kinds (KTD37)",
-      "owner": "T15",
-      "pending": "adversarial pass: every security step is deterministic code on the real path"
+      "fixtures": [
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · directive language in the body, the reasoning or a source ref is refused, never promoted"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · the page reaches disk only through the branded scrubbedWrite, which redacts a secret"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · a slug cannot leave decisions/ and a field cannot stamp its own frontmatter"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · a stale before_hash loses the CAS and lands wiki_cas_conflict"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · every harvest outcome lands on security-events.jsonl under its closed-set kind"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · a harvested page with an operator-shaped slug is still wrapped, file or snippet"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · a recalled page carrying directives is quarantined, and the event is recorded"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · every event_type an emitter writes is in SECURITY_EVENT_TYPES, and the union matches"
+        },
+        {
+          "test": "hooks/__tests__/t10-hook-rungs.test.ts",
+          "title": "F2 a 50k test log reaching T1 is a truncated pointer"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · a tampered before_span with a stale hash is blocked_confirm; the playbook is untouched"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · a tampered before_span with a re-stamped hash is refused by D5; the playbook is untouched"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · a tampered page inverse carrying directives is refused by the injection probe"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · harvest refuses a body that spells the wrapper tag, and records harvest_refused"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · recall of a page written by other means keeps the wrapper intact"
+        },
+        {
+          "test": "hooks/__tests__/t15-ingest-pause.test.ts",
+          "title": "F2 · poisoned candidate: the Write is refused with a security event until the operator clears it"
+        },
+        {
+          "test": "hooks/__tests__/t15-ingest-pause.test.ts",
+          "title": "F2 · clean candidate: no pause, the Write passes"
+        }
+      ]
     },
     {
       "id": "F12",
       "unit": "T15",
       "proves": "assignment-projected tools AND the PreToolUse AND-mask; compile pins MCP hashes (KTD60 + KTD28)",
-      "owner": "T15",
-      "pending": "isolation fixtures for the projected-tools AND PreToolUse AND-mask"
+      "fixtures": [
+        {
+          "test": "hooks/__tests__/pre-tool-use-projection-gate.test.ts",
+          "title": "F12 · an off-projection tool is DENIED even when the capability scope would only ask"
+        },
+        {
+          "test": "hooks/__tests__/pre-tool-use-projection-gate.test.ts",
+          "title": "F12 · CONTROL: the same scope alone still answers ask (the AND-mask is unchanged)"
+        },
+        {
+          "test": "hooks/__tests__/pre-tool-use-projection-gate.test.ts",
+          "title": "F12 · an isolated instance with an EMPTY projection is denied every tool"
+        },
+        {
+          "test": "hooks/__tests__/pre-tool-use-projection-gate.test.ts",
+          "title": "DENIES a tool outside the projection, at the seam the host actually calls"
+        },
+        {
+          "test": "hooks/__tests__/t15-mcp-pins.test.ts",
+          "title": "F12 · the committed pin file describes the committed binary, tool by tool"
+        },
+        {
+          "test": "hooks/__tests__/t15-mcp-pins.test.ts",
+          "title": "F12 · PreToolUse asks on a drifted description of a Guild tool (rug-pull)"
+        },
+        {
+          "test": "hooks/__tests__/t15-mcp-pins.test.ts",
+          "title": "F12 · PreToolUse asks when the binary is not the one the pins describe"
+        }
+      ]
     },
     {
       "id": "D5",
       "unit": "T15",
       "proves": "the D5 permission carve-out cannot be overridden or evolved",
-      "owner": "T15",
-      "pending": "D5 poison fixture on the real path"
+      "fixtures": [
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "D5 · harvest span-replace: a permission replacement, or a Permissions span, is refused"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "D5 · the redirect trigger: the third redirect cannot promote a permission edit"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "D5 · replacePlaybookSpan refuses a permission edit before a byte moves"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "D5 · an evolve candidate: auto or operator, the permission edit parks as a candidate"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "D5 · rollback cannot restore a permission edit from a tampered history"
+        }
+      ]
     }
   ]
 }

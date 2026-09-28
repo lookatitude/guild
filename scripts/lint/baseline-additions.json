@@ -133,27 +133,27 @@
       "lane": "T14"
     },
     {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:1487::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:1588::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join.",
       "lane": "T14"
     },
     {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:1531::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:1632::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join.",
       "lane": "T14"
     },
     {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:174::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:179::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join.",
       "lane": "T14"
     },
     {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:245::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:250::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join.",
       "lane": "T14"
     },
     {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:713::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:809::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
       "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join.",
       "lane": "T14"
     },
@@ -286,6 +286,21 @@
       "key": "write-entry-calls-ensure-storage-layout::hooks/dist/using-guild-bootstrap.js::hook module names a .guild path with no call to an imported ensureStorageLayout",
       "reason": "hooks/dist bundle of the SessionStart hook (T14): the bundle inlines ensureStorageLayout, so the raw-text rule sees a .guild name without an import; same shape as the other hooks/**/dist entries T01 baselined.",
       "lane": "T14"
+    },
+    {
+      "key": "no-direct-guild-join::src/domains/security/events.ts:327::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Not new: the pre-existing resolveRunDir join (baselined at events.ts:294) moved 33 lines when T15 added the harvest kinds and SECURITY_EVENT_TYPES above it.",
+      "lane": "T15"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/lib/ingest-similarity.ts:115::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Not new: the pre-existing .guild joins (readIngestGate / scanCategoryPages) moved 1 line when T15 rework-r1 added the ingest-pause import.",
+      "lane": "T15"
+    },
+    {
+      "key": "no-direct-guild-join::scripts/lib/ingest-similarity.ts:178::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Not new: the pre-existing .guild joins (readIngestGate / scanCategoryPages) moved 1 line when T15 rework-r1 added the ingest-pause import.",
+      "lane": "T15"
     }
   ]
 }
