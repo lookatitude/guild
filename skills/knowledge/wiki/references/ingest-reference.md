@@ -5,23 +5,23 @@ procedure + `metadata.json` schema, the `§10.1.1` frontmatter spec + field
 rules, the minimal page body template, and the per-category definitions.
 `SKILL.md` is the lean playbook; this file is the format spec it points to.
 
-Rules: raw sources live beside (not inside) the wiki under `.guild/raw/sources/`; every page must carry the required frontmatter; categories are defined by the wiki structure; any specialist or the orchestrator may ingest.
+Rules: raw sources live beside (not inside) the wiki under `.guild/knowledge/sources/`; every page must carry the required frontmatter; categories are defined by the wiki structure; any specialist or the orchestrator may ingest.
 
 ## Raw capture
 
 Immutable. Raw sources never live inside `.guild/wiki/` (`§10.1`) — they live
-beside it under `.guild/raw/sources/<slug>/`.
+beside it under `.guild/knowledge/sources/<slug>/`.
 
 Steps:
 
 1. Compute `<slug>` (kebab-case, 3–60 chars).
-2. Create `.guild/raw/sources/<slug>/` if missing.
-3. Copy the source verbatim to `.guild/raw/sources/<slug>/original.<ext>` where
+2. Create `.guild/knowledge/sources/<slug>/` if missing.
+3. Copy the source verbatim to `.guild/knowledge/sources/<slug>/original.<ext>` where
    `<ext>` matches the source type (`html` for a fetched page's raw HTML, `md`
    for markdown, `pdf` for a downloaded PDF, `txt` for pasted plain text, etc.).
    Do not edit, re-flow, or clean the copy.
 4. Compute the SHA-256 checksum of `original.<ext>`.
-5. Write `.guild/raw/sources/<slug>/metadata.json` with exactly these keys:
+5. Write `.guild/knowledge/sources/<slug>/metadata.json` with exactly these keys:
 
    ```json
    {
@@ -75,7 +75,7 @@ Field rules:
   `medium` for secondhand summaries, `low` for opinion / forum / social-media
   content.
 - `source_refs` — **must include `<slug>`**, the exact directory name under
-  `.guild/raw/sources/`. Multiple refs allowed when one page synthesizes
+  `.guild/knowledge/sources/`. Multiple refs allowed when one page synthesizes
   several raw captures.
 - `created_at` / `updated_at` — ISO-8601 date (not datetime) in UTC.
 - `expires_at` — set only if the source is explicitly time-bound (e.g. a Q1
@@ -105,7 +105,7 @@ sentences from the source verbatim — see the prompt-injection rule.>
 might need to resolve. Omit this section if none.>
 
 ## Source
-- Raw copy: `.guild/raw/sources/<slug>/original.<ext>`
+- Raw copy: `.guild/knowledge/sources/<slug>/original.<ext>`
 - Checksum: `<sha256 or "not captured">`
 - Captured: `<ISO-8601 UTC>` by `<owner>`
 - Original: `<url or original path>`

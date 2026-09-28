@@ -42,6 +42,7 @@ export {
   defaultDirtyProbe,
   deriveGraphFromProductMap,
   discoverGuild,
+  durableGuildDir,
   ensureKgIndex,
   ensureKgProjectionIndex,
   ensureWikiFtsIndex,

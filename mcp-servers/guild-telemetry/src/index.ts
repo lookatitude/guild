@@ -41,6 +41,7 @@ import * as yaml from "js-yaml";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { durableGuildDir } from "../../../src/domains/state";
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -249,7 +250,7 @@ function resolveCwd(cwdArg?: string): string {
     // Check the EFFECTIVE runs dir (see guild-memory): a root outside the payload
     // whose `.guild/runs` symlinks into it would otherwise pass (gate r6).
     const root = path.resolve(cwdArg);
-    assertNotPayloadScoped(path.join(root, ".guild", "runs"), "cwd");
+    assertNotPayloadScoped(path.join(durableGuildDir(root), "runs"), "cwd");
     return root;
   }
   const envRoot = process.env.GUILD_TELEMETRY_CWD;
@@ -258,7 +259,7 @@ function resolveCwd(cwdArg?: string): string {
       throw new RelativeProjectRootError("GUILD_TELEMETRY_CWD", envRoot);
     }
     const envRootAbs = path.resolve(envRoot);
-    assertNotPayloadScoped(path.join(envRootAbs, ".guild", "runs"), "GUILD_TELEMETRY_CWD");
+    assertNotPayloadScoped(path.join(durableGuildDir(envRootAbs), "runs"), "GUILD_TELEMETRY_CWD");
     return envRootAbs;
   }
   if (NO_CWD_FALLBACK) {
@@ -268,7 +269,7 @@ function resolveCwd(cwdArg?: string): string {
 }
 
 function runsDir(cwd: string): string {
-  return path.join(cwd, ".guild", "runs");
+  return path.join(durableGuildDir(cwd), "runs");
 }
 
 /**

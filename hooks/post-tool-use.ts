@@ -82,6 +82,7 @@ import {
   type GuildHookEvent,
 } from "./lib/guild-hook-event.js";
 import { emitTraceEvent, makeAnalysisTraceEvent } from "../src/modules/telemetry/index.js";
+import { durableGuildDir } from "../src/domains/state";
 
 function isKnownTool(name: string | undefined): name is ToolCallTool {
   if (typeof name !== "string") return false;
@@ -208,7 +209,7 @@ function runGuildArtifactScrub(
   const effectiveRunDir =
     typeof runDir === "string" && runDir.length > 0
       ? runDir
-      : path.join(guildRoot, ".guild", "runs", effectiveRunId);
+      : path.join(durableGuildDir(guildRoot), "runs", effectiveRunId);
   const toolName = payload.tool_name;
   if (toolName !== "Write" && toolName !== "Edit") return;
 
@@ -413,7 +414,7 @@ export async function main(): Promise<void> {
         ? earlyRunId
         : undefined;
     const earlyRunDir = earlyRunIdSafe
-      ? (runDirOverride() ?? path.join(guildRoot, ".guild", "runs", earlyRunIdSafe))
+      ? (runDirOverride() ?? path.join(durableGuildDir(guildRoot), "runs", earlyRunIdSafe))
       : undefined;
     // oir-wi-57: GUILD_LANE_ID has no producer anywhere in this codebase — every
     // real dispatch backend (inprocess-backend.ts, tmux-backend.ts,
@@ -449,7 +450,7 @@ export async function main(): Promise<void> {
   //                  the outer qa gate sees an unverified cell.
   if (toolName === "Write" || toolName === "Edit") {
     try {
-      const durableDir = path.join(guildRoot, ".guild");
+      const durableDir = durableGuildDir(guildRoot);
       const verifyRunId = resolveRunId();
       const verifyRunDir =
         runDirOverride() ??
@@ -489,7 +490,7 @@ export async function main(): Promise<void> {
       const snapRunDir =
         runDirOverride() ??
         (snapRunId !== undefined && isSafeRunId(snapRunId)
-          ? path.join(guildRoot, ".guild", "runs", snapRunId)
+          ? path.join(durableGuildDir(guildRoot), "runs", snapRunId)
           : undefined);
       if (
         snapRunId !== undefined &&
@@ -535,7 +536,7 @@ export async function main(): Promise<void> {
     return;
   }
 
-  const runDir = runDirOverride() ?? path.join(guildRoot, ".guild", "runs", runId);
+  const runDir = runDirOverride() ?? path.join(durableGuildDir(guildRoot), "runs", runId);
   // Sidecar PAIRING key — MUST stay GUILD_LANE_ID-only, matching
   // hooks/pre-tool-use.ts's own resolution byte-for-byte (that file is a
   // sibling lane's and out of scope here). Broadening this to include

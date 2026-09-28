@@ -84,6 +84,7 @@ import type { SpecialistModelProvenance } from "./specialist-contract";
 import type { DoneWhenItem } from "./progress-ledger";
 import { isInstanceReservation } from "./instance-cap";
 import { publishTaskCellFile, type TaskCellArtifactKind } from "./task-cell-artifact-join";
+import { durableGuildDir } from "../state";
 
 /**
  * The launcher-facing dispatch descriptor for ONE task attempt. The launcher
@@ -679,7 +680,7 @@ export interface ProductionDispatchModelOutcome {
 
 function readSettingsJson(cwd: string): unknown {
   try {
-    return JSON.parse(fs.readFileSync(path.join(cwd, ".guild", "settings.json"), "utf8"));
+    return JSON.parse(fs.readFileSync(path.join(durableGuildDir(cwd), "settings.json"), "utf8"));
   } catch {
     return undefined;
   }
@@ -687,7 +688,7 @@ function readSettingsJson(cwd: string): unknown {
 
 /** Discover on-record M0/M1 evidence refs in the run's own tree (gateM2 verifies each). */
 function discoverM2EvidenceRefs(cwd: string, runId: string): M2EvidenceRefs {
-  const runDir = path.join(cwd, ".guild", "runs", runId);
+  const runDir = path.join(durableGuildDir(cwd), "runs", runId);
   const listJson = (sub: string, suffix: string): string[] => {
     try {
       return fs

@@ -106,6 +106,7 @@ import {
   canonicalizeNode,
   canonicalizeEdge,
 } from "./write-knowledge-links";
+import { durableGuildDir } from "../lib/state/storage";
 
 // NOTE: k-stage-staleness is NOT imported here. Staleness is the SKILL's coarse
 // gate — the skill decides run-or-skip the whole tier. The orchestrator always
@@ -730,7 +731,7 @@ export function emitRound1Candidates(
   // The classifyPage seam reads k2-judgments.json keyed by wiki_page_id; those
   // IDs are 1:1 with the candidate_key here.
   const wikiAbsDirs: string[] = [
-    filePaths.wikiDir ?? path.join(repoRoot, ".guild", "wiki"),
+    filePaths.wikiDir ?? path.join(durableGuildDir(repoRoot), "wiki"),
     path.join(repoRoot, "docs", "knowledge"),
   ];
   const k2Pages: ReturnType<typeof collectWikiPageCandidates> = [];
@@ -928,7 +929,7 @@ async function runKnowledgeStagesK1ToK4(
   //
   // Both roots match the candidate emitter at lines ~585-594 exactly.
   const k2Roots: string[] = [
-    wikiDir ?? path.join(repoRoot, ".guild", "wiki"),
+    wikiDir ?? path.join(durableGuildDir(repoRoot), "wiki"),
     path.join(repoRoot, "docs", "knowledge"),
   ];
   // BUG-3: pass repoRoot so wiki_page ids/anchors are repoRoot-relative and
@@ -1115,7 +1116,7 @@ export async function runKnowledgeStages(
   // Persists ALL suppressed candidates from both drop points so no candidate
   // silently vanishes (retention invariant: candidates_in == classified_nodes
   // + suppressed.length). Not part of the SC-8 byte-set — sidecar only.
-  const indexesDir = path.join(repoRoot, ".guild", "indexes");
+  const indexesDir = path.join(durableGuildDir(repoRoot), "indexes");
   fs.mkdirSync(indexesDir, { recursive: true });
   const suppressedDoc: KnowledgeSuppressed = {
     schema: "guild.knowledge_suppressed.v1",
@@ -1188,8 +1189,8 @@ if (require.main === module) {
 
     const repoRoot = path.resolve(cwd);
     const runDir = runId
-      ? path.join(repoRoot, ".guild", "runs", runId, "knowledge")
-      : path.join(repoRoot, ".guild", "runs", "_current", "knowledge");
+      ? path.join(durableGuildDir(repoRoot), "runs", runId, "knowledge")
+      : path.join(durableGuildDir(repoRoot), "runs", "_current", "knowledge");
     const candidateDir = runDir;
     const judgmentDir = runDir;
 
@@ -1210,7 +1211,7 @@ if (require.main === module) {
       );
     } else if (phase === "finalize") {
       const seams = buildFileBackedSeams(judgmentDir);
-      const structuralGraphPath = path.join(repoRoot, ".guild", "indexes", "knowledge-graph.json");
+      const structuralGraphPath = path.join(durableGuildDir(repoRoot), "indexes", "knowledge-graph.json");
       let structuralGraph: RunKnowledgeOptions["structuralGraph"];
       try {
         const prior = JSON.parse(fs.readFileSync(structuralGraphPath, "utf8")) as Partial<KnowledgeGraph>;
@@ -1370,6 +1371,6 @@ export function discoverFilePaths(repoRoot: string): KnowledgeFilePaths {
     codeRelPaths,
     docRelPaths,
     svgRelPaths,
-    wikiDir: path.join(repoRoot, ".guild", "wiki"),
+    wikiDir: path.join(durableGuildDir(repoRoot), "wiki"),
   };
 }

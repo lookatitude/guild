@@ -18,6 +18,7 @@ import {
   readTeamResult,
   writeTeamResult,
 } from "../../src/domains/teams/station-signals";
+import { durableGuildDir } from "./state/storage";
 
 export interface TaskCellLaunchLane extends Specialist {
   taskId: string;
@@ -103,7 +104,7 @@ export function buildStationTaskCellResult(
 }
 
 function assignmentFiles(cwd: string, runId: string): string[] {
-  const root = path.join(cwd, ".guild", "runs", runId, "task-cells");
+  const root = path.join(durableGuildDir(cwd), "runs", runId, "task-cells");
   const out: string[] = [];
   const walk = (dir: string): void => {
     let entries: fs.Dirent[];

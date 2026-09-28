@@ -28,6 +28,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { durableGuildDir } from "./lib/state/storage";
 
 export const RECALL_DECISION_SCHEMA = "guild.trace.recall_decision.v1";
 
@@ -374,7 +375,7 @@ export function runRecallStatsCli(argv: string[]): void {
     else if (a.startsWith("--threshold=")) threshold = parseFloat(a.slice("--threshold=".length));
   }
 
-  const resolvedRuns = runsDir || path.join(cwd, ".guild", "runs");
+  const resolvedRuns = runsDir || path.join(durableGuildDir(cwd), "runs");
   const events = readRecallDecisionEvents(resolvedRuns);
   const report = computeRecallStats(
     events,

@@ -61,6 +61,7 @@ import * as path from "node:path";
 import type { DispatchAttribution } from "./dispatch-attribution.js";
 import { classifyLaneEvidence, type LaneEvidence } from "./backend-degradation.js";
 import { redactField } from "./v1.4/redact-log.js";
+import { durableGuildDir } from "../../src/domains/state";
 
 /** The env var an operator sets to consciously dispatch a lane without a tier. */
 export const OVERRIDE_ENV = "GUILD_ALLOW_UNTIERED_DISPATCH";
@@ -316,7 +317,7 @@ export function readConfiguredTierModels(guildRoot: string, hostId: string): Tie
   };
   let doc: unknown;
   try {
-    doc = JSON.parse(fs.readFileSync(path.join(guildRoot, ".guild", "settings.json"), "utf8"));
+    doc = JSON.parse(fs.readFileSync(path.join(durableGuildDir(guildRoot), "settings.json"), "utf8"));
   } catch {
     return out; // absent/malformed settings — built-in ladder (Claude) or nothing.
   }

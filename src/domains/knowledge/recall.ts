@@ -81,6 +81,7 @@ import { ingestImportanceScore, resolveRecallImportance } from "./ingest-importa
 // R-TRACE (Wave 6): additive trace emit — NEVER changes return value
 import { emitTraceEvent } from "../telemetry";
 import { makeAnalysisTraceEvent, makeRecallEvent, makeRecallDecisionEvent } from "../telemetry";
+import { durableGuildDir } from "../state";
 
 // Re-export so existing importers (`recall.ts` was the original home of the scorer)
 // keep resolving `ingestImportanceScore` from here; canonical impl now in ingest-importance.ts.
@@ -401,7 +402,7 @@ function fileBm25Branch(
   runId?: string,
   composite?: CompositeConfig,
 ): RecallResult | null {
-  const wikiBase = path.join(cwd, ".guild", "wiki");
+  const wikiBase = path.join(durableGuildDir(cwd), "wiki");
   const scanDir = category ? path.join(wikiBase, category) : wikiBase;
 
   const files = walkMdFiles(scanDir);
@@ -523,7 +524,7 @@ function kgQueryBranch(
   category?: string,
 ): RecallResult | null {
   // METRIC 6: read the recall projection, not the raw knowledge-graph
-  const projPath = path.join(cwd, ".guild", "indexes", "knowledge-recall.json");
+  const projPath = path.join(durableGuildDir(cwd), "indexes", "knowledge-recall.json");
   if (!fs.existsSync(projPath)) return null;
 
   let proj: KnowledgeLinksDoc | null = null;
@@ -708,7 +709,7 @@ function structuralBranch(
   if (!intent) return null;
 
   // Read the FROZEN structural graph (source of truth; never the FTS cache).
-  const graphPath = path.join(cwd, ".guild", "indexes", "knowledge-graph.json");
+  const graphPath = path.join(durableGuildDir(cwd), "indexes", "knowledge-graph.json");
   if (!fs.existsSync(graphPath)) return null;
   let doc: { nodes?: unknown; edges?: unknown } | null = null;
   try {
@@ -810,7 +811,7 @@ function corpusForcesIdentifierBypass(
   // to ensureWikiFtsIndex's `collectMarkdownFiles` (recursive *.md), so the counts
   // agree. Below the global threshold the FTS cache never populates and BOTH modes
   // fall through to file-BM25 → parity holds without any bypass.
-  const globalWikiBase = path.join(resolveMainRepoRoot(cwd), ".guild", "wiki");
+  const globalWikiBase = path.join(durableGuildDir(resolveMainRepoRoot(cwd)), "wiki");
   if (walkMdFiles(globalWikiBase).length <= wikiFileThreshold) return false;
 
   const querySet = new Set(tokenizeIdentifierAware(query));
@@ -820,7 +821,7 @@ function corpusForcesIdentifierBypass(
   // ranks (raw-cwd base + category, matching fileBm25Branch's wikiBase) for a
   // doc-side identifier that file-BM25 splits but FTS5 does not — the divergence
   // the bypass exists to prevent.
-  const wikiBase = path.join(cwd, ".guild", "wiki");
+  const wikiBase = path.join(durableGuildDir(cwd), "wiki");
   const scanDir = category ? path.join(wikiBase, category) : wikiBase;
   for (const f of walkMdFiles(scanDir)) {
     let content: string;
@@ -878,7 +879,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
   const _traceStart = Date.now();
 
   // Derive runDir from cwd + runId when not given explicitly.
-  const runDir = rawRunDir ?? (runId ? path.join(cwd, ".guild", "runs", runId) : undefined);
+  const runDir = rawRunDir ?? (runId ? path.join(durableGuildDir(cwd), "runs", runId) : undefined);
 
   // Merge test-seam overrides into DEFAULT_INDEX_BLOCK.
   const indexConfig: IndexBlock = { ...DEFAULT_INDEX_BLOCK, ..._indexConfig };

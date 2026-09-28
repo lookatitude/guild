@@ -8,6 +8,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { durableGuildDir } from "./state/storage";
 
 export type BenchmarkGuildArtifactKind = "agent" | "skill" | "tool" | "wiki" | "initiative" | "sanitized-run-stub";
 
@@ -34,7 +35,7 @@ function walkFiles(dir: string): string[] {
 }
 
 function addFiles(root: string, relDir: string, kind: BenchmarkGuildArtifactKind, out: BenchmarkGuildArtifact[]): void {
-  for (const file of walkFiles(path.join(root, ".guild", relDir))) {
+  for (const file of walkFiles(path.join(durableGuildDir(root), relDir))) {
     out.push({ kind, path: path.relative(root, file), host: null, sanitized: true });
   }
 }
@@ -56,7 +57,7 @@ export function collectBenchmarkGuildArtifacts(root: string): BenchmarkGuildArti
   addFiles(root, "wiki", "wiki", out);
   addFiles(root, "initiatives", "initiative", out);
 
-  const runsDir = path.join(root, ".guild", "runs");
+  const runsDir = path.join(durableGuildDir(root), "runs");
   if (fs.existsSync(runsDir)) {
     for (const ent of fs.readdirSync(runsDir, { withFileTypes: true })) {
       if (!ent.isDirectory()) continue;

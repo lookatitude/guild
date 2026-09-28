@@ -45,6 +45,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { withStableLock } from "./stable-lock.js";
 import { resolveGuildRoot } from "../state";
+import { durableGuildDir } from "../state";
 
 // ── Types (mirror the frozen guild.run_state.v1 body — ADR §"New contracts") ──
 
@@ -443,7 +444,7 @@ export function laneResumeCheckpointPath(runDir: string, laneId: string): string
  * `readHeartbeatTimeoutMs` pattern: tolerant runtime reader, NOT the validator.
  */
 export function readResumeEnabled(cwd: string): boolean {
-  const settingsPath = path.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  const settingsPath = path.join(durableGuildDir(resolveGuildRoot(cwd)), "settings.json");
   try {
     const raw = fs.readFileSync(settingsPath, "utf8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;

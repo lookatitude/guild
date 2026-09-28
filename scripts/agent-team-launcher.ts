@@ -234,6 +234,7 @@ import { emitReadbackDegradation } from "./lib/emit-readback-degradation"; // W2
 import { captureHostCapabilitySnapshot, familyForHostId, rungKeyForSession, rungPlanForFamily } from "../src/adapters";
 import { recordRungLosses, rungLossesAsRecordedLosses } from "../src/domains/dispatch";
 import { resolvePluginRoot } from "../src/domains/kernel";
+import { durableGuildDir } from "./lib/state/storage";
 
 export interface TerminalSubstantiveReconciliation {
   readonly attempted: number;
@@ -929,7 +930,7 @@ function buildManifest(opts: {
 
 function writeManifest(cwd: string, manifest: Manifest): string {
   const runId = manifest.run_id;
-  const dir = path.join(cwd, ".guild", "runs", runId, "agent-team");
+  const dir = path.join(durableGuildDir(cwd), "runs", runId, "agent-team");
   fs.mkdirSync(dir, { recursive: true });
   const out = path.join(dir, "session.json");
   fs.writeFileSync(out, JSON.stringify(manifest, null, 2) + "\n", "utf8");
@@ -979,7 +980,7 @@ function makeLaneModelPlanner(
   let rawSettings: unknown;
   try {
     rawSettings = JSON.parse(
-      fs.readFileSync(path.join(cwd, ".guild", "settings.json"), "utf8"),
+      fs.readFileSync(path.join(durableGuildDir(cwd), "settings.json"), "utf8"),
     );
   } catch {
     rawSettings = undefined;
@@ -1652,7 +1653,7 @@ function resolveLifecycleRunId(cwd: string, callerRunId: string | null): string 
   let candidate = callerRunId;
   if (!candidate) {
     source = ".guild/runs/current-run-id";
-    const sentinel = path.join(cwd, ".guild", "runs", "current-run-id");
+    const sentinel = path.join(durableGuildDir(cwd), "runs", "current-run-id");
     try {
       candidate = fs.readFileSync(sentinel, "utf8").trim();
     } catch {
@@ -1976,7 +1977,7 @@ function readFrozenDispatchResolution(
   runId: string | null
 ): FrozenDispatchResolution | null {
   if (runId === null || runId.length === 0) return null;
-  const snapshotPath = path.join(cwd, ".guild", "runs", runId, "resolved-settings.json");
+  const snapshotPath = path.join(durableGuildDir(cwd), "runs", runId, "resolved-settings.json");
   if (!fs.existsSync(snapshotPath)) return null;
   let parsed: unknown;
   try {
@@ -2141,7 +2142,7 @@ async function main(): Promise<void> {
     if (runIds.length === 0) {
       process.stdout.write(
         "[agent-team-launcher] --reap: no runs with session.json found " +
-          `under ${path.join(cwd, ".guild", "runs")}\n`
+          `under ${path.join(durableGuildDir(cwd), "runs")}\n`
       );
       process.exit(0);
     }
@@ -2307,7 +2308,7 @@ async function main(): Promise<void> {
       process.exit(0);
     }
     const runId = args.runId;
-    const runDir = path.join(cwd, ".guild", "runs", runId);
+    const runDir = path.join(durableGuildDir(cwd), "runs", runId);
     const sjPath = sessionJsonPath(cwd, runId);
 
     if (!fs.existsSync(sjPath)) {
@@ -3311,7 +3312,7 @@ async function main(): Promise<void> {
       if (!args.dryRun) {
         for (const [taskId, sel] of v2ModelByTask) {
           upsertLane(
-            path.join(cwd, ".guild", "runs", runId),
+            path.join(durableGuildDir(cwd), "runs", runId),
             { runId, planSlug: slug, programId: null },
             taskId,
             {
@@ -3437,7 +3438,7 @@ async function main(): Promise<void> {
                   : d.modelParams,
               };
               upsertLane(
-                path.join(cwd, ".guild", "runs", runId),
+                path.join(durableGuildDir(cwd), "runs", runId),
                 { runId, planSlug: slug, programId: null },
                 taskId,
                 { host: hostBlock }
@@ -3570,7 +3571,7 @@ async function main(): Promise<void> {
           // On exhaustion, onExhausted marks every remote lane dead via the shared
           // markLaneDead writer (same checkpoint the prose path writes via mark-lane-dead.ts).
           const retryOpts = loadRetryOpts(cwd);
-          const runDir = path.join(cwd, ".guild", "runs", runId);
+          const runDir = path.join(durableGuildDir(cwd), "runs", runId);
           const init: RunStateInit = { runId, planSlug: slug, programId: null };
 
           let remoteResult;

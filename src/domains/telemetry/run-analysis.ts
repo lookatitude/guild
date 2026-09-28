@@ -12,6 +12,7 @@ import * as path from "node:path";
 
 import { parseYaml } from "../state";
 import { validateGuildTraceEvent, type AnalysisEventClass } from "./guild-trace-events";
+import { durableGuildDir } from "../state";
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const RESERVED_RECOMMENDATION_SOURCE_IDS = new Set(["activity", "queue"]);
@@ -159,7 +160,7 @@ function assertRecommendationSourceId(value: string, label: string): void {
 function runDir(root: string, runId: string): string {
   assertSafeId(runId, "run id");
   const resolvedRoot = path.resolve(root);
-  const runs = path.join(resolvedRoot, ".guild", "runs");
+  const runs = path.join(durableGuildDir(resolvedRoot), "runs");
   const candidate = path.join(runs, runId);
   try {
     if (fs.lstatSync(runs).isSymbolicLink() || fs.lstatSync(candidate).isSymbolicLink()) {
@@ -311,7 +312,7 @@ function unlinkOwnedLock(file: string, descriptor: number): void {
 }
 
 export function withRecommendationLock<T>(root: string, action: () => T): T {
-  const dir = path.join(root, ".guild", "recommendations");
+  const dir = path.join(durableGuildDir(root), "recommendations");
   const lock = path.join(dir, ".write.lock");
   const recovery = path.join(dir, ".write.lock.recovery");
   assertOutputContained(root, lock);
@@ -585,7 +586,7 @@ function preserveRecordedStatuses(
 } {
   const sourceId = path.basename(file, ".jsonl");
   const existing = readRecommendationRecords(root, file, false, sourceId);
-  const queue = readRecommendationRecords(root, path.join(root, ".guild", "recommendations", "queue.jsonl"), false);
+  const queue = readRecommendationRecords(root, path.join(durableGuildDir(root), "recommendations", "queue.jsonl"), false);
   const activity = readRecommendationActivity(root);
   const migrations: Array<{ item: Recommendation; fromId: string; fromSourceId: string; fromSourceAnalysisId: string }> = [];
   const persisted = [
@@ -676,7 +677,7 @@ function preserveRecordedStatuses(
 }
 
 function upsertProjectQueue(root: string, incoming: readonly Recommendation[], explicitStatus = false): string {
-  const queue = path.join(root, ".guild", "recommendations", "queue.jsonl");
+  const queue = path.join(durableGuildDir(root), "recommendations", "queue.jsonl");
   const records = readRecommendationRecords(root, queue, false);
   if (records.some((item) => item.scope !== "project")) throw new Error("project recommendation queue contains a non-project record");
   for (const item of incoming.filter((candidate) => candidate.scope === "project")) {
@@ -698,12 +699,12 @@ function upsertProjectQueue(root: string, incoming: readonly Recommendation[], e
 
 function recommendationSourceFile(root: string, sourceId: string): string {
   assertRecommendationSourceId(sourceId, "recommendation source id");
-  return path.join(root, ".guild", "recommendations", `${sourceId}.jsonl`);
+  return path.join(durableGuildDir(root), "recommendations", `${sourceId}.jsonl`);
 }
 
 function canonicalSourceAnalysisId(root: string, sourceId: string): string {
-  const runArtifact = path.join(root, ".guild", "analysis", "runs", sourceId, "analysis.json");
-  const comparisonArtifact = path.join(root, ".guild", "analysis", "comparisons", sourceId, "comparison.json");
+  const runArtifact = path.join(durableGuildDir(root), "analysis", "runs", sourceId, "analysis.json");
+  const comparisonArtifact = path.join(durableGuildDir(root), "analysis", "comparisons", sourceId, "comparison.json");
   for (const [file, schema, idKey, analysisKey] of [
     [runArtifact, "guild.run_analysis.v1", "run_id", "analysis_id"],
     [comparisonArtifact, "guild.run_comparison.v1", "comparison_id", "comparison_id"],
@@ -774,7 +775,7 @@ function activitySemantics(item: Record<string, unknown>): boolean {
 }
 
 function readRecommendationActivity(root: string, allowPendingMigration = false): RecommendationActivity[] {
-  const activity = path.join(root, ".guild", "recommendations", "activity.jsonl");
+  const activity = path.join(durableGuildDir(root), "recommendations", "activity.jsonl");
   const raw = readExistingContainedText(root, activity);
   if (raw === null) return [];
   const records: RecommendationActivity[] = [];
@@ -838,7 +839,7 @@ function recordRecommendationActivity(
   deferFinalValidation = false,
 ): void {
   if (fromStatus === item.status && effect !== "status_migrated") return;
-  const activity = path.join(root, ".guild", "recommendations", "activity.jsonl");
+  const activity = path.join(durableGuildDir(root), "recommendations", "activity.jsonl");
   const records = readRecommendationActivity(root, effect === "status_migrated");
   const at = new Date().toISOString();
   const event: RecommendationActivity = {
@@ -906,7 +907,7 @@ function assertAnalyzerOwnedTransactionTarget(root: string, file: string): void 
 }
 
 function transactionJournalPath(root: string): string {
-  return path.resolve(root, ".guild", "recommendations", ".transaction.json");
+  return path.resolve(durableGuildDir(root), "recommendations", ".transaction.json");
 }
 
 function removeTransactionJournal(root: string): void {
@@ -984,8 +985,8 @@ function rewriteRecommendation(
 ): Recommendation {
   assertSafeId(recommendationId, "recommendation id");
   const source = recommendationSourceFile(root, sourceId);
-  const queue = path.join(root, ".guild", "recommendations", "queue.jsonl");
-  const activity = path.join(root, ".guild", "recommendations", "activity.jsonl");
+  const queue = path.join(durableGuildDir(root), "recommendations", "queue.jsonl");
+  const activity = path.join(durableGuildDir(root), "recommendations", "activity.jsonl");
   const sourceBefore = readExistingContainedText(root, source);
   const queueBefore = readExistingContainedText(root, queue);
   const activityBefore = readExistingContainedText(root, activity);
@@ -1549,8 +1550,8 @@ function renderAnalysis(analysis: RunAnalysis): string {
 export function writeRunAnalysis(root: string, analysis: RunAnalysis): { json: string; markdown: string; recommendations: string } {
   return withRecommendationLock(root, () => {
     assertRecommendationSourceId(analysis.run_id, "run id");
-    const outDir = path.join(root, ".guild", "analysis", "runs", analysis.run_id);
-    const recommendationsDir = path.join(root, ".guild", "recommendations");
+    const outDir = path.join(durableGuildDir(root), "analysis", "runs", analysis.run_id);
+    const recommendationsDir = path.join(durableGuildDir(root), "recommendations");
     const json = path.join(outDir, "analysis.json");
     const markdown = path.join(outDir, "analysis.md");
     const recommendations = path.join(recommendationsDir, `${analysis.run_id}.jsonl`);
@@ -1599,9 +1600,9 @@ export function writeRunComparison(root: string, comparison: RunComparison): {
 } {
   return withRecommendationLock(root, () => {
   assertRecommendationSourceId(comparison.comparison_id, "comparison id");
-  const comparisonsDir = path.join(root, ".guild", "analysis", "comparisons");
+  const comparisonsDir = path.join(durableGuildDir(root), "analysis", "comparisons");
   const outDir = path.join(comparisonsDir, comparison.comparison_id);
-  const recommendationsDir = path.join(root, ".guild", "recommendations");
+  const recommendationsDir = path.join(durableGuildDir(root), "recommendations");
   const json = path.join(outDir, "comparison.json");
   const markdown = path.join(outDir, "comparison.md");
   const recommendations = path.join(recommendationsDir, `${comparison.comparison_id}.jsonl`);
@@ -1648,7 +1649,7 @@ export function writeRunComparison(root: string, comparison: RunComparison): {
 }
 
 function discoverRunIds(root: string): string[] {
-  const runsDir = path.join(root, ".guild", "runs");
+  const runsDir = path.join(durableGuildDir(root), "runs");
   try {
     return fs.readdirSync(runsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && SAFE_ID.test(entry.name))
@@ -1779,7 +1780,7 @@ function decideRecommendationUnlocked(
   }
 
   if (!["proposed", "accepted"].includes(current.status)) throw new Error(`cannot accept a recommendation with status ${current.status}`);
-  const draft = path.join(root, ".guild", "recommendations", "drafts", `${recommendationId}.md`);
+  const draft = path.join(durableGuildDir(root), "recommendations", "drafts", `${recommendationId}.md`);
   assertOutputContained(root, draft);
   const updatedCandidate: Recommendation = { ...current, status: "accepted" };
   const body = `# Guild plugin recommendation draft: ${updatedCandidate.id}\n\n` +
@@ -1807,9 +1808,9 @@ export function decideRecommendation(
   assertSafeId(recommendationId, "recommendation id");
   return withRecommendationLock(root, () => withFileTransaction(root, [
     recommendationSourceFile(root, sourceId),
-    path.join(root, ".guild", "recommendations", "queue.jsonl"),
-    path.join(root, ".guild", "recommendations", "activity.jsonl"),
-    path.join(root, ".guild", "recommendations", "drafts", `${recommendationId}.md`),
+    path.join(durableGuildDir(root), "recommendations", "queue.jsonl"),
+    path.join(durableGuildDir(root), "recommendations", "activity.jsonl"),
+    path.join(durableGuildDir(root), "recommendations", "drafts", `${recommendationId}.md`),
   ], () => decideRecommendationUnlocked(root, sourceId, recommendationId, decision)));
 }
 
@@ -1840,7 +1841,7 @@ export function updateRecommendationStatus(
   assertSafeId(recommendationId, "recommendation id");
   return withRecommendationLock(root, () => withFileTransaction(root, [
     recommendationSourceFile(root, sourceId),
-    path.join(root, ".guild", "recommendations", "queue.jsonl"),
-    path.join(root, ".guild", "recommendations", "activity.jsonl"),
+    path.join(durableGuildDir(root), "recommendations", "queue.jsonl"),
+    path.join(durableGuildDir(root), "recommendations", "activity.jsonl"),
   ], () => updateRecommendationStatusUnlocked(root, sourceId, recommendationId, status)));
 }

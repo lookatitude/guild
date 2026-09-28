@@ -52,6 +52,7 @@ import {
 // RECALL_INTEGRITY_DIRECTIVE are re-exported so callers who import them from here
 // continue to work without changes.
 import { protectChunks, type RawRecallHit, type TrustTier } from "./recall-protect";
+import { durableGuildDir } from "../state";
 
 // Re-export for backward compatibility with callers that import from wiki-recall.
 export { classifyTrustTier, RECALL_INTEGRITY_DIRECTIVE } from "./recall-protect";
@@ -376,7 +377,7 @@ export function runWikiRecallCli(): void {
 
   // Derive runDir from cwd when only --run-id is given.
   if (runId && !runDir) {
-    runDir = path.join(cwd, ".guild", "runs", runId);
+    runDir = path.join(durableGuildDir(cwd), "runs", runId);
   }
 
   // Allow the caller to signal index=off via env for the OFF path test.

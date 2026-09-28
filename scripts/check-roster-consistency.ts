@@ -34,6 +34,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { parseFrontmatter } from "./lib/frontmatter";
+import { durableGuildDir } from "./lib/state/storage";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -248,7 +249,7 @@ export function compareRosterToAgents(
  * Throws (writes to stderr + exits 1) if required paths are missing.
  */
 export function loadAndCompare(pluginRoot: string): ConsistencyResult {
-  const rosterPath = path.join(pluginRoot, ".guild", "wiki", "entities", "specialist-roster.md");
+  const rosterPath = path.join(durableGuildDir(pluginRoot), "wiki", "entities", "specialist-roster.md");
   const agentsDir = path.join(pluginRoot, "agents");
   const templatesDir = path.join(pluginRoot, "templates", "specialists");
 

@@ -1061,7 +1061,7 @@ function discoverWorkspaceRoot(startDir: string): string | null {
 
   let current = absStart;
   while (true) {
-    const manifestPath = path.join(current, ".guild", "workspace.json");
+    const manifestPath = path.join(durableGuildDir(current), "workspace.json");
     if (fs.existsSync(manifestPath)) {
       let manifest: WorkspaceManifest | null = null;
       try {
@@ -2235,14 +2235,14 @@ function nearestSource(dottedKey: string, sources: Record<string, string>): stri
 /** Every settings file that contributes to the resolved config (project + workspace, each layer). */
 function contributingSettingsFiles(cwd: string): Array<{ label: string; file: string }> {
   const candidates: Array<{ label: string; file: string }> = [
-    { label: "project settings.json", file: path.join(cwd, ".guild", "settings.json") },
-    { label: "project settings.local.json", file: path.join(cwd, ".guild", "settings.local.json") },
+    { label: "project settings.json", file: path.join(durableGuildDir(cwd), "settings.json") },
+    { label: "project settings.local.json", file: path.join(durableGuildDir(cwd), "settings.local.json") },
   ];
   const wsRoot = discoverWorkspaceRoot(cwd);
   if (wsRoot && path.resolve(wsRoot) !== path.resolve(cwd)) {
     candidates.push(
-      { label: "workspace settings.json", file: path.join(wsRoot, ".guild", "settings.json") },
-      { label: "workspace settings.local.json", file: path.join(wsRoot, ".guild", "settings.local.json") }
+      { label: "workspace settings.json", file: path.join(durableGuildDir(wsRoot), "settings.json") },
+      { label: "workspace settings.local.json", file: path.join(durableGuildDir(wsRoot), "settings.local.json") }
     );
   }
   return candidates;
@@ -2496,6 +2496,7 @@ export function cmdProvidersDetect(cwd: string, probe?: ProbeEnv): number {
  * Exit codes: 0 success; 1 bad input / IO error; 2 bad --cwd.
  */
 import * as crypto from "node:crypto";
+import { durableGuildDir } from "./lib/state/storage";
 
 function sha256Hex(text: string): string {
   return crypto.createHash("sha256").update(text, "utf8").digest("hex");
@@ -2572,11 +2573,11 @@ export function cmdUpdateMcpHashes(
       );
       return 1;
     }
-    targetFile = path.join(wsRoot, ".guild", "settings.json");
+    targetFile = path.join(durableGuildDir(wsRoot), "settings.json");
   } else if (scope === "project") {
-    targetFile = path.join(cwd, ".guild", "settings.json");
+    targetFile = path.join(durableGuildDir(cwd), "settings.json");
   } else {
-    targetFile = path.join(cwd, ".guild", "settings.local.json");
+    targetFile = path.join(durableGuildDir(cwd), "settings.local.json");
   }
 
   // 5. Read-modify-write: merge or replace mcp.tool_description_hashes

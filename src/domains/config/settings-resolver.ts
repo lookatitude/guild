@@ -20,6 +20,7 @@ import { resolveSettings as _resolveSettings, type ResolveOptions, type ResolveR
 // R-TRACE imports — additive only.
 import { emitTraceEvent } from "../telemetry";
 import { makeConfigResolutionEvent } from "../telemetry";
+import { durableGuildDir } from "../state";
 
 /**
  * resolveSettings — thin observability wrapper around the core implementation.
@@ -41,7 +42,7 @@ export function resolveSettings(opts: ResolveOptions): ResolveResult {
     const assembled = result.config;
     const _traceRunId = process.env["GUILD_RUN_ID"] ?? "";
     const _traceRunDir = _traceRunId && cwd
-      ? path.join(cwd, ".guild", "runs", _traceRunId)
+      ? path.join(durableGuildDir(cwd), "runs", _traceRunId)
       : undefined;
     if (_traceRunDir) {
       const _fingerprint = crypto

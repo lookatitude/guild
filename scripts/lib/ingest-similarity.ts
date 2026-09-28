@@ -102,6 +102,7 @@ export interface IngestSimilarityResult {
 // tests. The former verbatim copy was deleted to enforce the single-source floor.
 export { tokenize, bm25Score } from "./shared/bm25";
 import { tokenize, bm25Score } from "./shared/bm25";
+import { durableGuildDir } from "./state/storage.js";
 
 // ── Config reader ─────────────────────────────────────────────────────────────
 //
@@ -112,7 +113,7 @@ const DEFAULT_GATE = 0.80;
 
 export function readIngestGate(cwd: string): number {
   try {
-    const settingsPath = path.join(cwd, ".guild", "settings.json");
+    const settingsPath = path.join(durableGuildDir(cwd), "settings.json");
     if (!fs.existsSync(settingsPath)) return DEFAULT_GATE;
     const raw = fs.readFileSync(settingsPath, "utf8");
     const settings = JSON.parse(raw) as Record<string, unknown>;
@@ -175,7 +176,7 @@ interface CategoryPage {
 function scanCategoryPages(cwd: string, category: string): CategoryPage[] {
   // Normalize singular → plural before scanning (standard→standards etc.)
   const canonicalCategory = normalizeCategory(category);
-  const catDir = path.join(cwd, ".guild", "wiki", canonicalCategory);
+  const catDir = path.join(durableGuildDir(cwd), "wiki", canonicalCategory);
   let names: string[];
   try {
     names = fs.readdirSync(catDir).filter((n) => n.endsWith(".md"));

@@ -44,6 +44,7 @@ import {
   writeCheckpoint,
   type CheckpointPhase,
 } from "../emit-learning-checkpoint.js";
+import { durableGuildDir } from "../../src/domains/state";
 
 // ── Phase-token mapping ─────────────────────────────────────────────────────
 
@@ -152,7 +153,7 @@ export interface RunLearningBackstopOpts {
 export function runLearningBackstop(opts: RunLearningBackstopOpts): BackstopResult {
   try {
     const runDir =
-      opts.runDir ?? path.join(opts.guildRoot, ".guild", "runs", opts.runId);
+      opts.runDir ?? path.join(durableGuildDir(opts.guildRoot), "runs", opts.runId);
 
     let raw: string;
     try {

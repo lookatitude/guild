@@ -46,6 +46,7 @@ import {
   type ConfirmationKey,
   type RunLocalConfirmationState,
 } from "../config";
+import { durableGuildDir } from "../state";
 
 export const CONFIRMATION_STATE_SCHEMA = "guild.confirmation_state.v1" as const;
 
@@ -66,7 +67,7 @@ export interface ConfirmationStateFile {
 }
 
 export function confirmationStatePath(root: string, runId: string): string {
-  return path.join(root, ".guild", "runs", runId, CONFIRMATION_DIR, "state.json");
+  return path.join(durableGuildDir(root), "runs", runId, CONFIRMATION_DIR, "state.json");
 }
 
 /**

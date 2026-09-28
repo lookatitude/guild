@@ -50,6 +50,7 @@ import { classifyPhase, type ArtifactSet } from "../scripts/lib/learning-signatu
 import { ensureStorageLayout } from "./lib/ensure-layout.js";
 // T10 (KTD38): the four additive work-loop event kinds on the EXISTING JSONL.
 import { emitLoopEvent } from "./lib/loop-events.js";
+import { durableGuildDir } from "../src/domains/state";
 
 // ── Schema constants ───────────────────────────────────────────────────────
 
@@ -345,7 +346,7 @@ function appendKnowledgeLinksIndex(
 ): void {
   if (links.length === 0) return;
 
-  const indexDir = path.join(guildRoot, ".guild", "indexes");
+  const indexDir = path.join(durableGuildDir(guildRoot), "indexes");
   const indexPath = path.join(indexDir, "knowledge-links.json");
 
   // Read existing links (safe — missing file = empty list).
@@ -407,7 +408,7 @@ function appendReflections(
   const nonNone = DECISION_TARGETS.filter((k) => decisions[k] !== "none");
   if (nonNone.length === 0) return; // VC-K7: nothing to queue
 
-  const reflectionsDir = path.join(guildRoot, ".guild", "reflections");
+  const reflectionsDir = path.join(durableGuildDir(guildRoot), "reflections");
   fs.mkdirSync(reflectionsDir, { recursive: true });
   const reflPath = path.join(reflectionsDir, `${runId}.md`);
 
@@ -440,13 +441,13 @@ export function writeCheckpoint(opts: WriteCheckpointOpts): string {
   const decisions: CheckpointDecisions = opts.decisions ?? { ...ALL_NONE_DECISIONS };
 
   // Compute paths
-  const learningDir = path.join(guildRoot, ".guild", "runs", opts.runId, "learning");
+  const learningDir = path.join(durableGuildDir(guildRoot), "runs", opts.runId, "learning");
   fs.mkdirSync(learningDir, { recursive: true });
   const checkpointFile = path.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
 
   // Relative reflections path (stored in the YAML for reference; actual write uses absolute)
   const reflectionsRelPath = `.guild/reflections/${opts.runId}.md`;
-  const reflectionsAbsPath = path.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
+  const reflectionsAbsPath = path.join(durableGuildDir(guildRoot), "reflections", `${opts.runId}.md`);
 
   const observed = opts.observed ?? [];
 
@@ -476,7 +477,7 @@ export function writeCheckpoint(opts: WriteCheckpointOpts): string {
   // — the enqueue signal the harvest writer picks up. No wiki path is touched
   // and no third log is created (KTD38).
   if (decisions.wiki !== "none" && decisions.wiki.length > 0) {
-    emitLoopEvent(path.join(guildRoot, ".guild", "runs", opts.runId), {
+    emitLoopEvent(path.join(durableGuildDir(guildRoot), "runs", opts.runId), {
       ts: new Date().toISOString(),
       event: "harvest_event",
       run_id: opts.runId,

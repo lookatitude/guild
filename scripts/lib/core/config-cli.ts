@@ -79,6 +79,7 @@ import {
 // (accepted + validated at load, §5 fail-closed) but never scaffolded into a
 // fresh settings.json, so `config init` stays byte-identical to the golden.
 import { validateModelPolicy } from "../../../src/domains/config/model-policy";
+import { durableGuildDir } from "../state/storage";
 export { resolveTierModel };
 export type { ResolvedTierModel, TierHostValue, TierModelSpec };
 
@@ -950,7 +951,7 @@ function loadLocalOverride(
   fileConfig: Partial<GuildSettings>,
   selfBuild: boolean
 ): Partial<GuildSettings> {
-  const localPath = path.join(cwd, ".guild", "settings.local.json");
+  const localPath = path.join(durableGuildDir(cwd), "settings.local.json");
   if (!fs.existsSync(localPath)) return fileConfig; // no-op when absent
 
   let localParsed: Record<string, unknown>;
@@ -1620,7 +1621,7 @@ export function validateDefaults(d: Record<string, unknown>, selfBuild: boolean)
 }
 
 function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
-  const settingsPath = path.join(cwd, ".guild", "settings.json");
+  const settingsPath = path.join(durableGuildDir(cwd), "settings.json");
 
   if (fs.existsSync(settingsPath)) {
     let parsed: Record<string, unknown>;
@@ -2035,7 +2036,7 @@ function main(): void {
   // ── resolve mode: delegate to the shared settings-resolver library.
   // This is the canonical path; all workspace inheritance and precedence
   // chain logic lives in lib/settings-resolver.ts.
-  const localPath = path.join(cwd, ".guild", "settings.local.json");
+  const localPath = path.join(durableGuildDir(cwd), "settings.local.json");
   let localLoadedKeys: string[] = [];
 
   // Surface settings.local.json INFO/ERROR log (parity with the old loader's stderr output).

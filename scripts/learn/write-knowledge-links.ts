@@ -53,6 +53,7 @@ export {
   type CanonicalEdge,
 } from "../../src/domains/knowledge/knowledge-links-contract";
 import { importanceMultiplier, confidenceBonus } from "./kg-query";
+import { durableGuildDir } from "../lib/state/storage";
 
 // ---------------------------------------------------------------------------
 // Schema version constants
@@ -227,7 +228,7 @@ export function writeKnowledgeLinks(opts: WriteKnowledgeLinksOptions): WriteKnow
   };
 
   // ── Step 6: write to disk (L0 convention: JSON.stringify(.,null,2)+"\n") ──
-  const indexesDir = path.join(repoRoot, ".guild", "indexes");
+  const indexesDir = path.join(durableGuildDir(repoRoot), "indexes");
   fs.mkdirSync(indexesDir, { recursive: true });
 
   const linksPath = path.join(indexesDir, "knowledge-recall.json");

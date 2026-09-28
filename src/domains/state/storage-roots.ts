@@ -103,6 +103,14 @@ export function guildRootId(activeRoot: string): string {
   return `${base}-${digest}`;
 }
 
+/**
+ * `<activeRoot>/.guild` — the durable root, for callers that already hold the root
+ * and only need the directory. Pure; no resolution, no discovery (KTD15).
+ */
+export function durableGuildDir(activeRoot: string): string {
+  return path.join(activeRoot, ".guild");
+}
+
 /** Resolve the five roots. Pure; safe to call on every path lookup. */
 export function resolveStorageRoots(opts: StorageRootsOptions): GuildStorageRoots {
   const env = opts.env ?? process.env;
@@ -119,7 +127,7 @@ export function resolveStorageRoots(opts: StorageRootsOptions): GuildStorageRoot
   const state = override("state") ?? platformStateRoot(platform, env, home);
   const cache = override("cache") ?? platformCacheRoot(platform, env, home);
   return {
-    durable: path.join(activeRoot, ".guild"),
+    durable: durableGuildDir(activeRoot),
     state,
     cache,
     worktrees: override("worktrees") ?? path.join(cache, "worktrees"),

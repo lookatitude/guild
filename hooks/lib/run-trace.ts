@@ -112,6 +112,7 @@ import { resolveHeartbeatTimeoutMs } from "./heartbeat.js";
 // carries a REAL verdict (not all-none) WITHOUT depending on the model running a CLI.
 import { classifyPhase, type ArtifactSet, type HandoffV2Block } from "../../scripts/lib/learning-signatures.js";
 import { extractHandoffEnvelope } from "./handoff-v2.js";
+import { durableGuildDir } from "../../src/domains/state";
 
 function captureCapabilityBaseline(root: string, runId: string) {
   const hashes = snapshotTreeHashes(root);
@@ -124,8 +125,8 @@ function recordCapabilityBaselineCapture(root: string, evidence: CapabilityBasel
   const operationId = `capability-start-snapshot:${evidence.run_id}`;
   const outputHash = `sha256:${evidence.snapshot_sha256}`;
   const paths = {
-    journal: path.join(root, ".guild", "runs", evidence.run_id, "receipts", "journal.jsonl"),
-    checkpoint: path.join(root, ".guild", "runs", evidence.run_id, "receipts", "checkpoint.json"),
+    journal: path.join(durableGuildDir(root), "runs", evidence.run_id, "receipts", "journal.jsonl"),
+    checkpoint: path.join(durableGuildDir(root), "runs", evidence.run_id, "receipts", "checkpoint.json"),
   };
   const input = makeReceiptInput({
     run_id: evidence.run_id,
@@ -239,7 +240,7 @@ interface TraceEventV1 {
 // ── Path helpers (mirror B2's run-lifecycle layout, .guild base = root) ───────
 
 function runDir(root: string, runId: string): string {
-  return path.join(root, ".guild", "runs", runId);
+  return path.join(durableGuildDir(root), "runs", runId);
 }
 
 /** The terminal_trace_event.log_ref target — the exact file the pointer names. */
@@ -929,7 +930,7 @@ function emitPhaseCheckpoint(root: string, runId: string, phase: string): void {
 
     // Idempotent: do not overwrite a model-emitted or previously backstopped checkpoint.
     const checkpointFile = path.join(
-      root, ".guild", "runs", runId, "learning",
+      durableGuildDir(root), "runs", runId, "learning",
       `${checkpointPhase}-${runId}.yaml`,
     );
     if (fs.existsSync(checkpointFile)) return;

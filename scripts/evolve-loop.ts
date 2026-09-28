@@ -47,6 +47,7 @@
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { durableGuildDir } from "./lib/state/storage";
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ function findLiveSkillDir(cwd: string, slug: string): { tier: string; dir: strin
   // DH-3: the consuming repo's project instance wins over the plugin library —
   // an evolved/minted skill at .guild/skills/<slug>/ is the live version, so a
   // later evolve round baselines and edits THAT, not the shipped library copy.
-  const projectDir = path.join(cwd, ".guild", "skills", slug);
+  const projectDir = path.join(durableGuildDir(cwd), "skills", slug);
   if (fs.existsSync(path.join(projectDir, "SKILL.md"))) {
     return { tier: "project", dir: projectDir };
   }
@@ -261,7 +262,7 @@ function main(): void {
   const live = findLiveSkillDir(cwd, skill!);
   if (!live) {
     process.stderr.write(
-      `[evolve-loop] ERROR: live skill not found at ${cwd}/.guild/skills/${skill}/SKILL.md, ` +
+      `[evolve-loop] ERROR: live skill not found at ${durableGuildDir(cwd)}/skills/${skill}/SKILL.md, ` +
         `${cwd}/skills/<tier>/${skill}/SKILL.md, or the plugin install ` +
         `(GUILD_PLUGIN_ROOT/CLAUDE_PLUGIN_ROOT)\n`
     );
@@ -272,7 +273,7 @@ function main(): void {
   const baseline = baselineHash(live!.dir);
 
   // 2. Write pipeline.md.
-  const evolveDir = path.join(cwd, ".guild", "evolve", runId!);
+  const evolveDir = path.join(durableGuildDir(cwd), "evolve", runId!);
   fs.mkdirSync(evolveDir, { recursive: true });
   const pipelineMd = buildPipelineMd({
     slug: skill!,

@@ -32,6 +32,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { durableGuildDir } from "./lib/state/storage";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -318,8 +319,8 @@ function main(): void {
   }
 
   const cwd = path.resolve(cwdArg);
-  const gradingFile = path.join(cwd, ".guild", "evolve", runId, "grading.json");
-  const defaultOut = path.join(cwd, ".guild", "evolve", runId, "flip-report.md");
+  const gradingFile = path.join(durableGuildDir(cwd), "evolve", runId, "grading.json");
+  const defaultOut = path.join(durableGuildDir(cwd), "evolve", runId, "flip-report.md");
   const outFile = outArg ? path.resolve(outArg) : defaultOut;
 
   if (!fs.existsSync(gradingFile)) {

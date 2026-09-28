@@ -77,7 +77,7 @@ Return a list of matches. For each match:
   summary: <first non-empty body line or explicit `## Summary` first line, one line>
   source_refs:
     - slug: <slug>
-      raw_path: .guild/raw/sources/<slug>/original.<ext>
+      raw_path: .guild/knowledge/sources/<slug>/original.<ext>
       url_or_path: <original URL or file path from metadata.json, or "unknown" if metadata.json missing>
 ```
 

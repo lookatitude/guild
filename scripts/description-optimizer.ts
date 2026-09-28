@@ -51,6 +51,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { durableGuildDir } from "./lib/state/storage";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -135,7 +136,7 @@ function findSkillDirUnderSkillsRoot(root: string, slug: string): string | null 
  * layout under `cwd`, then the shipped baseline under the plugin install root.
  */
 function findLiveSkillDir(cwd: string, slug: string): string | null {
-  const project = path.join(cwd, ".guild", "skills", slug);
+  const project = path.join(durableGuildDir(cwd), "skills", slug);
   if (fs.existsSync(path.join(project, "SKILL.md"))) return project;
 
   const selfBuild = findSkillDirUnderSkillsRoot(cwd, slug);
@@ -280,7 +281,7 @@ function main(): void {
   if (!evalsPath) {
     process.stderr.write(
       `[description-optimizer] ERROR: evals.json not found for skill "${skill}" under ` +
-        `${cwd}/.guild/skills/${skill}/, ${cwd}/skills/${skill}/, ${cwd}/skills/<tier>/${skill}/ ` +
+        `${durableGuildDir(cwd)}/skills/${skill}/, ${cwd}/skills/${skill}/, ${cwd}/skills/<tier>/${skill}/ ` +
         `for any tier under skills/, or the plugin install root\n`
     );
     process.exit(1);

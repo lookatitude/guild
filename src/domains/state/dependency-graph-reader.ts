@@ -39,6 +39,7 @@ import {
   REASON_MAX_LEN,
   validateDependencyGraphV1,
 } from "./dependency-graph-schema";
+import { durableGuildDir } from "./storage-roots";
 
 // ---------------------------------------------------------------------------
 // FS read seam (injectable) + the child-wiki deny guard (F-7, real-path)
@@ -141,7 +142,7 @@ export function loadDependencyGraphArtifact(
   workspaceRoot: string,
   seam: FsReadSeam
 ): { valid: boolean; errors: string[]; graph: DependencyGraphV1 | null } {
-  const file = path.join(workspaceRoot, ".guild", "workspace", "dependency-graph.json");
+  const file = path.join(durableGuildDir(workspaceRoot), "workspace", "dependency-graph.json");
   if (!seam.exists(file)) {
     return { valid: true, errors: [], graph: null };
   }
@@ -165,7 +166,7 @@ export function deriveGraphFromProductMap(
   workspaceRoot: string,
   seam: FsReadSeam
 ): { valid: boolean; errors: string[]; graph: DependencyGraphV1 | null } {
-  const file = path.join(workspaceRoot, ".guild", "workspace", "product-map.json");
+  const file = path.join(durableGuildDir(workspaceRoot), "workspace", "product-map.json");
   if (!seam.exists(file)) {
     return { valid: true, errors: [], graph: null };
   }

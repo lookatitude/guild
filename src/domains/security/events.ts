@@ -23,6 +23,7 @@ import * as path from "node:path";
 import { resolveGuildRoot } from "../state";
 import { redactField } from "./redact-log.js";
 import type { BypassPolicy } from "./config.js";
+import { durableGuildDir } from "../state";
 
 /** Why a security record was emitted. */
 export type SecurityEventType =
@@ -327,7 +328,7 @@ export function appendSecurityEvent(runDir: string, record: SecurityEventV1): bo
 /** Convenience: resolve the run dir from cwd + runId the same way every hook does. */
 export function resolveRunDir(cwd: string, runId: string, explicitRunDir?: string): string {
   if (typeof explicitRunDir === "string" && explicitRunDir.length > 0) return explicitRunDir;
-  return path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  return path.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", runId);
 }
 
 /**

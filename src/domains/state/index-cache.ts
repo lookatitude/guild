@@ -36,6 +36,7 @@ import { runMigrations } from "./index-migrate";
 // Identifier tokenizer is a base-layer primitive in kernel (not the higher
 // knowledge module) — keeps this lower `state` module's dependency direction inward.
 import { tokenizeIdentifierAware } from "../kernel";
+import { durableGuildDir } from "./storage-roots";
 
 // ── Minimal node:sqlite type stubs ────────────────────────────────────────
 
@@ -214,8 +215,8 @@ export function ensureKgIndex(cwd: string, config: IndexBlock): CacheResult | nu
 
   try {
     const repoRoot = resolveMainRepoRoot(cwd);
-    const kgPath = path.join(repoRoot, ".guild", "indexes", "knowledge-graph.json");
-    const dbPath = path.join(repoRoot, ".guild", "index.sqlite");
+    const kgPath = path.join(durableGuildDir(repoRoot), "indexes", "knowledge-graph.json");
+    const dbPath = path.join(durableGuildDir(repoRoot), "index.sqlite");
 
     if (!fs.existsSync(kgPath)) return null;
 
@@ -357,8 +358,8 @@ export function ensureKgProjectionIndex(cwd: string, config: IndexBlock): CacheR
 
   try {
     const repoRoot = resolveMainRepoRoot(cwd);
-    const kgPath = path.join(repoRoot, ".guild", "indexes", "knowledge-graph.json");
-    const dbPath = path.join(repoRoot, ".guild", "index.sqlite");
+    const kgPath = path.join(durableGuildDir(repoRoot), "indexes", "knowledge-graph.json");
+    const dbPath = path.join(durableGuildDir(repoRoot), "index.sqlite");
 
     if (!fs.existsSync(kgPath)) return null;
 
@@ -459,8 +460,8 @@ export function ensureWikiFtsIndex(cwd: string, config: IndexBlock): CacheResult
 
   try {
     const repoRoot = resolveMainRepoRoot(cwd);
-    const wikiDir = path.join(repoRoot, ".guild", "wiki");
-    const dbPath = path.join(repoRoot, ".guild", "index.sqlite");
+    const wikiDir = path.join(durableGuildDir(repoRoot), "wiki");
+    const dbPath = path.join(durableGuildDir(repoRoot), "index.sqlite");
 
     const mdFiles = collectMarkdownFiles(wikiDir);
     if (mdFiles.length <= config.wiki_file_threshold) return null;

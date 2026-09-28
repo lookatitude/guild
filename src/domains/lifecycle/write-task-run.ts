@@ -58,6 +58,7 @@ import * as path from "path";
 import { emitTraceEvent, makeDispatchEvent } from "../telemetry";
 import { loadYamlApi } from "../kernel";
 import { atomicWrite } from "../state";
+import { durableGuildDir } from "../state";
 
 // ── Canonical schema types (guild.task_run.v1) ───────────────────────────────
 
@@ -213,7 +214,7 @@ export interface TaskRunParams {
  * `.guild/runs/<run-id>/task-runs/<task-id>.yaml`
  */
 export function taskRunPath(cwd: string, runId: string, taskId: string): string {
-  return path.join(cwd, ".guild", "runs", runId, "task-runs", `${taskId}.yaml`);
+  return path.join(durableGuildDir(cwd), "runs", runId, "task-runs", `${taskId}.yaml`);
 }
 
 // ── Read (W2-A2 single-source) ───────────────────────────────────────────────
@@ -346,7 +347,7 @@ export function writeTaskRun(
   // The task_run write is the canonical pre-dispatch gate (the orchestrator calls
   // this BEFORE each dispatch attempt per the module contract).
   try {
-    const _traceRunDir = path.join(cwd, ".guild", "runs", runId);
+    const _traceRunDir = path.join(durableGuildDir(cwd), "runs", runId);
     const _traceTs = new Date().toISOString();
     // task_run creation happens before host routing/dispatch, so the real backend
     // is not known yet. Keep the trace schema-valid without leaking host ids.

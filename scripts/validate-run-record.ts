@@ -24,6 +24,7 @@ import {
   validateRunRecordDir,
   type RunRecordValidation,
 } from "./lib/run-record-validate";
+import { durableGuildDir } from "./lib/state/storage";
 
 function usageError(detail: string): RunRecordValidation {
   return {
@@ -67,7 +68,7 @@ function main(argv: string[]): number {
     : validateRunRecordDir(
         dir !== null
           ? path.resolve(cwd, dir)
-          : path.join(path.resolve(cwd), ".guild", "runs", runId as string)
+          : path.join(durableGuildDir(path.resolve(cwd)), "runs", runId as string)
       );
 
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");

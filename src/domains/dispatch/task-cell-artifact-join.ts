@@ -20,6 +20,7 @@ import {
   type TaskAssignmentV2,
 } from "./task-cell-contract";
 import { STATIONS, readTeamPlan, readTeamResult, type TeamResultV1 } from "../teams";
+import { durableGuildDir } from "../state";
 
 export const TASK_CELL_TERMINAL_SCHEMA = "guild.task_cell_terminal.v1" as const;
 
@@ -72,7 +73,7 @@ export interface PublishTaskCellFileInput {
 }
 
 function runDir(cwd: string, runId: string): string {
-  return path.join(cwd, ".guild", "runs", runId);
+  return path.join(durableGuildDir(cwd), "runs", runId);
 }
 
 /**

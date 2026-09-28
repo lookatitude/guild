@@ -16,11 +16,12 @@ import * as path from "path";
 import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson } from "./lib/paths";
 import { deriveDomain, appendKnowledgeLinks } from "./lib/domain";
 import type { KnowledgeGraph } from "./lib/schema";
+import { durableGuildDir } from "../lib/state/storage";
 
 function resolveRunId(cwd: string, argv: string[]): string {
   const flag = parseFlag(argv, "run-id");
   if (flag) return flag;
-  const sentinel = path.join(cwd, ".guild", "runs", "current-run-id");
+  const sentinel = path.join(durableGuildDir(cwd), "runs", "current-run-id");
   try {
     return require("fs").readFileSync(sentinel, "utf8").trim() || "run-unknown";
   } catch {

@@ -11,6 +11,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { resolveGuildRoot } from "./guild-root";
+import { durableGuildDir } from "./state/storage";
 
 export type RetentionClass = "one-off-90d" | "until-archive";
 export const DEFAULT_RETENTION_DAYS = 90;
@@ -78,7 +79,7 @@ if (require.main === module) {
   // invocation never creates or targets a nested .guild/.
   // An explicit --guild-dir takes precedence (honored unchanged).
   // Decision: .guild/wiki/decisions/telemetry-anchors-to-repo-root-not-cwd.md
-  let guildDir = path.join(resolveGuildRoot(process.cwd()), ".guild");
+  let guildDir = durableGuildDir(resolveGuildRoot(process.cwd()));
   let apply = false;
   let nowMs = Date.now();
   for (let i = 0; i < argv.length; i++) {

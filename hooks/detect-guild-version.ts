@@ -43,6 +43,7 @@ import { resolveGuildRoot } from "./lib/guild-root.js";
 // path-resolution surprises.
 import { detect } from "../scripts/dot-guild/convert/detect.js";
 import { realFs } from "../scripts/dot-guild/convert/seams.js";
+import { durableGuildDir } from "../src/domains/state";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -203,7 +204,7 @@ async function main(): Promise<void> {
 
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   const root = resolveGuildRoot(cwd);
-  const guildDir = path.join(root, ".guild");
+  const guildDir = durableGuildDir(root);
 
   // Fast path: no .guild/ → silent
   if (!fs.existsSync(guildDir)) {

@@ -98,6 +98,7 @@ import {
 import { publishSubmittedHandoffPointer } from "../../src/domains/dispatch/task-cell-acceptance.js";
 // T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
 import { ensureStorageLayout } from "../lib/ensure-layout.js";
+import { durableGuildDir } from "../../src/domains/state";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -150,7 +151,7 @@ function deriveRunId(sessionId: string, guildRoot: string): string {
   const bound = resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] });
   if (bound) return bound;
   const legacy = `run-${sessionId}`;
-  if (fs.existsSync(path.join(guildRoot, ".guild", "runs", legacy))) {
+  if (fs.existsSync(path.join(durableGuildDir(guildRoot), "runs", legacy))) {
     process.stderr.write(
       `[task-completed] WARN: legacy read-only fallback run id used: ${legacy}; ` +
         "start/inherit the lifecycle run id to remove this compatibility read.\n",
@@ -170,7 +171,7 @@ function deriveRunId(sessionId: string, guildRoot: string): string {
  * Path: <guild-root>/.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md
  */
 function receiptPath(guildRoot: string, runId: string, specialist: string, taskId: string): string {
-  return path.join(guildRoot, ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
+  return path.join(durableGuildDir(guildRoot), "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
 }
 
 /**
@@ -183,7 +184,7 @@ function learningsPath(
   specialist: string,
   taskId: string
 ): string {
-  return path.join(guildRoot, ".guild", "runs", runId, "learnings", `${specialist}-${taskId}.json`);
+  return path.join(durableGuildDir(guildRoot), "runs", runId, "learnings", `${specialist}-${taskId}.json`);
 }
 
 /**
@@ -341,7 +342,7 @@ function nativeTaskCellAssignments(input: {
   taskId: string;
   specialist: string;
 }): TaskCellAssignment[] {
-  const root = path.join(input.guildRoot, ".guild", "runs", input.runId, "task-cells");
+  const root = path.join(durableGuildDir(input.guildRoot), "runs", input.runId, "task-cells");
   const files: string[] = [];
   const walk = (dir: string): void => {
     let entries: fs.Dirent[];
@@ -390,7 +391,7 @@ function publishTaskCellSubmission(input: {
     : portableAssignmentRef(rawAssignmentRef);
   let assignment: TaskCellAssignment | null = null;
   if (assignmentRef) {
-    const legacyRunDir = path.join(input.guildRoot, ".guild", "runs", input.runId);
+    const legacyRunDir = path.join(durableGuildDir(input.guildRoot), "runs", input.runId);
     const legacyRef = portableAssignmentRef(
       path.relative(
         input.guildRoot,
@@ -684,7 +685,7 @@ async function main(): Promise<void> {
   }
 
   const runId = deriveRunId(sessionId, guildRoot);
-  const runDir = path.join(guildRoot, ".guild", "runs", runId);
+  const runDir = path.join(durableGuildDir(guildRoot), "runs", runId);
   const rPath = receiptPath(guildRoot, runId, specialist, taskId);
 
   // T3b (session_context §5): run-record WRITES below (learnings extraction,

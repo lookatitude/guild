@@ -41,6 +41,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
 import { resolveSettings } from "../config";
+import { durableGuildDir } from "./storage-roots";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -137,14 +138,14 @@ function classifyChild(root: string, name: string): SubGuild | null {
   if (!stat.isDirectory()) return null;
 
   const hasGit = fs.existsSync(path.join(childPath, ".git"));
-  const hasGuild = fs.existsSync(path.join(childPath, ".guild"));
+  const hasGuild = fs.existsSync(durableGuildDir(childPath));
 
   // Neither → plain dir → ignore
   if (!hasGit && !hasGuild) return null;
 
   const kind: SubGuildKind = hasGuild ? "sub-guild" : "sub-project";
-  const has_wiki = fs.existsSync(path.join(childPath, ".guild", "wiki"));
-  const has_indexes = fs.existsSync(path.join(childPath, ".guild", "indexes"));
+  const has_wiki = fs.existsSync(path.join(durableGuildDir(childPath), "wiki"));
+  const has_indexes = fs.existsSync(path.join(durableGuildDir(childPath), "indexes"));
   const remote = hasGit ? readRemote(childPath) : null;
   const last_seen_commit = hasGit ? readHead(childPath) : null;
 

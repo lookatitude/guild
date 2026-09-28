@@ -17,12 +17,13 @@ import * as path from "path";
 import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA } from "./lib/paths";
 import { changedFiles, headSha } from "./lib/git";
 import type { KnowledgeGraph } from "./lib/schema";
+import { durableGuildDir } from "../lib/state/storage";
 
 function resolveRunId(cwd: string, argv: string[]): string {
   const flag = parseFlag(argv, "run-id");
   if (flag) return flag;
   try {
-    return fs.readFileSync(path.join(cwd, ".guild", "runs", "current-run-id"), "utf8").trim() || "run-adhoc";
+    return fs.readFileSync(path.join(durableGuildDir(cwd), "runs", "current-run-id"), "utf8").trim() || "run-adhoc";
   } catch {
     return "run-adhoc";
   }

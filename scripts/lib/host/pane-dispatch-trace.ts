@@ -66,6 +66,7 @@
 import * as path from "node:path";
 import { emitTraceEvent } from "../guild-trace-emit";
 import { makeDispatchEvent, type DispatchBackend } from "../guild-trace-events";
+import { durableGuildDir } from "../state/storage";
 
 /**
  * Host-capability rung of a confirmed lane pane: the FULL substrate, not a
@@ -150,7 +151,7 @@ export function emitPaneDispatchEvents(opts: EmitPaneDispatchOpts): number {
     const backend: DispatchBackend = SURFACE_TO_BACKEND[surface] ?? "unknown";
     // Carry pane_backend only when `backend` cannot name the surface itself.
     const paneBackend = surface !== backend ? surface : undefined;
-    const runDir = path.join(opts.cwd, ".guild", "runs", opts.runId);
+    const runDir = path.join(durableGuildDir(opts.cwd), "runs", opts.runId);
     const now = opts.now ?? (() => new Date());
 
     let emitted = 0;

@@ -44,6 +44,7 @@ import {
   validateTaskAttemptV1,
 } from "../../../src/domains/dispatch/task-cell-contract";
 import { redactShareableFile } from "../shared/scrub-redact";
+import { durableGuildDir } from "../state/storage";
 
 export const MIGRATION_BOUNDARY_SCHEMA = "guild.capability_migration_boundary.v1" as const;
 export const MIGRATION_BOUNDARY_CHANNEL = "next" as const;
@@ -414,7 +415,7 @@ function migrationRunCloseIdentityHash(
 }
 
 function receiptPaths(projectRoot: string, runId: string): { journal: string; checkpoint: string } {
-  const root = path.join(fs.realpathSync(projectRoot), ".guild", "runs", runId, "receipts");
+  const root = path.join(durableGuildDir(fs.realpathSync(projectRoot)), "runs", runId, "receipts");
   return { journal: path.join(root, "journal.jsonl"), checkpoint: path.join(root, "checkpoint.json") };
 }
 
@@ -823,7 +824,7 @@ function readQualifyingCompatibilityReceipts(projectRoot: string, runId: string)
   if (compareCheckpointToJournal(readCheckpointState(paths.checkpoint), scan, runId).length > 0) {
     throw new Error("migration run seal requires an intact checkpoint-bound receipt journal");
   }
-  const payloadDir = path.join(fs.realpathSync(projectRoot), ".guild", "runs", runId, "receipts", "payloads");
+  const payloadDir = path.join(durableGuildDir(fs.realpathSync(projectRoot)), "runs", runId, "receipts", "payloads");
   const checked = checkContained(projectRoot, payloadDir, { policy: "physical" });
   if (isRefused(checked)) throw new Error(`migration run seal payload directory refused [${checked.code}]`);
   const payloads = new Map<string, ReturnType<typeof parseCompatibilityUsageV1>>();
@@ -2159,8 +2160,8 @@ export function createMigrationObservation(options: { pluginRoot: string; runtim
   const publicationProfile = validateProjectCapabilityProfileV1(rawProfile);
   if (!publicationProfile) throw new Error("migration observation final profile became invalid before publication");
   assertProfileMatchesCurrentCapabilityTrees(options.projectRoot, publicationProfile, "migration observation publication");
-  const liveJournalPath = path.join(root, ".guild", "runs", runId, "receipts", "journal.jsonl");
-  const liveCheckpointPath = path.join(root, ".guild", "runs", runId, "receipts", "checkpoint.json");
+  const liveJournalPath = path.join(durableGuildDir(root), "runs", runId, "receipts", "journal.jsonl");
+  const liveCheckpointPath = path.join(durableGuildDir(root), "runs", runId, "receipts", "checkpoint.json");
   const expectedJournal = stagedSnapshots.get(runs[0].journal.path)!;
   const expectedCheckpoint = stagedSnapshots.get(runs[0].checkpoint.path)!;
   for (const [relativePath, bytes] of stagedSnapshots) {

@@ -42,10 +42,11 @@
 import * as fs from "fs";
 import * as path from "path";
 import { hasTopLevelKey, replaceTopLevelLine } from "./lib/frontmatter";
+import { durableGuildDir } from "./lib/state/storage";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const CANONICAL_REL = path.join("plugin", ".guild", "wiki", "entities", "MIGRATION.md");
+const CANONICAL_REL = path.join(durableGuildDir("plugin"), "wiki", "entities", "MIGRATION.md");
 const PLUGIN_TARGET_REL = path.join("plugin", "MIGRATION.md");
 const ROOT_TARGET_REL = "MIGRATION.md";
 

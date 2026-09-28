@@ -72,6 +72,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as net from "node:net";
 import { spawn, spawnSync } from "node:child_process";
+import { durableGuildDir } from "./lib/state/storage";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -321,7 +322,7 @@ export function resolveProjectRoot(cwd: string, env: LaunchEnv): string | null {
   let dir = path.resolve(cwd);
   let nearestGuild: string | null = null;
   for (;;) {
-    if (env.isDirectory(path.join(dir, ".guild"))) {
+    if (env.isDirectory(durableGuildDir(dir))) {
       nearestGuild ??= dir;
       if (isWorkspaceRoot(dir, env)) return dir;
     }
@@ -332,7 +333,7 @@ export function resolveProjectRoot(cwd: string, env: LaunchEnv): string | null {
 }
 
 function isWorkspaceRoot(root: string, env: LaunchEnv): boolean {
-  const workspacePath = path.join(root, ".guild", "workspace.json");
+  const workspacePath = path.join(durableGuildDir(root), "workspace.json");
   if (!env.exists(workspacePath)) return false;
   try {
     const parsed = JSON.parse(env.readFile(workspacePath)) as { is_workspace?: unknown };
@@ -353,11 +354,11 @@ export interface DashboardRecord {
 }
 
 export function dashboardRecordPath(projectRoot: string): string {
-  return path.join(projectRoot, ".guild", "cache", "dashboard.json");
+  return path.join(durableGuildDir(projectRoot), "cache", "dashboard.json");
 }
 
 export function dashboardLogPath(projectRoot: string): string {
-  return path.join(projectRoot, ".guild", "cache", "dashboard.log");
+  return path.join(durableGuildDir(projectRoot), "cache", "dashboard.log");
 }
 
 /** Parse the PID record; `null` when missing or malformed. */
@@ -462,7 +463,7 @@ export function resolveBenchmarkCheckout(
   const candidates: Array<{ kind: "sibling" | "in-repo" | "cache"; dir: string }> = [
     { kind: "sibling", dir: path.join(path.dirname(projectRoot), "benchmark") },
     { kind: "in-repo", dir: path.join(projectRoot, "benchmark") },
-    { kind: "cache", dir: path.join(projectRoot, ".guild", "cache", "benchmark") },
+    { kind: "cache", dir: path.join(durableGuildDir(projectRoot), "cache", "benchmark") },
   ];
   for (const cand of candidates) {
     if (isBenchmarkCheckout(cand.dir, env)) {
@@ -475,7 +476,7 @@ export function resolveBenchmarkCheckout(
   }
   return {
     kind: "required-install",
-    cacheDir: path.join(projectRoot, ".guild", "cache", "benchmark"),
+    cacheDir: path.join(durableGuildDir(projectRoot), "cache", "benchmark"),
   };
 }
 
@@ -559,7 +560,7 @@ export function discoverRunDirs(projectRoot: string, env: LaunchEnv): string[] {
   const roots = discoverRunRoots(projectRoot, env);
   const out: string[] = [];
   for (const root of roots) {
-    const runsRoot = path.join(root, ".guild", "runs");
+    const runsRoot = path.join(durableGuildDir(root), "runs");
     for (const name of env.readDir(runsRoot)) {
       const runDir = path.join(runsRoot, name);
       if (!env.isDirectory(runDir)) continue;
@@ -574,7 +575,7 @@ export function discoverRunDirs(projectRoot: string, env: LaunchEnv): string[] {
 function discoverRunRoots(projectRoot: string, env: LaunchEnv): string[] {
   const root = path.resolve(projectRoot);
   const roots = [root];
-  const workspacePath = path.join(root, ".guild", "workspace.json");
+  const workspacePath = path.join(durableGuildDir(root), "workspace.json");
   if (!env.exists(workspacePath)) return roots;
   let parsed: unknown;
   try {
@@ -706,7 +707,7 @@ export async function launchDashboard(
     );
     return { exitCode: EXIT_ERROR };
   }
-  if (!env.isDirectory(path.join(projectRoot, ".guild"))) {
+  if (!env.isDirectory(durableGuildDir(projectRoot))) {
     env.log(
       `[dashboard-launch] ERROR: ${projectRoot} has no .guild/ directory — ` +
         `the dashboard reads .guild/runs + .guild/wiki + .guild/indexes`,
@@ -885,7 +886,7 @@ export async function launchDashboard(
 
   // 4. Spawn the server — detached but MANAGED: output to a log file, PID
   // recorded durably (atomic temp+rename) so --stop can terminate it.
-  const cacheDir = path.join(projectRoot, ".guild", "cache");
+  const cacheDir = path.join(durableGuildDir(projectRoot), "cache");
   env.mkdirp(cacheDir);
   const logPath = dashboardLogPath(projectRoot);
   const proc = env.spawnDetached(

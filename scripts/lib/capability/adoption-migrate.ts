@@ -113,6 +113,7 @@ import {
   makeReceiptInput,
   type ReceiptAppendOutcome,
 } from "../../../src/domains/telemetry";
+import { durableGuildDir } from "../state/storage";
 
 /** The catalog envelope key set, for the nested-object snapshot (CODEX #10). */
 const CATALOG_KEYS = [
@@ -676,7 +677,7 @@ export function buildAdoptionReport(opts: unknown): AdoptionReport {
     }
   };
 
-  const guild = path.join(projRoot, ".guild");
+  const guild = durableGuildDir(projRoot);
   scan(listFiles(path.join(guild, "team"), (n) => n.endsWith(".yaml")), "team_file");
   scan(listFiles(path.join(guild, "plan"), (n) => n.endsWith(".md")), "plan_file");
   scan(listFiles(path.join(guild, "agents"), (n) => n.endsWith(".md")), "project_agent_frontmatter");

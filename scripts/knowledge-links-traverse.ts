@@ -52,6 +52,7 @@ import {
   appendKnowledgeLinksBatch,
   KNOWLEDGE_LINKS_SCHEMA_VERSION,
 } from "./learn/lib/knowledge-links-io";
+import { durableGuildDir } from "./lib/state/storage";
 
 /** Closed edge-type set — continuous-knowledge-and-learning-loop.md §"CR-A #2". */
 export const CLOSED_EDGE_TYPES: ReadonlySet<string> = sealSet([
@@ -235,7 +236,7 @@ function main(): void {
     return; // advisory: never a hard failure exit
   }
 
-  const klPath = path.join(cwd, ".guild", "indexes", "knowledge-links.json");
+  const klPath = path.join(durableGuildDir(cwd), "indexes", "knowledge-links.json");
   if (!fs.existsSync(klPath)) {
     const result = { task_id: taskId, connected: false, reachable_kinds: [], required_kinds: REQUIRED_KINDS, missing_kinds: REQUIRED_KINDS, note: "no knowledge-links.json found" };
     process.stdout.write(JSON.stringify(result, null, asJson ? 2 : 0) + "\n");

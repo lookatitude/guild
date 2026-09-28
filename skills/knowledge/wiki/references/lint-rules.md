@@ -32,7 +32,7 @@ finding.
 
 For each page, for each slug in `source_refs:`:
 
-- `.guild/raw/sources/<slug>/` must exist as a directory.
+- `.guild/knowledge/sources/<slug>/` must exist as a directory.
 - It must contain `metadata.json` AND at least one `original.*` file (any
   extension — the directory contract from `guild:wiki-ingest`).
 - `metadata.json` must parse as JSON and contain at minimum the `slug` and

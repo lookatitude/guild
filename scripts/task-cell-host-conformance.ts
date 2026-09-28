@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { TASK_CELL_HOST_CONFORMANCE_SCHEMA, buildTaskCellHostConformanceMatrix, runTaskCellHostConformance, verifyTaskCellHostConformanceReceipt, type HostProbeInvocation, type HostProbeInvocationInput, type HostProbePreflight, type HostProbeRunner, type NormalizedHostHandoff, type TaskCellHostConformanceReceipt } from "../src/domains/dispatch";
 import type { TaskCellMechanicsMode } from "../src/domains/dispatch";
 import { normalizeResult } from "./lib/result-normalizer";
+import { durableGuildDir } from "./lib/state/storage";
 
 interface CliArgs {
   hosts: string[];
@@ -44,7 +45,7 @@ export function parseArgs(argv: string[]): CliArgs | { error: string } {
     cwd,
     run_id: runId,
     wrapper,
-    output: output ?? path.join(cwd, ".guild", "runs", runId, "task-cell-host-conformance", "matrix.json"),
+    output: output ?? path.join(durableGuildDir(cwd), "runs", runId, "task-cell-host-conformance", "matrix.json"),
     receipt_files: receiptFiles,
   };
 }
