@@ -126,6 +126,16 @@ export {
   recordingObservationSink,
   redactExecutionDetail,
   releasedLogicalTasks,
+  // T15F (plr-wi-15-4): one-shot isolated-launch admission.
+  ISOLATED_LAUNCH_CLAIM_SCHEMA,
+  ISOLATED_SPAWN_REFUSED,
+  IsolatedSpawnRefused,
+  admitRelaunch,
+  assertIsolatedLaneAdmitted,
+  assertLaneInstanceExported,
+  assertReservationAdmitsInstance,
+  claimIsolatedLaunches,
+  launchClaimPath,
   reserveInstance,
   reserveInstanceBatch,
   reserveRefused,
@@ -150,6 +160,7 @@ export {
   verifyTaskCellHostConformanceReceipt,
 } from "../../domains/dispatch";
 export type {
+  IsolatedLaunchLane,
   AcceptHandoffRequest,
   AcceptHandoffResult,
   AcceptanceAuthority,
