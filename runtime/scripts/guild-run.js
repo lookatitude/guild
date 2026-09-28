@@ -17480,7 +17480,8 @@ var init_events = __esm({
       "harvest_refused",
       "playbook_auto_replace",
       "wiki_cas_conflict",
-      "harvest_reverted"
+      "harvest_reverted",
+      "lane_wiki_write_refused"
     ]);
     SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
     KNOWN_GUILD_HOST_KINDS = Object.freeze([

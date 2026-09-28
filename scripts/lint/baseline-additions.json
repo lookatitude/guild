@@ -133,28 +133,28 @@
       "lane": "T14"
     },
     {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:1588::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join.",
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:1659::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join. Re-keyed again by a line shift (T15 follow-up edited this file: MCP binary stand-in, lane wiki-write gate).",
       "lane": "T14"
     },
     {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:1632::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join.",
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:1703::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join. Re-keyed again by a line shift (T15 follow-up edited this file: MCP binary stand-in, lane wiki-write gate).",
       "lane": "T14"
     },
     {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:179::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join.",
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:182::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join. Re-keyed again by a line shift (T15 follow-up edited this file: MCP binary stand-in, lane wiki-write gate).",
       "lane": "T14"
     },
     {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:250::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join.",
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:253::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join. Re-keyed again by a line shift (T15 follow-up edited this file: MCP binary stand-in, lane wiki-write gate).",
       "lane": "T14"
     },
     {
-      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:809::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join.",
+      "key": "no-direct-guild-join::hooks/pre-tool-use.ts:864::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Pre-existing .guild path construction re-keyed by a line shift (T14 edited this file: rung-plan wiring, SessionStart chain, GUILD_RUN_DIR guard or import moves); not a new join. Re-keyed again by a line shift (T15 follow-up edited this file: MCP binary stand-in, lane wiki-write gate).",
       "lane": "T14"
     },
     {
@@ -288,8 +288,8 @@
       "lane": "T14"
     },
     {
-      "key": "no-direct-guild-join::src/domains/security/events.ts:327::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
-      "reason": "Not new: the pre-existing resolveRunDir join (baselined at events.ts:294) moved 33 lines when T15 added the harvest kinds and SECURITY_EVENT_TYPES above it.",
+      "key": "no-direct-guild-join::src/domains/security/events.ts:330::builds a .guild path directly; use GuildStorage (state storage is the only constructor)",
+      "reason": "Not new: the pre-existing resolveRunDir join (baselined at events.ts:294) moved 33 lines when T15 added the harvest kinds and SECURITY_EVENT_TYPES above it. Re-keyed again by a line shift (T15 follow-up edited this file: MCP binary stand-in, lane wiki-write gate).",
       "lane": "T15"
     },
     {

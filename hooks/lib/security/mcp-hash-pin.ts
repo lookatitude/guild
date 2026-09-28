@@ -135,15 +135,21 @@ export function serverSegmentMatches(segment: string, serverId: string): boolean
 
 /**
  * Every spelling of a Guild MCP server this build recognises, exactly. Two shipped
- * server ids (`.mcp.json` keys) plus the two D-MCP ids `runtime/guild-mcp.js` is
- * launched under, because a host may name the server after either.
+ * server ids (`.mcp.json` keys), the two D-MCP ids `runtime/guild-mcp.js` is
+ * launched under, and the Claude plugin install's spelling of each server key
+ * (`plugin_<plugin>_<server>`), because a host may name the server after any.
  */
 export const GUILD_MCP_SERVER_IDS = Object.freeze([
   "guild-memory",
   "guild-telemetry",
   "wiki",
   "trace",
+  "plugin_guild_guild-memory",
+  "plugin_guild_guild-telemetry",
 ] as const);
+
+/** The Claude plugin install prefixes a server key with `plugin_<plugin>_`. */
+const CLAUDE_PLUGIN_SERVER_PREFIX = "plugin_guild_";
 
 /** Validate the shape the compile step writes. Anything else is malformed. */
 export function isWellFormedShippedPins(doc: unknown): doc is ShippedMcpPins {
@@ -184,10 +190,14 @@ export function shippedPinFor(
   const owner = knownServers.find((id) => serverSegmentMatches(segment, id));
   if (!owner || !base) return { guildOwned: false };
   if (!shipped) return { guildOwned: true, failure: failure ?? "pins_missing" };
-  // `owner` is a server key (`guild-memory`) or a D-MCP id (`wiki`); the pin file
-  // is keyed by server key and carries the D-MCP id on each entry.
-  const entry = shipped.servers[owner]
-    ?? Object.values(shipped.servers).find((v) => v.mcp_id === owner);
+  // `owner` is a server key (`guild-memory`), its plugin spelling
+  // (`plugin_guild_guild-memory`), or a D-MCP id (`wiki`); the pin file is keyed
+  // by server key and carries the D-MCP id on each entry.
+  const key = owner.startsWith(CLAUDE_PLUGIN_SERVER_PREFIX)
+    ? owner.slice(CLAUDE_PLUGIN_SERVER_PREFIX.length)
+    : owner;
+  const entry = shipped.servers[key]
+    ?? Object.values(shipped.servers).find((v) => v.mcp_id === key);
   const sha = entry?.tools[base];
   if (typeof sha !== "string") return { guildOwned: true, failure: "tool_not_pinned" };
   return { guildOwned: true, sha256: sha };
@@ -205,4 +215,24 @@ export function effectivePins(
 ): Record<string, string> {
   if (typeof projectPins[toolName] === "string" && projectPins[toolName].length > 0) return projectPins;
   return lookup.sha256 ? { ...projectPins, [toolName]: lookup.sha256 } : projectPins;
+}
+
+/**
+ * Operator decision O1 (plr-wi-15-1): for a Guild-owned tool, the verified binary
+ * stands in for a missing live description. The shipped pins are generated from
+ * `runtime/guild-mcp.js`, and `lookup.sha256` is only ever set after that file's
+ * sha256 matched `binary_sha256`, so the served descriptions are the pinned ones.
+ * An operator pin that differs from the shipped one is not vouched for by the
+ * binary and stays unverifiable. Third-party tools are never vouched for. Pure.
+ */
+export function binaryVouchesForDescription(
+  toolName: string,
+  projectPins: Record<string, string>,
+  lookup: ShippedPinLookup,
+): boolean {
+  const { guildOwned, failure, sha256 } = lookup;
+  if (!guildOwned || failure !== undefined || typeof sha256 !== "string") return false;
+  const operator = projectPins[toolName];
+  return typeof operator !== "string" || operator.length === 0 ||
+    operator.toLowerCase() === sha256.toLowerCase();
 }

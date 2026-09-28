@@ -12,6 +12,12 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import {
+  binaryVouchesForDescription,
+  GUILD_MCP_SERVER_IDS,
+  shippedPinFor,
+  type ShippedMcpPins,
+} from "../lib/security/mcp-hash-pin";
 import { spawnSync } from "child_process";
 import * as crypto from "crypto";
 import * as fs from "fs";
@@ -22,9 +28,8 @@ const PLUGIN = path.resolve(__dirname, "..", "..");
 const SCRIPT = path.join(PLUGIN, "hooks", "pre-tool-use.ts");
 const PINS = "runtime/mcp-descriptions.pins.json";
 const BINARY = "runtime/guild-mcp.js";
-// The spelling the pin gate recognises today. The Claude plugin spelling
-// (`mcp__plugin_guild_guild-memory__…`) is NOT recognised: see work item plr-wi-15-1.
-const TOOL = "mcp__guild-memory__wiki_search";
+// The spelling the Claude plugin install gives Guild's tools (plr-wi-15-1).
+const TOOL = "mcp__plugin_guild_guild-memory__wiki_search";
 
 const sha = (s: string): string => crypto.createHash("sha256").update(s, "utf8").digest("hex");
 
@@ -68,9 +73,15 @@ afterEach(() => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-function runHook(pluginRoot: string, description: string): { permissionDecision?: string; reason?: string } {
+function runHook(
+  pluginRoot: string,
+  description: string | undefined,
+  tool: string = TOOL,
+): { permissionDecision?: string; reason?: string } {
+  const payload: Record<string, unknown> = { tool_name: tool, tool_input: { query: "x" } };
+  if (description !== undefined) payload.tool_description = description;
   const r = spawnSync("npx", ["tsx", SCRIPT], {
-    input: JSON.stringify({ tool_name: TOOL, tool_input: { query: "x" }, tool_description: description }),
+    input: JSON.stringify(payload),
     encoding: "utf8",
     env: {
       ...process.env,
@@ -79,6 +90,7 @@ function runHook(pluginRoot: string, description: string): { permissionDecision?
       GUILD_RUN_DIR: "",
       GUILD_RUN_ID: "",
       GUILD_TASK_ID: "",
+      GUILD_LANE_ID: "",
       GUILD_TASK_CELL_INSTANCE_ID: "",
       GUILD_CAPABILITY_SCOPE: "",
     },
@@ -134,5 +146,33 @@ describe("T15 · F12 — compile pins the MCP hashes (KTD60)", () => {
     const d = runHook(pluginCopy((bin) => `${bin}\n// swapped\n`), served());
     expect(d.permissionDecision).toBe("ask");
     expect(d.reason).toMatch(/mcp_description_unpinned.*binary_hash_mismatch/);
+  });
+
+  it("wi-15-1 · a verified binary stands in for a missing description on the plugin spelling", () => {
+    const d = runHook(pluginCopy(), undefined);
+    expect(d.permissionDecision).toBeUndefined();
+  });
+
+  it("wi-15-1 · CONTROL: a swapped binary with no description still asks", () => {
+    const d = runHook(pluginCopy((bin) => `${bin}\n// swapped\n`), undefined);
+    expect(d.permissionDecision).toBe("ask");
+    expect(d.reason).toMatch(/mcp_description_unpinned.*binary_hash_mismatch/);
+  });
+
+  it("wi-15-1 · the binary vouches only for Guild servers, and not over a differing operator pin", () => {
+    const doc = JSON.parse(fs.readFileSync(path.join(PLUGIN, PINS), "utf8")) as ShippedMcpPins;
+    const look = (t: string) => shippedPinFor(t, doc, undefined, GUILD_MCP_SERVER_IDS);
+    const guild = look(TOOL);
+    expect(guild.sha256).toBe(doc.servers["guild-memory"].tools.wiki_search);
+    expect(binaryVouchesForDescription(TOOL, {}, guild)).toBe(true);
+    expect(binaryVouchesForDescription(TOOL, { [TOOL]: "0".repeat(64) }, guild)).toBe(false);
+    for (const spoof of [
+      "mcp__plugin_evil_guild-memory__wiki_search",
+      "mcp__plugin_guild_guild-memory-x__wiki_search",
+      "mcp__third_party_plugin_guild_guild-memory__wiki_search",
+    ]) {
+      expect(look(spoof).guildOwned).toBe(false);
+      expect(binaryVouchesForDescription(spoof, {}, look(spoof))).toBe(false);
+    }
   });
 });

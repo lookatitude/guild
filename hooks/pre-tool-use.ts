@@ -88,6 +88,7 @@ import {
   shippedPinFor,
   isWellFormedShippedPins,
   GUILD_MCP_SERVER_IDS,
+  binaryVouchesForDescription,
   type ShippedMcpPins,
   type ShippedPinFailure,
 } from "./lib/security/mcp-hash-pin.js";
@@ -146,6 +147,8 @@ import {
 } from "./lib/guild-hook-event.js";
 import { evaluateCompatibilitySkillUse } from "./lib/compatibility-skill-guard.js";
 import { runDirOverride } from "./lib/run-dir-override.js";
+import { laneWikiWriteTarget } from "./lib/security/lane-wiki-guard.js";
+import { createGuildStorage } from "../src/domains/state";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -778,6 +781,58 @@ function runIngestPauseGate(payload: GuildHookEvent, cwd: string): boolean {
 }
 
 /**
+ * KTD35 (plr-wi-15-3): a lane worker never writes the wiki. A Write / Edit /
+ * MultiEdit / NotebookEdit, or a Bash redirection / `tee`, whose target realpaths
+ * under <root>/.guild/wiki is denied with a security event. The worker stages a
+ * candidate under .guild/knowledge/candidates/ and the lead promotes it. The
+ * lead / T0 session sets neither GUILD_TASK_ID nor GUILD_LANE_ID and is untouched.
+ */
+function runLaneWikiWriteGate(payload: GuildHookEvent, cwd: string): boolean {
+  const tool = payload.tool_name ?? "";
+  const ti = (payload.tool_input ?? {}) as Record<string, unknown>;
+  const storage = createGuildStorage(resolveGuildRoot(cwd));
+  const wikiRoots = [storage.project?.knowledge(), storage.workspace?.knowledge()].filter(
+    (r): r is string => typeof r === "string",
+  );
+  const target = laneWikiWriteTarget(process.env, tool, ti, wikiRoots, cwd);
+  if (target === null) return false;
+  const reason =
+    `a lane worker may not write the wiki (${target} resolves under ${wikiRoots.join(" | ")}); ` +
+    `stage a candidate under .guild/knowledge/candidates/ for the lead to promote (KTD35)`;
+  const runId = resolveRunId(cwd);
+  if (runId !== undefined && isSafeRunId(runId)) {
+    try {
+      const laneEnv = process.env["GUILD_LANE_ID"];
+      appendSecurityEvent(
+        runDirOverride() ?? resolveRunDir(cwd, runId),
+        buildSecurityEvent({
+          run_id: runId,
+          lane_id: typeof laneEnv === "string" && isSafeLaneId(laneEnv) ? laneEnv : undefined,
+          event_type: "lane_wiki_write_refused",
+          decision: "deny",
+          tool,
+          detail: reason,
+        }),
+      );
+    } catch {
+      /* observability only */
+    }
+  } else {
+    process.stderr.write("warn: [pre-tool-use] lane_wiki_write_refused not logged (no run id resolvable).\n");
+  }
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: `Guild security (lane_wiki_write_refused): ${reason}`,
+      },
+    }),
+  );
+  return true;
+}
+
+/**
  * Run capability-scope enforcement + MCP description hash-pin. Returns true iff
  * it emitted a PreToolUse permission decision (the caller then owns nothing
  * further and must return). Returns false to let the rest of the hook proceed.
@@ -991,8 +1046,20 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
       return gate("ask", "mcp_description_mismatch", `${reason} Confirm before allowing.`);
     }
     if (r.status === "unverifiable") {
-      // Guild's own tools fail CLOSED: we control both ends, so "cannot verify"
-      // is a defect, not a fact of life. Third-party tools keep the shipped
+      // O1 (plr-wi-15-1): the Claude payload carries no description, so for a
+      // Guild tool the verified runtime/guild-mcp.js stands in for it.
+      if (binaryVouchesForDescription(toolName, sec.tool_description_hashes, shippedLookup)) {
+        emit({
+          event_type: "mcp_description_unverifiable",
+          decision: "allow",
+          tool: toolName,
+          detail: `MCP tool "${toolName}" has no live description; the verified Guild MCP binary stands in for it.`,
+          permission_mode: permissionMode,
+        });
+        return false;
+      }
+      // Guild's own tools otherwise fail CLOSED: we control both ends, so "cannot
+      // verify" is a defect, not a fact of life. Third-party tools keep the shipped
       // behaviour (record + proceed) so pinning a third-party server does not
       // brick every call when the host omits the description.
       if (shippedLookup.guildOwned) {
@@ -1566,6 +1633,10 @@ export async function main(): Promise<void> {
   // D-PROBE ingest pause — a hard deny on a paused candidate, before any gate
   // that could answer an approvable `ask` for the same write.
   if (runIngestPauseGate(payload, cwd)) return;
+
+  // KTD35 — a lane worker's wiki write is a hard deny, before any gate that
+  // could answer an approvable `ask` for the same write.
+  if (runLaneWikiWriteGate(payload, cwd)) return;
 
   // v2 security ADR — capability-scope enforcement + MCP description hash-pin.
   // Runs BEFORE the boundary guard so a security gate owns stdout for this
