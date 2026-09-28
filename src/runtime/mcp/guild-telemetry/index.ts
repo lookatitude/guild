@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 /**
- * mcp-servers/guild-telemetry/src/index.ts
+ * src/runtime/mcp/guild-telemetry/index.ts
  *
  * Optional Guild MCP server — structured read/query over .guild/runs/.
  * See guild-plan.md §13.3.
@@ -41,7 +41,8 @@ import * as yaml from "js-yaml";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { durableGuildDir } from "../../../src/domains/state";
+import { ensureStorageLayout } from "../../../../scripts/lib/state/ensure-storage-layout";
+import { durableGuildDir } from "../../../domains/state";
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -961,6 +962,8 @@ export function buildServer(): McpServer {
 // ─── Main ────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  // Read-only entry: detect the layout (a future one fails closed), never upgrade.
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const server = buildServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);

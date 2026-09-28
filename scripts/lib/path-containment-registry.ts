@@ -226,6 +226,16 @@ export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
     status: "waived",
     note: "WAIVER: the ingest-pause gate CLASSIFIES whether a PreToolUse target is a paused candidate or under the wiki; it performs no bounded write. It follows a dangling link's text (bounded hops) and matches hard links by inode so an alias fails closed, which canonicalizeRealPath deliberately does not do. Tests pin directory, file, dangling and hard-link aliases.",
   }),
+  Object.freeze({
+    path: "src/runtime/mcp/guild-memory/index.ts",
+    status: "waived",
+    note: "WAIVER: the read-only guild-memory MCP server proves EXCLUSION, not containment: a requested wiki root must NOT be the plugin payload or live beneath it. It walks the candidate's real ancestry comparing (device, inode) to the payload so case variants and links fail closed; checkContained proves the opposite relation. It performs no write. tests/rails/mcp-project-root-scoping.test.ts pins payload, relative, symlink and case-variant roots.",
+  }),
+  Object.freeze({
+    path: "src/runtime/mcp/guild-telemetry/index.ts",
+    status: "waived",
+    note: "WAIVER: the read-only guild-telemetry MCP server carries the same payload-EXCLUSION walk as guild-memory for its runs root: (device, inode) ancestry compare so a root that is, or reaches, the plugin payload fails closed. checkContained proves the opposite relation. It performs no write. tests/rails/mcp-project-root-scoping.test.ts pins the cases.",
+  }),
 ]);
 
 /** Repo-relative path of the one file that may hold `status: "home"`. */

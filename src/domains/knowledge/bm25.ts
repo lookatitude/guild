@@ -4,8 +4,8 @@
  * CANONICAL, single-source BM25 utility (re-arch WAVE 1, M9 single-source floor).
  * This is the ONE implementation of the BM25 tokenizer + scorer in the repo.
  * Every consumer imports from here:
- *   - mcp-servers/guild-memory/src/bm25.ts  (thin re-export — keeps its import path)
- *   - mcp-servers/guild-memory/src/index.ts (via ./bm25)
+ *   - src/runtime/mcp/guild-memory/bm25.ts  (thin re-export — keeps its import path)
+ *   - src/runtime/mcp/guild-memory/index.ts (via ./bm25)
  *   - scripts/lib/recall.ts                  (file-BM25 branch)
  *   - scripts/lib/ingest-similarity.ts       (re-exports tokenize/bm25Score)
  *

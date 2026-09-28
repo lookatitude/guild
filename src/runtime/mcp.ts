@@ -21,11 +21,11 @@
 import {
   buildServer as buildWiki,
   runAsEntry as runWiki,
-} from "../../mcp-servers/guild-memory/src/index";
+} from "./mcp/guild-memory/index";
 import {
   buildServer as buildTrace,
   runAsEntry as runTrace,
-} from "../../mcp-servers/guild-telemetry/src/index";
+} from "./mcp/guild-telemetry/index";
 
 /** The closed D-MCP id list. A third id is a failed review (KTD3). */
 export const MCP_IDS = Object.freeze(["wiki", "trace"] as const);

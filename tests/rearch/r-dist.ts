@@ -471,17 +471,17 @@ function prove(): void {
   proveAssert(floorSelf.length === 0, "the shared/ floor itself is exempt (it is the canonical home)");
 
   // RE-EXPORT SHIM exemption — a target that only re-exports the canonical floor is
-  // canonical, so importing it is allowed (the real mcp-servers/guild-memory/src/bm25.ts case).
+  // canonical, so importing it is allowed (the real src/runtime/mcp/guild-memory/bm25.ts case).
   const shimContent = 'export { bm25Score } from "../../../scripts/lib/shared/bm25";\n';
   proveAssert(
-    isReExportShim("mcp-servers/guild-memory/src/bm25.ts", shimContent),
+    isReExportShim("src/runtime/mcp/guild-memory/bm25.ts", shimContent),
     "isReExportShim recognises a pure re-export of the canonical floor",
   );
   const viaShim = detectNonCanonicalImports(
-    "mcp-servers/guild-memory/src/index.ts",
+    "src/runtime/mcp/guild-memory/index.ts",
     'import { bm25Score } from "./bm25";\n',
     canonical,
-    (t) => (t === "mcp-servers/guild-memory/src/bm25.ts" ? shimContent : null),
+    (t) => (t === "src/runtime/mcp/guild-memory/bm25.ts" ? shimContent : null),
   );
   proveAssert(
     viaShim.length === 0,

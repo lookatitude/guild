@@ -20,7 +20,7 @@
  * same always-ask channel the similarity gate uses. Code, not model prose.
  *
  * Contract:
- *  - Same BM25 algorithm as guild-memory/src/index.ts (k1=1.5, b=0.75,
+ *  - Same BM25 algorithm as src/runtime/mcp/guild-memory/index.ts (k1=1.5, b=0.75,
  *    tokenize = /[A-Za-z0-9]+/g lowercase, length>1) — no re-implementation;
  *    these ARE the same constants and formula.
  *  - Category-scoped: only pages under .guild/wiki/<category>/ are compared.

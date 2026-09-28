@@ -385,6 +385,8 @@ describe("host packages ship a projection, not the domain tree (KTD28)", () => {
       "claude-code: zz-planted.md tells the model to run a .ts script the package does not ship",
     ]);
 
+    // A package has no node_modules: every bare package the binary needs is bundled.
+    expect(fs.readFileSync(path.join(pkg, "runtime/guild-mcp.js"), "utf8")).not.toMatch(/require\("js-yaml"\)/);
     const run = spawnSync(process.execPath, [path.join(pkg, "runtime/guild-mcp.js"), "wiki"], {
       cwd: pkg, input: "", encoding: "utf8", timeout: 20000,
     });

@@ -33,13 +33,7 @@
     "glossary-not-in-always-on-prefix"
   ],
   "entries": [
-    "index-only-domain-imports::mcp-servers/guild-memory/src/index.ts::imports '../../../src/domains/knowledge/wiki-frontmatter-contract' past knowledge/index",
-    "index-only-domain-imports::mcp-servers/guild-memory/src/index.ts::imports '../../../src/domains/state/frontmatter' past state/index",
-    "index-only-domain-imports::scripts/capability-profile.ts::imports '../src/domains/state/storage-layout' past state/index",
-    "index-only-domain-imports::scripts/capability-profile.ts::imports '../src/domains/state/upgrade-journal' past state/index",
-    "index-only-domain-imports::scripts/lib/capability/profile-emit.ts::imports '../../../src/domains/kernel/path-containment' past kernel/index",
     "index-only-domain-imports::scripts/lib/guild-root.ts::imports '../../src/domains/state/guild-root' past state/index",
-    "index-only-domain-imports::scripts/lib/shared/bm25.ts::imports '../../../src/domains/knowledge/bm25' past knowledge/index",
     "index-only-domain-imports::scripts/lib/shared/config-defaults.ts::imports '../../../src/domains/config/config-defaults' past config/index"
   ]
 }
