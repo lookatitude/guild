@@ -150,6 +150,7 @@ import { runDirOverride } from "./lib/run-dir-override.js";
 import { laneWikiWriteTarget } from "./lib/security/lane-wiki-guard.js";
 import { createGuildStorage } from "../src/domains/state";
 import { durableGuildDir } from "../src/domains/state";
+import { ensureStorageLayout } from "../scripts/lib/state/ensure-storage-layout.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1554,6 +1555,24 @@ export async function main(): Promise<void> {
   }
 
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+
+  // KTD23: a future layout is not ours to read or write. This is a security gate,
+  // so skipping it would let every tool through: DENY the call (fail closed), and
+  // do it before any guard below writes a receipt into that .guild/.
+  try {
+    ensureStorageLayout(resolveGuildRoot(cwd), { detectOnly: true });
+  } catch (e) {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: e instanceof Error ? e.message : String(e),
+        },
+      }),
+    );
+    return;
+  }
 
   // Both dispatch guards run BEFORE capability enforcement so an `Agent`
   // dispatch defect is DENIED outright and can never be downgraded to an `ask`
