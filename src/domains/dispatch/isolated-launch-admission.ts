@@ -295,7 +295,7 @@ export function admitRelaunch(input: {
   max?: number;
   guildDir?: string;
   now?: () => string;
-}): { instanceId: string; attempt: number } {
+}): { instanceId: string; attempt: number; assignmentPath: string } {
   const { runId, logicalTaskId, instanceId } = input;
   const attempt = input.prior.attempt + 1;
   let root: string;

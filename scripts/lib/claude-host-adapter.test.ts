@@ -136,7 +136,7 @@ describe("Claude HostAdapter concrete parity", () => {
       taskRun: { prompt: "Implement the lane", runId: "run-1", taskId: "T1", specialist: "backend" },
     });
     expect(unadmitted.status).toBe("unavailable");
-    expect(unadmitted.receipt.reason).toMatch(/^isolated_spawn_refused:/);
+    expect(String(unadmitted.receipt.reason).startsWith("isolated_spawn_refused:")).toBe(true);
     expect(JSON.stringify(unadmitted.value)).not.toContain("GUILD_TASK_ID");
     expect(JSON.stringify(dispatch.value)).toContain("GUILD_SPECIALIST=backend");
 
