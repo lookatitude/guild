@@ -44,6 +44,7 @@ import * as path from "node:path";
 
 import { splitFrontmatter, parseYaml } from "../../scripts/lib/frontmatter";
 import { parseModelsArgs } from "../../src/domains/config/index";
+import { moduleManifestFiles } from "../../src/domains/kernel/index";
 import {
   createCacheKey,
   modelCatalogCacheDir,
@@ -194,16 +195,13 @@ describe("T6b(1) — `guild models` trigger, registration and help", () => {
   });
 
   it("is owned by exactly one module manifest (host packaging needs an owner)", () => {
-    const modulesDir = path.join(PLUGIN_ROOT, "src", "modules");
-    const owners = fs
-      .readdirSync(modulesDir)
-      .filter((d) => fs.existsSync(path.join(modulesDir, d, "module.manifest.json")))
-      .filter((d) => {
-        const m = JSON.parse(
-          fs.readFileSync(path.join(modulesDir, d, "module.manifest.json"), "utf8")
-        );
+    // T16: manifests live beside their fold domain (src/domains/<d>/modules/<id>.manifest.json).
+    const owners = moduleManifestFiles(PLUGIN_ROOT)
+      .filter(({ path: p }) => {
+        const m = JSON.parse(fs.readFileSync(p, "utf8"));
         return (m.owns?.commands ?? []).includes("models");
-      });
+      })
+      .map(({ id }) => id);
     expect(owners).toEqual(["capability"]);
   });
 

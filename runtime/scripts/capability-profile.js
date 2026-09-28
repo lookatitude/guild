@@ -3076,8 +3076,8 @@ __export(capability_profile_exports, {
   renderLayoutRow: () => renderLayoutRow
 });
 module.exports = __toCommonJS(capability_profile_exports);
-var fs19 = __toESM(require("fs"));
-var path21 = __toESM(require("path"));
+var fs17 = __toESM(require("fs"));
+var path19 = __toESM(require("path"));
 
 // scripts/lib/capability/candidate-surface.ts
 var fs = __toESM(require("fs"));
@@ -3099,8 +3099,8 @@ var DEFINITION_LAYERS = Object.freeze([
   "umbrella-guild"
 ]);
 var DEFINITION_LAYER_SET = new Set(DEFINITION_LAYERS);
-function layerAgreesWithPath(layer, path22) {
-  const segments = path22.split("/");
+function layerAgreesWithPath(layer, path20) {
+  const segments = path20.split("/");
   const hasClaude = segments.includes(".claude");
   const hasGuild = segments.includes(".guild");
   if (hasClaude && hasGuild) return false;
@@ -6391,135 +6391,15 @@ var STRUCTURAL_BASENAMES = sealSet([
   "transfer-manifest.md"
 ], "STRUCTURAL_BASENAMES");
 
-// src/domains/state/detect.ts
+// src/domains/state/federated-query.ts
 var fs14 = __toESM(require("fs"));
 var path16 = __toESM(require("path"));
-var import_child_process = require("child_process");
-function readRemote(childPath) {
-  const gitConfig = path16.join(childPath, ".git", "config");
-  if (!fs14.existsSync(gitConfig)) return null;
-  try {
-    const content = fs14.readFileSync(gitConfig, "utf8");
-    const match = content.match(/url\s*=\s*(.+)/);
-    if (!match) return null;
-    const url = match[1].trim();
-    return url.replace(/^git@/, "").replace(/^https?:\/\//, "").replace(/\.git$/, "").replace(/:/, "/");
-  } catch {
-    return null;
-  }
-}
-function readHead(childPath) {
-  try {
-    const result = (0, import_child_process.execSync)("git rev-parse HEAD", {
-      cwd: childPath,
-      encoding: "utf8",
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: 3e3
-    }).trim();
-    return result.length > 0 ? result : null;
-  } catch {
-    return null;
-  }
-}
-function classifyChild(root, name) {
-  const childPath = path16.join(root, name);
-  let stat;
-  try {
-    stat = fs14.statSync(childPath);
-  } catch {
-    return null;
-  }
-  if (!stat.isDirectory()) return null;
-  const hasGit = fs14.existsSync(path16.join(childPath, ".git"));
-  const hasGuild = fs14.existsSync(durableGuildDir(childPath));
-  if (!hasGit && !hasGuild) return null;
-  const kind = hasGuild ? "sub-guild" : "sub-project";
-  const has_wiki = fs14.existsSync(path16.join(durableGuildDir(childPath), "wiki"));
-  const has_indexes = fs14.existsSync(path16.join(durableGuildDir(childPath), "indexes"));
-  const remote = hasGit ? readRemote(childPath) : null;
-  const last_seen_commit = hasGit ? readHead(childPath) : null;
-  return {
-    name,
-    path: name,
-    // relative to root (depth-1 means path === name)
-    kind,
-    remote,
-    has_wiki,
-    has_indexes,
-    last_seen_commit
-  };
-}
-function detect2(root, modeOverride, readMode) {
-  const mode = modeOverride ?? readMode(root);
-  const RULE = "immediate child has .git/ OR .guild/";
-  let subGuilds = [];
-  try {
-    const entries = fs14.readdirSync(root);
-    for (const name of entries) {
-      const sg = classifyChild(root, name);
-      if (sg !== null) subGuilds.push(sg);
-    }
-  } catch {
-  }
-  let kind;
-  if (mode === "on") {
-    kind = "workspace";
-  } else if (mode === "off") {
-    kind = "regular";
-    subGuilds = [];
-  } else {
-    kind = subGuilds.length > 0 ? "workspace" : "regular";
-  }
-  return {
-    kind,
-    detection: { depth: 1, rule: RULE, mode },
-    sub_guilds: subGuilds
-  };
-}
-function parseArgs(argv) {
-  let cwd;
-  let mode;
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--cwd" && argv[i + 1]) {
-      cwd = argv[++i];
-    } else if (arg === "--mode" && argv[i + 1]) {
-      const v = argv[++i];
-      if (v === "auto" || v === "on" || v === "off") mode = v;
-    }
-  }
-  return { cwd, mode };
-}
-function runWorkspaceDetectCli(readMode, argv = process.argv.slice(2)) {
-  const { cwd: cwdArg, mode } = parseArgs(argv);
-  const cwd = cwdArg ?? process.env["GUILD_CWD"] ?? process.cwd();
-  if (!fs14.existsSync(cwd) || !fs14.statSync(cwd).isDirectory()) {
-    process.stderr.write(`[workspace/detect] ERROR: --cwd "${cwd}" is not a directory
-`);
-    process.exit(1);
-  }
-  try {
-    const result = detect2(cwd, mode, readMode);
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
-  } catch (e) {
-    process.stderr.write(`[workspace/detect] ERROR: ${e.message}
-`);
-    process.exit(2);
-  }
-}
-if (typeof module !== "undefined" && require.main === module && /^detect\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-  runWorkspaceDetectCli();
-}
-
-// src/domains/state/federated-query.ts
-var fs15 = __toESM(require("fs"));
-var path17 = __toESM(require("path"));
 function federatedQuery(root, query, scope) {
-  const manifestPath = path17.join(durableGuildDir(root), "workspace.json");
-  if (!fs15.existsSync(manifestPath)) {
+  const manifestPath = path16.join(durableGuildDir(root), "workspace.json");
+  if (!fs14.existsSync(manifestPath)) {
     throw new Error(`workspace.json not found at ${manifestPath}`);
   }
-  const manifest = JSON.parse(fs15.readFileSync(manifestPath, "utf8"));
+  const manifest = JSON.parse(fs14.readFileSync(manifestPath, "utf8"));
   let candidates = manifest.sub_guilds.filter((sg) => sg.has_wiki);
   if (scope !== void 0) {
     const named = candidates.find((sg) => sg.name === scope);
@@ -6541,7 +6421,7 @@ function federatedQuery(root, query, scope) {
   }
   const steps = [];
   for (const sg of candidates) {
-    const subAbsPath = path17.resolve(root, sg.path);
+    const subAbsPath = path16.resolve(root, sg.path);
     steps.push({
       type: "query",
       sub_guild: sg.name,
@@ -6556,7 +6436,7 @@ function federatedQuery(root, query, scope) {
   });
   return { query, steps };
 }
-function parseArgs2(argv) {
+function parseArgs(argv) {
   let cwd;
   let query;
   let scope;
@@ -6569,16 +6449,16 @@ function parseArgs2(argv) {
   return { cwd, query, scope };
 }
 function runFederatedQueryCli(argv = process.argv.slice(2)) {
-  const { cwd: cwdArg, query, scope } = parseArgs2(argv);
+  const { cwd: cwdArg, query, scope } = parseArgs(argv);
   const cwd = cwdArg ?? process.env["GUILD_CWD"] ?? process.cwd();
   if (!query) {
     process.stderr.write(`[workspace/federated-query] ERROR: --query is required
 `);
     process.exit(1);
   }
-  if (!fs15.existsSync(path17.join(durableGuildDir(cwd), "workspace.json"))) {
+  if (!fs14.existsSync(path16.join(durableGuildDir(cwd), "workspace.json"))) {
     process.stderr.write(
-      `[workspace/federated-query] ERROR: no workspace.json at ${path17.join(durableGuildDir(cwd), "workspace.json")}
+      `[workspace/federated-query] ERROR: no workspace.json at ${path16.join(durableGuildDir(cwd), "workspace.json")}
 `
     );
     process.exit(1);
@@ -6597,8 +6477,8 @@ if (typeof module !== "undefined" && require.main === module && /^federated-quer
 }
 
 // src/domains/state/promote-upstream.ts
-var fs16 = __toESM(require("fs"));
-var path18 = __toESM(require("path"));
+var fs15 = __toESM(require("fs"));
+var path17 = __toESM(require("path"));
 function validateRunId(runId) {
   if (!runId || !runId.trim()) return false;
   if (runId.includes("\0")) return false;
@@ -6615,10 +6495,10 @@ function isCrossCutting(candidate) {
   return false;
 }
 function readSubGuilds(workspaceRoot) {
-  const manifestPath = path18.join(durableGuildDir(workspaceRoot), "workspace.json");
-  if (!fs16.existsSync(manifestPath)) return [];
+  const manifestPath = path17.join(durableGuildDir(workspaceRoot), "workspace.json");
+  if (!fs15.existsSync(manifestPath)) return [];
   try {
-    const raw = JSON.parse(fs16.readFileSync(manifestPath, "utf8"));
+    const raw = JSON.parse(fs15.readFileSync(manifestPath, "utf8"));
     const sgs = raw["sub_guilds"];
     if (!Array.isArray(sgs)) return [];
     return sgs.map((sg) => ({
@@ -6630,14 +6510,14 @@ function readSubGuilds(workspaceRoot) {
   }
 }
 function findHarvestFiles(childDir) {
-  const runsDir = path18.join(durableGuildDir(childDir), "runs");
-  if (!fs16.existsSync(runsDir)) return [];
+  const runsDir = path17.join(durableGuildDir(childDir), "runs");
+  if (!fs15.existsSync(runsDir)) return [];
   const results = [];
   try {
-    const runIds = fs16.readdirSync(runsDir);
+    const runIds = fs15.readdirSync(runsDir);
     for (const runId of runIds) {
-      const candidate = path18.join(runsDir, runId, "learn", "harvest-candidates.json");
-      if (fs16.existsSync(candidate)) {
+      const candidate = path17.join(runsDir, runId, "learn", "harvest-candidates.json");
+      if (fs15.existsSync(candidate)) {
         results.push(candidate);
       }
     }
@@ -6648,11 +6528,11 @@ function findHarvestFiles(childDir) {
 function extractFromHarvestFile(harvestPath, childName, workspaceRoot) {
   let raw;
   try {
-    raw = JSON.parse(fs16.readFileSync(harvestPath, "utf8"));
+    raw = JSON.parse(fs15.readFileSync(harvestPath, "utf8"));
   } catch {
     return [];
   }
-  const sourcePath = path18.relative(workspaceRoot, harvestPath);
+  const sourcePath = path17.relative(workspaceRoot, harvestPath);
   const staged = [];
   const wikiCandidates = Array.isArray(raw.wiki_candidates) ? raw.wiki_candidates : [];
   const decisionCandidates = Array.isArray(raw.decision_candidates) ? raw.decision_candidates : [];
@@ -6698,7 +6578,7 @@ function collectUpstreamCandidates(opts) {
   }
   const all = [];
   for (const child of children) {
-    const childDir = path18.join(workspaceRoot, child.path);
+    const childDir = path17.join(workspaceRoot, child.path);
     const harvestFiles = findHarvestFiles(childDir);
     for (const hf of harvestFiles) {
       const from = extractFromHarvestFile(hf, child.name, workspaceRoot);
@@ -6707,7 +6587,7 @@ function collectUpstreamCandidates(opts) {
   }
   return all;
 }
-function parseArgs3(argv) {
+function parseArgs2(argv) {
   let workspaceRoot;
   let child;
   let runId;
@@ -6730,9 +6610,9 @@ function parseArgs3(argv) {
   return { workspaceRoot, child, runId };
 }
 function runPromoteUpstreamCli(argv = process.argv.slice(2)) {
-  const { workspaceRoot: rootArg, child, runId: runIdArg } = parseArgs3(argv);
+  const { workspaceRoot: rootArg, child, runId: runIdArg } = parseArgs2(argv);
   const workspaceRoot = rootArg ?? process.env["GUILD_CWD"] ?? process.cwd();
-  if (!fs16.existsSync(workspaceRoot) || !fs16.statSync(workspaceRoot).isDirectory()) {
+  if (!fs15.existsSync(workspaceRoot) || !fs15.statSync(workspaceRoot).isDirectory()) {
     process.stderr.write(
       `[promote-upstream] ERROR: --workspace-root "${workspaceRoot}" is not a directory
 `
@@ -6749,10 +6629,10 @@ function runPromoteUpstreamCli(argv = process.argv.slice(2)) {
   }
   try {
     const candidates = collectUpstreamCandidates({ workspaceRoot, child });
-    const runsBase = path18.resolve(durableGuildDir(workspaceRoot), "runs");
-    const runsDir = path18.join(runsBase, runId);
-    const manifestPath = path18.join(runsDir, "upstream-candidates.json");
-    const resolvedRunsDir = path18.resolve(runsDir);
+    const runsBase = path17.resolve(durableGuildDir(workspaceRoot), "runs");
+    const runsDir = path17.join(runsBase, runId);
+    const manifestPath = path17.join(runsDir, "upstream-candidates.json");
+    const resolvedRunsDir = path17.resolve(runsDir);
     if (!isWithin(resolvedRunsDir, runsBase) || resolvedRunsDir === runsBase) {
       process.stderr.write(
         `[promote-upstream] ERROR: resolved run dir "${resolvedRunsDir}" is not a strict subdirectory of the runs base
@@ -6808,107 +6688,10 @@ if (typeof module !== "undefined" && require.main === module && /^promote-upstre
   runPromoteUpstreamCli();
 }
 
-// src/domains/state/write-manifest.ts
-var fs17 = __toESM(require("fs"));
-var path19 = __toESM(require("path"));
-var CODE_EXTENSIONS = /* @__PURE__ */ new Set([
-  ".ts",
-  ".tsx",
-  ".js",
-  ".jsx",
-  ".mjs",
-  ".cjs",
-  ".py",
-  ".rb",
-  ".go",
-  ".rs",
-  ".java",
-  ".kt",
-  ".swift",
-  ".cs",
-  ".cpp",
-  ".c",
-  ".h",
-  ".hpp"
-]);
-function hasTopLevelCode(root) {
-  try {
-    const entries = fs17.readdirSync(root);
-    for (const name of entries) {
-      const ext = path19.extname(name).toLowerCase();
-      if (CODE_EXTENSIONS.has(ext)) {
-        try {
-          const stat = fs17.statSync(path19.join(root, name));
-          if (stat.isFile()) return true;
-        } catch {
-        }
-      }
-    }
-  } catch {
-  }
-  return false;
-}
-function writeManifest(root, modeOverride, readMode) {
-  const detection = detect2(root, modeOverride, readMode);
-  const rootWiki = hasTopLevelCode(root);
-  const manifest = {
-    schema_version: "guild.workspace.v1",
-    is_workspace: detection.kind === "workspace",
-    detected_at: (/* @__PURE__ */ new Date()).toISOString(),
-    detection: detection.detection,
-    root_wiki: rootWiki,
-    sub_guilds: detection.sub_guilds,
-    query_recipe: {
-      mechanism: "guild-memory MCP wiki_search/wiki_get/wiki_list with per-call cwd override (or GUILD_MEMORY_WIKI_ROOT=<path>/.guild/wiki)",
-      fan_out: "iterate sub_guilds where has_wiki; merge results, tag each hit with sub_guild.name",
-      example: "wiki_search({ query: '<q>', cwd: 'plugin' })"
-    }
-  };
-  const guildDir = durableGuildDir(root);
-  fs17.mkdirSync(guildDir, { recursive: true });
-  const manifestPath = path19.join(guildDir, "workspace.json");
-  atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-  return manifestPath;
-}
-function parseArgs4(argv) {
-  let cwd;
-  let mode;
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--cwd" && argv[i + 1]) {
-      cwd = argv[++i];
-    } else if (arg === "--mode" && argv[i + 1]) {
-      const v = argv[++i];
-      if (v === "auto" || v === "on" || v === "off") mode = v;
-    }
-  }
-  return { cwd, mode };
-}
-function runWriteWorkspaceManifestCli(readMode, argv = process.argv.slice(2)) {
-  const { cwd: cwdArg, mode } = parseArgs4(argv);
-  const cwd = cwdArg ?? process.env["GUILD_CWD"] ?? process.cwd();
-  if (!fs17.existsSync(cwd) || !fs17.statSync(cwd).isDirectory()) {
-    process.stderr.write(`[workspace/write-manifest] ERROR: --cwd "${cwd}" is not a directory
-`);
-    process.exit(1);
-  }
-  try {
-    const written = writeManifest(cwd, mode, readMode);
-    process.stdout.write(written + "\n");
-  } catch (e) {
-    process.stderr.write(`[workspace/write-manifest] ERROR: ${e.message}
-`);
-    process.exit(2);
-  }
-}
-if (typeof module !== "undefined" && require.main === module && /^write-manifest\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-  runWriteWorkspaceManifestCli();
-}
-
 // scripts/lib/capability/profile-emit.ts
 var import_crypto = require("crypto");
-var fs18 = __toESM(require("fs"));
-var path20 = __toESM(require("path"));
+var fs16 = __toESM(require("fs"));
+var path18 = __toESM(require("path"));
 var import_util4 = require("util");
 
 // scripts/lib/capability/context-manager-contract.ts
@@ -6994,9 +6777,9 @@ function isCanonicalRelPath(v) {
   }
   return true;
 }
-function isUnderRoot(path22, root) {
-  if (path22 === root) return true;
-  const p = path22.split("/");
+function isUnderRoot(path20, root) {
+  if (path20 === root) return true;
+  const p = path20.split("/");
   const r = root.split("/");
   if (p.length <= r.length) return false;
   for (let i = 0; i < r.length; i++) if (p[i] !== r[i]) return false;
@@ -7036,7 +6819,7 @@ var TREE_HASH_RE2 = /^[0-9a-f]{64}$/;
 var EMPTY_TREE_HASH = (0, import_crypto.createHash)("sha256").update("").digest("hex");
 function sha256File(abs) {
   try {
-    return (0, import_crypto.createHash)("sha256").update(fs18.readFileSync(abs)).digest("hex");
+    return (0, import_crypto.createHash)("sha256").update(fs16.readFileSync(abs)).digest("hex");
   } catch {
     return null;
   }
@@ -7046,7 +6829,7 @@ function listTree(absRoot, rel2 = "", depth = 0) {
   if (depth > MAX_TREE_DEPTH) return null;
   let entries;
   try {
-    entries = fs18.readdirSync(absRoot, { withFileTypes: true });
+    entries = fs16.readdirSync(absRoot, { withFileTypes: true });
   } catch (e) {
     if (e?.code === "ENOENT") return [];
     return null;
@@ -7058,7 +6841,7 @@ function listTree(absRoot, rel2 = "", depth = 0) {
       out.push({ rel: childRel, kind: "symlink" });
     } else if (e.isDirectory()) {
       out.push({ rel: childRel, kind: "dir" });
-      const child = listTree(path20.join(absRoot, e.name), childRel, depth + 1);
+      const child = listTree(path18.join(absRoot, e.name), childRel, depth + 1);
       if (child === null) return null;
       out.push(...child);
     } else if (e.isFile()) {
@@ -7070,9 +6853,9 @@ function listTree(absRoot, rel2 = "", depth = 0) {
   return out.sort((a, b) => a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
 }
 function hashTree(projectRoot, relRoot) {
-  const abs = path20.join(projectRoot, relRoot);
+  const abs = path18.join(projectRoot, relRoot);
   try {
-    const st = fs18.lstatSync(abs);
+    const st = fs16.lstatSync(abs);
     if (st.isSymbolicLink()) return null;
     if (!st.isDirectory()) return null;
   } catch (e) {
@@ -7089,7 +6872,7 @@ function hashTree(projectRoot, relRoot) {
 `);
       continue;
     }
-    const fileHash = sha256File(path20.join(abs, e.rel));
+    const fileHash = sha256File(path18.join(abs, e.rel));
     if (fileHash === null) return null;
     h.update(`${e.rel}\0${fileHash}
 `);
@@ -7100,10 +6883,10 @@ function hashFileSet(projectRoot, relPaths) {
   const h = (0, import_crypto.createHash)("sha256");
   let any = false;
   for (const rel2 of [...relPaths].sort()) {
-    const abs = path20.join(projectRoot, rel2);
+    const abs = path18.join(projectRoot, rel2);
     let exists;
     try {
-      const st = fs18.lstatSync(abs);
+      const st = fs16.lstatSync(abs);
       if (st.isSymbolicLink()) return null;
       exists = st.isFile();
     } catch (e) {
@@ -7121,7 +6904,7 @@ function hashFileSet(projectRoot, relPaths) {
 }
 function baselineBinding(projectRoot) {
   try {
-    return (0, import_crypto.createHash)("sha256").update(fs18.realpathSync(projectRoot)).digest("hex");
+    return (0, import_crypto.createHash)("sha256").update(fs16.realpathSync(projectRoot)).digest("hex");
   } catch {
     return null;
   }
@@ -7145,7 +6928,7 @@ function snapshotFeedstock(projectRoot) {
   const absent = [];
   const hashes = {};
   for (const input of FEEDSTOCK_INPUTS) {
-    const h = sha256File(path20.join(projectRoot, input.rel));
+    const h = sha256File(path18.join(projectRoot, input.rel));
     if (h === null) absent.push(input.name);
     hashes[input.name] = h;
   }
@@ -7245,7 +7028,7 @@ var MAX_PRIOR_PROFILE_BYTES = 256 * 1024;
 function readPriorProfile(abs) {
   let st;
   try {
-    st = fs18.lstatSync(abs);
+    st = fs16.lstatSync(abs);
   } catch (e) {
     if (e?.code === "ENOENT") return { kind: "absent" };
     return { kind: "unreadable", why: "could not stat the existing profile" };
@@ -7255,7 +7038,7 @@ function readPriorProfile(abs) {
     return { kind: "unreadable", why: "existing profile exceeds the size bound" };
   }
   try {
-    return { kind: "bytes", bytes: fs18.readFileSync(abs) };
+    return { kind: "bytes", bytes: fs16.readFileSync(abs) };
   } catch {
     return { kind: "unreadable", why: "existing profile could not be read" };
   }
@@ -7265,30 +7048,30 @@ function writeFileAtomicNoFollow(abs, bytes) {
   let fd = null;
   let created = false;
   try {
-    fd = fs18.openSync(
+    fd = fs16.openSync(
       tmp,
-      fs18.constants.O_WRONLY | fs18.constants.O_CREAT | fs18.constants.O_EXCL | fs18.constants.O_NOFOLLOW,
+      fs16.constants.O_WRONLY | fs16.constants.O_CREAT | fs16.constants.O_EXCL | fs16.constants.O_NOFOLLOW,
       384
     );
     created = true;
     let off = 0;
     while (off < bytes.length) {
-      const n = fs18.writeSync(fd, bytes, off, bytes.length - off);
+      const n = fs16.writeSync(fd, bytes, off, bytes.length - off);
       if (n <= 0) return false;
       off += n;
     }
-    fs18.fsyncSync(fd);
-    fs18.closeSync(fd);
+    fs16.fsyncSync(fd);
+    fs16.closeSync(fd);
     fd = null;
-    fs18.renameSync(tmp, abs);
+    fs16.renameSync(tmp, abs);
     created = false;
     return true;
   } catch {
     return false;
   } finally {
     try {
-      if (fd !== null) fs18.closeSync(fd);
-      if (created) fs18.rmSync(tmp, { force: true });
+      if (fd !== null) fs16.closeSync(fd);
+      if (created) fs16.rmSync(tmp, { force: true });
     } catch {
     }
   }
@@ -7471,17 +7254,17 @@ function emitCapabilityProfile(opts) {
         detail: `context-manager contract refused "${rel2}": ${verdict.reason}`
       };
     }
-    const abs = path20.join(root, rel2);
+    const abs = path18.join(root, rel2);
     let prior = { kind: "absent" };
     try {
-      if (!isContainedRealPath(root, path20.dirname(abs))) {
+      if (!isContainedRealPath(root, path18.dirname(abs))) {
         return {
           status: "refused",
           code: "escapes_project_root",
           detail: `"${rel2}" has an ancestor that resolves outside the project root`
         };
       }
-      fs18.mkdirSync(path20.dirname(abs), { recursive: true });
+      fs16.mkdirSync(path18.dirname(abs), { recursive: true });
       if (!isContainedRealPath(root, abs)) {
         return {
           status: "refused",
@@ -7510,7 +7293,7 @@ function emitCapabilityProfile(opts) {
       if (isContainedRealPath(root, abs)) {
         try {
           if (prior.kind === "absent") {
-            fs18.rmSync(abs, { force: true });
+            fs16.rmSync(abs, { force: true });
             rolledBack = true;
           } else if (prior.kind === "bytes") {
             rolledBack = writeFileAtomicNoFollow(abs, prior.bytes);
@@ -7772,10 +7555,10 @@ var evidenceChunk = null;
 function evidence() {
   if (evidenceChunk === null) {
     const candidates = [
-      path21.join(__dirname, "capability-profile-evidence.js"),
-      path21.join(__dirname, "lib", "capability", "capability-profile-evidence")
+      path19.join(__dirname, "capability-profile-evidence.js"),
+      path19.join(__dirname, "lib", "capability", "capability-profile-evidence")
     ];
-    const spec = candidates.find((c) => fs19.existsSync(c) || fs19.existsSync(`${c}.ts`)) ?? candidates[1];
+    const spec = candidates.find((c) => fs17.existsSync(c) || fs17.existsSync(`${c}.ts`)) ?? candidates[1];
     evidenceChunk = require(spec);
   }
   return evidenceChunk;
@@ -7816,14 +7599,14 @@ function readFacts(file) {
   if (file === null) return EMPTY_FACTS;
   let parsed;
   try {
-    parsed = JSON.parse(fs19.readFileSync(file, "utf8"));
+    parsed = JSON.parse(fs17.readFileSync(file, "utf8"));
   } catch (e) {
     fail("bad_facts_file", `${file}: ${String(e)}`);
   }
   return parsed;
 }
 function cmdHashTree(argv) {
-  const root = path21.resolve(flag(argv, "cwd") ?? process.cwd());
+  const root = path19.resolve(flag(argv, "cwd") ?? process.cwd());
   const h = snapshotTreeHashes(root);
   if (h === null) fail("hash_incomplete", "the agents/skills/registry trees could not be hashed");
   if (has(argv, "json")) {
@@ -7845,7 +7628,7 @@ function cmdHashTree(argv) {
 }
 function cmdBaseline(argv) {
   if (has(argv, "captured-at")) fail("unknown_option", "--captured-at is forbidden; baseline capture time belongs to the lifecycle start transaction");
-  const root = path21.resolve(flag(argv, "cwd") ?? process.cwd());
+  const root = path19.resolve(flag(argv, "cwd") ?? process.cwd());
   const runId = flag(argv, "run-id");
   if (runId === null) fail("missing_arg", "--run-id is required");
   try {
@@ -7858,7 +7641,7 @@ function cmdBaseline(argv) {
 }
 function cmdEmit(argv) {
   if (has(argv, "generated-at")) fail("unknown_option", "--generated-at is forbidden; profile emission time comes from the tool clock");
-  const root = path21.resolve(flag(argv, "cwd") ?? process.cwd());
+  const root = path19.resolve(flag(argv, "cwd") ?? process.cwd());
   const runId = flag(argv, "run-id");
   const projectId = flag(argv, "project-id");
   const generatedAt = (/* @__PURE__ */ new Date()).toISOString();
@@ -7875,7 +7658,7 @@ function cmdEmit(argv) {
   let baselineHashes;
   if (baselineFile !== null) {
     try {
-      const parsed = JSON.parse(fs19.readFileSync(baselineFile, "utf8"));
+      const parsed = JSON.parse(fs17.readFileSync(baselineFile, "utf8"));
       const retained = evidence().validateMigrationRunBaseline(parsed);
       baselineHashes = retained ? evidence().profileBaselineFromMigrationRunBaseline(retained) : parsed;
     } catch (e) {
@@ -7914,7 +7697,7 @@ function cmdEmit(argv) {
   );
 }
 function cmdCandidates(argv) {
-  const root = path21.resolve(flag(argv, "cwd") ?? process.cwd());
+  const root = path19.resolve(flag(argv, "cwd") ?? process.cwd());
   const budgetRaw = flag(argv, "budget");
   const budget = budgetRaw === null ? void 0 : parseCount(budgetRaw);
   if (budgetRaw !== null && budget === null) fail("bad_budget", `"${budgetRaw}" is not a count`);

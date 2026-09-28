@@ -397,7 +397,8 @@ function u9Walk(root: string): { dirs: string[]; files: string[] } {
     for (const e of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) {
-        if (U9_SKIP.has(e.name) || r === LINT_FIXTURES) continue;
+        // Root dist/ is gitignored generated host packages, not an authored copy.
+        if (U9_SKIP.has(e.name) || r === LINT_FIXTURES || r === "dist") continue;
         dirs.push(r);
         walk(r);
       } else if (e.isFile()) {

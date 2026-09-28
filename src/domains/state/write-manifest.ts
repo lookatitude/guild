@@ -169,13 +169,4 @@ export function runWriteWorkspaceManifestCli(readMode: WorkspaceModeReader, argv
   }
 }
 
-// esbuild inlines this module into other bundles, where `require.main === module`
-// is true for EVERY inlined module — gate on the exact argv basename so only a direct
-// `write-manifest` invocation runs the CLI, never a bundle that merely imports this file.
-if (
-  typeof module !== "undefined" &&
-  require.main === module &&
-  /^write-manifest\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")
-) {
-  runWriteWorkspaceManifestCli();
-}
+// Run through scripts/workspace/write-manifest.ts, which injects the mode reader.

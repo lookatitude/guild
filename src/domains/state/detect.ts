@@ -225,13 +225,4 @@ export function runWorkspaceDetectCli(readMode: WorkspaceModeReader, argv: strin
   }
 }
 
-// esbuild inlines this module into other bundles, where `require.main === module`
-// is true for EVERY inlined module — gate on the exact argv basename so only a direct
-// `detect` invocation runs the CLI, never a bundle that merely imports this file.
-if (
-  typeof module !== "undefined" &&
-  require.main === module &&
-  /^detect\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")
-) {
-  runWorkspaceDetectCli();
-}
+// Run through scripts/workspace/detect.ts, which injects the mode reader.

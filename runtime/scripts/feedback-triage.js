@@ -3081,9 +3081,9 @@ __export(feedback_triage_exports, {
   runTriage: () => runTriage
 });
 module.exports = __toCommonJS(feedback_triage_exports);
-var fs15 = __toESM(require("fs"));
-var path20 = __toESM(require("path"));
-var import_child_process2 = require("child_process");
+var fs13 = __toESM(require("fs"));
+var path18 = __toESM(require("path"));
+var import_child_process = require("child_process");
 
 // scripts/lib/replay-rundir.ts
 var fsNode = __toESM(require("fs"));
@@ -3304,10 +3304,10 @@ var ARTIFACT_CATALOGUE = [
   }
 ];
 function assembleReplayManifest(runDir, opts) {
-  const fs16 = opts?.fs ?? createRealReplayFsSeam();
+  const fs14 = opts?.fs ?? createRealReplayFsSeam();
   const artifacts = ARTIFACT_CATALOGUE.map((def) => {
     const absPath = path3.join(runDir, def.relativePath);
-    const present = fs16.exists(absPath);
+    const present = fs14.exists(absPath);
     const entry = {
       role: def.role,
       relativePath: def.relativePath,
@@ -3316,7 +3316,7 @@ function assembleReplayManifest(runDir, opts) {
       status: def.status
     };
     if (def.isDir) {
-      entry.files = present ? fs16.listDir(absPath) : [];
+      entry.files = present ? fs14.listDir(absPath) : [];
     }
     return entry;
   });
@@ -3346,8 +3346,8 @@ if (require.main === module && /^replay-rundir\.[cm]?[jt]s$/.test((process.argv[
 }
 
 // scripts/docs-hygiene/scan.ts
-var fs14 = __toESM(require("fs"));
-var path19 = __toESM(require("path"));
+var fs12 = __toESM(require("fs"));
+var path17 = __toESM(require("path"));
 
 // src/domains/state/atomic-write.ts
 var fs4 = __toESM(require("fs"));
@@ -5200,135 +5200,15 @@ var STRUCTURAL_BASENAMES = sealSet([
   "transfer-manifest.md"
 ], "STRUCTURAL_BASENAMES");
 
-// src/domains/state/detect.ts
+// src/domains/state/federated-query.ts
 var fs10 = __toESM(require("fs"));
 var path14 = __toESM(require("path"));
-var import_child_process = require("child_process");
-function readRemote(childPath) {
-  const gitConfig = path14.join(childPath, ".git", "config");
-  if (!fs10.existsSync(gitConfig)) return null;
-  try {
-    const content = fs10.readFileSync(gitConfig, "utf8");
-    const match = content.match(/url\s*=\s*(.+)/);
-    if (!match) return null;
-    const url = match[1].trim();
-    return url.replace(/^git@/, "").replace(/^https?:\/\//, "").replace(/\.git$/, "").replace(/:/, "/");
-  } catch {
-    return null;
-  }
-}
-function readHead(childPath) {
-  try {
-    const result = (0, import_child_process.execSync)("git rev-parse HEAD", {
-      cwd: childPath,
-      encoding: "utf8",
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: 3e3
-    }).trim();
-    return result.length > 0 ? result : null;
-  } catch {
-    return null;
-  }
-}
-function classifyChild(root, name) {
-  const childPath = path14.join(root, name);
-  let stat;
-  try {
-    stat = fs10.statSync(childPath);
-  } catch {
-    return null;
-  }
-  if (!stat.isDirectory()) return null;
-  const hasGit = fs10.existsSync(path14.join(childPath, ".git"));
-  const hasGuild = fs10.existsSync(durableGuildDir(childPath));
-  if (!hasGit && !hasGuild) return null;
-  const kind = hasGuild ? "sub-guild" : "sub-project";
-  const has_wiki = fs10.existsSync(path14.join(durableGuildDir(childPath), "wiki"));
-  const has_indexes = fs10.existsSync(path14.join(durableGuildDir(childPath), "indexes"));
-  const remote = hasGit ? readRemote(childPath) : null;
-  const last_seen_commit = hasGit ? readHead(childPath) : null;
-  return {
-    name,
-    path: name,
-    // relative to root (depth-1 means path === name)
-    kind,
-    remote,
-    has_wiki,
-    has_indexes,
-    last_seen_commit
-  };
-}
-function detect2(root, modeOverride, readMode) {
-  const mode = modeOverride ?? readMode(root);
-  const RULE = "immediate child has .git/ OR .guild/";
-  let subGuilds = [];
-  try {
-    const entries = fs10.readdirSync(root);
-    for (const name of entries) {
-      const sg = classifyChild(root, name);
-      if (sg !== null) subGuilds.push(sg);
-    }
-  } catch {
-  }
-  let kind;
-  if (mode === "on") {
-    kind = "workspace";
-  } else if (mode === "off") {
-    kind = "regular";
-    subGuilds = [];
-  } else {
-    kind = subGuilds.length > 0 ? "workspace" : "regular";
-  }
-  return {
-    kind,
-    detection: { depth: 1, rule: RULE, mode },
-    sub_guilds: subGuilds
-  };
-}
-function parseArgs(argv) {
-  let cwd;
-  let mode;
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--cwd" && argv[i + 1]) {
-      cwd = argv[++i];
-    } else if (arg === "--mode" && argv[i + 1]) {
-      const v = argv[++i];
-      if (v === "auto" || v === "on" || v === "off") mode = v;
-    }
-  }
-  return { cwd, mode };
-}
-function runWorkspaceDetectCli(readMode, argv = process.argv.slice(2)) {
-  const { cwd: cwdArg, mode } = parseArgs(argv);
-  const cwd = cwdArg ?? process.env["GUILD_CWD"] ?? process.cwd();
-  if (!fs10.existsSync(cwd) || !fs10.statSync(cwd).isDirectory()) {
-    process.stderr.write(`[workspace/detect] ERROR: --cwd "${cwd}" is not a directory
-`);
-    process.exit(1);
-  }
-  try {
-    const result = detect2(cwd, mode, readMode);
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
-  } catch (e) {
-    process.stderr.write(`[workspace/detect] ERROR: ${e.message}
-`);
-    process.exit(2);
-  }
-}
-if (typeof module !== "undefined" && require.main === module && /^detect\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-  runWorkspaceDetectCli();
-}
-
-// src/domains/state/federated-query.ts
-var fs11 = __toESM(require("fs"));
-var path15 = __toESM(require("path"));
 function federatedQuery(root, query, scope) {
-  const manifestPath = path15.join(durableGuildDir(root), "workspace.json");
-  if (!fs11.existsSync(manifestPath)) {
+  const manifestPath = path14.join(durableGuildDir(root), "workspace.json");
+  if (!fs10.existsSync(manifestPath)) {
     throw new Error(`workspace.json not found at ${manifestPath}`);
   }
-  const manifest = JSON.parse(fs11.readFileSync(manifestPath, "utf8"));
+  const manifest = JSON.parse(fs10.readFileSync(manifestPath, "utf8"));
   let candidates = manifest.sub_guilds.filter((sg) => sg.has_wiki);
   if (scope !== void 0) {
     const named = candidates.find((sg) => sg.name === scope);
@@ -5350,7 +5230,7 @@ function federatedQuery(root, query, scope) {
   }
   const steps = [];
   for (const sg of candidates) {
-    const subAbsPath = path15.resolve(root, sg.path);
+    const subAbsPath = path14.resolve(root, sg.path);
     steps.push({
       type: "query",
       sub_guild: sg.name,
@@ -5365,7 +5245,7 @@ function federatedQuery(root, query, scope) {
   });
   return { query, steps };
 }
-function parseArgs2(argv) {
+function parseArgs(argv) {
   let cwd;
   let query;
   let scope;
@@ -5378,16 +5258,16 @@ function parseArgs2(argv) {
   return { cwd, query, scope };
 }
 function runFederatedQueryCli(argv = process.argv.slice(2)) {
-  const { cwd: cwdArg, query, scope } = parseArgs2(argv);
+  const { cwd: cwdArg, query, scope } = parseArgs(argv);
   const cwd = cwdArg ?? process.env["GUILD_CWD"] ?? process.cwd();
   if (!query) {
     process.stderr.write(`[workspace/federated-query] ERROR: --query is required
 `);
     process.exit(1);
   }
-  if (!fs11.existsSync(path15.join(durableGuildDir(cwd), "workspace.json"))) {
+  if (!fs10.existsSync(path14.join(durableGuildDir(cwd), "workspace.json"))) {
     process.stderr.write(
-      `[workspace/federated-query] ERROR: no workspace.json at ${path15.join(durableGuildDir(cwd), "workspace.json")}
+      `[workspace/federated-query] ERROR: no workspace.json at ${path14.join(durableGuildDir(cwd), "workspace.json")}
 `
     );
     process.exit(1);
@@ -5406,8 +5286,8 @@ if (typeof module !== "undefined" && require.main === module && /^federated-quer
 }
 
 // src/domains/state/promote-upstream.ts
-var fs12 = __toESM(require("fs"));
-var path16 = __toESM(require("path"));
+var fs11 = __toESM(require("fs"));
+var path15 = __toESM(require("path"));
 function validateRunId(runId) {
   if (!runId || !runId.trim()) return false;
   if (runId.includes("\0")) return false;
@@ -5424,10 +5304,10 @@ function isCrossCutting(candidate) {
   return false;
 }
 function readSubGuilds(workspaceRoot) {
-  const manifestPath = path16.join(durableGuildDir(workspaceRoot), "workspace.json");
-  if (!fs12.existsSync(manifestPath)) return [];
+  const manifestPath = path15.join(durableGuildDir(workspaceRoot), "workspace.json");
+  if (!fs11.existsSync(manifestPath)) return [];
   try {
-    const raw = JSON.parse(fs12.readFileSync(manifestPath, "utf8"));
+    const raw = JSON.parse(fs11.readFileSync(manifestPath, "utf8"));
     const sgs = raw["sub_guilds"];
     if (!Array.isArray(sgs)) return [];
     return sgs.map((sg) => ({
@@ -5439,14 +5319,14 @@ function readSubGuilds(workspaceRoot) {
   }
 }
 function findHarvestFiles(childDir) {
-  const runsDir = path16.join(durableGuildDir(childDir), "runs");
-  if (!fs12.existsSync(runsDir)) return [];
+  const runsDir = path15.join(durableGuildDir(childDir), "runs");
+  if (!fs11.existsSync(runsDir)) return [];
   const results = [];
   try {
-    const runIds = fs12.readdirSync(runsDir);
+    const runIds = fs11.readdirSync(runsDir);
     for (const runId of runIds) {
-      const candidate = path16.join(runsDir, runId, "learn", "harvest-candidates.json");
-      if (fs12.existsSync(candidate)) {
+      const candidate = path15.join(runsDir, runId, "learn", "harvest-candidates.json");
+      if (fs11.existsSync(candidate)) {
         results.push(candidate);
       }
     }
@@ -5457,11 +5337,11 @@ function findHarvestFiles(childDir) {
 function extractFromHarvestFile(harvestPath, childName, workspaceRoot) {
   let raw;
   try {
-    raw = JSON.parse(fs12.readFileSync(harvestPath, "utf8"));
+    raw = JSON.parse(fs11.readFileSync(harvestPath, "utf8"));
   } catch {
     return [];
   }
-  const sourcePath = path16.relative(workspaceRoot, harvestPath);
+  const sourcePath = path15.relative(workspaceRoot, harvestPath);
   const staged = [];
   const wikiCandidates = Array.isArray(raw.wiki_candidates) ? raw.wiki_candidates : [];
   const decisionCandidates = Array.isArray(raw.decision_candidates) ? raw.decision_candidates : [];
@@ -5507,7 +5387,7 @@ function collectUpstreamCandidates(opts) {
   }
   const all = [];
   for (const child of children) {
-    const childDir = path16.join(workspaceRoot, child.path);
+    const childDir = path15.join(workspaceRoot, child.path);
     const harvestFiles = findHarvestFiles(childDir);
     for (const hf of harvestFiles) {
       const from = extractFromHarvestFile(hf, child.name, workspaceRoot);
@@ -5516,7 +5396,7 @@ function collectUpstreamCandidates(opts) {
   }
   return all;
 }
-function parseArgs3(argv) {
+function parseArgs2(argv) {
   let workspaceRoot;
   let child;
   let runId;
@@ -5539,9 +5419,9 @@ function parseArgs3(argv) {
   return { workspaceRoot, child, runId };
 }
 function runPromoteUpstreamCli(argv = process.argv.slice(2)) {
-  const { workspaceRoot: rootArg, child, runId: runIdArg } = parseArgs3(argv);
+  const { workspaceRoot: rootArg, child, runId: runIdArg } = parseArgs2(argv);
   const workspaceRoot = rootArg ?? process.env["GUILD_CWD"] ?? process.cwd();
-  if (!fs12.existsSync(workspaceRoot) || !fs12.statSync(workspaceRoot).isDirectory()) {
+  if (!fs11.existsSync(workspaceRoot) || !fs11.statSync(workspaceRoot).isDirectory()) {
     process.stderr.write(
       `[promote-upstream] ERROR: --workspace-root "${workspaceRoot}" is not a directory
 `
@@ -5558,10 +5438,10 @@ function runPromoteUpstreamCli(argv = process.argv.slice(2)) {
   }
   try {
     const candidates = collectUpstreamCandidates({ workspaceRoot, child });
-    const runsBase = path16.resolve(durableGuildDir(workspaceRoot), "runs");
-    const runsDir = path16.join(runsBase, runId);
-    const manifestPath = path16.join(runsDir, "upstream-candidates.json");
-    const resolvedRunsDir = path16.resolve(runsDir);
+    const runsBase = path15.resolve(durableGuildDir(workspaceRoot), "runs");
+    const runsDir = path15.join(runsBase, runId);
+    const manifestPath = path15.join(runsDir, "upstream-candidates.json");
+    const resolvedRunsDir = path15.resolve(runsDir);
     if (!isWithin(resolvedRunsDir, runsBase) || resolvedRunsDir === runsBase) {
       process.stderr.write(
         `[promote-upstream] ERROR: resolved run dir "${resolvedRunsDir}" is not a strict subdirectory of the runs base
@@ -5615,103 +5495,6 @@ function runPromoteUpstreamCli(argv = process.argv.slice(2)) {
 }
 if (typeof module !== "undefined" && require.main === module && /^promote-upstream\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   runPromoteUpstreamCli();
-}
-
-// src/domains/state/write-manifest.ts
-var fs13 = __toESM(require("fs"));
-var path17 = __toESM(require("path"));
-var CODE_EXTENSIONS = /* @__PURE__ */ new Set([
-  ".ts",
-  ".tsx",
-  ".js",
-  ".jsx",
-  ".mjs",
-  ".cjs",
-  ".py",
-  ".rb",
-  ".go",
-  ".rs",
-  ".java",
-  ".kt",
-  ".swift",
-  ".cs",
-  ".cpp",
-  ".c",
-  ".h",
-  ".hpp"
-]);
-function hasTopLevelCode(root) {
-  try {
-    const entries = fs13.readdirSync(root);
-    for (const name of entries) {
-      const ext = path17.extname(name).toLowerCase();
-      if (CODE_EXTENSIONS.has(ext)) {
-        try {
-          const stat = fs13.statSync(path17.join(root, name));
-          if (stat.isFile()) return true;
-        } catch {
-        }
-      }
-    }
-  } catch {
-  }
-  return false;
-}
-function writeManifest(root, modeOverride, readMode) {
-  const detection = detect2(root, modeOverride, readMode);
-  const rootWiki = hasTopLevelCode(root);
-  const manifest = {
-    schema_version: "guild.workspace.v1",
-    is_workspace: detection.kind === "workspace",
-    detected_at: (/* @__PURE__ */ new Date()).toISOString(),
-    detection: detection.detection,
-    root_wiki: rootWiki,
-    sub_guilds: detection.sub_guilds,
-    query_recipe: {
-      mechanism: "guild-memory MCP wiki_search/wiki_get/wiki_list with per-call cwd override (or GUILD_MEMORY_WIKI_ROOT=<path>/.guild/wiki)",
-      fan_out: "iterate sub_guilds where has_wiki; merge results, tag each hit with sub_guild.name",
-      example: "wiki_search({ query: '<q>', cwd: 'plugin' })"
-    }
-  };
-  const guildDir = durableGuildDir(root);
-  fs13.mkdirSync(guildDir, { recursive: true });
-  const manifestPath = path17.join(guildDir, "workspace.json");
-  atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-  return manifestPath;
-}
-function parseArgs4(argv) {
-  let cwd;
-  let mode;
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--cwd" && argv[i + 1]) {
-      cwd = argv[++i];
-    } else if (arg === "--mode" && argv[i + 1]) {
-      const v = argv[++i];
-      if (v === "auto" || v === "on" || v === "off") mode = v;
-    }
-  }
-  return { cwd, mode };
-}
-function runWriteWorkspaceManifestCli(readMode, argv = process.argv.slice(2)) {
-  const { cwd: cwdArg, mode } = parseArgs4(argv);
-  const cwd = cwdArg ?? process.env["GUILD_CWD"] ?? process.cwd();
-  if (!fs13.existsSync(cwd) || !fs13.statSync(cwd).isDirectory()) {
-    process.stderr.write(`[workspace/write-manifest] ERROR: --cwd "${cwd}" is not a directory
-`);
-    process.exit(1);
-  }
-  try {
-    const written = writeManifest(cwd, mode, readMode);
-    process.stdout.write(written + "\n");
-  } catch (e) {
-    process.stderr.write(`[workspace/write-manifest] ERROR: ${e.message}
-`);
-    process.exit(2);
-  }
-}
-if (typeof module !== "undefined" && require.main === module && /^write-manifest\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-  runWriteWorkspaceManifestCli();
 }
 
 // scripts/lib/frontmatter.ts
@@ -5786,7 +5569,7 @@ var KNOWN_GUILD_HOST_KINDS = Object.freeze([
 var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
 
 // src/domains/security/share-set.ts
-var path18 = __toESM(require("path"));
+var path16 = __toESM(require("path"));
 var SHARED_SCRUBBED_NAMES = sealSet([
   "verify.md",
   "review.md",
@@ -5795,7 +5578,7 @@ var SHARED_SCRUBBED_NAMES = sealSet([
   "run.yaml",
   "run-state.json"
 ], "SHARED_SCRUBBED_NAMES");
-var CANONICAL_RUN_LOG = path18.join("logs", "v1.4-events.jsonl");
+var CANONICAL_RUN_LOG = path16.join("logs", "v1.4-events.jsonl");
 
 // src/domains/security/secret-patterns.ts
 var SECRET_PATTERNS = Object.freeze([
@@ -5848,19 +5631,19 @@ var SECRET_PATTERNS = Object.freeze([
 // scripts/docs-hygiene/scan.ts
 var args = process.argv.slice(2);
 var workspaceArg = args.find((a) => a.startsWith("--workspace="));
-var WORKSPACE = workspaceArg ? workspaceArg.split("=")[1] : path19.resolve(__dirname, "../../..");
-var DOCS_KNOWLEDGE = path19.join(WORKSPACE, "docs/knowledge");
-var UMBRELLA_WIKI = path19.join(WORKSPACE, ".guild/wiki");
-var PLUGIN_WIKI = path19.join(WORKSPACE, "plugin/.guild/wiki");
-var PLUGIN_DOCS = path19.join(WORKSPACE, "plugin/docs");
-var MIGRATION_MD = path19.join(WORKSPACE, "MIGRATION.md");
-var AGENTS_MD = path19.join(WORKSPACE, "AGENTS.md");
-var ROOT_README = path19.join(WORKSPACE, "README.md");
-var PLUGIN_README = path19.join(WORKSPACE, "plugin/README.md");
-var PLUGIN_CLAUDE = path19.join(WORKSPACE, "plugin/CLAUDE.md");
+var WORKSPACE = workspaceArg ? workspaceArg.split("=")[1] : path17.resolve(__dirname, "../../..");
+var DOCS_KNOWLEDGE = path17.join(WORKSPACE, "docs/knowledge");
+var UMBRELLA_WIKI = path17.join(WORKSPACE, ".guild/wiki");
+var PLUGIN_WIKI = path17.join(WORKSPACE, "plugin/.guild/wiki");
+var PLUGIN_DOCS = path17.join(WORKSPACE, "plugin/docs");
+var MIGRATION_MD = path17.join(WORKSPACE, "MIGRATION.md");
+var AGENTS_MD = path17.join(WORKSPACE, "AGENTS.md");
+var ROOT_README = path17.join(WORKSPACE, "README.md");
+var PLUGIN_README = path17.join(WORKSPACE, "plugin/README.md");
+var PLUGIN_CLAUDE = path17.join(WORKSPACE, "plugin/CLAUDE.md");
 var outputArg = args.find((a) => a.startsWith("--output="));
-var OUTPUT_PATH = outputArg ? path19.resolve(outputArg.split("=")[1]) : path19.resolve(__dirname, ".last-scan.md");
-var OUTPUT_DIR = path19.dirname(OUTPUT_PATH);
+var OUTPUT_PATH = outputArg ? path17.resolve(outputArg.split("=")[1]) : path17.resolve(__dirname, ".last-scan.md");
+var OUTPUT_DIR = path17.dirname(OUTPUT_PATH);
 var LANDING_FILE_NAMES = /* @__PURE__ */ new Set([
   "README.md",
   "index.md",
@@ -5872,10 +5655,10 @@ function relPath(p) {
   return p.startsWith(WORKSPACE) ? p.slice(WORKSPACE.length + 1) : p;
 }
 function walkFiles(dir, filter = /\.md$/) {
-  if (!fs14.existsSync(dir)) return [];
+  if (!fs12.existsSync(dir)) return [];
   const results = [];
-  for (const entry of fs14.readdirSync(dir, { withFileTypes: true })) {
-    const full = path19.join(dir, entry.name);
+  for (const entry of fs12.readdirSync(dir, { withFileTypes: true })) {
+    const full = path17.join(dir, entry.name);
     if (entry.isDirectory() && entry.name === "_archive") continue;
     if (entry.isDirectory()) {
       results.push(...walkFiles(full, filter));
@@ -5887,7 +5670,7 @@ function walkFiles(dir, filter = /\.md$/) {
 }
 function readFile(p) {
   try {
-    return fs14.readFileSync(p, "utf8");
+    return fs12.readFileSync(p, "utf8");
   } catch {
     return "";
   }
@@ -6038,7 +5821,7 @@ function scanProgressMsg(corpus) {
     const rel2 = relPath(fpath);
     if (rel2.includes("/research/") || rel2.includes("/ideation/")) continue;
     if (isProvenanceDoc(rel2)) continue;
-    const bname = path19.basename(fpath);
+    const bname = path17.basename(fpath);
     if (LANDING_FILE_NAMES.has(bname)) continue;
     const content = readFile(fpath);
     const contentLines = content.split("\n");
@@ -6087,7 +5870,7 @@ function buildSlugSet() {
     ...walkFiles(UMBRELLA_WIKI),
     ...walkFiles(PLUGIN_WIKI)
   ]) {
-    const slug = path19.basename(fpath, ".md");
+    const slug = path17.basename(fpath, ".md");
     slugs.add(slug);
   }
   return slugs;
@@ -6204,14 +5987,14 @@ function checkSourceRef(ref, sourceFile, lineLabel) {
   if (clean.startsWith("/")) {
     checkPath = clean;
   } else if (clean.startsWith("docs/") || clean.startsWith("plugin/") || clean.startsWith("benchmark/") || clean.startsWith("mcp-servers/") || clean.startsWith("website/") || clean.startsWith("scripts/") || clean.startsWith("hooks/")) {
-    checkPath = path19.join(WORKSPACE, clean);
+    checkPath = path17.join(WORKSPACE, clean);
   } else if (clean.startsWith("external-input/")) {
     return;
   } else {
-    checkPath = path19.join(WORKSPACE, path19.dirname(sourceFile), clean);
+    checkPath = path17.join(WORKSPACE, path17.dirname(sourceFile), clean);
   }
   const withoutSection = checkPath.split(" ")[0];
-  if (!fs14.existsSync(withoutSection)) {
+  if (!fs12.existsSync(withoutSection)) {
     addFlag({
       category: "dangling-source-refs",
       file: sourceFile,
@@ -6227,7 +6010,7 @@ function isCanonicalPage(fpath) {
   if (rel2.includes("/_archive/")) return false;
   if (rel2.includes("/research/")) return false;
   if (rel2.includes("/ideation/")) return false;
-  const bname = path19.basename(fpath);
+  const bname = path17.basename(fpath);
   if (LANDING_FILE_NAMES.has(bname)) return false;
   return true;
 }
@@ -6242,7 +6025,7 @@ function scanMissingImportance(corpus) {
         file: relPath(fpath),
         lines: "L1",
         pattern: "canonical page has no frontmatter",
-        match: path19.basename(fpath)
+        match: path17.basename(fpath)
       });
       continue;
     }
@@ -6336,7 +6119,7 @@ No findings.
   const pluginWikiFiles = walkFiles(PLUGIN_WIKI);
   const pluginDocsFiles = walkFiles(PLUGIN_DOCS);
   const rootFiles = [MIGRATION_MD, AGENTS_MD, ROOT_README, PLUGIN_README, PLUGIN_CLAUDE].filter(
-    fs14.existsSync
+    fs12.existsSync
   );
   const allCorpus = [
     ...docsKnowledgeFiles,
@@ -6427,8 +6210,8 @@ Lane C consumes this as its worklist. **Flags are candidates, not auto-deletes**
 
 _Run: \`npx tsx plugin/scripts/docs-hygiene/scan.ts\` from the workspace root._
 `;
-  fs14.mkdirSync(OUTPUT_DIR, { recursive: true });
-  fs14.writeFileSync(OUTPUT_PATH, output, "utf8");
+  fs12.mkdirSync(OUTPUT_DIR, { recursive: true });
+  fs12.writeFileSync(OUTPUT_PATH, output, "utf8");
   console.log(OUTPUT_PATH);
   console.error(`
 Scan complete \u2014 ${totalFlags} total flags written to ${OUTPUT_PATH}`);
@@ -6743,10 +6526,10 @@ function assertSafeId(kind, value) {
 }
 function feedbackDir(cwd, runId) {
   assertSafeId("run id", runId);
-  return path20.join(durableGuildDir(cwd), "feedback", runId);
+  return path18.join(durableGuildDir(cwd), "feedback", runId);
 }
 function runTriage(opts) {
-  const fsi = opts.fsi ?? fs15;
+  const fsi = opts.fsi ?? fs13;
   const log = opts.log ?? ((l) => process.stderr.write(`[feedback-triage] ${l}
 `));
   const dir = feedbackDir(opts.cwd, opts.runId);
@@ -6763,14 +6546,14 @@ function runTriage(opts) {
     })
   };
   fsi.writeFileSync(
-    path20.join(dir, "triage.json"),
+    path18.join(dir, "triage.json"),
     JSON.stringify(record, null, 2) + "\n",
     "utf8"
   );
   for (const f of record.findings) {
     if (!f.draft) continue;
     fsi.writeFileSync(
-      path20.join(dir, `${f.finding.id}.draft.md`),
+      path18.join(dir, `${f.finding.id}.draft.md`),
       `<!-- ${f.draft.schema_version} \xB7 sanitized \xB7 approval_required -->
 # ${f.draft.title}
 
@@ -6795,13 +6578,13 @@ ${f.draft.body}
   return record;
 }
 function runFile(opts) {
-  const fsi = opts.fsi ?? fs15;
+  const fsi = opts.fsi ?? fs13;
   const log = opts.log ?? ((l) => process.stderr.write(`[feedback-triage] ${l}
 `));
-  const gh = opts.gh ?? ((args2) => (0, import_child_process2.execFileSync)("gh", args2, { encoding: "utf8" }).trim());
+  const gh = opts.gh ?? ((args2) => (0, import_child_process.execFileSync)("gh", args2, { encoding: "utf8" }).trim());
   assertSafeId("finding id", opts.findingId);
   const dir = feedbackDir(opts.cwd, opts.runId);
-  const triagePath = path20.join(dir, "triage.json");
+  const triagePath = path18.join(dir, "triage.json");
   let record;
   try {
     record = JSON.parse(fsi.readFileSync(triagePath, "utf8"));
@@ -6820,7 +6603,7 @@ function runFile(opts) {
     approved_at: (opts.now ?? /* @__PURE__ */ new Date()).toISOString()
   } : opts.deny ? { approved: false, reason: opts.denyReason ?? "operator denied" } : void 0;
   const decision = decideGitHubIssueFiling(entry.draft, approval);
-  const filedPath = path20.join(dir, "filed.json");
+  const filedPath = path18.join(dir, "filed.json");
   const filed = (() => {
     try {
       return JSON.parse(fsi.readFileSync(filedPath, "utf8"));
@@ -6853,7 +6636,7 @@ function runFile(opts) {
     log(`dry-run: would file to ${repo}: "${draft.title}" (labels: ${draft.labels.join(", ")})`);
     return 0;
   }
-  const bodyFile = path20.join(dir, `${opts.findingId}.filed-body.md`);
+  const bodyFile = path18.join(dir, `${opts.findingId}.filed-body.md`);
   fsi.writeFileSync(bodyFile, draft.body, "utf8");
   const url = gh([
     "issue",
@@ -6898,7 +6681,7 @@ function main() {
     else if (a === "--deny") {
       deny = true;
       if (argv[i + 1] && !argv[i + 1].startsWith("--")) denyReason = argv[++i];
-    } else if (a === "--cwd" && argv[i + 1]) cwd = path20.resolve(argv[++i]);
+    } else if (a === "--cwd" && argv[i + 1]) cwd = path18.resolve(argv[++i]);
     else if (a === "--dry-run") dryRun = true;
     else {
       process.stderr.write(`[feedback-triage] unknown argument: ${a}
@@ -6915,7 +6698,7 @@ function main() {
       process.stderr.write("[feedback-triage] triage requires --findings <findings.json>\n");
       return 1;
     }
-    const findings = JSON.parse(fs15.readFileSync(findingsPath, "utf8"));
+    const findings = JSON.parse(fs13.readFileSync(findingsPath, "utf8"));
     if (!Array.isArray(findings)) {
       process.stderr.write("[feedback-triage] findings file must be a JSON array of RunLearningFinding\n");
       return 1;

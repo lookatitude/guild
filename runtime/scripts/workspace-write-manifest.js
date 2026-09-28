@@ -5174,37 +5174,6 @@ function detect(root, modeOverride, readMode2) {
     sub_guilds: subGuilds
   };
 }
-function parseArgs(argv) {
-  let cwd;
-  let mode;
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--cwd" && argv[i + 1]) {
-      cwd = argv[++i];
-    } else if (arg === "--mode" && argv[i + 1]) {
-      const v = argv[++i];
-      if (v === "auto" || v === "on" || v === "off") mode = v;
-    }
-  }
-  return { cwd, mode };
-}
-function runWorkspaceDetectCli(readMode2, argv = process.argv.slice(2)) {
-  const { cwd: cwdArg, mode } = parseArgs(argv);
-  const cwd = cwdArg ?? process.env["GUILD_CWD"] ?? process.cwd();
-  if (!fs8.existsSync(cwd) || !fs8.statSync(cwd).isDirectory()) {
-    process.stderr.write(`[workspace/detect] ERROR: --cwd "${cwd}" is not a directory
-`);
-    process.exit(1);
-  }
-  try {
-    const result = detect(cwd, mode, readMode2);
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
-  } catch (e) {
-    process.stderr.write(`[workspace/detect] ERROR: ${e.message}
-`);
-    process.exit(2);
-  }
-}
 var fs8, path11, import_child_process;
 var init_detect = __esm({
   "src/domains/state/detect.ts"() {
@@ -5212,9 +5181,6 @@ var init_detect = __esm({
     path11 = __toESM(require("path"));
     import_child_process = require("child_process");
     init_storage_roots();
-    if (typeof module !== "undefined" && require.main === module && /^detect\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-      runWorkspaceDetectCli();
-    }
   }
 });
 
@@ -5261,7 +5227,7 @@ function federatedQuery(root, query, scope) {
   });
   return { query, steps };
 }
-function parseArgs2(argv) {
+function parseArgs(argv) {
   let cwd;
   let query;
   let scope;
@@ -5274,7 +5240,7 @@ function parseArgs2(argv) {
   return { cwd, query, scope };
 }
 function runFederatedQueryCli(argv = process.argv.slice(2)) {
-  const { cwd: cwdArg, query, scope } = parseArgs2(argv);
+  const { cwd: cwdArg, query, scope } = parseArgs(argv);
   const cwd = cwdArg ?? process.env["GUILD_CWD"] ?? process.cwd();
   if (!query) {
     process.stderr.write(`[workspace/federated-query] ERROR: --query is required
@@ -5418,7 +5384,7 @@ function collectUpstreamCandidates(opts) {
   }
   return all;
 }
-function parseArgs3(argv) {
+function parseArgs2(argv) {
   let workspaceRoot2;
   let child;
   let runId;
@@ -5441,7 +5407,7 @@ function parseArgs3(argv) {
   return { workspaceRoot: workspaceRoot2, child, runId };
 }
 function runPromoteUpstreamCli(argv = process.argv.slice(2)) {
-  const { workspaceRoot: rootArg, child, runId: runIdArg } = parseArgs3(argv);
+  const { workspaceRoot: rootArg, child, runId: runIdArg } = parseArgs2(argv);
   const workspaceRoot2 = rootArg ?? process.env["GUILD_CWD"] ?? process.cwd();
   if (!fs10.existsSync(workspaceRoot2) || !fs10.statSync(workspaceRoot2).isDirectory()) {
     process.stderr.write(
@@ -5569,7 +5535,7 @@ function writeManifest(root, modeOverride, readMode2) {
   atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   return manifestPath;
 }
-function parseArgs4(argv) {
+function parseArgs3(argv) {
   let cwd;
   let mode;
   for (let i = 0; i < argv.length; i++) {
@@ -5584,7 +5550,7 @@ function parseArgs4(argv) {
   return { cwd, mode };
 }
 function runWriteWorkspaceManifestCli(readMode2, argv = process.argv.slice(2)) {
-  const { cwd: cwdArg, mode } = parseArgs4(argv);
+  const { cwd: cwdArg, mode } = parseArgs3(argv);
   const cwd = cwdArg ?? process.env["GUILD_CWD"] ?? process.cwd();
   if (!fs11.existsSync(cwd) || !fs11.statSync(cwd).isDirectory()) {
     process.stderr.write(`[workspace/write-manifest] ERROR: --cwd "${cwd}" is not a directory
@@ -5628,9 +5594,6 @@ var init_write_manifest = __esm({
       ".h",
       ".hpp"
     ]);
-    if (typeof module !== "undefined" && require.main === module && /^write-manifest\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-      runWriteWorkspaceManifestCli();
-    }
   }
 });
 
