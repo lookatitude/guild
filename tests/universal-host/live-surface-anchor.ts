@@ -678,7 +678,11 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-09-28 (T15F hooks, plr-wi-15-3): decisions reference stages ADR-lite
   // candidates under .guild/knowledge/candidates/decisions/ for harvest promotion (KTD35).
   // ANTI-VACUITY: check-surface-pins named only `skills/skills` stale against the T15 pin.
-  skills: "b5cbff1affdedc17dfe223ca79f3b656fe86eed3",
+  // Re-ratified 2026-09-28 (T16 delete copies): wiki references route ingest blobs to
+  // sources/ (KTD47), evolve step 9 names applyEvolveDelta, context-assemble passes
+  // --phase/--cell, init and team-compose drop the retired paths. ANTI-VACUITY:
+  // check-surface-pins named only `skills/skills` stale against the T15F pin.
+  skills: "5145228d73c214112f4301193c7ef06bd46139ff",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
