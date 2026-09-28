@@ -211,6 +211,11 @@ export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
     status: "waived",
     note: "WAIVER: the analyzer intentionally owns a stricter transactional containment layer: symlink-refusing input walks, O_EXCL temporary files, atomic rename, inode-owned locks, and a validated multi-file recovery journal. Replacing it with the single-file primitive would discard transaction and lock guarantees; adversarial analyzer tests pin escape, symlink, journal, and recovery behavior.",
   }),
+  Object.freeze({
+    path: "src/domains/security/ingest-pause.ts",
+    status: "waived",
+    note: "WAIVER: the ingest-pause gate CLASSIFIES whether a PreToolUse target is a paused candidate or under the wiki; it performs no bounded write. It follows a dangling link's text (bounded hops) and matches hard links by inode so an alias fails closed, which canonicalizeRealPath deliberately does not do. Tests pin directory, file, dangling and hard-link aliases.",
+  }),
 ]);
 
 /** Repo-relative path of the one file that may hold `status: "home"`. */
