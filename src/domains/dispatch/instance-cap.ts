@@ -51,6 +51,11 @@ export interface InstanceReservationV1 {
   run_id: string;
   logical_task_id: string;
   attempt: number;
+  /**
+   * The one instance this slot admits, when the caller knows it at claim time.
+   * Isolated-launch admission refuses any other instance id under this attempt.
+   */
+  instance_id?: string;
   claimed_at: string;
   /**
    * Unique owner token (codex G-lane r4). `release()` deletes the placeholder
@@ -247,6 +252,8 @@ export function instanceCapFailure(
 export interface ReserveInstanceInput extends RunScope {
   logical_task_id: string;
   attempt: number;
+  /** The one instance this reservation admits (recorded on the placeholder). */
+  instance_id?: string;
   max?: number;
   now?: () => string;
 }
@@ -321,6 +328,7 @@ export function reserveInstance(input: ReserveInstanceInput): ReserveResult {
       run_id: input.run_id,
       logical_task_id: input.logical_task_id,
       attempt: input.attempt,
+      ...(input.instance_id ? { instance_id: input.instance_id } : {}),
       claimed_at: (input.now ?? (() => new Date().toISOString()))(),
       owner,
     };
@@ -369,7 +377,7 @@ export function reserveInstanceBatch(input: {
   max?: number;
   guildDir?: string;
   now?: () => string;
-  lanes: ReadonlyArray<{ logical_task_id: string; attempt: number }>;
+  lanes: ReadonlyArray<{ logical_task_id: string; attempt: number; instance_id?: string }>;
 }): ReserveBatchResult {
   const held: InstanceReservation[] = [];
   for (const lane of input.lanes) {
@@ -381,6 +389,7 @@ export function reserveInstanceBatch(input: {
       now: input.now,
       logical_task_id: lane.logical_task_id,
       attempt: lane.attempt,
+      instance_id: lane.instance_id,
     });
     if (reserveRefused(claim)) {
       for (const prior of held) prior.release();

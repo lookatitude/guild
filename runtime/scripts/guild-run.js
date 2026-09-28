@@ -22712,11 +22712,21 @@ function assertIsolatedLaneAdmitted(input) {
     { run_id: runId, logical_task_id: logicalTaskId, attempt: input.attempt ?? 1, instance_id: instanceId },
     { guildDir: input.guildDir }
   );
-  if (!fs28.existsSync(path35.resolve(input.cwd, paths.attempt_path))) {
+  let attemptRaw;
+  try {
+    attemptRaw = fs28.readFileSync(path35.resolve(input.cwd, paths.attempt_path), "utf8");
+  } catch {
     throw new IsolatedSpawnRefused(
       `instance ${instanceId} (${logicalTaskId}) holds no admitted slot: reserveInstance never claimed its attempt record`
     );
   }
+  assertReservationAdmitsInstance({
+    raw: attemptRaw,
+    runId,
+    logicalTaskId,
+    attempt: input.attempt ?? 1,
+    instanceId
+  });
   let assignment = null;
   try {
     assignment = validateTaskAssignmentV2(
@@ -22736,12 +22746,42 @@ function assertIsolatedLaneAdmitted(input) {
     );
   }
 }
+function assertReservationAdmitsInstance(input) {
+  const { runId, logicalTaskId, attempt, instanceId } = input;
+  const label = `attempt ${attempt} of ${logicalTaskId}`;
+  let record;
+  try {
+    const parsed = JSON.parse(input.raw);
+    if (parsed === null || typeof parsed !== "object") throw new Error("not an object");
+    record = parsed;
+  } catch {
+    throw new IsolatedSpawnRefused(`${label} in run ${runId} has an unreadable attempt record`);
+  }
+  const isReservation = record["schema_version"] === INSTANCE_RESERVATION_SCHEMA;
+  if (!isReservation && record["schema_version"] !== "guild.task_attempt.v1") {
+    throw new IsolatedSpawnRefused(`${label} in run ${runId} has no reservation or attempt record`);
+  }
+  if (record["run_id"] !== runId || record["logical_task_id"] !== logicalTaskId || record["attempt"] !== attempt) {
+    throw new IsolatedSpawnRefused(`the attempt record for ${label} is not for run ${runId}`);
+  }
+  const terminal = record["terminal_state"];
+  if (!isReservation && terminal !== null && terminal !== void 0) {
+    throw new IsolatedSpawnRefused(`${label} is terminal (${String(terminal)}); a relaunch reserves a new attempt`);
+  }
+  const admitted = record["instance_id"];
+  if (!isReservation && typeof admitted !== "string") {
+    throw new IsolatedSpawnRefused(`the attempt record for ${label} names no instance`);
+  }
+  if (typeof admitted === "string" && admitted !== instanceId) {
+    throw new IsolatedSpawnRefused(`${label} admitted instance ${admitted}, not ${instanceId}`);
+  }
+}
 function launchClaimPath(ids) {
   const paths = taskCellPaths(
-    { run_id: ids.runId, logical_task_id: ids.logicalTaskId, attempt: ids.attempt ?? 1, instance_id: ids.instanceId },
+    { run_id: ids.runId, logical_task_id: ids.logicalTaskId, attempt: ids.attempt ?? 1, instance_id: "claim" },
     { guildDir: ids.guildDir }
   );
-  return path35.join(paths.instance_dir, "launch-claim.json");
+  return path35.join(paths.attempt_dir, "launch-claim.json");
 }
 function claimIsolatedLaunches(input) {
   if (!present2(input.launchId)) throw new IsolatedSpawnRefused(`a launch in run ${input.runId} has no launch id`);
@@ -22768,7 +22808,6 @@ function claimIsolatedLaunches(input) {
       launchClaimPath({
         runId: input.runId,
         logicalTaskId: lane.logicalTaskId,
-        instanceId: lane.instanceId,
         attempt: lane.attempt,
         guildDir: input.guildDir
       })
@@ -22789,16 +22828,19 @@ function claimIsolatedLaunches(input) {
 `, { encoding: "utf8", flag: "wx" });
       created.push(file);
     } catch (err) {
-      for (const own of created) fs28.rmSync(own, { force: true });
-      let holder = "an earlier launch";
-      try {
-        const prior = JSON.parse(fs28.readFileSync(file, "utf8"));
-        if (typeof prior.launch_id === "string") holder = `launch ${prior.launch_id}`;
-      } catch {
-      }
       const code = err.code;
+      let holder = "an unknown instance by an earlier launch";
+      if (code === "EEXIST") {
+        try {
+          const prior = JSON.parse(fs28.readFileSync(file, "utf8"));
+          if (typeof prior.launch_id === "string") holder = `instance ${String(prior.instance_id)} by launch ${prior.launch_id}`;
+        } catch {
+        }
+      }
+      for (const own of created) fs28.rmSync(own, { force: true });
+      const label = `attempt ${lane.attempt ?? 1} of ${lane.logicalTaskId}`;
       throw new IsolatedSpawnRefused(
-        code === "EEXIST" ? `instance ${lane.instanceId} (${lane.logicalTaskId}) was already launched by ${holder}; admission is one launch per instance. A relaunch reserves a new attempt.` : `instance ${lane.instanceId} (${lane.logicalTaskId}) launch claim could not be written (${code ?? "error"})`
+        code === "EEXIST" ? `${label} already launched ${holder}; refusing ${lane.instanceId}. One reservation admits one launch. A relaunch reserves a new attempt.` : `${label} launch claim for ${lane.instanceId} could not be written (${code ?? "error"})`
       );
     }
   }
@@ -22809,6 +22851,7 @@ var init_isolated_launch_admission = __esm({
     crypto7 = __toESM(require("crypto"));
     fs28 = __toESM(require("fs"));
     path35 = __toESM(require("path"));
+    init_instance_cap();
     init_task_cell_contract();
     ISOLATED_SPAWN_REFUSED = "isolated_spawn_refused";
     IsolatedSpawnRefused = class extends Error {

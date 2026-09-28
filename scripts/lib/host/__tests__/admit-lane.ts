@@ -27,8 +27,26 @@ export function admitLane(
   instanceId: string,
   tools: string[] = ["Read"],
 ): void {
-  const claim = reserveInstance({ cwd, run_id: runId, logical_task_id: logicalTaskId, attempt: 1, max: 64 });
+  const claim = reserveInstance({
+    cwd,
+    run_id: runId,
+    logical_task_id: logicalTaskId,
+    attempt: 1,
+    instance_id: instanceId,
+    max: 64,
+  });
   if (reserveRefused(claim)) throw new Error(claim.reason);
+  writeLaneAssignment(cwd, runId, logicalTaskId, instanceId, tools);
+}
+
+/** Write one valid v2 assignment for an instance of attempt 1, with no reservation. */
+export function writeLaneAssignment(
+  cwd: string,
+  runId: string,
+  logicalTaskId: string,
+  instanceId: string,
+  tools: string[] = ["Read"],
+): void {
   const assignment = buildTaskAssignmentV2({
     run_id: runId,
     cell_id: `cell-${logicalTaskId}`,

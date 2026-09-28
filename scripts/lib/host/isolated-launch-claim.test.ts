@@ -92,7 +92,7 @@ describe("plr-wi-15-4 r1 · backends: one admission, one launch", () => {
     }
     // CONTROL: the fresh admission launches once.
     expect(outcomes).toEqual([true, false, false, false, false]);
-    for (const n of notes.slice(1)) expect(n).toMatch(/isolated_spawn_refused:.*already launched by launch tmux:guild-wi154c-0/);
+    for (const n of notes.slice(1)) expect(n).toMatch(/isolated_spawn_refused:.*already launched instance T1\.a1\.i-1 by launch tmux:guild-wi154c-0/);
     fs.rmSync(link);
   });
 
@@ -152,7 +152,7 @@ describe("plr-wi-15-4 r1 · backends: one admission, one launch", () => {
         ],
       }),
     ).toThrow(/^isolated_spawn_refused:.*B\.a1\.i-1.*launch first/);
-    expect(fs.existsSync(path.join(cwd, launchClaimPath({ runId: RUN, logicalTaskId: "A", instanceId: "A.a1.i-1" })))).toBe(false);
+    expect(fs.existsSync(path.join(cwd, launchClaimPath({ runId: RUN, logicalTaskId: "A" })))).toBe(false);
     // CONTROL: A is still launchable once.
     claimIsolatedLaunches({ cwd, runId: RUN, launchId: "third", lanes: [{ logicalTaskId: "A", instanceId: "A.a1.i-1" }] });
   });
@@ -205,7 +205,7 @@ describe("plr-wi-15-4 r1 · guild-run wrapper spawns only admitted lanes (compil
     expect(first.started).toBe(1);
     const second = guildRun(cwd, identity);
     expect(second.exit).toBe(1);
-    expect(second.stderr).toMatch(/already launched by launch guild-run:/);
+    expect(second.stderr).toMatch(/already launched instance T1\.a1\.i-1 by launch guild-run:/);
     expect(second.started).toBe(0);
   });
 

@@ -22151,6 +22151,7 @@ var init_execution_transport_adapters = __esm({
 // src/domains/dispatch/isolated-launch-admission.ts
 var init_isolated_launch_admission = __esm({
   "src/domains/dispatch/isolated-launch-admission.ts"() {
+    init_instance_cap();
     init_task_cell_contract();
   }
 });

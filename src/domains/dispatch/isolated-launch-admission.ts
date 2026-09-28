@@ -12,10 +12,15 @@
  *  - `assertIsolatedLaneAdmitted` (disk): at real launch, the instance must have
  *    been admitted through `reserveInstance` (its attempt record exists) and its
  *    `guild.task_assignment.v2` must be written and name this exact instance.
+ *  - `assertReservationAdmitsInstance` (disk): the attempt record is the
+ *    reservation. When it names an instance (the placeholder's `instance_id`,
+ *    or the written `guild.task_attempt.v1`), no other instance id may launch
+ *    under it, and a terminal attempt launches nothing.
  *  - `claimIsolatedLaunches` (disk, one-shot): the real launch consumes the
- *    instance's single launch claim with an exclusive create. A second launch of
- *    the same instance, under any cwd spelling, refuses. Admission is not a
- *    reusable file check.
+ *    RESERVATION's single launch claim, keyed by (run, task, attempt), with an
+ *    exclusive create that records the instance it launched. A second launch
+ *    under that attempt, by any instance id and under any cwd spelling,
+ *    refuses. So live slots and spawned workers stay one to one.
  *
  * Refusals throw `IsolatedSpawnRefused`; the message starts with
  * `isolated_spawn_refused:` like the launcher's rung refusal.
@@ -24,6 +29,7 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 
+import { INSTANCE_RESERVATION_SCHEMA } from "./instance-cap";
 import { taskCellPaths, validateTaskAssignmentV2 } from "./task-cell-contract";
 
 export const ISOLATED_SPAWN_REFUSED = "isolated_spawn_refused" as const;
@@ -76,11 +82,21 @@ export function assertIsolatedLaneAdmitted(input: {
     { run_id: runId, logical_task_id: logicalTaskId, attempt: input.attempt ?? 1, instance_id: instanceId! },
     { guildDir: input.guildDir },
   );
-  if (!fs.existsSync(path.resolve(input.cwd, paths.attempt_path))) {
+  let attemptRaw: string;
+  try {
+    attemptRaw = fs.readFileSync(path.resolve(input.cwd, paths.attempt_path), "utf8");
+  } catch {
     throw new IsolatedSpawnRefused(
       `instance ${instanceId} (${logicalTaskId}) holds no admitted slot: reserveInstance never claimed its attempt record`,
     );
   }
+  assertReservationAdmitsInstance({
+    raw: attemptRaw,
+    runId,
+    logicalTaskId,
+    attempt: input.attempt ?? 1,
+    instanceId: instanceId!,
+  });
   let assignment: ReturnType<typeof validateTaskAssignmentV2> = null;
   try {
     assignment = validateTaskAssignmentV2(
@@ -106,21 +122,63 @@ export function assertIsolatedLaneAdmitted(input: {
   }
 }
 
+/**
+ * Disk: the attempt record at `attempt_path` is the reservation. It must be for
+ * this run / task / attempt, must not be terminal, and when it names an
+ * instance, that instance is the only one it admits. A placeholder that names
+ * no instance is bound by the first launch claim instead.
+ */
+export function assertReservationAdmitsInstance(input: {
+  raw: string;
+  runId: string;
+  logicalTaskId: string;
+  attempt: number;
+  instanceId: string;
+}): void {
+  const { runId, logicalTaskId, attempt, instanceId } = input;
+  const label = `attempt ${attempt} of ${logicalTaskId}`;
+  let record: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(input.raw);
+    if (parsed === null || typeof parsed !== "object") throw new Error("not an object");
+    record = parsed as Record<string, unknown>;
+  } catch {
+    throw new IsolatedSpawnRefused(`${label} in run ${runId} has an unreadable attempt record`);
+  }
+  const isReservation = record["schema_version"] === INSTANCE_RESERVATION_SCHEMA;
+  if (!isReservation && record["schema_version"] !== "guild.task_attempt.v1") {
+    throw new IsolatedSpawnRefused(`${label} in run ${runId} has no reservation or attempt record`);
+  }
+  if (record["run_id"] !== runId || record["logical_task_id"] !== logicalTaskId || record["attempt"] !== attempt) {
+    throw new IsolatedSpawnRefused(`the attempt record for ${label} is not for run ${runId}`);
+  }
+  const terminal = record["terminal_state"];
+  if (!isReservation && terminal !== null && terminal !== undefined) {
+    throw new IsolatedSpawnRefused(`${label} is terminal (${String(terminal)}); a relaunch reserves a new attempt`);
+  }
+  const admitted = record["instance_id"];
+  if (!isReservation && typeof admitted !== "string") {
+    throw new IsolatedSpawnRefused(`the attempt record for ${label} names no instance`);
+  }
+  if (typeof admitted === "string" && admitted !== instanceId) {
+    throw new IsolatedSpawnRefused(`${label} admitted instance ${admitted}, not ${instanceId}`);
+  }
+}
+
 export const ISOLATED_LAUNCH_CLAIM_SCHEMA = "guild.isolated_launch_claim.v1" as const;
 
-/** The one launch claim of an instance, beside its assignment. */
+/** The one launch claim of a reservation, beside its attempt record. */
 export function launchClaimPath(ids: {
   runId: string;
   logicalTaskId: string;
-  instanceId: string;
   attempt?: number;
   guildDir?: string;
 }): string {
   const paths = taskCellPaths(
-    { run_id: ids.runId, logical_task_id: ids.logicalTaskId, attempt: ids.attempt ?? 1, instance_id: ids.instanceId },
+    { run_id: ids.runId, logical_task_id: ids.logicalTaskId, attempt: ids.attempt ?? 1, instance_id: "claim" },
     { guildDir: ids.guildDir },
   );
-  return path.join(paths.instance_dir, "launch-claim.json");
+  return path.join(paths.attempt_dir, "launch-claim.json");
 }
 
 export interface IsolatedLaunchLane {
@@ -131,10 +189,12 @@ export interface IsolatedLaunchLane {
 
 /**
  * Admit and consume, all or nothing: every lane must pass
- * `assertIsolatedLaneAdmitted`, then each lane's launch claim is created with
- * `wx` (O_EXCL). If any claim already exists, the claims this call created are
- * removed and the launch refuses naming the launch that holds it. Call it only
- * immediately before the process or pane is created.
+ * `assertIsolatedLaneAdmitted`, then each lane's reservation claim (one per
+ * run / task / attempt) is created with `wx` (O_EXCL) and records the instance
+ * it launched. If any claim already exists, including one this call just made
+ * for another instance of the same attempt, the claims this call created are
+ * removed and the launch refuses naming the instance and launch that hold it.
+ * Call it only immediately before the process or pane is created.
  */
 export function claimIsolatedLaunches(input: {
   cwd: string;
@@ -168,7 +228,6 @@ export function claimIsolatedLaunches(input: {
       launchClaimPath({
         runId: input.runId,
         logicalTaskId: lane.logicalTaskId!,
-        instanceId: lane.instanceId!,
         attempt: lane.attempt,
         guildDir: input.guildDir,
       }),
@@ -188,20 +247,23 @@ export function claimIsolatedLaunches(input: {
       fs.writeFileSync(file, `${JSON.stringify(claim, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
       created.push(file);
     } catch (err) {
-      for (const own of created) fs.rmSync(own, { force: true });
-      let holder = "an earlier launch";
-      try {
-        const prior = JSON.parse(fs.readFileSync(file, "utf8")) as { launch_id?: unknown };
-        if (typeof prior.launch_id === "string") holder = `launch ${prior.launch_id}`;
-      } catch {
-        /* unreadable claim still refuses */
-      }
       const code = (err as NodeJS.ErrnoException).code;
+      let holder = "an unknown instance by an earlier launch";
+      if (code === "EEXIST") {
+        try {
+          const prior = JSON.parse(fs.readFileSync(file, "utf8")) as { launch_id?: unknown; instance_id?: unknown };
+          if (typeof prior.launch_id === "string") holder = `instance ${String(prior.instance_id)} by launch ${prior.launch_id}`;
+        } catch {
+          /* unreadable claim still refuses */
+        }
+      }
+      for (const own of created) fs.rmSync(own, { force: true });
+      const label = `attempt ${lane.attempt ?? 1} of ${lane.logicalTaskId}`;
       throw new IsolatedSpawnRefused(
         code === "EEXIST"
-          ? `instance ${lane.instanceId} (${lane.logicalTaskId}) was already launched by ${holder}; ` +
-              `admission is one launch per instance. A relaunch reserves a new attempt.`
-          : `instance ${lane.instanceId} (${lane.logicalTaskId}) launch claim could not be written (${code ?? "error"})`,
+          ? `${label} already launched ${holder}; refusing ${lane.instanceId}. ` +
+              `One reservation admits one launch. A relaunch reserves a new attempt.`
+          : `${label} launch claim for ${lane.instanceId} could not be written (${code ?? "error"})`,
       );
     }
   }
