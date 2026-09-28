@@ -208,6 +208,46 @@ describe("plr-wi-15-3 · a lane worker never writes the wiki (KTD35)", () => {
     }
   });
 
+  it("G-lane r3: a quoted interpreter path with spaces into the wiki is refused (symlink alias, absolute)", () => {
+    fs.symlinkSync(path.join(repo, ".guild", "wiki"), path.join(repo, "wiki alias"));
+    const repro = `node -e "require('fs').writeFileSync('wiki alias/bypass.md','x')"`;
+    expect(refused(runHook("task", "Bash", { command: repro }))).toBe(true);
+    const abs = `python3 -c 'open("${repo}/wiki alias/abs.md","w")'`;
+    expect(refused(runHook("task", "Bash", { command: abs }))).toBe(true);
+    expect(refusalEvents().length).toBe(2);
+    // CONTROL: a spaced literal outside the wiki passes; the lead runs the repro untouched.
+    const other = `node -e "require('fs').writeFileSync('out dir/x.md','x')"`;
+    expect(runHook("task", "Bash", { command: other }).permissionDecision).toBeUndefined();
+    expect(runHook("lead", "Bash", { command: repro }).permissionDecision).toBeUndefined();
+  });
+
+  it("G-lane r3: bashWikiPath keeps spaces in literals and absolute runs under a spaced repo", () => {
+    const spaced = path.join(tmp, "my repo");
+    const wiki = path.join(spaced, ".guild", "wiki");
+    fs.mkdirSync(wiki, { recursive: true });
+    fs.symlinkSync(wiki, path.join(spaced, "wiki alias"));
+    const hit = (c: string): string | null => bashWikiPath(c, (t) => resolvesUnderWiki([wiki], t, spaced));
+    for (const c of [
+      `node -e "require('fs').writeFileSync('wiki alias/bypass.md','x')"`,
+      `node -e "require('fs').writeFileSync('${spaced}/.guild/wiki/abs.md','x')"`,
+      `python3 -c 'open("${wiki}/p.md","w")'`,
+      // a stray apostrophe before the literal must not shift quote pairing
+      `node -e "// don't\nrequire('fs').writeFileSync('wiki alias/b','x')"`,
+      `bash -c "node -e \\"require('fs').writeFileSync('wiki alias/n','x')\\""`,
+      `echo x > ${spaced.replace(" ", "\\ ")}/.guild/wiki/esc.md`,
+    ]) {
+      expect(hit(c)).not.toBeNull();
+    }
+    // CONTROL: spaced paths outside the wiki are not refused.
+    for (const c of [
+      `node -e "require('fs').writeFileSync('wiki aliasx/b.md','x')"`,
+      `python3 -c 'open("${spaced}/.guild/knowledge/candidates/x.md","w")'`,
+      "echo 'hello world' > out.txt",
+    ]) {
+      expect(hit(c)).toBeNull();
+    }
+  });
+
   it("CONTROL: the in-process harvest writer is not a tool call and still promotes under a lane env", () => {
     const prev = process.env["GUILD_TASK_ID"];
     process.env["GUILD_TASK_ID"] = "T1";

@@ -44231,6 +44231,34 @@ function bashWords(command, depth = 0) {
   }
   return words;
 }
+var QUOTES = "'\"`";
+var SPAN_START = /[\s'"`(,=:[{]/;
+var SPAN_END = /['"`),;\]}|&<>\n]/;
+function quotedLiterals(text, depth = 0) {
+  const out = [];
+  for (let i = 0; i < text.length && out.length < 4096; i++) {
+    const q = text[i];
+    if (!QUOTES.includes(q)) continue;
+    let j = i + 1;
+    while (j < text.length && text[j] !== q) j += q !== "'" && text[j] === "\\" ? 2 : 1;
+    if (j >= text.length) continue;
+    const body = text.slice(i + 1, j);
+    out.push(body, body.replace(/\\(.)/g, "$1"));
+    if (depth < 4) out.push(...quotedLiterals(body, depth + 1));
+  }
+  return out;
+}
+function absoluteSpans(text) {
+  const out = [];
+  for (let i = 0; i < text.length; i++) {
+    const starts = text[i] === "/" || text[i] === "~" && text[i + 1] === "/";
+    if (!starts || i > 0 && !SPAN_START.test(text[i - 1])) continue;
+    let j = i;
+    while (j < text.length && !SPAN_END.test(text[j])) j++;
+    out.push(text.slice(i, j), text.slice(i, j).trimEnd());
+  }
+  return out;
+}
 function bashWikiPath(command, inWiki) {
   const seen = /* @__PURE__ */ new Set();
   const check = (c) => {
@@ -44238,7 +44266,11 @@ function bashWikiPath(command, inWiki) {
     seen.add(c);
     return inWiki(c);
   };
-  for (const w of [...bashWords(command), command.replace(/["'\\]/g, "")]) {
+  const words = bashWords(command);
+  for (const w of [...words, command]) {
+    for (const c of [...quotedLiterals(w), ...absoluteSpans(w)]) if (check(c)) return c;
+  }
+  for (const w of [...words, command.replace(/["'\\]/g, "")]) {
     if (check(w)) return w;
     for (const f of w.split(FRAGMENT_SPLIT)) {
       if (check(f)) return f;

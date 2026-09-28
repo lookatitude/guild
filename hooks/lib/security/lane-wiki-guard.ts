@@ -13,7 +13,8 @@
  * a path.relative check, so `alias/../x` and `wiki/..hidden` are both judged
  * where they really land. Write / Edit / MultiEdit / NotebookEdit are fully
  * gated. Bash fails closed: a command whose shell-word-normalized text (quotes
- * and escapes stripped, substitutions included) names any path resolving under
+ * and escapes stripped, substitutions included), any quoted literal or absolute
+ * run of it (spaces kept), names any path resolving under
  * the wiki is refused, whatever the verb; there is no reader allowlist, and a
  * lane reads the wiki through Read / Grep / Glob. A path computed at run time
  * (variables, string joins, globs, `cd` then a relative path) is not visible in
@@ -220,11 +221,50 @@ export function bashWords(command: string, depth = 0): string[] {
   return words;
 }
 
+const QUOTES = "'\"`";
+const SPAN_START = /[\s'"`(,=:[{]/;
+const SPAN_END = /['"`),;\]}|&<>\n]/;
+
+/**
+ * Every quoted string literal in `text`, spaces kept: the content from EACH
+ * quote character to the next same unescaped quote, so a stray apostrophe
+ * cannot shift the pairing off the path literal. Nested literals are re-read
+ * to a bounded depth; a backslash-unescaped copy is added too.
+ */
+export function quotedLiterals(text: string, depth = 0): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < text.length && out.length < 4096; i++) {
+    const q = text[i]!;
+    if (!QUOTES.includes(q)) continue;
+    let j = i + 1;
+    while (j < text.length && text[j] !== q) j += q !== "'" && text[j] === "\\" ? 2 : 1;
+    if (j >= text.length) continue;
+    const body = text.slice(i + 1, j);
+    out.push(body, body.replace(/\\(.)/g, "$1"));
+    if (depth < 4) out.push(...quotedLiterals(body, depth + 1));
+  }
+  return out;
+}
+
+/** Every absolute (`/`, `~/`) run in `text` up to a hard delimiter, spaces kept. */
+export function absoluteSpans(text: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const starts = text[i] === "/" || (text[i] === "~" && text[i + 1] === "/");
+    if (!starts || (i > 0 && !SPAN_START.test(text[i - 1]!))) continue;
+    let j = i;
+    while (j < text.length && !SPAN_END.test(text[j]!)) j++;
+    out.push(text.slice(i, j), text.slice(i, j).trimEnd());
+  }
+  return out;
+}
+
 /**
  * The first path a Bash command names that resolves under the wiki, or null,
- * whatever the command verb. Checked: each normalized word, each fragment of a
- * word (`--output=`, `of=`, interpreter literals, `${x:-...}` defaults), and the
- * raw text with quotes and backslashes removed. `inWiki` decides one string.
+ * whatever the command verb. Checked: each normalized word; every quoted
+ * literal and absolute run in the raw text and in each word, spaces kept; each
+ * fragment of a word (`--output=`, `of=`, `${x:-...}` defaults); and the raw
+ * text with quotes and backslashes removed. `inWiki` decides one string.
  */
 export function bashWikiPath(command: string, inWiki: (p: string) => boolean): string | null {
   const seen = new Set<string>();
@@ -233,7 +273,11 @@ export function bashWikiPath(command: string, inWiki: (p: string) => boolean): s
     seen.add(c);
     return inWiki(c);
   };
-  for (const w of [...bashWords(command), command.replace(/["'\\]/g, "")]) {
+  const words = bashWords(command);
+  for (const w of [...words, command]) {
+    for (const c of [...quotedLiterals(w), ...absoluteSpans(w)]) if (check(c)) return c;
+  }
+  for (const w of [...words, command.replace(/["'\\]/g, "")]) {
     if (check(w)) return w;
     for (const f of w.split(FRAGMENT_SPLIT)) {
       if (check(f)) return f;
