@@ -38,7 +38,7 @@ import * as fs from "fs";
 import * as path from "path";
 
 import { parseYaml } from "../state";
-import { canonicalYaml } from "./canonical-hash";
+import { canonicalYaml } from "../kernel";
 import {
   applyRestructure,
   dispatchGate,

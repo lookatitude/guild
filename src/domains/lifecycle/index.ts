@@ -39,6 +39,9 @@ export * from "./neutral-conformance-assembly";
 // neutral files above plus the already-declared `kernel` public contract, so it
 // adds no module dependency.
 export * from "./module-boundary-conformance-evaluator";
+// A21-8 — the MH-08 owner evaluator (module `migrations`). Here beside MH-07, not in
+// `state`, because it consumes the neutral files above and state sits below lifecycle.
+export * from "./host-cutover-controller";
 
 export * from "./check-lane-liveness";
 export * from "./emit-loop-event";

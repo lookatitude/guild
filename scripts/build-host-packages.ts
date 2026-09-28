@@ -85,7 +85,7 @@ import {
   type ModuleResourcePlan,
   type ModuleResourceEntry,
 } from "./lib/module-resources";
-import { OWNED_INVENTORY_CATEGORIES } from "./lib/module-manifest";
+import { OWNED_INVENTORY_CATEGORIES, moduleManifestFiles } from "./lib/module-manifest";
 import {
   assertNativeClaudePackageIdentityCurrent,
   assertLockedScriptRuntimeDependencies,
@@ -420,14 +420,19 @@ const stableJson = (v: unknown): string => JSON.stringify(v, null, 2) + "\n";
  * KTD28: a host package is a projection, never a copy of the domain tree. Two
  * parts of src/ ship, and only these:
  *   - src/surfaces/** — runtime DATA (class graphs, prompt dialects);
- *   - src/modules/** — module manifests + index shims, which the shipped
- *     activated-host-conformance worker reads in place (--module-boundary-root).
+ *   - the module ownership manifests (<tree>/modules/<id>.manifest.json), which
+ *     the shipped activated-host-conformance worker reads in place
+ *     (--module-boundary-root). JSON only, at their source paths.
  * No src/domains TypeScript ships: every CLI a surface spawns is compiled Node
  * under runtime/ (KTD11), so nothing on the user path imports a domain file.
  */
 function copyModuleRuntime(root: string, dest: string): void {
   copyDirExcludingNodeModules(path.join(root, "src", "surfaces"), path.join(dest, "src", "surfaces"));
-  copyDirExcludingNodeModules(path.join(root, "src", "modules"), path.join(dest, "src", "modules"));
+  for (const { path: abs } of moduleManifestFiles(root)) {
+    const to = path.join(dest, path.relative(root, abs));
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.copyFileSync(abs, to);
+  }
 }
 
 const TS_SOURCE = /\.(ts|tsx|mts|cts)$/;

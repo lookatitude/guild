@@ -40,7 +40,6 @@
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
-import { resolveSettings } from "../config";
 import { durableGuildDir } from "./storage-roots";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -72,23 +71,11 @@ export interface DetectionResult {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Read workspace.mode for this repo root via the settings resolver.
- * Returns "auto" if absent/invalid.
- *
- * OD-1 caveat: workspace.mode is NON-INHERITABLE (root-detection-only).
- * The resolver strips workspace.mode from workspace→child inheritance, so
- * `resolvedConfig.workspace.mode` always reflects THIS project's own file
- * (or the built-in default "auto") — never a parent workspace's value.
- * This preserves the original semantics exactly.
+ * Reads workspace.mode for a repo root. The settings resolver lives in config,
+ * which sits above state, so the caller injects it (config's
+ * `resolveWorkspaceMode`), the same way upgrade-steps takes `ctx.policy`.
  */
-function readSettingsMode(root: string): WorkspaceMode {
-  try {
-    const { config } = resolveSettings({ cwd: root });
-    return config.workspace.mode;
-  } catch {
-    return "auto";
-  }
-}
+export type WorkspaceModeReader = (root: string) => WorkspaceMode;
 
 /** Best-effort: parse remote URL from <childPath>/.git/config */
 function readRemote(childPath: string): string | null {
@@ -162,9 +149,12 @@ function classifyChild(root: string, name: string): SubGuild | null {
 
 // ── Core detection ────────────────────────────────────────────────────────────
 
-export function detect(root: string, modeOverride?: WorkspaceMode): DetectionResult {
-  const settingsMode = readSettingsMode(root);
-  const mode: WorkspaceMode = modeOverride ?? settingsMode;
+export function detect(
+  root: string,
+  modeOverride: WorkspaceMode | undefined,
+  readMode: WorkspaceModeReader,
+): DetectionResult {
+  const mode: WorkspaceMode = modeOverride ?? readMode(root);
 
   const RULE = "immediate child has .git/ OR .guild/";
 
@@ -217,7 +207,7 @@ function parseArgs(argv: string[]): { cwd?: string; mode?: WorkspaceMode } {
   return { cwd, mode };
 }
 
-export function runWorkspaceDetectCli(argv: string[] = process.argv.slice(2)): void {
+export function runWorkspaceDetectCli(readMode: WorkspaceModeReader, argv: string[] = process.argv.slice(2)): void {
   const { cwd: cwdArg, mode } = parseArgs(argv);
   const cwd = cwdArg ?? process.env["GUILD_CWD"] ?? process.cwd();
 
@@ -227,7 +217,7 @@ export function runWorkspaceDetectCli(argv: string[] = process.argv.slice(2)): v
   }
 
   try {
-    const result = detect(cwd, mode);
+    const result = detect(cwd, mode, readMode);
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } catch (e) {
     process.stderr.write(`[workspace/detect] ERROR: ${(e as Error).message}\n`);

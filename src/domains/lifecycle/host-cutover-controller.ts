@@ -1,5 +1,5 @@
 /**
- * src/domains/state/host-cutover-controller.ts
+ * src/domains/lifecycle/host-cutover-controller.ts
  *
  * A21-8 / W4/MH-08 — the strangler-migration host-cutover controller and its
  * four-scenario owner evaluator.
@@ -43,14 +43,10 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import {
-  NEUTRAL_ASSEMBLY_PACKET_SCHEMA,
-  NEUTRAL_SCENARIO_SUITE_ID,
-  NEUTRAL_SCENARIO_SUITE_VERSION,
-  neutralCanonicalJson,
-  neutralFreeze,
-} from "../lifecycle";
-import type { NeutralEvidenceIdentity, NeutralScenarioResult } from "../lifecycle";
+import { NEUTRAL_ASSEMBLY_PACKET_SCHEMA } from "./neutral-conformance-assembly";
+import { NEUTRAL_SCENARIO_SUITE_ID, NEUTRAL_SCENARIO_SUITE_VERSION } from "./neutral-conformance-core";
+import type { NeutralEvidenceIdentity, NeutralScenarioResult } from "./neutral-conformance-core";
+import { neutralCanonicalJson, neutralFreeze } from "./neutral-runtime-contracts";
 
 // ---------------------------------------------------------------------------
 // Identity of this owner

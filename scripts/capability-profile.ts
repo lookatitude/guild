@@ -57,8 +57,7 @@ import { CURRENT_LAYOUT_VERSION, detect as detectLayout } from "./lib/state/ensu
 // Narrow, not the barrel: `status` is a KTD29 cheap entrypoint, and pulling the
 // whole state index in would widen its require-graph. These two modules import
 // only node builtins and state-internal path arithmetic.
-import { createGuildStorage } from "../src/domains/state/storage-layout";
-import { loadJournal, upgradeJournalPath } from "../src/domains/state/upgrade-journal";
+import { createGuildStorage, loadJournal, upgradeJournalPath } from "../src/domains/state/index";
 import {
   HASHED_REGISTRIES,
   HASHED_TREES,

@@ -3,8 +3,8 @@
  *
  * FIC-140 / A21-8 (RED-FIRST) — the executable contract for the not-yet-written
  * production module
- * `src/domains/state/host-cutover-controller.ts`, exported
- * through the migrations module's public index.
+ * `src/domains/lifecycle/host-cutover-controller.ts`, exported
+ * through the lifecycle domain's public index.
  *
  * WHAT THIS BINDS
  *   `guild.conformance_scenarios.v1` assigns exactly FOUR of its 31 scenarios to
@@ -75,8 +75,8 @@ const CONTROLLER_SOURCE_PATH = path.resolve(
   __dirname,
   "host-cutover-controller.ts"
 );
-// T12 folded `migrations` into the state domain; the PUBLIC index the contract
-// means is that domain's index, not the transitional module shim beside it.
+// The MH-08 owner lives in lifecycle (T16D: state sits below lifecycle); the
+// PUBLIC index the contract means is that domain's index.
 const MIGRATIONS_INDEX_PATH = path.resolve(__dirname, "index.ts");
 
 const RED = "A21-8 RED: production module not implemented yet";

@@ -971,7 +971,7 @@ const GUILD_JOIN_ALLOWLIST = [
   // four migration files by name rather than a whole module directory.
   "src/domains/state/index-migrate.ts",
   "src/domains/state/wiki-importance.ts",
-  "src/domains/state/host-cutover-controller.ts",
+  "src/domains/lifecycle/host-cutover-controller.ts",
   "scripts/dot-guild/",
 ];
 

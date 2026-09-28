@@ -20,3 +20,6 @@ export * from "./runtime-tree-guard";
 // communication domain's artifact bus can enforce it without a dependency cycle.
 export * from "./tier-bus";
 export * from "./plugin-root";
+// The §1 canonical-hash rule (team-contracts). Pure (crypto only), so config and
+// teams both reach it here without a teams -> config -> teams cycle.
+export * from "./canonical-hash";

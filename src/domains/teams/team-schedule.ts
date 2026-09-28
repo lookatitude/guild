@@ -17,7 +17,7 @@
  * mutation.
  */
 
-import { canonicalYaml, isSha256Hex, sha256Hex } from "./canonical-hash";
+import { canonicalYaml, isSha256Hex, sha256Hex } from "../kernel";
 import {
   dispatchGate,
   proposalHashOf,

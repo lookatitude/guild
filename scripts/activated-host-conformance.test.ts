@@ -8,6 +8,17 @@ import { buildSync } from "esbuild";
 import { NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS } from "../src/domains/lifecycle";
 import { snapshotMigrationRuntimePackage } from "./lib/capability/migration-evidence";
 import { buildHostPackages } from "./build-host-packages";
+import { moduleManifestFiles } from "./lib/module-manifest";
+
+/** The module ownership manifests, at their source paths (what a package ships). */
+function copyModuleManifests(plugin: string): void {
+  const repo = path.resolve(__dirname, "..");
+  for (const { path: abs } of moduleManifestFiles(repo)) {
+    const to = path.join(plugin, path.relative(repo, abs));
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.copyFileSync(abs, to);
+  }
+}
 
 const {
   ACTIVATED_HOST_CONFORMANCE_SCHEMA,
@@ -242,7 +253,7 @@ function productionWorkerFixture(host: HostId = "claude-code-cli") {
   const manifest = host === "claude-code-cli" ? ".claude-plugin/plugin.json" : ".codex-plugin/plugin.json";
   fs.mkdirSync(path.join(plugin, path.dirname(manifest)), { recursive: true });
   fs.cpSync(path.resolve(__dirname, "__tests__", `../../${manifest}`), path.join(plugin, manifest));
-  fs.cpSync(path.resolve(__dirname, "../src/modules"), path.join(plugin, "src", "modules"), { recursive: true });
+  copyModuleManifests(plugin);
   fs.mkdirSync(path.join(plugin, "scripts", "lib", "capability"), { recursive: true });
   fs.mkdirSync(path.join(plugin, "hooks", "dist"), { recursive: true });
   fs.cpSync(path.resolve(__dirname, "../hooks/dist/pre-tool-use.js"), path.join(plugin, "hooks", "dist", "pre-tool-use.js"));
@@ -605,7 +616,7 @@ describe("activated-host conformance capture", () => {
     const out = path.join(stage, "worker.json");
     fs.mkdirSync(path.join(plugin, ".claude-plugin"), { recursive: true });
     fs.cpSync(path.resolve(__dirname, "../.claude-plugin/plugin.json"), path.join(plugin, ".claude-plugin", "plugin.json"));
-    fs.cpSync(path.resolve(__dirname, "../src/modules"), path.join(plugin, "src", "modules"), { recursive: true });
+    copyModuleManifests(plugin);
     fs.mkdirSync(path.join(plugin, "scripts", "lib", "capability"), { recursive: true });
     fs.mkdirSync(path.join(plugin, "hooks", "dist"), { recursive: true });
     fs.cpSync(path.resolve(__dirname, "../hooks/dist/pre-tool-use.js"), path.join(plugin, "hooks", "dist", "pre-tool-use.js"));
@@ -654,7 +665,7 @@ describe("activated-host conformance capture", () => {
     const benchmark = path.join(stage, "benchmark");
     fs.mkdirSync(path.join(plugin, ".claude-plugin"), { recursive: true });
     fs.cpSync(path.resolve(__dirname, "../.claude-plugin/plugin.json"), path.join(plugin, ".claude-plugin", "plugin.json"));
-    fs.cpSync(path.resolve(__dirname, "../src/modules"), path.join(plugin, "src", "modules"), { recursive: true });
+    copyModuleManifests(plugin);
     fs.mkdirSync(path.join(plugin, "scripts", "lib", "capability"), { recursive: true });
     fs.mkdirSync(path.join(plugin, "hooks", "dist"), { recursive: true });
     fs.cpSync(path.resolve(__dirname, "../hooks/dist/pre-tool-use.js"), path.join(plugin, "hooks", "dist", "pre-tool-use.js"));

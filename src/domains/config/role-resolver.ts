@@ -20,8 +20,37 @@
 
 import { HOST_IDS, HOST_REGISTRY_ROWS, type HostRegistryEntry } from "./host-registry-schema";
 import { resolveRoles, type RoleResolutionSet } from "./role-model-schema";
-import { ADVISORY_SUBSTRATES, type AdvisorySubstrate } from "../review";
 import type { DetectionResult } from "./provider-detect";
+
+/**
+ * Advisory SUBSTRATE — the role-resolved advisory HOST that gives the advice
+ * (universal-host P1-L0, contract C1). This is a DISTINCT axis from `backend`:
+ *   - `backend`   = the dispatch MECHANISM (tmux_team | host_subagents | single_agent)
+ *   - `substrate` = WHICH host produces the advice (the resolved roles.advisory)
+ * Do NOT overload `backend` with the provider. Additive + back-compatible: the field
+ * is optional and an ABSENT `substrate` means the default local advisor —
+ * `"claude-code-cli"` (legacy `"claude"` records remain valid).
+ * The routing change (populate from roles.advisory) lands in P1-L8; the schema field
+ * is the P1-L0 additive migration.
+ */
+export const ADVISORY_SUBSTRATES = Object.freeze([
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+  // Legacy substrate labels accepted for older records.
+  "claude",
+  "codex",
+  ".agents",
+  "pi",
+  "antigravity",
+] as const);
+export type AdvisorySubstrate = (typeof ADVISORY_SUBSTRATES)[number];
 
 /**
  * The registry rows AVAILABLE on this box, in registry/preference order. A row's

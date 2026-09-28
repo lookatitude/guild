@@ -66,6 +66,7 @@ import { buildModelInspection, MODEL_INSPECTION_SCHEMA, type ModelInspectionV1 }
 import { readSessionBinding } from "./session-binding";
 import { readRoutingFlags, ROUTING_FLAG_KEYS, type RoutingFlags } from "./routing-rollout";
 import { durableGuildDir } from "../state";
+import { createGuildStorage } from "../state";
 
 export const MODELS_COMMAND_USAGE = [
   "usage: guild models inspect [--cwd <repo-root>] [--run-id <id>] [--json]",
@@ -861,11 +862,7 @@ export function safeEmit(rendered: string): SafeEmit {
  * malformed binding renders as "not bound", never as a default host.
  */
 function readBindingView(cwd: string, runId: string): SessionBindingView | null {
-  // The run record is named by GuildStorage (KTD15). The require is lazy: a
-  // top-level state import from capability closes an init cycle.
-  const { createGuildStorage } = require("../state") as {
-    createGuildStorage: (cwd: string) => { project?: { runRecord(id: string): string }; workspace?: { runRecord(id: string): string } };
-  };
+  // The run record is named by GuildStorage (KTD15).
   const storage = createGuildStorage(cwd);
   const scoped = storage.project ?? storage.workspace;
   if (!scoped) return null;

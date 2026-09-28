@@ -124,7 +124,7 @@ const DISTRIBUTION_INDEX_PATH = path.resolve(__dirname, "../src/domains/distribu
 const SIGNER_REQUEST = "./sign-release-attestation";
 const SIGNER_SOURCE_PATH = path.resolve(__dirname, "sign-release-attestation.ts");
 
-const DISTRIBUTION_MANIFEST_PATH = path.resolve(__dirname, "../src/modules/distribution/module.manifest.json");
+const DISTRIBUTION_MANIFEST_PATH = path.resolve(__dirname, "../src/domains/distribution/modules/distribution.manifest.json");
 const SCRIPTS_PACKAGE_JSON_PATH = path.resolve(__dirname, "package.json");
 
 const RED = "A21-MH09 RED: production module not implemented yet";

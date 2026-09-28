@@ -42,7 +42,6 @@ export {
   isProvenance,
   splitFrontmatter as wikiImportanceSplitFrontmatter,
 } from "./wiki-importance";
-export * from "./host-cutover-controller";
 
 // ── from src/modules/workspace ──────────────────────────────────────────
 export * from "./detect";

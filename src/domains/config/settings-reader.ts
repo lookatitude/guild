@@ -62,20 +62,7 @@ import {
   type CapabilityAutoCreatePolicy,
   type CapabilityResolverMode,
 } from "./config-defaults";
-// T8R/F2: `config` is the LOWER substrate — `capability` already imports
-// config's tier-model resolver, so eagerly loading capability's public index at
-// config module-init closes a require cycle
-// (config/index → settings-resolver → settings-reader → capability/index →
-//  capability/router → config/index) and leaves settings-resolver
-// half-initialised in the real launcher process
-// (`import_settings_resolver.isPlainObject is not a function`). The one symbol
-// config needs from capability is resolved LAZILY, at call time, through the
-// SAME public module entrypoint the boundary rail requires.
-function validateModelPolicy(input: unknown): string[] {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const capability = require("./") as typeof import("./");
-  return capability.validateModelPolicy(input);
-}
+import { validateModelPolicy } from "./model-policy";
 import { loadYamlApi, sealSet } from "../kernel";
 
 const yaml = loadYamlApi() as { load: (src: string) => unknown };

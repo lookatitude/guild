@@ -44,9 +44,9 @@ function fixtureManifest(id: string, dependsOn: string[] = []) {
 function writeDerivationFixture(manifests: Array<ReturnType<typeof fixtureManifest>>): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-docs-architecture-"));
   for (const manifest of manifests) {
-    const moduleDir = path.join(root, "src", "modules", manifest.id);
+    const moduleDir = path.join(root, "src", "domains", manifest.id, "modules");
     fs.mkdirSync(moduleDir, { recursive: true });
-    fs.writeFileSync(path.join(moduleDir, "module.manifest.json"), JSON.stringify(manifest));
+    fs.writeFileSync(path.join(moduleDir, `${manifest.id}.manifest.json`), JSON.stringify(manifest));
   }
   fs.writeFileSync(
     path.join(root, "guild.inventory.json"),

@@ -540,10 +540,11 @@ describe("src/modules ownership manifests", () => {
       }
       fs.mkdirSync(path.join(tmp, "src", "adapters"), { recursive: true });
       fs.writeFileSync(path.join(tmp, "src", "adapters", "index.ts"), "export {};\n");
-      for (const id of MODULE_TO_DOMAIN.keys()) {
-        fs.mkdirSync(path.join(tmp, "src", "modules", id), { recursive: true });
-        fs.writeFileSync(path.join(tmp, "src", "modules", id, "module.manifest.json"), "{}\n");
+      for (const [id, domain] of MODULE_TO_DOMAIN) {
+        fs.mkdirSync(path.join(tmp, domainTree(domain), "modules"), { recursive: true });
+        fs.writeFileSync(path.join(tmp, domainTree(domain), "modules", `${id}.manifest.json`), "{}\n");
       }
+      fs.mkdirSync(path.join(tmp, "src/modules/state"), { recursive: true });
       expect(validateDomainOwnership(tmp).ok).toBe(true);
 
       fs.writeFileSync(path.join(tmp, "src/modules/state/leftover.ts"), "export const b = 1;\n");

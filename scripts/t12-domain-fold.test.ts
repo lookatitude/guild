@@ -135,6 +135,41 @@ describe("R43 — domain index-only imports (KTD4/KTD27)", () => {
   });
 });
 
+// ------------------------------------------------------- R43 load order
+/** Import one `src/domains/<id>/index.ts` FIRST in a fresh Bun process: the entry
+ *  decides the cycle's init order, so every index must survive being the entry. */
+function loadIndexFresh(root: string, id: string): { ok: boolean; err: string } {
+  const abs = path.join(root, "src", "domains", id, "index.ts");
+  const run = spawnSync(Bun.which("bun") ?? "bun", ["-e", `await import(${JSON.stringify(abs)})`], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  const err = (run.stderr ?? "").split("\n").find((l) => /Error/.test(l)) ?? "";
+  return { ok: run.status === 0, err };
+}
+
+describe("R43 — every domain index loads from any entry", () => {
+  test("R43 · each domain index loads first in a fresh process", () => {
+    const failed = DOMAIN_IDS.map((id) => ({ id, ...loadIndexFresh(REPO, id) })).filter((r) => !r.ok);
+    expect(failed).toEqual([]);
+  }, 120_000);
+
+  test("CONTROL: a planted cycle that reads a binding at load FAILS from one entry", () => {
+    const root = tmpTree({
+      "src/domains/kernel/index.ts": 'export * from "./a";\n',
+      "src/domains/kernel/a.ts": 'import { B } from "../state";\nexport const A = B + 1;\n',
+      "src/domains/state/index.ts": 'export * from "./b";\n',
+      "src/domains/state/b.ts": 'import { A } from "../kernel";\nexport const B = 1;\nexport const readA = () => A;\n',
+    });
+    // Entering through kernel initialises state first: clean.
+    expect(loadIndexFresh(root, "kernel").ok).toBe(true);
+    // Entering through state reaches kernel/a.ts while b.ts is mid-init: red.
+    const viaState = loadIndexFresh(root, "state");
+    expect(viaState.ok).toBe(false);
+    expect(viaState.err).toMatch(/before initialization/);
+  }, 60_000);
+});
+
 // ------------------------------------------------------- R52 preserve-and-fold
 describe("R52 — coverage domains[] bijection (KTD36)", () => {
   const surfaces = new Map<string, ReadonlySet<string>>([
@@ -187,8 +222,8 @@ describe("R52 — coverage domains[] bijection (KTD36)", () => {
   });
 });
 
-/** A minimal fold: twelve domain indexes, the adapter index, and one module
- *  directory per module holding only its manifest (T16 deleted the shims). */
+/** A minimal fold: twelve domain indexes, the adapter index, and each module's
+ *  manifest beside its fold domain (T16 retired the src/modules tree). */
 function plantShims(root: string): void {
   for (const id of DOMAIN_IDS) {
     fs.mkdirSync(path.join(root, domainTree(id)), { recursive: true });
@@ -196,10 +231,11 @@ function plantShims(root: string): void {
   }
   fs.mkdirSync(path.join(root, "src/adapters"), { recursive: true });
   fs.writeFileSync(path.join(root, "src/adapters/index.ts"), "export const x = 1;\n");
-  for (const id of MODULE_TO_DOMAIN.keys()) {
-    fs.mkdirSync(path.join(root, "src/modules", id), { recursive: true });
-    fs.writeFileSync(path.join(root, "src/modules", id, "module.manifest.json"), "{}\n");
+  for (const [id, domain] of MODULE_TO_DOMAIN) {
+    fs.mkdirSync(path.join(root, domainTree(domain), "modules"), { recursive: true });
+    fs.writeFileSync(path.join(root, domainTree(domain), "modules", `${id}.manifest.json`), "{}\n");
   }
+  fs.mkdirSync(path.join(root, "src/modules/state"), { recursive: true });
 }
 
 // ------------------------------------------------------------ domain ownership
@@ -230,10 +266,25 @@ describe("domain ownership — every domain file is owned exactly once", () => {
     expect(after.violations.map((v) => v.rule)).toContain("module_holds_implementation");
   });
 
-  test("T16: no real src/modules/* holds TypeScript — the shims are deleted", () => {
-    const ts = fs.readdirSync(path.join(REPO, "src/modules"), { recursive: true, encoding: "utf8" })
-      .filter((f) => /\.tsx?$/.test(f));
-    expect(ts).toEqual([]);
+  test("T16: the retired src/modules tree is gone; each manifest sits beside its fold domain", () => {
+    expect(fs.existsSync(path.join(REPO, "src/modules"))).toBe(false);
+    for (const [id, domain] of MODULE_TO_DOMAIN) {
+      expect(fs.existsSync(path.join(REPO, domainTree(domain), "modules", `${id}.manifest.json`))).toBe(true);
+    }
+  });
+
+  test("a manifest outside its fold domain, or any leftover in src/modules, is REFUSED", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-t12-manifest-"));
+    plantShims(root);
+    expect(validateDomainOwnership(root).ok).toBe(true);
+    fs.renameSync(
+      path.join(root, "src/domains/state/modules/migrations.manifest.json"),
+      path.join(root, "src/domains/lifecycle/modules/migrations.manifest.json"),
+    );
+    fs.writeFileSync(path.join(root, "src/modules/state/module.manifest.json"), "{}\n");
+    const rules = validateDomainOwnership(root).violations.map((v) => v.rule);
+    expect(rules).toContain("misplaced_module_manifest");
+    expect(rules).toContain("retired_module_tree");
   });
 
   test("a module index with a function body is REFUSED, naming the file", () => {
@@ -315,6 +366,7 @@ describe("host packages ship a projection, not the domain tree (KTD28)", () => {
     expect(checkPackagedSource(pkg)).toEqual([]);
     expect(checkSpawnedBundles(pkg)).toEqual([]);
     expect(fs.existsSync(path.join(pkg, "src/surfaces/graphs/product.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(pkg, "src/domains/kernel/modules/kernel.manifest.json"))).toBe(true);
     // No retired tree, no module implementation, no domain copy: only shims ship.
     const shipped = execFileSync("find", ["src", "-name", "*.ts"], { cwd: pkg, encoding: "utf8" }).trim().split("\n");
     expect(shipped.filter((f) => f.includes("/workflows/"))).toEqual([]);

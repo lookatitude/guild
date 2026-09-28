@@ -80,7 +80,6 @@ import {
 // fresh settings.json, so `config init` stays byte-identical to the golden.
 import { validateModelPolicy } from "../../../src/domains/config/index";
 import { durableGuildDir } from "../state/storage";
-import { validateModelPolicy } from "../../../src/domains/config/model-policy";
 import { ensureStorageLayout } from "../state/ensure-storage-layout";
 export { resolveTierModel };
 export type { ResolvedTierModel, TierHostValue, TierModelSpec };

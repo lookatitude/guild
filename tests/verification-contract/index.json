@@ -491,8 +491,12 @@
       "id": "R43",
       "unit": "U3",
       "proves": "every domain index loads from any entry",
-      "owner": "T16",
-      "pending": "break the domain import cycle knowledge/distribution -> state -> lifecycle -> teams -> evolve/dispatch; today a suite entering through knowledge or distribution reads a binding before init (the bun preload enters through lifecycle)"
+      "fixtures": [
+        {
+          "test": "scripts/t12-domain-fold.test.ts",
+          "title": "R43 · each domain index loads first in a fresh process"
+        }
+      ]
     },
     {
       "id": "R44",

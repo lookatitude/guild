@@ -60,6 +60,7 @@ import * as path from "path";
 // host-id-namespace.ts), so the selectable/detail outputs are unchanged for every
 // family (claude → false, codex → true, pi/antigravity → false). SC-4 A/B.
 import { resultAdapterForFamily } from "./host-registry";
+import { hostCapabilityCacheDir } from "../state";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -704,12 +705,6 @@ export function defaultProbeEnv(cwd: string): ProbeEnv {
 function readCapabilityManifests(cwd: string): string[] {
   // Platform cache, not `.guild/hosts` (KTD15/U-CFG): host capability is machine
   // state and must not travel with the repo.
-  // Resolved LAZILY through the state barrel. A top-level import here closes an
-  // init cycle (state -> migrations -> lifecycle -> config -> … -> host-runtime)
-  // that throws on load; nothing in this module needs the path before first call.
-  const { hostCapabilityCacheDir } = require("../state") as {
-    hostCapabilityCacheDir: (cwd: string) => string;
-  };
   const hostsDir = hostCapabilityCacheDir(cwd);
   if (!fs.existsSync(hostsDir)) return [];
   const out = new Set<string>();

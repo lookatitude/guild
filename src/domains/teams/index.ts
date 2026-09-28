@@ -12,7 +12,18 @@ export * from "./team-file";
 // (self-referential proposal/decision hashes, resolution receipts, shadow
 // provenance). It is published here so capability/dispatch consume it through
 // the public module entrypoint instead of a private cross-module import.
-export * from "./canonical-hash";
+// The §1 canonical hash moved to kernel (T16D: config needs it and sits below
+// teams); re-exported here so the teams surface is unchanged.
+export {
+  canonicalYaml,
+  cloneArtifact,
+  codePointCompare,
+  doubleQuoted,
+  isPlainSafe,
+  isSha256Hex,
+  selfReferentialHash,
+  sha256Hex,
+} from "../kernel";
 export * from "./station-composer";
 export * from "./station-signals";
 // U-TIER (T08): the two goal nouns and the per-goal roster slice. Exported here

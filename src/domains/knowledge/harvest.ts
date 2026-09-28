@@ -40,7 +40,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { appendEvent, exclusionSentinelPath, withStableLock } from "../lifecycle";
+// Lazy: lifecycle sits above knowledge (its event log reaches config and js-yaml),
+// so a static import would load that graph in every knowledge entry, the MCP
+// binary included. Only the write paths below need it.
+function lifecycleApi(): typeof import("../lifecycle") {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require("../lifecycle");
+}
 import { classifyPermissionContent, sanitizeForInjection } from "../security";
 import { containsRecallTag } from "./recall-protect";
 import { appendSecurityEvent, buildSecurityEvent, resolveRunDir } from "../security";
@@ -297,7 +303,7 @@ export interface HarvestResult {
 
 function emitHarvestEvent(runDir: string, runId: string, op: HarvestOp): void {
   try {
-    appendEvent(runDir, {
+    lifecycleApi().appendEvent(runDir, {
       ts: new Date().toISOString(),
       event: "harvest_event",
       run_id: runId,
@@ -629,7 +635,7 @@ export function harvestDecision(input: HarvestInput): HarvestResult {
   // is per PAGE and per ROOT, so the loser is the second writer to acquire it and
   // it loses on the hash, deterministically, with a `cas_event` on its own run.
   const lockDir = harvestCasLockDir(storage, wikiAbs);
-  const cas = withStableLock(lockDir, (): HarvestResult | null => {
+  const cas = lifecycleApi().withStableLock(lockDir, (): HarvestResult | null => {
     const before = fs.existsSync(wikiAbs) ? fs.readFileSync(wikiAbs, "utf8") : null;
     const beforeHash = before === null ? "" : sha256(before);
     const expected =
@@ -640,7 +646,7 @@ export function harvestDecision(input: HarvestInput): HarvestResult {
         : existing?.before_hash;
     if (expected !== undefined && expected !== beforeHash) {
       try {
-        appendEvent(input.runDir, {
+        lifecycleApi().appendEvent(input.runDir, {
           ts: now,
           event: "cas_event",
           run_id: input.run_id,
@@ -724,7 +730,7 @@ export function harvestDecision(input: HarvestInput): HarvestResult {
     upsertOp(input.run_id, op, storeOpts);
     emitHarvestEvent(input.runDir, input.run_id, op);
     try {
-      appendEvent(input.runDir, {
+      lifecycleApi().appendEvent(input.runDir, {
         ts: now,
         event: "cas_event",
         run_id: input.run_id,
@@ -781,7 +787,7 @@ function finishHarvest(
     op.playbook_path = input.playbook.path;
     const outcome = applyPlaybookSpanInverseFirst(input, op, storage, storeOpts);
     try {
-      appendEvent(input.runDir, {
+      lifecycleApi().appendEvent(input.runDir, {
         ts: now,
         event: "curator_event",
         run_id: input.run_id,

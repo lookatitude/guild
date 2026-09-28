@@ -125,6 +125,7 @@ export * from "./policy-resolver";
 export * from "./session-binding";
 export * from "./config-validation";
 export * from "./settings-resolver";
+export * from "./workspace-mode";
 export * from "./tier-model";
 
 // ── from src/modules/capability ──────────────────────────────────────────

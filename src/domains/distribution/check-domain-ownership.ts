@@ -22,6 +22,7 @@ import {
   formatModuleHealthValidation,
   formatOwnershipValidation,
   loadModuleManifests,
+  moduleManifestFiles,
   validateModuleHealth,
   validateModuleOwnership,
 } from "../kernel";
@@ -33,6 +34,8 @@ export interface DomainOwnershipViolation {
     | "missing_domain_index"
     | "workflows_tree"
     | "module_holds_implementation"
+    | "retired_module_tree"
+    | "misplaced_module_manifest"
     | "unmapped_module"
     | "unclaimed_domain"
     | "duplicate_file_owner";
@@ -71,6 +74,21 @@ function walkTs(abs: string, out: string[] = []): string[] {
     const p = path.join(abs, e.name);
     if (e.isDirectory()) walkTs(p, out);
     else if (e.isFile() && /\.tsx?$/.test(e.name)) out.push(p);
+  }
+  return out;
+}
+
+function walkFiles(abs: string, out: string[] = []): string[] {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(abs, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
+    const p = path.join(abs, e.name);
+    if (e.isDirectory()) walkFiles(p, out);
+    else if (e.isFile()) out.push(p);
   }
   return out;
 }
@@ -235,25 +253,37 @@ export function validateDomainOwnership(root: string = PLUGIN_ROOT): DomainOwner
     }
   }
 
-  const modulesDir = path.join(root, "src", "modules");
-  const claimed = new Set<string>();
-  for (const id of listDirs(modulesDir)) {
+  // T16 retired src/modules: each ownership manifest sits beside its fold
+  // domain, so a manifest in another tree is a second home for the module.
+  for (const { id, path: abs } of moduleManifestFiles(root)) {
     const domain = MODULE_TO_DOMAIN.get(id);
+    const rel = toPosix(path.relative(root, abs));
     if (!domain) {
-      violations.push({ rule: "unmapped_module", detail: `src/modules/${id} has no domain home in the KTD36 fold` });
+      violations.push({ rule: "unmapped_module", detail: `${rel}: module ${id} has no domain home in the KTD36 fold` });
       continue;
     }
-    // T16 deleted the re-export shims: the module tree keeps its ownership
-    // manifests and no TypeScript. A .ts file here is a second home for code
-    // that belongs in the domain, and a consumer reaching past the domain index.
-    for (const abs of walkTs(path.join(modulesDir, id))) {
-      const rel = toPosix(path.relative(path.join(modulesDir, id), abs));
-      violations.push({
-        rule: "module_holds_implementation",
-        detail: `src/modules/${id}/${rel} is TypeScript in the retired module tree; it belongs in ${domainTree(domain)}`,
-      });
+    const expected = `${domainTree(domain)}/modules/${id}.manifest.json`;
+    if (rel !== expected) {
+      violations.push({ rule: "misplaced_module_manifest", detail: `${rel} belongs at ${expected}` });
     }
   }
+  // Nothing may come back under the retired tree. A .ts file there is a second
+  // home for code that belongs in a domain; anything else is a leftover.
+  const modulesDir = path.join(root, "src", "modules");
+  for (const abs of walkFiles(modulesDir)) {
+    const rel = toPosix(path.relative(root, abs));
+    const id = toPosix(path.relative(modulesDir, abs)).split("/")[0];
+    const domain = MODULE_TO_DOMAIN.get(id);
+    if (/\.ts$/.test(abs)) {
+      violations.push({
+        rule: "module_holds_implementation",
+        detail: `${rel} is TypeScript in the retired module tree; it belongs in ${domain ? domainTree(domain) : "a domain"}`,
+      });
+    } else {
+      violations.push({ rule: "retired_module_tree", detail: `${rel} sits in the retired src/modules tree` });
+    }
+  }
+  const claimed = new Set<string>();
   for (const domain of MODULE_TO_DOMAIN.values()) claimed.add(domain);
   for (const d of DOMAIN_IDS) {
     if (!claimed.has(d)) {

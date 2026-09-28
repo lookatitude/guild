@@ -2,8 +2,11 @@
  * src/domains/kernel/module-manifest.ts
  *
  * Canonical module-manifest validator for the additive plugin reorganization.
- * The live install surfaces stay where they are; module manifests under
- * src/modules/* declare which existing inventory ids each module owns.
+ * The live install surfaces stay where they are; module manifests declare which
+ * existing inventory ids each module owns. T16 retired the src/modules tree:
+ * each manifest sits beside the domain its module folded into (KTD36), at
+ * src/domains/<domain>/modules/<id>.manifest.json (src/adapters/modules/ for
+ * the one module that folds into the adapter tree).
  */
 
 import * as fs from "node:fs";
@@ -191,14 +194,32 @@ function validateManifest(value: unknown, relPath: string): ModuleValidationResu
   return { ok: errors.length === 0, errors };
 }
 
-export function loadModuleManifests(root: string): ModuleManifest[] {
-  const modulesDir = path.join(root, "src", "modules");
-  const manifests: ModuleManifest[] = [];
-  if (!fs.existsSync(modulesDir)) return manifests;
+const MODULE_MANIFEST_SUFFIX = ".manifest.json";
 
-  for (const name of fs.readdirSync(modulesDir).sort()) {
-    const manifestPath = path.join(modulesDir, name, "module.manifest.json");
-    if (!fs.existsSync(manifestPath)) continue;
+/** Every `<tree>/modules/<id>.manifest.json`, sorted by module id. */
+export function moduleManifestFiles(root: string): { id: string; path: string }[] {
+  const trees: string[] = [path.join(root, "src", "adapters")];
+  const domainsDir = path.join(root, "src", "domains");
+  if (fs.existsSync(domainsDir)) {
+    for (const entry of fs.readdirSync(domainsDir, { withFileTypes: true })) {
+      if (entry.isDirectory()) trees.push(path.join(domainsDir, entry.name));
+    }
+  }
+  const files: { id: string; path: string }[] = [];
+  for (const tree of trees) {
+    const dir = path.join(tree, "modules");
+    if (!fs.existsSync(dir)) continue;
+    for (const name of fs.readdirSync(dir)) {
+      if (!name.endsWith(MODULE_MANIFEST_SUFFIX)) continue;
+      files.push({ id: name.slice(0, -MODULE_MANIFEST_SUFFIX.length), path: path.join(dir, name) });
+    }
+  }
+  return files.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+export function loadModuleManifests(root: string): ModuleManifest[] {
+  const manifests: ModuleManifest[] = [];
+  for (const { id, path: manifestPath } of moduleManifestFiles(root)) {
     const relPath = path.relative(root, manifestPath).split(path.sep).join("/");
     let parsed: unknown;
     try {
@@ -209,6 +230,9 @@ export function loadModuleManifests(root: string): ModuleManifest[] {
     const validation = validateManifest(parsed, relPath);
     if (!validation.ok) {
       throw new Error(validation.errors.join("\n"));
+    }
+    if ((parsed as ModuleManifest).id !== id) {
+      throw new Error(`${relPath}: id "${(parsed as ModuleManifest).id}" does not match the file name "${id}"`);
     }
     manifests.push(parsed as ModuleManifest);
   }
@@ -306,20 +330,10 @@ export function validateModuleHealth(
   const modulesDir = path.join(root, "src", "modules");
 
   for (const manifest of manifests) {
+    // The src/modules/<id> tree is retired (T16): absent is the healthy state.
+    // A tree that still exists is scanned so leftover workflows are still seen.
     const moduleDir = path.join(modulesDir, manifest.id);
     const relModuleDir = `src/modules/${manifest.id}`;
-    if (!fs.existsSync(moduleDir) || !fs.statSync(moduleDir).isDirectory()) {
-      findings.push({ module_id: manifest.id, reason: "missing_module_directory", path: relModuleDir });
-      modules.push({
-        module_id: manifest.id,
-        kind: manifest.kind,
-        implementation_mode: manifest.implementation_mode,
-        resources: 0,
-        workflows: 0,
-        has_public_index: false,
-      });
-      continue;
-    }
 
     const indexPath = path.join(root, publicIndexFor(manifest.id));
     // T12 fold, T16 shim deletion: the implementation lives in src/domains/<id>
@@ -607,13 +621,8 @@ export function validateModuleBoundaries(
   const manifestById = new Map(manifests.map((manifest) => [manifest.id, manifest]));
   const seenImporterSpecifiers = new Set<string>();
 
-  for (const manifest of manifests) {
-    const moduleDir = path.join(modulesDir, manifest.id);
-    if (!fs.existsSync(moduleDir)) {
-      errors.push(`module ${manifest.id} has no src/modules/${manifest.id} directory`);
-    }
-  }
-
+  // The src/modules/<id> trees are retired (T16): a module with no tree has no
+  // TypeScript and so no import edges. Any tree that remains is still walked.
   for (const importer of walkTsFiles(modulesDir)) {
     const fromModule = moduleIdForPath(modulesDir, importer, moduleIds);
     if (!fromModule) continue;

@@ -1,5 +1,5 @@
 /**
- * src/domains/teams/canonical-hash.ts
+ * src/domains/kernel/canonical-hash.ts
  *
  * T2b (dynamic-host-model-routing) — the runtime implementation of the
  * workspace-wide canonical-hash rule (team-contracts §1, the single normative

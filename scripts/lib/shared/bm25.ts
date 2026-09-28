@@ -5,4 +5,4 @@
  * internals without breaking existing imports from scripts/lib/shared/*.
  */
 
-export * from "../../../src/domains/knowledge/bm25";
+export { TOKEN_RE, bm25Score, tokenize, tokenizeIdentifierAware } from "../../../src/domains/knowledge/index";

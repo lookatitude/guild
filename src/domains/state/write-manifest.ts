@@ -33,7 +33,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { detect, type WorkspaceMode } from "./detect";
+import { detect, type WorkspaceMode, type WorkspaceModeReader } from "./detect";
 import { atomicWrite } from "./atomic-write";
 import { durableGuildDir } from "./storage-roots";
 
@@ -96,8 +96,12 @@ interface WorkspaceManifest {
 
 // ── Core writer ───────────────────────────────────────────────────────────────
 
-export function writeManifest(root: string, modeOverride?: WorkspaceMode): string {
-  const detection = detect(root, modeOverride);
+export function writeManifest(
+  root: string,
+  modeOverride: WorkspaceMode | undefined,
+  readMode: WorkspaceModeReader,
+): string {
+  const detection = detect(root, modeOverride, readMode);
   const rootWiki = hasTopLevelCode(root);
 
   const manifest: WorkspaceManifest = {
@@ -147,7 +151,7 @@ function parseArgs(argv: string[]): { cwd?: string; mode?: WorkspaceMode } {
   return { cwd, mode };
 }
 
-export function runWriteWorkspaceManifestCli(argv: string[] = process.argv.slice(2)): void {
+export function runWriteWorkspaceManifestCli(readMode: WorkspaceModeReader, argv: string[] = process.argv.slice(2)): void {
   const { cwd: cwdArg, mode } = parseArgs(argv);
   const cwd = cwdArg ?? process.env["GUILD_CWD"] ?? process.cwd();
 
@@ -157,7 +161,7 @@ export function runWriteWorkspaceManifestCli(argv: string[] = process.argv.slice
   }
 
   try {
-    const written = writeManifest(cwd, mode);
+    const written = writeManifest(cwd, mode, readMode);
     process.stdout.write(written + "\n");
   } catch (e) {
     process.stderr.write(`[workspace/write-manifest] ERROR: ${(e as Error).message}\n`);

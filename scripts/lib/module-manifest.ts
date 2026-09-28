@@ -7,6 +7,7 @@
 
 export {
   loadModuleManifests,
+  moduleManifestFiles,
   ownersFor,
   validateModuleOwnership,
   validateModuleHealth,

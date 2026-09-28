@@ -32,7 +32,7 @@ function lifecycleApi(): typeof import("../lifecycle") {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   return require("../lifecycle");
 }
-import { selfReferentialHash } from "../teams";
+import { selfReferentialHash } from "../kernel";
 import { durableGuildDir } from "../state";
 
 export const ROUTING_FLAG_KEYS = Object.freeze([

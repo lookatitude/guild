@@ -60,6 +60,7 @@ import type { ResolvedSettingsSnapshot } from "./runstart-preflight";
 import { scrubbedWrite, type ScrubbedWriteResult, type ScrubSurface } from "../security";
 import { emitTraceEvent, makeAnalysisTraceEvent, type GuildTraceAnalysisV2 } from "../telemetry";
 import { durableGuildDir } from "../state";
+import { createGuildStorage } from "../state";
 
 // ── Injected seams (B1 §4) ───────────────────────────────────────────────────
 
@@ -587,15 +588,8 @@ function bindRunSession(env: RunLifecycleEnv, root: string, runId: string): void
   if (!result.ok) return fail((result as BindRefusal).message);
 }
 
-/**
- * The durable root for `root`, named by GuildStorage (KTD15) rather than joined.
- * Lazy require: a top-level state import from lifecycle closes an init cycle.
- */
+/** The durable root for `root`, named by GuildStorage (KTD15) rather than joined. */
 function guildDirOf(root: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { createGuildStorage } = require("../state") as {
-    createGuildStorage: (cwd: string) => { root: { durable: string } };
-  };
   return createGuildStorage(root).root.durable;
 }
 
