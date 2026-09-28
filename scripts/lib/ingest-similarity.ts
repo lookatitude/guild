@@ -39,6 +39,7 @@ import * as path from "node:path";
 // candidate content. Same regex detector the recall/handoff paths use
 // (hooks/lib/security/injection-guard.ts, HK-08) — code, not model self-scan.
 import { sanitizeForInjection } from "../../hooks/lib/security/injection-guard.js";
+import { clearIngestPause, recordIngestPause } from "../../src/domains/security";
 
 // ── Public types ──────────────────────────────────────────────────────────
 
@@ -302,6 +303,7 @@ if (require.main === module) {
   let category = "";
   let title = "";
   let contentFile = "";
+  let clearPause = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -313,6 +315,15 @@ if (require.main === module) {
     else if (arg.startsWith("--category=")) { category = arg.slice("--category=".length); }
     else if (arg.startsWith("--title=")) { title = arg.slice("--title=".length); }
     else if (arg.startsWith("--content-file=")) { contentFile = arg.slice("--content-file=".length); }
+    else if (arg === "--clear-pause") { clearPause = true; }
+  }
+
+  // Operator resume: the user chose supersede / skip / proceed. PreToolUse routes
+  // this command to `ask`, so the clear is the operator's, not the model's.
+  if (clearPause) {
+    const cleared = clearIngestPause(cwd, contentFile ? path.resolve(cwd, contentFile) : undefined);
+    process.stdout.write(JSON.stringify({ cleared }) + "\n");
+    process.exit(0);
   }
 
   if (!category) {
@@ -333,5 +344,16 @@ if (require.main === module) {
   }
 
   const result = ingestSimilarity(cwd, { title, content }, category);
+  // The pause is state, not a verdict the skill may ignore: PreToolUse refuses a
+  // write to this candidate, or under the wiki, until the operator clears it.
+  if (result.should_pause && result.pause_reason !== null) {
+    recordIngestPause(cwd, {
+      // No content file: the entry still blocks every write under the wiki.
+      candidate_path: path.resolve(cwd, contentFile || `<inline:${title}>`),
+      category,
+      pause_reason: result.pause_reason,
+      probe_patterns: result.probe_patterns,
+    });
+  }
   process.stdout.write(JSON.stringify(result) + "\n");
 }

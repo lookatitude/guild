@@ -37,6 +37,9 @@ function runHook(
     env: {
       ...process.env,
       GUILD_CWD: tmp,
+      // Never the invoking session's run: an inherited GUILD_RUN_DIR sent this
+      // file's audit events into the live run that launched the test.
+      GUILD_RUN_DIR: "",
       GUILD_RUN_ID: RUN,
       GUILD_TASK_ID: TASK,
       GUILD_TASK_CELL_INSTANCE_ID: INSTANCE,
@@ -173,5 +176,46 @@ describe("PreToolUse projection gate (KTD28)", () => {
       { GUILD_TASK_ID: "", GUILD_TASK_CELL_INSTANCE_ID: "" },
     );
     expect(decision(out.stdout).permissionDecision).not.toBe("deny");
+  });
+
+  // ── T15 · F12: the projection deny and the PreToolUse AND-mask ────────────
+  //
+  // The capability scope answers `ask` for an out-of-scope tool, and an operator
+  // may approve an ask. The projection is a hard deny, so it must win: before
+  // T15 the scope gate ran first, returned `ask`, and the projection never ran.
+
+  it("F12 · an off-projection tool is DENIED even when the capability scope would only ask", () => {
+    writeAssignment(["Read"]);
+    const out = runHook(
+      { tool_name: "Bash", tool_input: { command: "ls" } },
+      { GUILD_CAPABILITY_SCOPE: '["Read"]' },
+    );
+    const d = decision(out.stdout);
+    expect(d.permissionDecision).toBe("deny");
+    expect(d.permissionDecisionReason).toMatch(/outside this assignment's tool projection/);
+    // The deny has an audit twin on the run's security-events.jsonl.
+    const log = path.join(tmp, ".guild", "runs", RUN, "logs", "security-events.jsonl");
+    const events = fs.readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(events.some((e) => e.event_type === "capability_scope_violation" && e.decision === "deny" && e.tool === "Bash")).toBe(true);
+  });
+
+  it("F12 · CONTROL: the same scope alone still answers ask (the AND-mask is unchanged)", () => {
+    // No cell identity: the projection has no opinion, so the scope gate decides.
+    const out = runHook(
+      { tool_name: "Bash", tool_input: { command: "ls" } },
+      { GUILD_CAPABILITY_SCOPE: '["Read"]', GUILD_TASK_CELL_INSTANCE_ID: "" },
+    );
+    expect(decision(out.stdout).permissionDecision).toBe("ask");
+    // And an in-scope, in-projection tool passes both rails.
+    writeAssignment(["Read"]);
+    const ok = runHook({ tool_name: "Read", tool_input: { file_path: "a" } }, { GUILD_CAPABILITY_SCOPE: '["Read"]' });
+    expect(["deny", "ask"]).not.toContain(decision(ok.stdout).permissionDecision);
+  });
+
+  it("F12 · an isolated instance with an EMPTY projection is denied every tool", () => {
+    writeAssignment([]);
+    const d = decision(runHook({ tool_name: "Read", tool_input: { file_path: "a" } }).stdout);
+    expect(d.permissionDecision).toBe("deny");
+    expect(d.permissionDecisionReason).toMatch(/empty tool projection/);
   });
 });

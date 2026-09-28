@@ -41,8 +41,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { appendEvent, exclusionSentinelPath, withStableLock } from "../lifecycle";
-import { sanitizeForInjection } from "../security";
-import { appendSecurityEvent, buildSecurityEvent } from "../security";
+import { classifyPermissionContent, sanitizeForInjection } from "../security";
+import { containsRecallTag } from "./recall-protect";
+import { appendSecurityEvent, buildSecurityEvent, resolveRunDir } from "../security";
 import { scrubbedWrite } from "../security";
 import { createGuildStorage, type GuildStorage, readScalarField } from "../state";
 import {
@@ -173,6 +174,9 @@ export function assertThisCwdPlaybook(storage: GuildStorage, absTarget: string):
     );
   }
 }
+
+/** A harvest slug: one lower-case file-name segment under `decisions/`. */
+const HARVEST_SLUG_RE = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 
 /** Frontmatter keys harvest must never stamp (R66). */
 export const FORBIDDEN_HARVEST_KEYS = Object.freeze(["labels", "label_taxonomy", "concern"] as const);
@@ -309,9 +313,18 @@ function emitHarvestEvent(runDir: string, runId: string, op: HarvestOp): void {
   }
 }
 
+/** The harvest audit kinds (KTD37) — one closed set with the rest of `guild.security_event.v1`. */
+type HarvestSecurityKind =
+  | "harvest_promoted"
+  | "harvest_refused"
+  | "playbook_auto_replace"
+  | "wiki_cas_conflict"
+  | "harvest_reverted";
+
 function emitSecurity(
   runDir: string,
   runId: string,
+  kind: HarvestSecurityKind,
   decision: "allow" | "blocked",
   detail: string,
 ): void {
@@ -320,7 +333,7 @@ function emitSecurity(
       runDir,
       buildSecurityEvent({
         run_id: runId,
-        event_type: "harvest_auto_promote",
+        event_type: kind,
         decision,
         tool: "harvest",
         detail,
@@ -343,7 +356,7 @@ function refuse(
   op.refuse_reason = reason;
   upsertOp(input.run_id, op, opts);
   emitHarvestEvent(input.runDir, input.run_id, op);
-  emitSecurity(input.runDir, input.run_id, "blocked", `harvest refused (${reason}): ${detail}`);
+  emitSecurity(input.runDir, input.run_id, "harvest_refused", "blocked", `harvest refused (${reason}): ${detail}`);
   return {
     op,
     promoted: false,
@@ -377,6 +390,7 @@ function blockResume(
   emitSecurity(
     input.runDir,
     input.run_id,
+    "harvest_refused",
     "blocked",
     `harvest resume blocked at ${step}: ${detail}`,
   );
@@ -456,6 +470,7 @@ export function harvestDecision(input: HarvestInput): HarvestResult {
     emitSecurity(
       input.runDir,
       input.run_id,
+      "harvest_refused",
       "blocked",
       `harvest refused (replay): op '${existing.op_id}' is terminal at '${existing.status}'`,
     );
@@ -479,6 +494,17 @@ export function harvestDecision(input: HarvestInput): HarvestResult {
   const scope = storage.project ?? storage.workspace;
   if (!scope) {
     return refuse(input, op, "lint", "this root owns no wiki", storeOpts);
+  }
+  // The slug names ONE file in `decisions/`, and it, `replaces` and `glossary_term`
+  // are rendered into frontmatter unquoted. A `../` slug left the decisions tree for
+  // an operator-trusted path, and a newline stamped keys the renderer never wrote.
+  if (!HARVEST_SLUG_RE.test(input.slug)) {
+    return refuse(input, op, "scope", `slug '${input.slug}' is not a single safe segment (${HARVEST_SLUG_RE})`, storeOpts);
+  }
+  for (const [key, value] of [["replaces", input.replaces], ["glossary_term", input.glossary_term]] as const) {
+    if (value !== undefined && /[\r\n]/.test(value)) {
+      return refuse(input, op, "scope", `${key} carries a line break; it would stamp its own frontmatter`, storeOpts);
+    }
   }
   const wikiAbs = scope.knowledge("decisions", `${input.slug}.md`);
   assertThisCwdWiki(storage, wikiAbs);
@@ -521,6 +547,17 @@ export function harvestDecision(input: HarvestInput): HarvestResult {
         true,
       );
     }
+    // D5: a permission edit is proposal-only on every path, the automatic playbook
+    // span-replace included. Screened on the span name, the bytes it replaces, and
+    // the replacement — the same classifier the evolve writer uses.
+    const d5 = classifyPermissionContent({
+      span: input.playbook.span,
+      beforeSpan: located.text,
+      replacement: input.playbook.replacement,
+    });
+    if (d5.isPermissionEdit) {
+      return refuse(input, op, "probe", `permissions are proposal-only (D5): ${d5.detail}`, storeOpts);
+    }
   }
 
   // A crash AFTER the wiki write but BEFORE the BM25 refresh resumes here: the
@@ -562,7 +599,15 @@ export function harvestDecision(input: HarvestInput): HarvestResult {
   }
 
   // ── probe: injection guard ────────────────────────────────────────────────
-  const probe = sanitizeForInjection(`${input.title}\n${input.body}\n${input.reasoning}`);
+  // Sources and body (KTD37): the source refs are rendered into the page too.
+  const probe = sanitizeForInjection(
+    [input.title, input.body, input.reasoning, ...(input.source_refs ?? [])].join("\n"),
+  );
+  // The recall wrapper is the one boundary between a page and a directive. A body
+  // that spells the wrapper tag at all is refused, not rewritten.
+  if (containsRecallTag([input.title, input.body, input.reasoning, ...(input.source_refs ?? [])].join("\n"))) {
+    return refuse(input, op, "injection", "the harvested content spells the <guild:recall> wrapper tag", storeOpts);
+  }
   if (probe.result === "flagged") {
     return refuse(
       input,
@@ -607,6 +652,7 @@ export function harvestDecision(input: HarvestInput): HarvestResult {
       } catch {
         /* observability only */
       }
+      emitSecurity(input.runDir, input.run_id, "wiki_cas_conflict", "blocked", `CAS lost on ${wikiAbs}`);
       return refuse(input, op, "cas", "the page changed under this op", storeOpts);
     }
     op.before_hash = beforeHash;
@@ -645,7 +691,12 @@ export function harvestDecision(input: HarvestInput): HarvestResult {
     // the playbook write, from the same buffer (see `finishHarvest`), because an
     // entry that exists means "the write may have happened".
     const inverseFiles: HarvestInverseFile[] = [
-      { path: wikiAbs, before, after_sha256: sha256(page) },
+      {
+        path: wikiAbs,
+        before,
+        ...(before === null ? {} : { before_sha256: sha256(before) }),
+        after_sha256: sha256(page),
+      },
     ];
     recordInverseOnce(input.run_id, { op_id: op.op_id, files: inverseFiles }, storeOpts);
 
@@ -766,7 +817,7 @@ function finishHarvest(
   op.status = "reported";
   upsertOp(input.run_id, op, storeOpts);
   emitHarvestEvent(input.runDir, input.run_id, op);
-  emitSecurity(input.runDir, input.run_id, "allow", `harvest promoted ${decisionId} on this cwd`);
+  emitSecurity(input.runDir, input.run_id, "harvest_promoted", "allow", `harvest promoted ${decisionId} on this cwd`);
 
   return {
     op,
@@ -918,6 +969,15 @@ export function planPlaybookSpan(
   const located = locatePlaybookSpan(text, input.span);
   if (!located) return null;
 
+  const d5 = classifyPermissionContent({
+    span: input.span,
+    beforeSpan: located.text,
+    replacement: input.replacement,
+  });
+  if (d5.isPermissionEdit) {
+    throw new HarvestRefusal(`permissions are proposal-only (D5): ${d5.detail}`, "probe");
+  }
+
   const afterSpan = renderPlaybookSpan(located.anchor, input.replacement);
   const head = text.slice(0, located.start);
   const tail = text.slice(located.end);
@@ -945,6 +1005,7 @@ export function applyPlaybookSpanPlan(
     ...(ctx.laneId ? { laneId: ctx.laneId } : {}),
   });
   if (!wrote.written) return { applied: false, blocked: wrote.blocked };
+  emitSecurity(ctx.runDir, ctx.runId, "playbook_auto_replace", "allow", `span '${input.span}' replaced in ${input.path}`);
 
   // What LANDED, not what was handed to the writer: the writer scrubs, so
   // `plan.next` is still pre-scrub input and returning it would put a redacted
@@ -1169,10 +1230,12 @@ function applyPlaybookSpanInverseFirst(
     {
       path: pb.path,
       before: plan.before,
+      before_sha256: sha256(plan.before),
       after_sha256: sha256(plan.next),
       span: {
         anchor: plan.anchor,
         before_span: plan.before_span,
+        before_sha256: sha256(plan.before_span),
         after_len: plan.after_span.length,
         after_sha256: sha256(plan.after_span),
       },
@@ -1204,7 +1267,11 @@ export interface RevertBlock {
     /** The op's record has no after-side for this file: what it wrote is not knowable. */
     | "partial-inverse"
     /** The inverse was written but the bytes on disk afterwards are not the ones it meant to restore. */
-    | "not-verified";
+    | "not-verified"
+    /** The recorded inverse no longer hashes to what the op recorded: it was edited after the op. */
+    | "inverse-tampered"
+    /** The bytes revert would restore fail the D5 classifier or the injection probe. */
+    | "content-refused";
   detail: string;
 }
 
@@ -1219,7 +1286,79 @@ export interface RevertResult {
    */
   blocked_confirm?: boolean;
   blocked?: RevertBlock[];
+  /** `operator` when a content gate refused the restore: the operator decides. */
+  next_need?: "operator";
   detail?: string;
+}
+
+/**
+ * The paragraphs that differ between two texts, plus the nearest heading above
+ * them. Computed from the BYTES — never from the inverse's `span` metadata, which
+ * lives in off-repo state and can be stripped or rewritten (codex G-lane r2 P1).
+ *
+ * The region is widened to blank-line paragraph boundaries, so a one-line edit to
+ * a sentence that wraps across lines is classified as the whole sentence.
+ */
+function changedRegion(from: string, to: string): { heading: string; from: string; to: string } {
+  const a = from.split("\n");
+  const b = to.split("\n");
+  let pre = 0;
+  while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++;
+  let suf = 0;
+  while (suf < a.length - pre && suf < b.length - pre && a[a.length - 1 - suf] === b[b.length - 1 - suf]) suf++;
+  while (pre > 0 && a[pre - 1].trim() !== "") pre--;
+  while (suf > 0 && a[a.length - suf].trim() !== "") suf--;
+  const heading = a.slice(0, pre).reverse().find((l) => /^#{1,6}\s/.test(l)) ?? "";
+  return {
+    heading: heading.replace(/^#+\s*/, ""),
+    from: a.slice(pre, a.length - suf).join("\n"),
+    to: b.slice(pre, b.length - suf).join("\n"),
+  };
+}
+
+/**
+ * Screen the bytes a revert would put back with the gates a forward harvest
+ * passes. A revert is a WRITE from off-repo history, so an edited inverse is the
+ * same injection vector as an unscreened harvest.
+ *
+ * It screens `write` — the full file revert is about to hand the scrubbed
+ * writer — against the live bytes, whatever shape the inverse claims to have. A
+ * whole-file inverse and a span inverse go through the same D5 + probe path.
+ */
+function screenRevertFile(f: HarvestInverseFile, current: string | null, write: string | null): RevertBlock | null {
+  if (write === null) return null; // a delete restores no content
+  const region = changedRegion(current ?? "", write);
+  const d5 = classifyPermissionContent({ span: region.heading, beforeSpan: region.from, replacement: region.to });
+  if (d5.isPermissionEdit) {
+    return { path: f.path, reason: "content-refused", detail: `permissions are proposal-only (D5): ${d5.detail}` };
+  }
+  const probe = sanitizeForInjection(write);
+  if (probe.result === "flagged") {
+    return {
+      path: f.path,
+      reason: "content-refused",
+      detail: `the restore carries directive language (${probe.matchedPatterns.join(", ")})`,
+    };
+  }
+  if (containsRecallTag(write)) {
+    return { path: f.path, reason: "content-refused", detail: "the restore spells the <guild:recall> wrapper tag" };
+  }
+  return null;
+}
+
+/** A span record revert can use: every field it reads has the type it reads. */
+function spanIsWellFormed(span: unknown): boolean {
+  if (typeof span !== "object" || span === null || Array.isArray(span)) return false;
+  const s = span as Record<string, unknown>;
+  const optional = (v: unknown, t: "string" | "number") => v === undefined || typeof v === t;
+  return (
+    typeof s.anchor === "string" &&
+    typeof s.before_span === "string" &&
+    typeof s.before_sha256 === "string" &&
+    optional(s.after_sha256, "string") &&
+    optional(s.after_len, "number") &&
+    (s.after_len === undefined || (Number.isInteger(s.after_len) && (s.after_len as number) >= 0))
+  );
 }
 
 /**
@@ -1231,9 +1370,45 @@ export interface RevertResult {
  * never touched. It now restores only the REGION the op wrote, and only while the
  * live bytes in that region are still the op's: anything else is `blocked_confirm`.
  */
-function planRevertFile(f: HarvestInverseFile): { write?: string | null; block?: RevertBlock } {
+function planRevertFile(
+  f: HarvestInverseFile,
+  mustHaveSpan: boolean,
+): { write?: string | null; block?: RevertBlock } {
+  // Shape before trust. A span-shaped op whose record no longer carries a usable
+  // span is a tampered record, not a whole-file one: stripping `span` used to
+  // route a playbook through the whole-file branch, which restored `before`
+  // wholesale (codex G-lane r2 P1).
+  if (f.span !== undefined ? !spanIsWellFormed(f.span) : mustHaveSpan) {
+    return {
+      block: {
+        path: f.path,
+        reason: "inverse-tampered",
+        detail:
+          f.span === undefined
+            ? "this file was changed by a span op but its recorded inverse carries no span"
+            : "the recorded span is malformed",
+      },
+    };
+  }
+  if (f.before !== null && typeof f.before !== "string") {
+    return { block: { path: f.path, reason: "inverse-tampered", detail: "the recorded `before` is malformed" } };
+  }
   const exists = fs.existsSync(f.path);
   const current = exists ? fs.readFileSync(f.path, "utf8") : null;
+
+  // The inverse lives in off-repo runtime state. Trust it only while it still
+  // hashes to what the op recorded next to it.
+  const restoring = f.span ? f.span.before_span : f.before;
+  const recorded = f.span ? f.span.before_sha256 : f.before_sha256;
+  if (restoring !== null && (recorded === undefined || sha256(restoring) !== recorded)) {
+    return {
+      block: {
+        path: f.path,
+        reason: "inverse-tampered",
+        detail: "the recorded inverse does not match its recorded hash",
+      },
+    };
+  }
 
   if (f.span) {
     // A record with no after-side is a PARTIAL inverse. It used to be treated as
@@ -1309,7 +1484,7 @@ function planRevertFile(f: HarvestInverseFile): { write?: string | null; block?:
 export function revertHarvest(
   runId: string,
   opId: string,
-  opts: { cwd?: string; storage?: GuildStorage } = {},
+  opts: { cwd?: string; storage?: GuildStorage; runDir?: string } = {},
 ): RevertResult {
   const inverse = readInverse(runId, opId, opts);
   if (!inverse) {
@@ -1317,27 +1492,55 @@ export function revertHarvest(
   }
   const storage = opts.storage ?? createGuildStorage(opts.cwd ?? process.cwd());
 
+  const runDir = opts.runDir ?? resolveRunDir(storage.activeRoot, runId);
   const plans: Array<{ file: HarvestInverseFile; write: string | null }> = [];
   const blocked: RevertBlock[] = [];
-  for (const f of inverse.files) {
-    const planned = planRevertFile(f);
-    if (planned.block) blocked.push(planned.block);
+  // Which files MUST carry a span is decided outside the inverse: the op's own
+  // journal entry names its playbook, and only a wiki page is ever a whole-file
+  // inverse. A file outside the wiki root is span-only.
+  const opRecord = findOp(runId, opId, opts);
+  const scopeForSpan = storage.project ?? storage.workspace;
+  const wikiRootForSpan = scopeForSpan ? scopeForSpan.knowledge() : null;
+  const spanOnly = (p: string): boolean =>
+    (opRecord?.playbook_path !== undefined && path.resolve(opRecord.playbook_path) === path.resolve(p)) ||
+    wikiRootForSpan === null ||
+    !isWithin(path.resolve(p), wikiRootForSpan);
+  const files = Array.isArray(inverse.files) ? inverse.files : [];
+  for (const f of files) {
+    if (typeof f?.path !== "string" || f.path.length === 0) {
+      blocked.push({ path: String(f?.path ?? ""), reason: "inverse-tampered", detail: "the recorded file entry has no path" });
+      continue;
+    }
+    const planned = planRevertFile(f, spanOnly(f.path));
+    if (planned.block) {
+      blocked.push(planned.block);
+      continue;
+    }
+    const screened = screenRevertFile(f, readFileOrNull(f.path), planned.write ?? null);
+    if (screened) blocked.push(screened);
     else plans.push({ file: f, write: planned.write ?? null });
   }
   if (blocked.length > 0) {
+    const detail =
+      `revert refused: ` +
+      blocked.map((b) => `${b.path} (${b.reason}: ${b.detail})`).join("; ") +
+      `. The operator must resolve this — revert never clobbers a later edit.`;
+    const gated = blocked.some((b) => b.reason === "content-refused" || b.reason === "inverse-tampered");
+    if (gated && fs.existsSync(runDir)) {
+      emitSecurity(runDir, runId, "harvest_refused", "blocked", `revert of '${opId}' refused: ${detail}`);
+    }
     return {
       op_id: opId,
       restored: [],
       ok: false,
       blocked_confirm: true,
       blocked,
-      detail:
-        `revert refused: ` +
-        blocked.map((b) => `${b.path} (${b.reason}: ${b.detail})`).join("; ") +
-        `. The operator must resolve this — revert never clobbers a later edit.`,
+      ...(gated ? { next_need: "operator" as const } : {}),
+      detail,
     };
   }
 
+  const writer = assertScrubbedWriter(scrubbedWikiWriter);
   const restored: string[] = [];
   const unverified: RevertBlock[] = [];
   for (const { file, write } of plans) {
@@ -1346,7 +1549,10 @@ export function revertHarvest(
         if (fs.existsSync(file.path)) fs.rmSync(file.path);
       } else {
         storage.ensureDir(path.dirname(file.path));
-        fs.writeFileSync(file.path, write, "utf8");
+        const wrote = writer(file.path, write, { runDir, runId });
+        if (!wrote.written) {
+          return { op_id: opId, restored, ok: false, detail: `scrubbed write refused ${file.path}` };
+        }
       }
     } catch (err) {
       return { op_id: opId, restored, ok: false, detail: (err as Error).message };
@@ -1402,5 +1608,10 @@ export function revertHarvest(
     { ...(prior ?? { op_id: opId, trigger: "manual" as const }), op_id: opId, status: "reverted" },
     opts,
   );
+  // The audit twin lands on the run the op belonged to, and only when that run
+  // record exists: a revert must not invent a run directory to log into.
+  if (fs.existsSync(runDir)) {
+    emitSecurity(runDir, runId, "harvest_reverted", "allow", `harvest op '${opId}' reverted (${restored.length} file(s))`);
+  }
   return { op_id: opId, restored, ok: true };
 }
