@@ -56,6 +56,10 @@ import {
 } from "../permission-policy";
 import type { HostMode } from "../permission-policy-schema";
 import { ownPluginRoot } from "../../../src/domains/kernel";
+import {
+  assertIsolatedLaneAdmitted,
+  assertLaneInstanceExported,
+} from "../../../src/domains/dispatch";
 
 // ── Pure command composition helpers ─────────────────────────────────────────
 
@@ -511,6 +515,8 @@ export function paneCommand(
   /** Verified Claude package root exported so spawned hooks resolve this package, not the parent host. */
   pluginRoot?: string,
 ): string {
+  // plr-wi-15-4: a task id never reaches a pane without its admitted instance id.
+  assertLaneInstanceExported({ runId, taskId, taskCellInstanceId });
   const pluginDirIndexes = launchArgs.flatMap((arg, index) => arg === "--plugin-dir" ? [index] : []);
   if (pluginDirIndexes.length > 0 && pluginRoot === undefined) {
     throw new Error("--plugin-dir activation requires the paired child GUILD_PLUGIN_ROOT");
@@ -1358,6 +1364,28 @@ export class TmuxTeamBackend implements TeamBackend {
             ? ["mixed-host adapter preflight withheld until real dispatch"]
             : []),
         ],
+        dispatchPlan,
+      };
+    }
+    // plr-wi-15-4: every lane pane is an admitted TaskCell instance with a
+    // written v2 assignment, or nothing spawns.
+    try {
+      for (const lane of req.specialists) {
+        assertIsolatedLaneAdmitted({
+          cwd: req.cwd,
+          runId: req.runId,
+          logicalTaskId: lane.taskId,
+          instanceId: lane.task_cell_instance_id,
+        });
+      }
+    } catch (error) {
+      return {
+        kind: this.kind,
+        ok: false,
+        plannedCommands,
+        orchestratorPaneId: null,
+        teammatePaneIds: {},
+        notes: [error instanceof Error ? error.message : String(error)],
         dispatchPlan,
       };
     }

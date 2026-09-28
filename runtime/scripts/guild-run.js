@@ -19499,9 +19499,9 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
   const unstable = (message) => ({ code: "journal_identity_unstable", message });
   const ambiguous = (message) => ({ code: "journal_identity_ambiguous", message });
   const pin = () => {
-    const present2 = lstatOrNull2(identity.path);
-    if (present2 === null) return null;
-    if (present2.isSymbolicLink() || !present2.isFile()) {
+    const present3 = lstatOrNull2(identity.path);
+    if (present3 === null) return null;
+    if (present3.isSymbolicLink() || !present3.isFile()) {
       return unstable(`canonical journal name "${identity.path}" no longer names a regular file`);
     }
     let fd = null;
@@ -19523,7 +19523,7 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
       }
     }
     const st = fstatOrNull(fd);
-    if (st === null || st.dev !== present2.dev || st.ino !== present2.ino) {
+    if (st === null || st.dev !== present3.dev || st.ino !== present3.ino) {
       closeQuietly(fd);
       return unstable(`the journal at "${identity.path}" was replaced while it was being opened`);
     }
@@ -22505,6 +22505,32 @@ var init_execution_transport_adapters = __esm({
       "skills"
     ]);
     PINNED_SKILL_KEYS = Object.freeze(["id", "relative_path", "content_hash"]);
+  }
+});
+
+// src/domains/dispatch/isolated-launch-admission.ts
+function present2(v) {
+  return typeof v === "string" && v.length > 0;
+}
+function assertLaneInstanceExported(spec) {
+  if (present2(spec.runId) && present2(spec.taskId) && !present2(spec.taskCellInstanceId)) {
+    throw new IsolatedSpawnRefused(
+      `lane ${spec.taskId} in run ${spec.runId} has no GUILD_TASK_CELL_INSTANCE_ID. Admit it through reserveInstance and write its guild.task_assignment.v2 before launch (agent-team-launcher emitTaskCellsV2), or run it lead_only.`
+    );
+  }
+}
+var ISOLATED_SPAWN_REFUSED, IsolatedSpawnRefused;
+var init_isolated_launch_admission = __esm({
+  "src/domains/dispatch/isolated-launch-admission.ts"() {
+    init_task_cell_contract();
+    ISOLATED_SPAWN_REFUSED = "isolated_spawn_refused";
+    IsolatedSpawnRefused = class extends Error {
+      code = ISOLATED_SPAWN_REFUSED;
+      constructor(detail) {
+        super(`${ISOLATED_SPAWN_REFUSED}: ${detail}`);
+        this.name = "IsolatedSpawnRefused";
+      }
+    };
   }
 });
 
@@ -27648,6 +27674,7 @@ var init_dispatch = __esm({
     init_progress_ledger();
     init_instance_cap();
     init_isolation_guard();
+    init_isolated_launch_admission();
     init_adapter_rungs();
     init_advisor_budget();
     init_assignment_binding();
@@ -30447,7 +30474,7 @@ function validateWorkflowGraphOverlay(pluginDefault, overlay, classDefaults) {
   const rawOverlayNodes = hasOverlay ? toNodes(overlay) : defaultNodes;
   const overlayNodes = mergeNodeList(defaultNodes, rawOverlayNodes);
   const violations = [];
-  const present2 = new Set(overlayNodes.map((n) => n?.id).filter((id) => !!id));
+  const present3 = new Set(overlayNodes.map((n) => n?.id).filter((id) => !!id));
   const defaultIds = new Set(defaultNodes.map((n) => n?.id).filter(Boolean));
   const defaultIndex = nodeIndex(defaultNodes);
   const overlayIndex = nodeIndex(overlayNodes);
@@ -30469,7 +30496,7 @@ function validateWorkflowGraphOverlay(pluginDefault, overlay, classDefaults) {
     }
   }
   for (const id of gates) {
-    if (!present2.has(id)) {
+    if (!present3.has(id)) {
       violations.push({
         rule: "missing-required-node",
         detail: `overlay drops required node '${id}'`
@@ -30547,7 +30574,7 @@ function validateWorkflowGraphOverlay(pluginDefault, overlay, classDefaults) {
   const defaultEntry = typeof defaultGraph.entry === "string" ? defaultGraph.entry : void 0;
   const overlayEntry = typeof overlayGraph.entry === "string" ? overlayGraph.entry : void 0;
   const effectiveEntry = overlayEntry ?? defaultEntry;
-  if (effectiveEntry !== void 0 && !present2.has(effectiveEntry)) {
+  if (effectiveEntry !== void 0 && !present3.has(effectiveEntry)) {
     violations.push({
       rule: "entry-unknown-node",
       detail: `entry '${effectiveEntry}' names no node in the merged graph`
@@ -30558,7 +30585,7 @@ function validateWorkflowGraphOverlay(pluginDefault, overlay, classDefaults) {
     if (target.entry === void 0) continue;
     const destGraph = classDefaults?.[target.class];
     const destEntry = (typeof destGraph?.entry === "string" ? destGraph.entry : void 0) ?? CLASS_DEFAULT_ENTRIES[target.class];
-    if (target.class === ownClass && !present2.has(target.entry)) {
+    if (target.class === ownClass && !present3.has(target.entry)) {
       violations.push({
         rule: "cross-class-entry-unknown-node",
         detail: `edge ${target.from} hands off to class '${target.class}' at '${target.entry}', which names no node in the merged graph`
@@ -30594,7 +30621,7 @@ function validateWorkflowGraphOverlay(pluginDefault, overlay, classDefaults) {
   }
   if (effectiveEntry !== void 0) {
     const fromEntry = reachableFrom(mergedAdj, effectiveEntry);
-    const liveGates = gates.filter((g) => present2.has(g));
+    const liveGates = gates.filter((g) => present3.has(g));
     for (const gate of liveGates) {
       if (fromEntry.has(gate)) continue;
       violations.push({
@@ -30644,9 +30671,9 @@ function validateWorkflowGraphOverlay(pluginDefault, overlay, classDefaults) {
   }
   for (const e of overlayGraph.edges ?? []) {
     if (!e) continue;
-    if (present2.size > 0) {
+    if (present3.size > 0) {
       for (const [side, id] of [["from", e.from], ["to", typeof e.to === "string" ? e.to : void 0]]) {
-        if (typeof id !== "string" || present2.has(id)) continue;
+        if (typeof id !== "string" || present3.has(id)) continue;
         violations.push({
           rule: "edge-endpoint-unknown",
           detail: `edge ${side} '${id}' names a node the merged graph does not declare`
@@ -30667,7 +30694,7 @@ function validateWorkflowGraphOverlay(pluginDefault, overlay, classDefaults) {
         detail: `edge ${String(e.from)} changes class to '${toClass}', which is not one of the five`
       });
     }
-    if (typeof target === "string" && present2.size > 0 && !present2.has(target)) {
+    if (typeof target === "string" && present3.size > 0 && !present3.has(target)) {
       violations.push({
         rule: "unknown-edge-endpoint",
         detail: `edge ${String(e.from)} -> '${target}' names a node the merged graph does not declare`
@@ -46073,6 +46100,7 @@ var BYPASS_SET = new Set(BYPASS_POLICIES);
 
 // scripts/lib/host/tmux-backend.ts
 init_kernel();
+init_dispatch();
 function shellQuote(s) {
   if (s === "") return "''";
   if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(s)) return s;
@@ -46083,6 +46111,7 @@ function paneDebugEnabled(env = process.env) {
   return env["GUILD_PANE_DEBUG"] === "1";
 }
 function paneCommand(prompt, runId, capabilityScope, taskId, specialist, debug = paneDebugEnabled(), launchArgs = [], model, assignmentPath, taskCellInstanceId, definitionRef, pluginRoot) {
+  assertLaneInstanceExported({ runId, taskId, taskCellInstanceId });
   const pluginDirIndexes = launchArgs.flatMap((arg, index) => arg === "--plugin-dir" ? [index] : []);
   if (pluginDirIndexes.length > 0 && pluginRoot === void 0) {
     throw new Error("--plugin-dir activation requires the paired child GUILD_PLUGIN_ROOT");
@@ -46127,6 +46156,7 @@ var GENERATED_PRE_GUARD_EXPORTS2 = Object.freeze([
 ]);
 
 // scripts/lib/host/remote-backend.ts
+init_dispatch();
 var HOOK_PROBE_EVENT = '{"session_id":"guild-remote-enforcement-probe","transcript_path":"","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"guild-remote-enforcement-probe"},"tool_use_id":"guild-probe"}';
 var HOOK_INSTALL_PROBE = `root="\${GUILD_PLUGIN_ROOT:-\${CLAUDE_PLUGIN_ROOT:-}}"; [ -n "$root" ] && [ -f "$root/hooks/hooks.json" ] && [ -f "$root/hooks/dist/pre-tool-use.js" ] && node -e 'const m=require(process.argv[1]);const g=(m.hooks&&m.hooks.PreToolUse)||[];const hit=g.some(e=>(e.hooks||[]).some(h=>String(h.command||"").includes("pre-tool-use")));process.exit(hit?0:1)' "$root/hooks/hooks.json" && out=$(printf '%s' '${HOOK_PROBE_EVENT}' | GUILD_CAPABILITY_SCOPE='["Read"]' node "$root/hooks/dist/pre-tool-use.js" 2>/dev/null) && printf '%s' "$out" | grep -q '"hookEventName":"PreToolUse"' && printf '%s' "$out" | grep -qE '"permissionDecision":"(ask|deny)"' && echo GUILD_HOOKS_ENFORCING || true`;
 
@@ -46154,8 +46184,10 @@ var REF_VERIFICATION_FAILURES = Object.freeze([
 
 // scripts/lib/host/cmux-backend.ts
 init_kernel();
+init_dispatch();
 
 // scripts/lib/pane-adapter.ts
+init_dispatch();
 var import_child_process7 = require("child_process");
 var ADAPTER_VERSION = "1";
 var defaultRun2 = (cmd, args, opts = {}) => {
@@ -46218,6 +46250,7 @@ var ClaudePaneAdapter = class {
     return { ok: true, message: "claude --version ok" };
   }
   command(spec) {
+    assertLaneInstanceExported(spec);
     return paneCommand(
       spec.prompt,
       spec.runId,
@@ -46231,10 +46264,14 @@ var ClaudePaneAdapter = class {
       // trailing `model` param so T6 model selection still reaches the pane.
       void 0,
       [],
-      spec.model
+      spec.model,
+      spec.assignmentPath,
+      // plr-wi-15-4: the admitted instance id rides with the task id.
+      spec.taskCellInstanceId
     );
   }
   env(spec) {
+    assertLaneInstanceExported(spec);
     return {
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
       GUILD_RUN_ID: spec.runId,
@@ -46244,6 +46281,7 @@ var ClaudePaneAdapter = class {
       ...spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {},
       // D-CAP: carry lane identity and the environment-only capability scope.
       ...spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {},
+      ...taskCellInstanceEnv(spec),
       ...spec.capability_scope !== void 0 ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) } : {}
     };
   }
@@ -46272,12 +46310,14 @@ var AntigravityPaneAdapter = class {
     return { ok: true, message: "agy --version ok" };
   }
   command(spec) {
+    assertLaneInstanceExported(spec);
     const taskFragment = spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
     const specialistFragment = spec.specialist ? `export GUILD_SPECIALIST=${shellQuote(spec.specialist)}; ` : "";
     const scopeFragment = spec.capability_scope !== void 0 ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; ` : "";
     return `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` + producerMarkerExport() + taskFragment + specialistFragment + taskAssignmentExport(spec) + taskCellInstanceExport(spec) + scopeFragment + modelExport(spec) + `agy ${modelArg(spec, "--model")}${AGY_PROMPT_FLAG} ${shellQuote(spec.prompt)}; exec $SHELL`;
   }
   env(spec) {
+    assertLaneInstanceExported(spec);
     return {
       GUILD_RUN_ID: spec.runId,
       ...modelEnv(spec),
@@ -46312,12 +46352,14 @@ var PiPaneAdapter = class {
     return { ok: true, message: "pi --version ok (multi-provider; pi resolves its own auth)" };
   }
   command(spec) {
+    assertLaneInstanceExported(spec);
     const taskFragment = spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
     const specialistFragment = spec.specialist ? `export GUILD_SPECIALIST=${shellQuote(spec.specialist)}; ` : "";
     const scopeFragment = spec.capability_scope !== void 0 ? `export GUILD_CAPABILITY_SCOPE=${shellQuote(JSON.stringify(spec.capability_scope))}; ` : "";
     return `export GUILD_RUN_ID=${shellQuote(spec.runId)}; ` + producerMarkerExport() + taskFragment + specialistFragment + taskAssignmentExport(spec) + taskCellInstanceExport(spec) + scopeFragment + modelExport(spec) + `pi ${modelArg(spec, "--model")}-p ${shellQuote(spec.prompt)}; exec $SHELL`;
   }
   env(spec) {
+    assertLaneInstanceExported(spec);
     return {
       GUILD_RUN_ID: spec.runId,
       ...modelEnv(spec),
@@ -46669,6 +46711,7 @@ function createClaudeCodeCliAdapter(entry = ENTRY3) {
       const prompt = typeof taskRun["prompt"] === "string" ? taskRun["prompt"] : JSON.stringify(taskRun);
       const runId = typeof taskRun["runId"] === "string" ? taskRun["runId"] : "run";
       const taskId = typeof taskRun["taskId"] === "string" ? taskRun["taskId"] : void 0;
+      const taskCellInstanceId = typeof taskRun["taskCellInstanceId"] === "string" ? taskRun["taskCellInstanceId"] : void 0;
       const specialist = typeof taskRun["specialist"] === "string" ? taskRun["specialist"] : void 0;
       const wrapperCommand = typeof taskRun["command"] === "string" ? taskRun["command"] : null;
       const wrapperArgs = Array.isArray(taskRun["args"]) ? taskRun["args"].map(String) : null;
@@ -46681,8 +46724,14 @@ function createClaudeCodeCliAdapter(entry = ENTRY3) {
         prompt,
         hostKind: "claude",
         ...taskId ? { taskId } : {},
+        ...taskCellInstanceId ? { taskCellInstanceId } : {},
         ...specialist ? { specialist } : {}
       };
+      try {
+        pane.env(paneSpec);
+      } catch (err) {
+        return result5("dispatch", "unavailable", err.message, { taskRun, dispatch_kind: "refused" });
+      }
       return result5(
         "dispatch",
         "ok",

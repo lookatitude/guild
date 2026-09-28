@@ -102,6 +102,7 @@ const PANE_SPEC: PaneSpec = {
   prompt: "do the thing",
   hostKind: "claude",
   taskId: "MH-04",
+  taskCellInstanceId: "MH-04.a1.i-1",
   specialist: "architect",
 };
 
@@ -439,7 +440,12 @@ describe("PaneExecutionTransport — the PaneAdapter and wrapper seams", () => {
       PANE_SPEC.runId,
       PANE_SPEC.capability_scope,
       PANE_SPEC.taskId,
-      PANE_SPEC.specialist
+      PANE_SPEC.specialist,
+      undefined,
+      [],
+      undefined,
+      undefined,
+      PANE_SPEC.taskCellInstanceId,
     ));
   });
 

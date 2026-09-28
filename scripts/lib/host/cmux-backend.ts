@@ -37,6 +37,7 @@ import { readRuntimePermissionConfig } from "../permission-policy";
 import { validateProjectDefinitionRefV1 } from "../core/contracts/project-definition-ref";
 import * as path from "node:path";
 import { ownPluginRoot } from "../../../src/domains/kernel";
+import { assertIsolatedLaneAdmitted } from "../../../src/domains/dispatch";
 
 function definitionRefCarriage(
   value: unknown,
@@ -343,6 +344,23 @@ export class CmuxTeamBackend implements TeamBackend {
         dispatchPlan,
       };
     };
+
+    // plr-wi-15-4: no surface opens for a lane that is not an admitted TaskCell
+    // instance with a written v2 assignment.
+    if (!req.dryRun) {
+      try {
+        for (const lane of req.specialists) {
+          assertIsolatedLaneAdmitted({
+            cwd: req.cwd,
+            runId: req.runId,
+            logicalTaskId: lane.taskId,
+            instanceId: lane.task_cell_instance_id,
+          });
+        }
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    }
 
     let claudePluginActivation: ClaudePluginActivation | undefined;
     try {

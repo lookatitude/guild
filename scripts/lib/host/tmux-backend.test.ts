@@ -496,7 +496,7 @@ function fakeTmux(opts: {
 
 describe("paneCommand — worker pane teardown (deliverable 3 / AT14)", () => {
   it("does NOT append `exec $SHELL` by default — a completed worker's pane closes", () => {
-    const c = paneCommand("do the thing", "run-1", undefined, "task-1", "backend", /* debug */ false);
+    const c = paneCommand("do the thing", "run-1", undefined, undefined, "backend", /* debug */ false);
     expect(c).not.toContain("exec $SHELL");
     // No launchArgs passed => byte-identical to paneCommand's pre-issue-#54
     // behavior (issue #54's flag-splicing is an explicit opt-in — see the
@@ -507,7 +507,7 @@ describe("paneCommand — worker pane teardown (deliverable 3 / AT14)", () => {
   });
 
   it("opt-in debug shell retitles the pane to the debug sentinel so it is NOT a live worker", () => {
-    const c = paneCommand("do the thing", "run-1", undefined, "task-1", "backend", /* debug */ true);
+    const c = paneCommand("do the thing", "run-1", undefined, undefined, "backend", /* debug */ true);
     expect(c).toContain("exec $SHELL"); // the operator shell only exists under opt-in
     expect(c).toContain(`${DEBUG_PANE_TITLE_PREFIX}backend`);
     expect(c).toContain("select-pane");
@@ -1223,13 +1223,13 @@ describe("resolveClaudePluginActivationArgs — exact local plugin activation", 
 describe("paneCommand — launchArgs splicing (issue #54: an explicit opt-in, not a new default)", () => {
   it("refuses plugin activation argv without the paired child GUILD_PLUGIN_ROOT", () => {
     expect(() => paneCommand(
-      "do the work", "run-1", undefined, "task-1", "backend", false,
+      "do the work", "run-1", undefined, undefined, "backend", false,
       ["--plugin-dir", "/tmp/claude-package"],
     )).toThrow(/plugin-dir.*GUILD_PLUGIN_ROOT/i);
   });
 
   it("with no launchArgs, paneCommand is UNCHANGED from its pre-issue-#54 shape (bare claude invocation)", () => {
-    const c = paneCommand("do the work", "run-1", undefined, "task-1", "backend");
+    const c = paneCommand("do the work", "run-1", undefined, undefined, "backend");
     expect(c).toContain("claude 'do the work'");
     expect(c).not.toContain("--permission-mode");
   });
@@ -1239,7 +1239,7 @@ describe("paneCommand — launchArgs splicing (issue #54: an explicit opt-in, no
       "do the work",
       "run-1",
       undefined,
-      "task-1",
+      undefined,
       "backend",
       /* debug */ false,
       resolveClaudeTeamLaunchArgs(RUNTIME_DEFAULT_CONFIG),
@@ -1253,7 +1253,7 @@ describe("paneCommand — launchArgs splicing (issue #54: an explicit opt-in, no
       trickyPrompt,
       "run-1",
       undefined,
-      "task-1",
+      undefined,
       "backend",
       /* debug */ false,
       resolveClaudeTeamLaunchArgs(RUNTIME_DEFAULT_CONFIG),
@@ -1269,7 +1269,7 @@ describe("paneCommand — launchArgs splicing (issue #54: an explicit opt-in, no
     // A hostile-shaped launch arg (spaces, quotes, $(), ;) — if `launchArgs.map(shellQuote)`
     // were ever removed in favor of a naive `.join(" ")`, this would inject.
     const hostileArg = "--foo=bar; rm -rf / $(whoami) 'x'";
-    const c = paneCommand("do the work", "run-1", undefined, "task-1", "backend", false, [hostileArg]);
+    const c = paneCommand("do the work", "run-1", undefined, undefined, "backend", false, [hostileArg]);
     const quotedArg = `'${hostileArg.replace(/'/g, "'\\''")}'`;
     expect(c).toContain(`claude ${quotedArg} 'do the work'`);
     // Not present unquoted/raw anywhere in the command.

@@ -28989,6 +28989,13 @@ var init_execution_transport_adapters = __esm({
   }
 });
 
+// src/domains/dispatch/isolated-launch-admission.ts
+var init_isolated_launch_admission = __esm({
+  "src/domains/dispatch/isolated-launch-admission.ts"() {
+    init_task_cell_contract();
+  }
+});
+
 // src/domains/dispatch/assignment-binding.ts
 var ASSIGNMENT_BINDING_CONTRACT;
 var init_assignment_binding = __esm({
@@ -33897,6 +33904,7 @@ var init_dispatch = __esm({
     init_progress_ledger();
     init_instance_cap();
     init_isolation_guard();
+    init_isolated_launch_admission();
     init_adapter_rungs();
     init_advisor_budget();
     init_assignment_binding();
@@ -44137,6 +44145,7 @@ var AUTONOMY_ORDER = Object.freeze([
 
 // scripts/lib/host/tmux-backend.ts
 init_kernel();
+init_dispatch();
 function probeTmuxAvailable(run = defaultRun) {
   return run("tmux", ["-V"]).status === 0;
 }
@@ -44155,6 +44164,7 @@ var GENERATED_PRE_GUARD_EXPORTS2 = Object.freeze([
 ]);
 
 // scripts/lib/host/remote-backend.ts
+init_dispatch();
 var HOOK_PROBE_EVENT = '{"session_id":"guild-remote-enforcement-probe","transcript_path":"","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"guild-remote-enforcement-probe"},"tool_use_id":"guild-probe"}';
 var HOOK_INSTALL_PROBE = `root="\${GUILD_PLUGIN_ROOT:-\${CLAUDE_PLUGIN_ROOT:-}}"; [ -n "$root" ] && [ -f "$root/hooks/hooks.json" ] && [ -f "$root/hooks/dist/pre-tool-use.js" ] && node -e 'const m=require(process.argv[1]);const g=(m.hooks&&m.hooks.PreToolUse)||[];const hit=g.some(e=>(e.hooks||[]).some(h=>String(h.command||"").includes("pre-tool-use")));process.exit(hit?0:1)' "$root/hooks/hooks.json" && out=$(printf '%s' '${HOOK_PROBE_EVENT}' | GUILD_CAPABILITY_SCOPE='["Read"]' node "$root/hooks/dist/pre-tool-use.js" 2>/dev/null) && printf '%s' "$out" | grep -q '"hookEventName":"PreToolUse"' && printf '%s' "$out" | grep -qE '"permissionDecision":"(ask|deny)"' && echo GUILD_HOOKS_ENFORCING || true`;
 
@@ -44182,6 +44192,7 @@ var REF_VERIFICATION_FAILURES = Object.freeze([
 
 // scripts/lib/host/cmux-backend.ts
 init_kernel();
+init_dispatch();
 
 // scripts/write-host-capability.ts
 init_state();

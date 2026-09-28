@@ -50,6 +50,7 @@ import {
   NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
   computePhysicalNativeClaudePayloadDigest,
 } from "./release-package-identity";
+import { admitLane, tmpLaunchRoot } from "./host/__tests__/admit-lane";
 
 const TEST_PLUGIN_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "team-backend-native-plugin-"));
 fs.mkdirSync(path.join(TEST_PLUGIN_ROOT, ".claude-plugin"), { recursive: true });
@@ -277,7 +278,14 @@ describe("TmuxTeamBackend.launch() — seam-conformant entry", () => {
   it("real run: spawns and reports teammate pane ids", () => {
     const { run } = makeFakeRun({ panes: [["1", "%1", "architect"]] });
     const backend = tmuxBackend(run);
-    const result = backend.launch(req({ dryRun: false }));
+    // plr-wi-15-4: a real launch spawns only admitted TaskCell lanes.
+    const cwd = tmpLaunchRoot();
+    const specialists = SPECIALISTS.map((s) => {
+      const taskId = `T-${s.name}`;
+      admitLane(cwd, "run-test-001", taskId, `${taskId}.a1.i-1`);
+      return { ...s, taskId, task_cell_instance_id: `${taskId}.a1.i-1` };
+    });
+    const result = backend.launch(req({ dryRun: false, cwd, specialists }));
     expect(result.ok).toBe(true);
     expect(result.teammatePaneIds.architect).toBe("%1");
   });
@@ -634,7 +642,7 @@ describe("pure helpers", () => {
 
   // D-CAP GUILD_TASK_ID injection (lane identity carrier)
   it("D-CAP: paneCommand injects GUILD_TASK_ID when taskId present", () => {
-    const c = paneCommand("hello", "run-1", undefined, "T2-backend");
+    const c = paneCommand("hello", "run-1", undefined, "T2-backend", undefined, false, [], undefined, undefined, "T2-backend.a1.i-1");
     expect(c).toContain("GUILD_TASK_ID=");
     expect(c).toContain("T2-backend");
     // Must come BEFORE the `claude` invocation
@@ -649,7 +657,7 @@ describe("pure helpers", () => {
   });
 
   it("D-CAP: paneCommand injects both GUILD_TASK_ID and GUILD_CAPABILITY_SCOPE when both present", () => {
-    const c = paneCommand("hello", "run-1", ["Read", "Write"], "T1-architect");
+    const c = paneCommand("hello", "run-1", ["Read", "Write"], "T1-architect", undefined, false, [], undefined, undefined, "T1-architect.a1.i-1");
     expect(c).toContain("GUILD_TASK_ID=");
     expect(c).toContain("GUILD_CAPABILITY_SCOPE=");
     // GUILD_TASK_ID must come before GUILD_CAPABILITY_SCOPE (and both before claude)
@@ -663,7 +671,7 @@ describe("pure helpers", () => {
   // G-9 / C2-D1 (heartbeat real-path wiring): specialist panes must export
   // GUILD_SPECIALIST so the PostToolUse heartbeat writer fires.
   it("heartbeat: paneCommand exports GUILD_SPECIALIST when specialist present (before claude)", () => {
-    const c = paneCommand("hello", "run-1", undefined, "T2-backend", "backend");
+    const c = paneCommand("hello", "run-1", undefined, "T2-backend", "backend", false, [], undefined, undefined, "T2-backend.a1.i-1");
     expect(c).toContain("export GUILD_SPECIALIST=backend");
     const specIdx = c.indexOf("GUILD_SPECIALIST");
     const claudeIdx = c.indexOf("claude ");
@@ -671,7 +679,7 @@ describe("pure helpers", () => {
   });
 
   it("heartbeat: paneCommand omits GUILD_SPECIALIST when specialist is absent (orchestrator pane)", () => {
-    const c = paneCommand("hello", "run-1", ["Read"], "T1");
+    const c = paneCommand("hello", "run-1", ["Read"], "T1", undefined, false, [], undefined, undefined, "T1.a1.i-1");
     expect(c).not.toContain("GUILD_SPECIALIST");
   });
 

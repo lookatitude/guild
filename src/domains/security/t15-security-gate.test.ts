@@ -312,9 +312,11 @@ describe("D5 · a permission edit cannot promote through any automatic path", ()
         run_id: RUN_ID,
         agent_id: "backend",
         topic_key: "retries",
+        // The operator correction is the one free field the template renders.
+        correction: PERMISSION_EDIT,
         runDir,
         storage,
-        decision: { ...CLEAN, playbook: { path: p, span: "Retries", replacement: PERMISSION_EDIT } },
+        decision: { ...CLEAN, playbook: { path: p, span: "Retries" } },
       });
     route();
     route();

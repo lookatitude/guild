@@ -40,6 +40,7 @@ import {
   binaryForHostKind,
 } from "./tmux-backend";
 import type { HostKind } from "../host-types";
+import { assertIsolatedLaneAdmitted } from "../../../src/domains/dispatch";
 
 /**
  * ISSUE #94 (secondary) — the synthetic PreToolUse event the remote probe feeds
@@ -560,6 +561,28 @@ export class RemoteTeamBackend implements TeamBackend {
           `dry-run: ${transport.kind} transport not invoked`,
           `dry-run: hook-install preflight not run — panes planned BARE (permission-mode flags withheld until hooks are verified at launch)`,
         ],
+      };
+    }
+
+    // plr-wi-15-4: every remote lane is an admitted TaskCell instance with a
+    // written v2 assignment before any transport is touched.
+    try {
+      for (const p of planned) {
+        assertIsolatedLaneAdmitted({
+          cwd: req.cwd,
+          runId: req.runId,
+          logicalTaskId: p.spec.taskId,
+          instanceId: p.spec.task_cell_instance_id,
+        });
+      }
+    } catch (error) {
+      return {
+        kind: this.kind,
+        ok: false,
+        plannedCommands,
+        orchestratorPaneId: null,
+        teammatePaneIds: {},
+        notes: [error instanceof Error ? error.message : String(error)],
       };
     }
 

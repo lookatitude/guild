@@ -18,8 +18,22 @@ import {
   NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
   computePhysicalNativeClaudePayloadDigest,
 } from "../release-package-identity";
+import { admitLane, tmpLaunchRoot } from "./__tests__/admit-lane";
 
 const TEST_PLUGIN_ROOT = fs.realpathSync(process.cwd());
+// plr-wi-15-4: a real launch needs admitted TaskCell lanes. They live in a temp
+// root, never in the checkout.
+const LAUNCH_ROOT = tmpLaunchRoot();
+for (const runId of [
+  "run-20260812-000000-cmux-definition-override",
+  "run-20260812-000000-cmux-definition-proof",
+  "run-20260812-000000-cmux-proof",
+  "run-20260812-000000-cmux-reserved-no-ref",
+  "run-20260820-120000-cmux-preview-failure",
+  "run-20260820-120000-cmux-real-preflight",
+]) {
+  for (const taskId of ["T1", "T2"]) admitLane(LAUNCH_ROOT, runId, taskId, `${taskId}.a1.i-test`);
+}
 const testClaudeActivation = () => ({
   args: ["--plugin-dir", TEST_PLUGIN_ROOT],
   pluginRoot: TEST_PLUGIN_ROOT,
@@ -87,7 +101,7 @@ describe("W4 — CmuxTeamBackend", () => {
     const result = backend.launch({
       slug: "cmux-proof",
       runId: "run-20260812-000000-cmux-proof",
-      cwd: process.cwd(),
+      cwd: LAUNCH_ROOT,
       specialists: [lane("backend", "T1"), lane("backend", "T2")],
       targetName: "workspace:9",
       mode: "in-session",
@@ -138,7 +152,7 @@ describe("W4 — CmuxTeamBackend", () => {
     }).launch({
       slug: "cmux-proof",
       runId: "run-20260812-000000-cmux-proof",
-      cwd: process.cwd(),
+      cwd: LAUNCH_ROOT,
       specialists: [lane("backend", "T1"), lane("security", "T2")],
       targetName: "workspace:9",
       mode: "in-session",
@@ -175,7 +189,7 @@ describe("W4 — CmuxTeamBackend", () => {
     }).launch({
       slug: "cmux-proof",
       runId: "run-20260812-000000-cmux-proof",
-      cwd: process.cwd(),
+      cwd: LAUNCH_ROOT,
       specialists: [lane("backend", "T1"), lane("security", "T2")],
       targetName: "workspace:9",
       mode: "in-session",
@@ -200,7 +214,7 @@ describe("W4 — CmuxTeamBackend", () => {
     }).launch({
       slug: "cmux-proof",
       runId: "run-20260812-000000-cmux-proof",
-      cwd: process.cwd(),
+      cwd: LAUNCH_ROOT,
       specialists: [lane("backend", "T1")],
       targetName: "workspace:9",
       mode: "in-session",
@@ -314,7 +328,7 @@ describe("W4 — CmuxTeamBackend", () => {
     }).launch({
       slug: "cmux-proof",
       runId: "run-20260812-000000-cmux-proof",
-      cwd: process.cwd(),
+      cwd: LAUNCH_ROOT,
       specialists: [lane("backend", "T1")],
       targetName: "workspace:9",
       mode: "in-session",
@@ -343,7 +357,7 @@ describe("W4 — CmuxTeamBackend", () => {
     }).launch({
       slug: "cmux-preview-failure",
       runId: "run-20260820-120000-cmux-preview-failure",
-      cwd: process.cwd(),
+      cwd: LAUNCH_ROOT,
       specialists: [{ ...lane("backend", "T1"), host_kind: "codex" }],
       targetName: "workspace:9",
       mode: "in-session",
@@ -377,7 +391,7 @@ describe("W4 — CmuxTeamBackend", () => {
     const result = backend.launch({
       slug: "cmux-real-preflight",
       runId: "run-20260820-120000-cmux-real-preflight",
-      cwd: process.cwd(),
+      cwd: LAUNCH_ROOT,
       specialists: [{ ...lane("backend", "T1"), host_kind: "codex" }],
       targetName: "workspace:9",
       mode: "in-session",
@@ -420,7 +434,7 @@ describe("W4 — CmuxTeamBackend", () => {
     }).launch({
       slug: "cmux-definition-proof",
       runId: "run-20260812-000000-cmux-definition-proof",
-      cwd: process.cwd(),
+      cwd: LAUNCH_ROOT,
       specialists: [codexLane],
       targetName: "workspace:9",
       mode: "in-session",
@@ -476,7 +490,7 @@ describe("W4 — CmuxTeamBackend", () => {
     }).launch({
       slug: "cmux-definition-override",
       runId: "run-20260812-000000-cmux-definition-override",
-      cwd: process.cwd(),
+      cwd: LAUNCH_ROOT,
       specialists: [{
         ...lane("backend", "T1"),
         host_kind: "codex",
@@ -515,7 +529,7 @@ describe("W4 — CmuxTeamBackend", () => {
     }).launch({
       slug: "cmux-reserved-no-ref",
       runId: "run-20260812-000000-cmux-reserved-no-ref",
-      cwd: process.cwd(),
+      cwd: LAUNCH_ROOT,
       specialists: [{ ...lane("backend", "T1"), host_kind: "codex" }],
       targetName: "workspace:9",
       mode: "in-session",
