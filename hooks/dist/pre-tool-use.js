@@ -44111,9 +44111,13 @@ function isWithin2(root, child) {
 }
 function resolvesUnderWiki(wikiRoots, target, cwd) {
   if (target.length === 0) return false;
-  const expanded = target === "~" || target.startsWith("~/") ? os5.homedir() + target.slice(1) : target;
-  const abs = realpathDeep(path85.isAbsolute(expanded) ? expanded : cwd + path85.sep + expanded);
-  return wikiRoots.some((root) => isWithin2(realpathDeep(root), abs));
+  const readings = [target];
+  if (target === "~" || target.startsWith("~/")) readings.push(os5.homedir() + target.slice(1));
+  const roots = wikiRoots.map((root) => realpathDeep(root));
+  return readings.some((r) => {
+    const abs = realpathDeep(path85.isAbsolute(r) ? r : cwd + path85.sep + r);
+    return roots.some((root) => isWithin2(root, abs));
+  });
 }
 function shellTokens(command) {
   const out = [];

@@ -305,4 +305,17 @@ describe("plr-wi-15-3 · a lane worker never writes the wiki (KTD35)", () => {
     expect(resolvesUnderWiki([wiki], path.join(".guild", "wiki", "..", "outside.md"), repo)).toBe(false);
     fs.rmSync(repo, { recursive: true, force: true });
   });
+
+  it("G-lane r6: a literal ~ that is a repo symlink to the wiki is refused", () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "t15-tilde-"));
+    const wiki = path.join(repo, ".guild", "wiki");
+    fs.mkdirSync(wiki, { recursive: true });
+    fs.symlinkSync(wiki, path.join(repo, "~"));
+    const hit = (c: string): string | null => bashWikiPath(c, (t) => resolvesUnderWiki([wiki], t, repo));
+    expect(hit("printf x > '~/bypass.md'")).not.toBeNull();
+    // CONTROL: ~ under a repo with no such link resolves to HOME, not the wiki.
+    fs.unlinkSync(path.join(repo, "~"));
+    expect(hit("printf x > '~/bypass.md'")).toBeNull();
+    fs.rmSync(repo, { recursive: true, force: true });
+  });
 });

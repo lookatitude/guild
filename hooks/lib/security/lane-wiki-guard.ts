@@ -86,9 +86,15 @@ export function isWithin(root: string, child: string): boolean {
 /** Does `target` (resolved against `cwd`) realpath under one of `wikiRoots`? */
 export function resolvesUnderWiki(wikiRoots: readonly string[], target: string, cwd: string): boolean {
   if (target.length === 0) return false;
-  const expanded = target === "~" || target.startsWith("~/") ? os.homedir() + target.slice(1) : target;
-  const abs = realpathDeep(path.isAbsolute(expanded) ? expanded : cwd + path.sep + expanded);
-  return wikiRoots.some((root) => isWithin(realpathDeep(root), abs));
+  // A quoted `~` is literal to the shell and an unquoted one expands; the scanner
+  // cannot tell which, so both readings are checked.
+  const readings = [target];
+  if (target === "~" || target.startsWith("~/")) readings.push(os.homedir() + target.slice(1));
+  const roots = wikiRoots.map((root) => realpathDeep(root));
+  return readings.some((r) => {
+    const abs = realpathDeep(path.isAbsolute(r) ? r : cwd + path.sep + r);
+    return roots.some((root) => isWithin(root, abs));
+  });
 }
 
 type Tok = { kind: "word"; value: string } | { kind: "op"; value: string };
