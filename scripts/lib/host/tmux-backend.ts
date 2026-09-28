@@ -7,6 +7,7 @@
  * Layer: host/ — imports from core/contracts + shared/, no upward imports.
  */
 
+import { randomUUID } from "node:crypto";
 import { hostKindToRegistryId, getRegistryEntry } from "../host-registry";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -57,7 +58,7 @@ import {
 import type { HostMode } from "../permission-policy-schema";
 import { ownPluginRoot } from "../../../src/domains/kernel";
 import {
-  assertIsolatedLaneAdmitted,
+  claimIsolatedLaunches,
   assertLaneInstanceExported,
 } from "../../../src/domains/dispatch";
 
@@ -1368,16 +1369,18 @@ export class TmuxTeamBackend implements TeamBackend {
       };
     }
     // plr-wi-15-4: every lane pane is an admitted TaskCell instance with a
-    // written v2 assignment, or nothing spawns.
+    // written v2 assignment, and this launch consumes its one launch claim, or
+    // nothing spawns.
     try {
-      for (const lane of req.specialists) {
-        assertIsolatedLaneAdmitted({
-          cwd: req.cwd,
-          runId: req.runId,
+      claimIsolatedLaunches({
+        cwd: req.cwd,
+        runId: req.runId,
+        launchId: `tmux:${req.targetName}:${process.pid}:${randomUUID()}`,
+        lanes: req.specialists.map((lane) => ({
           logicalTaskId: lane.taskId,
           instanceId: lane.task_cell_instance_id,
-        });
-      }
+        })),
+      });
     } catch (error) {
       return {
         kind: this.kind,

@@ -34313,9 +34313,77 @@ function assertIsolatedLaneAdmitted(input) {
     );
   }
 }
-var fs51, path60, ISOLATED_SPAWN_REFUSED, IsolatedSpawnRefused;
+function launchClaimPath(ids) {
+  const paths = taskCellPaths(
+    { run_id: ids.runId, logical_task_id: ids.logicalTaskId, attempt: ids.attempt ?? 1, instance_id: ids.instanceId },
+    { guildDir: ids.guildDir }
+  );
+  return path60.join(paths.instance_dir, "launch-claim.json");
+}
+function claimIsolatedLaunches(input) {
+  if (!present2(input.launchId)) throw new IsolatedSpawnRefused(`a launch in run ${input.runId} has no launch id`);
+  let root;
+  try {
+    root = fs51.realpathSync(input.cwd);
+  } catch {
+    throw new IsolatedSpawnRefused(`launch root ${input.cwd} does not resolve`);
+  }
+  for (const lane of input.lanes) {
+    assertIsolatedLaneAdmitted({
+      cwd: root,
+      runId: input.runId,
+      logicalTaskId: lane.logicalTaskId,
+      instanceId: lane.instanceId,
+      attempt: lane.attempt,
+      guildDir: input.guildDir
+    });
+  }
+  const created = [];
+  for (const lane of input.lanes) {
+    const file = path60.resolve(
+      root,
+      launchClaimPath({
+        runId: input.runId,
+        logicalTaskId: lane.logicalTaskId,
+        instanceId: lane.instanceId,
+        attempt: lane.attempt,
+        guildDir: input.guildDir
+      })
+    );
+    const claim = {
+      schema_version: ISOLATED_LAUNCH_CLAIM_SCHEMA,
+      run_id: input.runId,
+      logical_task_id: lane.logicalTaskId,
+      attempt: lane.attempt ?? 1,
+      instance_id: lane.instanceId,
+      launch_id: input.launchId,
+      nonce: crypto13.randomBytes(16).toString("hex"),
+      root,
+      claimed_at: (input.now ?? (() => (/* @__PURE__ */ new Date()).toISOString()))()
+    };
+    try {
+      fs51.writeFileSync(file, `${JSON.stringify(claim, null, 2)}
+`, { encoding: "utf8", flag: "wx" });
+      created.push(file);
+    } catch (err) {
+      for (const own2 of created) fs51.rmSync(own2, { force: true });
+      let holder = "an earlier launch";
+      try {
+        const prior = JSON.parse(fs51.readFileSync(file, "utf8"));
+        if (typeof prior.launch_id === "string") holder = `launch ${prior.launch_id}`;
+      } catch {
+      }
+      const code = err.code;
+      throw new IsolatedSpawnRefused(
+        code === "EEXIST" ? `instance ${lane.instanceId} (${lane.logicalTaskId}) was already launched by ${holder}; admission is one launch per instance. A relaunch reserves a new attempt.` : `instance ${lane.instanceId} (${lane.logicalTaskId}) launch claim could not be written (${code ?? "error"})`
+      );
+    }
+  }
+}
+var crypto13, fs51, path60, ISOLATED_SPAWN_REFUSED, IsolatedSpawnRefused, ISOLATED_LAUNCH_CLAIM_SCHEMA;
 var init_isolated_launch_admission = __esm({
   "src/domains/dispatch/isolated-launch-admission.ts"() {
+    crypto13 = __toESM(require("crypto"));
     fs51 = __toESM(require("fs"));
     path60 = __toESM(require("path"));
     init_task_cell_contract();
@@ -34327,6 +34395,7 @@ var init_isolated_launch_admission = __esm({
         this.name = "IsolatedSpawnRefused";
       }
     };
+    ISOLATED_LAUNCH_CLAIM_SCHEMA = "guild.isolated_launch_claim.v1";
   }
 });
 
@@ -34763,7 +34832,7 @@ var init_per_host_packaging = __esm({
 
 // src/domains/distribution/release-distribution-contract.ts
 function sha2564(value) {
-  return crypto13.createHash("sha256").update(value).digest("hex");
+  return crypto14.createHash("sha256").update(value).digest("hex");
 }
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
@@ -34805,10 +34874,10 @@ function verifyReleaseClaim(claim, archive) {
   if (claim.host_support.supported !== false) errors.push("unsupported host cannot be promoted");
   return errors;
 }
-var crypto13, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
+var crypto14, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
 var init_release_distribution_contract = __esm({
   "src/domains/distribution/release-distribution-contract.ts"() {
-    crypto13 = __toESM(require("node:crypto"));
+    crypto14 = __toESM(require("node:crypto"));
     RELEASE_CLAIM_SCHEMA = "guild.release_claim.v1";
     OPERATION_KINDS = Object.freeze(["render", "install", "activate", "update", "uninstall", "verify"]);
     ACCEPTED_CONFORMANCE_ARTIFACTS = Object.freeze([
@@ -38289,7 +38358,7 @@ function resolveRecallBeforeRead(cwd) {
   return true;
 }
 function hashQuery(query) {
-  return crypto14.createHash("sha256").update(query).digest("hex").slice(0, 16);
+  return crypto15.createHash("sha256").update(query).digest("hex").slice(0, 16);
 }
 function categoryFromWikiPath(absPath, wikiBase) {
   const segs = path68.relative(wikiBase, absPath).split(path68.sep);
@@ -38625,7 +38694,7 @@ function recall(query, opts) {
   const _traceBranch = allChunks.length === 0 ? "empty" : source === "combined" ? "combined" : source === "structural" ? "structural" : source;
   try {
     const _analysisTs = (/* @__PURE__ */ new Date()).toISOString();
-    const _spanId = crypto14.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
+    const _spanId = crypto15.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
     emitTraceEvent(
       makeAnalysisTraceEvent({
         ts: new Date(_traceStart).toISOString(),
@@ -38770,12 +38839,12 @@ function runRecallCli() {
   });
   process.stdout.write(JSON.stringify(result) + "\n");
 }
-var fs58, path68, crypto14, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
+var fs58, path68, crypto15, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
 var init_recall = __esm({
   "src/domains/knowledge/recall.ts"() {
     fs58 = __toESM(require("node:fs"));
     path68 = __toESM(require("node:path"));
-    crypto14 = __toESM(require("node:crypto"));
+    crypto15 = __toESM(require("node:crypto"));
     init_state();
     init_wiki_recall();
     init_fs_scanner();
@@ -40142,7 +40211,7 @@ function mintRunBinding(opts) {
   const record = {
     schema_version: "guild.run_binding.v1",
     run_id: opts.run_id,
-    binding_ref: `rb-${crypto15.randomBytes(16).toString("hex")}`,
+    binding_ref: `rb-${crypto16.randomBytes(16).toString("hex")}`,
     state: "open"
   };
   fs86.mkdirp(path73.dirname(p));
@@ -40256,10 +40325,10 @@ function readHookBindingEnvelope(env) {
   if (!run_id || !binding_ref) return null;
   return { run_id, binding_ref };
 }
-var crypto15, fsReal2, path73, BindingRejectedError, PENDING_SUBSTANTIVE_OPERATION_SCHEMA, HOOK_BINDING_ENV_RUN_ID, HOOK_BINDING_ENV_BINDING_REF;
+var crypto16, fsReal2, path73, BindingRejectedError, PENDING_SUBSTANTIVE_OPERATION_SCHEMA, HOOK_BINDING_ENV_RUN_ID, HOOK_BINDING_ENV_BINDING_REF;
 var init_run_binding = __esm({
   "src/domains/lifecycle/run-binding.ts"() {
-    crypto15 = __toESM(require("crypto"));
+    crypto16 = __toESM(require("crypto"));
     fsReal2 = __toESM(require("fs"));
     path73 = __toESM(require("path"));
     init_kernel();
@@ -40292,7 +40361,7 @@ function capabilityRunStartIdentityHash(runId, startedAt, snapshotHash2) {
     started_at: startedAt,
     capability_start_snapshot_sha256: snapshotHash2
   });
-  return `sha256:${crypto16.createHash("sha256").update(body).digest("hex")}`;
+  return `sha256:${crypto17.createHash("sha256").update(body).digest("hex")}`;
 }
 function runDir3(root, runId) {
   return path74.join(root, ".guild", "runs", runId);
@@ -40360,10 +40429,10 @@ function deriveRunSlug(opts) {
     const slug = runSlug(candidate);
     if (slug) return slug;
   }
-  return crypto16.randomUUID();
+  return crypto17.randomUUID();
 }
 function makeCanonicalRunId(nowIso, slugSource) {
-  const slug = runSlug(slugSource) || crypto16.randomUUID();
+  const slug = runSlug(slugSource) || crypto17.randomUUID();
   return assertCanonicalRunId(`run-${utcCompact(nowIso)}-${slug}`);
 }
 function makeRunId(opts, nowIso) {
@@ -40623,7 +40692,7 @@ function createRunLifecycle(env) {
       const nowIso = env.now();
       const preferredRunId = makeRunId(opts, nowIso);
       const root = opts.root;
-      const runId = env.fs.exists(runDir3(root, preferredRunId)) ? makeCanonicalRunId(nowIso, `${deriveRunSlug(opts)}-${crypto16.randomUUID()}`) : preferredRunId;
+      const runId = env.fs.exists(runDir3(root, preferredRunId)) ? makeCanonicalRunId(nowIso, `${deriveRunSlug(opts)}-${crypto17.randomUUID()}`) : preferredRunId;
       const runClass = opts.run_class ?? "full";
       const capabilityBaseline = runClass === "full" ? env.captureCapabilityBaseline?.(root, runId) ?? null : null;
       if (runClass === "full" && env.captureCapabilityBaseline && (!capabilityBaseline || capabilityBaseline.bound_run_id !== runId)) {
@@ -40671,7 +40740,7 @@ function createRunLifecycle(env) {
             ...capabilityBaseline
           }, null, 2)}
 `;
-          capabilityBaselineHash = crypto16.createHash("sha256").update(snapshotBytes).digest("hex");
+          capabilityBaselineHash = crypto17.createHash("sha256").update(snapshotBytes).digest("hex");
           env.fs.writeFile(capabilityRunStartSnapshotPath(root, runId), snapshotBytes);
         }
         let resolvedSettingsWritten = false;
@@ -40785,7 +40854,7 @@ function createRunLifecycle(env) {
         const now = env.now();
         const finalCheckpoint = runClass === "lightweight" ? null : opts.final_learning_checkpoint ?? null;
         const terminalTraceEvent = {
-          event_id: `evt-${crypto16.randomUUID()}`,
+          event_id: `evt-${crypto17.randomUUID()}`,
           event_name: "run_closed",
           at: now,
           log_ref: logRefFor(runId)
@@ -40979,7 +41048,7 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
 }
 function hashOptionalFile(env, file) {
   const raw = env.fs.readFile(file);
-  return raw === null ? null : crypto16.createHash("sha256").update(raw).digest("hex");
+  return raw === null ? null : crypto17.createHash("sha256").update(raw).digest("hex");
 }
 function derivePluginIdentity(start, env) {
   const pluginManifestPath = path74.join(start.root, ".claude-plugin", "plugin.json");
@@ -40992,7 +41061,7 @@ function derivePluginIdentity(start, env) {
     } catch {
     }
   }
-  const manifestHash = pluginManifest === null ? null : crypto16.createHash("sha256").update(pluginManifest).digest("hex");
+  const manifestHash = pluginManifest === null ? null : crypto17.createHash("sha256").update(pluginManifest).digest("hex");
   const commandSurfaceHash = hashOptionalFile(env, path74.join(start.root, "command-src", "command-registry.json"));
   return {
     version: start.plugin_identity?.version ?? manifestVersion2 ?? "unknown",
@@ -41159,10 +41228,10 @@ function readRunStartedAt(runDir4, readFile = (p) => {
   if (v === void 0 || v === null) return null;
   return String(v).trim() || null;
 }
-var crypto16, fsNode, path74, CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, CANONICAL_RUN_ID_RE, HOST_FAMILY_TO_KIND, CANONICAL_PHASES, WORKSPACE_KNOWLEDGE_DEFAULTS, GATE_TOKEN;
+var crypto17, fsNode, path74, CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, CANONICAL_RUN_ID_RE, HOST_FAMILY_TO_KIND, CANONICAL_PHASES, WORKSPACE_KNOWLEDGE_DEFAULTS, GATE_TOKEN;
 var init_run_lifecycle = __esm({
   "src/domains/lifecycle/run-lifecycle.ts"() {
-    crypto16 = __toESM(require("crypto"));
+    crypto17 = __toESM(require("crypto"));
     init_config2();
     init_config2();
     init_config2();
@@ -45303,7 +45372,7 @@ function openMigrationJournal(root) {
   return handle;
 }
 function computeRecordHash(input) {
-  return `sha256:${crypto17.createHash("sha256").update(neutralCanonicalJson(input)).digest("hex")}`;
+  return `sha256:${crypto18.createHash("sha256").update(neutralCanonicalJson(input)).digest("hex")}`;
 }
 function readMigrationJournal(handle) {
   authenticateJournalHandle(handle);
@@ -45656,10 +45725,10 @@ function evaluateHostCutoverConformance(request) {
     packet
   };
 }
-var crypto17, fs68, os4, path80, MH08_OWNER_KEY, MH08_SCENARIO_IDS, MH08_DECISION_SCHEMA, MH08_DIVERGENCE_REASON_CODE, MH08_MODES, MH08_SCOPE_FIELDS, AUTHENTICATED_JOURNAL_HANDLES, MH08_PROVENANCE_ALLOWLIST, MH08_DEFAULT_SCOPE, MH08_COMPARISON_MAX_TEXT_LENGTH, MH08_COMPARISON_MAX_DEPTH, MH08_EVIDENCE_INCOMPLETE_REASON_CODE, MH08_RESULT_MISMATCH_REASON_CODE;
+var crypto18, fs68, os4, path80, MH08_OWNER_KEY, MH08_SCENARIO_IDS, MH08_DECISION_SCHEMA, MH08_DIVERGENCE_REASON_CODE, MH08_MODES, MH08_SCOPE_FIELDS, AUTHENTICATED_JOURNAL_HANDLES, MH08_PROVENANCE_ALLOWLIST, MH08_DEFAULT_SCOPE, MH08_COMPARISON_MAX_TEXT_LENGTH, MH08_COMPARISON_MAX_DEPTH, MH08_EVIDENCE_INCOMPLETE_REASON_CODE, MH08_RESULT_MISMATCH_REASON_CODE;
 var init_host_cutover_controller = __esm({
   "src/domains/state/host-cutover-controller.ts"() {
-    crypto17 = __toESM(require("node:crypto"));
+    crypto18 = __toESM(require("node:crypto"));
     fs68 = __toESM(require("node:fs"));
     os4 = __toESM(require("node:os"));
     path80 = __toESM(require("node:path"));
@@ -47691,7 +47760,7 @@ __export(resolve_specialist_capability_scope_exports, {
 module.exports = __toCommonJS(resolve_specialist_capability_scope_exports);
 var fs85 = __toESM(require("node:fs"));
 var path101 = __toESM(require("node:path"));
-var import_node_crypto10 = require("node:crypto");
+var import_node_crypto13 = require("node:crypto");
 
 // scripts/agent-team-launcher.ts
 var import_child_process8 = require("child_process");
@@ -47699,6 +47768,9 @@ var import_crypto3 = require("crypto");
 var fs84 = __toESM(require("fs"));
 var path100 = __toESM(require("path"));
 init_state();
+
+// scripts/lib/host/tmux-backend.ts
+var import_node_crypto6 = require("node:crypto");
 
 // scripts/lib/host-registry.ts
 init_host_registry();
@@ -51019,14 +51091,15 @@ var TmuxTeamBackend = class {
       };
     }
     try {
-      for (const lane of req.specialists) {
-        assertIsolatedLaneAdmitted({
-          cwd: req.cwd,
-          runId: req.runId,
+      claimIsolatedLaunches({
+        cwd: req.cwd,
+        runId: req.runId,
+        launchId: `tmux:${req.targetName}:${process.pid}:${(0, import_node_crypto6.randomUUID)()}`,
+        lanes: req.specialists.map((lane) => ({
           logicalTaskId: lane.taskId,
           instanceId: lane.task_cell_instance_id
-        });
-      }
+        }))
+      });
     } catch (error) {
       return {
         kind: this.kind,
@@ -51143,6 +51216,7 @@ var InProcessTeamBackend = class {
 };
 
 // scripts/lib/host/remote-backend.ts
+var import_node_crypto7 = require("node:crypto");
 init_dispatch();
 var HOOK_PROBE_EVENT = '{"session_id":"guild-remote-enforcement-probe","transcript_path":"","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"guild-remote-enforcement-probe"},"tool_use_id":"guild-probe"}';
 var HOOK_INSTALL_PROBE = `root="\${GUILD_PLUGIN_ROOT:-\${CLAUDE_PLUGIN_ROOT:-}}"; [ -n "$root" ] && [ -f "$root/hooks/hooks.json" ] && [ -f "$root/hooks/dist/pre-tool-use.js" ] && node -e 'const m=require(process.argv[1]);const g=(m.hooks&&m.hooks.PreToolUse)||[];const hit=g.some(e=>(e.hooks||[]).some(h=>String(h.command||"").includes("pre-tool-use")));process.exit(hit?0:1)' "$root/hooks/hooks.json" && out=$(printf '%s' '${HOOK_PROBE_EVENT}' | GUILD_CAPABILITY_SCOPE='["Read"]' node "$root/hooks/dist/pre-tool-use.js" 2>/dev/null) && printf '%s' "$out" | grep -q '"hookEventName":"PreToolUse"' && printf '%s' "$out" | grep -qE '"permissionDecision":"(ask|deny)"' && echo GUILD_HOOKS_ENFORCING || true`;
@@ -51463,6 +51537,24 @@ var RemoteTeamBackend = class {
         );
       }
     }
+    try {
+      claimIsolatedLaunches({
+        cwd: req.cwd,
+        runId: req.runId,
+        launchId: `remote:${req.targetName}:${process.pid}:${(0, import_node_crypto7.randomUUID)()}`,
+        lanes: planned.map((p) => ({ logicalTaskId: p.spec.taskId, instanceId: p.spec.task_cell_instance_id }))
+      });
+    } catch (error) {
+      transport.teardown();
+      return {
+        kind: this.kind,
+        ok: false,
+        plannedCommands,
+        orchestratorPaneId: null,
+        teammatePaneIds: {},
+        notes: [error instanceof Error ? error.message : String(error)]
+      };
+    }
     const teammatePaneIds = {};
     const flaggedHosts = /* @__PURE__ */ new Set();
     const flagsOptedIn = this.claudeLaunchArgs.length > 0;
@@ -51526,6 +51618,7 @@ var RemoteTeamBackend = class {
 };
 
 // scripts/lib/host/cmux-backend.ts
+var import_node_crypto8 = require("node:crypto");
 init_team_prompt();
 
 // scripts/lib/core/contracts/project-definition-ref.ts
@@ -52001,14 +52094,15 @@ var CmuxTeamBackend = class {
     };
     if (!req.dryRun) {
       try {
-        for (const lane of req.specialists) {
-          assertIsolatedLaneAdmitted({
-            cwd: req.cwd,
-            runId: req.runId,
+        claimIsolatedLaunches({
+          cwd: req.cwd,
+          runId: req.runId,
+          launchId: `cmux:${req.targetName}:${process.pid}:${(0, import_node_crypto8.randomUUID)()}`,
+          lanes: req.specialists.map((lane) => ({
             logicalTaskId: lane.taskId,
             instanceId: lane.task_cell_instance_id
-          });
-        }
+          }))
+        });
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }
@@ -52125,7 +52219,7 @@ function terminateCmuxSurface(surfaceId, run = defaultRun, workspaceId) {
 }
 
 // scripts/lib/task-cell-launch-plan.ts
-var import_node_crypto6 = require("node:crypto");
+var import_node_crypto9 = require("node:crypto");
 
 // scripts/lib/core/contracts/task-cell-backend.ts
 init_task_cell_backend();
@@ -52152,7 +52246,7 @@ function expandTaskCellLaunchLanes(runId, specialists, ownerMap) {
       taskIds.add(taskId);
       const role = safeSegment(specialist.name);
       const dispatchKey = `${role}--${taskId}--a1`;
-      const nonce = (0, import_node_crypto6.createHash)("sha256").update(`${runId}\0${specialist.name}\0${rawTaskId}\0attempt:1`).digest("hex").slice(0, 12);
+      const nonce = (0, import_node_crypto9.createHash)("sha256").update(`${runId}\0${specialist.name}\0${rawTaskId}\0attempt:1`).digest("hex").slice(0, 12);
       const instanceId = `${taskId}.a1.i-${nonce}`;
       if (dispatchKeys.has(dispatchKey) || instanceIds.has(instanceId)) {
         throw new Error(`task-cell launch identity collision for ${specialist.name}/${rawTaskId}`);
@@ -52194,7 +52288,7 @@ function buildStationTaskCellResult(station, teamPlanRef, lanes) {
 init_teams();
 
 // scripts/lib/core/contracts/specialist-identity.ts
-var crypto18 = __toESM(require("crypto"));
+var crypto19 = __toESM(require("crypto"));
 var import_util5 = require("util");
 
 // scripts/lib/roster.ts
@@ -52458,7 +52552,7 @@ function hashSpecialistProfile(profile) {
   return sha256Hex3(canonicalJson4(profile));
 }
 function sha256Hex3(s) {
-  return crypto18.createHash("sha256").update(s, "utf8").digest("hex");
+  return crypto19.createHash("sha256").update(s, "utf8").digest("hex");
 }
 var TOOL_TO_CAPABILITY = Object.freeze({
   Read: "read-files",
@@ -52569,7 +52663,7 @@ function specialistProfileFromAgentFrontmatter(fm, boundType) {
 var path93 = __toESM(require("node:path"));
 
 // scripts/lib/core/contracts/adoption-manifest.ts
-var crypto19 = __toESM(require("crypto"));
+var crypto20 = __toESM(require("crypto"));
 var import_util6 = require("util");
 var ADOPTION_MANIFEST_SCHEMA = "guild.adoption_manifest.v1";
 var ADOPTION_REASONS = Object.freeze([
@@ -52669,7 +52763,7 @@ function entryDigest(entry) {
   try {
     const valid = validateAdoptionEntry(entry);
     if (valid === null) return INVALID_DIGEST;
-    return crypto19.createHash("sha256").update(JSON.stringify(canonicalize2(valid)), "utf8").digest("hex");
+    return crypto20.createHash("sha256").update(JSON.stringify(canonicalize2(valid)), "utf8").digest("hex");
   } catch {
     return INVALID_DIGEST;
   }
@@ -52685,7 +52779,7 @@ function manifestCommitment(manifest) {
     const payload = COMMITMENT_DOMAIN + JSON.stringify([m.schema_version, m.project_id, m.entries.length, tip]);
     return {
       ok: true,
-      digest: crypto19.createHash("sha256").update(payload, "utf8").digest("hex"),
+      digest: crypto20.createHash("sha256").update(payload, "utf8").digest("hex"),
       empty: m.entries.length === 0
     };
   } catch {
@@ -52987,11 +53081,11 @@ function deepFreeze5(value) {
 
 // scripts/lib/definition-artifact-resolver.ts
 var import_node_child_process3 = require("node:child_process");
-var import_node_crypto7 = require("node:crypto");
+var import_node_crypto10 = require("node:crypto");
 var import_node_fs3 = require("node:fs");
 var import_node_path3 = require("node:path");
 function digest(bytes) {
-  return `sha256:${(0, import_node_crypto7.createHash)("sha256").update(bytes).digest("hex")}`;
+  return `sha256:${(0, import_node_crypto10.createHash)("sha256").update(bytes).digest("hex")}`;
 }
 function readContainedRegularFile(root, relativePath) {
   if (!relativePath || (0, import_node_path3.isAbsolute)(relativePath)) throw new Error("path must be project-root-relative");
@@ -53233,7 +53327,7 @@ init_compatibility_catalog();
 // scripts/lib/capability/compatibility-loader.ts
 var fs78 = __toESM(require("node:fs"));
 var path91 = __toESM(require("node:path"));
-var import_node_crypto9 = require("node:crypto");
+var import_node_crypto12 = require("node:crypto");
 init_telemetry();
 init_compatibility_catalog();
 init_compatibility_usage();
@@ -53242,7 +53336,7 @@ init_run_binding();
 init_host_id_namespace2();
 
 // scripts/lib/capability/migration-evidence.ts
-var import_node_crypto8 = require("node:crypto");
+var import_node_crypto11 = require("node:crypto");
 var fs77 = __toESM(require("node:fs"));
 var path90 = __toESM(require("node:path"));
 init_compatibility_usage();
@@ -53613,7 +53707,7 @@ function isHandoffReceiptId2(value) {
   return SHA256.test(value.slice("handoff-sha256:".length));
 }
 function sha2568(bytes) {
-  return (0, import_node_crypto8.createHash)("sha256").update(bytes).digest("hex");
+  return (0, import_node_crypto11.createHash)("sha256").update(bytes).digest("hex");
 }
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
@@ -54123,13 +54217,13 @@ function readCompatibilityAsset(options) {
       const contained = checkContained(root, target, { policy: "physical", requireRegularFileLeaf: true });
       if (isRefused(contained)) return { status: "refused", detail: `compatibility asset refused [${contained.code}]` };
       const bytes = fs78.readFileSync(contained.realPath);
-      const actual = (0, import_node_crypto9.createHash)("sha256").update(bytes).digest("hex");
+      const actual = (0, import_node_crypto12.createHash)("sha256").update(bytes).digest("hex");
       if (actual !== entry.content_hash) return { status: "refused", detail: "compatibility asset bytes do not match the catalog" };
       const emitted = compatibilityUsageForRead({ entry, mode: options.mode, intent: options.intent, synthetic: options.synthetic, specialist_id: options.specialistId });
       if (emitted.status !== "ok") return { status: "refused", detail: emitted.detail };
       const payloadBytes = Buffer.from(`${JSON.stringify(emitted.payload, null, 2)}
 `, "utf8");
-      const payloadHash2 = (0, import_node_crypto9.createHash)("sha256").update(payloadBytes).digest("hex");
+      const payloadHash2 = (0, import_node_crypto12.createHash)("sha256").update(payloadBytes).digest("hex");
       const receipts = path91.join(path91.resolve(options.projectRoot), ".guild", "runs", options.runId, "receipts");
       const safeOperation = options.operationId.replace(/[^a-zA-Z0-9._-]/g, "-");
       if (!safeOperation || safeOperation.length > 160) return { status: "refused", detail: "operationId is not a bounded identity" };
@@ -59010,7 +59104,7 @@ function readApprovalBoundTeam(cwd, teamPath, expectedSha256) {
     if (isRefused(after)) {
       throw new Error(`team path escaped while its approval binding was being verified [${after.code}]`);
     }
-    const actualSha256 = `sha256:${(0, import_node_crypto10.createHash)("sha256").update(bytes).digest("hex")}`;
+    const actualSha256 = `sha256:${(0, import_node_crypto13.createHash)("sha256").update(bytes).digest("hex")}`;
     if (actualSha256 !== expectedSha256) {
       throw new Error("team bytes changed after the launcher approval check");
     }
