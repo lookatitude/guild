@@ -12,11 +12,12 @@
  * followed before a later `..` pops it, as the kernel does), and containment is
  * a path.relative check, so `alias/../x` and `wiki/..hidden` are both judged
  * where they really land. Write / Edit / MultiEdit / NotebookEdit are fully
- * gated. Bash is shell-word normalized (quotes and escapes stripped); a
- * redirection or `tee` operand into the wiki is refused, and so is any command
- * outside a small read-only allowlist whose words (or any path fragment inside
- * a word, e.g. a `node -e` literal or `of=`) resolve under the wiki. A path
- * computed at run time (variables, string joins) is not parseable from the text.
+ * gated. Bash fails closed: a command whose shell-word-normalized text (quotes
+ * and escapes stripped, substitutions included) names any path resolving under
+ * the wiki is refused, whatever the verb; there is no reader allowlist, and a
+ * lane reads the wiki through Read / Grep / Glob. A path computed at run time
+ * (variables, string joins, globs, `cd` then a relative path) is not visible in
+ * the text.
  */
 
 import * as fs from "node:fs";
@@ -87,8 +88,6 @@ export function resolvesUnderWiki(wikiRoots: readonly string[], target: string, 
 }
 
 type Tok = { kind: "word"; value: string } | { kind: "op"; value: string };
-
-const CONTROL = new Set([";", "&", "|", "&&", "||", "|&", ";;", "\n", "(", ")", "`", "$(", "{", "}"]);
 
 /**
  * Shell-word lexer: quotes and backslash escapes are removed from words, and
@@ -203,88 +202,43 @@ export function shellTokens(command: string): Tok[] {
   return out;
 }
 
-const isRedirect = (op: string): boolean => /^\d*(>>?|>\||>&|<>)$|^&>>?$/.test(op);
-
-/** Split tokens into simple commands: their words plus their redirection targets. */
-function simpleCommands(tokens: Tok[]): Array<{ words: string[]; redirects: string[] }> {
-  const cmds: Array<{ words: string[]; redirects: string[] }> = [];
-  let cur = { words: [] as string[], redirects: [] as string[] };
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i]!;
-    if (t.kind === "op" && CONTROL.has(t.value)) {
-      if (cur.words.length > 0 || cur.redirects.length > 0) cmds.push(cur);
-      cur = { words: [], redirects: [] };
-      continue;
-    }
-    if (t.kind === "op") {
-      const next = tokens[i + 1];
-      if (next?.kind !== "word") continue;
-      i++;
-      // `>&1` / `>&-` duplicate an fd; `<`, `<<`, `<<<` read.
-      if (isRedirect(t.value) && !(t.value.endsWith(">&") && /^(\d+|-)$/.test(next.value))) {
-        cur.redirects.push(next.value);
-      }
-      continue;
-    }
-    cur.words.push(t.value);
-  }
-  if (cur.words.length > 0 || cur.redirects.length > 0) cmds.push(cur);
-  return cmds;
-}
-
-/** The file targets a Bash command writes by redirection or `tee`, where the text names them. */
-export function bashWriteTargets(command: string): string[] {
-  const redirects: string[] = [];
-  const tees: string[] = [];
-  for (const c of simpleCommands(shellTokens(command))) {
-    redirects.push(...c.redirects.filter((t) => t.length > 0));
-    const name = c.words[0] !== undefined ? path.basename(c.words[0]) : "";
-    if (name === "tee") tees.push(...c.words.slice(1).filter((w) => w.length > 0 && !w.startsWith("-")));
-  }
-  return [...redirects, ...tees];
-}
-
-/** Commands that never write their operands (their redirections are still checked). */
-const READERS = new Set([
-  "cat", "head", "tail", "less", "more", "grep", "egrep", "fgrep", "rg", "ag", "ls", "wc",
-  "diff", "cmp", "stat", "file", "test", "[", "echo", "printf", "realpath", "readlink",
-  "basename", "dirname", "jq", "bat", "cut", "tr", "nl", "md5", "shasum", "sha256sum", "du",
-  "cd", "pwd", "true", "false",
-]);
-const GIT_READS = new Set(["log", "show", "diff", "status", "blame", "grep", "ls-files", "rev-parse", "cat-file"]);
-const FIND_WRITES = /^-(delete|exec|execdir|ok|okdir|fprint|fprint0|fprintf|fls)$/;
-const WRAPPERS = new Set(["env", "command", "builtin", "exec", "nohup", "time", "nice", "sudo", "stdbuf"]);
+const SUBSTITUTION = /\$\(|`|\$\{|[<>]\(/;
 const FRAGMENT_SPLIT = /[\s'"`(),;=<>|&{}[\]+:]+/;
 
 /**
- * The first word of a Bash command that would write under the wiki, or null.
- * `inWiki` decides whether one path string resolves under the wiki.
+ * Every shell word of `command`, quotes and escapes stripped, plus the words of
+ * any `$(...)`, backtick, `${...}` or process substitution inside a word
+ * (double-quoted substitutions included), re-lexed to a bounded depth.
  */
-export function bashWikiWriteTarget(command: string, inWiki: (p: string) => boolean): string | null {
-  const names = (w: string): string | null =>
-    inWiki(w) ? w : (w.split(FRAGMENT_SPLIT).find((f) => f.length > 0 && f !== w && inWiki(f)) ?? null);
-  for (const c of simpleCommands(shellTokens(command))) {
-    const hit = c.redirects.find(inWiki);
-    if (hit !== undefined) return hit;
-    let words = c.words;
-    while (words.length > 0 && (WRAPPERS.has(path.basename(words[0]!)) || /^[A-Za-z_]\w*=/.test(words[0]!))) {
-      words = words.slice(1);
-    }
-    if (words.length === 0) continue;
-    const name = path.basename(words[0]!);
-    const args = words.slice(1);
-    const reader =
-      READERS.has(name) ||
-      // sed reads unless in-place, or unless its script names a wiki path (`w FILE`).
-      (name === "sed" &&
-        !args.some((a) => /^(--in-place|-[a-zA-Z]*i)/.test(a)) &&
-        !args.some((a) => !inWiki(a) && names(a) !== null)) ||
-      (name === "find" && !args.some((a) => FIND_WRITES.test(a))) ||
-      (name === "git" && GIT_READS.has(args.find((a) => !a.startsWith("-")) ?? ""));
-    if (reader) continue;
-    for (const w of words) {
-      const n = names(w);
-      if (n !== null) return n;
+export function bashWords(command: string, depth = 0): string[] {
+  const words: string[] = [];
+  for (const t of shellTokens(command)) {
+    if (t.kind !== "word") continue;
+    words.push(t.value);
+    if (depth < 8 && SUBSTITUTION.test(t.value)) words.push(...bashWords(t.value, depth + 1));
+  }
+  return words;
+}
+
+/**
+ * The first path a Bash command names that resolves under the wiki, or null,
+ * whatever the command verb. Checked: each normalized word, each fragment of a
+ * word (`--output=`, `of=`, interpreter literals, `${x:-...}` defaults), and the
+ * raw text with quotes and backslashes removed. `inWiki` decides one string.
+ */
+export function bashWikiPath(command: string, inWiki: (p: string) => boolean): string | null {
+  const seen = new Set<string>();
+  const check = (c: string): boolean => {
+    if (c.length === 0 || seen.has(c)) return false;
+    seen.add(c);
+    return inWiki(c);
+  };
+  for (const w of [...bashWords(command), command.replace(/["'\\]/g, "")]) {
+    if (check(w)) return w;
+    for (const f of w.split(FRAGMENT_SPLIT)) {
+      if (check(f)) return f;
+      const bare = f.replace(/^[-?#%!@*]+/, "");
+      if (check(bare)) return bare;
     }
   }
   return null;
@@ -313,7 +267,7 @@ export function laneWikiWriteTarget(
   if (!isLaneWorker(env)) return null;
   const inWiki = (t: string): boolean => resolvesUnderWiki(wikiRoots, t, cwd);
   if (tool === "Bash") {
-    return typeof input["command"] === "string" ? bashWikiWriteTarget(input["command"], inWiki) : null;
+    return typeof input["command"] === "string" ? bashWikiPath(input["command"], inWiki) : null;
   }
   return toolWriteTargets(tool, input).find(inWiki) ?? null;
 }

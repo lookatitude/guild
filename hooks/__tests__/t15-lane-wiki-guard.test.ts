@@ -14,7 +14,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import { bashWikiWriteTarget, bashWriteTargets, isWithin, resolvesUnderWiki } from "../lib/security/lane-wiki-guard";
+import { bashWikiPath, bashWords, isWithin, resolvesUnderWiki } from "../lib/security/lane-wiki-guard";
 import { createGuildStorage } from "../../src/domains/state";
 import { harvestDecision } from "../../src/domains/knowledge";
 
@@ -134,15 +134,9 @@ describe("plr-wi-15-3 · a lane worker never writes the wiki (KTD35)", () => {
     expect(refused(runHook("lead", "Bash", { command: "echo hi >> .guild/wiki/log.md" }))).toBe(false);
   });
 
-  it("bashWriteTargets reads redirections and tee operands, never fd duplications", () => {
-    expect(bashWriteTargets("a >> b.md 2>&1 && c &> 'd e' ; x | tee -a f g >/dev/null")).toEqual([
-      "b.md",
-      "d e",
-      "/dev/null",
-      "f",
-      "g",
-    ]);
-    expect(bashWriteTargets("cat < in.md && grep -c x 2>&1")).toEqual([]);
+  it("bashWords strips quotes and escapes and re-lexes substitutions, double-quoted ones included", () => {
+    expect(bashWords(`echo "$(printf x > .guild/w\\iki/s.md)"`)).toContain(".guild/wiki/s.md");
+    expect(bashWords("printf x > .guild/\"wiki\"/q.md")).toContain(".guild/wiki/q.md");
   });
 
   it("G-lane r1: a symlink popped by `..` is resolved physically, not lexically", () => {
@@ -169,41 +163,47 @@ describe("plr-wi-15-3 · a lane worker never writes the wiki (KTD35)", () => {
     expect(
       refused(runHook("task", "Bash", { command: `node -e "require('fs').writeFileSync('.guild/wiki/n.md','x')"` })),
     ).toBe(true);
-    // CONTROL: a lane may still read the wiki, and the lead may still write it.
-    expect(refused(runHook("task", "Bash", { command: "cat .guild/wiki/decisions/x.md | grep -c y" }))).toBe(false);
+    // CONTROL: the lead may still write it.
     expect(refused(runHook("lead", "Bash", { command: "cp /dev/null .guild/wiki/copy.md" }))).toBe(false);
   });
 
-  it("bashWikiWriteTarget: writers and redirections are refused, read-only commands pass", () => {
+  it("G-lane r2: a double-quoted substitution and a git output option into the wiki are refused", () => {
+    const sub = path.join(repo, ".guild", "wiki", "substitution.md");
+    const diff = path.join(repo, ".guild", "wiki", "diff.md");
+    expect(refused(runHook("task", "Bash", { command: 'echo "$(printf x > .guild/wiki/substitution.md)"' }))).toBe(true);
+    expect(
+      refused(runHook("task", "Bash", { command: "git diff --no-index --output=.guild/wiki/diff.md /dev/null /dev/null" })),
+    ).toBe(true);
+    expect(fs.existsSync(sub) || fs.existsSync(diff)).toBe(false);
+    expect(refusalEvents().length).toBe(2);
+    // CONTROL: a lane Bash that names no wiki path passes; the lead runs the same command untouched.
+    expect(runHook("task", "Bash", { command: "git diff --stat && echo ok > out.txt" }).permissionDecision).toBeUndefined();
+    expect(
+      runHook("lead", "Bash", { command: 'echo "$(printf x > .guild/wiki/substitution.md)"' }).permissionDecision,
+    ).toBeUndefined();
+  });
+
+  it("bashWikiPath: any command naming a wiki path is refused, whatever the verb (no reader allowlist)", () => {
     const wiki = path.join(repo, ".guild", "wiki");
-    const hit = (c: string): string | null => bashWikiWriteTarget(c, (t) => resolvesUnderWiki([wiki], t, repo));
+    const hit = (c: string): string | null => bashWikiPath(c, (t) => resolvesUnderWiki([wiki], t, repo));
     for (const c of [
+      'echo "$(printf x > .guild/wiki/substitution.md)"',
+      "echo \"`cp a .guild/wiki/b`\"",
+      "git diff --no-index --output=.guild/wiki/diff.md /dev/null /dev/null",
+      "cat .guild/wiki/x.md",
+      "grep -r foo .guild/wiki",
+      "git log .guild/wiki",
       "sed -i s/a/b/ .guild/wiki/x",
-      "sed -n 'w .guild/wiki/o' in",
-      "bash -c 'echo > .guild/wiki/x'",
       "dd if=a of=.guild/wiki/x",
-      "find .guild/wiki -delete",
-      "git checkout -- .guild/wiki/x",
-      "mv a .guild/wiki/",
       `python3 -c "open('.guild/wiki/p','w')"`,
       "cat a | tee .guild/wi\\ki/t",
-      "FOO=1 env cp a .guild/wiki/b",
-      "echo $(cp a .guild/wiki/c)",
+      "echo ${X:-.guild/wiki/d} > /dev/null",
       "x 2> .guild/wiki/e",
-      "ln -s a .guild/wiki/l",
+      `ls ${wiki}`,
     ]) {
       expect(hit(c)).not.toBeNull();
     }
-    for (const c of [
-      "echo ok > out.txt 2>&1",
-      "cat .guild/wiki/x.md",
-      "grep -r foo .guild/wiki",
-      "sed -n 1p .guild/wiki/x.md",
-      "find .guild/wiki -name x",
-      "git log .guild/wiki",
-      "ls -la .guild/wiki/ | head",
-      "bun test --isolate hooks",
-    ]) {
+    for (const c of ["echo ok > out.txt 2>&1", "bun test --isolate hooks", "cat .guild/knowledge/candidates/x.md"]) {
       expect(hit(c)).toBeNull();
     }
   });

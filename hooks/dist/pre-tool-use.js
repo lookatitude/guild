@@ -44114,7 +44114,6 @@ function resolvesUnderWiki(wikiRoots, target, cwd) {
   const abs = realpathDeep(path85.isAbsolute(expanded) ? expanded : cwd + path85.sep + expanded);
   return wikiRoots.some((root) => isWithin2(realpathDeep(root), abs));
 }
-var CONTROL = /* @__PURE__ */ new Set([";", "&", "|", "&&", "||", "|&", ";;", "\n", "(", ")", "`", "$(", "{", "}"]);
 function shellTokens(command) {
   const out = [];
   let word = "";
@@ -44221,92 +44220,30 @@ function shellTokens(command) {
   flush();
   return out;
 }
-var isRedirect = (op) => /^\d*(>>?|>\||>&|<>)$|^&>>?$/.test(op);
-function simpleCommands(tokens) {
-  const cmds = [];
-  let cur = { words: [], redirects: [] };
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-    if (t.kind === "op" && CONTROL.has(t.value)) {
-      if (cur.words.length > 0 || cur.redirects.length > 0) cmds.push(cur);
-      cur = { words: [], redirects: [] };
-      continue;
-    }
-    if (t.kind === "op") {
-      const next = tokens[i + 1];
-      if (next?.kind !== "word") continue;
-      i++;
-      if (isRedirect(t.value) && !(t.value.endsWith(">&") && /^(\d+|-)$/.test(next.value))) {
-        cur.redirects.push(next.value);
-      }
-      continue;
-    }
-    cur.words.push(t.value);
-  }
-  if (cur.words.length > 0 || cur.redirects.length > 0) cmds.push(cur);
-  return cmds;
-}
-var READERS = /* @__PURE__ */ new Set([
-  "cat",
-  "head",
-  "tail",
-  "less",
-  "more",
-  "grep",
-  "egrep",
-  "fgrep",
-  "rg",
-  "ag",
-  "ls",
-  "wc",
-  "diff",
-  "cmp",
-  "stat",
-  "file",
-  "test",
-  "[",
-  "echo",
-  "printf",
-  "realpath",
-  "readlink",
-  "basename",
-  "dirname",
-  "jq",
-  "bat",
-  "cut",
-  "tr",
-  "nl",
-  "md5",
-  "shasum",
-  "sha256sum",
-  "du",
-  "cd",
-  "pwd",
-  "true",
-  "false"
-]);
-var GIT_READS = /* @__PURE__ */ new Set(["log", "show", "diff", "status", "blame", "grep", "ls-files", "rev-parse", "cat-file"]);
-var FIND_WRITES = /^-(delete|exec|execdir|ok|okdir|fprint|fprint0|fprintf|fls)$/;
-var WRAPPERS = /* @__PURE__ */ new Set(["env", "command", "builtin", "exec", "nohup", "time", "nice", "sudo", "stdbuf"]);
+var SUBSTITUTION = /\$\(|`|\$\{|[<>]\(/;
 var FRAGMENT_SPLIT = /[\s'"`(),;=<>|&{}[\]+:]+/;
-function bashWikiWriteTarget(command, inWiki) {
-  const names = (w) => inWiki(w) ? w : w.split(FRAGMENT_SPLIT).find((f) => f.length > 0 && f !== w && inWiki(f)) ?? null;
-  for (const c of simpleCommands(shellTokens(command))) {
-    const hit = c.redirects.find(inWiki);
-    if (hit !== void 0) return hit;
-    let words = c.words;
-    while (words.length > 0 && (WRAPPERS.has(path85.basename(words[0])) || /^[A-Za-z_]\w*=/.test(words[0]))) {
-      words = words.slice(1);
-    }
-    if (words.length === 0) continue;
-    const name = path85.basename(words[0]);
-    const args = words.slice(1);
-    const reader = READERS.has(name) || // sed reads unless in-place, or unless its script names a wiki path (`w FILE`).
-    name === "sed" && !args.some((a) => /^(--in-place|-[a-zA-Z]*i)/.test(a)) && !args.some((a) => !inWiki(a) && names(a) !== null) || name === "find" && !args.some((a) => FIND_WRITES.test(a)) || name === "git" && GIT_READS.has(args.find((a) => !a.startsWith("-")) ?? "");
-    if (reader) continue;
-    for (const w of words) {
-      const n = names(w);
-      if (n !== null) return n;
+function bashWords(command, depth = 0) {
+  const words = [];
+  for (const t of shellTokens(command)) {
+    if (t.kind !== "word") continue;
+    words.push(t.value);
+    if (depth < 8 && SUBSTITUTION.test(t.value)) words.push(...bashWords(t.value, depth + 1));
+  }
+  return words;
+}
+function bashWikiPath(command, inWiki) {
+  const seen = /* @__PURE__ */ new Set();
+  const check = (c) => {
+    if (c.length === 0 || seen.has(c)) return false;
+    seen.add(c);
+    return inWiki(c);
+  };
+  for (const w of [...bashWords(command), command.replace(/["'\\]/g, "")]) {
+    if (check(w)) return w;
+    for (const f of w.split(FRAGMENT_SPLIT)) {
+      if (check(f)) return f;
+      const bare = f.replace(/^[-?#%!@*]+/, "");
+      if (check(bare)) return bare;
     }
   }
   return null;
@@ -44322,7 +44259,7 @@ function laneWikiWriteTarget(env, tool, input, wikiRoots, cwd) {
   if (!isLaneWorker(env)) return null;
   const inWiki = (t) => resolvesUnderWiki(wikiRoots, t, cwd);
   if (tool === "Bash") {
-    return typeof input["command"] === "string" ? bashWikiWriteTarget(input["command"], inWiki) : null;
+    return typeof input["command"] === "string" ? bashWikiPath(input["command"], inWiki) : null;
   }
   return toolWriteTargets(tool, input).find(inWiki) ?? null;
 }

@@ -782,8 +782,8 @@ function runIngestPauseGate(payload: GuildHookEvent, cwd: string): boolean {
 
 /**
  * KTD35 (plr-wi-15-3): a lane worker never writes the wiki. A Write / Edit /
- * MultiEdit / NotebookEdit, or a Bash redirection / tee / writer command, whose
- * target resolves physically under <root>/.guild/wiki is denied with an event. The worker stages a
+ * MultiEdit / NotebookEdit whose target resolves physically under <root>/.guild/wiki,
+ * or a Bash command naming any such path, is denied with an event. The worker stages a
  * candidate under .guild/knowledge/candidates/ and the lead promotes it. The
  * lead / T0 session sets neither GUILD_TASK_ID nor GUILD_LANE_ID and is untouched.
  */
