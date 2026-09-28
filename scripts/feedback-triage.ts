@@ -39,6 +39,7 @@ import {
   type RunLearningClassification,
   type RunLearningFinding,
 } from "./lib/run-learning-classifier";
+import { durableGuildDir } from "./lib/state/storage";
 
 export const TRIAGE_SCHEMA = "guild.feedback_triage.v1";
 export const FILED_SCHEMA = "guild.feedback_filed.v1";
@@ -81,7 +82,7 @@ export function assertSafeId(kind: string, value: string): void {
 
 export function feedbackDir(cwd: string, runId: string): string {
   assertSafeId("run id", runId);
-  return path.join(cwd, ".guild", "feedback", runId);
+  return path.join(durableGuildDir(cwd), "feedback", runId);
 }
 
 export function runTriage(opts: {

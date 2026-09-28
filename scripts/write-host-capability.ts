@@ -63,6 +63,7 @@ export type {
 import { isClaudeCli } from "./lib/capability/rank";
 // W4 D2: runtime tier defaults from the registry (kills DEFAULT_TIER_MODELS hand-typed literal).
 import { defaultTierModels } from "./lib/capability/tier-defaults";
+import { durableGuildDir } from "./lib/state/storage";
 
 // Built-in tier ladder — W4 D2: runtime-from-registry via defaultTierModels().
 // No hand-typed literals; reads from HOST_REGISTRY_ROWS["claude-code-cli"].capabilities.models.
@@ -130,7 +131,7 @@ function readSettingsModels(cwd: string): {
   list?: string[];
 } {
   try {
-    const raw = fs.readFileSync(path.join(cwd, ".guild", "settings.json"), "utf8");
+    const raw = fs.readFileSync(path.join(durableGuildDir(cwd), "settings.json"), "utf8");
     const parsed = JSON.parse(raw) as { models?: { tiers?: unknown; list?: unknown } };
     const models = parsed.models ?? {};
     const out: { tiers?: unknown; list?: string[] } = {};

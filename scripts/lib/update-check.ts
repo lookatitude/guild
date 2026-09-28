@@ -27,6 +27,7 @@ import {
   type HostId,
 } from "../../src/domains/config";
 import type { UpdateCaps } from "../../src/domains/config/index";
+import { durableGuildDir } from "./state/storage";
 
 export const SOURCE_REPO_DEFAULT = "https://github.com/lookatitude/guild.git";
 export const CACHE_SCHEMA = "guild.update_check_cache.v1";
@@ -451,7 +452,7 @@ export interface UpdateCache {
 }
 
 export function cachePath(homedir: string = os.homedir()): string {
-  return path.join(homedir, ".guild", "update-check.json");
+  return path.join(durableGuildDir(homedir), "update-check.json");
 }
 
 export function readCache(file: string, fsi: typeof fs = fs): UpdateCache | null {

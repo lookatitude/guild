@@ -31,6 +31,7 @@ var ensure_storage_layout_exports = {};
 __export(ensure_storage_layout_exports, {
   CURRENT_LAYOUT_VERSION: () => CURRENT_LAYOUT_VERSION,
   detect: () => detect,
+  durableGuildDir: () => durableGuildDir,
   ensureStorageLayout: () => ensureStorageLayout,
   markerPath: () => markerPath
 });
@@ -62,6 +63,9 @@ function resolveGuildRoot(startDir) {
 
 // scripts/lib/state/ensure-storage-layout.ts
 var CURRENT_LAYOUT_VERSION = 2;
+function durableGuildDir(root) {
+  return path2.join(root, ".guild");
+}
 function markerPath(root) {
   return path2.join(root, ".guild", "storage-layout.json");
 }
@@ -144,6 +148,7 @@ if (isProcessEntry()) {
 0 && (module.exports = {
   CURRENT_LAYOUT_VERSION,
   detect,
+  durableGuildDir,
   ensureStorageLayout,
   markerPath
 });

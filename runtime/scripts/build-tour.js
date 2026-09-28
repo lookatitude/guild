@@ -23,12 +23,124 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // scripts/learn/build-tour.ts
-var path2 = __toESM(require("path"));
+var path4 = __toESM(require("path"));
 
 // scripts/learn/lib/paths.ts
-var fs = __toESM(require("fs"));
-var path = __toESM(require("path"));
+var fs3 = __toESM(require("fs"));
+var path3 = __toESM(require("path"));
 var import_child_process = require("child_process");
+
+// scripts/lib/state/ensure-storage-layout.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      try {
+        if (fs.existsSync(guildDir) && fs.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function durableGuildDir(root) {
+  return path2.join(root, ".guild");
+}
+function markerPath(root) {
+  return path2.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs2.existsSync(path2.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs2.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path2.join(__dirname, "upgrade-chain.js"),
+      path2.join(__dirname, "lib", "state", "upgrade-chain"),
+      path2.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs2.existsSync(c) || fs2.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
+// scripts/learn/lib/paths.ts
 function parseCwd(argv) {
   const idx = argv.indexOf("--cwd");
   if (idx !== -1 && argv[idx + 1]) return argv[idx + 1];
@@ -51,38 +163,38 @@ function resolveMainRepoRoot(cwd) {
       cwd,
       encoding: "utf-8"
     }).trim();
-    const abs = path.isAbsolute(commonDir) ? commonDir : path.resolve(cwd, commonDir);
-    const root = path.dirname(abs);
-    if (fs.existsSync(root)) return root;
+    const abs = path3.isAbsolute(commonDir) ? commonDir : path3.resolve(cwd, commonDir);
+    const root = path3.dirname(abs);
+    if (fs3.existsSync(root)) return root;
   } catch {
   }
-  return path.resolve(cwd);
+  return path3.resolve(cwd);
 }
 function guildPaths(cwd) {
   const repoRoot = resolveMainRepoRoot(cwd);
-  const guildDir = path.join(repoRoot, ".guild");
-  const indexesDir = path.join(guildDir, "indexes");
-  const runsDir = path.join(guildDir, "runs");
+  const guildDir = durableGuildDir(repoRoot);
+  const indexesDir = path3.join(guildDir, "indexes");
+  const runsDir = path3.join(guildDir, "runs");
   return {
     repoRoot,
     guildDir,
     indexesDir,
     runsDir,
-    codebaseMap: path.join(indexesDir, "codebase-map.json"),
-    knowledgeGraph: path.join(indexesDir, "knowledge-graph.json"),
-    knowledgeLinks: path.join(indexesDir, "knowledge-links.json"),
-    knowledgeRecall: path.join(indexesDir, "knowledge-recall.json"),
-    fingerprint: path.join(indexesDir, "understand-fingerprint.json"),
-    partialGraph: path.join(indexesDir, "understand-partial-graph.json")
+    codebaseMap: path3.join(indexesDir, "codebase-map.json"),
+    knowledgeGraph: path3.join(indexesDir, "knowledge-graph.json"),
+    knowledgeLinks: path3.join(indexesDir, "knowledge-links.json"),
+    knowledgeRecall: path3.join(indexesDir, "knowledge-recall.json"),
+    fingerprint: path3.join(indexesDir, "understand-fingerprint.json"),
+    partialGraph: path3.join(indexesDir, "understand-partial-graph.json")
   };
 }
 function writeJson(filePath, data) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
+  fs3.mkdirSync(path3.dirname(filePath), { recursive: true });
+  fs3.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
 }
 function readJson(filePath) {
   try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+    return JSON.parse(fs3.readFileSync(filePath, "utf8"));
   } catch {
     return null;
   }
@@ -138,7 +250,7 @@ function main() {
   const cwd = parseCwd(argv);
   const gp = guildPaths(cwd);
   const inPath = parseFlag(argv, "in");
-  const target = inPath ? path2.resolve(cwd, inPath) : gp.knowledgeGraph;
+  const target = inPath ? path4.resolve(cwd, inPath) : gp.knowledgeGraph;
   const graph = readJson(target);
   if (!graph) {
     process.stderr.write(`[tour] ERROR: cannot read ${target}
@@ -148,7 +260,7 @@ function main() {
   graph.tour = buildTourOrder(graph);
   writeJson(target, graph);
   process.stderr.write(
-    `[tour] ${graph.tour.length} steps \u2192 ${path2.relative(gp.repoRoot, target)}
+    `[tour] ${graph.tour.length} steps \u2192 ${path4.relative(gp.repoRoot, target)}
 `
   );
   if (hasFlag(argv, "print")) process.stdout.write(JSON.stringify(graph.tour, null, 2) + "\n");

@@ -15,6 +15,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { deriveInitiativeStatus, validateInitiativeManifest, type InitiativeAxes, type DerivedStatus, DERIVED_STATUS } from "./lib/initiative";
+import { durableGuildDir } from "./lib/state/storage";
 
 const yaml = require("js-yaml") as { load: (s: string) => unknown; dump: (o: unknown) => string };
 
@@ -263,7 +264,7 @@ export function writeInitiativesRegistry(guildDir: string, registry: Initiatives
 
 if (require.main === module) {
   const argv = process.argv.slice(2);
-  let guildDir = path.join(process.cwd(), ".guild");
+  let guildDir = durableGuildDir(process.cwd());
   let write = false, json = false;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--guild-dir" && argv[i + 1]) guildDir = path.resolve(argv[++i]);

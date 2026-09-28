@@ -39,6 +39,7 @@ function lifecycleApi(): typeof import("../lifecycle") {
   return require("../lifecycle");
 }
 import { MODEL_INSPECTION_SCHEMA, type ModelInspectionV1 } from "./model-inspect";
+import { durableGuildDir } from "../state";
 
 const SAFE_LABEL = /^[A-Za-z0-9_.-]+$/;
 
@@ -79,7 +80,7 @@ export function persistInspectionReport(input: {
     run_id: binding.run_id,
     binding_ref: binding.binding_ref,
   });
-  const dir = path.join(root, ".guild", "runs", verified.run_id, "inspection");
+  const dir = path.join(durableGuildDir(root), "runs", verified.run_id, "inspection");
   fs.mkdirSync(dir, { recursive: true });
   const target = path.join(dir, `${label}.json`);
   const tmp = `${target}.tmp-${process.pid}`;

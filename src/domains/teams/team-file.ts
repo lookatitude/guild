@@ -25,6 +25,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { CANONICAL_PHASES, isCanonicalPhase } from "../lifecycle";
 import { parseYaml, resolveGuildRoot } from "../state";
+import { durableGuildDir } from "../state";
 
 // Re-export the canonical set so consumers can import it from the team-file module
 // without reaching into run-lifecycle (single import surface for the phase vocabulary).
@@ -34,7 +35,7 @@ export { CANONICAL_PHASES, isCanonicalPhase };
 
 /** `.guild/team/` for a guild root. */
 function teamDir(guildRoot: string): string {
-  return path.join(guildRoot, ".guild", "team");
+  return path.join(durableGuildDir(guildRoot), "team");
 }
 
 /**
@@ -139,7 +140,7 @@ export function writeCurrentPhasePointer(guildRoot: string, slug: string, phase:
 function readSentinelRunId(guildRoot: string): string | null {
   try {
     const v = fs.readFileSync(
-      path.join(guildRoot, ".guild", "runs", "current-run-id"),
+      path.join(durableGuildDir(guildRoot), "runs", "current-run-id"),
       "utf8",
     ).trim();
     return v.length > 0 ? v : null;
@@ -166,7 +167,7 @@ export function readActivePhase(cwd: string, runId?: string): string | null {
     const guildRoot = resolveGuildRoot(cwd);
     const id = runId ?? readSentinelRunId(guildRoot);
     if (!id) return null;
-    const runYaml = path.join(guildRoot, ".guild", "runs", id, "run.yaml");
+    const runYaml = path.join(durableGuildDir(guildRoot), "runs", id, "run.yaml");
     let raw: string;
     try {
       raw = fs.readFileSync(runYaml, "utf8");
@@ -274,7 +275,7 @@ export function readPlanOwnerTaskIds(guildRoot: string, slug: string): Map<strin
   const map = new Map<string, string[]>();
   let raw: string;
   try {
-    raw = fs.readFileSync(path.join(guildRoot, ".guild", "plan", `${slug}.md`), "utf8");
+    raw = fs.readFileSync(path.join(durableGuildDir(guildRoot), "plan", `${slug}.md`), "utf8");
   } catch {
     return map; // no plan → empty map (reader-side validation handles this)
   }

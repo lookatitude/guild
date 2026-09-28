@@ -58,6 +58,15 @@ export interface LayoutStatus {
   };
 }
 
+/**
+ * `<root>/.guild` without the state barrel, for tools whose import closure must stay
+ * small (learn's structural extractor proves a no-network closure). Same value as
+ * `durableGuildDir` in src/domains/state.
+ */
+export function durableGuildDir(root: string): string {
+  return path.join(root, ".guild");
+}
+
 /** The marker file. One small JSON document directly under `.guild/`. */
 export function markerPath(root: string): string {
   return path.join(root, ".guild", "storage-layout.json");

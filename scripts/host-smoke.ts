@@ -52,6 +52,7 @@ import {
 } from "./lib/host-public-state";
 import { serializeReceipt, writeCommittedReceipt } from "./lib/host-smoke-store";
 import { redact } from "./lib/shared/scrub-redact";
+import { durableGuildDir } from "./lib/state/storage";
 
 const GUILD_VERSION = "2.0.0";
 
@@ -452,7 +453,7 @@ function main(): void {
       continue;
     }
     // (a) ephemeral R5 write under a scratch consuming-project .guild/runs/<run-id>/.
-    const ephPath = join(args.ephemeralRoot, ".guild", "runs", runId, "host-smoke", host, `${outcome.receipt.identity.box_id}.json`);
+    const ephPath = join(durableGuildDir(args.ephemeralRoot), "runs", runId, "host-smoke", host, `${outcome.receipt.identity.box_id}.json`);
     if (!args.dryRun) {
       mkdirSync(dirname(ephPath), { recursive: true });
       writeFileSync(ephPath, serializeReceipt(outcome.receipt));

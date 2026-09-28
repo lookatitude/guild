@@ -8,8 +8,8 @@
  * write-host-capability.ts) built its temp file under `os.tmpdir()` then
  * `renameSync`'d it into a `.guild/` path. POSIX `rename(2)` requires both
  * paths to be on the SAME filesystem/mount — a temp dir on a different mount
- * (e.g. a Linux tmpfs `/tmp` while the project lives on a different volume,
- * or a container with `/tmp` bind-mounted separately from the workspace)
+ * (e.g. a Linux tmpfs OS temp dir while the project lives on a different volume,
+ * or a container with the OS temp dir bind-mounted separately from the workspace)
  * makes `renameSync` throw `EXDEV: cross-device link not permitted`.
  *
  * Writing the temp file in the SAME directory as the target guarantees the

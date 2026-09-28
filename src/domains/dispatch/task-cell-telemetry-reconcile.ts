@@ -19,6 +19,7 @@ import {
   type TaskAssignmentV2,
 } from "./task-cell-contract";
 import { readAssignmentAck } from "./task-assignment-v2";
+import { durableGuildDir } from "../state";
 
 export interface ReconcileTaskCellLifecycleTelemetryInput {
   cwd: string;
@@ -45,7 +46,7 @@ function readJson(file: string): unknown | null {
 }
 
 function assignmentFiles(cwd: string, runId: string): string[] {
-  const root = path.join(cwd, ".guild", "runs", runId, "task-cells");
+  const root = path.join(durableGuildDir(cwd), "runs", runId, "task-cells");
   const files: string[] = [];
   const walk = (dir: string): void => {
     let entries: fs.Dirent[];

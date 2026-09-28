@@ -613,9 +613,9 @@ export function cloudTaskPacketPath(
   taskRunId: string
 ): string {
   const path = require("path") as typeof import("path");
+  const { durableGuildDir } = require("./state/storage") as typeof import("./state/storage");
   return path.join(
-    repoRoot,
-    ".guild",
+    durableGuildDir(repoRoot),
     "runs",
     runId,
     "cloud-packets",

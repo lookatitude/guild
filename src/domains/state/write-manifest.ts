@@ -35,6 +35,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { detect, type WorkspaceMode } from "./detect";
 import { atomicWrite } from "./atomic-write";
+import { durableGuildDir } from "./storage-roots";
 
 // ── Code-file extensions that indicate scannable top-level code (D-OQ2) ──────
 
@@ -117,7 +118,7 @@ export function writeManifest(root: string, modeOverride?: WorkspaceMode): strin
   };
 
   // Ensure .guild/ dir exists (does not touch any sub-dir or wiki)
-  const guildDir = path.join(root, ".guild");
+  const guildDir = durableGuildDir(root);
   fs.mkdirSync(guildDir, { recursive: true });
 
   const manifestPath = path.join(guildDir, "workspace.json");

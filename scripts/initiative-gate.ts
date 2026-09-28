@@ -77,6 +77,7 @@ import {
   type D8Result,
 } from "./lib/initiative";
 import { populateReleaseDocsWorkItems, type WorkItem } from "./lib/initiative-workitems";
+import { durableGuildDir } from "./lib/state/storage";
 
 // ── Manifest lookup ──────────────────────────────────────────────────────────
 
@@ -93,7 +94,7 @@ export interface LoadedManifest {
  */
 export function loadInitiativeManifest(root: string, id: string): LoadedManifest | null {
   for (const bucket of ["active", "archived"] as const) {
-    const p = path.join(root, ".guild", "initiatives", bucket, id, "initiative.yaml");
+    const p = path.join(durableGuildDir(root), "initiatives", bucket, id, "initiative.yaml");
     if (!fs.existsSync(p)) continue;
     let text: string;
     try {
@@ -447,7 +448,7 @@ export interface CloseCheckOutput {
 export function runCloseCheck(root: string, initiativeId: string, execVerified: boolean): CloseCheckOutput | { error: string } {
   const manifest = loadInitiativeManifest(root, initiativeId);
   if (manifest === null) {
-    return { error: `no initiative.yaml found for "${initiativeId}" under ${path.join(root, ".guild", "initiatives")}/{active,archived}/${initiativeId}/` };
+    return { error: `no initiative.yaml found for "${initiativeId}" under ${path.join(durableGuildDir(root), "initiatives")}/{active,archived}/${initiativeId}/` };
   }
   const { input, warnings } = buildD8Input(manifest.raw, execVerified);
   const result = d8CloseGate(input);
@@ -474,7 +475,7 @@ export interface DocsWorkitemsOutput {
 export function runDocsWorkitems(root: string, initiativeId: string, execVerified: boolean): DocsWorkitemsOutput | { error: string } {
   const manifest = loadInitiativeManifest(root, initiativeId);
   if (manifest === null) {
-    return { error: `no initiative.yaml found for "${initiativeId}" under ${path.join(root, ".guild", "initiatives")}/{active,archived}/${initiativeId}/` };
+    return { error: `no initiative.yaml found for "${initiativeId}" under ${path.join(durableGuildDir(root), "initiatives")}/{active,archived}/${initiativeId}/` };
   }
   const { input, warnings } = buildD8Input(manifest.raw, execVerified);
   const result = d8CloseGate(input);

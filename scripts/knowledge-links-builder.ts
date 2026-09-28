@@ -48,6 +48,7 @@ import { readScalarField } from "./lib/frontmatter";
 import { KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION } from '../src/domains/knowledge';
 import { loadKnowledgeLinksDoc, writeKnowledgeLinksDoc } from "./learn/lib/knowledge-links-io";
 import { createGuildStorage } from "../src/domains/state";
+import { durableGuildDir } from "./lib/state/storage";
 
 // ── Extended node-kind type ───────────────────────────────────────────────────
 
@@ -285,7 +286,7 @@ function slugify(s: string): string {
  *   resolves   — decision page frontmatter `resolves: <open-question-id>`
  */
 function collectWikiEdges(root: string, runId: string): KnowledgeLink[] {
-  const wikiDir = path.join(root, ".guild", "wiki");
+  const wikiDir = path.join(durableGuildDir(root), "wiki");
   const links: KnowledgeLink[] = [];
   if (!fs.existsSync(wikiDir)) return links;
 
@@ -359,7 +360,7 @@ function collectRawSourceEdges(root: string, runId: string): KnowledgeLink[] {
     // through to the compatibility path rather than failing the whole build.
   }
   // V1 compatibility read. Listed second so an upgraded root wins on a duplicate id.
-  dirs.push(path.join(root, ".guild", "raw", "sources"));
+  dirs.push(path.join(durableGuildDir(root), "raw", "sources"));
 
   const files = dirs
     .filter((d) => fs.existsSync(d))
@@ -400,7 +401,7 @@ function collectRawSourceEdges(root: string, runId: string): KnowledgeLink[] {
  *   initiative : run (produced, from run_id)
  */
 function collectInitiativeEdges(root: string, runId: string): KnowledgeLink[] {
-  const initiativesDir = path.join(root, ".guild", "initiatives");
+  const initiativesDir = path.join(durableGuildDir(root), "initiatives");
   const links: KnowledgeLink[] = [];
   if (!fs.existsSync(initiativesDir)) return links;
 
@@ -511,7 +512,7 @@ function collectInitiativeEdges(root: string, runId: string): KnowledgeLink[] {
  * Also reads run.yaml when present for initiative_attachment + command.
  */
 function collectRunEdges(root: string, builderRunId: string): KnowledgeLink[] {
-  const runsDir = path.join(root, ".guild", "runs");
+  const runsDir = path.join(durableGuildDir(root), "runs");
   const links: KnowledgeLink[] = [];
   if (!fs.existsSync(runsDir)) return links;
 
@@ -662,7 +663,7 @@ function collectRunEdges(root: string, builderRunId: string): KnowledgeLink[] {
  *   reflection : source_refs as raw_source (references — FU-A1-3 compat)
  */
 function collectReflectionEdges(root: string, runId: string): KnowledgeLink[] {
-  const reflDir = path.join(root, ".guild", "reflections");
+  const reflDir = path.join(durableGuildDir(root), "reflections");
   const links: KnowledgeLink[] = [];
   if (!fs.existsSync(reflDir)) return links;
 
@@ -699,7 +700,7 @@ function collectReflectionEdges(root: string, runId: string): KnowledgeLink[] {
  *   evolution : skill/agent (used_for, when it targets a specific skill)
  */
 function collectEvolveEdges(root: string, runId: string): KnowledgeLink[] {
-  const evolveDir = path.join(root, ".guild", "evolve");
+  const evolveDir = path.join(durableGuildDir(root), "evolve");
   const links: KnowledgeLink[] = [];
   if (!fs.existsSync(evolveDir)) return links;
 
@@ -737,7 +738,7 @@ function collectEvolveEdges(root: string, runId: string): KnowledgeLink[] {
  * with A1's guild.harvest_candidates.v1). Bodies are NEVER embedded.
  */
 function collectHarvestCandidateEdges(root: string, builderRunId: string): KnowledgeLink[] {
-  const runsDir = path.join(root, ".guild", "runs");
+  const runsDir = path.join(durableGuildDir(root), "runs");
   const links: KnowledgeLink[] = [];
   if (!fs.existsSync(runsDir)) return links;
 
@@ -855,7 +856,7 @@ export function buildKnowledgeLinks(opts: BuildOptions): BuildResult {
   //    state is held there that is not also in the canonical stores. If it is
   //    absent (NN#8 delete case), only the canonical-store edges appear.
   // ─────────────────────────────────────────────────────────────────────────
-  const klPath = path.join(root, ".guild", "indexes", "knowledge-links.json");
+  const klPath = path.join(durableGuildDir(root), "indexes", "knowledge-links.json");
   let existingLinks: KnowledgeLink[] = [];
   if (!dry_run && fs.existsSync(klPath)) {
     // G2b-4 fix: read via the shared knowledge-links-io helper (tolerant of

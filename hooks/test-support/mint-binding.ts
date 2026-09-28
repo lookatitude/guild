@@ -13,6 +13,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { durableGuildDir } from "../../src/domains/state";
 
 export interface MintTestBindingOpts {
   state?: "open" | "closed";
@@ -29,7 +30,7 @@ export function mintTestBinding(
   opts: MintTestBindingOpts = {},
 ): string {
   const ref = opts.ref ?? `rb-test-${runId.replace(/[^A-Za-z0-9_-]/g, "")}`;
-  const p = path.join(root, ".guild", "runs", runId, "binding.json");
+  const p = path.join(durableGuildDir(root), "runs", runId, "binding.json");
   fs.mkdirSync(path.dirname(p), { recursive: true });
   const record = opts.malformed
     ? { schema_version: "guild.run_binding.v1", run_id: runId } // fails validation

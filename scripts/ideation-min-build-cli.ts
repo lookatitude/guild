@@ -30,6 +30,7 @@ import {
   type InitState,
   type ProjectFacts,
 } from "./lib/ideation-min-build";
+import { durableGuildDir } from "./lib/state/storage";
 
 function parseArgs(argv: string[]): Record<string, string> {
   const flags: Record<string, string> = {};
@@ -45,8 +46,8 @@ function parseArgs(argv: string[]): Record<string, string> {
 
 /** Observe init state on disk — the canonical baseline is `.guild/wiki/index.md`. */
 function observeInitState(cwd: string): InitState {
-  const wikiIndex = path.join(cwd, ".guild", "wiki", "index.md");
-  const guildYaml = path.join(cwd, ".guild", "guild.yaml");
+  const wikiIndex = path.join(durableGuildDir(cwd), "wiki", "index.md");
+  const guildYaml = path.join(durableGuildDir(cwd), "guild.yaml");
   return {
     hasInitWiki: fs.existsSync(wikiIndex),
     hasGuildYaml: fs.existsSync(guildYaml),

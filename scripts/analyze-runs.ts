@@ -60,6 +60,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { durableGuildDir } from "./lib/state/storage";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -198,7 +199,7 @@ function stripQuotes(s: string): string {
 // ── Reflection reader ──────────────────────────────────────────────────────
 
 export function loadReflections(guildRoot: string, ifs: IFs): ReflectionMeta[] {
-  const reflectDir = path.join(guildRoot, ".guild", "reflections");
+  const reflectDir = path.join(durableGuildDir(guildRoot), "reflections");
   if (!ifs.existsSync(reflectDir)) return [];
 
   const entries = ifs.readdirSync(reflectDir).filter((f) => f.endsWith(".md"));
@@ -242,7 +243,7 @@ function extractStringArray(val: unknown): string[] {
 // ── Handoff reader ─────────────────────────────────────────────────────────
 
 export function loadHandoffs(guildRoot: string, ifs: IFs): HandoffMeta[] {
-  const runsDir = path.join(guildRoot, ".guild", "runs");
+  const runsDir = path.join(durableGuildDir(guildRoot), "runs");
   if (!ifs.existsSync(runsDir)) return [];
 
   const runDirs = ifs.readdirSync(runsDir);
@@ -536,7 +537,7 @@ export function run(
   const output = format === "json" ? formatJson(result) : formatText(result);
 
   // Write to default path (.guild/evolve/analyze-runs-latest.md) — always
-  const evolveDir = path.join(resolvedCwd, ".guild", "evolve");
+  const evolveDir = path.join(durableGuildDir(resolvedCwd), "evolve");
   try {
     ifs.mkdirSync(evolveDir, { recursive: true });
     const defaultPath = path.join(evolveDir, "analyze-runs-latest.md");

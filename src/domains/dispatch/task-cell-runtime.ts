@@ -94,6 +94,7 @@ import type {
   ExecutionSpawnRequest,
   ExecutionTransportPort,
 } from "./execution-transport-ports";
+import { durableGuildDir } from "../state";
 
 export type TaskCellMechanicsMode = "native" | "wrapped" | "bridged" | "emulated" | "degraded";
 export interface TaskCellMechanicsResult { ok: boolean; reason: string | null }
@@ -824,7 +825,7 @@ export class FilesystemTaskCellRuntime implements TaskCellBackend, TaskCellRecor
   }
 
   async readRecords(runId: string): Promise<TaskCellRecordSet> {
-    const root = path.join(this.cwd, ".guild", "runs", runId, "task-cells");
+    const root = path.join(durableGuildDir(this.cwd), "runs", runId, "task-cells");
     const files: string[] = [];
     const walk = (dir: string): void => {
       let entries: fs.Dirent[];

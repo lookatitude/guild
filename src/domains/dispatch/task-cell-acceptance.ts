@@ -72,6 +72,7 @@ import {
   publishTaskCellFile,
   type TaskCellArtifactKind,
 } from "./task-cell-artifact-join";
+import { durableGuildDir } from "../state";
 
 // ── Path ids the run-tree records are keyed by (D6) ──────────────────────────
 
@@ -670,7 +671,7 @@ export interface RunAcceptance {
  * Best-effort + non-throwing: a missing/garbled tree yields [].
  */
 export function findRunAcceptances(cwd: string, runId: string): RunAcceptance[] {
-  const cellsRoot = path.join(cwd, ".guild", "runs", runId, "task-cells");
+  const cellsRoot = path.join(durableGuildDir(cwd), "runs", runId, "task-cells");
   const out: RunAcceptance[] = [];
   let logicalTaskDirs: string[];
   try {
@@ -886,7 +887,7 @@ function writeSealed(absPath: string, relLabel: string, record: TaskAttemptV1): 
  * enumerators below. Best-effort + non-throwing: a missing/garbled tree yields [].
  */
 function walkRunInstanceIds(cwd: string, runId: string): TaskCellInstanceIds[] {
-  const cellsRoot = path.join(cwd, ".guild", "runs", runId, "task-cells");
+  const cellsRoot = path.join(durableGuildDir(cwd), "runs", runId, "task-cells");
   const out: TaskCellInstanceIds[] = [];
   let logicalTaskDirs: string[];
   try {

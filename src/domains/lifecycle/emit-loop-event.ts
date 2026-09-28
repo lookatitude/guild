@@ -52,6 +52,7 @@ import {
   type LoopRoundStartEvent,
 } from "./event-log";
 import { resolveGuildRoot } from "../state";
+import { durableGuildDir } from "../state";
 
 const VALID_EVENTS = new Set(["loop_round_start", "loop_round_end", "codex_review_round"]);
 const VALID_LAYERS = new Set(["L1", "L2", "L3", "L4", "security-review"]);
@@ -93,7 +94,7 @@ function parseArgs(argv: string[]): {
 }
 
 function readSentinel(cwd: string): string | undefined {
-  const sentinelPath = path.join(cwd, ".guild", "runs", "current-run-id");
+  const sentinelPath = path.join(durableGuildDir(cwd), "runs", "current-run-id");
   try {
     const value = fs.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : undefined;
@@ -199,7 +200,7 @@ export function runEmitLoopEventCli(): void {
   }
 
   try {
-    appendEvent(path.join(cwd, ".guild", "runs", runId), event);
+    appendEvent(path.join(durableGuildDir(cwd), "runs", runId), event);
   } catch (err) {
     process.stderr.write(
       `[emit-loop-event] ERROR: could not write event: ${

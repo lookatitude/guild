@@ -39,6 +39,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { atomicWrite } from "../state";
+import { durableGuildDir } from "../state";
 
 // ── Schema (guild.run_manifest.v1) ───────────────────────────────────────────
 
@@ -83,7 +84,7 @@ export interface WavePatch {
 // ── Paths ──────────────────────────────────────────────────────────────────────
 
 export function manifestPathFor(cwd: string, slug: string): string {
-  return path.join(cwd, ".guild", "programs", slug, "manifest.json");
+  return path.join(durableGuildDir(cwd), "programs", slug, "manifest.json");
 }
 
 // ── Read / write ────────────────────────────────────────────────────────────────

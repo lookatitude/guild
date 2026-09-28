@@ -52,6 +52,7 @@ import { createHash } from "crypto";
 import * as ts from "typescript";
 import { parseCwd, hasFlag, guildPaths } from "./lib/paths";
 import { walkRepo } from "./lib/walk";
+import { durableGuildDir } from "../lib/state/storage";
 
 // ---------------------------------------------------------------------------
 // Extension sets
@@ -450,7 +451,7 @@ const KNOWLEDGE_TIER_NODE_TYPES: ReadonlySet<string> = new Set([
  * the wiki tree directly rather than reusing the tracked-file walk.
  */
 function hasWikiPages(repoRoot: string): boolean {
-  const wikiDir = path.join(repoRoot, ".guild", "wiki");
+  const wikiDir = path.join(durableGuildDir(repoRoot), "wiki");
   const stack: string[] = [wikiDir];
   while (stack.length) {
     const dir = stack.pop()!;
@@ -487,7 +488,7 @@ function hasWikiPages(repoRoot: string): boolean {
 export function knowledgeTierClobbered(repoRoot: string): boolean {
   if (!hasWikiPages(repoRoot)) return false;
 
-  const graphPath = path.join(repoRoot, ".guild", "indexes", "knowledge-graph.json");
+  const graphPath = path.join(durableGuildDir(repoRoot), "indexes", "knowledge-graph.json");
   let graph: { nodes?: Array<{ type?: unknown }> } | null;
   try {
     graph = JSON.parse(fs.readFileSync(graphPath, "utf8"));
@@ -522,7 +523,7 @@ function withKnowledgeTierClobber(result: KStageStaleness, repoRoot: string): KS
 // ---------------------------------------------------------------------------
 
 function kStoreFile(repoRoot: string): string {
-  return path.join(repoRoot, ".guild", "indexes", "kstage-fingerprint.json");
+  return path.join(durableGuildDir(repoRoot), "indexes", "kstage-fingerprint.json");
 }
 
 export function readKStageTree(repoRoot: string): Record<string, string> {
@@ -598,7 +599,7 @@ function main(): void {
     }
     writeKStageBaseline(repoRoot);
     process.stderr.write(
-      `[k-stage-staleness] baseline written → ${path.join(repoRoot, ".guild", "indexes", "kstage-fingerprint.json")}\n`,
+      `[k-stage-staleness] baseline written → ${path.join(durableGuildDir(repoRoot), "indexes", "kstage-fingerprint.json")}\n`,
     );
     process.stdout.write("BASELINE\n");
     return;

@@ -149,6 +149,7 @@ import { evaluateCompatibilitySkillUse } from "./lib/compatibility-skill-guard.j
 import { runDirOverride } from "./lib/run-dir-override.js";
 import { laneWikiWriteTarget } from "./lib/security/lane-wiki-guard.js";
 import { createGuildStorage } from "../src/domains/state";
+import { durableGuildDir } from "../src/domains/state";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -179,7 +180,7 @@ function isKnownTool(name: string | undefined): name is ToolCallTool {
 }
 
 function readCurrentRunId(cwd: string): string | undefined {
-  const sentinelPath = path.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
+  const sentinelPath = path.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", "current-run-id");
   try {
     const value = fs.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : undefined;
@@ -250,7 +251,7 @@ function readHostCapability(cwd: string): HostCapabilitySlice | null {
 
   for (const hostId of candidates) {
     try {
-      const manifestPath = path.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
+      const manifestPath = path.join(durableGuildDir(resolveGuildRoot(cwd)), "hosts", hostId, "capability.json");
       const raw = fs.readFileSync(manifestPath, "utf8");
       return JSON.parse(raw) as HostCapabilitySlice;
     } catch {
@@ -861,7 +862,7 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
       typeof envTaskId === "string" && envTaskId.length > 0
     ) {
       const scopeFilePath = path.join(
-        resolveGuildRoot(cwd), ".guild", "runs", envRunId, "scope", `${envTaskId}.json`,
+        durableGuildDir(resolveGuildRoot(cwd)), "runs", envRunId, "scope", `${envTaskId}.json`,
       );
       scope = readScopeFile(scopeFilePath, sec.allowed_tools);
     }
@@ -1656,7 +1657,7 @@ export async function main(): Promise<void> {
     const bgRunDir =
       bgRunId !== undefined
         ? (runDirOverride() ??
-            path.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId))
+            path.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", bgRunId))
         : undefined;
     const bgLaneEnv = process.env["GUILD_LANE_ID"];
     const bgLaneId =
@@ -1700,7 +1701,7 @@ export async function main(): Promise<void> {
 
   const runDir =
     runDirOverride() ??
-    path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+    path.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", runId);
   const laneId = process.env["GUILD_LANE_ID"];
 
   const entry: SidecarPreEntry = {

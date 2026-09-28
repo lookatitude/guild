@@ -47,6 +47,7 @@ import {
 } from "../../hooks/lib/handoff-v2";
 import type { RunFn } from "./team-backend";
 import { readRunStartedAt as _readRunStartedAt } from "./run-lifecycle";
+import { durableGuildDir } from "./state/storage";
 
 // ── Injectable filesystem seam ────────────────────────────────────────────────
 //
@@ -751,7 +752,7 @@ function getLivePaneIds(run: RunFn, manifest: SessionManifest): Set<string> | nu
  * and run ID.  Does NOT check for existence.
  */
 export function sessionJsonPath(cwd: string, runId: string): string {
-  return path.join(cwd, ".guild", "runs", runId, "agent-team", "session.json");
+  return path.join(durableGuildDir(cwd), "runs", runId, "agent-team", "session.json");
 }
 
 /**
@@ -764,7 +765,7 @@ export function listRunnableRunIds(
   cwd: string,
   fsMod: FsLike = realFs()
 ): string[] {
-  const runsDir = path.join(cwd, ".guild", "runs");
+  const runsDir = path.join(durableGuildDir(cwd), "runs");
   if (!fsMod.existsSync(runsDir)) return [];
   let ids: string[];
   try {

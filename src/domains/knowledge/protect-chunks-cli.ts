@@ -8,6 +8,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { protectChunks, type RawRecallHit } from "./recall-protect";
+import { durableGuildDir } from "../state";
 
 export function runProtectChunksCli(): void {
   const argv = process.argv.slice(2);
@@ -30,7 +31,7 @@ export function runProtectChunksCli(): void {
   }
 
   if (runId && !runDir) {
-    runDir = path.join(cwd, ".guild", "runs", runId);
+    runDir = path.join(durableGuildDir(cwd), "runs", runId);
   }
 
   let rawJson: string;

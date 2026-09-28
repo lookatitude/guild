@@ -42,6 +42,7 @@ import {
   type DegradationReceipt,
 } from "../adapter-fallback-ladders";
 import { HOST_REGISTRY_ROWS, type HostId, type HostRegistryEntry } from "../host-registry-schema";
+import { durableGuildDir } from "../state/storage";
 
 /** Config for one thin wrapped-CLI instance. Host facts are READ from the registry row. */
 export interface WrappedCliAdapterConfig {
@@ -155,7 +156,7 @@ function activeGuildRoot(request: MemoryRequest): string {
   const payload = request.payload;
   if (payload && typeof payload === "object" && typeof (payload as Record<string, unknown>)["cwd"] === "string") {
     const cleaned = ((payload as Record<string, unknown>)["cwd"] as string).replace(/\/+$/, "");
-    return cleaned === ".guild" || cleaned.endsWith("/.guild") ? cleaned : `${cleaned}/.guild`;
+    return cleaned === ".guild" || cleaned.endsWith("/.guild") ? cleaned : durableGuildDir(cleaned || "/");
   }
   return ".guild";
 }

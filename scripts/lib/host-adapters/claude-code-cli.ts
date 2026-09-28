@@ -21,6 +21,7 @@ import {
   type DegradationReceipt,
 } from "../adapter-fallback-ladders";
 import { ClaudePaneAdapter } from "../pane-adapter";
+import { durableGuildDir } from "../state/storage";
 
 const HOST_ID: HostId = "claude-code-cli";
 const ENTRY = HOST_REGISTRY_ROWS[HOST_ID];
@@ -76,7 +77,7 @@ function activeGuildRoot(request: MemoryRequest): string {
         ? ((payload as Record<string, unknown>)["cwd"] as string)
         : ".";
   const cleaned = root.replace(/\/+$/, "");
-  return cleaned === ".guild" || cleaned.endsWith("/.guild") ? cleaned : `${cleaned}/.guild`;
+  return cleaned === ".guild" || cleaned.endsWith("/.guild") ? cleaned : durableGuildDir(cleaned || "/");
 }
 
 function taskRunRecord(request: DispatchRequest): Record<string, unknown> {

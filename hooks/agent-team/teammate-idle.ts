@@ -78,6 +78,7 @@ import {
 } from "../../src/domains/dispatch/index.js";
 // T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
 import { ensureStorageLayout } from "../lib/ensure-layout.js";
+import { durableGuildDir } from "../../src/domains/state";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -144,7 +145,7 @@ function deriveRunId(sessionId: string, guildRoot: string): string {
   const bound = resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] });
   if (bound) return bound;
   const legacy = `run-${sessionId}`;
-  if (fs.existsSync(path.join(guildRoot, ".guild", "runs", legacy))) {
+  if (fs.existsSync(path.join(durableGuildDir(guildRoot), "runs", legacy))) {
     process.stderr.write(
       `[teammate-idle] WARN: legacy read-only fallback run id used: ${legacy}; ` +
         "start/inherit the lifecycle run id to remove this compatibility read.\n",
@@ -225,7 +226,7 @@ function assessReceipts(runDir: string, teammate: string): ReceiptAssessment[] {
  * Find task IDs assigned to this teammate in any plan file.
  */
 function findAssignedTaskIds(cwd: string, teammate: string): string[] {
-  const planDir = path.join(resolveGuildRoot(cwd), ".guild", "plan");
+  const planDir = path.join(durableGuildDir(resolveGuildRoot(cwd)), "plan");
   if (!fs.existsSync(planDir)) return [];
   const files = fs.readdirSync(planDir).filter((f) => f.endsWith(".md"));
   const ids: string[] = [];
@@ -483,7 +484,7 @@ async function main(): Promise<void> {
   }
 
   const runId = deriveRunId(sessionId, guildRootForRun);
-  const runDir = path.join(guildRootForRun, ".guild", "runs", runId);
+  const runDir = path.join(durableGuildDir(guildRootForRun), "runs", runId);
 
   // Gather context — assess receipt validity first (R4a).
   const receiptAssessments = assessReceipts(runDir, teammate);
@@ -559,7 +560,7 @@ async function main(): Promise<void> {
   // run-<session_id> bus file.
   const writeAuth = authorizeHookWrite(guildRootForRun);
   if (writeAuth.ok === true) {
-    const boundRunDir = path.join(guildRootForRun, ".guild", "runs", writeAuth.run_id);
+    const boundRunDir = path.join(durableGuildDir(guildRootForRun), "runs", writeAuth.run_id);
     emitBusEvent(boundRunDir, {
       run_id: writeAuth.run_id,
       event: "idle",

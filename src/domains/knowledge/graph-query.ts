@@ -88,6 +88,7 @@ import { sealSet } from "../kernel";
 import * as path from "path";
 
 import type { GraphNode, GraphEdge } from "./knowledge-graph-contract";
+import { durableGuildDir } from "../state";
 
 export type { GraphNode, GraphEdge } from "./knowledge-graph-contract";
 
@@ -579,7 +580,7 @@ function indexEntryPoints(indexesDir: string, read: (p: string) => string): stri
  * is optional), so a repo with none yields just the explicit entries.
  */
 export function resolveEntryPointConfig(src: EntryPointSources): string[] {
-  const guildDir = src.guildDir ?? path.join(src.repoRoot, ".guild");
+  const guildDir = src.guildDir ?? durableGuildDir(src.repoRoot);
   const indexesDir = src.indexesDir ?? path.join(guildDir, "indexes");
   const read = src.readFile ?? ((p: string) => fs.readFileSync(p, "utf8"));
 

@@ -1691,6 +1691,9 @@ function guildRootId(activeRoot) {
   const base = path9.basename(abs).replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "root";
   return `${base}-${digest}`;
 }
+function durableGuildDir(activeRoot) {
+  return path9.join(activeRoot, ".guild");
+}
 function resolveStorageRoots(opts) {
   const env = opts.env ?? process.env;
   const platform = opts.platform ?? process.platform;
@@ -1704,7 +1707,7 @@ function resolveStorageRoots(opts) {
   const state = override("state") ?? platformStateRoot(platform, env, home);
   const cache = override("cache") ?? platformCacheRoot(platform, env, home);
   return {
-    durable: path9.join(activeRoot, ".guild"),
+    durable: durableGuildDir(activeRoot),
     state,
     cache,
     worktrees: override("worktrees") ?? path9.join(cache, "worktrees"),

@@ -46,6 +46,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { durableGuildDir } from "./storage-roots";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ export function federatedQuery(
   query: string,
   scope?: string
 ): FanOutPlan {
-  const manifestPath = path.join(root, ".guild", "workspace.json");
+  const manifestPath = path.join(durableGuildDir(root), "workspace.json");
   if (!fs.existsSync(manifestPath)) {
     throw new Error(`workspace.json not found at ${manifestPath}`);
   }
@@ -178,9 +179,9 @@ export function runFederatedQueryCli(argv: string[] = process.argv.slice(2)): vo
     process.exit(1);
   }
 
-  if (!fs.existsSync(path.join(cwd, ".guild", "workspace.json"))) {
+  if (!fs.existsSync(path.join(durableGuildDir(cwd), "workspace.json"))) {
     process.stderr.write(
-      `[workspace/federated-query] ERROR: no workspace.json at ${path.join(cwd, ".guild", "workspace.json")}\n`
+      `[workspace/federated-query] ERROR: no workspace.json at ${path.join(durableGuildDir(cwd), "workspace.json")}\n`
     );
     process.exit(1);
   }

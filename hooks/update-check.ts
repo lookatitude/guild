@@ -37,6 +37,7 @@ import {
   RECEIPT_BASENAME,
   RECEIPT_SCHEMA,
 } from "../scripts/lib/update-check";
+import { durableGuildDir } from "../src/domains/state";
 
 function readUpdateConfig(cwd: string): { mode: UpdateMode; cadenceHours: number } {
   const defaults = { mode: "notify" as UpdateMode, cadenceHours: 24 };
@@ -66,7 +67,7 @@ function readUpdateConfig(cwd: string): { mode: UpdateMode; cadenceHours: number
 }
 
 function stagedMarkerPath(): string {
-  return path.join(os.homedir(), ".guild", "update-staged.json");
+  return path.join(durableGuildDir(os.homedir()), "update-staged.json");
 }
 
 /** true when an auto-update for this exact target was already staged. */

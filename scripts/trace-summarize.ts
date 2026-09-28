@@ -36,6 +36,7 @@ import {
   sinkAuditReflectionHint,
   type RunSinkAudit,
 } from "./lib/run-sinks";
+import { durableGuildDir } from "./lib/state/storage";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -786,7 +787,7 @@ function main(): void {
 
   // Resolve paths
   const cwd = path.resolve(cwdArg);
-  const runDir = path.join(cwd, ".guild", "runs", runId);
+  const runDir = path.join(durableGuildDir(cwd), "runs", runId);
   const defaultOut = path.join(runDir, "summary.md");
   const outFile = outArg ? path.resolve(outArg) : defaultOut;
 

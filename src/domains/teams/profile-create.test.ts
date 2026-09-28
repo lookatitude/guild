@@ -24,6 +24,7 @@ const AGENTS_TREE_REF = [
   /["'`]\.guild["'`]\s*,\s*["'`]agents["'`]/,
   /definition\(\s*["'`]agents["'`]/,
   /\bguild\w*\s*,\s*["'`]agents["'`]/i,
+  /\bdurableGuildDir\([^)]*\)\s*,\s*["'`]agents["'`]/,
 ];
 const FILE_WRITE =
   /\b(writeFileSync|appendFileSync|copyFileSync|cpSync|renameSync|symlinkSync|linkSync|atomicWrite\w*|writeFile|createWriteStream)\s*\(/;

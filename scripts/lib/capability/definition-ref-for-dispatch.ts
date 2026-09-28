@@ -13,6 +13,7 @@ import {
   adoptionCommitmentJournalRelpath,
   readAdoptionManifest,
 } from "./adoption-migrate";
+import { durableGuildDir } from "../state/storage";
 
 export type CommittedManifestResult =
   | { status: "committed"; manifest: AdoptionManifestV1 }
@@ -28,7 +29,7 @@ export function readCommittedAdoptionManifest(projectRoot: string): CommittedMan
   }
   const root = path.resolve(projectRoot);
   const canonicalJournal = path.join(root, adoptionCommitmentJournalRelpath(last.run_id));
-  const legacyJournal = path.join(root, ".guild", "runs", last.run_id, "receipts", "journal.jsonl");
+  const legacyJournal = path.join(durableGuildDir(root), "runs", last.run_id, "receipts", "journal.jsonl");
   const canonicalScan = scanReceiptJournal(canonicalJournal);
   // Backward compatibility for manifests committed before the tracked authority
   // existed. Once present, the canonical journal is authoritative: corruption

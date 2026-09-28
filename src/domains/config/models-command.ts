@@ -65,6 +65,7 @@ import {
 import { buildModelInspection, MODEL_INSPECTION_SCHEMA, type ModelInspectionV1 } from "./model-inspect";
 import { readSessionBinding } from "./session-binding";
 import { readRoutingFlags, ROUTING_FLAG_KEYS, type RoutingFlags } from "./routing-rollout";
+import { durableGuildDir } from "../state";
 
 export const MODELS_COMMAND_USAGE = [
   "usage: guild models inspect [--cwd <repo-root>] [--run-id <id>] [--json]",
@@ -195,7 +196,7 @@ export function loadPersistedInspections(
   root: string,
   runId: string
 ): PersistedInspectionRecord[] {
-  const dir = path.join(root, ".guild", "runs", runId, "inspection");
+  const dir = path.join(durableGuildDir(root), "runs", runId, "inspection");
   if (!fs.existsSync(dir)) return [];
   const out: PersistedInspectionRecord[] = [];
   for (const name of fs.readdirSync(dir).sort()) {
@@ -352,7 +353,7 @@ export function loadRoutingFlags(root: string): {
   source: string;
   rejects: string[];
 } {
-  const p = path.join(root, ".guild", "settings.json");
+  const p = path.join(durableGuildDir(root), "settings.json");
   const settings = readJson(p);
   if (settings === null) {
     const { flags, rejects } = readRoutingFlags(null);

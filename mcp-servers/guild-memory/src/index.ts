@@ -240,7 +240,7 @@ function resolveWikiRoot(cwdArg?: string): string {
     // Check the EFFECTIVE data dir, not the project root: a root outside the
     // payload whose `.guild/wiki` symlinks back INTO the payload would otherwise
     // pass (gate r6). Checking the final target subsumes the root check.
-    const wikiRoot = path.join(path.resolve(cwdArg), ".guild", "wiki");
+    const wikiRoot = path.join(durableGuildDir(path.resolve(cwdArg)), "wiki");
     assertNotPayloadScoped(wikiRoot, "cwd");
     return wikiRoot;
   }
@@ -256,7 +256,7 @@ function resolveWikiRoot(cwdArg?: string): string {
   if (NO_CWD_FALLBACK) {
     throw new UnresolvedProjectRootError();
   }
-  return path.join(process.cwd(), ".guild", "wiki");
+  return path.join(durableGuildDir(process.cwd()), "wiki");
 }
 
 // ─── Frontmatter parsing ─────────────────────────────────────────────────
@@ -401,6 +401,7 @@ function loadAllPages(wikiRoot: string): WikiPage[] {
 // Pure BM25 utilities live in ./bm25.ts so tests can import them without
 // starting the MCP server (index.ts executes main() at module load time).
 import { tokenize, bm25Score } from "./bm25";
+import { durableGuildDir } from "../../../src/domains/state";
 
 interface Scored {
   page: WikiPage;
