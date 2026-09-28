@@ -31,15 +31,23 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { atomicWriteDurable, createGuildStorage, type GuildStorage } from "../state";
+import { createGuildStorage, type GuildStorage } from "../state";
 import { assertNotRuntimeTree, checkContained, isRefused } from "../kernel";
 import {
   SCRUBBED_WRITER_BRAND,
   assertScrubbedWriter,
+  containsRecallTag,
   locatePlaybookSpan,
   type WikiWriter,
 } from "../knowledge";
-import { scrubbedWrite } from "../security";
+import {
+  appendSecurityEvent,
+  applySecretsPolicy,
+  buildSecurityEvent,
+  readSecurityConfig,
+  sanitizeForInjection,
+  scrubbedWrite,
+} from "../security";
 import { gateProfileCreation } from "../teams";
 import {
   assertCheapCurator,
@@ -70,9 +78,9 @@ export interface EvolveApplyContext {
   /** True for the KTD33 automatic path. Default false = explicit `maintain evolve`. */
   auto?: boolean;
   /**
-   * The run record dir. REQUIRED for the `glossary` target: the glossary is a wiki
-   * page, so its bytes go out through the branded scrubbing writer (KTD37), and that
-   * writer emits its security events onto this run.
+   * The run record dir the security events land on. Defaults to this root's run
+   * record for `runId` (else `evolve-apply`). Every project-home write goes out
+   * through the branded scrubbing writer (KTD37), which reads its policy from here.
    */
   runDir?: string;
   /** Injected in tests. Production gets the branded scrubbing writer. */
@@ -104,7 +112,8 @@ export interface EvolveApplyResult {
 }
 
 /**
- * The production glossary writer: `scrubbedWrite` on the `wiki` surface, branded so
+ * The production writer for every project-home definition (the name predates the
+ * playbook/skill/profile targets): `scrubbedWrite` on the `wiki` surface, branded so
  * `assertScrubbedWriter` accepts it. Declared here rather than reusing harvest's copy
  * so this module carries its own `scrubbedWrite` CALL SITE — the KTD37 lint reads call
  * sites, and a module that reaches the choke point only through another module's
@@ -118,6 +127,70 @@ const GLOSSARY_WRITER: WikiWriter = Object.assign(
 
 function storageFor(ctx: EvolveApplyContext): GuildStorage {
   return ctx.storage ?? createGuildStorage(ctx.cwd ?? process.cwd());
+}
+
+/** Where this apply's security events and scrub policy live. Null when the root owns no run scope. */
+function auditRunDir(ctx: EvolveApplyContext, storage: GuildStorage): string | null {
+  if (ctx.runDir) return ctx.runDir;
+  const scope = storage.project ?? storage.workspace;
+  return scope ? scope.runRecord(ctx.runId ?? "evolve-apply") : null;
+}
+
+/** Record a blocked screen, then refuse. Nothing has been written when this runs. */
+function refuseScreened(
+  ctx: EvolveApplyContext,
+  storage: GuildStorage,
+  kind: "injection" | "secret",
+  detail: string,
+): never {
+  const runDir = auditRunDir(ctx, storage);
+  if (runDir) {
+    appendSecurityEvent(
+      runDir,
+      buildSecurityEvent({
+        run_id: ctx.runId ?? "",
+        event_type: kind === "injection" ? "injection_attempt_detected" : "secret_scrub_blocked",
+        decision: "blocked",
+        tool: "evolve",
+        detail,
+      }),
+    );
+  } else {
+    process.stderr.write(`warn: [evolve] ${kind} refusal not logged (no run scope): ${detail}\n`);
+  }
+  throw new EvolveTargetRefusal(detail, kind);
+}
+
+/** True when the secrets policy would change `text` or cannot scrub it. */
+function carriesSecret(text: string, storage: GuildStorage): boolean {
+  const policy = readSecurityConfig(storage.activeRoot).secrets_policy;
+  const scrub = applySecretsPolicy(text, policy, { noTruncate: true });
+  return !scrub.ok || scrub.value !== text;
+}
+
+/**
+ * The harvest writer's screens, on the bytes this delta would put in a prompt-loaded
+ * file (KTD37): the recall wrapper tag, the injection probe and the secrets scrub. A
+ * hit refuses before any candidate, history or file is written, so a directive never
+ * gains a persistence mechanism through evolve, and a secret never lands in a candidate.
+ */
+function screenDeltaContent(delta: EvolveDelta, ctx: EvolveApplyContext, storage: GuildStorage): void {
+  const text = [delta.span, delta.replacement ?? ""].join("\n");
+  if (containsRecallTag(text)) {
+    refuseScreened(ctx, storage, "injection", "the evolve delta spells the <guild:recall> wrapper tag");
+  }
+  const probe = sanitizeForInjection(text);
+  if (probe.result === "flagged") {
+    refuseScreened(
+      ctx,
+      storage,
+      "injection",
+      `directive language in the evolve delta (${probe.matchedPatterns.join(", ")})`,
+    );
+  }
+  if (carriesSecret(text, storage)) {
+    refuseScreened(ctx, storage, "secret", "the evolve delta carries secret material; the scrub refuses it");
+  }
 }
 
 /**
@@ -285,6 +358,8 @@ function candidateOutcome(
  * partial application:
  *
  *   1. the target token is not a permission token (D5, the cheap check);
+ *   1b. the span and replacement pass the harvest screens: recall tag, injection
+ *      probe, secrets scrub (KTD37) — a hit is a refusal with a security event;
  *   2. the CONTENT is not a permission edit — heading, frontmatter key, or changed
  *      approval language — on ANY target, auto or not (D5, the real check);
  *   3. the auto path may carry this target at all;
@@ -304,6 +379,7 @@ export function applyEvolveDelta(
   assertNotPermissionEdit(String(delta.target));
   const home = evolveHome(delta.target);
   const storage = storageFor(ctx);
+  screenDeltaContent(delta, ctx, storage);
   const cwd = ctx.cwd ?? storage.activeRoot;
   const abs = path.resolve(cwd, delta.path);
   const current = fs.existsSync(abs) ? fs.readFileSync(abs, "utf8") : "";
@@ -390,6 +466,20 @@ export function applyEvolveDelta(
 
   const plan: EvolveDeltaPlan = planEvolveDelta({ ...delta, path: abs }, current);
 
+  // The writer scrubs; a file the scrub would change is refused HERE, before the
+  // inverse is recorded, so a block leaves no history and a write lands exactly
+  // `plan.next` (the bytes the inverse describes).
+  const runDir = auditRunDir(ctx, storage);
+  if (!runDir) {
+    throw new EvolveTargetRefusal(
+      "this root owns no run scope; the scrubbing writer has no policy or audit record (KTD37)",
+      "scope",
+    );
+  }
+  if (carriesSecret(plan.next, storage)) {
+    refuseScreened(ctx, storage, "secret", `the scrub would change '${path.basename(abs)}'; nothing was written`);
+  }
+
   // Inverse first: the record is fsynced before the file moves.
   const history = recordEvolveDelta(ctx.historyKey ?? path.basename(abs, path.extname(abs)), plan, {
     cwd,
@@ -401,32 +491,21 @@ export function applyEvolveDelta(
 
   fs.mkdirSync(path.dirname(abs), { recursive: true });
 
-  if (delta.target === "glossary") {
-    // The glossary IS a wiki page. KTD37 has exactly one choke point for wiki bytes,
-    // and "the evolve writer is not harvest" is not a reason to route around it — an
-    // unscreened glossary term is a prompt injection with a persistence mechanism,
-    // because every later lane reads the terms it hits.
-    if (!ctx.runDir) {
-      throw new EvolveTargetRefusal(
-        "a glossary evolve needs runDir: its bytes go out through the scrubbing wiki writer (KTD37)",
-        "scope",
-      );
-    }
-    const writer = assertScrubbedWriter(ctx.writer ?? GLOSSARY_WRITER);
-    const wrote = writer(abs, plan.next, { runDir: ctx.runDir, runId: ctx.runId ?? "" });
-    if (!wrote.written) {
-      return {
-        target: delta.target,
-        home,
-        applied: false,
-        path: abs,
-        history,
-        next_need: "operator",
-        detail: "the scrub blocked the glossary write; the span is unchanged",
-      };
-    }
-  } else {
-    atomicWriteDurable(abs, plan.next);
+  // Every project-home definition is prompt-loaded, and the glossary IS a wiki page.
+  // KTD37 has exactly one choke point for those bytes, and "the evolve writer is not
+  // harvest" is not a reason to route around it.
+  const writer = assertScrubbedWriter(ctx.writer ?? GLOSSARY_WRITER);
+  const wrote = writer(abs, plan.next, { runDir, runId: ctx.runId ?? "" });
+  if (!wrote.written) {
+    return {
+      target: delta.target,
+      home,
+      applied: false,
+      path: abs,
+      history,
+      next_need: "operator",
+      detail: "the scrub blocked the write; the span is unchanged",
+    };
   }
 
   return {

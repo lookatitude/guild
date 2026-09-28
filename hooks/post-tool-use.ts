@@ -18,7 +18,7 @@
  *          tool_call event lives in `<runDir>/logs/v1.4-events.jsonl`.
  *
  * Stdin:   JSON — Claude Code PostToolUse hook payload.
- * Stdout:  Silent.
+ * Stdout:  Silent, except the T0 queue drain's additionalContext (T16I).
  * Stderr:  Diagnostic warnings only.
  * Exit:    Always 0 — telemetry must not block.
  */
@@ -84,6 +84,8 @@ import {
 import { emitTraceEvent, makeAnalysisTraceEvent } from "../src/domains/telemetry/index.js";
 import { createGuildStorage, durableGuildDir } from "../src/domains/state";
 import { refreshTouched } from "../src/domains/knowledge";
+// T16I (KTD33/KTD43): the lead session drains the T0 write queue from its own tool result.
+import { drainT0Queue } from "./lib/t0-drain.js";
 
 function isKnownTool(name: string | undefined): name is ToolCallTool {
   if (typeof name !== "string") return false;
@@ -384,6 +386,33 @@ export async function main(): Promise<void> {
     process.stderr.write(`warn: [post-tool-use] .guild layout refused (${layout.refused}) — no writes\n`);
     return;
   }
+
+  // ── T16I (KTD33/KTD43): drain the T0 write queue ─────────────────────────
+  // `work-loop redirect` and `evolve-loop --apply` only enqueue. The gated writer
+  // runs here, in the lead session's hook, for the receipt in this call's own
+  // result. A lane worker's hook env, a subagent call, or a swapped request file
+  // drains nothing. The outcome goes back to T0 as context and beside the request.
+  try {
+    const report = drainT0Queue(payload, process.env, __dirname);
+    if (report) {
+      for (const r of report.refused) {
+        process.stderr.write(`warn: [post-tool-use] T0 queue request ${r.request_id} refused: ${r.detail}\n`);
+      }
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PostToolUse",
+            additionalContext: `guild.t0_request.v1 drained: ${JSON.stringify(report)}`.slice(0, 8000),
+          },
+        }) + "\n",
+      );
+    }
+  } catch (err) {
+    process.stderr.write(
+      `warn: [post-tool-use] T0 queue drain threw (non-fatal): ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+  }
+  // ── end T0 queue drain ───────────────────────────────────────────────────
 
   // ── G-9 (SC-5): structured heartbeat write ────────────────────────────────
   // When GUILD_RUN_ID + GUILD_SPECIALIST are both exported (the dispatch path

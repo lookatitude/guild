@@ -13,9 +13,14 @@
  *       Apply one `guild.workflow_decision.v1` to the PERSISTED cursor. The next
  *       node is read off the merged graph; an unrecognised outcome escalates.
  *   redirect        --run-id <id> --input <file>
- *       Record a T0-routed operator correction on the redirect ledger. The count
- *       that crosses the threshold harvests the distilled decision (security-gated,
- *       journaled). A harvest that supersedes a pinned decision routes `replan`.
+ *       Validate a T0-routed operator correction and ENQUEUE it on the run
+ *       (`<runDir>/queue/harvest/<id>.json`); prints a `guild.t0_request.v1`
+ *       receipt. This CLI never writes the ledger, the wiki or a playbook: the lead
+ *       session's PostToolUse hook drains the receipt from its own tool result and
+ *       runs `routeRedirect` (the count that crosses the threshold harvests; a
+ *       harvest that supersedes a pinned decision routes `replan`). A lane worker's
+ *       env (GUILD_TASK_ID, GUILD_LANE_ID or GUILD_TASK_CELL_INSTANCE_ID) is refused
+ *       here too (KTD33/KTD35/KTD43).
  *   research-packet --run-id <id> --input <file>
  *       Write `guild.research_packet.v1` on the run record.
  *
@@ -30,17 +35,17 @@ import { createGuildStorage, resolveGuildRoot, type GuildStorage } from "../src/
 import {
   WORKFLOW_CLASSES,
   bindWorkflowCursor,
-  loadAllClassGraphs,
+  enqueueT0Request,
   loadClassGraph,
   readWorkflowCursor,
-  routeWorkflowDecisionAtRun,
+  routeAtPersistedCursor,
   writeWorkflowCursor,
   type CursorBindSource,
-  type RouteResult,
   type WorkflowClass,
 } from "../src/domains/lifecycle";
-import { routeRedirect, writeResearchPacket, type RouteRedirectInput } from "../src/domains/knowledge";
+import { writeResearchPacket } from "../src/domains/knowledge";
 import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
+import { isLaneWorker } from "../hooks/lib/security/lane-wiki-guard";
 
 const USAGE =
   "usage: work-loop <bind|route|redirect|research-packet> --run-id <id> [--cwd <dir>]\n" +
@@ -88,20 +93,14 @@ function runDirOf(storage: GuildStorage, runId: string): string {
   return scope.runRecord(runId);
 }
 
-function classGraphs(cwd: string): Partial<Record<WorkflowClass, ReturnType<typeof loadClassGraph>["graph"]>> {
-  try {
-    return loadAllClassGraphs({ cwd });
-  } catch {
-    // A sibling class that fails to load only loses the real change_class entry;
-    // the router falls back to the pinned default table for it.
-    return {};
+/** The redirect input the drain hands to `routeRedirect`, checked for shape only. */
+function redirectPayload(input: Record<string, unknown>): Record<string, unknown> {
+  for (const k of ["agent_id", "topic_key", "correction"]) {
+    if (typeof input[k] !== "string" || input[k] === "") throw new UsageError(`input.${k} must be a non-empty string`);
   }
-}
-
-/** Route against the persisted cursor. The caller has checked that one exists. */
-function route(runDir: string, cwd: string, klass: WorkflowClass, decision: unknown): RouteResult {
-  const graph = loadClassGraph(klass, { cwd }).graph;
-  return routeWorkflowDecisionAtRun(runDir, { graph, decision, classGraphs: classGraphs(cwd) });
+  const d = input["decision"];
+  if (!d || typeof d !== "object" || Array.isArray(d)) throw new UsageError("input.decision must be an object");
+  return input;
 }
 
 export function runWorkLoop(argv: readonly string[]): { code: number; out: unknown } {
@@ -135,35 +134,23 @@ export function runWorkLoop(argv: readonly string[]): { code: number; out: unkno
     if (!at) {
       return { code: 3, out: { escalated: true, detail: "the run has no workflow cursor; bind a class first" } };
     }
-    const result = route(runDir, root, at.class, decision);
+    const result = routeAtPersistedCursor(runDir, root, at.class, decision);
     return { code: result.escalated ? 3 : 0, out: result };
   }
 
   if (verb === "redirect") {
-    const input = readJsonFile(required(argv, "input"));
-    const result = routeRedirect({
-      ...(input as unknown as Omit<RouteRedirectInput, "run_id" | "runDir" | "storage" | "cwd">),
-      run_id: runId,
-      runDir,
-      storage,
-    });
-    // KTD53: a harvest that superseded a pinned decision is a replan, emitted by T0
-    // as a workflow decision — never a silent rewrite of the spec or plan.
-    let replan: RouteResult | null = null;
-    const at = result.harvest?.replan_queued ? readWorkflowCursor(runDir) : null;
-    if (result.harvest && at) {
-      replan = route(runDir, root, at.class, {
-        run_id: runId,
-        node_id: at.node_id,
-        outcome: "replan",
-        reason: `harvest superseded pinned ${result.harvest.stale_decision_ids.join(", ")}`,
-      });
+    if (isLaneWorker(process.env)) {
+      return {
+        code: 3,
+        out: {
+          refused: true,
+          reason: "lane_worker",
+          detail: "redirect harvesting is a T0-only writer; a lane worker stages a knowledge candidate instead (KTD35)",
+        },
+      };
     }
-    const refused = result.harvest !== null && !result.harvest.promoted;
-    return {
-      code: refused || replan?.escalated ? 3 : 0,
-      out: { redirect: { entry: result.redirect.entry, fires_harvest: result.redirect.fires_harvest }, harvest: result.harvest, replan },
-    };
+    const payload = redirectPayload(readJsonFile(required(argv, "input")));
+    return { code: 0, out: enqueueT0Request({ kind: "harvest", runId, root, payload, storage }) };
   }
 
   if (verb === "research-packet") {

@@ -10,11 +10,18 @@
  *   3. `guild.lane_bundle.v1`: the card, the hits as citations, and the glossary
  *      terms the assignment text actually names (capped).
  *
- * The lane bundle is the only object here a parent may see (KTD26).
+ * The lane bundle is the only object here a parent may see (KTD26). Its hit gists
+ * and glossary terms are wiki text, so they pass the same D-RECALL choke point as
+ * recall (`protectChunks`): an injection hit is quarantined to a marker, anything
+ * else is wrapped by trust tier with recall tags neutralized. Never raw.
  */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
+
 import { createGuildStorage, type GuildStorage } from "../state";
-import { resolveGlossary } from "./glossary";
+import { resolveGlossary, type Glossary } from "./glossary";
+import { neutralizeRecallTags, protectChunks, type ProtectChunksOpts } from "./recall-protect";
 import { buildLaneBundle, type LaneBundle } from "./lane-bundle";
 import { searchWiki, type RecallBackend, type SearchResult } from "./wiki-index";
 import { loadWorkingSet } from "./working-set";
@@ -27,6 +34,9 @@ export interface PhaseStartOptions {
   storage?: GuildStorage;
   pinned_decision_ids?: readonly string[];
   open_question_ids?: readonly string[];
+  /** Where a quarantine security event lands. No event when absent. */
+  runId?: string;
+  runDir?: string;
 }
 
 export interface PhaseStartResult {
@@ -63,6 +73,43 @@ export function resolveRecallPolicy(cwd: string): RecallPolicy {
   }
 }
 
+/** One line of wiki text through the D-RECALL pipeline: marker, raw operator line, or wrapped. */
+function protectLine(line: string, probe: { source_path: string; content: string }, opts: ProtectChunksOpts): string {
+  const [chunk] = protectChunks([probe], opts).chunks;
+  if (!chunk || chunk.quarantined) return chunk?.rendered ?? "[QUARANTINED]";
+  const safe = neutralizeRecallTags(line);
+  return chunk.trust_tier === "operator" ? safe : `<guild:recall trust_tier="${chunk.trust_tier}">${safe}</guild:recall>`;
+}
+
+/** The page body a hit cites, for the probe. Empty when unreadable or outside the wiki. */
+function pageText(storage: GuildStorage, rel: string): string {
+  const root = (storage.project ?? storage.workspace)?.knowledge();
+  if (!root) return "";
+  const abs = path.resolve(root, rel);
+  const back = path.relative(root, abs);
+  if (back.startsWith("..") || path.isAbsolute(back)) return "";
+  try {
+    return fs.readFileSync(abs, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+/** The glossary with every term probed and wrapped; an injected term keeps only a marker. */
+function protectGlossary(glossary: Glossary, opts: ProtectChunksOpts): Glossary {
+  return {
+    ...glossary,
+    terms: glossary.terms.map((t) => {
+      const content = [t.term, ...(t.aliases ?? []), t.definition].join("\n");
+      return {
+        ...t,
+        term: neutralizeRecallTags(t.term),
+        definition: protectLine(t.definition, { source_path: "glossary.md", content }, opts),
+      };
+    }),
+  };
+}
+
 export function phaseStartRecall(query: string, opts: PhaseStartOptions): PhaseStartResult {
   const storage = opts.storage ?? createGuildStorage(opts.cwd);
   const ws = loadWorkingSet({
@@ -82,12 +129,23 @@ export function phaseStartRecall(query: string, opts: PhaseStartOptions): PhaseS
     ...(policy.max_hits !== undefined ? { max_hits: policy.max_hits } : {}),
   });
 
+  const protect: ProtectChunksOpts = {
+    callerTool: "phaseStartRecall",
+    ...(opts.runId
+      ? { runId: opts.runId, runDir: opts.runDir ?? (storage.project ?? storage.workspace)?.runRecord(opts.runId) }
+      : {}),
+  };
   const lane_bundle = buildLaneBundle({
     cell_id: opts.cell_id,
     working_set: ws.card,
-    hits: search.hits.map((h) => ({ path: `wiki:${h.rel}`, gist: h.title, score: h.score })),
+    // The title comes from the cache index, so it is probed with the page it names.
+    hits: search.hits.map((h) => ({
+      path: `wiki:${h.rel}`,
+      gist: protectLine(h.title, { source_path: h.rel, content: `${h.title}\n${pageText(storage, h.rel)}` }, protect),
+      score: h.score,
+    })),
     assignment_text: query,
-    glossary: resolveGlossary({ storage }),
+    glossary: protectGlossary(resolveGlossary({ storage }), protect),
   });
 
   return {

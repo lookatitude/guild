@@ -1198,7 +1198,13 @@ export function runRecallCli(): void {
   // KTD50 phase start: the working-set card + BM25 (through recall.backend) +
   // the lane bundle a parent may see. Additive fields; the chunks are unchanged.
   if (phase) {
-    const start = phaseStartRecall(query, { cwd, phase, cell_id: cellId || runId || phase });
+    const start = phaseStartRecall(query, {
+      cwd,
+      phase,
+      cell_id: cellId || runId || phase,
+      ...(runId ? { runId } : {}),
+      ...(runDir ? { runDir } : {}),
+    });
     process.stdout.write(JSON.stringify({ ...result, ...start }) + "\n");
     return;
   }
