@@ -497,3 +497,88 @@ describe("F2 · the <guild:recall> wrapper cannot be escaped (rework-r1 P1-2)", 
     }
   });
 });
+
+// ── rework-r2 · revert never trusts inverse metadata to decide what it screens ──
+
+describe("F2 · revert screens the whole restore, span or no span (rework-r2 P1)", () => {
+  const promote = () => {
+    const p = playbook();
+    const r = harvest({ playbook: { path: p, span: "Retries", replacement: "Retry with backoff; consumers are idempotent." } });
+    expect(r.promoted).toBe(true);
+    const hist = harvestHistoryPath(storage, RUN_ID, r.op.op_id);
+    return { p, r, hist, applied: fs.readFileSync(p, "utf8"), inverse: JSON.parse(fs.readFileSync(hist, "utf8")) };
+  };
+  type Entry = { path: string; before: string | null; before_sha256?: string; span?: unknown };
+  const pbEntry = (inverse: { files: Entry[] }, p: string) => inverse.files.find((f) => f.path === p)!;
+
+  it("F2 · span stripped, whole `before` carries a permission edit with a re-stamped hash: blocked, untouched, event", () => {
+    // Codex G-lane r2 reproduction, byte for byte.
+    const { p, r, hist, applied, inverse } = promote();
+    const e = pbEntry(inverse, p);
+    delete e.span;
+    e.before = PLAYBOOK.replace("Retry once, then give up.", `Retry once, then give up. ${PERMISSION_EDIT}`);
+    e.before_sha256 = sha256(e.before);
+    fs.writeFileSync(hist, JSON.stringify(inverse));
+    const back = revertHarvest(RUN_ID, r.op.op_id, { storage });
+    expect(back.ok).toBe(false);
+    expect(back.blocked_confirm).toBe(true);
+    expect(back.next_need).toBe("operator");
+    expect(fs.readFileSync(p, "utf8")).toBe(applied);
+    expect(kinds()).toContain("harvest_refused:blocked");
+  });
+
+  it("F2 · span stripped from a playbook inverse with CLEAN bytes is still blocked (the op recorded a span)", () => {
+    const { p, r, hist, applied, inverse } = promote();
+    const e = pbEntry(inverse, p);
+    delete e.span;
+    e.before = PLAYBOOK;
+    e.before_sha256 = sha256(e.before);
+    fs.writeFileSync(hist, JSON.stringify(inverse));
+    const back = revertHarvest(RUN_ID, r.op.op_id, { storage });
+    expect(back.ok).toBe(false);
+    expect(back.blocked_confirm).toBe(true);
+    expect(back.blocked?.some((b) => b.path === p && b.reason === "inverse-tampered")).toBe(true);
+    expect(fs.readFileSync(p, "utf8")).toBe(applied);
+  });
+
+  it("F2 · a malformed span (non-string before_span / anchor) is blocked, never thrown or skipped", () => {
+    for (const mutate of [
+      (s: Record<string, unknown>) => ({ anchor: s.anchor }),
+      (s: Record<string, unknown>) => ({ ...s, anchor: 7 }),
+      (s: Record<string, unknown>) => ({ ...s, after_len: String(s.after_len) }),
+      () => "not-an-object",
+    ]) {
+      const { p, r, hist, applied, inverse } = promote();
+      const e = pbEntry(inverse, p);
+      e.span = mutate(e.span as Record<string, unknown>);
+      fs.writeFileSync(hist, JSON.stringify(inverse));
+      const back = revertHarvest(RUN_ID, r.op.op_id, { storage });
+      expect(back.ok).toBe(false);
+      expect(back.blocked_confirm).toBe(true);
+      expect(back.blocked?.find((b) => b.path === p)?.detail).toMatch(/malformed/);
+      expect(fs.readFileSync(p, "utf8")).toBe(applied);
+      fs.rmSync(p);
+    }
+  });
+
+  it("F2 · a whole-page inverse whose `before` adds a permission sentence is refused by D5", () => {
+    const { r, hist, inverse } = promote();
+    const pg = inverse.files.find((f: Entry) => !f.span) as Entry;
+    const current = fs.readFileSync(page(), "utf8");
+    pg.before = current.replace(CLEAN.body, `${CLEAN.body}\n\n${PERMISSION_EDIT}`);
+    pg.before_sha256 = sha256(pg.before);
+    fs.writeFileSync(hist, JSON.stringify(inverse));
+    const back = revertHarvest(RUN_ID, r.op.op_id, { storage });
+    expect(back.ok).toBe(false);
+    expect(back.blocked?.some((b) => b.reason === "content-refused" && /D5/.test(b.detail))).toBe(true);
+    expect(fs.readFileSync(page(), "utf8")).toBe(current);
+  });
+
+  it("F2 · CONTROL: the untampered inverse still restores the playbook and deletes the page", () => {
+    const { p, r } = promote();
+    const back = revertHarvest(RUN_ID, r.op.op_id, { storage });
+    expect(back.ok).toBe(true);
+    expect(fs.readFileSync(p, "utf8")).toBe(PLAYBOOK);
+    expect(fs.existsSync(page())).toBe(false);
+  });
+});

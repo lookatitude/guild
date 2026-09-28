@@ -42077,19 +42077,51 @@ function readIngestPause(root) {
     }
   ];
 }
+function canonicalPath(p, hops = 0) {
+  const abs = path76.resolve(p);
+  try {
+    return fs64.realpathSync.native(abs);
+  } catch {
+  }
+  if (hops < 40) {
+    try {
+      if (fs64.lstatSync(abs).isSymbolicLink()) {
+        return canonicalPath(path76.resolve(path76.dirname(abs), fs64.readlinkSync(abs)), hops + 1);
+      }
+    } catch {
+    }
+  }
+  const parent = path76.dirname(abs);
+  if (parent === abs) return abs;
+  return path76.join(canonicalPath(parent, hops + 1), path76.basename(abs));
+}
+function sameInode(a, b) {
+  try {
+    const x = fs64.statSync(a);
+    const y = fs64.statSync(b);
+    return x.dev === y.dev && x.ino === y.ino;
+  } catch {
+    return false;
+  }
+}
 function ingestPauseBlocking(root, targetPath) {
   const entries = readIngestPause(root);
   if (entries.length === 0) return null;
   const storage = storageFor(root);
-  const target = path76.resolve(storage.activeRoot, targetPath);
-  const direct = entries.find((e) => e.candidate_path === target);
+  const lexical = path76.resolve(storage.activeRoot, targetPath);
+  const target = canonicalPath(lexical);
+  const direct = entries.find(
+    (e) => e.candidate_path === lexical || canonicalPath(e.candidate_path) === target || sameInode(e.candidate_path, target)
+  );
   if (direct) return direct;
   const wikiRoots = [storage.project?.knowledge(), storage.workspace?.knowledge()].filter(
     (r) => typeof r === "string"
   );
-  for (const wiki of wikiRoots) {
-    const rel2 = path76.relative(wiki, target);
-    if (rel2 === "" || !rel2.startsWith("..") && !path76.isAbsolute(rel2)) return entries[0];
+  for (const wiki of wikiRoots.flatMap((w) => [w, canonicalPath(w)])) {
+    for (const t of [lexical, target]) {
+      const rel2 = path76.relative(wiki, t);
+      if (rel2 === "" || !rel2.startsWith("..") && !path76.isAbsolute(rel2)) return entries[0];
+    }
   }
   return null;
 }

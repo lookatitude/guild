@@ -1292,35 +1292,73 @@ export interface RevertResult {
 }
 
 /**
+ * The paragraphs that differ between two texts, plus the nearest heading above
+ * them. Computed from the BYTES — never from the inverse's `span` metadata, which
+ * lives in off-repo state and can be stripped or rewritten (codex G-lane r2 P1).
+ *
+ * The region is widened to blank-line paragraph boundaries, so a one-line edit to
+ * a sentence that wraps across lines is classified as the whole sentence.
+ */
+function changedRegion(from: string, to: string): { heading: string; from: string; to: string } {
+  const a = from.split("\n");
+  const b = to.split("\n");
+  let pre = 0;
+  while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++;
+  let suf = 0;
+  while (suf < a.length - pre && suf < b.length - pre && a[a.length - 1 - suf] === b[b.length - 1 - suf]) suf++;
+  while (pre > 0 && a[pre - 1].trim() !== "") pre--;
+  while (suf > 0 && a[a.length - suf].trim() !== "") suf--;
+  const heading = a.slice(0, pre).reverse().find((l) => /^#{1,6}\s/.test(l)) ?? "";
+  return {
+    heading: heading.replace(/^#+\s*/, ""),
+    from: a.slice(pre, a.length - suf).join("\n"),
+    to: b.slice(pre, b.length - suf).join("\n"),
+  };
+}
+
+/**
  * Screen the bytes a revert would put back with the gates a forward harvest
  * passes. A revert is a WRITE from off-repo history, so an edited inverse is the
  * same injection vector as an unscreened harvest.
+ *
+ * It screens `write` — the full file revert is about to hand the scrubbed
+ * writer — against the live bytes, whatever shape the inverse claims to have. A
+ * whole-file inverse and a span inverse go through the same D5 + probe path.
  */
-function screenRevertFile(f: HarvestInverseFile, current: string | null): RevertBlock | null {
-  if (f.span) {
-    const region =
-      current === null ? "" : current.slice(locateAnchorOffset(current, f.span.anchor) ?? 0).slice(0, f.span.after_len ?? 0);
-    const d5 = classifyPermissionContent({
-      span: f.span.anchor.replace(/^#+\s*/, ""),
-      beforeSpan: region,
-      replacement: f.span.before_span,
-    });
-    if (d5.isPermissionEdit) {
-      return { path: f.path, reason: "content-refused", detail: `permissions are proposal-only (D5): ${d5.detail}` };
-    }
+function screenRevertFile(f: HarvestInverseFile, current: string | null, write: string | null): RevertBlock | null {
+  if (write === null) return null; // a delete restores no content
+  const region = changedRegion(current ?? "", write);
+  const d5 = classifyPermissionContent({ span: region.heading, beforeSpan: region.from, replacement: region.to });
+  if (d5.isPermissionEdit) {
+    return { path: f.path, reason: "content-refused", detail: `permissions are proposal-only (D5): ${d5.detail}` };
   }
-  const restoring = f.span ? f.span.before_span : f.before;
-  if (restoring !== null) {
-    const probe = sanitizeForInjection(restoring);
-    if (probe.result === "flagged") {
-      return {
-        path: f.path,
-        reason: "content-refused",
-        detail: `the restore carries directive language (${probe.matchedPatterns.join(", ")})`,
-      };
-    }
+  const probe = sanitizeForInjection(write);
+  if (probe.result === "flagged") {
+    return {
+      path: f.path,
+      reason: "content-refused",
+      detail: `the restore carries directive language (${probe.matchedPatterns.join(", ")})`,
+    };
+  }
+  if (containsRecallTag(write)) {
+    return { path: f.path, reason: "content-refused", detail: "the restore spells the <guild:recall> wrapper tag" };
   }
   return null;
+}
+
+/** A span record revert can use: every field it reads has the type it reads. */
+function spanIsWellFormed(span: unknown): boolean {
+  if (typeof span !== "object" || span === null || Array.isArray(span)) return false;
+  const s = span as Record<string, unknown>;
+  const optional = (v: unknown, t: "string" | "number") => v === undefined || typeof v === t;
+  return (
+    typeof s.anchor === "string" &&
+    typeof s.before_span === "string" &&
+    typeof s.before_sha256 === "string" &&
+    optional(s.after_sha256, "string") &&
+    optional(s.after_len, "number") &&
+    (s.after_len === undefined || (Number.isInteger(s.after_len) && (s.after_len as number) >= 0))
+  );
 }
 
 /**
@@ -1332,7 +1370,29 @@ function screenRevertFile(f: HarvestInverseFile, current: string | null): Revert
  * never touched. It now restores only the REGION the op wrote, and only while the
  * live bytes in that region are still the op's: anything else is `blocked_confirm`.
  */
-function planRevertFile(f: HarvestInverseFile): { write?: string | null; block?: RevertBlock } {
+function planRevertFile(
+  f: HarvestInverseFile,
+  mustHaveSpan: boolean,
+): { write?: string | null; block?: RevertBlock } {
+  // Shape before trust. A span-shaped op whose record no longer carries a usable
+  // span is a tampered record, not a whole-file one: stripping `span` used to
+  // route a playbook through the whole-file branch, which restored `before`
+  // wholesale (codex G-lane r2 P1).
+  if (f.span !== undefined ? !spanIsWellFormed(f.span) : mustHaveSpan) {
+    return {
+      block: {
+        path: f.path,
+        reason: "inverse-tampered",
+        detail:
+          f.span === undefined
+            ? "this file was changed by a span op but its recorded inverse carries no span"
+            : "the recorded span is malformed",
+      },
+    };
+  }
+  if (f.before !== null && typeof f.before !== "string") {
+    return { block: { path: f.path, reason: "inverse-tampered", detail: "the recorded `before` is malformed" } };
+  }
   const exists = fs.existsSync(f.path);
   const current = exists ? fs.readFileSync(f.path, "utf8") : null;
 
@@ -1435,13 +1495,28 @@ export function revertHarvest(
   const runDir = opts.runDir ?? resolveRunDir(storage.activeRoot, runId);
   const plans: Array<{ file: HarvestInverseFile; write: string | null }> = [];
   const blocked: RevertBlock[] = [];
-  for (const f of inverse.files) {
-    const planned = planRevertFile(f);
+  // Which files MUST carry a span is decided outside the inverse: the op's own
+  // journal entry names its playbook, and only a wiki page is ever a whole-file
+  // inverse. A file outside the wiki root is span-only.
+  const opRecord = findOp(runId, opId, opts);
+  const scopeForSpan = storage.project ?? storage.workspace;
+  const wikiRootForSpan = scopeForSpan ? scopeForSpan.knowledge() : null;
+  const spanOnly = (p: string): boolean =>
+    (opRecord?.playbook_path !== undefined && path.resolve(opRecord.playbook_path) === path.resolve(p)) ||
+    wikiRootForSpan === null ||
+    !isWithin(path.resolve(p), wikiRootForSpan);
+  const files = Array.isArray(inverse.files) ? inverse.files : [];
+  for (const f of files) {
+    if (typeof f?.path !== "string" || f.path.length === 0) {
+      blocked.push({ path: String(f?.path ?? ""), reason: "inverse-tampered", detail: "the recorded file entry has no path" });
+      continue;
+    }
+    const planned = planRevertFile(f, spanOnly(f.path));
     if (planned.block) {
       blocked.push(planned.block);
       continue;
     }
-    const screened = screenRevertFile(f, readFileOrNull(f.path));
+    const screened = screenRevertFile(f, readFileOrNull(f.path), planned.write ?? null);
     if (screened) blocked.push(screened);
     else plans.push({ file: f, write: planned.write ?? null });
   }

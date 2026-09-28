@@ -1243,6 +1243,34 @@
         {
           "test": "hooks/__tests__/t15-ingest-pause.test.ts",
           "title": "F2 · clean candidate: no pause, the Write passes"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · span stripped, whole `before` carries a permission edit with a re-stamped hash: blocked, untouched, event"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · span stripped from a playbook inverse with CLEAN bytes is still blocked (the op recorded a span)"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · a malformed span (non-string before_span / anchor) is blocked, never thrown or skipped"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · a whole-page inverse whose `before` adds a permission sentence is refused by D5"
+        },
+        {
+          "test": "src/domains/security/t15-security-gate.test.ts",
+          "title": "F2 · CONTROL: the untampered inverse still restores the playbook and deletes the page"
+        },
+        {
+          "test": "hooks/__tests__/t15-ingest-pause.test.ts",
+          "title": "F2 · a directory alias to .guild/wiki and a file alias to the candidate are refused for Write, Edit and MultiEdit"
+        },
+        {
+          "test": "src/domains/security/ingest-pause.test.ts",
+          "title": "F2 · directory, file, dangling and hard-link aliases all block; an outside alias does not"
         }
       ]
     },

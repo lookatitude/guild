@@ -102,9 +102,54 @@ export function clearIngestPause(root: string | GuildStorage, candidatePath?: st
 }
 
 /**
+ * The real path of `p`, whether or not it exists yet.
+ *
+ * Lexical `path.resolve` let a symlink alias walk past the pause: a `wiki-link` to
+ * the wiki directory, or `cand-link.md` to the candidate, resolved to paths the gate did
+ * not know (codex G-lane r2 P2). A not-yet-existing target canonicalizes its
+ * deepest existing ancestor and keeps the tail; a dangling link is followed by
+ * its own text, bounded so a link loop cannot spin.
+ */
+export function canonicalPath(p: string, hops = 0): string {
+  const abs = path.resolve(p);
+  try {
+    return fs.realpathSync.native(abs);
+  } catch {
+    // not fully resolvable: fall through
+  }
+  if (hops < 40) {
+    try {
+      if (fs.lstatSync(abs).isSymbolicLink()) {
+        return canonicalPath(path.resolve(path.dirname(abs), fs.readlinkSync(abs)), hops + 1);
+      }
+    } catch {
+      // does not exist: canonicalize the parent instead
+    }
+  }
+  const parent = path.dirname(abs);
+  if (parent === abs) return abs;
+  return path.join(canonicalPath(parent, hops + 1), path.basename(abs));
+}
+
+/** Same file on disk: a hard link is an alias no path comparison can see. */
+function sameInode(a: string, b: string): boolean {
+  try {
+    const x = fs.statSync(a);
+    const y = fs.statSync(b);
+    return x.dev === y.dev && x.ino === y.ino;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The entry that blocks a write to `targetPath`, or null. A write to the paused
  * candidate itself, or anywhere under this root's wiki, is blocked while any
  * entry stands: the synthesized page lands under the wiki, not at the candidate.
+ *
+ * Both sides are compared as REAL paths — the marker's candidate and wiki roots,
+ * and the tool's target — so a symlinked directory or file alias names the same
+ * thing the canonical path does.
  */
 export function ingestPauseBlocking(
   root: string | GuildStorage,
@@ -113,15 +158,23 @@ export function ingestPauseBlocking(
   const entries = readIngestPause(root);
   if (entries.length === 0) return null;
   const storage = storageFor(root);
-  const target = path.resolve(storage.activeRoot, targetPath);
-  const direct = entries.find((e) => e.candidate_path === target);
+  const lexical = path.resolve(storage.activeRoot, targetPath);
+  const target = canonicalPath(lexical);
+  const direct = entries.find(
+    (e) =>
+      e.candidate_path === lexical ||
+      canonicalPath(e.candidate_path) === target ||
+      sameInode(e.candidate_path, target),
+  );
   if (direct) return direct;
   const wikiRoots = [storage.project?.knowledge(), storage.workspace?.knowledge()].filter(
     (r): r is string => typeof r === "string",
   );
-  for (const wiki of wikiRoots) {
-    const rel = path.relative(wiki, target);
-    if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) return entries[0];
+  for (const wiki of wikiRoots.flatMap((w) => [w, canonicalPath(w)])) {
+    for (const t of [lexical, target]) {
+      const rel = path.relative(wiki, t);
+      if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) return entries[0];
+    }
   }
   return null;
 }

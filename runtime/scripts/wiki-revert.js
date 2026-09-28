@@ -40823,6 +40823,10 @@ function foldForTagScan(text) {
   }
   return { folded, from, to };
 }
+function containsRecallTag(text) {
+  RECALL_TAG_RE.lastIndex = 0;
+  return RECALL_TAG_RE.test(foldForTagScan(text).folded);
+}
 function neutralizeRecallTags(text) {
   const { folded, from, to } = foldForTagScan(text);
   const ranges = [];
@@ -41189,32 +41193,61 @@ function locateAnchorOffset(text, anchor) {
   const m = new RegExp(`^${escaped}$`, "m").exec(text);
   return m ? m.index : null;
 }
-function screenRevertFile(f, current) {
-  if (f.span) {
-    const region = current === null ? "" : current.slice(locateAnchorOffset(current, f.span.anchor) ?? 0).slice(0, f.span.after_len ?? 0);
-    const d5 = classifyPermissionContent({
-      span: f.span.anchor.replace(/^#+\s*/, ""),
-      beforeSpan: region,
-      replacement: f.span.before_span
-    });
-    if (d5.isPermissionEdit) {
-      return { path: f.path, reason: "content-refused", detail: `permissions are proposal-only (D5): ${d5.detail}` };
-    }
+function changedRegion(from, to) {
+  const a = from.split("\n");
+  const b = to.split("\n");
+  let pre = 0;
+  while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++;
+  let suf = 0;
+  while (suf < a.length - pre && suf < b.length - pre && a[a.length - 1 - suf] === b[b.length - 1 - suf]) suf++;
+  while (pre > 0 && a[pre - 1].trim() !== "") pre--;
+  while (suf > 0 && a[a.length - suf].trim() !== "") suf--;
+  const heading = a.slice(0, pre).reverse().find((l) => /^#{1,6}\s/.test(l)) ?? "";
+  return {
+    heading: heading.replace(/^#+\s*/, ""),
+    from: a.slice(pre, a.length - suf).join("\n"),
+    to: b.slice(pre, b.length - suf).join("\n")
+  };
+}
+function screenRevertFile(f, current, write) {
+  if (write === null) return null;
+  const region = changedRegion(current ?? "", write);
+  const d5 = classifyPermissionContent({ span: region.heading, beforeSpan: region.from, replacement: region.to });
+  if (d5.isPermissionEdit) {
+    return { path: f.path, reason: "content-refused", detail: `permissions are proposal-only (D5): ${d5.detail}` };
   }
-  const restoring = f.span ? f.span.before_span : f.before;
-  if (restoring !== null) {
-    const probe = sanitizeForInjection(restoring);
-    if (probe.result === "flagged") {
-      return {
-        path: f.path,
-        reason: "content-refused",
-        detail: `the restore carries directive language (${probe.matchedPatterns.join(", ")})`
-      };
-    }
+  const probe = sanitizeForInjection(write);
+  if (probe.result === "flagged") {
+    return {
+      path: f.path,
+      reason: "content-refused",
+      detail: `the restore carries directive language (${probe.matchedPatterns.join(", ")})`
+    };
+  }
+  if (containsRecallTag(write)) {
+    return { path: f.path, reason: "content-refused", detail: "the restore spells the <guild:recall> wrapper tag" };
   }
   return null;
 }
-function planRevertFile(f) {
+function spanIsWellFormed(span) {
+  if (typeof span !== "object" || span === null || Array.isArray(span)) return false;
+  const s = span;
+  const optional = (v, t) => v === void 0 || typeof v === t;
+  return typeof s.anchor === "string" && typeof s.before_span === "string" && typeof s.before_sha256 === "string" && optional(s.after_sha256, "string") && optional(s.after_len, "number") && (s.after_len === void 0 || Number.isInteger(s.after_len) && s.after_len >= 0);
+}
+function planRevertFile(f, mustHaveSpan) {
+  if (f.span !== void 0 ? !spanIsWellFormed(f.span) : mustHaveSpan) {
+    return {
+      block: {
+        path: f.path,
+        reason: "inverse-tampered",
+        detail: f.span === void 0 ? "this file was changed by a span op but its recorded inverse carries no span" : "the recorded span is malformed"
+      }
+    };
+  }
+  if (f.before !== null && typeof f.before !== "string") {
+    return { block: { path: f.path, reason: "inverse-tampered", detail: "the recorded `before` is malformed" } };
+  }
   const exists = fs60.existsSync(f.path);
   const current = exists ? fs60.readFileSync(f.path, "utf8") : null;
   const restoring = f.span ? f.span.before_span : f.before;
@@ -41284,13 +41317,22 @@ function revertHarvest(runId, opId, opts = {}) {
   const runDir3 = opts.runDir ?? resolveRunDir(storage.activeRoot, runId);
   const plans = [];
   const blocked = [];
-  for (const f of inverse.files) {
-    const planned = planRevertFile(f);
+  const opRecord = findOp(runId, opId, opts);
+  const scopeForSpan = storage.project ?? storage.workspace;
+  const wikiRootForSpan = scopeForSpan ? scopeForSpan.knowledge() : null;
+  const spanOnly = (p) => opRecord?.playbook_path !== void 0 && path71.resolve(opRecord.playbook_path) === path71.resolve(p) || wikiRootForSpan === null || !isWithin(path71.resolve(p), wikiRootForSpan);
+  const files = Array.isArray(inverse.files) ? inverse.files : [];
+  for (const f of files) {
+    if (typeof f?.path !== "string" || f.path.length === 0) {
+      blocked.push({ path: String(f?.path ?? ""), reason: "inverse-tampered", detail: "the recorded file entry has no path" });
+      continue;
+    }
+    const planned = planRevertFile(f, spanOnly(f.path));
     if (planned.block) {
       blocked.push(planned.block);
       continue;
     }
-    const screened = screenRevertFile(f, readFileOrNull(f.path));
+    const screened = screenRevertFile(f, readFileOrNull(f.path), planned.write ?? null);
     if (screened) blocked.push(screened);
     else plans.push({ file: f, write: planned.write ?? null });
   }
