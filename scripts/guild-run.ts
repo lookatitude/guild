@@ -78,7 +78,14 @@ import {
 import { isClaudeCli } from "./lib/capability/rank";
 import type { HostKind } from "./lib/host-types";
 import { ownPluginRoot } from "../src/domains/kernel";
-import { assertLaneInstanceExported, claimIsolatedLaunches } from "../src/domains/dispatch";
+import {
+  admitRelaunch,
+  assertLaneInstanceExported,
+  claimIsolatedLaunches,
+  IsolatedSpawnRefused,
+  resolveMaxInstances,
+} from "../src/domains/dispatch";
+import { resolvePolicy } from "../src/domains/config";
 import { resolveGuildRoot } from "../src/domains/state";
 
 // ---------------------------------------------------------------------------
@@ -122,6 +129,43 @@ export function admitWrapperLaunch(childEnv: NodeJS.ProcessEnv, cwd: string): Wr
     lanes: [{ logicalTaskId: lane.taskId, instanceId: lane.instanceId, attempt: lane.attempt }],
   });
   return lane;
+}
+
+/**
+ * A repair re-spawn is one more process for the lane, so it is one more
+ * admission: the next attempt is reserved through `reserveInstance` with its own
+ * instance id, assignment and launch claim (`admitRelaunch`). Returns the env
+ * overrides that export the new identity to the child. Throws
+ * `IsolatedSpawnRefused`; the caller stops repairing and records the refusal.
+ */
+export function admitWrapperRelaunch(
+  lane: WrapperLaneIdentity,
+  cwd: string,
+  retryReason: string,
+): { lane: WrapperLaneIdentity; env: NodeJS.ProcessEnv } {
+  const root = resolveGuildRoot(cwd);
+  let policy: Record<string, unknown> | null = null;
+  try {
+    policy = resolvePolicy({ cwd: root }).policy;
+  } catch {
+    policy = null;
+  }
+  const attempt = lane.attempt + 1;
+  const instanceId = `${lane.taskId}.a${attempt}.i-${randomUUID().slice(0, 8)}`;
+  admitRelaunch({
+    cwd: root,
+    runId: lane.runId,
+    logicalTaskId: lane.taskId,
+    prior: { instanceId: lane.instanceId!, attempt: lane.attempt },
+    instanceId,
+    retryReason,
+    launchId: `guild-run:${process.pid}:${randomUUID()}`,
+    max: resolveMaxInstances(policy),
+  });
+  return {
+    lane: { ...lane, instanceId, attempt },
+    env: { GUILD_TASK_CELL_INSTANCE_ID: instanceId, GUILD_TASK_ATTEMPT: String(attempt) },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -479,10 +523,10 @@ function childEnvFor(plan: WrapperPlan): NodeJS.ProcessEnv {
 }
 
 /** Spawn the host with a given argv (synchronous; captures stdio). */
-function spawnHost(plan: WrapperPlan, args: string[]): RunOutcome {
+function spawnHost(plan: WrapperPlan, args: string[], envOverride: NodeJS.ProcessEnv = {}): RunOutcome {
   const res = spawnSync(plan.command, args, {
     cwd: plan.cwd,
-    env: childEnvFor(plan),
+    env: { ...childEnvFor(plan), ...envOverride },
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
@@ -649,8 +693,9 @@ function main(): number {
 
   // plr-wi-15-4: a child that inherits lane identity is admitted (one-shot) or
   // never spawned. Before any instruction file is written.
+  let lane: WrapperLaneIdentity | null;
   try {
-    admitWrapperLaunch(childEnvFor(plan), plan.cwd);
+    lane = admitWrapperLaunch(childEnvFor(plan), plan.cwd);
   } catch (err) {
     process.stderr.write(`guild-run: ${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
@@ -696,22 +741,47 @@ function main(): number {
   let initial: RunOutcome;
   let latestStructuredStdout = "";
   let normalized: BoundedRepairResult | null = null;
+  let repairRefusal: string | null = null;
+  let repairsStarted = 0;
   try {
     initial = spawnHost(plan, plan.args);
     latestStructuredStdout = initial.stdout;
     if (parsed.contract) {
-      normalized = normalizeWithRepair(
-        initial.stdout,
-        parsed.contract,
-        (repairPrompt) => {
-          latestStructuredStdout = spawnHost(
-            plan,
-            rebuildArgsWithPrompt(plan, repairRoundPrompt(plan.prompt, repairPrompt)),
-          ).stdout;
-          return latestStructuredStdout;
-        },
-        { maxRounds: parsed.maxRepair }
-      );
+      const contract = parsed.contract;
+      try {
+        normalized = normalizeWithRepair(
+          initial.stdout,
+          contract,
+          (repairPrompt) => {
+            // Each repair process is its own admission, or no process at all.
+            let envOverride: NodeJS.ProcessEnv = {};
+            if (lane !== null) {
+              const next = admitWrapperRelaunch(lane, plan.cwd, `repair: result invalid against ${contract}`);
+              lane = next.lane;
+              envOverride = next.env;
+            }
+            repairsStarted++;
+            latestStructuredStdout = spawnHost(
+              plan,
+              rebuildArgsWithPrompt(plan, repairRoundPrompt(plan.prompt, repairPrompt)),
+              envOverride,
+            ).stdout;
+            return latestStructuredStdout;
+          },
+          { maxRounds: parsed.maxRepair }
+        );
+      } catch (err) {
+        if (!(err instanceof IsolatedSpawnRefused)) throw err;
+        repairRefusal = err.message;
+        normalized = {
+          ok: false,
+          wire_schema_version: contract,
+          value: null,
+          errors: [`fail-closed: repair stopped after ${repairsStarted} round(s); ${err.message}`],
+          rounds_used: repairsStarted,
+          failed_closed: true,
+        };
+      }
     }
   } finally {
     restoreInstructionFiles(backups);
@@ -741,6 +811,7 @@ function main(): number {
           errors: normalized.errors,
         }
       : null,
+    repair_refusal: repairRefusal,
   };
 
   if (parsed.record) {

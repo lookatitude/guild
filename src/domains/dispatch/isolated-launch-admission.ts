@@ -22,6 +22,12 @@
  *    under that attempt, by any instance id and under any cwd spelling,
  *    refuses. So live slots and spawned workers stay one to one.
  *
+ *  - `admitRelaunch` (disk): a second process for the same lane (a repair
+ *    re-spawn) is a new attempt. It reserves that attempt through
+ *    `reserveInstance`, writes the attempt's assignment derived from the prior
+ *    admitted one, and consumes the new attempt's launch claim. A spent claim
+ *    is never reused.
+ *
  * Refusals throw `IsolatedSpawnRefused`; the message starts with
  * `isolated_spawn_refused:` like the launcher's rung refusal.
  */
@@ -29,8 +35,8 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 
-import { INSTANCE_RESERVATION_SCHEMA } from "./instance-cap";
-import { taskCellPaths, validateTaskAssignmentV2 } from "./task-cell-contract";
+import { INSTANCE_RESERVATION_SCHEMA, reserveInstance, reserveRefused } from "./instance-cap";
+import { buildTaskAssignmentV2, taskCellPaths, validateTaskAssignmentV2 } from "./task-cell-contract";
 
 export const ISOLATED_SPAWN_REFUSED = "isolated_spawn_refused" as const;
 
@@ -267,4 +273,126 @@ export function claimIsolatedLaunches(input: {
       );
     }
   }
+}
+
+/**
+ * Admit the next attempt of an already-launched lane, for one more process
+ * (a repair re-spawn). The new attempt goes through the one admission entry,
+ * `reserveInstance` (the per-run cap applies, and an attempt that already has
+ * a record refuses). Its `guild.task_assignment.v2` is derived from the prior
+ * attempt's validated assignment, so the projection is inherited, never
+ * widened. Then its own launch claim is consumed. Any refusal undoes what this
+ * call wrote and throws `IsolatedSpawnRefused`.
+ */
+export function admitRelaunch(input: {
+  cwd: string;
+  runId: string;
+  logicalTaskId: string;
+  prior: { instanceId: string; attempt: number };
+  instanceId: string;
+  retryReason: string;
+  launchId: string;
+  max?: number;
+  guildDir?: string;
+  now?: () => string;
+}): { instanceId: string; attempt: number } {
+  const { runId, logicalTaskId, instanceId } = input;
+  const attempt = input.prior.attempt + 1;
+  let root: string;
+  try {
+    root = fs.realpathSync(input.cwd);
+  } catch {
+    throw new IsolatedSpawnRefused(`launch root ${input.cwd} does not resolve`);
+  }
+  const priorPaths = taskCellPaths(
+    { run_id: runId, logical_task_id: logicalTaskId, attempt: input.prior.attempt, instance_id: input.prior.instanceId },
+    { guildDir: input.guildDir },
+  );
+  let prior: ReturnType<typeof validateTaskAssignmentV2> = null;
+  try {
+    prior = validateTaskAssignmentV2(JSON.parse(fs.readFileSync(path.resolve(root, priorPaths.assignment_path), "utf8")));
+  } catch {
+    prior = null;
+  }
+  if (
+    !prior ||
+    prior.run_id !== runId ||
+    prior.logical_task_id !== logicalTaskId ||
+    prior.instance_id !== input.prior.instanceId ||
+    prior.attempt !== input.prior.attempt
+  ) {
+    throw new IsolatedSpawnRefused(
+      `attempt ${attempt} of ${logicalTaskId}: the prior attempt ${input.prior.attempt} ` +
+        `(${input.prior.instanceId}) has no matching guild.task_assignment.v2 to relaunch from`,
+    );
+  }
+  const claim = reserveInstance({
+    cwd: root,
+    run_id: runId,
+    logical_task_id: logicalTaskId,
+    attempt,
+    instance_id: instanceId,
+    max: input.max,
+    guildDir: input.guildDir,
+    now: input.now,
+  });
+  if (reserveRefused(claim)) {
+    throw new IsolatedSpawnRefused(`relaunch of ${logicalTaskId} refused: ${claim.failure}: ${claim.reason}`);
+  }
+  const paths = taskCellPaths(
+    { run_id: runId, logical_task_id: logicalTaskId, attempt, instance_id: instanceId },
+    { guildDir: input.guildDir },
+  );
+  const assignmentFile = path.resolve(root, paths.assignment_path);
+  let wroteAssignment = false;
+  try {
+    const {
+      schema_version: _schema,
+      assignment_path: _a,
+      handoff_path: _h,
+      heartbeat_path: _hb,
+      cancel_channel: _c,
+      previous_attempt_id: _p,
+      retry_reason: _r,
+      ...carried
+    } = prior as typeof prior & { previous_attempt_id?: unknown; retry_reason?: unknown };
+    const next = buildTaskAssignmentV2({
+      ...(carried as unknown as Parameters<typeof buildTaskAssignmentV2>[0]),
+      attempt,
+      attempt_id: `${prior.attempt_id}.r${attempt}`,
+      instance_id: instanceId,
+      previous_attempt_id: prior.attempt_id,
+      retry_reason: input.retryReason,
+      written_at: (input.now ?? (() => new Date().toISOString()))(),
+      guildDir: input.guildDir,
+    });
+    if (!validateTaskAssignmentV2(next)) throw new Error("derived assignment is not a valid guild.task_assignment.v2");
+    fs.mkdirSync(path.dirname(assignmentFile), { recursive: true });
+    fs.writeFileSync(assignmentFile, `${JSON.stringify(next, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+    wroteAssignment = true;
+    claimIsolatedLaunches({
+      cwd: root,
+      runId,
+      launchId: input.launchId,
+      lanes: [{ logicalTaskId, instanceId, attempt }],
+      guildDir: input.guildDir,
+      now: input.now,
+    });
+  } catch (err) {
+    if (wroteAssignment) {
+      fs.rmSync(assignmentFile, { force: true });
+      try {
+        fs.rmdirSync(path.dirname(assignmentFile));
+        fs.rmdirSync(path.dirname(path.dirname(assignmentFile)));
+      } catch {
+        /* not empty; the release below prunes what it can */
+      }
+    }
+    claim.reservation.release();
+    if (err instanceof IsolatedSpawnRefused) throw err;
+    throw new IsolatedSpawnRefused(
+      `relaunch of ${logicalTaskId} attempt ${attempt} could not be admitted: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  return { instanceId, attempt };
 }
