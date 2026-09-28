@@ -53,6 +53,7 @@ import {
   KNOWLEDGE_LINKS_SCHEMA_VERSION,
 } from "./learn/lib/knowledge-links-io";
 import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 /** Closed edge-type set — continuous-knowledge-and-learning-loop.md §"CR-A #2". */
 export const CLOSED_EDGE_TYPES: ReadonlySet<string> = sealSet([
@@ -227,6 +228,7 @@ function parseFlag(argv: string[], flag: string): string | undefined {
 function main(): void {
   const argv = process.argv.slice(2);
   const cwd = parseFlag(argv, "--cwd") ?? process.cwd();
+  ensureStorageLayout(cwd, { detectOnly: true });
   const taskId = parseFlag(argv, "--task-id");
   const asJson = argv.includes("--json");
 

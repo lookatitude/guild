@@ -92,6 +92,7 @@ import * as path from "node:path";
 
 import { NEUTRAL_ATTESTATION_CHAINS, NEUTRAL_ATTESTATION_CHAIN_LENGTH, NEUTRAL_ATTESTATION_CHECKSUM_CHAINS, NEUTRAL_ATTESTATION_MESSAGE_CHAINS, NEUTRAL_ATTESTATION_SCHEME, NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN, NEUTRAL_ATTESTATION_TREE_HEIGHT, NEUTRAL_ATTESTOR_TRUST_ROOT, neutralAttestorVerificationKey, neutralVerifyAttestationSignature } from "../src/domains/lifecycle";
 import { neutralCanonicalJson, neutralSha256Hex } from "../src/domains/lifecycle";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ---------------------------------------------------------------------------
 // Contract surface
@@ -1706,5 +1707,6 @@ export function runSignerCli(argv: readonly string[]): number {
 }
 
 if (require.main === module) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   process.exit(runSignerCli(process.argv.slice(2)));
 }

@@ -37,6 +37,7 @@ import {
   type RunSinkAudit,
 } from "./lib/run-sinks";
 import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -776,6 +777,7 @@ function buildSummary(
 // ── Main ───────────────────────────────────────────────────────────────────
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const args = process.argv.slice(2);
   const { runId, cwd: cwdArg, out: outArg } = parseArgs(args);
 

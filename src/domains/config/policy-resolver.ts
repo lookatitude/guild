@@ -163,8 +163,8 @@ function readLayer(
   for (const spec of POLICY_KEYS) {
     // CANONICAL FIRST, and it wins. The first cut iterated
     // `[canonical, ...aliases]` and let each assignment overwrite the last, so a
-    // legacy `defaults.wiki.autopromote: true` sitting beside a canonical
-    // `wiki.autopromote: false` silently won — `config set` reported success and
+    // legacy alias set to `true` sitting beside a canonical key set to `false`
+    // silently won — `config set` reported success and
     // the effective value never moved (codex G-lane r2 P1-1).
     const canonical = getByPath(parsed, spec.key);
     if (canonical !== undefined) {

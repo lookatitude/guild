@@ -73,6 +73,7 @@ import * as path from "node:path";
 import * as net from "node:net";
 import { spawn, spawnSync } from "node:child_process";
 import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -964,6 +965,7 @@ export async function launchDashboard(
 // ── CLI entrypoint ───────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const parsed = parseDashboardArgs(process.argv.slice(2));
   if ("error" in parsed) {
     process.stderr.write(`[dashboard-launch] ${parsed.error}\n`);

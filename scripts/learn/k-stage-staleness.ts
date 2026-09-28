@@ -53,6 +53,7 @@ import * as ts from "typescript";
 import { parseCwd, hasFlag, guildPaths } from "./lib/paths";
 import { walkRepo } from "./lib/walk";
 import { durableGuildDir } from "../lib/state/storage";
+import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
 // ---------------------------------------------------------------------------
 // Extension sets
@@ -589,6 +590,7 @@ export function runKStageStaleness(cwd: string): KStageStaleness {
 function main(): void {
   const argv = process.argv.slice(2);
   const cwd = parseCwd(argv);
+  ensureStorageLayout(cwd, { detectOnly: true });
 
   if (hasFlag(argv, "baseline")) {
     let repoRoot: string;

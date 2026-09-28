@@ -2922,6 +2922,7 @@ function renderLayoutRow(row) {
   return lines.join("\n");
 }
 function main() {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const [, , sub, ...argv] = process.argv;
   switch (sub) {
     case "hash-tree":

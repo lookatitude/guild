@@ -89,6 +89,12 @@ trap 'rm -f "${PAYLOAD_FILE}"' EXIT
 # so in a normal install it IS `${SCRIPT_DIR}/dist/lifecycle-gate.js`.
 LIFECYCLE_GATE_BUNDLE="${GUILD_PLUGIN_ROOT_RESOLVED}/hooks/dist/lifecycle-gate.js"
 if command -v node &>/dev/null && [[ -f "${LIFECYCLE_GATE_BUNDLE}" ]]; then
+  # KTD23: the gate writes fire-once state, so the layout check runs first
+  # (detect only; SessionStart runs the upgrade). A future layout writes
+  # nothing: skip the gate and the nudge.
+  if [[ -f "${GUILD_PLUGIN_ROOT_RESOLVED}/runtime/scripts/ensure-storage-layout.js" ]]; then
+    node "${GUILD_PLUGIN_ROOT_RESOLVED}/runtime/scripts/ensure-storage-layout.js" --cwd="${PWD}" --detect-only >/dev/null 2>&1 || exit 0
+  fi
   # stderr is deliberately NOT redirected — the gate writes its body there too,
   # so it stays visible on hosts that do not surface the JSON `reason`.
   GATE_OUTPUT="$(node "${LIFECYCLE_GATE_BUNDLE}" < "${PAYLOAD_FILE}" || true)"

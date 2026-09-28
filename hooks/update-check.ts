@@ -38,6 +38,7 @@ import {
   RECEIPT_SCHEMA,
 } from "../scripts/lib/update-check";
 import { durableGuildDir } from "../src/domains/state";
+import { ensureStorageLayout } from "../scripts/lib/state/ensure-storage-layout";
 
 function readUpdateConfig(cwd: string): { mode: UpdateMode; cadenceHours: number } {
   const defaults = { mode: "notify" as UpdateMode, cadenceHours: 24 };
@@ -117,6 +118,12 @@ function main(): void {
   const pluginRoot =
     process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
   if (!pluginRoot) return;
+  // KTD23: detect only; a future project layout is not read or written here.
+  try {
+    ensureStorageLayout(process.cwd(), { detectOnly: true });
+  } catch {
+    return;
+  }
 
   const { mode, cadenceHours } = readUpdateConfig(process.cwd());
   if (mode === "off") return;

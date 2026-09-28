@@ -2,7 +2,7 @@
   "name": "guild-scripts",
   "private": true,
   "scripts": {
-    "test": "npx jest --testPathPattern=__tests__ --no-coverage --runInBand",
+    "test": "cd .. && bun test --isolate scripts",
     "build:activated-host-conformance": "esbuild activated-host-conformance.ts --bundle --platform=node --target=node18 --format=cjs --alias:js-yaml=./node_modules/js-yaml --outfile=dist/activated-host-conformance.js",
     "build:inventory": "npx tsx build-inventory.ts",
     "check:inventory": "npx tsx build-inventory.ts --check",
@@ -38,28 +38,9 @@
     "js-yaml": "^4.3.0"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.12",
     "@types/node": "^22.0.0",
     "esbuild": "^0.28.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.2.3",
     "tsx": "^4.21.0",
     "typescript": "^5.5.0"
-  },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "testPathIgnorePatterns": [
-      "/node_modules/",
-      "/__tests__/fixtures/"
-    ],
-    "moduleNameMapper": {
-      "^js-yaml$": "<rootDir>/node_modules/js-yaml",
-      "^(\\.{1,2}/.*)\\.js$": "$1"
-    },
-    "transform": {
-      "^.+\\.tsx?$": ["ts-jest", { "tsconfig": { "module": "commonjs", "target": "es2022" } }]
-    },
-    "testTimeout": 30000
   }
 }

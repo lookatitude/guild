@@ -2,43 +2,12 @@
   "name": "guild-cross-cutting-tests",
   "private": true,
   "scripts": {
-    "test": "npx jest --no-coverage"
+    "test": "cd .. && bun test --isolate tests"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.12",
     "@types/node": "^22.0.0",
-    "jest": "^29.7.0",
     "js-yaml": "^4.3.0",
-    "ts-jest": "^29.2.3",
     "tsx": "^4.21.0",
     "typescript": "^5.5.0"
-  },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "transform": {
-      "^.+\\.tsx?$": [
-        "ts-jest",
-        {
-          "tsconfig": {
-            "module": "commonjs",
-            "target": "ES2020"
-          }
-        }
-      ]
-    },
-    "moduleNameMapper": {
-      "^(\\.{1,2}/.*)\\.js$": "$1"
-    },
-    "testMatch": [
-      "**/evolve/*.test.ts",
-      "**/shadow/harness.test.ts",
-      "**/workspace/*.test.ts",
-      "**/integration/*.test.ts",
-      "**/dot-guild/*.test.ts",
-      "**/universal-host/*.test.ts",
-      "**/contracts/*.test.ts"
-    ],
-    "testTimeout": 60000
   }
 }

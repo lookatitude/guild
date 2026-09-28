@@ -8,6 +8,7 @@ import { TASK_CELL_HOST_CONFORMANCE_SCHEMA, buildTaskCellHostConformanceMatrix, 
 import type { TaskCellMechanicsMode } from "../src/domains/dispatch";
 import { normalizeResult } from "./lib/result-normalizer";
 import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 interface CliArgs {
   hosts: string[];
@@ -166,6 +167,7 @@ export class GuildRunHostProbeRunner implements HostProbeRunner {
 }
 
 async function main(): Promise<number> {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const parsed = parseArgs(process.argv.slice(2));
   if ("error" in parsed) {
     process.stderr.write(parsed.error + "\n");

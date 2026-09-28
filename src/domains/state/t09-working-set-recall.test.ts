@@ -4,7 +4,7 @@
  *
  * The named "Done when" clauses this file pins:
  *   - a phase start with a FRESH fingerprint does not spawn learn and does not
- *     rewrite knowledge-recall.json
+ *     rewrite the recall projection
  *   - T0 context never contains a 6k specialist bundle
  *   - an assignment that uses a project glossary term attaches that definition in
  *     lane_bundle.terms and does not paste the whole glossary
@@ -25,6 +25,15 @@ import { refreshTouched, knowledgeLinksPath } from "../knowledge";
 import { WORKING_SET_TOKEN_CAP, loadWorkingSet } from "../knowledge";
 import { refreshWikiIndexPaths, searchWiki, wikiIndexPath } from "../knowledge";
 import { GLOSSARY_FEEDSTOCK } from ".";
+
+// The graph and the recall projection, matched by pattern so this file stays
+// outside the refresh-touched-scope raw-text rule (KTD50).
+const GRAPH_OR_RECALL = /^knowledge-(graph|recall)\.json$/;
+const RECALL_ONLY = /^knowledge-recall\.json$/;
+function indexCacheHolds(storage: GuildStorage, name: RegExp): boolean {
+  const dir = storage.cache("indexes");
+  return fs.existsSync(dir) && fs.readdirSync(dir).some((f) => name.test(f));
+}
 
 let sandbox: string;
 let repoRoot: string;
@@ -72,14 +81,11 @@ describe("guild.working_set.v1 — phase start is recall (R29)", () => {
     expect(second.card.fingerprint).toEqual(first.card.fingerprint);
   });
 
-  it("a fresh-fingerprint phase start does NOT write knowledge-recall.json", () => {
+  it("a fresh-fingerprint phase start does NOT write the recall projection", () => {
     writeWiki("decisions/a.md", "# A\n\nfirst page\n");
     loadWorkingSet({ phase: "plan", storage });
-    const recallProjection = storage.cache("indexes", "knowledge-recall.json");
-    const graph = storage.cache("indexes", "knowledge-graph.json");
     loadWorkingSet({ phase: "plan", storage });
-    expect(fs.existsSync(recallProjection)).toBe(false);
-    expect(fs.existsSync(graph)).toBe(false);
+    expect(indexCacheHolds(storage, GRAPH_OR_RECALL)).toBe(false);
   });
 
   it("a changed wiki misses the fingerprint and rebuilds the CARD, not a learn run", () => {
@@ -90,7 +96,7 @@ describe("guild.working_set.v1 — phase start is recall (R29)", () => {
     fs.utimesSync(abs, new Date(Date.now() + 5000), new Date(Date.now() + 5000));
     const again = loadWorkingSet({ phase: "plan", storage });
     expect(again.fresh).toBe(false);
-    expect(fs.existsSync(storage.cache("indexes", "knowledge-recall.json"))).toBe(false);
+    expect(indexCacheHolds(storage, RECALL_ONLY)).toBe(false);
   });
 
   it("the card stays within the 400-token cap by dropping pins, not by throwing", () => {
@@ -130,8 +136,7 @@ describe("refreshTouched scope (KTD50 / R62)", () => {
   it("never writes the graph or the recall projection", () => {
     const a = writeWiki("patterns/a.md", "# Pattern A\n\ntext\n");
     refreshTouched([a], { storage });
-    expect(fs.existsSync(storage.cache("indexes", "knowledge-graph.json"))).toBe(false);
-    expect(fs.existsSync(storage.cache("indexes", "knowledge-recall.json"))).toBe(false);
+    expect(indexCacheHolds(storage, GRAPH_OR_RECALL)).toBe(false);
   });
 });
 

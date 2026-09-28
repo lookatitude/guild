@@ -78,6 +78,7 @@ import {
 } from "./lib/initiative";
 import { populateReleaseDocsWorkItems, type WorkItem } from "./lib/initiative-workitems";
 import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── Manifest lookup ──────────────────────────────────────────────────────────
 
@@ -492,6 +493,7 @@ export function runDocsWorkitems(root: string, initiativeId: string, execVerifie
 // ── CLI entry ────────────────────────────────────────────────────────────────
 
 function main(): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const parsed = parseGateArgs(process.argv.slice(2));
   if ("error" in parsed) {
     process.stderr.write(parsed.error + "\n");

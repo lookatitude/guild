@@ -49,6 +49,7 @@ import * as path from "path";
 import { loadRunEvents, RunEvent } from "./lib/run-events";
 import { readCompactHistory } from "../src/domains/evolve";
 import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -340,6 +341,7 @@ function formatReport(
 // ── Main ───────────────────────────────────────────────────────────────────
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const { skill, proposedEdit, runId, cwd: cwdArg } = parseArgs(
     process.argv.slice(2)
   );

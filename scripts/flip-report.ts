@@ -33,6 +33,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -311,6 +312,7 @@ function buildReport(runId: string, grading: Grading): string {
 // ── Main ───────────────────────────────────────────────────────────────────
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const { runId, cwd: cwdArg, out: outArg } = parseArgs(process.argv.slice(2));
 
   if (!runId) {

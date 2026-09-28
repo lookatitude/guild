@@ -31,6 +31,7 @@ import {
   type ProjectFacts,
 } from "./lib/ideation-min-build";
 import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 function parseArgs(argv: string[]): Record<string, string> {
   const flags: Record<string, string> = {};
@@ -57,6 +58,7 @@ function observeInitState(cwd: string): InitState {
 function main(): void {
   const flags = parseArgs(process.argv.slice(2));
   const cwd = flags.cwd ?? process.cwd();
+  ensureStorageLayout(cwd, { detectOnly: true });
   const initState = observeInitState(cwd);
 
   if (!needsMinBuild(initState)) {

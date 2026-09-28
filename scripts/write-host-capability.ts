@@ -52,6 +52,7 @@ import type {
   HostCapabilityManifest,
   HostKind,
 } from "../src/domains/config";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 export type {
   HostCapabilityManifest,
   HostKind,
@@ -237,6 +238,7 @@ function parseArgs(argv: string[]): {
 function main(): void {
   const parsed = parseArgs(process.argv.slice(2));
   const cwd = parsed.cwd ?? process.env["GUILD_CWD"] ?? process.cwd();
+  ensureStorageLayout(cwd, { detectOnly: true });
 
   if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
     process.stderr.write(

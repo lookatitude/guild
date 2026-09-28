@@ -35,11 +35,120 @@ __export(kb_snapshot_exports, {
 });
 module.exports = __toCommonJS(kb_snapshot_exports);
 var crypto = __toESM(require("node:crypto"));
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+
+// scripts/lib/state/ensure-storage-layout.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
 var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      try {
+        if (fs.existsSync(guildDir) && fs.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path2.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs2.existsSync(path2.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs2.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path2.join(__dirname, "upgrade-chain.js"),
+      path2.join(__dirname, "lib", "state", "upgrade-chain"),
+      path2.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs2.existsSync(c) || fs2.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
+// scripts/lib/kb-snapshot.ts
 function hashFile(absPath) {
   try {
-    const buf = fs.readFileSync(absPath);
+    const buf = fs3.readFileSync(absPath);
     return crypto.createHash("sha256").update(buf).digest("hex");
   } catch {
     return null;
@@ -50,16 +159,16 @@ function walkRelative(dir) {
   function walk(cur) {
     let entries;
     try {
-      entries = fs.readdirSync(cur, { withFileTypes: true });
+      entries = fs3.readdirSync(cur, { withFileTypes: true });
     } catch {
       return;
     }
     for (const e of entries) {
-      const abs = path.join(cur, e.name);
+      const abs = path3.join(cur, e.name);
       if (e.isDirectory()) {
         walk(abs);
       } else if (e.isFile()) {
-        results.push(path.relative(dir, abs));
+        results.push(path3.relative(dir, abs));
       }
     }
   }
@@ -69,7 +178,7 @@ function walkRelative(dir) {
 }
 function snapshotKB(wikiDir, destDir, snapshotAt, snapshotId) {
   try {
-    const stat = fs.statSync(wikiDir);
+    const stat = fs3.statSync(wikiDir);
     if (!stat.isDirectory()) {
       return { ok: false, manifest: null, error: `wikiDir is not a directory: ${wikiDir}` };
     }
@@ -79,7 +188,7 @@ function snapshotKB(wikiDir, destDir, snapshotAt, snapshotId) {
   const relPaths = walkRelative(wikiDir);
   const entries = [];
   for (const rel of relPaths) {
-    const abs = path.join(wikiDir, rel);
+    const abs = path3.join(wikiDir, rel);
     const hash = hashFile(abs);
     if (hash === null) {
       return {
@@ -90,7 +199,7 @@ function snapshotKB(wikiDir, destDir, snapshotAt, snapshotId) {
     }
     let sizeBytes = 0;
     try {
-      sizeBytes = fs.statSync(abs).size;
+      sizeBytes = fs3.statSync(abs).size;
     } catch {
     }
     entries.push({ relPath: rel, sha256: hash, sizeBytes });
@@ -105,9 +214,9 @@ function snapshotKB(wikiDir, destDir, snapshotAt, snapshotId) {
   };
   if (destDir !== null) {
     try {
-      fs.mkdirSync(destDir, { recursive: true });
-      const outPath = path.join(destDir, `${snapshotId}.json`);
-      fs.writeFileSync(outPath, JSON.stringify(manifest, null, 2), "utf8");
+      fs3.mkdirSync(destDir, { recursive: true });
+      const outPath = path3.join(destDir, `${snapshotId}.json`);
+      fs3.writeFileSync(outPath, JSON.stringify(manifest, null, 2), "utf8");
       return { ok: true, manifest, writtenTo: outPath };
     } catch (e) {
       return { ok: false, manifest, error: `Failed to write manifest to destDir: ${String(e)}` };
@@ -118,7 +227,7 @@ function snapshotKB(wikiDir, destDir, snapshotAt, snapshotId) {
 function verifyAgainstSnapshot(manifest, wikiDir) {
   const targetDir = wikiDir ?? manifest.wikiDir;
   try {
-    const stat = fs.statSync(targetDir);
+    const stat = fs3.statSync(targetDir);
     if (!stat.isDirectory()) {
       return {
         ok: false,
@@ -145,7 +254,7 @@ function verifyAgainstSnapshot(manifest, wikiDir) {
     if (!currentRelPaths.has(relPath)) {
       diffs.push({ relPath, status: "removed", expectedSha256: entry.sha256 });
     } else {
-      const currentHash = hashFile(path.join(targetDir, relPath));
+      const currentHash = hashFile(path3.join(targetDir, relPath));
       if (currentHash === null) {
         return {
           ok: false,
@@ -204,6 +313,7 @@ function rollbackKB(manifest, wikiDir) {
   return { ok: true, diff, alreadyClean: false, summary };
 }
 if (require.main === module) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const subcommand = argv[0];
   let wikiDirArg = null;
@@ -248,7 +358,7 @@ if (require.main === module) {
     }
     let manifest;
     try {
-      manifest = JSON.parse(fs.readFileSync(manifestArg, "utf8"));
+      manifest = JSON.parse(fs3.readFileSync(manifestArg, "utf8"));
     } catch (e) {
       process.stderr.write(`[kb-snapshot] ERROR: cannot read manifest '${manifestArg}': ${String(e)}
 `);

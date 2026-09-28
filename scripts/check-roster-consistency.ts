@@ -35,6 +35,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { parseFrontmatter } from "./lib/frontmatter";
 import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -312,6 +313,7 @@ function parseCwd(args: string[]): string {
 }
 
 if (require.main === module) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const pluginRoot = parseCwd(process.argv.slice(2));
   const { issues } = loadAndCompare(pluginRoot);
 

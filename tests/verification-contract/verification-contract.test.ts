@@ -185,7 +185,7 @@ describe("authored Verification Contract fixtures", () => {
   test("R24 · bun test is the blocking runner, isolated per file, in a hermetic cwd", () => {
     expect(read("bunfig.toml")).toMatch(/^preload = \["\.\/test-preload\.ts"\]$/m);
     expect(bunTestProblems(read(".github/workflows/compile-gates.yml"))).toEqual([]);
-    expect(read(".github/workflows/test-suites.yml")).toMatch(/jest:[\s\S]*?continue-on-error: true/);
+    expect(read(".github/workflows/test-suites.yml")).not.toMatch(/^  jest:|npx jest/m);
     // The preload ran for THIS file: a temp cwd, no GUILD_* identity, Node as the
     // spawn path whenever a node is installed (KTD11).
     expect(path.relative(PLUGIN_ROOT, process.cwd()).startsWith("..")).toBe(true);

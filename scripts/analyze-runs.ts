@@ -61,6 +61,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -576,6 +577,7 @@ export function run(
 // ── CLI entry point ────────────────────────────────────────────────────────
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const { exitCode, stdout, stderr } = run(argv);
   if (stdout) process.stdout.write(stdout);

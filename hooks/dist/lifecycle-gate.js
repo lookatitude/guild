@@ -47550,6 +47550,7 @@ function cliMain(argv) {
   return 0;
 }
 if (isMainModule()) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   process.exit(cliMain(process.argv));
 }
 

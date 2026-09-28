@@ -235,6 +235,7 @@ import { captureHostCapabilitySnapshot, familyForHostId, rungKeyForSession, rung
 import { recordRungLosses, rungLossesAsRecordedLosses } from "../src/domains/dispatch";
 import { resolvePluginRoot } from "../src/domains/kernel";
 import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 export interface TerminalSubstantiveReconciliation {
   readonly attempted: number;
@@ -2087,6 +2088,7 @@ function resolveAgentMode(
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const args = parseArgs(process.argv.slice(2));
 
   // FU08: maintenance modes are side-effecting launch-surface operations too.

@@ -33,7 +33,7 @@
  * Output: path of written checkpoint
  *
  * ── INVARIANTS (VC-K7) ───────────────────────────────────────────────────
- * - Never writes to .guild/wiki/ directly
+ * - Never writes to the wiki directly
  * - Non-`none` verdicts ONLY route to the reflections queue (operator gate)
  * - No permission / sandbox / runtime policy changes
  */

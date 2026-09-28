@@ -18,6 +18,7 @@ import { createHash } from "node:crypto";
 import { parseYaml } from "./agent-team-launcher";
 import { checkContained, isRefused } from "../src/domains/kernel";
 import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 export interface CliArgs {
   team: string;
@@ -176,6 +177,7 @@ export function resolveAndWriteSpecialistScope(args: CliArgs): ScopeResolution {
 }
 
 export function main(argv: string[] = process.argv.slice(2)): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   try {
     process.stdout.write(`${JSON.stringify(resolveAndWriteSpecialistScope(parseArgs(argv)))}\n`);
     return 0;

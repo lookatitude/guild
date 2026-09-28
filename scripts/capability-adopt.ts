@@ -47,6 +47,7 @@ import { collectCompatibilityUsageWindow, writeFrozenCompatibilityCatalog } from
 import { createMigrationObservation, sealMigrationObservationRun, verifySubstantiveMigrationObservation, writeMigrationObservation } from "./lib/capability/migration-evidence";
 import { advanceMigrationWindow, inspectMigrationWindow, legacyRemovalEligibility, recordMigrationRelease, restartMigrationWindow, startMigrationWindow } from "./lib/capability/migration-window";
 import { ownPluginRoot } from "../src/domains/kernel";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 const USAGE = `
 capability-adopt — project capability adoption migration (D6)
@@ -106,6 +107,7 @@ function fail(message: string, code: 1 | 2): never {
 }
 
 function main(argv: readonly string[]): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const verb = argv[0] ?? "report";
   if (verb === "--help" || verb === "-h" || verb === "help") {
     process.stdout.write(`${USAGE}\n`);

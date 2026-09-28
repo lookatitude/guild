@@ -37,6 +37,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { validateGuildTraceEvent } from "../src/domains/telemetry";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Closed enums — copied verbatim from `guild-benchmark/plans/v1.4-jsonl-schema.md`.
@@ -700,5 +701,6 @@ function cliMain(argv: string[]): number {
 }
 
 if (isMainModule()) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   process.exit(cliMain(process.argv));
 }

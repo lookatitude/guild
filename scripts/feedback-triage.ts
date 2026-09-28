@@ -40,6 +40,7 @@ import {
   type RunLearningFinding,
 } from "./lib/run-learning-classifier";
 import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 export const TRIAGE_SCHEMA = "guild.feedback_triage.v1";
 export const FILED_SCHEMA = "guild.feedback_filed.v1";
@@ -252,6 +253,7 @@ export function runFile(opts: {
 // ── CLI ─────────────────────────────────────────────────────────────────────
 
 function main(): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const cmd = argv[0];
   let runId: string | null = null;

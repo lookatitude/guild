@@ -58,6 +58,7 @@ import { join } from "node:path";
 // logic — so build:verify's redaction leg can never drift from the CI audit gate. audit.ts
 // guards its own main() behind `require.main === module`, so this import is side-effect-free.
 import { findPackageReceiptLeaks } from "./dot-guild/audit";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 const SCRIPTS_DIR = __dirname;
 const PLUGIN_ROOT = join(SCRIPTS_DIR, "..");
@@ -242,6 +243,7 @@ function refreshReceipts(): number {
 }
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const refresh = process.argv.includes("--refresh-receipts");
   console.log(
     `[build:verify] verified-multi-host-support — top-level build/verify chain (ADR §8)` +

@@ -36,6 +36,7 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { ensureStorageLayout } from "./state/ensure-storage-layout";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -412,6 +413,7 @@ export function rollbackKB(
 // Prints JSON to stdout. Exits 0 on success, 1 on error.
 
 if (require.main === module) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const subcommand = argv[0];
 

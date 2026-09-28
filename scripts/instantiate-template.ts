@@ -46,6 +46,7 @@ import {
   isForbiddenRuntimeSubtree,
   resolvePluginRoot,
 } from "../src/domains/kernel";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ---------------------------------------------------------------------------
 // Pure core (no IO — exported for tests / the eval harness)
@@ -260,6 +261,7 @@ export function parseProducerArgs(argv: string[]): ProducerArgs {
 // ---------------------------------------------------------------------------
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const args = parseProducerArgs(process.argv.slice(2));
   if (!args.ref) {
     process.stderr.write(
