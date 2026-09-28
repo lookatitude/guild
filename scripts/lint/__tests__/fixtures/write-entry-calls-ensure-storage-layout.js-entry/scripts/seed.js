@@ -1,2 +1,4 @@
 const { writeFileSync } = require("node:fs");
-writeFileSync(`${process.cwd()}/.guild/wiki/glossary.md`, "# glossary\n");
+if (require.main === module) {
+  writeFileSync(`${process.cwd()}/.guild/wiki/glossary.md`, "# glossary\n");
+}

@@ -1,2 +1,2 @@
 const save = require("fs").writeFileSync;
-save(".guild/wiki/a", "x");
+if (require.main === module) save(".guild/wiki/a", "x");

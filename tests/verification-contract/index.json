@@ -169,8 +169,12 @@
       "id": "R22",
       "unit": "U9",
       "proves": "one authoring home; dual copies and the nested clone are gone",
-      "owner": "T16",
-      "pending": "clone and deletion greps for the one authoring home"
+      "fixtures": [
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R22 · one authoring home: no dual copies, no nested clone, no Jest, no workflows/ dir, no principles skill"
+        }
+      ]
     },
     {
       "id": "R23",
@@ -1120,8 +1124,12 @@
       "id": "KTD9",
       "unit": "U9",
       "proves": "no dual-home mirrors; no shipping plugin/_archive/",
-      "owner": "T16",
-      "pending": "clone and deletion greps (no mirrors, no _archive)"
+      "fixtures": [
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "KTD9 · no dual-home mirrors, no shipping _archive, every print-only alias file present"
+        }
+      ]
     },
     {
       "id": "KTD10",

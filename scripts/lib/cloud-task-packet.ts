@@ -626,6 +626,9 @@ export function cloudTaskPacketPath(
 // ── CLI harness (ad-hoc inspection only — never imported) ─────────────────────
 
 if (require.main === module) {
+  // KTD23: this CLI only reads stdin; detect so a future layout fails closed.
+  const { ensureStorageLayout } = require("./state/ensure-storage-layout");
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   // Ad-hoc inspection: validate a packet file passed on stdin.
   // Uses Date.now() for the timestamp prefix — isolated to CLI-only block.
   const readline = require("readline") as typeof import("readline");
