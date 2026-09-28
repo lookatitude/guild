@@ -17,10 +17,12 @@ import * as path from "path";
 import { bashWikiPath, bashWords, isWithin, resolvesUnderWiki } from "../lib/security/lane-wiki-guard";
 import { createGuildStorage } from "../../src/domains/state";
 import { harvestDecision } from "../../src/domains/knowledge";
+import { admitLane } from "../../scripts/lib/host/__tests__/admit-lane";
 
 const PLUGIN = path.resolve(__dirname, "..", "..");
 const SCRIPT = path.join(PLUGIN, "hooks", "pre-tool-use.ts");
 const RUN_ID = "run-t15-wiki";
+const TASK_INSTANCE = "T1.a1.i-1";
 
 let tmp: string;
 let repo: string;
@@ -34,6 +36,9 @@ beforeEach(() => {
   fs.mkdirSync(path.join(repo, ".guild", "knowledge", "candidates"), { recursive: true });
   runDir = path.join(tmp, "run");
   fs.mkdirSync(path.join(runDir, "logs"), { recursive: true });
+  // plr-wi-15-4: a run+task worker must be an admitted TaskCell instance, or the
+  // projection gate denies everything before the wiki rule is reached.
+  admitLane(repo, RUN_ID, "T1", TASK_INSTANCE, ["Read", "Grep", "Glob", "Bash", "Write", "Edit", "MultiEdit"]);
 });
 
 afterEach(() => {
@@ -59,7 +64,7 @@ function runHook(
       GUILD_RUN_ID: RUN_ID,
       GUILD_TASK_ID: who === "task" ? "T1" : "",
       GUILD_LANE_ID: who === "lane" ? "lane-a" : "",
-      GUILD_TASK_CELL_INSTANCE_ID: "",
+      GUILD_TASK_CELL_INSTANCE_ID: who === "task" ? TASK_INSTANCE : "",
       GUILD_CAPABILITY_SCOPE: "",
     },
     timeout: 30000,
