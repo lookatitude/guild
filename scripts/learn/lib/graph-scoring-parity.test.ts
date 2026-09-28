@@ -22,7 +22,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as graphScoringShim from "../../lib/shared/graph-scoring";
-import * as graphScoringModule from "../../../src/domains/knowledge/graph-scoring";
+import * as graphScoringModule from "../../../src/domains/knowledge/index";
 import {
   scoreNode as canonicalScoreNode,
   termMatchScore as canonicalTermMatchScore,

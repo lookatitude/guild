@@ -5,4 +5,12 @@
  * the reorg can move internals without breaking imports from scripts/lib/shared/*.
  */
 
-export * from "../../../src/domains/knowledge/graph-scoring";
+export {
+  importanceMultiplier,
+  confidenceBonus,
+  termMatchScore,
+  scoreNode,
+  rankKgNodes,
+  buildProximityBonuses,
+  PROXIMITY_WEIGHT,
+} from "../../../src/domains/knowledge/index";

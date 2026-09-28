@@ -56,14 +56,10 @@ import {
   renderProposalReview,
   renderRestructurePlan,
   type LoadedDecision,
-} from "../src/domains/teams/team-decision-surface";
-import { writeProposal, type TeamProposalV2 } from "../src/domains/teams/team-proposal";
-import type { TeamScheduleV1 } from "../src/domains/teams/team-schedule";
-import {
-  recordDecision,
-  writeDecision,
-  type TeamDecisionV1,
-} from "../src/domains/teams/team-decision";
+} from "../src/domains/teams/index";
+import { writeProposal, type TeamProposalV2 } from "../src/domains/teams/index";
+import type { TeamScheduleV1 } from "../src/domains/teams/index";
+import { recordDecision, writeDecision, type TeamDecisionV1 } from "../src/domains/teams/index";
 
 const USAGE = [
   "usage: team-decide.ts <review|restructure|gate|persist|record> [flags]",

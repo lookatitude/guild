@@ -44,3 +44,48 @@ export * from "./assignment-binding";
 export * from "./comms-format-lint";
 export * from "./no-accidental-write";
 export * from "./artifact-bus";
+
+// ── consumed outside the domain (T16: every importer goes through this index) ──
+export {
+  main as commsFormatLintMain,
+} from "./comms-format-lint.cli";
+export {
+  claimConfirmation,
+  createPreviewConfirmationSession,
+  loadConfirmationEntries,
+  previewConfirmation,
+  recordConfirmationDecision,
+} from "./confirmation-gate";
+export {
+  main as noAccidentalWriteMain,
+} from "./no-accidental-write.cli";
+export {
+  buildTaskCell,
+  deriveResolveInputsFromM0Evidence,
+  planProductionDispatchModel,
+  type ProductionDispatchModelOutcome,
+  readTaskAssignmentV2,
+  type TaskCellDispatchInput,
+  writeTaskCell,
+} from "./task-assignment-v2";
+export {
+  buildTaskAssignment,
+  readTaskAssignment,
+  taskAssignmentPath,
+} from "./task-assignment";
+export {
+  buildAcceptance,
+  findOrphanedAttempts,
+  findRunAcceptances,
+  findRunTaskCells,
+  isTerminationAuthorized,
+  markAttemptOrphaned,
+  publishSubmittedHandoffPointer,
+  readAssignmentForInstance,
+  readAttemptForInstance,
+  type RunAcceptance,
+  runDeterministicFloor,
+  sealTerminalAttempt,
+  type TaskCellInstanceIds,
+  writeAcceptanceRecord,
+} from "./task-cell-acceptance";

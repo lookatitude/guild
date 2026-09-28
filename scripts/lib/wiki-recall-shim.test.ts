@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./wiki-recall";
-import * as moduleImpl from "../../src/domains/knowledge/wiki-recall";
+import * as moduleImpl from "../../src/domains/knowledge/index";
 
 describe("wiki-recall compatibility shim", () => {
   test("scripts/lib/wiki-recall re-exports src/modules/context", () => {
@@ -22,7 +22,7 @@ describe("wiki-recall compatibility shim", () => {
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/wiki-recall.ts"), "utf8");
     const modulePath = fs.readFileSync(path.join(repoRoot, "src/domains/knowledge/wiki-recall.ts"), "utf8");
 
-    expect(oldPath).toMatch(/src\/domains\/knowledge\/wiki-recall/);
+    expect(oldPath).toMatch(/src\/domains\/knowledge\/index/);
     expect(oldPath).not.toMatch(/export\s+function\s+wikiRecall/);
     expect(oldPath).not.toMatch(/function\s+main/);
     expect(oldPath).toMatch(/runWikiRecallCli\(\)/);

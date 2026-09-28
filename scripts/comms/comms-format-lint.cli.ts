@@ -3,6 +3,6 @@
  *
  * The implementation lives in src/domains/dispatch.
  */
-import { main } from "../../src/domains/dispatch/comms-format-lint.cli";
+import { commsFormatLintMain as main } from "../../src/domains/dispatch/index";
 
 main();

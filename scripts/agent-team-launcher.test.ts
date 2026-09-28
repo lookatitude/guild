@@ -20,22 +20,18 @@ import { createHash } from "crypto";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-import {
-  buildTaskCell,
-  writeTaskCell,
-  type TaskCellDispatchInput,
-} from "../src/domains/dispatch/task-assignment-v2";
+import { buildTaskCell, writeTaskCell, type TaskCellDispatchInput } from "../src/domains/dispatch/index";
 import { taskCellPaths } from "../src/domains/dispatch";
 // T3 F3: descriptor writers fail closed without the run's minted binding.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const launcherTestBinding = require("../src/domains/lifecycle/run-binding") as
-  typeof import("../src/domains/lifecycle/run-binding");
+const launcherTestBinding = require("../src/domains/lifecycle") as
+  typeof import("../src/domains/lifecycle");
 // T06/T08: the launcher copies assignment host/model ids from the run's
 // guild.session_binding.v1 and BLOCKS without one, so the fixture seeds it
 // alongside the run binding (never rely on an ambient run in the lead's shell).
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const launcherTestSession = require("../src/domains/config/session-binding") as
-  typeof import("../src/domains/config/session-binding");
+const launcherTestSession = require("../src/domains/config") as
+  typeof import("../src/domains/config");
 function launcherTestSeedSessionBinding(cwd: string, runId: string): void {
   const runDir = path.join(cwd, ".guild", "runs", runId);
   const file = launcherTestSession.sessionBindingPath(runDir);
@@ -79,7 +75,7 @@ import {
   findRunTaskCells,
   findOrphanedAttempts,
   type TaskCellInstanceIds,
-} from "../src/domains/dispatch/task-cell-acceptance";
+} from "../src/domains/dispatch/index";
 import { scanReceiptJournal } from "../src/domains/telemetry";
 import {
   reconcileTerminalSubstantiveOperations,
@@ -111,11 +107,7 @@ import {
   COMPATIBILITY_USAGE_SCHEMA,
   DEPENDENCE_COMPATIBILITY_READ_REASONS,
 } from "../src/domains/config";
-import {
-  NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE,
-  NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
-  computePhysicalNativeClaudePayloadDigest,
-} from "../src/domains/distribution/release-package-identity";
+import { NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE, NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA, computePhysicalNativeClaudePayloadDigest } from "../src/domains/distribution/index";
 
 const FIXTURES = path.resolve(__dirname, "fixtures");
 const INHERITED_RUN_ID = "run-20260811-000000-launcher-test";

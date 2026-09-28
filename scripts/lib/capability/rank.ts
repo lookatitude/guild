@@ -15,4 +15,4 @@ export {
   rankScore,
   backendForMode,
   getDefaultModelTierMap,
-} from "../../../src/domains/config/rank";
+} from "../../../src/domains/config/index";

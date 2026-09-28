@@ -187,8 +187,8 @@ describe("R52 — coverage domains[] bijection (KTD36)", () => {
   });
 });
 
-/** A minimal fold: twelve domain indexes, the adapter index, and one real
- *  re-export shim per module pointing at its domain home. */
+/** A minimal fold: twelve domain indexes, the adapter index, and one module
+ *  directory per module holding only its manifest (T16 deleted the shims). */
 function plantShims(root: string): void {
   for (const id of DOMAIN_IDS) {
     fs.mkdirSync(path.join(root, domainTree(id)), { recursive: true });
@@ -196,13 +196,9 @@ function plantShims(root: string): void {
   }
   fs.mkdirSync(path.join(root, "src/adapters"), { recursive: true });
   fs.writeFileSync(path.join(root, "src/adapters/index.ts"), "export const x = 1;\n");
-  for (const [id, domain] of MODULE_TO_DOMAIN) {
-    const target = domain === "adapters" ? "../../adapters" : `../../domains/${domain}`;
+  for (const id of MODULE_TO_DOMAIN.keys()) {
     fs.mkdirSync(path.join(root, "src/modules", id), { recursive: true });
-    fs.writeFileSync(
-      path.join(root, "src/modules", id, "index.ts"),
-      `/** shim */\nexport { x } from "${target}";\nexport type { Y } from "${target}";\n`,
-    );
+    fs.writeFileSync(path.join(root, "src/modules", id, "module.manifest.json"), "{}\n");
   }
 }
 
@@ -234,14 +230,10 @@ describe("domain ownership — every domain file is owned exactly once", () => {
     expect(after.violations.map((v) => v.rule)).toContain("module_holds_implementation");
   });
 
-  test("every real src/modules/*/index.ts is a pure re-export shim", () => {
-    const ids = fs.readdirSync(path.join(REPO, "src/modules")).filter((id) =>
-      fs.existsSync(path.join(REPO, "src/modules", id, "index.ts")),
-    );
-    expect(ids).toHaveLength(30);
-    for (const id of ids) {
-      expect([id, shimDefect(REPO, path.join(REPO, "src/modules", id, "index.ts"))]).toEqual([id, null]);
-    }
+  test("T16: no real src/modules/* holds TypeScript — the shims are deleted", () => {
+    const ts = fs.readdirSync(path.join(REPO, "src/modules"), { recursive: true, encoding: "utf8" })
+      .filter((f) => /\.tsx?$/.test(f));
+    expect(ts).toEqual([]);
   });
 
   test("a module index with a function body is REFUSED, naming the file", () => {
@@ -276,7 +268,7 @@ describe("domain ownership — every domain file is owned exactly once", () => {
     expect(after.ok).toBe(false);
     const hit = after.violations.find((v) => v.rule === "module_holds_implementation");
     expect(hit?.detail).toContain("src/modules/state/index.ts");
-    expect(hit?.detail).toContain("re-exports from src/modules/capability");
+    expect(shimDefect(root, path.join(root, "src/modules/state/index.ts"))).toContain("re-exports from src/modules/capability");
   });
 
   test.each([
@@ -303,7 +295,7 @@ describe("domain ownership — every domain file is owned exactly once", () => {
     expect(after.ok).toBe(false);
     const hit = after.violations.find((v) => v.rule === "module_holds_implementation");
     expect(hit?.detail).toContain("src/modules/state/index.ts");
-    expect(hit?.detail).toContain(needle);
+    expect(shimDefect(root, path.join(root, "src/modules/state/index.ts"))).toContain(needle);
   });
 
   test("a thirteenth domain is REFUSED", () => {

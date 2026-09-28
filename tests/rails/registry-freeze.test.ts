@@ -226,14 +226,18 @@ describe("registry freeze — RUNTIME verification over the module public indexe
   // The static half above tests the SPELLING. This half tests the PROPERTY, on the
   // import-safe surface: a module's public index re-exports its vocabularies and runs
   // no CLI.
-  const moduleDirs = fs
-    .readdirSync(path.join(REPO, "src", "modules"), { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort();
+  // T16 deleted the src/modules shims: the public indexes are the twelve domains
+  // plus the adapter tree (KTD1/KTD4).
+  const moduleDirs = [
+    ...fs
+      .readdirSync(path.join(REPO, "src", "domains"), { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name),
+    "adapters",
+  ].sort();
 
   it("there are module indexes to verify (anti-vacuity for this half)", () => {
-    expect(moduleDirs.length).toBeGreaterThan(25);
+    expect(moduleDirs.length).toBeGreaterThanOrEqual(13);
   });
 
   /**
@@ -257,15 +261,14 @@ describe("registry freeze — RUNTIME verification over the module public indexe
    * `continue`, so deleting an entrypoint silently removed a module from the rail. Any
    * module not named here now FAILS.
    */
-  const MODULES_WITHOUT_INDEX: Record<string, string> = {
-    dashboard: "resource-only module (implementation_mode: resource-only); ships no workflow code.",
-  };
+  const MODULES_WITHOUT_INDEX: Record<string, string> = {};
 
   const results: { module: string; checked: number; unfrozen: string[] }[] = [];
   const unimportable: string[] = [];
 
   for (const mod of moduleDirs) {
-    const indexPath = path.join(REPO, "src", "modules", mod, "index.ts");
+    const indexPath =
+      mod === "adapters" ? path.join(REPO, "src", "adapters", "index.ts") : path.join(REPO, "src", "domains", mod, "index.ts");
 
     it(`module "${mod}" exports no unfrozen array at runtime`, () => {
       if (!fs.existsSync(indexPath)) {
@@ -332,7 +335,7 @@ describe("registry freeze — the exploit this rail closes", () => {
   // A rail that never demonstrates the failure it prevents is a claim, not evidence.
   it("pushing onto a frozen vocabulary THROWS and the predicate does not budge", () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const dispatch = require(path.join(REPO, "src", "modules", "dispatch", "index.ts")) as {
+    const dispatch = require(path.join(REPO, "src", "domains", "dispatch", "index.ts")) as {
       EXECUTION_OPERATIONS: readonly string[];
       isExecutionOperation: (v: unknown) => boolean;
     };

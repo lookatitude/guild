@@ -73,12 +73,12 @@ import {
   type ResolvedTierModel,
   type TierHostValue,
   type TierModelSpec,
-} from "../../../src/domains/config/tier-model";
+} from "../../../src/domains/config/index";
 // guild.model_policy.v2 closed-key validator (T5 dynamic-host-model-routing).
 // The policy is an OPTIONAL settings key during the M0-M2 rollout: registered
 // (accepted + validated at load, §5 fail-closed) but never scaffolded into a
 // fresh settings.json, so `config init` stays byte-identical to the golden.
-import { validateModelPolicy } from "../../../src/domains/config/model-policy";
+import { validateModelPolicy } from "../../../src/domains/config/index";
 export { resolveTierModel };
 export type { ResolvedTierModel, TierHostValue, TierModelSpec };
 

@@ -5,10 +5,10 @@ import * as routerShim from "./capability/router";
 import * as rankShim from "./capability/rank";
 import * as tiebreakShim from "./capability/tiebreak";
 import * as tierShim from "./capability/tier-defaults";
-import * as routerModule from "../../src/domains/config/router";
-import * as rankModule from "../../src/domains/config/rank";
-import * as tiebreakModule from "../../src/domains/config/tiebreak";
-import * as tierModule from "../../src/domains/config/tier-defaults";
+import * as routerModule from "../../src/domains/config/index";
+import * as rankModule from "../../src/domains/config/index";
+import * as tiebreakModule from "../../src/domains/config/index";
+import * as tierModule from "../../src/domains/config/index";
 
 describe("capability routing compatibility shims", () => {
   test("scripts/lib/capability re-exports src/modules/capability implementations", () => {

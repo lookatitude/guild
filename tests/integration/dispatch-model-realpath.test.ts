@@ -29,10 +29,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import {
-  deriveResolveInputsFromM0Evidence,
-  planProductionDispatchModel,
-} from "../../src/domains/dispatch/task-assignment-v2";
+import { deriveResolveInputsFromM0Evidence, planProductionDispatchModel } from "../../src/domains/dispatch/index";
 import { persistInspectionReport } from "../../src/domains/config";
 import {
   buildModelInspection,
@@ -53,8 +50,8 @@ import {
 import { loadRunBinding, mintRunBinding } from "../../src/domains/lifecycle";
 import { sessionBindingPath, type SessionBinding } from "../../src/domains/config";
 import { selfReferentialHash } from "../../src/domains/teams";
-import { recordDecision, writeDecision } from "../../src/domains/teams/team-decision";
-import { composeProposal, writeProposal } from "../../src/domains/teams/team-proposal";
+import { recordDecision, writeDecision } from "../../src/domains/teams/index";
+import { composeProposal, writeProposal } from "../../src/domains/teams/index";
 import { createExactClaudePluginFixture } from "../fixtures/exact-claude-plugin-fixture";
 
 const SESSION_CONTEXT_SCHEMA = "guild.session_context.v1";

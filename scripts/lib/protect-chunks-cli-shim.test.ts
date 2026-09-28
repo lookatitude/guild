@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./protect-chunks";
-import * as moduleImpl from "../../src/domains/knowledge/protect-chunks-cli";
+import * as moduleImpl from "../../src/domains/knowledge/index";
 
 describe("protect-chunks CLI compatibility shim", () => {
   test("scripts/lib/protect-chunks re-exports src/modules/context CLI implementation", () => {
@@ -18,7 +18,7 @@ describe("protect-chunks CLI compatibility shim", () => {
     );
 
     expect(oldPath).toMatch(/^#!\/usr\/bin\/env -S npx tsx/);
-    expect(oldPath).toMatch(/src\/domains\/knowledge\/protect-chunks-cli/);
+    expect(oldPath).toMatch(/src\/domains\/knowledge\/index/);
     expect(oldPath).not.toMatch(/fs\.readFileSync\(0/);
     expect(oldPath).not.toMatch(/JSON\.parse\(rawJson/);
     expect(modulePath).toMatch(/export\s+function\s+runProtectChunksCli/);

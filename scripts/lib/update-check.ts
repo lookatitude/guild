@@ -26,7 +26,7 @@ import {
   HOST_REGISTRY_ROWS,
   type HostId,
 } from "../../src/domains/config";
-import type { UpdateCaps } from "../../src/domains/config/host-capabilities-schema";
+import type { UpdateCaps } from "../../src/domains/config/index";
 
 export const SOURCE_REPO_DEFAULT = "https://github.com/lookatitude/guild.git";
 export const CACHE_SCHEMA = "guild.update_check_cache.v1";

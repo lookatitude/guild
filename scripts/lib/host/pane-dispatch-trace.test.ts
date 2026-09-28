@@ -736,9 +736,9 @@ describe("issue #76 — pane-dispatched lanes in the orchestrating run trace", (
   // ───────────────────────────────────────────────────────────────────────────
   describe("guild.trace.dispatch.v1 contract edges", () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const events = require("../../../src/domains/telemetry/guild-trace-events");
+    const events = require("../../../src/domains/telemetry");
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const emit = require("../../../src/domains/telemetry/guild-trace-emit");
+    const emit = require("../../../src/domains/telemetry");
 
     const valid = () =>
       events.makeDispatchEvent({

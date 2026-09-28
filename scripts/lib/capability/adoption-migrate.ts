@@ -80,7 +80,7 @@ import {
 import {
   checkContained,
   isRefused,
-} from "../../../src/domains/kernel/path-containment";
+} from "../../../src/domains/kernel/index";
 import {
   PROJECT_DEFINITION_REF_SCHEMA,
   validateProjectDefinitionRefV1,
@@ -104,7 +104,7 @@ import {
   type CompatibilityCatalogEntry,
 } from "./compatibility-catalog";
 import { readCompatibilityAsset, readRuntimeVersion } from "./compatibility-loader";
-import { assertWritableBinding } from "../../../src/domains/lifecycle/run-binding";
+import { assertWritableBinding } from "../../../src/domains/lifecycle/index";
 import { readWorkflowCursor } from "../../../src/domains/lifecycle";
 import { createGuildStorage } from "../../../src/domains/state";
 import { gateProfileCreation } from "../../../src/domains/teams";

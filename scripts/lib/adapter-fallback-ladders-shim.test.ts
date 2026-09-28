@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./adapter-fallback-ladders";
-import * as moduleImpl from "../../src/domains/config/adapter-fallback-ladders";
+import * as moduleImpl from "../../src/domains/config/index";
 
 describe("adapter-fallback-ladders compatibility shim", () => {
   test("scripts/lib/adapter-fallback-ladders re-exports src/modules/host-runtime", () => {
@@ -37,7 +37,7 @@ describe("adapter-fallback-ladders compatibility shim", () => {
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/adapter-fallback-ladders.ts"), "utf8");
     const modulePath = fs.readFileSync(path.join(repoRoot, "src/domains/config/adapter-fallback-ladders.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/domains\/config\/adapter-fallback-ladders["']/);
+    expect(oldPath).toMatch(/from\s+["']\.\.\/\.\.\/src\/domains\/config\/index["']/);
     expect(oldPath).not.toMatch(/export\s+const\s+FALLBACK_LADDER_TABLE/);
     expect(modulePath).toMatch(/export\s+const\s+FALLBACK_LADDER_TABLE/);
     expect(modulePath).toMatch(/from\s+["']\.\/host-registry-schema["']/);

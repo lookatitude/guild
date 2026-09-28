@@ -9,14 +9,14 @@ import {
   readCheckpointState,
   scanReceiptJournal,
 } from "../../../src/domains/telemetry";
-import { compatibilityUsageForRead, readCatalogEntry, type CompatibilityCatalog, type CompatibilityCatalogEntry } from "../../../src/domains/config/compatibility-catalog";
-import { parseCompatibilityUsageV1, rollupCompatibilityUsage, type CompatibilityUsageRollup } from "../../../src/domains/config/compatibility-usage";
-import type { CapabilityResolutionIntent } from "../../../src/domains/config/resolver-mode";
-import { checkContained, isRefused, writeContainedFile } from "../../../src/domains/kernel/path-containment";
+import { compatibilityUsageForRead, readCatalogEntry, type CompatibilityCatalog, type CompatibilityCatalogEntry } from "../../../src/domains/config/index";
+import { parseCompatibilityUsageV1, rollupCompatibilityUsage, type CompatibilityUsageRollup } from "../../../src/domains/config/index";
+import type { CapabilityResolutionIntent } from "../../../src/domains/config/index";
+import { checkContained, isRefused, writeContainedFile } from "../../../src/domains/kernel/index";
 import {
   assertWritableBinding,
   withRunBindingExclusion,
-} from "../../../src/domains/lifecycle/run-binding";
+} from "../../../src/domains/lifecycle/index";
 import { normalizeHostId } from "../host-id-namespace";
 import { hashCompatibilityRuntimeProducer, type MigrationRuntimeHost } from "./migration-evidence";
 

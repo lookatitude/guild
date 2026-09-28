@@ -37,7 +37,7 @@ import {
   lazyEntriesFor,
   requiredEntriesFor,
   scaffoldFor,
-} from "../../../src/domains/config/init-scaffold-manifest";
+} from "../../../src/domains/config/index";
 
 const REPO = path.resolve(__dirname, "../../..");
 

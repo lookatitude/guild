@@ -5,4 +5,9 @@
  * can move internals without breaking existing imports from scripts/lib/shared/*.
  */
 
-export * from "../../../src/domains/security/scrub-redact";
+export {
+  redact,
+  redactShareableFile,
+  type SecretHit,
+  type RedactResult,
+} from "../../../src/domains/security/index";

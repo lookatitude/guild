@@ -22,7 +22,7 @@ import {
   createCacheKey,
   createStore,
   singleflightDiscover,
-} from "../../../src/domains/config/catalog-cache";
+} from "../../../src/domains/config/index";
 
 const [storeDir, identityJson, runId, discoverMsStr, label] = process.argv.slice(2);
 

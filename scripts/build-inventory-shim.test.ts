@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import * as shim from "./build-inventory";
-import * as moduleImpl from "../src/domains/distribution/build-inventory";
+import * as moduleImpl from "../src/domains/distribution/index";
 
 describe("build-inventory compatibility shim", () => {
   test("scripts/build-inventory re-exports src/modules/distribution", () => {

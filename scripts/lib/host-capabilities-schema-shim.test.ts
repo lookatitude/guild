@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./host-capabilities-schema";
 import { planWrapperInvocation } from "./guild-run-wrapper";
-import * as moduleImpl from "../../src/domains/config/host-capabilities-schema";
+import * as moduleImpl from "../../src/domains/config";
 
 describe("host-capabilities-schema compatibility shim", () => {
   test("scripts/lib/host-capabilities-schema re-exports src/modules/host-runtime", () => {
@@ -20,7 +20,7 @@ describe("host-capabilities-schema compatibility shim", () => {
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/host-capabilities-schema.ts"), "utf8");
     const modulePath = fs.readFileSync(path.join(repoRoot, "src/domains/config/host-capabilities-schema.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/domains\/config\/host-capabilities-schema["']/);
+    expect(oldPath).toMatch(/from\s+["']\.\.\/\.\.\/src\/domains\/config\/index["']/);
     expect(oldPath).not.toMatch(/export\s+const\s+CLAUDE_CAPABILITIES/);
     expect(modulePath).toMatch(/export\s+const\s+CLAUDE_CAPABILITIES/);
   });

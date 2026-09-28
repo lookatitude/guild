@@ -75,7 +75,7 @@ import {
   findRunAcceptances,
   readAssignmentForInstance,
   isTerminationAuthorized,
-} from "../../src/domains/dispatch/task-cell-acceptance.js";
+} from "../../src/domains/dispatch/index.js";
 // T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
 import { ensureStorageLayout } from "../lib/ensure-layout.js";
 

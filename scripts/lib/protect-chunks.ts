@@ -6,9 +6,9 @@
  * reorg can move internals without breaking existing script invocations.
  */
 
-import { runProtectChunksCli } from "../../src/domains/knowledge/protect-chunks-cli";
+import { runProtectChunksCli } from "../../src/domains/knowledge/index";
 
-export { runProtectChunksCli } from "../../src/domains/knowledge/protect-chunks-cli";
+export { runProtectChunksCli } from "../../src/domains/knowledge/index";
 
 if (require.main === module) {
   runProtectChunksCli();

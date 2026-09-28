@@ -421,7 +421,6 @@ export function evaluateDocumentServiceBoundary(
  * test can assert over the real shipped surface without directory scanning.
  */
 export const DOCUMENTS_MODULE_SOURCE_FILES: readonly string[] = Object.freeze([
-  "src/modules/documents/index.ts",
   "src/domains/lifecycle/document-safe.ts",
   "src/domains/lifecycle/document-records.ts",
   "src/domains/lifecycle/document-hash.ts",

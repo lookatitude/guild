@@ -7,7 +7,7 @@ import * as path from "path";
 import { buildInventory } from "./build-inventory";
 import { MODULE_RESOURCES_SCHEMA_VERSION, buildModuleResourcePlan } from "./lib/module-resources";
 import * as shim from "./lib/module-resources";
-import * as moduleImpl from "../src/domains/distribution/module-resources";
+import * as moduleImpl from "../src/domains/distribution";
 
 // T12: the resources/ mirrors are retired. The plan is now the projector's input:
 // one live source_path per owned surface file, hashed from the live bytes.

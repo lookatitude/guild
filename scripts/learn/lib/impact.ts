@@ -80,7 +80,7 @@
  */
 
 import type { GraphNode, GraphEdge } from "./schema";
-import { sealSet } from "../../../src/domains/kernel/sealed-collections";
+import { sealSet } from "../../../src/domains/kernel/index";
 
 export type { GraphNode, GraphEdge } from "./schema";
 

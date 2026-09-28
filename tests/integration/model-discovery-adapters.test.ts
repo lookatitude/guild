@@ -86,6 +86,13 @@ function target(targetId: string, overrides: Partial<CatalogTarget> = {}): Catal
 
 // ── Codex app-server model/list — REAL [P3] capture ─────────────────────────
 
+// The file's runtime export set, read from its source: consumers import the
+// domain index (KTD27), so a namespace import can no longer see one file alone.
+const valueExportsOf = (rel: string): string[] =>
+  [...fs.readFileSync(path.resolve(__dirname, "../..", rel), "utf8").matchAll(
+    /^export\s+(?:async\s+)?(?:function\*?|const|let|var|class)\s+([A-Za-z_$][\w$]*)/gm,
+  )].map((m) => m[1]);
+
 describe("codex-app-server adapter (live [P3] capture)", () => {
   const result = fixtureJson("codex-app-server-model-list.result.json");
 
@@ -595,8 +602,8 @@ describe("listing authority is row-keyed and closed (T4-R1-001 / T4-R1-002 probe
 
   test("REGRESSION (T4-R2-001): the module's public surface is sealed — no raw state-transition/setter escapes", () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const catalog = require("../../src/domains/config/model-catalog");
-    expect(Object.keys(catalog).sort()).toEqual([
+    const catalog = require("../../src/domains/config");
+    expect(valueExportsOf("src/domains/config/model-catalog.ts").sort()).toEqual([
       "EVIDENCE_STATES",
       "LEGAL_EVIDENCE_TRANSITIONS",
       "LISTING_AUTHORITY",

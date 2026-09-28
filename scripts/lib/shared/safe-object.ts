@@ -5,4 +5,4 @@
  * move internals without breaking existing imports from scripts/lib/shared/*.
  */
 
-export * from "../../../src/domains/security/safe-object";
+export { isProtoPoisonKey, PROTO_POISON_KEYS } from "../../../src/domains/security/index";

@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./surface-manifest";
-import * as moduleImpl from "../../src/domains/distribution/surface-manifest";
+import * as moduleImpl from "../../src/domains/distribution/index";
 
 describe("surface-manifest compatibility shim", () => {
   test("scripts/lib/surface-manifest re-exports src/modules/distribution", () => {
@@ -16,7 +16,7 @@ describe("surface-manifest compatibility shim", () => {
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/surface-manifest.ts"), "utf8");
     const modulePath = fs.readFileSync(path.join(repoRoot, "src/domains/distribution/surface-manifest.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/domains\/distribution\/surface-manifest["']/);
+    expect(oldPath).toMatch(/from\s+["']\.\.\/\.\.\/src\/domains\/distribution\/index["']/);
     expect(oldPath).not.toMatch(/export\s+function\s+validateSurfaceManifest/);
     expect(modulePath).toMatch(/export\s+function\s+validateSurfaceManifest/);
   });

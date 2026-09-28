@@ -119,7 +119,7 @@ import {
   emitTraceEvent,
   makeAnalysisTraceEvent,
   type AnalysisEventClass,
-} from "../src/modules/telemetry/index.js";
+} from "../src/domains/telemetry/index.js";
 
 // ── v2 observability ADR (D-OBS-1/2/6): guild.trace_event.v2 additive fields,
 // deterministic hook-side span ids, and the redacted guild.trace_payload.v1

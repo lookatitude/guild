@@ -21,7 +21,7 @@ import {
   readFeatureGateRegistry,
   writeFeatureGateRegistry,
 } from "./strangler-control";
-import * as resolverMode from "../../../src/domains/config/resolver-mode";
+import * as resolverMode from "../../../src/domains/config";
 import { main as selfBuildCanonicalizeMain } from "../../self-build-canonicalize";
 
 describe("PCL-15 self-build canonicalization", () => {

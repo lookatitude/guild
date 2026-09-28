@@ -104,7 +104,7 @@ import {
   readRunBindingRecord,
   stagePendingSubstantiveOperation,
   withRunBindingExclusion,
-} from "../src/domains/lifecycle/run-binding";
+} from "../src/domains/lifecycle/index";
 import type { CapabilityResolverMode } from "../src/domains/config";
 // P1-3 A2b: force-reap of dead panes. (Receipt-based `detectDismissible` is
 // retired from the dismiss path — dismissal is acceptance-gated in G4, below.)
@@ -132,9 +132,9 @@ import {
   markAttemptOrphaned,
   type RunAcceptance,
   type TaskCellInstanceIds,
-} from "../src/domains/dispatch/task-cell-acceptance";
+} from "../src/domains/dispatch/index";
 
-import { reconcileTaskCellLifecycleTelemetry } from "../src/domains/dispatch/task-cell-telemetry-reconcile";
+import { reconcileTaskCellLifecycleTelemetry } from "../src/domains/dispatch/index";
 // CH-1/CH-2: mixed-host pane adapters (claude + codex) for a mixed `host:` team.
 import { resolveAdapter } from "./lib/pane-adapter";
 // CH-1: route each specialist to its backend (local tmux vs remote) via the
@@ -153,8 +153,8 @@ import { resolveSettings, isPlainObject } from "./lib/settings-resolver";
 import {
   loadRunBinding,
   readHookBindingEnvelope,
-} from "../src/domains/lifecycle/run-binding";
-import { assertCanonicalRunId } from "../src/domains/lifecycle/run-lifecycle";
+} from "../src/domains/lifecycle/index";
+import { assertCanonicalRunId } from "../src/domains/lifecycle/index";
 // MH-04: the substrate DECISION lives behind the versioned execution port
 // (`guild.execution.transports.v1`), never in this launcher. The launcher reads
 // host FACTS through the capability probe below and reports what the port decided.
@@ -170,11 +170,11 @@ import {
   type ExecutionTransportPort,
   type HostExecutionRuntime,
   type TeamDispatchPort,
-} from "../src/domains/dispatch/execution-transport-ports";
+} from "../src/domains/dispatch/index";
 import {
   TeamDispatchExecutionTransport,
   createHostExecutionRuntime,
-} from "../src/domains/dispatch/execution-transport-adapters";
+} from "../src/domains/dispatch/index";
 // task-cell-runtime G3: the authoritative `guild.task_assignment.v2` channel
 // (per-attempt, one immutable file per task a specialist owns; no representative-
 // first-task collapse). Replaces v1 as the PRODUCTION write; v1 is retained above
@@ -184,28 +184,28 @@ import {
   planProductionDispatchModel,
   writeTaskCell,
   type ProductionDispatchModelOutcome,
-} from "../src/domains/dispatch/task-assignment-v2";
-import { createPreviewConfirmationSession } from "../src/domains/dispatch/confirmation-gate";
+} from "../src/domains/dispatch/index";
+import { createPreviewConfirmationSession } from "../src/domains/dispatch/index";
 // T8R F3: the PRODUCTION writer for M0 inspection evidence. `persistInspectionReport`
 // previously had no production caller at all — `guild models inspect` is read-only by
 // contract — so the M2 gate's evidence dir was always empty in a real run and the
 // derived resolver inputs were always null. Recording happens HERE, once per run on the
 // real dispatch path, and is inert at the ADR defaults (v2 flags off ⇒ no write).
-import { recordRunInspectionEvidence } from "../src/domains/config/inspection-record";
-import { readRoutingFlags } from "../src/domains/config/routing-rollout";
+import { recordRunInspectionEvidence } from "../src/domains/config/index";
+import { readRoutingFlags } from "../src/domains/config/index";
 // T6 rework F5: the legacy tier→model label for the shadow comparison comes
 // from the SAME unpack point the legacy path uses (models.tiers), never a
 // parallel implementation.
-import { resolveTierModel } from "../src/domains/config/tier-model";
-import { detectSession, isUnknownHost, readSessionBinding } from "../src/domains/config/session-binding";
+import { resolveTierModel } from "../src/domains/config/index";
+import { detectSession, isUnknownHost, readSessionBinding } from "../src/domains/config/index";
 import { createGuildStorage } from "./lib/state/storage";
-import { resolvePolicy } from "../src/domains/config/policy-resolver";
-import { resolveAssignmentBinding } from "../src/domains/dispatch/assignment-binding";
+import { resolvePolicy } from "../src/domains/config/index";
+import { resolveAssignmentBinding } from "../src/domains/dispatch/index";
 import {
   reserveInstanceBatch,
   reserveRefused,
   resolveMaxInstances,
-} from "../src/domains/dispatch/instance-cap";
+} from "../src/domains/dispatch/index";
 // R-016a: bounded retry for the ONE TS-level dispatch call site (RemoteTeamBackend.launch).
 import { runWithRetry, loadRetryOpts } from "./retry-lane";
 // R-016 bridge: on retry exhaustion, mark each remote lane dead via the shared writer.
@@ -226,7 +226,7 @@ import { slugFromTeamPath, phaseFromTeamPath, readActivePhase, resolveDeadLaneKe
 import {
   assertDispatchApproved,
   resolveApprovalOverride,
-} from "../src/domains/teams/dispatch-approval";
+} from "../src/domains/teams/index";
 // TE-01 CONSOLIDATED (cluster-a-rev2-CONSOLIDATED.md): launcher owns EDIT-3 (tmux/remote);
 // execute-plan SKILL owns EDIT-4 (subagent/in-process) — mutually exclusive, no double-write.
 import { writeTaskRun, readTaskRunCapReqs } from "./write-task-run";

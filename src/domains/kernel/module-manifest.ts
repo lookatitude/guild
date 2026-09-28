@@ -296,7 +296,10 @@ function countWorkflowFiles(moduleDir: string): number {
 
 export function validateModuleHealth(
   root: string,
-  manifests: readonly ModuleManifest[]
+  manifests: readonly ModuleManifest[],
+  /** Repo-relative public index of a module. After T16 deleted the shims, the
+   * caller that owns the fold map points this at the module's domain index. */
+  publicIndexFor: (moduleId: string) => string = (moduleId) => `src/modules/${moduleId}/index.ts`
 ): ModuleHealthValidationResult {
   const findings: ModuleHealthFinding[] = [];
   const modules: ModuleHealthSummary[] = [];
@@ -318,11 +321,11 @@ export function validateModuleHealth(
       continue;
     }
 
-    const indexPath = path.join(moduleDir, "index.ts");
-    // T12 fold: the implementation moved into src/domains/<id> and this directory
-    // is the transitional re-export shim. Health is therefore about the SURFACE —
-    // a workflow-backed module still publishes an index, a resource-only one does
-    // not own code. "Every domain file is owned exactly once", and the rule that
+    const indexPath = path.join(root, publicIndexFor(manifest.id));
+    // T12 fold, T16 shim deletion: the implementation lives in src/domains/<id>
+    // and this directory keeps only the manifest. Health is therefore about the
+    // SURFACE — a workflow-backed module is published through a public index
+    // (`publicIndexFor`), a resource-only one does not own code. "Every domain file is owned exactly once", and the rule that
     // no implementation is left behind here, belong to the domain-ownership check
     // (src/domains/distribution/check-domain-ownership.ts), not to two places.
     const workflows = countWorkflowFiles(moduleDir);
@@ -332,7 +335,7 @@ export function validateModuleHealth(
       findings.push({
         module_id: manifest.id,
         reason: "workflow_module_missing_public_index",
-        path: `${relModuleDir}/index.ts`,
+        path: publicIndexFor(manifest.id),
       });
     }
     if (manifest.implementation_mode === "resource-only" && workflows > 0) {

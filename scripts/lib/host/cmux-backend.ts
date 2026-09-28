@@ -8,7 +8,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { buildPrompt } from "../../../src/domains/config/team-prompt";
+import { buildPrompt } from "../../../src/domains/config/index";
 import type {
   AdapterResolver,
   GuildDispatchDescriptor,

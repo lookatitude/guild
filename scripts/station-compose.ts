@@ -44,17 +44,15 @@ import {
   composeStationTeam,
   isStation,
   STATIONS,
-  type CellFanout,
   type DecompositionSignals,
   type FanoutOverride,
   type StationSignals,
-} from "../src/domains/teams/station-composer";
-import {
   emptyStationSignalsV1,
   signalsOf,
   validateStationSignalsV1,
   writeTeamPlan,
-} from "../src/domains/teams/station-signals";
+} from "../src/domains/teams/index";
+import type { CellFanout } from "../src/domains/dispatch/index";
 import { resolvePluginRoot } from "../src/domains/kernel";
 
 function fail(msg: string): never {

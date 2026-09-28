@@ -1,8 +1,8 @@
 import { describe, test, expect } from "bun:test";
 import * as defineShim from "./define-schema";
 import * as exploreShim from "./explore-schema";
-import * as defineModule from "../../src/domains/evolve/define-schema";
-import * as exploreModule from "../../src/domains/evolve/explore-schema";
+import * as defineModule from "../../src/domains/evolve/index";
+import * as exploreModule from "../../src/domains/evolve/index";
 
 describe("artifact schema compatibility shims", () => {
   test("scripts/lib/explore-schema re-exports src/modules/evals", () => {

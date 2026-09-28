@@ -44,7 +44,7 @@ describe("team prompt module compatibility", () => {
     const tmuxBackend = fs.readFileSync(path.join(repoRoot, "scripts/lib/host/tmux-backend.ts"), "utf8");
     const moduleFile = fs.readFileSync(path.join(repoRoot, "src/domains/config/team-prompt.ts"), "utf8");
 
-    expect(tmuxBackend).toMatch(/src\/domains\/config\/team-prompt/);
+    expect(tmuxBackend).toMatch(/src\/domains\/config\/index/);
     expect(tmuxBackend).not.toMatch(/export\s+function\s+buildPrompt/);
     expect(moduleFile).toMatch(/export\s+function\s+buildPrompt/);
     expect(moduleFile).toMatch(/from\s+["']\.\/host-id-namespace["']/);

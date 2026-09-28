@@ -44,7 +44,7 @@ function readUpdateConfig(cwd: string): { mode: UpdateMode; cadenceHours: number
     // The REAL config source of truth (AC-6): workspace + local + project
     // layering with deep merge — never a raw single-file read (codex G-lane
     // MAJOR: a workspace-level `defaults.update.mode: off` must be honored).
-    const { resolveSettings } = require("../src/domains/config/settings-resolver") as {
+    const { resolveSettings } = require("../src/domains/config") as {
       resolveSettings: (o: { cwd: string }) => { config: Record<string, unknown> };
     };
     const parsed = resolveSettings({ cwd }).config as {

@@ -46,7 +46,7 @@
  */
 
 import * as fs from "fs";
-import { sealSet } from "../../src/domains/kernel/sealed-collections";
+import { sealSet } from "../../src/domains/kernel/index";
 import * as path from "path";
 import { createHash } from "crypto";
 import * as ts from "typescript";

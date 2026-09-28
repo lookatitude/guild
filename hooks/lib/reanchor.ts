@@ -36,7 +36,7 @@
  */
 
 import * as fs from "node:fs";
-import { sealSet } from "../../src/domains/kernel/sealed-collections";
+import { sealSet } from "../../src/domains/kernel/index";
 import * as path from "node:path";
 
 import * as yaml from "js-yaml";

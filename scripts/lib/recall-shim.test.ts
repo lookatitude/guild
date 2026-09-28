@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./recall";
-import * as moduleImpl from "../../src/domains/knowledge/recall";
+import * as moduleImpl from "../../src/domains/knowledge/index";
 
 describe("recall compatibility shim", () => {
   test("scripts/lib/recall re-exports src/modules/context", () => {
@@ -19,7 +19,7 @@ describe("recall compatibility shim", () => {
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/recall.ts"), "utf8");
     const modulePath = fs.readFileSync(path.join(repoRoot, "src/domains/knowledge/recall.ts"), "utf8");
 
-    expect(oldPath).toMatch(/src\/domains\/knowledge\/recall/);
+    expect(oldPath).toMatch(/src\/domains\/knowledge\/index/);
     expect(oldPath).not.toMatch(/export\s+function\s+recall/);
     expect(oldPath).toMatch(/runRecallCli\(\)/);
     expect(modulePath).toMatch(/export\s+function\s+recall/);

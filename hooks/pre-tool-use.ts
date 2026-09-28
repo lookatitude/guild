@@ -67,7 +67,7 @@ import {
 } from "./lib/security/events.js";
 // ISSUE #94: the manifest-absent fallback for `pre_tool_use_ask` reads the same
 // capability rows the manifest is rendered from — see hostSupportsPreToolUseAsk.
-import { HOST_REGISTRY_ROWS } from "../src/domains/config/host-registry-schema.js";
+import { HOST_REGISTRY_ROWS } from "../src/domains/config/index.js";
 import { authorizeProjectedToolCall } from "../src/domains/dispatch";
 import {
   ingestPauseBlocking,

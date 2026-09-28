@@ -127,3 +127,72 @@ export * from "./owner-architect-loop";
 
 // ── from src/modules/operations ──────────────────────────────────────────
 export * from "./operations-catalog";
+
+// ── consumed outside the domain (T16: every importer goes through this index) ──
+export {
+  appendSidecarPre,
+  buildOrphanedToolCall,
+  buildToolCallFromPair,
+  buildToolCallFromPostOnly,
+  consumeSidecarPre,
+  ORPHAN_LATENCY_MS,
+  ORPHAN_RESULT_EXCERPT,
+  type OrphanSweepResult,
+  SIDECAR_MAX_BYTES as EVENT_LOG_SIDECAR_MAX_BYTES,
+  type SidecarAppendOptions,
+  type SidecarMatchKey,
+  type SidecarPreEntry,
+  sweepOrphanedSidecar,
+  sweepOrphanedSidecarFull,
+} from "./event-log-sidecar";
+export {
+  isCanonicalLaneReceipt,
+  RUN_RECORD_FINDING_CODES,
+  RUN_RECORD_VALIDATION_SCHEMA,
+  type RunRecordFinding,
+  type RunRecordFindingCode,
+  type RunRecordValidation,
+  scanRunsRoot,
+  validateRunRecordDir,
+} from "./run-record-validate";
+export {
+  LANE_RESUME_SCHEMA_VERSION,
+  type LaneAdjudicationRef,
+  type LaneExhaustionSignal,
+  type LaneIndependenceRef,
+  type LaneModelParams,
+  type LanePatch,
+  type LaneResumeCheckpoint,
+  laneResumeCheckpointPath,
+  type LaneState,
+  type LaneStatus,
+  type LaneTier,
+  loadLaneResumeCheckpoint,
+  loadRunState,
+  markLaneDead,
+  markLaneInProgress,
+  readResumeEnabled,
+  RUN_STATE_SCHEMA_VERSION,
+  type RunStateInit,
+  runStatePath,
+  type RunStateV1,
+  upsertLane,
+  writeRunStateAtomic,
+} from "./run-state";
+export {
+  genSpanId,
+  isLlmCallEvent,
+  normalizeTokens,
+  payloadRef,
+  type PayloadSidecarInput,
+  payloadSidecarPath,
+  pruneUndefined,
+  type ResolveTraceOpts,
+  resolveTraceV2Fields,
+  SIDECAR_MAX_BYTES as TRACE_V2_SIDECAR_MAX_BYTES,
+  TRACE_EVENT_SCHEMA,
+  TRACE_PAYLOAD_SCHEMA,
+  type TraceTokens,
+  type TraceV2Fields,
+  writePayloadSidecar,
+} from "./trace-v2";

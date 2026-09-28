@@ -230,7 +230,7 @@ export interface LifecycleGateConfig {
  */
 export function readLifecycleGateConfig(guildRoot: string): LifecycleGateConfig {
   try {
-    const { resolveSettings } = require("../../src/domains/config/settings-resolver") as {
+    const { resolveSettings } = require("../../src/domains/config") as {
       resolveSettings: (o: { cwd: string }) => { config: Record<string, unknown> };
     };
     const parsed = resolveSettings({ cwd: guildRoot }).config as {

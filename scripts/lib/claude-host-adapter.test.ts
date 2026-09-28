@@ -264,12 +264,13 @@ describe("Claude HostAdapter concrete parity", () => {
     }
   });
 
-  it("generated Claude package ships compiled runtime and module shims, never domain TypeScript (KTD28)", () => {
+  it("generated Claude package ships compiled runtime and module manifests, never domain TypeScript (KTD28)", () => {
     const tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), "guild-r3-claude-src-"));
     try {
       const dest = writeClaudeTree(PLUGIN_ROOT, buildInventory(PLUGIN_ROOT), tmpDist, UNSTAMPED_GENERATED_AT);
-      // Module manifests + shims ship for the conformance worker; no domain file does.
-      expect(fs.existsSync(path.join(dest, "src", "modules", "kernel", "index.ts"))).toBe(true);
+      // Module manifests ship for the conformance worker (T16 deleted the shims); no domain file does.
+      expect(fs.existsSync(path.join(dest, "src", "modules", "kernel", "module.manifest.json"))).toBe(true);
+      expect(fs.existsSync(path.join(dest, "src", "modules", "kernel", "index.ts"))).toBe(false);
       expect(fs.existsSync(path.join(dest, "src", "domains"))).toBe(false);
       // Authoring TypeScript and its node_modules stay in the repo (KTD11).
       expect(fs.existsSync(path.join(dest, "scripts", "lib", "module-manifest.ts"))).toBe(false);

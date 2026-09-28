@@ -21,11 +21,11 @@ export type {
   SpecialistBackend,
   SpecialistRoute,
   PlanTeamRoutingOpts,
-} from "../../../src/domains/config/router";
+} from "../../../src/domains/config/index";
 export {
   RouteError,
   resolveModel,
   resolveModelParams,
   route,
   planTeamRouting,
-} from "../../../src/domains/config/router";
+} from "../../../src/domains/config/index";

@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./guild-trace-events";
-import * as moduleImpl from "../../src/domains/telemetry/guild-trace-events";
+import * as moduleImpl from "../../src/domains/telemetry/index";
 
 describe("guild-trace-events compatibility shim", () => {
   test("scripts/lib/guild-trace-events re-exports src/modules/telemetry", () => {
@@ -28,7 +28,7 @@ describe("guild-trace-events compatibility shim", () => {
       "utf8",
     );
 
-    expect(oldPath).toMatch(/src\/domains\/telemetry\/guild-trace-events/);
+    expect(oldPath).toMatch(/src\/domains\/telemetry\/index/);
     expect(oldPath).not.toMatch(/export\s+function\s+validateRecallEvent/);
     expect(modulePath).toMatch(/export\s+function\s+validateRecallEvent/);
     expect(modulePath).toMatch(/export\s+function\s+makeSecurityDecisionEvent/);

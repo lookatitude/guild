@@ -706,7 +706,7 @@ describe("model-inspect — M0 read-only inspection service (lane T6)", () => {
       expect(src).not.toMatch(/from ["'].*guild-trace-emit["']/);
       expect(src).not.toMatch(/export function emitInspectionTrace/);
       expect(src).not.toMatch(/emitTraceEvent\(/);
-      const mod = require("../../src/domains/config/model-inspect");
+      const mod = require("../../src/domains/config");
       expect("emitInspectionTrace" in mod).toBe(false);
     });
   });

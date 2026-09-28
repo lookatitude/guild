@@ -5,4 +5,16 @@
  * internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/domains/config/settings-resolver";
+export {
+  resolveSettings,
+  isPlainObject,
+  deepMerge,
+  rigorProfile,
+  initiativeIsWorkspaceScoped,
+  type Source,
+  type ResolvedConfig,
+  type ResolveOptions,
+  type ResolveResult,
+  RESOLVER_TIER1_KEYS,
+  type RigorProfile,
+} from "../../src/domains/config/index";

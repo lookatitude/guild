@@ -243,20 +243,18 @@ export function validateDomainOwnership(root: string = PLUGIN_ROOT): DomainOwner
       violations.push({ rule: "unmapped_module", detail: `src/modules/${id} has no domain home in the KTD36 fold` });
       continue;
     }
-    claimed.add(domain);
-    // The module tree is transitional shims only (T16 deletes it). Anything
-    // else there is a second home for an implementation that already moved.
+    // T16 deleted the re-export shims: the module tree keeps its ownership
+    // manifests and no TypeScript. A .ts file here is a second home for code
+    // that belongs in the domain, and a consumer reaching past the domain index.
     for (const abs of walkTs(path.join(modulesDir, id))) {
       const rel = toPosix(path.relative(path.join(modulesDir, id), abs));
-      const reason = rel === "index.ts" ? shimDefect(root, abs) : "it is not the module index";
-      if (reason) {
-        violations.push({
-          rule: "module_holds_implementation",
-          detail: `src/modules/${id}/${rel} is not a re-export shim (${reason}); the implementation belongs in ${domainTree(domain)}`,
-        });
-      }
+      violations.push({
+        rule: "module_holds_implementation",
+        detail: `src/modules/${id}/${rel} is TypeScript in the retired module tree; it belongs in ${domainTree(domain)}`,
+      });
     }
   }
+  for (const domain of MODULE_TO_DOMAIN.values()) claimed.add(domain);
   for (const d of DOMAIN_IDS) {
     if (!claimed.has(d)) {
       violations.push({ rule: "unclaimed_domain", detail: `no module folds into ${d}; the KTD36 map is not surjective` });
@@ -304,7 +302,7 @@ export function runDomainOwnershipCheck(argv: string[] = process.argv.slice(2)):
     const inventory = buildInventory(root);
     const manifests = loadModuleManifests(root);
     const ownership = validateModuleOwnership(inventory, manifests);
-    const health = validateModuleHealth(root, manifests);
+    const health = validateModuleHealth(root, manifests, (id) => `${domainTree(MODULE_TO_DOMAIN.get(id) ?? id)}/index.ts`);
     if (!domains.ok || !ownership.ok || !health.ok) {
       const details = [
         formatDomainOwnership(domains),

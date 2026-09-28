@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { parseCompatibilityUsageV1 } from "../../../src/domains/config/compatibility-usage";
-import { checkContained, isRefused, writeContainedFile } from "../../../src/domains/kernel/path-containment";
-import { loadYamlApi } from "../../../src/domains/kernel/yaml-loader";
+import { parseCompatibilityUsageV1 } from "../../../src/domains/config/index";
+import { checkContained, isRefused, writeContainedFile } from "../../../src/domains/kernel/index";
+import { loadYamlApi } from "../../../src/domains/kernel/index";
 import {
   acquireJournalAuthority,
   appendReceipt,
@@ -16,8 +16,8 @@ import {
   scanReceiptJournal,
   type ReceiptAppendInput,
   type ReceiptRecordV1,
-} from "../../../src/domains/telemetry/receipt-journal";
-import { reconcileReceiptJournal } from "../../../src/domains/telemetry/receipt-reconcile";
+} from "../../../src/domains/telemetry/index";
+import { reconcileReceiptJournal } from "../../../src/domains/telemetry/index";
 import { validateProjectCapabilityProfileV1 } from "../core/contracts/project-capability-profile";
 import {
   baselineBinding,
@@ -29,20 +29,20 @@ import { extractHandoffEnvelope, validateHandoffV2 } from "../../../hooks/lib/ha
 import {
   CAPABILITY_RUN_START_SNAPSHOT_SCHEMA,
   capabilityRunStartIdentityHash,
-} from "../../../src/domains/lifecycle/run-lifecycle";
+} from "../../../src/domains/lifecycle/index";
 import {
   completePendingSubstantiveOperation,
   readRunBindingRecord,
   stagePendingSubstantiveOperation,
   withRunBindingExclusion,
-} from "../../../src/domains/lifecycle/run-binding";
-import { isCanonicalLaneReceipt } from "../../../src/domains/lifecycle/run-record-validate";
+} from "../../../src/domains/lifecycle/index";
+import { isCanonicalLaneReceipt } from "../../../src/domains/lifecycle/index";
 import { validateFrozenReceiptDocument } from "../../../src/domains/lifecycle";
 import {
   taskCellPaths,
   validateTaskAssignmentV2,
   validateTaskAttemptV1,
-} from "../../../src/domains/dispatch/task-cell-contract";
+} from "../../../src/domains/dispatch/index";
 import { redactShareableFile } from "../shared/scrub-redact";
 
 export const MIGRATION_BOUNDARY_SCHEMA = "guild.capability_migration_boundary.v1" as const;

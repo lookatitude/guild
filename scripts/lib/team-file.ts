@@ -6,4 +6,17 @@
  * imports from scripts/lib/team-file.
  */
 
-export * from "../../src/domains/teams/team-file";
+export {
+  teamFilePath,
+  legacyTeamFilePath,
+  slugFromTeamPath,
+  phaseFromTeamPath,
+  readCurrentPhasePointer,
+  writeCurrentPhasePointer,
+  readActivePhase,
+  resolveTeamFile,
+  readPlanOwnerTaskIds,
+  readPlanTaskIdSet,
+  resolveDeadLaneKeys,
+} from "../../src/domains/teams/index";
+export { CANONICAL_PHASES, isCanonicalPhase } from "../../src/domains/lifecycle/index";

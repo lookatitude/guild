@@ -31,3 +31,36 @@ export * from "./roster-contract";
 
 // ── from src/modules/templates ──────────────────────────────────────────
 export * from "./template-schema";
+
+// ── consumed outside the domain (T16: every importer goes through this index) ──
+export {
+  assertDispatchApproved,
+  resolveApprovalOverride,
+} from "./dispatch-approval";
+export {
+  buildProposalReview,
+  DECISION_VOCABULARY,
+  kindCoverage,
+  type LoadedDecision,
+  loadPersistedDecisions,
+  parseDecisionVerb,
+  planRestructure,
+  preDispatchGate,
+  renderProposalReview,
+  renderRestructurePlan,
+  scanCapReintroduction,
+  teamPlanDir,
+} from "./team-decision-surface";
+export {
+  recordDecision,
+  type TeamDecisionV1,
+  writeDecision,
+} from "./team-decision";
+export {
+  composeProposal,
+  type TeamProposalV2,
+  writeProposal,
+} from "./team-proposal";
+export {
+  type TeamScheduleV1,
+} from "./team-schedule";

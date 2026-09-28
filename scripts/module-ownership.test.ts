@@ -19,10 +19,11 @@ import {
   type ModuleManifest,
 } from "./lib/module-manifest";
 import * as shim from "./lib/module-manifest";
-import * as moduleImpl from "../src/domains/kernel/module-manifest";
+import * as moduleImpl from "../src/domains/kernel/index";
 import {
   DOMAIN_IDS,
   MODULE_TO_DOMAIN,
+  domainTree,
   validateDomainOwnership,
 } from "../src/domains/distribution";
 
@@ -61,19 +62,15 @@ describe("src/modules ownership manifests", () => {
   });
 
   it("versions every public module API introduced for host-facing migrations", () => {
-    // T12: the declaration moved into the module's domain home and the module
-    // index republishes it, so assert the surface, not the declaration site.
+    // T12: the declaration moved into the module's domain home; T16 deleted the
+    // module shims, so the domain index is the surface that carries it.
     const declaredIn = new Set<string>();
     for (const [moduleId, domain] of [
       ["config", "config"], ["dispatch", "dispatch"], ["distribution", "distribution"],
       ["learning", "knowledge"], ["migrations", "state"], ["review", "review"],
       ["security", "security"], ["specialists", "teams"],
     ] as const) {
-      const shim = fs.readFileSync(
-        path.join(PLUGIN_ROOT, "src", "modules", moduleId, "index.ts"),
-        "utf8"
-      );
-      expect(shim).toContain("MODULE_PUBLIC_API_VERSION");
+      expect(MODULE_TO_DOMAIN.get(moduleId)).toBe(domain);
       declaredIn.add(domain);
     }
     for (const domain of declaredIn) {
@@ -114,8 +111,12 @@ describe("src/modules ownership manifests", () => {
     expect(result).toEqual({ ok: true, violations: [], errors: [] });
   });
 
-  it("keeps every module healthy: the module tree is re-export shims over the domain fold", () => {
-    const result = validateModuleHealth(PLUGIN_ROOT, manifests);
+  it("keeps every module healthy: each module publishes through its fold domain's index", () => {
+    const result = validateModuleHealth(
+      PLUGIN_ROOT,
+      manifests,
+      (id) => `${domainTree(MODULE_TO_DOMAIN.get(id) ?? id)}/index.ts`,
+    );
     expect(result.ok).toBe(true);
     expect(result.findings).toEqual([]);
     expect(result.modules.length).toBe(manifests.length);
@@ -134,11 +135,6 @@ describe("src/modules ownership manifests", () => {
         .sort()
       // dashboard: resource-only since its orphaned projector was deleted (G5b)
     ).toEqual(["dashboard"]);
-    expect(
-      result.modules
-        .filter((module) => module.implementation_mode === "resource-only")
-        .every((module) => !module.has_public_index)
-    ).toBe(true);
   });
 
   it("CONTROL: removing an owner makes the real inventory report a missing surface", () => {
@@ -533,7 +529,7 @@ describe("src/modules ownership manifests", () => {
     }
   });
 
-  it("CONTROL: a module directory holding more than its shim fails DOMAIN ownership", () => {
+  it("CONTROL: a module directory holding TypeScript fails DOMAIN ownership", () => {
     // T12: "no implementation left behind in src/modules" is stated once, in the
     // domain-ownership check, not duplicated into the module health rail.
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-module-leftover-"));
@@ -544,10 +540,9 @@ describe("src/modules ownership manifests", () => {
       }
       fs.mkdirSync(path.join(tmp, "src", "adapters"), { recursive: true });
       fs.writeFileSync(path.join(tmp, "src", "adapters", "index.ts"), "export {};\n");
-      for (const [id, domain] of MODULE_TO_DOMAIN) {
-        const target = domain === "adapters" ? "../../adapters" : `../../domains/${domain}`;
+      for (const id of MODULE_TO_DOMAIN.keys()) {
         fs.mkdirSync(path.join(tmp, "src", "modules", id), { recursive: true });
-        fs.writeFileSync(path.join(tmp, "src", "modules", id, "index.ts"), `export * from "${target}";\n`);
+        fs.writeFileSync(path.join(tmp, "src", "modules", id, "module.manifest.json"), "{}\n");
       }
       expect(validateDomainOwnership(tmp).ok).toBe(true);
 

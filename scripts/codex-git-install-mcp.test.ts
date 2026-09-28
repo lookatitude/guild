@@ -50,10 +50,7 @@ import { checkClaudeInstallSurface } from "./build-host-packages";
 // buildInventory (not the private loadInventory) — the latter WRITES
 // guild.inventory.json, the documented side effect that flakes sibling suites.
 import { buildInventory } from "./build-inventory";
-import {
-  renderCodexGitInstallManifest,
-  renderCodexPluginJson,
-} from "../src/domains/distribution/per-host-packaging";
+import { renderCodexGitInstallManifest, renderCodexPluginJson } from "../src/domains/distribution/index";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "..");
 const MANIFEST_REL = path.join(".codex-plugin", "plugin.json");

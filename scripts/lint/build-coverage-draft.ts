@@ -2,7 +2,7 @@
 /**
  * build-coverage-draft — the first `guild.coverage.v1` draft (spec gap G-a).
  *
- * Enumerates every pre-change id on this tree (command, skill, live
+ * Enumerates every pre-change id on this tree (command, skill, frozen
  * `src/modules/*` public export, eval) and maps it to its post-reshape target:
  * assembler chapter | playbook | domain function | alias | deleted.
  * Zero unmapped ids is the acceptance criterion; the script fails loudly when an
@@ -341,9 +341,6 @@ const MODULE_TO_DOMAIN: Record<string, string> = Object.fromEntries(SHIPPED_MODU
 function read(p: string): string {
   try { return fs.readFileSync(p, "utf8"); } catch { return ""; }
 }
-function isDir(p: string): boolean {
-  try { return fs.statSync(p).isDirectory(); } catch { return false; }
-}
 function walk(root: string, rel = "", out: string[] = []): string[] {
   let entries: fs.Dirent[];
   try { entries = fs.readdirSync(path.join(root, rel), { withFileTypes: true }); } catch { return out; }
@@ -508,40 +505,6 @@ function skills(): Entry[] {
   });
 }
 
-/**
- * A module shim republishes its exact pre-fold surface, aliasing any name the
- * fold had to disambiguate. This is module-side name -> domain-side name, so a
- * coverage row points at the symbol the DOMAIN index actually exports.
- */
-function shimAliases(moduleId: string): Map<string, string> {
-  const out = new Map<string, string>();
-  const file = path.join(ROOT, "src/modules", moduleId, "index.ts");
-  if (!fs.existsSync(file)) return out;
-  const sf = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  for (const st of sf.statements) {
-    if (!ts.isExportDeclaration(st) || !st.moduleSpecifier) continue;
-    if (!st.exportClause || !ts.isNamedExports(st.exportClause)) continue;
-    for (const el of st.exportClause.elements) {
-      out.set(el.name.text, (el.propertyName ?? el.name).text);
-    }
-  }
-  return out;
-}
-
-/** Shim name -> the domain a named `export { … } from "../../domains/<d>"` points at. */
-function shimDomainSources(file: string): Map<string, string> {
-  const out = new Map<string, string>();
-  const sf = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  for (const st of sf.statements) {
-    if (!ts.isExportDeclaration(st) || !st.moduleSpecifier || !ts.isStringLiteral(st.moduleSpecifier)) continue;
-    if (!st.exportClause || !ts.isNamedExports(st.exportClause)) continue;
-    const domain = /(?:^|\/)domains\/([^/]+)$/.exec(st.moduleSpecifier.text)?.[1];
-    if (!domain) continue;
-    for (const el of st.exportClause.elements) out.set(el.name.text, domain);
-  }
-  return out;
-}
-
 /** Public surface of every domain index, plus the adapter tree (not a domain). */
 function domainSurfaces(): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
@@ -552,52 +515,90 @@ function domainSurfaces(): Map<string, Set<string>> {
   return out;
 }
 
+/**
+ * The `src/modules/<id>` public surfaces, frozen when T16 deleted the shims: a
+ * pre-change id never vanishes (KTD36), and git history holds the shims themselves.
+ * A bare name targets the same name in the module's fold domain; `name=>d#n` is a
+ * name the fold renamed or re-homed.
+ */
+const MODULE_FOLD_ROWS = path.join(ROOT, "scripts/lint/module-fold-rows.json");
+
 function moduleExports(): Entry[] {
-  const base = path.join(ROOT, "src/modules");
+  const frozen = JSON.parse(read(MODULE_FOLD_ROWS)) as { modules: Record<string, string[]> };
   const out: Entry[] = [];
-  for (const m of fs.readdirSync(base).sort()) {
-    if (!isDir(path.join(base, m))) continue;
+  for (const m of Object.keys(frozen.modules).sort()) {
     const domain = MODULE_TO_DOMAIN[m];
     if (!domain) throw new Error(`unmapped module: ${m}`);
-    const idx = path.join(base, m, "index.ts");
-    if (!fs.existsSync(idx)) {
+    const rows = frozen.modules[m];
+    if (rows.length === 0) {
       out.push({
         id: `module:${m}`, kind: "module_export", target: `domain:${domain}`,
-        disposition: "domain-fold", note: "module has no index.ts; U3 gives it one or folds its files",
+        disposition: "domain-fold", note: "module had no index.ts; its surfaces fold into the domain",
       });
       continue;
     }
-    // Every `export * from` barrel is resolved to its named symbols with the
-    // TypeScript compiler API, recursively, so the row is a public export and not a
-    // file path. Symbols keep the file they come from, which is what U3 has to move.
-    const symbols = collectExports(idx, new Set());
-    const aliases = shimAliases(m);
-    const sources = shimDomainSources(idx);
-    for (const [name, from] of [...symbols.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
-      const rel = path.relative(ROOT, from).replace(/\\/g, "/");
-      // host-runtime folds into the adapter tree, except the host identity truth
-      // T14 moved into a domain (KTD27): that row targets the domain its shim
-      // re-exports it from.
-      const target = domain === "adapters" ? (sources.get(name) ?? domain) : domain;
+    for (const row of rows) {
+      const [name, target] = row.split("=>");
       out.push({
-        id: `module:${m}#${name}`,
-        kind: "module_export",
-        target: `domain:${target}#${aliases.get(name) ?? name}`,
-        disposition: "domain-fold",
-        note: rel === `src/modules/${m}/index.ts` ? undefined : `declared in ${rel}`,
-      });
-    }
-    for (const spec of UNRESOLVED_BARRELS.splice(0)) {
-      out.push({
-        id: `module:${m}#*:${spec}`,
-        kind: "module_export",
-        target: `domain:${domain} <- ${spec}`,
-        disposition: "domain-fold",
-        note: "re-export barrel whose backing file could not be resolved on disk; U3 must place it by hand",
+        id: `module:${m}#${name}`, kind: "module_export",
+        target: `domain:${target ?? `${domain}#${name}`}`, disposition: "domain-fold",
       });
     }
   }
   return out;
+}
+
+/**
+ * A domain export no module ever published is still public API when code outside
+ * the domain imports it (KTD27: every consumer goes through the index). Each such
+ * name gets one row naming a consumer; an export nobody outside imports stays an
+ * orphan, because it should stay internal.
+ */
+function consumerExports(claimed: ReadonlySet<string>): Entry[] {
+  const used = new Map<string, string>();
+  const note = (domain: string, name: string, by: string) => {
+    const key = `${domain}#${name}`;
+    if (!claimed.has(key) && !used.has(key)) used.set(key, by);
+  };
+  const domainOf = (spec: string, from: string): string | null => {
+    if (!spec.startsWith(".")) return null;
+    const rel = path.relative(ROOT, path.resolve(path.dirname(from), spec)).replace(/\\/g, "/")
+      .replace(/\.(ts|js)$/, "").replace(/\/index$/, "");
+    const m = /^src\/domains\/([^/]+)$/.exec(rel);
+    return m ? m[1] : null;
+  };
+  for (const tree of ["src", "scripts", "hooks", "tests", "mcp-servers"]) {
+    for (const f of walk(path.join(ROOT, tree))) {
+      if (!/\.tsx?$/.test(f) || f.endsWith(".d.ts") || /(^|\/)dist\//.test(f)) continue;
+      const rel = `${tree}/${f}`;
+      const abs = path.join(ROOT, rel);
+      const sf = ts.createSourceFile(abs, read(abs), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+      const namespaces = new Map<string, string>();
+      const visit = (n: ts.Node): void => {
+        if ((ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) &&
+            n.moduleSpecifier && ts.isStringLiteral(n.moduleSpecifier)) {
+          const d = domainOf(n.moduleSpecifier.text, abs);
+          if (d && !rel.startsWith(`src/domains/${d}/`)) {
+            const clause = ts.isImportDeclaration(n) ? n.importClause?.namedBindings : n.exportClause;
+            if (clause && (ts.isNamedImports(clause) || ts.isNamedExports(clause))) {
+              for (const el of clause.elements) note(d, (el.propertyName ?? el.name).text, rel);
+            } else if (clause && ts.isNamespaceImport(clause)) {
+              namespaces.set(clause.name.text, d);
+            }
+          }
+        }
+        if (ts.isPropertyAccessExpression(n) && ts.isIdentifier(n.expression) && namespaces.has(n.expression.text)) {
+          note(namespaces.get(n.expression.text)!, n.name.text, rel);
+        }
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+    }
+  }
+  return [...used.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([key, by]) => ({
+    id: `export:${key}`, kind: "module_export", target: `domain:${key}`,
+    disposition: "domain-export", note: `imported outside the domain by ${by}`,
+  }));
 }
 
 function evals(): Entry[] {
@@ -679,7 +680,9 @@ function main(argv: string[]): number {
     const hit = argv.find((a) => a.startsWith(`--${n}=`));
     return hit ? hit.slice(n.length + 3) : undefined;
   };
-  const entries = [...commands(), ...skills(), ...moduleExports(), ...evals(), ...vcEvals()];
+  const folded = moduleExports();
+  const claimed = new Set(folded.map((e) => e.target.replace(/^domain:/, "")));
+  const entries = [...commands(), ...skills(), ...folded, ...consumerExports(claimed), ...evals(), ...vcEvals()];
   const unmapped = entries.filter((e) => !e.target || !e.target.trim());
 
   // ---- KTD36 bijection over the live domain public APIs ---------------------
@@ -689,7 +692,6 @@ function main(argv: string[]): number {
   const surfaces = domainSurfaces();
   const foldedInto = new Map<string, string[]>();
   for (const [moduleId, domain] of Object.entries(MODULE_TO_DOMAIN)) {
-    if (!isDir(path.join(ROOT, "src/modules", moduleId))) continue;
     let list = foldedInto.get(domain);
     if (!list) foldedInto.set(domain, (list = []));
     list.push(moduleId);

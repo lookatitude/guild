@@ -43,7 +43,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { splitFrontmatter, parseYaml } from "../../scripts/lib/frontmatter";
-import { parseModelsArgs } from "../../src/domains/config/models-command";
+import { parseModelsArgs } from "../../src/domains/config/index";
 import {
   createCacheKey,
   modelCatalogCacheDir,
@@ -56,9 +56,9 @@ import {
   preDispatchGate,
   scanCapReintroduction,
   teamPlanDir,
-} from "../../src/domains/teams/team-decision-surface";
-import { composeProposal, writeProposal } from "../../src/domains/teams/team-proposal";
-import { recordDecision, writeDecision } from "../../src/domains/teams/team-decision";
+} from "../../src/domains/teams/index";
+import { composeProposal, writeProposal } from "../../src/domains/teams/index";
+import { recordDecision, writeDecision } from "../../src/domains/teams/index";
 import { canonicalYaml } from "../../src/domains/teams";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");

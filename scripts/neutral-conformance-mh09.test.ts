@@ -1670,7 +1670,7 @@ describe("the production external one-time signer", () => {
       // so the REAL production-mode body can traverse its complete success
       // path; it adds no signer option or production trust override.
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const neutralCore = require("../src/domains/lifecycle/neutral-conformance-core") as {
+      const neutralCore = require("../src/domains/lifecycle") as {
         neutralAttestorVerificationKey: (attestorId: string) => string | null;
       };
       const originalAuthorityLookup = neutralCore.neutralAttestorVerificationKey;
@@ -2931,7 +2931,7 @@ describe("the FU04 public root-admission bridge", () => {
 
     // A fresh signer bound to the rotated live trust root. mock.module patches the
     // core module in place, so the real exports are restored in the finally.
-    const corePath = "../src/domains/lifecycle/neutral-conformance-core";
+    const corePath = "../src/domains/lifecycle";
     const actualCore = { ...(require(corePath) as Record<string, unknown>) };
     mock.module(corePath, () => ({ ...actualCore, NEUTRAL_ATTESTOR_TRUST_ROOT: rotatedTrustRoot }));
     try {

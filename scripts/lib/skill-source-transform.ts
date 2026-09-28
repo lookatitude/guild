@@ -61,10 +61,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import {
-  canonicalizeRealPath,
-  isWithin,
-} from "../../src/domains/kernel/path-containment";
+import { canonicalizeRealPath, isWithin } from "../../src/domains/kernel/index";
 
 import { splitFrontmatter } from "./frontmatter";
 

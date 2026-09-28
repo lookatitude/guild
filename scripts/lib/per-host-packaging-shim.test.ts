@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./per-host-packaging";
-import * as moduleImpl from "../../src/domains/distribution/per-host-packaging";
+import * as moduleImpl from "../../src/domains/distribution/index";
 
 describe("per-host-packaging compatibility shim", () => {
   test("scripts/lib/per-host-packaging re-exports src/modules/distribution", () => {
@@ -19,7 +19,7 @@ describe("per-host-packaging compatibility shim", () => {
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/per-host-packaging.ts"), "utf8");
     const modulePath = fs.readFileSync(path.join(repoRoot, "src/domains/distribution/per-host-packaging.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/domains\/distribution\/per-host-packaging["']/);
+    expect(oldPath).toMatch(/from\s+["']\.\.\/\.\.\/src\/domains\/distribution\/index["']/);
     expect(oldPath).not.toMatch(/export\s+function\s+renderCodexPluginJson/);
     expect(modulePath).toMatch(/export\s+function\s+renderCodexPluginJson/);
   });

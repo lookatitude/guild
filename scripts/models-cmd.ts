@@ -14,7 +14,7 @@
  * rendered output trips the canonical redaction applier.
  */
 
-import { runModelsCommand } from "../src/domains/config/models-command";
+import { runModelsCommand } from "../src/domains/config/index";
 import { locateCandidateRunId } from "./lib/run-binding";
 
 export function main(argv: string[] = process.argv.slice(2)): number {

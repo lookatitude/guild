@@ -19,7 +19,7 @@ import * as path from "path";
 import * as crypto from "crypto";
 import * as yaml from "js-yaml";
 
-import * as catalogCache from "../../src/domains/config/catalog-cache";
+import * as catalogCache from "../../src/domains/config";
 import {
   CACHED_INSPECTION_BUDGET_MS,
   CacheKeyIdentity,
@@ -87,6 +87,13 @@ function mkKey(salt: string): CatalogCacheKey {
 }
 
 // ── Canonical YAML parity with the contract-fixture reference (js-yaml) ──────
+
+// The file's runtime export set, read from its source: consumers import the
+// domain index (KTD27), so a namespace import can no longer see one file alone.
+const valueExportsOf = (rel: string): string[] =>
+  [...fs.readFileSync(path.resolve(__dirname, "../..", rel), "utf8").matchAll(
+    /^export\s+(?:async\s+)?(?:function\*?|const|let|var|class)\s+([A-Za-z_$][\w$]*)/gm,
+  )].map((m) => m[1]);
 
 describe("canonical YAML byte-parity with the js-yaml reference (team-contracts §1)", () => {
   test("reference tuple and every -CHANGED variant serialize byte-identically", () => {
@@ -287,7 +294,7 @@ describe("sealed cache-key surface (T4-R2-002 encapsulation, permanent reviewer 
   });
 
   test("the module's public runtime surface is exactly the sealed export set (no bypass symbols)", () => {
-    expect(Object.keys(catalogCache).sort()).toEqual([
+    expect(valueExportsOf("src/domains/config/catalog-cache.ts").sort()).toEqual([
       "CACHED_INSPECTION_BUDGET_MS",
       "CACHE_KEY_COMPONENTS",
       "DEFAULT_CATALOG_TTL_SECONDS",

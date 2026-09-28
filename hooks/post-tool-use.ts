@@ -81,7 +81,7 @@ import {
   readHookStdin,
   type GuildHookEvent,
 } from "./lib/guild-hook-event.js";
-import { emitTraceEvent, makeAnalysisTraceEvent } from "../src/modules/telemetry/index.js";
+import { emitTraceEvent, makeAnalysisTraceEvent } from "../src/domains/telemetry/index.js";
 
 function isKnownTool(name: string | undefined): name is ToolCallTool {
   if (typeof name !== "string") return false;

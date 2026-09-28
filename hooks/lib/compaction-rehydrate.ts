@@ -35,19 +35,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { createGuildStorage } from "../../src/modules/state/index.js";
-import { readWorkingSet, type WorkingSet } from "../../src/modules/knowledge/index.js";
-import { readWorkflowCursor, type WorkflowCursor } from "../../src/modules/lifecycle/index.js";
-import {
-  progressLedgerPath,
-  validateProgressLedgerV1,
-  type ProgressLedgerV1,
-} from "../../src/modules/dispatch/index.js";
-import {
-  ORCHESTRATOR_WINDOW,
-  foldOrchestratorContext,
-  type OrchestratorContext,
-} from "../../src/modules/teams/index.js";
+import { createGuildStorage } from "../../src/domains/state/index.js";
+import { readWorkingSet, type WorkingSet } from "../../src/domains/knowledge/index.js";
+import { readWorkflowCursor, type WorkflowCursor } from "../../src/domains/lifecycle/index.js";
+import { progressLedgerPath, validateProgressLedgerV1, type ProgressLedgerV1 } from "../../src/domains/dispatch/index.js";
+import { ORCHESTRATOR_WINDOW, foldOrchestratorContext, type OrchestratorContext } from "../../src/domains/teams/index.js";
 import { KTD26_TOKEN_CAP, truncateWithPointer } from "./token-cap.js";
 import { readScalarField } from "../../scripts/lib/frontmatter";
 

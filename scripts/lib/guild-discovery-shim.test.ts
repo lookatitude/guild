@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./guild-discovery";
-import * as moduleImpl from "../../src/domains/state/guild-discovery";
+import * as moduleImpl from "../../src/domains/state/index";
 
 describe("guild-discovery compatibility shim", () => {
   test("scripts/lib/guild-discovery re-exports src/modules/state", () => {
@@ -21,7 +21,7 @@ describe("guild-discovery compatibility shim", () => {
       "utf8",
     );
 
-    expect(oldPath).toMatch(/src\/domains\/state\/guild-discovery/);
+    expect(oldPath).toMatch(/src\/domains\/state\/index/);
     expect(oldPath).not.toMatch(/export\s+function\s+discoverGuild/);
     expect(modulePath).toMatch(/export\s+function\s+discoverGuild/);
     expect(modulePath).toMatch(/export\s+function\s+workspaceReadThroughSources/);

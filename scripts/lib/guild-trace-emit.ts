@@ -5,6 +5,6 @@
  * without breaking imports from scripts/lib/guild-trace-emit.
  */
 
-import * as traceEmitImpl from "../../src/domains/telemetry/guild-trace-emit";
+import * as traceEmitImpl from "../../src/domains/telemetry/index";
 
 export const emitTraceEvent = traceEmitImpl.emitTraceEvent;

@@ -44,14 +44,14 @@ import {
   type KnowledgeLinksDoc,
   type CanonicalNode,
   type CanonicalEdge,
-} from "../../src/domains/knowledge/knowledge-links-contract";
+} from "../../src/domains/knowledge/index";
 export {
   KNOWLEDGE_RECALL_SCHEMA_VERSION,
   KNOWLEDGE_LINKS_PROVENANCE_SCHEMA_VERSION,
   type KnowledgeLinksDoc,
   type CanonicalNode,
   type CanonicalEdge,
-} from "../../src/domains/knowledge/knowledge-links-contract";
+} from "../../src/domains/knowledge/index";
 import { importanceMultiplier, confidenceBonus } from "./kg-query";
 
 // ---------------------------------------------------------------------------

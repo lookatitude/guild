@@ -101,8 +101,8 @@ import {
   makeReceiptInput,
   readCheckpointState,
   scanReceiptJournal,
-} from "../../src/domains/telemetry/receipt-journal.js";
-import { reconcileReceiptJournal } from "../../src/domains/telemetry/receipt-reconcile.js";
+} from "../../src/domains/telemetry/index.js";
+import { reconcileReceiptJournal } from "../../src/domains/telemetry/index.js";
 
 import { writeCheckpoint } from "../emit-learning-checkpoint.js";
 import { PHASE_TOKEN_TO_CHECKPOINT } from "./learning-backstop.js";

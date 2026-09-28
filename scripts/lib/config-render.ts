@@ -35,7 +35,7 @@
  */
 
 import * as path from "path";
-import { sealSet } from "../../src/domains/kernel/sealed-collections";
+import { sealSet } from "../../src/domains/kernel/index";
 import {
   HostId,
   HOST_IDS,

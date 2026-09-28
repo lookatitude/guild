@@ -5,7 +5,7 @@
  * move internals without breaking imports from scripts/lib/frontmatter.
  */
 
-import * as frontmatterImpl from "../../src/domains/state/frontmatter";
+import * as frontmatterImpl from "../../src/domains/state/index";
 
 export const splitFrontmatter = frontmatterImpl.splitFrontmatter;
 export const parseYaml = frontmatterImpl.parseYaml;
@@ -15,7 +15,4 @@ export const readFrontmatterString = frontmatterImpl.readFrontmatterString;
 export const readScalarField = frontmatterImpl.readScalarField;
 export const hasTopLevelKey = frontmatterImpl.hasTopLevelKey;
 export const replaceTopLevelLine = frontmatterImpl.replaceTopLevelLine;
-export type {
-  FrontmatterSplit,
-  ParseOpts,
-} from "../../src/domains/state/frontmatter";
+export type { FrontmatterSplit, ParseOpts } from "../../src/domains/state/index";

@@ -6,15 +6,11 @@
  * or `npx tsx scripts/lib/fs-scanner.ts`.
  */
 
-import * as fsScannerImpl from "../../src/domains/knowledge/fs-scanner";
+import * as fsScannerImpl from "../../src/domains/knowledge/index";
 
 export const fsScan = fsScannerImpl.fsScan;
 export const runFsScannerCli = fsScannerImpl.runFsScannerCli;
-export type {
-  FsScanHit,
-  FsScanResult,
-  FsScanOpts,
-} from "../../src/domains/knowledge/fs-scanner";
+export type { FsScanHit, FsScanResult, FsScanOpts } from "../../src/domains/knowledge/index";
 
 if (typeof module !== "undefined" && require.main === module) {
   runFsScannerCli();

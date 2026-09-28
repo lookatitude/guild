@@ -43,7 +43,7 @@ import {
   loadConfirmationEntries,
   previewConfirmation,
   recordConfirmationDecision,
-} from "../../src/domains/dispatch/confirmation-gate";
+} from "../../src/domains/dispatch/index";
 
 const RUN_ID = "run-t7-remediation";
 

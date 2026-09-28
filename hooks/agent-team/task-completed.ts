@@ -90,12 +90,12 @@ import {
   evaluateContextCompliance,
   recordContextCompliance,
 } from "../lib/context-compliance.js";
-import { readTaskAssignmentV2 } from "../../src/domains/dispatch/task-assignment-v2.js";
+import { readTaskAssignmentV2 } from "../../src/domains/dispatch/index.js";
 import {
   readTaskAssignment,
   taskAssignmentPath,
-} from "../../src/domains/dispatch/task-assignment.js";
-import { publishSubmittedHandoffPointer } from "../../src/domains/dispatch/task-cell-acceptance.js";
+} from "../../src/domains/dispatch/index.js";
+import { publishSubmittedHandoffPointer } from "../../src/domains/dispatch/index.js";
 // T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
 import { ensureStorageLayout } from "../lib/ensure-layout.js";
 

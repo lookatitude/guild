@@ -13,11 +13,11 @@ import {
   isStation,
   type StationId,
   type TeamResultV1,
-} from "../../src/domains/teams/station-composer";
+} from "../../src/domains/teams/index";
 import {
   readTeamResult,
   writeTeamResult,
-} from "../../src/domains/teams/station-signals";
+} from "../../src/domains/teams/index";
 
 export interface TaskCellLaunchLane extends Specialist {
   taskId: string;

@@ -30,11 +30,8 @@ const SCRIPT = path.resolve(__dirname, "../task-completed.ts");
 // GUILD_RUN_ID would redirect deriveRunId off the fixture's run).
 import { mintTestBinding } from "../../test-support/mint-binding";
 import { hermeticEnv } from "../../test-support/hermetic-env";
-import {
-  buildTaskCell,
-  writeTaskCell,
-} from "../../../src/domains/dispatch/task-assignment-v2";
-import { buildTaskAssignment } from "../../../src/domains/dispatch/task-assignment";
+import { buildTaskCell, writeTaskCell } from "../../../src/domains/dispatch/index";
+import { buildTaskAssignment } from "../../../src/domains/dispatch/index";
 
 function runScript(
   payloadOverride: object,

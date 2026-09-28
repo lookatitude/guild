@@ -154,3 +154,117 @@ export * from "./tier-defaults";
 // ── from src/modules/prompting ──────────────────────────────────────────
 export * from "./compose-prompt";
 export * from "./team-prompt";
+
+// ── consumed outside the domain (T16: every importer goes through this index) ──
+export {
+  ADAPTER_SURFACES,
+  type AdapterSurface,
+  FALLBACK_LADDER_TABLE,
+  INFERRED_HOSTS,
+  isHostInferred,
+  type Rung,
+  rungLoss,
+  RUNGS,
+  validateDegradationReceipt,
+  validateLadderTableComplete,
+  type ValidationResult as LadderValidationResult,
+} from "./adapter-fallback-ladders";
+export {
+  createAllHostAdapters,
+  createHostAdapter,
+} from "./host-adapter-contract";
+export {
+  AGENTS_FILE_CAPABILITIES,
+  type AgentsCaps,
+  type ArtifactsCaps,
+  type BootstrapCaps,
+  CLAUDE_CAPABILITIES,
+  CODEX_CAPABILITIES,
+  type CommandsCaps,
+  type DispatchCaps,
+  type GuildHostCapabilitiesV1,
+  type HooksCaps,
+  INJECTION_SUPPORT,
+  type InjectionCaps,
+  type InjectionSupport,
+  type InteractionCaps,
+  isHostCapabilitiesV1,
+  type McpCaps,
+  type ModelsCaps,
+  type ModelTierEntry,
+  type PackageCaps,
+  type PermissionMode,
+  type PermissionsCaps,
+  PROBE_RECEIPT_PATH_RE,
+  REQUIRED_HOOK_EVENTS,
+  type SessionsCaps,
+  type SkillsCaps,
+  type StructuredOutputCaps,
+  type ToolsCaps,
+  type ToolStrength,
+  UPDATE_COMMANDS,
+  type UpdateCaps,
+  validateHostCapabilitiesV1,
+  type ValidationResult as HostCapabilitiesValidationResult,
+} from "./host-capabilities-schema";
+export {
+  isDroppedHostKind,
+  LEGACY_HOST_ALIASES,
+  registryIdToCanonicalHostKind,
+} from "./host-id-namespace";
+export {
+  CLI_NATIVE_HOSTS,
+  detectChildGitRepos,
+  detectGuildState,
+  GUILD_STATE_SCHEMA_VERSION,
+  type GuildState,
+  type GuildStateEvidence,
+  type GuildStateProblem,
+  type GuildStateResult,
+  HOST_OPEN_PREFLIGHT_SCHEMA_VERSION,
+  hostOpenPreflight,
+  type HostOpenPreflightResult,
+  type InitMode,
+  type InitPromptData,
+  type PreflightAction,
+  type PreflightAdvisory,
+  type RootKind,
+  suggestWorkspaceMode,
+  type WorkspaceSuggestion,
+} from "./host-open-preflight";
+export {
+  VALID_HOST_PROFILE_ENTRY_KEYS,
+  VALID_HOST_PROFILE_MODEL_KEYS,
+  validateHostProfiles,
+} from "./host-profiles-validate";
+export {
+  AUTH_PROBES,
+  type HostDetection,
+  type HostMarker,
+  isHostRegistryEntry,
+  validateHostRegistryEntry,
+  type ValidationResult as HostRegistryValidationResult,
+} from "./host-registry-schema";
+export {
+  deriveCapabilityRow,
+  DERIVED_HOST_CAPABILITY_ROWS,
+  dispatchSelectableForHostId,
+  getRegistryEntryForHostKind,
+  installabilityForHostId,
+  resultAdapterForFamily,
+  resultAdapterForHostId,
+  resultAdapterForHostKind,
+} from "./host-registry";
+export {
+  eagerEntriesFor,
+  lazyEntriesFor,
+  requiredEntriesFor,
+  scaffoldFor,
+} from "./init-scaffold-manifest";
+export {
+  parseModelsArgs,
+  runModelsCommand,
+} from "./models-command";
+export {
+  resolveSettings as resolveSettingsUntraced,
+} from "./settings-reader";
