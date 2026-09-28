@@ -93,17 +93,18 @@ server inside the consuming project, where step 3 is correct.
 
 ## Wiring
 
-See `.mcp.json` at the repo root — the server is registered via
-`node ${CLAUDE_PLUGIN_ROOT}/runtime/guild-mcp.js`, stdio
-transport. `npm run build` (esbuild, bundled/self-contained) produces that
-`dist/index.js`; `npx tsx src/index.ts` is only for local development.
+See `.mcp.json` at the repo root. The server is the `wiki` id of the one MCP
+binary, `node ${CLAUDE_PLUGIN_ROOT}/runtime/guild-mcp.js wiki`, stdio transport.
+The source lives at `src/runtime/mcp/guild-memory/`; `npm run build` (which runs
+`bun scripts/compile.ts --only=mcp` from the plugin root) compiles it into the
+committed `runtime/guild-mcp.js`. This folder keeps only the tests and fixtures.
 
 ## Tests
 
 ```bash
 cd mcp-servers/guild-memory
 npm install
-npx jest --no-coverage
+npm test          # bun test --isolate mcp-servers/guild-memory, from the plugin root
 ```
 
 Tests spawn the server as a subprocess and drive it with the

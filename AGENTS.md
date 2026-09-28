@@ -7,6 +7,10 @@ demand by team composition), and 76 skills — 17 of them indexed — across a
 brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision
 capture, and a self-evolution loop with shadow-mode gating.
 
+The runtime shape (bare `/guild` = T0, three tiers, five class graphs, one review
+gate, one promotion law, two context sizes) is the Layout laws list below; README
+carries the user-facing summary.
+
 This `AGENTS.md` file is the canonical host-neutral instruction file. Claude Code
 loads `CLAUDE.md`, but `CLAUDE.md` must only import this file; all durable
 directions belong here so Codex, Pi, Antigravity, and AGENTS.md-consuming hosts
@@ -21,8 +25,9 @@ For full architecture and design documentation see **https://guildstack.dev/docs
   assembler directories (KTD59); everything else ships off-index. An assembler is a
   three-stage folder: `SKILL.md` (frontmatter always, body on match) + `references/`
   (L3 chapters, on demand) + `scripts/` (compiled, never prompt text). The 58
-  specialist starter recipes and the dashboard launcher live under
-  `skills/playbooks/` as copy-on-mint feedstock (KTD13/KTD20), never indexed.
+  specialist starter recipes live under `skills/specialists/` as copy-on-mint
+  feedstock (KTD13/KTD20) and the dashboard launcher under
+  `skills/playbooks/dashboard/`; neither is indexed.
   The former `core/` and `fallback/` tiers are gone: `principles` folded into
   `using-guild`, and `tdd` / `systematic-debug` / `worktrees` / `finish-branch`
   are now chapters of the assembler that invokes them.
@@ -50,16 +55,24 @@ For full architecture and design documentation see **https://guildstack.dev/docs
 - `src/adapters/` — host family maps and the remaining host-runtime projection
   (KTD4). Not a thirteenth domain: adapters may read a domain index, a domain must
   not import adapters.
-- `src/modules/<module>/` — transitional re-export shims over the domains, kept so
-  existing importers keep working; T16 deletes them. **Edit the domain file, never
-  a shim.** A non-shim file here fails `npm run check:modules`.
+- `src/runtime/mcp/` — the source of the two optional MCP servers; it compiles
+  into the one committed `runtime/guild-mcp.js` with two D-MCP ids (`wiki` |
+  `trace`, KTD3). `src/surfaces/` holds only the five class graphs
+  (`graphs/*.yaml`) and the prompt dialects (`prompts/`).
+- There is no `src/modules/` tree: each former module's manifests and code live
+  beside the domain it folded into.
 - Host packages are a PROJECTION of the live surface (KTD28): `build-host-packages`
   copies straight from `commands/`, `skills/`, `agents/`, `hooks/`, `scripts/`.
   There are no `resources/` byte mirrors and no mirror-sync step.
-- `scripts/`, `mcp-servers/` — evolve loop, telemetry, optional MCP servers.
+- `scripts/` — author-plane CLIs (compile, lint, evolve, telemetry); run under
+  `bun`, shipped to users as compiled Node under `runtime/scripts/`.
+- `mcp-servers/` — tests and fixtures for the two MCP servers; their source is
+  `src/runtime/mcp/`.
 - `dist/` — committed per-host packages (`claude-code`, `codex`, `pi`, …) rendered
   by `scripts/build-host-packages.ts`; regenerated, never hand-edited.
-- `tests/` — skill evals and wiki-lint fixtures.
+- `tests/` — cross-cutting evals, fixtures, and the Verification Contract
+  (`tests/verification-contract/index.json`). Every test runs under
+  `bun test --isolate`; there is no Jest and no layout-laws baseline.
 - `templates/{skills,agents,products}/` — authoring + product scaffolds
   (`templates/specialists/` is the 15 specialist type templates, described above).
 - `docs/` — RETIRED as a docs set: holds only a static redirect page to
@@ -85,12 +98,12 @@ never user-typed. This is the one-place wiring reference — each command's
 | Phase verb | Skill(s) invoked, in order | Output artifact |
 |---|---|---|
 | `/guild:init` | `guild:init` (cheap by default: wiki + brownfield cheap-scan CodebaseMap + architecture-map stub) — full `learn-*` pipeline runs ONLY under `--learn` / `defaults.auto_learn` | `.guild/init/<slug>.md`, `.guild/wiki/**`, `codebase-map.json` + `architecture-map.md` stub |
-| `/guild:ideate` | `guild:brainstorm` (standard+deep: wrapped by `guild:loop-clarify`) | `.guild/spec/<slug>.md` |
-| `/guild:plan` | `guild:team-compose` → `guild:plan` (deep: + `guild:loop-plan-review`) | `.guild/team/<slug>.<phase>.yaml` (resolved via `resolveTeamFile`; legacy `<slug>.yaml` read-only), `.guild/prd/<slug>.md`, `.guild/plan/<slug>.md` |
-| `/guild:build` | per lane: `guild:context-assemble` → `guild:execute-plan` → `guild:review` (deep: + `guild:loop-implement`) | handoff receipts, `assumptions.md`, `review.md` |
-| `/guild:qa` | `guild:guild-quality` | `.guild/runs/<run-id>/quality/<run-id>.md` |
-| `/guild:ops` | `guild:guild-operations` | `.guild/runs/<run-id>/ops/<run-id>.md` |
-| `/guild:learn` | the `learn-*` family — `guild:learn-map` / `learn-graph` / `learn-onboard` / `learn-diff` / `learn-explain` | deep knowledge-graph + onboarding / diff / explain artifacts (lazy, gated) |
+| `/guild:ideate` | `guild:brainstorm` (standard+deep: its `loop-clarify` chapter) | `.guild/spec/<slug>.md` |
+| `/guild:plan` | `guild:team-compose` → `guild:plan` (deep: + its `loop-plan-review` chapter) | `.guild/team/<slug>.<phase>.yaml` (resolved via `resolveTeamFile`; legacy `<slug>.yaml` read-only), `.guild/prd/<slug>.md`, `.guild/plan/<slug>.md` |
+| `/guild:build` | `guild:execute-plan` — per lane its `context-assemble` chapter, dispatch, then `guild:review` (deep: + its `loop-implement` chapter) | handoff receipts, `assumptions.md`, `review.md` |
+| `/guild:qa` | `guild:quality` | `.guild/runs/<run-id>/quality/<run-id>.md` |
+| `/guild:ops` | `guild:operations` | `.guild/runs/<run-id>/ops/<run-id>.md` |
+| `/guild:learn` | `guild:learn` — its `learn-map` / `learn-graph` / `learn-knowledge` / `learn-onboard` / `learn-diff` / `learn-explain` chapters; explicit Stage-2 is `extract-structural.ts` | deep knowledge-graph + onboarding / diff / explain artifacts (lazy, gated) |
 
 ## Dev team (`.guild/agents/`)
 
@@ -136,32 +149,39 @@ All project-created Guild state lives in the active root's `.guild/`:
 ```
 .guild/
 ├── guild.yaml                 # root identity: workspace or project
-├── settings.json              # project/workspace behavior
+├── config/project.json        # durable POLICY only (closed key set); host family, host id, and model names are session-bound on the run
+├── settings.json              # reconcile-owned settings surface (/guild:config); policy keys only
 ├── workspace.json             # workspace federation manifest, workspace roots only
 ├── workspace/                 # workspace metadata, workspace roots only
 ├── agents/*.md                # project/workspace-created specialists (files = source of truth, D4)
 ├── agents/registry.yaml       # DERIVED index of agents/*.md — generated by scripts/roster-resolve.ts, never hand-edited
 ├── skills/<name>/SKILL.md     # project/workspace-created skills (files = source of truth, D4)
 ├── skills/registry.yaml       # DERIVED index of skills/*/SKILL.md — generated by scripts/roster-resolve.ts, never hand-edited
-├── workflows/registry.yaml    # reusable workflows
-├── loops/registry.yaml        # custom review/build/learning loops
+├── workflows/registry.yaml    # derived index; class graphs are the one workflow runtime (overlay: .guild/graphs/)
+├── loops/registry.yaml        # derived index; not authored truth
 ├── wiki/                      # synthesized knowledge, decisions, standards
-├── knowledge/                 # graph, indexes, sources, promotion candidates
+├── knowledge/                 # graph, indexes, sources/ (ingested blobs), promotion candidates
 ├── memory/                    # summaries, lessons, recall index
 ├── initiatives/               # initiative registry, active, archived
 ├── teams/registry.yaml        # reusable team definitions
 ├── artifacts/                 # reports, audits, handoffs, generated outputs
-├── raw/                       # immutable source inputs + checksums
 ├── indexes/                   # codebase map and compatibility indexes
 ├── runs/                      # run traces and shareable run-summary subset
 ├── spec/                      # approved specs
 ├── plan/                      # per-task plans
-├── team/                      # resolved specialist teams, legacy path
+├── team/                      # per-phase team files <slug>.<phase>.yaml
 ├── context/                   # per-run specialist context bundles
 ├── reflections/               # proposed learnings and improvements
-├── evolve/                    # shadow-mode eval runs and reports
-└── skill-versions/            # rollback snapshots
+└── evolve/                    # shadow-mode eval runs and reports
 ```
+
+Files here are latest-only: evolve replaces the wrong span and keeps a compact
+history (inverse span + `before_hash`) on platform state, so there is no
+`skill-versions/` tree. Ingested blobs are `knowledge/sources/`, never `raw/`.
+Caches (SQLite index, codebase map, model catalog) and scratch live off the
+repo. Opening Guild on a root with an older layout upgrades it lazily on the first
+write-capable entry, and SessionStart on a Guild root always loads the Guild
+bootstrap.
 
 The benchmark consumes these artifacts. Keep them structured, deterministic, and
 safe to share in a team repository when policy allows it.
@@ -182,9 +202,10 @@ identifiers, private absolute paths when policy requires, and any configured
 redaction pattern. Redaction must preserve structure so the run remains useful
 for replay and learning.
 
-The wiki read path uses a lazy SQLite read-through cache (`index: "auto"`, default);
-disable with `index: "off"`. See `https://guildstack.dev/docs/configuration`
-(`defaults.index.*`).
+Recall is `recall.backend: bm25 | hybrid` (default `bm25`). Embeddings are cache
+only, and a missing embedding model fails open to BM25. The wiki read path uses a
+lazy SQLite read-through cache on platform state (`index: "auto"`, default);
+disable with `index: "off"`.
 
 ## Branch + PR discipline (mandatory) — the next/main channel model
 
@@ -262,9 +283,16 @@ Guild has a built-in self-evolution loop. For Guild's own development, the disci
    `.guild/wiki/index.md`, append to `.guild/wiki/log.md`.
 2. **Reflection after major work.** After a release, phase, or non-trivial task, invoke
    `guild:reflect` against the run summary; output to `.guild/reflections/<slug>.md`.
-3. **Promotion on user gate.** Reflections are *proposals*. The user reviews;
-   `guild:wiki-ingest` lands sourced knowledge; `guild:evolve-skill` lands skill body
-   changes via shadow-mode. Nothing auto-promotes.
+3. **One promotion law.** Harvest is the only auto writer: it promotes
+   decision-shaped verdicts to this cwd's wiki and span-replaces project playbooks
+   through `scrubbedWrite`, and never commits. `wiki.autopromote` defaults on;
+   `false` makes that root candidates-only. Specialists never write the wiki; a
+   request they need goes to the T0 request queue, which the lead drains. The
+   checkpoint is a domain function that classifies (`none | decision |
+   playbook_span | skill_def | reflect`) and never writes the wiki. Everything
+   else is a proposal: `guild:wiki-ingest` lands init staging, external URLs, and
+   manual pages; `guild:evolve` lands skill changes via shadow mode; plugin
+   machinery changes stay a human commit.
 
 The wiki for the Guild repo lives at `.guild/wiki/` (start at `index.md`). Read it before
 making decisions that touch the same surface — prior choices are recorded with their

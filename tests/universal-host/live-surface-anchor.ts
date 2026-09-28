@@ -626,7 +626,10 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-09-27 (T14 adapters + MCP): skill bodies spawn the compiled
   // runtime/scripts entries instead of npx tsx (KTD11). ANTI-VACUITY: the pin guards
   // were RED against the T13 pins before these values.
-  commands: "ecd95ee87f922d1ab9ba49326c2771f498e42058",
+  // Re-ratified 2026-09-28 (T17 plugin-local docs): wiki.md states the promotion law,
+  // the sources/ home and the hybrid-recall fail-open; status.md names the SQLite cache
+  // as platform state. The command registry was re-extracted for those two entries.
+  commands: "3ad08dd9650f6723dacd9ff62369a0fb69526066",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
   // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
@@ -682,7 +685,9 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // sources/ (KTD47), evolve step 9 names applyEvolveDelta, context-assemble passes
   // --phase/--cell, init and team-compose drop the retired paths. ANTI-VACUITY:
   // check-surface-pins named only `skills/skills` stale against the T15F pin.
-  skills: "5145228d73c214112f4301193c7ef06bd46139ff",
+  // Re-ratified 2026-09-28 (T17 plugin-local docs): using-guild states the promotion law
+  // and the shipped concern enum, and points the dispatch table at AGENTS.md.
+  skills: "1fea256df205e5a51f3390be6d535f37fe90c0ad",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

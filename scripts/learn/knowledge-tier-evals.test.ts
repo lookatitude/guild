@@ -11,7 +11,7 @@
  *     SC-2, SC-4 (validator/structural half), SC-5 (structural half), SC-6 (validator half),
  *     SC-11, SC-12, SC-13, plus a permanent field_contract tightness meta-eval.
  *   - PENDING (it.todo carrying the assertion spec; filled when the owning K-lane gates):
- *     SC-1 (L1), SC-3 (L2), SC-7 (L3), SC-8/14/15 (L6), SC-9 (L1+docs), SC-10 (L7),
+ *     SC-1 (L1), SC-3 (L2), SC-7 (L3), SC-8/14/15 (L6), SC-9 (L1+docs),
  *     plus the data-production halves of SC-4 (L5) / SC-5 (L4) and the lint half of SC-6 (L8).
  *
  * Assertion spec = the field_contract authored in expected-output.json (the tightness codex
@@ -1036,6 +1036,53 @@ describe("SC-8 — byte-identical projection across all 3 triggers (real orchest
   });
 });
 
-describe("PENDING — fill as the owning lane gates", () => {
-  it.todo("SC-10 (L7 benchmark UI): a headless assertion confirms (a) subtopic_of tree >=3 deep, (b) >=1 classified+labeled wiki_page cluster, (c) >=1 cross-modal evidenced_by edge between a doc/wiki node and a code node (owner: T17)");
+// ===========================================================================
+// SC-10 — the data the benchmark UI renders. The UI itself is the benchmark
+// repo's product (KTD66); the plugin proves, headlessly, that the graph it
+// produces carries the three shapes that UI draws.
+// ===========================================================================
+
+const CODE_TYPES = new Set(["file", "function"]);
+
+/** The three SC-10 shapes over one graph: taxonomy depth, a labeled wiki cluster, a doc→code edge. */
+function sc10Shapes(g: { nodes: GraphNode[]; edges: GraphEdge[] }) {
+  const parent = new Map<string, string>();
+  for (const e of g.edges) if (e.type === "subtopic_of") parent.set(e.source, e.target as string);
+  const depthOf = (id: string, seen = new Set<string>()): number =>
+    parent.has(id) && !seen.has(id) ? depthOf(parent.get(id)!, seen.add(id)) + 1 : 0;
+  const topics = g.nodes.filter((n) => n.type === "topic");
+  const depth = topics.length ? Math.max(...topics.map((t) => depthOf(t.id))) : 0;
+  const byCategory = new Map<string, number>();
+  for (const n of g.nodes) {
+    const labels = (n as { labels?: unknown[] }).labels;
+    if (n.type === "wiki_page" && n.category && Array.isArray(labels) && labels.length > 0) {
+      byCategory.set(n.category, (byCategory.get(n.category) ?? 0) + 1);
+    }
+  }
+  const largestCluster = Math.max(0, ...byCategory.values());
+  const byId = new Map(g.nodes.map((n) => [n.id, n]));
+  const fromDocs = (n?: GraphNode) =>
+    !!n && !CODE_TYPES.has(n.type) && (n.source_refs ?? []).some((r: string) => /\.md(#|$)/.test(r));
+  const crossModal = g.edges.filter(
+    (e) => e.type === "evidenced_by" && fromDocs(byId.get(e.source)) && CODE_TYPES.has(byId.get(e.target as string)?.type ?? ""),
+  ).length;
+  return { depth, largestCluster, crossModal };
+}
+
+describe("SC-10 — the graph carries the shapes the benchmark UI renders", () => {
+  it("SC-10: subtopic_of tree >=3 deep, a classified+labeled wiki_page cluster, a doc->code evidenced_by edge", () => {
+    const s = sc10Shapes(graph);
+    expect(s.depth).toBeGreaterThanOrEqual(3);
+    expect(s.largestCluster).toBeGreaterThanOrEqual(2);
+    expect(s.crossModal).toBeGreaterThanOrEqual(1);
+  });
+
+  it("SC-10 CONTROL: a shallow tree, unlabeled pages, and doc-only evidence each fail their shape", () => {
+    const shallow = { ...graph, edges: graph.edges.filter((e: GraphEdge) => e.type !== "subtopic_of" || e.target === "topic:a81857d8") };
+    expect(sc10Shapes(shallow).depth).toBeLessThan(3);
+    const unlabeled = { ...graph, nodes: graph.nodes.map((n: GraphNode) => (n.type === "wiki_page" ? { ...n, labels: [] } : n)) };
+    expect(sc10Shapes(unlabeled).largestCluster).toBe(0);
+    const docOnly = { ...graph, edges: graph.edges.filter((e: GraphEdge) => e.type !== "evidenced_by" || !e.target.toString().startsWith("function:")) };
+    expect(sc10Shapes(docOnly).crossModal).toBe(0);
+  });
 });

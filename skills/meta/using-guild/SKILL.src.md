@@ -61,6 +61,11 @@ In any Guild root, project terms live in `.guild/wiki/glossary.md`; recall on mi
 glossary here — the context manager attaches only the terms an assignment actually
 hits, capped, as part of the lane bundle.
 
+Harvest is the only automatic wiki writer (`wiki.autopromote`, default on; `false`
+is candidates-only); specialists never write `.guild/wiki/`. Wiki `labels.concern`
+uses the shipped enum: architecture · security · performance · reliability · data ·
+api · ux · build · ops.
+
 ## Where the full surface lives — don't memorize it
 
 Guild has typed **commands** (`/guild:<verb>`, run by the user) and model-invoked
@@ -77,7 +82,7 @@ not enumerate or guess them. Orient through these pointers instead:
 - The lifecycle spine is **init → ideate → plan → build → qa → ops**; reach for the
   skill(s) of the phase you are actually in.
 - `/guild:status` reports current run state.
-- The canonical phase → skill dispatch table is in `plugin/CLAUDE.md`; the full
+- The canonical phase → skill dispatch table is in `plugin/AGENTS.md`; the full
   command map is on the Guild docs site.
 
 Reach for the specific phase skill the moment you know the phase — don't route
