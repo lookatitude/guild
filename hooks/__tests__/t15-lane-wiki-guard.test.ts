@@ -282,4 +282,17 @@ describe("plr-wi-15-3 · a lane worker never writes the wiki (KTD35)", () => {
       else process.env["GUILD_TASK_ID"] = prev;
     }
   });
+
+  it("G-lane r4: a command past the scan ceiling is refused, not half-scanned", () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "t15-scan-cap-"));
+    const wiki = path.join(repo, ".guild", "wiki");
+    fs.mkdirSync(wiki, { recursive: true });
+    fs.symlinkSync(wiki, path.join(repo, "wiki alias"));
+    const hit = (c: string): string | null => bashWikiPath(c, (t) => resolvesUnderWiki([wiki], t, repo));
+    const padded = `node -e "${"/*''*/".repeat(1500)}require('fs').writeFileSync('wiki alias/bypass.md','x')"`;
+    expect(hit(padded)).not.toBeNull();
+    // CONTROL: a large command with no wiki path under the ceiling still passes.
+    expect(hit(`echo ${"a ".repeat(200)}`)).toBeNull();
+    fs.rmSync(repo, { recursive: true, force: true });
+  });
 });

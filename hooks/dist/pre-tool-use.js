@@ -44234,9 +44234,13 @@ function bashWords(command, depth = 0) {
 var QUOTES = "'\"`";
 var SPAN_START = /[\s'"`(,=:[{]/;
 var SPAN_END = /['"`),;\]}|&<>\n]/;
+var MAX_SCAN_CANDIDATES = 4096;
+var ScanExhausted = class extends Error {
+};
 function quotedLiterals(text, depth = 0) {
   const out = [];
-  for (let i = 0; i < text.length && out.length < 4096; i++) {
+  for (let i = 0; i < text.length; i++) {
+    if (out.length >= MAX_SCAN_CANDIDATES) throw new ScanExhausted("quoted-literal scan exhausted");
     const q = text[i];
     if (!QUOTES.includes(q)) continue;
     let j = i + 1;
@@ -44260,6 +44264,14 @@ function absoluteSpans(text) {
   return out;
 }
 function bashWikiPath(command, inWiki) {
+  try {
+    return scanBashWikiPath(command, inWiki);
+  } catch (err) {
+    if (err instanceof ScanExhausted) return "(command exceeds the wiki-path scan limit)";
+    throw err;
+  }
+}
+function scanBashWikiPath(command, inWiki) {
   const seen = /* @__PURE__ */ new Set();
   const check = (c) => {
     if (c.length === 0 || seen.has(c)) return false;

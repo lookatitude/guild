@@ -231,9 +231,16 @@ const SPAN_END = /['"`),;\]}|&<>\n]/;
  * cannot shift the pairing off the path literal. Nested literals are re-read
  * to a bounded depth; a backslash-unescaped copy is added too.
  */
+/** Candidate ceiling per scan; a command that reaches it is refused, never half-scanned. */
+export const MAX_SCAN_CANDIDATES = 4096;
+
+/** Thrown when a command yields more candidates than the scanner will check. */
+export class ScanExhausted extends Error {}
+
 export function quotedLiterals(text: string, depth = 0): string[] {
   const out: string[] = [];
-  for (let i = 0; i < text.length && out.length < 4096; i++) {
+  for (let i = 0; i < text.length; i++) {
+    if (out.length >= MAX_SCAN_CANDIDATES) throw new ScanExhausted("quoted-literal scan exhausted");
     const q = text[i]!;
     if (!QUOTES.includes(q)) continue;
     let j = i + 1;
@@ -267,6 +274,16 @@ export function absoluteSpans(text: string): string[] {
  * text with quotes and backslashes removed. `inWiki` decides one string.
  */
 export function bashWikiPath(command: string, inWiki: (p: string) => boolean): string | null {
+  try {
+    return scanBashWikiPath(command, inWiki);
+  } catch (err) {
+    // Fail closed: a command too large to scan fully is refused as if it named the wiki.
+    if (err instanceof ScanExhausted) return "(command exceeds the wiki-path scan limit)";
+    throw err;
+  }
+}
+
+function scanBashWikiPath(command: string, inWiki: (p: string) => boolean): string | null {
   const seen = new Set<string>();
   const check = (c: string): boolean => {
     if (c.length === 0 || seen.has(c)) return false;
