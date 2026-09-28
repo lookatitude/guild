@@ -44074,7 +44074,8 @@ function realpathDeep(p, depth = 0) {
   const abs = path85.isAbsolute(p) ? p : process.cwd() + path85.sep + p;
   let current = path85.parse(abs).root;
   let exists = true;
-  for (const seg of abs.slice(current.length).split(/[\\/]+/)) {
+  const SEP = path85.sep === "\\" ? /[\\/]+/ : /\/+/;
+  for (const seg of abs.slice(current.length).split(SEP)) {
     if (seg === "" || seg === ".") continue;
     if (seg === "..") {
       current = path85.dirname(current);

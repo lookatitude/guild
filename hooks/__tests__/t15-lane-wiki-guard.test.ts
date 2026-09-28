@@ -295,4 +295,14 @@ describe("plr-wi-15-3 · a lane worker never writes the wiki (KTD35)", () => {
     expect(hit(`echo ${"a ".repeat(200)}`)).toBeNull();
     fs.rmSync(repo, { recursive: true, force: true });
   });
+
+  it("G-lane r5: a backslash is part of a POSIX name, so ..\\x.md stays inside the wiki", () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "t15-backslash-"));
+    const wiki = path.join(repo, ".guild", "wiki");
+    fs.mkdirSync(wiki, { recursive: true });
+    expect(resolvesUnderWiki([wiki], path.join(".guild", "wiki", "..\\bypass.md"), repo)).toBe(true);
+    // CONTROL: a real climb out of the wiki is still outside it.
+    expect(resolvesUnderWiki([wiki], path.join(".guild", "wiki", "..", "outside.md"), repo)).toBe(false);
+    fs.rmSync(repo, { recursive: true, force: true });
+  });
 });

@@ -41,7 +41,10 @@ export function realpathDeep(p: string, depth = 0): string {
   const abs = path.isAbsolute(p) ? p : process.cwd() + path.sep + p;
   let current = path.parse(abs).root;
   let exists = true;
-  for (const seg of abs.slice(current.length).split(/[\\/]+/)) {
+  // Split on the platform separator only: on POSIX a backslash is part of a name
+  // (`..\\x.md` is a file inside the directory, not a climb out of it).
+  const SEP = path.sep === "\\" ? /[\\/]+/ : /\/+/;
+  for (const seg of abs.slice(current.length).split(SEP)) {
     if (seg === "" || seg === ".") continue;
     if (seg === "..") {
       current = path.dirname(current);
