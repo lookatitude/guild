@@ -30182,6 +30182,14 @@ var init_execution_transport_adapters = __esm({
   }
 });
 
+// src/domains/dispatch/isolated-launch-admission.ts
+var init_isolated_launch_admission = __esm({
+  "src/domains/dispatch/isolated-launch-admission.ts"() {
+    init_instance_cap();
+    init_task_cell_contract();
+  }
+});
+
 // src/domains/dispatch/assignment-binding.ts
 var ASSIGNMENT_BINDING_CONTRACT;
 var init_assignment_binding = __esm({
@@ -30366,6 +30374,7 @@ var init_dispatch = __esm({
     init_progress_ledger();
     init_instance_cap();
     init_isolation_guard();
+    init_isolated_launch_admission();
     init_adapter_rungs();
     init_advisor_budget();
     init_assignment_binding();

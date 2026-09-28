@@ -7,6 +7,7 @@
  * operator. A partial launch is rolled back synchronously and reported.
  */
 
+import { randomUUID } from "node:crypto";
 import { buildPrompt } from "../../../src/domains/config/team-prompt";
 import type {
   AdapterResolver,
@@ -37,6 +38,7 @@ import { readRuntimePermissionConfig } from "../permission-policy";
 import { validateProjectDefinitionRefV1 } from "../core/contracts/project-definition-ref";
 import * as path from "node:path";
 import { ownPluginRoot } from "../../../src/domains/kernel";
+import { claimIsolatedLaunches } from "../../../src/domains/dispatch";
 
 function definitionRefCarriage(
   value: unknown,
@@ -343,6 +345,24 @@ export class CmuxTeamBackend implements TeamBackend {
         dispatchPlan,
       };
     };
+
+    // plr-wi-15-4: no surface opens for a lane that is not an admitted TaskCell
+    // instance with a written v2 assignment; this launch consumes its one claim.
+    if (!req.dryRun) {
+      try {
+        claimIsolatedLaunches({
+          cwd: req.cwd,
+          runId: req.runId,
+          launchId: `cmux:${req.targetName}:${process.pid}:${randomUUID()}`,
+          lanes: req.specialists.map((lane) => ({
+            logicalTaskId: lane.taskId,
+            instanceId: lane.task_cell_instance_id,
+          })),
+        });
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    }
 
     let claudePluginActivation: ClaudePluginActivation | undefined;
     try {

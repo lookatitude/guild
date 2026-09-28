@@ -118,7 +118,7 @@ describe("guild.redirect_ledger.v1 — three strikes (KTD33 / R50)", () => {
     for (let i = 0; i < 5; i++) {
       fired.push(
         recordRedirect(
-          { run_id: RUN_ID, agent_id: "backend", topic_key: "retry-semantics" },
+          { run_id: RUN_ID, agent_id: "backend", topic_key: "retry-semantics", correction: "Make it idempotent." },
           { storage },
         ).fires_harvest,
       );
@@ -128,16 +128,16 @@ describe("guild.redirect_ledger.v1 — three strikes (KTD33 / R50)", () => {
   });
 
   it("counts per (agent, topic), so three unrelated corrections do not fire", () => {
-    const r1 = recordRedirect({ run_id: RUN_ID, agent_id: "backend", topic_key: "retries" }, { storage });
-    const r2 = recordRedirect({ run_id: RUN_ID, agent_id: "backend", topic_key: "naming" }, { storage });
-    const r3 = recordRedirect({ run_id: RUN_ID, agent_id: "backend", topic_key: "logging" }, { storage });
+    const r1 = recordRedirect({ run_id: RUN_ID, agent_id: "backend", topic_key: "retries", correction: "Make it idempotent." }, { storage });
+    const r2 = recordRedirect({ run_id: RUN_ID, agent_id: "backend", topic_key: "naming", correction: "Make it idempotent." }, { storage });
+    const r3 = recordRedirect({ run_id: RUN_ID, agent_id: "backend", topic_key: "logging", correction: "Make it idempotent." }, { storage });
     expect([r1, r2, r3].map((r) => r.fires_harvest)).toEqual([false, false, false]);
   });
 
   it("refuses a free-text topic that could never repeat", () => {
     expect(() =>
       recordRedirect(
-        { run_id: RUN_ID, agent_id: "backend", topic_key: "the retry thing we discussed" },
+        { run_id: RUN_ID, agent_id: "backend", topic_key: "the retry thing we discussed", correction: "Make it idempotent." },
         { storage },
       ),
     ).toThrow(RedirectLedgerError);
@@ -188,9 +188,10 @@ describe("the third redirect harvests (R50 / R53)", () => {
         run_id: RUN_ID,
         agent_id: "backend",
         topic_key: "retry-semantics",
+        correction: "Consumers must be idempotent.",
         runDir,
         storage,
-        decision: { ...decision, playbook: { path: pb, span: "Retries", replacement: "Consumers must be idempotent." } },
+        decision: { ...decision, playbook: { path: pb, span: "Retries" } },
       }).harvest;
     }
     expect(harvested?.promoted).toBe(true);

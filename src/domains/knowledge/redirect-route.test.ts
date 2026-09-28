@@ -56,6 +56,7 @@ function redirect() {
     run_id: RUN_ID,
     agent_id: "backend",
     topic_key: "retry-semantics",
+    correction: "Make every queue consumer idempotent.",
     runDir,
     storage,
     decision: DECISION,

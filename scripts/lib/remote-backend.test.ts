@@ -33,6 +33,7 @@ import {
   type Specialist,
   type TeamLaunchRequest,
 } from "./team-backend";
+import { admitRequest } from "./host/__tests__/admit-lane";
 import { resolveAdapter } from "./pane-adapter";
 import { planTeamRouting, type RoutableHost } from "./host-router";
 import type { HostCapabilityManifest } from "../write-host-capability";
@@ -45,7 +46,8 @@ const SPECIALISTS: Specialist[] = [
 ];
 
 function req(overrides: Partial<TeamLaunchRequest> = {}): TeamLaunchRequest {
-  return {
+  // plr-wi-15-4: a real launch spawns only admitted TaskCell lanes.
+  return admitRequest({
     slug: "demo",
     runId: "run-remote-001",
     cwd: "/tmp/repo",
@@ -54,7 +56,7 @@ function req(overrides: Partial<TeamLaunchRequest> = {}): TeamLaunchRequest {
     mode: "new-session",
     dryRun: false,
     ...overrides,
-  };
+  });
 }
 
 // Every specialist lands on the same remote box here; the per-brand command is

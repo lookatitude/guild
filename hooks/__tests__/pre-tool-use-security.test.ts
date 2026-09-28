@@ -30,6 +30,7 @@ const SCRIPT = path.resolve(__dirname, "../dist/pre-tool-use.js");
 // so the spawned hook sees ONLY the identity each test sets.
 import { hermeticEnv } from "../test-support/hermetic-env";
 import { mintTestBinding } from "../test-support/mint-binding";
+import { admitLane } from "../../scripts/lib/host/__tests__/admit-lane";
 
 function run(
   payload: object,
@@ -222,6 +223,7 @@ describe("pre-tool-use.ts — scope file fallback (HK-05 belt-and-suspenders)", 
   let tmp: string;
   const RUN = "test-run-file";
   const TASK = "task-file-001";
+  const INSTANCE = "task-file-001.a1.i-1";
 
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-ptu-scopefile-"));
@@ -229,6 +231,9 @@ describe("pre-tool-use.ts — scope file fallback (HK-05 belt-and-suspenders)", 
     const runDir = path.join(tmp, ".guild", "runs", RUN);
     fs.mkdirSync(runDir, { recursive: true });
     mintTestBinding(tmp, RUN);
+    // plr-wi-15-4: a lane worker is an admitted TaskCell instance. Its projection
+    // admits the tools under test, so the scope file is what decides here.
+    admitLane(tmp, RUN, TASK, INSTANCE, ["Read", "Grep", "Bash", "Write", "Edit"]);
     // Write scope file — read-only lane
     const scopeDir = path.join(runDir, "scope");
     fs.mkdirSync(scopeDir, { recursive: true });
@@ -245,6 +250,7 @@ describe("pre-tool-use.ts — scope file fallback (HK-05 belt-and-suspenders)", 
     GUILD_RUN_ID: RUN,
     GUILD_RUN_BINDING_REF: `rb-test-${RUN}`,
     GUILD_TASK_ID: TASK,
+    GUILD_TASK_CELL_INSTANCE_ID: INSTANCE,
     GUILD_LANE_ID: "backend",
     ...over,
   });

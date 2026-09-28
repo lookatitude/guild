@@ -12,6 +12,7 @@
  *   [x] a tool OUTSIDE it                                         → DENY
  *   [x] an instance with no assignment on disk                    → DENY (fail-closed)
  *   [x] a session that is not a TaskCell worker (no env identity) → PASS, no opinion
+ *   [x] run + task with no instance id (wi-15-4)                  → DENY + security event
  */
 
 import { describe, it, expect, beforeEach } from "bun:test";
@@ -178,6 +179,28 @@ describe("PreToolUse projection gate (KTD28)", () => {
     expect(decision(out.stdout).permissionDecision).not.toBe("deny");
   });
 
+  // ── plr-wi-15-4: run + task with no instance id is an unverifiable worker ──
+
+  it("wi-15-4 · DENIES a run + task session with no instance id, with a security event", () => {
+    writeAssignment(["Read", "Bash"]);
+    const out = runHook(
+      { tool_name: "Read", tool_input: { file_path: "src/a.ts" } },
+      { GUILD_TASK_CELL_INSTANCE_ID: "" },
+    );
+    const d = decision(out.stdout);
+    expect(d.permissionDecision).toBe("deny");
+    expect(d.permissionDecisionReason).toMatch(/no GUILD_TASK_CELL_INSTANCE_ID/);
+    const log = path.join(tmp, ".guild", "runs", RUN, "logs", "security-events.jsonl");
+    const events = fs.readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(events.some((e) => e.event_type === "capability_scope_violation" && e.decision === "deny" && e.tool === "Read")).toBe(true);
+  });
+
+  it("wi-15-4 · CONTROL: the same session WITH its instance id runs an in-projection tool", () => {
+    writeAssignment(["Read", "Bash"]);
+    const out = runHook({ tool_name: "Read", tool_input: { file_path: "src/a.ts" } });
+    expect(decision(out.stdout).permissionDecision).not.toBe("deny");
+  });
+
   // ── T15 · F12: the projection deny and the PreToolUse AND-mask ────────────
   //
   // The capability scope answers `ask` for an out-of-scope tool, and an operator
@@ -203,7 +226,7 @@ describe("PreToolUse projection gate (KTD28)", () => {
     // No cell identity: the projection has no opinion, so the scope gate decides.
     const out = runHook(
       { tool_name: "Bash", tool_input: { command: "ls" } },
-      { GUILD_CAPABILITY_SCOPE: '["Read"]', GUILD_TASK_CELL_INSTANCE_ID: "" },
+      { GUILD_CAPABILITY_SCOPE: '["Read"]', GUILD_TASK_ID: "", GUILD_TASK_CELL_INSTANCE_ID: "" },
     );
     expect(decision(out.stdout).permissionDecision).toBe("ask");
     // And an in-scope, in-projection tool passes both rails.

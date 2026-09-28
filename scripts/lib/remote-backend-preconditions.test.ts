@@ -29,13 +29,15 @@ import {
   type Specialist,
   type TeamLaunchRequest,
 } from "./team-backend";
+import { admitRequest } from "./host/__tests__/admit-lane";
 import { resolveAdapter } from "./pane-adapter";
 
 const target = (hostId: string, hostKind: RemoteHostTarget["hostKind"], loginShell?: string): RemoteHostTarget =>
   ({ hostId, hostKind, endpoint: `u@${hostId}`, ...(loginShell ? { loginShell } : {}) });
 
 function req(specialists: Specialist[]): TeamLaunchRequest {
-  return { slug: "demo", runId: "run-1", cwd: "/tmp", specialists, targetName: "t", mode: "new-session", dryRun: false };
+  // plr-wi-15-4: a real launch spawns only admitted TaskCell lanes.
+  return admitRequest({ slug: "demo", runId: "run-1", cwd: "/tmp", specialists, targetName: "t", mode: "new-session", dryRun: false });
 }
 const sp = (name: string, host_kind: Specialist["host_kind"] = "claude"): Specialist =>
   ({ name, scope: "x", dependsOn: [], host_kind } as Specialist);

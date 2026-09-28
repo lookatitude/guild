@@ -87,7 +87,7 @@ describe("PiPaneAdapter", () => {
     expect(new PiPaneAdapter({ run: runner({ pi: OK }) }).preflight().ok).toBe(true); // binary present
   });
   it("command emits `pi -p` with the run env + keep-alive", () => {
-    const cmd = new PiPaneAdapter().command(spec({ hostKind: "pi", prompt: "go", taskId: "t1" }));
+    const cmd = new PiPaneAdapter().command(spec({ hostKind: "pi", prompt: "go", taskId: "t1", taskCellInstanceId: "t1.a1.i-1" }));
     expect(cmd).toContain("pi -p go");
     expect(cmd).toContain("export GUILD_TASK_ID=t1");
     expect(cmd).toContain("exec $SHELL");

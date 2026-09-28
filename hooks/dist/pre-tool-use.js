@@ -29669,6 +29669,14 @@ var init_execution_transport_adapters = __esm({
   }
 });
 
+// src/domains/dispatch/isolated-launch-admission.ts
+var init_isolated_launch_admission = __esm({
+  "src/domains/dispatch/isolated-launch-admission.ts"() {
+    init_instance_cap();
+    init_task_cell_contract();
+  }
+});
+
 // src/domains/dispatch/assignment-binding.ts
 var ASSIGNMENT_BINDING_CONTRACT;
 var init_assignment_binding = __esm({
@@ -34577,6 +34585,7 @@ var init_dispatch = __esm({
     init_progress_ledger();
     init_instance_cap();
     init_isolation_guard();
+    init_isolated_launch_admission();
     init_adapter_rungs();
     init_advisor_budget();
     init_assignment_binding();
@@ -44555,13 +44564,12 @@ function runProjectionGate(payload, cwd) {
   const taskId = process.env["GUILD_TASK_ID"];
   const instanceId = process.env["GUILD_TASK_CELL_INSTANCE_ID"];
   const toolName = payload.tool_name ?? "";
-  if (typeof runId !== "string" || runId.length === 0 || typeof taskId !== "string" || taskId.length === 0 || typeof instanceId !== "string" || instanceId.length === 0 || toolName.length === 0) {
+  if (typeof runId !== "string" || runId.length === 0 || typeof taskId !== "string" || taskId.length === 0 || toolName.length === 0) {
     return false;
   }
-  const attemptRaw = process.env["GUILD_TASK_ATTEMPT"];
-  const attempt = Number.parseInt(attemptRaw ?? "1", 10);
-  let verdict;
-  try {
+  let verdict = { ok: false, reason: `lane ${taskId} in run ${runId} has no GUILD_TASK_CELL_INSTANCE_ID; its tool projection cannot be verified (KTD28)` };
+  if (typeof instanceId === "string" && instanceId.length > 0) try {
+    const attempt = Number.parseInt(process.env["GUILD_TASK_ATTEMPT"] ?? "1", 10);
     verdict = authorizeProjectedToolCall({
       cwd: resolveGuildRoot(cwd),
       run_id: runId,

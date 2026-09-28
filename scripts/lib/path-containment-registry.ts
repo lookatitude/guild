@@ -217,6 +217,11 @@ export const CONTAINMENT_SITES: readonly ContainmentSite[] = Object.freeze([
     note: "WAIVER: the PreToolUse lane wiki guard CLASSIFIES whether a lane worker's tool target lands under .guild/wiki; it performs no write. It walks raw segments physically (realpath before each `..`, dangling links followed) so an alias fails closed, which checkContained's parent-traversal refusal cannot express for a verdict. Tests pin alias, `..hidden`, backslash, `~` and spaced-literal cases.",
   }),
   Object.freeze({
+    path: "src/domains/dispatch/isolated-launch-admission.ts",
+    status: "waived",
+    note: "WAIVER: admission canonicalizes the launch root once (realpath of cwd) so claims and assignments from real and symlinked spellings of the same root collide; its writes are exclusive-create (wx / O_EXCL) at taskCellPaths locations derived from validated run, task and attempt ids, not caller-supplied paths. Tests pin the symlinked-cwd reuse case.",
+  }),
+  Object.freeze({
     path: "src/domains/security/ingest-pause.ts",
     status: "waived",
     note: "WAIVER: the ingest-pause gate CLASSIFIES whether a PreToolUse target is a paused candidate or under the wiki; it performs no bounded write. It follows a dangling link's text (bounded hops) and matches hard links by inode so an alias fails closed, which canonicalizeRealPath deliberately does not do. Tests pin directory, file, dangling and hard-link aliases.",

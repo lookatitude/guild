@@ -174,7 +174,7 @@ describe("ClaudePaneAdapter", () => {
   // D-CAP (Wave-3 security): GUILD_TASK_ID binds the spawned process to its lane;
   // GUILD_CAPABILITY_SCOPE is carried independently in that process environment.
   it("D-CAP: command exports GUILD_TASK_ID when taskId is present", () => {
-    const c = adapter.command(spec({ taskId: "task-arch-001" }));
+    const c = adapter.command(spec({ taskId: "task-arch-001", taskCellInstanceId: "task-arch-001.a1.i-1" }));
     expect(c).toContain("export GUILD_TASK_ID=task-arch-001");
     // GUILD_TASK_ID must appear BEFORE `claude` so it is set on entry
     expect(c.indexOf("GUILD_TASK_ID")).toBeLessThan(c.indexOf("claude "));
@@ -186,7 +186,7 @@ describe("ClaudePaneAdapter", () => {
   });
 
   it("D-CAP: env includes GUILD_TASK_ID when taskId is present (lane-attributable)", () => {
-    const e = adapter.env(spec({ taskId: "task-arch-001" }));
+    const e = adapter.env(spec({ taskId: "task-arch-001", taskCellInstanceId: "task-arch-001.a1.i-1" }));
     expect(e["GUILD_TASK_ID"]).toBe("task-arch-001");
   });
 
@@ -330,7 +330,7 @@ describe("CodexPaneAdapter", () => {
   // (pre-tool-use.ts:487-494) can locate <runDir>/scope/<taskId>.json.
   it("D-CAP: command exports GUILD_TASK_ID when taskId is present", () => {
     const adapter = new CodexPaneAdapter({ env: { OPENAI_API_KEY: "sk-x" } });
-    const c = adapter.command(spec({ hostKind: "codex", taskId: "task-sec-001" }));
+    const c = adapter.command(spec({ hostKind: "codex", taskId: "task-sec-001", taskCellInstanceId: "task-sec-001.a1.i-1" }));
     expect(c).toContain("export GUILD_TASK_ID=task-sec-001");
     // GUILD_TASK_ID must appear BEFORE `codex exec`
     expect(c.indexOf("GUILD_TASK_ID")).toBeLessThan(c.indexOf("codex exec"));
@@ -344,7 +344,7 @@ describe("CodexPaneAdapter", () => {
 
   it("D-CAP: env includes GUILD_TASK_ID when taskId is present (lane-attributable)", () => {
     const adapter = new CodexPaneAdapter({ env: {} });
-    const e = adapter.env(spec({ hostKind: "codex", taskId: "task-sec-001" }));
+    const e = adapter.env(spec({ hostKind: "codex", taskId: "task-sec-001", taskCellInstanceId: "task-sec-001.a1.i-1" }));
     expect(e["GUILD_TASK_ID"]).toBe("task-sec-001");
   });
 
@@ -594,7 +594,7 @@ describe("rf-wi-03 (G3) — the producer marker is universal across ALL adapters
       ([, a]) => a !== undefined,
     ),
   )("adapter %s emits the marker on BOTH command and env", (hostKind, adapter) => {
-    const s = spec({ hostKind: hostKind as PaneSpec["hostKind"], specialist: "backend", taskId: "wi-1" });
+    const s = spec({ hostKind: hostKind as PaneSpec["hostKind"], specialist: "backend", taskId: "wi-1", taskCellInstanceId: "wi-1.a1.i-1" });
     // Claude's command routes through paneCommand (marker set there); every other
     // adapter emits it in its own command fragment. Either way the marker is present.
     expect(adapter!.command(s)).toContain(MARKER);

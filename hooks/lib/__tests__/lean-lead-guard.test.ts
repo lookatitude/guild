@@ -35,6 +35,7 @@ import {
   renderLeanLeadAdvisory,
   evaluateLeanLeadGuard,
 } from "../lean-lead-guard";
+import { admitLane } from "../../../scripts/lib/host/__tests__/admit-lane";
 
 function tmpRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "lean-lead-guard-test-"));
@@ -628,7 +629,15 @@ describe("lean-lead-guard — attribution via the REAL post-tool-use.ts producer
     // duplicate), and the final event STILL carries the correct lane_id via
     // the separate (non-pairing) attribution override.
     const PRE_TOOL_USE = path.resolve(__dirname, "..", "..", "pre-tool-use.ts");
-    const env = { ...process.env, GUILD_CWD: tmp, GUILD_RUN_ID: RUN_ID, GUILD_TASK_ID: "T1-backend" };
+    // plr-wi-15-4: a production lane worker is an admitted TaskCell instance.
+    admitLane(tmp, RUN_ID, "T1-backend", "T1-backend.a1.i-1", ["Edit"]);
+    const env = {
+      ...process.env,
+      GUILD_CWD: tmp,
+      GUILD_RUN_ID: RUN_ID,
+      GUILD_TASK_ID: "T1-backend",
+      GUILD_TASK_CELL_INSTANCE_ID: "T1-backend.a1.i-1",
+    };
     const toolInput = { file_path: "some/file.ts", old_string: "a", new_string: "b" };
 
     const preResult = spawnSync("npx", ["tsx", PRE_TOOL_USE], {

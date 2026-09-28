@@ -31,6 +31,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
 import {
@@ -77,6 +78,101 @@ import {
 import { isClaudeCli } from "./lib/capability/rank";
 import type { HostKind } from "./lib/host-types";
 import { ownPluginRoot } from "../src/domains/kernel";
+import {
+  admitRelaunch,
+  assertLaneInstanceExported,
+  claimIsolatedLaunches,
+  IsolatedSpawnRefused,
+  resolveMaxInstances,
+} from "../src/domains/dispatch";
+import { resolvePolicy } from "../src/domains/config";
+import { resolveGuildRoot } from "../src/domains/state";
+
+// ---------------------------------------------------------------------------
+// Lane admission (plr-wi-15-4)
+// ---------------------------------------------------------------------------
+
+export interface WrapperLaneIdentity {
+  runId: string;
+  taskId: string;
+  instanceId: string | undefined;
+  attempt: number;
+}
+
+/** The TaskCell identity the child would inherit, or null when it is not a lane worker. */
+export function childLaneIdentity(env: NodeJS.ProcessEnv): WrapperLaneIdentity | null {
+  const runId = env["GUILD_RUN_ID"];
+  const taskId = env["GUILD_TASK_ID"];
+  if (!runId || !taskId) return null;
+  const attempt = Number.parseInt(env["GUILD_TASK_ATTEMPT"] ?? "1", 10);
+  return {
+    runId,
+    taskId,
+    instanceId: env["GUILD_TASK_CELL_INSTANCE_ID"] || undefined,
+    attempt: Number.isInteger(attempt) && attempt >= 1 ? attempt : 1,
+  };
+}
+
+/**
+ * A child that inherits run + task identity is an isolated lane launch: it goes
+ * through the same one-shot admission as the tmux / cmux / remote backends. An
+ * empty instance id counts as absent. Throws `IsolatedSpawnRefused`.
+ */
+export function admitWrapperLaunch(childEnv: NodeJS.ProcessEnv, cwd: string): WrapperLaneIdentity | null {
+  const lane = childLaneIdentity(childEnv);
+  if (lane === null) return null;
+  assertLaneInstanceExported({ runId: lane.runId, taskId: lane.taskId, taskCellInstanceId: lane.instanceId });
+  claimIsolatedLaunches({
+    cwd: resolveGuildRoot(cwd),
+    runId: lane.runId,
+    launchId: `guild-run:${process.pid}:${randomUUID()}`,
+    lanes: [{ logicalTaskId: lane.taskId, instanceId: lane.instanceId, attempt: lane.attempt }],
+  });
+  return lane;
+}
+
+/**
+ * A repair re-spawn is one more process for the lane, so it is one more
+ * admission: the next attempt is reserved through `reserveInstance` with its own
+ * instance id, assignment and launch claim (`admitRelaunch`). Returns the env
+ * overrides that export the new identity to the child. Throws
+ * `IsolatedSpawnRefused`; the caller stops repairing and records the refusal.
+ */
+export function admitWrapperRelaunch(
+  lane: WrapperLaneIdentity,
+  cwd: string,
+  retryReason: string,
+): { lane: WrapperLaneIdentity; env: NodeJS.ProcessEnv } {
+  const root = resolveGuildRoot(cwd);
+  let policy: Record<string, unknown> | null = null;
+  try {
+    policy = resolvePolicy({ cwd: root }).policy;
+  } catch {
+    policy = null;
+  }
+  const attempt = lane.attempt + 1;
+  const instanceId = `${lane.taskId}.a${attempt}.i-${randomUUID().slice(0, 8)}`;
+  const admitted = admitRelaunch({
+    cwd: root,
+    runId: lane.runId,
+    logicalTaskId: lane.taskId,
+    prior: { instanceId: lane.instanceId!, attempt: lane.attempt },
+    instanceId,
+    retryReason,
+    launchId: `guild-run:${process.pid}:${randomUUID()}`,
+    max: resolveMaxInstances(policy),
+  });
+  return {
+    lane: { ...lane, instanceId, attempt },
+    // A repair runs as a new instance: it must read and acknowledge its own
+    // assignment, not the inherited attempt-1 path.
+    env: {
+      GUILD_TASK_CELL_INSTANCE_ID: instanceId,
+      GUILD_TASK_ATTEMPT: String(attempt),
+      GUILD_TASK_ASSIGNMENT: admitted.assignmentPath,
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Arg parsing
@@ -385,9 +481,11 @@ export function hostAdapterRuntimeReceipt(
   parsed: CliArgs,
   request: WrapperRequest,
   plan: WrapperPlan,
-  result: HostRuntimeBindingResult
+  result: HostRuntimeBindingResult,
+  childEnv: NodeJS.ProcessEnv = {}
 ): HostAdapterRuntimeReceipt {
   const binding = authoredBinding(parsed, result);
+  const lane = childLaneIdentity(childEnv);
   if (binding === null) {
     return hostAdapterRefusalReceipt(parsed, result);
   }
@@ -417,16 +515,24 @@ export function hostAdapterRuntimeReceipt(
         args: plan.args,
         env: plan.env,
         launch_mode: plan.launch,
+        // plr-wi-15-4: dispatch sees the lane identity the spawn will carry.
+        ...(lane ? { taskId: lane.taskId } : {}),
+        ...(lane?.instanceId ? { taskCellInstanceId: lane.instanceId } : {}),
       },
     }),
   };
 }
 
+/** The environment the host child is spawned with. */
+function childEnvFor(plan: WrapperPlan): NodeJS.ProcessEnv {
+  return { ...process.env, ...plan.env };
+}
+
 /** Spawn the host with a given argv (synchronous; captures stdio). */
-function spawnHost(plan: WrapperPlan, args: string[]): RunOutcome {
+function spawnHost(plan: WrapperPlan, args: string[], envOverride: NodeJS.ProcessEnv = {}): RunOutcome {
   const res = spawnSync(plan.command, args, {
     cwd: plan.cwd,
-    env: { ...process.env, ...plan.env },
+    env: { ...childEnvFor(plan), ...envOverride },
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
@@ -570,7 +676,7 @@ function main(): number {
     return 1;
   }
 
-  const hostAdapter = hostAdapterRuntimeReceipt(parsed, request, plan, binding);
+  const hostAdapter = hostAdapterRuntimeReceipt(parsed, request, plan, binding, childEnvFor(plan));
 
   // The receipt must be AUTHORED by the binding obtained above. Production binds
   // and mints from one `parsed`, so these cannot currently disagree — gating the
@@ -589,6 +695,16 @@ function main(): number {
   if (parsed.dryRun) {
     process.stdout.write(JSON.stringify({ ...plan, host_adapter: hostAdapter }, null, 2) + "\n");
     return 0;
+  }
+
+  // plr-wi-15-4: a child that inherits lane identity is admitted (one-shot) or
+  // never spawned. Before any instruction file is written.
+  let lane: WrapperLaneIdentity | null;
+  try {
+    lane = admitWrapperLaunch(childEnvFor(plan), plan.cwd);
+  } catch (err) {
+    process.stderr.write(`guild-run: ${err instanceof Error ? err.message : String(err)}\n`);
+    return 1;
   }
 
   // Write instruction files (e.g. Codex AGENTS.md) before launch — NON-DESTRUCTIVELY.
@@ -631,22 +747,47 @@ function main(): number {
   let initial: RunOutcome;
   let latestStructuredStdout = "";
   let normalized: BoundedRepairResult | null = null;
+  let repairRefusal: string | null = null;
+  let repairsStarted = 0;
   try {
     initial = spawnHost(plan, plan.args);
     latestStructuredStdout = initial.stdout;
     if (parsed.contract) {
-      normalized = normalizeWithRepair(
-        initial.stdout,
-        parsed.contract,
-        (repairPrompt) => {
-          latestStructuredStdout = spawnHost(
-            plan,
-            rebuildArgsWithPrompt(plan, repairRoundPrompt(plan.prompt, repairPrompt)),
-          ).stdout;
-          return latestStructuredStdout;
-        },
-        { maxRounds: parsed.maxRepair }
-      );
+      const contract = parsed.contract;
+      try {
+        normalized = normalizeWithRepair(
+          initial.stdout,
+          contract,
+          (repairPrompt) => {
+            // Each repair process is its own admission, or no process at all.
+            let envOverride: NodeJS.ProcessEnv = {};
+            if (lane !== null) {
+              const next = admitWrapperRelaunch(lane, plan.cwd, `repair: result invalid against ${contract}`);
+              lane = next.lane;
+              envOverride = next.env;
+            }
+            repairsStarted++;
+            latestStructuredStdout = spawnHost(
+              plan,
+              rebuildArgsWithPrompt(plan, repairRoundPrompt(plan.prompt, repairPrompt)),
+              envOverride,
+            ).stdout;
+            return latestStructuredStdout;
+          },
+          { maxRounds: parsed.maxRepair }
+        );
+      } catch (err) {
+        if (!(err instanceof IsolatedSpawnRefused)) throw err;
+        repairRefusal = err.message;
+        normalized = {
+          ok: false,
+          wire_schema_version: contract,
+          value: null,
+          errors: [`fail-closed: repair stopped after ${repairsStarted} round(s); ${err.message}`],
+          rounds_used: repairsStarted,
+          failed_closed: true,
+        };
+      }
     }
   } finally {
     restoreInstructionFiles(backups);
@@ -676,6 +817,7 @@ function main(): number {
           errors: normalized.errors,
         }
       : null,
+    repair_refusal: repairRefusal,
   };
 
   if (parsed.record) {

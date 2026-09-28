@@ -122,12 +122,22 @@ describe("Claude HostAdapter concrete parity", () => {
         prompt: "Implement the lane",
         runId: "run-1",
         taskId: "T1",
+        taskCellInstanceId: "T1.a1.i-abc",
         specialist: "backend",
       },
     });
     expect(dispatch.status).toBe("ok");
     expect(JSON.stringify(dispatch.value)).toContain("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1");
     expect(JSON.stringify(dispatch.value)).toContain("GUILD_TASK_ID=T1");
+    expect(JSON.stringify(dispatch.value)).toContain("GUILD_TASK_CELL_INSTANCE_ID=T1.a1.i-abc");
+
+    // plr-wi-15-4: a task id with no admitted instance id is refused, never planned.
+    const unadmitted = adapter.dispatch({
+      taskRun: { prompt: "Implement the lane", runId: "run-1", taskId: "T1", specialist: "backend" },
+    });
+    expect(unadmitted.status).toBe("unavailable");
+    expect(String(unadmitted.receipt.reason).startsWith("isolated_spawn_refused:")).toBe(true);
+    expect(JSON.stringify(unadmitted.value)).not.toContain("GUILD_TASK_ID");
     expect(JSON.stringify(dispatch.value)).toContain("GUILD_SPECIALIST=backend");
 
     const wrapperDispatch = adapter.dispatch({

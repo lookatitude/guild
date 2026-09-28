@@ -654,15 +654,15 @@ function runProjectionGate(payload: GuildHookEvent, cwd: string): boolean {
   if (
     typeof runId !== "string" || runId.length === 0 ||
     typeof taskId !== "string" || taskId.length === 0 ||
-    typeof instanceId !== "string" || instanceId.length === 0 ||
     toolName.length === 0
   ) {
     return false;
   }
-  const attemptRaw = process.env["GUILD_TASK_ATTEMPT"];
-  const attempt = Number.parseInt(attemptRaw ?? "1", 10);
-  let verdict: { ok: boolean; reason?: string };
-  try {
+  // plr-wi-15-4: run + task with no instance id is a lane worker whose projection cannot be
+  // verified, not a non-worker. Every isolated launch exports one, so its absence is denied.
+  let verdict: { ok: boolean; reason?: string } = { ok: false, reason: `lane ${taskId} in run ${runId} has no GUILD_TASK_CELL_INSTANCE_ID; its tool projection cannot be verified (KTD28)` };
+  if (typeof instanceId === "string" && instanceId.length > 0) try {
+    const attempt = Number.parseInt(process.env["GUILD_TASK_ATTEMPT"] ?? "1", 10);
     verdict = authorizeProjectedToolCall({
       cwd: resolveGuildRoot(cwd),
       run_id: runId,

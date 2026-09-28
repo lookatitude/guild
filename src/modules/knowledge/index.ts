@@ -109,6 +109,9 @@ export {
   resolveRecallImportance,
   resumableOps,
   revertHarvest,
+  // T15F (plr-wi-15-2): the fixed redirect playbook template.
+  CORRECTION_MAX_CHARS,
+  renderRedirectReplacement,
   routeRedirect,
   scoreNode,
   scrubbedWikiWriter,
@@ -130,6 +133,7 @@ export {
   writeWorkingSet,
 } from "../../domains/knowledge";
 export type {
+  RedirectPlaybookTarget,
   BuildLaneBundleInput,
   BuildWorkingSetInput,
   BundleCheck,

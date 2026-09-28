@@ -34,6 +34,7 @@ export * from "./execution-transport-adapters";
 export * from "./progress-ledger";
 export * from "./instance-cap";
 export * from "./isolation-guard";
+export * from "./isolated-launch-admission";
 // T14: the closed adapter rung matrix as dispatch policy (KTD5, KTD28).
 export * from "./adapter-rungs";
 export * from "./advisor-budget";
