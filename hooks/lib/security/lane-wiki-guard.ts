@@ -35,6 +35,34 @@ export function isLaneWorker(env: NodeJS.ProcessEnv): boolean {
 
 /** The work-loop entry, compiled (`runtime/scripts/work-loop.js`) or source (`scripts/work-loop.ts`). */
 const WORK_LOOP_ENTRY = /(^|[\\/])work-loop(\.[cm]?[jt]s)?$/;
+/** The names the entry can be spelled as, for matching a glob word (`work-loo?.js`). */
+const WORK_LOOP_NAMES = ["work-loop", "work-loop.js", "work-loop.cjs", "work-loop.mjs", "work-loop.ts"];
+
+/** Does a word name the work-loop entry, literally or as a shell glob that expands to it? */
+function namesWorkLoopEntry(word: string): boolean {
+  if (WORK_LOOP_ENTRY.test(word)) return true;
+  const base = word.split(/[\\/]/).pop() ?? "";
+  if (!/[*?[]/.test(base)) return false;
+  let re = "";
+  for (let i = 0; i < base.length; i++) {
+    const c = base[i]!;
+    if (c === "*") re += "[^/]*";
+    else if (c === "?") re += "[^/]";
+    else if (c === "[") {
+      const end = base.indexOf("]", i + 2);
+      if (end === -1) return true; // unreadable class: fail closed
+      re += `[${base.slice(i + 1, end).replace(/^!/, "^").replace(/\\/g, "\\\\")}]`;
+      i = end;
+    } else re += c.replace(/[.+^${}()|\\]/g, "\\$&");
+  }
+  try {
+    const g = new RegExp(`^${re}$`);
+    return WORK_LOOP_NAMES.some((n) => g.test(n));
+  } catch {
+    return true;
+  }
+}
+
 /** The work-loop verbs that do not harvest. Anything else after the entry is refused. */
 const NON_HARVEST_VERBS = new Set(["bind", "route", "research-packet"]);
 
@@ -43,7 +71,9 @@ const UNREADABLE_VERB_OPS = new Set(["$(", "`", "<(", ">("]);
 
 /**
  * Does a Bash command invoke the work-loop harvest path (the `redirect` verb)?
- * Harvest writes the wiki in-process, so no path in the command names it. The
+ * Defense in depth only: `redirect` now just enqueues, and the harvest runs in the
+ * lead session's hook (hooks/lib/t0-drain.ts). A glob word that expands to the
+ * entry counts as the entry. The
  * token right after the entry is the verb the CLI reads: a literal non-harvest
  * verb passes, and so does no verb at all (the entry is only read, as in
  * `cat work-loop.ts | head`); `redirect`, a variable or a substitution is
@@ -55,7 +85,7 @@ export function bashInvokesHarvest(command: string): boolean {
     return [command, ...quotedLiterals(command)].some((text) => {
       const toks = shellTokens(text);
       return toks.some((t, i) => {
-        if (t.kind !== "word" || !WORK_LOOP_ENTRY.test(t.value)) return false;
+        if (t.kind !== "word" || !namesWorkLoopEntry(t.value)) return false;
         const next = toks[i + 1];
         if (next === undefined) return false;
         if (next.kind === "op") return UNREADABLE_VERB_OPS.has(next.value);

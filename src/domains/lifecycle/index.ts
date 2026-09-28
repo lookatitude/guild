@@ -72,6 +72,9 @@ export * from "./stable-lock";
 export * from "./learning-checkpoint-5";
 export * from "./workflow-graph-load";
 export * from "./workflow-router";
+// T16I (KTD33/KTD43): T0-owned writes (redirect harvest, evolve apply) are enqueued
+// by their CLIs and drained only by the lead session's hook.
+export * from "./t0-queue";
 // T09 (KTD38): the KTD16 JSONL append path. The four additive work-loop kinds
 // (harvest / redirect / CAS / curator) ride the EXISTING run log, so the
 // knowledge domain reaches the writer through this index — there is no third

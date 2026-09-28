@@ -20,12 +20,14 @@
  *   scripts/evolve-loop.ts --apply <delta.json> [--run-id <id>] [--auto] [--cwd <path>]
  *
  * `--apply` is `maintain evolve <id> --target=<type>`'s write step: one
- * `guild.evolve_delta.v1` through the ONE gate (`applyEvolveDelta`, KTD18/R32).
- * Project targets span-replace under this repo's `.guild/` with the inverse in
- * compact history; machinery targets become a candidate with `next_need:
- * operator` (KTD63). `--auto` is the KTD33 curator path and fails closed on
- * everything but `playbook` / `skill` (R74). Prints the result as JSON.
- * Exit 0 applied or candidate · 3 refused by the gate · 1 bad input.
+ * `guild.evolve_delta.v1`, validated and ENQUEUED for the ONE gate
+ * (`applyEvolveDelta`, KTD18/R32), which the lead session's PostToolUse hook runs
+ * when it drains the printed receipt (KTD33/KTD43). Project targets span-replace
+ * under this repo's `.guild/` with the inverse in compact history; machinery
+ * targets become a candidate with `next_need: operator` (KTD63). `--auto` is the
+ * KTD33 curator path and fails closed on everything but `playbook` / `skill`
+ * (R74). Prints the receipt as JSON; the drained outcome lands beside the request
+ * as `<id>.result.json`. Exit 0 queued · 1 bad input (a repeated flag included).
  *
  * Options:
  *   --skill <slug>         (required) Skill slug (e.g. "guild-brainstorm").
@@ -58,30 +60,52 @@ import * as fs from "fs";
 import * as path from "path";
 import { durableGuildDir } from "./lib/state/storage";
 import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
-import { EvolveTargetRefusal, applyEvolveDelta, type EvolveDelta } from "../src/domains/evolve";
-import { resolvePluginRoot } from "../src/domains/kernel";
-import { createGuildStorage } from "../src/domains/state";
+import { enqueueT0Request } from "../src/domains/lifecycle";
+import { createGuildStorage, resolveGuildRoot } from "../src/domains/state";
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
 
-function parseArgs(argv: string[]): {
+interface EvolveArgs {
   skill: string | null;
   runId: string | null;
   proposedEdit: string | null;
   cwd: string;
-} {
-  let skill: string | null = null;
-  let runId: string | null = null;
-  let proposedEdit: string | null = null;
-  let cwd = ".";
+  apply: string | null;
+  auto: boolean;
+}
+
+const VALUE_FLAGS = ["--skill", "--run-id", "--proposed-edit", "--cwd", "--apply"] as const;
+
+/**
+ * Each single-valued flag may appear once, with a value. A repeat is an argument
+ * error, never last-wins: the root the layout gate validates must be the root the
+ * run writes (codex r2 P2: `--cwd <layout99> --cwd <current>`).
+ */
+function parseArgs(argv: string[]): EvolveArgs {
+  const seen = new Map<string, string>();
+  let auto = false;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--skill" && i + 1 < argv.length) skill = argv[++i];
-    else if (argv[i] === "--run-id" && i + 1 < argv.length) runId = argv[++i];
-    else if (argv[i] === "--proposed-edit" && i + 1 < argv.length)
-      proposedEdit = argv[++i];
-    else if (argv[i] === "--cwd" && i + 1 < argv.length) cwd = argv[++i];
+    const a = argv[i]!;
+    if (a === "--auto") {
+      if (auto) throw new Error("--auto given more than once");
+      auto = true;
+      continue;
+    }
+    const name = (VALUE_FLAGS as readonly string[]).find((f) => a === f || a.startsWith(`${f}=`));
+    if (!name) continue;
+    if (seen.has(name)) throw new Error(`${name} given more than once`);
+    const value = a === name ? argv[++i] : a.slice(name.length + 1);
+    if (value === undefined || value === "") throw new Error(`${name} needs a value`);
+    seen.set(name, value);
   }
-  return { skill, runId, proposedEdit, cwd };
+  return {
+    skill: seen.get("--skill") ?? null,
+    runId: seen.get("--run-id") ?? null,
+    proposedEdit: seen.get("--proposed-edit") ?? null,
+    cwd: seen.get("--cwd") ?? ".",
+    apply: seen.get("--apply") ?? null,
+    auto,
+  };
 }
 
 // ── Skill path resolution ──────────────────────────────────────────────────
@@ -257,65 +281,60 @@ function buildPipelineMd(params: {
 
 // ── Main ───────────────────────────────────────────────────────────────────
 
-/** `--apply <delta.json>`: run one delta through the evolve gate. */
-function applyMain(argv: string[]): void {
-  const at = (name: string): string | null => {
-    const i = argv.indexOf(name);
-    return i !== -1 && i + 1 < argv.length ? argv[i + 1] : null;
-  };
-  const deltaFile = at("--apply");
-  const runId = at("--run-id") ?? undefined;
-  const cwd = path.resolve(at("--cwd") ?? ".");
-  let delta: EvolveDelta;
+/**
+ * `--apply <delta.json>`: validate one delta and ENQUEUE it on the run
+ * (`<runDir>/queue/evolve/<id>.json`, KTD33/KTD43). This CLI never writes the
+ * target, a candidate or compact history: the lead session's PostToolUse hook
+ * drains the printed `guild.t0_request.v1` receipt from its own tool result and
+ * runs `applyEvolveDelta` (the one gate) on the root validated here.
+ */
+function applyMain(args: EvolveArgs, cwd: string): void {
+  let delta: unknown;
   try {
-    delta = JSON.parse(fs.readFileSync(deltaFile ?? "", "utf8")) as EvolveDelta;
+    delta = JSON.parse(fs.readFileSync(args.apply ?? "", "utf8"));
   } catch (err) {
     process.stderr.write(`[evolve-loop] ERROR: --apply needs a readable delta JSON (${(err as Error).message})\n`);
     process.exit(1);
   }
-  const storage = createGuildStorage(cwd);
-  const scope = storage.project ?? storage.workspace;
-  try {
-    const result = applyEvolveDelta(delta, {
-      cwd,
-      storage,
-      auto: argv.includes("--auto"),
-      // The install root the host advertised, else this package's own root. A
-      // machinery candidate is parked there, never under the consuming repo.
-      pluginRoot: (() => {
-        try {
-          return resolvePluginRoot(__dirname);
-        } catch {
-          return cwd;
-        }
-      })(),
-      ...(runId ? { runId } : {}),
-      ...(runId && scope ? { runDir: scope.runRecord(runId) } : {}),
-    });
-    process.stdout.write(JSON.stringify(result) + "\n");
-    process.exit(0);
-  } catch (err) {
-    if (err instanceof EvolveTargetRefusal) {
-      process.stdout.write(
-        JSON.stringify({ applied: false, refused: true, next_need: "operator", detail: err.message }) + "\n",
-      );
-      process.exit(3);
-    }
-    throw err;
+  if (!delta || typeof delta !== "object" || Array.isArray(delta) ||
+      (delta as { schema_version?: unknown }).schema_version !== "guild.evolve_delta.v1") {
+    process.stderr.write("[evolve-loop] ERROR: --apply needs a guild.evolve_delta.v1 object\n");
+    process.exit(1);
   }
+  const root = resolveGuildRoot(cwd);
+  if (path.resolve(root) !== cwd) {
+    process.stderr.write(`[evolve-loop] ERROR: --cwd ${cwd} is not a Guild root\n`);
+    process.exit(1);
+  }
+  const receipt = enqueueT0Request({
+    kind: "evolve",
+    // A delta with no run scope queues on the same `evolve-apply` record the gate
+    // uses for its security events.
+    runId: args.runId ?? "evolve-apply",
+    root,
+    payload: { delta: delta as Record<string, unknown>, auto: args.auto, ...(args.runId ? { run_id: args.runId } : {}) },
+    storage: createGuildStorage(root),
+  });
+  process.stdout.write(JSON.stringify(receipt) + "\n");
+  process.exit(0);
 }
 
 function main(): void {
+  let args: EvolveArgs;
+  try {
+    args = parseArgs(process.argv.slice(2));
+  } catch (err) {
+    process.stderr.write(`[evolve-loop] ERROR: ${(err as Error).message}\n`);
+    process.exit(1);
+  }
   // The layout gate reads the root this run WRITES (--cwd), not wherever it was
   // launched: a future layout there fails closed before any delta or history lands.
-  ensureStorageLayout(path.resolve(parseArgs(process.argv.slice(2)).cwd), { detectOnly: true });
-  if (process.argv.includes("--apply")) {
-    applyMain(process.argv.slice(2));
+  ensureStorageLayout(path.resolve(args.cwd), { detectOnly: true });
+  if (args.apply !== null) {
+    applyMain(args, path.resolve(args.cwd));
     return;
   }
-  const { skill, runId, proposedEdit, cwd: cwdArg } = parseArgs(
-    process.argv.slice(2)
-  );
+  const { skill, runId, proposedEdit, cwd: cwdArg } = args;
 
   if (!skill) {
     process.stderr.write("[evolve-loop] ERROR: --skill <slug> is required\n");

@@ -10,6 +10,9 @@
  *   evolve-loop.js --cwd      the layout gate reads the --cwd root, not process.cwd()
  *
  * Each row carries a CONTROL that must come out the other way.
+ *
+ * `redirect` and `--apply` only enqueue since T16I; `t0Call` hands the CLI's result
+ * to the lead session's PostToolUse hook, which drains it through the same gates.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
@@ -24,6 +27,7 @@ const ROOT = path.resolve(__dirname, "..");
 const WORK_LOOP = path.join(ROOT, "runtime", "scripts", "work-loop.js");
 const EVOLVE = path.join(ROOT, "runtime", "scripts", "evolve-loop.js");
 const PRE_TOOL_USE = path.join(ROOT, "hooks", "dist", "pre-tool-use.js");
+const POST_TOOL_USE = path.join(ROOT, "hooks", "dist", "post-tool-use.js");
 const RUN = "run-t16h";
 const TASK_INSTANCE = "T1.a1.i-1";
 
@@ -73,6 +77,41 @@ function node(
   }
   return { code: r.status ?? -1, out, stdout, stderr: r.stderr ?? "" };
 }
+
+/**
+ * A Bash call of a T0-queue entry in the session `env` names: the CLI enqueues,
+ * then that session's PostToolUse hook sees the call's own result. Returns the
+ * drained outcome as the CLI used to (exit code + JSON); a CLI that queued nothing
+ * (refused, or a usage error) is returned as it is.
+ */
+function t0Call(entry: string, args: string[], opts: { env?: Record<string, string>; cwd?: string } = {}) {
+  const cli = node(entry, args, opts);
+  if (cli.out?.queued !== true) return cli;
+  const hook = node(POST_TOOL_USE, [], {
+    input: JSON.stringify({
+      tool_name: "Bash",
+      tool_input: { command: `node ${entry} ${args.join(" ")}` },
+      tool_response: { stdout: cli.stdout, stderr: "", interrupted: false },
+      cwd: repo,
+    }),
+    env: { CLAUDE_PLUGIN_ROOT: ROOT, GUILD_CWD: repo, ...(opts.env ?? {}) },
+  });
+  for (const line of hook.stdout.split("\n")) {
+    let ctx = "";
+    try {
+      ctx = String(JSON.parse(line).hookSpecificOutput?.additionalContext ?? "");
+    } catch {
+      /* not this line */
+    }
+    const m = /^guild\.t0_request\.v1 drained: (.*)$/s.exec(ctx);
+    const o = m ? JSON.parse(m[1]!).drained[0] : undefined;
+    if (o) return { code: o.code as number, out: o.out, stdout: hook.stdout, stderr: hook.stderr };
+  }
+  throw new Error(`the PostToolUse hook drained nothing: ${hook.stderr}`);
+}
+
+/** Files the queue itself adds (request, claim, result): not a write of the gated target. */
+const notQueue = (f: string): boolean => !f.split(path.sep).includes("queue");
 
 function write(rel: string, body: string): string {
   const abs = path.join(repo, rel);
@@ -170,7 +209,7 @@ function pluginSandbox(): Record<string, string> {
 }
 
 function apply(deltaFile: string, extra: string[] = [], cwd?: string) {
-  return node(EVOLVE, ["--apply", deltaFile, "--run-id", RUN, "--cwd", repo, ...extra], {
+  return t0Call(EVOLVE, ["--apply", deltaFile, "--run-id", RUN, "--cwd", repo, ...extra], {
     env: pluginSandbox(),
     ...(cwd ? { cwd } : {}),
   });
@@ -185,7 +224,7 @@ describe("P1 — evolve-loop --apply passes the injection probe, D5 and the scru
     expect(r.out).toMatchObject({ applied: false, refused: true, next_need: "operator" });
     expect(fs.existsSync(playbookPath())).toBe(false);
     // Nothing new on disk but the audit record: no playbook, no compact history.
-    const added = tree(sandbox).filter((f) => !before.includes(f));
+    const added = tree(sandbox).filter((f) => !before.includes(f) && notQueue(f));
     expect(added).toEqual([path.join("repo", ".guild", "runs", RUN, "logs", "security-events.jsonl")]);
     const ev = securityEvents();
     expect(ev.length).toBe(1);
@@ -210,7 +249,7 @@ describe("P1 — evolve-loop --apply passes the injection probe, D5 and the scru
     const r = apply(d);
     expect(r.code).toBe(3);
     expect(fs.existsSync(playbookPath())).toBe(false);
-    const added = tree(sandbox).filter((f) => !before.includes(f));
+    const added = tree(sandbox).filter((f) => !before.includes(f) && notQueue(f));
     expect(added).toEqual([path.join("repo", ".guild", "runs", RUN, "logs", "security-events.jsonl")]);
     expect(securityEvents().map((e) => e.event_type)).toEqual(["secret_scrub_blocked"]);
     expect(JSON.stringify(securityEvents())).not.toContain("ABCDEFGHIJKLMNOP");
@@ -254,7 +293,7 @@ const PAGE = (): string => path.join(repo, ".guild", "wiki", "decisions", `${DEC
 
 function redirectThrice(env: Record<string, string>) {
   const input = redirectInput();
-  return [1, 2, 3].map(() => node(WORK_LOOP, ["redirect", "--run-id", RUN, "--cwd", repo, "--input", input], { env }));
+  return [1, 2, 3].map(() => t0Call(WORK_LOOP, ["redirect", "--run-id", RUN, "--cwd", repo, "--input", input], { env }));
 }
 
 describe("P1 — work-loop redirect refuses a lane worker's env", () => {
