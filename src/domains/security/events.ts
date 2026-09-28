@@ -105,7 +105,9 @@ export type SecurityEventType =
   | "wiki_cas_conflict"
   | "harvest_reverted"
   /** KTD60: a Guild-owned MCP tool whose shipped pin is unusable (missing, malformed, stale binary). */
-  | "mcp_description_unpinned";
+  | "mcp_description_unpinned"
+  /** KTD35: a lane worker's Write/Edit/MultiEdit/NotebookEdit/Bash write resolved under <root>/.guild/wiki. */
+  | "lane_wiki_write_refused";
 
 /**
  * The closed set of `event_type` values, as data. Every emitter in the tree uses
@@ -131,6 +133,7 @@ export const SECURITY_EVENT_TYPES: readonly SecurityEventType[] = Object.freeze(
   "playbook_auto_replace",
   "wiki_cas_conflict",
   "harvest_reverted",
+  "lane_wiki_write_refused",
 ] as const);
 
 /** The action Guild took for the gated tool call. */

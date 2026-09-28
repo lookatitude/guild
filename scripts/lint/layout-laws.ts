@@ -2093,13 +2093,18 @@ const CHECKS: Check[] = [
     title: "specialist surfaces never instruct a wiki Write",
     run(ctx) {
       const v: Violation[] = [];
+      // guild:decisions runs inside lanes, so it stages candidates too (plr-wi-15-3).
       const specialistFiles = ctx.files.filter(
-        (f) => /(^|\/)specialists\//.test(f) && f.endsWith(".md") && !isFixturePath(f),
+        (f) =>
+          (/(^|\/)specialists\//.test(f) || f === "skills/knowledge/wiki/references/decisions.md") &&
+          f.endsWith(".md") && !isFixturePath(f),
       );
       for (const f of specialistFiles) {
         const lines = read(path.join(ctx.root, f)).split("\n");
         lines.forEach((line, i) => {
-          if (line.includes(".guild/wiki") && /\bWrite\b|\bwrite to\b|\bwrites\b/.test(line)) {
+          // A line that forbids the write ("never writes .guild/wiki") is not an instruction to write.
+          if (/\b(never|not)\b/i.test(line)) return;
+          if (line.includes(".guild/wiki") && /\bWrite\b|\bwrite to\b|\bwrites\b|\bupdates\b|\bappends to\b/.test(line)) {
             v.push({ check: "specialists-never-write-wiki", path: `${f}:${i + 1}`, detail: "specialist surface writes the wiki" });
           }
         });

@@ -1,15 +1,15 @@
 ---
 name: guild-decisions
-description: Captures Q&A during specialist work as structured ADR-lite decisions under .guild/wiki/decisions/<slug>.md. Required when a specialist reaches uncertainty (principle #1 "ask") and the answer is non-trivial — user supplies the answer, this skill writes the decision file, updates `wiki/index.md`, and appends a dated entry to `wiki/log.md`. Has a significance threshold (low → keep in the run transcript only; medium/high → persist to `wiki/decisions/`) to prevent the trivial-question flood. TRIGGER for phrasings like "capture this decision", "record this as an ADR", "log why we chose X over Y", "write up this architectural decision", "persist this as a decision". DO NOT TRIGGER for: ingesting a source (hand off to `guild:wiki-ingest`); a specialist asking a clarifying question and getting an immediate answer with low significance (keep it in the run transcript — only escalate medium+ to this skill); routine status updates; wiki search or lint.
+description: Captures Q&A during specialist work as structured ADR-lite decision candidates under .guild/knowledge/candidates/decisions/<slug>.md, which the lead promotes into the wiki through harvest. Required when a specialist reaches uncertainty (principle #1 "ask") and the answer is non-trivial — user supplies the answer, this skill stages the candidate. Has a significance threshold (low → keep in the run transcript only; medium/high → stage a candidate) to prevent the trivial-question flood. TRIGGER for phrasings like "capture this decision", "record this as an ADR", "log why we chose X over Y", "write up this architectural decision", "persist this as a decision". DO NOT TRIGGER for: ingesting a source (hand off to `guild:wiki-ingest`); a specialist asking a clarifying question and getting an immediate answer with low significance (keep it in the run transcript — only escalate medium+ to this skill); routine status updates; wiki search or lint.
 when_to_use: Any specialist or orchestrator that reaches medium+ significance uncertainty during task execution. Also fires when a user explicitly asks to record a past decision for the project wiki.
 type: meta
 ---
 
 # guild:decisions
 
-Implements the decision capture workflow. This skill turns ad-hoc Q&A during specialist work into structured, queryable knowledge under `.guild/wiki/decisions/`. It is a workflow (T2 meta) skill — it WRITES into the knowledge layer, but it is not itself a knowledge skill.
+Implements the decision capture workflow. This skill turns ad-hoc Q&A during specialist work into structured decision candidates under `.guild/knowledge/candidates/decisions/`. It is a workflow (T2 meta) skill — it stages knowledge, but it is not itself a knowledge skill.
 
-The wiki directory `decisions/` is an append-only subdir of `.guild/wiki/`. The significance threshold prevents the trivial-questions flood; assumptions surfaced in specialist handoff receipts are decision candidates.
+A lane worker never writes `.guild/wiki/` (KTD35): PreToolUse denies it with a `lane_wiki_write_refused` security event. The lead promotes a candidate into `.guild/wiki/decisions/` through harvest, which also owns `index.md` and `log.md`. The significance threshold prevents the trivial-questions flood; assumptions surfaced in specialist handoff receipts are decision candidates.
 
 ## Flow
 
@@ -20,10 +20,9 @@ The wiki directory `decisions/` is an append-only subdir of `.guild/wiki/`. The 
    - `options` — concrete alternatives the specialist has already considered (A, B, …).
 3. **Skill prompts the user** with those three fields verbatim and waits for an answer. Do not synthesize an answer from plan context — that defeats the principle.
 4. **User answers.** The skill then asks the user to rate **significance** (low / medium / high). Low-significance stays in the run transcript (`.guild/runs/<run-id>/assumptions.md` per §8.1) and does **not** persist to the wiki. Medium or high triggers file creation (see §15.2 threshold).
-5. **Skill writes `.guild/wiki/decisions/<slug>.md`** using the ADR-lite template below. Slug is a kebab-case summary of the question (e.g. `postgres-vs-dynamodb`). If a prior decision on the same topic exists, set `supersedes:` to that slug.
-6. **Skill updates `.guild/wiki/index.md`** — adds an entry under the `decisions/` section linking to the new file with its date and one-line summary.
-7. **Skill appends to `.guild/wiki/log.md`** — one line in the form `## [YYYY-MM-DD] decided <slug>`, so the chronological log shows the decision alongside other wiki events.
-8. **Specialist receives the answer** and continues its task, citing the new decision slug in its handoff receipt (see "Handoff" below).
+5. **Skill stages `.guild/knowledge/candidates/decisions/<slug>.md`** using the ADR-lite template below. Slug is a kebab-case summary of the question (e.g. `postgres-vs-dynamodb`). If a prior decision on the same topic exists, set `supersedes:` to that slug.
+6. **The skill does not touch `.guild/wiki/`** — not the page, not `index.md`, not `log.md`. The lead promotes the candidate through harvest, which writes the page and the index/log entries.
+7. **Specialist receives the answer** and continues its task, citing the candidate slug in its handoff receipt (see "Handoff" below).
 
 ## ADR-lite template
 
@@ -73,22 +72,22 @@ Notes:
 
 Per `§15.2` (risk: "Decision capture noise — trivial questions flood wiki/decisions/"), always ask the user to rate the decision's significance after they answer:
 
-- **low** — routine clarification ("is the field called `user_id` or `userId`?"). Record it in `.guild/runs/<run-id>/assumptions.md` only. Do **not** create a file under `wiki/decisions/`. Do not touch `index.md` or `log.md`.
-- **medium** — affects more than the current task but is reversible. Persist with `confidence: medium`.
-- **high** — architectural, contractual, or otherwise hard to reverse. Persist with `confidence: high` and include a one-line note in the run summary so reviewers see it without opening the file.
+- **low** — routine clarification ("is the field called `user_id` or `userId`?"). Record it in `.guild/runs/<run-id>/assumptions.md` only. Do **not** stage a candidate.
+- **medium** — affects more than the current task but is reversible. Stage with `confidence: medium`.
+- **high** — architectural, contractual, or otherwise hard to reverse. Stage with `confidence: high` and include a one-line note in the run summary so reviewers see it without opening the file.
 
 If the user declines to rate, default to **medium** and flag it in the handoff `assumptions:` field.
 
 ## Relationship to guild:wiki-ingest
 
-Decisions are **authored by this skill**, not by `guild:wiki-ingest`. Ingest brings external material into `.guild/wiki/sources/` and synthesizes summaries; it does not produce ADR-lite pages. The `guild:wiki-lint` skill (Task 3) enforces this separation: any page under `wiki/decisions/` whose frontmatter or shape does not match this skill's template is flagged as not-written-by-`guild:decisions`. If a user insists on ingesting an external doc as a decision, the correct flow is: ingest to `sources/`, then invoke this skill to create a decision that cites the source in `source_refs`.
+Decision candidates are **authored by this skill**, not by `guild:wiki-ingest`. Ingest brings external material into `.guild/wiki/sources/` and synthesizes summaries; it does not produce ADR-lite pages. The `guild:wiki-lint` skill (Task 3) enforces this separation: any page under `wiki/decisions/` whose frontmatter or shape does not match this skill's template is flagged as not-written-by-`guild:decisions`. If a user insists on ingesting an external doc as a decision, the correct flow is: ingest to `sources/`, then invoke this skill to stage a decision candidate that cites the source in `source_refs`.
 
 ## Handoff
 
 Return two things to the invoking specialist:
 
 1. The **answer** the user gave, verbatim — so the specialist can proceed.
-2. The **decision slug and absolute file path** (e.g. `postgres-vs-dynamodb` → `.guild/wiki/decisions/postgres-vs-dynamodb.md`), or `null` if significance was low and no file was written.
+2. The **decision slug and candidate path** (e.g. `postgres-vs-dynamodb` → `.guild/knowledge/candidates/decisions/postgres-vs-dynamodb.md`), or `null` if significance was low and no file was written.
 
 The specialist cites the decision in its own handoff receipt per `§8.2`:
 - Under `assumptions:` when the decision locks in an inferred choice.
