@@ -675,7 +675,10 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-09-28 (T15 security gate): wiki-ingest reference states the
   // should_pause marker is enforced at PreToolUse. ANTI-VACUITY: check-surface-pins and
   // SC-W3-6 were RED on guild#203 CI against the T14 pin and named only `skills/skills`.
-  skills: "2b48b2141535884bb6bfb2fb99ce4f2e90878dbf",
+  // Re-ratified 2026-09-28 (T15F hooks, plr-wi-15-3): decisions reference stages ADR-lite
+  // candidates under .guild/knowledge/candidates/decisions/ for harvest promotion (KTD35).
+  // ANTI-VACUITY: check-surface-pins named only `skills/skills` stale against the T15 pin.
+  skills: "b5cbff1affdedc17dfe223ca79f3b656fe86eed3",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
