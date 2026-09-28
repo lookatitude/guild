@@ -17,6 +17,15 @@
  * Usage:
  *   scripts/evolve-loop.ts --skill <slug> --run-id <id> \
  *          [--proposed-edit <path>] [--cwd <path>]
+ *   scripts/evolve-loop.ts --apply <delta.json> [--run-id <id>] [--auto] [--cwd <path>]
+ *
+ * `--apply` is `maintain evolve <id> --target=<type>`'s write step: one
+ * `guild.evolve_delta.v1` through the ONE gate (`applyEvolveDelta`, KTD18/R32).
+ * Project targets span-replace under this repo's `.guild/` with the inverse in
+ * compact history; machinery targets become a candidate with `next_need:
+ * operator` (KTD63). `--auto` is the KTD33 curator path and fails closed on
+ * everything but `playbook` / `skill` (R74). Prints the result as JSON.
+ * Exit 0 applied or candidate · 3 refused by the gate · 1 bad input.
  *
  * Options:
  *   --skill <slug>         (required) Skill slug (e.g. "guild-brainstorm").
@@ -49,6 +58,9 @@ import * as fs from "fs";
 import * as path from "path";
 import { durableGuildDir } from "./lib/state/storage";
 import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
+import { EvolveTargetRefusal, applyEvolveDelta, type EvolveDelta } from "../src/domains/evolve";
+import { resolvePluginRoot } from "../src/domains/kernel";
+import { createGuildStorage } from "../src/domains/state";
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
 
@@ -221,7 +233,7 @@ function buildPipelineMd(params: {
     "8. **Promotion gate.** HUMAN DECISION. Promote if ANY of the four conditions holds: (a) 0 regressions AND ≥ 1 fix, (b) no flip change AND tokens ↓ ≥ 10%, (c) regressions present AND user approves via review viewer, (d) doc-only fast-path — the proposed edit is doc-only (no trigger-phrasing, body-algorithm, or eval-case change; prose/description/comments only, so paired evals show no delta) AND the user approves (a blanket session directive or a run-time prompt qualifies); recorded as `condition: doc-only-fast-path` (+ `user_approved_at`) in `gate.json`. The doc-only path is NOT a fallback for behavior-change edits. Gate result goes to `gate.json`. This wrapper stops here — it does NOT auto-promote."
   );
   lines.push(
-    `9. **On promote: description optimizer + commit.** Call: \`npx tsx scripts/description-optimizer.ts --skill ${slug} --cwd ${cwd}\`. Orchestrator applies the emitted \`description:\` YAML to the live skill as a \`guild.evolve_delta.v1\` span replace (which records the inverse in compact history), and updates \`evals.json\` if new cases were bootstrapped in step 2.`
+    `9. **On promote: description optimizer + commit.** Call: \`npx tsx scripts/description-optimizer.ts --skill ${slug} --cwd ${cwd}\`. Orchestrator applies the emitted \`description:\` YAML to the live skill as a \`guild.evolve_delta.v1\` span replace through the gate — \`node runtime/scripts/evolve-loop.js --apply <delta.json> --run-id ${runId} --cwd ${cwd}\` (records the inverse in compact history), and updates \`evals.json\` if new cases were bootstrapped in step 2.`
   );
   lines.push(
     `10. **On reject: archive attempt.** Move proposed edit + flip report + shadow-mode output + gate verdict to \`.guild/evolve/${runId}/archived/\`. Live skill untouched.`
@@ -245,8 +257,60 @@ function buildPipelineMd(params: {
 
 // ── Main ───────────────────────────────────────────────────────────────────
 
+/** `--apply <delta.json>`: run one delta through the evolve gate. */
+function applyMain(argv: string[]): void {
+  const at = (name: string): string | null => {
+    const i = argv.indexOf(name);
+    return i !== -1 && i + 1 < argv.length ? argv[i + 1] : null;
+  };
+  const deltaFile = at("--apply");
+  const runId = at("--run-id") ?? undefined;
+  const cwd = path.resolve(at("--cwd") ?? ".");
+  let delta: EvolveDelta;
+  try {
+    delta = JSON.parse(fs.readFileSync(deltaFile ?? "", "utf8")) as EvolveDelta;
+  } catch (err) {
+    process.stderr.write(`[evolve-loop] ERROR: --apply needs a readable delta JSON (${(err as Error).message})\n`);
+    process.exit(1);
+  }
+  const storage = createGuildStorage(cwd);
+  const scope = storage.project ?? storage.workspace;
+  try {
+    const result = applyEvolveDelta(delta, {
+      cwd,
+      storage,
+      auto: argv.includes("--auto"),
+      // The install root the host advertised, else this package's own root. A
+      // machinery candidate is parked there, never under the consuming repo.
+      pluginRoot: (() => {
+        try {
+          return resolvePluginRoot(__dirname);
+        } catch {
+          return cwd;
+        }
+      })(),
+      ...(runId ? { runId } : {}),
+      ...(runId && scope ? { runDir: scope.runRecord(runId) } : {}),
+    });
+    process.stdout.write(JSON.stringify(result) + "\n");
+    process.exit(0);
+  } catch (err) {
+    if (err instanceof EvolveTargetRefusal) {
+      process.stdout.write(
+        JSON.stringify({ applied: false, refused: true, next_need: "operator", detail: err.message }) + "\n",
+      );
+      process.exit(3);
+    }
+    throw err;
+  }
+}
+
 function main(): void {
   ensureStorageLayout(process.cwd(), { detectOnly: true });
+  if (process.argv.includes("--apply")) {
+    applyMain(process.argv.slice(2));
+    return;
+  }
   const { skill, runId, proposedEdit, cwd: cwdArg } = parseArgs(
     process.argv.slice(2)
   );

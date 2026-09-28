@@ -308,6 +308,10 @@ const ENTRY_ALLOWLIST = new Set<string>([
   "hooks/lib/__tests__/trace-v2.test.ts",
   "hooks/lib/v1.4/__tests__/append-trace-v2.test.ts",
   "hooks/lib/v1.4/__tests__/log-jsonl-split-parity.test.ts",
+  // plugin-layout-reshape T16F: the knowledge domain's recall CLI gained the KTD50
+  // phase-start leg, so every bundle that inlines that domain was recompiled
+  // (compile --check pins it). The bootstrap's own behaviour did not change.
+  "hooks/dist/using-guild-bootstrap.js",
 ]);
 
 function gitLines(args: string[]): string[] {
@@ -352,9 +356,9 @@ describe("SC-W1-9 — command/hook/package entry paths byte-identical vs HEAD (A
     for (const notAllowed of [
       "commands/guild-build.md",
       "hooks/hooks.json",
-      // T12 admitted emit-learning-checkpoint.js (an import-specifier recompile), so
-      // the control moved to a bundle with no admitted delta in any lane so far.
-      "hooks/dist/using-guild-bootstrap.js",
+      // T12 admitted emit-learning-checkpoint.js and T16F using-guild-bootstrap.js
+      // (domain recompiles), so the control is a hook entry no lane has touched.
+      "hooks/check-skill-coverage.sh",
     ]) {
       expect(ENTRY_ALLOWLIST.has(notAllowed)).toBe(false);
     }

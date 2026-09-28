@@ -148,8 +148,10 @@ Implements the cost-aware-tiering ADR (§4) and the persistence/SQLite-index pol
 The **recall-before-read rule** (https://guildstack.dev/docs/architecture, surfaced in ADR §4 + D-PS-2): before an agent reads a file, recall the task description against the wiki — through the **single config-aware recall entry-point** `scripts/lib/recall.ts`. There is **one** bundle-recall call; the CLI picks the mechanism internally and protects every chunk intrinsically.
 
 ```
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/recall.js --query "<task description>" --cwd <repo-root> --run-id <run-id> [--category <cat>] [--limit 10]
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/recall.js --query "<task description>" --cwd <repo-root> --run-id <run-id> --phase <phase> --cell <task-id> [--category <cat>] [--limit 10]
 ```
+
+`--phase` makes the call the phase start (KTD50): it also returns `working_set_fresh`, `recall_backend` (the `recall.backend` policy; `hybrid` with no embedding model serves BM25 and sets `degraded_reason`) and `lane_bundle` — the `guild.lane_bundle.v1` (≤1200 tokens: working-set card + citations + matched glossary terms). Hand T1/T0 only `lane_bundle`, never the specialist bundle.
 
 **`recall.ts` is the only recall path for bundle content** — it unifies **all four** sources: wiki via SQLite FTS5/BM25 (when `defaults.index` is at/above threshold), wiki via BM25-over-files / `guild-memory` semantics (below threshold), `fsScan` (when the MCP stdio transport is unavailable), **and** the `knowledge_graph` sub-source (bounded, token-scored graph traversal — formerly a direct `kg-query.ts` call). It resolves the wiki mechanism from config **internally**, traverses the graph, and runs **every** source's hits through `protect-chunks` (probe → quarantine → classify → trust-tier wrap) **before returning**. So the output is **intrinsically protected** — there is no raw-hits branch and no separate protect step for the skill to remember (the prior model-prose protect-pipe was skippable; this isn't). When the graph sub-source contributes, the result-level `source` becomes `kg-query` (or `combined` when wiki also contributes); graph-sourced chunks obey the `## Graph retrieval` sub-cap + drop-first priority.
 

@@ -82,7 +82,8 @@ import {
   type GuildHookEvent,
 } from "./lib/guild-hook-event.js";
 import { emitTraceEvent, makeAnalysisTraceEvent } from "../src/domains/telemetry/index.js";
-import { durableGuildDir } from "../src/domains/state";
+import { createGuildStorage, durableGuildDir } from "../src/domains/state";
+import { refreshTouched } from "../src/domains/knowledge";
 
 function isKnownTool(name: string | undefined): name is ToolCallTool {
   if (typeof name !== "string") return false;
@@ -476,6 +477,37 @@ export async function main(): Promise<void> {
     }
   }
   // ── end verify.after_edit ────────────────────────────────────────────────
+
+  // ── KTD50 (R62/R75): the cheap after-edit refresh ─────────────────────────
+  // An edit invalidates exactly three derived things: the working-set card,
+  // the BM25 entry of a touched wiki page, and the edges citing the touched
+  // path. `refreshTouched` rebuilds those and nothing deeper — never the
+  // explicit learn tier. Cache-class writes only; never blocks the edit.
+  if (toolName === "Write" || toolName === "Edit") {
+    const ti = payload.tool_input as Record<string, unknown> | null | undefined;
+    const touched = ti && typeof ti["file_path"] === "string" ? (ti["file_path"] as string) : "";
+    if (touched !== "") {
+      try {
+        // Real paths on both sides: a symlinked checkout (macOS /var → /private/var)
+        // would otherwise place a wiki page outside the wiki it lives in.
+        const real = (p: string): string => (fs.existsSync(p) ? fs.realpathSync(p) : p);
+        // The root is already resolved: skip storage discovery's parent-workspace
+        // scan, which alone costs more than the whole after-edit budget. The
+        // wiki and the cache are keyed on the root, not on the profile.
+        const root = real(guildRoot);
+        refreshTouched([real(touched)], {
+          storage: createGuildStorage(root, { activeRoot: root, profile: "standalone" }),
+        });
+      } catch (err) {
+        process.stderr.write(
+          `warn: [post-tool-use] after-edit refresh threw (non-fatal): ${
+            err instanceof Error ? err.message : String(err)
+          }\n`,
+        );
+      }
+    }
+  }
+  // ── end after-edit refresh ───────────────────────────────────────────────
 
   // ── T10 rework (KTD28/R42 P2): skip-recorded compaction, from the tool path ─
   // KTD28 says a skip-recorded compaction rung still writes its disk files "each

@@ -70,7 +70,10 @@ not enumerate or guess them. Orient through these pointers instead:
 - **Bare `/guild` is T0** — the orchestrator session. With no verb it runs intake,
   classifies the work, and proposes the next step; `--class=` or a typed sub-verb binds
   the class directly.
-  A verb is an option, not a requirement.
+  A verb is an option, not a requirement. T0 walks the class graph with
+  `node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/work-loop.js" <verb> --run-id <id> --cwd "$(pwd)"`:
+  `bind --class=<c>` once, `route --decision '<json>'` after each node, `redirect --input <f>`
+  per operator correction, `research-packet --input <f>` at the packet node. Exit 3 = stop and ask.
 - The lifecycle spine is **init → ideate → plan → build → qa → ops**; reach for the
   skill(s) of the phase you are actually in.
 - `/guild:status` reports current run state.

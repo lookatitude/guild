@@ -58,6 +58,7 @@
       "resume-lanes",
       "retry-lane",
       "validate-run-record",
+      "work-loop",
       "write-run-manifest",
       "write-task-run",
       "lib/run-binding",
