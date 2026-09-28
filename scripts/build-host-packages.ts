@@ -92,6 +92,7 @@ import {
   writeNativeClaudePackageIdentity,
   writeReleasePackageIdentitySet,
 } from "./lib/release-package-identity";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ---------------------------------------------------------------------------
 // IO helpers
@@ -1287,6 +1288,7 @@ export function parseArgs(argv: string[]): CliArgs | { error: string } {
 }
 
 function main(): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const parsed = parseArgs(process.argv.slice(2));
   if ("error" in parsed) {
     process.stderr.write(

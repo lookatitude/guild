@@ -47,6 +47,7 @@
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
 
@@ -244,6 +245,7 @@ function buildPipelineMd(params: {
 // ── Main ───────────────────────────────────────────────────────────────────
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const { skill, runId, proposedEdit, cwd: cwdArg } = parseArgs(
     process.argv.slice(2)
   );

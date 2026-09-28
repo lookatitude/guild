@@ -40,6 +40,7 @@ import * as path from "node:path";
 // (hooks/lib/security/injection-guard.ts, HK-08) — code, not model self-scan.
 import { sanitizeForInjection } from "../../hooks/lib/security/injection-guard.js";
 import { clearIngestPause, recordIngestPause } from "../../src/domains/security";
+import { ensureStorageLayout } from "./state/ensure-storage-layout";
 
 // ── Public types ──────────────────────────────────────────────────────────
 
@@ -300,6 +301,7 @@ export function ingestSimilarity(
 if (require.main === module) {
   const argv = process.argv.slice(2);
   let cwd = process.env["GUILD_CWD"] ?? process.cwd();
+  ensureStorageLayout(cwd, { detectOnly: true });
   let category = "";
   let title = "";
   let contentFile = "";

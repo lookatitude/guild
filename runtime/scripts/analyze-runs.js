@@ -40,8 +40,117 @@ __export(analyze_runs_exports, {
   run: () => run
 });
 module.exports = __toCommonJS(analyze_runs_exports);
-var fs = __toESM(require("fs"));
-var path = __toESM(require("path"));
+var fs3 = __toESM(require("fs"));
+var path3 = __toESM(require("path"));
+
+// scripts/lib/state/ensure-storage-layout.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      try {
+        if (fs.existsSync(guildDir) && fs.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path2.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs2.existsSync(path2.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs2.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path2.join(__dirname, "upgrade-chain.js"),
+      path2.join(__dirname, "lib", "state", "upgrade-chain"),
+      path2.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs2.existsSync(c) || fs2.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
+// scripts/analyze-runs.ts
 function parseFrontmatter(content) {
   const match = content.match(/^---\s*\n([\s\S]*?)\n---/);
   if (!match) return null;
@@ -109,12 +218,12 @@ function stripQuotes(s) {
   return s.replace(/^["']|["']$/g, "");
 }
 function loadReflections(guildRoot, ifs) {
-  const reflectDir = path.join(guildRoot, ".guild", "reflections");
+  const reflectDir = path3.join(guildRoot, ".guild", "reflections");
   if (!ifs.existsSync(reflectDir)) return [];
   const entries = ifs.readdirSync(reflectDir).filter((f) => f.endsWith(".md"));
   const results = [];
   for (const entry of entries) {
-    const filePath = path.join(reflectDir, entry);
+    const filePath = path3.join(reflectDir, entry);
     let content;
     try {
       content = ifs.readFileSync(filePath, "utf8");
@@ -143,12 +252,12 @@ function extractStringArray(val) {
   return val.filter((v) => typeof v === "string" && v.trim().length > 0);
 }
 function loadHandoffs(guildRoot, ifs) {
-  const runsDir = path.join(guildRoot, ".guild", "runs");
+  const runsDir = path3.join(guildRoot, ".guild", "runs");
   if (!ifs.existsSync(runsDir)) return [];
   const runDirs = ifs.readdirSync(runsDir);
   const results = [];
   for (const runDir of runDirs) {
-    const handoffsDir = path.join(runsDir, runDir, "handoffs");
+    const handoffsDir = path3.join(runsDir, runDir, "handoffs");
     if (!ifs.existsSync(handoffsDir)) continue;
     let handoffFiles;
     try {
@@ -157,7 +266,7 @@ function loadHandoffs(guildRoot, ifs) {
       continue;
     }
     for (const hFile of handoffFiles) {
-      const filePath = path.join(handoffsDir, hFile);
+      const filePath = path3.join(handoffsDir, hFile);
       let content;
       try {
         content = ifs.readFileSync(filePath, "utf8");
@@ -171,10 +280,10 @@ function loadHandoffs(guildRoot, ifs) {
       let specialist = "";
       const taskId = String(fm["task_id"] ?? "");
       if (taskId) {
-        const basename2 = path.basename(hFile, ".md");
+        const basename2 = path3.basename(hFile, ".md");
         specialist = inferSpecialistFromTaskId(taskId) || inferSpecialistFromFilename(basename2);
       } else {
-        specialist = inferSpecialistFromFilename(path.basename(hFile, ".md"));
+        specialist = inferSpecialistFromFilename(path3.basename(hFile, ".md"));
       }
       results.push({ runId: runDir, specialist, escalated });
     }
@@ -347,7 +456,7 @@ function parseArgs(argv) {
   }
   return { cwd, minRuns, out, format, error: null };
 }
-function run(argv, ifs = fs) {
+function run(argv, ifs = fs3) {
   const { cwd, minRuns, out, format, error } = parseArgs(argv);
   if (error || minRuns === null) {
     return {
@@ -357,7 +466,7 @@ function run(argv, ifs = fs) {
 `
     };
   }
-  const resolvedCwd = path.resolve(cwd);
+  const resolvedCwd = path3.resolve(cwd);
   const reflections = loadReflections(resolvedCwd, ifs);
   const handoffs = loadHandoffs(resolvedCwd, ifs);
   const proposals = aggregateProposals(reflections, handoffs, minRuns);
@@ -369,10 +478,10 @@ function run(argv, ifs = fs) {
     proposals
   };
   const output = format === "json" ? formatJson(result) : formatText(result);
-  const evolveDir = path.join(resolvedCwd, ".guild", "evolve");
+  const evolveDir = path3.join(resolvedCwd, ".guild", "evolve");
   try {
     ifs.mkdirSync(evolveDir, { recursive: true });
-    const defaultPath = path.join(evolveDir, "analyze-runs-latest.md");
+    const defaultPath = path3.join(evolveDir, "analyze-runs-latest.md");
     const fileContent = buildFrontmatter(result) + "\n" + formatText(result);
     ifs.writeFileSync(defaultPath, fileContent, "utf8");
   } catch (e) {
@@ -381,8 +490,8 @@ function run(argv, ifs = fs) {
 `);
   }
   if (out) {
-    const resolvedOut = path.resolve(out);
-    if (resolvedOut.includes(path.join(".guild", "wiki"))) {
+    const resolvedOut = path3.resolve(out);
+    if (resolvedOut.includes(path3.join(".guild", "wiki"))) {
       return {
         exitCode: 1,
         stdout: "",
@@ -391,7 +500,7 @@ function run(argv, ifs = fs) {
       };
     }
     try {
-      const outDir = path.dirname(resolvedOut);
+      const outDir = path3.dirname(resolvedOut);
       ifs.mkdirSync(outDir, { recursive: true });
       const fileContent = buildFrontmatter(result) + "\n" + formatText(result);
       ifs.writeFileSync(resolvedOut, fileContent, "utf8");
@@ -404,6 +513,7 @@ function run(argv, ifs = fs) {
   return { exitCode: 0, stdout: output, stderr: "" };
 }
 function main() {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const { exitCode, stdout, stderr } = run(argv);
   if (stdout) process.stdout.write(stdout);

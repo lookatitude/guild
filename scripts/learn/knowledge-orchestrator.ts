@@ -106,6 +106,7 @@ import {
   canonicalizeNode,
   canonicalizeEdge,
 } from "./write-knowledge-links";
+import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
 // NOTE: k-stage-staleness is NOT imported here. Staleness is the SKILL's coarse
 // gate — the skill decides run-or-skip the whole tier. The orchestrator always
@@ -1158,6 +1159,7 @@ export async function runKnowledgeStages(
 // ---------------------------------------------------------------------------
 
 if (require.main === module) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   void (async () => {
     const args = process.argv.slice(2);
     const arg = (flag: string): string | undefined => {

@@ -37,6 +37,7 @@ import {
   validateProjectDefinitionRefV1,
   type ProjectDefinitionRefV1,
 } from "./lib/core/contracts/project-definition-ref";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── Constants (mirror the SKILL.md budget — bound by pointer) ────────────────
 
@@ -209,6 +210,7 @@ export function lintBundle(content: string): BundleLintVerdict {
 const USAGE = "usage: lint-context-bundle.ts --bundle <file>";
 
 function main(): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   let bundlePath: string | undefined;
   for (let i = 0; i < argv.length; i++) {

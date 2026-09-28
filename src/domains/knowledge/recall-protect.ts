@@ -51,7 +51,7 @@ export type TrustTier = "operator" | "trusted" | "untrusted";
  * Snippets lack frontmatter → classifyTrustTier returns "untrusted" (DEFAULT-DENY).
  */
 export interface RawRecallHit {
-  /** Relative path of the source page (e.g. `.guild/wiki/context/page.md`). */
+  /** Relative path of the source page (e.g. `wiki/context/page.md` under the Guild root). */
   source_path: string;
   /**
    * The content to probe and protect. Full file text for the SQLite/fsScan paths;

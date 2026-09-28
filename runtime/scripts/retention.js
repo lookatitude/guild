@@ -35,8 +35,8 @@ __export(retention_exports, {
   sweepExpiredRuns: () => sweepExpiredRuns
 });
 module.exports = __toCommonJS(retention_exports);
-var fs2 = __toESM(require("fs"));
-var path2 = __toESM(require("path"));
+var fs3 = __toESM(require("fs"));
+var path3 = __toESM(require("path"));
 
 // src/domains/state/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -60,6 +60,89 @@ function resolveGuildRoot(startDir) {
   }
 }
 
+// scripts/lib/state/ensure-storage-layout.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path2.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs2.existsSync(path2.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs2.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path2.join(__dirname, "upgrade-chain.js"),
+      path2.join(__dirname, "lib", "state", "upgrade-chain"),
+      path2.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs2.existsSync(c) || fs2.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
 // scripts/lib/retention.ts
 var DEFAULT_RETENTION_DAYS = 90;
 function isExpired(info, nowMs, days = DEFAULT_RETENTION_DAYS) {
@@ -70,22 +153,22 @@ function isExpired(info, nowMs, days = DEFAULT_RETENTION_DAYS) {
   return nowMs - closedMs > days * 864e5;
 }
 function findExpiredRuns(guildDir, nowMs, days = DEFAULT_RETENTION_DAYS) {
-  const runsDir = path2.join(guildDir, "runs");
+  const runsDir = path3.join(guildDir, "runs");
   let entries;
   try {
-    entries = fs2.readdirSync(runsDir, { withFileTypes: true });
+    entries = fs3.readdirSync(runsDir, { withFileTypes: true });
   } catch {
     return [];
   }
   const out = [];
   for (const e of entries) {
     if (!e.isDirectory()) continue;
-    const dir = path2.join(runsDir, e.name);
-    const prov = path2.join(dir, "provenance.json");
-    if (!fs2.existsSync(prov)) continue;
+    const dir = path3.join(runsDir, e.name);
+    const prov = path3.join(dir, "provenance.json");
+    if (!fs3.existsSync(prov)) continue;
     let p;
     try {
-      p = JSON.parse(fs2.readFileSync(prov, "utf8"));
+      p = JSON.parse(fs3.readFileSync(prov, "utf8"));
     } catch {
       continue;
     }
@@ -99,17 +182,18 @@ function sweepExpiredRuns(guildDir, nowMs, opts = {}) {
   const dryRun = opts.dryRun !== false;
   const expired = findExpiredRuns(guildDir, nowMs, days);
   if (!dryRun) {
-    for (const r of expired) fs2.rmSync(r.dir, { recursive: true, force: true });
+    for (const r of expired) fs3.rmSync(r.dir, { recursive: true, force: true });
   }
   return { removed: expired, dryRun };
 }
 if (require.main === module) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
-  let guildDir = path2.join(resolveGuildRoot(process.cwd()), ".guild");
+  let guildDir = path3.join(resolveGuildRoot(process.cwd()), ".guild");
   let apply = false;
   let nowMs = Date.now();
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--guild-dir" && argv[i + 1]) guildDir = path2.resolve(argv[++i]);
+    if (argv[i] === "--guild-dir" && argv[i + 1]) guildDir = path3.resolve(argv[++i]);
     else if (argv[i] === "--apply") apply = true;
     else if (argv[i] === "--now" && argv[i + 1]) nowMs = Date.parse(argv[++i]) || nowMs;
   }

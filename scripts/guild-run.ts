@@ -87,6 +87,7 @@ import {
 } from "../src/domains/dispatch";
 import { resolvePolicy } from "../src/domains/config";
 import { resolveGuildRoot } from "../src/domains/state";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ---------------------------------------------------------------------------
 // Lane admission (plr-wi-15-4)
@@ -606,6 +607,7 @@ function restoreInstructionFiles(backups: Backup[]): void {
 // ---------------------------------------------------------------------------
 
 function main(): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const parsed = parseArgs(process.argv.slice(2));
   if ("error" in parsed) {
     process.stderr.write(parsed.error + "\n");

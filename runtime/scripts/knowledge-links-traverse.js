@@ -43,7 +43,7 @@ __export(knowledge_links_traverse_exports, {
   tombstoneLinks: () => tombstoneLinks
 });
 module.exports = __toCommonJS(knowledge_links_traverse_exports);
-var fs2 = __toESM(require("node:fs"));
+var fs4 = __toESM(require("node:fs"));
 
 // src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
@@ -186,7 +186,7 @@ var TIER_BUS_CONTRACT = deepFreeze({
 });
 
 // scripts/knowledge-links-traverse.ts
-var path3 = __toESM(require("node:path"));
+var path5 = __toESM(require("node:path"));
 
 // scripts/learn/lib/knowledge-links-io.ts
 var fs = __toESM(require("fs"));
@@ -229,6 +229,113 @@ function appendKnowledgeLinksBatch(file, batch) {
   }
   writeKnowledgeLinksDoc(file, { schema_version: KNOWLEDGE_LINKS_SCHEMA_VERSION, links: doc.links });
   return { added, total: doc.links.length };
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var fs3 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
+var fs2 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path3.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs2.existsSync(path3.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path3.join(current, ".guild");
+      try {
+        if (fs2.existsSync(guildDir) && fs2.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path3.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path4.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs3.existsSync(path4.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs3.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path4.join(__dirname, "upgrade-chain.js"),
+      path4.join(__dirname, "lib", "state", "upgrade-chain"),
+      path4.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs3.existsSync(c) || fs3.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
 }
 
 // scripts/knowledge-links-traverse.ts
@@ -326,6 +433,7 @@ function parseFlag(argv, flag) {
 function main() {
   const argv = process.argv.slice(2);
   const cwd = parseFlag(argv, "--cwd") ?? process.cwd();
+  ensureStorageLayout(cwd, { detectOnly: true });
   const taskId = parseFlag(argv, "--task-id");
   const asJson = argv.includes("--json");
   if (!taskId) {
@@ -333,8 +441,8 @@ function main() {
     process.stdout.write(JSON.stringify({ error: "missing --task-id" }) + "\n");
     return;
   }
-  const klPath = path3.join(cwd, ".guild", "indexes", "knowledge-links.json");
-  if (!fs2.existsSync(klPath)) {
+  const klPath = path5.join(cwd, ".guild", "indexes", "knowledge-links.json");
+  if (!fs4.existsSync(klPath)) {
     const result2 = { task_id: taskId, connected: false, reachable_kinds: [], required_kinds: REQUIRED_KINDS, missing_kinds: REQUIRED_KINDS, note: "no knowledge-links.json found" };
     process.stdout.write(JSON.stringify(result2, null, asJson ? 2 : 0) + "\n");
     return;

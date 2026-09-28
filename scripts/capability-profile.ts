@@ -68,6 +68,7 @@ import {
   snapshotTreeHashes,
   type DerivedFacts,
 } from "./lib/capability/profile-emit";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 // The migration-evidence chain is reached ONLY by `baseline` and `emit`. It is
 // loaded from a separate compiled chunk so it stays OUT of this bundle — see
 // `lib/capability/capability-profile-evidence.ts` and KTD29's `status` budget.
@@ -374,6 +375,7 @@ export function renderLayoutRow(row: LayoutRow): string {
 // ── main ─────────────────────────────────────────────────────────────────────
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const [, , sub, ...argv] = process.argv;
   switch (sub) {
     case "hash-tree":

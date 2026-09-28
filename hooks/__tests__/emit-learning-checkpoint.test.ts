@@ -242,7 +242,7 @@ describe("emit-learning-checkpoint — HK-03", () => {
     it("writes non-none verdict for a single target", () => {
       const decisions: CheckpointDecisions = {
         ...ALL_NONE_DECISIONS,
-        wiki: "candidate:.guild/wiki/decisions/test.md",
+        wiki: "candidate:wiki/decisions/test.md",
       };
       writeCheckpoint({ runId: RUN, phase: "development", evidenceRef: "none", guildRoot: root, decisions });
       const content = readCheckpoint(checkpointPath(root, RUN, "development"));
@@ -276,7 +276,7 @@ describe("emit-learning-checkpoint — HK-03", () => {
     it("does NOT auto-promote to wiki (VC-K7 — no wiki write)", () => {
       const decisions: CheckpointDecisions = {
         ...ALL_NONE_DECISIONS,
-        wiki: "candidate:.guild/wiki/decisions/x.md",
+        wiki: "candidate:wiki/decisions/x.md",
       };
       writeCheckpoint({ runId: RUN, phase: "development", evidenceRef: "none", guildRoot: root, decisions });
       // Only the reflections queue file should be written — not any wiki file
@@ -661,7 +661,7 @@ describe("emit-learning-checkpoint — HK-03", () => {
         runId: RUN,
         provenanceTouched: {
           decisions: ["decision:adr-77"],            // → memory: candidate:<ref>
-          wiki: [".guild/wiki/decisions/adr-77.md"], // → wiki: candidate:<ref>
+          wiki: ["wiki/decisions/adr-77.md"], // → wiki: candidate:<ref>
           initiatives: ["initiative:learning-tier"], // → knowledge_graph: refresh:<state>
           config_keys: ["models.tiers.cheap"],       // → config: proposal:<key>
           tasks: ["TASK-9"],                         // → task_tracking (with done handoff)
@@ -688,7 +688,7 @@ describe("emit-learning-checkpoint — HK-03", () => {
       // …and the machine-derivable targets fired (NON-vacuous proof of wiring).
       // Verdict forms match contract §2 exactly.
       expect(decisions["memory"]).toBe("candidate:decision:adr-77");
-      expect(decisions["wiki"]).toBe("candidate:.guild/wiki/decisions/adr-77.md");
+      expect(decisions["wiki"]).toBe("candidate:wiki/decisions/adr-77.md");
       expect(decisions["knowledge_graph"]).toBe("refresh:initiative-touched");
       expect(decisions["domain_model"]).toBe("re-derive");
       expect(decisions["config"]).toBe("proposal:models.tiers.cheap");
@@ -733,7 +733,7 @@ describe("emit-learning-checkpoint — HK-03", () => {
       const verdictFile = path.join(root, "verdict.json");
       const verdict: CheckpointDecisions = {
         ...ALL_NONE_DECISIONS,
-        wiki: "candidate:.guild/wiki/explicit.md",
+        wiki: "candidate:wiki/explicit.md",
       };
       fs.writeFileSync(verdictFile, JSON.stringify(verdict), "utf8");
 
@@ -745,7 +745,7 @@ describe("emit-learning-checkpoint — HK-03", () => {
         { GUILD_CHECKPOINT_VERDICT: verdictFile },
       );
       const decisions = readEmittedDecisions(root);
-      expect(decisions["wiki"]).toBe("candidate:.guild/wiki/explicit.md");
+      expect(decisions["wiki"]).toBe("candidate:wiki/explicit.md");
       expect(decisions["memory"]).toBe("none"); // ArtifactSet path was NOT used
     });
   });
@@ -791,7 +791,7 @@ describe("emit-learning-checkpoint — HK-03", () => {
       const verdictFile = path.join(root, "development-verdict.json");
       const verdict: CheckpointDecisions = {
         ...ALL_NONE_DECISIONS,
-        wiki: "candidate:.guild/wiki/step-7-5-proof.md",
+        wiki: "candidate:wiki/step-7-5-proof.md",
       };
       fs.writeFileSync(verdictFile, JSON.stringify(verdict), "utf8");
 
@@ -839,7 +839,7 @@ describe("emit-learning-checkpoint — HK-03", () => {
       expect(record?.run_id).toBe(RUN);
       expect(record?.evidence_ref).toBe(evidenceRef);
       expect(Object.keys(record?.decisions ?? {}).sort()).toEqual([...DECISION_TARGETS].sort());
-      expect(record?.decisions?.["wiki"]).toBe("candidate:.guild/wiki/step-7-5-proof.md");
+      expect(record?.decisions?.["wiki"]).toBe("candidate:wiki/step-7-5-proof.md");
       expect(record?.knowledge_links_batch).toHaveLength(1);
       expect(record?.knowledge_links_batch?.[0]).toMatchObject({
         from: `run:${RUN}`,

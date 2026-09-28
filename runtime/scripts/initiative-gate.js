@@ -3080,8 +3080,8 @@ __export(initiative_gate_exports, {
   runDocsWorkitems: () => runDocsWorkitems
 });
 module.exports = __toCommonJS(initiative_gate_exports);
-var fs2 = __toESM(require("node:fs"));
-var path3 = __toESM(require("node:path"));
+var fs4 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
 
 // src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
@@ -3397,14 +3397,121 @@ function populateReleaseDocsWorkItems(initiativeId, d8, documentationStatus) {
   return items;
 }
 
+// scripts/lib/state/ensure-storage-layout.ts
+var fs3 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
+var fs2 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path3.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs2.existsSync(path3.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path3.join(current, ".guild");
+      try {
+        if (fs2.existsSync(guildDir) && fs2.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path3.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path4.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs3.existsSync(path4.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs3.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path4.join(__dirname, "upgrade-chain.js"),
+      path4.join(__dirname, "lib", "state", "upgrade-chain"),
+      path4.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs3.existsSync(c) || fs3.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
 // scripts/initiative-gate.ts
 function loadInitiativeManifest(root, id) {
   for (const bucket of ["active", "archived"]) {
-    const p = path3.join(root, ".guild", "initiatives", bucket, id, "initiative.yaml");
-    if (!fs2.existsSync(p)) continue;
+    const p = path5.join(root, ".guild", "initiatives", bucket, id, "initiative.yaml");
+    if (!fs4.existsSync(p)) continue;
     let text;
     try {
-      text = fs2.readFileSync(p, "utf8");
+      text = fs4.readFileSync(p, "utf8");
     } catch {
       return null;
     }
@@ -3473,7 +3580,7 @@ function buildD8Input(raw, execVerified) {
   return { input, warnings };
 }
 function isPathContained(rootPath, candidatePath) {
-  return candidatePath === rootPath || candidatePath.startsWith(rootPath + path3.sep);
+  return candidatePath === rootPath || candidatePath.startsWith(rootPath + path5.sep);
 }
 function evidencePathToken(rawRef) {
   if (/[\u0000-\u001f\u007f]/.test(rawRef)) return null;
@@ -3490,15 +3597,15 @@ function classifyEvidenceRef(root, source, rawRef) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be a path, not prose/control text" } };
   }
   const fileRef = normalizedRef.split("#", 1)[0];
-  if (!fileRef || path3.isAbsolute(fileRef)) {
+  if (!fileRef || path5.isAbsolute(fileRef)) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be repository-relative" } };
   }
   const segments = fileRef.split(/[\\/]/);
   if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be a canonical contained path" } };
   }
-  const rootAbs = path3.resolve(root);
-  const resolved = path3.resolve(rootAbs, fileRef);
+  const rootAbs = path5.resolve(root);
+  const resolved = path5.resolve(rootAbs, fileRef);
   if (!isPathContained(rootAbs, resolved)) {
     return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref escapes repository root" } };
   }
@@ -3523,14 +3630,14 @@ function checkInitiativeEvidenceRefs(root, initiativeDir, manifest) {
         invalid.push(classified.record);
         continue;
       }
-      if (!fs2.existsSync(classified.record.resolved_path)) {
+      if (!fs4.existsSync(classified.record.resolved_path)) {
         checked.push(classified.record);
         missing.push(classified.record);
         continue;
       }
       try {
-        const rootReal = fs2.realpathSync.native(path3.resolve(root));
-        const evidenceReal = fs2.realpathSync.native(classified.record.resolved_path);
+        const rootReal = fs4.realpathSync.native(path5.resolve(root));
+        const evidenceReal = fs4.realpathSync.native(classified.record.resolved_path);
         if (!isPathContained(rootReal, evidenceReal)) {
           invalid.push({
             ref: classified.record.ref,
@@ -3539,7 +3646,7 @@ function checkInitiativeEvidenceRefs(root, initiativeDir, manifest) {
           });
           continue;
         }
-        if (!fs2.statSync(evidenceReal).isFile()) {
+        if (!fs4.statSync(evidenceReal).isFile()) {
           invalid.push({
             ref: classified.record.ref,
             source,
@@ -3566,11 +3673,11 @@ function checkInitiativeEvidenceRefs(root, initiativeDir, manifest) {
       consume("initiative.yaml#close_gate.evidence", closeGate["evidence"]);
     }
   }
-  const workItemsDir = path3.join(initiativeDir, "work-items");
-  if (fs2.existsSync(workItemsDir)) {
+  const workItemsDir = path5.join(initiativeDir, "work-items");
+  if (fs4.existsSync(workItemsDir)) {
     let names;
     try {
-      const entries = fs2.readdirSync(workItemsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+      const entries = fs4.readdirSync(workItemsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
       names = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".yaml")).map((entry) => entry.name).sort();
       for (const entry of entries) {
         if (entry.name.endsWith(".yaml") && !entry.isFile()) {
@@ -3598,7 +3705,7 @@ function checkInitiativeEvidenceRefs(root, initiativeDir, manifest) {
       const source = `work-items/${name}`;
       let parsed;
       try {
-        parsed = parseYaml2(fs2.readFileSync(path3.join(workItemsDir, name), "utf8"));
+        parsed = parseYaml2(fs4.readFileSync(path5.join(workItemsDir, name), "utf8"));
       } catch {
         invalid.push({ ref: name, source, reason: "work item is unreadable or malformed YAML" });
         continue;
@@ -3638,16 +3745,16 @@ ${USAGE}` };
   }
   if (!initiative) return { error: `missing --initiative <id>
 ${USAGE}` };
-  return { command, initiative, root: path3.resolve(root), execVerified };
+  return { command, initiative, root: path5.resolve(root), execVerified };
 }
 function runCloseCheck(root, initiativeId, execVerified) {
   const manifest = loadInitiativeManifest(root, initiativeId);
   if (manifest === null) {
-    return { error: `no initiative.yaml found for "${initiativeId}" under ${path3.join(root, ".guild", "initiatives")}/{active,archived}/${initiativeId}/` };
+    return { error: `no initiative.yaml found for "${initiativeId}" under ${path5.join(root, ".guild", "initiatives")}/{active,archived}/${initiativeId}/` };
   }
   const { input, warnings } = buildD8Input(manifest.raw, execVerified);
   const result = d8CloseGate(input);
-  const evidence = checkInitiativeEvidenceRefs(root, path3.dirname(manifest.path), manifest.raw);
+  const evidence = checkInitiativeEvidenceRefs(root, path5.dirname(manifest.path), manifest.raw);
   return {
     initiative_id: initiativeId,
     manifest_path: manifest.path,
@@ -3661,7 +3768,7 @@ function runCloseCheck(root, initiativeId, execVerified) {
 function runDocsWorkitems(root, initiativeId, execVerified) {
   const manifest = loadInitiativeManifest(root, initiativeId);
   if (manifest === null) {
-    return { error: `no initiative.yaml found for "${initiativeId}" under ${path3.join(root, ".guild", "initiatives")}/{active,archived}/${initiativeId}/` };
+    return { error: `no initiative.yaml found for "${initiativeId}" under ${path5.join(root, ".guild", "initiatives")}/{active,archived}/${initiativeId}/` };
   }
   const { input, warnings } = buildD8Input(manifest.raw, execVerified);
   const result = d8CloseGate(input);
@@ -3675,6 +3782,7 @@ function runDocsWorkitems(root, initiativeId, execVerified) {
   };
 }
 function main() {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const parsed = parseGateArgs(process.argv.slice(2));
   if ("error" in parsed) {
     process.stderr.write(parsed.error + "\n");

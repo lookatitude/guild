@@ -46,7 +46,7 @@ Write the bundle to
 - `<specialist>` — the `owner` slug from the lane (matches `agents/<name>.md`).
 - `<task-id>` — the lane's `task-id` from `.guild/plan/<slug>.md`.
 
-The bundle is a single markdown file. First section is frontmatter naming the run-id, specialist, task-id, spec path, plan path, source paths, and exactly one `definition_ref: {<compact JSON>}` copied byte-for-byte from the matching team specialist. Never emit an absolute `.guild/agents/*.md` or `.claude/agents/*.md` definition carrier; historical bundles are resolved read-only through the adoption manifest. Remaining sections are the three layers in order: Universal, Role-dependent, Task-dependent. `guild:execute-plan` passes this file path as the specialist's primary task brief; it is not merged back into chat before dispatch.
+The bundle is a single markdown file. First section is frontmatter naming the run-id, specialist, task-id, spec path, plan path, source paths, and exactly one `definition_ref: {<compact JSON>}` copied byte-for-byte from the matching team specialist. Never emit an absolute `.guild/agents/*.md` or host-native agent-file definition carrier; historical bundles are resolved read-only through the adoption manifest. Remaining sections are the three layers in order: Universal, Role-dependent, Task-dependent. `guild:execute-plan` passes this file path as the specialist's primary task brief; it is not merged back into chat before dispatch.
 
 **Prompt-cache prefix discipline (shared-before-specific, G-19).** Provider prompt
 caches key on identical leading bytes, so the assembly order is also a cost rule:

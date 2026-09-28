@@ -28,6 +28,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 export const RECALL_DECISION_SCHEMA = "guild.trace.recall_decision.v1";
 
@@ -389,5 +390,6 @@ export function runRecallStatsCli(argv: string[]): void {
 }
 
 if (typeof module !== "undefined" && require.main === module) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   runRecallStatsCli(process.argv.slice(2));
 }

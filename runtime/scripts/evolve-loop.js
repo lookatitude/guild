@@ -24,8 +24,117 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 
 // scripts/evolve-loop.ts
 var crypto = __toESM(require("crypto"));
-var fs = __toESM(require("fs"));
-var path = __toESM(require("path"));
+var fs3 = __toESM(require("fs"));
+var path3 = __toESM(require("path"));
+
+// scripts/lib/state/ensure-storage-layout.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      try {
+        if (fs.existsSync(guildDir) && fs.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path2.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs2.existsSync(path2.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs2.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path2.join(__dirname, "upgrade-chain.js"),
+      path2.join(__dirname, "lib", "state", "upgrade-chain"),
+      path2.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs2.existsSync(c) || fs2.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
+// scripts/evolve-loop.ts
 function parseArgs(argv) {
   let skill = null;
   let runId = null;
@@ -41,41 +150,41 @@ function parseArgs(argv) {
   return { skill, runId, proposedEdit, cwd };
 }
 function listSkillTierDirs(root) {
-  const skillsRoot = path.join(root, "skills");
+  const skillsRoot = path3.join(root, "skills");
   try {
-    return fs.readdirSync(skillsRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+    return fs3.readdirSync(skillsRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
   } catch {
     return [];
   }
 }
 function findSkillUnderSkillsRoot(root, slug) {
-  const directDir = path.join(root, "skills", slug);
-  if (fs.existsSync(path.join(directDir, "SKILL.md"))) {
+  const directDir = path3.join(root, "skills", slug);
+  if (fs3.existsSync(path3.join(directDir, "SKILL.md"))) {
     return { tier: "skills", dir: directDir };
   }
   for (const tier of listSkillTierDirs(root)) {
-    const dir = path.join(root, "skills", tier, slug);
-    if (fs.existsSync(path.join(dir, "SKILL.md"))) return { tier, dir };
+    const dir = path3.join(root, "skills", tier, slug);
+    if (fs3.existsSync(path3.join(dir, "SKILL.md"))) return { tier, dir };
   }
   return null;
 }
 function findLiveSkillDir(cwd, slug) {
-  const projectDir = path.join(cwd, ".guild", "skills", slug);
-  if (fs.existsSync(path.join(projectDir, "SKILL.md"))) {
+  const projectDir = path3.join(cwd, ".guild", "skills", slug);
+  if (fs3.existsSync(path3.join(projectDir, "SKILL.md"))) {
     return { tier: "project", dir: projectDir };
   }
   const selfBuild = findSkillUnderSkillsRoot(cwd, slug);
   if (selfBuild) return selfBuild;
   const pluginRoot = process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
-  if (pluginRoot && path.resolve(pluginRoot) !== path.resolve(cwd)) {
+  if (pluginRoot && path3.resolve(pluginRoot) !== path3.resolve(cwd)) {
     const shipped = findSkillUnderSkillsRoot(pluginRoot, slug);
     if (shipped) return shipped;
   }
   return null;
 }
 function baselineHash(liveDir) {
-  const body = path.join(liveDir, "SKILL.md");
-  return crypto.createHash("sha256").update(fs.readFileSync(body, "utf8"), "utf8").digest("hex");
+  const body = path3.join(liveDir, "SKILL.md");
+  return crypto.createHash("sha256").update(fs3.readFileSync(body, "utf8"), "utf8").digest("hex");
 }
 function buildPipelineMd(params) {
   const {
@@ -158,6 +267,7 @@ function buildPipelineMd(params) {
   return lines.join("\n");
 }
 function main() {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const { skill, runId, proposedEdit, cwd: cwdArg } = parseArgs(
     process.argv.slice(2)
   );
@@ -169,7 +279,7 @@ function main() {
     process.stderr.write("[evolve-loop] ERROR: --run-id <id> is required\n");
     process.exit(1);
   }
-  const cwd = path.resolve(cwdArg);
+  const cwd = path3.resolve(cwdArg);
   const live = findLiveSkillDir(cwd, skill);
   if (!live) {
     process.stderr.write(
@@ -179,8 +289,8 @@ function main() {
     process.exit(1);
   }
   const baseline = baselineHash(live.dir);
-  const evolveDir = path.join(cwd, ".guild", "evolve", runId);
-  fs.mkdirSync(evolveDir, { recursive: true });
+  const evolveDir = path3.join(cwd, ".guild", "evolve", runId);
+  fs3.mkdirSync(evolveDir, { recursive: true });
   const pipelineMd = buildPipelineMd({
     slug: skill,
     runId,
@@ -190,7 +300,7 @@ function main() {
     proposedEdit,
     cwd
   });
-  fs.writeFileSync(path.join(evolveDir, "pipeline.md"), pipelineMd, "utf8");
+  fs3.writeFileSync(path3.join(evolveDir, "pipeline.md"), pipelineMd, "utf8");
   process.stderr.write(
     `[evolve-loop] baseline ${baseline.slice(0, 12)}\u2026
 [evolve-loop] pipeline.md \u2192 ${evolveDir}/pipeline.md

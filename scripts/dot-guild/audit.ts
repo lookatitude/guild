@@ -49,6 +49,7 @@ import { redact } from "../lib/shared/scrub-redact";
 // audit.ts half of the two-leg scrub-policy update (scrub.ts warns at scrub
 // time with the same canonical path constants).
 import { MODEL_CATALOG_CACHE_REL, legacyModelCatalogCacheDir } from "../../src/domains/config";
+import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
 const args = process.argv.slice(2);
 const wsArg   = args.find(a => a.startsWith("--workspace="));
@@ -701,6 +702,7 @@ function renderReport(repoResults: Array<{ repo: string; flags: FileFlag[] }>, n
 }
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const now = new Date().toISOString().slice(0, 10);
   const repoResults: Array<{ repo: string; flags: FileFlag[] }> = [];
 

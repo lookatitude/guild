@@ -25,6 +25,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { ingestImportanceScore, stampRecallImportance } from "./lib/ingest-importance";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 export interface StampTreeResult {
   scanned: number;
@@ -98,6 +99,7 @@ function importanceAtIngestEnabled(cwd: string): boolean {
 }
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const get = (flag: string): string | undefined => {
     const hit = argv.find((a) => a === flag || a.startsWith(`${flag}=`));

@@ -3065,8 +3065,8 @@ var require_js_yaml = __commonJS({
 });
 
 // hooks/detect-guild-version.ts
-var path4 = __toESM(require("node:path"));
-var fs3 = __toESM(require("node:fs"));
+var path6 = __toESM(require("node:path"));
+var fs5 = __toESM(require("node:fs"));
 
 // hooks/lib/guild-root.ts
 var fs = __toESM(require("node:fs"));
@@ -3177,14 +3177,14 @@ function isReportFile(name) {
 }
 var WALK_MAX_DEPTH = 25;
 var WALK_MAX_NODES = 2e4;
-function walk(fs4, dir, excludeDir, base, _depth = 0, _budget = { nodes: 0 }) {
+function walk(fs6, dir, excludeDir, base, _depth = 0, _budget = { nodes: 0 }) {
   if (_depth > WALK_MAX_DEPTH) return [];
   if (_budget.nodes >= WALK_MAX_NODES) return [];
-  if (!fs4.existsSync(dir)) return [];
+  if (!fs6.existsSync(dir)) return [];
   const out = [];
   let entries;
   try {
-    entries = fs4.readdirSync(dir);
+    entries = fs6.readdirSync(dir);
   } catch {
     return out;
   }
@@ -3194,7 +3194,7 @@ function walk(fs4, dir, excludeDir, base, _depth = 0, _budget = { nodes: 0 }) {
     const full = path3.join(dir, e.name);
     if (e.isDirectory) {
       if (excludeDir(e.name)) continue;
-      const sub = walk(fs4, full, excludeDir, base, _depth + 1, _budget);
+      const sub = walk(fs6, full, excludeDir, base, _depth + 1, _budget);
       out.push(...sub);
     } else if (e.isFile) {
       out.push(full);
@@ -3233,23 +3233,23 @@ function readParsed(pr, p, kind, authoritative) {
   }
   return res.value;
 }
-function detect(fs4, guildDir) {
+function detect(fs6, guildDir) {
   const evidence = [];
   const unparseable = [];
-  const pr = { fs: fs4, guildDir, evidence, unparseable };
+  const pr = { fs: fs6, guildDir, evidence, unparseable };
   const addM1 = (p, marker, note) => evidence.push({ path: relTo(guildDir, p), marker, contributes: "M1", note });
   const addM2 = (p, marker, note) => evidence.push({ path: relTo(guildDir, p), marker, contributes: "M2", note });
-  if (!fs4.existsSync(guildDir)) {
+  if (!fs6.existsSync(guildDir)) {
     return { classification: "none", m1: false, m2: false, hasUnparseable: false, evidence, unparseable };
   }
-  const topFiles = walk(fs4, guildDir, (name) => isBackupDir(name), guildDir);
+  const topFiles = walk(fs6, guildDir, (name) => isBackupDir(name), guildDir);
   if (topFiles.length === 0) {
     return { classification: "none", m1: false, m2: false, hasUnparseable: false, evidence, unparseable };
   }
   const j = (rel) => path3.join(guildDir, rel);
   {
     const p = j("settings.json");
-    if (fs4.existsSync(p)) {
+    if (fs6.existsSync(p)) {
       addM2(p, "P1", "settings.json exists (v2-only file)");
       const parsed = readParsed(pr, p, "json", true);
       for (const k of v1KeysIn(parsed)) addM1(p, "P1", `v1-only key: ${k}`);
@@ -3257,7 +3257,7 @@ function detect(fs4, guildDir) {
   }
   {
     const p = j("settings.local.json");
-    if (fs4.existsSync(p)) {
+    if (fs6.existsSync(p)) {
       addM2(p, "P9", "settings.local.json exists (v2-era surface \u2014 F2)");
       const parsed = readParsed(pr, p, "json", true);
       for (const k of v1KeysIn(parsed)) addM1(p, "P9", `local-only v1 key: ${k}`);
@@ -3265,7 +3265,7 @@ function detect(fs4, guildDir) {
   }
   {
     const p = j("config.yml");
-    if (fs4.existsSync(p)) {
+    if (fs6.existsSync(p)) {
       addM1(p, "P2", "config.yml exists (v1-only file)");
       readParsed(pr, p, "yaml", true);
     }
@@ -3286,10 +3286,10 @@ function detect(fs4, guildDir) {
   }
   {
     const runsDir = j("runs");
-    if (fs4.existsSync(runsDir)) {
+    if (fs6.existsSync(runsDir)) {
       let runEntries;
       try {
-        runEntries = fs4.readdirSync(runsDir);
+        runEntries = fs6.readdirSync(runsDir);
       } catch {
         runEntries = [];
       }
@@ -3298,14 +3298,14 @@ function detect(fs4, guildDir) {
         const runDir = path3.join(runsDir, e.name);
         const runYaml = path3.join(runDir, "run.yaml");
         const meta = path3.join(runDir, "metadata.json");
-        const hasRunYaml = fs4.existsSync(runYaml);
+        const hasRunYaml = fs6.existsSync(runYaml);
         if (hasRunYaml) {
           const parsed = readParsed(pr, runYaml, "yaml", true);
           const sv = svOf(parsed);
           if (sv === "guild.run.v1" || sv && SCHEMA_STAMP_RE.test(sv)) addM2(runYaml, "P5", `schema_version: ${sv}`);
           else addM2(runYaml, "P5", "run.yaml present (v2 run manifest)");
         }
-        if (fs4.existsSync(meta) && !hasRunYaml) {
+        if (fs6.existsSync(meta) && !hasRunYaml) {
           addM1(meta, "P6", "metadata.json without sibling run.yaml (v1 run record)");
           readParsed(pr, meta, "json", true);
         }
@@ -3314,10 +3314,10 @@ function detect(fs4, guildDir) {
   }
   {
     const hostsDir = j("hosts");
-    if (fs4.existsSync(hostsDir)) {
+    if (fs6.existsSync(hostsDir)) {
       let hostEntries;
       try {
-        hostEntries = fs4.readdirSync(hostsDir);
+        hostEntries = fs6.readdirSync(hostsDir);
       } catch {
         hostEntries = [];
       }
@@ -3332,10 +3332,10 @@ function detect(fs4, guildDir) {
   }
   {
     const refDir = j("reflections");
-    if (fs4.existsSync(refDir)) {
+    if (fs6.existsSync(refDir)) {
       let refEntries;
       try {
-        refEntries = fs4.readdirSync(refDir);
+        refEntries = fs6.readdirSync(refDir);
       } catch {
         refEntries = [];
       }
@@ -3344,7 +3344,7 @@ function detect(fs4, guildDir) {
         const p = path3.join(refDir, e.name);
         let head = "";
         try {
-          head = fs4.readFileSync(p).slice(0, P10_HEAD_BYTES);
+          head = fs6.readFileSync(p).slice(0, P10_HEAD_BYTES);
         } catch {
           continue;
         }
@@ -3360,7 +3360,7 @@ function detect(fs4, guildDir) {
   }
   {
     const files = walk(
-      fs4,
+      fs6,
       guildDir,
       (name) => isBackupDir(name),
       guildDir
@@ -3373,7 +3373,7 @@ function detect(fs4, guildDir) {
       if (!P10_EXTS.has(ext)) continue;
       let head = "";
       try {
-        head = fs4.readFileSync(f).slice(0, P10_HEAD_BYTES);
+        head = fs6.readFileSync(f).slice(0, P10_HEAD_BYTES);
       } catch {
         continue;
       }
@@ -3412,15 +3412,122 @@ function hasWikiShareMode(parsed) {
   return false;
 }
 
+// scripts/lib/state/ensure-storage-layout.ts
+var fs4 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
+var fs3 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
+function resolveGuildRoot2(startDir) {
+  const resolvedStart = path4.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs3.existsSync(path4.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path4.join(current, ".guild");
+      try {
+        if (fs3.existsSync(guildDir) && fs3.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path4.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path5.join(root, ".guild", "storage-layout.json");
+}
+function detect2(cwd = process.cwd()) {
+  const root = resolveGuildRoot2(cwd);
+  const marker = markerPath(root);
+  if (!fs4.existsSync(path5.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs4.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path5.join(__dirname, "upgrade-chain.js"),
+      path5.join(__dirname, "lib", "state", "upgrade-chain"),
+      path5.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs4.existsSync(c) || fs4.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect2(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect2(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
 // hooks/detect-guild-version.ts
 async function readStdin() {
-  return new Promise((resolve3) => {
+  return new Promise((resolve4) => {
     const chunks = [];
     let settled = false;
     const settle = (result) => {
       if (settled) return;
       settled = true;
-      resolve3(result);
+      resolve4(result);
     };
     process.stdin.on("data", (c) => chunks.push(c));
     process.stdin.on("end", () => settle(Buffer.concat(chunks).toString("utf8")));
@@ -3431,14 +3538,14 @@ async function readStdin() {
 function resolveMigratePath() {
   const pluginRoot = process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
   if (pluginRoot) {
-    const candidate = path4.resolve(pluginRoot, "scripts/dot-guild/migrate-guild.ts");
-    if (fs3.existsSync(candidate)) return candidate;
+    const candidate = path6.resolve(pluginRoot, "scripts/dot-guild/migrate-guild.ts");
+    if (fs5.existsSync(candidate)) return candidate;
     return candidate;
   }
-  const distRelative = path4.resolve(__dirname, "../../scripts/dot-guild/migrate-guild.ts");
-  const srcRelative = path4.resolve(__dirname, "../scripts/dot-guild/migrate-guild.ts");
-  if (fs3.existsSync(distRelative)) return distRelative;
-  if (fs3.existsSync(srcRelative)) return srcRelative;
+  const distRelative = path6.resolve(__dirname, "../../scripts/dot-guild/migrate-guild.ts");
+  const srcRelative = path6.resolve(__dirname, "../scripts/dot-guild/migrate-guild.ts");
+  if (fs5.existsSync(distRelative)) return distRelative;
+  if (fs5.existsSync(srcRelative)) return srcRelative;
   return distRelative;
 }
 function buildV1MixedMessage(classification, guildDir, repoRoot, migratePath) {
@@ -3493,8 +3600,13 @@ async function main() {
   }
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   const root = resolveGuildRoot(cwd);
-  const guildDir = path4.join(root, ".guild");
-  if (!fs3.existsSync(guildDir)) {
+  const guildDir = path6.join(root, ".guild");
+  try {
+    ensureStorageLayout(root, { detectOnly: true });
+  } catch {
+    process.exit(0);
+  }
+  if (!fs5.existsSync(guildDir)) {
     process.exit(0);
   }
   const result = detect(realFs, guildDir);

@@ -64,6 +64,7 @@ import {
   writeDecision,
   type TeamDecisionV1,
 } from "../src/domains/teams/team-decision";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 const USAGE = [
   "usage: team-decide.ts <review|restructure|gate|persist|record> [flags]",
@@ -103,6 +104,7 @@ function readArtifact(p: unknown): any {
 }
 
 export function main(argv: string[] = process.argv.slice(2)): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const verb = argv[0];
   const parsed = parseFlags(argv.slice(1));
   if ("error" in parsed) {

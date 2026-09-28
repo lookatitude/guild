@@ -37,8 +37,8 @@ __export(validate_graph_exports, {
   validateWithDispatch: () => validateWithDispatch
 });
 module.exports = __toCommonJS(validate_graph_exports);
-var fs3 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
+var fs5 = __toESM(require("fs"));
+var path5 = __toESM(require("path"));
 
 // scripts/learn/lib/paths.ts
 var fs = __toESM(require("fs"));
@@ -1052,6 +1052,113 @@ function validateGraphV2(input, opts) {
   return { success: true, data: graph, issues };
 }
 
+// scripts/lib/state/ensure-storage-layout.ts
+var fs4 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path3.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs3.existsSync(path3.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path3.join(current, ".guild");
+      try {
+        if (fs3.existsSync(guildDir) && fs3.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path3.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path4.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs4.existsSync(path4.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs4.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path4.join(__dirname, "upgrade-chain.js"),
+      path4.join(__dirname, "lib", "state", "upgrade-chain"),
+      path4.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs4.existsSync(c) || fs4.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
 // scripts/learn/validate-graph.ts
 var KNOWLEDGE_GRAPH_V2 = "guild.knowledge_graph.v2";
 function isV2Input(input) {
@@ -1079,13 +1186,14 @@ function checkDowngradeGuard(knowledgeGraphPath, resultData, force) {
 function main() {
   const argv = process.argv.slice(2);
   const cwd = parseCwd(argv);
+  ensureStorageLayout(cwd, { detectOnly: true });
   const gp = guildPaths(cwd);
   let input;
   if (hasFlag(argv, "stdin")) {
-    input = JSON.parse(fs3.readFileSync(0, "utf8"));
+    input = JSON.parse(fs5.readFileSync(0, "utf8"));
   } else {
     const inPath = parseFlag(argv, "in");
-    const resolved = inPath ? path3.resolve(cwd, inPath) : gp.partialGraph;
+    const resolved = inPath ? path5.resolve(cwd, inPath) : gp.partialGraph;
     input = readJson(resolved);
     if (input === null) {
       process.stderr.write(`[validate] ERROR: cannot read input graph ${resolved}
@@ -1136,14 +1244,14 @@ function main() {
   }
   if (!dry) {
     writeJson(gp.knowledgeGraph, result.data);
-    process.stderr.write(`[validate] \u2192 ${path3.relative(gp.repoRoot, gp.knowledgeGraph)}
+    process.stderr.write(`[validate] \u2192 ${path5.relative(gp.repoRoot, gp.knowledgeGraph)}
 `);
   }
   if (hasFlag(argv, "print")) {
     process.stdout.write(JSON.stringify({ data: result.data, issues: result.issues }, null, 2) + "\n");
   } else {
     process.stdout.write(
-      dry ? "validated (dry-run)\n" : path3.relative(gp.repoRoot, gp.knowledgeGraph) + "\n"
+      dry ? "validated (dry-run)\n" : path5.relative(gp.repoRoot, gp.knowledgeGraph) + "\n"
     );
   }
 }

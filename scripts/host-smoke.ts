@@ -52,6 +52,7 @@ import {
 } from "./lib/host-public-state";
 import { serializeReceipt, writeCommittedReceipt } from "./lib/host-smoke-store";
 import { redact } from "./lib/shared/scrub-redact";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 const GUILD_VERSION = "2.0.0";
 
@@ -435,6 +436,7 @@ function runHost(host: HostId, args: ReturnType<typeof parseArgs>): SmokeOutcome
 }
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const args = parseArgs(process.argv.slice(2));
   const targets = args.allReachable ? [...HOST_IDS] : args.hosts;
   if (targets.length === 0) {

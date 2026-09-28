@@ -3081,13 +3081,122 @@ __export(feedback_triage_exports, {
   runTriage: () => runTriage
 });
 module.exports = __toCommonJS(feedback_triage_exports);
-var fs3 = __toESM(require("fs"));
-var path5 = __toESM(require("path"));
+var fs5 = __toESM(require("fs"));
+var path7 = __toESM(require("path"));
 var import_child_process = require("child_process");
 
 // scripts/lib/replay-rundir.ts
 var fsNode = __toESM(require("fs"));
-var path = __toESM(require("path"));
+var path3 = __toESM(require("path"));
+
+// scripts/lib/state/ensure-storage-layout.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      try {
+        if (fs.existsSync(guildDir) && fs.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path2.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs2.existsSync(path2.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs2.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path2.join(__dirname, "upgrade-chain.js"),
+      path2.join(__dirname, "lib", "state", "upgrade-chain"),
+      path2.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs2.existsSync(c) || fs2.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
+// scripts/lib/replay-rundir.ts
 function createRealReplayFsSeam() {
   return {
     exists(absPath) {
@@ -3195,10 +3304,10 @@ var ARTIFACT_CATALOGUE = [
   }
 ];
 function assembleReplayManifest(runDir, opts) {
-  const fs4 = opts?.fs ?? createRealReplayFsSeam();
+  const fs6 = opts?.fs ?? createRealReplayFsSeam();
   const artifacts = ARTIFACT_CATALOGUE.map((def) => {
-    const absPath = path.join(runDir, def.relativePath);
-    const present = fs4.exists(absPath);
+    const absPath = path3.join(runDir, def.relativePath);
+    const present = fs6.exists(absPath);
     const entry = {
       role: def.role,
       relativePath: def.relativePath,
@@ -3207,7 +3316,7 @@ function assembleReplayManifest(runDir, opts) {
       status: def.status
     };
     if (def.isDir) {
-      entry.files = present ? fs4.listDir(absPath) : [];
+      entry.files = present ? fs6.listDir(absPath) : [];
     }
     return entry;
   });
@@ -3220,13 +3329,14 @@ function assembleReplayManifest(runDir, opts) {
   };
 }
 if (require.main === module && /^replay-rundir\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const runDir = argv[0];
   if (!runDir) {
     process.stderr.write("Usage: npx tsx scripts/lib/replay-rundir.ts <runDir>\n");
     process.exit(1);
   }
-  const absRunDir = path.resolve(runDir);
+  const absRunDir = path3.resolve(runDir);
   const manifest = assembleReplayManifest(absRunDir);
   const ts = new Date(Date.now()).toISOString();
   process.stdout.write(
@@ -3236,8 +3346,8 @@ if (require.main === module && /^replay-rundir\.[cm]?[jt]s$/.test((process.argv[
 }
 
 // scripts/docs-hygiene/scan.ts
-var fs2 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
+var fs4 = __toESM(require("fs"));
+var path6 = __toESM(require("path"));
 
 // src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
@@ -3250,17 +3360,17 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
 ]);
 
 // src/domains/kernel/yaml-loader.ts
-var path3 = __toESM(require("node:path"));
+var path5 = __toESM(require("node:path"));
 
 // src/domains/kernel/plugin-root.ts
-var fs = __toESM(require("node:fs"));
-var path2 = __toESM(require("node:path"));
-var PLUGIN_ROOT_MARKER = path2.join("runtime", "guild-mcp.js");
+var fs3 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
+var PLUGIN_ROOT_MARKER = path4.join("runtime", "guild-mcp.js");
 function findPluginRoot(fromDir) {
-  let dir = path2.resolve(fromDir);
+  let dir = path4.resolve(fromDir);
   for (; ; ) {
-    if (fs.existsSync(path2.join(dir, PLUGIN_ROOT_MARKER))) return dir;
-    const parent = path2.dirname(dir);
+    if (fs3.existsSync(path4.join(dir, PLUGIN_ROOT_MARKER))) return dir;
+    const parent = path4.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
   }
@@ -3271,14 +3381,14 @@ function pluginLocalScriptsRoots() {
   const own = findPluginRoot(__dirname);
   return [
     // The package this code shipped in, whatever the bundle depth (runtime/scripts).
-    ...own === null ? [] : [path3.join(own, "scripts")],
+    ...own === null ? [] : [path5.join(own, "scripts")],
     // Source TS layout (src/domains/<id>) and the bundled agent-team hook layout
     // (hooks/agent-team/dist) both sit three levels under plugin/.
-    path3.resolve(__dirname, "..", "..", "..", "scripts"),
+    path5.resolve(__dirname, "..", "..", "..", "scripts"),
     // Bundled hook layout (hooks/dist) and src/adapters both sit two levels under.
-    path3.resolve(__dirname, "..", "..", "scripts"),
+    path5.resolve(__dirname, "..", "..", "scripts"),
     // src/adapters/model-discovery and any deeper nesting.
-    path3.resolve(__dirname, "..", "..", "..", "..", "scripts")
+    path5.resolve(__dirname, "..", "..", "..", "..", "scripts")
   ];
 }
 function tryScriptsRoot(scriptsRoot) {
@@ -3299,7 +3409,7 @@ function loadYamlApi() {
     return require_js_yaml();
   } catch {
   }
-  const cwdRoot = path3.resolve(process.cwd(), "scripts");
+  const cwdRoot = path5.resolve(process.cwd(), "scripts");
   tried.push(cwdRoot);
   const api = tryScriptsRoot(cwdRoot);
   if (api) return api;
@@ -3523,19 +3633,19 @@ var SECRET_PATTERNS = Object.freeze([
 // scripts/docs-hygiene/scan.ts
 var args = process.argv.slice(2);
 var workspaceArg = args.find((a) => a.startsWith("--workspace="));
-var WORKSPACE = workspaceArg ? workspaceArg.split("=")[1] : path4.resolve(__dirname, "../../..");
-var DOCS_KNOWLEDGE = path4.join(WORKSPACE, "docs/knowledge");
-var UMBRELLA_WIKI = path4.join(WORKSPACE, ".guild/wiki");
-var PLUGIN_WIKI = path4.join(WORKSPACE, "plugin/.guild/wiki");
-var PLUGIN_DOCS = path4.join(WORKSPACE, "plugin/docs");
-var MIGRATION_MD = path4.join(WORKSPACE, "MIGRATION.md");
-var AGENTS_MD = path4.join(WORKSPACE, "AGENTS.md");
-var ROOT_README = path4.join(WORKSPACE, "README.md");
-var PLUGIN_README = path4.join(WORKSPACE, "plugin/README.md");
-var PLUGIN_CLAUDE = path4.join(WORKSPACE, "plugin/CLAUDE.md");
+var WORKSPACE = workspaceArg ? workspaceArg.split("=")[1] : path6.resolve(__dirname, "../../..");
+var DOCS_KNOWLEDGE = path6.join(WORKSPACE, "docs/knowledge");
+var UMBRELLA_WIKI = path6.join(WORKSPACE, ".guild/wiki");
+var PLUGIN_WIKI = path6.join(WORKSPACE, "plugin/.guild/wiki");
+var PLUGIN_DOCS = path6.join(WORKSPACE, "plugin/docs");
+var MIGRATION_MD = path6.join(WORKSPACE, "MIGRATION.md");
+var AGENTS_MD = path6.join(WORKSPACE, "AGENTS.md");
+var ROOT_README = path6.join(WORKSPACE, "README.md");
+var PLUGIN_README = path6.join(WORKSPACE, "plugin/README.md");
+var PLUGIN_CLAUDE = path6.join(WORKSPACE, "plugin/CLAUDE.md");
 var outputArg = args.find((a) => a.startsWith("--output="));
-var OUTPUT_PATH = outputArg ? path4.resolve(outputArg.split("=")[1]) : path4.resolve(__dirname, ".last-scan.md");
-var OUTPUT_DIR = path4.dirname(OUTPUT_PATH);
+var OUTPUT_PATH = outputArg ? path6.resolve(outputArg.split("=")[1]) : path6.resolve(__dirname, ".last-scan.md");
+var OUTPUT_DIR = path6.dirname(OUTPUT_PATH);
 var LANDING_FILE_NAMES = /* @__PURE__ */ new Set([
   "README.md",
   "index.md",
@@ -3547,10 +3657,10 @@ function relPath(p) {
   return p.startsWith(WORKSPACE) ? p.slice(WORKSPACE.length + 1) : p;
 }
 function walkFiles(dir, filter = /\.md$/) {
-  if (!fs2.existsSync(dir)) return [];
+  if (!fs4.existsSync(dir)) return [];
   const results = [];
-  for (const entry of fs2.readdirSync(dir, { withFileTypes: true })) {
-    const full = path4.join(dir, entry.name);
+  for (const entry of fs4.readdirSync(dir, { withFileTypes: true })) {
+    const full = path6.join(dir, entry.name);
     if (entry.isDirectory() && entry.name === "_archive") continue;
     if (entry.isDirectory()) {
       results.push(...walkFiles(full, filter));
@@ -3562,7 +3672,7 @@ function walkFiles(dir, filter = /\.md$/) {
 }
 function readFile(p) {
   try {
-    return fs2.readFileSync(p, "utf8");
+    return fs4.readFileSync(p, "utf8");
   } catch {
     return "";
   }
@@ -3713,7 +3823,7 @@ function scanProgressMsg(corpus) {
     const rel = relPath(fpath);
     if (rel.includes("/research/") || rel.includes("/ideation/")) continue;
     if (isProvenanceDoc(rel)) continue;
-    const bname = path4.basename(fpath);
+    const bname = path6.basename(fpath);
     if (LANDING_FILE_NAMES.has(bname)) continue;
     const content = readFile(fpath);
     const contentLines = content.split("\n");
@@ -3762,7 +3872,7 @@ function buildSlugSet() {
     ...walkFiles(UMBRELLA_WIKI),
     ...walkFiles(PLUGIN_WIKI)
   ]) {
-    const slug = path4.basename(fpath, ".md");
+    const slug = path6.basename(fpath, ".md");
     slugs.add(slug);
   }
   return slugs;
@@ -3879,14 +3989,14 @@ function checkSourceRef(ref, sourceFile, lineLabel) {
   if (clean.startsWith("/")) {
     checkPath = clean;
   } else if (clean.startsWith("docs/") || clean.startsWith("plugin/") || clean.startsWith("benchmark/") || clean.startsWith("mcp-servers/") || clean.startsWith("website/") || clean.startsWith("scripts/") || clean.startsWith("hooks/")) {
-    checkPath = path4.join(WORKSPACE, clean);
+    checkPath = path6.join(WORKSPACE, clean);
   } else if (clean.startsWith("external-input/")) {
     return;
   } else {
-    checkPath = path4.join(WORKSPACE, path4.dirname(sourceFile), clean);
+    checkPath = path6.join(WORKSPACE, path6.dirname(sourceFile), clean);
   }
   const withoutSection = checkPath.split(" ")[0];
-  if (!fs2.existsSync(withoutSection)) {
+  if (!fs4.existsSync(withoutSection)) {
     addFlag({
       category: "dangling-source-refs",
       file: sourceFile,
@@ -3902,7 +4012,7 @@ function isCanonicalPage(fpath) {
   if (rel.includes("/_archive/")) return false;
   if (rel.includes("/research/")) return false;
   if (rel.includes("/ideation/")) return false;
-  const bname = path4.basename(fpath);
+  const bname = path6.basename(fpath);
   if (LANDING_FILE_NAMES.has(bname)) return false;
   return true;
 }
@@ -3917,7 +4027,7 @@ function scanMissingImportance(corpus) {
         file: relPath(fpath),
         lines: "L1",
         pattern: "canonical page has no frontmatter",
-        match: path4.basename(fpath)
+        match: path6.basename(fpath)
       });
       continue;
     }
@@ -4005,12 +4115,13 @@ No findings.
     }
     return out;
   };
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const docsKnowledgeFiles = walkFiles(DOCS_KNOWLEDGE);
   const umbrellaWikiFiles = walkFiles(UMBRELLA_WIKI);
   const pluginWikiFiles = walkFiles(PLUGIN_WIKI);
   const pluginDocsFiles = walkFiles(PLUGIN_DOCS);
   const rootFiles = [MIGRATION_MD, AGENTS_MD, ROOT_README, PLUGIN_README, PLUGIN_CLAUDE].filter(
-    fs2.existsSync
+    fs4.existsSync
   );
   const allCorpus = [
     ...docsKnowledgeFiles,
@@ -4101,8 +4212,8 @@ Lane C consumes this as its worklist. **Flags are candidates, not auto-deletes**
 
 _Run: \`npx tsx plugin/scripts/docs-hygiene/scan.ts\` from the workspace root._
 `;
-  fs2.mkdirSync(OUTPUT_DIR, { recursive: true });
-  fs2.writeFileSync(OUTPUT_PATH, output, "utf8");
+  fs4.mkdirSync(OUTPUT_DIR, { recursive: true });
+  fs4.writeFileSync(OUTPUT_PATH, output, "utf8");
   console.log(OUTPUT_PATH);
   console.error(`
 Scan complete \u2014 ${totalFlags} total flags written to ${OUTPUT_PATH}`);
@@ -4417,10 +4528,10 @@ function assertSafeId(kind, value) {
 }
 function feedbackDir(cwd, runId) {
   assertSafeId("run id", runId);
-  return path5.join(cwd, ".guild", "feedback", runId);
+  return path7.join(cwd, ".guild", "feedback", runId);
 }
 function runTriage(opts) {
-  const fsi = opts.fsi ?? fs3;
+  const fsi = opts.fsi ?? fs5;
   const log = opts.log ?? ((l) => process.stderr.write(`[feedback-triage] ${l}
 `));
   const dir = feedbackDir(opts.cwd, opts.runId);
@@ -4437,14 +4548,14 @@ function runTriage(opts) {
     })
   };
   fsi.writeFileSync(
-    path5.join(dir, "triage.json"),
+    path7.join(dir, "triage.json"),
     JSON.stringify(record, null, 2) + "\n",
     "utf8"
   );
   for (const f of record.findings) {
     if (!f.draft) continue;
     fsi.writeFileSync(
-      path5.join(dir, `${f.finding.id}.draft.md`),
+      path7.join(dir, `${f.finding.id}.draft.md`),
       `<!-- ${f.draft.schema_version} \xB7 sanitized \xB7 approval_required -->
 # ${f.draft.title}
 
@@ -4469,13 +4580,13 @@ ${f.draft.body}
   return record;
 }
 function runFile(opts) {
-  const fsi = opts.fsi ?? fs3;
+  const fsi = opts.fsi ?? fs5;
   const log = opts.log ?? ((l) => process.stderr.write(`[feedback-triage] ${l}
 `));
   const gh = opts.gh ?? ((args2) => (0, import_child_process.execFileSync)("gh", args2, { encoding: "utf8" }).trim());
   assertSafeId("finding id", opts.findingId);
   const dir = feedbackDir(opts.cwd, opts.runId);
-  const triagePath = path5.join(dir, "triage.json");
+  const triagePath = path7.join(dir, "triage.json");
   let record;
   try {
     record = JSON.parse(fsi.readFileSync(triagePath, "utf8"));
@@ -4494,7 +4605,7 @@ function runFile(opts) {
     approved_at: (opts.now ?? /* @__PURE__ */ new Date()).toISOString()
   } : opts.deny ? { approved: false, reason: opts.denyReason ?? "operator denied" } : void 0;
   const decision = decideGitHubIssueFiling(entry.draft, approval);
-  const filedPath = path5.join(dir, "filed.json");
+  const filedPath = path7.join(dir, "filed.json");
   const filed = (() => {
     try {
       return JSON.parse(fsi.readFileSync(filedPath, "utf8"));
@@ -4527,7 +4638,7 @@ function runFile(opts) {
     log(`dry-run: would file to ${repo}: "${draft.title}" (labels: ${draft.labels.join(", ")})`);
     return 0;
   }
-  const bodyFile = path5.join(dir, `${opts.findingId}.filed-body.md`);
+  const bodyFile = path7.join(dir, `${opts.findingId}.filed-body.md`);
   fsi.writeFileSync(bodyFile, draft.body, "utf8");
   const url = gh([
     "issue",
@@ -4552,6 +4663,7 @@ function runFile(opts) {
   return 0;
 }
 function main() {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const cmd = argv[0];
   let runId = null;
@@ -4571,7 +4683,7 @@ function main() {
     else if (a === "--deny") {
       deny = true;
       if (argv[i + 1] && !argv[i + 1].startsWith("--")) denyReason = argv[++i];
-    } else if (a === "--cwd" && argv[i + 1]) cwd = path5.resolve(argv[++i]);
+    } else if (a === "--cwd" && argv[i + 1]) cwd = path7.resolve(argv[++i]);
     else if (a === "--dry-run") dryRun = true;
     else {
       process.stderr.write(`[feedback-triage] unknown argument: ${a}
@@ -4588,7 +4700,7 @@ function main() {
       process.stderr.write("[feedback-triage] triage requires --findings <findings.json>\n");
       return 1;
     }
-    const findings = JSON.parse(fs3.readFileSync(findingsPath, "utf8"));
+    const findings = JSON.parse(fs5.readFileSync(findingsPath, "utf8"));
     if (!Array.isArray(findings)) {
       process.stderr.write("[feedback-triage] findings file must be a JSON array of RunLearningFinding\n");
       return 1;

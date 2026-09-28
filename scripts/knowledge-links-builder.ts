@@ -48,6 +48,7 @@ import { readScalarField } from "./lib/frontmatter";
 import { KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION } from '../src/domains/knowledge';
 import { loadKnowledgeLinksDoc, writeKnowledgeLinksDoc } from "./learn/lib/knowledge-links-io";
 import { createGuildStorage } from "../src/domains/state";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── Extended node-kind type ───────────────────────────────────────────────────
 
@@ -1065,6 +1066,7 @@ export function queryDecisionsAndOpenQuestions(
 // ── CLI entrypoint ────────────────────────────────────────────────────────────
 
 if (require.main === module) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const args = process.argv.slice(2);
   const rootIdx = args.indexOf("--root");
   const root = rootIdx >= 0 ? args[rootIdx + 1] : process.cwd();

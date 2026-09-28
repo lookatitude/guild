@@ -67,6 +67,7 @@ import {
 } from "../../src/domains/kernel/path-containment";
 
 import { splitFrontmatter } from "./frontmatter";
+import { ensureStorageLayout } from "./state/ensure-storage-layout";
 
 // ---------------------------------------------------------------------------
 // Schema constants + result shape
@@ -574,6 +575,7 @@ export function parseCliArgs(argv: string[]): CliArgs | { error: string } {
 }
 
 function main(): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const parsed = parseCliArgs(process.argv.slice(2));
   if ("error" in parsed) {
     process.stderr.write(

@@ -57,10 +57,119 @@ __export(dashboard_launch_exports, {
   waitForReady: () => waitForReady
 });
 module.exports = __toCommonJS(dashboard_launch_exports);
-var fs = __toESM(require("node:fs"));
-var path = __toESM(require("node:path"));
+var fs3 = __toESM(require("node:fs"));
+var path3 = __toESM(require("node:path"));
 var net = __toESM(require("node:net"));
 var import_node_child_process = require("node:child_process");
+
+// scripts/lib/state/ensure-storage-layout.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      try {
+        if (fs.existsSync(guildDir) && fs.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path2.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs2.existsSync(path2.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs2.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path2.join(__dirname, "upgrade-chain.js"),
+      path2.join(__dirname, "lib", "state", "upgrade-chain"),
+      path2.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs2.existsSync(c) || fs2.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
+// scripts/dashboard-launch.ts
 var BENCHMARK_PACKAGE_NAME = "@guild/benchmark";
 var BENCHMARK_REPO_URL_DEFAULT = "https://github.com/lookatitude/guild-benchmark.git";
 var DEFAULT_PORT = 3055;
@@ -73,32 +182,32 @@ var EXIT_NOT_READY = 2;
 var EXIT_REQUIRED_INSTALL = 3;
 function createRealEnv() {
   return {
-    exists: (p) => fs.existsSync(p),
+    exists: (p) => fs3.existsSync(p),
     isDirectory: (p) => {
       try {
-        return fs.statSync(p).isDirectory();
+        return fs3.statSync(p).isDirectory();
       } catch {
         return false;
       }
     },
-    readFile: (p) => fs.readFileSync(p, "utf-8"),
+    readFile: (p) => fs3.readFileSync(p, "utf-8"),
     readDir: (p) => {
       try {
-        return fs.readdirSync(p);
+        return fs3.readdirSync(p);
       } catch {
         return [];
       }
     },
     mkdirp: (p) => {
-      fs.mkdirSync(p, { recursive: true });
+      fs3.mkdirSync(p, { recursive: true });
     },
     writeFileAtomic: (p, content) => {
       const tmp = `${p}.tmp-${process.pid}`;
-      fs.writeFileSync(tmp, content);
-      fs.renameSync(tmp, p);
+      fs3.writeFileSync(tmp, content);
+      fs3.renameSync(tmp, p);
     },
     removeFile: (p) => {
-      fs.rmSync(p, { force: true });
+      fs3.rmSync(p, { force: true });
     },
     isProcessAlive: (pid) => {
       try {
@@ -130,14 +239,14 @@ function createRealEnv() {
       return { code: res.status ?? 1, stdout: res.stdout ?? "" };
     },
     spawnDetached: (cmd, args, opts) => {
-      const fd = fs.openSync(opts.logPath, "a");
+      const fd = fs3.openSync(opts.logPath, "a");
       const child = (0, import_node_child_process.spawn)(cmd, args, {
         cwd: opts.cwd,
         detached: true,
         stdio: ["ignore", fd, fd]
       });
       child.unref();
-      fs.closeSync(fd);
+      fs3.closeSync(fd);
       return { pid: child.pid ?? -1 };
     },
     fetchFn: async (url, init) => {
@@ -191,26 +300,26 @@ function parseDashboardArgs(argv) {
   if (!Number.isInteger(args.port) || args.port < 1 || args.port > 65535) {
     return { error: `--port must be a valid TCP port (1-65535)` };
   }
-  if (args.projectRoot !== void 0 && !path.isAbsolute(args.projectRoot)) {
+  if (args.projectRoot !== void 0 && !path3.isAbsolute(args.projectRoot)) {
     return { error: `--project-root must be an absolute path` };
   }
   return args;
 }
 function resolveProjectRoot(cwd, env) {
-  let dir = path.resolve(cwd);
+  let dir = path3.resolve(cwd);
   let nearestGuild = null;
   for (; ; ) {
-    if (env.isDirectory(path.join(dir, ".guild"))) {
+    if (env.isDirectory(path3.join(dir, ".guild"))) {
       nearestGuild ??= dir;
       if (isWorkspaceRoot(dir, env)) return dir;
     }
-    const parent = path.dirname(dir);
+    const parent = path3.dirname(dir);
     if (parent === dir) return nearestGuild;
     dir = parent;
   }
 }
 function isWorkspaceRoot(root, env) {
-  const workspacePath = path.join(root, ".guild", "workspace.json");
+  const workspacePath = path3.join(root, ".guild", "workspace.json");
   if (!env.exists(workspacePath)) return false;
   try {
     const parsed = JSON.parse(env.readFile(workspacePath));
@@ -220,10 +329,10 @@ function isWorkspaceRoot(root, env) {
   }
 }
 function dashboardRecordPath(projectRoot) {
-  return path.join(projectRoot, ".guild", "cache", "dashboard.json");
+  return path3.join(projectRoot, ".guild", "cache", "dashboard.json");
 }
 function dashboardLogPath(projectRoot) {
-  return path.join(projectRoot, ".guild", "cache", "dashboard.log");
+  return path3.join(projectRoot, ".guild", "cache", "dashboard.log");
 }
 function readDashboardRecord(projectRoot, env) {
   const p = dashboardRecordPath(projectRoot);
@@ -275,7 +384,7 @@ function stopDashboard(projectRoot, env) {
   return { exitCode: EXIT_OK };
 }
 function isBenchmarkCheckout(dir, env) {
-  const pkgPath = path.join(dir, "package.json");
+  const pkgPath = path3.join(dir, "package.json");
   if (!env.exists(pkgPath)) return false;
   try {
     const pkg = JSON.parse(env.readFile(pkgPath));
@@ -286,22 +395,22 @@ function isBenchmarkCheckout(dir, env) {
 }
 function resolveBenchmarkCheckout(projectRoot, env) {
   const candidates = [
-    { kind: "sibling", dir: path.join(path.dirname(projectRoot), "benchmark") },
-    { kind: "in-repo", dir: path.join(projectRoot, "benchmark") },
-    { kind: "cache", dir: path.join(projectRoot, ".guild", "cache", "benchmark") }
+    { kind: "sibling", dir: path3.join(path3.dirname(projectRoot), "benchmark") },
+    { kind: "in-repo", dir: path3.join(projectRoot, "benchmark") },
+    { kind: "cache", dir: path3.join(projectRoot, ".guild", "cache", "benchmark") }
   ];
   for (const cand of candidates) {
     if (isBenchmarkCheckout(cand.dir, env)) {
       return {
         kind: cand.kind,
         dir: cand.dir,
-        needsInstall: !env.isDirectory(path.join(cand.dir, "node_modules"))
+        needsInstall: !env.isDirectory(path3.join(cand.dir, "node_modules"))
       };
     }
   }
   return {
     kind: "required-install",
-    cacheDir: path.join(projectRoot, ".guild", "cache", "benchmark")
+    cacheDir: path3.join(projectRoot, ".guild", "cache", "benchmark")
   };
 }
 function requiredInstallCommands(resolution, repoUrl) {
@@ -345,11 +454,11 @@ function discoverRunDirs(projectRoot, env) {
   const roots = discoverRunRoots(projectRoot, env);
   const out = [];
   for (const root of roots) {
-    const runsRoot = path.join(root, ".guild", "runs");
+    const runsRoot = path3.join(root, ".guild", "runs");
     for (const name of env.readDir(runsRoot)) {
-      const runDir = path.join(runsRoot, name);
+      const runDir = path3.join(runsRoot, name);
       if (!env.isDirectory(runDir)) continue;
-      if (env.exists(path.join(runDir, "logs", "v1.4-events.jsonl"))) {
+      if (env.exists(path3.join(runDir, "logs", "v1.4-events.jsonl"))) {
         out.push(runDir);
       }
     }
@@ -357,9 +466,9 @@ function discoverRunDirs(projectRoot, env) {
   return out.sort();
 }
 function discoverRunRoots(projectRoot, env) {
-  const root = path.resolve(projectRoot);
+  const root = path3.resolve(projectRoot);
   const roots = [root];
-  const workspacePath = path.join(root, ".guild", "workspace.json");
+  const workspacePath = path3.join(root, ".guild", "workspace.json");
   if (!env.exists(workspacePath)) return roots;
   let parsed;
   try {
@@ -372,9 +481,9 @@ function discoverRunRoots(projectRoot, env) {
     if (entry === null || typeof entry !== "object" || Array.isArray(entry)) continue;
     const childPath = entry.path;
     if (typeof childPath !== "string") continue;
-    const childRoot = path.resolve(root, childPath);
-    const rel = path.relative(root, childRoot);
-    if (rel.startsWith("..") || path.isAbsolute(rel)) continue;
+    const childRoot = path3.resolve(root, childPath);
+    const rel = path3.relative(root, childRoot);
+    if (rel.startsWith("..") || path3.isAbsolute(rel)) continue;
     roots.push(childRoot);
   }
   return roots;
@@ -437,7 +546,7 @@ async function launchDashboard(args, env, cwd = process.cwd(), repoUrl = process
     );
     return { exitCode: EXIT_ERROR };
   }
-  if (!env.isDirectory(path.join(projectRoot, ".guild"))) {
+  if (!env.isDirectory(path3.join(projectRoot, ".guild"))) {
     env.log(
       `[dashboard-launch] ERROR: ${projectRoot} has no .guild/ directory \u2014 the dashboard reads .guild/runs + .guild/wiki + .guild/indexes`
     );
@@ -482,7 +591,7 @@ async function launchDashboard(args, env, cwd = process.cwd(), repoUrl = process
   let resolution = resolveBenchmarkCheckout(projectRoot, env);
   if (resolution.kind === "required-install" && args.install && !args.dryRun) {
     const cacheDir2 = resolution.cacheDir;
-    env.mkdirp(path.dirname(cacheDir2));
+    env.mkdirp(path3.dirname(cacheDir2));
     env.log(`[dashboard-launch] cloning benchmark \u2192 ${cacheDir2}`);
     const cloneCode = env.execSync("git", ["clone", repoUrl, cacheDir2], {});
     if (cloneCode !== 0) {
@@ -499,7 +608,7 @@ async function launchDashboard(args, env, cwd = process.cwd(), repoUrl = process
   } else if (resolution.kind === "required-install") {
     const cmds = requiredInstallCommands(resolution, repoUrl);
     env.log(
-      `[dashboard-launch] REQUIRED-INSTALL: no benchmark checkout found (looked: sibling ${path.join(path.dirname(projectRoot), "benchmark")}, in-repo ${path.join(projectRoot, "benchmark")}, cache ${resolution.cacheDir}).`
+      `[dashboard-launch] REQUIRED-INSTALL: no benchmark checkout found (looked: sibling ${path3.join(path3.dirname(projectRoot), "benchmark")}, in-repo ${path3.join(projectRoot, "benchmark")}, cache ${resolution.cacheDir}).`
     );
     env.log(
       `[dashboard-launch] No network I/O is performed without --install. Run these commands (or re-run with --install after confirming):`
@@ -573,7 +682,7 @@ async function launchDashboard(args, env, cwd = process.cwd(), repoUrl = process
     }
     return { exitCode: EXIT_OK, port };
   }
-  const cacheDir = path.join(projectRoot, ".guild", "cache");
+  const cacheDir = path3.join(projectRoot, ".guild", "cache");
   env.mkdirp(cacheDir);
   const logPath = dashboardLogPath(projectRoot);
   const proc = env.spawnDetached(
@@ -622,7 +731,7 @@ async function launchDashboard(args, env, cwd = process.cwd(), repoUrl = process
     );
     for (const r of importResults) {
       env.log(
-        r.ok ? `  ok   ${path.basename(r.runDir)}${r.runId ? ` \u2192 ${r.runId}` : ``}` : `  FAIL ${path.basename(r.runDir)} \u2014 ${r.error}`
+        r.ok ? `  ok   ${path3.basename(r.runDir)}${r.runId ? ` \u2192 ${r.runId}` : ``}` : `  FAIL ${path3.basename(r.runDir)} \u2014 ${r.error}`
       );
     }
   } else {
@@ -636,6 +745,7 @@ async function launchDashboard(args, env, cwd = process.cwd(), repoUrl = process
   return { exitCode: EXIT_OK, url, pid: proc.pid, port, importResults };
 }
 async function main() {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const parsed = parseDashboardArgs(process.argv.slice(2));
   if ("error" in parsed) {
     process.stderr.write(`[dashboard-launch] ${parsed.error}

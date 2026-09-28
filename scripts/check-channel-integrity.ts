@@ -66,6 +66,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 
 import { evaluateTransportedReleaseConformance } from "../src/domains/distribution";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 export const MANIFEST_PATH = ".claude-plugin/plugin.json";
 export const MARKETPLACE_PATH = ".claude-plugin/marketplace.json";
@@ -398,6 +399,7 @@ export function checkChannelIntegrity(
 }
 
 export function main(argv: string[] = process.argv.slice(2)): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   if (argv[0] === "promotion") return promotionMain(argv.slice(1));
   let stableRef = "origin/main";
   let betaRef = "origin/next";

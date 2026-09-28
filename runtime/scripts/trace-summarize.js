@@ -23,25 +23,134 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // scripts/trace-summarize.ts
+var fs5 = __toESM(require("fs"));
+var path5 = __toESM(require("path"));
+
+// scripts/lib/run-events.ts
 var fs3 = __toESM(require("fs"));
 var path3 = __toESM(require("path"));
 
+// scripts/lib/state/ensure-storage-layout.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      try {
+        if (fs.existsSync(guildDir) && fs.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path2.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs2.existsSync(path2.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs2.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path2.join(__dirname, "upgrade-chain.js"),
+      path2.join(__dirname, "lib", "state", "upgrade-chain"),
+      path2.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs2.existsSync(c) || fs2.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
 // scripts/lib/run-events.ts
-var fs = __toESM(require("fs"));
-var path = __toESM(require("path"));
-var CANONICAL_EVENTS_RELPATH = path.join("logs", "v1.4-events.jsonl");
+var CANONICAL_EVENTS_RELPATH = path3.join("logs", "v1.4-events.jsonl");
 var LEGACY_EVENTS_RELPATH = "events.ndjson";
 function resolveRunEventsFile(runDir) {
-  const canonical = path.join(runDir, CANONICAL_EVENTS_RELPATH);
-  const legacy = path.join(runDir, LEGACY_EVENTS_RELPATH);
-  if (fs.existsSync(canonical)) return { filePath: canonical, source: "canonical" };
-  if (fs.existsSync(legacy)) return { filePath: legacy, source: "legacy" };
+  const canonical = path3.join(runDir, CANONICAL_EVENTS_RELPATH);
+  const legacy = path3.join(runDir, LEGACY_EVENTS_RELPATH);
+  if (fs3.existsSync(canonical)) return { filePath: canonical, source: "canonical" };
+  if (fs3.existsSync(legacy)) return { filePath: legacy, source: "legacy" };
   return { filePath: canonical, source: "none" };
 }
 function parseRunEventsJsonl(filePath) {
   let content;
   try {
-    content = fs.readFileSync(filePath, "utf8");
+    content = fs3.readFileSync(filePath, "utf8");
   } catch {
     return { events: [], parseErrors: 0 };
   }
@@ -67,19 +176,20 @@ function loadRunEvents(runDir) {
   return { events, source, filePath, parseErrors };
 }
 if (require.main === module) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const runDir = process.argv[2];
   if (!runDir) {
     process.stderr.write("Usage: npx tsx scripts/lib/run-events.ts <runDir>\n");
     process.exit(1);
   }
-  const result = loadRunEvents(path.resolve(runDir));
+  const result = loadRunEvents(path3.resolve(runDir));
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   process.exit(result.source === "none" ? 1 : 0);
 }
 
 // scripts/lib/run-sinks.ts
-var fs2 = __toESM(require("fs"));
-var path2 = __toESM(require("path"));
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
 var BACKEND_DEGRADATION_SINK = "logs/backend-degradation.jsonl";
 var TIER_DISPATCH_SINK = "logs/tier-dispatch.jsonl";
 var BACKEND_DEGRADATION_SCHEMA = "guild.backend_degradation.v1";
@@ -88,7 +198,7 @@ var UNTIERED_REASON = "missing_model";
 function readSinkRaw(runDir, relPath, expectedSchema) {
   let content;
   try {
-    content = fs2.readFileSync(path2.join(runDir, relPath), "utf8");
+    content = fs4.readFileSync(path4.join(runDir, relPath), "utf8");
   } catch (err) {
     if (err?.code === "ENOENT") return { rows: [], anomalies: 0 };
     return { rows: [], anomalies: 1 };
@@ -586,20 +696,21 @@ function buildSummary(runId, events, sinkAudit) {
   return sections.join("\n");
 }
 function main() {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const args = process.argv.slice(2);
   const { runId, cwd: cwdArg, out: outArg } = parseArgs(args);
   if (!runId) {
     process.stderr.write("[trace-summarize] ERROR: --run-id <id> is required\n");
     process.exit(1);
   }
-  const cwd = path3.resolve(cwdArg);
-  const runDir = path3.join(cwd, ".guild", "runs", runId);
-  const defaultOut = path3.join(runDir, "summary.md");
-  const outFile = outArg ? path3.resolve(outArg) : defaultOut;
+  const cwd = path5.resolve(cwdArg);
+  const runDir = path5.join(cwd, ".guild", "runs", runId);
+  const defaultOut = path5.join(runDir, "summary.md");
+  const outFile = outArg ? path5.resolve(outArg) : defaultOut;
   const { events, source, filePath, parseErrors } = loadRunEvents(runDir);
   if (source === "none") {
     process.stderr.write(
-      `[trace-summarize] ERROR: no event log found for run ${runId} (looked for ${filePath} and ${path3.join(runDir, "events.ndjson")})
+      `[trace-summarize] ERROR: no event log found for run ${runId} (looked for ${filePath} and ${path5.join(runDir, "events.ndjson")})
 `
     );
     process.exit(1);
@@ -612,9 +723,9 @@ function main() {
   }
   const sinkAudit = loadRunSinks(runDir);
   const summary = buildSummary(runId, events.map(normalizeEvent), sinkAudit);
-  const outDir = path3.dirname(outFile);
-  fs3.mkdirSync(outDir, { recursive: true });
-  fs3.writeFileSync(outFile, summary, "utf8");
+  const outDir = path5.dirname(outFile);
+  fs5.mkdirSync(outDir, { recursive: true });
+  fs5.writeFileSync(outFile, summary, "utf8");
   process.stderr.write(
     `[trace-summarize] wrote summary for run ${runId} \u2192 ${outFile}
 `

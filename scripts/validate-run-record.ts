@@ -24,6 +24,7 @@ import {
   validateRunRecordDir,
   type RunRecordValidation,
 } from "./lib/run-record-validate";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 function usageError(detail: string): RunRecordValidation {
   return {
@@ -36,6 +37,7 @@ function usageError(detail: string): RunRecordValidation {
 
 function main(argv: string[]): number {
   let cwd = process.cwd();
+  ensureStorageLayout(cwd, { detectOnly: true });
   let runId: string | null = null;
   let dir: string | null = null;
   let scan = false;

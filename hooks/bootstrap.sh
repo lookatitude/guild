@@ -106,8 +106,10 @@ _ENSURE_LAYOUT="${PLUGIN_ROOT}/runtime/scripts/ensure-storage-layout.js"
 if [[ ! -f "${_ENSURE_LAYOUT}" ]]; then
   _guild_fail_closed "guild: missing compile output ${_ENSURE_LAYOUT}. Re-install Guild, or run \`bun run compile\` in the plugin repo."
 else
-  _LAYOUT_ERR="$(node "${_ENSURE_LAYOUT}" --cwd="${PWD}" 2>&1 >/dev/null)" || \
-    _guild_fail_closed "guild: ${_LAYOUT_ERR:-storage layout check failed}"
+  # The literal path on its own line is what the KTD23 entry lint looks for.
+  _LAYOUT_ERR=$(
+    node "${PLUGIN_ROOT}/runtime/scripts/ensure-storage-layout.js" --cwd="${PWD}" 2>&1 >/dev/null
+  ) || _guild_fail_closed "guild: ${_LAYOUT_ERR:-storage layout check failed}"
 fi
 
 # ── Print status block ─────────────────────────────────────────────────────

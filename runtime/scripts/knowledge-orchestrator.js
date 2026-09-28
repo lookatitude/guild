@@ -1075,7 +1075,7 @@ function extractHeadingTexts(content) {
 }
 function safeReadFile(repoRoot, relPath) {
   try {
-    return fs7.readFileSync(path7.join(repoRoot, relPath), "utf-8");
+    return fs9.readFileSync(path9.join(repoRoot, relPath), "utf-8");
   } catch {
     return null;
   }
@@ -1399,11 +1399,11 @@ async function buildCrossLinks(repoRoot, input, opts) {
   }
   return { edges: result };
 }
-var fs7, path7, STOPWORDS;
+var fs9, path9, STOPWORDS;
 var init_cross_link = __esm({
   "scripts/learn/cross-link.ts"() {
-    fs7 = __toESM(require("fs"));
-    path7 = __toESM(require("path"));
+    fs9 = __toESM(require("fs"));
+    path9 = __toESM(require("path"));
     init_schema();
     STOPWORDS = /* @__PURE__ */ new Set([
       // Linguistic stop-words
@@ -1537,8 +1537,8 @@ __export(knowledge_orchestrator_exports, {
   runKnowledgeStages: () => runKnowledgeStages
 });
 module.exports = __toCommonJS(knowledge_orchestrator_exports);
-var fs10 = __toESM(require("fs"));
-var path10 = __toESM(require("path"));
+var fs12 = __toESM(require("fs"));
+var path12 = __toESM(require("path"));
 
 // scripts/learn/content-analyze.ts
 var fs2 = __toESM(require("fs"));
@@ -2302,9 +2302,118 @@ if (require.main === module) {
 }
 
 // scripts/learn/wiki-index.ts
-var fs4 = __toESM(require("fs"));
-var path5 = __toESM(require("path"));
+var fs6 = __toESM(require("fs"));
+var path7 = __toESM(require("path"));
 init_schema();
+
+// scripts/lib/state/ensure-storage-layout.ts
+var fs5 = __toESM(require("node:fs"));
+var path6 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
+var fs4 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path5.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs4.existsSync(path5.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path5.join(current, ".guild");
+      try {
+        if (fs4.existsSync(guildDir) && fs4.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path5.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path6.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs5.existsSync(path6.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs5.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path6.join(__dirname, "upgrade-chain.js"),
+      path6.join(__dirname, "lib", "state", "upgrade-chain"),
+      path6.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs5.existsSync(c) || fs5.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
+// scripts/learn/wiki-index.ts
 function headingSlug2(raw) {
   return raw.trim().toLowerCase().replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
@@ -2342,7 +2451,7 @@ function collectWikiPageRelpaths(wikiDir) {
   function walk(current, rel) {
     let entries;
     try {
-      entries = fs4.readdirSync(current, { withFileTypes: true });
+      entries = fs6.readdirSync(current, { withFileTypes: true });
     } catch {
       return;
     }
@@ -2351,7 +2460,7 @@ function collectWikiPageRelpaths(wikiDir) {
       if (name.startsWith(".")) continue;
       const relChild = rel ? `${rel}/${name}` : name;
       if (entry.isDirectory()) {
-        walk(path5.join(current, name), relChild);
+        walk(path7.join(current, name), relChild);
       } else if (entry.isFile() && name.toLowerCase().endsWith(".md")) {
         if (!EXCLUDED_WIKI_NAMES.has(name)) {
           results.push(relChild);
@@ -2363,12 +2472,12 @@ function collectWikiPageRelpaths(wikiDir) {
   return results.sort();
 }
 function toPosixRel(p) {
-  return p.split(path5.sep).join("/");
+  return p.split(path7.sep).join("/");
 }
 function buildBasenameMapFromList(relpaths) {
   const map = /* @__PURE__ */ new Map();
   for (const relpath of relpaths) {
-    const basename5 = path5.basename(relpath, path5.extname(relpath));
+    const basename5 = path7.basename(relpath, path7.extname(relpath));
     if (!map.has(basename5)) {
       map.set(basename5, relpath);
     }
@@ -2387,15 +2496,15 @@ var defaultClassifier = async (pages) => {
 };
 async function indexWiki(wikiDir, opts) {
   const classifier = opts?.classifier ?? defaultClassifier;
-  const relBase = opts?.repoRoot !== void 0 ? toPosixRel(path5.relative(opts.repoRoot, wikiDir)) : "";
+  const relBase = opts?.repoRoot !== void 0 ? toPosixRel(path7.relative(opts.repoRoot, wikiDir)) : "";
   const toRepoRel = (fileRel) => relBase ? `${relBase}/${fileRel}` : fileRel;
   const fileRelpaths = collectWikiPageRelpaths(wikiDir);
   const pageDescriptors = [];
   for (const fileRel of fileRelpaths) {
-    const absPath = path5.join(wikiDir, fileRel);
+    const absPath = path7.join(wikiDir, fileRel);
     let content;
     try {
-      content = fs4.readFileSync(absPath, "utf8");
+      content = fs6.readFileSync(absPath, "utf8");
     } catch {
       continue;
     }
@@ -2426,7 +2535,7 @@ async function indexWiki(wikiDir, opts) {
     const node = {
       id: desc.id,
       type: "wiki_page",
-      name: desc.name || path5.basename(desc.relpath, ".md"),
+      name: desc.name || path7.basename(desc.relpath, ".md"),
       source_refs: [anchor],
       confidence: "high",
       category: cls.category,
@@ -2454,6 +2563,7 @@ async function indexWiki(wikiDir, opts) {
   return { nodes, edges, suppressed };
 }
 if (require.main === module) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const wikiDir = argv[0];
   if (!wikiDir || wikiDir.startsWith("--")) {
@@ -2464,8 +2574,8 @@ if (require.main === module) {
   }
   const cwdIdx = argv.indexOf("--cwd");
   const cwdArg = cwdIdx >= 0 ? argv[cwdIdx + 1] : void 0;
-  const repoRoot = path5.resolve(cwdArg ?? process.cwd());
-  const absWikiDir = path5.resolve(repoRoot, wikiDir);
+  const repoRoot = path7.resolve(cwdArg ?? process.cwd());
+  const absWikiDir = path7.resolve(repoRoot, wikiDir);
   indexWiki(absWikiDir, { repoRoot }).then(({ nodes, edges }) => {
     const wikiPages = nodes.filter((n) => n.type === "wiki_page");
     const related = edges.filter((e) => e.type === "related");
@@ -2487,8 +2597,8 @@ if (require.main === module) {
 }
 
 // scripts/learn/lib/ignore.ts
-var fs5 = __toESM(require("fs"));
-var path6 = __toESM(require("path"));
+var fs7 = __toESM(require("fs"));
+var path8 = __toESM(require("path"));
 var DEFAULT_IGNORE_PATTERNS = Object.freeze([
   "node_modules/",
   ".git/",
@@ -2612,9 +2722,9 @@ function compile(patterns) {
 }
 function createIgnoreFilter(projectRoot) {
   const patterns = [...DEFAULT_IGNORE_PATTERNS];
-  const rootIgnore = path6.join(projectRoot, ".guildignore");
-  if (fs5.existsSync(rootIgnore)) {
-    patterns.push(...fs5.readFileSync(rootIgnore, "utf-8").split("\n"));
+  const rootIgnore = path8.join(projectRoot, ".guildignore");
+  if (fs7.existsSync(rootIgnore)) {
+    patterns.push(...fs7.readFileSync(rootIgnore, "utf-8").split("\n"));
   }
   const rules = compile(patterns);
   return {
@@ -2643,7 +2753,7 @@ function headSha(cwd) {
 }
 
 // scripts/learn/taxonomy-build.ts
-var fs6 = __toESM(require("fs"));
+var fs8 = __toESM(require("fs"));
 init_schema();
 function slugifyTopicName(name) {
   return name.toLowerCase().replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
@@ -2734,7 +2844,7 @@ function foldSubThreshold(proposals, minTopicImportance) {
 }
 function getTopLevelDirs(repoRoot) {
   try {
-    return fs6.readdirSync(repoRoot, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith(".")).map((e) => e.name);
+    return fs8.readdirSync(repoRoot, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith(".")).map((e) => e.name);
   } catch {
     return [];
   }
@@ -2890,16 +3000,16 @@ init_cross_link();
 init_schema();
 
 // scripts/learn/write-knowledge-links.ts
-var fs9 = __toESM(require("fs"));
-var path9 = __toESM(require("path"));
+var fs11 = __toESM(require("fs"));
+var path11 = __toESM(require("path"));
 
 // src/domains/knowledge/knowledge-links-contract.ts
 var KNOWLEDGE_RECALL_SCHEMA_VERSION = "guild.knowledge_links.v2";
 var KNOWLEDGE_LINKS_PROVENANCE_SCHEMA_VERSION = "guild.knowledge_links.provenance.v1";
 
 // scripts/learn/lib/paths.ts
-var fs8 = __toESM(require("fs"));
-var path8 = __toESM(require("path"));
+var fs10 = __toESM(require("fs"));
+var path10 = __toESM(require("path"));
 var import_child_process2 = require("child_process");
 function parseCwd(argv) {
   const idx = argv.indexOf("--cwd");
@@ -2923,34 +3033,34 @@ function resolveMainRepoRoot(cwd) {
       cwd,
       encoding: "utf-8"
     }).trim();
-    const abs = path8.isAbsolute(commonDir) ? commonDir : path8.resolve(cwd, commonDir);
-    const root = path8.dirname(abs);
-    if (fs8.existsSync(root)) return root;
+    const abs = path10.isAbsolute(commonDir) ? commonDir : path10.resolve(cwd, commonDir);
+    const root = path10.dirname(abs);
+    if (fs10.existsSync(root)) return root;
   } catch {
   }
-  return path8.resolve(cwd);
+  return path10.resolve(cwd);
 }
 function guildPaths(cwd) {
   const repoRoot = resolveMainRepoRoot(cwd);
-  const guildDir = path8.join(repoRoot, ".guild");
-  const indexesDir = path8.join(guildDir, "indexes");
-  const runsDir = path8.join(guildDir, "runs");
+  const guildDir = path10.join(repoRoot, ".guild");
+  const indexesDir = path10.join(guildDir, "indexes");
+  const runsDir = path10.join(guildDir, "runs");
   return {
     repoRoot,
     guildDir,
     indexesDir,
     runsDir,
-    codebaseMap: path8.join(indexesDir, "codebase-map.json"),
-    knowledgeGraph: path8.join(indexesDir, "knowledge-graph.json"),
-    knowledgeLinks: path8.join(indexesDir, "knowledge-links.json"),
-    knowledgeRecall: path8.join(indexesDir, "knowledge-recall.json"),
-    fingerprint: path8.join(indexesDir, "understand-fingerprint.json"),
-    partialGraph: path8.join(indexesDir, "understand-partial-graph.json")
+    codebaseMap: path10.join(indexesDir, "codebase-map.json"),
+    knowledgeGraph: path10.join(indexesDir, "knowledge-graph.json"),
+    knowledgeLinks: path10.join(indexesDir, "knowledge-links.json"),
+    knowledgeRecall: path10.join(indexesDir, "knowledge-recall.json"),
+    fingerprint: path10.join(indexesDir, "understand-fingerprint.json"),
+    partialGraph: path10.join(indexesDir, "understand-partial-graph.json")
   };
 }
 function readJson(filePath) {
   try {
-    return JSON.parse(fs8.readFileSync(filePath, "utf8"));
+    return JSON.parse(fs10.readFileSync(filePath, "utf8"));
   } catch {
     return null;
   }
@@ -3169,10 +3279,10 @@ function writeKnowledgeLinks(opts) {
     nodes: canonNodes,
     edges: canonEdges
   };
-  const indexesDir = path9.join(repoRoot, ".guild", "indexes");
-  fs9.mkdirSync(indexesDir, { recursive: true });
-  const linksPath = path9.join(indexesDir, "knowledge-recall.json");
-  fs9.writeFileSync(linksPath, JSON.stringify(linksDoc, null, 2) + "\n", "utf8");
+  const indexesDir = path11.join(repoRoot, ".guild", "indexes");
+  fs11.mkdirSync(indexesDir, { recursive: true });
+  const linksPath = path11.join(indexesDir, "knowledge-recall.json");
+  fs11.writeFileSync(linksPath, JSON.stringify(linksDoc, null, 2) + "\n", "utf8");
   const provenanceDoc = {
     schema_version: KNOWLEDGE_LINKS_PROVENANCE_SCHEMA_VERSION,
     run_id: runId ?? null,
@@ -3180,8 +3290,8 @@ function writeKnowledgeLinks(opts) {
     node_count: graph.nodes.length,
     edge_count: dedupedEdges.length
   };
-  const provenancePath = path9.join(indexesDir, "knowledge-recall-provenance.json");
-  fs9.writeFileSync(provenancePath, JSON.stringify(provenanceDoc, null, 2) + "\n", "utf8");
+  const provenancePath = path11.join(indexesDir, "knowledge-recall-provenance.json");
+  fs11.writeFileSync(provenancePath, JSON.stringify(provenanceDoc, null, 2) + "\n", "utf8");
   return {
     linksPath,
     provenancePath,
@@ -3194,7 +3304,7 @@ function writeKnowledgeLinks(opts) {
 var FALLBACK_ROOT_TOPIC_SEED = "project-knowledge";
 var FALLBACK_ROOT_TOPIC_NAME = "Project Knowledge";
 function deriveFallbackRootTopicName(repoRoot) {
-  const base = path10.basename((repoRoot ?? "").replace(/[/\\]+$/, "")).trim();
+  const base = path12.basename((repoRoot ?? "").replace(/[/\\]+$/, "")).trim();
   if (!base || base === "." || base === "..") return FALLBACK_ROOT_TOPIC_NAME;
   const titled = base.split(/[^A-Za-z0-9]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
   return titled ? `${titled} Knowledge` : FALLBACK_ROOT_TOPIC_NAME;
@@ -3242,8 +3352,8 @@ function findOrphanWikiPages(graph) {
 }
 function safeReadJson(filePath) {
   try {
-    if (!fs10.existsSync(filePath)) return null;
-    return JSON.parse(fs10.readFileSync(filePath, "utf8"));
+    if (!fs12.existsSync(filePath)) return null;
+    return JSON.parse(fs12.readFileSync(filePath, "utf8"));
   } catch {
     return null;
   }
@@ -3251,7 +3361,7 @@ function safeReadJson(filePath) {
 function buildFileBackedSeams(judgmentDir) {
   const proposeConcepts = async (candidates) => {
     const judgments = safeReadJson(
-      path10.join(judgmentDir, "k1-judgments.json")
+      path12.join(judgmentDir, "k1-judgments.json")
     );
     if (!judgments?.concepts) return [];
     const results = [];
@@ -3269,7 +3379,7 @@ function buildFileBackedSeams(judgmentDir) {
   };
   const proposeClaimsAndEntities = async (sections, headings) => {
     const judgments = safeReadJson(
-      path10.join(judgmentDir, "k1-judgments.json")
+      path12.join(judgmentDir, "k1-judgments.json")
     );
     const claims = [];
     const entities = [];
@@ -3302,7 +3412,7 @@ function buildFileBackedSeams(judgmentDir) {
   };
   const classifyPage = async (pages) => {
     const judgments = safeReadJson(
-      path10.join(judgmentDir, "k2-judgments.json")
+      path12.join(judgmentDir, "k2-judgments.json")
     );
     const result = /* @__PURE__ */ new Map();
     for (const page of pages) {
@@ -3318,7 +3428,7 @@ function buildFileBackedSeams(judgmentDir) {
   };
   const proposeTaxonomy = async (topicInputs, _context) => {
     const judgments = safeReadJson(
-      path10.join(judgmentDir, "k4-judgments.json")
+      path12.join(judgmentDir, "k4-judgments.json")
     );
     if (!judgments?.topics) {
       return { topicProposals: [], domainProposals: [] };
@@ -3336,7 +3446,7 @@ function buildFileBackedSeams(judgmentDir) {
       });
     }
     const k4Candidates = safeReadJson(
-      path10.join(judgmentDir, "k4-candidates.json")
+      path12.join(judgmentDir, "k4-candidates.json")
     );
     const validDomainKeys = new Set(
       (k4Candidates?.domain_candidates ?? []).map((c) => c.candidate_key)
@@ -3354,7 +3464,7 @@ function buildFileBackedSeams(judgmentDir) {
   };
   const confirmCrossLinks = async (_nodes, candidates, context) => {
     const judgments = safeReadJson(
-      path10.join(judgmentDir, "k5-judgments.json")
+      path12.join(judgmentDir, "k5-judgments.json")
     );
     if (!judgments?.edges) return [];
     const relMinConf = context?.relMinConf ?? 0.5;
@@ -3384,18 +3494,18 @@ function buildFileBackedSeams(judgmentDir) {
 }
 function collectWikiPageCandidates(wikiAbsDir, repoRoot) {
   const results = [];
-  const rawRelBase = path10.relative(repoRoot, wikiAbsDir).split(path10.sep).join("/");
+  const rawRelBase = path12.relative(repoRoot, wikiAbsDir).split(path12.sep).join("/");
   const toRepoRel = (fileRel) => rawRelBase ? `${rawRelBase}/${fileRel}` : fileRel;
   for (const fileRel of collectWikiPageRelpaths(wikiAbsDir)) {
-    const abs = path10.join(wikiAbsDir, fileRel);
+    const abs = path12.join(wikiAbsDir, fileRel);
     let content;
     try {
-      content = fs10.readFileSync(abs, "utf8");
+      content = fs12.readFileSync(abs, "utf8");
     } catch {
       continue;
     }
     const h1Match = content.match(/^#\s+(.+)$/m);
-    const name = h1Match ? h1Match[1].trim() : path10.basename(fileRel, ".md");
+    const name = h1Match ? h1Match[1].trim() : path12.basename(fileRel, ".md");
     const headings = [];
     const headingRe = /^#{1,6}\s+(.+)$/gm;
     let m;
@@ -3412,7 +3522,7 @@ function collectWikiPageCandidates(wikiAbsDir, repoRoot) {
   return results;
 }
 function emitRound1Candidates(repoRoot, filePaths, candidateDir) {
-  fs10.mkdirSync(candidateDir, { recursive: true });
+  fs12.mkdirSync(candidateDir, { recursive: true });
   const { codeRelPaths, docRelPaths, svgRelPaths = [] } = filePaths;
   const rawDocComments = extractDocCommentCandidates(repoRoot, codeRelPaths);
   const docCommentCandidates = rawDocComments.map((c) => ({
@@ -3444,18 +3554,18 @@ function emitRound1Candidates(repoRoot, filePaths, candidateDir) {
     heading_candidates: headingCandidates,
     claim_sections: claimSections
   };
-  fs10.writeFileSync(
-    path10.join(candidateDir, "k1-candidates.json"),
+  fs12.writeFileSync(
+    path12.join(candidateDir, "k1-candidates.json"),
     JSON.stringify(k1Doc, null, 2) + "\n",
     "utf8"
   );
   const wikiAbsDirs = [
-    filePaths.wikiDir ?? path10.join(repoRoot, ".guild", "wiki"),
-    path10.join(repoRoot, "docs", "knowledge")
+    filePaths.wikiDir ?? path12.join(repoRoot, ".guild", "wiki"),
+    path12.join(repoRoot, "docs", "knowledge")
   ];
   const k2Pages = [];
   for (const dir of wikiAbsDirs) {
-    if (fs10.existsSync(dir)) {
+    if (fs12.existsSync(dir)) {
       k2Pages.push(...collectWikiPageCandidates(dir, repoRoot));
     }
   }
@@ -3464,8 +3574,8 @@ function emitRound1Candidates(repoRoot, filePaths, candidateDir) {
     stage: "k2",
     pages: k2Pages
   };
-  fs10.writeFileSync(
-    path10.join(candidateDir, "k2-candidates.json"),
+  fs12.writeFileSync(
+    path12.join(candidateDir, "k2-candidates.json"),
     JSON.stringify(k2Doc, null, 2) + "\n",
     "utf8"
   );
@@ -3476,8 +3586,8 @@ function emitRound1Candidates(repoRoot, filePaths, candidateDir) {
     stage: "k3",
     nodes: k3Result.nodes
   };
-  fs10.writeFileSync(
-    path10.join(candidateDir, "k3-nodes.json"),
+  fs12.writeFileSync(
+    path12.join(candidateDir, "k3-nodes.json"),
     JSON.stringify(k3Doc, null, 2) + "\n",
     "utf8"
   );
@@ -3503,14 +3613,14 @@ function emitRound1Candidates(repoRoot, filePaths, candidateDir) {
       primary_topicId: t.topicId
     }))
   };
-  fs10.writeFileSync(
-    path10.join(candidateDir, "k4-candidates.json"),
+  fs12.writeFileSync(
+    path12.join(candidateDir, "k4-candidates.json"),
     JSON.stringify(k4Doc, null, 2) + "\n",
     "utf8"
   );
 }
 async function emitRound2Candidates(repoRoot, filePaths, candidateDir, judgmentDir) {
-  fs10.mkdirSync(candidateDir, { recursive: true });
+  fs12.mkdirSync(candidateDir, { recursive: true });
   const seams = buildFileBackedSeams(judgmentDir);
   const { nodes } = await runKnowledgeStagesK1ToK4(repoRoot, filePaths, seams);
   const { proposeCandidates: proposeCandidates2 } = await Promise.resolve().then(() => (init_cross_link(), cross_link_exports));
@@ -3531,8 +3641,8 @@ async function emitRound2Candidates(repoRoot, filePaths, candidateDir, judgmentD
       reason: c.reason
     }))
   };
-  fs10.writeFileSync(
-    path10.join(candidateDir, "k5-candidates.json"),
+  fs12.writeFileSync(
+    path12.join(candidateDir, "k5-candidates.json"),
     JSON.stringify(k5Doc, null, 2) + "\n",
     "utf8"
   );
@@ -3562,14 +3672,14 @@ async function runKnowledgeStagesK1ToK4(repoRoot, filePaths, seams) {
   const k3Result = analyzeDiagrams(repoRoot, k3Paths);
   allNodes.push(...k3Result.nodes);
   const k2Roots = [
-    wikiDir ?? path10.join(repoRoot, ".guild", "wiki"),
-    path10.join(repoRoot, "docs", "knowledge")
+    wikiDir ?? path12.join(repoRoot, ".guild", "wiki"),
+    path12.join(repoRoot, "docs", "knowledge")
   ];
   const k2Opts = { repoRoot };
   if (seams.classifyPage) k2Opts.classifier = seams.classifyPage;
   const k2Suppressed = [];
   for (const k2Dir of k2Roots) {
-    if (fs10.existsSync(k2Dir)) {
+    if (fs12.existsSync(k2Dir)) {
       const k2Result = await indexWiki(k2Dir, k2Opts);
       allNodes.push(...k2Result.nodes);
       allEdges.push(...k2Result.edges);
@@ -3646,17 +3756,17 @@ async function runKnowledgeStages(repoRoot, filePaths, seams, opts = {}) {
       `[knowledge] SC-3 VIOLATION: ${sc3OrphanWikiPageIds.length} wiki_page node(s) have no topic-membership edge after finalize \u2014 the fallback root topic and cross-link Rule 6 both failed to cover: ${sc3OrphanWikiPageIds.join(", ")}. Refusing to write an SC-3-violating graph.`
     );
   }
-  const indexesDir = path10.join(repoRoot, ".guild", "indexes");
-  fs10.mkdirSync(indexesDir, { recursive: true });
+  const indexesDir = path12.join(repoRoot, ".guild", "indexes");
+  fs12.mkdirSync(indexesDir, { recursive: true });
   const suppressedDoc = {
     schema: "guild.knowledge_suppressed.v1",
     generated_at: opts.generatedAt ?? (/* @__PURE__ */ new Date()).toISOString(),
     suppressed: suppressedEntries
   };
-  const suppressedPath = path10.join(indexesDir, "knowledge-suppressed.json");
-  fs10.writeFileSync(suppressedPath, JSON.stringify(suppressedDoc, null, 2) + "\n", "utf8");
-  const graphPath = path10.join(indexesDir, "knowledge-graph.json");
-  fs10.writeFileSync(graphPath, JSON.stringify(graph, null, 2) + "\n", "utf8");
+  const suppressedPath = path12.join(indexesDir, "knowledge-suppressed.json");
+  fs12.writeFileSync(suppressedPath, JSON.stringify(suppressedDoc, null, 2) + "\n", "utf8");
+  const graphPath = path12.join(indexesDir, "knowledge-graph.json");
+  fs12.writeFileSync(graphPath, JSON.stringify(graph, null, 2) + "\n", "utf8");
   const linksResult = writeKnowledgeLinks({
     graph: { nodes: graph.nodes, edges: graph.edges },
     repoRoot,
@@ -3675,6 +3785,7 @@ async function runKnowledgeStages(repoRoot, filePaths, seams, opts = {}) {
   };
 }
 if (require.main === module) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   void (async () => {
     const args = process.argv.slice(2);
     const arg = (flag) => {
@@ -3699,8 +3810,8 @@ if (require.main === module) {
       );
       process.exit(1);
     }
-    const repoRoot = path10.resolve(cwd);
-    const runDir = runId ? path10.join(repoRoot, ".guild", "runs", runId, "knowledge") : path10.join(repoRoot, ".guild", "runs", "_current", "knowledge");
+    const repoRoot = path12.resolve(cwd);
+    const runDir = runId ? path12.join(repoRoot, ".guild", "runs", runId, "knowledge") : path12.join(repoRoot, ".guild", "runs", "_current", "knowledge");
     const candidateDir = runDir;
     const judgmentDir = runDir;
     const filePaths = discoverFilePaths(repoRoot);
@@ -3716,10 +3827,10 @@ if (require.main === module) {
       );
     } else if (phase === "finalize") {
       const seams = buildFileBackedSeams(judgmentDir);
-      const structuralGraphPath = path10.join(repoRoot, ".guild", "indexes", "knowledge-graph.json");
+      const structuralGraphPath = path12.join(repoRoot, ".guild", "indexes", "knowledge-graph.json");
       let structuralGraph;
       try {
-        const prior = JSON.parse(fs10.readFileSync(structuralGraphPath, "utf8"));
+        const prior = JSON.parse(fs12.readFileSync(structuralGraphPath, "utf8"));
         if (prior.version === "guild.knowledge_graph.v1" && Array.isArray(prior.nodes) && Array.isArray(prior.edges) && Array.isArray(prior.layers) && Array.isArray(prior.tour)) {
           structuralGraph = {
             nodes: prior.nodes,
@@ -3762,7 +3873,7 @@ function discoverFilePaths(repoRoot) {
   const walk = (dir, relBase) => {
     let entries;
     try {
-      entries = fs10.readdirSync(dir, { withFileTypes: true });
+      entries = fs12.readdirSync(dir, { withFileTypes: true });
     } catch {
       return;
     }
@@ -3771,7 +3882,7 @@ function discoverFilePaths(repoRoot) {
       const rel = relBase ? `${relBase}/${e.name}` : e.name;
       if (e.isDirectory()) {
         if (filter.isIgnored(rel) || filter.isIgnored(rel + "/")) continue;
-        walk(path10.join(dir, e.name), rel);
+        walk(path12.join(dir, e.name), rel);
         continue;
       }
       if (!e.isFile()) continue;
@@ -3796,7 +3907,7 @@ function discoverFilePaths(repoRoot) {
     codeRelPaths,
     docRelPaths,
     svgRelPaths,
-    wikiDir: path10.join(repoRoot, ".guild", "wiki")
+    wikiDir: path12.join(repoRoot, ".guild", "wiki")
   };
 }
 // Annotate the CommonJS export names for ESM import in node:

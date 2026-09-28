@@ -79,6 +79,7 @@ import {
 // (accepted + validated at load, §5 fail-closed) but never scaffolded into a
 // fresh settings.json, so `config init` stays byte-identical to the golden.
 import { validateModelPolicy } from "../../../src/domains/config/model-policy";
+import { ensureStorageLayout } from "../state/ensure-storage-layout";
 export { resolveTierModel };
 export type { ResolvedTierModel, TierHostValue, TierModelSpec };
 
@@ -1997,6 +1998,7 @@ function crossHostAvailable(): boolean {
 function main(): void {
   const { cwd: cwdFlag, mode, selfBuild, modelTier, flags } = parseArgs(process.argv.slice(2));
   const cwd = cwdFlag ?? process.env["GUILD_CWD"] ?? process.cwd();
+  ensureStorageLayout(cwd, { detectOnly: true });
 
   if (mode === "scaffold") {
     process.stdout.write(scaffold());

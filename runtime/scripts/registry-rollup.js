@@ -3077,8 +3077,8 @@ __export(registry_rollup_exports, {
   writeInitiativesRegistry: () => writeInitiativesRegistry
 });
 module.exports = __toCommonJS(registry_rollup_exports);
-var fs = __toESM(require("fs"));
-var path = __toESM(require("path"));
+var fs3 = __toESM(require("fs"));
+var path3 = __toESM(require("path"));
 
 // src/domains/lifecycle/initiative.ts
 var DEFINITION_STATUS = Object.freeze(["incomplete", "assumed", "complete"]);
@@ -3143,28 +3143,135 @@ var DEFINITION_CATEGORIES = Object.freeze([
 ]);
 var DEFINITION_ITEM_STATUS = Object.freeze(["defined", "needs_definition", "assumed", "superseded"]);
 
+// scripts/lib/state/ensure-storage-layout.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      try {
+        if (fs.existsSync(guildDir) && fs.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path2.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs2.existsSync(path2.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs2.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path2.join(__dirname, "upgrade-chain.js"),
+      path2.join(__dirname, "lib", "state", "upgrade-chain"),
+      path2.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs2.existsSync(c) || fs2.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
 // scripts/registry-rollup.ts
 var yaml = require_js_yaml();
 var REGISTRY_SCHEMA = "guild.initiatives_registry.v1";
 function listDirs(dir) {
   try {
-    return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => path.join(dir, e.name));
+    return fs3.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => path3.join(dir, e.name));
   } catch {
     return [];
   }
 }
 function collectRuns(guildDir) {
   const map = /* @__PURE__ */ new Map();
-  const runsRoot = path.join(guildDir, "runs");
+  const runsRoot = path3.join(guildDir, "runs");
   const runDirs = [
-    ...listDirs(runsRoot).filter((d) => path.basename(d) !== "_archive"),
-    ...listDirs(path.join(runsRoot, "_archive"))
+    ...listDirs(runsRoot).filter((d) => path3.basename(d) !== "_archive"),
+    ...listDirs(path3.join(runsRoot, "_archive"))
   ];
   for (const runDir of runDirs) {
-    const prov = path.join(runDir, "provenance.json");
-    if (!fs.existsSync(prov)) continue;
+    const prov = path3.join(runDir, "provenance.json");
+    if (!fs3.existsSync(prov)) continue;
     try {
-      const p = JSON.parse(fs.readFileSync(prov, "utf8"));
+      const p = JSON.parse(fs3.readFileSync(prov, "utf8"));
       if (!p.initiative || !p.run_id) continue;
       if (!map.has(p.initiative)) map.set(p.initiative, { runs: [] });
       map.get(p.initiative).runs.push({ id: p.run_id, at: p.closed_at ?? p.started_at ?? "" });
@@ -3190,10 +3297,10 @@ function notesToScalar(v) {
 }
 function loadExistingEntries(guildDir) {
   const out = /* @__PURE__ */ new Map();
-  const p = path.join(guildDir, "indexes", "initiatives-registry.yaml");
-  if (!fs.existsSync(p)) return out;
+  const p = path3.join(guildDir, "indexes", "initiatives-registry.yaml");
+  if (!fs3.existsSync(p)) return out;
   try {
-    const parsed = yaml.load(fs.readFileSync(p, "utf8"));
+    const parsed = yaml.load(fs3.readFileSync(p, "utf8"));
     const container = parsed && typeof parsed === "object" ? parsed["initiatives"] ? parsed : parsed["initiatives_registry"] ?? {} : {};
     const list = container["initiatives"];
     if (Array.isArray(list)) {
@@ -3212,15 +3319,15 @@ function buildInitiativesRegistry(guildDir) {
   const byId = new Map(loadExistingEntries(guildDir));
   for (const bucket of ["active", "archived"]) {
     const archived = bucket === "archived";
-    for (const initDir of listDirs(path.join(guildDir, "initiatives", bucket))) {
-      const manifestPath = path.join(initDir, "initiative.yaml");
-      if (!fs.existsSync(manifestPath)) continue;
+    for (const initDir of listDirs(path3.join(guildDir, "initiatives", bucket))) {
+      const manifestPath = path3.join(initDir, "initiative.yaml");
+      if (!fs3.existsSync(manifestPath)) continue;
       let m = {};
       try {
-        m = unwrapManifest(yaml.load(fs.readFileSync(manifestPath, "utf8")));
+        m = unwrapManifest(yaml.load(fs3.readFileSync(manifestPath, "utf8")));
       } catch {
       }
-      const id = typeof m["id"] === "string" && m["id"] || path.basename(initDir);
+      const id = typeof m["id"] === "string" && m["id"] || path3.basename(initDir);
       const existing = byId.get(id);
       const manifestValid = validateInitiativeManifest(m).valid;
       let status;
@@ -3296,17 +3403,18 @@ function buildInitiativesRegistry(guildDir) {
   return { schema_version: REGISTRY_SCHEMA, built_from: ["initiatives/*", "runs/**/provenance.json"], initiatives: entries };
 }
 function writeInitiativesRegistry(guildDir, registry) {
-  const out = path.join(guildDir, "indexes", "initiatives-registry.yaml");
-  fs.mkdirSync(path.dirname(out), { recursive: true });
-  fs.writeFileSync(out, yaml.dump(registry), "utf8");
+  const out = path3.join(guildDir, "indexes", "initiatives-registry.yaml");
+  fs3.mkdirSync(path3.dirname(out), { recursive: true });
+  fs3.writeFileSync(out, yaml.dump(registry), "utf8");
   return out;
 }
 if (require.main === module) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
-  let guildDir = path.join(process.cwd(), ".guild");
+  let guildDir = path3.join(process.cwd(), ".guild");
   let write = false, json = false;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--guild-dir" && argv[i + 1]) guildDir = path.resolve(argv[++i]);
+    if (argv[i] === "--guild-dir" && argv[i + 1]) guildDir = path3.resolve(argv[++i]);
     else if (argv[i] === "--write") write = true;
     else if (argv[i] === "--json") json = true;
   }

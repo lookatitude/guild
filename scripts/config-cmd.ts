@@ -124,6 +124,7 @@ import { CLI_NATIVE_HOSTS } from "./lib/host-open-preflight";
 // two files import nothing but node builtins and each other.
 import { policyFilesFor, policyOverlayFile, policyValue, resolvePolicy } from "../src/domains/config";
 import { POLICY_KEYS, POLICY_KEY_ALIASES, PolicyRejectedError, assertPolicyWrite, isPolicyKey, scanHostIdentity } from "../src/domains/config";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ---------------------------------------------------------------------------
 // Prototype-pollution guard — PROTO_POISON_KEYS is the canonical single-source
@@ -2670,6 +2671,7 @@ function cmdReconcile(mode: ReconcileMode, cwd: string): number {
 // ---------------------------------------------------------------------------
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const parsed = parseArgs(process.argv);
 
   if ("error" in parsed) {

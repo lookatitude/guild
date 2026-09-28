@@ -12,8 +12,7 @@
 #                           anti-vacuity passes run alongside so a check that stops
 #                           detecting anything fails loudly rather than passing.
 #   3. bun test             BLOCKING since T13, sharded, `--isolate` (see the job).
-#                           The Jest legs in test-suites.yml are advisory until T16
-#                           deletes Jest.
+#                           The only runner; T16 deleted Jest.
 #   4. skill-link-integrity BLOCKING since T13: every relative link under skills/
 #                           resolves (a dead link in prompt text never throws).
 #

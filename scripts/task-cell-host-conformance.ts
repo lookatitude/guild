@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { TASK_CELL_HOST_CONFORMANCE_SCHEMA, buildTaskCellHostConformanceMatrix, runTaskCellHostConformance, verifyTaskCellHostConformanceReceipt, type HostProbeInvocation, type HostProbeInvocationInput, type HostProbePreflight, type HostProbeRunner, type NormalizedHostHandoff, type TaskCellHostConformanceReceipt } from "../src/domains/dispatch";
 import type { TaskCellMechanicsMode } from "../src/domains/dispatch";
 import { normalizeResult } from "./lib/result-normalizer";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 interface CliArgs {
   hosts: string[];
@@ -165,6 +166,7 @@ export class GuildRunHostProbeRunner implements HostProbeRunner {
 }
 
 async function main(): Promise<number> {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const parsed = parseArgs(process.argv.slice(2));
   if ("error" in parsed) {
     process.stderr.write(parsed.error + "\n");

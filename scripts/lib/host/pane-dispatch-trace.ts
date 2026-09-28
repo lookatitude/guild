@@ -66,6 +66,7 @@
 import * as path from "node:path";
 import { emitTraceEvent } from "../guild-trace-emit";
 import { makeDispatchEvent, type DispatchBackend } from "../guild-trace-events";
+import { ensureStorageLayout } from "../state/ensure-storage-layout";
 
 /**
  * Host-capability rung of a confirmed lane pane: the FULL substrate, not a
@@ -261,6 +262,7 @@ if (
   require.main === module &&
   /^pane-dispatch-trace\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")
 ) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const parsed = parseCliArgs(process.argv.slice(2));
   if ("error" in parsed) {
     process.stderr.write(`[pane-dispatch-trace] ERROR: ${parsed.error}\n${USAGE}`);

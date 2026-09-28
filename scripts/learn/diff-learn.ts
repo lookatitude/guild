@@ -17,6 +17,7 @@ import * as path from "path";
 import { guildPaths, parseCwd, parseFlag, hasFlag, writeJson, readJson, SCHEMA } from "./lib/paths";
 import { changedFiles, headSha } from "./lib/git";
 import type { KnowledgeGraph } from "./lib/schema";
+import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
 function resolveRunId(cwd: string, argv: string[]): string {
   const flag = parseFlag(argv, "run-id");
@@ -36,6 +37,7 @@ function relOfNode(srcRefs: string[] | undefined): string | null {
 function main(): void {
   const argv = process.argv.slice(2);
   const cwd = parseCwd(argv);
+  ensureStorageLayout(cwd, { detectOnly: true });
   const gp = guildPaths(cwd);
   const base = parseFlag(argv, "base");
   const head = parseFlag(argv, "head") ?? "HEAD";
