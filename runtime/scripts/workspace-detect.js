@@ -7286,7 +7286,8 @@ var init_events = __esm({
       "playbook_auto_replace",
       "wiki_cas_conflict",
       "harvest_reverted",
-      "lane_wiki_write_refused"
+      "lane_wiki_write_refused",
+      "queue_drain_refused"
     ]);
     KNOWN_GUILD_HOST_KINDS = Object.freeze([
       "claude-code-cli",

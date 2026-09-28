@@ -108,7 +108,13 @@ export type SecurityEventType =
   /** KTD60: a Guild-owned MCP tool whose shipped pin is unusable (missing, malformed, stale binary). */
   | "mcp_description_unpinned"
   /** KTD35: a lane worker's Write/Edit/MultiEdit/NotebookEdit/Bash write resolved under <root>/.guild/wiki. */
-  | "lane_wiki_write_refused";
+  | "lane_wiki_write_refused"
+  /**
+   * KTD33/KTD43: a T0 queue receipt reached the lead's PostToolUse hook in a result
+   * that was not the lead's own enqueue call (a printed or planted receipt, a
+   * compound command, a stale request). Nothing was drained.
+   */
+  | "queue_drain_refused";
 
 /**
  * The closed set of `event_type` values, as data. Every emitter in the tree uses
@@ -135,6 +141,7 @@ export const SECURITY_EVENT_TYPES: readonly SecurityEventType[] = Object.freeze(
   "wiki_cas_conflict",
   "harvest_reverted",
   "lane_wiki_write_refused",
+  "queue_drain_refused",
 ] as const);
 
 /** The action Guild took for the gated tool call. */

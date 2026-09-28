@@ -389,11 +389,12 @@ export async function main(): Promise<void> {
 
   // ── T16I (KTD33/KTD43): drain the T0 write queue ─────────────────────────
   // `work-loop redirect` and `evolve-loop --apply` only enqueue. The gated writer
-  // runs here, in the lead session's hook, for the receipt in this call's own
-  // result. A lane worker's hook env, a subagent call, or a swapped request file
-  // drains nothing. The outcome goes back to T0 as context and beside the request.
+  // runs here, in the lead session's hook, only when this call WAS the lead's own
+  // `node <plugin entry>` enqueue and its result is that call's one receipt. A lane
+  // worker's hook env, a subagent call, a printed (planted) receipt, or a swapped
+  // request file drains nothing. The outcome goes back to T0 as context and beside the request.
   try {
-    const report = drainT0Queue(payload, process.env, __dirname);
+    const report = drainT0Queue(payload, process.env, __dirname, guildRoot);
     if (report) {
       for (const r of report.refused) {
         process.stderr.write(`warn: [post-tool-use] T0 queue request ${r.request_id} refused: ${r.detail}\n`);

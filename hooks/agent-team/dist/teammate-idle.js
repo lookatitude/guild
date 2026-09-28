@@ -16046,7 +16046,8 @@ var init_events = __esm({
       "playbook_auto_replace",
       "wiki_cas_conflict",
       "harvest_reverted",
-      "lane_wiki_write_refused"
+      "lane_wiki_write_refused",
+      "queue_drain_refused"
     ]);
     SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
     KNOWN_GUILD_HOST_KINDS = Object.freeze([
@@ -38548,10 +38549,16 @@ function protectGlossary(glossary, opts) {
     ...glossary,
     terms: glossary.terms.map((t) => {
       const content = [t.term, ...t.aliases ?? [], t.definition].join("\n");
+      const [chunk] = protectChunks([{ source_path: "glossary.md", content }], opts).chunks;
+      if (!chunk || chunk.quarantined) {
+        const marker = chunk?.rendered ?? "[QUARANTINED]";
+        return { ...t, term: marker, aliases: [t.term, ...t.aliases ?? []], definition: marker };
+      }
+      const def = neutralizeRecallTags(t.definition);
       return {
         ...t,
         term: neutralizeRecallTags(t.term),
-        definition: protectLine(t.definition, { source_path: "glossary.md", content }, opts)
+        definition: chunk.trust_tier === "operator" ? def : `<guild:recall trust_tier="${chunk.trust_tier}">${def}</guild:recall>`
       };
     })
   };

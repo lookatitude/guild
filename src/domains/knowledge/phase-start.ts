@@ -11,9 +11,10 @@
  *      terms the assignment text actually names (capped).
  *
  * The lane bundle is the only object here a parent may see (KTD26). Its hit gists
- * and glossary terms are wiki text, so they pass the same D-RECALL choke point as
- * recall (`protectChunks`): an injection hit is quarantined to a marker, anything
- * else is wrapped by trust tier with recall tags neutralized. Never raw.
+ * and glossary term names, aliases and definitions are wiki text, so they pass the
+ * same D-RECALL choke point as recall (`protectChunks`): an injection is quarantined
+ * to a marker, anything else is tag-neutralized and (gists, definitions) wrapped by
+ * trust tier. Never raw.
  */
 
 import * as fs from "node:fs";
@@ -95,16 +96,30 @@ function pageText(storage: GuildStorage, rel: string): string {
   }
 }
 
-/** The glossary with every term probed and wrapped; an injected term keeps only a marker. */
+/**
+ * The glossary with every term probed on its name, aliases and definition together.
+ * An injection anywhere in the entry quarantines BOTH emitted strings (name and
+ * definition) to the marker; aliases (and a quarantined entry's original name) are
+ * match keys only and never emitted.
+ * A clean name is emitted tag-neutralized, a clean definition wrapped by tier.
+ */
 function protectGlossary(glossary: Glossary, opts: ProtectChunksOpts): Glossary {
   return {
     ...glossary,
     terms: glossary.terms.map((t) => {
       const content = [t.term, ...(t.aliases ?? []), t.definition].join("\n");
+      const [chunk] = protectChunks([{ source_path: "glossary.md", content }], opts).chunks;
+      if (!chunk || chunk.quarantined) {
+        const marker = chunk?.rendered ?? "[QUARANTINED]";
+        // The original name stays a match key (aliases are never emitted), so the lane
+        // still sees that a term it named was excluded.
+        return { ...t, term: marker, aliases: [t.term, ...(t.aliases ?? [])], definition: marker };
+      }
+      const def = neutralizeRecallTags(t.definition);
       return {
         ...t,
         term: neutralizeRecallTags(t.term),
-        definition: protectLine(t.definition, { source_path: "glossary.md", content }, opts),
+        definition: chunk.trust_tier === "operator" ? def : `<guild:recall trust_tier="${chunk.trust_tier}">${def}</guild:recall>`,
       };
     }),
   };
