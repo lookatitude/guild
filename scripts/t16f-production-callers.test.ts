@@ -373,8 +373,8 @@ describe("R50 / R53 / R54 — T0-routed redirects harvest on the third, gated, j
     expect(fired.map((r) => r.code)).toEqual([0, 0, 0]);
     expect(fired.map((r) => r.out.harvest !== null)).toEqual([false, false, true]);
     const page = fs.readFileSync(pagePath(), "utf8");
-    expect(page).toMatch(/^status: canonical$/m);
-    expect(page).toMatch(/^trigger: redirect_threshold$/m);
+    expect(page.split("\n")).toContain("status: canonical");
+    expect(page.split("\n")).toContain("trigger: redirect_threshold");
 
     const ev = events();
     expect(ev.filter((e) => e.event === "redirect_event").map((e) => e.count)).toEqual([1, 2, 3]);

@@ -681,7 +681,7 @@ function main(argv: string[]): number {
     return hit ? hit.slice(n.length + 3) : undefined;
   };
   const folded = moduleExports();
-  const claimed = new Set(folded.map((e) => e.target.replace(/^domain:/, "")));
+  const claimed = new Set(folded.map((e) => (e.target.startsWith("domain:") ? e.target.slice("domain:".length) : e.target)));
   const entries = [...commands(), ...skills(), ...folded, ...consumerExports(claimed), ...evals(), ...vcEvals()];
   const unmapped = entries.filter((e) => !e.target || !e.target.trim());
 
