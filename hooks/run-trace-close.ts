@@ -86,6 +86,7 @@ import {
 import { readScalarField } from "../scripts/lib/frontmatter.js";
 // T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
 import { ensureStorageLayout } from "./lib/ensure-layout.js";
+import { durableGuildDir } from "../src/domains/state";
 
 /**
  * Tolerance window (ms) for the reopen-on-activity check (see header). Newer
@@ -423,7 +424,7 @@ async function main(): Promise<void> {
   const runId = resolveRunIdForTrace(root, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] });
   if (!runId) process.exit(0); // no active run
 
-  const runDir = path.join(root, ".guild", "runs", runId);
+  const runDir = path.join(durableGuildDir(root), "runs", runId);
   // NN#7 guard — only close a run B2's startRun actually opened.
   if (!fs.existsSync(path.join(runDir, "run.yaml"))) process.exit(0);
 

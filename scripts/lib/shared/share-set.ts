@@ -5,4 +5,11 @@
  * move internals without breaking existing imports from scripts/lib/shared/*.
  */
 
-export * from "../../../src/domains/security/share-set";
+export {
+  isCanonicalRunLog,
+  isHandoffFile,
+  isPayloadFile,
+  inShareSet,
+  SHARED_SCRUBBED_NAMES,
+  CANONICAL_RUN_LOG,
+} from "../../../src/domains/security/index";

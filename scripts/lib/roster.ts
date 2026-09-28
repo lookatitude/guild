@@ -32,7 +32,7 @@
  */
 
 import * as fs from "fs";
-import { sealSet } from "../../src/domains/kernel/sealed-collections";
+import { sealSet } from "../../src/domains/kernel/index";
 import * as path from "path";
 // The ONE shared, js-yaml-backed frontmatter/YAML reader (OD-3): all reading
 // goes through it — this file only DUMPS YAML directly.
@@ -40,12 +40,13 @@ import { parseFrontmatter, parseYaml } from "./frontmatter";
 import {
   checkContained,
   isRefused,
-} from "../../src/domains/kernel/path-containment";
+} from "../../src/domains/kernel/index";
 // KTD20/R59: the mint tree is addressed through GuildStorage.definition, never
 // by hand-joining ".guild". One constructor means one place decides where a
 // project's definitions live, so a layout change moves the mint with it.
 import { createGuildStorage } from "./state/storage";
 import { gateProfileCreation, resolveMintScope, type WorkflowClass } from "../../src/domains/teams";
+import { durableGuildDir } from "./state/storage";
 
 const yaml = require("js-yaml") as {
   dump: (o: unknown, opts?: Record<string, unknown>) => string;
@@ -279,7 +280,7 @@ function readAgentEntry(
  */
 export function checkWorkspaceRosterScopes(workspaceRootInput: string): WorkspaceRosterScopeCheck {
   const workspaceRoot = path.resolve(workspaceRootInput);
-  const manifestPath = path.join(workspaceRoot, ".guild", "workspace.json");
+  const manifestPath = path.join(durableGuildDir(workspaceRoot), "workspace.json");
   const issues: WorkspaceRosterScopeIssue[] = [];
   let manifest: Record<string, unknown>;
   try {
@@ -351,7 +352,7 @@ export function checkWorkspaceRosterScopes(workspaceRootInput: string): Workspac
     Array<{ root_id: string; path: string; scope: string | null; counterpart: string | null }>
   >();
   for (const root of roots) {
-    const dir = path.join(root.root, ".guild", "agents");
+    const dir = path.join(durableGuildDir(root.root), "agents");
     for (const filename of listAgentFiles(dir)) {
       if (filename === "registry.yaml") continue;
       const file = path.join(dir, filename);
@@ -884,7 +885,7 @@ export function deriveAgentsRegistry(
   resolution: RosterResolution,
   opts: { force?: boolean; dryRun?: boolean } = {}
 ): DeriveResult {
-  const target = path.join(resolution.project_root, ".guild", "agents", "registry.yaml");
+  const target = path.join(durableGuildDir(resolution.project_root), "agents", "registry.yaml");
   const items = resolution.project.map((a) =>
     pruneNulls({
       id: a.name,
@@ -921,7 +922,7 @@ export function deriveSkillsRegistry(
   resolution: RosterResolution,
   opts: { force?: boolean; dryRun?: boolean } = {}
 ): DeriveResult {
-  const target = path.join(resolution.project_root, ".guild", "skills", "registry.yaml");
+  const target = path.join(durableGuildDir(resolution.project_root), "skills", "registry.yaml");
   const items = resolution.project_skills.map((s) =>
     pruneNulls({
       id: s.id,
@@ -992,7 +993,7 @@ export function projectInstanceToHostNative(opts: {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
     return { path: "", action: "refused", reason: `unsafe specialist name "${name}"` };
   }
-  const src = path.join(projectRoot, ".guild", "agents", `${name}.md`);
+  const src = path.join(durableGuildDir(projectRoot), "agents", `${name}.md`);
   if (!fs.existsSync(src)) {
     return {
       path: src,
@@ -1105,7 +1106,7 @@ export function migrateTeamRoster(opts: {
 }): TeamMigrationFileResult[] {
   const projectRoot = path.resolve(opts.projectRoot);
   const pluginRoot = path.resolve(opts.pluginRoot);
-  const teamDir = path.join(projectRoot, ".guild", "team");
+  const teamDir = path.join(durableGuildDir(projectRoot), "team");
   if (!fs.existsSync(teamDir)) return [];
   const templateNames = new Set(listSpecialistTemplates(pluginRoot).map((t) => t.name));
 

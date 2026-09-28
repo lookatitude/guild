@@ -12,7 +12,18 @@ export * from "./team-file";
 // (self-referential proposal/decision hashes, resolution receipts, shadow
 // provenance). It is published here so capability/dispatch consume it through
 // the public module entrypoint instead of a private cross-module import.
-export * from "./canonical-hash";
+// The §1 canonical hash moved to kernel (T16D: config needs it and sits below
+// teams); re-exported here so the teams surface is unchanged.
+export {
+  canonicalYaml,
+  cloneArtifact,
+  codePointCompare,
+  doubleQuoted,
+  isPlainSafe,
+  isSha256Hex,
+  selfReferentialHash,
+  sha256Hex,
+} from "../kernel";
 export * from "./station-composer";
 export * from "./station-signals";
 // U-TIER (T08): the two goal nouns and the per-goal roster slice. Exported here
@@ -31,3 +42,36 @@ export * from "./roster-contract";
 
 // ── from src/modules/templates ──────────────────────────────────────────
 export * from "./template-schema";
+
+// ── consumed outside the domain (T16: every importer goes through this index) ──
+export {
+  assertDispatchApproved,
+  resolveApprovalOverride,
+} from "./dispatch-approval";
+export {
+  buildProposalReview,
+  DECISION_VOCABULARY,
+  kindCoverage,
+  type LoadedDecision,
+  loadPersistedDecisions,
+  parseDecisionVerb,
+  planRestructure,
+  preDispatchGate,
+  renderProposalReview,
+  renderRestructurePlan,
+  scanCapReintroduction,
+  teamPlanDir,
+} from "./team-decision-surface";
+export {
+  recordDecision,
+  type TeamDecisionV1,
+  writeDecision,
+} from "./team-decision";
+export {
+  composeProposal,
+  type TeamProposalV2,
+  writeProposal,
+} from "./team-proposal";
+export {
+  type TeamScheduleV1,
+} from "./team-schedule";

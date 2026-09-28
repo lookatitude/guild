@@ -8,8 +8,8 @@ import { FEDERATION_DEFINITION_MANIFEST_REF_SCHEMA, validateFederationDefinition
 import { tierForModel } from "../roster";
 import { commitAdoptionManifest, readAdoptionManifest } from "./adoption-migrate";
 import { definitionRefForDispatch, readCommittedAdoptionManifest } from "./definition-ref-for-dispatch";
-import { writeContainedFile } from "../../../src/domains/kernel/path-containment";
-import { resolveCapability } from "../../../src/domains/config/resolver-mode";
+import { writeContainedFile } from "../../../src/domains/kernel/index";
+import { resolveCapability } from "../../../src/domains/config/index";
 import {
   executeResolverRollback,
   readFeatureGateRegistry,
@@ -17,6 +17,7 @@ import {
   writeFeatureGateRegistry,
 } from "./strangler-control";
 import { parseFrontmatter, readScalarField, splitFrontmatter } from "../frontmatter";
+import { durableGuildDir } from "../state/storage";
 
 export const SELF_BUILD_REFS_SCHEMA = "guild.self_build_definition_refs.v1" as const;
 export const SELF_BUILD_REFS_RELPATH = ".guild/artifacts/capability/self-build-definition-refs.json";
@@ -582,7 +583,7 @@ export function canonicalizeSelfBuildDefinitions(options: { projectRoot: string;
   for (const id of [...new Set(options.roles)].sort()) {
     if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) return { status: "refused" as const, detail: `invalid role id ${id}` };
     const oldPath = path.join(root, ".claude", "agents", `${id}.md`);
-    const newPath = path.join(root, ".guild", "agents", `${id}.md`);
+    const newPath = path.join(durableGuildDir(root), "agents", `${id}.md`);
     let newBytes: Buffer;
     try {
       if (fs.lstatSync(newPath).isSymbolicLink()) return { status: "refused" as const, detail: `symlink definition for ${id}` };
@@ -639,7 +640,7 @@ export function canonicalizeSelfBuildDefinitions(options: { projectRoot: string;
   }
   const manifest = validateAdoptionManifestV1({ schema_version: ADOPTION_MANIFEST_SCHEMA, project_id: options.projectId, entries });
   if (!manifest) return { status: "refused" as const, detail: "constructed manifest did not validate" };
-  const manifestPath = path.join(root, ".guild", "adoption-manifest.json");
+  const manifestPath = path.join(durableGuildDir(root), "adoption-manifest.json");
   const artifactPath = path.join(root, SELF_BUILD_REFS_RELPATH);
   const manifestWrite = writeContainedFile(root, manifestPath, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"), { policy: "physical" });
   if (!manifestWrite.written) return { status: "refused" as const, detail: `manifest write refused [${manifestWrite.code}]: ${manifestWrite.detail}` };

@@ -5,4 +5,18 @@
  * reorg can move internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/domains/distribution/equivalence-contract";
+export {
+  normalizeJson,
+  normalizeText,
+  jsonEquivalent,
+  textEquivalent,
+  checkClaudeEquivalence,
+  type LogicalPackage,
+  EQUIVALENCE_SURFACES,
+  type IntentionalExclusion,
+  INTENTIONAL_EXCLUSIONS,
+  PROVENANCE_FIELDS,
+  SORTED_MANIFEST_ARRAYS,
+  type EquivalenceResult,
+  type ExpectedSurfaces,
+} from "../../src/domains/distribution/index";

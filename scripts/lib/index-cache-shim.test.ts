@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./index-cache";
-import * as moduleImpl from "../../src/domains/state/index-cache";
+import * as moduleImpl from "../../src/domains/state/index";
 
 describe("index-cache compatibility shim", () => {
   test("scripts/lib/index-cache re-exports src/modules/state", () => {
@@ -21,7 +21,7 @@ describe("index-cache compatibility shim", () => {
       "utf8",
     );
 
-    expect(oldPath).toMatch(/src\/domains\/state\/index-cache/);
+    expect(oldPath).toMatch(/src\/domains\/state\/index/);
     expect(oldPath).not.toMatch(/export\s+function\s+ensureWikiFtsIndex/);
     expect(modulePath).toMatch(/export\s+function\s+ensureWikiFtsIndex/);
     // T12 folded `migrations` into the state domain, so this is now a sibling

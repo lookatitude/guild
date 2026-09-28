@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { checkContained, isRefused } from "../../src/domains/kernel/path-containment";
+import { checkContained, isRefused } from "../../src/domains/kernel/index";
+import { durableGuildDir } from "./state/storage";
 
 export type WorkspaceProjectRootResult =
   | { status: "resolved"; root: string; workspace_root: string }
@@ -9,7 +10,7 @@ export type WorkspaceProjectRootResult =
 function nearestWorkspaceRoot(start: string): string | null {
   let cursor = fs.realpathSync(start);
   while (true) {
-    const candidate = path.join(cursor, ".guild", "workspace.json");
+    const candidate = path.join(durableGuildDir(cursor), "workspace.json");
     try {
       if (fs.lstatSync(candidate).isFile()) return cursor;
     } catch {
@@ -29,7 +30,7 @@ export function resolveWorkspaceProjectRoot(startRoot: string, projectId: string
     }
     const workspaceRoot = nearestWorkspaceRoot(path.resolve(startRoot));
     if (!workspaceRoot) return { status: "capability_absent", detail: "no enclosing .guild/workspace.json" };
-    const manifestPath = path.join(workspaceRoot, ".guild", "workspace.json");
+    const manifestPath = path.join(durableGuildDir(workspaceRoot), "workspace.json");
     if (fs.lstatSync(manifestPath).isSymbolicLink()) {
       return { status: "invalid_request", detail: "symlinked workspace manifest is refused" };
     }

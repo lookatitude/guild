@@ -31,6 +31,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { durableGuildDir } from "../state";
 
 // ── Public types (mirror wiki-recall.ts WikiHit/WikiRecallResult, minus rank) ──
 
@@ -176,7 +177,7 @@ export function fsScan(
   const terms = queryTerms(query);
 
   // Resolve which target dirs actually exist.
-  const guildDir = path.join(guildRoot, ".guild");
+  const guildDir = durableGuildDir(guildRoot);
   const existingDirs: string[] = [];
   for (const rel of dirs) {
     const abs = path.join(guildDir, rel);

@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./result-contracts";
-import * as moduleImpl from "../../src/domains/distribution/result-contracts";
+import * as moduleImpl from "../../src/domains/distribution/index";
 
 describe("result-contracts compatibility shim", () => {
   test("scripts/lib/result-contracts re-exports src/modules/distribution", () => {
@@ -19,7 +19,7 @@ describe("result-contracts compatibility shim", () => {
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/result-contracts.ts"), "utf8");
     const modulePath = fs.readFileSync(path.join(repoRoot, "src/domains/distribution/result-contracts.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/domains\/distribution\/result-contracts["']/);
+    expect(oldPath).toMatch(/from\s+["']\.\.\/\.\.\/src\/domains\/distribution\/index["']/);
     expect(oldPath).not.toMatch(/export\s+const\s+RESULT_CONTRACTS/);
     expect(modulePath).toMatch(/export\s+const\s+RESULT_CONTRACTS/);
     expect(modulePath).toMatch(/from\s+["']\.\/handoff-v2["']/);

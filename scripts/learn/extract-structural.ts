@@ -63,7 +63,8 @@ import {
 import { validateGraph } from "./lib/schema";
 import type { GraphEdge, GraphNode } from "./lib/schema";
 import * as fs from "fs";
-import { assertContained as assertSharedContained } from "../../src/domains/kernel/path-containment";
+import { assertContained as assertSharedContained } from "../../src/domains/kernel/index";
+import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
 /**
  * FIX-T4.1-1: resolve `p` and PROVE it stays within `root` before any read/write.
@@ -98,6 +99,7 @@ interface ExistingGraph {
 function main(): void {
   const argv = process.argv.slice(2);
   const cwd = parseCwd(argv);
+  ensureStorageLayout(cwd, { detectOnly: true });
   const gp = guildPaths(cwd);
   const repoRoot = gp.repoRoot;
   const incremental = hasFlag(argv, "incremental");

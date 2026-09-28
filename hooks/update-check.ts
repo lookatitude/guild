@@ -37,6 +37,8 @@ import {
   RECEIPT_BASENAME,
   RECEIPT_SCHEMA,
 } from "../scripts/lib/update-check";
+import { durableGuildDir } from "../src/domains/state";
+import { ensureStorageLayout } from "../scripts/lib/state/ensure-storage-layout";
 
 function readUpdateConfig(cwd: string): { mode: UpdateMode; cadenceHours: number } {
   const defaults = { mode: "notify" as UpdateMode, cadenceHours: 24 };
@@ -44,7 +46,7 @@ function readUpdateConfig(cwd: string): { mode: UpdateMode; cadenceHours: number
     // The REAL config source of truth (AC-6): workspace + local + project
     // layering with deep merge — never a raw single-file read (codex G-lane
     // MAJOR: a workspace-level `defaults.update.mode: off` must be honored).
-    const { resolveSettings } = require("../src/domains/config/settings-resolver") as {
+    const { resolveSettings } = require("../src/domains/config") as {
       resolveSettings: (o: { cwd: string }) => { config: Record<string, unknown> };
     };
     const parsed = resolveSettings({ cwd }).config as {
@@ -66,7 +68,7 @@ function readUpdateConfig(cwd: string): { mode: UpdateMode; cadenceHours: number
 }
 
 function stagedMarkerPath(): string {
-  return path.join(os.homedir(), ".guild", "update-staged.json");
+  return path.join(durableGuildDir(os.homedir()), "update-staged.json");
 }
 
 /** true when an auto-update for this exact target was already staged. */
@@ -116,6 +118,12 @@ function main(): void {
   const pluginRoot =
     process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
   if (!pluginRoot) return;
+  // KTD23: detect only; a future project layout is not read or written here.
+  try {
+    ensureStorageLayout(process.cwd(), { detectOnly: true });
+  } catch {
+    return;
+  }
 
   const { mode, cadenceHours } = readUpdateConfig(process.cwd());
   if (mode === "off") return;

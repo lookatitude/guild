@@ -33,17 +33,11 @@
  */
 
 import * as fs from "fs";
-import { sealSet } from "../../../src/domains/kernel/sealed-collections";
+import { sealSet } from "../../../src/domains/kernel/index";
 import * as path from "path";
 import * as crypto from "crypto";
-import type {
-  GraphNode,
-  GraphEdge,
-} from "../../../src/domains/knowledge/knowledge-graph-contract";
-export type {
-  GraphNode,
-  GraphEdge,
-} from "../../../src/domains/knowledge/knowledge-graph-contract";
+import type { GraphNode, GraphEdge } from "../../../src/domains/knowledge/index";
+export type { GraphNode, GraphEdge } from "../../../src/domains/knowledge/index";
 
 // ---------------------------------------------------------------------------
 // v1 — closed node type set (frozen)

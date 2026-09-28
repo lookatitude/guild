@@ -18,7 +18,7 @@
  *   obligations before acceptance.
  */
 
-import { cloneArtifact, isSha256Hex, selfReferentialHash, canonicalYaml } from "./canonical-hash";
+import { cloneArtifact, isSha256Hex, selfReferentialHash, canonicalYaml } from "../kernel";
 import {
   validateProposal,
   type ProposalParticipant,

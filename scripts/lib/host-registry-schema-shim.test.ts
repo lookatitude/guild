@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./host-registry-schema";
-import * as moduleImpl from "../../src/domains/config/host-registry-schema";
+import * as moduleImpl from "../../src/domains/config/index";
 
 describe("host-registry-schema compatibility shim", () => {
   test("scripts/lib/host-registry-schema re-exports src/modules/host-runtime", () => {
@@ -18,7 +18,7 @@ describe("host-registry-schema compatibility shim", () => {
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/host-registry-schema.ts"), "utf8");
     const modulePath = fs.readFileSync(path.join(repoRoot, "src/domains/config/host-registry-schema.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/domains\/config\/host-registry-schema["']/);
+    expect(oldPath).toMatch(/from\s+["']\.\.\/\.\.\/src\/domains\/config\/index["']/);
     expect(oldPath).not.toMatch(/export\s+const\s+HOST_REGISTRY_ROWS/);
     expect(modulePath).toMatch(/export\s+const\s+HOST_REGISTRY_ROWS/);
     expect(modulePath).toMatch(/from\s+["']\.\/host-capabilities-schema["']/);

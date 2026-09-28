@@ -29,7 +29,7 @@ import {
   type ProposalParticipant,
   type TeamProposalV2,
 } from "./team-proposal";
-import { selfReferentialHash } from "./canonical-hash";
+import { selfReferentialHash } from "../kernel";
 
 // ── §6 legacy scheduling inputs ──────────────────────────────────────────────
 

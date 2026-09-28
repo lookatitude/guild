@@ -17,6 +17,17 @@
  * Usage:
  *   scripts/evolve-loop.ts --skill <slug> --run-id <id> \
  *          [--proposed-edit <path>] [--cwd <path>]
+ *   scripts/evolve-loop.ts --apply <delta.json> [--run-id <id>] [--auto] [--cwd <path>]
+ *
+ * `--apply` is `maintain evolve <id> --target=<type>`'s write step: one
+ * `guild.evolve_delta.v1`, validated and ENQUEUED for the ONE gate
+ * (`applyEvolveDelta`, KTD18/R32), which the lead session's PostToolUse hook runs
+ * when it drains the printed receipt (KTD33/KTD43). Project targets span-replace
+ * under this repo's `.guild/` with the inverse in compact history; machinery
+ * targets become a candidate with `next_need: operator` (KTD63). `--auto` is the
+ * KTD33 curator path and fails closed on everything but `playbook` / `skill`
+ * (R74). Prints the receipt as JSON; the drained outcome lands beside the request
+ * as `<id>.result.json`. Exit 0 queued · 1 bad input (a repeated flag included).
  *
  * Options:
  *   --skill <slug>         (required) Skill slug (e.g. "guild-brainstorm").
@@ -47,27 +58,54 @@
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
+import { enqueueT0Request } from "../src/domains/lifecycle";
+import { createGuildStorage, resolveGuildRoot } from "../src/domains/state";
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
 
-function parseArgs(argv: string[]): {
+interface EvolveArgs {
   skill: string | null;
   runId: string | null;
   proposedEdit: string | null;
   cwd: string;
-} {
-  let skill: string | null = null;
-  let runId: string | null = null;
-  let proposedEdit: string | null = null;
-  let cwd = ".";
+  apply: string | null;
+  auto: boolean;
+}
+
+const VALUE_FLAGS = ["--skill", "--run-id", "--proposed-edit", "--cwd", "--apply"] as const;
+
+/**
+ * Each single-valued flag may appear once, with a value. A repeat is an argument
+ * error, never last-wins: the root the layout gate validates must be the root the
+ * run writes (codex r2 P2: `--cwd <layout99> --cwd <current>`).
+ */
+function parseArgs(argv: string[]): EvolveArgs {
+  const seen = new Map<string, string>();
+  let auto = false;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--skill" && i + 1 < argv.length) skill = argv[++i];
-    else if (argv[i] === "--run-id" && i + 1 < argv.length) runId = argv[++i];
-    else if (argv[i] === "--proposed-edit" && i + 1 < argv.length)
-      proposedEdit = argv[++i];
-    else if (argv[i] === "--cwd" && i + 1 < argv.length) cwd = argv[++i];
+    const a = argv[i]!;
+    if (a === "--auto") {
+      if (auto) throw new Error("--auto given more than once");
+      auto = true;
+      continue;
+    }
+    const name = (VALUE_FLAGS as readonly string[]).find((f) => a === f || a.startsWith(`${f}=`));
+    if (!name) continue;
+    if (seen.has(name)) throw new Error(`${name} given more than once`);
+    const value = a === name ? argv[++i] : a.slice(name.length + 1);
+    if (value === undefined || value === "") throw new Error(`${name} needs a value`);
+    seen.set(name, value);
   }
-  return { skill, runId, proposedEdit, cwd };
+  return {
+    skill: seen.get("--skill") ?? null,
+    runId: seen.get("--run-id") ?? null,
+    proposedEdit: seen.get("--proposed-edit") ?? null,
+    cwd: seen.get("--cwd") ?? ".",
+    apply: seen.get("--apply") ?? null,
+    auto,
+  };
 }
 
 // ── Skill path resolution ──────────────────────────────────────────────────
@@ -113,7 +151,7 @@ function findLiveSkillDir(cwd: string, slug: string): { tier: string; dir: strin
   // DH-3: the consuming repo's project instance wins over the plugin library —
   // an evolved/minted skill at .guild/skills/<slug>/ is the live version, so a
   // later evolve round baselines and edits THAT, not the shipped library copy.
-  const projectDir = path.join(cwd, ".guild", "skills", slug);
+  const projectDir = path.join(durableGuildDir(cwd), "skills", slug);
   if (fs.existsSync(path.join(projectDir, "SKILL.md"))) {
     return { tier: "project", dir: projectDir };
   }
@@ -219,7 +257,7 @@ function buildPipelineMd(params: {
     "8. **Promotion gate.** HUMAN DECISION. Promote if ANY of the four conditions holds: (a) 0 regressions AND ≥ 1 fix, (b) no flip change AND tokens ↓ ≥ 10%, (c) regressions present AND user approves via review viewer, (d) doc-only fast-path — the proposed edit is doc-only (no trigger-phrasing, body-algorithm, or eval-case change; prose/description/comments only, so paired evals show no delta) AND the user approves (a blanket session directive or a run-time prompt qualifies); recorded as `condition: doc-only-fast-path` (+ `user_approved_at`) in `gate.json`. The doc-only path is NOT a fallback for behavior-change edits. Gate result goes to `gate.json`. This wrapper stops here — it does NOT auto-promote."
   );
   lines.push(
-    `9. **On promote: description optimizer + commit.** Call: \`npx tsx scripts/description-optimizer.ts --skill ${slug} --cwd ${cwd}\`. Orchestrator applies the emitted \`description:\` YAML to the live skill as a \`guild.evolve_delta.v1\` span replace (which records the inverse in compact history), and updates \`evals.json\` if new cases were bootstrapped in step 2.`
+    `9. **On promote: description optimizer + commit.** Call: \`npx tsx scripts/description-optimizer.ts --skill ${slug} --cwd ${cwd}\`. Orchestrator applies the emitted \`description:\` YAML to the live skill as a \`guild.evolve_delta.v1\` span replace through the gate — \`node runtime/scripts/evolve-loop.js --apply <delta.json> --run-id ${runId} --cwd ${cwd}\` (records the inverse in compact history), and updates \`evals.json\` if new cases were bootstrapped in step 2.`
   );
   lines.push(
     `10. **On reject: archive attempt.** Move proposed edit + flip report + shadow-mode output + gate verdict to \`.guild/evolve/${runId}/archived/\`. Live skill untouched.`
@@ -243,10 +281,60 @@ function buildPipelineMd(params: {
 
 // ── Main ───────────────────────────────────────────────────────────────────
 
+/**
+ * `--apply <delta.json>`: validate one delta and ENQUEUE it on the run
+ * (`<runDir>/queue/evolve/<id>.json`, KTD33/KTD43). This CLI never writes the
+ * target, a candidate or compact history: the lead session's PostToolUse hook
+ * drains the printed `guild.t0_request.v1` receipt from its own tool result and
+ * runs `applyEvolveDelta` (the one gate) on the root validated here.
+ */
+function applyMain(args: EvolveArgs, cwd: string): void {
+  let delta: unknown;
+  try {
+    delta = JSON.parse(fs.readFileSync(args.apply ?? "", "utf8"));
+  } catch (err) {
+    process.stderr.write(`[evolve-loop] ERROR: --apply needs a readable delta JSON (${(err as Error).message})\n`);
+    process.exit(1);
+  }
+  if (!delta || typeof delta !== "object" || Array.isArray(delta) ||
+      (delta as { schema_version?: unknown }).schema_version !== "guild.evolve_delta.v1") {
+    process.stderr.write("[evolve-loop] ERROR: --apply needs a guild.evolve_delta.v1 object\n");
+    process.exit(1);
+  }
+  const root = resolveGuildRoot(cwd);
+  if (path.resolve(root) !== cwd) {
+    process.stderr.write(`[evolve-loop] ERROR: --cwd ${cwd} is not a Guild root\n`);
+    process.exit(1);
+  }
+  const receipt = enqueueT0Request({
+    kind: "evolve",
+    // A delta with no run scope queues on the same `evolve-apply` record the gate
+    // uses for its security events.
+    runId: args.runId ?? "evolve-apply",
+    root,
+    payload: { delta: delta as Record<string, unknown>, auto: args.auto, ...(args.runId ? { run_id: args.runId } : {}) },
+    storage: createGuildStorage(root),
+  });
+  process.stdout.write(JSON.stringify(receipt) + "\n");
+  process.exit(0);
+}
+
 function main(): void {
-  const { skill, runId, proposedEdit, cwd: cwdArg } = parseArgs(
-    process.argv.slice(2)
-  );
+  let args: EvolveArgs;
+  try {
+    args = parseArgs(process.argv.slice(2));
+  } catch (err) {
+    process.stderr.write(`[evolve-loop] ERROR: ${(err as Error).message}\n`);
+    process.exit(1);
+  }
+  // The layout gate reads the root this run WRITES (--cwd), not wherever it was
+  // launched: a future layout there fails closed before any delta or history lands.
+  ensureStorageLayout(path.resolve(args.cwd), { detectOnly: true });
+  if (args.apply !== null) {
+    applyMain(args, path.resolve(args.cwd));
+    return;
+  }
+  const { skill, runId, proposedEdit, cwd: cwdArg } = args;
 
   if (!skill) {
     process.stderr.write("[evolve-loop] ERROR: --skill <slug> is required\n");
@@ -261,7 +349,7 @@ function main(): void {
   const live = findLiveSkillDir(cwd, skill!);
   if (!live) {
     process.stderr.write(
-      `[evolve-loop] ERROR: live skill not found at ${cwd}/.guild/skills/${skill}/SKILL.md, ` +
+      `[evolve-loop] ERROR: live skill not found at ${durableGuildDir(cwd)}/skills/${skill}/SKILL.md, ` +
         `${cwd}/skills/<tier>/${skill}/SKILL.md, or the plugin install ` +
         `(GUILD_PLUGIN_ROOT/CLAUDE_PLUGIN_ROOT)\n`
     );
@@ -272,7 +360,7 @@ function main(): void {
   const baseline = baselineHash(live!.dir);
 
   // 2. Write pipeline.md.
-  const evolveDir = path.join(cwd, ".guild", "evolve", runId!);
+  const evolveDir = path.join(durableGuildDir(cwd), "evolve", runId!);
   fs.mkdirSync(evolveDir, { recursive: true });
   const pipelineMd = buildPipelineMd({
     slug: skill!,

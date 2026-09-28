@@ -105,7 +105,8 @@ function localImportClosure(entryAbs: string): string[] {
     const file = stack.pop()!;
     if (seen.has(file)) continue;
     seen.add(file);
-    const src = fs.readFileSync(file, "utf8");
+    // Type-only imports are erased at runtime, so they are not part of the closure.
+    const src = fs.readFileSync(file, "utf8").replace(/^\s*(?:import|export)\s+type\s[^;]*;/gm, "");
     const dir = path.dirname(file);
     // Fresh regex per file — a shared /g/ instance would carry lastIndex across files.
     const re = new RegExp(SPEC_SRC, "g");
@@ -241,7 +242,7 @@ describe("G8 gate 3 — 0 model tokens, 0 network", () => {
     // allowlist entry.
     const imports = [...SIMILARITY_CODE.matchAll(/from ["']([^"']+)["']/g)].map((m) => m[1]).sort();
     expect(imports).toEqual([
-      "../../../src/domains/kernel/path-containment",
+      "../../../src/domains/kernel/index",
       "./schema",
       "./structural",
       "fs",

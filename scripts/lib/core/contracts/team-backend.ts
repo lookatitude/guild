@@ -12,7 +12,7 @@
 
 import { spawnSync } from "child_process";
 import type { HostKind } from "../../host-types";
-import type { SpecialistDispatchContract } from "../../../../src/domains/dispatch/specialist-contract";
+import type { SpecialistDispatchContract } from "../../../../src/domains/dispatch/index";
 import type { ProjectDefinitionRefV1 } from "./project-definition-ref";
 export type { HostKind };
 

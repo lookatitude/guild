@@ -9,16 +9,17 @@ import {
   readCheckpointState,
   scanReceiptJournal,
 } from "../../../src/domains/telemetry";
-import { compatibilityUsageForRead, readCatalogEntry, type CompatibilityCatalog, type CompatibilityCatalogEntry } from "../../../src/domains/config/compatibility-catalog";
-import { parseCompatibilityUsageV1, rollupCompatibilityUsage, type CompatibilityUsageRollup } from "../../../src/domains/config/compatibility-usage";
-import type { CapabilityResolutionIntent } from "../../../src/domains/config/resolver-mode";
-import { checkContained, isRefused, writeContainedFile } from "../../../src/domains/kernel/path-containment";
+import { compatibilityUsageForRead, readCatalogEntry, type CompatibilityCatalog, type CompatibilityCatalogEntry } from "../../../src/domains/config/index";
+import { parseCompatibilityUsageV1, rollupCompatibilityUsage, type CompatibilityUsageRollup } from "../../../src/domains/config/index";
+import type { CapabilityResolutionIntent } from "../../../src/domains/config/index";
+import { checkContained, isRefused, writeContainedFile } from "../../../src/domains/kernel/index";
 import {
   assertWritableBinding,
   withRunBindingExclusion,
-} from "../../../src/domains/lifecycle/run-binding";
+} from "../../../src/domains/lifecycle/index";
 import { normalizeHostId } from "../host-id-namespace";
 import { hashCompatibilityRuntimeProducer, type MigrationRuntimeHost } from "./migration-evidence";
+import { durableGuildDir } from "../state/storage";
 
 const PLUGIN_MANIFEST_CANDIDATES: ReadonlyArray<readonly [string, string]> = [
   [".claude-plugin", "plugin.json"],
@@ -152,7 +153,7 @@ export function readCompatibilityAsset(options: {
       if (emitted.status !== "ok") return { status: "refused", detail: emitted.detail };
       const payloadBytes = Buffer.from(`${JSON.stringify(emitted.payload, null, 2)}\n`, "utf8");
       const payloadHash = createHash("sha256").update(payloadBytes).digest("hex");
-      const receipts = path.join(path.resolve(options.projectRoot), ".guild", "runs", options.runId, "receipts");
+      const receipts = path.join(durableGuildDir(path.resolve(options.projectRoot)), "runs", options.runId, "receipts");
       const safeOperation = options.operationId.replace(/[^a-zA-Z0-9._-]/g, "-");
       if (!safeOperation || safeOperation.length > 160) return { status: "refused", detail: "operationId is not a bounded identity" };
       const payloadRel = path.posix.join("payloads", `${safeOperation}-${payloadHash.slice(0, 16)}.compatibility-usage.json`);
@@ -242,7 +243,7 @@ export function collectCompatibilityUsageWindow(options: {
     if (!/^run-[a-zA-Z0-9._-]+$/.test(runId)) {
       return rollupCompatibilityUsage({ window_start_release: options.windowStartRelease, window_end_release: options.windowEndRelease, known_asset_ids: options.knownAssetIds, records: [], unreadable: 1 });
     }
-    const receipts = path.join(path.resolve(options.projectRoot), ".guild", "runs", runId, "receipts");
+    const receipts = path.join(durableGuildDir(path.resolve(options.projectRoot)), "runs", runId, "receipts");
     const scan = scanReceiptJournal(path.join(receipts, "journal.jsonl"));
     unreadable += scan.rejected.length + (scan.blocks_clean_close && scan.integrity !== "absent" ? 1 : 0);
     for (const receipt of scan.records) {

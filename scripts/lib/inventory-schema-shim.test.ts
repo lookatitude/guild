@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./inventory-schema";
-import * as moduleImpl from "../../src/domains/distribution/inventory-schema";
+import * as moduleImpl from "../../src/domains/distribution/index";
 
 describe("inventory-schema compatibility shim", () => {
   test("scripts/lib/inventory-schema re-exports src/modules/distribution", () => {
@@ -17,7 +17,7 @@ describe("inventory-schema compatibility shim", () => {
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/inventory-schema.ts"), "utf8");
     const modulePath = fs.readFileSync(path.join(repoRoot, "src/domains/distribution/inventory-schema.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/domains\/distribution\/inventory-schema["']/);
+    expect(oldPath).toMatch(/from\s+["']\.\.\/\.\.\/src\/domains\/distribution\/index["']/);
     expect(oldPath).not.toMatch(/export\s+function\s+validateInventoryV1/);
     expect(modulePath).toMatch(/export\s+function\s+validateInventoryV1/);
   });

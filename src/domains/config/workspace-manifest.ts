@@ -17,6 +17,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { durableGuildDir } from "../state";
 
 export interface WorkspaceManifest {
   is_workspace: boolean;
@@ -97,7 +98,7 @@ export function discoverWorkspace(startDir: string): DiscoveredWorkspace | null 
   const fsRoot = path.parse(current).root;
 
   while (current !== fsRoot) {
-    const manifestPath = path.join(current, ".guild", "workspace.json");
+    const manifestPath = path.join(durableGuildDir(current), "workspace.json");
     const parsed = parseWorkspaceManifest(manifestPath);
     if (parsed.status === "workspace") {
       return { rootDir: current, manifest: parsed.manifest };

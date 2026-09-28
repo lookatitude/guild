@@ -39,6 +39,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { resolveGuildRoot } from "./guild-root.js";
 import { loadRunState, type LaneTier } from "./run-state.js";
+import { durableGuildDir } from "../../src/domains/state";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -162,7 +163,7 @@ export function readHeartbeatTimeoutMs(cwd: string): number {
  * value always wins over the tier defaults (resolveHeartbeatTimeoutMs).
  */
 export function readExplicitHeartbeatTimeoutMs(cwd: string): number | null {
-  const settingsPath = path.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  const settingsPath = path.join(durableGuildDir(resolveGuildRoot(cwd)), "settings.json");
   let raw: string;
   try {
     raw = fs.readFileSync(settingsPath, "utf8");

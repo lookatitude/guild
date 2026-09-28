@@ -80,7 +80,7 @@ import {
 import {
   checkContained,
   isRefused,
-} from "../../../src/domains/kernel/path-containment";
+} from "../../../src/domains/kernel/index";
 import {
   PROJECT_DEFINITION_REF_SCHEMA,
   validateProjectDefinitionRefV1,
@@ -104,7 +104,7 @@ import {
   type CompatibilityCatalogEntry,
 } from "./compatibility-catalog";
 import { readCompatibilityAsset, readRuntimeVersion } from "./compatibility-loader";
-import { assertWritableBinding } from "../../../src/domains/lifecycle/run-binding";
+import { assertWritableBinding } from "../../../src/domains/lifecycle/index";
 import { readWorkflowCursor } from "../../../src/domains/lifecycle";
 import { createGuildStorage } from "../../../src/domains/state";
 import { gateProfileCreation } from "../../../src/domains/teams";
@@ -113,6 +113,7 @@ import {
   makeReceiptInput,
   type ReceiptAppendOutcome,
 } from "../../../src/domains/telemetry";
+import { durableGuildDir } from "../state/storage";
 
 /** The catalog envelope key set, for the nested-object snapshot (CODEX #10). */
 const CATALOG_KEYS = [
@@ -676,7 +677,7 @@ export function buildAdoptionReport(opts: unknown): AdoptionReport {
     }
   };
 
-  const guild = path.join(projRoot, ".guild");
+  const guild = durableGuildDir(projRoot);
   scan(listFiles(path.join(guild, "team"), (n) => n.endsWith(".yaml")), "team_file");
   scan(listFiles(path.join(guild, "plan"), (n) => n.endsWith(".md")), "plan_file");
   scan(listFiles(path.join(guild, "agents"), (n) => n.endsWith(".md")), "project_agent_frontmatter");

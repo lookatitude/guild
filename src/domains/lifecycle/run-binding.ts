@@ -26,6 +26,7 @@ import * as fsReal from "fs";
 import * as path from "path";
 import { writeContainedFile } from "../kernel";
 import { initStableLockfile, withStableLock } from "./stable-lock";
+import { durableGuildDir } from "../state";
 
 // ── Schema ───────────────────────────────────────────────────────────────────
 
@@ -101,7 +102,7 @@ function realBindingFs(): BindingFs {
 }
 
 export function runBindingPath(root: string, runId: string): string {
-  return path.join(root, ".guild", "runs", runId, "binding.json");
+  return path.join(durableGuildDir(root), "runs", runId, "binding.json");
 }
 
 export const PENDING_SUBSTANTIVE_OPERATION_SCHEMA = "guild.pending_substantive_operation.v1" as const;
@@ -114,7 +115,7 @@ export interface PendingSubstantiveOperationRecord {
 }
 
 export function pendingSubstantiveOperationPath(root: string, runId: string): string {
-  return path.join(root, ".guild", "runs", runId, "capability", "pending-substantive-operation.json");
+  return path.join(durableGuildDir(root), "runs", runId, "capability", "pending-substantive-operation.json");
 }
 
 export function readPendingSubstantiveOperation(root: string, runId: string, fs: BindingFs = realBindingFs()): PendingSubstantiveOperationRecord | null {
@@ -198,7 +199,7 @@ export function withRunBindingExclusion<T>(
   const persisted = readRunBindingRecord({ root, run_id: runId });
   if (persisted.status === "absent") throw new BindingRejectedError("binding_not_minted", runId);
   if (persisted.status === "malformed") throw new BindingRejectedError("binding_malformed", runId);
-  return withStableLock(path.join(root, ".guild", "runs", runId), fn);
+  return withStableLock(path.join(durableGuildDir(root), "runs", runId), fn);
 }
 
 /** Initialize the permanent exclusion inode as part of a successful run start. */
@@ -206,7 +207,7 @@ export function initializeRunBindingExclusion(root: string, runId: string): void
   if (!/^run-[A-Za-z0-9][A-Za-z0-9._-]{0,191}$/.test(runId)) {
     throw new Error(`run-binding exclusion: invalid run id ${JSON.stringify(runId)}`);
   }
-  initStableLockfile(path.join(root, ".guild", "runs", runId));
+  initStableLockfile(path.join(durableGuildDir(root), "runs", runId));
 }
 
 // ── Mint / load / close ──────────────────────────────────────────────────────
@@ -452,8 +453,8 @@ export interface IntakeCandidate {
 export function locateCandidateRunId(root: string, fs?: BindingFs): IntakeCandidate | null {
   const f = fs ?? realBindingFs();
   const candidates: Array<[string, IntakeCandidate["source"]]> = [
-    [path.join(root, ".guild", "runs", "current-run-id"), "sentinel-legacy"],
-    [path.join(root, ".guild", "current-run-id"), "sentinel-b2"],
+    [path.join(durableGuildDir(root), "runs", "current-run-id"), "sentinel-legacy"],
+    [path.join(durableGuildDir(root), "current-run-id"), "sentinel-b2"],
   ];
   for (const [p, source] of candidates) {
     const raw = f.readFile(p);

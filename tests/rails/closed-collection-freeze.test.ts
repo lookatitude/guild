@@ -53,7 +53,7 @@ import * as ts from "typescript";
 // The rail uses the shipped predicates on purpose: a private re-implementation could
 // drift from the primitive it is supposed to be checking.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { isSealedCollection, sealedCollectionValues } = require("../../src/domains/kernel/sealed-collections") as {
+const { isSealedCollection, sealedCollectionValues } = require("../../src/domains/kernel") as {
   isSealedCollection: (v: unknown) => boolean;
   sealedCollectionValues: (v: unknown) => unknown[] | undefined;
 };
@@ -93,13 +93,11 @@ const SEAL_WRAPPERS = new Set(["sealSet", "sealMap"]);
  * untrusted, and the declaration is judged unfrozen.
  */
 const WRAPPER_IMPLEMENTATIONS = new Set([
-  "src/modules/kernel/index.ts",
   // T12: the kernel domain's public index is the import surface every domain and
   // adapter file uses (`../kernel`, `../domains/kernel`).
   "src/domains/kernel/index.ts",
   "src/domains/kernel/sealed-collections.ts",
   // The neutral core's deliberate duplicate; `neutralFreeze` is re-exported by the index.
-  "src/modules/lifecycle/index.ts",
   "src/domains/lifecycle/index.ts",
   "src/domains/lifecycle/neutral-runtime-contracts.ts",
 ]);
@@ -716,9 +714,7 @@ function walkValue(
  * SILENTLY SKIPPED with a bare `continue` — a rail that stops testing a module the moment
  * someone deletes its entrypoint. Anything not on this list now FAILS.
  */
-const MODULES_WITHOUT_INDEX: Record<string, string> = {
-  dashboard: "resource-only module (implementation_mode: resource-only); ships no workflow code.",
-};
+const MODULES_WITHOUT_INDEX: Record<string, string> = {};
 
 /**
  * Module indexes that do not import cleanly, with the EXACT error each must produce.
@@ -737,21 +733,27 @@ const KNOWN_UNIMPORTABLE: Record<string, { match: RegExp; why: string }> = {
   },
 };
 
-const moduleDirs = fs
-  .readdirSync(path.join(REPO, "src", "modules"), { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name)
-  .sort();
+// T16 deleted the src/modules shims: the public indexes are the twelve domains
+// plus the adapter tree (KTD1/KTD4).
+const moduleDirs = [
+  ...fs
+    .readdirSync(path.join(REPO, "src", "domains"), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name),
+  "adapters",
+].sort();
+const indexPathOf = (mod: string): string =>
+  mod === "adapters" ? path.join(REPO, "src", "adapters", "index.ts") : path.join(REPO, "src", "domains", mod, "index.ts");
 
 const runtimeByModule = new Map<string, WalkResult>();
 
 describe("closed collections — RUNTIME (deep-walk of every module export graph)", () => {
   it("there are module indexes to walk (anti-vacuity for this half)", () => {
-    expect(moduleDirs.length).toBeGreaterThan(25);
+    expect(moduleDirs.length).toBeGreaterThanOrEqual(13);
   });
 
   for (const mod of moduleDirs) {
-    const indexPath = path.join(REPO, "src", "modules", mod, "index.ts");
+    const indexPath = indexPathOf(mod);
 
     it(`module "${mod}" exports no unfrozen collection at any depth`, () => {
       if (!fs.existsSync(indexPath)) {
@@ -793,7 +795,7 @@ describe("closed collections — RUNTIME (deep-walk of every module export graph
     // (a changed export shape, an early return) while every property assertion above went
     // quietly vacuous.
     expect(visited).toBeGreaterThan(700);
-    expect(runtimeByModule.size).toBeGreaterThan(25);
+    expect(runtimeByModule.size).toBeGreaterThanOrEqual(13);
   });
 });
 
@@ -900,7 +902,7 @@ describe("closed collections — POSITIVE CONTROLS for the round-1 findings", ()
       // The contrast is the point: the rule keys on where the binding RESOLVES, not on
       // whether the file happens to contain the letters `sealSet`.
       const real = `
-        import { sealSet } from "../../src/domains/kernel/sealed-collections";
+        import { sealSet } from "../../src/domains/kernel";
         export const PERMITTED_ACTIONS = sealSet(["bypass"]);
       `;
       const [found] = scanSource("scripts/lib/real.ts", real);
@@ -1005,7 +1007,7 @@ describe("closed collections — POSITIVE CONTROLS for the round-1 findings", ()
     });
 
     it("the runtime walk reads a sealed Map's VALUES: fresh tuples pass, a mutable value is found", () => {
-      const { sealMap } = require("../../src/domains/kernel/sealed-collections") as {
+      const { sealMap } = require("../../src/domains/kernel") as {
         sealMap: <K, V>(e: Iterable<readonly [K, V]>) => ReadonlyMap<K, V>;
       };
       const clean = sealMap([["a", "x"]]);
@@ -1076,7 +1078,7 @@ describe("closed collections — POSITIVE CONTROLS for the round-1 findings", ()
     // a Proxy over a Set still answers `true` to `instanceof Set`. Pinned so the coverage
     // is not lost if the refusal is ever relaxed.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { deepFreeze } = require(path.join(REPO, "src", "modules", "kernel", "index.ts")) as {
+    const { deepFreeze } = require(path.join(REPO, "src", "domains", "kernel", "index.ts")) as {
       deepFreeze: <T>(v: T) => T;
     };
     const child = { gate: "closed" };
@@ -1140,7 +1142,7 @@ describe("closed collections — POSITIVE CONTROLS for the round-1 findings", ()
     // property the spread depends on, so making the facade merely sealed (or leaving one
     // mutator configurable) fails here instead of silently reopening the hole.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { sealSet } = require(path.join(REPO, "src", "modules", "kernel", "index.ts")) as {
+    const { sealSet } = require(path.join(REPO, "src", "domains", "kernel", "index.ts")) as {
       sealSet: <T>(v: Iterable<T>, label?: string) => ReadonlySet<T>;
     };
     const facade = sealSet(["x"], "PROBE");
@@ -1185,8 +1187,8 @@ describe("closed collections — POSITIVE CONTROLS for the round-1 findings", ()
 describe("closed collections — evidence strength, joined on identity", () => {
   it("reports runtime-verified vs static-only with the join made explicit", () => {
     const moduleOf = (file: string): string | undefined => {
-      const m = /^src\/modules\/([^/]+)\//.exec(file);
-      return m ? m[1] : undefined;
+      const m = /^src\/(?:domains\/([^/]+)|(adapters))\//.exec(file);
+      return m ? m[1] ?? m[2] : undefined;
     };
     const runtimeVerified: string[] = [];
     const staticOnly: { id: string; reason: string; detail: string }[] = [];
@@ -1219,7 +1221,7 @@ describe("closed collections — evidence strength, joined on identity", () => {
       if (!mod) {
         staticOnly.push({
           id,
-          reason: direct?.reason ?? "outside src/modules — no module index reaches it",
+          reason: direct?.reason ?? "outside src/domains and src/adapters — no public index reaches it",
           detail: collection.file,
         });
         continue;
@@ -1302,7 +1304,7 @@ describe("closed collections — the structural facts, re-verified on this Node"
 describe("closed collections — the exploits, demonstrated against this branch", () => {
   it("REDACTABLE_FIELDS cannot be narrowed, and redaction still redacts", () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const security = require(path.join(REPO, "src", "modules", "security", "index.ts")) as {
+    const security = require(path.join(REPO, "src", "domains", "security", "index.ts")) as {
       REDACTABLE_FIELDS: ReadonlySet<string>;
       redactEventFields: (event: Record<string, unknown>) => Record<string, unknown>;
     };
@@ -1332,7 +1334,7 @@ describe("closed collections — the exploits, demonstrated against this branch"
 
   it("a normalization rule cannot be rewritten in place (the frozen-array/mutable-element defect)", () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const lifecycle = require(path.join(REPO, "src", "modules", "lifecycle", "index.ts")) as {
+    const lifecycle = require(path.join(REPO, "src", "domains", "lifecycle", "index.ts")) as {
       NEUTRAL_EVENT_COMPATIBILITY_RULES: readonly { from: string; to: string | null; candidates: readonly string[] }[];
     };
     const rules = lifecycle.NEUTRAL_EVENT_COMPATIBILITY_RULES;
@@ -1372,7 +1374,7 @@ describe("closed collections — the exploits, demonstrated against this branch"
 
   it("a terminal task-cell state cannot be reopened", () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const dispatch = require(path.join(REPO, "src", "modules", "dispatch", "index.ts")) as {
+    const dispatch = require(path.join(REPO, "src", "domains", "dispatch", "index.ts")) as {
       LEGAL_TRANSITIONS: Readonly<Record<string, readonly string[]>>;
     };
     expect(dispatch.LEGAL_TRANSITIONS.terminated).toEqual([]);
@@ -1391,7 +1393,7 @@ describe("closed collections — the exploits, demonstrated against this branch"
 
   it("the shipped secrets policy cannot be emptied", () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const config = require(path.join(REPO, "src", "modules", "config", "index.ts")) as {
+    const config = require(path.join(REPO, "src", "domains", "config", "index.ts")) as {
       DEFAULTS: { secrets_policy: { redaction_patterns: readonly string[]; env_allowlist: readonly string[] } };
     };
     for (const list of [
@@ -1562,15 +1564,15 @@ describe("closed collections — the neutral core's deliberate, WEAKER duplicate
   // The copy is therefore weaker BY CONTRACT, and this block pins exactly how, so neither
   // the divergence nor the copy can drift unnoticed.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { deepFreeze } = require(path.join(REPO, "src", "modules", "kernel", "index.ts")) as {
+  const { deepFreeze } = require(path.join(REPO, "src", "domains", "kernel", "index.ts")) as {
     deepFreeze: <T>(v: T) => T;
   };
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { neutralFreeze } = require(path.join(REPO, "src", "modules", "lifecycle", "index.ts")) as {
+  const { neutralFreeze } = require(path.join(REPO, "src", "domains", "lifecycle", "index.ts")) as {
     neutralFreeze: <T>(v: T) => T;
   };
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { sealSet } = require(path.join(REPO, "src", "modules", "kernel", "index.ts")) as {
+  const { sealSet } = require(path.join(REPO, "src", "domains", "kernel", "index.ts")) as {
     sealSet: <T>(v: Iterable<T>, label?: string) => ReadonlySet<T>;
   };
 
@@ -1648,7 +1650,7 @@ describe("closed collections — the neutral core's deliberate, WEAKER duplicate
     // constants. This is the DYNAMIC path it could not constrain: a value handed in at
     // runtime and frozen into the returned outcome.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { neutralOutcome } = require(path.join(REPO, "src", "modules", "lifecycle", "index.ts")) as {
+    const { neutralOutcome } = require(path.join(REPO, "src", "domains", "lifecycle", "index.ts")) as {
       neutralOutcome: (input: Record<string, unknown>) => unknown;
     };
     const allowed = new Set(["required"]);
@@ -1712,7 +1714,7 @@ describe("closed collections — the neutral core's deliberate, WEAKER duplicate
     // that keeps it that way; the runtime deep-walk enforces it for the module at large,
     // and this states it for the core specifically.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const lifecycle = require(path.join(REPO, "src", "modules", "lifecycle", "index.ts")) as Record<string, unknown>;
+    const lifecycle = require(path.join(REPO, "src", "domains", "lifecycle", "index.ts")) as Record<string, unknown>;
     const offenders: string[] = [];
     const seen = new WeakSet<object>();
     const walk = (n: unknown, label: string, depth: number): void => {

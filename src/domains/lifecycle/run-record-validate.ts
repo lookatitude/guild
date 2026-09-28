@@ -34,6 +34,7 @@ import { isCanonicalRunId } from "./run-lifecycle";
 import { validateHandoffV2 } from "../distribution";
 import { RECEIPT_FRONTMATTER_SCHEMA_VERSION, hasCanonicalReceiptWrapper, parseReceiptDocument, readReceiptFrontmatter } from "./document-receipts";
 import { validateTaskAssignmentV2 } from "../dispatch";
+import { durableGuildDir } from "../state";
 
 export const RUN_RECORD_VALIDATION_SCHEMA = "guild.run_record_validation.v1" as const;
 
@@ -340,7 +341,7 @@ export function validateRunRecordDir(runDir: string): RunRecordValidation {
  * dot-prefixed entries (locks, editor/system files).
  */
 export function scanRunsRoot(root: string): RunRecordValidation {
-  const runsRoot = path.join(root, ".guild", "runs");
+  const runsRoot = path.join(durableGuildDir(root), "runs");
   const findings: RunRecordFinding[] = [];
 
   let entries: fs.Dirent[];

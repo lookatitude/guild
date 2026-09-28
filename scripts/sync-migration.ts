@@ -42,10 +42,12 @@
 import * as fs from "fs";
 import * as path from "path";
 import { hasTopLevelKey, replaceTopLevelLine } from "./lib/frontmatter";
+import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const CANONICAL_REL = path.join("plugin", ".guild", "wiki", "entities", "MIGRATION.md");
+const CANONICAL_REL = path.join(durableGuildDir("plugin"), "wiki", "entities", "MIGRATION.md");
 const PLUGIN_TARGET_REL = path.join("plugin", "MIGRATION.md");
 const ROOT_TARGET_REL = "MIGRATION.md";
 
@@ -293,6 +295,7 @@ export function generateRootStub(canonical: string): string {
 function main(): void {
   const { check, cwd: cwdArg, canonicalRel, targetRel } = parseArgs(process.argv.slice(2));
   const cwd = path.resolve(cwdArg);
+  ensureStorageLayout(cwd, { detectOnly: true });
 
   const canonicalPath = path.join(cwd, canonicalRel);
   if (!fs.existsSync(canonicalPath)) {

@@ -13,11 +13,12 @@ import {
   isStation,
   type StationId,
   type TeamResultV1,
-} from "../../src/domains/teams/station-composer";
+} from "../../src/domains/teams/index";
 import {
   readTeamResult,
   writeTeamResult,
-} from "../../src/domains/teams/station-signals";
+} from "../../src/domains/teams/index";
+import { durableGuildDir } from "./state/storage";
 
 export interface TaskCellLaunchLane extends Specialist {
   taskId: string;
@@ -103,7 +104,7 @@ export function buildStationTaskCellResult(
 }
 
 function assignmentFiles(cwd: string, runId: string): string[] {
-  const root = path.join(cwd, ".guild", "runs", runId, "task-cells");
+  const root = path.join(durableGuildDir(cwd), "runs", runId, "task-cells");
   const out: string[] = [];
   const walk = (dir: string): void => {
     let entries: fs.Dirent[];

@@ -5,7 +5,7 @@
  * internals without breaking imports from scripts/lib/guild-discovery.
  */
 
-import * as discoveryImpl from "../../src/domains/state/guild-discovery";
+import * as discoveryImpl from "../../src/domains/state/index";
 
 export const readWorkspaceManifest = discoveryImpl.readWorkspaceManifest;
 export const discoverGuild = discoveryImpl.discoverGuild;
@@ -18,4 +18,4 @@ export type {
   WorkspaceManifest,
   GuildDiscovery,
   ReadThroughSource,
-} from "../../src/domains/state/guild-discovery";
+} from "../../src/domains/state/index";

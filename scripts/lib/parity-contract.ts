@@ -5,4 +5,17 @@
  * move internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/domains/distribution/parity-contract";
+export {
+  checkCoverage,
+  checkSubset,
+  checkParity,
+  type DiscoveryRule,
+  DISCOVERY_RULES,
+  COVERAGE_ENFORCED_CATEGORIES,
+  type DiscoveredSurfaces,
+  type CoverageCategoryResult,
+  type CoverageResult,
+  type PackageReferences,
+  type SubsetResult,
+  type ParityResult,
+} from "../../src/domains/distribution/index";

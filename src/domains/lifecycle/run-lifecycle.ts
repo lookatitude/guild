@@ -59,6 +59,8 @@ import {
 import type { ResolvedSettingsSnapshot } from "./runstart-preflight";
 import { scrubbedWrite, type ScrubbedWriteResult, type ScrubSurface } from "../security";
 import { emitTraceEvent, makeAnalysisTraceEvent, type GuildTraceAnalysisV2 } from "../telemetry";
+import { durableGuildDir } from "../state";
+import { createGuildStorage } from "../state";
 
 // ── Injected seams (B1 §4) ───────────────────────────────────────────────────
 
@@ -344,7 +346,7 @@ interface StartManifestFacts {
 // ── Path helpers (all relative to the run's .guild/ base = opts.root) ─────────
 
 function runDir(root: string, runId: string): string {
-  return path.join(root, ".guild", "runs", runId);
+  return path.join(durableGuildDir(root), "runs", runId);
 }
 function runYamlPath(root: string, runId: string): string {
   return path.join(runDir(root, runId), "run.yaml");
@@ -370,7 +372,7 @@ function sentinelPath(root: string): string {
   // Consumed by: capture-telemetry.ts, post-tool-use.ts, pre-compact.ts,
   // pre-tool-use.ts, and the hook run-trace chain
   // (GUILD_RUN_ID → runs/current-run-id → current-run-id).
-  return path.join(root, ".guild", "runs", "current-run-id");
+  return path.join(durableGuildDir(root), "runs", "current-run-id");
 }
 /** Trace log_ref recorded into provenance — a POSIX-style .guild-relative pointer. */
 function logRefFor(runId: string): string {
@@ -586,15 +588,8 @@ function bindRunSession(env: RunLifecycleEnv, root: string, runId: string): void
   if (!result.ok) return fail((result as BindRefusal).message);
 }
 
-/**
- * The durable root for `root`, named by GuildStorage (KTD15) rather than joined.
- * Lazy require: a top-level state import from lifecycle closes an init cycle.
- */
+/** The durable root for `root`, named by GuildStorage (KTD15) rather than joined. */
 function guildDirOf(root: string): string {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { createGuildStorage } = require("../state") as {
-    createGuildStorage: (cwd: string) => { root: { durable: string } };
-  };
   return createGuildStorage(root).root.durable;
 }
 
@@ -1145,7 +1140,7 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       const provPath = provenancePath(root, runId);
       const provenanceContent = JSON.stringify(provenance, null, 2) + "\n";
       if (env.fs.scrubbedWriteDurable) {
-        const runDir = path.join(root, ".guild", "runs", runId);
+        const runDir = path.join(durableGuildDir(root), "runs", runId);
         const result = env.fs.scrubbedWriteDurable(provPath, provenanceContent, "provenance", runDir, runId);
         if (result.blocked) {
           process.stderr.write(
@@ -1373,7 +1368,7 @@ function assertContained(target: string, cwd: string, label: string): void {
   // The original also required a STRICT subdirectory of the RUNS BASE — which is
   // now a different path from the containment root, so it is spelled explicitly.
   // Containment permits equality; this rule does not.
-  const runsBase = path.resolve(cwd, ".guild", "runs");
+  const runsBase = path.resolve(durableGuildDir(cwd), "runs");
   const resolvedTarget = path.resolve(target);
   if (resolvedTarget === runsBase || !isWithin(resolvedTarget, runsBase)) {
     throw new Error(
@@ -1474,7 +1469,7 @@ export function writeResolvedSettingsSnapshot(
 
   // Containment assertion: outPath must be a strict subdir of .guild/runs/.
   // Catches any edge case that slips past validateRunId on unusual platforms.
-  const runsBase = path.resolve(cwd, ".guild", "runs");
+  const runsBase = path.resolve(durableGuildDir(cwd), "runs");
   assertContained(outPath, cwd, "writeResolvedSettingsSnapshot");
 
   // Build the on-disk record — resolved_at_ref is set here, not in U3.
@@ -1492,7 +1487,7 @@ export function writeResolvedSettingsSnapshot(
   // Uses scrubbedWriteDurable (same seam as RunLifecycleEnv.fs + createRealEnv),
   // so the real start-run path IS scrubbed — not just injected-seam tests.
   if (fs.scrubbedWriteDurable) {
-    const runDir = path.join(cwd, ".guild", "runs", runId);
+    const runDir = path.join(durableGuildDir(cwd), "runs", runId);
     const result = fs.scrubbedWriteDurable(outPath, serialized, "config", runDir, runId);
     if (result.blocked) {
       process.stderr.write(
@@ -1576,8 +1571,8 @@ export function writePluginConfigSnapshot(
       capabilities_ref: host.capabilities_ref ?? null,
     },
     registry_hashes: {
-      skills: hashOptionalFile(env, path.join(start.root, ".guild", "skills", "registry.yaml")),
-      agents: hashOptionalFile(env, path.join(start.root, ".guild", "agents", "registry.yaml")),
+      skills: hashOptionalFile(env, path.join(durableGuildDir(start.root), "skills", "registry.yaml")),
+      agents: hashOptionalFile(env, path.join(durableGuildDir(start.root), "agents", "registry.yaml")),
     },
     command_surface_version: pluginIdentity.commandSurfaceVersion,
     redaction_policy: "scrubbed-config-v1",
@@ -1639,7 +1634,7 @@ export function readResolvedSettingsSnapshot(
 
   // Containment assertion: filePath must be a strict subdir of .guild/runs/.
   // Return null rather than throwing — read callers degrade gracefully.
-  const runsBase = path.resolve(cwd, ".guild", "runs");
+  const runsBase = path.resolve(durableGuildDir(cwd), "runs");
   try {
     assertContained(filePath, cwd, "readResolvedSettingsSnapshot");
   } catch {
@@ -1680,7 +1675,7 @@ const WORKSPACE_KNOWLEDGE_DEFAULTS: WorkspaceKnowledgeConfig = {
 export function readWorkspaceKnowledgeConfig(root: string): WorkspaceKnowledgeConfig {
   let parsed: Record<string, unknown> = {};
   try {
-    const raw = fsNode.readFileSync(path.join(root, ".guild", "workspace.json"), "utf8");
+    const raw = fsNode.readFileSync(path.join(durableGuildDir(root), "workspace.json"), "utf8");
     const obj = JSON.parse(raw);
     if (obj && typeof obj === "object") parsed = obj as Record<string, unknown>;
   } catch {

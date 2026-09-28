@@ -1065,7 +1065,7 @@ describe("MH-03 public surface", () => {
   });
 
   test("the host-runtime manifest declares the lifecycle dependency it type-imports", () => {
-    const manifest = JSON.parse(readSource("src/modules/host-runtime/module.manifest.json"));
+    const manifest = JSON.parse(readSource("src/adapters/modules/host-runtime.manifest.json"));
     expect(manifest.depends_on).toContain("lifecycle");
   });
 });

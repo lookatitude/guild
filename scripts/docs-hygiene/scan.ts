@@ -54,6 +54,7 @@ import * as path from "path";
 import * as os from "os";
 import { parseFrontmatter as parseSharedFrontmatter } from "../lib/frontmatter";
 import { SECRET_PATTERNS } from "../lib/shared/secret-patterns";
+import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
 export { SECRET_PATTERNS };
 
@@ -853,6 +854,7 @@ if (
   require.main === module &&
   /^scan\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")
 ) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
 
 // ---------------------------------------------------------------------------
 // Collect corpora

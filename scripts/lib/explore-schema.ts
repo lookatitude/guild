@@ -5,4 +5,12 @@
  * internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/domains/evolve/explore-schema";
+export {
+  validateExploreV1,
+  isExploreV1,
+  runExploreSelfCheck as runSelfCheck,
+  EXPLORE_SCHEMA_VERSION,
+  type ExploreValidationResult as ValidationResult,
+  type ExploreV1,
+  EXPLORE_V1_EXAMPLE,
+} from "../../src/domains/evolve/index";

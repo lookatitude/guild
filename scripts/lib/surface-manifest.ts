@@ -5,4 +5,11 @@
  * so the reorg can move internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/domains/distribution/surface-manifest";
+export {
+  validateSurfaceManifest,
+  SURFACE_MANIFEST_SCHEMA_VERSION,
+  type SurfaceKind,
+  SURFACE_KINDS,
+  type SurfaceManifest,
+  type SurfaceManifestValidationResult as ValidationResult,
+} from "../../src/domains/distribution/index";

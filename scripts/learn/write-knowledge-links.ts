@@ -44,15 +44,16 @@ import {
   type KnowledgeLinksDoc,
   type CanonicalNode,
   type CanonicalEdge,
-} from "../../src/domains/knowledge/knowledge-links-contract";
+} from "../../src/domains/knowledge/index";
 export {
   KNOWLEDGE_RECALL_SCHEMA_VERSION,
   KNOWLEDGE_LINKS_PROVENANCE_SCHEMA_VERSION,
   type KnowledgeLinksDoc,
   type CanonicalNode,
   type CanonicalEdge,
-} from "../../src/domains/knowledge/knowledge-links-contract";
+} from "../../src/domains/knowledge/index";
 import { importanceMultiplier, confidenceBonus } from "./kg-query";
+import { durableGuildDir } from "../lib/state/storage";
 
 // ---------------------------------------------------------------------------
 // Schema version constants
@@ -227,7 +228,7 @@ export function writeKnowledgeLinks(opts: WriteKnowledgeLinksOptions): WriteKnow
   };
 
   // ── Step 6: write to disk (L0 convention: JSON.stringify(.,null,2)+"\n") ──
-  const indexesDir = path.join(repoRoot, ".guild", "indexes");
+  const indexesDir = path.join(durableGuildDir(repoRoot), "indexes");
   fs.mkdirSync(indexesDir, { recursive: true });
 
   const linksPath = path.join(indexesDir, "knowledge-recall.json");

@@ -2,6 +2,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { isRefused, prepareContainedWrite } from "../kernel";
+import { durableGuildDir } from "../state";
 
 export const TASK_CELL_LIFECYCLE_EVENT_SCHEMA = "guild.task_cell_lifecycle_event.v1" as const;
 export const TASK_CELL_USAGE_SCHEMA = "guild.task_cell_usage.v1" as const;
@@ -294,7 +295,7 @@ export function importTaskCellUsageFromTrace(input: { cwd: string; runId: string
   const lifecycle = readTaskCellLifecycleEvents(input);
   const instanceIds = [...new Set(lifecycle.map((item) => item.instance_id))].sort();
   if (instanceIds.length === 0) return { ok: false, imported: [], unavailable: [], parse_errors: 0 };
-  const runDir = path.join(fs.realpathSync(path.resolve(input.cwd)), ".guild", "runs", input.runId);
+  const runDir = path.join(durableGuildDir(fs.realpathSync(path.resolve(input.cwd))), "runs", input.runId);
   const canonical = path.join(runDir, "logs", "v1.4-events.jsonl");
   const legacy = path.join(runDir, "events.ndjson");
   const traceFile = fs.existsSync(canonical) ? canonical : legacy;

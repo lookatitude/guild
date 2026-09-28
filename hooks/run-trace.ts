@@ -57,6 +57,7 @@
  */
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
+import { ensureStorageLayout } from "../scripts/lib/state/ensure-storage-layout.js";
 import {
   defaultResolveHost,
   recordStatusLightweight,
@@ -109,6 +110,15 @@ async function main(): Promise<void> {
   const sub = argv[0];
   const cwd = flag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
   const root = resolveGuildRoot(cwd);
+  // KTD23: detect only (SessionStart runs the upgrade); a future layout is not
+  // ours to write, so refuse before any record lands.
+  try {
+    ensureStorageLayout(root, { detectOnly: true });
+  } catch (e) {
+    process.stderr.write(`[run-trace] ${(e as Error).message}\n`);
+    process.exitCode = 1;
+    return;
+  }
 
   // ── start — uniform record path (A2 rollout seam) ──────────────────────────
   if (sub === "start") {

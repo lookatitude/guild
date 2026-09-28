@@ -13,7 +13,13 @@
  * passes its own `replacement` is refused before the ledger advances.
  */
 
-import { appendEvent } from "../lifecycle";
+// Lazy: lifecycle sits above knowledge (its event log reaches config and js-yaml),
+// so a static import would load that graph in every knowledge entry, the MCP
+// binary included. Only the write paths below need it.
+function lifecycleApi(): typeof import("../lifecycle") {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require("../lifecycle");
+}
 import type { GuildStorage } from "../state";
 import { harvestDecision, type HarvestInput, type HarvestResult } from "./harvest";
 import {
@@ -80,7 +86,7 @@ export function routeRedirect(input: RouteRedirectInput): RouteRedirectResult {
     },
     { cwd, storage },
   );
-  appendEvent(runDir, {
+  lifecycleApi().appendEvent(runDir, {
     ts: redirect.entry.last_at,
     event: "redirect_event",
     run_id: input.run_id,

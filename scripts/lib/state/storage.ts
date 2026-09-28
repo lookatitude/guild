@@ -13,6 +13,7 @@
 
 export {
   createGuildStorage,
+  durableGuildDir,
   guildRootId,
   resolveStorageRoots,
   artifactPolicy,

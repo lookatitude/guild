@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./host-adapter-contract";
-import * as moduleImpl from "../../src/domains/config/host-adapter-contract";
+import * as moduleImpl from "../../src/domains/config/index";
 import { createHostAdapter as createRoutedHostAdapter } from "./host-adapter-factory";
 
 describe("host-adapter-contract compatibility shim", () => {
@@ -47,7 +47,7 @@ describe("host-adapter-contract compatibility shim", () => {
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/host-adapter-contract.ts"), "utf8");
     const modulePath = fs.readFileSync(path.join(repoRoot, "src/domains/config/host-adapter-contract.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/domains\/config\/host-adapter-contract["']/);
+    expect(oldPath).toMatch(/from\s+["']\.\.\/\.\.\/src\/domains\/config\/index["']/);
     expect(oldPath).not.toMatch(/export\s+function\s+createHostAdapter/);
     expect(modulePath).toMatch(/export\s+function\s+createHostAdapter/);
     expect(modulePath).toMatch(/from\s+["']\.\/host-registry-schema["']/);

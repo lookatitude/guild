@@ -25,6 +25,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { resolveGuildRoot } from "../state";
+import { durableGuildDir } from "../state";
 
 export type BypassPolicy = "deny" | "audit" | "allow";
 export type FailModeDurable = "closed" | "open";
@@ -210,7 +211,7 @@ export function parseSecurityConfig(parsed: unknown): SecurityConfig {
  * must not crash a PreToolUse hook.
  */
 export function readSecurityConfig(cwd: string): SecurityConfig {
-  const settingsPath = path.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+  const settingsPath = path.join(durableGuildDir(resolveGuildRoot(cwd)), "settings.json");
   let raw: string;
   try {
     raw = fs.readFileSync(settingsPath, "utf8");
@@ -264,7 +265,7 @@ export function readTaskRunAutonomyPolicy(filePath: string): AutonomyMode | null
 /** Read `defaults.gates.auto_approve` (string[]) from settings.json. Best-effort. */
 export function readSettingsAutoApprove(cwd: string): string[] {
   try {
-    const settingsPath = path.join(resolveGuildRoot(cwd), ".guild", "settings.json");
+    const settingsPath = path.join(durableGuildDir(resolveGuildRoot(cwd)), "settings.json");
     const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as unknown;
     if (!isPlainObject(parsed)) return [];
     const defaults = parsed["defaults"];
@@ -304,8 +305,7 @@ export function resolveRunAutonomyMode(opts: ResolveAutonomyModeOpts): AutonomyM
     const safe = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
     if (safe.test(runId) && safe.test(taskId)) {
       const taskRunPath = path.join(
-        resolveGuildRoot(opts.cwd),
-        ".guild",
+        durableGuildDir(resolveGuildRoot(opts.cwd)),
         "runs",
         runId,
         "task-runs",

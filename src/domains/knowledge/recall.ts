@@ -12,7 +12,7 @@
  *     A. SQLite FTS (wiki-recall.ts):
  *          `index.enabled=true` AND file count > `wiki_file_threshold`.
  *          Returns null when below threshold or disabled → fall through.
- *     B. File-BM25 (mcp-servers/guild-memory/src/bm25.ts):
+ *     B. File-BM25 (src/runtime/mcp/guild-memory/bm25.ts):
  *          Direct in-process BM25 over .guild/wiki/ recursively (*.md files).
  *          k1=1.5/b=0.75 — same parameters as guild-memory's MCP search path.
  *          Returns null when no wiki files match query terms → fall through.
@@ -81,6 +81,8 @@ import { ingestImportanceScore, resolveRecallImportance } from "./ingest-importa
 // R-TRACE (Wave 6): additive trace emit — NEVER changes return value
 import { emitTraceEvent } from "../telemetry";
 import { makeAnalysisTraceEvent, makeRecallEvent, makeRecallDecisionEvent } from "../telemetry";
+import { durableGuildDir } from "../state";
+import { phaseStartRecall } from "./phase-start";
 
 // Re-export so existing importers (`recall.ts` was the original home of the scorer)
 // keep resolving `ingestImportanceScore` from here; canonical impl now in ingest-importance.ts.
@@ -386,7 +388,7 @@ function sqliteBranch(
   return { source: "sqlite", chunks, directive: result.directive };
 }
 
-// ── Branch B: File-BM25 (mcp-servers/guild-memory/src/bm25.ts) ───────────────
+// ── Branch B: File-BM25 (src/runtime/mcp/guild-memory/bm25.ts) ───────────────
 //
 // Direct in-process BM25 over .guild/wiki/<category?>/**/*.md.
 // k1=1.5/b=0.75 — identical to guild-memory's search path.
@@ -401,7 +403,7 @@ function fileBm25Branch(
   runId?: string,
   composite?: CompositeConfig,
 ): RecallResult | null {
-  const wikiBase = path.join(cwd, ".guild", "wiki");
+  const wikiBase = path.join(durableGuildDir(cwd), "wiki");
   const scanDir = category ? path.join(wikiBase, category) : wikiBase;
 
   const files = walkMdFiles(scanDir);
@@ -523,7 +525,7 @@ function kgQueryBranch(
   category?: string,
 ): RecallResult | null {
   // METRIC 6: read the recall projection, not the raw knowledge-graph
-  const projPath = path.join(cwd, ".guild", "indexes", "knowledge-recall.json");
+  const projPath = path.join(durableGuildDir(cwd), "indexes", "knowledge-recall.json");
   if (!fs.existsSync(projPath)) return null;
 
   let proj: KnowledgeLinksDoc | null = null;
@@ -708,7 +710,7 @@ function structuralBranch(
   if (!intent) return null;
 
   // Read the FROZEN structural graph (source of truth; never the FTS cache).
-  const graphPath = path.join(cwd, ".guild", "indexes", "knowledge-graph.json");
+  const graphPath = path.join(durableGuildDir(cwd), "indexes", "knowledge-graph.json");
   if (!fs.existsSync(graphPath)) return null;
   let doc: { nodes?: unknown; edges?: unknown } | null = null;
   try {
@@ -810,7 +812,7 @@ function corpusForcesIdentifierBypass(
   // to ensureWikiFtsIndex's `collectMarkdownFiles` (recursive *.md), so the counts
   // agree. Below the global threshold the FTS cache never populates and BOTH modes
   // fall through to file-BM25 → parity holds without any bypass.
-  const globalWikiBase = path.join(resolveMainRepoRoot(cwd), ".guild", "wiki");
+  const globalWikiBase = path.join(durableGuildDir(resolveMainRepoRoot(cwd)), "wiki");
   if (walkMdFiles(globalWikiBase).length <= wikiFileThreshold) return false;
 
   const querySet = new Set(tokenizeIdentifierAware(query));
@@ -820,7 +822,7 @@ function corpusForcesIdentifierBypass(
   // ranks (raw-cwd base + category, matching fileBm25Branch's wikiBase) for a
   // doc-side identifier that file-BM25 splits but FTS5 does not — the divergence
   // the bypass exists to prevent.
-  const wikiBase = path.join(cwd, ".guild", "wiki");
+  const wikiBase = path.join(durableGuildDir(cwd), "wiki");
   const scanDir = category ? path.join(wikiBase, category) : wikiBase;
   for (const f of walkMdFiles(scanDir)) {
     let content: string;
@@ -878,7 +880,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
   const _traceStart = Date.now();
 
   // Derive runDir from cwd + runId when not given explicitly.
-  const runDir = rawRunDir ?? (runId ? path.join(cwd, ".guild", "runs", runId) : undefined);
+  const runDir = rawRunDir ?? (runId ? path.join(durableGuildDir(cwd), "runs", runId) : undefined);
 
   // Merge test-seam overrides into DEFAULT_INDEX_BLOCK.
   const indexConfig: IndexBlock = { ...DEFAULT_INDEX_BLOCK, ..._indexConfig };
@@ -1113,6 +1115,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
 // Exit 0 always; errors exit 1 with stderr.
 //
 // Flags (canonical): --query --cwd --run-id [--category --limit --run-dir]
+//                   [--phase <p> --cell <id>] → + working set, BM25 via recall.backend, lane_bundle
 // Test seams (env): GUILD_WIKI_THRESHOLD → wiki_file_threshold override
 //                   GUILD_INDEX=off     → index.enabled=false (force file-BM25/fsScan)
 
@@ -1124,6 +1127,8 @@ export function runRecallCli(): void {
   let limit = 10;
   let runId = "";
   let runDir = "";
+  let phase = "";
+  let cellId = "";
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -1139,6 +1144,10 @@ export function runRecallCli(): void {
     else if (arg.startsWith("--limit=")) { limit = Math.max(1, parseInt(arg.slice("--limit=".length), 10) || 10); }
     else if (arg.startsWith("--run-id=")) { runId = arg.slice("--run-id=".length); }
     else if (arg.startsWith("--run-dir=")) { runDir = arg.slice("--run-dir=".length); }
+    else if (arg === "--phase" && argv[i + 1]) { phase = argv[++i]!; }
+    else if (arg === "--cell" && argv[i + 1]) { cellId = argv[++i]!; }
+    else if (arg.startsWith("--phase=")) { phase = arg.slice("--phase=".length); }
+    else if (arg.startsWith("--cell=")) { cellId = arg.slice("--cell=".length); }
   }
 
   if (!query) {
@@ -1185,6 +1194,20 @@ export function runRecallCli(): void {
       ? { _indexConfig }
       : {}),
   });
+
+  // KTD50 phase start: the working-set card + BM25 (through recall.backend) +
+  // the lane bundle a parent may see. Additive fields; the chunks are unchanged.
+  if (phase) {
+    const start = phaseStartRecall(query, {
+      cwd,
+      phase,
+      cell_id: cellId || runId || phase,
+      ...(runId ? { runId } : {}),
+      ...(runDir ? { runDir } : {}),
+    });
+    process.stdout.write(JSON.stringify({ ...result, ...start }) + "\n");
+    return;
+  }
 
   process.stdout.write(JSON.stringify(result) + "\n");
 }

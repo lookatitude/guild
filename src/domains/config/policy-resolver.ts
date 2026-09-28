@@ -35,6 +35,7 @@ import {
   setByPath,
   validatePolicyValue,
 } from "./policy-keys";
+import { createGuildStorage } from "../state";
 
 /** Durable policy file names under `.guild/config/`. */
 export const POLICY_FILES = Object.freeze({
@@ -163,8 +164,8 @@ function readLayer(
   for (const spec of POLICY_KEYS) {
     // CANONICAL FIRST, and it wins. The first cut iterated
     // `[canonical, ...aliases]` and let each assignment overwrite the last, so a
-    // legacy `defaults.wiki.autopromote: true` sitting beside a canonical
-    // `wiki.autopromote: false` silently won — `config set` reported success and
+    // legacy alias set to `true` sitting beside a canonical key set to `false`
+    // silently won — `config set` reported success and
     // the effective value never moved (codex G-lane r2 P1-1).
     const canonical = getByPath(parsed, spec.key);
     if (canonical !== undefined) {
@@ -235,22 +236,12 @@ function leafPaths(obj: unknown, prefix = "", out: string[] = []): string[] {
 
 /**
  * Resolve one scope's policy file pair through `GuildStorage` — the only
- * constructor of a durable path (KTD15). The require is LAZY on purpose: a
- * top-level state import closes an init cycle (state -> migrations -> lifecycle
- * -> config) that throws on load, and nothing here needs the path before the
- * first resolve.
+ * constructor of a durable path (KTD15).
  *
  * `.local.json` is derived from the scope's config name rather than joined, so
  * the two files can never drift apart when the split moves.
  */
 export function policyFilesFor(root: string, scope: "project" | "workspace"): { config: string; local: string } | null {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { createGuildStorage } = require("../state") as {
-    createGuildStorage: (cwd: string, opts?: { profile?: string }) => {
-      project?: { config(): string };
-      workspace?: { config(): string };
-    };
-  };
   // The SCOPE is the caller's assertion about which file it means, so it picks the
   // storage profile rather than depending on root auto-detection: `--scope workspace`
   // on a root whose profile probe says "standalone" must still name the workspace
@@ -271,10 +262,6 @@ export function policyFilesFor(root: string, scope: "project" | "workspace"): { 
  */
 export function policyOverlayFile(cwd: string): string | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { createGuildStorage } = require("../state") as {
-      createGuildStorage: (c: string) => { runtime(...segments: string[]): string };
-    };
     return createGuildStorage(cwd).runtime(POLICY_OVERLAY_FILE);
   } catch {
     // No resolvable root — there is no overlay to read, which is not an error.

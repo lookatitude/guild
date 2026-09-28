@@ -24,6 +24,7 @@ import {
   parseWorkspaceManifest,
 } from "./workspace-manifest";
 import { advisoryMessage } from "./init-config-copy";
+import { durableGuildDir } from "../state";
 
 // ===========================================================================
 // detectGuildState — install-state + workspace-mode detection from cwd
@@ -141,7 +142,7 @@ export interface GuildStateResult {
  */
 export function detectGuildState(cwd: string): GuildStateResult {
   const evidence: GuildStateEvidence[] = [];
-  const guildDir = path.join(cwd, ".guild");
+  const guildDir = durableGuildDir(cwd);
   const guildDirPresent = safeIsDir(guildDir);
   evidence.push({ kind: "guild_dir", path: guildDir, present: guildDirPresent });
 
@@ -202,7 +203,7 @@ export function detectGuildState(cwd: string): GuildStateResult {
   // parse_error skips, is_workspace!==true stops, is_workspace===true → ancestor.
   const ancestor = discoverWorkspace(cwd);
   if (ancestor) {
-    const ancestorManifestPath = path.join(ancestor.rootDir, ".guild", "workspace.json");
+    const ancestorManifestPath = path.join(durableGuildDir(ancestor.rootDir), "workspace.json");
     evidence.push({
       kind: "ancestor_workspace",
       path: ancestorManifestPath,

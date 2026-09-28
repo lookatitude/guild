@@ -59,6 +59,7 @@ import {
 import { execSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+import { durableGuildDir } from "../state";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -706,11 +707,11 @@ export function defaultPreflightProbe(cwd: string): PreflightProbe {
     providerProbe: defaultProbeEnv(cwd),
     incompleteRun: () =>
       safeProbe(() => {
-        const idFile = join(cwd, ".guild", "runs", "current-run-id");
+        const idFile = join(durableGuildDir(cwd), "runs", "current-run-id");
         if (!existsSync(idFile)) return null;
         const runId = readFileSync(idFile, "utf8").trim();
         if (!runId) return null;
-        const runDir = join(cwd, ".guild", "runs", runId);
+        const runDir = join(durableGuildDir(cwd), "runs", runId);
         if (!existsSync(runDir)) return null;
         if (existsSync(join(runDir, "verify.md"))) return null;
         return { runId, runDir };

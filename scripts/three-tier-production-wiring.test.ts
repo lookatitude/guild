@@ -30,11 +30,7 @@ import * as path from "path";
 import { emitTaskCellsV2 } from "./agent-team-launcher";
 import { publish, lastBusPublishRefusal } from "./lib/artifact-bus";
 import { authenticateBusTier } from "../src/domains/kernel";
-import {
-  buildTaskCell,
-  writeTaskCell,
-  type TaskCellDispatchInput,
-} from "../src/domains/dispatch/task-assignment-v2";
+import { buildTaskCell, writeTaskCell, type TaskCellDispatchInput } from "../src/domains/dispatch/index";
 import {
   ExecutionTransportTaskCellWorkerPort,
   FilesystemTaskCellRuntime,

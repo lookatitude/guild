@@ -36,7 +36,7 @@
  */
 
 import * as fs from "node:fs";
-import { sealSet } from "../../src/domains/kernel/sealed-collections";
+import { sealSet } from "../../src/domains/kernel/index";
 import * as path from "node:path";
 
 import * as yaml from "js-yaml";
@@ -45,6 +45,7 @@ import {
   readResolvedSettingsSnapshot,
   validateRunId,
 } from "../../scripts/lib/run-lifecycle.js";
+import { durableGuildDir } from "../../src/domains/state";
 
 /** Stable marker string — the dist-grep rail and SessionStart source gate both key off it. */
 export const REANCHOR_MARKER = "[GUILD RE-ANCHOR]";
@@ -205,7 +206,7 @@ export function resolveActiveRunId(guildRoot: string): string | undefined {
   if (typeof envRunId === "string" && envRunId.trim().length > 0) {
     return envRunId.trim();
   }
-  const sentinel = path.join(guildRoot, ".guild", "runs", "current-run-id");
+  const sentinel = path.join(durableGuildDir(guildRoot), "runs", "current-run-id");
   try {
     const value = fs.readFileSync(sentinel, "utf8").trim();
     return value.length > 0 ? value : undefined;
@@ -226,7 +227,7 @@ export function resolveActiveRunId(guildRoot: string): string | undefined {
  * never called startRun — never fabricate a header for it) or unparseable.
  */
 export function readRunYamlFacts(guildRoot: string, runId: string): RunYamlFacts | null {
-  const runYamlPath = path.join(guildRoot, ".guild", "runs", runId, "run.yaml");
+  const runYamlPath = path.join(durableGuildDir(guildRoot), "runs", runId, "run.yaml");
   let raw: string;
   try {
     raw = fs.readFileSync(runYamlPath, "utf8");
@@ -357,7 +358,7 @@ function reanchorGraceMs(): number {
  * alive moments ago" signal we want. Returns 0 when nothing is readable.
  */
 export function newestRunSignalMs(guildRoot: string, runId: string): number {
-  const dir = path.join(guildRoot, ".guild", "runs", runId);
+  const dir = path.join(durableGuildDir(guildRoot), "runs", runId);
   const candidates = [
     path.join(dir, "run.yaml"),
     path.join(dir, "events.ndjson"),

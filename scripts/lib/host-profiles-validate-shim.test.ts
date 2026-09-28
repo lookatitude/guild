@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./host-profiles-validate";
-import * as moduleImpl from "../../src/domains/config/host-profiles-validate";
+import * as moduleImpl from "../../src/domains/config/index";
 
 describe("host-profiles-validate compatibility shim", () => {
   test("scripts/lib/host-profiles-validate re-exports src/modules/host-runtime", () => {
@@ -33,7 +33,7 @@ describe("host-profiles-validate compatibility shim", () => {
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/host-profiles-validate.ts"), "utf8");
     const modulePath = fs.readFileSync(path.join(repoRoot, "src/domains/config/host-profiles-validate.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/domains\/config\/host-profiles-validate["']/);
+    expect(oldPath).toMatch(/from\s+["']\.\.\/\.\.\/src\/domains\/config\/index["']/);
     expect(oldPath).not.toMatch(/export\s+function\s+validateHostProfiles/);
     expect(modulePath).toMatch(/export\s+function\s+validateHostProfiles/);
     expect(modulePath).toMatch(/from\s+["']\.\/host-registry-schema["']/);

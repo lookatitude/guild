@@ -2,6 +2,7 @@ import { describe, it, expect } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 import { parseFrontmatter } from "./frontmatter";
+import { moduleManifestFiles } from "./module-manifest";
 import {
   listOperationsRunbooks,
   listOperationsSkillIds,
@@ -27,7 +28,7 @@ function readManifest(moduleId: string): {
 } {
   return JSON.parse(
     fs.readFileSync(
-      path.join(pluginRoot, "src", "modules", moduleId, "module.manifest.json"),
+      moduleManifestFiles(pluginRoot).find((m) => m.id === moduleId)?.path ?? `${moduleId}.manifest.json`,
       "utf8"
     )
   );

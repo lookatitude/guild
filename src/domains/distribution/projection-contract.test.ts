@@ -39,7 +39,7 @@ function compileStrict(cwd: string, inputs: string[]) {
       "--esModuleInterop",
       "--resolveJsonModule",
       "--types",
-      "node,jest",
+      "node",
       "--typeRoots",
       path.join(PLUGIN_ROOT, "scripts", "node_modules", "@types"),
       ...inputs,

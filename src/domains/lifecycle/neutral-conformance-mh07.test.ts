@@ -655,7 +655,7 @@ function conformingFiles(): Record<string, string> {
 
   for (const module of modules) {
     const base = `plugin/src/modules/${module.id}`;
-    files[`${base}/module.manifest.json`] = manifestJson(
+    files[`plugin/src/domains/${module.id}/modules/${module.id}.manifest.json`] = manifestJson(
       module.id,
       module.kind,
       `MH-07 fixture module ${module.id}`,
@@ -693,7 +693,7 @@ const REPOSITORY_MUTATIONS: Readonly<Record<string, (files: Record<string, strin
   },
   "unclassified-module": (files) => {
     const base = "plugin/src/modules/invented-module";
-    files[`${base}/module.manifest.json`] = manifestJson(
+    files["plugin/src/domains/invented-module/modules/invented-module.manifest.json"] = manifestJson(
       "invented-module",
       "capability",
       "a module no role registry names"
@@ -2825,7 +2825,7 @@ describe("A21-7 MH-07 — the production module-boundary evaluator", () => {
     // bind. The fixture-workspace FIC124-B2 controls above cover the scope rule
     // in every checkout; here there is simply no real repository to observe.
     if (Object.keys(real).length !== 2) {
-      expect(fs.existsSync(path.join(PLUGIN_ROOT, "src", "modules"))).toBe(true);
+      expect(fs.existsSync(path.join(PLUGIN_ROOT, "src", "domains", "kernel", "modules", "kernel.manifest.json"))).toBe(true);
       return;
     }
     const result = subject.evaluate({

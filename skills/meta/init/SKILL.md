@@ -50,7 +50,7 @@ No sub-guild's pages are ever copied up (federation, not duplication).
 On a **regular** repo (the default), nothing above is written and the path below
 is byte-for-byte unchanged:
 
-`.guild/init/<slug>.md` (the Init record), `.guild/wiki/**`, `.guild/raw/**`,
+`.guild/init/<slug>.md` (the Init record), `.guild/wiki/**`, `.guild/knowledge/sources/**`,
 `.guild/settings.json` (the project config surface — scaffolded
 fully-documented **if absent**, idempotent, via
 `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/read-guild-config.js --scaffold > .guild/settings.json`;

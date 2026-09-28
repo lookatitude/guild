@@ -8,7 +8,7 @@ describe("host-types compatibility shim", () => {
     const shim = fs.readFileSync(path.join(repoRoot, "scripts/lib/host-types.ts"), "utf8");
     const module = fs.readFileSync(path.join(repoRoot, "src/domains/config/host-types.ts"), "utf8");
 
-    expect(shim).toMatch(/export\s+type\s+\{\s*HostKind\s*\}\s+from\s+["']\.\.\/\.\.\/src\/domains\/config\/host-types["']/);
+    expect(shim).toMatch(/export\s+type\s+\{\s*HostKind\s*\}\s+from\s+["']\.\.\/\.\.\/src\/domains\/config\/index["']/);
     expect(shim).not.toMatch(/export\s+type\s+HostKind\s*=/);
     expect(module).toMatch(/export\s+type\s+HostKind\s*=/);
     expect(module).toMatch(/"claude-ai-connector"/);

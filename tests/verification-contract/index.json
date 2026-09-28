@@ -169,8 +169,12 @@
       "id": "R22",
       "unit": "U9",
       "proves": "one authoring home; dual copies and the nested clone are gone",
-      "owner": "T16",
-      "pending": "clone and deletion greps for the one authoring home"
+      "fixtures": [
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R22 · one authoring home: no dual copies, no nested clone, no Jest, no workflows/ dir, no principles skill"
+        }
+      ]
     },
     {
       "id": "R23",
@@ -257,8 +261,16 @@
       "id": "R29",
       "unit": "U-LOOP",
       "proves": "phase start is recall: working-set card + fingerprint; BM25 before a brownfield scan",
-      "owner": "T16",
-      "pending": "no production caller (T13 rework-r3 sweep): the working-set card writer and phase-start recall (buildWorkingSetCard, searchWiki) have no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+      "fixtures": [
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R29 · recall.js --phase serves the working-set card from cache on a fresh fingerprint and runs BM25, never a scan"
+        },
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R29 · CONTROL: the same recall call without --phase writes no working-set card"
+        }
+      ]
     },
     {
       "id": "R30",
@@ -275,15 +287,31 @@
       "id": "R31",
       "unit": "U-LOOP · U-S",
       "proves": "research is a miss-path chapter; working files OS temp; research_packet on the run; sources/ not raw/",
-      "owner": "T16",
-      "pending": "no production caller (T13 rework-r3 sweep): writeResearchPacket / buildResearchPacket have no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+      "fixtures": [
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R31 · work-loop research-packet writes the packet on the run record, not in wiki or raw"
+        },
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R31 · CONTROL: a packet id that is not a safe id is refused and nothing is written"
+        }
+      ]
     },
     {
       "id": "R32",
       "unit": "U-RSI",
       "proves": "RSI is one gate, two homes",
-      "owner": "T16",
-      "pending": "no production caller (T13 rework-r3 sweep): applyEvolveDelta (the project/plugin RSI gate) has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+      "fixtures": [
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R32 · evolve-loop --apply span-replaces a project playbook under this repo's .guild and records the inverse"
+        },
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R32 · CONTROL: a stale before_hash is refused by the gate and the playbook is untouched"
+        }
+      ]
     },
     {
       "id": "R33",
@@ -491,8 +519,12 @@
       "id": "R43",
       "unit": "U3",
       "proves": "every domain index loads from any entry",
-      "owner": "T16",
-      "pending": "break the domain import cycle knowledge/distribution -> state -> lifecycle -> teams -> evolve/dispatch; today a suite entering through knowledge or distribution reads a binding before init (the bun preload enters through lifecycle)"
+      "fixtures": [
+        {
+          "test": "scripts/t12-domain-fold.test.ts",
+          "title": "R43 · each domain index loads first in a fresh process"
+        }
+      ]
     },
     {
       "id": "R44",
@@ -623,8 +655,16 @@
       "id": "R50",
       "unit": "U-LOOP",
       "proves": "auto-harvest on redirect >=3, methodology repeat and new features",
-      "owner": "T16",
-      "pending": "no production caller (T13 rework-r3 sweep): routeRedirect, the redirect-threshold harvest trigger, has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+      "fixtures": [
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R50 · the third work-loop redirect harvests a canonical decision with redirect, harvest and security events"
+        },
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R50 · CONTROL: two redirects write no decision page"
+        }
+      ]
     },
     {
       "id": "R51",
@@ -655,15 +695,23 @@
       "id": "R53",
       "unit": "U-LOOP · U-STOR",
       "proves": "harvest is security-gated and observable on the KTD16 JSONL",
-      "owner": "T16",
-      "pending": "no production caller (T13 rework-r3 sweep): harvestDecision is reached only from routeRedirect, which has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+      "fixtures": [
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R53 · an injection-flagged decision stays a candidate and the redirect exits 3"
+        }
+      ]
     },
     {
       "id": "R54",
       "unit": "U-LOOP · U-S",
       "proves": "harvest is resumable and reversible; scratch janitor",
-      "owner": "T16",
-      "pending": "no production caller (T13 rework-r3 sweep): the harvest journal is written only by harvestDecision, which has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+      "fixtures": [
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R54 · the harvest the redirect wrote is journaled and wiki-revert restores the wiki"
+        }
+      ]
     },
     {
       "id": "R55",
@@ -692,8 +740,16 @@
       "id": "R57",
       "unit": "U-LOOP · U5",
       "proves": "two context sizes; glossary matching is assignment-scoped",
-      "owner": "T16",
-      "pending": "no production caller (T13 rework-r3 sweep): buildLaneBundle and glossary term matching have no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+      "fixtures": [
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R57 · recall.js --phase hands up a ≤1200-token lane bundle carrying only the glossary terms the assignment names"
+        },
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R57 · CONTROL: an assignment naming no term attaches no definition"
+        }
+      ]
     },
     {
       "id": "R58",
@@ -738,8 +794,12 @@
       "id": "R61",
       "unit": "U-LOOP",
       "proves": "the research class writes guild.research_packet.v1 on the run",
-      "owner": "T16",
-      "pending": "no production caller (T13 rework-r3 sweep): the research-class packet writer has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+      "fixtures": [
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R31 · work-loop research-packet writes the packet on the run record, not in wiki or raw"
+        }
+      ]
     },
     {
       "id": "R62",
@@ -770,15 +830,31 @@
       "id": "R64",
       "unit": "U-LOOP · U-S",
       "proves": "adversarial wrappers are L3, not graph nodes",
-      "owner": "T16",
-      "pending": "no production caller (T13 rework-r3 sweep): the class-graph router and loader (routeWorkflowDecision, loadClassGraph) have no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+      "fixtures": [
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R64 · work-loop bind loads the class graph and route advances the persisted cursor along an authored edge"
+        },
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R64 · CONTROL: a decision that names another node is refused, never followed"
+        }
+      ]
     },
     {
       "id": "R65",
       "unit": "U-LOOP",
       "proves": "a harvest pin hit forces a replan",
-      "owner": "T16",
-      "pending": "no production caller (T13 rework-r3 sweep): the harvest pin-hit replan is reached only through harvestDecision, which has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+      "fixtures": [
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R65 · a redirect harvest that supersedes a pinned decision routes replan on the cursor"
+        },
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R65 · CONTROL: the same supersede with nothing pinned routes no replan"
+        }
+      ]
     },
     {
       "id": "R66",
@@ -937,15 +1013,27 @@
       "id": "R74",
       "unit": "U-RSI",
       "proves": "machinery TS evolves only through the human gate",
-      "owner": "T16",
-      "pending": "no production caller (T13 rework-r3 sweep): applyEvolveDelta (the human gate for machinery) has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+      "fixtures": [
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R74 · machinery TS never reaches the tree: a candidate for the operator, and --auto refuses outright"
+        }
+      ]
     },
     {
       "id": "R75",
       "unit": "U-LOOP",
       "proves": "explicit learn Stage-2 is extract-structural; refreshTouched never runs it",
-      "owner": "T16",
-      "pending": "no production caller (T13 rework-r3 sweep): refreshTouched has no production caller. Wire it or delete it; the helper tests stay in the suite, unmapped."
+      "fixtures": [
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R75 · an Edit of a wiki page re-indexes that page and refreshes the card, never the graph or the recall projection"
+        },
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R75 · CONTROL: a Read tool call refreshes nothing"
+        }
+      ]
     },
     {
       "id": "R76",
@@ -958,8 +1046,16 @@
       "id": "R77",
       "unit": "U-LOOP · U-CFG",
       "proves": "recall backend bm25 | hybrid; hybrid fails open to BM25",
-      "owner": "T16",
-      "pending": "no production caller (T13 rework-r3 sweep): searchWiki (hybrid recall with BM25 fail-open) has no production caller; recall.backend is settable but never read. Wire it or delete it; the helper tests stay in the suite, unmapped."
+      "fixtures": [
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R77 · recall.backend hybrid with no embedding model fails open to BM25 and says so"
+        },
+        {
+          "test": "scripts/t16f-production-callers.test.ts",
+          "title": "R77 · CONTROL: recall.backend bm25 records no degradation"
+        }
+      ]
     },
     {
       "id": "R78",
@@ -1025,9 +1121,13 @@
     {
       "id": "KTD2",
       "unit": "U3 · U9",
-      "proves": "flat src/surfaces/ is the only authoring home",
-      "owner": "T16",
-      "pending": "one authoring home under src/surfaces (with R22's clone and deletion greps)"
+      "proves": "one authoring home: commands/, skills/, agents/, templates/, hooks/ at the plugin root (operator-amended at T16); src/surfaces/ holds graphs and prompts only",
+      "fixtures": [
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "KTD2 · one authoring home: each surface tree lives once, at the plugin root"
+        }
+      ]
     },
     {
       "id": "KTD3",
@@ -1120,8 +1220,12 @@
       "id": "KTD9",
       "unit": "U9",
       "proves": "no dual-home mirrors; no shipping plugin/_archive/",
-      "owner": "T16",
-      "pending": "clone and deletion greps (no mirrors, no _archive)"
+      "fixtures": [
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "KTD9 · no dual-home mirrors, no shipping _archive, every print-only alias file present"
+        }
+      ]
     },
     {
       "id": "KTD10",

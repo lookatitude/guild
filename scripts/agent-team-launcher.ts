@@ -104,7 +104,7 @@ import {
   readRunBindingRecord,
   stagePendingSubstantiveOperation,
   withRunBindingExclusion,
-} from "../src/domains/lifecycle/run-binding";
+} from "../src/domains/lifecycle/index";
 import type { CapabilityResolverMode } from "../src/domains/config";
 // P1-3 A2b: force-reap of dead panes. (Receipt-based `detectDismissible` is
 // retired from the dismiss path — dismissal is acceptance-gated in G4, below.)
@@ -132,9 +132,9 @@ import {
   markAttemptOrphaned,
   type RunAcceptance,
   type TaskCellInstanceIds,
-} from "../src/domains/dispatch/task-cell-acceptance";
+} from "../src/domains/dispatch/index";
 
-import { reconcileTaskCellLifecycleTelemetry } from "../src/domains/dispatch/task-cell-telemetry-reconcile";
+import { reconcileTaskCellLifecycleTelemetry } from "../src/domains/dispatch/index";
 // CH-1/CH-2: mixed-host pane adapters (claude + codex) for a mixed `host:` team.
 import { resolveAdapter } from "./lib/pane-adapter";
 // CH-1: route each specialist to its backend (local tmux vs remote) via the
@@ -153,8 +153,8 @@ import { resolveSettings, isPlainObject } from "./lib/settings-resolver";
 import {
   loadRunBinding,
   readHookBindingEnvelope,
-} from "../src/domains/lifecycle/run-binding";
-import { assertCanonicalRunId } from "../src/domains/lifecycle/run-lifecycle";
+} from "../src/domains/lifecycle/index";
+import { assertCanonicalRunId } from "../src/domains/lifecycle/index";
 // MH-04: the substrate DECISION lives behind the versioned execution port
 // (`guild.execution.transports.v1`), never in this launcher. The launcher reads
 // host FACTS through the capability probe below and reports what the port decided.
@@ -170,11 +170,11 @@ import {
   type ExecutionTransportPort,
   type HostExecutionRuntime,
   type TeamDispatchPort,
-} from "../src/domains/dispatch/execution-transport-ports";
+} from "../src/domains/dispatch/index";
 import {
   TeamDispatchExecutionTransport,
   createHostExecutionRuntime,
-} from "../src/domains/dispatch/execution-transport-adapters";
+} from "../src/domains/dispatch/index";
 // task-cell-runtime G3: the authoritative `guild.task_assignment.v2` channel
 // (per-attempt, one immutable file per task a specialist owns; no representative-
 // first-task collapse). Replaces v1 as the PRODUCTION write; v1 is retained above
@@ -184,28 +184,28 @@ import {
   planProductionDispatchModel,
   writeTaskCell,
   type ProductionDispatchModelOutcome,
-} from "../src/domains/dispatch/task-assignment-v2";
-import { createPreviewConfirmationSession } from "../src/domains/dispatch/confirmation-gate";
+} from "../src/domains/dispatch/index";
+import { createPreviewConfirmationSession } from "../src/domains/dispatch/index";
 // T8R F3: the PRODUCTION writer for M0 inspection evidence. `persistInspectionReport`
 // previously had no production caller at all — `guild models inspect` is read-only by
 // contract — so the M2 gate's evidence dir was always empty in a real run and the
 // derived resolver inputs were always null. Recording happens HERE, once per run on the
 // real dispatch path, and is inert at the ADR defaults (v2 flags off ⇒ no write).
-import { recordRunInspectionEvidence } from "../src/domains/config/inspection-record";
-import { readRoutingFlags } from "../src/domains/config/routing-rollout";
+import { recordRunInspectionEvidence } from "../src/domains/config/index";
+import { readRoutingFlags } from "../src/domains/config/index";
 // T6 rework F5: the legacy tier→model label for the shadow comparison comes
 // from the SAME unpack point the legacy path uses (models.tiers), never a
 // parallel implementation.
-import { resolveTierModel } from "../src/domains/config/tier-model";
-import { detectSession, isUnknownHost, readSessionBinding } from "../src/domains/config/session-binding";
+import { resolveTierModel } from "../src/domains/config/index";
+import { detectSession, isUnknownHost, readSessionBinding } from "../src/domains/config/index";
 import { createGuildStorage } from "./lib/state/storage";
-import { resolvePolicy } from "../src/domains/config/policy-resolver";
-import { resolveAssignmentBinding } from "../src/domains/dispatch/assignment-binding";
+import { resolvePolicy } from "../src/domains/config/index";
+import { resolveAssignmentBinding } from "../src/domains/dispatch/index";
 import {
   reserveInstanceBatch,
   reserveRefused,
   resolveMaxInstances,
-} from "../src/domains/dispatch/instance-cap";
+} from "../src/domains/dispatch/index";
 // R-016a: bounded retry for the ONE TS-level dispatch call site (RemoteTeamBackend.launch).
 import { runWithRetry, loadRetryOpts } from "./retry-lane";
 // R-016 bridge: on retry exhaustion, mark each remote lane dead via the shared writer.
@@ -226,7 +226,7 @@ import { slugFromTeamPath, phaseFromTeamPath, readActivePhase, resolveDeadLaneKe
 import {
   assertDispatchApproved,
   resolveApprovalOverride,
-} from "../src/domains/teams/dispatch-approval";
+} from "../src/domains/teams/index";
 // TE-01 CONSOLIDATED (cluster-a-rev2-CONSOLIDATED.md): launcher owns EDIT-3 (tmux/remote);
 // execute-plan SKILL owns EDIT-4 (subagent/in-process) — mutually exclusive, no double-write.
 import { writeTaskRun, readTaskRunCapReqs } from "./write-task-run";
@@ -234,6 +234,8 @@ import { emitReadbackDegradation } from "./lib/emit-readback-degradation"; // W2
 import { captureHostCapabilitySnapshot, familyForHostId, rungKeyForSession, rungPlanForFamily } from "../src/adapters";
 import { recordRungLosses, rungLossesAsRecordedLosses } from "../src/domains/dispatch";
 import { resolvePluginRoot } from "../src/domains/kernel";
+import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 export interface TerminalSubstantiveReconciliation {
   readonly attempted: number;
@@ -929,7 +931,7 @@ function buildManifest(opts: {
 
 function writeManifest(cwd: string, manifest: Manifest): string {
   const runId = manifest.run_id;
-  const dir = path.join(cwd, ".guild", "runs", runId, "agent-team");
+  const dir = path.join(durableGuildDir(cwd), "runs", runId, "agent-team");
   fs.mkdirSync(dir, { recursive: true });
   const out = path.join(dir, "session.json");
   fs.writeFileSync(out, JSON.stringify(manifest, null, 2) + "\n", "utf8");
@@ -979,7 +981,7 @@ function makeLaneModelPlanner(
   let rawSettings: unknown;
   try {
     rawSettings = JSON.parse(
-      fs.readFileSync(path.join(cwd, ".guild", "settings.json"), "utf8"),
+      fs.readFileSync(path.join(durableGuildDir(cwd), "settings.json"), "utf8"),
     );
   } catch {
     rawSettings = undefined;
@@ -1652,7 +1654,7 @@ function resolveLifecycleRunId(cwd: string, callerRunId: string | null): string 
   let candidate = callerRunId;
   if (!candidate) {
     source = ".guild/runs/current-run-id";
-    const sentinel = path.join(cwd, ".guild", "runs", "current-run-id");
+    const sentinel = path.join(durableGuildDir(cwd), "runs", "current-run-id");
     try {
       candidate = fs.readFileSync(sentinel, "utf8").trim();
     } catch {
@@ -1976,7 +1978,7 @@ function readFrozenDispatchResolution(
   runId: string | null
 ): FrozenDispatchResolution | null {
   if (runId === null || runId.length === 0) return null;
-  const snapshotPath = path.join(cwd, ".guild", "runs", runId, "resolved-settings.json");
+  const snapshotPath = path.join(durableGuildDir(cwd), "runs", runId, "resolved-settings.json");
   if (!fs.existsSync(snapshotPath)) return null;
   let parsed: unknown;
   try {
@@ -2086,6 +2088,7 @@ function resolveAgentMode(
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const args = parseArgs(process.argv.slice(2));
 
   // FU08: maintenance modes are side-effecting launch-surface operations too.
@@ -2141,7 +2144,7 @@ async function main(): Promise<void> {
     if (runIds.length === 0) {
       process.stdout.write(
         "[agent-team-launcher] --reap: no runs with session.json found " +
-          `under ${path.join(cwd, ".guild", "runs")}\n`
+          `under ${path.join(durableGuildDir(cwd), "runs")}\n`
       );
       process.exit(0);
     }
@@ -2307,7 +2310,7 @@ async function main(): Promise<void> {
       process.exit(0);
     }
     const runId = args.runId;
-    const runDir = path.join(cwd, ".guild", "runs", runId);
+    const runDir = path.join(durableGuildDir(cwd), "runs", runId);
     const sjPath = sessionJsonPath(cwd, runId);
 
     if (!fs.existsSync(sjPath)) {
@@ -3311,7 +3314,7 @@ async function main(): Promise<void> {
       if (!args.dryRun) {
         for (const [taskId, sel] of v2ModelByTask) {
           upsertLane(
-            path.join(cwd, ".guild", "runs", runId),
+            path.join(durableGuildDir(cwd), "runs", runId),
             { runId, planSlug: slug, programId: null },
             taskId,
             {
@@ -3437,7 +3440,7 @@ async function main(): Promise<void> {
                   : d.modelParams,
               };
               upsertLane(
-                path.join(cwd, ".guild", "runs", runId),
+                path.join(durableGuildDir(cwd), "runs", runId),
                 { runId, planSlug: slug, programId: null },
                 taskId,
                 { host: hostBlock }
@@ -3570,7 +3573,7 @@ async function main(): Promise<void> {
           // On exhaustion, onExhausted marks every remote lane dead via the shared
           // markLaneDead writer (same checkpoint the prose path writes via mark-lane-dead.ts).
           const retryOpts = loadRetryOpts(cwd);
-          const runDir = path.join(cwd, ".guild", "runs", runId);
+          const runDir = path.join(durableGuildDir(cwd), "runs", runId);
           const init: RunStateInit = { runId, planSlug: slug, programId: null };
 
           let remoteResult;

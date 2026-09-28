@@ -25,11 +25,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import {
-  buildTaskCell,
-  writeTaskCell,
-  type TaskCellDispatchInput,
-} from "../../src/domains/dispatch/task-assignment-v2";
+import { buildTaskCell, writeTaskCell, type TaskCellDispatchInput } from "../../src/domains/dispatch/index";
 import {
   ExecutionTransportTaskCellWorkerPort,
   FilesystemTaskCellRuntime,
@@ -62,8 +58,8 @@ import {
   resolveAdvisorRounds,
 } from "../../src/domains/dispatch";
 import { resolveAssignmentBinding } from "../../src/domains/dispatch";
-import { publishSubmittedHandoffPointer } from "../../src/domains/dispatch/task-cell-acceptance";
-import { acknowledgeAssignment } from "../../src/domains/dispatch/task-assignment-v2";
+import { publishSubmittedHandoffPointer } from "../../src/domains/dispatch/index";
+import { acknowledgeAssignment } from "../../src/domains/dispatch/index";
 import {
   foldOrchestratorContext,
   lintOrchestratorContext,

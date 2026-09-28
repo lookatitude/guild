@@ -2169,11 +2169,6 @@
       "kind": "cli"
     },
     {
-      "id": "lint/baseline-shrink-gate",
-      "source_path": "scripts/lint/baseline-shrink-gate.ts",
-      "kind": "cli"
-    },
-    {
       "id": "lint/build-coverage-draft",
       "source_path": "scripts/lint/build-coverage-draft.ts",
       "kind": "cli"
@@ -2396,6 +2391,11 @@
     {
       "id": "wiki-revert",
       "source_path": "scripts/wiki-revert.ts",
+      "kind": "cli"
+    },
+    {
+      "id": "work-loop",
+      "source_path": "scripts/work-loop.ts",
       "kind": "cli"
     },
     {

@@ -55,10 +55,7 @@ import {
   validateLegacyLocator,
 } from "../../scripts/lib/core/contracts/adoption-manifest";
 import { EXECUTION_DISPATCH_MODES, EXECUTION_OPERATIONS, EXECUTION_OUTCOME_STATUSES, EXECUTION_REASON_CODES, EXECUTION_TRANSPORT_IDS, TEAM_DISPATCH_SCOPES, isExecutionOperation, isExecutionReasonCode } from "../../src/domains/dispatch";
-import {
-  INJECTION_SUPPORT,
-  REQUIRED_HOOK_EVENTS,
-} from "../../src/domains/config/host-capabilities-schema";
+import { INJECTION_SUPPORT, REQUIRED_HOOK_EVENTS } from "../../src/domains/config/index";
 
 /** Every exported vocabulary across the four contract surfaces this lane owns. */
 const REGISTRIES: ReadonlyArray<readonly [string, readonly unknown[]]> = [

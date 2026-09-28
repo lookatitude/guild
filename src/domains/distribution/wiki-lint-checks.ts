@@ -41,6 +41,7 @@ import {
 import { lintKnowledgeNodes, type GraphNode } from "../knowledge";
 import { loadYamlApi } from "../kernel";
 import { WIKI_PAGE_TYPES, isWikiPageType } from "../knowledge";
+import { durableGuildDir } from "../state";
 
 const yaml = loadYamlApi();
 
@@ -76,7 +77,7 @@ export interface LabelTaxonomy {
 
 /** Read `.guild/project.yaml → label_taxonomy`. Returns null when absent/empty. */
 export function readLabelTaxonomy(root: string): LabelTaxonomy | null {
-  const p = path.join(root, ".guild", "project.yaml");
+  const p = path.join(durableGuildDir(root), "project.yaml");
   if (!fs.existsSync(p)) return null;
   let parsed: unknown;
   try { parsed = yaml.load(fs.readFileSync(p, "utf8")); } catch { return null; }
@@ -143,7 +144,7 @@ function parseArgs(argv: string[]): { root: string; json: boolean } {
 
 
 export function lintWiki(root: string): Finding[] {
-  const wiki = path.join(root, ".guild", "wiki");
+  const wiki = path.join(durableGuildDir(root), "wiki");
   const findings: Finding[] = [];
   // Label taxonomy: null ⇒ the label-coverage check is inert (item 5 opt-in).
   const taxonomy = readLabelTaxonomy(root);
@@ -202,7 +203,7 @@ export function lintWiki(root: string): Finding[] {
   // at .guild/indexes/knowledge-graph.json (produced by K-stages; absent before K2 runs).
   // Folds lintKnowledgeNodes() findings into the wiki-lint report so that
   // `/guild:wiki lint` → lintWiki() surfaces them even when .guild/wiki is absent.
-  const kgPath = path.join(root, ".guild", "indexes", "knowledge-graph.json");
+  const kgPath = path.join(durableGuildDir(root), "indexes", "knowledge-graph.json");
   if (fs.existsSync(kgPath)) {
     try {
       const kg = JSON.parse(fs.readFileSync(kgPath, "utf8")) as { nodes?: unknown[] };

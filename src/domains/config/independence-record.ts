@@ -81,6 +81,7 @@ import {
   type ReviewPartyFacts,
   type WrittenAdjudication,
 } from "./independence-predicates";
+import { durableGuildDir } from "../state";
 
 /** Run-dir-relative directory holding written §7a blocks. */
 export const INDEPENDENCE_DIR = "independence";
@@ -286,7 +287,7 @@ export function persistIndependenceAdjudication(input: {
     run_id: binding.run_id,
     binding_ref: binding.binding_ref,
   });
-  const dir = path.join(root, ".guild", "runs", verified.run_id, INDEPENDENCE_DIR);
+  const dir = path.join(durableGuildDir(root), "runs", verified.run_id, INDEPENDENCE_DIR);
   fs.mkdirSync(dir, { recursive: true });
   const target = path.join(dir, `${label}.json`);
   const tmp = `${target}.tmp-${process.pid}`;

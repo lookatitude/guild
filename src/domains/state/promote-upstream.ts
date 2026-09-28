@@ -39,6 +39,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { atomicWrite } from "./atomic-write";
 import { isRefused, isWithin, prepareContainedWrite } from "../kernel";
+import { durableGuildDir } from "./storage-roots";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -150,7 +151,7 @@ function isCrossCutting(candidate: { applies_to?: string[]; upstream?: boolean }
 
 /** Read workspace.json and return sub_guilds[]. Returns [] on any error. */
 function readSubGuilds(workspaceRoot: string): SubGuildEntry[] {
-  const manifestPath = path.join(workspaceRoot, ".guild", "workspace.json");
+  const manifestPath = path.join(durableGuildDir(workspaceRoot), "workspace.json");
   if (!fs.existsSync(manifestPath)) return [];
   try {
     const raw = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
@@ -170,7 +171,7 @@ function readSubGuilds(workspaceRoot: string): SubGuildEntry[] {
  * Returns all matching file paths.
  */
 function findHarvestFiles(childDir: string): string[] {
-  const runsDir = path.join(childDir, ".guild", "runs");
+  const runsDir = path.join(durableGuildDir(childDir), "runs");
   if (!fs.existsSync(runsDir)) return [];
   const results: string[] = [];
   try {
@@ -360,7 +361,7 @@ export function runPromoteUpstreamCli(argv: string[] = process.argv.slice(2)): v
   try {
     const candidates = collectUpstreamCandidates({ workspaceRoot, child });
 
-    const runsBase = path.resolve(workspaceRoot, ".guild", "runs");
+    const runsBase = path.resolve(durableGuildDir(workspaceRoot), "runs");
     const runsDir = path.join(runsBase, runId);
     const manifestPath = path.join(runsDir, "upstream-candidates.json");
 

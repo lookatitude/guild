@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./provider-detect";
 import type { ProbeEnv } from "./provider-detect";
-import * as moduleImpl from "../../src/domains/config/provider-detect";
+import * as moduleImpl from "../../src/domains/config/index";
 
 const CWD = "/tmp/guild-provider-detect-shim";
 
@@ -70,7 +70,7 @@ describe("provider-detect compatibility shim", () => {
     );
 
     expect(oldPath).toMatch(
-      /export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/domains\/config\/provider-detect["']/
+      /from\s+["']\.\.\/\.\.\/src\/domains\/config\/index["']/
     );
     expect(oldPath).not.toMatch(/export\s+function\s+detectProviders/);
     expect(modulePath).toMatch(/export\s+function\s+detectProviders/);

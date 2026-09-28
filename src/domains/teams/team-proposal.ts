@@ -25,7 +25,7 @@ import {
   isSha256Hex,
   selfReferentialHash,
   cloneArtifact,
-} from "./canonical-hash";
+} from "../kernel";
 import { writeRunArtifact } from "./station-signals";
 
 export const TEAM_PROPOSAL_SCHEMA = "guild.team_proposal.v2" as const;

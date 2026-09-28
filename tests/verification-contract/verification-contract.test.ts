@@ -90,12 +90,8 @@ beforeAll(() => {
   }
   const live = runCli("lint/layout-laws.ts", ["--json"]);
   const report = JSON.parse(live.stdout) as { violations: Array<{ check: string; path: string; detail: string }> };
-  const baseline = new Set(
-    (JSON.parse(read("scripts/lint/layout-baseline.json")) as { entries: string[] }).entries,
-  );
+  // T16 retired the layout baseline: every live violation is open.
   for (const v of report.violations) {
-    const key = `${v.check}::${v.path}::${v.detail}`;
-    if (baseline.has(key)) continue;
     lintOpen.set(v.check, [...(lintOpen.get(v.check) ?? []), `${v.path} — ${v.detail}`]);
   }
   const out = path.join(scratch, "coverage.yaml");
@@ -185,7 +181,7 @@ describe("authored Verification Contract fixtures", () => {
   test("R24 · bun test is the blocking runner, isolated per file, in a hermetic cwd", () => {
     expect(read("bunfig.toml")).toMatch(/^preload = \["\.\/test-preload\.ts"\]$/m);
     expect(bunTestProblems(read(".github/workflows/compile-gates.yml"))).toEqual([]);
-    expect(read(".github/workflows/test-suites.yml")).toMatch(/jest:[\s\S]*?continue-on-error: true/);
+    expect(read(".github/workflows/test-suites.yml")).not.toMatch(/^  jest:|npx jest/m);
     // The preload ran for THIS file: a temp cwd, no GUILD_* identity, Node as the
     // spawn path whenever a node is installed (KTD11).
     expect(path.relative(PLUGIN_ROOT, process.cwd()).startsWith("..")).toBe(true);
@@ -294,6 +290,58 @@ describe("authored Verification Contract fixtures", () => {
     expect(policyKeySpec("review.critic")?.default).toBe("advisor");
   });
 
+  test("R22 · one authoring home: no dual copies, no nested clone, no Jest, no workflows/ dir, no principles skill", () => {
+    expect(authoringHomeFindings()).toEqual([]);
+    // CONTROL: each planted defect is visible to the same walk.
+    const root = path.join(scratch, "r22");
+    fs.mkdirSync(path.join(root, "plugin", ".claude-plugin"), { recursive: true });
+    fs.writeFileSync(path.join(root, "plugin", ".claude-plugin", "plugin.json"), "{}");
+    fs.mkdirSync(path.join(root, "src", "modules", "state", "resources"), { recursive: true });
+    fs.writeFileSync(path.join(root, "src", "modules", "state", "index.ts"), "export {};\n");
+    fs.writeFileSync(path.join(root, "jest.config.js"), "module.exports = {};\n");
+    fs.writeFileSync(path.join(root, "package.json"), '{"devDependencies":{"ts-jest":"1"}}');
+    fs.mkdirSync(path.join(root, "src", "domains", "knowledge", "workflows"), { recursive: true });
+    fs.mkdirSync(path.join(root, "skills", "core", "principles"), { recursive: true });
+    fs.writeFileSync(path.join(root, "skills", "core", "principles", "SKILL.md"), "---\nname: principles\n---\n");
+    expect(authoringHomeFindings(root)).toEqual([
+      "dual copy: src/modules/state/index.ts",
+      "dual copy: src/modules/state/resources",
+      "jest config: jest.config.js",
+      "jest dependency: package.json",
+      "nested clone: plugin",
+      "principles skill: skills/core/principles/SKILL.md",
+      "workflows dir: src/domains/knowledge/workflows",
+    ]);
+  });
+
+  test("KTD2 · one authoring home: each surface tree lives once, at the plugin root", () => {
+    expect(surfaceHomeFindings()).toEqual([]);
+    // CONTROL: a second copy under src/surfaces and a missing root tree are visible.
+    const root = path.join(scratch, "ktd2");
+    for (const t of ["commands", "skills", "templates", "hooks"]) fs.mkdirSync(path.join(root, t), { recursive: true });
+    fs.mkdirSync(path.join(root, "src", "surfaces", "skills"), { recursive: true });
+    expect(surfaceHomeFindings(root)).toEqual(["missing home: agents", "second copy: src/surfaces/skills"]);
+  });
+
+  test("KTD9 · no dual-home mirrors, no shipping _archive, every print-only alias file present", () => {
+    expect(mirrorArchiveFindings()).toEqual([]);
+    // CONTROL: a planted _archive, a resources mirror and a missing alias are visible.
+    const root = path.join(scratch, "ktd9");
+    fs.mkdirSync(path.join(root, "_archive", "v1"), { recursive: true });
+    fs.mkdirSync(path.join(root, "src", "modules", "wiki", "resources"), { recursive: true });
+    fs.mkdirSync(path.join(root, "commands"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, "commands", "aliases.allowlist.json"),
+      JSON.stringify({ aliases: ["audit", "stats"] }),
+    );
+    fs.writeFileSync(path.join(root, "commands", "audit.md"), "print-only\n");
+    expect(mirrorArchiveFindings(root)).toEqual([
+      "_archive: _archive",
+      "alias missing: commands/stats.md",
+      "dual copy: src/modules/wiki/resources",
+    ]);
+  });
+
   test("KTD6 · Bun authors and CI compiles; the user path is Node with no Bun", () => {
     const pkg = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
     expect(pkg.scripts.compile.startsWith("bun ")).toBe(true);
@@ -333,6 +381,94 @@ function principlesSkills(root = PLUGIN_ROOT): string[] {
     }
   };
   walk(path.join(root, "skills"));
+  return out.sort();
+}
+
+// ── U9 clone and deletion greps (R22, KTD9) ─────────────────────────────────
+
+const U9_SKIP = new Set(["node_modules", ".git", ".worktrees", ".guild", ".github"]);
+const LINT_FIXTURES = "scripts/lint/__tests__/fixtures";
+
+/** Every directory and file under root, repo-relative, minus VCS/state/lint fixtures. */
+function u9Walk(root: string): { dirs: string[]; files: string[] } {
+  const dirs: string[] = [];
+  const files: string[] = [];
+  const walk = (rel: string): void => {
+    for (const e of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) {
+        // Root dist/ is gitignored generated host packages, not an authored copy.
+        if (U9_SKIP.has(e.name) || r === LINT_FIXTURES || r === "dist") continue;
+        dirs.push(r);
+        walk(r);
+      } else if (e.isFile()) {
+        files.push(r);
+      }
+    }
+  };
+  walk("");
+  return { dirs, files };
+}
+
+/** Code or byte mirrors left in the retired src/modules tree (manifests are data). */
+function dualCopies(tree: { dirs: string[]; files: string[] }): string[] {
+  return [
+    ...tree.dirs.filter((d) => /^src\/modules\/[^/]+\/resources$/.test(d)),
+    ...tree.files.filter((f) => /^src\/modules\/.+\.(ts|js|md)$/.test(f) && f !== "src/modules/README.md"),
+  ].map((p) => `dual copy: ${p}`);
+}
+
+/** R22: one authoring home. */
+function authoringHomeFindings(root = PLUGIN_ROOT): string[] {
+  const tree = u9Walk(root);
+  const out = [...dualCopies(tree)];
+  for (const d of tree.dirs) {
+    const nested = fs.existsSync(path.join(root, d, ".git")) ||
+      fs.existsSync(path.join(root, d, ".claude-plugin", "plugin.json"));
+    if (d === "plugin" || nested) out.push(`nested clone: ${d}`);
+    if (path.basename(d) === "workflows") out.push(`workflows dir: ${d}`);
+  }
+  for (const f of tree.files) {
+    if (/(^|\/)jest\.config\.[cm]?[jt]s(on)?$/.test(f)) out.push(`jest config: ${f}`);
+    if (path.basename(f) !== "package.json") continue;
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, f), "utf8")) as Record<string, unknown>;
+    const deps = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]
+      .flatMap((k) => Object.keys((pkg[k] as Record<string, string> | undefined) ?? {}));
+    if (pkg.jest !== undefined || deps.some((d) => d === "jest" || d === "ts-jest" || d === "@types/jest")) {
+      out.push(`jest dependency: ${f}`);
+    }
+  }
+  if (fs.existsSync(path.join(root, "skills"))) {
+    out.push(...principlesSkills(root).map((f) => `principles skill: ${f}`));
+  }
+  return out.sort();
+}
+
+/** KTD9: no mirrors, no _archive; KTD14 alias files stay until the stable cut. */
+/**
+ * KTD2 as amended by the operator at T16: commands/, skills/ (playbooks under
+ * skills/playbooks/), agents/, templates/ and hooks/ are authored once, at the
+ * plugin root. src/surfaces/ holds only graphs and prompts.
+ */
+function surfaceHomeFindings(root = PLUGIN_ROOT): string[] {
+  const out: string[] = [];
+  for (const t of ["agents", "commands", "hooks", "skills", "templates"]) {
+    if (!fs.existsSync(path.join(root, t))) out.push(`missing home: ${t}`);
+    if (fs.existsSync(path.join(root, "src", "surfaces", t))) out.push(`second copy: src/surfaces/${t}`);
+  }
+  return out.sort();
+}
+
+function mirrorArchiveFindings(root = PLUGIN_ROOT): string[] {
+  const tree = u9Walk(root);
+  const out = [...dualCopies(tree)];
+  for (const d of tree.dirs) if (path.basename(d) === "_archive") out.push(`_archive: ${d}`);
+  const allow = JSON.parse(
+    fs.readFileSync(path.join(root, "commands", "aliases.allowlist.json"), "utf8"),
+  ) as { aliases: string[] };
+  for (const a of allow.aliases) {
+    if (!fs.existsSync(path.join(root, "commands", `${a}.md`))) out.push(`alias missing: commands/${a}.md`);
+  }
   return out.sort();
 }
 

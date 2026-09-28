@@ -4,7 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { spawnSync } from "child_process";
 
-import { validateRunRecordDir } from "../../src/domains/lifecycle/run-record-validate";
+import { validateRunRecordDir } from "../../src/domains/lifecycle/index";
 import { validateText } from "../../scripts/v1.4-log-validator";
 import { runTsCli } from "./ts-runtime-helper";
 

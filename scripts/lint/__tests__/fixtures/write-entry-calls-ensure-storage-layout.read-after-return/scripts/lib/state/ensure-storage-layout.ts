@@ -7,3 +7,6 @@ export function ensureStorageLayout(cwd: string): string | null {
   // eslint-disable-next-line no-unreachable
   return fs.readFileSync(path.join(cwd, ".guild", "storage-layout.json"), "utf8");
 }
+
+// D4: the real file is also a CLI (process.argv[1] guard), so it is a process entry.
+if (process.argv[1]?.endsWith("ensure-storage-layout.js")) ensureStorageLayout(process.cwd());

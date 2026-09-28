@@ -5,4 +5,13 @@
  * module layer owns it; this shim keeps the stable scripts/lib import path.
  */
 
-export * from "../../src/domains/lifecycle/run-record-validate";
+export {
+  isCanonicalLaneReceipt,
+  validateRunRecordDir,
+  scanRunsRoot,
+  RUN_RECORD_VALIDATION_SCHEMA,
+  RUN_RECORD_FINDING_CODES,
+  type RunRecordFindingCode,
+  type RunRecordFinding,
+  type RunRecordValidation,
+} from "../../src/domains/lifecycle/index";

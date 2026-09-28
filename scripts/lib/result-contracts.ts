@@ -5,4 +5,14 @@
  * move internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/domains/distribution/result-contracts";
+export {
+  findContract,
+  type ContractStatus,
+  type ValidatorKind,
+  type ResultContractEntry,
+  EXISTING_CONTRACTS,
+  DEFERRED_CONTRACTS,
+  RESULT_CONTRACTS,
+  PHASE1_NORMALIZER_TARGETS,
+  CONTRACT_VALIDATORS,
+} from "../../src/domains/distribution/index";

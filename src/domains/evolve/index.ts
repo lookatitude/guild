@@ -52,3 +52,8 @@ export * from "./compact-history";
 export * from "./evolve-apply";
 export * from "./learning-candidate";
 export * from "./learning-signatures";
+
+// ── consumed outside the domain (T16: every importer goes through this index) ──
+export {
+  runSelfCheck as runDefineSelfCheck,
+} from "./define-schema";

@@ -62,20 +62,7 @@ import {
   type CapabilityAutoCreatePolicy,
   type CapabilityResolverMode,
 } from "./config-defaults";
-// T8R/F2: `config` is the LOWER substrate — `capability` already imports
-// config's tier-model resolver, so eagerly loading capability's public index at
-// config module-init closes a require cycle
-// (config/index → settings-resolver → settings-reader → capability/index →
-//  capability/router → config/index) and leaves settings-resolver
-// half-initialised in the real launcher process
-// (`import_settings_resolver.isPlainObject is not a function`). The one symbol
-// config needs from capability is resolved LAZILY, at call time, through the
-// SAME public module entrypoint the boundary rail requires.
-function validateModelPolicy(input: unknown): string[] {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const capability = require("./") as typeof import("./");
-  return capability.validateModelPolicy(input);
-}
+import { validateModelPolicy } from "./model-policy";
 import { loadYamlApi, sealSet } from "../kernel";
 
 const yaml = loadYamlApi() as { load: (src: string) => unknown };
@@ -655,6 +642,7 @@ export function rigorProfile(rigor: ResolvedConfig["rigor"]): RigorProfile {
 // classifier (§E3/§E8). Imported (NOT re-exported) to keep the settings-resolver
 // shim surface unchanged (parity guard).
 import { discoverWorkspace } from "./workspace-manifest";
+import { durableGuildDir } from "../state";
 
 // ---------------------------------------------------------------------------
 // Settings file loading
@@ -1030,8 +1018,7 @@ export function initiativeIsWorkspaceScoped(
     // --- 1. Try registry -------------------------------------------------
     // id is compared by value against registry entries — NOT used as a path.
     const registryPath = path.join(
-      workspaceRoot,
-      ".guild",
+      durableGuildDir(workspaceRoot),
       "indexes",
       "initiatives-registry.yaml"
     );
@@ -1063,7 +1050,7 @@ export function initiativeIsWorkspaceScoped(
     // id has already been validated by isValidInitiativeId above.
     // Defense-in-depth: verify the joined path stays within the initiatives
     // base dir before reading.
-    const initiativesBase = path.join(workspaceRoot, ".guild", "initiatives");
+    const initiativesBase = path.join(durableGuildDir(workspaceRoot), "initiatives");
 
     const activePath = path.join(
       initiativesBase,
@@ -1174,7 +1161,7 @@ export function resolveSettings(opts: ResolveOptions): ResolveResult {
   let wsLocalSettings: Partial<ResolvedConfig> = {};
 
   if (ws !== null) {
-    const wsGuildDir = path.join(ws.rootDir, ".guild");
+    const wsGuildDir = durableGuildDir(ws.rootDir);
     const rawWsSettings = parseSettingsFile(path.join(wsGuildDir, "settings.json"));
 
     // Strip non-inheritable keys from workspace layer.
@@ -1229,7 +1216,7 @@ export function resolveSettings(opts: ResolveOptions): ResolveResult {
   }
 
   // Layer D: project settings.json
-  const projectGuildDir = path.join(cwd, ".guild");
+  const projectGuildDir = durableGuildDir(cwd);
   const projectSettings = parseSettingsFile(path.join(projectGuildDir, "settings.json"));
   for (const key of Object.keys(projectSettings)) {
     if (key === "workspace") {

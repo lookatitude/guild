@@ -342,7 +342,8 @@ describe("FIX G1-6 — no network/model across the dependency closure", () => {
       const real = stack.pop()!;
       if (seen.has(real) || !fs.existsSync(real) || !fs.statSync(real).isFile()) continue;
       seen.add(real);
-      const text = fs.readFileSync(real, "utf8");
+      // Type-only imports are erased at runtime, so they are not part of the closure.
+      const text = fs.readFileSync(real, "utf8").replace(/^\s*(?:import|export)\s+type\s[^;]*;/gm, "");
       let m: RegExpExecArray | null;
       importRe.lastIndex = 0;
       while ((m = importRe.exec(text)) !== null) {

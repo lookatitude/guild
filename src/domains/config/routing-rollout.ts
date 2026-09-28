@@ -32,7 +32,8 @@ function lifecycleApi(): typeof import("../lifecycle") {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   return require("../lifecycle");
 }
-import { selfReferentialHash } from "../teams";
+import { selfReferentialHash } from "../kernel";
+import { durableGuildDir } from "../state";
 
 export const ROUTING_FLAG_KEYS = Object.freeze([
   "model_routing.identity_v2",
@@ -195,7 +196,7 @@ export function loadVerifiedM0Reports(
   }
   const binding = lifecycleApi().readRunBindingRecord({ root: evidence.root, run_id: evidence.run_id });
   if (binding.status !== "ok") return [];
-  const runDir = path.resolve(evidence.root, ".guild", "runs", evidence.run_id);
+  const runDir = path.resolve(durableGuildDir(evidence.root), "runs", evidence.run_id);
   const refs = Array.isArray(evidence.m0?.inspection_report_refs)
     ? evidence.m0.inspection_report_refs
     : [];
@@ -233,7 +234,7 @@ export function gateM2(flags: RoutingFlags, evidence: M2EvidenceRefs | null | un
         `run tree proves nothing — v2 routing stays off`,
     };
   }
-  const runDir = path.resolve(evidence.root, ".guild", "runs", evidence.run_id);
+  const runDir = path.resolve(durableGuildDir(evidence.root), "runs", evidence.run_id);
 
   const m0Refs = Array.isArray(evidence.m0?.inspection_report_refs)
     ? evidence.m0.inspection_report_refs

@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { hostKindToRegistryId, getRegistryEntry } from "../host-registry";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { buildPrompt } from "../../../src/domains/config/team-prompt";
+import { buildPrompt } from "../../../src/domains/config/index";
 import type {
   AdapterResolver,
   PaneAdapter,

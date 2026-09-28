@@ -3065,8 +3065,8 @@ var require_js_yaml = __commonJS({
 });
 
 // scripts/dot-guild/migrate-guild.ts
-var fs5 = __toESM(require("fs"));
-var path7 = __toESM(require("path"));
+var fs13 = __toESM(require("fs"));
+var path17 = __toESM(require("path"));
 
 // scripts/dot-guild/convert/seams.ts
 var fs = __toESM(require("fs"));
@@ -3105,7 +3105,7 @@ var realFs = {
 };
 
 // scripts/dot-guild/convert/wiki-importance.ts
-var path4 = __toESM(require("path"));
+var path15 = __toESM(require("path"));
 
 // src/domains/kernel/module-manifest.ts
 var OWNED_INVENTORY_CATEGORIES = Object.freeze([
@@ -3265,6 +3265,8 @@ function frozenList(items, options = {}) {
 }
 
 // src/domains/kernel/path-containment.ts
+var fs3 = __toESM(require("node:fs"));
+var path4 = __toESM(require("node:path"));
 var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "root-unresolvable",
   "no-existing-ancestor",
@@ -3276,6 +3278,137 @@ var CONTAINMENT_REFUSAL_CODES = Object.freeze([
   "parent-traversal",
   "destination-moved"
 ]);
+function isRefused(r) {
+  return "code" in r;
+}
+function escapes(rel2) {
+  return rel2 === ".." || rel2.startsWith(`..${path4.sep}`) || path4.isAbsolute(rel2);
+}
+function refuse(code, detail) {
+  return Object.freeze({ contained: false, code, detail });
+}
+function hasParentSegment(p) {
+  return p.split(/[\\/]/).includes("..");
+}
+function lstatOrNull(p) {
+  try {
+    return fs3.lstatSync(p);
+  } catch {
+    return null;
+  }
+}
+function isWithin(child, parent) {
+  const rel2 = path4.relative(parent, child);
+  return rel2 === "" || !escapes(rel2);
+}
+function checkContained(root, target, options = {}) {
+  const policy = options.policy ?? "resolve";
+  let realRoot;
+  try {
+    realRoot = fs3.realpathSync(path4.resolve(root));
+  } catch {
+    return refuse("root-unresolvable", `project root ${root} does not resolve`);
+  }
+  if (hasParentSegment(target)) {
+    return refuse(
+      "parent-traversal",
+      `refusing a path spelled with a ".." segment (${target}) \u2014 parent traversal cannot be resolved before symlinks`
+    );
+  }
+  const abs = path4.isAbsolute(target) ? path4.resolve(target) : path4.resolve(realRoot, target);
+  let probe = abs;
+  let probeStat = null;
+  for (; ; ) {
+    probeStat = lstatOrNull(probe);
+    if (probeStat !== null) break;
+    const parent = path4.dirname(probe);
+    if (parent === probe) {
+      return refuse("no-existing-ancestor", `no existing ancestor of ${abs}`);
+    }
+    probe = parent;
+  }
+  if (options.requireRegularFileLeaf && probe === abs && !probeStat.isFile()) {
+    const what = probeStat.isSymbolicLink() ? "symlink" : probeStat.isDirectory() ? "directory" : "special file";
+    return refuse(
+      "leaf-not-regular-file",
+      `${abs} exists and is not a regular file (${what}); refusing to write through it`
+    );
+  }
+  let realProbe;
+  try {
+    realProbe = fs3.realpathSync(probe);
+  } catch {
+    return refuse(
+      "dangling-symlink",
+      `${probe} is a symlink that does not resolve; refusing to write through it`
+    );
+  }
+  const rel2 = path4.relative(realRoot, realProbe);
+  if (rel2 !== "" && escapes(rel2)) {
+    return refuse("outside-root", `${abs} resolves outside the project root (${realProbe})`);
+  }
+  if (policy === "physical") {
+    const parsed = path4.parse(abs);
+    let walk = parsed.root;
+    for (const seg of abs.slice(parsed.root.length).split(path4.sep)) {
+      if (seg === "" || seg === ".") continue;
+      walk = path4.join(walk, seg);
+      const st = lstatOrNull(walk);
+      if (st === null || !st.isSymbolicLink()) continue;
+      let segReal;
+      try {
+        segReal = fs3.realpathSync(walk);
+      } catch {
+        return refuse("dangling-symlink", `${walk} is a symlink that does not resolve`);
+      }
+      const segRel = path4.relative(realRoot, segReal);
+      const strictlyInside = segRel !== "" && !escapes(segRel);
+      if (strictlyInside) {
+        return refuse("physical-symlink", `refusing \u2014 symlinked path segment: ${walk}`);
+      }
+    }
+  }
+  const tail = path4.relative(probe, abs);
+  const realPath = tail === "" ? realProbe : path4.join(realProbe, tail);
+  return Object.freeze({ contained: true, realRoot, realPath });
+}
+function prepareContainedWrite(root, target, options = {}) {
+  if (hasParentSegment(target)) {
+    return refuse(
+      "parent-traversal",
+      `refusing a path spelled with a ".." segment (${target}) \u2014 parent traversal cannot be resolved before symlinks`
+    );
+  }
+  let canonRoot;
+  try {
+    canonRoot = fs3.realpathSync(path4.resolve(root));
+  } catch {
+    return refuse("root-unresolvable", `project root ${root} does not resolve`);
+  }
+  const abs = path4.isAbsolute(target) ? path4.resolve(target) : path4.resolve(canonRoot, target);
+  const dir = path4.dirname(abs);
+  const pre = checkContained(root, dir, { policy: options.policy });
+  if (isRefused(pre)) return pre;
+  try {
+    fs3.mkdirSync(dir, { recursive: true });
+  } catch (err) {
+    return refuse("mkdir-failed", `could not create ${dir}: ${err?.message ?? "unknown"}`);
+  }
+  const post = checkContained(root, abs, options);
+  if (isRefused(post)) return post;
+  let realDir;
+  try {
+    realDir = fs3.realpathSync(dir);
+  } catch {
+    return refuse("dangling-symlink", `${dir} stopped resolving between the check and the write`);
+  }
+  return Object.freeze({
+    contained: true,
+    realRoot: post.realRoot,
+    realPath: post.realPath,
+    realDir
+  });
+}
 
 // src/domains/kernel/runtime-tree-guard.ts
 var RUNTIME_SUBTREE_SEGMENTS = sealSet(
@@ -3302,6 +3435,79 @@ var TIER_BUS_CONTRACT = deepFreeze({
   tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
 });
 
+// src/domains/state/atomic-write.ts
+var fs5 = __toESM(require("fs"));
+var path6 = __toESM(require("path"));
+var crypto2 = __toESM(require("crypto"));
+
+// src/domains/state/plugin-install-guard.ts
+var fs4 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
+function assertNotUnderPluginInstall(absPath, pluginInstallRoot) {
+  const root = pluginInstallRoot ?? process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"] ?? process.env["CODEX_PLUGIN_ROOT"];
+  if (!root) return;
+  const resolvedRoot = path5.resolve(root);
+  const rel2 = path5.relative(resolvedRoot, path5.resolve(absPath));
+  if (rel2 === "" || !rel2.startsWith("..") && !path5.isAbsolute(rel2)) {
+    const underOwnDotGuild = rel2 === ".guild" || rel2.startsWith(`.guild${path5.sep}`);
+    if (underOwnDotGuild && fs4.existsSync(path5.join(resolvedRoot, ".git"))) return;
+    throw new Error(`project-created Guild artifact would be written under plugin install dir: ${absPath}`);
+  }
+}
+
+// src/domains/state/atomic-write.ts
+function atomicWrite(targetPath, content, pluginInstallRoot) {
+  writeThroughTemp(targetPath, content, false, pluginInstallRoot);
+}
+function writeThroughTemp(targetPath, content, durable, pluginInstallRoot) {
+  assertNotUnderPluginInstall(targetPath, pluginInstallRoot);
+  const dir = path6.dirname(targetPath);
+  fs5.mkdirSync(dir, { recursive: true });
+  const unique = `${process.pid}-${Date.now()}-${crypto2.randomBytes(4).toString("hex")}`;
+  const tmpPath = path6.join(dir, `.${path6.basename(targetPath)}.tmp-${unique}`);
+  if (durable) {
+    const fd = fs5.openSync(tmpPath, "w");
+    try {
+      fs5.writeFileSync(fd, content, "utf8");
+      fs5.fsyncSync(fd);
+    } finally {
+      fs5.closeSync(fd);
+    }
+  } else {
+    fs5.writeFileSync(tmpPath, content, "utf8");
+  }
+  try {
+    fs5.renameSync(tmpPath, targetPath);
+  } catch (err) {
+    try {
+      fs5.unlinkSync(tmpPath);
+    } catch {
+    }
+    throw err;
+  }
+}
+
+// src/domains/state/dependency-graph-schema.ts
+var DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
+var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
+  schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
+  nodes: [
+    { id: "guild-plugin", path: "plugin" },
+    { id: "guild-website", path: "website" },
+    { id: "guild-benchmark", path: "benchmark" }
+  ],
+  edges: [
+    { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
+    { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
+  ]
+});
+
+// src/domains/state/storage-roots.ts
+var path7 = __toESM(require("node:path"));
+function durableGuildDir(activeRoot) {
+  return path7.join(activeRoot, ".guild");
+}
+
 // src/domains/state/frontmatter.ts
 var loadedYaml = null;
 function yamlApi() {
@@ -3318,12 +3524,1746 @@ function parseYaml2(text, opts = {}) {
   }
 }
 
+// src/domains/state/guild-root.ts
+var fs6 = __toESM(require("node:fs"));
+var path8 = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path8.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs6.existsSync(path8.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path8.join(current, ".guild");
+      try {
+        if (fs6.existsSync(guildDir) && fs6.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path8.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// src/domains/state/index-migrate.ts
+var import_node_child_process = require("node:child_process");
+var fs7 = __toESM(require("node:fs"));
+var path9 = __toESM(require("node:path"));
+function openDatabase(dbPath) {
+  const { DatabaseSync } = require("node:sqlite");
+  const db = new DatabaseSync(dbPath);
+  db.exec("PRAGMA busy_timeout = 5000");
+  return db;
+}
+var CURRENT_SCHEMA_VERSION = 3;
+function resolveGuildRoot2(cwd) {
+  try {
+    const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
+      cwd,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    const abs = path9.isAbsolute(raw) ? raw : path9.resolve(cwd, raw);
+    const root = path9.dirname(abs);
+    if (fs7.existsSync(root)) return root;
+  } catch {
+  }
+  return path9.resolve(cwd);
+}
+var MIGRATIONS = [
+  // ── v1: core tables ───────────────────────────────────────────────────────
+  {
+    version: 1,
+    tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
+    up(db) {
+      db.exec(`
+        DROP TABLE IF EXISTS kg_nodes;
+        DROP TABLE IF EXISTS kg_edges;
+        DROP TABLE IF EXISTS kl_edges;
+        DROP TABLE IF EXISTS run_provenance;
+        DROP TABLE IF EXISTS wiki_fts;
+        DROP TABLE IF EXISTS _fingerprints;
+      `);
+      db.exec(`
+        CREATE TABLE kg_nodes (
+          id         TEXT NOT NULL PRIMARY KEY,
+          type       TEXT,
+          name       TEXT,
+          source_refs TEXT,
+          confidence TEXT,
+          layer      TEXT,
+          data       TEXT
+        );
+
+        CREATE TABLE kg_edges (
+          id        INTEGER PRIMARY KEY,
+          source    TEXT NOT NULL,
+          target    TEXT NOT NULL,
+          type      TEXT,
+          direction TEXT,
+          weight    REAL,
+          data      TEXT
+        );
+
+        CREATE TABLE kl_edges (
+          id        INTEGER PRIMARY KEY,
+          from_node TEXT NOT NULL,
+          to_node   TEXT NOT NULL,
+          type      TEXT,
+          run_id    TEXT,
+          data      TEXT
+        );
+
+        CREATE TABLE run_provenance (
+          run_id TEXT NOT NULL PRIMARY KEY,
+          ts     TEXT,
+          data   TEXT
+        );
+
+        CREATE TABLE _fingerprints (
+          table_name   TEXT NOT NULL PRIMARY KEY,
+          source_path  TEXT NOT NULL,
+          sha256       TEXT NOT NULL,
+          populated_at TEXT NOT NULL
+        );
+      `);
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE wiki_fts USING fts5(
+            path      UNINDEXED,
+            title,
+            content,
+            tokenize='porter ascii'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE TABLE wiki_fts (
+            path    TEXT,
+            title   TEXT,
+            content TEXT
+          );
+        `);
+      }
+    }
+  },
+  // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
+  //
+  // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
+  // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
+  // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
+  //
+  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
+  // production code writes to sub_guild_root/.guild/. NOTE: the populate/
+  // invalidate function (ensureFederationWikiCache) was removed in
+  // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
+  // schema migration is retained (harmless empty table) since altering the
+  // migration ladder is a separate, out-of-scope decision.
+  {
+    version: 2,
+    tables: ["federation_wiki_cache"],
+    up(db) {
+      db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
+      db.exec(`
+        CREATE TABLE federation_wiki_cache (
+          sub_guild_root TEXT NOT NULL,
+          path           TEXT NOT NULL,
+          title          TEXT,
+          snippet        TEXT,
+          PRIMARY KEY (sub_guild_root, path)
+        );
+      `);
+    }
+  },
+  // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
+  //
+  // Two OPTIONAL acceleration tables projected from the canonical, file-first
+  // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
+  // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
+  // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
+  // remains the source of truth that returns IDENTICAL answers.
+  //
+  //   kg_calls       — denormalized `calls` edges (source, target, confidence),
+  //                    indexed on source AND target so the call-graph BFS
+  //                    (kgTrace / kgDeadCode) is fetched without parsing the
+  //                    whole JSON graph.
+  //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
+  //                    node, so identifier search (`process_order` →
+  //                    `processOrder`) is an index lookup, not a full node scan.
+  //                    Tokens are PRE-SPLIT with the shared identifier-aware
+  //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
+  //                    document and query side, so the FTS built-in tokenizer
+  //                    only has to whitespace-split — the camel/snake behaviour
+  //                    lives in the (deterministic, model-free) projection feed.
+  {
+    version: 3,
+    tables: ["kg_calls", "kg_symbols_fts"],
+    up(db) {
+      db.exec(`
+        DROP TABLE IF EXISTS kg_calls;
+        DROP TABLE IF EXISTS kg_symbols_fts;
+      `);
+      db.exec(`
+        CREATE TABLE kg_calls (
+          id         INTEGER PRIMARY KEY,
+          source     TEXT NOT NULL,
+          target     TEXT NOT NULL,
+          confidence TEXT
+        );
+        CREATE INDEX kg_calls_source ON kg_calls (source);
+        CREATE INDEX kg_calls_target ON kg_calls (target);
+      `);
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
+            node_id UNINDEXED,
+            name_tokens,
+            tokenize='ascii'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE TABLE kg_symbols_fts (
+            node_id     TEXT,
+            name_tokens TEXT
+          );
+        `);
+      }
+    }
+  }
+];
+function runMigrations(dbPath) {
+  let db;
+  let fromVersion = 0;
+  try {
+    fs7.mkdirSync(path9.dirname(dbPath), { recursive: true });
+    db = openDatabase(dbPath);
+    db.exec("PRAGMA journal_mode = WAL");
+    db.exec("PRAGMA synchronous = NORMAL");
+    fromVersion = db.prepare("PRAGMA user_version").get().user_version;
+    for (const mig of MIGRATIONS) {
+      if (mig.version <= fromVersion) continue;
+      try {
+        db.exec("BEGIN IMMEDIATE");
+        mig.up(db);
+        db.exec(`PRAGMA user_version = ${mig.version}`);
+        db.exec("COMMIT");
+        fromVersion = mig.version;
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch {
+        }
+        for (const tbl of mig.tables) {
+          try {
+            db.exec(`DROP TABLE IF EXISTS ${tbl}`);
+          } catch {
+          }
+        }
+        db.close();
+        return {
+          ok: false,
+          fromVersion,
+          toVersion: fromVersion,
+          dbPath,
+          message: `migration to v${mig.version} failed: ${err.message}`
+        };
+      }
+    }
+    db.close();
+    return {
+      ok: true,
+      fromVersion,
+      toVersion: CURRENT_SCHEMA_VERSION,
+      dbPath
+    };
+  } catch (err) {
+    try {
+      db?.close();
+    } catch {
+    }
+    return {
+      ok: false,
+      fromVersion,
+      toVersion: fromVersion,
+      dbPath,
+      message: `migration runner error: ${err.message}`
+    };
+  }
+}
+function runIndexMigrateCli() {
+  const argv = process.argv.slice(2);
+  let cwd = process.env["GUILD_CWD"] ?? process.cwd();
+  let dbPath;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--cwd" && argv[i + 1]) cwd = argv[++i];
+    if (argv[i] === "--db-path" && argv[i + 1]) dbPath = argv[++i];
+  }
+  if (!dbPath) {
+    const guildRoot = resolveGuildRoot2(cwd);
+    dbPath = path9.join(guildRoot, ".guild", "index.sqlite");
+  }
+  const result = runMigrations(dbPath);
+  if (result.ok) {
+    process.stdout.write(
+      `[index-migrate] OK: schema v${result.fromVersion}\u2192v${result.toVersion} at ${result.dbPath}
+`
+    );
+  } else {
+    process.stderr.write(`[index-migrate] WARN: ${result.message}
+`);
+    process.exit(1);
+  }
+}
+if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+  runIndexMigrateCli();
+}
+
+// src/domains/state/storage-policy.ts
+var path10 = __toESM(require("node:path"));
+var NON_DURABLE_CLASSES = sealSet(
+  ["runtime", "cache", "managed-resource", "temporary"],
+  "NON_DURABLE_CLASSES"
+);
+var DURABLE_CLASSES = sealSet(
+  ["canonical", "durable-record"],
+  "DURABLE_CLASSES"
+);
+var KTD16_FROZEN_PREFIXES = deepFreeze([
+  "runs",
+  "analysis",
+  "recommendations"
+]);
+var DURABLE_SUBTREES = deepFreeze({
+  /** Canonical knowledge (KTD35/KTD70). */
+  knowledge: "wiki",
+  /**
+   * The definition tree root is `.guild/` itself: `agents/`, `skills/` and `teams/`
+   * already sit there (KTD20).
+   */
+  definitionsRoot: "",
+  /**
+   * `definition("sources", id)` — the one logical name that maps elsewhere, onto
+   * the durable sources tree that already exists, so R59 does not invent a third home.
+   */
+  sources: path10.join("knowledge", "sources"),
+  initiatives: "initiatives",
+  /** KTD16 freeze. */
+  runs: "runs",
+  artifacts: "artifacts"
+});
+
+// src/domains/state/storage-artifact-registry.ts
+var STORAGE_ARTIFACT_REGISTRY = deepFreeze([
+  // ── canonical: the knowledge a user would mourn ───────────────────────────
+  {
+    id: "root-identity",
+    storageClass: "canonical",
+    scope: "project",
+    shareable: true,
+    rebuildable: false,
+    retention: { kind: "permanent" },
+    cleanupOwner: "never",
+    description: ".guild/guild.yaml \u2014 root identity (workspace or project)."
+  },
+  {
+    id: "project-config",
+    storageClass: "canonical",
+    scope: "project",
+    shareable: true,
+    rebuildable: false,
+    retention: { kind: "permanent" },
+    cleanupOwner: "never",
+    description: ".guild/config/{project,workspace}.json \u2014 policy-only durable config; host/model identity is refused here (KTD22)."
+  },
+  {
+    id: "wiki-page",
+    storageClass: "canonical",
+    scope: "project",
+    shareable: true,
+    rebuildable: false,
+    retention: { kind: "permanent" },
+    cleanupOwner: "never",
+    description: ".guild/wiki/** \u2014 synthesized knowledge, decisions, standards, glossary."
+  },
+  {
+    id: "definition-agent",
+    storageClass: "canonical",
+    scope: "project",
+    shareable: true,
+    rebuildable: false,
+    retention: { kind: "permanent" },
+    cleanupOwner: "never",
+    description: ".guild/agents/*.md \u2014 minted specialist profiles (KTD20); never overwritten by feedstock."
+  },
+  {
+    id: "definition-skill",
+    storageClass: "canonical",
+    scope: "project",
+    shareable: true,
+    rebuildable: false,
+    retention: { kind: "permanent" },
+    cleanupOwner: "never",
+    description: ".guild/skills/<name>/SKILL.md \u2014 project-authored skills (KTD20)."
+  },
+  {
+    id: "definition-source",
+    storageClass: "durable-record",
+    scope: "project",
+    shareable: false,
+    rebuildable: false,
+    retention: { kind: "permanent" },
+    cleanupOwner: "never",
+    description: 'definition("sources", <id>) \u2014 ingested blobs kept as durable sources (KTD47/R59). Replaces the retired raw sources tree.'
+  },
+  {
+    id: "initiative-record",
+    storageClass: "durable-record",
+    scope: "project",
+    shareable: true,
+    rebuildable: false,
+    retention: { kind: "until-archive" },
+    cleanupOwner: "initiative-archive",
+    description: ".guild/initiatives/{active,archived}/** \u2014 durable work records."
+  },
+  {
+    id: "run-record",
+    storageClass: "durable-record",
+    scope: "project",
+    shareable: true,
+    rebuildable: false,
+    retention: { kind: "until-archive" },
+    cleanupOwner: "initiative-archive",
+    description: ".guild/runs/<run-id>/** \u2014 the KTD16 frozen run record the benchmark reads (logs/v1.4-events.jsonl)."
+  },
+  {
+    id: "analysis-artifact",
+    storageClass: "durable-record",
+    scope: "project",
+    shareable: true,
+    rebuildable: true,
+    retention: { kind: "until-archive" },
+    cleanupOwner: "initiative-archive",
+    description: ".guild/analysis/** and .guild/recommendations/** \u2014 KTD16 producer outputs."
+  },
+  // ── runtime: needed while something runs, not truth afterwards ────────────
+  {
+    id: "layout-journal",
+    storageClass: "runtime",
+    scope: "local",
+    shareable: false,
+    rebuildable: false,
+    retention: { kind: "ttl", ttl_hours: 24 * 30 },
+    cleanupOwner: "cache-gc",
+    description: "<state>/roots/<root-id>/journal/** \u2014 the layout-upgrade journal, deliberately OUTSIDE .guild (KTD23; T07 writes it)."
+  },
+  {
+    id: "evolve-compact-history",
+    storageClass: "runtime",
+    scope: "local",
+    shareable: false,
+    rebuildable: false,
+    retention: { kind: "ttl", ttl_hours: 24 * 90 },
+    cleanupOwner: "cache-gc",
+    description: "<state>/roots/<root-id>/evolve-history/<key>.json \u2014 guild.evolve_history.v1: the inverse span + before/after hash of each applied evolve delta. Replaces the retired per-version snapshot tree (KTD48/R60); NOT run-scoped, because rollback must work in a later session."
+  },
+  {
+    id: "run-lease",
+    storageClass: "runtime",
+    scope: "local",
+    shareable: false,
+    rebuildable: false,
+    retention: { kind: "run-scoped" },
+    cleanupOwner: "run-close",
+    description: "<state>/roots/<root-id>/runs/<run-id>/** \u2014 leases and live execution state."
+  },
+  // ── cache: derived, rebuildable, off the repo ─────────────────────────────
+  {
+    id: "index-sqlite",
+    storageClass: "cache",
+    scope: "local",
+    shareable: false,
+    rebuildable: true,
+    retention: { kind: "ttl", ttl_hours: 24 * 30 },
+    cleanupOwner: "cache-gc",
+    description: "BM25/recall SQLite index \u2014 rebuildable from the wiki (was .guild/index.sqlite)."
+  },
+  {
+    id: "codebase-map",
+    storageClass: "cache",
+    scope: "local",
+    shareable: false,
+    rebuildable: true,
+    retention: { kind: "ttl", ttl_hours: 24 * 14 },
+    cleanupOwner: "cache-gc",
+    description: "CodebaseMap cheap-scan output \u2014 rebuildable by learn-map."
+  },
+  {
+    id: "knowledge-graph",
+    storageClass: "cache",
+    scope: "local",
+    shareable: false,
+    rebuildable: true,
+    retention: { kind: "ttl", ttl_hours: 24 * 30 },
+    cleanupOwner: "cache-gc",
+    description: "KnowledgeGraph + knowledge-links recall projection \u2014 rebuildable by learn-graph."
+  },
+  {
+    id: "model-catalog",
+    storageClass: "cache",
+    scope: "local",
+    shareable: false,
+    rebuildable: true,
+    retention: { kind: "ttl", ttl_hours: 24 * 7 },
+    cleanupOwner: "cache-gc",
+    description: "Provider/model catalog \u2014 refetched on miss; never durable truth (KTD22)."
+  },
+  // ── managed resources: things with an owner and a reaper ──────────────────
+  {
+    id: "lane-worktree",
+    storageClass: "managed-resource",
+    scope: "local",
+    shareable: false,
+    rebuildable: true,
+    retention: { kind: "run-scoped" },
+    cleanupOwner: "resource-reaper",
+    description: "<worktrees>/<root-id>/<run-id>/<lane-id> \u2014 managed lane worktree; dirty trees are preserved."
+  },
+  // ── temporary: scratch, deleted on close ──────────────────────────────────
+  {
+    id: "run-scratch",
+    storageClass: "temporary",
+    scope: "local",
+    shareable: false,
+    rebuildable: true,
+    retention: { kind: "run-scoped" },
+    cleanupOwner: "run-close",
+    description: "temporary(<run-id>) \u2014 research/experiment working files (KTD34/R51). Never a durable tree; deleted by closeRun."
+  },
+  {
+    id: "session-scratch",
+    storageClass: "temporary",
+    scope: "local",
+    shareable: false,
+    rebuildable: true,
+    retention: { kind: "ttl", ttl_hours: 24 },
+    cleanupOwner: "scratch-janitor",
+    description: "temporary() with no run \u2014 swept by the 24h janitor after a crash or reboot."
+  }
+]);
+var BY_ID = new Map(STORAGE_ARTIFACT_REGISTRY.map((p) => [p.id, p]));
+
+// src/domains/state/storage-fs.ts
+var fs8 = __toESM(require("node:fs"));
+var path11 = __toESM(require("node:path"));
+function lstatSafe(p) {
+  try {
+    return fs8.lstatSync(p);
+  } catch {
+    return null;
+  }
+}
+function readdirSafe(dir) {
+  try {
+    return fs8.readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+function resolveContainedRealDir(abs, root) {
+  const st = lstatSafe(abs);
+  if (!st || !st.isDirectory() || st.isSymbolicLink()) return null;
+  let real;
+  let realRoot;
+  try {
+    real = fs8.realpathSync(abs);
+    realRoot = fs8.realpathSync(root);
+  } catch {
+    return null;
+  }
+  const rel2 = path11.relative(realRoot, real);
+  if (rel2 === "" || rel2.startsWith("..") || path11.isAbsolute(rel2)) return null;
+  return real;
+}
+function isContainedRealDir(abs, root) {
+  return resolveContainedRealDir(abs, root) !== null;
+}
+function removeContainedTree(abs, root) {
+  const real = resolveContainedRealDir(abs, root);
+  if (!real) return null;
+  fs8.rmSync(real, { recursive: true, force: true });
+  return real;
+}
+
+// src/domains/state/storage-layout.ts
+var POLICY_CONFIG_FILES = Object.freeze({
+  project: "config/project.json",
+  workspace: "config/workspace.json"
+});
+
+// src/domains/state/upgrade-glossary.ts
+var GLOSSARY_FEEDSTOCK = `---
+schema_version: guild.glossary.v1
+title: Glossary
+description: Guild operating terms. Add this project's own terms below; Guild never overwrites this file.
+---
+
+# Glossary
+
+Terms the Guild machinery uses. The context-manager attaches matching entries to a
+specialist bundle on demand \u2014 this file is never loaded whole into the always-on
+prefix (KTD70).
+
+## Guild terms
+
+- **root** \u2014 a directory with a \`.guild/\` tree. Guild has exactly two levels: an
+  umbrella workspace root and its immediate project roots.
+- **durable** \u2014 content under \`.guild/\` that you would lose by deleting it. Caches,
+  scratch and runtime state are NOT durable and live off the repo.
+- **run** \u2014 one lifecycle execution, recorded under \`.guild/runs/<run-id>/\`.
+- **lane** \u2014 one specialist's slice of a plan, dispatched as its own task cell.
+- **handoff** \u2014 the compact envelope a specialist returns. The parent reads the
+  envelope, never the specialist's transcript.
+- **tier** \u2014 \`cheap\` | \`mid\` | \`powerful\`. A selector, never a model name; the
+  host adapter maps a tier to a model at dispatch.
+- **session binding** \u2014 the host and models resolved for ONE run. Session state,
+  never durable config.
+- **harvest** \u2014 the automatic capture of a decision into this root's wiki. The
+  only unattended writer there is; everything else goes through a human.
+- **class** \u2014 which of the five graphs a run follows: \`product\`, \`research\`,
+  \`debug\`, \`ops\`, \`init\`. Bound once at intake, by a typed verb, or by
+  \`--class=\`.
+- **cursor** \u2014 where a run currently sits on its class graph. Read on crash resume.
+- **working set** \u2014 the small card a phase reads first: pinned decision ids, open
+  questions, and a fingerprint that says whether any of it can have changed.
+- **lane bundle** \u2014 the \u22641200-token citation list a parent sees. Parents get
+  citations; only the specialist reads the sources.
+- **recall** \u2014 looking something up before doing it. Cheap and mandatory; research
+  is what happens when recall misses.
+- **redirect** \u2014 an operator correction that made the orchestrator change course.
+  Three on the same agent and topic in one run fire a harvest.
+- **layout version** \u2014 the integer in \`.guild/storage-layout.json\` saying which
+  storage layout this root is on. Guild upgrades a root on activation.
+
+## Project terms
+
+Add yours here. This file is yours once it exists.
+`;
+
+// src/domains/state/upgrade-journal.ts
+var LOCK_STALE_MS = 15 * 60 * 1e3;
+
+// src/domains/state/upgrade-steps.ts
+var crypto3 = __toESM(require("node:crypto"));
+var fs9 = __toESM(require("node:fs"));
+var path12 = __toESM(require("node:path"));
+var KNOWLEDGE_PREFIX = `.guild/${DURABLE_SUBTREES.knowledge}`;
+var DERIVED_PATTERNS = Object.freeze([
+  /^indexes(\/|$)/,
+  /^index\.sqlite$/,
+  /^hosts(\/|$)/,
+  /^current-run-id$/,
+  /^agents\/registry\.yaml$/,
+  /^skills\/registry\.yaml$/,
+  /^bus\/\.lock$/,
+  /(^|\/)\.tmp-[^/]+$/
+]);
+function classifyPath(relToGuild) {
+  const rel2 = relToGuild.split(path12.sep).join("/");
+  return DERIVED_PATTERNS.some((re) => re.test(rel2)) ? "derived" : "durable";
+}
+function rel(ctx, abs) {
+  return path12.relative(ctx.root, abs).split(path12.sep).join("/");
+}
+function knowledgeDir(ctx, ...segments) {
+  const scope = ctx.storage.project ?? ctx.storage.workspace;
+  if (!scope) throw new Error("root owns no durable scope: cannot name the knowledge tree");
+  return scope.knowledge(...segments);
+}
+function readIfFile(abs) {
+  const st = lstatSafe(abs);
+  if (!st || !st.isFile()) return null;
+  try {
+    return fs9.readFileSync(abs, "utf8");
+  } catch {
+    return null;
+  }
+}
+function writeFile(ctx, abs, text) {
+  if (ctx.dryRun) return;
+  fs9.mkdirSync(path12.dirname(abs), { recursive: true });
+  fs9.writeFileSync(abs, text, "utf8");
+}
+function sha256(text) {
+  return crypto3.createHash("sha256").update(text).digest("hex");
+}
+function filesUnder(dir, out = []) {
+  for (const name of readdirSafe(dir)) {
+    const abs = path12.join(dir, name);
+    const st = lstatSafe(abs);
+    if (!st) continue;
+    if (st.isDirectory()) filesUnder(abs, out);
+    else if (st.isFile()) out.push(abs);
+  }
+  return out;
+}
+function setByPath(target, dotted, value) {
+  const parts = dotted.split(".");
+  let node = target;
+  for (const seg of parts.slice(0, -1)) {
+    const next = node[seg];
+    if (typeof next !== "object" || next === null || Array.isArray(next)) node[seg] = {};
+    node = node[seg];
+  }
+  node[parts[parts.length - 1]] = value;
+}
+function getByPath(source, dotted) {
+  let node = source;
+  for (const seg of dotted.split(".")) {
+    if (typeof node !== "object" || node === null) return void 0;
+    node = node[seg];
+  }
+  return node;
+}
+function flatten(value, prefix = "", out = {}) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    if (prefix) out[prefix] = value;
+    return out;
+  }
+  for (const [k, v] of Object.entries(value)) {
+    flatten(v, prefix ? `${prefix}.${k}` : k, out);
+  }
+  return out;
+}
+var v1Content = {
+  id: "v1-content",
+  cls: "durable",
+  source: "proposal \xA721.7",
+  affects: [".guild"],
+  apply(ctx) {
+    if (!ctx.v1) {
+      return {
+        status: "skipped",
+        detail: "no v1 converter provided by this entry point; legacy content left untouched",
+        paths: []
+      };
+    }
+    const r = ctx.v1({ root: ctx.root, dryRun: ctx.dryRun });
+    const complaints = [r.error, ...r.warnings ?? []].filter((m) => typeof m === "string" && m !== "");
+    if (complaints.length > 0 || r.action === "error" || r.action === "corrupt-blocked") {
+      return {
+        status: "failed",
+        detail: `v1 converter reported ${complaints.length || 1} problem(s): ${complaints.join("; ") || r.action}`,
+        paths: []
+      };
+    }
+    if (r.classification === "v2" || r.classification === "none" || r.action === "v2-noop" || r.action === "none") {
+      return { status: "skipped", detail: `v1 converter: ${r.classification}/${r.action} \u2014 nothing to convert`, paths: [] };
+    }
+    return {
+      status: "completed",
+      detail: `v1 converter: ${r.classification}/${r.action}, ${r.changed} artifact(s)`,
+      paths: [".guild"]
+    };
+  }
+};
+var settingsPolicySplit = {
+  id: "settings-policy-split",
+  cls: "durable",
+  source: "proposal \xA721.6",
+  affects: [".guild/settings.json", ".guild/config"],
+  apply(ctx) {
+    const legacy = readIfFile(path12.join(ctx.guildDir, "settings.json"));
+    if (legacy === null) return { status: "skipped", detail: "no .guild/settings.json to split", paths: [] };
+    let parsed;
+    try {
+      parsed = JSON.parse(legacy);
+    } catch {
+      return { status: "skipped", detail: ".guild/settings.json is not parseable JSON \u2014 preserved, not split", paths: [] };
+    }
+    if (!ctx.policy) {
+      return { status: "skipped", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
+    }
+    const cfg = ctx.policy;
+    const flat = flatten(parsed);
+    const policy = {};
+    let dropped = 0;
+    for (const [key, value] of Object.entries(flat)) {
+      const canonical = cfg.canonicalPolicyKey(key);
+      if (!cfg.isPolicyKey(canonical)) {
+        dropped += 1;
+        continue;
+      }
+      if (cfg.findHostIdentity(canonical, value) !== null) {
+        dropped += 1;
+        continue;
+      }
+      setByPath(policy, canonical, value);
+    }
+    const targets = [];
+    if (ctx.storage.project) targets.push(ctx.storage.project.config());
+    if (ctx.storage.workspace) targets.push(ctx.storage.workspace.config());
+    if (targets.length === 0) return { status: "skipped", detail: "root owns no durable config scope", paths: [] };
+    const written = [];
+    for (const target of targets) {
+      const existing = readIfFile(target);
+      let base = {};
+      if (existing !== null) {
+        try {
+          const value = JSON.parse(existing);
+          if (value === null || typeof value !== "object" || Array.isArray(value)) {
+            throw new Error("top level is not a JSON object");
+          }
+          base = value;
+        } catch (e) {
+          const where = rel(ctx, target);
+          return {
+            status: "blocked_confirm",
+            detail: `${where} is not parseable JSON (${e.message}) \u2014 left byte-identical, not replaced`,
+            paths: [where],
+            question: `settings-policy-split cannot read ${where}: ${e.message}. Fix or remove that file, then re-run the upgrade. Replace it with a fresh policy file?`
+          };
+        }
+      }
+      let added = 0;
+      for (const [key, value] of Object.entries(flatten(policy))) {
+        if (getByPath(base, key) !== void 0) continue;
+        setByPath(base, key, value);
+        added += 1;
+      }
+      if (added === 0) continue;
+      writeFile(ctx, target, `${JSON.stringify(base, null, 2)}
+`);
+      written.push(rel(ctx, target));
+    }
+    if (written.length === 0) {
+      return { status: "skipped", detail: "policy keys already present in every scoped config file", paths: [] };
+    }
+    return {
+      status: "completed",
+      detail: `split ${Object.keys(flatten(policy)).length} policy key(s) into ${written.join(" + ")}` + (dropped > 0 ? `; ${dropped} non-policy/inventory key(s) not transferred (KTD22)` : "") + (written.length === 2 ? "; hybrid root \u2014 the legacy dual-role file was split into both scopes" : ""),
+      paths: written
+    };
+  }
+};
+var PINNED_KEYS = /^(host|host_id|host_family|model|model_id|model_name|models)$/;
+var TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}([Tt ].*)?$/;
+function isPlainScalar(v) {
+  return typeof v === "string" || typeof v === "number" || typeof v === "boolean";
+}
+function isIdentityEntry(key, raw, parsed, cfg) {
+  const isDate = parsed instanceof Date || raw !== void 0 && TIMESTAMP_RE.test(raw);
+  const text = raw !== void 0 ? raw : isPlainScalar(parsed) ? String(parsed) : void 0;
+  const scalar = raw !== void 0 ? raw !== "" : isPlainScalar(parsed) && String(parsed) !== "";
+  if (!scalar) return false;
+  if (text !== void 0 && text.includes("\n")) return false;
+  if (PINNED_KEYS.test(key)) return true;
+  if (isDate || text === void 0) return cfg.findHostIdentity(key, "") !== null;
+  return cfg.findHostIdentity(key, text) !== null;
+}
+function expectedAfterStrip(node, cfg) {
+  if (Array.isArray(node)) {
+    const out2 = [];
+    for (const item of node) {
+      const wasNonEmptyMapping = isPlainObject(item) && Object.keys(item).length > 0;
+      const next = expectedAfterStrip(item, cfg);
+      if (wasNonEmptyMapping && isPlainObject(next) && Object.keys(next).length === 0) continue;
+      out2.push(next);
+    }
+    return out2;
+  }
+  if (!isPlainObject(node)) return node;
+  const out = {};
+  for (const [key, value] of Object.entries(node)) {
+    if (isIdentityEntry(key, void 0, value, cfg)) continue;
+    out[key] = expectedAfterStrip(value, cfg);
+  }
+  return out;
+}
+function isPlainObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof Date);
+}
+function sameData(a, b) {
+  if (a instanceof Date || b instanceof Date) {
+    return a instanceof Date && b instanceof Date && a.getTime() === b.getTime();
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((item, i) => sameData(item, b[i]));
+  }
+  if (isPlainObject(a) || isPlainObject(b)) {
+    if (!isPlainObject(a) || !isPlainObject(b)) return false;
+    const ka = Object.keys(a);
+    const kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    return ka.every(
+      (k) => kb.includes(k) && sameData(a[k], b[k])
+    );
+  }
+  return a === b;
+}
+var BLOCK_SCALAR = /:\s*[|>]([0-9]?)[+-]?\s*(#.*)?$/;
+var MAP_ENTRY = /^(\s*)(?:(-)(\s+))?("[^"]*"|'[^']*'|[^\s#][^:]*?):(?:(\s+)(.*))?$/;
+function splitInlineValue(rawValue) {
+  if (rawValue.trimStart().startsWith("#")) return { value: "", comment: rawValue.trim() };
+  const quote = /^["']/.exec(rawValue.trimStart());
+  if (quote) {
+    const text = rawValue.trimStart();
+    const q = text[0];
+    let i = 1;
+    while (i < text.length) {
+      if (q === '"' && text[i] === "\\") i += 2;
+      else if (q === "'" && text[i] === "'" && text[i + 1] === "'") i += 2;
+      else if (text[i] === q) break;
+      else i += 1;
+    }
+    const rest = text.slice(i + 1).trim();
+    return { value: text.slice(1, i), comment: rest.startsWith("#") ? rest : null };
+  }
+  const hash = rawValue.search(/[ \t]#/);
+  if (hash >= 0) return { value: rawValue.slice(0, hash).trim(), comment: rawValue.slice(hash + 1).trim() };
+  return { value: rawValue.trim(), comment: null };
+}
+function scanLines(lines) {
+  const scan = [];
+  const protectedLines = /* @__PURE__ */ new Set();
+  let pending = null;
+  let contentIndent = null;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const blank = line.trim() === "";
+    const indent = line.length - line.trimStart().length;
+    if (pending !== null || contentIndent !== null) {
+      if (blank) {
+        protectedLines.add(i);
+        continue;
+      }
+      if (contentIndent === null) {
+        const base = pending.base;
+        const resolved = pending.explicit !== null ? base + pending.explicit : indent;
+        if (resolved <= base) {
+          pending = null;
+        } else {
+          contentIndent = resolved;
+          pending = null;
+          if (indent >= contentIndent) {
+            protectedLines.add(i);
+            continue;
+          }
+          contentIndent = null;
+        }
+      } else if (indent >= contentIndent) {
+        protectedLines.add(i);
+        continue;
+      } else {
+        contentIndent = null;
+      }
+    }
+    if (blank || /^\s*#/.test(line)) continue;
+    const m = MAP_ENTRY.exec(line);
+    if (!m) continue;
+    const [, pad, dash, dashGap, key, , rawValue] = m;
+    const keyCol = pad.length + (dash ? 1 + (dashGap ?? "").length : 0);
+    const header = BLOCK_SCALAR.exec(line);
+    if (header) {
+      pending = { base: keyCol, explicit: header[1] === "" ? null : Number(header[1]) };
+      contentIndent = null;
+    }
+    const split = rawValue === void 0 ? null : splitInlineValue(rawValue);
+    scan.push({
+      idx: i,
+      indent: pad.length,
+      dash: dash === "-",
+      keyCol,
+      key: key.replace(/^["'](.*)["']$/, "$1"),
+      value: split === null ? void 0 : split.value,
+      comment: split === null ? null : split.comment,
+      rawValue: rawValue ?? ""
+    });
+  }
+  return { scan, protectedLines };
+}
+function commentsIn(text) {
+  const lines = text.split("\n");
+  const { protectedLines } = scanLines(lines);
+  const out = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (protectedLines.has(i)) continue;
+    const line = lines[i];
+    if (/^\s*#/.test(line)) {
+      out.push(line.trim());
+      continue;
+    }
+    const m = MAP_ENTRY.exec(line);
+    if (!m) continue;
+    const rawValue = m[6];
+    if (rawValue === void 0) continue;
+    const { comment } = splitInlineValue(rawValue);
+    if (comment !== null) out.push(comment);
+  }
+  return out.sort();
+}
+function stripHostIdentityFromYaml(text, cfg, commentsOf = commentsIn) {
+  const yaml2 = loadYamlApi();
+  let doc;
+  try {
+    doc = yaml2.load(text);
+  } catch (e) {
+    return { next: text, removed: [], parseError: e.message };
+  }
+  if (doc === null || doc === void 0 || typeof doc !== "object") {
+    return { next: text, removed: [] };
+  }
+  const lines = text.split("\n");
+  const { scan, protectedLines } = scanLines(lines);
+  const removed = [];
+  const deleted = /* @__PURE__ */ new Set();
+  const rewritten = /* @__PURE__ */ new Map();
+  const promotedItems = /* @__PURE__ */ new Set();
+  const keptComments = /* @__PURE__ */ new Map();
+  const block = (reason, line) => ({
+    next: text,
+    removed: [],
+    blockReason: reason,
+    blockLine: line === void 0 ? void 0 : line + 1
+  });
+  for (let n = 0; n < scan.length; n += 1) {
+    const node = scan[n];
+    if (node.key === null || node.value === void 0) continue;
+    const flow = /^[[{]/.test(node.rawValue.trim());
+    if (flow) {
+      const pairs = node.rawValue.matchAll(/([A-Za-z_][\w.-]*)\s*:\s*([^,{}[\]]+)/g);
+      for (const [, k, v] of pairs) {
+        if (isIdentityEntry(k, v.trim(), void 0, cfg)) {
+          return block(`flow-style mapping carries host/model identity (${k}: ${v.trim()})`, node.idx);
+        }
+      }
+      continue;
+    }
+    if (!isIdentityEntry(node.key, node.value, void 0, cfg)) continue;
+    if (/^\t| \t/.test(lines[node.idx]) || lines.some((l, i) => !protectedLines.has(i) && /^\t/.test(l))) {
+      return block("tab-indented YAML cannot be edited by line", node.idx);
+    }
+    if (lines.some((l, i) => i > 0 && !protectedLines.has(i) && /^(---|\.\.\.)\s*$/.test(l))) {
+      return block("multi-document YAML", node.idx);
+    }
+    const anchorAt = lines.findIndex((l, i) => !protectedLines.has(i) && /(^|\s)(<<:|[&*][A-Za-z_])/.test(l));
+    if (anchorAt >= 0) return block("anchor or alias in the document", anchorAt);
+    removed.push(`${node.key}: ${node.value}`);
+    if (node.comment !== null) keptComments.set(node.idx, { indent: node.indent, text: node.comment });
+    if (!node.dash) {
+      deleted.add(node.idx);
+      continue;
+    }
+    const body = [];
+    for (let k = n + 1; k < scan.length; k += 1) {
+      if (scan[k].indent <= node.indent) break;
+      if (scan[k].indent === node.keyCol) body.push(scan[k].idx);
+    }
+    if (body.length === 0) {
+      deleted.add(node.idx);
+      continue;
+    }
+    const promote = body[0];
+    promotedItems.add(node.idx);
+    const promoted = lines[promote];
+    if (promoted.length - promoted.trimStart().length !== node.keyCol) {
+      return block("sequence item continuation is not at the key column", promote);
+    }
+    const dashGap = " ".repeat(node.keyCol - node.indent - 1);
+    deleted.add(node.idx);
+    rewritten.set(promote, `${" ".repeat(node.indent)}-${dashGap}${promoted.trimStart()}`);
+  }
+  if (removed.length === 0) return { next: text, removed: [] };
+  for (let n = 0; n < scan.length; n += 1) {
+    const parent = scan[n];
+    if (parent.key === null || parent.value !== void 0 && parent.value !== "") continue;
+    if (deleted.has(parent.idx) || rewritten.has(parent.idx)) continue;
+    const direct = [];
+    let childIndent = null;
+    for (let k = n + 1; k < scan.length; k += 1) {
+      const c = scan[k];
+      if (c.indent < parent.indent) break;
+      if (c.indent === parent.indent && !c.dash) break;
+      if (childIndent === null) childIndent = c.indent;
+      if (c.indent < childIndent) break;
+      if (c.indent === childIndent) direct.push(c);
+    }
+    if (direct.length === 0) continue;
+    if (!direct.every((c) => deleted.has(c.idx) && !promotedItems.has(c.idx))) continue;
+    const empty = direct[0].dash ? "[]" : "{}";
+    const moved = [];
+    for (const child of direct) {
+      const kept = keptComments.get(child.idx);
+      if (kept === void 0) continue;
+      moved.push(`${" ".repeat(parent.indent)}${kept.text}`);
+      keptComments.delete(child.idx);
+    }
+    const parentLine = lines[parent.idx];
+    const parentComment = parent.comment;
+    const upToComment = parentComment === null ? "" : parentLine.slice(0, parentLine.lastIndexOf(parentComment));
+    const head = parentComment === null ? parentLine.replace(/:\s*$/, "") : upToComment.replace(/[:\s]*$/, "");
+    const tail = parentComment === null ? "" : `${/(\s*)$/.exec(upToComment)?.[1] ?? " "}${parentComment}`;
+    rewritten.set(parent.idx, [...moved, `${head}: ${empty}${tail}`].join("\n"));
+  }
+  const next = lines.map((line, i) => {
+    if (!deleted.has(i)) return rewritten.get(i) ?? line;
+    const kept = keptComments.get(i);
+    return kept === void 0 ? null : `${" ".repeat(kept.indent)}${kept.text}`;
+  }).filter((line) => line !== null).join("\n");
+  let after;
+  try {
+    after = yaml2.load(next);
+  } catch (e) {
+    return block(`the line edit produced unparseable YAML (${e.message})`);
+  }
+  if (!sameData(after, expectedAfterStrip(doc, cfg))) {
+    return block("the line edit would change data other than the host/model identity");
+  }
+  const before = commentsOf(text);
+  const afterComments = commentsOf(next);
+  const pool = [...afterComments];
+  const lost = [];
+  for (const comment of before) {
+    const at = pool.indexOf(comment);
+    if (at < 0) lost.push(comment);
+    else pool.splice(at, 1);
+  }
+  if (lost.length > 0) return { next: text, removed: [], lostComments: lost };
+  return { next, removed };
+}
+var ktd22Strip = {
+  id: "ktd22-host-identity-strip",
+  cls: "durable",
+  source: "KTD22 / R38",
+  affects: [".guild/initiatives", ".guild/team", ".guild/teams"],
+  apply(ctx) {
+    if (!ctx.policy) {
+      return { status: "skipped", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
+    }
+    const cfg = ctx.policy;
+    const roots = ["initiatives", "team", "teams"].map((d) => path12.join(ctx.guildDir, d));
+    const touched = [];
+    let removedTotal = 0;
+    for (const dir of roots) {
+      if (!isContainedRealDir(dir, ctx.guildDir)) continue;
+      for (const abs of filesUnder(dir)) {
+        if (!/\.ya?ml$/.test(abs)) continue;
+        const text = readIfFile(abs);
+        if (text === null) continue;
+        const { next, removed, parseError, blockReason, blockLine, lostComments } = stripHostIdentityFromYaml(text, cfg);
+        if (parseError !== void 0) {
+          const where = rel(ctx, abs);
+          return {
+            status: "blocked_confirm",
+            detail: `${where} is not parseable YAML (${parseError}) \u2014 left byte-identical, not rewritten`,
+            paths: [where],
+            question: `ktd22-host-identity-strip cannot parse ${where}: ${parseError}. Fix that file, then re-run the upgrade. Skip it and continue?`
+          };
+        }
+        if (lostComments !== void 0 && lostComments.length > 0) {
+          return {
+            status: "failed",
+            detail: `${rel(ctx, abs)}: the strip would drop ${lostComments.length} comment(s) (${lostComments.join(" / ")}) \u2014 nothing was written`,
+            paths: [rel(ctx, abs)]
+          };
+        }
+        if (blockReason !== void 0) {
+          const where = blockLine === void 0 ? rel(ctx, abs) : `${rel(ctx, abs)}:${blockLine}`;
+          return {
+            status: "blocked_confirm",
+            detail: `${where} carries host/model identity this step cannot remove by line (${blockReason}) \u2014 left byte-identical`,
+            paths: [rel(ctx, abs)],
+            question: `ktd22-host-identity-strip cannot safely edit ${where}: ${blockReason}. Remove the host/model identity there by hand, then re-run the upgrade. Skip it and continue?`
+          };
+        }
+        if (removed.length === 0) continue;
+        writeFile(ctx, abs, next);
+        touched.push(rel(ctx, abs));
+        removedTotal += removed.length;
+      }
+    }
+    if (touched.length === 0) {
+      return { status: "skipped", detail: "no host or model identity pinned in durable initiative/team files", paths: [] };
+    }
+    return {
+      status: "completed",
+      detail: `stripped ${removedTotal} host/model pin(s) from ${touched.length} durable file(s)`,
+      paths: touched
+    };
+  }
+};
+var CACHE_TARGETS = Object.freeze(["indexes", "index.sqlite", "hosts"]);
+var cachesOut = {
+  id: "caches-out",
+  cls: "safe-local",
+  source: "proposal \xA721.11",
+  affects: [],
+  apply(ctx) {
+    const removed = [];
+    for (const name of CACHE_TARGETS) {
+      const abs = path12.join(ctx.guildDir, name);
+      const st = lstatSafe(abs);
+      if (!st) continue;
+      if (classifyPath(name) !== "derived") {
+        return {
+          status: "blocked_confirm",
+          detail: `refusing to remove non-derived path .guild/${name}`,
+          paths: [rel(ctx, abs)],
+          question: `caches-out wants to delete .guild/${name}, which is not classified derived. Delete it?`
+        };
+      }
+      if (ctx.dryRun) {
+        removed.push(rel(ctx, abs));
+        continue;
+      }
+      if (st.isDirectory()) {
+        if (removeContainedTree(abs, ctx.guildDir) !== null) removed.push(rel(ctx, abs));
+      } else {
+        fs9.rmSync(abs, { force: true });
+        removed.push(rel(ctx, abs));
+      }
+    }
+    if (removed.length === 0) return { status: "skipped", detail: "no derived cache left under .guild", paths: [] };
+    return {
+      status: "completed",
+      detail: `removed ${removed.length} derived cache path(s); V2 rebuilds them on the platform cache root`,
+      paths: removed
+    };
+  }
+};
+var TERMINAL_STATUSES = Object.freeze([
+  "closed",
+  "complete",
+  "completed",
+  "done",
+  "failed",
+  "aborted",
+  "cancelled",
+  "canceled"
+]);
+function terminalRunStatus(runYaml) {
+  let doc;
+  try {
+    doc = loadYamlApi().load(runYaml);
+  } catch {
+    return null;
+  }
+  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return null;
+  const value = doc["status"];
+  if (typeof value !== "string") return null;
+  const status = value.trim().toLowerCase();
+  return TERMINAL_STATUSES.includes(status) ? status : null;
+}
+var closedRunReceipts = {
+  id: "closed-run-receipts",
+  cls: "durable",
+  source: "proposal \xA721.10",
+  affects: [".guild/runs"],
+  apply(ctx) {
+    const runsDir = path12.join(ctx.guildDir, "runs");
+    if (!isContainedRealDir(runsDir, ctx.guildDir)) {
+      return { status: "skipped", detail: "no .guild/runs tree", paths: [] };
+    }
+    const written = [];
+    let open = 0;
+    for (const name of readdirSafe(runsDir)) {
+      if (name.startsWith("_")) continue;
+      const runDir = path12.join(runsDir, name);
+      if (!isContainedRealDir(runDir, ctx.guildDir)) continue;
+      const receipt = path12.join(runDir, "receipt.json");
+      if (lstatSafe(receipt)) continue;
+      const runYaml = readIfFile(path12.join(runDir, "run.yaml"));
+      if (runYaml === null) continue;
+      const status = terminalRunStatus(runYaml);
+      if (status === null) {
+        open += 1;
+        continue;
+      }
+      writeFile(
+        ctx,
+        receipt,
+        `${JSON.stringify(
+          {
+            schema_version: "guild.run_receipt.v1",
+            run_id: name,
+            status,
+            source: "layout-upgrade",
+            generated_at: ctx.now()
+          },
+          null,
+          2
+        )}
+`
+      );
+      written.push(rel(ctx, receipt));
+    }
+    if (written.length === 0) {
+      return {
+        status: "skipped",
+        detail: `every legacy run already has a receipt or is not terminal (${open} left open)`,
+        paths: []
+      };
+    }
+    return {
+      status: "completed",
+      detail: `wrote ${written.length} run receipt(s); ${open} non-terminal run(s) left untouched (never falsely closed)`,
+      paths: written
+    };
+  }
+};
+var currentRunIdRetire = {
+  id: "current-run-id-retire",
+  cls: "safe-local",
+  source: "proposal \xA721.10",
+  affects: [],
+  apply(ctx) {
+    const abs = path12.join(ctx.guildDir, "current-run-id");
+    const text = readIfFile(abs);
+    if (text === null) return { status: "skipped", detail: "no current-run-id sentinel", paths: [] };
+    const captured = text.trim();
+    if (classifyPath("current-run-id") !== "derived") {
+      return {
+        status: "blocked_confirm",
+        detail: "current-run-id is not classified derived",
+        paths: [rel(ctx, abs)],
+        question: "current-run-id-retire wants to delete .guild/current-run-id. Delete it?"
+      };
+    }
+    if (!ctx.dryRun) fs9.rmSync(abs, { force: true });
+    return {
+      status: "completed",
+      detail: `captured run binding "${captured}" and retired the singleton sentinel; V2 writers never recreate it`,
+      paths: [rel(ctx, abs)]
+    };
+  }
+};
+var LEGACY_VERSION_TREE = "skill-versions";
+var skillVersionsDelete = {
+  id: "skill-versions-delete",
+  cls: "safe-local",
+  source: "proposal \xA721.12 / R60",
+  affects: [],
+  apply(ctx) {
+    const dir = path12.join(ctx.guildDir, LEGACY_VERSION_TREE);
+    if (!isContainedRealDir(dir, ctx.guildDir)) {
+      return { status: "skipped", detail: `no leftover ${LEGACY_VERSION_TREE} tree`, paths: [] };
+    }
+    const snapshots = filesUnder(dir);
+    if (snapshots.length === 0) {
+      if (!ctx.dryRun) removeContainedTree(dir, ctx.guildDir);
+      return { status: "completed", detail: `removed the empty ${LEGACY_VERSION_TREE} tree`, paths: [rel(ctx, dir)] };
+    }
+    const live = /* @__PURE__ */ new Set();
+    const skillsDir = path12.join(ctx.guildDir, "skills");
+    if (isContainedRealDir(skillsDir, ctx.guildDir)) {
+      for (const abs of filesUnder(skillsDir)) {
+        const text = readIfFile(abs);
+        if (text !== null) live.add(sha256(text));
+      }
+    }
+    const unique = snapshots.filter((abs) => {
+      const text = readIfFile(abs);
+      return text === null || !live.has(sha256(text));
+    });
+    if (unique.length > 0) {
+      return {
+        status: "blocked_confirm",
+        detail: `${unique.length} legacy snapshot(s) carry content no live skill body has`,
+        paths: unique.slice(0, 10).map((abs) => rel(ctx, abs)),
+        question: `skill-versions-delete found ${unique.length} snapshot(s) under .guild/${LEGACY_VERSION_TREE}/ whose content is NOT in any live .guild/skills/** body, so they are not derived. Review them and either keep the tree or remove it yourself, then re-run \`config migrate --mode=migrate\`.`
+      };
+    }
+    if (!ctx.dryRun) removeContainedTree(dir, ctx.guildDir);
+    return {
+      status: "completed",
+      detail: `removed ${snapshots.length} redundant snapshot(s); every one matched a live skill body`,
+      paths: [rel(ctx, dir)]
+    };
+  }
+};
+var AUTHORED_REGISTRIES = Object.freeze(["loops/registry.yaml", "workflows/registry.yaml"]);
+var DERIVED_REGISTRIES = Object.freeze(["agents/registry.yaml", "skills/registry.yaml"]);
+var registryYamlRetire = {
+  id: "registry-yaml-retire",
+  cls: "durable",
+  source: "KTD56 / R68",
+  affects: [".guild/loops", ".guild/workflows", ".guild/agents/registry.yaml", ".guild/skills/registry.yaml"],
+  apply(ctx) {
+    const changed = [];
+    for (const relPath of DERIVED_REGISTRIES) {
+      const abs = path12.join(ctx.guildDir, relPath);
+      if (!lstatSafe(abs)) continue;
+      if (classifyPath(relPath) !== "derived") continue;
+      if (!ctx.dryRun) fs9.rmSync(abs, { force: true });
+      changed.push(rel(ctx, abs));
+    }
+    for (const relPath of AUTHORED_REGISTRIES) {
+      const abs = path12.join(ctx.guildDir, relPath);
+      const text = readIfFile(abs);
+      if (text === null) continue;
+      const target = path12.join(ctx.guildDir, "artifacts", "legacy", relPath.replace("/", "-"));
+      if (lstatSafe(target)) continue;
+      writeFile(ctx, target, text);
+      if (!ctx.dryRun) fs9.rmSync(abs, { force: true });
+      changed.push(`${rel(ctx, abs)} \u2192 ${rel(ctx, target)}`);
+    }
+    if (changed.length === 0) {
+      return { status: "skipped", detail: "no registry YAML left to retire", paths: [] };
+    }
+    return {
+      status: "completed",
+      detail: `retired ${changed.length} registry file(s); authored ones were preserved under artifacts/legacy/, not deleted`,
+      paths: changed
+    };
+  }
+};
+var glossaryCreate = {
+  id: "glossary-create",
+  cls: "durable",
+  source: "R80 / KTD70",
+  // The KNOWLEDGE TREE, not just the file: a durable step must not write into a
+  // tree whose tracked pages are dirty, even when its own target does not exist yet.
+  affects: [KNOWLEDGE_PREFIX],
+  apply(ctx) {
+    const abs = knowledgeDir(ctx, "glossary.md");
+    if (lstatSafe(abs)) {
+      return {
+        status: "skipped",
+        detail: "project glossary already exists \u2014 feedstock never replaces it (R80)",
+        paths: []
+      };
+    }
+    writeFile(ctx, abs, GLOSSARY_FEEDSTOCK);
+    return { status: "completed", detail: "created the root glossary page from plugin feedstock", paths: [rel(ctx, abs)] };
+  }
+};
+var UPGRADE_STEPS = deepFreeze([
+  v1Content,
+  settingsPolicySplit,
+  ktd22Strip,
+  cachesOut,
+  closedRunReceipts,
+  currentRunIdRetire,
+  skillVersionsDelete,
+  registryYamlRetire,
+  glossaryCreate
+]);
+var UPGRADE_STEP_IDS = Object.freeze(UPGRADE_STEPS.map((s) => s.id));
+
+// src/domains/state/wiki-importance.ts
+var STRUCTURAL_BASENAMES = sealSet([
+  "index.md",
+  "readme.md",
+  "log.md",
+  "query.md",
+  "transfer-manifest.md"
+], "STRUCTURAL_BASENAMES");
+
+// src/domains/state/federated-query.ts
+var fs10 = __toESM(require("fs"));
+var path13 = __toESM(require("path"));
+function federatedQuery(root, query, scope) {
+  const manifestPath = path13.join(durableGuildDir(root), "workspace.json");
+  if (!fs10.existsSync(manifestPath)) {
+    throw new Error(`workspace.json not found at ${manifestPath}`);
+  }
+  const manifest = JSON.parse(fs10.readFileSync(manifestPath, "utf8"));
+  let candidates = manifest.sub_guilds.filter((sg) => sg.has_wiki);
+  if (scope !== void 0) {
+    const named = candidates.find((sg) => sg.name === scope);
+    if (!named) {
+      process.stderr.write(
+        `[workspace/federated-query] WARN: scope "${scope}" not found or has no wiki \u2014 0 query steps
+`
+      );
+      candidates = [];
+    } else {
+      candidates = [named];
+    }
+  }
+  if (candidates.length === 0 && scope === void 0) {
+    process.stderr.write(
+      `[workspace/federated-query] WARN: no sub_guilds with has_wiki=true \u2014 0 query steps
+`
+    );
+  }
+  const steps = [];
+  for (const sg of candidates) {
+    const subAbsPath = path13.resolve(root, sg.path);
+    steps.push({
+      type: "query",
+      sub_guild: sg.name,
+      tool: "wiki_search",
+      cwd: subAbsPath,
+      query
+    });
+  }
+  steps.push({
+    type: "merge_and_tag",
+    description: "Merge results from all query steps; tag each result hit with its source sub_guild name. Deduplicate by page path if the same page appears via multiple guild-memory calls. Present to the user with [sub_guild: <name>] provenance."
+  });
+  return { query, steps };
+}
+function parseArgs(argv) {
+  let cwd;
+  let query;
+  let scope;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--cwd" && argv[i + 1]) cwd = argv[++i];
+    else if (arg === "--query" && argv[i + 1]) query = argv[++i];
+    else if (arg === "--scope" && argv[i + 1]) scope = argv[++i];
+  }
+  return { cwd, query, scope };
+}
+function runFederatedQueryCli(argv = process.argv.slice(2)) {
+  const { cwd: cwdArg, query, scope } = parseArgs(argv);
+  const cwd = cwdArg ?? process.env["GUILD_CWD"] ?? process.cwd();
+  if (!query) {
+    process.stderr.write(`[workspace/federated-query] ERROR: --query is required
+`);
+    process.exit(1);
+  }
+  if (!fs10.existsSync(path13.join(durableGuildDir(cwd), "workspace.json"))) {
+    process.stderr.write(
+      `[workspace/federated-query] ERROR: no workspace.json at ${path13.join(durableGuildDir(cwd), "workspace.json")}
+`
+    );
+    process.exit(1);
+  }
+  try {
+    const plan = federatedQuery(cwd, query, scope);
+    process.stdout.write(JSON.stringify(plan, null, 2) + "\n");
+  } catch (e) {
+    process.stderr.write(`[workspace/federated-query] ERROR: ${e.message}
+`);
+    process.exit(2);
+  }
+}
+if (typeof module !== "undefined" && require.main === module && /^federated-query\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+  runFederatedQueryCli();
+}
+
+// src/domains/state/promote-upstream.ts
+var fs11 = __toESM(require("fs"));
+var path14 = __toESM(require("path"));
+function validateRunId(runId) {
+  if (!runId || !runId.trim()) return false;
+  if (runId.includes("\0")) return false;
+  if (runId.startsWith("/") || runId.startsWith("\\")) return false;
+  if (runId.includes("/") || runId.includes("\\")) return false;
+  if (runId === ".") return false;
+  if (runId === ".." || runId.startsWith("..")) return false;
+  if (runId.includes("..")) return false;
+  return true;
+}
+function isCrossCutting(candidate) {
+  if (candidate.upstream === true) return true;
+  if (Array.isArray(candidate.applies_to) && candidate.applies_to.length > 1) return true;
+  return false;
+}
+function readSubGuilds(workspaceRoot) {
+  const manifestPath = path14.join(durableGuildDir(workspaceRoot), "workspace.json");
+  if (!fs11.existsSync(manifestPath)) return [];
+  try {
+    const raw = JSON.parse(fs11.readFileSync(manifestPath, "utf8"));
+    const sgs = raw["sub_guilds"];
+    if (!Array.isArray(sgs)) return [];
+    return sgs.map((sg) => ({
+      name: String(sg["name"] ?? ""),
+      path: String(sg["path"] ?? sg["name"] ?? "")
+    }));
+  } catch {
+    return [];
+  }
+}
+function findHarvestFiles(childDir) {
+  const runsDir = path14.join(durableGuildDir(childDir), "runs");
+  if (!fs11.existsSync(runsDir)) return [];
+  const results = [];
+  try {
+    const runIds = fs11.readdirSync(runsDir);
+    for (const runId of runIds) {
+      const candidate = path14.join(runsDir, runId, "learn", "harvest-candidates.json");
+      if (fs11.existsSync(candidate)) {
+        results.push(candidate);
+      }
+    }
+  } catch {
+  }
+  return results;
+}
+function extractFromHarvestFile(harvestPath, childName, workspaceRoot) {
+  let raw;
+  try {
+    raw = JSON.parse(fs11.readFileSync(harvestPath, "utf8"));
+  } catch {
+    return [];
+  }
+  const sourcePath = path14.relative(workspaceRoot, harvestPath);
+  const staged = [];
+  const wikiCandidates = Array.isArray(raw.wiki_candidates) ? raw.wiki_candidates : [];
+  const decisionCandidates = Array.isArray(raw.decision_candidates) ? raw.decision_candidates : [];
+  for (const wc of wikiCandidates) {
+    if (!isCrossCutting(wc)) continue;
+    const candidate = {
+      kind: "wiki",
+      id_or_title: wc.title ?? "(untitled)",
+      source_repo: childName,
+      source_path: sourcePath,
+      source_refs: wc.source_refs ?? [],
+      promotion_gate: wc.promotion_gate ?? "guild:wiki-ingest"
+    };
+    if (Array.isArray(wc.applies_to)) candidate.applies_to = wc.applies_to;
+    if (wc.upstream === true) candidate.upstream = true;
+    staged.push(candidate);
+  }
+  for (const dc of decisionCandidates) {
+    if (!isCrossCutting(dc)) continue;
+    const candidate = {
+      kind: "decision",
+      id_or_title: dc.decision ?? "(untitled decision)",
+      source_repo: childName,
+      source_path: sourcePath,
+      source_refs: dc.source_refs ?? [],
+      promotion_gate: dc.promotion_gate ?? "guild:decisions"
+    };
+    if (Array.isArray(dc.applies_to)) candidate.applies_to = dc.applies_to;
+    if (dc.upstream === true) candidate.upstream = true;
+    staged.push(candidate);
+  }
+  return staged;
+}
+function collectUpstreamCandidates(opts) {
+  const { workspaceRoot } = opts;
+  let children;
+  if (opts.child) {
+    const all2 = readSubGuilds(workspaceRoot);
+    const found = all2.find((sg) => sg.name === opts.child);
+    children = found ? [found] : [{ name: opts.child, path: opts.child }];
+  } else {
+    children = readSubGuilds(workspaceRoot);
+  }
+  const all = [];
+  for (const child of children) {
+    const childDir = path14.join(workspaceRoot, child.path);
+    const harvestFiles = findHarvestFiles(childDir);
+    for (const hf of harvestFiles) {
+      const from = extractFromHarvestFile(hf, child.name, workspaceRoot);
+      all.push(...from);
+    }
+  }
+  return all;
+}
+function parseArgs2(argv) {
+  let workspaceRoot;
+  let child;
+  let runId;
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--workspace-root" && argv[i + 1]) {
+      workspaceRoot = argv[++i];
+    } else if (arg === "--child" && argv[i + 1]) {
+      child = argv[++i];
+    } else if (arg === "--run-id" && argv[i + 1]) {
+      runId = argv[++i];
+    } else if (arg.startsWith("--workspace-root=")) {
+      workspaceRoot = arg.slice("--workspace-root=".length);
+    } else if (arg.startsWith("--child=")) {
+      child = arg.slice("--child=".length);
+    } else if (arg.startsWith("--run-id=")) {
+      runId = arg.slice("--run-id=".length);
+    }
+  }
+  return { workspaceRoot, child, runId };
+}
+function runPromoteUpstreamCli(argv = process.argv.slice(2)) {
+  const { workspaceRoot: rootArg, child, runId: runIdArg } = parseArgs2(argv);
+  const workspaceRoot = rootArg ?? process.env["GUILD_CWD"] ?? process.cwd();
+  if (!fs11.existsSync(workspaceRoot) || !fs11.statSync(workspaceRoot).isDirectory()) {
+    process.stderr.write(
+      `[promote-upstream] ERROR: --workspace-root "${workspaceRoot}" is not a directory
+`
+    );
+    process.exit(1);
+  }
+  const runId = runIdArg ?? `upstream-${child ?? "all"}`;
+  if (!validateRunId(runId)) {
+    process.stderr.write(
+      `[promote-upstream] ERROR: invalid run-id "${runId}" \u2014 path traversal or separator detected
+`
+    );
+    process.exit(1);
+  }
+  try {
+    const candidates = collectUpstreamCandidates({ workspaceRoot, child });
+    const runsBase = path14.resolve(durableGuildDir(workspaceRoot), "runs");
+    const runsDir = path14.join(runsBase, runId);
+    const manifestPath = path14.join(runsDir, "upstream-candidates.json");
+    const resolvedRunsDir = path14.resolve(runsDir);
+    if (!isWithin(resolvedRunsDir, runsBase) || resolvedRunsDir === runsBase) {
+      process.stderr.write(
+        `[promote-upstream] ERROR: resolved run dir "${resolvedRunsDir}" is not a strict subdirectory of the runs base
+`
+      );
+      process.exit(1);
+    }
+    const prepared = prepareContainedWrite(workspaceRoot, manifestPath, {
+      policy: "physical"
+    });
+    if (isRefused(prepared)) {
+      process.stderr.write(
+        `[promote-upstream] ERROR: resolved run dir "${resolvedRunsDir}" escapes runs base [${prepared.code}] \u2014 ${prepared.detail}
+`
+      );
+      process.exit(1);
+    }
+    const subGuilds = child ? [{ name: child, path: child }] : readSubGuilds(workspaceRoot);
+    const childrenScanned = subGuilds.map((sg) => sg.name);
+    const manifest = {
+      schema_version: "guild.upstream_candidates.v1",
+      generated_at: (/* @__PURE__ */ new Date()).toISOString(),
+      workspace_root: workspaceRoot,
+      children_scanned: childrenScanned,
+      candidates
+    };
+    atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+    const byRepo = /* @__PURE__ */ new Map();
+    for (const c of candidates) {
+      byRepo.set(c.source_repo, (byRepo.get(c.source_repo) ?? 0) + 1);
+    }
+    process.stdout.write(`[promote-upstream] Scanned: ${childrenScanned.join(", ") || "(none)"}
+`);
+    process.stdout.write(`[promote-upstream] Staged candidates: ${candidates.length}
+`);
+    for (const [repo, count] of byRepo) {
+      process.stdout.write(`  ${repo}: ${count}
+`);
+    }
+    process.stdout.write(
+      `[promote-upstream] GATE REMINDER: Promotion to docs/knowledge/ happens ONLY via guild:wiki-ingest (human gate). This manifest is by-reference only.
+`
+    );
+    process.stdout.write(`[promote-upstream] Manifest: ${manifestPath}
+`);
+  } catch (e) {
+    process.stderr.write(`[promote-upstream] ERROR: ${e.message}
+`);
+    process.exit(2);
+  }
+}
+if (typeof module !== "undefined" && require.main === module && /^promote-upstream\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+  runPromoteUpstreamCli();
+}
+
 // scripts/lib/frontmatter.ts
 var parseYaml3 = parseYaml2;
 
 // scripts/dot-guild/convert/wiki-importance.ts
-var STRUCTURAL_BASENAMES = sealSet(["index.md", "readme.md", "log.md", "query.md", "transfer-manifest.md"], "STRUCTURAL_BASENAMES");
-function splitFrontmatter2(content) {
+var STRUCTURAL_BASENAMES2 = sealSet(["index.md", "readme.md", "log.md", "query.md", "transfer-manifest.md"], "STRUCTURAL_BASENAMES");
+function splitFrontmatter3(content) {
   if (content.slice(0, 3) !== "---") return { fmLines: null, body: content };
   const lines = content.split("\n");
   if (lines[0].trim() !== "---") return { fmLines: null, body: content };
@@ -3334,24 +5274,24 @@ function splitFrontmatter2(content) {
   }
   return { fmLines: null, body: content };
 }
-function fmValue(fmLines, key) {
+function fmValue2(fmLines, key) {
   if (!fmLines) return null;
   const doc = parseYaml3(fmLines.join("\n"));
   if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return null;
   const v = doc[key];
   return v === void 0 || v === null ? null : String(v);
 }
-function walkWiki(fs6, wikiDir) {
+function walkWiki(fs14, wikiDir) {
   const out = [];
   const recur = (dir) => {
     let entries;
     try {
-      entries = fs6.readdirSync(dir);
+      entries = fs14.readdirSync(dir);
     } catch {
       return;
     }
     for (const e of [...entries].sort((a, b) => a.name.localeCompare(b.name))) {
-      const full = path4.join(dir, e.name);
+      const full = path15.join(dir, e.name);
       if (e.isDirectory) recur(full);
       else if (e.isFile && e.name.endsWith(".md")) out.push(full);
     }
@@ -3359,70 +5299,46 @@ function walkWiki(fs6, wikiDir) {
   recur(wikiDir);
   return out.sort();
 }
-function acceptGrades(fs6, guildDir) {
-  const wikiDir = path4.join(guildDir, "wiki");
+function acceptGrades(fs14, guildDir) {
+  const wikiDir = path15.join(guildDir, "wiki");
   const accepted = [];
-  if (!fs6.existsSync(wikiDir)) return accepted;
-  for (const p of walkWiki(fs6, wikiDir)) {
-    const content = fs6.readFileSync(p);
-    const { fmLines, body } = splitFrontmatter2(content);
+  if (!fs14.existsSync(wikiDir)) return accepted;
+  for (const p of walkWiki(fs14, wikiDir)) {
+    const content = fs14.readFileSync(p);
+    const { fmLines, body } = splitFrontmatter3(content);
     if (fmLines === null) continue;
-    if (fmValue(fmLines, "importance_draft") !== "true") continue;
+    if (fmValue2(fmLines, "importance_draft") !== "true") continue;
     const kept = fmLines.filter(
       (l) => !/^importance_draft\s*:/.test(l) && !/^graded_by\s*:/.test(l)
     );
-    fs6.writeFileSync(p, `---
+    fs14.writeFileSync(p, `---
 ${kept.join("\n")}
 ---
 ${body}`);
     accepted.push({
-      rel: path4.relative(guildDir, p),
-      grade: fmValue(fmLines, "importance") ?? "(none)"
+      rel: path15.relative(guildDir, p),
+      grade: fmValue2(fmLines, "importance") ?? "(none)"
     });
   }
   return accepted;
 }
 
 // scripts/lib/state/ensure-storage-layout.ts
-var fs4 = __toESM(require("node:fs"));
-var path6 = __toESM(require("node:path"));
-
-// src/domains/state/guild-root.ts
-var fs3 = __toESM(require("node:fs"));
-var path5 = __toESM(require("node:path"));
-function resolveGuildRoot(startDir) {
-  const resolvedStart = path5.resolve(startDir);
-  let current = resolvedStart;
-  let nearestGuildDir = null;
-  for (; ; ) {
-    if (fs3.existsSync(path5.join(current, ".git"))) return current;
-    if (nearestGuildDir === null) {
-      const guildDir = path5.join(current, ".guild");
-      try {
-        if (fs3.existsSync(guildDir) && fs3.statSync(guildDir).isDirectory()) nearestGuildDir = current;
-      } catch {
-      }
-    }
-    const parent = path5.dirname(current);
-    if (parent === current) return nearestGuildDir ?? resolvedStart;
-    current = parent;
-  }
-}
-
-// scripts/lib/state/ensure-storage-layout.ts
+var fs12 = __toESM(require("node:fs"));
+var path16 = __toESM(require("node:path"));
 var CURRENT_LAYOUT_VERSION = 2;
 function markerPath(root) {
-  return path6.join(root, ".guild", "storage-layout.json");
+  return path16.join(root, ".guild", "storage-layout.json");
 }
-function detect2(cwd = process.cwd()) {
+function detect3(cwd = process.cwd()) {
   const root = resolveGuildRoot(cwd);
   const marker = markerPath(root);
-  if (!fs4.existsSync(path6.join(root, ".guild"))) {
+  if (!fs12.existsSync(path16.join(root, ".guild"))) {
     return { state: "absent", version: null, root, marker };
   }
   let version = null;
   try {
-    const parsed = JSON.parse(fs4.readFileSync(marker, "utf8"));
+    const parsed = JSON.parse(fs12.readFileSync(marker, "utf8"));
     if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
   } catch {
     version = null;
@@ -3435,17 +5351,17 @@ var upgradeChunk = null;
 function upgradeChain() {
   if (upgradeChunk === null) {
     const candidates = [
-      path6.join(__dirname, "upgrade-chain.js"),
-      path6.join(__dirname, "lib", "state", "upgrade-chain"),
-      path6.join(__dirname, "upgrade-chain")
+      path16.join(__dirname, "upgrade-chain.js"),
+      path16.join(__dirname, "lib", "state", "upgrade-chain"),
+      path16.join(__dirname, "upgrade-chain")
     ];
-    const spec = candidates.find((c) => fs4.existsSync(c) || fs4.existsSync(`${c}.ts`)) ?? candidates[2];
+    const spec = candidates.find((c) => fs12.existsSync(c) || fs12.existsSync(`${c}.ts`)) ?? candidates[2];
     upgradeChunk = require(spec);
   }
   return upgradeChunk;
 }
 function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
-  const status = detect2(cwd);
+  const status = detect3(cwd);
   if (status.state === "current") return status;
   if (status.state === "future") {
     throw new Error(
@@ -3460,7 +5376,7 @@ function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
     toVersion: CURRENT_LAYOUT_VERSION,
     dryRun: opts.dryRun === true
   });
-  const after = detect2(cwd);
+  const after = detect3(cwd);
   return { ...after, upgrade: result };
 }
 function isProcessEntry() {
@@ -3494,24 +5410,24 @@ if (isProcessEntry()) {
 function childGuildRoots(root) {
   let names = [];
   try {
-    names = fs5.readdirSync(root);
+    names = fs13.readdirSync(root);
   } catch {
     return [];
   }
   const out = [];
   for (const name of names) {
     if (name.startsWith(".")) continue;
-    const child = path7.join(root, name);
+    const child = path17.join(root, name);
     try {
-      if (!fs5.lstatSync(child).isDirectory()) continue;
-      if (fs5.existsSync(path7.join(child, ".guild"))) out.push(child);
+      if (!fs13.lstatSync(child).isDirectory()) continue;
+      if (fs13.existsSync(path17.join(child, ".guild"))) out.push(child);
     } catch {
     }
   }
   return out;
 }
 function upgradeOne(root, mode, prefix) {
-  const before = detect2(root);
+  const before = detect3(root);
   if (before.state === "absent") {
     process.stdout.write(`${prefix}no .guild/ at ${root} \u2014 nothing to migrate.
 `);
@@ -3556,9 +5472,9 @@ function main() {
   const rootArg = args.find((a) => a.startsWith("--root="));
   const modeArg = args.find((a) => a.startsWith("--mode="));
   const workspace = args.includes("--workspace");
-  const root = rootArg ? path7.resolve(rootArg.split("=").slice(1).join("=")) : process.cwd();
+  const root = rootArg ? path17.resolve(rootArg.split("=").slice(1).join("=")) : process.cwd();
   if (args.includes("--accept-grades")) {
-    const accepted = acceptGrades(realFs, path7.join(root, ".guild"));
+    const accepted = acceptGrades(realFs, path17.join(root, ".guild"));
     if (accepted.length === 0) {
       process.stdout.write(`No drafted wiki importance grades pending \u2014 nothing to accept.
 `);

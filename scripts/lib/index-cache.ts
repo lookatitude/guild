@@ -11,9 +11,5 @@ export {
   ensureKgIndex,
   ensureKgProjectionIndex,
   ensureWikiFtsIndex,
-} from "../../src/domains/state/index-cache";
-export type {
-  IndexBlock,
-  CacheStatus,
-  CacheResult,
-} from "../../src/domains/state/index-cache";
+} from "../../src/domains/state/index";
+export type { IndexBlock, CacheStatus, CacheResult } from "../../src/domains/state/index";

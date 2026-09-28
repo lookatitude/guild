@@ -122,6 +122,7 @@ import { validateRunId } from "../../scripts/lib/run-lifecycle.js";
 // internal deps (config-defaults.ts's own contract) — safe to bundle into hooks/dist/.
 import { DEFAULTS as CONFIG_DEFAULTS } from "../../scripts/lib/shared/config-defaults.js";
 import { runDirOverride } from "./run-dir-override.js";
+import { durableGuildDir } from "../../src/domains/state";
 
 /** Stable marker string — pinned by tests and the dist-grep rail. */
 export const LEAN_LEAD_MARKER = "[GUILD LEAN-LEAD]";
@@ -170,7 +171,7 @@ export interface LeanLeadConfig {
  */
 export function readLeanLeadConfig(guildRoot: string): LeanLeadConfig {
   try {
-    const { resolveSettings } = require("../../src/domains/config/settings-resolver") as {
+    const { resolveSettings } = require("../../src/domains/config") as {
       resolveSettings: (o: { cwd: string }) => { config: Record<string, unknown> };
     };
     const parsed = resolveSettings({ cwd: guildRoot }).config as {
@@ -430,7 +431,7 @@ export async function evaluateLeanLeadGuard(
   const config = readLeanLeadConfig(guildRoot);
   if (!config.enabled || isOverridden(env)) return { advisory: null };
 
-  const runDir = runDirOverride(env) ?? path.join(guildRoot, ".guild", "runs", safeRunId);
+  const runDir = runDirOverride(env) ?? path.join(durableGuildDir(guildRoot), "runs", safeRunId);
   const openLanes = countOpenLanes(runDir);
   if (openLanes === 0) return { advisory: null };
 

@@ -18,7 +18,7 @@
  *          tool_call event lives in `<runDir>/logs/v1.4-events.jsonl`.
  *
  * Stdin:   JSON — Claude Code PostToolUse hook payload.
- * Stdout:  Silent.
+ * Stdout:  Silent, except the T0 queue drain's additionalContext (T16I).
  * Stderr:  Diagnostic warnings only.
  * Exit:    Always 0 — telemetry must not block.
  */
@@ -81,7 +81,11 @@ import {
   readHookStdin,
   type GuildHookEvent,
 } from "./lib/guild-hook-event.js";
-import { emitTraceEvent, makeAnalysisTraceEvent } from "../src/modules/telemetry/index.js";
+import { emitTraceEvent, makeAnalysisTraceEvent } from "../src/domains/telemetry/index.js";
+import { createGuildStorage, durableGuildDir } from "../src/domains/state";
+import { refreshTouched } from "../src/domains/knowledge";
+// T16I (KTD33/KTD43): the lead session drains the T0 write queue from its own tool result.
+import { drainT0Queue } from "./lib/t0-drain.js";
 
 function isKnownTool(name: string | undefined): name is ToolCallTool {
   if (typeof name !== "string") return false;
@@ -208,7 +212,7 @@ function runGuildArtifactScrub(
   const effectiveRunDir =
     typeof runDir === "string" && runDir.length > 0
       ? runDir
-      : path.join(guildRoot, ".guild", "runs", effectiveRunId);
+      : path.join(durableGuildDir(guildRoot), "runs", effectiveRunId);
   const toolName = payload.tool_name;
   if (toolName !== "Write" && toolName !== "Edit") return;
 
@@ -383,6 +387,34 @@ export async function main(): Promise<void> {
     return;
   }
 
+  // ── T16I (KTD33/KTD43): drain the T0 write queue ─────────────────────────
+  // `work-loop redirect` and `evolve-loop --apply` only enqueue. The gated writer
+  // runs here, in the lead session's hook, only when this call WAS the lead's own
+  // `node <plugin entry>` enqueue and its result is that call's one receipt. A lane
+  // worker's hook env, a subagent call, a printed (planted) receipt, or a swapped
+  // request file drains nothing. The outcome goes back to T0 as context and beside the request.
+  try {
+    const report = drainT0Queue(payload, process.env, __dirname, guildRoot);
+    if (report) {
+      for (const r of report.refused) {
+        process.stderr.write(`warn: [post-tool-use] T0 queue request ${r.request_id} refused: ${r.detail}\n`);
+      }
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PostToolUse",
+            additionalContext: `guild.t0_request.v1 drained: ${JSON.stringify(report)}`.slice(0, 8000),
+          },
+        }) + "\n",
+      );
+    }
+  } catch (err) {
+    process.stderr.write(
+      `warn: [post-tool-use] T0 queue drain threw (non-fatal): ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+  }
+  // ── end T0 queue drain ───────────────────────────────────────────────────
+
   // ── G-9 (SC-5): structured heartbeat write ────────────────────────────────
   // When GUILD_RUN_ID + GUILD_SPECIALIST are both exported (the dispatch path
   // sets them per lane), every PostToolUse refreshes the lane's structured
@@ -413,7 +445,7 @@ export async function main(): Promise<void> {
         ? earlyRunId
         : undefined;
     const earlyRunDir = earlyRunIdSafe
-      ? (runDirOverride() ?? path.join(guildRoot, ".guild", "runs", earlyRunIdSafe))
+      ? (runDirOverride() ?? path.join(durableGuildDir(guildRoot), "runs", earlyRunIdSafe))
       : undefined;
     // oir-wi-57: GUILD_LANE_ID has no producer anywhere in this codebase — every
     // real dispatch backend (inprocess-backend.ts, tmux-backend.ts,
@@ -449,7 +481,7 @@ export async function main(): Promise<void> {
   //                  the outer qa gate sees an unverified cell.
   if (toolName === "Write" || toolName === "Edit") {
     try {
-      const durableDir = path.join(guildRoot, ".guild");
+      const durableDir = durableGuildDir(guildRoot);
       const verifyRunId = resolveRunId();
       const verifyRunDir =
         runDirOverride() ??
@@ -476,6 +508,37 @@ export async function main(): Promise<void> {
   }
   // ── end verify.after_edit ────────────────────────────────────────────────
 
+  // ── KTD50 (R62/R75): the cheap after-edit refresh ─────────────────────────
+  // An edit invalidates exactly three derived things: the working-set card,
+  // the BM25 entry of a touched wiki page, and the edges citing the touched
+  // path. `refreshTouched` rebuilds those and nothing deeper — never the
+  // explicit learn tier. Cache-class writes only; never blocks the edit.
+  if (toolName === "Write" || toolName === "Edit") {
+    const ti = payload.tool_input as Record<string, unknown> | null | undefined;
+    const touched = ti && typeof ti["file_path"] === "string" ? (ti["file_path"] as string) : "";
+    if (touched !== "") {
+      try {
+        // Real paths on both sides: a symlinked checkout (macOS /var → /private/var)
+        // would otherwise place a wiki page outside the wiki it lives in.
+        const real = (p: string): string => (fs.existsSync(p) ? fs.realpathSync(p) : p);
+        // The root is already resolved: skip storage discovery's parent-workspace
+        // scan, which alone costs more than the whole after-edit budget. The
+        // wiki and the cache are keyed on the root, not on the profile.
+        const root = real(guildRoot);
+        refreshTouched([real(touched)], {
+          storage: createGuildStorage(root, { activeRoot: root, profile: "standalone" }),
+        });
+      } catch (err) {
+        process.stderr.write(
+          `warn: [post-tool-use] after-edit refresh threw (non-fatal): ${
+            err instanceof Error ? err.message : String(err)
+          }\n`,
+        );
+      }
+    }
+  }
+  // ── end after-edit refresh ───────────────────────────────────────────────
+
   // ── T10 rework (KTD28/R42 P2): skip-recorded compaction, from the tool path ─
   // KTD28 says a skip-recorded compaction rung still writes its disk files "each
   // heartbeat" — and the heartbeat cannot be PreCompact, because a skip-recorded
@@ -489,7 +552,7 @@ export async function main(): Promise<void> {
       const snapRunDir =
         runDirOverride() ??
         (snapRunId !== undefined && isSafeRunId(snapRunId)
-          ? path.join(guildRoot, ".guild", "runs", snapRunId)
+          ? path.join(durableGuildDir(guildRoot), "runs", snapRunId)
           : undefined);
       if (
         snapRunId !== undefined &&
@@ -535,7 +598,7 @@ export async function main(): Promise<void> {
     return;
   }
 
-  const runDir = runDirOverride() ?? path.join(guildRoot, ".guild", "runs", runId);
+  const runDir = runDirOverride() ?? path.join(durableGuildDir(guildRoot), "runs", runId);
   // Sidecar PAIRING key — MUST stay GUILD_LANE_ID-only, matching
   // hooks/pre-tool-use.ts's own resolution byte-for-byte (that file is a
   // sibling lane's and out of scope here). Broadening this to include

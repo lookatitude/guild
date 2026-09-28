@@ -78,7 +78,11 @@ function isPureModuleShim(sharedRel: string, content: string, spec: string, reso
   if (!/^src\/(modules|domains|adapters)\//.test(resolved)) return false;
   const trimmed = content.trim();
   const escapedSpec = spec.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const shimRe = new RegExp(`^(?:/\\*[\\s\\S]*?\\*/\\s*)?export\\s+\\*\\s+from\\s+["']${escapedSpec}["'];?$`);
+  // `export * from` or one named re-export list (T16: shims name what they take from
+  // the domain index). Nothing else may sit in the file.
+  const shimRe = new RegExp(
+    `^(?:/\\*[\\s\\S]*?\\*/\\s*)?export\\s+(?:\\*|\\{[^}]*\\})\\s+from\\s+["']${escapedSpec}["'];?$`,
+  );
   return shimRe.test(trimmed);
 }
 

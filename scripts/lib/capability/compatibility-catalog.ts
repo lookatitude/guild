@@ -7,4 +7,22 @@
  * scripts/lib/capability/*.
  */
 
-export * from "../../../src/domains/config/compatibility-catalog";
+export {
+  buildCompatibilityCatalog,
+  readCatalogEntry,
+  suggestableAssets,
+  compatibilityUsageForRead,
+  requiredAssetIdsForG5,
+  COMPATIBILITY_CATALOG_SCHEMA,
+  SHIPPED_TEMPLATE_COUNT,
+  SHIPPED_DOMAIN_SKILL_IDS,
+  SHIPPED_DOMAIN_SKILL_COUNT,
+  SHIPPED_COMPATIBILITY_ASSET_COUNT,
+  COMPATIBILITY_ASSET_ROOTS,
+  COMPATIBILITY_DEPRECATION_STATES,
+  type CompatibilityDeprecationState,
+  type CompatibilityCatalogEntry,
+  type CompatibilityCatalog,
+  type SuggestableAssets,
+  type CompatibilityUsageEmission,
+} from "../../../src/domains/config/index";

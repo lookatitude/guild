@@ -1,1 +1,17 @@
-export * from "../../src/domains/lifecycle/trace-v2.js";
+export {
+  genSpanId,
+  normalizeTokens,
+  isLlmCallEvent,
+  resolveTraceV2Fields,
+  pruneUndefined,
+  payloadSidecarPath,
+  payloadRef,
+  writePayloadSidecar,
+  TRACE_EVENT_SCHEMA,
+  TRACE_PAYLOAD_SCHEMA,
+  TRACE_V2_SIDECAR_MAX_BYTES as SIDECAR_MAX_BYTES,
+  type TraceTokens,
+  type TraceV2Fields,
+  type ResolveTraceOpts,
+  type PayloadSidecarInput,
+} from "../../src/domains/lifecycle/index.js";

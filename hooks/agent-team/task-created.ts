@@ -49,6 +49,7 @@ import { emitBusEvent } from "../lib/bus-emit.js";
 import { authorizeHookWrite, formatBindingRejected } from "../lib/hook-binding.js";
 // T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
 import { ensureStorageLayout } from "../lib/ensure-layout.js";
+import { durableGuildDir } from "../../src/domains/state";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -83,7 +84,7 @@ function extractDependsOn(text: string): string[] {
 /** Return all task IDs found in a plan markdown file (lines like "- task-001:" or "id: task-001") */
 function loadPlanTaskIds(cwd: string): Set<string> | null {
   // Look for any .guild/plan/*.md
-  const planDir = path.join(resolveGuildRoot(cwd), ".guild", "plan");
+  const planDir = path.join(durableGuildDir(resolveGuildRoot(cwd)), "plan");
   if (!fs.existsSync(planDir)) return null;
   const files = fs.readdirSync(planDir).filter((f) => f.endsWith(".md"));
   if (files.length === 0) return null;
@@ -207,7 +208,7 @@ async function main(): Promise<void> {
     process.stderr.write(formatBindingRejected("task-created", runStateAuth));
   } else {
     const runId = runStateAuth.run_id;
-    const runDir = path.join(guildRootForRun, ".guild", "runs", runId);
+    const runDir = path.join(durableGuildDir(guildRootForRun), "runs", runId);
     try {
       markLaneInProgress(runDir, { runId }, taskId);
       process.stderr.write(

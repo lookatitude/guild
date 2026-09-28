@@ -118,7 +118,9 @@ export type EvolveRefusalKind =
   | "permission"
   | "not_a_definition_file"
   | "curator_shape"
-  | "history_unreadable";
+  | "history_unreadable"
+  | "injection"
+  | "secret";
 
 /** A fail-closed evolve refusal. Carries the `next_need` T0 surfaces. */
 export class EvolveTargetRefusal extends Error {

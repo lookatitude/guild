@@ -46,6 +46,7 @@ import { resolveGuildRoot } from "./lib/guild-root.js";
 import { appendGateOutcome } from "../src/domains/lifecycle";
 // T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
 import { ensureStorageLayout } from "./lib/ensure-layout.js";
+import { durableGuildDir } from "../src/domains/state";
 
 interface GateWriterPayload {
   tool_name?: string;
@@ -54,7 +55,7 @@ interface GateWriterPayload {
 }
 
 function readCurrentRunId(cwd: string): string | undefined {
-  const sentinelPath = path.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
+  const sentinelPath = path.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", "current-run-id");
   try {
     const value = fs.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : undefined;
@@ -162,7 +163,7 @@ export async function main(): Promise<void> {
     return;
   }
 
-  const expectedDir = path.join(root, ".guild", "runs", runId);
+  const expectedDir = path.join(durableGuildDir(root), "runs", runId);
   const abs = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
   // Path-anchor: the write must be INSIDE THIS run's own dir — never record a
   // gate for a report belonging to a DIFFERENT run just because the basename

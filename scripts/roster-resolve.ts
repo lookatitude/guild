@@ -58,10 +58,12 @@ import {
 } from "./lib/roster";
 import type { WorkflowClass } from "../src/domains/teams";
 import { resolvePluginRoot } from "../src/domains/kernel";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 function main(): void {
   const argv = process.argv.slice(2);
   let cwd = ".";
+  ensureStorageLayout(cwd, { detectOnly: true });
   let pluginRoot: string | null = null;
   let writeRegistry = false;
   let check = false;

@@ -17,6 +17,8 @@ import { createHash } from "node:crypto";
 
 import { parseYaml } from "./agent-team-launcher";
 import { checkContained, isRefused } from "../src/domains/kernel";
+import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 export interface CliArgs {
   team: string;
@@ -88,7 +90,7 @@ function readApprovalBoundTeam(cwd: string, teamPath: string, expectedSha256: st
   if (!/^sha256:[0-9a-f]{64}$/.test(expectedSha256)) {
     throw new Error("team-sha256 must be sha256:<64 lowercase hex>");
   }
-  const teamRoot = path.join(cwd, ".guild", "team");
+  const teamRoot = path.join(durableGuildDir(cwd), "team");
   const relativeTeamPath = path.relative(teamRoot, teamPath);
   if (
     relativeTeamPath === "" ||
@@ -175,6 +177,7 @@ export function resolveAndWriteSpecialistScope(args: CliArgs): ScopeResolution {
 }
 
 export function main(argv: string[] = process.argv.slice(2)): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   try {
     process.stdout.write(`${JSON.stringify(resolveAndWriteSpecialistScope(parseArgs(argv)))}\n`);
     return 0;

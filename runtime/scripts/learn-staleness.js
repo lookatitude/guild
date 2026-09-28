@@ -23,13 +23,125 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // scripts/learn/staleness.ts
-var fs4 = __toESM(require("fs"));
-var path5 = __toESM(require("path"));
+var fs6 = __toESM(require("fs"));
+var path7 = __toESM(require("path"));
 
 // scripts/learn/lib/paths.ts
-var fs = __toESM(require("fs"));
-var path = __toESM(require("path"));
+var fs3 = __toESM(require("fs"));
+var path3 = __toESM(require("path"));
 var import_child_process = require("child_process");
+
+// scripts/lib/state/ensure-storage-layout.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      try {
+        if (fs.existsSync(guildDir) && fs.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function durableGuildDir(root) {
+  return path2.join(root, ".guild");
+}
+function markerPath(root) {
+  return path2.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs2.existsSync(path2.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs2.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path2.join(__dirname, "upgrade-chain.js"),
+      path2.join(__dirname, "lib", "state", "upgrade-chain"),
+      path2.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs2.existsSync(c) || fs2.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
+// scripts/learn/lib/paths.ts
 function parseCwd(argv) {
   const idx = argv.indexOf("--cwd");
   if (idx !== -1 && argv[idx + 1]) return argv[idx + 1];
@@ -44,38 +156,38 @@ function resolveMainRepoRoot(cwd) {
       cwd,
       encoding: "utf-8"
     }).trim();
-    const abs = path.isAbsolute(commonDir) ? commonDir : path.resolve(cwd, commonDir);
-    const root = path.dirname(abs);
-    if (fs.existsSync(root)) return root;
+    const abs = path3.isAbsolute(commonDir) ? commonDir : path3.resolve(cwd, commonDir);
+    const root = path3.dirname(abs);
+    if (fs3.existsSync(root)) return root;
   } catch {
   }
-  return path.resolve(cwd);
+  return path3.resolve(cwd);
 }
 function guildPaths(cwd) {
   const repoRoot = resolveMainRepoRoot(cwd);
-  const guildDir = path.join(repoRoot, ".guild");
-  const indexesDir = path.join(guildDir, "indexes");
-  const runsDir = path.join(guildDir, "runs");
+  const guildDir = durableGuildDir(repoRoot);
+  const indexesDir = path3.join(guildDir, "indexes");
+  const runsDir = path3.join(guildDir, "runs");
   return {
     repoRoot,
     guildDir,
     indexesDir,
     runsDir,
-    codebaseMap: path.join(indexesDir, "codebase-map.json"),
-    knowledgeGraph: path.join(indexesDir, "knowledge-graph.json"),
-    knowledgeLinks: path.join(indexesDir, "knowledge-links.json"),
-    knowledgeRecall: path.join(indexesDir, "knowledge-recall.json"),
-    fingerprint: path.join(indexesDir, "understand-fingerprint.json"),
-    partialGraph: path.join(indexesDir, "understand-partial-graph.json")
+    codebaseMap: path3.join(indexesDir, "codebase-map.json"),
+    knowledgeGraph: path3.join(indexesDir, "knowledge-graph.json"),
+    knowledgeLinks: path3.join(indexesDir, "knowledge-links.json"),
+    knowledgeRecall: path3.join(indexesDir, "knowledge-recall.json"),
+    fingerprint: path3.join(indexesDir, "understand-fingerprint.json"),
+    partialGraph: path3.join(indexesDir, "understand-partial-graph.json")
   };
 }
 function writeJson(filePath, data) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
+  fs3.mkdirSync(path3.dirname(filePath), { recursive: true });
+  fs3.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
 }
 function readJson(filePath) {
   try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+    return JSON.parse(fs3.readFileSync(filePath, "utf8"));
   } catch {
     return null;
   }
@@ -95,12 +207,12 @@ function headSha(cwd) {
 }
 
 // scripts/learn/lib/walk.ts
-var fs3 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
+var fs5 = __toESM(require("fs"));
+var path5 = __toESM(require("path"));
 
 // scripts/learn/lib/ignore.ts
-var fs2 = __toESM(require("fs"));
-var path2 = __toESM(require("path"));
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
 var DEFAULT_IGNORE_PATTERNS = Object.freeze([
   "node_modules/",
   ".git/",
@@ -224,9 +336,9 @@ function compile(patterns) {
 }
 function createIgnoreFilter(projectRoot) {
   const patterns = [...DEFAULT_IGNORE_PATTERNS];
-  const rootIgnore = path2.join(projectRoot, ".guildignore");
-  if (fs2.existsSync(rootIgnore)) {
-    patterns.push(...fs2.readFileSync(rootIgnore, "utf-8").split("\n"));
+  const rootIgnore = path4.join(projectRoot, ".guildignore");
+  if (fs4.existsSync(rootIgnore)) {
+    patterns.push(...fs4.readFileSync(rootIgnore, "utf-8").split("\n"));
   }
   const rules = compile(patterns);
   return {
@@ -249,14 +361,14 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
     if (out.length >= maxFiles) return;
     let entries;
     try {
-      entries = fs3.readdirSync(absDir, { withFileTypes: true });
+      entries = fs5.readdirSync(absDir, { withFileTypes: true });
     } catch {
       return;
     }
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const e of entries) {
-      const abs = path3.join(absDir, e.name);
-      const rel = path3.relative(repoRoot, abs).replace(/\\/g, "/");
+      const abs = path5.join(absDir, e.name);
+      const rel = path5.relative(repoRoot, abs).replace(/\\/g, "/");
       if (e.isDirectory()) {
         if (filter.isIgnored(rel) || filter.isIgnored(rel + "/")) continue;
         visit(abs);
@@ -273,7 +385,7 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
 }
 
 // scripts/learn/lib/languages.ts
-var path4 = __toESM(require("path"));
+var path6 = __toESM(require("path"));
 var EXT_LANG = {
   ".ts": "typescript",
   ".tsx": "typescript",
@@ -329,9 +441,9 @@ var BASENAME_LANG = {
   ".gitignore": "config"
 };
 function detectLanguage(filePath) {
-  const base = path4.basename(filePath);
+  const base = path6.basename(filePath);
   if (BASENAME_LANG[base]) return BASENAME_LANG[base];
-  const ext = path4.extname(filePath).toLowerCase();
+  const ext = path6.extname(filePath).toLowerCase();
   return EXT_LANG[ext] ?? "unknown";
 }
 function isCodeLanguage(lang) {
@@ -687,7 +799,7 @@ function readTree(repoRoot) {
   for (const rel of files) {
     if (!isCodeLanguage(detectLanguage(rel))) continue;
     try {
-      out[rel] = fs4.readFileSync(path5.join(repoRoot, rel), "utf8");
+      out[rel] = fs6.readFileSync(path7.join(repoRoot, rel), "utf8");
     } catch {
     }
   }
@@ -703,7 +815,7 @@ function main() {
     const store2 = buildStore(tree, commit);
     writeJson(gp.fingerprint, store2);
     process.stderr.write(
-      `[staleness] baseline written: ${Object.keys(store2.files).length} files @ ${commit.slice(0, 8)} \u2192 ${path5.relative(gp.repoRoot, gp.fingerprint)}
+      `[staleness] baseline written: ${Object.keys(store2.files).length} files @ ${commit.slice(0, 8)} \u2192 ${path7.relative(gp.repoRoot, gp.fingerprint)}
 `
     );
     process.stdout.write("BASELINE\n");

@@ -1,6 +1,6 @@
 ---
 name: guild-wiki-lint
-description: Audits .guild/wiki/ for contradictions between pages, stale claims (expires_at passed), missing §10.1.1 frontmatter fields, orphan pages (not linked from index.md), concepts referenced ≥3x without a page, missing source_refs resolution to .guild/raw/sources/<slug>/, and decision pages not in ADR-lite shape. Produces .guild/wiki/lint-<timestamp>.md. NEVER auto-edits — findings are for the user to act on. TRIGGER for "run wiki-lint", "audit the wiki for contradictions", "check wiki health", "find orphan pages", "any stale wiki pages", "which wiki pages have broken source_refs". DO NOT TRIGGER for: ingesting a new source (guild:wiki-ingest), searching or querying wiki content (guild:wiki-query), capturing a Q&A decision (guild:decisions), or editing a specific wiki page directly.
+description: Audits .guild/wiki/ for contradictions between pages, stale claims (expires_at passed), missing §10.1.1 frontmatter fields, orphan pages (not linked from index.md), concepts referenced ≥3x without a page, missing source_refs resolution to .guild/knowledge/sources/<slug>/, and decision pages not in ADR-lite shape. Produces .guild/wiki/lint-<timestamp>.md. NEVER auto-edits — findings are for the user to act on. TRIGGER for "run wiki-lint", "audit the wiki for contradictions", "check wiki health", "find orphan pages", "any stale wiki pages", "which wiki pages have broken source_refs". DO NOT TRIGGER for: ingesting a new source (guild:wiki-ingest), searching or querying wiki content (guild:wiki-query), capturing a Q&A decision (guild:decisions), or editing a specific wiki page directly.
 when_to_use: Weekly schedule, after any batch of 5+ ingests in a session, or on explicit `/guild:wiki lint` invocation.
 type: knowledge
 ---
@@ -14,7 +14,7 @@ Read-only auditor. Complements `guild:wiki-ingest` (write) and `guild:wiki-query
 ## Input
 
 - **wiki root** — `.guild/wiki/` walked recursively. Every `.md` is a candidate page EXCEPT `index.md` (catalog), `log.md` (append-only log), and `lint-*.md` (prior reports).
-- **raw root** — `.guild/raw/sources/` walked for `source_refs` resolution; each `<slug>/` must contain `original.*` + `metadata.json` per `guild:wiki-ingest`.
+- **raw root** — `.guild/knowledge/sources/` walked for `source_refs` resolution; each `<slug>/` must contain `original.*` + `metadata.json` per `guild:wiki-ingest`.
 - **now** — current UTC timestamp, for `expires_at` comparison and the report filename.
 
 Lint takes no user arguments; it walks the entire wiki on every invocation.
@@ -67,7 +67,7 @@ Do not self-trigger between runs. Lint is idempotent: two runs produce two repor
 
 ## Non-destructive rule
 
-Lint NEVER auto-edits any file under `.guild/wiki/` or `.guild/raw/` — no rewriting frontmatter (even a trivially inferable field), no deleting orphans, no collapsing contradictions, no stub concept pages, no purging stale pages. The only write it performs is the lint report under `.guild/wiki/lint-<timestamp>.md`. Every finding is surfaced for the user to act on. This mirrors the `§10.6` guarantee: the lint step is advisory, not corrective.
+Lint NEVER auto-edits any file under `.guild/wiki/` or `.guild/knowledge/sources/` — no rewriting frontmatter (even a trivially inferable field), no deleting orphans, no collapsing contradictions, no stub concept pages, no purging stale pages. The only write it performs is the lint report under `.guild/wiki/lint-<timestamp>.md`. Every finding is surfaced for the user to act on. This mirrors the `§10.6` guarantee: the lint step is advisory, not corrective.
 
 ## Handoff
 

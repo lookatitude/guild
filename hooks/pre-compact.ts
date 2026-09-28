@@ -86,6 +86,7 @@ import { appendEvent, type HookEvent } from "./lib/v1.4/log-jsonl.js";
 // lib/trace-v2.ts header. Hook events are not LLM calls → no tokens.
 import { resolveTraceV2Fields } from "./lib/trace-v2.js";
 import { resolveLaneAttribution } from "./lib/lane-attribution.js";
+import { durableGuildDir } from "../src/domains/state";
 
 interface PreCompactPayload {
   session_id?: string;
@@ -234,7 +235,7 @@ export async function main(): Promise<void> {
     return;
   }
 
-  const runDir = runDirOverride() ?? path.join(guildRoot, ".guild", "runs", runId);
+  const runDir = runDirOverride() ?? path.join(durableGuildDir(guildRoot), "runs", runId);
 
   // ── T10 (KTD26/KTD28/R42/R46): the compaction rung ────────────────────────
   // The context is about to be reclaimed. What survives is what is on DISK:

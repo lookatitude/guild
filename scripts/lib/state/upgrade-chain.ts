@@ -23,11 +23,7 @@
 import { formatUpgradeReport, runUpgrade } from "../../../src/domains/state";
 // The closed policy set, imported NARROWLY (not through the config barrel) so the
 // compiled chunk carries `policy-keys` + kernel and not all of config's fan-out.
-import {
-  canonicalPolicyKey,
-  findHostIdentity,
-  isPolicyKey,
-} from "../../../src/domains/config/policy-keys";
+import { canonicalPolicyKey, findHostIdentity, isPolicyKey } from "../../../src/domains/config/index";
 import { planMigration, runMigration } from "../../dot-guild/convert";
 
 /** What `ensureStorageLayout` reports back to its caller. */

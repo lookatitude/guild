@@ -23,10 +23,12 @@ import { detectLanguage, detectFrameworks, isEntrypoint, moduleOf, isCodeLanguag
 import { analyzeSource } from "./lib/extract";
 import { buildImportMap } from "./lib/import-map";
 import { generateStarterIgnoreFile } from "./lib/ignore";
+import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
 function main(): void {
   const argv = process.argv.slice(2);
   const cwd = parseCwd(argv);
+  ensureStorageLayout(cwd, { detectOnly: true });
   const gp = guildPaths(cwd);
   const repoRoot = gp.repoRoot;
 

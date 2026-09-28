@@ -2,7 +2,7 @@ import { describe, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./equivalence-contract";
-import * as moduleImpl from "../../src/domains/distribution/equivalence-contract";
+import * as moduleImpl from "../../src/domains/distribution/index";
 
 describe("equivalence-contract compatibility shim", () => {
   test("scripts/lib/equivalence-contract re-exports src/modules/distribution", () => {
@@ -22,7 +22,7 @@ describe("equivalence-contract compatibility shim", () => {
     const oldPath = fs.readFileSync(path.join(repoRoot, "scripts/lib/equivalence-contract.ts"), "utf8");
     const modulePath = fs.readFileSync(path.join(repoRoot, "src/domains/distribution/equivalence-contract.ts"), "utf8");
 
-    expect(oldPath).toMatch(/export\s+\*\s+from\s+["']\.\.\/\.\.\/src\/domains\/distribution\/equivalence-contract["']/);
+    expect(oldPath).toMatch(/from\s+["']\.\.\/\.\.\/src\/domains\/distribution\/index["']/);
     expect(oldPath).not.toMatch(/export\s+function\s+checkClaudeEquivalence/);
     expect(modulePath).toMatch(/export\s+function\s+checkClaudeEquivalence/);
   });

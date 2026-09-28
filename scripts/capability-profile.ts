@@ -57,8 +57,7 @@ import { CURRENT_LAYOUT_VERSION, detect as detectLayout } from "./lib/state/ensu
 // Narrow, not the barrel: `status` is a KTD29 cheap entrypoint, and pulling the
 // whole state index in would widen its require-graph. These two modules import
 // only node builtins and state-internal path arithmetic.
-import { createGuildStorage } from "../src/domains/state/storage-layout";
-import { loadJournal, upgradeJournalPath } from "../src/domains/state/upgrade-journal";
+import { createGuildStorage, loadJournal, upgradeJournalPath } from "../src/domains/state/index";
 import {
   HASHED_REGISTRIES,
   HASHED_TREES,
@@ -68,6 +67,7 @@ import {
   snapshotTreeHashes,
   type DerivedFacts,
 } from "./lib/capability/profile-emit";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 // The migration-evidence chain is reached ONLY by `baseline` and `emit`. It is
 // loaded from a separate compiled chunk so it stays OUT of this bundle — see
 // `lib/capability/capability-profile-evidence.ts` and KTD29's `status` budget.
@@ -374,6 +374,7 @@ export function renderLayoutRow(row: LayoutRow): string {
 // ── main ─────────────────────────────────────────────────────────────────────
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const [, , sub, ...argv] = process.argv;
   switch (sub) {
     case "hash-tree":

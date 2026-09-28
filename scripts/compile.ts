@@ -46,6 +46,12 @@ export interface Target {
   out: string;
   /** Directory whose node_modules supplies `js-yaml` for the esbuild alias. */
   yamlFrom?: string;
+  /**
+   * Repo-relative node_modules dirs for bare packages the entry cannot reach by
+   * walking up (src/ has no node_modules). The MCP binary's SDK and zod live only
+   * in the mcp-servers/* lockfiles CI installs.
+   */
+  nodePaths?: string[];
   group: "hooks" | "agent-team" | "mcp" | "scripts";
 }
 
@@ -107,6 +113,10 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   // `/guild:maintain evolve <id>` step 1 — records the pre-edit baseline hash and the
   // 10-step pipeline plan. No version tree is written (KTD48).
   { id: "evolve-loop", entry: "scripts/evolve-loop.ts" },
+  // T0's work loop (KTD33/KTD41-44/KTD49/KTD53): bind the class cursor, route a
+  // workflow decision, route an operator redirect (harvest on the third), write
+  // the research packet. Named by the `/guild` command body.
+  { id: "work-loop", entry: "scripts/work-loop.ts" },
   // Every script a `commands/*.md` body spawns today with `npx tsx`. Compiling
   // them here is T02's half of the fix; T04 owns swapping the command bodies to
   // `node "$GUILD_PLUGIN_ROOT/runtime/scripts/<id>.js"` (command bodies are that
@@ -192,6 +202,8 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
 const MCP_ENTRY = "src/runtime/mcp.ts";
 const MCP_OUT = "runtime/guild-mcp.js";
 const PINS_OUT = "runtime/mcp-descriptions.pins.json";
+/** Packages whose lockfiles supply the MCP binary's bare imports (sdk, zod, js-yaml). */
+const MCP_DEPS = ["mcp-servers/guild-memory", "mcp-servers/guild-telemetry"];
 
 export function targets(): Target[] {
   const t: Target[] = [];
@@ -207,7 +219,14 @@ export function targets(): Target[] {
       group: "agent-team",
     });
   }
-  t.push({ id: "mcp/guild-mcp", entry: MCP_ENTRY, out: MCP_OUT, group: "mcp" });
+  t.push({
+    id: "mcp/guild-mcp",
+    entry: MCP_ENTRY,
+    out: MCP_OUT,
+    yamlFrom: MCP_DEPS[0],
+    nodePaths: MCP_DEPS.map((d) => `${d}/node_modules`),
+    group: "mcp",
+  });
   for (const s of RUNTIME_SCRIPT_IDS) {
     t.push({ id: `scripts/${s.id}`, entry: s.entry, out: `runtime/scripts/${s.id}.js`, yamlFrom: "scripts", group: "scripts" });
   }
@@ -248,6 +267,7 @@ export function buildOptionsForTarget(t: Target, outAbs: string): import("esbuil
     target: "node18",
     format: "cjs",
     alias: aliasForTarget(t),
+    nodePaths: (t.nodePaths ?? []).map((p) => path.join(ROOT, p)),
     logLevel: "silent",
   };
 }

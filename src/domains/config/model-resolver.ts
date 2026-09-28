@@ -30,7 +30,7 @@ import {
   codePointCompare,
   selfReferentialHash,
   sha256Hex,
-} from "../teams";
+} from "../kernel";
 import { eligibleForPurpose } from "./model-catalog";
 import {
   parseSelector,

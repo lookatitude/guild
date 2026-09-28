@@ -17,16 +17,8 @@ import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-import {
-  buildTaskCell,
-  writeTaskCell,
-  type TaskCellDispatchInput,
-} from "../../src/domains/dispatch/task-assignment-v2";
-import {
-  buildAcceptance,
-  runDeterministicFloor,
-  writeAcceptanceRecord,
-} from "../../src/domains/dispatch/task-cell-acceptance";
+import { buildTaskCell, writeTaskCell, type TaskCellDispatchInput } from "../../src/domains/dispatch/index";
+import { buildAcceptance, runDeterministicFloor, writeAcceptanceRecord } from "../../src/domains/dispatch/index";
 
 const SCRIPT = path.resolve(__dirname, "../agent-team/teammate-idle.ts");
 
@@ -169,8 +161,8 @@ function seedAcceptance(cwd: string, runId: string, logicalTaskId: string, worke
   const cell = buildTaskCell(disp);
   // T3 F3: descriptor writers fail closed without the run's minted binding.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const rb = require("../../src/domains/lifecycle/run-binding") as
-    typeof import("../../src/domains/lifecycle/run-binding");
+  const rb = require("../../src/domains/lifecycle") as
+    typeof import("../../src/domains/lifecycle");
   const existing = rb.loadRunBinding({ root: cwd, run_id: cell.assignment.run_id });
   const bindingRef =
     (existing ?? rb.mintRunBinding({ root: cwd, run_id: cell.assignment.run_id })).binding_ref;

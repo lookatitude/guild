@@ -37,6 +37,7 @@
 
 import * as fsNode from "fs";
 import * as path from "path";
+import { ensureStorageLayout } from "./state/ensure-storage-layout";
 
 // ── Injectable filesystem seam ─────────────────────────────────────────────────
 
@@ -354,6 +355,7 @@ if (
   require.main === module &&
   /^replay-rundir\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")
 ) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const runDir = argv[0];
   if (!runDir) {

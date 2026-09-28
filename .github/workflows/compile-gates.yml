@@ -7,13 +7,12 @@
 #                           This is the R-DIST rail: it runs in the same env shape
 #                           the author plane compiles in, so a stale bundle cannot
 #                           reach a channel branch (KTD6, KTD7, R19, R24).
-#   2. lint:layout          BLOCKING against T01's baseline. A PR may REMOVE
-#                           baseline entries; any NEW violation fails. The raw and
+#   2. lint:layout          BLOCKING. T16 retired T01's baseline, so any violation
+#                           fails. The raw and
 #                           anti-vacuity passes run alongside so a check that stops
 #                           detecting anything fails loudly rather than passing.
 #   3. bun test             BLOCKING since T13, sharded, `--isolate` (see the job).
-#                           The Jest legs in test-suites.yml are advisory until T16
-#                           deletes Jest.
+#                           The only runner; T16 deleted Jest.
 #   4. skill-link-integrity BLOCKING since T13: every relative link under skills/
 #                           resolves (a dead link in prompt text never throws).
 #
@@ -75,8 +74,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0   # the shrink gate resolves the base revision's baseline
 
       - name: Set up Node 24
         uses: actions/setup-node@v7
@@ -89,27 +86,9 @@ jobs:
 
       # The lint EXECUTES code (the overlay oracle imports the validator) and
       # builds a ts.Program per entry file, so it runs under tsx, not plain node.
-      - name: lint:layout (baseline applied — regressions fail)
+      - name: lint:layout (no baseline since T16 — any violation fails)
         working-directory: scripts
         run: npm run lint:layout
-
-      # The baseline may only SHRINK. Without this, a PR that adds a violation AND
-      # adds a matching baseline entry is green — `lint:layout` reads the PR's own
-      # baseline, so it cannot see the growth (codex G-lane r1).
-      - name: layout baseline may only shrink (vs the base revision)
-        run: |
-          BASE="${{ github.event.pull_request.base.sha || github.event.before }}"
-          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
-            echo "no base revision to compare against (first push on this ref) — skipping"
-            exit 0
-          fi
-          npx --prefix scripts tsx scripts/lint/baseline-shrink-gate.ts --base "$BASE"
-
-      # Raw count, recorded not gated: it is the number T03–T16 drive to zero.
-      - name: lint:layout --no-baseline (reported)
-        working-directory: scripts
-        continue-on-error: true
-        run: npx tsx lint/layout-laws.ts --no-baseline
 
       # Anti-vacuity: fails on VACUOUS, on OVERFLAG of a negative control, and on
       # an orphan fixture tree. Without it a check that silently stopped matching

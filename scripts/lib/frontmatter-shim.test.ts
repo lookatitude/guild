@@ -2,7 +2,7 @@ import { describe, it, test, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as shim from "./frontmatter";
-import * as moduleImpl from "../../src/domains/state/frontmatter";
+import * as moduleImpl from "../../src/domains/state/index";
 
 describe("frontmatter compatibility shim", () => {
   test("scripts/lib/frontmatter re-exports src/modules/state", () => {
@@ -40,7 +40,7 @@ describe("frontmatter compatibility shim", () => {
       "utf8",
     );
 
-    expect(oldPath).toMatch(/src\/domains\/state\/frontmatter/);
+    expect(oldPath).toMatch(/src\/domains\/state\/index/);
     expect(oldPath).not.toMatch(/export\s+function\s+readScalarField/);
     expect(modulePath).toMatch(/export\s+function\s+readScalarField/);
     expect(modulePath).toMatch(/JSON_SCHEMA/);

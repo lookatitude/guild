@@ -67,7 +67,7 @@ import {
 } from "./lib/security/events.js";
 // ISSUE #94: the manifest-absent fallback for `pre_tool_use_ask` reads the same
 // capability rows the manifest is rendered from — see hostSupportsPreToolUseAsk.
-import { HOST_REGISTRY_ROWS } from "../src/domains/config/host-registry-schema.js";
+import { HOST_REGISTRY_ROWS } from "../src/domains/config/index.js";
 import { authorizeProjectedToolCall } from "../src/domains/dispatch";
 import {
   ingestPauseBlocking,
@@ -149,6 +149,8 @@ import { evaluateCompatibilitySkillUse } from "./lib/compatibility-skill-guard.j
 import { runDirOverride } from "./lib/run-dir-override.js";
 import { laneWikiWriteTarget } from "./lib/security/lane-wiki-guard.js";
 import { createGuildStorage } from "../src/domains/state";
+import { durableGuildDir } from "../src/domains/state";
+import { ensureStorageLayout } from "../scripts/lib/state/ensure-storage-layout.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -179,7 +181,7 @@ function isKnownTool(name: string | undefined): name is ToolCallTool {
 }
 
 function readCurrentRunId(cwd: string): string | undefined {
-  const sentinelPath = path.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
+  const sentinelPath = path.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", "current-run-id");
   try {
     const value = fs.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : undefined;
@@ -250,7 +252,7 @@ function readHostCapability(cwd: string): HostCapabilitySlice | null {
 
   for (const hostId of candidates) {
     try {
-      const manifestPath = path.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
+      const manifestPath = path.join(durableGuildDir(resolveGuildRoot(cwd)), "hosts", hostId, "capability.json");
       const raw = fs.readFileSync(manifestPath, "utf8");
       return JSON.parse(raw) as HostCapabilitySlice;
     } catch {
@@ -861,7 +863,7 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
       typeof envTaskId === "string" && envTaskId.length > 0
     ) {
       const scopeFilePath = path.join(
-        resolveGuildRoot(cwd), ".guild", "runs", envRunId, "scope", `${envTaskId}.json`,
+        durableGuildDir(resolveGuildRoot(cwd)), "runs", envRunId, "scope", `${envTaskId}.json`,
       );
       scope = readScopeFile(scopeFilePath, sec.allowed_tools);
     }
@@ -1554,6 +1556,24 @@ export async function main(): Promise<void> {
 
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
 
+  // KTD23: a future layout is not ours to read or write. This is a security gate,
+  // so skipping it would let every tool through: DENY the call (fail closed), and
+  // do it before any guard below writes a receipt into that .guild/.
+  try {
+    ensureStorageLayout(resolveGuildRoot(cwd), { detectOnly: true });
+  } catch (e) {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: e instanceof Error ? e.message : String(e),
+        },
+      }),
+    );
+    return;
+  }
+
   // Both dispatch guards run BEFORE capability enforcement so an `Agent`
   // dispatch defect is DENIED outright and can never be downgraded to an `ask`
   // (and then approved) by a capability-scope gate. Each is scoped tightly to
@@ -1656,7 +1676,7 @@ export async function main(): Promise<void> {
     const bgRunDir =
       bgRunId !== undefined
         ? (runDirOverride() ??
-            path.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId))
+            path.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", bgRunId))
         : undefined;
     const bgLaneEnv = process.env["GUILD_LANE_ID"];
     const bgLaneId =
@@ -1700,7 +1720,7 @@ export async function main(): Promise<void> {
 
   const runDir =
     runDirOverride() ??
-    path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+    path.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", runId);
   const laneId = process.env["GUILD_LANE_ID"];
 
   const entry: SidecarPreEntry = {

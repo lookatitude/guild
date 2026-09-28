@@ -31,8 +31,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { canonicalYaml } from "../../src/domains/teams";
-import { recordDecision, writeDecision } from "../../src/domains/teams/team-decision";
-import { composeProposal, writeProposal } from "../../src/domains/teams/team-proposal";
+import { recordDecision, writeDecision } from "../../src/domains/teams/index";
+import { composeProposal, writeProposal } from "../../src/domains/teams/index";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 const COMMANDS = path.join(PLUGIN_ROOT, "commands");

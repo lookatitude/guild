@@ -18,10 +18,8 @@
  * executes the validator it finds. These are KTD regression guards for a repo we
  * control -- not a sandbox, not a security boundary, and not safe against hostile code.
  *
- * Baseline semantics (T01 -> T16): scripts/lint/layout-baseline.json enumerates every
- * violation present on the tree at the start of the reshape. A later lane may only
- * REMOVE entries. A violation whose key is absent from the baseline is a regression
- * and fails the run. T16 deletes the baseline file.
+ * No baseline: T16 retired scripts/lint/layout-baseline.json, so every violation
+ * fails the run. `--no-baseline` is accepted and changes nothing.
  */
 
 import * as fs from "node:fs";
@@ -486,27 +484,56 @@ function fsWriteBindings(root: string, rel: string): { direct: Set<string>; ns: 
 
 /** True when the file performs a filesystem write through a real call site. */
 function performsWrite(root: string, rel: string): boolean {
-  if (rel.endsWith(".sh") || rel.endsWith(".bash")) {
-    const stripped = read(path.join(root, rel))
-      .split("\n").map((l) => l.replace(/(^|\s)#.*$/, "")).join("\n");
+  if (rel.endsWith(".sh") || rel.endsWith(".bash") || isShellEntry(root, rel)) {
+    const stripped = shellCodeText(root, rel);
     return /(^|\s)(mkdir|cp|mv|touch|tee|install)\s/.test(stripped) || />>?\s*"?\$/.test(stripped);
   }
+  return writeCalls(root, rel).length > 0;
+}
+
+/** Every fs write call site in a JS/TS file. */
+function writeCalls(root: string, rel: string): ts.CallExpression[] {
   const sf = parse(root, rel);
-  if (!sf) return false;
-  const { direct, ns } = fsWriteBindings(root, rel);
-  let found = false;
+  if (!sf) return [];
+  const { direct } = fsWriteBindings(root, rel);
+  const out: ts.CallExpression[] = [];
   eachNode(sf, (n) => {
-    if (found || !ts.isCallExpression(n)) return;
+    if (!ts.isCallExpression(n)) return;
     const e = n.expression;
-    if (ts.isIdentifier(e) && direct.has(e.text)) { found = true; return; }
+    if (ts.isIdentifier(e) && direct.has(e.text)) { out.push(n); return; }
     const c = calleeName(n);
     if (!c || !WRITE_CALL_NAMES.includes(c)) return;
-    // `fs.writeFileSync`, `fsp.writeFile`, `fs.promises.writeFile`, bare `writeFileSync`.
     // Bare `writeFileSync(...)` or any receiver whose method is an fs write API
     // (`fs.writeFileSync`, `fsp.writeFile`, `fs.promises.writeFile`).
-    if (ts.isIdentifier(e) || ts.isPropertyAccessExpression(e)) found = true;
+    if (ts.isIdentifier(e) || ts.isPropertyAccessExpression(e)) out.push(n);
   });
-  return found;
+  return out;
+}
+
+/** A shell script with `#` comments removed. */
+function shellCodeText(root: string, rel: string): string {
+  return read(path.join(root, rel))
+    .split("\n").map((l) => l.replace(/(^|\s)#.*$/, "")).join("\n");
+}
+
+/**
+ * The code text of a file with comments removed. For JS/TS this is the text of
+ * every string, template and regex literal (a `.guild` path can only live there);
+ * for shell it is the script minus `#` comments.
+ */
+function codeText(root: string, rel: string): string {
+  if (isShellEntry(root, rel)) return shellCodeText(root, rel);
+  const sf = parse(root, rel);
+  if (!sf) return "";
+  const parts: string[] = [];
+  eachNode(sf, (n) => {
+    if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) ||
+        ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n) ||
+        n.kind === ts.SyntaxKind.RegularExpressionLiteral) {
+      parts.push(n.getText(sf));
+    }
+  });
+  return parts.join("\n");
 }
 
 /** Every module specifier: import, export-from, require(), and dynamic import(). */
@@ -922,29 +949,58 @@ const SURFACE_PREFIXES = [
 const DOMAIN_PREFIXES = ["src/modules/", "src/domains/"];
 
 /**
- * Does this file target the wiki? RAW TEXT, FAIL CLOSED.
+ * Does this file hold a real wiki WRITE CALL? (lead decision D7)
  *
- * Path-assembly analysis was tried and rejected (codex G-lane r2). Every AST rule
- * has a shape it cannot see: a literal-only predicate missed
- * `path.join(cwd, ".guild", "wiki")`; adding join/template handling still missed
- * `[".guild", "wiki", page].join("/")`, `reduce`, a segment held in a const, a
- * path built in a helper two files away. Each miss is a real wiki writer shipping
- * without `scrubbedWrite`, which is a KTD37 security guard, not a style rule.
- *
- * So the rule is deliberately over-inclusive and syntax-free: a file that
- * mentions BOTH the `.guild` and `wiki` tokens ANYWHERE in its raw text —
- * literals, template pieces, array elements, comments — and touches an fs write
- * API is treated as a wiki writer. The one escape is a real `scrubbedWrite` call
- * site. False positives cost one `scrubbedWrite` call or one baseline line; false
- * negatives cost an unscrubbed write to the knowledge base.
- *
- * A `wiki` token is the word on an identifier/path boundary (`"wiki"`, `wikiDir`,
- * `wiki/decisions`), not a substring of an unrelated word.
+ * The earlier raw-text rule (any `.guild` + `wiki` token anywhere in the file)
+ * flagged comments and identifiers such as `wiki_cas_conflict` or `root_wiki`.
+ * Now only the PATH arguments of an fs write call count. The literals inside them
+ * are read, and every identifier there is followed to its declaration in the same
+ * file (a const initializer or a local function body), so `const wikiDir =
+ * path.join(cwd, ".guild", "wiki")` and `[root, ".guild", "wiki", p].join("/")`
+ * still resolve. A path is a wiki path when one literal has a `wiki` path segment.
+ * Accepted miss: a path built in another file and passed in as a parameter.
  */
-function targetsWikiRawText(root: string, rel: string): boolean {
-  const body = read(path.join(root, rel));
-  if (!body.includes(".guild")) return false;
-  return /(^|[^A-Za-z0-9_])wiki([^A-Za-z0-9_]|$)/i.test(body) || /\bwiki[A-Z]/.test(body);
+function writesWikiPath(root: string, rel: string): boolean {
+  const calls = writeCalls(root, rel);
+  if (calls.length === 0) return false;
+  const program = singleFileProgram(root, rel);
+  const checker = program?.getTypeChecker();
+  const isWikiLiteral = (n: ts.Node): boolean => {
+    if (!(ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) ||
+      ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n))) return false;
+    return n.text.split(/[\\/]/).includes("wiki");
+  };
+  const seen = new Set<ts.Node>();
+  const reaches = (node: ts.Node, depth: number): boolean => {
+    if (depth > 6 || seen.has(node)) return false;
+    seen.add(node);
+    let hit = false;
+    eachNode(node, (n) => {
+      if (hit) return;
+      if (isWikiLiteral(n)) { hit = true; return; }
+      if (!checker || !ts.isIdentifier(n)) return;
+      let sym: ts.Symbol | undefined;
+      try { sym = checker.getSymbolAtLocation(n); } catch { sym = undefined; }
+      for (const d of sym?.declarations ?? []) {
+        const body = ts.isVariableDeclaration(d) ? d.initializer
+          : ts.isFunctionDeclaration(d) ? d.body : undefined;
+        if (body && reaches(body, depth + 1)) { hit = true; return; }
+      }
+    });
+    return hit;
+  };
+  const TWO_PATHS = new Set(["renameSync", "rename", "cpSync", "copyFileSync"]);
+  // The single-file program re-parses the file, so map each call to its node there.
+  const sf = program?.getSourceFiles().find((f) => path.resolve(f.fileName) === path.resolve(path.join(root, rel)));
+  const byPos = new Map<number, ts.CallExpression>();
+  if (sf) eachNode(sf, (n) => { if (ts.isCallExpression(n)) byPos.set(n.getStart(sf), n); });
+  const parsed = parse(root, rel)!;
+  for (const c0 of calls) {
+    const c = byPos.get(c0.getStart(parsed)) ?? c0;
+    const n = TWO_PATHS.has(calleeName(c) ?? "") ? 2 : 1;
+    if (c.arguments.slice(0, n).some((a) => reaches(a, 0))) return true;
+  }
+  return false;
 }
 
 /**
@@ -971,7 +1027,7 @@ const GUILD_JOIN_ALLOWLIST = [
   // four migration files by name rather than a whole module directory.
   "src/domains/state/index-migrate.ts",
   "src/domains/state/wiki-importance.ts",
-  "src/domains/state/host-cutover-controller.ts",
+  "src/domains/lifecycle/host-cutover-controller.ts",
   "scripts/dot-guild/",
 ];
 
@@ -1676,19 +1732,56 @@ function callsImportedEnsureStorageLayout(root: string, rel: string): boolean {
 }
 
 /**
- * Committed compile outputs. The generic walker skips `dist/` (it is regenerated and
- * noisy), but `hooks/dist/**` and `runtime/**` ARE the graph users execute (KTD7), so
- * the write-capable entry scan reaches them explicitly.
+ * Committed compile outputs under `runtime/`. Hook bundles (`hooks/dist`, `hooks/agent-team/dist`) are NOT scanned (lead
+ * decision D5): esbuild inlines `ensureStorageLayout`, so a bundle can never show an
+ * imported callee, and `compile --check` already proves each bundle equals its source.
  */
 function compiledOutputs(root: string): string[] {
   const out: string[] = [];
-  for (const base of ["hooks/dist", "hooks/agent-team/dist", "runtime", "runtime/scripts"]) {
+  for (const base of ["runtime", "runtime/scripts"]) {
     if (!isDir(path.join(root, base))) continue;
     for (const f of walk(path.join(root, base))) {
       if (/\.(js|mjs|cjs)$/.test(f)) out.push(`${base}/${f}`);
     }
   }
   return out;
+}
+
+/** The MCP binary source (KTD3: one runtime/guild-mcp.js). Always a process entry. */
+const MCP_BINARY_SOURCE = "src/runtime/mcp.ts";
+
+/**
+ * D4: is this file a PROCESS ENTRY (something a host or a user runs), not a library?
+ * Shell scripts count when they write. JS/TS counts when it is the MCP binary or its
+ * AST holds `require.main`, `import.meta.main`, `process.argv[1]`, or
+ * a top-level expression statement that reads `process.argv` (`main(process.argv…)`).
+ */
+function isProcessEntry(root: string, rel: string): boolean {
+  if (liveOf(rel) === MCP_BINARY_SOURCE) return true;
+  if (isShellEntry(root, rel)) return performsWrite(root, rel);
+  const sf = parse(root, rel);
+  if (!sf) return false;
+  const isProcessArgv = (e: ts.Node): boolean =>
+    ts.isPropertyAccessExpression(e) && e.name.text === "argv" &&
+    ts.isIdentifier(e.expression) && e.expression.text === "process";
+  let found = false;
+  eachNode(sf, (n) => {
+    if (found) return;
+    if (ts.isPropertyAccessExpression(n) && n.name.text === "main") {
+      const b = n.expression;
+      if (ts.isIdentifier(b) && b.text === "require") found = true;
+      if (ts.isMetaProperty(b) && b.keywordToken === ts.SyntaxKind.ImportKeyword) found = true;
+    }
+    if (ts.isElementAccessExpression(n) && isProcessArgv(n.expression) &&
+        ts.isNumericLiteral(n.argumentExpression) && n.argumentExpression.text === "1") found = true;
+  });
+  if (found) return true;
+  for (const st of sf.statements) {
+    if (!ts.isExpressionStatement(st)) continue;
+    eachNode(st, (n) => { if (!found && isProcessArgv(n)) found = true; });
+    if (found) return true;
+  }
+  return false;
 }
 
 function writeCapableEntries(ctx: Ctx): Array<{ kind: string; source: string }> {
@@ -1719,16 +1812,17 @@ function writeCapableEntries(ctx: Ctx): Array<{ kind: string; source: string }> 
   );
   for (const f of [...new Set(cliCandidates)].sort()) {
     if (isLayoutLawsSource(f)) continue; // this lint writes only its own baseline
+    if (/^hooks\/(.+\/)?dist\//.test(liveOf(f))) continue; // D5: compile --check owns bundles
+    if (!isProcessEntry(ctx.root, f)) continue; // D4: libraries are reached via their entry
     // `runtime/**` is COMPILED from an entry that is itself in this candidate set
     // (scripts/compile.ts owns the table). A bundle can only carry the violation its
     // source carries, so flagging both double-counts one program and would force a
     // baseline to GROW when a lane merely starts shipping a compiled copy. Fix the
-    // source and the bundle follows. `hooks/**/dist` stays in scope: those bundles
-    // predate the compile step and can be stale relative to their .ts.
+    // source and the bundle follows.
     if (liveOf(f).startsWith("runtime/")) continue;
     const shell = isShellEntry(ctx.root, f);
     const live = liveOf(f);
-    const kind = live.startsWith("mcp-servers/") ? "MCP binary"
+    const kind = live.startsWith("mcp-servers/") || live === MCP_BINARY_SOURCE ? "MCP binary"
       : live.startsWith(".githooks/") ? "git hook script"
       : live.startsWith("src/runtime/") || live.startsWith("runtime/") ? "runtime graph entry"
       : live.startsWith("hooks/") ? (shell ? "hook script" : "hook module")
@@ -1791,7 +1885,21 @@ function hostIdentityHits(obj: unknown, prefix = "", out: string[] = []): string
   return out;
 }
 
+/** The KTD48 upgrade step that deletes leftover skill-versions/ trees (exact path). */
+const SKILL_VERSIONS_DELETER = "src/domains/state/upgrade-steps.ts";
+
 // ---------------------------------------------------------------- the checks
+/**
+ * KTD29 outranks KTD27 for these two imports only (T16, lead decision D1 after the
+ * R43 cycle cut). Through the domain index, guild-root pulls upgrade steps and
+ * js-yaml into the SessionStart bundle, and config-defaults drags telemetry past the
+ * blocking status require-graph allowlist. Key: importer -> "<domain>/<file>".
+ */
+const KTD29_DEEP_IMPORTS: ReadonlyMap<string, string> = new Map([
+  ["scripts/lib/guild-root.ts", "state/guild-root"],
+  ["scripts/lib/shared/config-defaults.ts", "config/config-defaults"],
+]);
+
 const CHECKS: Check[] = [
   {
     id: "skills-glob-17",
@@ -1905,6 +2013,7 @@ const CHECKS: Check[] = [
           if (self && self.name === target.name && self.tree === target.tree) continue;
           const tail = resolved.slice(`src/${target.tree}/${target.name}/`.length);
           if (tail === "index" || tail === "") continue;
+          if (KTD29_DEEP_IMPORTS.get(f) === `${target.name}/${tail}`) continue;
           v.push({
             check: "index-only-domain-imports",
             path: f,
@@ -1965,15 +2074,19 @@ const CHECKS: Check[] = [
     id: "write-entry-calls-ensure-storage-layout",
     ktd: "KTD23",
     title: "every entry naming a .guild path calls the layout bootstrap (raw-text rule)",
-    // RAW-TEXT and fail closed. Write-capable == the file's text contains `.guild`;
-    // how it reaches fs is irrelevant. Shell entries must invoke the compiled
-    // bootstrap on a line outside heredocs and quoted strings; JS/TS entries must
-    // call an IMPORTED `ensureStorageLayout`. Out of scope by design: building the
-    // string ".guild" by concatenation. These are KTD regression guards, not a sandbox.
+    // Scope (lead decision D4): PROCESS ENTRIES only — registered hooks, CLIs with a
+    // require.main / import.meta.main / process.argv[1] guard (or a top-level
+    // statement that reads process.argv), shell scripts that write, and
+    // the MCP binary. Library modules are covered through the entry that loads them.
+    // An entry is in scope when its code text (comments excluded) names `.guild`.
+    // Shell entries must invoke the compiled bootstrap on a line outside heredocs
+    // and quoted strings; JS/TS entries must call an IMPORTED `ensureStorageLayout`.
+    // Out of scope by design: building the string ".guild" by concatenation.
     run(ctx) {
       const v: Violation[] = [];
       for (const { kind, source } of writeCapableEntries(ctx)) {
-        if (!read(path.join(ctx.root, source)).includes(".guild")) continue;
+        // Comments do not count: only code text naming `.guild` puts an entry in scope.
+        if (!codeText(ctx.root, source).includes(".guild")) continue;
         if (isShellEntry(ctx.root, source)) {
           const verdict = shellBootstrapVerdict(ctx.root, source);
           if (verdict.ok) continue;
@@ -2126,7 +2239,7 @@ const CHECKS: Check[] = [
         // else that merely exports the name is still flagged.
         if (liveOf(f) === CANONICAL_SCRUBBED_WRITE && exportsNamed(ctx.root, f, "scrubbedWrite")) continue;
         if (!performsWrite(ctx.root, f)) continue;
-        if (!targetsWikiRawText(ctx.root, f)) continue;
+        if (!writesWikiPath(ctx.root, f)) continue;
         // A comment or a string saying "scrubbedWrite" is not a call site.
         if (hasCallTo(ctx.root, f, "scrubbedWrite")) continue;
         v.push({ check: "harvest-writer-calls-scrubbed-write", path: f, detail: "writes the wiki without a call to scrubbedWrite" });
@@ -2198,6 +2311,8 @@ const CHECKS: Check[] = [
       const v: Violation[] = [];
       for (const f of under(ctx.files, ...DOMAIN_PREFIXES, "hooks/", ...SURFACE_PREFIXES)) {
         if (isFixturePath(f) || f.endsWith(".test.ts") || isLayoutLawsSource(f)) continue;
+        // D3: the KTD48 upgrade step names skill-versions/ in order to DELETE it.
+        if (liveOf(f) === SKILL_VERSIONS_DELETER) continue;
         const lines = read(path.join(ctx.root, f)).split("\n");
         lines.forEach((line, i) => {
           if (line.includes("skill-versions")) {
@@ -2452,14 +2567,6 @@ function repoRoot(): string {
   return path.resolve(here, "..", "..");
 }
 
-function baselinePath(root: string): string {
-  return path.join(root, "scripts/lint/layout-baseline.json");
-}
-
-function loadBaseline(root: string): Set<string> {
-  const j = readJson(baselinePath(root));
-  return new Set<string>(Array.isArray(j?.entries) ? j.entries.map(String) : []);
-}
 
 async function main(argv: string[]): Promise<number> {
   const flag = (n: string) => argv.includes(`--${n}`);
@@ -2474,19 +2581,11 @@ async function main(argv: string[]): Promise<number> {
   if (flag("fixtures")) return await runFixtures(root);
 
   const violations = await runChecks(root, only);
-  const useBaseline = !flag("no-baseline");
-  const baseline = useBaseline ? loadBaseline(root) : new Set<string>();
-
+  // The T01 baseline was retired at T16: nothing is waived.
+  const baseline = new Set<string>();
   if (flag("write-baseline")) {
-    const payload = {
-      schema: "guild.layout_baseline.v1",
-      note: "Violations present on the tree when U1 landed. Later lanes may only REMOVE entries; T16 deletes this file.",
-      checks: CHECKS.map((c) => c.id),
-      entries: violations.map(key),
-    };
-    fs.writeFileSync(baselinePath(root), `${JSON.stringify(payload, null, 2)}\n`);
-    console.log(`wrote ${violations.length} baseline entries to scripts/lint/layout-baseline.json`);
-    return 0;
+    console.error("layout-laws: the baseline was retired at T16; fix the violation instead");
+    return 2;
   }
 
   const byCheck = new Map<string, { open: Violation[]; waived: Violation[] }>();
@@ -2502,7 +2601,7 @@ async function main(argv: string[]): Promise<number> {
   if (flag("json")) {
     console.log(JSON.stringify({ violations, baselined: baseline.size, stale }, null, 2));
   } else {
-    console.log(`layout-laws — ${CHECKS.length} checks · root ${path.relative(process.cwd(), root) || "."} · baseline ${useBaseline ? `${baseline.size} entries` : "OFF"}`);
+    console.log(`layout-laws — ${CHECKS.length} checks · root ${path.relative(process.cwd(), root) || "."} · no baseline`);
     for (const c of CHECKS) {
       if (only && c.id !== only) continue;
       const b = byCheck.get(c.id)!;

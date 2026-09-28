@@ -1,1 +1,6 @@
-export * from "../../../src/domains/security/scrubbed-write.js";
+export {
+  writeScrubApprovalRequest,
+  scrubbedWrite,
+  type ScrubSurface,
+  type ScrubbedWriteResult,
+} from "../../../src/domains/security/index.js";

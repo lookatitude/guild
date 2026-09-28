@@ -26,6 +26,7 @@ import * as path from "path";
 
 import { resolveAuthorHost, type HostFamily } from "./provider-detect";
 import type { RunBindingRecord } from "../lifecycle";
+import { durableGuildDir } from "../state";
 
 // ── Closed enums (§1) ────────────────────────────────────────────────────────
 
@@ -276,7 +277,7 @@ export function makeFingerprint(raw: string, salt: string): string {
  * never committed/shared). Created on first use with crypto randomness.
  */
 export function loadOrCreateFingerprintSalt(root: string): string {
-  const p = path.join(root, ".guild", "indexes", "model-catalog", ".fp-salt");
+  const p = path.join(durableGuildDir(root), "indexes", "model-catalog", ".fp-salt");
   if (fsReal.existsSync(p)) return fsReal.readFileSync(p, "utf8").trim();
   const salt = crypto.randomBytes(32).toString("hex");
   fsReal.mkdirSync(path.dirname(p), { recursive: true });
@@ -303,7 +304,7 @@ function realFs(): SessionContextFs {
 }
 
 export function sessionContextPath(root: string, runId: string): string {
-  return path.join(root, ".guild", "runs", runId, "session-context.json");
+  return path.join(durableGuildDir(root), "runs", runId, "session-context.json");
 }
 
 /**

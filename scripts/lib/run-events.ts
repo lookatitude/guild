@@ -57,6 +57,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { ensureStorageLayout } from "./state/ensure-storage-layout";
 
 // ── Event shape ──────────────────────────────────────────────────────────────
 
@@ -175,6 +176,7 @@ export function loadRunEvents(runDir: string): LoadRunEventsResult {
 // ── CLI (diagnostics only; never called from lib consumers) ──────────────────
 
 if (require.main === module) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const runDir = process.argv[2];
   if (!runDir) {
     process.stderr.write("Usage: npx tsx scripts/lib/run-events.ts <runDir>\n");

@@ -36,6 +36,7 @@ import {
   type PolicyRoute,
   type PolicyTier,
 } from "./model-policy";
+import { durableGuildDir } from "../state";
 
 // ── Dual-read resolution ─────────────────────────────────────────────────────
 
@@ -177,7 +178,7 @@ export interface MigrationPreview {
  * lossless.
  */
 export function migrationPreview(input: { root: string }): MigrationPreview {
-  const settingsPath = path.join(input.root, ".guild", "settings.json");
+  const settingsPath = path.join(durableGuildDir(input.root), "settings.json");
   let parsed: Record<string, unknown> = {};
   if (fs.existsSync(settingsPath)) {
     try {

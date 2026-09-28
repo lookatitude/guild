@@ -8,4 +8,23 @@
  * and `suggestWorkspaceMode` through this path.
  */
 
-export * from "../../src/domains/config/host-open-preflight";
+export {
+  detectGuildState,
+  detectChildGitRepos,
+  suggestWorkspaceMode,
+  hostOpenPreflight,
+  GUILD_STATE_SCHEMA_VERSION,
+  type GuildState,
+  type GuildStateEvidence,
+  type GuildStateProblem,
+  type GuildStateResult,
+  type WorkspaceSuggestion,
+  HOST_OPEN_PREFLIGHT_SCHEMA_VERSION,
+  CLI_NATIVE_HOSTS,
+  type PreflightAction,
+  type PreflightAdvisory,
+  type RootKind,
+  type InitMode,
+  type InitPromptData,
+  type HostOpenPreflightResult,
+} from "../../src/domains/config/index";

@@ -37,7 +37,7 @@ function safeSlug(raw: string): string {
  * calls it on every write: R6 stops being prose-only the moment the shared write
  * choke-point enforces it.
  */
-import { assertNotUnderPluginInstall } from "../../src/domains/state/plugin-install-guard";
+import { assertNotUnderPluginInstall } from "../../src/domains/state/index";
 export { assertNotUnderPluginInstall };
 
 export function resolveGuildArtifactPath(req: ArtifactPathRequest): string {

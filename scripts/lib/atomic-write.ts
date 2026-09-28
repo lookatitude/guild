@@ -8,4 +8,4 @@
  * imports from scripts/lib/atomic-write.
  */
 
-export * from "../../src/domains/state/atomic-write";
+export { atomicWrite, atomicWriteDurable } from "../../src/domains/state/index";

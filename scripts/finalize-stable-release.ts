@@ -12,6 +12,7 @@
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 const BETA_VERSION_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
 const STABLE_VERSION_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -175,6 +176,7 @@ function changedPaths(root: string, base: string, head: string): string[] {
 }
 
 export function main(argv: string[] = process.argv.slice(2)): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const mode = argv.shift();
   let root = ".";
   let githubOutput: string | undefined;

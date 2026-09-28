@@ -50,6 +50,7 @@ import type { ReviewServedEvidence } from "../review";
 import {
   selfReferentialHash,
 } from "../teams";
+import { durableGuildDir } from "../state";
 
 // ── M1: shadow resolution ────────────────────────────────────────────────────
 
@@ -181,7 +182,7 @@ export function persistShadowArtifacts(
     binding_ref: binding.binding_ref,
   });
   const dispatchId = String(result.receipt.dispatch_id);
-  const dir = path.join(root, ".guild", "runs", verified.run_id, "shadow");
+  const dir = path.join(durableGuildDir(root), "runs", verified.run_id, "shadow");
   fs.mkdirSync(dir, { recursive: true });
   const writeAtomic = (target: string, body: string): void => {
     const tmp = `${target}.tmp-${process.pid}`;

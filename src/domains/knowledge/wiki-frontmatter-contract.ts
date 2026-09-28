@@ -26,7 +26,7 @@
  *   sensitivity: public | internal | confidential | secret
  *
  * Consumers (as of this module's introduction, plugin-audit-remediation G9):
- *   - mcp-servers/guild-memory/src/index.ts — types WikiFrontmatter.type
+ *   - src/runtime/mcp/guild-memory/index.ts — types WikiFrontmatter.type
  *     against WikiPageType instead of a loose `string`.
  *   - src/domains/distribution/wiki-lint-checks.ts — the new
  *     `invalid-type` mechanical check (a page whose `type:` is present but

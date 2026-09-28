@@ -5,4 +5,14 @@
  * internals without breaking existing imports from scripts/lib/*.
  */
 
-export * from "../../src/domains/evolve/define-schema";
+export {
+  validateDefineV1,
+  isDefineV1,
+  acceptanceCriterionIds,
+  runDefineSelfCheck as runSelfCheck,
+  DEFINE_SCHEMA_VERSION,
+  type DefineValidationResult as ValidationResult,
+  type AcceptanceCriterion,
+  type DefineV1,
+  DEFINE_V1_EXAMPLE,
+} from "../../src/domains/evolve/index";

@@ -43,10 +43,7 @@ import * as path from "path";
 
 import type { GraphNode, GraphEdge } from "./schema";
 import { STRUCTURAL_PROFILE_KEYS } from "./structural";
-import {
-  checkContained,
-  isRefused,
-} from "../../../src/domains/kernel/path-containment";
+import { checkContained, isRefused } from "../../../src/domains/kernel/index";
 
 // ---------------------------------------------------------------------------
 // Tunables (all overridable via SimilarityOptions)

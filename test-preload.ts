@@ -8,8 +8,8 @@
  *    writes rebind to that lane's run and host detection reads the operator's
  *    session instead of the fixture. CI never has them. Tests that need an
  *    identity set it per call. The explicit live-suite opt-ins survive.
- * 2. Serves the author-plane packages to files under src/, which has no
- *    node_modules of its own. The compile does the same with an esbuild alias
+ * 2. Serves the author-plane packages (and the MCP SDK + zod) to files under
+ *    src/, which has no node_modules of its own. The compile does the same with an esbuild alias
  *    (scripts/compile.ts); a runtime `onResolve` never sees bare packages.
  * 3. Gives `eval("require")` a CommonJS `require` bound to the CALLING file.
  *    Domain code reaches lazy deps that way so esbuild cannot inline them
@@ -80,6 +80,21 @@ const SCRIPTS = path.join(PLUGIN_ROOT, "scripts");
 
 for (const name of ["js-yaml", "typescript"]) {
   const resolved = require.resolve(name, { paths: [SCRIPTS] });
+  mock.module(name, () => require(resolved));
+}
+
+// The MCP server source (src/runtime/mcp/) takes the SDK and zod from the lockfile
+// the compile resolves them from (scripts/compile.ts MCP_DEPS).
+const MCP_DEPS = path.join(PLUGIN_ROOT, "mcp-servers", "guild-memory");
+// A CI leg that never installs mcp-servers/ deps never loads the MCP source either,
+// so an unresolvable package is skipped, not fatal.
+for (const name of ["zod", "@modelcontextprotocol/sdk/server/mcp.js", "@modelcontextprotocol/sdk/server/stdio.js"]) {
+  let resolved: string;
+  try {
+    resolved = require.resolve(name, { paths: [MCP_DEPS] });
+  } catch {
+    continue;
+  }
   mock.module(name, () => require(resolved));
 }
 

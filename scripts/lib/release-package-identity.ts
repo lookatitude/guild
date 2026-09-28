@@ -1,3 +1,25 @@
 /** Backward-compatible scripts/lib entrypoint for the distribution-owned contract. */
 
-export * from "../../src/domains/distribution/release-package-identity";
+export {
+  computeReleasePackageDigest,
+  computeTrackedNativeClaudePayloadDigest,
+  computePhysicalNativeClaudePayloadDigest,
+  writeNativeClaudePackageIdentity,
+  assertNativeClaudePackageIdentityCurrent,
+  readVerifiedNativeClaudePackageIdentity,
+  assertLockedScriptRuntimeDependencies,
+  computeReleaseIdentityId,
+  writeReleasePackageIdentitySet,
+  readVerifiedReleasePackageIdentity,
+  RELEASE_PACKAGE_IDENTITY_FILE,
+  RELEASE_PACKAGE_IDENTITY_SCHEMA,
+  RELEASE_PACKAGE_INSTALL_RECEIPT_FILE,
+  NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE,
+  NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
+  RELEASE_PACKAGE_NAMES,
+  LOCKED_SCRIPT_RUNTIME_DIGESTS,
+  type ReleasePackageName,
+  type ReleasePackageIdentityV1,
+  type NativeClaudePackageIdentityV1,
+  type ReleasePackageDigestOptions,
+} from "../../src/domains/distribution/index";

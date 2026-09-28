@@ -119,7 +119,7 @@ import {
   emitTraceEvent,
   makeAnalysisTraceEvent,
   type AnalysisEventClass,
-} from "../src/modules/telemetry/index.js";
+} from "../src/domains/telemetry/index.js";
 
 // ── v2 observability ADR (D-OBS-1/2/6): guild.trace_event.v2 additive fields,
 // deterministic hook-side span ids, and the redacted guild.trace_payload.v1
@@ -137,6 +137,7 @@ import {
 // T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
 import { ensureStorageLayout } from "./lib/ensure-layout.js";
 import { runDirOverride } from "./lib/run-dir-override.js";
+import { durableGuildDir } from "../src/domains/state";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -315,7 +316,7 @@ async function main(): Promise<void> {
   // ── guild.trace_event.v2 + payload sidecar (D-OBS-1/2/6) ────────────────────
   // Additive: the frozen v1 fields above are untouched; everything here is
   // optional. Compose with the secrets gatekeeper — never store a raw prompt.
-  const runsDir = path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const runsDir = path.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", runId);
   const redact = (s: string): string => applySecretsPolicy(s, secPolicy).value;
   const spanId = genSpanId(runId, eventName, ts, actorId);
 

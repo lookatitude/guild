@@ -42,10 +42,14 @@ export {
   isProvenance,
   splitFrontmatter as wikiImportanceSplitFrontmatter,
 } from "./wiki-importance";
-export * from "./host-cutover-controller";
 
 // ── from src/modules/workspace ──────────────────────────────────────────
 export * from "./detect";
 export * from "./federated-query";
 export * from "./promote-upstream";
 export * from "./write-manifest";
+
+// ── consumed outside the domain (T16: every importer goes through this index) ──
+export {
+  assertNotUnderPluginInstall,
+} from "./plugin-install-guard";

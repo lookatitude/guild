@@ -55,10 +55,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import {
-  canonicalizeRealPath,
-  isWithin,
-} from "../../src/domains/kernel/path-containment";
+import { canonicalizeRealPath, isWithin } from "../../src/domains/kernel/index";
 import { splitFrontmatter, parseYaml } from "./frontmatter";
 
 // ---------------------------------------------------------------------------

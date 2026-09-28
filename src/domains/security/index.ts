@@ -31,3 +31,27 @@ export * from "./events";
 export * from "./d5-permission-content";
 // T15 rework: the wiki-ingest pause marker the PreToolUse hook enforces.
 export * from "./ingest-pause";
+
+// ── consumed outside the domain (T16: every importer goes through this index) ──
+export {
+  type AutonomyMode,
+  type BypassPolicy,
+  type FailModeDurable,
+  type FailModeTelemetry,
+  type McpAvailability,
+  parseAutonomyMode,
+  parseSecurityConfig,
+  readSecurityConfig,
+  readSettingsAutoApprove,
+  readTaskRunAutonomyPolicy,
+  type ResolveAutonomyModeOpts,
+  resolveRunAutonomyMode,
+  type SecretsPolicy,
+  type SecurityConfig,
+  securityDefaults,
+} from "./config";
+export {
+  applySecretsPolicy,
+  resolveTelemetryField,
+  type ScrubResult,
+} from "./secrets";

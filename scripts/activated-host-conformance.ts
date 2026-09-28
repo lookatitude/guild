@@ -36,6 +36,7 @@ import {
 } from "./lib/capability/migration-evidence";
 import { readScalarField } from "./lib/frontmatter";
 import { redactShareableFile } from "./lib/shared/scrub-redact";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // Composition root: bind the host-runtime ports the distribution domain names (KTD4).
 bindHostRuntimePorts();
@@ -2222,6 +2223,7 @@ function runWorkerCli(argv: readonly string[]): number {
 }
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const [subcommand, ...argv] = process.argv.slice(2);
   try {
     if (subcommand === "worker") {

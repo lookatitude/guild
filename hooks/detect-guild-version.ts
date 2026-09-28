@@ -43,6 +43,8 @@ import { resolveGuildRoot } from "./lib/guild-root.js";
 // path-resolution surprises.
 import { detect } from "../scripts/dot-guild/convert/detect.js";
 import { realFs } from "../scripts/dot-guild/convert/seams.js";
+import { durableGuildDir } from "../src/domains/state";
+import { ensureStorageLayout } from "../scripts/lib/state/ensure-storage-layout.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -203,7 +205,13 @@ async function main(): Promise<void> {
 
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   const root = resolveGuildRoot(cwd);
-  const guildDir = path.join(root, ".guild");
+  const guildDir = durableGuildDir(root);
+  // KTD23: detect only (this hook never mutates); a future layout stays silent.
+  try {
+    ensureStorageLayout(root, { detectOnly: true });
+  } catch {
+    process.exit(0);
+  }
 
   // Fast path: no .guild/ → silent
   if (!fs.existsSync(guildDir)) {

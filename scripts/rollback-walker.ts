@@ -37,6 +37,7 @@
 import * as path from "path";
 
 import { readCompactHistory, rollbackEvolve, type EvolveHistoryEntry } from "../src/domains/evolve";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
 
@@ -103,6 +104,7 @@ function formatProposedRollback(
 // ── Main ───────────────────────────────────────────────────────────────────
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const { skill, steps, apply, cwd: cwdArg } = parseArgs(process.argv.slice(2));
 
   if (!skill) {

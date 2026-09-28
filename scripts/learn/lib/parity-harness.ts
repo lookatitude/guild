@@ -27,10 +27,7 @@
  * Zero runtime deps; never throws on the comparison path.
  */
 
-import {
-  DEFAULT_INDEX_BLOCK,
-  type IndexBlock,
-} from "../../../src/domains/state/index-cache";
+import { DEFAULT_INDEX_BLOCK, type IndexBlock } from "../../../src/domains/state/index";
 
 export type IndexMode = "off" | "on";
 

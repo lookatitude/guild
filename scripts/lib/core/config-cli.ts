@@ -73,12 +73,14 @@ import {
   type ResolvedTierModel,
   type TierHostValue,
   type TierModelSpec,
-} from "../../../src/domains/config/tier-model";
+} from "../../../src/domains/config/index";
 // guild.model_policy.v2 closed-key validator (T5 dynamic-host-model-routing).
 // The policy is an OPTIONAL settings key during the M0-M2 rollout: registered
 // (accepted + validated at load, §5 fail-closed) but never scaffolded into a
 // fresh settings.json, so `config init` stays byte-identical to the golden.
-import { validateModelPolicy } from "../../../src/domains/config/model-policy";
+import { validateModelPolicy } from "../../../src/domains/config/index";
+import { durableGuildDir } from "../state/storage";
+import { ensureStorageLayout } from "../state/ensure-storage-layout";
 export { resolveTierModel };
 export type { ResolvedTierModel, TierHostValue, TierModelSpec };
 
@@ -950,7 +952,7 @@ function loadLocalOverride(
   fileConfig: Partial<GuildSettings>,
   selfBuild: boolean
 ): Partial<GuildSettings> {
-  const localPath = path.join(cwd, ".guild", "settings.local.json");
+  const localPath = path.join(durableGuildDir(cwd), "settings.local.json");
   if (!fs.existsSync(localPath)) return fileConfig; // no-op when absent
 
   let localParsed: Record<string, unknown>;
@@ -1620,7 +1622,7 @@ export function validateDefaults(d: Record<string, unknown>, selfBuild: boolean)
 }
 
 function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
-  const settingsPath = path.join(cwd, ".guild", "settings.json");
+  const settingsPath = path.join(durableGuildDir(cwd), "settings.json");
 
   if (fs.existsSync(settingsPath)) {
     let parsed: Record<string, unknown>;
@@ -1997,6 +1999,7 @@ function crossHostAvailable(): boolean {
 function main(): void {
   const { cwd: cwdFlag, mode, selfBuild, modelTier, flags } = parseArgs(process.argv.slice(2));
   const cwd = cwdFlag ?? process.env["GUILD_CWD"] ?? process.cwd();
+  ensureStorageLayout(cwd, { detectOnly: true });
 
   if (mode === "scaffold") {
     process.stdout.write(scaffold());
@@ -2035,7 +2038,7 @@ function main(): void {
   // ── resolve mode: delegate to the shared settings-resolver library.
   // This is the canonical path; all workspace inheritance and precedence
   // chain logic lives in lib/settings-resolver.ts.
-  const localPath = path.join(cwd, ".guild", "settings.local.json");
+  const localPath = path.join(durableGuildDir(cwd), "settings.local.json");
   let localLoadedKeys: string[] = [];
 
   // Surface settings.local.json INFO/ERROR log (parity with the old loader's stderr output).

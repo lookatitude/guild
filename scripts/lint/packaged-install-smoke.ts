@@ -17,8 +17,8 @@
  *
  * KTD28: a package is a projection. It ships compiled Node and markdown, never
  * authoring TypeScript: its src/ holds only src/surfaces/** (runtime data) and
- * src/modules/** (manifests + shims the conformance worker reads as text), with NO
- * src/domains/** TypeScript at all; no scripts/**.ts, hooks/**.ts or mcp-servers/
+ * the module manifests (<tree>/modules/<id>.manifest.json, JSON the conformance
+ * worker reads), with NO src/domains/** TypeScript at all; no scripts/**.ts, hooks/**.ts or mcp-servers/
  * ship; and every `runtime/scripts/*.js` / `hooks/dist/*.js` a shipped markdown
  * surface spawns is present in the package.
  *
@@ -93,20 +93,23 @@ function walkFiles(dir: string, out: string[] = []): string[] {
 const TS_SOURCE = /\.(ts|tsx|mts|cts)$/;
 
 /**
- * KTD28: no authoring TypeScript outside src/surfaces + src/modules, and no
- * src/domains copy at all. A package is surfaces + adapter map + compiled output.
+ * KTD28: no authoring TypeScript outside src/surfaces, and no src/domains copy
+ * beyond the module manifests. A package is surfaces + adapter map + compiled output.
  */
+const MODULE_MANIFEST = /^src\/(domains\/[a-z0-9-]+|adapters)\/modules\/[a-z0-9-]+\.manifest\.json$/;
+
 export function checkPackagedSource(pkgDir: string): string[] {
   const name = path.basename(pkgDir);
   const problems: string[] = [];
   for (const abs of walkFiles(pkgDir)) {
     const rel = path.relative(pkgDir, abs).split(path.sep).join("/");
     if (rel.split("/").includes("node_modules")) continue;
+    if (MODULE_MANIFEST.test(rel)) continue;
     if (rel.startsWith("src/domains/") || rel.startsWith("src/adapters/") || rel.startsWith("src/runtime/")) {
       problems.push(`${name}: ships ${rel} — a package never copies a domain (KTD28)`);
       continue;
     }
-    if (!TS_SOURCE.test(rel) || rel.startsWith("src/surfaces/") || rel.startsWith("src/modules/")) continue;
+    if (!TS_SOURCE.test(rel) || rel.startsWith("src/surfaces/")) continue;
     // A skill may carry a TypeScript EXAMPLE as reference data; what may not ship
     // is runnable authoring code, or anything that reaches for a domain.
     const runnable = /^(scripts|hooks|mcp-servers|src)\//.test(rel);
