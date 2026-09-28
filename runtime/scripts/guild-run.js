@@ -23124,7 +23124,7 @@ function admitRelaunch(input) {
       `relaunch of ${logicalTaskId} attempt ${attempt} could not be admitted: ${err instanceof Error ? err.message : String(err)}`
     );
   }
-  return { instanceId, attempt };
+  return { instanceId, attempt, assignmentPath: paths.assignment_path };
 }
 var crypto8, fs29, path36, ISOLATED_SPAWN_REFUSED, IsolatedSpawnRefused, ISOLATED_LAUNCH_CLAIM_SCHEMA;
 var init_isolated_launch_admission = __esm({
@@ -48293,7 +48293,7 @@ function admitWrapperRelaunch(lane, cwd, retryReason) {
   }
   const attempt = lane.attempt + 1;
   const instanceId = `${lane.taskId}.a${attempt}.i-${(0, import_node_crypto4.randomUUID)().slice(0, 8)}`;
-  admitRelaunch({
+  const admitted = admitRelaunch({
     cwd: root,
     runId: lane.runId,
     logicalTaskId: lane.taskId,
@@ -48305,7 +48305,13 @@ function admitWrapperRelaunch(lane, cwd, retryReason) {
   });
   return {
     lane: { ...lane, instanceId, attempt },
-    env: { GUILD_TASK_CELL_INSTANCE_ID: instanceId, GUILD_TASK_ATTEMPT: String(attempt) }
+    // A repair runs as a new instance: it must read and acknowledge its own
+    // assignment, not the inherited attempt-1 path.
+    env: {
+      GUILD_TASK_CELL_INSTANCE_ID: instanceId,
+      GUILD_TASK_ATTEMPT: String(attempt),
+      GUILD_TASK_ASSIGNMENT: admitted.assignmentPath
+    }
   };
 }
 var VALID_MODES = /* @__PURE__ */ new Set([

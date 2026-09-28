@@ -394,5 +394,5 @@ export function admitRelaunch(input: {
       `relaunch of ${logicalTaskId} attempt ${attempt} could not be admitted: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-  return { instanceId, attempt };
+  return { instanceId, attempt, assignmentPath: paths.assignment_path };
 }

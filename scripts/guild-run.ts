@@ -152,7 +152,7 @@ export function admitWrapperRelaunch(
   }
   const attempt = lane.attempt + 1;
   const instanceId = `${lane.taskId}.a${attempt}.i-${randomUUID().slice(0, 8)}`;
-  admitRelaunch({
+  const admitted = admitRelaunch({
     cwd: root,
     runId: lane.runId,
     logicalTaskId: lane.taskId,
@@ -164,7 +164,13 @@ export function admitWrapperRelaunch(
   });
   return {
     lane: { ...lane, instanceId, attempt },
-    env: { GUILD_TASK_CELL_INSTANCE_ID: instanceId, GUILD_TASK_ATTEMPT: String(attempt) },
+    // A repair runs as a new instance: it must read and acknowledge its own
+    // assignment, not the inherited attempt-1 path.
+    env: {
+      GUILD_TASK_CELL_INSTANCE_ID: instanceId,
+      GUILD_TASK_ATTEMPT: String(attempt),
+      GUILD_TASK_ASSIGNMENT: admitted.assignmentPath,
+    },
   };
 }
 

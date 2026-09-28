@@ -32,7 +32,7 @@ describe("plr-wi-15-4 r3 · guild-run repair re-spawns are admitted one by one (
   // Every start records the identity the child inherited, then returns an invalid result.
   fs.writeFileSync(
     path.join(bin, "claude"),
-    `#!/bin/sh\necho "\${GUILD_TASK_CELL_INSTANCE_ID:-none} \${GUILD_TASK_ATTEMPT:-none}" >> "${marker}"\necho "{}"\n`,
+    `#!/bin/sh\necho "\${GUILD_TASK_CELL_INSTANCE_ID:-none} \${GUILD_TASK_ATTEMPT:-none} \${GUILD_TASK_ASSIGNMENT:-none}" >> "${marker}"\necho "{}"\n`,
     { mode: 0o755 },
   );
   afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
@@ -46,8 +46,8 @@ describe("plr-wi-15-4 r3 · guild-run repair re-spawns are admitted one by one (
     );
     const starts = fs.existsSync(marker)
       ? fs.readFileSync(marker, "utf8").trim().split("\n").map((l) => {
-          const [instance, attempt] = l.split(" ");
-          return { instance, attempt };
+          const [instance, attempt, assignment] = l.split(" ");
+          return { instance, attempt, assignment };
         })
       : [];
     return { exit: r.status, stderr: r.stderr, starts };
@@ -57,7 +57,14 @@ describe("plr-wi-15-4 r3 · guild-run repair re-spawns are admitted one by one (
     const cwd = tmpLaunchRoot();
     fs.mkdirSync(path.join(cwd, ".git"));
     admitLane(cwd, RUN, "T1", "T1.a1.i-1");
-    const r = guildRun(cwd, { GUILD_RUN_ID: RUN, GUILD_TASK_ID: "T1", GUILD_TASK_CELL_INSTANCE_ID: "T1.a1.i-1", GUILD_TASK_ATTEMPT: "1" });
+    const a1 = taskCellPaths({ run_id: RUN, logical_task_id: "T1", attempt: 1, instance_id: "T1.a1.i-1" }).assignment_path;
+    const r = guildRun(cwd, {
+      GUILD_RUN_ID: RUN,
+      GUILD_TASK_ID: "T1",
+      GUILD_TASK_CELL_INSTANCE_ID: "T1.a1.i-1",
+      GUILD_TASK_ATTEMPT: "1",
+      GUILD_TASK_ASSIGNMENT: a1,
+    });
 
     // dispatch.max_instances defaults to 4: attempt 1 plus three admitted repairs
     // fill the run; the fourth repair is refused and never starts.
@@ -65,8 +72,12 @@ describe("plr-wi-15-4 r3 · guild-run repair re-spawns are admitted one by one (
     const instances = r.starts.map((s) => s.instance);
     expect(instances[0]).toBe("T1.a1.i-1");
     expect(new Set(instances).size).toBe(instances.length);
-    r.starts.forEach(({ instance, attempt }) => {
+    r.starts.forEach(({ instance, attempt, assignment: exported }) => {
       const n = Number(attempt);
+      // codex r4: each start reads its OWN assignment, never the inherited attempt-1 path.
+      expect(exported).toBe(
+        taskCellPaths({ run_id: RUN, logical_task_id: "T1", attempt: n, instance_id: instance }).assignment_path,
+      );
       const claim = JSON.parse(
         fs.readFileSync(path.join(cwd, launchClaimPath({ runId: RUN, logicalTaskId: "T1", attempt: n })), "utf8"),
       );
@@ -127,7 +138,7 @@ describe("plr-wi-15-4 r3 · admitRelaunch", () => {
       retryReason: "repair",
       launchId: "l1",
     };
-    expect(admitRelaunch(input)).toEqual({ instanceId: "T3.a2.i-1", attempt: 2 });
+    expect(admitRelaunch(input)).toMatchObject({ instanceId: "T3.a2.i-1", attempt: 2 });
     expect(() => admitRelaunch({ ...input, instanceId: "T3.a2.i-2", launchId: "l2" })).toThrow(
       /^isolated_spawn_refused:.*T3 attempt 2 already has an attempt record/,
     );
