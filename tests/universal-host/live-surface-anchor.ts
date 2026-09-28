@@ -672,7 +672,10 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // script through tsx becomes `node …/runtime/scripts/<id>.js` (KTD11/KTD28), and
   // the WAVE2 registry was re-extracted with it; the learn stage calls follow. ANTI-VACUITY:
   // check-surface-pins was RED (registry_stale ×4, tree_pin_stale skills) against the T12 pins.
-  skills: "21a146f0a47d1ddd411d2569649560673f18cfb9",
+  // Re-ratified 2026-09-28 (T15 security gate): wiki-ingest reference states the
+  // should_pause marker is enforced at PreToolUse. ANTI-VACUITY: check-surface-pins and
+  // SC-W3-6 were RED on guild#203 CI against the T14 pin and named only `skills/skills`.
+  skills: "2b48b2141535884bb6bfb2fb99ce4f2e90878dbf",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

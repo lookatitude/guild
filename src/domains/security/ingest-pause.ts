@@ -110,7 +110,7 @@ export function clearIngestPause(root: string | GuildStorage, candidatePath?: st
  * deepest existing ancestor and keeps the tail; a dangling link is followed by
  * its own text, bounded so a link loop cannot spin.
  */
-export function canonicalPath(p: string, hops = 0): string {
+function canonicalPath(p: string, hops = 0): string {
   const abs = path.resolve(p);
   try {
     return fs.realpathSync.native(abs);
