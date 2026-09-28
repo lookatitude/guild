@@ -107,6 +107,10 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   // `/guild:maintain evolve <id>` step 1 — records the pre-edit baseline hash and the
   // 10-step pipeline plan. No version tree is written (KTD48).
   { id: "evolve-loop", entry: "scripts/evolve-loop.ts" },
+  // T0's work loop (KTD33/KTD41-44/KTD49/KTD53): bind the class cursor, route a
+  // workflow decision, route an operator redirect (harvest on the third), write
+  // the research packet. Named by the `/guild` command body.
+  { id: "work-loop", entry: "scripts/work-loop.ts" },
   // Every script a `commands/*.md` body spawns today with `npx tsx`. Compiling
   // them here is T02's half of the fix; T04 owns swapping the command bodies to
   // `node "$GUILD_PLUGIN_ROOT/runtime/scripts/<id>.js"` (command bodies are that

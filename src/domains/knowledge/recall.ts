@@ -82,6 +82,7 @@ import { ingestImportanceScore, resolveRecallImportance } from "./ingest-importa
 import { emitTraceEvent } from "../telemetry";
 import { makeAnalysisTraceEvent, makeRecallEvent, makeRecallDecisionEvent } from "../telemetry";
 import { durableGuildDir } from "../state";
+import { phaseStartRecall } from "./phase-start";
 
 // Re-export so existing importers (`recall.ts` was the original home of the scorer)
 // keep resolving `ingestImportanceScore` from here; canonical impl now in ingest-importance.ts.
@@ -1114,6 +1115,7 @@ export function recall(query: string, opts: RecallOpts): RecallResult {
 // Exit 0 always; errors exit 1 with stderr.
 //
 // Flags (canonical): --query --cwd --run-id [--category --limit --run-dir]
+//                   [--phase <p> --cell <id>] → + working set, BM25 via recall.backend, lane_bundle
 // Test seams (env): GUILD_WIKI_THRESHOLD → wiki_file_threshold override
 //                   GUILD_INDEX=off     → index.enabled=false (force file-BM25/fsScan)
 
@@ -1125,6 +1127,8 @@ export function runRecallCli(): void {
   let limit = 10;
   let runId = "";
   let runDir = "";
+  let phase = "";
+  let cellId = "";
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -1140,6 +1144,10 @@ export function runRecallCli(): void {
     else if (arg.startsWith("--limit=")) { limit = Math.max(1, parseInt(arg.slice("--limit=".length), 10) || 10); }
     else if (arg.startsWith("--run-id=")) { runId = arg.slice("--run-id=".length); }
     else if (arg.startsWith("--run-dir=")) { runDir = arg.slice("--run-dir=".length); }
+    else if (arg === "--phase" && argv[i + 1]) { phase = argv[++i]!; }
+    else if (arg === "--cell" && argv[i + 1]) { cellId = argv[++i]!; }
+    else if (arg.startsWith("--phase=")) { phase = arg.slice("--phase=".length); }
+    else if (arg.startsWith("--cell=")) { cellId = arg.slice("--cell=".length); }
   }
 
   if (!query) {
@@ -1186,6 +1194,14 @@ export function runRecallCli(): void {
       ? { _indexConfig }
       : {}),
   });
+
+  // KTD50 phase start: the working-set card + BM25 (through recall.backend) +
+  // the lane bundle a parent may see. Additive fields; the chunks are unchanged.
+  if (phase) {
+    const start = phaseStartRecall(query, { cwd, phase, cell_id: cellId || runId || phase });
+    process.stdout.write(JSON.stringify({ ...result, ...start }) + "\n");
+    return;
+  }
 
   process.stdout.write(JSON.stringify(result) + "\n");
 }
