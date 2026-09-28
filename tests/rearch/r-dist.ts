@@ -472,7 +472,7 @@ function prove(): void {
 
   // RE-EXPORT SHIM exemption — a target that only re-exports the canonical floor is
   // canonical, so importing it is allowed (the real src/runtime/mcp/guild-memory/bm25.ts case).
-  const shimContent = 'export { bm25Score } from "../../../scripts/lib/shared/bm25";\n';
+  const shimContent = 'export { bm25Score } from "../../../../scripts/lib/shared/bm25";\n';
   proveAssert(
     isReExportShim("src/runtime/mcp/guild-memory/bm25.ts", shimContent),
     "isReExportShim recognises a pure re-export of the canonical floor",

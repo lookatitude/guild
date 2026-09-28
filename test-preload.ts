@@ -86,8 +86,15 @@ for (const name of ["js-yaml", "typescript"]) {
 // The MCP server source (src/runtime/mcp/) takes the SDK and zod from the lockfile
 // the compile resolves them from (scripts/compile.ts MCP_DEPS).
 const MCP_DEPS = path.join(PLUGIN_ROOT, "mcp-servers", "guild-memory");
+// A CI leg that never installs mcp-servers/ deps never loads the MCP source either,
+// so an unresolvable package is skipped, not fatal.
 for (const name of ["zod", "@modelcontextprotocol/sdk/server/mcp.js", "@modelcontextprotocol/sdk/server/stdio.js"]) {
-  const resolved = require.resolve(name, { paths: [MCP_DEPS] });
+  let resolved: string;
+  try {
+    resolved = require.resolve(name, { paths: [MCP_DEPS] });
+  } catch {
+    continue;
+  }
   mock.module(name, () => require(resolved));
 }
 
