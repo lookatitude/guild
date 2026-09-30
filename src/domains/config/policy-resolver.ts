@@ -116,7 +116,15 @@ function readJsonFile(file: string): Record<string, unknown> | null {
   } catch (e) {
     // Absent is "layer not set". Anything else (a directory, EACCES) must not
     // silently fall back to defaults.
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    // A dangling symlink also reads ENOENT; only a truly absent path is "not set".
+    let present = false;
+    try {
+      fs.lstatSync(file);
+      present = true;
+    } catch {
+      /* absent */
+    }
+    if ((e as NodeJS.ErrnoException).code === "ENOENT" && !present) return null;
     throw new PolicyRejectedError("not-policy", file, `policy config: ${file} is unreadable (${(e as Error).message}).`);
   }
   let parsed: unknown;

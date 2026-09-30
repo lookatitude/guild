@@ -10004,7 +10004,13 @@ function readJsonFile(file) {
   try {
     raw = fs16.readFileSync(file, "utf8");
   } catch (e) {
-    if (e.code === "ENOENT") return null;
+    let present2 = false;
+    try {
+      fs16.lstatSync(file);
+      present2 = true;
+    } catch {
+    }
+    if (e.code === "ENOENT" && !present2) return null;
     throw new PolicyRejectedError("not-policy", file, `policy config: ${file} is unreadable (${e.message}).`);
   }
   let parsed;

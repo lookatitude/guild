@@ -214,5 +214,12 @@ describe("KTD35 — wiki.autopromote picks the harvest destination at the T0 dra
     thirdRedirect(redirectInput());
     expect(fs.existsSync(pagePath())).toBe(false);
   });
+
+  test("codex r2 P2: a dangling policy symlink fails closed to candidates-only", () => {
+    fs.mkdirSync(path.join(repo, ".guild", "config"), { recursive: true });
+    fs.symlinkSync(path.join(sandbox, "missing.json"), path.join(repo, ".guild", "config", "project.json"));
+    thirdRedirect(redirectInput());
+    expect(fs.existsSync(pagePath())).toBe(false);
+  });
 });
 
