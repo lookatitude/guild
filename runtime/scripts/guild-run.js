@@ -10111,7 +10111,9 @@ function leafPaths(obj2, prefix = "", out = []) {
   const entries = Object.entries(obj2);
   if (entries.length === 0 && prefix !== "") out.push(prefix);
   for (const [k, v] of entries) {
-    if (k.includes(".")) throw new PolicyRejectedError("not-policy", k, `policy config: key '${k}' contains a '.'; nest it instead.`);
+    if (k === "" || k.includes(".")) {
+      throw new PolicyRejectedError("not-policy", k, `policy config: key '${k}' is empty or contains a '.'; use nested non-empty keys.`);
+    }
     leafPaths(v, prefix === "" ? k : `${prefix}.${k}`, out);
   }
   return out;

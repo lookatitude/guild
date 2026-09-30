@@ -251,5 +251,13 @@ describe("KTD35 — wiki.autopromote picks the harvest destination at the T0 dra
     thirdRedirect(redirectInput());
     expect(fs.existsSync(pagePath())).toBe(true);
   });
+
+  test("codex r5 P2: an empty key segment fails closed", () => {
+    for (const cfg of [{ "": {} }, { "": { wiki: { autopromote: false } } }]) {
+      write(".guild/config/project.json", `${JSON.stringify(cfg)}\n`);
+      thirdRedirect(redirectInput({ ...DECISION, slug: `empty-key-${Object.keys(cfg[""]).length}` }));
+      expect(fs.readdirSync(path.join(repo, ".guild", "wiki", "decisions"))).toEqual([]);
+    }
+  });
 });
 
