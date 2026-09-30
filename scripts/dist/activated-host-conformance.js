@@ -21296,12 +21296,27 @@ var init_policy_keys = __esm({
 });
 
 // ../src/domains/config/policy-resolver.ts
+function hasDanglingLink(file) {
+  let p = path34.resolve(file);
+  for (; ; ) {
+    let isLink = false;
+    try {
+      isLink = fs26.lstatSync(p).isSymbolicLink();
+    } catch {
+    }
+    if (isLink && !fs26.existsSync(p)) return true;
+    const parent = path34.dirname(p);
+    if (parent === p) return false;
+    p = parent;
+  }
+}
 function readJsonFile(file) {
   let raw;
   try {
     raw = fs26.readFileSync(file, "utf8");
-  } catch {
-    return null;
+  } catch (e) {
+    if (e.code === "ENOENT" && !hasDanglingLink(file)) return null;
+    throw new PolicyRejectedError("not-policy", file, `policy config: ${file} is unreadable (${e.message}).`);
   }
   let parsed;
   try {
@@ -21360,7 +21375,15 @@ function readLayer(file, layer, knownHostIds) {
   }
   for (const dotted of leafPaths(parsed)) {
     if (known2.has(dotted)) continue;
-    if ([...known2].some((k) => k.startsWith(`${dotted}.`))) continue;
+    if ([...known2].some((k) => k.startsWith(`${dotted}.`))) {
+      const v = getByPath2(parsed, dotted);
+      if (v !== null && typeof v === "object" && !Array.isArray(v)) continue;
+      throw new PolicyRejectedError(
+        "not-policy",
+        dotted,
+        `policy config (${layer}, ${file}): '${dotted}' must be an object of policy keys.`
+      );
+    }
     throw new PolicyRejectedError(
       "not-policy",
       dotted,
@@ -21377,7 +21400,12 @@ function leafPaths(obj, prefix = "", out = []) {
     if (prefix !== "") out.push(prefix);
     return out;
   }
-  for (const [k, v] of Object.entries(obj)) {
+  const entries = Object.entries(obj);
+  if (entries.length === 0 && prefix !== "") out.push(prefix);
+  for (const [k, v] of entries) {
+    if (k === "" || k.includes(".")) {
+      throw new PolicyRejectedError("not-policy", k, `policy config: key '${k}' is empty or contains a '.'; use nested non-empty keys.`);
+    }
     leafPaths(v, prefix === "" ? k : `${prefix}.${k}`, out);
   }
   return out;
@@ -26691,7 +26719,7 @@ var init_catalog_cache = __esm({
         }
       }
     };
-    defaultSleep = (ms) => new Promise((resolve44) => setTimeout(resolve44, ms));
+    defaultSleep = (ms) => new Promise((resolve45) => setTimeout(resolve45, ms));
   }
 });
 
@@ -28912,7 +28940,7 @@ function failClosedCore(inputs, reason, rulePath) {
   receipt2.resolution_core_hash = coreHash(receipt2);
   return receipt2;
 }
-function resolve22(inputs) {
+function resolve23(inputs) {
   const rulePath = [];
   const policyObj = asObject(inputs.policy);
   if (policyObj === null) {
@@ -32234,7 +32262,7 @@ __export(config_exports, {
   registryIdToCanonicalHostKind: () => registryIdToCanonicalHostKind,
   requiredAssetIdsForG5: () => requiredAssetIdsForG5,
   requiredEntriesFor: () => requiredEntriesFor,
-  resolve: () => resolve22,
+  resolve: () => resolve23,
   resolveAuthorHost: () => resolveAuthorHost,
   resolveCapability: () => resolveCapability,
   resolveEffectivePurpose: () => resolveEffectivePurpose,
@@ -37451,6 +37479,17 @@ function stageDecisionCandidate(input, op, storage, scope, decisionId, now, stor
   });
   const writer = assertScrubbedWriter(input.writer ?? scrubbedWikiWriter);
   storage.ensureDir(path60.dirname(candidateAbs));
+  const realDir = fs50.realpathSync(path60.dirname(candidateAbs));
+  const realWiki = fs50.existsSync(scope.knowledge()) ? fs50.realpathSync(scope.knowledge()) : path60.resolve(scope.knowledge());
+  const realGuild = fs50.realpathSync(path60.resolve(scope.knowledge(), ".."));
+  let fileIsLink = false;
+  try {
+    fileIsLink = fs50.lstatSync(candidateAbs).isSymbolicLink();
+  } catch {
+  }
+  if (isWithin(realDir, realWiki) || !isWithin(realDir, realGuild) || fileIsLink) {
+    return refuse6(input, op, "scope", `the candidate path '${candidateAbs}' resolves outside the candidates home`, storeOpts);
+  }
   const wrote = writer(candidateAbs, page, { runDir: input.runDir, runId: input.run_id });
   if (!wrote.written) {
     return refuse6(
@@ -43709,7 +43748,7 @@ function calcDelayMs(attempt, strategy, baseMs) {
 }
 function realSleep(ms) {
   if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve44) => setTimeout(resolve44, ms));
+  return new Promise((resolve45) => setTimeout(resolve45, ms));
 }
 async function runWithRetry(dispatchFn, opts) {
   const maxAttempts = Math.max(1, Math.floor(opts.maxAttempts));
