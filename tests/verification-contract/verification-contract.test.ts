@@ -478,3 +478,316 @@ function userPathRuntimes(hooksJson: string): string[] {
   for (const m of hooksJson.matchAll(/"command"\s*:\s*"([^\s"]+)/g)) found.add(m[1]);
   return [...found].sort();
 }
+
+// ── T17: plugin-local docs (R28 · F9) and the producer boundary (R76) ────────
+
+/** The 13 command files that dispatch; the rest of commands/ are print-only aliases. */
+const DISPATCH_COMMANDS = [
+  "build", "config", "guild", "ideate", "init", "initiative", "learn",
+  "maintain", "ops", "plan", "qa", "status", "wiki",
+].map((c) => `commands/${c}.md`);
+const USING_GUILD = "skills/meta/using-guild/SKILL.src.md";
+const MCP_READMES = ["mcp-servers/guild-memory/README.md", "mcp-servers/guild-telemetry/README.md"];
+/** Every plugin-local doc this D8 owns: README, AGENTS.md, CLAUDE.md, using-guild, command help, MCP READMEs. */
+const D8_DOCS = [
+  "README.md", "AGENTS.md", "CLAUDE.md", USING_GUILD, ...MCP_READMES,
+  ...fs.readdirSync(path.join(PLUGIN_ROOT, "commands")).filter((f) => f.endsWith(".md")).map((f) => `commands/${f}`),
+].sort();
+
+type Texts = Record<string, string>;
+interface DocRule {
+  id: string;
+  /** each file must match every `locked` pattern */
+  files: string[];
+  locked: RegExp[];
+  /** no D8 doc may match any `retired` pattern */
+  retired?: RegExp[];
+}
+
+/** Whitespace-normalized, so a sentence wrapped across lines still matches. */
+function liveDocs(root = PLUGIN_ROOT): Texts {
+  const out: Texts = {};
+  for (const rel of D8_DOCS) out[rel] = fs.readFileSync(path.join(root, rel), "utf8").replace(/\s+/g, " ");
+  return out;
+}
+
+function docProblems(texts: Texts, rules: DocRule[]): string[] {
+  const out: string[] = [];
+  for (const rule of rules) {
+    for (const f of rule.files) {
+      for (const re of rule.locked) if (!re.test(texts[f] ?? "")) out.push(`${rule.id}: ${f} lacks ${re}`);
+    }
+    for (const re of rule.retired ?? []) {
+      for (const [f, t] of Object.entries(texts)) if (re.test(t)) out.push(`${rule.id}: ${f} still says ${re}`);
+    }
+  }
+  return out;
+}
+
+/** Remove every match of `re` from `f`, the way a drifting edit would drop a locked sentence. */
+function withoutMatch(texts: Texts, f: string, re: RegExp): Texts {
+  return { ...texts, [f]: texts[f].replace(new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`), "") };
+}
+
+const CONCERN_LINE = new RegExp(DEFAULT_CONCERN_ENUM.join(" · "));
+
+/** R28: the plugin-local docs state the locked architecture (plan §U10 copy list). */
+const R28_RULES: DocRule[] = [
+  {
+    id: "readme-architecture",
+    files: ["README.md"],
+    locked: [
+      /\*\*13 dispatching command files\*\*/,
+      /17 are indexed/,
+      /bare `\/guild` is the T0 orchestrator session/,
+      /`research`, `debug`, and `--class=` bind the class/,
+      /five class graphs \(product · research · debug · ops · init\)/,
+      /three tiers \(T0 → a Team Lead per TaskCell → specialists\)/,
+      /one inner loop \(recall → research-on-miss → implement → verify → harvest\)/,
+      /enforced budget \(`advisorRounds`/,
+      /critic is the advisor machinery agent/,
+      /`qa` is the one review gate/,
+      /at most 6k tokens/,
+      /at most 1,200 tokens of citations/,
+      /glossary\.md` terms take at most 200/,
+      /\*\*One promotion law\*\*/,
+      /checkpoint is a domain function/,
+      /extract-structural\.ts/,
+      /durable config holds policy keys only/,
+      /bind per session on the run record/,
+      /keeps a compact history/,
+      /`\/guild:status dashboard`/,
+      /ships no UI pages/,
+      /the bootstrap always loads/,
+      /first write-capable entry upgrades it/,
+      /Files here are latest-only/,
+    ],
+  },
+  {
+    id: "agents-architecture",
+    files: ["AGENTS.md"],
+    locked: [
+      /the twelve domains/,
+      /There is no `src\/modules\/` tree/,
+      /`src\/runtime\/mcp\/` — the source of the two optional MCP servers/,
+      /no Jest and no layout-laws baseline/,
+      /\*\*One promotion law\.\*\* Harvest is the only auto writer/,
+      /T0 request queue, which the lead drains/,
+      /`none \| decision \| playbook_span \| skill_def \| reflect`/,
+      /per-phase team files <slug>\.<phase>\.yaml/,
+      /Per-goal is a roster slice/,
+      /guild\.research_packet\.v1/,
+      /there is no `skill-versions\/` tree/,
+      /Ingested blobs are `knowledge\/sources\/`, never `raw\/`/,
+      /SessionStart on a Guild root always loads the Guild bootstrap/,
+    ],
+  },
+  {
+    id: "using-guild-gateway",
+    files: [USING_GUILD],
+    locked: [
+      /\*\*Bare `\/guild` is T0\*\*/,
+      /A verb is an option, not a requirement/,
+      /This file is \*\*latest-only\*\*/,
+    ],
+  },
+  {
+    id: "command-help",
+    files: ["commands/guild.md"],
+    locked: [/no verb runs six-way intake/, /`research` \/ `debug` \/ `--class=` bind the workflow class/],
+  },
+  { id: "command-help", files: ["commands/maintain.md"], locked: [/restore the inverse span/] },
+  { id: "command-help", files: ["commands/config.md"], locked: [/Durable config is policy only/] },
+  { id: "claude-md-imports-agents", files: ["CLAUDE.md"], locked: [/@AGENTS\.md/] },
+  {
+    id: "mcp-source-home",
+    files: MCP_READMES,
+    locked: [/The source lives at `src\/runtime\/mcp\/guild-(memory|telemetry)\/`/, /bun test --isolate/],
+  },
+  {
+    id: "retired-layout",
+    files: [],
+    locked: [],
+    retired: [
+      /`src\/modules\/<module>\/`/,
+      /npx jest/,
+      /`dist\/index\.js`/,
+      /skills\/core\/principles/,
+      /Update \(\d/,
+      /58 specialist starter recipes (plus the dashboard launcher )?live under `skills\/playbooks\/`/,
+    ],
+  },
+];
+
+/** F9: each colliding sentence reads the locked way, and its retired form is gone everywhere. */
+const F9_RULES: DocRule[] = [
+  {
+    id: "autopromote",
+    files: ["README.md", "AGENTS.md", USING_GUILD, "commands/wiki.md"],
+    locked: [/wiki\.autopromote`?,? ?\(?defaults? on/],
+    retired: [/Nothing auto-promotes/, /autopromote: false/, /autopromote[^.]{0,40}REJECTED/],
+  },
+  {
+    id: "harvest-writer",
+    files: ["README.md", "AGENTS.md", USING_GUILD, "commands/wiki.md"],
+    locked: [/Harvest is the only (auto|automatic)( wiki)? writer/i],
+    retired: [/agents emit candidates only/i, /tooling emits candidates, never auto-writes/],
+  },
+  {
+    id: "settings-policy",
+    files: ["README.md", "AGENTS.md", "commands/config.md"],
+    locked: [/policy (keys )?only/i],
+    retired: [/settings\.json`? config surface/, /settings\.json`? +# project\/workspace behavior/, /the single JSON file holding every Guild option/],
+  },
+  { id: "concern-enum", files: ["README.md", USING_GUILD], locked: [CONCERN_LINE] },
+  {
+    id: "bm25",
+    files: ["README.md", "AGENTS.md", "commands/wiki.md"],
+    locked: [/fails open to BM25/],
+    retired: [/\.guild\/index\.sqlite/, /SQLite read-through wiki cache\*\* — lazy-build/],
+  },
+  {
+    id: "skill-versions",
+    files: ["README.md", "AGENTS.md"],
+    locked: [/compact history/],
+    retired: [/\.guild\/skill-versions/, /skill-versions\/ +#/],
+  },
+  {
+    id: "verb-always-required",
+    files: [USING_GUILD, "README.md"],
+    locked: [/A verb is (an option, not a requirement|optional)/],
+    retired: [/smart \*\*phase detection\*\*/, /let the brainstorm skill prompt/, /a verb is (always )?required/i],
+  },
+  {
+    id: "glossary-one-liner",
+    files: [USING_GUILD],
+    locked: [/In any Guild root, project terms live in `\.guild\/wiki\/glossary\.md`; recall on miss\./],
+  },
+  {
+    id: "raw-to-sources",
+    files: ["commands/wiki.md"],
+    locked: [/Ingested blobs live in `\.guild\/knowledge\/sources\/`/],
+    retired: [/\.guild\/raw\//, /── raw\//],
+  },
+];
+
+/** A ts/js import specifier that reaches a sibling repo's source (KTD66). */
+function siblingImport(spec: string): boolean {
+  return /(^|\/)(website|benchmark)\//.test(spec) || /^(@[^/]+\/)?(guild-)?(website|benchmark)$/.test(spec);
+}
+
+function siblingImportFindings(files: Array<{ rel: string; text: string }>): string[] {
+  const out: string[] = [];
+  const re = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|^\s*import\s+)['"]([^'"\n]+)['"]/gm;
+  for (const { rel, text } of files) {
+    for (const m of text.matchAll(re)) if (siblingImport(m[1])) out.push(`${rel} imports ${m[1]}`);
+  }
+  return out;
+}
+
+/** Tracked plugin source (not fixtures, not compiled bundles, not node_modules). */
+function pluginSource(root = PLUGIN_ROOT): Array<{ rel: string; text: string }> {
+  const listed = spawnSync("git", ["ls-files", "-co", "--exclude-standard"], { cwd: root, encoding: "utf8" }).stdout;
+  return listed
+    .split("\n")
+    .filter((f) => /\.(ts|tsx|js|mjs|cjs)$/.test(f) && !f.endsWith(".d.ts"))
+    .filter((f) => !/(^|\/)(node_modules|dist|fixtures)\//.test(f) && !f.startsWith("runtime/") && !f.startsWith(".guild/"))
+    .filter((f) => fs.existsSync(path.join(root, f)))
+    .map((rel) => ({ rel, text: fs.readFileSync(path.join(root, rel), "utf8") }));
+}
+
+/** UI pages the plugin must not ship; docs/index.html is the one retired-docs redirect. */
+function uiPageFindings(paths: string[]): string[] {
+  return paths
+    .filter((f) => /\.(astro|tsx|jsx|vue|svelte|mdx|html?)$/.test(f))
+    .filter((f) => !f.startsWith(".guild/") && !f.startsWith("dist/") && f !== "docs/index.html");
+}
+
+describe("T17 plugin-local docs and producer boundary", () => {
+  const live = liveDocs();
+
+  test("R28 · README, AGENTS.md, using-guild and command help state the locked architecture", () => {
+    expect(docProblems(live, R28_RULES)).toEqual([]);
+  });
+
+  test("R28 · CONTROL: dropping any locked sentence, or planting a retired one, is flagged", () => {
+    for (const rule of R28_RULES) {
+      for (const f of rule.files) {
+        for (const re of rule.locked) {
+          expect(docProblems(withoutMatch(live, f, re), [rule])).toContain(`${rule.id}: ${f} lacks ${re}`);
+        }
+      }
+    }
+    const planted = { ...live, "README.md": `${live["README.md"]} Run \`npx jest\` from \`src/modules/<module>/\`.` };
+    const found = docProblems(planted, R28_RULES);
+    expect(found).toContain("retired-layout: README.md still says /npx jest/");
+    expect(found).toContain("retired-layout: README.md still says /`src\\/modules\\/<module>\\/`/");
+  });
+
+  test("F9 · every colliding sentence reads the locked way and its retired form is gone", () => {
+    expect(docProblems(live, F9_RULES)).toEqual([]);
+  });
+
+  test("F9 · CONTROL: each topic flags its retired sentence and its missing locked sentence", () => {
+    const retiredSamples: Record<string, string> = {
+      "autopromote": "Promotion on user gate. Nothing auto-promotes.",
+      "harvest-writer": "defaults.wiki.autopromote: true is REJECTED always (agents emit candidates only)",
+      "settings-policy": "Manage the `.guild/settings.json` config surface",
+      "bm25": "Resolves run state or the optional `.guild/index.sqlite` cache.",
+      "skill-versions": "Walk a skill back n versions from `.guild/skill-versions/`",
+      "verb-always-required": "Bare entry — smart **phase detection**: a verb is always required.",
+      "raw-to-sources": "Project knowledge over `.guild/raw/` and the wiki.",
+    };
+    for (const rule of F9_RULES) {
+      for (const f of rule.files) {
+        for (const re of rule.locked) {
+          expect(docProblems(withoutMatch(live, f, re), [rule])).toContain(`${rule.id}: ${f} lacks ${re}`);
+        }
+      }
+      if (!rule.retired) continue;
+      const sample = retiredSamples[rule.id];
+      expect(sample).toBeDefined();
+      const planted = { ...live, "AGENTS.md": `${live["AGENTS.md"]} ${sample}` };
+      expect(docProblems(planted, [rule]).some((p) => p.startsWith(`${rule.id}: AGENTS.md still says`))).toBe(true);
+    }
+    // The concern line is the shipped enum, not a hand-copied list: a renamed value fails.
+    const drifted = { ...live, "README.md": live["README.md"].replace(" · ux · ", " · design · ") };
+    expect(docProblems(drifted, F9_RULES)).toContain(`concern-enum: README.md lacks ${CONCERN_LINE}`);
+  });
+
+  test("R76 · plugin source imports no website/ or benchmark/ tree", () => {
+    const source = pluginSource();
+    expect(source.length).toBeGreaterThan(500);
+    expect(siblingImportFindings(source)).toEqual([]);
+  });
+
+  test("R76 · CONTROL: a relative, a bare and a dynamic sibling import are each flagged", () => {
+    // Split literals, so this file does not itself read as a sibling import to the live scan.
+    const planted = [
+      { rel: "src/domains/kernel/x.ts", text: 'import { page } from "../../../../' + "website" + '/src/pages/index";\n' },
+      { rel: "scripts/y.ts", text: 'const ui = require("guild-' + "benchmark" + '");\n' },
+      { rel: "hooks/z.ts", text: 'await import("../' + "benchmark" + '/src/ui/app");\n' },
+      { rel: "src/domains/kernel/ok.ts", text: 'import { a } from "./website-copy";\n' },
+    ];
+    expect(siblingImportFindings(planted)).toEqual([
+      "src/domains/kernel/x.ts imports ../../../../website/src/pages/index",
+      "scripts/y.ts imports guild-benchmark",
+      "hooks/z.ts imports ../benchmark/src/ui/app",
+    ]);
+  });
+
+  test("R76 · the dashboard launcher ships, off the skills glob, and the plugin has no UI pages", () => {
+    expect(fs.existsSync(path.join(PLUGIN_ROOT, "skills/playbooks/dashboard/SKILL.md"))).toBe(true);
+    expect(fs.existsSync(path.join(PLUGIN_ROOT, "runtime/scripts/dashboard-launch.js"))).toBe(true);
+    expect(read("commands/status.md")).toContain("runtime/scripts/dashboard-launch.js");
+    const manifest = JSON.parse(read(".claude-plugin/plugin.json")) as { skills: string[] };
+    expect(manifest.skills.filter((s) => s.includes("playbooks"))).toEqual([]);
+    const tracked = spawnSync("git", ["ls-files"], { cwd: PLUGIN_ROOT, encoding: "utf8" }).stdout.split("\n");
+    expect(uiPageFindings(tracked)).toEqual([]);
+    // CONTROL: a plugin UI page or component is flagged; the docs redirect is not.
+    expect(uiPageFindings(["src/ui/App.tsx", "skills/playbooks/dashboard/index.html", "docs/index.html"])).toEqual([
+      "src/ui/App.tsx",
+      "skills/playbooks/dashboard/index.html",
+    ]);
+  });
+});

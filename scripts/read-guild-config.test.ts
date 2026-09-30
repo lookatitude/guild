@@ -114,12 +114,22 @@ describe("read-guild-config.ts — .guild/settings.json surface", () => {
     expect(out).toMatch(/unknown defaults key "bogus_key"/);
   });
 
-  test("--validate rejects defaults.wiki.autopromote: true always", () => {
+  test("--validate accepts defaults.wiki.autopromote true and false (KTD35)", () => {
+    for (const value of [true, false]) {
+      const dir = repo();
+      writeSettings(dir, { defaults: { wiki: { autopromote: value } } });
+      const { status, out } = run(["--cwd", dir, "--validate"]);
+      expect(status).toBe(0);
+      expect(out).not.toMatch(/autopromote/);
+    }
+  });
+
+  test("--validate rejects a non-boolean defaults.wiki.autopromote", () => {
     const dir = repo();
-    writeSettings(dir, { defaults: { wiki: { autopromote: true } } });
+    writeSettings(dir, { defaults: { wiki: { autopromote: "yes" } } });
     const { status, out } = run(["--cwd", dir, "--validate"]);
     expect(status).toBe(1);
-    expect(out).toMatch(/autopromote: true is REJECTED/);
+    expect(out).toMatch(/defaults\.wiki\.autopromote must be true or false/);
   });
 
   test("--validate rejects defaults.adversarial: off only with --self-build", () => {

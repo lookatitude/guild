@@ -199,7 +199,7 @@ export function validateCrossHostBlock(value: Record<string, unknown>): string[]
 export function validateDefaults(value: Record<string, unknown>, selfBuild: boolean): string[] {
   const rejects = rejectUnknown(value, DEFAULT_KEYS, "defaults");
   if (value["adversarial"] === "off" && selfBuild) rejects.push("defaults.adversarial: off is REJECTED for Guild self-build");
-  if (object(value["wiki"]) && value["wiki"]["autopromote"] === true) rejects.push("defaults.wiki.autopromote: true is REJECTED always (agents emit candidates only)");
+  if (object(value["wiki"]) && value["wiki"]["autopromote"] !== undefined && typeof value["wiki"]["autopromote"] !== "boolean") rejects.push(`defaults.wiki.autopromote must be true or false (got ${JSON.stringify(value["wiki"]["autopromote"])})`);
   if (object(value["cross_host"])) rejects.push(...validateCrossHostBlock(value["cross_host"]));
   if (object(value["quality"]) && object(value["quality"]["budget"])) {
     for (const key of Object.keys(value["quality"]["budget"])) {

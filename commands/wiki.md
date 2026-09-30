@@ -7,14 +7,16 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestio
 
 # /guild:wiki — project knowledge
 
-Ingest stays human-gated: a source becomes a candidate, and only the gate lands it
+Ingest stays human-gated: a source becomes a candidate, and only the gate lands it.
+Harvest is the only automatic wiki writer (`wiki.autopromote`, default on; `false`
+keeps this root candidates-only). Ingested blobs live in `.guild/knowledge/sources/`.
 
 ## Sub-verbs
 
 | Token | Scope |
 |---|---|
 | `ingest <path>` | ingest a URL or local file as a sourced candidate |
-| `query "<text>"` | BM25 search with the optional filter flags |
+| `query "<text>"` | BM25 search with the optional filter flags; `recall.backend: hybrid` adds a cache-only rerank that fails open to BM25 |
 | `lint` | wiki health linter |
 
 ## Dispatch

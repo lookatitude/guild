@@ -22,7 +22,7 @@ related: [v2-runtime-and-execution-model, cost-aware-tiering-and-lean-context, m
 
 ## Status
 
-**Proposed (2026-07-14).** Contract-freeze record for the `task-cell-runtime`
+**Accepted (2026-09-30, plugin-layout-reshape KTD21; proposed 2026-07-14).** Contract-freeze record for the `task-cell-runtime`
 initiative (`.<HIGH_ENTROPY_REDACTED>-cell-runtime/`). This is a **decision
 record** (names + schemas + invariants); it does not write the launcher, hooks,
 backend, or config schema — each work item (G2…G13 in the initiative ledger) is

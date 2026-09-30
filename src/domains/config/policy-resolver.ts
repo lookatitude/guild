@@ -109,12 +109,34 @@ export interface ResolvedPolicy {
   legacyAliases: LegacyAliasRecord[];
 }
 
+/** True when `file` or any ancestor is a symlink whose target does not resolve. */
+function hasDanglingLink(file: string): boolean {
+  let p = path.resolve(file);
+  for (;;) {
+    let isLink = false;
+    try {
+      isLink = fs.lstatSync(p).isSymbolicLink();
+    } catch {
+      /* this component is absent */
+    }
+    if (isLink && !fs.existsSync(p)) return true;
+    const parent = path.dirname(p);
+    if (parent === p) return false;
+    p = parent;
+  }
+}
+
 function readJsonFile(file: string): Record<string, unknown> | null {
   let raw: string;
   try {
     raw = fs.readFileSync(file, "utf8");
-  } catch {
-    return null;
+  } catch (e) {
+    // Absent is "layer not set". Anything else (a directory, EACCES) must not
+    // silently fall back to defaults.
+    // A dangling symlink (the file or any ancestor directory) also reads ENOENT;
+    // only a path with no dangling link on it is "not set".
+    if ((e as NodeJS.ErrnoException).code === "ENOENT" && !hasDanglingLink(file)) return null;
+    throw new PolicyRejectedError("not-policy", file, `policy config: ${file} is unreadable (${(e as Error).message}).`);
   }
   let parsed: unknown;
   try {
@@ -198,8 +220,17 @@ function readLayer(
   }
   for (const dotted of leafPaths(parsed)) {
     if (known.has(dotted)) continue;
-    // A container path (`budget`) whose leaves are known is fine.
-    if ([...known].some((k) => k.startsWith(`${dotted}.`))) continue;
+    // A container path (`budget`) is fine only while it IS a container: a leaf value
+    // sitting where an object belongs (`"wiki": false`) must not read as "unset".
+    if ([...known].some((k) => k.startsWith(`${dotted}.`))) {
+      const v = getByPath(parsed, dotted);
+      if (v !== null && typeof v === "object" && !Array.isArray(v)) continue; // an empty known container
+      throw new PolicyRejectedError(
+        "not-policy",
+        dotted,
+        `policy config (${layer}, ${file}): '${dotted}' must be an object of policy keys.`,
+      );
+    }
     throw new PolicyRejectedError(
       "not-policy",
       dotted,
@@ -228,7 +259,15 @@ function leafPaths(obj: unknown, prefix = "", out: string[] = []): string[] {
     if (prefix !== "") out.push(prefix);
     return out;
   }
-  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+  const entries = Object.entries(obj as Record<string, unknown>);
+  // An empty object is still a key the file sets: it must be judged, not skipped.
+  if (entries.length === 0 && prefix !== "") out.push(prefix);
+  for (const [k, v] of entries) {
+    // `{"wiki.autopromote": false}` would validate as the dotted key yet never be read
+    // by getByPath; a literal dot inside one key is refused outright.
+    if (k === "" || k.includes(".")) {
+      throw new PolicyRejectedError("not-policy", k, `policy config: key '${k}' is empty or contains a '.'; use nested non-empty keys.`);
+    }
     leafPaths(v, prefix === "" ? k : `${prefix}.${k}`, out);
   }
   return out;

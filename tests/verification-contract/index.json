@@ -254,8 +254,16 @@
       "id": "R28",
       "unit": "U10",
       "proves": "plugin-local D8: README, AGENTS.md, using-guild and command help match the locked architecture",
-      "owner": "T17",
-      "pending": "plugin-local docs checks (README / AGENTS.md / using-guild / command help)"
+      "fixtures": [
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R28 · README, AGENTS.md, using-guild and command help state the locked architecture"
+        },
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R28 · CONTROL: dropping any locked sentence, or planting a retired one, is flagged"
+        }
+      ]
     },
     {
       "id": "R29",
@@ -1039,8 +1047,23 @@
       "id": "R76",
       "unit": "U10",
       "proves": "plugin imports no website/benchmark source; producer + dashboard launcher kept",
-      "owner": "T17",
-      "pending": "plugin-local D8 docs + producer/launcher checks"
+      "fixtures": [
+        {
+          "lint": "no-website-benchmark-import"
+        },
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R76 · plugin source imports no website/ or benchmark/ tree"
+        },
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R76 · CONTROL: a relative, a bare and a dynamic sibling import are each flagged"
+        },
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "R76 · the dashboard launcher ships, off the skills glob, and the plugin has no UI pages"
+        }
+      ]
     },
     {
       "id": "R77",
@@ -1276,8 +1299,16 @@
       "id": "F9",
       "unit": "U10",
       "proves": "plugin README / AGENTS.md / using-guild / command help carry the corrected sentences",
-      "owner": "T17",
-      "pending": "colliding-sentence docs checks"
+      "fixtures": [
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "F9 · every colliding sentence reads the locked way and its retired form is gone"
+        },
+        {
+          "test": "tests/verification-contract/verification-contract.test.ts",
+          "title": "F9 · CONTROL: each topic flags its retired sentence and its missing locked sentence"
+        }
+      ]
     },
     {
       "id": "F2",

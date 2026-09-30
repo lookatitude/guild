@@ -45,7 +45,9 @@ export type HarvestStatus =
   | "refused"
   | "reverted"
   | "failed"
-  | "replan_queued";
+  | "replan_queued"
+  /** Candidates-only root (`wiki.autopromote: false`, KTD35): screened, staged, never promoted. */
+  | "candidate";
 
 export type HarvestRefuseReason =
   | "injection"
@@ -65,6 +67,8 @@ export interface HarvestOp {
   trigger: HarvestTrigger;
   decision_id?: string;
   wiki_path?: string;
+  /** Where a candidates-only root staged the decision instead of the wiki. */
+  candidate_path?: string;
   playbook_path?: string;
   before_hash?: string;
   after_hash?: string;
@@ -281,6 +285,7 @@ export const TERMINAL_STATUSES: ReadonlySet<HarvestStatus> = sealSet<HarvestStat
   "refused",
   "reverted",
   "failed",
+  "candidate",
 ]);
 
 export function isTerminalHarvestStatus(status: HarvestStatus): boolean {

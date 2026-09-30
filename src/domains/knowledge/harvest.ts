@@ -51,7 +51,7 @@ import { classifyPermissionContent, sanitizeForInjection } from "../security";
 import { containsRecallTag } from "./recall-protect";
 import { appendSecurityEvent, buildSecurityEvent, resolveRunDir } from "../security";
 import { scrubbedWrite } from "../security";
-import { createGuildStorage, type GuildStorage, readScalarField } from "../state";
+import { createGuildStorage, type GuildStorage, readScalarField, type ScopedDurablePaths } from "../state";
 import {
   findOp,
   isTerminalHarvestStatus,
@@ -266,6 +266,13 @@ export interface HarvestInput {
   playbook?: { path: string; span: string; replacement: string };
   /** True when the wiki has uncommitted changes. T0 knows; this module does not shell out. */
   wiki_dirty?: boolean;
+  /**
+   * The effective `wiki.autopromote` policy for this cwd (KTD35). `false` makes the
+   * root candidates-only: every gate below still runs, and a clean decision is
+   * staged under `.guild/knowledge/candidates/decisions/` instead of the wiki, with
+   * no playbook span-replace. Omitted means the shipped default, on.
+   */
+  autopromote?: boolean;
   /** Injected in tests. Production callers get the branded scrubbing writer. */
   writer?: WikiWriter;
   now?: string;
@@ -279,6 +286,8 @@ export interface HarvestResult {
   /** True when a CANONICAL page landed. A refusal leaves a candidate instead. */
   promoted: boolean;
   wiki_path?: string;
+  /** Set when a candidates-only root staged the decision (`wiki.autopromote: false`). */
+  candidate_path?: string;
   decision_id?: string;
   /** KTD53: T0 must route a `replan` decision. */
   replan_queued: boolean;
@@ -312,6 +321,7 @@ function emitHarvestEvent(runDir: string, runId: string, op: HarvestOp): void {
       status: op.status,
       ...(op.decision_id ? { decision_id: op.decision_id } : {}),
       ...(op.wiki_path ? { wiki_path: op.wiki_path } : {}),
+      ...(op.candidate_path ? { candidate_path: op.candidate_path } : {}),
       ...(op.refuse_reason ? { refuse_reason: op.refuse_reason } : {}),
     });
   } catch {
@@ -627,6 +637,12 @@ export function harvestDecision(input: HarvestInput): HarvestResult {
   upsertOp(input.run_id, op, storeOpts);
   emitHarvestEvent(input.runDir, input.run_id, op);
 
+  // ── candidates-only root (KTD35) ──────────────────────────────────────────
+  // Every gate above has run; only the destination changes.
+  if (input.autopromote === false) {
+    return stageDecisionCandidate(input, op, storage, scope, decisionId, now, storeOpts);
+  }
+
   // ── CAS against whatever is on disk, UNDER THE PAGE LOCK ──────────────────
   //
   // Read, compare, and write are one critical section. Unlocked, two sessions
@@ -747,6 +763,79 @@ export function harvestDecision(input: HarvestInput): HarvestResult {
   if (cas) return cas;
 
   return finishHarvest(input, op, storage, scope.knowledge(), decisionId, now, storeOpts);
+}
+
+/**
+ * `wiki.autopromote: false` (KTD35): stage the screened decision as a CANDIDATE
+ * through the same scrubbing writer, never the wiki and never a playbook. An
+ * existing candidate for the slug is kept; this op gets its own file beside it.
+ */
+function stageDecisionCandidate(
+  input: HarvestInput,
+  op: HarvestOp,
+  storage: GuildStorage,
+  scope: ScopedDurablePaths,
+  decisionId: string,
+  now: string,
+  storeOpts: { storage?: GuildStorage; cwd?: string },
+): HarvestResult {
+  let candidateAbs = scope.definitions("knowledge", "candidates", "decisions", `${input.slug}.md`);
+  if (fs.existsSync(candidateAbs)) {
+    candidateAbs = scope.definitions("knowledge", "candidates", "decisions", `${input.slug}.${op.op_id}.md`);
+  }
+  const page = renderDecisionPage({
+    id: decisionId,
+    slug: input.slug,
+    title: input.title,
+    status: "candidate",
+    trigger: input.trigger,
+    source_refs: input.source_refs ?? [],
+    reasoning: input.reasoning,
+    created_at: now,
+    body: input.body,
+    ...(input.replaces ? { replaces: input.replaces } : {}),
+    ...(input.glossary_term ? { glossary_term: input.glossary_term } : {}),
+  });
+  const writer = assertScrubbedWriter(input.writer ?? scrubbedWikiWriter);
+  storage.ensureDir(path.dirname(candidateAbs));
+  // autopromote=false must never reach the wiki: a symlinked candidates dir or file
+  // that resolves under the wiki (or out of this root's .guild) is refused.
+  const realDir = fs.realpathSync(path.dirname(candidateAbs));
+  const realWiki = fs.existsSync(scope.knowledge()) ? fs.realpathSync(scope.knowledge()) : path.resolve(scope.knowledge());
+  const realGuild = fs.realpathSync(path.resolve(scope.knowledge(), ".."));
+  let fileIsLink = false;
+  try {
+    fileIsLink = fs.lstatSync(candidateAbs).isSymbolicLink();
+  } catch {
+    /* absent: the normal case */
+  }
+  if (isWithin(realDir, realWiki) || !isWithin(realDir, realGuild) || fileIsLink) {
+    return refuse(input, op, "scope", `the candidate path '${candidateAbs}' resolves outside the candidates home`, storeOpts);
+  }
+  const wrote = writer(candidateAbs, page, { runDir: input.runDir, runId: input.run_id });
+  if (!wrote.written) {
+    return refuse(
+      input,
+      op,
+      wrote.blocked ? "secrets" : "lint",
+      wrote.blocked ? "the secret scrub blocked the candidate write" : "the candidate write did not land",
+      storeOpts,
+    );
+  }
+  delete op.wiki_path;
+  op.candidate_path = candidateAbs;
+  op.status = "candidate";
+  upsertOp(input.run_id, op, storeOpts);
+  emitHarvestEvent(input.runDir, input.run_id, op);
+  return {
+    op,
+    promoted: false,
+    candidate_path: candidateAbs,
+    decision_id: decisionId,
+    replan_queued: false,
+    next_need: "operator",
+    stale_decision_ids: [],
+  };
 }
 
 /**

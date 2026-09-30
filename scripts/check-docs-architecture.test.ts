@@ -206,10 +206,6 @@ describe("check:docs-architecture", () => {
     expect(parsed.totals).toBeDefined();
   });
 
-  test.todo(
-    "the umbrella docs/v2 + website pages restate the live module spine (umbrella/website reconciliation; KTD65) (owner: T17)",
-  );
-
   it("parses the real document's prefix cells without structural or prefix drift", () => {
     const parsed = parseSpineDoc(realHtml);
     const section = sectionFor(realHtml, "owned inventory");

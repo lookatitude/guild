@@ -7,8 +7,8 @@ allowed-tools: Read, Grep, Glob, Bash, Skill, AskUserQuestion
 
 # /guild:status — where am I
 
-Resolves run state by filesystem scan, or the optional `.guild/index.sqlite`
-read-through cache unless `--no-index`. The bare form writes no `.guild/` data.
+Resolves run state by filesystem scan, or the optional SQLite read-through cache
+on platform state (off the repo) unless `--no-index`. The bare form writes no `.guild/` data.
 
 ```bash
 node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js" status --cwd "$(pwd)"

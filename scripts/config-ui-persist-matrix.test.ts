@@ -123,7 +123,7 @@ const VALUE_OVERRIDES: Record<string, string> = {
   "defaults.reporting": "verbose",
   "defaults.wiki.share_mode": "private",
   "defaults.retry.backoff": "exponential",
-  "defaults.wiki.autopromote": "false", // always-false invariant (agents emit candidates only) — true is rejected
+  "defaults.wiki.autopromote": "false", // default true (KTD35); false = candidates-only
 
   // S5 (cap-loc-D04) — capability localization enums. Values differ from their
   // defaults on purpose: this matrix persists a value and reads it back, so a value

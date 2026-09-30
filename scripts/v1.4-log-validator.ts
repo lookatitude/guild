@@ -137,6 +137,7 @@ export const HARVEST_STATUS = Object.freeze([
   "reverted",
   "failed",
   "replan_queued",
+  "candidate",
 ] as const);
 export const HARVEST_REFUSE_REASON = Object.freeze([
   "injection",
@@ -400,6 +401,7 @@ function validateHarvestEvent(o: Record<string, unknown>, errs: string[]): void 
   checkRequiredEnum(o, "status", HARVEST_STATUS, errs);
   checkOptionalString(o, "decision_id", errs);
   checkOptionalString(o, "wiki_path", errs);
+  checkOptionalString(o, "candidate_path", errs);
   if ("refuse_reason" in o) {
     checkRequiredEnum(o, "refuse_reason", HARVEST_REFUSE_REASON, errs);
   }

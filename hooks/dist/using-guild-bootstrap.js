@@ -20664,7 +20664,7 @@ var init_config_defaults = __esm({
         review_workflow: "standard",
         skill_policy: "standard",
         gates: { auto_approve: [] },
-        wiki: { share_mode: "team", autopromote: false },
+        wiki: { share_mode: "team", autopromote: true },
         quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
         reporting: "standard",
         index: {
@@ -21059,12 +21059,27 @@ var init_policy_keys = __esm({
 });
 
 // src/domains/config/policy-resolver.ts
+function hasDanglingLink(file) {
+  let p = path36.resolve(file);
+  for (; ; ) {
+    let isLink = false;
+    try {
+      isLink = fs28.lstatSync(p).isSymbolicLink();
+    } catch {
+    }
+    if (isLink && !fs28.existsSync(p)) return true;
+    const parent = path36.dirname(p);
+    if (parent === p) return false;
+    p = parent;
+  }
+}
 function readJsonFile(file) {
   let raw;
   try {
     raw = fs28.readFileSync(file, "utf8");
-  } catch {
-    return null;
+  } catch (e) {
+    if (e.code === "ENOENT" && !hasDanglingLink(file)) return null;
+    throw new PolicyRejectedError("not-policy", file, `policy config: ${file} is unreadable (${e.message}).`);
   }
   let parsed;
   try {
@@ -21123,7 +21138,15 @@ function readLayer(file, layer, knownHostIds) {
   }
   for (const dotted of leafPaths(parsed)) {
     if (known2.has(dotted)) continue;
-    if ([...known2].some((k) => k.startsWith(`${dotted}.`))) continue;
+    if ([...known2].some((k) => k.startsWith(`${dotted}.`))) {
+      const v = getByPath2(parsed, dotted);
+      if (v !== null && typeof v === "object" && !Array.isArray(v)) continue;
+      throw new PolicyRejectedError(
+        "not-policy",
+        dotted,
+        `policy config (${layer}, ${file}): '${dotted}' must be an object of policy keys.`
+      );
+    }
     throw new PolicyRejectedError(
       "not-policy",
       dotted,
@@ -21140,7 +21163,12 @@ function leafPaths(obj, prefix = "", out = []) {
     if (prefix !== "") out.push(prefix);
     return out;
   }
-  for (const [k, v] of Object.entries(obj)) {
+  const entries = Object.entries(obj);
+  if (entries.length === 0 && prefix !== "") out.push(prefix);
+  for (const [k, v] of entries) {
+    if (k === "" || k.includes(".")) {
+      throw new PolicyRejectedError("not-policy", k, `policy config: key '${k}' is empty or contains a '.'; use nested non-empty keys.`);
+    }
     leafPaths(v, prefix === "" ? k : `${prefix}.${k}`, out);
   }
   return out;
@@ -21575,7 +21603,7 @@ function validateCrossHostBlock(value) {
 function validateDefaults(value, selfBuild) {
   const rejects = rejectUnknown(value, DEFAULT_KEYS, "defaults");
   if (value["adversarial"] === "off" && selfBuild) rejects.push("defaults.adversarial: off is REJECTED for Guild self-build");
-  if (object(value["wiki"]) && value["wiki"]["autopromote"] === true) rejects.push("defaults.wiki.autopromote: true is REJECTED always (agents emit candidates only)");
+  if (object(value["wiki"]) && value["wiki"]["autopromote"] !== void 0 && typeof value["wiki"]["autopromote"] !== "boolean") rejects.push(`defaults.wiki.autopromote must be true or false (got ${JSON.stringify(value["wiki"]["autopromote"])})`);
   if (object(value["cross_host"])) rejects.push(...validateCrossHostBlock(value["cross_host"]));
   if (object(value["quality"]) && object(value["quality"]["budget"])) {
     for (const key of Object.keys(value["quality"]["budget"])) {
@@ -26457,7 +26485,7 @@ var init_catalog_cache = __esm({
         }
       }
     };
-    defaultSleep = (ms) => new Promise((resolve42) => setTimeout(resolve42, ms));
+    defaultSleep = (ms) => new Promise((resolve43) => setTimeout(resolve43, ms));
   }
 });
 
@@ -28678,7 +28706,7 @@ function failClosedCore(inputs, reason, rulePath) {
   receipt2.resolution_core_hash = coreHash(receipt2);
   return receipt2;
 }
-function resolve22(inputs) {
+function resolve23(inputs) {
   const rulePath = [];
   const policyObj = asObject(inputs.policy);
   if (policyObj === null) {
@@ -32000,7 +32028,7 @@ __export(config_exports, {
   registryIdToCanonicalHostKind: () => registryIdToCanonicalHostKind,
   requiredAssetIdsForG5: () => requiredAssetIdsForG5,
   requiredEntriesFor: () => requiredEntriesFor,
-  resolve: () => resolve22,
+  resolve: () => resolve23,
   resolveAuthorHost: () => resolveAuthorHost,
   resolveCapability: () => resolveCapability,
   resolveEffectivePurpose: () => resolveEffectivePurpose,
@@ -36416,7 +36444,8 @@ var init_harvest_journal = __esm({
       "reported",
       "refused",
       "reverted",
-      "failed"
+      "failed",
+      "candidate"
     ]);
     RESUMABLE_STATUSES = sealSet([
       "planned",
@@ -36673,6 +36702,7 @@ function emitHarvestEvent(runDir3, runId, op) {
       status: op.status,
       ...op.decision_id ? { decision_id: op.decision_id } : {},
       ...op.wiki_path ? { wiki_path: op.wiki_path } : {},
+      ...op.candidate_path ? { candidate_path: op.candidate_path } : {},
       ...op.refuse_reason ? { refuse_reason: op.refuse_reason } : {}
     });
   } catch {
@@ -36872,6 +36902,9 @@ function harvestDecision(input) {
   op.status = "probed";
   upsertOp(input.run_id, op, storeOpts);
   emitHarvestEvent(input.runDir, input.run_id, op);
+  if (input.autopromote === false) {
+    return stageDecisionCandidate(input, op, storage, scope, decisionId, now, storeOpts);
+  }
   const lockDir = harvestCasLockDir(storage, wikiAbs);
   const cas = lifecycleApi4().withStableLock(lockDir, () => {
     const before = fs52.existsSync(wikiAbs) ? fs52.readFileSync(wikiAbs, "utf8") : null;
@@ -36950,6 +36983,62 @@ function harvestDecision(input) {
   });
   if (cas) return cas;
   return finishHarvest(input, op, storage, scope.knowledge(), decisionId, now, storeOpts);
+}
+function stageDecisionCandidate(input, op, storage, scope, decisionId, now, storeOpts) {
+  let candidateAbs = scope.definitions("knowledge", "candidates", "decisions", `${input.slug}.md`);
+  if (fs52.existsSync(candidateAbs)) {
+    candidateAbs = scope.definitions("knowledge", "candidates", "decisions", `${input.slug}.${op.op_id}.md`);
+  }
+  const page = renderDecisionPage({
+    id: decisionId,
+    slug: input.slug,
+    title: input.title,
+    status: "candidate",
+    trigger: input.trigger,
+    source_refs: input.source_refs ?? [],
+    reasoning: input.reasoning,
+    created_at: now,
+    body: input.body,
+    ...input.replaces ? { replaces: input.replaces } : {},
+    ...input.glossary_term ? { glossary_term: input.glossary_term } : {}
+  });
+  const writer = assertScrubbedWriter(input.writer ?? scrubbedWikiWriter);
+  storage.ensureDir(path62.dirname(candidateAbs));
+  const realDir = fs52.realpathSync(path62.dirname(candidateAbs));
+  const realWiki = fs52.existsSync(scope.knowledge()) ? fs52.realpathSync(scope.knowledge()) : path62.resolve(scope.knowledge());
+  const realGuild = fs52.realpathSync(path62.resolve(scope.knowledge(), ".."));
+  let fileIsLink = false;
+  try {
+    fileIsLink = fs52.lstatSync(candidateAbs).isSymbolicLink();
+  } catch {
+  }
+  if (isWithin(realDir, realWiki) || !isWithin(realDir, realGuild) || fileIsLink) {
+    return refuse5(input, op, "scope", `the candidate path '${candidateAbs}' resolves outside the candidates home`, storeOpts);
+  }
+  const wrote = writer(candidateAbs, page, { runDir: input.runDir, runId: input.run_id });
+  if (!wrote.written) {
+    return refuse5(
+      input,
+      op,
+      wrote.blocked ? "secrets" : "lint",
+      wrote.blocked ? "the secret scrub blocked the candidate write" : "the candidate write did not land",
+      storeOpts
+    );
+  }
+  delete op.wiki_path;
+  op.candidate_path = candidateAbs;
+  op.status = "candidate";
+  upsertOp(input.run_id, op, storeOpts);
+  emitHarvestEvent(input.runDir, input.run_id, op);
+  return {
+    op,
+    promoted: false,
+    candidate_path: candidateAbs,
+    decision_id: decisionId,
+    replan_queued: false,
+    next_need: "operator",
+    stale_decision_ids: []
+  };
 }
 function finishHarvest(input, op, storage, wikiRoot2, decisionId, now, storeOpts) {
   const wikiAbs = op.wiki_path;
@@ -37812,7 +37901,8 @@ function routeRedirect(input) {
     runDir: runDir3,
     cwd,
     storage,
-    trigger: "redirect_threshold"
+    trigger: "redirect_threshold",
+    autopromote: input.autopromote
   }) : null;
   return { redirect, harvest };
 }
@@ -43183,7 +43273,7 @@ function calcDelayMs(attempt, strategy, baseMs) {
 }
 function realSleep(ms) {
   if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve42) => setTimeout(resolve42, ms));
+  return new Promise((resolve43) => setTimeout(resolve43, ms));
 }
 async function runWithRetry(dispatchFn, opts) {
   const maxAttempts = Math.max(1, Math.floor(opts.maxAttempts));
@@ -46191,6 +46281,15 @@ function routeAtPersistedCursor(runDir3, cwd, klass, decision) {
   }
   return routeWorkflowDecisionAtRun(runDir3, { graph, decision, classGraphs });
 }
+function wikiAutopromote(root) {
+  try {
+    const { policyValue: policyValue2, resolvePolicy: resolvePolicy2 } = (init_config2(), __toCommonJS(config_exports));
+    const resolved = resolvePolicy2({ cwd: root, workspaceRoot: discoverGuild(root).workspaceRoot });
+    return policyValue2(resolved, "wiki.autopromote") === true;
+  } catch {
+    return false;
+  }
+}
 function drainHarvest(req, storage) {
   const { routeRedirect: routeRedirect2 } = (init_knowledge(), __toCommonJS(knowledge_exports));
   const runDir3 = runRecord(storage, req.run_id);
@@ -46198,7 +46297,8 @@ function drainHarvest(req, storage) {
     ...req.payload,
     run_id: req.run_id,
     runDir: runDir3,
-    storage
+    storage,
+    autopromote: wikiAutopromote(req.root)
   });
   let replan = null;
   const at = result2.harvest?.replan_queued ? readWorkflowCursor(runDir3) : null;
@@ -46210,7 +46310,7 @@ function drainHarvest(req, storage) {
       reason: `harvest superseded pinned ${result2.harvest.stale_decision_ids.join(", ")}`
     });
   }
-  const refused = result2.harvest !== null && !result2.harvest.promoted;
+  const refused = result2.harvest !== null && !result2.harvest.promoted && result2.harvest.candidate_path === void 0;
   return {
     code: refused || replan?.escalated ? 3 : 0,
     out: { redirect: { entry: result2.redirect.entry, fires_harvest: result2.redirect.fires_harvest }, harvest: result2.harvest, replan }
@@ -48839,11 +48939,11 @@ var path91 = __toESM(require("node:path"));
 
 // hooks/lib/guild-hook-event.ts
 async function readHookStdin() {
-  return new Promise((resolve42) => {
+  return new Promise((resolve43) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve42(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve42(""));
+    process.stdin.on("end", () => resolve43(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve43(""));
   });
 }
 function emitClaudeHookEvent(raw) {

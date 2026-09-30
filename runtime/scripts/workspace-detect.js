@@ -6904,7 +6904,7 @@ var init_config_defaults = __esm({
         review_workflow: "standard",
         skill_policy: "standard",
         gates: { auto_approve: [] },
-        wiki: { share_mode: "team", autopromote: false },
+        wiki: { share_mode: "team", autopromote: true },
         quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
         reporting: "standard",
         index: {
