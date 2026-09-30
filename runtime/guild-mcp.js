@@ -2992,7 +2992,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve44.call(this, root, ref);
+      let _sch = resolve45.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a = root.localRefs) === null || _a === void 0 ? void 0 : _a[ref];
         const { schemaId } = this.opts;
@@ -3019,7 +3019,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve44(root, ref) {
+    function resolve45(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3650,7 +3650,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve44(baseURI, relativeURI, options) {
+    function resolve45(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const { parsed: baseParsed, malformedAuthorityOrPort: baseMalformed } = parseWithStatus(baseURI, schemelessOptions);
       const { parsed: relativeParsed, malformedAuthorityOrPort: relativeMalformed } = parseWithStatus(relativeURI, schemelessOptions);
@@ -3934,7 +3934,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize: normalize5,
-      resolve: resolve44,
+      resolve: resolve45,
       resolveComponent,
       equal,
       serialize,
@@ -31780,18 +31780,26 @@ var init_policy_keys = __esm({
 });
 
 // src/domains/config/policy-resolver.ts
+function hasDanglingLink(file) {
+  let p = path41.resolve(file);
+  for (; ; ) {
+    let isLink = false;
+    try {
+      isLink = fs34.lstatSync(p).isSymbolicLink();
+    } catch {
+    }
+    if (isLink && !fs34.existsSync(p)) return true;
+    const parent = path41.dirname(p);
+    if (parent === p) return false;
+    p = parent;
+  }
+}
 function readJsonFile(file) {
   let raw;
   try {
     raw = fs34.readFileSync(file, "utf8");
   } catch (e) {
-    let present2 = false;
-    try {
-      fs34.lstatSync(file);
-      present2 = true;
-    } catch {
-    }
-    if (e.code === "ENOENT" && !present2) return null;
+    if (e.code === "ENOENT" && !hasDanglingLink(file)) return null;
     throw new PolicyRejectedError("not-policy", file, `policy config: ${file} is unreadable (${e.message}).`);
   }
   let parsed;
@@ -31851,7 +31859,13 @@ function readLayer(file, layer, knownHostIds) {
   }
   for (const dotted of leafPaths(parsed)) {
     if (known2.has(dotted)) continue;
-    if ([...known2].some((k) => k.startsWith(`${dotted}.`))) continue;
+    if ([...known2].some((k) => k.startsWith(`${dotted}.`))) {
+      throw new PolicyRejectedError(
+        "not-policy",
+        dotted,
+        `policy config (${layer}, ${file}): '${dotted}' must be an object of policy keys.`
+      );
+    }
     throw new PolicyRejectedError(
       "not-policy",
       dotted,
@@ -34213,7 +34227,7 @@ var init_catalog_cache = __esm({
         }
       }
     };
-    defaultSleep = (ms) => new Promise((resolve44) => setTimeout(resolve44, ms));
+    defaultSleep = (ms) => new Promise((resolve45) => setTimeout(resolve45, ms));
   }
 });
 
@@ -36434,7 +36448,7 @@ function failClosedCore(inputs, reason, rulePath) {
   receipt2.resolution_core_hash = coreHash(receipt2);
   return receipt2;
 }
-function resolve22(inputs) {
+function resolve23(inputs) {
   const rulePath = [];
   const policyObj = asObject(inputs.policy);
   if (policyObj === null) {
@@ -39756,7 +39770,7 @@ __export(config_exports, {
   registryIdToCanonicalHostKind: () => registryIdToCanonicalHostKind,
   requiredAssetIdsForG5: () => requiredAssetIdsForG5,
   requiredEntriesFor: () => requiredEntriesFor,
-  resolve: () => resolve22,
+  resolve: () => resolve23,
   resolveAuthorHost: () => resolveAuthorHost,
   resolveCapability: () => resolveCapability,
   resolveEffectivePurpose: () => resolveEffectivePurpose,
@@ -46915,7 +46929,7 @@ function calcDelayMs(attempt, strategy, baseMs) {
 }
 function realSleep(ms) {
   if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve44) => setTimeout(resolve44, ms));
+  return new Promise((resolve45) => setTimeout(resolve45, ms));
 }
 async function runWithRetry(dispatchFn, opts) {
   const maxAttempts = Math.max(1, Math.floor(opts.maxAttempts));
@@ -67821,7 +67835,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve44) => setTimeout(resolve44, pollInterval));
+        await new Promise((resolve45) => setTimeout(resolve45, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -67838,7 +67852,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve44, reject2) => {
+    return new Promise((resolve45, reject2) => {
       const earlyReject = (error2) => {
         reject2(error2);
       };
@@ -67916,7 +67930,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject2(parseResult.error);
           } else {
-            resolve44(parseResult.data);
+            resolve45(parseResult.data);
           }
         } catch (error2) {
           reject2(error2);
@@ -68177,12 +68191,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve44, reject2) => {
+    return new Promise((resolve45, reject2) => {
       if (signal.aborted) {
         reject2(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve44, interval);
+      const timeoutId = setTimeout(resolve45, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject2(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -69273,7 +69287,7 @@ var McpServer = class {
     let task = createTaskResult.task;
     const pollInterval = task.pollInterval ?? 5e3;
     while (task.status !== "completed" && task.status !== "failed" && task.status !== "cancelled") {
-      await new Promise((resolve44) => setTimeout(resolve44, pollInterval));
+      await new Promise((resolve45) => setTimeout(resolve45, pollInterval));
       const updatedTask = await extra.taskStore.getTask(taskId);
       if (!updatedTask) {
         throw new McpError(ErrorCode.InternalError, `Task ${taskId} not found during polling`);
@@ -69937,12 +69951,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve44) => {
+    return new Promise((resolve45) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve44();
+        resolve45();
       } else {
-        this._stdout.once("drain", resolve44);
+        this._stdout.once("drain", resolve45);
       }
     });
   }

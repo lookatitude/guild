@@ -109,6 +109,23 @@ export interface ResolvedPolicy {
   legacyAliases: LegacyAliasRecord[];
 }
 
+/** True when `file` or any ancestor is a symlink whose target does not resolve. */
+function hasDanglingLink(file: string): boolean {
+  let p = path.resolve(file);
+  for (;;) {
+    let isLink = false;
+    try {
+      isLink = fs.lstatSync(p).isSymbolicLink();
+    } catch {
+      /* this component is absent */
+    }
+    if (isLink && !fs.existsSync(p)) return true;
+    const parent = path.dirname(p);
+    if (parent === p) return false;
+    p = parent;
+  }
+}
+
 function readJsonFile(file: string): Record<string, unknown> | null {
   let raw: string;
   try {
@@ -116,15 +133,9 @@ function readJsonFile(file: string): Record<string, unknown> | null {
   } catch (e) {
     // Absent is "layer not set". Anything else (a directory, EACCES) must not
     // silently fall back to defaults.
-    // A dangling symlink also reads ENOENT; only a truly absent path is "not set".
-    let present = false;
-    try {
-      fs.lstatSync(file);
-      present = true;
-    } catch {
-      /* absent */
-    }
-    if ((e as NodeJS.ErrnoException).code === "ENOENT" && !present) return null;
+    // A dangling symlink (the file or any ancestor directory) also reads ENOENT;
+    // only a path with no dangling link on it is "not set".
+    if ((e as NodeJS.ErrnoException).code === "ENOENT" && !hasDanglingLink(file)) return null;
     throw new PolicyRejectedError("not-policy", file, `policy config: ${file} is unreadable (${(e as Error).message}).`);
   }
   let parsed: unknown;
@@ -209,8 +220,15 @@ function readLayer(
   }
   for (const dotted of leafPaths(parsed)) {
     if (known.has(dotted)) continue;
-    // A container path (`budget`) whose leaves are known is fine.
-    if ([...known].some((k) => k.startsWith(`${dotted}.`))) continue;
+    // A container path (`budget`) is fine only while it IS a container: a leaf value
+    // sitting where an object belongs (`"wiki": false`) must not read as "unset".
+    if ([...known].some((k) => k.startsWith(`${dotted}.`))) {
+      throw new PolicyRejectedError(
+        "not-policy",
+        dotted,
+        `policy config (${layer}, ${file}): '${dotted}' must be an object of policy keys.`,
+      );
+    }
     throw new PolicyRejectedError(
       "not-policy",
       dotted,

@@ -10108,18 +10108,26 @@ var init_policy_keys = __esm({
 });
 
 // src/domains/config/policy-resolver.ts
+function hasDanglingLink(file) {
+  let p = path22.resolve(file);
+  for (; ; ) {
+    let isLink = false;
+    try {
+      isLink = fs16.lstatSync(p).isSymbolicLink();
+    } catch {
+    }
+    if (isLink && !fs16.existsSync(p)) return true;
+    const parent = path22.dirname(p);
+    if (parent === p) return false;
+    p = parent;
+  }
+}
 function readJsonFile(file) {
   let raw;
   try {
     raw = fs16.readFileSync(file, "utf8");
   } catch (e) {
-    let present3 = false;
-    try {
-      fs16.lstatSync(file);
-      present3 = true;
-    } catch {
-    }
-    if (e.code === "ENOENT" && !present3) return null;
+    if (e.code === "ENOENT" && !hasDanglingLink(file)) return null;
     throw new PolicyRejectedError("not-policy", file, `policy config: ${file} is unreadable (${e.message}).`);
   }
   let parsed;
@@ -10179,7 +10187,13 @@ function readLayer(file, layer, knownHostIds) {
   }
   for (const dotted of leafPaths(parsed)) {
     if (known2.has(dotted)) continue;
-    if ([...known2].some((k) => k.startsWith(`${dotted}.`))) continue;
+    if ([...known2].some((k) => k.startsWith(`${dotted}.`))) {
+      throw new PolicyRejectedError(
+        "not-policy",
+        dotted,
+        `policy config (${layer}, ${file}): '${dotted}' must be an object of policy keys.`
+      );
+    }
     throw new PolicyRejectedError(
       "not-policy",
       dotted,
@@ -16841,7 +16855,7 @@ var init_catalog_cache = __esm({
         }
       }
     };
-    defaultSleep = (ms) => new Promise((resolve59) => setTimeout(resolve59, ms));
+    defaultSleep = (ms) => new Promise((resolve60) => setTimeout(resolve60, ms));
   }
 });
 
@@ -28582,7 +28596,7 @@ function runShadowResolution(input) {
   if (input.flags["model_routing.shadow"] !== "on") {
     return { ran: false, reason: "model_routing.shadow is off (M1 not graduated for this scope)" };
   }
-  const receipt2 = resolve23(input.resolveInputs);
+  const receipt2 = resolve24(input.resolveInputs);
   const failedClosed = typeof receipt2["failed_closed"] === "string" ? receipt2["failed_closed"] : null;
   const selection2 = receipt2.selection;
   const shadowModel = !failedClosed && selection2 && typeof selection2["model"] === "string" ? selection2["model"] : null;
@@ -28650,7 +28664,7 @@ function selectDispatchModel(input) {
   if (!gate.active) {
     return { ...legacyOut, reason: `v2 routing inactive: ${gate.reason}` };
   }
-  const receipt2 = resolve23(input.resolveInputs);
+  const receipt2 = resolve24(input.resolveInputs);
   const failedClosed = typeof receipt2["failed_closed"] === "string" ? receipt2["failed_closed"] : null;
   const selection2 = receipt2.selection;
   if (failedClosed || !selection2 || typeof selection2["model"] !== "string") {
@@ -44430,7 +44444,7 @@ function calcDelayMs(attempt, strategy, baseMs) {
 }
 function realSleep(ms) {
   if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve59) => setTimeout(resolve59, ms));
+  return new Promise((resolve60) => setTimeout(resolve60, ms));
 }
 async function runWithRetry(dispatchFn, opts) {
   const maxAttempts = Math.max(1, Math.floor(opts.maxAttempts));
@@ -50747,7 +50761,7 @@ function failClosedCore(inputs, reason, rulePath) {
   receipt2.resolution_core_hash = coreHash(receipt2);
   return receipt2;
 }
-function resolve23(inputs) {
+function resolve24(inputs) {
   const rulePath = [];
   const policyObj = asObject(inputs.policy);
   if (policyObj === null) {
@@ -54069,7 +54083,7 @@ __export(config_exports, {
   registryIdToCanonicalHostKind: () => registryIdToCanonicalHostKind,
   requiredAssetIdsForG5: () => requiredAssetIdsForG5,
   requiredEntriesFor: () => requiredEntriesFor,
-  resolve: () => resolve23,
+  resolve: () => resolve24,
   resolveAuthorHost: () => resolveAuthorHost,
   resolveCapability: () => resolveCapability,
   resolveEffectivePurpose: () => resolveEffectivePurpose,

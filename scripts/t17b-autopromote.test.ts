@@ -221,5 +221,17 @@ describe("KTD35 — wiki.autopromote picks the harvest destination at the T0 dra
     thirdRedirect(redirectInput());
     expect(fs.existsSync(pagePath())).toBe(false);
   });
+
+  test("codex r3 P2: a dangling .guild/config directory symlink fails closed", () => {
+    fs.symlinkSync(path.join(sandbox, "missing-dir"), path.join(repo, ".guild", "config"));
+    thirdRedirect(redirectInput());
+    expect(fs.existsSync(pagePath())).toBe(false);
+  });
+
+  test("codex r3 P2: a leaf where the wiki container belongs fails closed", () => {
+    write(".guild/config/project.json", `${JSON.stringify({ wiki: false })}\n`);
+    thirdRedirect(redirectInput());
+    expect(fs.existsSync(pagePath())).toBe(false);
+  });
 });
 

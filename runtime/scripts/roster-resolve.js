@@ -20879,18 +20879,26 @@ var init_policy_keys = __esm({
 });
 
 // src/domains/config/policy-resolver.ts
+function hasDanglingLink(file) {
+  let p = path34.resolve(file);
+  for (; ; ) {
+    let isLink = false;
+    try {
+      isLink = fs26.lstatSync(p).isSymbolicLink();
+    } catch {
+    }
+    if (isLink && !fs26.existsSync(p)) return true;
+    const parent = path34.dirname(p);
+    if (parent === p) return false;
+    p = parent;
+  }
+}
 function readJsonFile(file) {
   let raw;
   try {
     raw = fs26.readFileSync(file, "utf8");
   } catch (e) {
-    let present2 = false;
-    try {
-      fs26.lstatSync(file);
-      present2 = true;
-    } catch {
-    }
-    if (e.code === "ENOENT" && !present2) return null;
+    if (e.code === "ENOENT" && !hasDanglingLink(file)) return null;
     throw new PolicyRejectedError("not-policy", file, `policy config: ${file} is unreadable (${e.message}).`);
   }
   let parsed;
@@ -20950,7 +20958,13 @@ function readLayer(file, layer, knownHostIds) {
   }
   for (const dotted of leafPaths(parsed)) {
     if (known2.has(dotted)) continue;
-    if ([...known2].some((k) => k.startsWith(`${dotted}.`))) continue;
+    if ([...known2].some((k) => k.startsWith(`${dotted}.`))) {
+      throw new PolicyRejectedError(
+        "not-policy",
+        dotted,
+        `policy config (${layer}, ${file}): '${dotted}' must be an object of policy keys.`
+      );
+    }
     throw new PolicyRejectedError(
       "not-policy",
       dotted,
@@ -26281,7 +26295,7 @@ var init_catalog_cache = __esm({
         }
       }
     };
-    defaultSleep = (ms) => new Promise((resolve44) => setTimeout(resolve44, ms));
+    defaultSleep = (ms) => new Promise((resolve45) => setTimeout(resolve45, ms));
   }
 });
 
@@ -28502,7 +28516,7 @@ function failClosedCore(inputs, reason, rulePath) {
   receipt2.resolution_core_hash = coreHash(receipt2);
   return receipt2;
 }
-function resolve23(inputs) {
+function resolve24(inputs) {
   const rulePath = [];
   const policyObj = asObject(inputs.policy);
   if (policyObj === null) {
@@ -31824,7 +31838,7 @@ __export(config_exports, {
   registryIdToCanonicalHostKind: () => registryIdToCanonicalHostKind,
   requiredAssetIdsForG5: () => requiredAssetIdsForG5,
   requiredEntriesFor: () => requiredEntriesFor,
-  resolve: () => resolve23,
+  resolve: () => resolve24,
   resolveAuthorHost: () => resolveAuthorHost,
   resolveCapability: () => resolveCapability,
   resolveEffectivePurpose: () => resolveEffectivePurpose,
@@ -31969,7 +31983,7 @@ function calcDelayMs(attempt, strategy, baseMs) {
 }
 function realSleep(ms) {
   if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve44) => setTimeout(resolve44, ms));
+  return new Promise((resolve45) => setTimeout(resolve45, ms));
 }
 async function runWithRetry(dispatchFn, opts) {
   const maxAttempts = Math.max(1, Math.floor(opts.maxAttempts));
