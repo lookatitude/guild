@@ -10006,8 +10006,9 @@ function readJsonFile(file) {
   let raw;
   try {
     raw = fs16.readFileSync(file, "utf8");
-  } catch {
-    return null;
+  } catch (e) {
+    if (e.code === "ENOENT") return null;
+    throw new PolicyRejectedError("not-policy", file, `policy config: ${file} is unreadable (${e.message}).`);
   }
   let parsed;
   try {
@@ -32798,6 +32799,17 @@ function stageDecisionCandidate(input, op, storage, scope, decisionId, now, stor
   });
   const writer = assertScrubbedWriter(input.writer ?? scrubbedWikiWriter);
   storage.ensureDir(path52.dirname(candidateAbs));
+  const realDir = fs42.realpathSync(path52.dirname(candidateAbs));
+  const realWiki = fs42.existsSync(scope.knowledge()) ? fs42.realpathSync(scope.knowledge()) : path52.resolve(scope.knowledge());
+  const realGuild = fs42.realpathSync(path52.resolve(scope.knowledge(), ".."));
+  let fileIsLink = false;
+  try {
+    fileIsLink = fs42.lstatSync(candidateAbs).isSymbolicLink();
+  } catch {
+  }
+  if (isWithin(realDir, realWiki) || !isWithin(realDir, realGuild) || fileIsLink) {
+    return refuse5(input, op, "scope", `the candidate path '${candidateAbs}' resolves outside the candidates home`, storeOpts);
+  }
   const wrote = writer(candidateAbs, page, { runDir: input.runDir, runId: input.run_id });
   if (!wrote.written) {
     return refuse5(

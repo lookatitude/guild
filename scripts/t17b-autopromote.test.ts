@@ -198,4 +198,21 @@ describe("KTD35 — wiki.autopromote picks the harvest destination at the T0 dra
     expect(fs.existsSync(pagePath())).toBe(true);
     expect(fs.existsSync(candidateDir())).toBe(false);
   });
+
+  test("codex r1 P1: a candidates dir symlinked into the wiki is refused; no page lands in the wiki", () => {
+    setProjectAutopromote(false);
+    fs.mkdirSync(path.dirname(candidateDir()), { recursive: true });
+    fs.symlinkSync(path.join(repo, ".guild", "wiki", "decisions"), candidateDir());
+    const r = thirdRedirect(redirectInput());
+    expect(r.out.harvest?.promoted ?? false).toBe(false);
+    expect(fs.existsSync(pagePath())).toBe(false);
+    expect(fs.readdirSync(path.join(repo, ".guild", "wiki", "decisions"))).toEqual([]);
+  });
+
+  test("codex r1 P2: an unreadable project config fails closed to candidates-only", () => {
+    fs.mkdirSync(path.join(repo, ".guild", "config", "project.json"), { recursive: true });
+    thirdRedirect(redirectInput());
+    expect(fs.existsSync(pagePath())).toBe(false);
+  });
 });
+

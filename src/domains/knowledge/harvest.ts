@@ -798,6 +798,20 @@ function stageDecisionCandidate(
   });
   const writer = assertScrubbedWriter(input.writer ?? scrubbedWikiWriter);
   storage.ensureDir(path.dirname(candidateAbs));
+  // autopromote=false must never reach the wiki: a symlinked candidates dir or file
+  // that resolves under the wiki (or out of this root's .guild) is refused.
+  const realDir = fs.realpathSync(path.dirname(candidateAbs));
+  const realWiki = fs.existsSync(scope.knowledge()) ? fs.realpathSync(scope.knowledge()) : path.resolve(scope.knowledge());
+  const realGuild = fs.realpathSync(path.resolve(scope.knowledge(), ".."));
+  let fileIsLink = false;
+  try {
+    fileIsLink = fs.lstatSync(candidateAbs).isSymbolicLink();
+  } catch {
+    /* absent: the normal case */
+  }
+  if (isWithin(realDir, realWiki) || !isWithin(realDir, realGuild) || fileIsLink) {
+    return refuse(input, op, "scope", `the candidate path '${candidateAbs}' resolves outside the candidates home`, storeOpts);
+  }
   const wrote = writer(candidateAbs, page, { runDir: input.runDir, runId: input.run_id });
   if (!wrote.written) {
     return refuse(
