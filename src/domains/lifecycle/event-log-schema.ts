@@ -229,10 +229,13 @@ export interface HarvestEvent {
     | "refused"
     | "reverted"
     | "failed"
-    | "replan_queued";
+    | "replan_queued"
+    | "candidate";
   decision_id?: string;
   /** Path only. Never the page body. */
   wiki_path?: string;
+  /** Set with status `candidate`: where the decision was staged instead of the wiki. Path only. */
+  candidate_path?: string;
   refuse_reason?:
     | "injection"
     | "probe"

@@ -519,7 +519,7 @@ export const HELP: Record<string, string> = {
     "[] | [spec,plan,build,qa,all] — default approval-gate posture. " +
     "qa auto-proceeds ONLY on a computed ReleaseGate PASS (BLOCK-override still prompts); never ops",
   "defaults.wiki.share_mode": "team | private — wiki share mode (moved here from legacy project.yaml)",
-  "defaults.wiki.autopromote": "false ALWAYS (true REJECTED — agents emit candidates only)",
+  "defaults.wiki.autopromote": "true | false (default true) — harvest auto-promotes decisions on this cwd; false = candidates-only (KTD35)",
   "defaults.quality.budget.per_class_minutes": "int > 0 — per-check-class wall-clock cap",
   "defaults.quality.budget.total_minutes": "int > 0 — whole-phase wall-clock cap",
   "defaults.reporting": "standard | quiet | verbose — default task/progress reporting",
@@ -1466,8 +1466,11 @@ export function validateDefaults(d: Record<string, unknown>, selfBuild: boolean)
   }
   if (d["adversarial"] === "off" && selfBuild)
     rejects.push(`defaults.adversarial: off is REJECTED for Guild self-build`);
-  if (isPlainObject(d["wiki"]) && (d["wiki"] as Record<string, unknown>)["autopromote"] === true)
-    rejects.push(`defaults.wiki.autopromote: true is REJECTED always (agents emit candidates only)`);
+  if (isPlainObject(d["wiki"])) {
+    const autopromote = (d["wiki"] as Record<string, unknown>)["autopromote"];
+    if (autopromote !== undefined && typeof autopromote !== "boolean")
+      rejects.push(`defaults.wiki.autopromote must be true or false (got ${JSON.stringify(autopromote)})`);
+  }
   if (isPlainObject(d["quality"])) {
     const q = (d["quality"] as Record<string, unknown>)["budget"];
     if (isPlainObject(q)) {

@@ -23461,7 +23461,7 @@ var init_config_defaults = __esm({
         review_workflow: "standard",
         skill_policy: "standard",
         gates: { auto_approve: [] },
-        wiki: { share_mode: "team", autopromote: false },
+        wiki: { share_mode: "team", autopromote: true },
         quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
         reporting: "standard",
         index: {
@@ -24372,7 +24372,7 @@ function validateCrossHostBlock(value) {
 function validateDefaults(value, selfBuild) {
   const rejects = rejectUnknown(value, DEFAULT_KEYS, "defaults");
   if (value["adversarial"] === "off" && selfBuild) rejects.push("defaults.adversarial: off is REJECTED for Guild self-build");
-  if (object(value["wiki"]) && value["wiki"]["autopromote"] === true) rejects.push("defaults.wiki.autopromote: true is REJECTED always (agents emit candidates only)");
+  if (object(value["wiki"]) && value["wiki"]["autopromote"] !== void 0 && typeof value["wiki"]["autopromote"] !== "boolean") rejects.push(`defaults.wiki.autopromote must be true or false (got ${JSON.stringify(value["wiki"]["autopromote"])})`);
   if (object(value["cross_host"])) rejects.push(...validateCrossHostBlock(value["cross_host"]));
   if (object(value["quality"]) && object(value["quality"]["budget"])) {
     for (const key of Object.keys(value["quality"]["budget"])) {
@@ -35591,7 +35591,8 @@ var init_harvest_journal = __esm({
       "reported",
       "refused",
       "reverted",
-      "failed"
+      "failed",
+      "candidate"
     ]);
     RESUMABLE_STATUSES = sealSet([
       "planned",
@@ -35848,6 +35849,7 @@ function emitHarvestEvent(runDir3, runId, op) {
       status: op.status,
       ...op.decision_id ? { decision_id: op.decision_id } : {},
       ...op.wiki_path ? { wiki_path: op.wiki_path } : {},
+      ...op.candidate_path ? { candidate_path: op.candidate_path } : {},
       ...op.refuse_reason ? { refuse_reason: op.refuse_reason } : {}
     });
   } catch {
@@ -36047,6 +36049,9 @@ function harvestDecision(input) {
   op.status = "probed";
   upsertOp(input.run_id, op, storeOpts);
   emitHarvestEvent(input.runDir, input.run_id, op);
+  if (input.autopromote === false) {
+    return stageDecisionCandidate(input, op, storage, scope, decisionId, now, storeOpts);
+  }
   const lockDir = harvestCasLockDir(storage, wikiAbs);
   const cas = lifecycleApi4().withStableLock(lockDir, () => {
     const before = fs52.existsSync(wikiAbs) ? fs52.readFileSync(wikiAbs, "utf8") : null;
@@ -36125,6 +36130,51 @@ function harvestDecision(input) {
   });
   if (cas) return cas;
   return finishHarvest(input, op, storage, scope.knowledge(), decisionId, now, storeOpts);
+}
+function stageDecisionCandidate(input, op, storage, scope, decisionId, now, storeOpts) {
+  let candidateAbs = scope.definitions("knowledge", "candidates", "decisions", `${input.slug}.md`);
+  if (fs52.existsSync(candidateAbs)) {
+    candidateAbs = scope.definitions("knowledge", "candidates", "decisions", `${input.slug}.${op.op_id}.md`);
+  }
+  const page = renderDecisionPage({
+    id: decisionId,
+    slug: input.slug,
+    title: input.title,
+    status: "candidate",
+    trigger: input.trigger,
+    source_refs: input.source_refs ?? [],
+    reasoning: input.reasoning,
+    created_at: now,
+    body: input.body,
+    ...input.replaces ? { replaces: input.replaces } : {},
+    ...input.glossary_term ? { glossary_term: input.glossary_term } : {}
+  });
+  const writer = assertScrubbedWriter(input.writer ?? scrubbedWikiWriter);
+  storage.ensureDir(path62.dirname(candidateAbs));
+  const wrote = writer(candidateAbs, page, { runDir: input.runDir, runId: input.run_id });
+  if (!wrote.written) {
+    return refuse5(
+      input,
+      op,
+      wrote.blocked ? "secrets" : "lint",
+      wrote.blocked ? "the secret scrub blocked the candidate write" : "the candidate write did not land",
+      storeOpts
+    );
+  }
+  delete op.wiki_path;
+  op.candidate_path = candidateAbs;
+  op.status = "candidate";
+  upsertOp(input.run_id, op, storeOpts);
+  emitHarvestEvent(input.runDir, input.run_id, op);
+  return {
+    op,
+    promoted: false,
+    candidate_path: candidateAbs,
+    decision_id: decisionId,
+    replan_queued: false,
+    next_need: "operator",
+    stale_decision_ids: []
+  };
 }
 function finishHarvest(input, op, storage, wikiRoot2, decisionId, now, storeOpts) {
   const wikiAbs = op.wiki_path;
@@ -36987,7 +37037,8 @@ function routeRedirect(input) {
     runDir: runDir3,
     cwd,
     storage,
-    trigger: "redirect_threshold"
+    trigger: "redirect_threshold",
+    autopromote: input.autopromote
   }) : null;
   return { redirect, harvest };
 }
@@ -40823,6 +40874,15 @@ function routeAtPersistedCursor(runDir3, cwd, klass, decision) {
   }
   return routeWorkflowDecisionAtRun(runDir3, { graph, decision, classGraphs });
 }
+function wikiAutopromote(root) {
+  try {
+    const { policyValue: policyValue2, resolvePolicy: resolvePolicy2 } = (init_config2(), __toCommonJS(config_exports));
+    const resolved = resolvePolicy2({ cwd: root, workspaceRoot: discoverGuild(root).workspaceRoot });
+    return policyValue2(resolved, "wiki.autopromote") === true;
+  } catch {
+    return false;
+  }
+}
 function drainHarvest(req, storage) {
   const { routeRedirect: routeRedirect2 } = (init_knowledge(), __toCommonJS(knowledge_exports));
   const runDir3 = runRecord(storage, req.run_id);
@@ -40830,7 +40890,8 @@ function drainHarvest(req, storage) {
     ...req.payload,
     run_id: req.run_id,
     runDir: runDir3,
-    storage
+    storage,
+    autopromote: wikiAutopromote(req.root)
   });
   let replan = null;
   const at = result2.harvest?.replan_queued ? readWorkflowCursor(runDir3) : null;
@@ -40842,7 +40903,7 @@ function drainHarvest(req, storage) {
       reason: `harvest superseded pinned ${result2.harvest.stale_decision_ids.join(", ")}`
     });
   }
-  const refused = result2.harvest !== null && !result2.harvest.promoted;
+  const refused = result2.harvest !== null && !result2.harvest.promoted && result2.harvest.candidate_path === void 0;
   return {
     code: refused || replan?.escalated ? 3 : 0,
     out: { redirect: { entry: result2.redirect.entry, fires_harvest: result2.redirect.fires_harvest }, harvest: result2.harvest, replan }
@@ -49380,8 +49441,11 @@ function validateDefaults2(d, selfBuild) {
   }
   if (d["adversarial"] === "off" && selfBuild)
     rejects.push(`defaults.adversarial: off is REJECTED for Guild self-build`);
-  if (isPlainObject8(d["wiki"]) && d["wiki"]["autopromote"] === true)
-    rejects.push(`defaults.wiki.autopromote: true is REJECTED always (agents emit candidates only)`);
+  if (isPlainObject8(d["wiki"])) {
+    const autopromote = d["wiki"]["autopromote"];
+    if (autopromote !== void 0 && typeof autopromote !== "boolean")
+      rejects.push(`defaults.wiki.autopromote must be true or false (got ${JSON.stringify(autopromote)})`);
+  }
   if (isPlainObject8(d["quality"])) {
     const q = d["quality"]["budget"];
     if (isPlainObject8(q)) {
@@ -49960,7 +50024,7 @@ var init_config_cli = __esm({
       "defaults.skill_policy": "standard | conservative \u2014 default skill-usage",
       "defaults.gates.auto_approve": "[] | [spec,plan,build,qa,all] \u2014 default approval-gate posture. qa auto-proceeds ONLY on a computed ReleaseGate PASS (BLOCK-override still prompts); never ops",
       "defaults.wiki.share_mode": "team | private \u2014 wiki share mode (moved here from legacy project.yaml)",
-      "defaults.wiki.autopromote": "false ALWAYS (true REJECTED \u2014 agents emit candidates only)",
+      "defaults.wiki.autopromote": "true | false (default true) \u2014 harvest auto-promotes decisions on this cwd; false = candidates-only (KTD35)",
       "defaults.quality.budget.per_class_minutes": "int > 0 \u2014 per-check-class wall-clock cap",
       "defaults.quality.budget.total_minutes": "int > 0 \u2014 whole-phase wall-clock cap",
       "defaults.reporting": "standard | quiet | verbose \u2014 default task/progress reporting",

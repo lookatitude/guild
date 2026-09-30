@@ -6827,7 +6827,7 @@ var init_config_defaults = __esm({
         review_workflow: "standard",
         skill_policy: "standard",
         gates: { auto_approve: [] },
-        wiki: { share_mode: "team", autopromote: false },
+        wiki: { share_mode: "team", autopromote: true },
         quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
         reporting: "standard",
         index: {
@@ -13194,8 +13194,11 @@ function validateDefaults(d, selfBuild) {
   }
   if (d["adversarial"] === "off" && selfBuild)
     rejects.push(`defaults.adversarial: off is REJECTED for Guild self-build`);
-  if (isPlainObject5(d["wiki"]) && d["wiki"]["autopromote"] === true)
-    rejects.push(`defaults.wiki.autopromote: true is REJECTED always (agents emit candidates only)`);
+  if (isPlainObject5(d["wiki"])) {
+    const autopromote = d["wiki"]["autopromote"];
+    if (autopromote !== void 0 && typeof autopromote !== "boolean")
+      rejects.push(`defaults.wiki.autopromote must be true or false (got ${JSON.stringify(autopromote)})`);
+  }
   if (isPlainObject5(d["quality"])) {
     const q = d["quality"]["budget"];
     if (isPlainObject5(q)) {
@@ -13774,7 +13777,7 @@ var init_config_cli = __esm({
       "defaults.skill_policy": "standard | conservative \u2014 default skill-usage",
       "defaults.gates.auto_approve": "[] | [spec,plan,build,qa,all] \u2014 default approval-gate posture. qa auto-proceeds ONLY on a computed ReleaseGate PASS (BLOCK-override still prompts); never ops",
       "defaults.wiki.share_mode": "team | private \u2014 wiki share mode (moved here from legacy project.yaml)",
-      "defaults.wiki.autopromote": "false ALWAYS (true REJECTED \u2014 agents emit candidates only)",
+      "defaults.wiki.autopromote": "true | false (default true) \u2014 harvest auto-promotes decisions on this cwd; false = candidates-only (KTD35)",
       "defaults.quality.budget.per_class_minutes": "int > 0 \u2014 per-check-class wall-clock cap",
       "defaults.quality.budget.total_minutes": "int > 0 \u2014 whole-phase wall-clock cap",
       "defaults.reporting": "standard | quiet | verbose \u2014 default task/progress reporting",

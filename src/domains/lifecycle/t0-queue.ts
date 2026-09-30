@@ -15,7 +15,8 @@
  * call wrote, so a worker that swaps the file between enqueue and drain is refused.
  *
  * The drain runs the existing gated writers unchanged: `routeRedirect` (D5, injection
- * probe, recall-tag refusal, scrubbedWrite, CAS, security events) and
+ * probe, recall-tag refusal, scrubbedWrite, CAS, security events; the root's
+ * resolved `wiki.autopromote` picks canonical page or candidate, KTD35) and
  * `applyEvolveDelta` (the one evolve gate). A drained request is claimed once
  * (exclusive `<id>.claim`), and its outcome is recorded beside it as `<id>.result.json`.
  */
@@ -24,7 +25,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { createGuildStorage, resolveGuildRoot, type GuildStorage } from "../state";
+import { createGuildStorage, discoverGuild, resolveGuildRoot, type GuildStorage } from "../state";
 import { loadAllClassGraphs, loadClassGraph } from "./workflow-graph-load";
 import { readWorkflowCursor, routeWorkflowDecisionAtRun, type RouteResult } from "./workflow-router";
 import type { WorkflowClass } from "./workflow-graph-overlay";
@@ -184,6 +185,21 @@ export function routeAtPersistedCursor(runDir: string, cwd: string, klass: Workf
   return routeWorkflowDecisionAtRun(runDir, { graph, decision, classGraphs });
 }
 
+/**
+ * The effective `wiki.autopromote` for a root: project > workspace > builtin default
+ * (on), through the policy resolver. A config the resolver refuses fails closed to
+ * candidates-only.
+ */
+function wikiAutopromote(root: string): boolean {
+  try {
+    const { policyValue, resolvePolicy } = require("../config") as typeof import("../config");
+    const resolved = resolvePolicy({ cwd: root, workspaceRoot: discoverGuild(root).workspaceRoot });
+    return policyValue(resolved, "wiki.autopromote") === true;
+  } catch {
+    return false;
+  }
+}
+
 function drainHarvest(req: T0Request, storage: GuildStorage): { code: number; out: unknown } {
   const { routeRedirect } = require("../knowledge") as typeof import("../knowledge");
   const runDir = runRecord(storage, req.run_id);
@@ -192,6 +208,7 @@ function drainHarvest(req: T0Request, storage: GuildStorage): { code: number; ou
     run_id: req.run_id,
     runDir,
     storage,
+    autopromote: wikiAutopromote(req.root),
   });
   // KTD53: a harvest that superseded a pinned decision is a replan, routed on the
   // cursor as a workflow decision — never a silent rewrite of the spec or plan.
@@ -205,7 +222,7 @@ function drainHarvest(req: T0Request, storage: GuildStorage): { code: number; ou
       reason: `harvest superseded pinned ${result.harvest.stale_decision_ids.join(", ")}`,
     });
   }
-  const refused = result.harvest !== null && !result.harvest.promoted;
+  const refused = result.harvest !== null && !result.harvest.promoted && result.harvest.candidate_path === undefined;
   return {
     code: refused || replan?.escalated ? 3 : 0,
     out: { redirect: { entry: result.redirect.entry, fires_harvest: result.redirect.fires_harvest }, harvest: result.harvest, replan },

@@ -41,8 +41,13 @@ export interface RouteRedirectInput extends RecordRedirectInput {
   runDir: string;
   cwd?: string;
   storage?: GuildStorage;
+  /**
+   * The effective `wiki.autopromote` policy, resolved by the caller from config
+   * (KTD35). Never read from `decision`: request payload bytes do not set policy.
+   */
+  autopromote?: boolean;
   /** The decision harvested on the crossing count. */
-  decision: Omit<HarvestInput, "run_id" | "runDir" | "cwd" | "storage" | "trigger" | "playbook"> & {
+  decision: Omit<HarvestInput, "run_id" | "runDir" | "cwd" | "storage" | "trigger" | "playbook" | "autopromote"> & {
     playbook?: RedirectPlaybookTarget;
   };
 }
@@ -111,6 +116,7 @@ export function routeRedirect(input: RouteRedirectInput): RouteRedirectResult {
         cwd,
         storage,
         trigger: "redirect_threshold",
+        autopromote: input.autopromote,
       })
     : null;
   return { redirect, harvest };
