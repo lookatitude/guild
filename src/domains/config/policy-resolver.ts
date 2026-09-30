@@ -223,6 +223,8 @@ function readLayer(
     // A container path (`budget`) is fine only while it IS a container: a leaf value
     // sitting where an object belongs (`"wiki": false`) must not read as "unset".
     if ([...known].some((k) => k.startsWith(`${dotted}.`))) {
+      const v = getByPath(parsed, dotted);
+      if (v !== null && typeof v === "object" && !Array.isArray(v)) continue; // an empty known container
       throw new PolicyRejectedError(
         "not-policy",
         dotted,
@@ -257,7 +259,13 @@ function leafPaths(obj: unknown, prefix = "", out: string[] = []): string[] {
     if (prefix !== "") out.push(prefix);
     return out;
   }
-  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+  const entries = Object.entries(obj as Record<string, unknown>);
+  // An empty object is still a key the file sets: it must be judged, not skipped.
+  if (entries.length === 0 && prefix !== "") out.push(prefix);
+  for (const [k, v] of entries) {
+    // `{"wiki.autopromote": false}` would validate as the dotted key yet never be read
+    // by getByPath; a literal dot inside one key is refused outright.
+    if (k.includes(".")) throw new PolicyRejectedError("not-policy", k, `policy config: key '${k}' contains a '.'; nest it instead.`);
     leafPaths(v, prefix === "" ? k : `${prefix}.${k}`, out);
   }
   return out;

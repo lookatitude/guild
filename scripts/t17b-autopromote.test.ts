@@ -233,5 +233,23 @@ describe("KTD35 — wiki.autopromote picks the harvest destination at the T0 dra
     thirdRedirect(redirectInput());
     expect(fs.existsSync(pagePath())).toBe(false);
   });
+
+  test("codex r4 P2: a dotted JSON key fails closed instead of being ignored", () => {
+    write(".guild/config/project.json", `${JSON.stringify({ "wiki.autopromote": false })}\n`);
+    thirdRedirect(redirectInput());
+    expect(fs.existsSync(pagePath())).toBe(false);
+  });
+
+  test("codex r4 P2: an unknown empty container fails closed", () => {
+    write(".guild/config/project.json", `${JSON.stringify({ unknown: {} })}\n`);
+    thirdRedirect(redirectInput());
+    expect(fs.existsSync(pagePath())).toBe(false);
+  });
+
+  test("CONTROL: an empty known container is accepted and leaves the default (promote)", () => {
+    write(".guild/config/project.json", `${JSON.stringify({ wiki: {} })}\n`);
+    thirdRedirect(redirectInput());
+    expect(fs.existsSync(pagePath())).toBe(true);
+  });
 });
 

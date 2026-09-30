@@ -24978,6 +24978,8 @@ function readLayer(file, layer, knownHostIds) {
   for (const dotted of leafPaths(parsed)) {
     if (known2.has(dotted)) continue;
     if ([...known2].some((k) => k.startsWith(`${dotted}.`))) {
+      const v = getByPath2(parsed, dotted);
+      if (v !== null && typeof v === "object" && !Array.isArray(v)) continue;
       throw new PolicyRejectedError(
         "not-policy",
         dotted,
@@ -25000,7 +25002,10 @@ function leafPaths(obj, prefix = "", out = []) {
     if (prefix !== "") out.push(prefix);
     return out;
   }
-  for (const [k, v] of Object.entries(obj)) {
+  const entries = Object.entries(obj);
+  if (entries.length === 0 && prefix !== "") out.push(prefix);
+  for (const [k, v] of entries) {
+    if (k.includes(".")) throw new PolicyRejectedError("not-policy", k, `policy config: key '${k}' contains a '.'; nest it instead.`);
     leafPaths(v, prefix === "" ? k : `${prefix}.${k}`, out);
   }
   return out;
