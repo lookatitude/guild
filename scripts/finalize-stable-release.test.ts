@@ -51,22 +51,35 @@ describe("stable release finalization", () => {
   it("prepare changes only the canonical manifest and returns a stable tag", () => {
     const root = tempRoot("2.7.0-beta.20", "2.7.0-beta.20");
     const result = prepareStableManifest(root);
-    expect(result).toEqual({ betaVersion: "2.7.0-beta.20", stableVersion: "2.7.0", tag: "v2.7.0" });
+    expect(result).toEqual({ sourceVersion: "2.7.0-beta.20", stableVersion: "2.7.0", tag: "v2.7.0" });
     expect(JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin", "plugin.json"), "utf8")).version).toBe("2.7.0");
     expect(JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin", "marketplace.json"), "utf8")).plugins[0].version).toBe("2.7.0-beta.20");
   });
 
-  it("inspect derives the identity without mutating the beta manifest", () => {
-    const root = tempRoot();
+  it("inspect reads the bare release identity the release cut put on next, without mutating it", () => {
+    const root = tempRoot("3.0.0", "3.0.0");
     expect(inspectStableManifest(root)).toEqual({
-      betaVersion: "2.7.0-beta.20",
+      sourceVersion: "3.0.0",
+      stableVersion: "3.0.0",
+      tag: "v3.0.0",
+    });
+    expect(JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin", "plugin.json"), "utf8")).version).toBe("3.0.0");
+  });
+
+  it("inspect keeps the frozen v2.7.0 beta-shaped provenance release publishable", () => {
+    expect(inspectStableManifest(tempRoot("2.7.0-beta.20", "2.7.0-beta.20"))).toEqual({
+      sourceVersion: "2.7.0-beta.20",
       stableVersion: "2.7.0",
       tag: "v2.7.0",
     });
-    expect(JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin", "plugin.json"), "utf8")).version).toBe(
-      "2.7.0-beta.20"
-    );
   });
+
+  it.each(["3.0.0-beta.1", "2.7.1-beta.1", "3.0.0-rc.1", "v3.0.0", "3.0.0+build"])(
+    "inspect refuses a manifest that is not exact bare MAJOR.MINOR.PATCH (%s)",
+    (version) => {
+      expect(() => inspectStableManifest(tempRoot(version, version))).toThrow(/exact MAJOR\.MINOR\.PATCH/);
+    }
+  );
 
   it("defines the complete and exact metadata-only release commit", () => {
     expect(stableReleaseMetadataPaths()).toEqual([

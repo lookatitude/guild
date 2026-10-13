@@ -6,8 +6,8 @@
  * hash-bound direct `next -> main` invariant that `branch-policy.yml` enforces on
  * every PR into `main`.
  *
- * WHAT THE GATE REQUIRES, end to end: the exact `next` source branch with an
- * X.Y.Z-beta.N manifest, a
+ * WHAT THE GATE REQUIRES, end to end: the exact `next` source branch with the
+ * bare X.Y.Z manifest of the release cut, a
  * `guild.release_promotion.v1` record, the EXACT bytes of its referenced
  * `guild.release_conformance.v1` record (SHA-256-bound), the frozen 31-scenario
  * contract pin, a COMPLETE 31/31 coverage statement (A21-X: the historical
@@ -64,7 +64,6 @@ const SOURCE_COMMIT = "b871c8d973bd8258c25ce5e87a89f68f2e63a516";
 const HEAD_SHA = "1234567890abcdef1234567890abcdef12345678";
 const STABLE_SHA = "abcdef1234567890abcdef1234567890abcdef12";
 const VERSION = "2.2.0";
-const BETA_VERSION = `${VERSION}-beta.20`;
 const MARKETPLACE_PATH = ".claude-plugin/marketplace.json";
 const GENERATED_AT = "2026-08-18T06:30:00.000Z";
 
@@ -226,7 +225,7 @@ function standardRepo(overrides: {
   const files = new Map<string, Buffer>();
   const put = (p: string, bytes: Buffer | string) =>
     files.set(`${HEAD_SHA}:${p}`, Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes));
-  const headVersion = overrides.manifestVersion ?? `${version}-beta.20`;
+  const headVersion = overrides.manifestVersion ?? version;
   put(MANIFEST_PATH, JSON.stringify({ name: "guild", version: headVersion }));
   put(
     MARKETPLACE_PATH,
@@ -335,11 +334,9 @@ describe("checkStablePromotion — every structural gate passes, the FINAL decis
     expect(check(repo).code).toBe("conformance_decision_not_promotable");
   });
 
-  it("the FIC-74 shape stays structurally admissible: beta-versioned evidence at SHA-T reaches the decision", () => {
-    // REL-P1 emits evidence at the `next` tip, whose plugin.json carries the
-    // beta shape (here 2.3.0-beta.1); the protected finalizer later bumps ONLY
-    // metadata to the bare triple. Every binding gate must accept exactly
-    // this; the decision re-run is then the only refusal left.
+  it("refuses beta-runtime evidence for a bare release: evidence must come from the release cut", () => {
+    // Evidence emitted at a beta tip (2.3.0-beta.1) names a runtime the bare
+    // 2.3.0 release never builds. The release cut sets the bare version first.
     const version = "2.3.0";
     const repo = standardRepo({
       version,
@@ -348,8 +345,8 @@ describe("checkStablePromotion — every structural gate passes, the FINAL decis
       sourceManifestVersion: "2.3.0-beta.1",
     });
     const result = check(repo);
-    expect(result.reason).not.toMatch(/runtime/);
-    expect(result.code).toBe("conformance_decision_not_promotable");
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("source_version_not_release");
   });
 
   it("a claimed-31/31 record transporting the honest 5-result evidence refuses on decision substance, not on its claimed count", () => {
@@ -386,11 +383,14 @@ describe("checkStablePromotion — source branch and manifest gates", () => {
     expect(check(repo).code).toBe("manifest_missing");
   });
 
-  it("refuses a head manifest that is not exact beta SemVer", () => {
-    const result = check(standardRepo({ manifestVersion: "2.2.0" }));
-    expect(result.ok).toBe(false);
-    expect(result.code).toBe("manifest_version_not_beta");
-  });
+  it.each(["2.2.0-beta.20", "2.2.0-rc.1", "v2.2.0"])(
+    "refuses a head manifest that is not the exact bare release version: %s",
+    (manifestVersion) => {
+      const result = check(standardRepo({ manifestVersion }));
+      expect(result.ok).toBe(false);
+      expect(result.code).toBe("manifest_version_not_release");
+    }
+  );
 
   it("refuses generated-marketplace drift from the canonical version field", () => {
     const result = check(standardRepo({ marketplaceVersion: "2.1.0" }));
@@ -622,8 +622,7 @@ describe("checkStablePromotion — source-commit binding and diff gates", () => 
   it("RELEASE-IDENTITY: refuses a metadata-only version jump — source core must equal the derived stable triple", () => {
     // Structurally valid 2.2.0 evidence (runtime matches its source manifest
     // exactly) must NOT authorize promoting a derived 9.0.0 where only release
-    // metadata changed. The source manifest's SemVer core must equal the
-    // derived stable triple (2.7.0-beta.N -> 2.7.0 stays allowed).
+    // metadata changed. The source manifest must build the release version.
     const version = "9.0.0";
     const promotion = JSON.parse(PROMOTION_BYTES.toString("utf8"));
     promotion.version = version;
@@ -655,16 +654,9 @@ describe("checkStablePromotion — source-commit binding and diff gates", () => 
     expect(result.reason).toContain(stableVersion);
   });
 
-  it("accepts the next release after a short-path stable tag even though main retains its beta candidate version", () => {
-    const version = "2.3.0";
-    const repo = standardRepo({
-      version,
-      conformance: BETA_CONFORMANCE_BYTES,
-      promotion: BETA_PROMOTION_BYTES,
-      sourceManifestVersion: "2.3.0-beta.1",
-      stableVersion: "2.2.0-beta.20",
-    });
-    repo.refs["refs/tags/v2.2.0"] = STABLE_SHA;
+  it("accepts the next release after a legacy short-path stable tag even though main retains its beta candidate version", () => {
+    const repo = standardRepo({ stableVersion: "2.1.0-beta.20" });
+    repo.refs["refs/tags/v2.1.0"] = STABLE_SHA;
     const result = check(repo);
     expect(result.code).toBe("conformance_decision_not_promotable");
     expect(result.reason).not.toMatch(/stable_manifest/);
@@ -733,10 +725,10 @@ describe("promotion mode — real git path (temp repository)", () => {
     git(repo, "add", "-A");
     git(repo, "commit", "-q", "-m", "stable baseline");
     git(repo, "checkout", "-q", "-b", "next");
-    fs.writeFileSync(path.join(repo, MANIFEST_PATH), JSON.stringify({ name: "guild", version: BETA_VERSION }));
+    fs.writeFileSync(path.join(repo, MANIFEST_PATH), JSON.stringify({ name: "guild", version: VERSION }));
     fs.writeFileSync(
       path.join(repo, MARKETPLACE_PATH),
-      JSON.stringify({ name: "guild", plugins: [{ name: "guild", source: "./", version: BETA_VERSION }] })
+      JSON.stringify({ name: "guild", plugins: [{ name: "guild", source: "./", version: VERSION }] })
     );
     fs.writeFileSync(path.join(repo, "CHANGELOG.md"), "# changelog\n");
     fs.writeFileSync(path.join(repo, "guild.inventory.json"), "{}\n");

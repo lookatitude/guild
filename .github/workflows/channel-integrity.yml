@@ -4,10 +4,11 @@ name: channel-integrity
 # (initiative cross-host-release-distribution, work item xhrd-wi-06 / G6.)
 #
 # Branches ARE distribution channels: main = STABLE (default marketplace
-# installs), next = BETA (`@next` followers). The short-path release tags the
-# reviewed next -> main merge without rewriting either protected branch, so an
-# exact shared beta candidate version is valid immediately after release.
-# Any other state where beta serves OLDER code than stable remains invalid.
+# installs), next = BETA (`@next` followers). The release tags the reviewed
+# next -> main merge without rewriting either protected branch, so right after
+# a release both carry the bare X.Y.Z with the same tree. A PR into next that
+# changes code before the dev-version bump fails here. Any state where beta
+# serves OLDER code than stable is invalid.
 #
 # That failure is invisible to every other gate: per-PR checks all stay green
 # because nothing is wrong with any individual PR. It happened for real —
