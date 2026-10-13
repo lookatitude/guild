@@ -1182,7 +1182,7 @@ export function buildHostPackages(opts: {
   if (claudeInstallSurface && !claudeInstallSurface.ok) {
     reasons.push(
       ...claudeInstallSurface.stale.map(
-        (s) => `Claude install surface stale: ${s.path} (${s.reason})`
+        (s) => `Claude install surface stale: ${s.path} (${s.reason}); run \`npm run sync:claude-install\` in scripts/`
       )
     );
   }

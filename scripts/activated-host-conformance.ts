@@ -51,8 +51,8 @@ const COMMIT = /^[0-9a-f]{40}$/;
 const UTC_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const SESSION_ID = /^[0-9a-f-]{16,64}$/;
 const HOSTS: readonly MigrationRuntimeHost[] = Object.freeze(["claude-code-cli", "codex-cli"]);
-const CODEX_PROBE_SKILL_NAME = "guild:guild-verify-done";
-const CODEX_PROBE_SKILL_PATH = ".agents/skills/guild/meta/verify-done/SKILL.md";
+export const CODEX_PROBE_SKILL_NAME = "guild:guild-quality";
+export const CODEX_PROBE_SKILL_PATH = ".agents/skills/guild/quality/SKILL.md";
 const CONSUMER_NAMES = Object.freeze(["website", "benchmark"] as const);
 const CONSUMER_REPOSITORIES = Object.freeze({
   website: "github.com/lookatitude/guild-website",
@@ -357,7 +357,7 @@ const INSTALL_RECEIPT_KEYS = Object.freeze([
 
 function expectedActivationChannel(release: string): { channel: string; ref: string; confidence: string } {
   return /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(release)
-    ? { channel: "beta", ref: "next", confidence: "version-derived" }
+    ? { channel: "beta", ref: "next", confidence: "launcher-declared" }
     : { channel: "stable", ref: "main", confidence: "assumed-default" };
 }
 
@@ -1294,6 +1294,15 @@ function hostEnvironment(overrides: NodeJS.ProcessEnv = {}, source: NodeJS.Proce
   return { ...env, ...overrides };
 }
 
+/**
+ * Package bytes cannot tell a beta from a stable short-path release, so the
+ * SessionStart hook mints a beta receipt only when the launcher declares the
+ * channel. The capture declares it from the attested release identity.
+ */
+export function claudeEnvironment(release: string, source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return hostEnvironment(expectedActivationChannel(release).channel === "beta" ? { GUILD_ACTIVATION_CHANNEL: "beta" } : {}, source);
+}
+
 export function isolatedCodexEnvironment(
   stageRoot: string,
   codexHome: string,
@@ -1514,7 +1523,7 @@ export function captureActivatedHostConformance(
     catch (error) { return failed("staged_package_mismatch", error instanceof Error ? error.message : String(error)); }
     const prepared = options.hostId === "codex-cli"
       ? prepareCodexActivation(stageRoot, stagedPlugin, options.expectedPackage, options.release, openedHostExecutable)
-      : { packageRoot: fs.realpathSync(stagedPlugin), environment: hostEnvironment(), transcriptPrefix: "", sensitiveValues: [], sensitivePath: null, sensitiveIdentity: null };
+      : { packageRoot: fs.realpathSync(stagedPlugin), environment: claudeEnvironment(options.release), transcriptPrefix: "", sensitiveValues: [], sensitivePath: null, sensitiveIdentity: null };
     const liveSensitiveValues = (): readonly string[] => refreshSensitiveJsonValues(prepared.sensitivePath, prepared.sensitiveValues);
     try { verifyAttestedGeneratedRuntimePackage(prepared.packageRoot, options.expectedPackage); }
     catch (error) { return failed("activated_package_mismatch", error instanceof Error ? error.message : String(error)); }
@@ -1895,7 +1904,8 @@ function verifyCodexTranscript(rows: readonly PlainRecord[], receipt: PlainRecor
       }
       if (item.type === "agent_message") {
         const declaration = isRecord(receipt.host_activation) ? receipt.host_activation.declaration : null;
-        if (item.text === declaration && skillProbeCount === 0) {
+        // Codex may end the probe line with one newline; nothing else is tolerated.
+        if (typeof declaration === "string" && (item.text === declaration || item.text === `${declaration}\n`) && skillProbeCount === 0) {
           if (threadCount !== 1 || turnStarted !== 1 || commandId !== null || commandCompleted !== 0) {
             return refusal("host_activation_unproven", "Codex model-visible Guild skill declaration is outside the started thread/turn");
           }

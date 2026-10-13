@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PCL-FU-04 operator checklist</title>
+<style>
+  :root { --fg:#1d232f; --muted:#5b6474; --line:#d9dde4; --bad:#9b1c1c; --ok:#1f6b3a; --bg:#fbfbfc; }
+  body { font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:var(--fg); background:var(--bg); max-width: 860px; margin: 2rem auto; padding: 0 1.25rem; }
+  h1 { font-size: 1.45rem; margin-bottom: .25rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; border-bottom: 1px solid var(--line); padding-bottom: .25rem; }
+  p.lede { color: var(--muted); margin-top: 0; }
+  code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background:#eef0f4; padding: 0 .25em; border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; margin: .5rem 0; }
+  th, td { text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); padding: .4rem .5rem; }
+  th { font-size: .85rem; color: var(--muted); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  .ok { color: var(--ok); font-weight: 600; }
+  ol li, ul li { margin: .3rem 0; }
+  .box { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: .75rem 1rem; }
+</style>
+</head>
+<body>
+<h1>PCL-FU-04 operator checklist</h1>
+<p class="lede">3.0.0-beta.1 · source <code>c3c4fbb175b84b31e43b655dcdb9cd0164cdcf9d</code> · boundary run <code>36806896654</code> · written 2026-10-13</p>
+
+<div class="box">
+<p><strong>Status.</strong> The activated-host 31/31 replay of the exact 3.0.0-beta.1 package is <span class="bad">blocked on both hosts</span> by two capture-harness defects (B1, B2). No 31/31 evidence exists for this package. <code>external_attestation_verified</code> stays <code>false</code>. The fixture-tier refusal controls pass (56/56 tests).</p>
+</div>
+
+<h2>What ran on 2026-10-13</h2>
+<table>
+<tr><th>Step</th><th>Result</th></tr>
+<tr><td>Download GitHub-attested boundary <code>guild-capability-migration-3.0.0-beta.1-c3c4fbb175b8.json</code> (boundary_hash <code>5dfe6126…4cf6</code>)</td><td class="ok">verified by the capture CLI (gh attestation + run metadata)</td></tr>
+<tr><td><code>npm --prefix scripts run build:hosts</code> at c3c4fbb1; packages checked against attested tree/install hashes</td><td class="ok">match (claude tree <code>f84b845b…</code>, codex tree <code>ca5d1467…</code>)</td></tr>
+<tr><td>Consumers: fresh clones of guild-website <code>2bbac088</code>, guild-benchmark <code>ece186bd</code></td><td class="ok">accepted</td></tr>
+<tr><td><code>capture --host claude-code-cli</code> (Claude Code 2.1.296)</td><td class="bad">refused: worker_output_missing (B1)</td></tr>
+<tr><td><code>capture --host codex-cli</code> (codex-cli 0.162.1)</td><td class="bad">refused: worker_output_missing (B2)</td></tr>
+<tr><td><code>bun test --isolate scripts/activated-host-conformance.test.ts</code></td><td class="ok">56 pass, 0 fail (fixture tier)</td></tr>
+</table>
+
+<h2>Blockers to fix first (repo code, reviewed PR)</h2>
+<ol>
+<li><strong>B1 · Claude receipt.</strong> The capture launches <code>claude -p --plugin-dir &lt;package&gt;</code>. That gives no native host identity. Since <code>5640fb1c</code> (“defer ambiguous native receipts”, after PR #163) <code>hooks/update-check.ts</code> does not mint <code>guild-install-receipt.json</code> for a <code>-beta.N</code> version without host identity. The Claude worker requires that receipt, so it always refuses with <code>owner_evaluation_error</code>. A marketplace install does not fix this alone: native identity resolves to <code>source: "host-registry"</code>, the hook mints only when <code>source === "default"</code> and the version is not beta, and the verifier expects a beta receipt with <code>channel_confidence: "version-derived"</code>. The hook and the verifier now disagree on the receipt contract. Fix: a reviewed design change that makes them agree for beta (for example, the verifier binds Claude activation to host-registry identity instead of a minted receipt). Do not simply drop the activation check, and do not change the attested package.</li>
+<li><strong>B2 · Codex probe skill.</strong> The harness pins <code>CODEX_PROBE_SKILL_PATH = .agents/skills/guild/meta/verify-done/SKILL.md</code> and name <code>guild:guild-verify-done</code>. The 3.0.0-beta.1 reshape folded verify-done into a chapter, so the file is absent from the attested Codex package. Codex answered “not model-visible” and ran nothing. Fix: pin a probe skill that the reshaped package indexes (for example an assembler under <code>meta/</code>), and add a test that the probe path exists in a freshly built package.</li>
+<li>After B1 and B2 merge to <code>next</code>, the replay must target the <em>new</em> beta boundary (the harness lives in the same repo). Bump the beta, let <code>capability-migration-boundary.yml</code> attest it, then rerun both captures.</li>
+</ol>
+
+<h2>Replay commands (after B1 and B2)</h2>
+<pre><code>gh run download &lt;boundary-run-id&gt; -R lookatitude/guild -D boundary
+npm --prefix scripts run build:hosts
+node scripts/dist/activated-host-conformance.js capture --host claude-code-cli \
+  --boundary &lt;boundary.json&gt; --package-root "$PWD/dist/claude-code" \
+  --consumer-root website=&lt;clean guild-website clone&gt; \
+  --consumer-root benchmark=&lt;clean guild-benchmark clone&gt; --out-dir &lt;out&gt;
+# repeat with --host codex-cli --package-root "$PWD/dist/codex"
+# then: verify, and public-project, with the same --boundary/--package-root</code></pre>
+<p>Then plant each control against the <em>real</em> receipt and confirm <code>verify</code> refuses: 5/31 result set, fabricated count, transcript or capture-id tamper, host/package identity drift.</p>
+
+<h2>Trust-root rotation (external principals only)</h2>
+<p>Current source-pinned table: <code>NEUTRAL_ATTESTOR_TRUST_ROOT</code> in <code>src/domains/lifecycle/neutral-conformance-core.ts</code> with three fixture-era attestors (<code>guild.release-attestor</code>, <code>guild.host-conformance-witness</code>, <code>guild.distribution-notary</code>); quorum is 2. These roots must be retired. Their seeds were discarded and must never be recovered or relabeled.</p>
+<ol>
+<li>Name three custodians. At least two must be genuinely independent principals (different people and different machines/accounts; not this repo's maintainer acting twice).</li>
+<li>Each custodian generates WOTS+/Merkle production material (<code>guild.wots_merkle.v1</code>) offline, on their own machine, in a current-user <code>0700</code> custody root. No private material enters the repo, CI, chat, or a shared drive.</li>
+<li>Write the candidate manifest: exactly three new roots, one per attestor id, all distinct, none equal to a fixture-era root, bound to the current predecessor snapshot.</li>
+<li>Each custodian runs <code>sign-release-attestation.ts root-admission-prove</code> against the manifest (consumes one one-time key; recorded in <code>&lt;custody-root&gt;/used-one-time-keys.json</code>).</li>
+<li>Anyone runs <code>root-admission-verify</code> with the three proofs. This proves possession only. It does not prove custody and does not authorize the change.</li>
+<li>Open a separate PR to <code>next</code> that replaces the three roots in <code>NEUTRAL_ATTESTOR_TRUST_ROOT</code>. It needs review by someone other than the author and at least one non-author custodian. Attach the manifest and the three proofs, never material.</li>
+<li>Each custodian records, outside the repo: custody location, backup method (encrypted, offline, separate site), one-time-key ledger and its backup, and a destruction plan for the material at end of life. Record only the fact and date of each in the PR.</li>
+<li>After the rotation merges: sign the production 31/31 evidence with at least 2 of the 3 new attestors, and have a non-author review the signed evidence and the refusal-control results.</li>
+</ol>
+
+<h2>Do not</h2>
+<ul>
+<li>Do not run the signer in <code>--mode fixture</code> and call the result production.</li>
+<li>Do not set <code>external_attestation_verified: true</code> in any capture receipt, public evidence, or manifest. The verifier always refuses it (<code>authority_overclaim</code> for receipts, <code>public_authority_overclaim</code> for public evidence and manifests). External attestation is recorded separately: the signed 31/31 evidence verified against rotated roots, plus independent review. Only then may the work item record it.</li>
+<li>Do not count fixture-tier test passes as activated-host evidence.</li>
+</ul>
+</body>
+</html>

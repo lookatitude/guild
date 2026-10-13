@@ -7291,16 +7291,21 @@ var require_loader = __commonJS({
         state.result += _result;
       }
     }
+    function chargeMergeWork(state) {
+      state.totalMergeKeys++;
+      if (state.maxTotalMergeKeys !== -1 && state.totalMergeKeys > state.maxTotalMergeKeys) {
+        throwError(state, "merge keys exceeded maxTotalMergeKeys (" + state.maxTotalMergeKeys + ")");
+      }
+    }
     function mergeMappings(state, destination, source, overridableKeys) {
       if (!common.isObject(source)) {
         throwError(state, "cannot merge mappings; the provided source object is unacceptable");
       }
+      chargeMergeWork(state);
       const sourceKeys = Object.keys(source);
       for (let index = 0, quantity = sourceKeys.length; index < quantity; index += 1) {
         const key = sourceKeys[index];
-        if (state.maxTotalMergeKeys !== -1 && ++state.totalMergeKeys > state.maxTotalMergeKeys) {
-          throwError(state, "merge keys exceeded maxTotalMergeKeys (" + state.maxTotalMergeKeys + ")");
-        }
+        chargeMergeWork(state);
         if (!_hasOwnProperty.call(destination, key)) {
           setProperty(destination, key, source[key]);
           overridableKeys[key] = true;
@@ -7328,6 +7333,9 @@ var require_loader = __commonJS({
       }
       if (keyTag === "tag:yaml.org,2002:merge") {
         if (Array.isArray(valueNode)) {
+          if (valueNode.length > 100) {
+            throwError(state, "abnormal merge sequence size");
+          }
           for (let index = 0, quantity = valueNode.length; index < quantity; index += 1) {
             mergeMappings(state, _result, valueNode[index], overridableKeys);
           }
@@ -40401,7 +40409,7 @@ var init_release_package_identity = __esm({
       "rovo-dev"
     ]);
     LOCKED_SCRIPT_RUNTIME_DIGESTS = Object.freeze({
-      "js-yaml": "sha256:aed429d107470e399343ecdab88c44e948c3e2dcc0eb8f60c86649ce399feda9",
+      "js-yaml": "sha256:e007e4d479d549a08782a6a4e33a5e7ef6b4c6e8bd50a1d5c165eefd8b7a1c7e",
       argparse: "sha256:0e9075c2cc084f6926b4259cd3d8f0157a78b869d5c38601f21d6dc9ae77d281"
     });
   }
@@ -49406,9 +49414,12 @@ __export(activated_host_conformance_exports, {
   ACTIVATED_HOST_PUBLIC_EVIDENCE_SCHEMA: () => ACTIVATED_HOST_PUBLIC_EVIDENCE_SCHEMA,
   ACTIVATED_HOST_PUBLIC_MANIFEST_SCHEMA: () => ACTIVATED_HOST_PUBLIC_MANIFEST_SCHEMA,
   ACTIVATED_HOST_WORKER_SCHEMA: () => ACTIVATED_HOST_WORKER_SCHEMA,
+  CODEX_PROBE_SKILL_NAME: () => CODEX_PROBE_SKILL_NAME,
+  CODEX_PROBE_SKILL_PATH: () => CODEX_PROBE_SKILL_PATH,
   activatedConsumerRoots: () => activatedConsumerRoots,
   activatedHostCaptureId: () => activatedHostCaptureId,
   captureActivatedHostConformance: () => captureActivatedHostConformance,
+  claudeEnvironment: () => claudeEnvironment,
   codexExecutionWorkspace: () => codexExecutionWorkspace,
   containsSensitiveOutput: () => containsSensitiveOutput,
   isolatedCodexEnvironment: () => isolatedCodexEnvironment,
@@ -52335,8 +52346,8 @@ var COMMIT2 = /^[0-9a-f]{40}$/;
 var UTC_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 var SESSION_ID = /^[0-9a-f-]{16,64}$/;
 var HOSTS = Object.freeze(["claude-code-cli", "codex-cli"]);
-var CODEX_PROBE_SKILL_NAME = "guild:guild-verify-done";
-var CODEX_PROBE_SKILL_PATH = ".agents/skills/guild/meta/verify-done/SKILL.md";
+var CODEX_PROBE_SKILL_NAME = "guild:guild-quality";
+var CODEX_PROBE_SKILL_PATH = ".agents/skills/guild/quality/SKILL.md";
 var CONSUMER_NAMES = Object.freeze(["website", "benchmark"]);
 var CONSUMER_REPOSITORIES = Object.freeze({
   website: "github.com/lookatitude/guild-website",
@@ -52521,7 +52532,7 @@ var INSTALL_RECEIPT_KEYS = Object.freeze([
   "channel_confidence"
 ]);
 function expectedActivationChannel(release) {
-  return /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(release) ? { channel: "beta", ref: "next", confidence: "version-derived" } : { channel: "stable", ref: "main", confidence: "assumed-default" };
+  return /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(release) ? { channel: "beta", ref: "next", confidence: "launcher-declared" } : { channel: "stable", ref: "main", confidence: "assumed-default" };
 }
 function codexSkillActivation(expectedPackage, packageRoot) {
   const skill = expectedPackage.files.find((entry) => entry.path === CODEX_PROBE_SKILL_PATH);
@@ -53334,6 +53345,9 @@ function hostEnvironment(overrides = {}, source = process.env) {
   for (const key of HOST_ENVIRONMENT_KEYS) if (source[key] !== void 0) env[key] = source[key];
   return { ...env, ...overrides };
 }
+function claudeEnvironment(release, source = process.env) {
+  return hostEnvironment(expectedActivationChannel(release).channel === "beta" ? { GUILD_ACTIVATION_CHANNEL: "beta" } : {}, source);
+}
 function isolatedCodexEnvironment(stageRoot, codexHome, installedRoot, source = process.env) {
   const isolatedHome = path91.join(stageRoot, "isolated-home");
   const xdgRoot = path91.join(stageRoot, "xdg");
@@ -53512,7 +53526,7 @@ function captureActivatedHostConformance(options) {
     } catch (error) {
       return failed2("staged_package_mismatch", error instanceof Error ? error.message : String(error));
     }
-    const prepared = options.hostId === "codex-cli" ? prepareCodexActivation(stageRoot, stagedPlugin, options.expectedPackage, options.release, openedHostExecutable) : { packageRoot: fs77.realpathSync(stagedPlugin), environment: hostEnvironment(), transcriptPrefix: "", sensitiveValues: [], sensitivePath: null, sensitiveIdentity: null };
+    const prepared = options.hostId === "codex-cli" ? prepareCodexActivation(stageRoot, stagedPlugin, options.expectedPackage, options.release, openedHostExecutable) : { packageRoot: fs77.realpathSync(stagedPlugin), environment: claudeEnvironment(options.release), transcriptPrefix: "", sensitiveValues: [], sensitivePath: null, sensitiveIdentity: null };
     const liveSensitiveValues = () => refreshSensitiveJsonValues(prepared.sensitivePath, prepared.sensitiveValues);
     try {
       verifyAttestedGeneratedRuntimePackage(prepared.packageRoot, options.expectedPackage);
@@ -53864,7 +53878,8 @@ function verifyCodexTranscript(rows, receipt2) {
       }
       if (item.type === "agent_message") {
         const declaration = isRecord7(receipt2.host_activation) ? receipt2.host_activation.declaration : null;
-        if (item.text === declaration && skillProbeCount === 0) {
+        if (typeof declaration === "string" && (item.text === declaration || item.text === `${declaration}
+`) && skillProbeCount === 0) {
           if (threadCount !== 1 || turnStarted !== 1 || commandId !== null || commandCompleted !== 0) {
             return refusal3("host_activation_unproven", "Codex model-visible Guild skill declaration is outside the started thread/turn");
           }
@@ -54215,9 +54230,12 @@ if (require.main === module) main6();
   ACTIVATED_HOST_PUBLIC_EVIDENCE_SCHEMA,
   ACTIVATED_HOST_PUBLIC_MANIFEST_SCHEMA,
   ACTIVATED_HOST_WORKER_SCHEMA,
+  CODEX_PROBE_SKILL_NAME,
+  CODEX_PROBE_SKILL_PATH,
   activatedConsumerRoots,
   activatedHostCaptureId,
   captureActivatedHostConformance,
+  claudeEnvironment,
   codexExecutionWorkspace,
   containsSensitiveOutput,
   isolatedCodexEnvironment,

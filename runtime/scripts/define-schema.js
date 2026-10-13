@@ -1838,16 +1838,21 @@ var require_loader = __commonJS({
         state.result += _result;
       }
     }
+    function chargeMergeWork(state) {
+      state.totalMergeKeys++;
+      if (state.maxTotalMergeKeys !== -1 && state.totalMergeKeys > state.maxTotalMergeKeys) {
+        throwError(state, "merge keys exceeded maxTotalMergeKeys (" + state.maxTotalMergeKeys + ")");
+      }
+    }
     function mergeMappings(state, destination, source, overridableKeys) {
       if (!common.isObject(source)) {
         throwError(state, "cannot merge mappings; the provided source object is unacceptable");
       }
+      chargeMergeWork(state);
       const sourceKeys = Object.keys(source);
       for (let index = 0, quantity = sourceKeys.length; index < quantity; index += 1) {
         const key = sourceKeys[index];
-        if (state.maxTotalMergeKeys !== -1 && ++state.totalMergeKeys > state.maxTotalMergeKeys) {
-          throwError(state, "merge keys exceeded maxTotalMergeKeys (" + state.maxTotalMergeKeys + ")");
-        }
+        chargeMergeWork(state);
         if (!_hasOwnProperty.call(destination, key)) {
           setProperty(destination, key, source[key]);
           overridableKeys[key] = true;
@@ -1875,6 +1880,9 @@ var require_loader = __commonJS({
       }
       if (keyTag === "tag:yaml.org,2002:merge") {
         if (Array.isArray(valueNode)) {
+          if (valueNode.length > 100) {
+            throwError(state, "abnormal merge sequence size");
+          }
           for (let index = 0, quantity = valueNode.length; index < quantity; index += 1) {
             mergeMappings(state, _result, valueNode[index], overridableKeys);
           }
@@ -37421,7 +37429,7 @@ var init_release_package_identity = __esm({
       "rovo-dev"
     ]);
     LOCKED_SCRIPT_RUNTIME_DIGESTS = Object.freeze({
-      "js-yaml": "sha256:aed429d107470e399343ecdab88c44e948c3e2dcc0eb8f60c86649ce399feda9",
+      "js-yaml": "sha256:e007e4d479d549a08782a6a4e33a5e7ef6b4c6e8bd50a1d5c165eefd8b7a1c7e",
       argparse: "sha256:0e9075c2cc084f6926b4259cd3d8f0157a78b869d5c38601f21d6dc9ae77d281"
     });
   }
