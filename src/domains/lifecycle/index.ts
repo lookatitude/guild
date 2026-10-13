@@ -26,7 +26,71 @@
 export * from "./neutral-runtime-contracts";
 export * from "./neutral-gate-policy";
 export * from "./neutral-lifecycle-machine";
-export * from "./neutral-conformance-core";
+// KTD36/R52: named re-export — the four NEUTRAL_FULL_SUITE_*/RUNTIME_MAJORS
+// decision tables stay domain-internal (no outside consumer; coverage orphan rule).
+export {
+  NEUTRAL_SCENARIO_SUITE_ID,
+  NEUTRAL_SCENARIO_SUITE_VERSION,
+  NEUTRAL_CORE_WAVE_OWNER,
+  NEUTRAL_EVIDENCE_PROFILES,
+  NEUTRAL_CORE_SCENARIOS,
+  validateNeutralScenarioRegistry,
+  NEUTRAL_UNEVALUATED_SUPPORT,
+  NEUTRAL_SUPPORT_TRANSITIONS,
+  applyNeutralSupportTransition,
+  deriveNeutralSupportClaim,
+  NEUTRAL_REQUIRED_CORE_SCENARIO_IDS,
+  NEUTRAL_RECEIPT_REF_SCHEMA,
+  NEUTRAL_RECOGNIZED_RUNTIME_MAJOR,
+  NEUTRAL_RECOGNIZED_PLATFORMS,
+  NEUTRAL_RECOGNIZED_HOST_IDS,
+  NEUTRAL_RECOGNIZED_ADAPTER_MAJOR,
+  NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS,
+  NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
+  NEUTRAL_ATTESTATION_REF_SCHEMA,
+  NEUTRAL_ATTESTATION_SCHEME,
+  NEUTRAL_ATTESTATION_CHAIN_LENGTH,
+  NEUTRAL_ATTESTATION_MESSAGE_CHAINS,
+  NEUTRAL_ATTESTATION_CHECKSUM_CHAINS,
+  NEUTRAL_ATTESTATION_CHAINS,
+  NEUTRAL_ATTESTATION_TREE_HEIGHT,
+  NEUTRAL_ATTESTOR_TRUST_ROOT,
+  NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS,
+  NEUTRAL_MINIMUM_ATTESTOR_QUORUM,
+  NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN,
+  NEUTRAL_EVIDENCE_IDENTITY_FIELDS,
+  isNeutralRecognizedRuntimeVersion,
+  unrecognizedNeutralIdentityFields,
+  unrecognizedNeutralHostFields,
+  neutralReceiptReference,
+  neutralJournalGenesis,
+  neutralJournalEntryCommitment,
+  neutralAttestationDigest,
+  neutralAttestationReference,
+  neutralAttestorVerificationKey,
+  neutralVerifyAttestationSignature,
+  neutralAttestationVerifies,
+  evaluateNeutralConformanceDecision,
+} from "./neutral-conformance-core";
+export type {
+  NeutralWaveOwner,
+  NeutralEvidenceProfile,
+  NeutralScenarioEvidenceRequirement,
+  NeutralScenarioDefinition,
+  NeutralSupportRecord,
+  NeutralSupportTransitionRule,
+  NeutralSupportTransitionResult,
+  NeutralSupportClaim,
+  NeutralEvidenceFreshnessVerdict,
+  NeutralEvidenceIdentity,
+  NeutralRuntimeBinding,
+  NeutralConformanceAuthority,
+  NeutralReceiptJournalEntry,
+  NeutralJournalAttestation,
+  NeutralAttestorVerificationKey,
+  NeutralScenarioResult,
+  NeutralConformanceEvidence,
+} from "./neutral-conformance-core";
 export * from "./neutral-core-boundary";
 // A21-S — the owner-packet assembly spine. Pure, and import-closed against the
 // two neutral-core files above; exported here for the same reason they are, so

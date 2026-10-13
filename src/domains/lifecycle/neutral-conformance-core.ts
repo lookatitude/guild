@@ -630,6 +630,180 @@ export const NEUTRAL_REQUIRED_CORE_SCENARIO_IDS: readonly string[] = neutralFree
 );
 
 /**
+ * A21-X MH-02 decision extension: the FULL frozen-suite tuple and each
+ * scenario's expected outcome TYPE, transcribed AUTHORED-NOT-IMPORTED against
+ * the frozen `guild.conformance_scenarios.v1` contract — exactly as
+ * `NEUTRAL_CORE_SCENARIOS` transcribes its five. The assembly module derives
+ * the same tuple from its owner table and fail-closes at load if the two
+ * statements drift, so the decision, the assembler, and the frozen contract
+ * cannot disagree silently.
+ *
+ * TWO PARALLEL ARRAYS, never a record keyed by stable id: every lookup against
+ * them is driven by a caller-supplied string, and a keyed record would make
+ * `__proto__` and `constructor` resolve to live prototype slots.
+ *
+ * The decision recognizes exactly two required tuples: the historical 5-core
+ * tuple (the shape every off-repository-signed attestation fixture binds; a
+ * signed bundle cannot be re-signed from inside this repository) and this full
+ * 31-scenario tuple. Anything else refuses, exactly as before.
+ *
+ * Expected outcome TYPES are re-judged here for all 31 scenarios. Expected
+ * DISPOSITIONS are re-judged for all 31 as well: strictly for the five
+ * scenarios this core itself implements (`NEUTRAL_CORE_SCENARIOS`), and for
+ * the other 26 by the contract's own conformance meaning — "passed or
+ * explicitly refused every required scenario": the observed disposition must
+ * EQUAL the contract-declared expectation, or be an EXPLICIT `refused` with a
+ * closed-vocabulary reason code (fail-closed refusal is conformant behaviour;
+ * the refusal is journal-recorded and attestor-signed). A `failed`,
+ * `unsupported`, or `degraded` result where the contract expects something
+ * else — and a `succeeded` result where the contract expects a refusal — is
+ * never promotable, whatever the producer reported.
+ */
+export const NEUTRAL_FULL_SUITE_SCENARIO_IDS: readonly string[] = neutralFreeze([
+  "MHRC-LIF-001",
+  "MHRC-LIF-002",
+  "MHRC-LIF-003",
+  "MHRC-LIF-004",
+  "MHRC-EVT-001",
+  "MHRC-EVT-002",
+  "MHRC-SUP-001",
+  "MHRC-SUP-002",
+  "MHRC-SUP-003",
+  "MHRC-SUP-004",
+  "MHRC-SUP-005",
+  "MHRC-SUP-006",
+  "MHRC-UNS-001",
+  "MHRC-UNS-002",
+  "MHRC-UNS-003",
+  "MHRC-RCT-001",
+  "MHRC-RCT-002",
+  "MHRC-RCT-003",
+  "MHRC-RCT-004",
+  "MHRC-RCT-005",
+  "MHRC-MOD-001",
+  "MHRC-MOD-002",
+  "MHRC-MOD-003",
+  "MHRC-MOD-004",
+  "MHRC-STR-001",
+  "MHRC-STR-002",
+  "MHRC-STR-003",
+  "MHRC-STR-004",
+  "MHRC-VER-001",
+  "MHRC-VER-002",
+  "MHRC-VER-003",
+]);
+
+/** `NEUTRAL_FULL_SUITE_SCENARIO_IDS[i]`'s expected outcome type, positionally. */
+export const NEUTRAL_FULL_SUITE_EXPECTED_OUTCOME_TYPES: readonly string[] = neutralFreeze([
+  "guild.lifecycle_outcome.v1",
+  "guild.lifecycle_outcome.v1",
+  "guild.lifecycle_outcome.v1",
+  "guild.lifecycle_outcome.v1",
+  "guild.normalized_event_outcome.v1",
+  "guild.normalized_event_outcome.v1",
+  "guild.support_transition_outcome.v1",
+  "guild.support_transition_outcome.v1",
+  "guild.support_transition_outcome.v1",
+  "guild.support_transition_outcome.v1",
+  "guild.support_transition_outcome.v1",
+  "guild.support_transition_outcome.v1",
+  "guild.capability_outcome.v1",
+  "guild.policy_outcome.v1",
+  "guild.capability_outcome.v1",
+  "guild.receipt_outcome.v1",
+  "guild.receipt_outcome.v1",
+  "guild.receipt_outcome.v1",
+  "guild.reconciliation_outcome.v1",
+  "guild.reconciliation_outcome.v1",
+  "guild.boundary_outcome.v1",
+  "guild.boundary_outcome.v1",
+  "guild.boundary_outcome.v1",
+  "guild.boundary_outcome.v1",
+  "guild.migration_outcome.v1",
+  "guild.migration_outcome.v1",
+  "guild.migration_outcome.v1",
+  "guild.migration_outcome.v1",
+  "guild.version_compatibility_outcome.v1",
+  "guild.version_compatibility_outcome.v1",
+  "guild.version_compatibility_outcome.v1",
+]);
+
+/** `NEUTRAL_FULL_SUITE_SCENARIO_IDS[i]`'s expected disposition, positionally. */
+export const NEUTRAL_FULL_SUITE_EXPECTED_DISPOSITIONS: readonly string[] = neutralFreeze([
+  "succeeded",
+  "refused",
+  "succeeded",
+  "succeeded",
+  "succeeded",
+  "unsupported",
+  "succeeded",
+  "succeeded",
+  "succeeded",
+  "succeeded",
+  "succeeded",
+  "succeeded",
+  "unsupported",
+  "refused",
+  "failed",
+  "succeeded",
+  "failed",
+  "failed",
+  "degraded",
+  "succeeded",
+  "succeeded",
+  "succeeded",
+  "succeeded",
+  "succeeded",
+  "succeeded",
+  "succeeded",
+  "succeeded",
+  "refused",
+  "refused",
+  "unsupported",
+  "failed",
+]);
+
+/** The full-suite expected outcome type for a caller-supplied stable id. */
+function neutralFullSuiteExpectedOutcomeType(stableId: unknown): string | null {
+  if (typeof stableId !== "string") return null;
+  const at = NEUTRAL_FULL_SUITE_SCENARIO_IDS.indexOf(stableId);
+  return at === -1 ? null : NEUTRAL_FULL_SUITE_EXPECTED_OUTCOME_TYPES[at];
+}
+
+/** The full-suite expected disposition for a caller-supplied stable id. */
+function neutralFullSuiteExpectedDisposition(stableId: unknown): string | null {
+  if (typeof stableId !== "string") return null;
+  const at = NEUTRAL_FULL_SUITE_SCENARIO_IDS.indexOf(stableId);
+  return at === -1 ? null : NEUTRAL_FULL_SUITE_EXPECTED_DISPOSITIONS[at];
+}
+
+// Fail closed at load if the in-core statements have drifted: the tables must
+// agree in length, and the core registry's five scenarios must carry exactly
+// the type and disposition the full-suite tables declare for them.
+if (
+  NEUTRAL_FULL_SUITE_SCENARIO_IDS.length !== NEUTRAL_FULL_SUITE_EXPECTED_OUTCOME_TYPES.length ||
+  NEUTRAL_FULL_SUITE_SCENARIO_IDS.length !== NEUTRAL_FULL_SUITE_EXPECTED_DISPOSITIONS.length
+) {
+  throw new Error("neutral-conformance-core: the full-suite id, type, and disposition tables disagree in length");
+}
+for (const scenario of NEUTRAL_CORE_SCENARIOS) {
+  const expectedType = neutralFullSuiteExpectedOutcomeType(scenario.stable_id);
+  if (expectedType !== scenario.expected_typed_outcome.type) {
+    throw new Error(
+      `neutral-conformance-core: ${scenario.stable_id} declares ${scenario.expected_typed_outcome.type} ` +
+        `in the core registry but ${String(expectedType)} in the full-suite table`
+    );
+  }
+  const expectedDisposition = neutralFullSuiteExpectedDisposition(scenario.stable_id);
+  if (expectedDisposition !== scenario.expected_typed_outcome.disposition) {
+    throw new Error(
+      `neutral-conformance-core: ${scenario.stable_id} declares ${scenario.expected_typed_outcome.disposition} ` +
+        `in the core registry but ${String(expectedDisposition)} in the full-suite disposition table`
+    );
+  }
+}
+
+/**
  * The canonical receipt-reference form: `guild.receipt_ref.v1:<journal>#<seq>`.
  *
  * A conformance result cites the durable receipt that records it (MH-06 owns
@@ -682,6 +856,22 @@ const NEUTRAL_RUNTIME_VERSION_PATTERN = new RegExp(
  * change, never a caller's assertion.
  */
 export const NEUTRAL_RECOGNIZED_RUNTIME_MAJOR = 2;
+
+/**
+ * A21-X MH-02 decision extension: the majors this core RECOGNIZES.
+ *
+ * The v3 release line ships this same core, so recognition EXTENDS to major 3
+ * rather than advancing away from major 2: the existing off-repository-signed
+ * guild-2.x attestation fixtures stay verifiable (nothing in this repository
+ * can re-sign them), and a guild-3.x identity stops refusing at recognition.
+ * Membership stays a closed, deliberate core change — a guild-4.x identity is
+ * still a parseable version from a major this core knows nothing about, and it
+ * refuses exactly as `guild-999.999.999` always has.
+ */
+export const NEUTRAL_RECOGNIZED_RUNTIME_MAJORS: readonly number[] = neutralFreeze([
+  NEUTRAL_RECOGNIZED_RUNTIME_MAJOR,
+  3,
+]);
 
 /** Platforms a conformance claim may name (`E-VERSION` requires `platform`). */
 export const NEUTRAL_RECOGNIZED_PLATFORMS: readonly string[] = neutralFreeze([
@@ -1093,7 +1283,7 @@ function differingIdentityFields(
 export function isNeutralRecognizedRuntimeVersion(value: unknown): boolean {
   if (typeof value !== "string" || !NEUTRAL_RUNTIME_VERSION_PATTERN.test(value)) return false;
   const major = NEUTRAL_RUNTIME_VERSION_PATTERN.exec(value);
-  return major !== null && major[1] === `${NEUTRAL_RECOGNIZED_RUNTIME_MAJOR}`;
+  return major !== null && NEUTRAL_RECOGNIZED_RUNTIME_MAJORS.some((m) => major[1] === `${m}`);
 }
 
 /**
@@ -1542,8 +1732,10 @@ function refuseConformance(
  *       quorum of distinct recognized attestors over that root, and a named
  *       claimant that is none of them
  *    1. the suite id + version must be the pinned pair         (no silent drift)
- *    2. the required tuple must EQUAL the core tuple, in order (no narrowing,
- *                                                              no re-ordering)
+ *    2. the required tuple must EQUAL a core-DECLARED tuple, in order — the
+ *       historical 5-core tuple or the full 31-scenario frozen-suite tuple
+ *       (A21-X MH-02 extension); never a caller's   (no narrowing, no
+ *                                                   re-ordering, no invention)
  *    3. results must be ordered against that tuple             (no re-association)
  *    4. each result must be a typed outcome, not a string      (no bare verdicts)
  *    5. each non-succeeded reason code must be in the closed
@@ -1567,7 +1759,13 @@ function refuseConformance(
  *                                                               no self-derived
  *                                                               commitments)
  *   13. every result's freshness verdict must be `fresh`       (no stale evidence)
- *   14. each disposition must match the scenario's expectation (the original check)
+ *   14. each disposition must match the scenario's contract expectation —
+ *       exactly for the five core-implemented scenarios; for the 26 extension
+ *       scenarios an EXPLICIT closed-reason refusal is also conformant
+ *       ("passed or explicitly refused"), while failed/unsupported/degraded
+ *       against a different expectation, or succeeded against an expected
+ *       refusal, never promotes                               (the original check,
+ *                                                              suite-wide)
  *   15. a quorum of the accepted attestations must carry SIGNATURES that verify
  *       under the verification keys this core PINS                (MH-02-R5-B01:
  *                                                              no bundle a single
@@ -1663,12 +1861,13 @@ export function evaluateNeutralConformanceDecision(
       "scenario_runtime_version_unrecognized",
       [
         "a conformance claim names a runtime identity the core recognizes",
-        `the core recognizes runtime major ${NEUTRAL_RECOGNIZED_RUNTIME_MAJOR}; a parseable version from an unknown major is not recognized`,
+        `the core recognizes runtime majors ${NEUTRAL_RECOGNIZED_RUNTIME_MAJORS.join(" and ")}; a parseable version from an unknown major is not recognized`,
       ],
       {
         ...baseFacts,
         scope: "authority",
         recognized_runtime_major: NEUTRAL_RECOGNIZED_RUNTIME_MAJOR,
+        recognized_runtime_majors: [...NEUTRAL_RECOGNIZED_RUNTIME_MAJORS],
         unrecognized_runtime_versions: [
           { scope: "authority", runtime_version: authority.identity.runtime_version ?? null },
         ],
@@ -1854,7 +2053,13 @@ export function evaluateNeutralConformanceDecision(
     );
   }
 
-  // 2 — the required tuple IS the core's tuple, element-by-element, in order
+  // 2 — the required tuple IS one of the TWO core-declared tuples,
+  // element-by-element, in order: the historical 5-core tuple (the shape the
+  // off-repository-signed attestation fixtures bind) or the full 31-scenario
+  // frozen-suite tuple (A21-X MH-02 extension). Still never the caller's.
+  const fullSuiteTupleSatisfied =
+    required.length === NEUTRAL_FULL_SUITE_SCENARIO_IDS.length &&
+    NEUTRAL_FULL_SUITE_SCENARIO_IDS.every((id, index) => required[index] === id);
   const missingRequired = expectedRequired.filter((id) => required.indexOf(id) === -1);
   const extraRequired = required.filter((id) => expectedRequired.indexOf(id) === -1);
   const tupleMisordered =
@@ -1863,10 +2068,11 @@ export function evaluateNeutralConformanceDecision(
     extraRequired.length === 0 &&
     expectedRequired.some((id, index) => required[index] !== id);
   if (
-    required.length !== expectedRequired.length ||
-    missingRequired.length > 0 ||
-    extraRequired.length > 0 ||
-    tupleMisordered
+    !fullSuiteTupleSatisfied &&
+    (required.length !== expectedRequired.length ||
+      missingRequired.length > 0 ||
+      extraRequired.length > 0 ||
+      tupleMisordered)
   ) {
     return refuseConformance(
       "scenario_required_set_mismatch",
@@ -1877,6 +2083,7 @@ export function evaluateNeutralConformanceDecision(
       {
         ...baseFacts,
         declared_required_scenario_ids: [...expectedRequired],
+        declared_full_suite_scenario_ids: [...NEUTRAL_FULL_SUITE_SCENARIO_IDS],
         submitted_required_scenario_ids: [...required],
         omitted_required_scenarios: missingRequired,
         undeclared_scenarios: extraRequired,
@@ -1973,14 +2180,13 @@ export function evaluateNeutralConformanceDecision(
   // four lifecycle scenarios and a policy scenario) is evidence of a different
   // experiment, not of this suite.
   const mistyped = results
-    .map((result) => {
-      const definition = scenarios.find((scenario) => scenario.stable_id === result.stable_id);
-      return {
-        stable_id: result.stable_id,
-        expected_outcome_type: definition?.expected_typed_outcome.type ?? null,
-        observed_outcome_type: result.outcome_type,
-      };
-    })
+    .map((result) => ({
+      stable_id: result.stable_id,
+      // The full-suite table covers all 31 scenarios (and agrees with the core
+      // registry on the five it implements — enforced at module load).
+      expected_outcome_type: neutralFullSuiteExpectedOutcomeType(result.stable_id),
+      observed_outcome_type: result.outcome_type,
+    }))
     .filter((entry) => entry.expected_outcome_type !== entry.observed_outcome_type);
   if (mistyped.length > 0) {
     return neutralOutcome({
@@ -2077,11 +2283,12 @@ export function evaluateNeutralConformanceDecision(
       "scenario_runtime_version_unrecognized",
       [
         "a conformance claim names a runtime identity the core recognizes",
-        `the core recognizes runtime major ${NEUTRAL_RECOGNIZED_RUNTIME_MAJOR}; a parseable version from an unknown major is not recognized`,
+        `the core recognizes runtime majors ${NEUTRAL_RECOGNIZED_RUNTIME_MAJORS.join(" and ")}; a parseable version from an unknown major is not recognized`,
       ],
       {
         ...baseFacts,
         recognized_runtime_major: NEUTRAL_RECOGNIZED_RUNTIME_MAJOR,
+        recognized_runtime_majors: [...NEUTRAL_RECOGNIZED_RUNTIME_MAJORS],
         unrecognized_runtime_versions: runtimeOffenders,
       }
     );
@@ -2311,13 +2518,26 @@ export function evaluateNeutralConformanceDecision(
   }
 
   // 14 — disposition matches the scenario's expectation
-  const mismatched = results
-    .map((result) => {
-      const definition = scenarios.find((scenario) => scenario.stable_id === result.stable_id);
-      const expected = definition?.expected_typed_outcome.disposition;
-      return { stable_id: result.stable_id, expected: expected ?? null, observed: result.disposition };
-    })
-    .filter((entry) => entry.expected !== entry.observed);
+  // The five core-implemented scenarios must match their expectation EXACTLY.
+  // The 26 extension scenarios conform when they match the contract's
+  // expectation OR explicitly REFUSED (stage 5 already proved every
+  // non-succeeded reason code is in the closed vocabulary; the refusal is
+  // journal-recorded under the attested root) — "passed or explicitly refused
+  // every required scenario". A failed/unsupported/degraded result where the
+  // contract expects something else, or a succeeded result where it expects a
+  // refusal, prevents promotion whatever the producer reported.
+  const mismatched: Array<{ stable_id: string; expected: string | null; observed: string }> = [];
+  for (const result of results) {
+    const definition = scenarios.find((scenario) => scenario.stable_id === result.stable_id);
+    const coreOwned = definition !== undefined;
+    const expected =
+      definition?.expected_typed_outcome.disposition ??
+      neutralFullSuiteExpectedDisposition(result.stable_id) ??
+      null;
+    if (expected === result.disposition) continue;
+    if (!coreOwned && result.disposition === "refused") continue;
+    mismatched.push({ stable_id: result.stable_id, expected, observed: result.disposition });
+  }
   if (mismatched.length > 0) {
     return neutralOutcome({
       type: "guild.support_transition_outcome.v1",
@@ -2402,6 +2622,10 @@ export function evaluateNeutralConformanceDecision(
     ],
     facts: {
       ...baseFacts,
+      // Which core-declared tuple this verdict covers: consumers that require
+      // the full frozen suite (the release emitter and the promotion gate)
+      // must not read a core-5 verdict as a 31-scenario one.
+      required_tuple_scope: fullSuiteTupleSatisfied ? "full_suite_31" : "core_5",
       activated_runtime: evidence.activated_runtime,
       authority_identity: authority.identity,
       authority_journal_id: authority.receipt_journal_id,
