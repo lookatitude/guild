@@ -161,25 +161,21 @@ gates (see `plugin/AGENTS.md §Codex adversarial review`).
   `next` = beta/integration (all merged PRs collect and get tested here).
 - Stable promotion is a direct same-repository `next -> main` PR. No release
   branch and no manual merge-back or sync-back is used.
-- Before that PR, an operator freezes the code tip, produces the applicable
-  hash-bound release evidence for that exact SHA, and merges an evidence-only
-  PR into `next`. The normal path requires independently authorized full-suite
-  conformance. Exact v2.7.0 instead uses a separately named, GitHub-OIDC-attested
-  provenance-only basis that explicitly does not claim conformance authority;
-  its gate is unavailable to every later version. The canonical runbook records
-  its three-file allowed diff and the still-open custody/migration follow-ups.
-- `next` carries exact `MAJOR.MINOR.PATCH-beta.N`. After the direct PR merges,
-  CI derives `vMAJOR.MINOR.PATCH`, tags the exact reviewed merge commit, and
-  publishes the PR body as release notes with the built-in repository token.
-- CI does not rewrite `main` or `next`, and contributors do not hand-edit
-  generated manifests for the release. A dedicated App and generated
-  bare-version metadata convergence are deferred hardening, not release
-  prerequisites. Stable update detection compares the installed commit with
-  remote `main`; Claude and Codex native caches recover that identity from the
-  host's existing registry. Commit-less stable signals suppress only the exact
-  same-core candidate/tag false positive, and ambiguous native receipt minting
-  is deferred rather than guessing a channel. The retained candidate label
-  therefore does not produce a permanent false update prompt or channel switch.
+- `main` holds the stable version; `next` holds the development version
+  (`MAJOR.MINOR.PATCH-beta.N`).
+- Before the promotion PR, an operator merges a release cut PR into `next` that
+  changes only the version metadata to bare `MAJOR.MINOR.PATCH`, then produces
+  the applicable hash-bound release evidence for that exact SHA and merges an
+  evidence-only PR into `next`. The normal path requires independently
+  authorized full-suite conformance. Exact v2.7.0 instead uses a separately
+  named, GitHub-OIDC-attested provenance-only basis that explicitly does not
+  claim conformance authority; its gate is unavailable to every later version.
+- After the direct PR merges, CI tags the exact reviewed merge commit with the
+  bare version from its manifest and publishes the PR body as release notes
+  with the built-in repository token. CI does not rewrite `main` or `next`.
+- A dev-version bump PR into `next` then sets the next `-beta.1` target. It
+  must merge before new code: `next` may share the released version only while
+  its tree equals `main`.
 - Full ruleset: `.guild/wiki/standards/release-discipline.md`.
 
 ## Reporting issues

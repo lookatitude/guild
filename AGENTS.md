@@ -216,15 +216,15 @@ Every merge to a channel branch ships to its followers immediately, so both are
 PR-only, and `main` only ever receives **release PRs**. Canonical ruleset:
 `.guild/wiki/standards/release-discipline.md`.
 
-**The beta channel must be legible from the manifest** (gap-audit B5, decision
-cap-loc-D12). `next` carries a **prerelease identifier** on the next target
-version — `MAJOR.MINOR.PATCH-beta.N` (e.g. `2.7.0-beta.1`). Under the current
-short-path release flow, the reviewed merge and stable tag retain that beta
-manifest as provenance; the bare stable identity is the CI-derived tag and
-GitHub Release. Under SemVer §11 a prerelease sorts below the same triple, so
-`2.5.0-beta.1` is correctly ahead of `2.4.0` and behind the CI-derived
-`v2.5.0`. A later release-App hardening follow-up may restore a generated
-bare-version metadata commit without changing the one-PR operator flow.
+**Each channel is legible from its manifest** (gap-audit B5, decision
+cap-loc-D12). `main` carries the bare stable `MAJOR.MINOR.PATCH` its
+`vMAJOR.MINOR.PATCH` tag names. `next` carries a **prerelease identifier** on
+the next target version — `MAJOR.MINOR.PATCH-beta.N` (e.g. `3.1.0-beta.1`) —
+except during a release, when the release cut sets it to the bare version it
+will promote. Under SemVer §11 a prerelease sorts below the same triple, so
+`2.5.0-beta.1` is correctly ahead of `2.4.0` and behind `2.5.0`. Releases
+before v3.0.0 left `main` at the reviewed beta candidate; the gates still
+accept that legacy state when the matching tag points at `main`.
 
 Day-to-day workflow (features, fixes, docs — everything non-release):
 1. Branch from `next`: `git checkout -b feature/<short-slug> origin/next`.
@@ -234,38 +234,43 @@ Day-to-day workflow (features, fixes, docs — everything non-release):
    channel for testing; it reaches stable only with the next release.
 
 Release workflow (operator-driven, when `next` is ready):
-1. Confirm `next` carries exact `MAJOR.MINOR.PATCH-beta.N`, the applicable
-   hash-bound release evidence under
-   `.guild/artifacts/release/vMAJOR.MINOR.PATCH/`, green CI, reconciled
-   `docs/v2`, and a curated PR body suitable as release notes. Exact v2.7.0 has
-   a separately named, GitHub-OIDC-attested provenance-only basis that
-   explicitly does not establish conformance authority; it is mechanically
-   unavailable to later versions. To set the beta version, edit only
-   `.claude-plugin/plugin.json`, then run `npm run sync:claude-install` in
-   `scripts/`. It regenerates every version-bearing file (`guild.inventory.json`,
-   both `.claude-plugin/` manifests, `.codex-plugin/plugin.json`, and the native
-   package identity); `build:inventory` alone leaves the G7 gate red.
-2. Open the release PR from the repository's exact `next` branch to `main`.
-   `branch-policy.yml` rejects every other head branch and all forks.
-3. Merge the PR using GitHub's **Create a merge commit** method. Squash and
+1. **Release cut.** Open a PR into `next` that changes only the version: run
+   `finalize:stable-release -- prepare`, `build:inventory`,
+   `sync:claude-install`, and `build:hosts -- --sync-native-identity` (all under
+   `npm --prefix scripts run`, with `--root ..`). It drops `-beta.N`, so `next`
+   carries bare `MAJOR.MINOR.PATCH` in `.claude-plugin/*`, `.codex-plugin`,
+   `guild.inventory.json`, and the native identity. Merge it; that merge SHA is
+   the evidence source commit.
+2. Produce the hash-bound evidence for that exact SHA and merge an
+   evidence-only PR into `next` (only
+   `.guild/artifacts/release/vMAJOR.MINOR.PATCH/{promotion,conformance}.json`).
+   Confirm green CI, reconciled `docs/v2`, and a curated PR body suitable as
+   release notes. Exact v2.7.0 has a separately named, GitHub-OIDC-attested
+   provenance-only basis that explicitly does not establish conformance
+   authority; it is mechanically unavailable to later versions.
+3. Open the release PR from the repository's exact `next` branch to `main`.
+   `branch-policy.yml` rejects every other head branch, all forks, and any
+   `next` manifest that is not the bare release version.
+4. Merge the PR using GitHub's **Create a merge commit** method. Squash and
    rebase merges are invalid because the evidence-bound `next` source commit
    must remain an ancestor of the merged `main` commit. CI also requires the
-   merged tree to equal the exact reviewed `next` tree, re-runs
-   promotion evidence, verifies any required release-basis OIDC identity, and
-   derives the bare stable tag
-   from the reviewed beta manifest, tags the exact merge commit with the
-   built-in repository token, and publishes the PR body as the GitHub Release.
-   CI does not commit or push to either protected branch.
-4. Verify the workflow, tag, GitHub Release, and that the peeled tag equals the
-   merged `main` commit. The next release gate treats that immutable tag as the
-   published stable version while `main` retains its reviewed candidate
-   identifier. A re-run accepts an existing tag only when it already
+   merged tree to equal the exact reviewed `next` tree, re-runs promotion
+   evidence, verifies any required release-basis OIDC identity, reads the tag
+   from the bare manifest, tags the exact merge commit with the built-in
+   repository token, and publishes the PR body as the GitHub Release. CI does
+   not commit or push to either protected branch. `main` now carries the bare
+   stable version.
+5. Verify the workflow, tag, GitHub Release, and that the peeled tag equals the
+   merged `main` commit. A re-run accepts an existing tag only when it already
    points to that exact merge commit, then creates a missing Release if needed.
+6. **Dev-version bump.** Open a PR into `next` that sets the next target
+   (e.g. `MAJOR.(MINOR+1).0-beta.1`) with the same regeneration commands,
+   editing `.claude-plugin/plugin.json` instead of running `prepare`. Until it
+   merges, `channel-integrity` fails any `next` PR that changes code, because
+   `next` may share the bare version only while its tree equals `main`.
 
 There is no operator release branch, App credential, environment gate, or
-manual sync-back in the current short path. The dedicated release App and
-post-merge bare-version metadata convergence remain a non-blocking hardening
-follow-up. See `.guild/wiki/standards/release-discipline.md`.
+manual sync-back. See `.guild/wiki/standards/release-discipline.md`.
 
 **Mechanical enforcement.** `branch-policy.yml` rejects any PR into `main` whose
 head is not the same-repository exact `next` branch; the repo-checked-in `pre-push` hook at

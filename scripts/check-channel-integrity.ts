@@ -18,10 +18,12 @@
  *
  * WHAT IT CHECKS.
  * Reads `.claude-plugin/plugin.json`'s `version` from both channel refs and
- * fails when next < main. In the short path, `main` retains the reviewed
- * `X.Y.Z-beta.N` candidate while the bare identity lives in `vX.Y.Z`; the gate
- * therefore binds that tag to main and proves next history contains main's
- * exact release tree before accepting later beta development.
+ * fails when next < main. `main` carries the bare `X.Y.Z` its `vX.Y.Z` tag
+ * names; right after a release `next` shares that bare version only while its
+ * tree still equals main's, until the dev-version bump PR reopens it as
+ * `X.Y'.Z'-beta.N`. Releases cut before this model left `main` at the reviewed
+ * `X.Y.Z-beta.N` candidate; the gate binds that legacy state to its tag and
+ * proves next history contains main's exact release tree.
  *
  * PRERELEASE HANDLING — full SemVer §11 precedence, NOT a bare triple compare.
  * A naive "ignore the suffix" comparison produces a FALSE PASS on exactly the
@@ -285,6 +287,19 @@ function gitResolveRef(ref: string): string {
   }).trim();
 }
 
+function gitTreesEqual(stableCommit: string, betaCommit: string): boolean {
+  try {
+    const tree = (ref: string) =>
+      execFileSync("git", ["rev-parse", "--verify", `${ref}^{tree}`], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }).trim();
+    return tree(stableCommit) === tree(betaCommit);
+  } catch {
+    return false;
+  }
+}
+
 function gitBetaContainsStableTree(stableCommit: string, betaCommit: string): boolean {
   try {
     const stableTree = execFileSync("git", ["rev-parse", "--verify", `${stableCommit}^{tree}`], {
@@ -309,7 +324,9 @@ export function checkChannelIntegrity(
   read: (r: string) => string = gitShowManifest,
   resolveRef: (r: string) => string = read === gitShowManifest ? gitResolveRef : (r) => r,
   betaContainsStableTree: (stableCommit: string, betaCommit: string) => boolean =
-    read === gitShowManifest ? gitBetaContainsStableTree : (stableCommit, betaCommit) => stableCommit === betaCommit
+    read === gitShowManifest ? gitBetaContainsStableTree : (stableCommit, betaCommit) => stableCommit === betaCommit,
+  treesEqual: (stableCommit: string, betaCommit: string) => boolean =
+    read === gitShowManifest ? gitTreesEqual : (stableCommit, betaCommit) => stableCommit === betaCommit
 ): IntegrityResult {
   const sv = versionAtRef(stableRef, read);
   const bv = versionAtRef(betaRef, read);
@@ -320,11 +337,10 @@ export function checkChannelIntegrity(
   const cmp = compareVersions(bp, sp);
   const coreCmp = compareVersions({ ...bp, prerelease: [] }, { ...sp, prerelease: [] });
 
-  // In the short path, main retains the reviewed beta identifier and the
-  // immutable vX.Y.Z tag is the stable identity. Bind that exception to the
-  // tag at main AND prove next history still contains the exact stable tree.
-  // That supports merge, squash, and rebase PR merges while preventing a
-  // reset to older bytes to hide behind a reused candidate version.
+  // Legacy short-path releases left main at the reviewed beta identifier with
+  // the immutable vX.Y.Z tag as the stable identity. Bind that state to the
+  // tag at main AND prove next history still contains the exact stable tree,
+  // so a reset to older bytes cannot hide behind a reused candidate version.
   if (BETA_CHANNEL_VERSION.test(sv)) {
     const publishedVersion = sp.core.join(".");
     const stableTag = `refs/tags/v${publishedVersion}`;
@@ -342,8 +358,14 @@ export function checkChannelIntegrity(
         reason: `${stableTag} resolves to ${taggedCommit}, not stable commit ${stable.commit}.`,
       };
     }
-    if (!BETA_CHANNEL_VERSION.test(bv)) {
-      return { stable, beta, ok: false, reason: `next must use MAJOR.MINOR.PATCH-beta.N after a short-path release; found ${bv}.` };
+    const bareCandidate = BARE_CHANNEL_VERSION.test(bv) && coreCmp > 0;
+    if (!BETA_CHANNEL_VERSION.test(bv) && !bareCandidate) {
+      return {
+        stable,
+        beta,
+        ok: false,
+        reason: `next must use MAJOR.MINOR.PATCH-beta.N or a newer bare release candidate after a short-path release; found ${bv}.`,
+      };
     }
     if (!betaContainsStableTree(stable.commit, beta.commit)) {
       return {
@@ -379,18 +401,44 @@ export function checkChannelIntegrity(
       ? { stable, beta, ok: true, reason: `both channels at ${bv} on the same commit — in sync at a quiescent release point.` }
       : { stable, beta, ok: false, reason: `the same commit reports different channel versions (${sv} vs ${bv}).` };
   }
-  if (cmp <= 0) {
+  if (cmp === 0) {
+    // Post-release point: main is the merge commit of the reviewed next head,
+    // so both carry bare X.Y.Z with identical trees until the dev-version bump.
+    const stableTag = `refs/tags/v${sv}`;
+    let taggedCommit: string | null;
+    try {
+      taggedCommit = resolveRef(stableTag);
+    } catch {
+      taggedCommit = null;
+    }
+    if (taggedCommit === stable.commit && treesEqual(stable.commit, beta.commit)) {
+      return {
+        stable,
+        beta,
+        ok: true,
+        reason: `both channels carry released ${sv} with the same tree; next awaits its dev-version bump.`,
+      };
+    }
     return {
       stable,
       beta,
       ok: false,
-      reason: cmp < 0
-        ? `beta channel (${betaRef}) is at ${bv} while stable (${stableRef}) is at ${sv} — beta users are running OLDER code than stable. The protected release transaction did not converge.`
-        : `diverged channels may not share bare version ${bv}; next must identify the newer beta runtime.`,
+      reason: `diverged channels may not share bare version ${bv} unless main is published ${stableTag} and next's tree equals it; bump next to a newer MAJOR.MINOR.PATCH-beta.N.`,
     };
   }
+  if (cmp < 0) {
+    return {
+      stable,
+      beta,
+      ok: false,
+      reason: `beta channel (${betaRef}) is at ${bv} while stable (${stableRef}) is at ${sv} — beta users are running OLDER code than stable. The protected release transaction did not converge.`,
+    };
+  }
+  if (BARE_CHANNEL_VERSION.test(bv)) {
+    return { stable, beta, ok: true, reason: `next carries bare release candidate ${bv}, ahead of stable (${sv}).` };
+  }
   if (!BETA_CHANNEL_VERSION.test(bv)) {
-    return { stable, beta, ok: false, reason: `diverged next must use MAJOR.MINOR.PATCH-beta.N; found ${bv}.` };
+    return { stable, beta, ok: false, reason: `diverged next must use MAJOR.MINOR.PATCH-beta.N or a bare release candidate; found ${bv}.` };
   }
   if (coreCmp <= 0) {
     return { stable, beta, ok: false, reason: `next beta core ${bp.core.join(".")} must be newer than stable ${sp.core.join(".")}.` };
@@ -438,7 +486,8 @@ export function main(argv: string[] = process.argv.slice(2)): number {
   if (!result.ok) {
     process.stderr.write(`check-channel-integrity: GATE FAILURE — ${result.reason}\n`);
     process.stderr.write(
-      "\nFix — inspect and re-run the failed `Publish stable release after next merges to main` workflow.\n" +
+      "\nFix — inspect and re-run the failed `Publish stable release after next merges to main` workflow,\n" +
+        "  or open the dev-version bump PR into next if next still carries the released version.\n" +
         "  Do not hand-push a sync-back or move the published tag. Follow the failure and\n" +
         "  re-run procedure in .guild/wiki/standards/release-discipline.md.\n"
     );
@@ -459,9 +508,9 @@ const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
 
 /**
  * The EXACT set of paths `next` may change after the evidence source commit:
- * only the two hash-bound evidence records. Stable manifests, inventory, and
- * changelog are generated after merge by the protected release job, never on a
- * human-authored release branch.
+ * only the two hash-bound evidence records. The bare-version manifests are
+ * already in the source commit (the release cut), so they are covered by the
+ * evidence and may not change after it.
  */
 export function promotionAllowedPaths(version: string): string[] {
   return [
@@ -802,8 +851,9 @@ export function checkStablePromotion(
     return refusePromotion("head_unresolvable", `head ref "${opts.headRef}" does not resolve to a commit.`);
   }
 
-  // 3 — next must carry an exact beta version. The stable triple comes from
-  //     the reviewed manifest bytes, never from a branch name.
+  // 3 — next must carry the exact bare release version, so main holds the
+  //     stable identity after merge. It comes from the reviewed manifest
+  //     bytes, never from a branch name.
   const manifestBytes = git.showBytes(headSha, MANIFEST_PATH);
   if (manifestBytes === null) {
     return refusePromotion("manifest_missing", `${MANIFEST_PATH} is absent at ${opts.headRef}.`);
@@ -812,16 +862,18 @@ export function checkStablePromotion(
   if (manifest === null || typeof manifest.version !== "string") {
     return refusePromotion("manifest_malformed", `${MANIFEST_PATH} at ${opts.headRef} has no usable version field.`);
   }
-  if (!BETA_CHANNEL_VERSION.test(manifest.version)) {
+  // The frozen v2.7.0 provenance basis predates the release cut and keeps its
+  // beta-shaped manifest; no other version may promote a prerelease.
+  const frozenV270 =
+    BETA_CHANNEL_VERSION.test(manifest.version) && parseVersion(manifest.version).core.join(".") === "2.7.0";
+  if (!BARE_TRIPLE_RE.test(manifest.version) && !frozenV270) {
     return refusePromotion(
-      "manifest_version_not_beta",
-      `${MANIFEST_PATH} carries ${manifest.version}; direct stable promotion requires exact MAJOR.MINOR.PATCH-beta.N on next.`
+      "manifest_version_not_release",
+      `${MANIFEST_PATH} carries ${manifest.version}; stable promotion requires next cut to exact MAJOR.MINOR.PATCH ` +
+        `(the release cut commit) so main holds the stable version.`
     );
   }
-  const version = parseVersion(manifest.version).core.join(".");
-  if (!BARE_TRIPLE_RE.test(version)) {
-    return refusePromotion("manifest_version_not_beta", `${MANIFEST_PATH} did not yield a stable SemVer core.`);
-  }
+  const version = frozenV270 ? "2.7.0" : manifest.version;
 
   // 3b — stable versions only move forward. This runs in the pre-merge gate
   // against origin/main and again post-merge against the PR's captured base
@@ -903,7 +955,7 @@ export function checkStablePromotion(
   // Protected workflows additionally verify the GitHub OIDC attestation over
   // release-basis.json with exact repository, workflow, ref, and source digest.
   // No later release can enter this path.
-  if (version === "2.7.0") {
+  if (frozenV270) {
     return checkV270ProvenanceRelease(version, headSha, git);
   }
 
@@ -1109,12 +1161,8 @@ export function checkStablePromotion(
     );
   }
   // 8b — the evidence runtime must be the runtime the SOURCE COMMIT builds:
-  //      `guild-<plugin.json version at source_commit>`. FIC-74 emits evidence
-  //      at the `next` tip (SHA-T), whose manifest carries the beta shape
-  //      (e.g. 2.7.0-beta.N); the protected workflow later changes ONLY metadata.
-  //      Binding to the release version would make that real sequence
-  //      impossible, and binding to nothing would admit evidence for a runtime
-  //      the source never built — this is the truthful middle.
+  //      `guild-<plugin.json version at source_commit>`. Evidence is emitted at
+  //      the release cut commit, whose manifest already carries bare X.Y.Z.
   const sourceManifestBytes = git.showBytes(sourceCommit, MANIFEST_PATH);
   if (sourceManifestBytes === null) {
     return refusePromotion(
@@ -1142,11 +1190,10 @@ export function checkStablePromotion(
         `produces.`
     );
   }
-  // 8c — RELEASE IDENTITY: the source manifest's SemVer CORE must equal the
-  //      derived stable triple. The finalizer may only drop a prerelease identifier
-  //      (2.7.0-beta.N -> 2.7.0); without this, valid
-  //      evidence for an old source (e.g. 2.6.0) could authorize a
-  //      metadata-only jump to any unrelated stable version.
+  // 8c — RELEASE IDENTITY: the source manifest must build exactly the release
+  //      version. Without this, valid evidence for an old source (e.g. 2.6.0)
+  //      could authorize a metadata-only jump to any unrelated stable version,
+  //      and beta-runtime evidence could stand in for the bare release.
   let sourceCore: [string, string, string];
   try {
     sourceCore = parseVersion(sourceManifest.version).core;
@@ -1161,8 +1208,14 @@ export function checkStablePromotion(
     return refusePromotion(
       "source_version_core_mismatch",
       `evidence source commit ${sourceCommit} builds version ${sourceManifest.version} (core ` +
-        `${sourceCore.join(".")}) but next derives stable version ${version} — a release may only drop the source's ` +
-        `prerelease identifier, never change its core triple.`
+        `${sourceCore.join(".")}) but next derives stable version ${version} — evidence must come from the release cut.`
+    );
+  }
+  if (sourceManifest.version !== version) {
+    return refusePromotion(
+      "source_version_not_release",
+      `evidence source commit ${sourceCommit} builds ${sourceManifest.version}, not release ${version} — emit the ` +
+        `evidence at the release cut commit that sets the bare version.`
     );
   }
   if (!git.isAncestor(sourceCommit, headSha)) {

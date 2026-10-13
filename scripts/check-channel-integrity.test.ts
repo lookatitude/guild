@@ -141,10 +141,70 @@ describe("check-channel-integrity", () => {
       expect(r.reason).toMatch(/diverged channels/);
     });
 
-    it("FAILS when divergent next uses a future bare version", () => {
+    it("PASSES a release cut: next carries a newer bare release candidate", () => {
       const r = checkChannelIntegrity("s", "b", readerFor({ s: "2.6.0", b: "2.7.0" }));
+      expect(r.ok).toBe(true);
+      expect(r.reason).toMatch(/bare release candidate 2\.7\.0/);
+    });
+    it("PASSES the post-release point: main is tagged and next's tree equals main's", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "3.0.0", "origin/next": "3.0.0" }),
+        (ref) => ({ "origin/main": "release-merge", "origin/next": "reviewed-next-head", "refs/tags/v3.0.0": "release-merge" })[ref] ?? ref,
+        () => true,
+        (stableCommit, betaCommit) => stableCommit === "release-merge" && betaCommit === "reviewed-next-head"
+      );
+      expect(r.ok).toBe(true);
+      expect(r.reason).toMatch(/awaits its dev-version bump/);
+    });
+    it("FAILS when next moves past the released tree without the dev-version bump", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "3.0.0", "origin/next": "3.0.0" }),
+        (ref) => ({ "origin/main": "release-merge", "origin/next": "feature-merge", "refs/tags/v3.0.0": "release-merge" })[ref] ?? ref,
+        () => true,
+        () => false
+      );
       expect(r.ok).toBe(false);
-      expect(r.reason).toMatch(/beta\.N/);
+      expect(r.reason).toMatch(/diverged channels may not share bare version 3\.0\.0/);
+    });
+    it("FAILS the shared bare version when main is not the published tag", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "3.0.0", "origin/next": "3.0.0" }),
+        (ref) => {
+          if (ref === "refs/tags/v3.0.0") throw new Error("unknown ref");
+          return ref;
+        },
+        () => true,
+        () => true
+      );
+      expect(r.ok).toBe(false);
+      expect(r.reason).toMatch(/published refs\/tags\/v3\.0\.0/);
+    });
+    it("PASSES a bare release cut on next after a legacy short-path release left main at its beta candidate", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "2.7.0-beta.20", "origin/next": "3.0.0" }),
+        (ref) => ({ "origin/main": "release-commit", "origin/next": "cut-commit", "refs/tags/v2.7.0": "release-commit" })[ref] ?? ref,
+        () => true
+      );
+      expect(r.ok).toBe(true);
+    });
+    it("FAILS a bare next that re-cuts the version a legacy main already published", () => {
+      const r = checkChannelIntegrity(
+        "origin/main",
+        "origin/next",
+        readerFor({ "origin/main": "2.7.0-beta.20", "origin/next": "2.7.0" }),
+        (ref) => ({ "origin/main": "release-commit", "origin/next": "cut-commit", "refs/tags/v2.7.0": "release-commit" })[ref] ?? ref,
+        () => true
+      );
+      expect(r.ok).toBe(false);
+      expect(r.reason).toMatch(/newer bare release candidate/);
     });
 
     it("FAILS when divergent next uses a non-beta prerelease", () => {
