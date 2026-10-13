@@ -655,8 +655,12 @@ function markerFor(challenge: string): string {
   return `GUILD_ACTIVATED_CONFORMANCE_OK:${challenge}`;
 }
 
-function releaseId(release: string, capturedDay = "2026-08-21"): string {
-  const suffix = release.split("-").slice(1).join("").replace(/[^0-9a-z]/gi, "").toLowerCase().slice(0, 16);
+export function releaseId(release: string, capturedDay = "2026-08-21"): string {
+  // A bare release ("3.0.0") has no prerelease tail; its suffix derives from
+  // the version itself so the id satisfies the core's rel-…-[0-9a-z]{1,16} pin.
+  const parts = release.split("-");
+  const raw = parts.length > 1 ? parts.slice(1).join("") : parts[0];
+  const suffix = raw.replace(/[^0-9a-z]/gi, "").toLowerCase().slice(0, 16);
   return `rel-${capturedDay}-${suffix}`;
 }
 
@@ -2290,13 +2294,7 @@ export function verifyActivatedHostConformanceReceipt(
     contract_version: receipt.contract_version,
     scenario_suite_id: receipt.scenario_suite_id,
     scenario_suite_version: receipt.scenario_suite_version,
-    release_id: `rel-${String(receipt.captured_at).slice(0, 10)}-${String(receipt.release)
-      .split("-")
-      .slice(1)
-      .join("")
-      .replace(/[^0-9a-z]/gi, "")
-      .toLowerCase()
-      .slice(0, 16)}`,
+    release_id: releaseId(String(receipt.release), String(receipt.captured_at).slice(0, 10)),
   };
   if (
     receipt.contract_version !== NEUTRAL_CONTRACT_VERSION ||

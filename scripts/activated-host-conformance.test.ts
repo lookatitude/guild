@@ -1,4 +1,5 @@
 import { describe, it, expect, spyOn } from "bun:test";
+import { releaseId } from "./activated-host-conformance";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -1397,5 +1398,17 @@ describe("activated-host conformance capture", () => {
     tampered.evidence.results[0].disposition = "failed";
     const result = verifyActivatedHostConformanceReceipt({ receipt: tampered, transcript: run.rawTranscript, workerResult: run.rawWorker, packageRoot: run.fixture.root, expectedPackage: run.fixture.runtimePackage, expectedSourceCommit: SOURCE_COMMIT, expectedRelease: RELEASE });
     expect(result).toEqual(expect.objectContaining({ ok: false, code: "capture_id_mismatch" }));
+  });
+});
+
+describe("releaseId derivation", () => {
+  const CORE_PATTERN = /^rel-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9a-z]{1,16}$/;
+  it("derives a non-empty suffix for a bare release so the core pattern accepts it", () => {
+    const id = releaseId("3.0.0", "2026-10-13");
+    expect(id).toBe("rel-2026-10-13-300");
+    expect(CORE_PATTERN.test(id)).toBe(true);
+  });
+  it("keeps the prerelease-derived suffix for a beta release", () => {
+    expect(releaseId("3.0.0-beta.4", "2026-08-21")).toBe("rel-2026-08-21-beta4");
   });
 });

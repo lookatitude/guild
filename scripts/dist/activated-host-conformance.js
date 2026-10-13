@@ -49783,6 +49783,7 @@ __export(activated_host_conformance_exports, {
   publishActivatedHostEvidence: () => publishActivatedHostEvidence,
   publishActivatedHostPublicEvidence: () => publishActivatedHostPublicEvidence,
   refreshSensitiveJsonValues: () => refreshSensitiveJsonValues,
+  releaseId: () => releaseId,
   runActivatedConformanceWorker: () => runActivatedConformanceWorker,
   runJsonCommand: () => runJsonCommand,
   sealActivatedWorkerRuntime: () => sealActivatedWorkerRuntime,
@@ -53113,7 +53114,9 @@ function markerFor(challenge) {
   return `GUILD_ACTIVATED_CONFORMANCE_OK:${challenge}`;
 }
 function releaseId(release, capturedDay = "2026-08-21") {
-  const suffix = release.split("-").slice(1).join("").replace(/[^0-9a-z]/gi, "").toLowerCase().slice(0, 16);
+  const parts = release.split("-");
+  const raw = parts.length > 1 ? parts.slice(1).join("") : parts[0];
+  const suffix = raw.replace(/[^0-9a-z]/gi, "").toLowerCase().slice(0, 16);
   return `rel-${capturedDay}-${suffix}`;
 }
 function copyPackageTree(source, destination) {
@@ -54516,7 +54519,7 @@ function verifyActivatedHostConformanceReceipt(options) {
     contract_version: receipt2.contract_version,
     scenario_suite_id: receipt2.scenario_suite_id,
     scenario_suite_version: receipt2.scenario_suite_version,
-    release_id: `rel-${String(receipt2.captured_at).slice(0, 10)}-${String(receipt2.release).split("-").slice(1).join("").replace(/[^0-9a-z]/gi, "").toLowerCase().slice(0, 16)}`
+    release_id: releaseId(String(receipt2.release), String(receipt2.captured_at).slice(0, 10))
   };
   if (receipt2.contract_version !== NEUTRAL_CONTRACT_VERSION || receipt2.scenario_suite_id !== NEUTRAL_SCENARIO_SUITE_ID || receipt2.scenario_suite_version !== NEUTRAL_SCENARIO_SUITE_VERSION || !isRecord7(evidence.activated_runtime)) {
     return refusal3("scenario_identity_mismatch", "receipt names an unrecognized contract or scenario suite identity");
@@ -54776,6 +54779,7 @@ if (require.main === module) main6();
   publishActivatedHostEvidence,
   publishActivatedHostPublicEvidence,
   refreshSensitiveJsonValues,
+  releaseId,
   runActivatedConformanceWorker,
   runJsonCommand,
   sealActivatedWorkerRuntime,
