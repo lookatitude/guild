@@ -4,10 +4,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { buildSync } from "esbuild";
+import * as yaml from "js-yaml";
 
 import { NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS } from "../src/domains/lifecycle";
 import { snapshotMigrationRuntimePackage } from "./lib/capability/migration-evidence";
-import { buildHostPackages } from "./build-host-packages";
+import { buildHostPackages, AGENTS_SKILL_ROOT } from "./build-host-packages";
 import { moduleManifestFiles } from "./lib/module-manifest";
 
 /** The module ownership manifests, at their source paths (what a package ships). */
@@ -1045,12 +1046,17 @@ describe("activated-host conformance capture", () => {
   });
 
   it("pins the Codex probe to a model-visible skill shipped in the reshaped Codex package", () => {
-    const packageRoot = path.resolve(__dirname, "../dist/codex");
-    const manifest = JSON.parse(fs.readFileSync(path.join(packageRoot, ".codex-plugin", "plugin.json"), "utf8"));
-    expect(CODEX_PROBE_SKILL_PATH.startsWith(path.normalize(manifest.skills))).toBe(true);
-    const body = fs.readFileSync(path.join(packageRoot, CODEX_PROBE_SKILL_PATH), "utf8");
-    expect(`guild:${/^name: (.+)$/m.exec(body)?.[1]}`).toBe(CODEX_PROBE_SKILL_NAME);
-    expect((/^description: (.+)$/m.exec(body)?.[1] ?? "").trim().split(/\s+/).length).toBeGreaterThanOrEqual(12);
+    // Pin against TRACKED sources: dist/codex is a build artifact the CI test
+    // shards never produce. AGENTS_SKILL_ROOT is the prefix build-host-packages
+    // renders into the Codex package manifest, and skills/quality/SKILL.md is
+    // the source it copies to CODEX_PROBE_SKILL_PATH inside the package.
+    const repoRoot = path.resolve(__dirname, "..");
+    expect(CODEX_PROBE_SKILL_PATH.startsWith(`${AGENTS_SKILL_ROOT}/`)).toBe(true);
+    const body = fs.readFileSync(path.join(repoRoot, "skills/quality/SKILL.md"), "utf8");
+    const fenced = /^---\n([\s\S]*?)\n---/.exec(body);
+    const frontmatter = yaml.load(fenced ? fenced[1] : body) as Record<string, unknown>;
+    expect(`guild:${frontmatter.name}`).toBe(CODEX_PROBE_SKILL_NAME);
+    expect(String(frontmatter.description ?? "").trim().split(/\s+/).length).toBeGreaterThanOrEqual(12);
   });
 
   function verifyCodexWithProbeText(text: string) {
