@@ -19,3 +19,7 @@ export * from "./guild-trace-emit";
 export * from "./guild-trace-events";
 export * from "./task-cell-telemetry";
 export * from "./run-analysis";
+
+// MHRC-MOD-004: this domain binds host-facing contracts (the lifecycle public
+// index), so it states the public-API contract version it was built against.
+export const MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1" as const;

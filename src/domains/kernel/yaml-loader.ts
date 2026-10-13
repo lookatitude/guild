@@ -5,6 +5,7 @@
  * should go through this single resolver instead of embedding ad hoc paths.
  */
 
+import { createRequire } from "node:module";
 import * as path from "node:path";
 import { findPluginRoot } from "./plugin-root";
 
@@ -32,8 +33,12 @@ function pluginLocalScriptsRoots(): string[] {
 
 function tryScriptsRoot(scriptsRoot: string): YamlApi | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require(require.resolve("js-yaml", { paths: [scriptsRoot] })) as YamlApi;
+    // `createRequire` anchored at the scripts root, not a computed
+    // `require(require.resolve(...))`: the package loaded is always the literal
+    // "js-yaml", so the module graph carries one resolvable external edge (the
+    // literal require below) instead of an unresolvable computed one (MOD-001).
+    const requireFrom = createRequire(path.join(scriptsRoot, "package.json"));
+    return requireFrom("js-yaml") as YamlApi;
   } catch {
     return null;
   }

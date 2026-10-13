@@ -300,6 +300,91 @@ export const MH07_MODULE_ROLES: Readonly<Record<string, string>> = Object.freeze
   telemetry: "service",
 });
 
+/**
+ * The POST-FOLD tree registry — SOURCE-OWNED, never requested.
+ *
+ * T12 folded the 29 `src/modules/<id>` trees into 12 `src/domains/<id>` trees
+ * plus the host-projection trees (`src/adapters`, `src/runtime`); T16 deleted
+ * the retired module trees. The classification unit of the module system is
+ * therefore the TREE, and this table restates the fold's role assignment the
+ * same authored-not-imported way `MH07_MODULE_ROLES` states the pre-fold one.
+ * A source tree under `src/` that this table does not name is UNCLASSIFIED and
+ * fails MOD-001 — an invented tree is visible, never silently tolerated.
+ */
+export const MH07_DOMAIN_TREE_ROLES: Readonly<Record<string, string>> = Object.freeze({
+  "src/domains/lifecycle": "neutral_core",
+
+  "src/adapters": "host_adapter",
+  "src/runtime": "host_adapter",
+
+  "src/domains/dispatch": "execution_transport",
+
+  "src/domains/config": "substrate",
+  "src/domains/kernel": "substrate",
+  "src/domains/security": "substrate",
+  "src/domains/state": "substrate",
+  "src/domains/teams": "substrate",
+
+  "src/domains/distribution": "service",
+  "src/domains/evolve": "service",
+  "src/domains/knowledge": "service",
+  "src/domains/review": "service",
+  "src/domains/telemetry": "service",
+});
+
+/**
+ * The post-fold graph scope. Domain trees hold their own test files
+ * (`*.test.ts`, `__tests__/`); tests are not module source — they import
+ * fixture trees by design — so they are outside the scanned closure exactly as
+ * generated `resources/` mirrors are. Source-owned; recorded on the binding.
+ */
+export const MH07_DOMAIN_GRAPH_SCOPE: {
+  readonly excluded_directories: readonly string[];
+  readonly excluded_file_suffixes: readonly string[];
+} = Object.freeze({
+  excluded_directories: Object.freeze(["resources", "__tests__"]) as readonly string[],
+  excluded_file_suffixes: Object.freeze([".test.ts"]) as readonly string[],
+});
+
+/**
+ * Each pre-fold module id's post-fold PUBLIC INDEX (the T12/KTD36 fold, as the
+ * evaluator's own authored statement). Manifests still carry the module ids;
+ * a manifest id this table does not name is unclassified and fails MOD-001.
+ */
+export const MH07_MODULE_FOLD_INDEX: Readonly<Record<string, string>> = Object.freeze({
+  kernel: "src/domains/kernel/index.ts",
+  state: "src/domains/state/index.ts",
+  migrations: "src/domains/state/index.ts",
+  workspace: "src/domains/state/index.ts",
+  security: "src/domains/security/index.ts",
+  config: "src/domains/config/index.ts",
+  capability: "src/domains/config/index.ts",
+  prompting: "src/domains/config/index.ts",
+  lifecycle: "src/domains/lifecycle/index.ts",
+  initiatives: "src/domains/lifecycle/index.ts",
+  operations: "src/domains/lifecycle/index.ts",
+  loops: "src/domains/lifecycle/index.ts",
+  intake: "src/domains/lifecycle/index.ts",
+  documents: "src/domains/lifecycle/index.ts",
+  knowledge: "src/domains/knowledge/index.ts",
+  context: "src/domains/knowledge/index.ts",
+  learning: "src/domains/knowledge/index.ts",
+  teams: "src/domains/teams/index.ts",
+  specialists: "src/domains/teams/index.ts",
+  templates: "src/domains/teams/index.ts",
+  dispatch: "src/domains/dispatch/index.ts",
+  communication: "src/domains/dispatch/index.ts",
+  review: "src/domains/review/index.ts",
+  quality: "src/domains/review/index.ts",
+  evolution: "src/domains/evolve/index.ts",
+  evals: "src/domains/evolve/index.ts",
+  telemetry: "src/domains/telemetry/index.ts",
+  dashboard: "src/domains/telemetry/index.ts",
+  distribution: "src/domains/distribution/index.ts",
+  "docs-sync": "src/domains/distribution/index.ts",
+  "host-runtime": "src/adapters/index.ts",
+});
+
 // ---------------------------------------------------------------------------
 // The scenario registry
 // ---------------------------------------------------------------------------
@@ -601,19 +686,207 @@ const MH07_CONSUMER_SCAN_EXCLUDED_DIRECTORIES: readonly string[] = Object.freeze
 ]);
 
 /** Every `.ts` file under `dir`, sorted, skipping the named directory names. */
-function walkTypeScript(dir: string, excluded: readonly string[]): string[] {
+function walkTypeScript(
+  dir: string,
+  excluded: readonly string[],
+  excludedSuffixes: readonly string[] = []
+): string[] {
   if (!fs.existsSync(dir)) return [];
   const found: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       if (excluded.indexOf(entry.name) !== -1) continue;
-      found.push(...walkTypeScript(full, excluded));
+      found.push(...walkTypeScript(full, excluded, excludedSuffixes));
     } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+      if (excludedSuffixes.some((suffix) => entry.name.endsWith(suffix))) continue;
       found.push(full);
     }
   }
   return found.sort();
+}
+
+// ---------------------------------------------------------------------------
+// Post-fold (domains-shape) tree model
+// ---------------------------------------------------------------------------
+
+/**
+ * Does `root` carry the post-fold layout? Source-owned shape detection.
+ *
+ * Keyed on TypeScript SOURCE under `src/domains`, not on the directory's
+ * existence: module manifests live at `src/domains/<d>/modules/*.manifest.json`
+ * in BOTH shapes, so a pre-fold tree legitimately carries the directory. A tree
+ * that holds domain source is judged by the post-fold model unconditionally —
+ * then any TypeScript left under the retired `src/modules` is an unclassified
+ * source and fails MOD-001, so a mixed tree cannot pick its judge.
+ */
+function mh07IsDomainsShape(root: string): boolean {
+  return (
+    walkTypeScript(
+      path.join(root, "src", "domains"),
+      MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
+      MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
+    ).length > 0
+  );
+}
+
+/** The classified unit a repo-relative path belongs to, or `null`. */
+function mh07UnitOfRelPath(rel: string): string | null {
+  for (const unit of Object.keys(MH07_DOMAIN_TREE_ROLES)) {
+    if (rel === unit || rel.indexOf(`${unit}/`) === 0) return unit;
+  }
+  return null;
+}
+
+/**
+ * Every module-source `.ts` under `src/` that NO classified tree owns — the
+ * post-fold unclassified-source finding. A leftover `src/modules/**` file, a
+ * new top-level tree the registry does not name, each fails MOD-001: the
+ * closure argument covers the whole source tree or it covers nothing.
+ */
+export function mh07UnclassifiedSources(root: string): string[] {
+  return walkTypeScript(
+    path.join(root, "src"),
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
+  )
+    .map((file) => relativeTo(root, file))
+    .filter((rel) => mh07UnitOfRelPath(rel) === null);
+}
+
+/** Post-fold destination classification: units instead of `src/modules/<id>`.
+ * `closure` is the exact set of repo-relative files the scanner WALKED — the
+ * only thing "this destination is scanned source" may be judged against:
+ * stat-based guesses follow symlinks the walker skips. */
+function classifyDomainDestination(
+  root: string,
+  importer: string,
+  specifier: string,
+  fromUnit: string,
+  closure: ReadonlySet<string>
+): { destination_class: string; imported: string | null; to_module: string | null } {
+  if (specifier.indexOf(".") !== 0) {
+    const bare = specifier.indexOf("node:") === 0 ? specifier.slice("node:".length) : specifier;
+    const isBuiltin = specifier.indexOf("node:") === 0 || MH07_NODE_BUILTINS.indexOf(bare) !== -1;
+    return {
+      destination_class: isBuiltin ? "node_builtin" : "external_package",
+      imported: null,
+      to_module: null,
+    };
+  }
+  const resolved = resolveRelative(importer, specifier);
+  const rel = relativeTo(root, resolved);
+  if (rel.indexOf("..") === 0 || path.isAbsolute(rel)) {
+    return { destination_class: "unclassified", imported: rel, to_module: null };
+  }
+  // A destination the SCOPE excludes is not module source, so an edge into it
+  // leaves the scanned closure: production importing a `.test.ts` (or anything
+  // under `__tests__`/`resources`) would smuggle unscanned code into the graph.
+  if (
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes.some((suffix) => rel.endsWith(suffix)) ||
+    rel.split("/").some((segment) => MH07_DOMAIN_GRAPH_SCOPE.excluded_directories.indexOf(segment) !== -1)
+  ) {
+    return { destination_class: "unclassified", imported: rel, to_module: null };
+  }
+  const head = rel.split("/")[0];
+  if (MH07_HOST_FACING_ROOTS.indexOf(head) !== -1) {
+    return { destination_class: "host_facing_mirror", imported: rel, to_module: head };
+  }
+  const toUnit = mh07UnitOfRelPath(rel);
+  if (toUnit === null) {
+    return { destination_class: "unclassified", imported: rel, to_module: null };
+  }
+  // A unit-internal destination must be a regular `.ts` file — a member of the
+  // walked closure. Anything else (`.tsx`, `.mts`, a missing path) is a node
+  // the scanner never reads, so an edge into it leaves the closure and fails
+  // rather than hiding unscanned code behind an intra-module label.
+  // A `.ts` destination must be a member of the WALKED closure (a symlink the
+  // walker skipped is not, whatever it points at); `.json` is inert data that
+  // cannot carry an import, and must be a real regular file, never a link.
+  let isClosureMember = closure.has(rel);
+  if (!isClosureMember && rel.endsWith(".json")) {
+    try {
+      const entry = fs.lstatSync(resolved);
+      isClosureMember = entry.isFile() && !entry.isSymbolicLink();
+    } catch {
+      isClosureMember = false;
+    }
+  }
+  if (!isClosureMember) {
+    return { destination_class: "unclassified", imported: rel, to_module: null };
+  }
+  if (toUnit === fromUnit) {
+    return { destination_class: "intra_module", imported: rel, to_module: toUnit };
+  }
+  const isPublic = rel === `${toUnit}/index.ts`;
+  return {
+    destination_class: isPublic ? "module_public_index" : "module_private",
+    imported: rel,
+    to_module: toUnit,
+  };
+}
+
+/** The complete post-fold dependency graph over the classified trees. */
+function mh07ScanDomainDependencyGraph(
+  root: string,
+  extract: typeof extractNeutralImportEdges
+): Mh07DependencyGraph {
+  const nodes: string[] = [];
+  const edges: Mh07GraphEdge[] = [];
+  const unresolved: { importer: string; form: string; detail: string }[] = [];
+  const ambient: { importer: string; detail: string }[] = [];
+
+  const unitFiles = new Map<string, string[]>();
+  const closure = new Set<string>();
+  for (const unit of Object.keys(MH07_DOMAIN_TREE_ROLES)) {
+    const files = walkTypeScript(
+      path.join(root, unit),
+      MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
+      MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
+    );
+    unitFiles.set(unit, files);
+    for (const file of files) closure.add(relativeTo(root, file));
+  }
+
+  for (const unit of Object.keys(MH07_DOMAIN_TREE_ROLES)) {
+    const files = unitFiles.get(unit) ?? [];
+    for (const file of files) {
+      const rel = relativeTo(root, file);
+      nodes.push(rel);
+      const extracted: readonly NeutralImportEdge[] = extract(fs.readFileSync(file, "utf8"));
+      for (const edge of extracted) {
+        if (edge.kind === "unresolved") {
+          const detail = edge.detail ?? "";
+          if (edge.form === "require" && detail.indexOf("require used as a value") === 0) {
+            ambient.push({ importer: rel, detail });
+          } else {
+            unresolved.push({ importer: rel, form: edge.form, detail });
+          }
+          continue;
+        }
+        const specifier = edge.specifier ?? "";
+        const classified = classifyDomainDestination(root, file, specifier, unit, closure);
+        edges.push({
+          importer: rel,
+          specifier,
+          form: edge.form,
+          imported: classified.imported,
+          destination_class: classified.destination_class,
+          from_module: unit,
+          to_module: classified.to_module,
+        });
+      }
+    }
+  }
+
+  return neutralFreeze({
+    node_count: nodes.length,
+    edge_count: edges.length,
+    nodes: nodes.sort(),
+    edges,
+    unresolved,
+    ambient_uses: ambient,
+  }) as Mh07DependencyGraph;
 }
 
 function toPosix(value: string): string {
@@ -624,10 +897,13 @@ function relativeTo(root: string, target: string): string {
   return toPosix(path.relative(root, target));
 }
 
-/** The `.ts` resolution the module-boundary rail itself uses. */
+/** The `.ts` resolution the module-boundary rail itself uses. An ESM-style
+ * `./x.js` specifier names the compiled twin of `./x.ts`; the source file is
+ * what the closure holds, so it is a resolution candidate. */
 function resolveRelative(importer: string, specifier: string): string {
   const base = path.resolve(path.dirname(importer), specifier);
   const candidates = [base, `${base}.ts`, path.join(base, "index.ts")];
+  if (base.endsWith(".js")) candidates.push(`${base.slice(0, -3)}.ts`);
   return (
     candidates.find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile()) ?? base
   );
@@ -710,6 +986,11 @@ export function mh07ScanDependencyGraph(
   extract: typeof extractNeutralImportEdges = extractNeutralImportEdges,
   moduleIdsOverride?: readonly string[]
 ): Mh07DependencyGraph {
+  // Shape is read from the tree, never requested: a post-fold repository is
+  // judged by the post-fold model even when a caller passes legacy module ids.
+  if (mh07IsDomainsShape(root)) {
+    return mh07ScanDomainDependencyGraph(root, extract);
+  }
   const modulesDir = path.join(root, "src", "modules");
   const moduleIds =
     moduleIdsOverride ??
@@ -1143,25 +1424,55 @@ export function evaluateNeutralModuleBoundaries(
   const moduleIds = moduleIdsOf(manifests);
   const ownership = port.validateModuleOwnership(emptyModuleInventory(), manifests);
   const boundaries = port.validateModuleBoundaries(root, manifests);
-  const health = port.validateModuleHealth(root, manifests);
+  // The tree model is READ from the tree, never requested (see
+  // `mh07IsDomainsShape`): a post-fold repository is judged at tree granularity
+  // against `MH07_DOMAIN_TREE_ROLES`; the pre-fold `src/modules` model remains
+  // for repositories that still carry that shape. On a post-fold tree the health
+  // check resolves each manifest's public index through the authored fold map.
+  const domainsShape = mh07IsDomainsShape(root);
+  const health = domainsShape
+    ? port.validateModuleHealth(
+        root,
+        manifests,
+        (moduleId) => MH07_MODULE_FOLD_INDEX[moduleId] ?? `src/domains/${moduleId}/index.ts`
+      )
+    : port.validateModuleHealth(root, manifests);
   const graph = mh07ScanDependencyGraph(root, port.extractNeutralImportEdges, moduleIds);
 
   // -- 4. classification, the precondition every scenario opens with --------
-  const roleOf = (moduleId: string | null): string | null =>
-    moduleId === null ? null : MH07_MODULE_ROLES[moduleId] ?? null;
-  const unclassifiedModules = moduleIds.filter((id) => roleOf(id) === null);
-  const modulesWithRole = (role: string): string[] => moduleIds.filter((id) => roleOf(id) === role);
+  //
+  // The classification UNIT is the graph's `from_module` key: a pre-fold module
+  // id, or a post-fold classified tree. Manifest ids are additionally required
+  // to be claimed by the active registry, so an invented manifest is visible in
+  // either shape.
+  const roleOf = (unit: string | null): string | null =>
+    unit === null
+      ? null
+      : (domainsShape ? MH07_DOMAIN_TREE_ROLES[unit] : MH07_MODULE_ROLES[unit]) ?? null;
+  const classifiedUnits: readonly string[] = domainsShape
+    ? Object.keys(MH07_DOMAIN_TREE_ROLES)
+    : moduleIds;
+  const unclassifiedModules = domainsShape
+    ? moduleIds.filter((id) => MH07_MODULE_FOLD_INDEX[id] === undefined)
+    : moduleIds.filter((id) => roleOf(id) === null);
+  const unclassifiedSources: readonly string[] = domainsShape ? mh07UnclassifiedSources(root) : [];
+  const modulesWithRole = (role: string): string[] =>
+    classifiedUnits.filter((unit) => roleOf(unit) === role);
 
   const coreModules = modulesWithRole("neutral_core");
   const adapterModules = modulesWithRole("host_adapter");
   const transportModules = modulesWithRole("execution_transport");
   const serviceModules = modulesWithRole("service");
-  const nonAdapterModules = moduleIds.filter((id) => roleOf(id) !== "host_adapter");
+  const nonAdapterModules = classifiedUnits.filter((unit) => roleOf(unit) !== "host_adapter");
 
-  const sourcesOf = (moduleId: string): { path: string; source: string }[] =>
-    walkTypeScript(
-      path.join(root, "src", "modules", moduleId),
-      MH07_GRAPH_SCOPE.excluded_directories
+  const sourcesOf = (unit: string): { path: string; source: string }[] =>
+    (domainsShape
+      ? walkTypeScript(
+          path.join(root, unit),
+          MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
+          MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
+        )
+      : walkTypeScript(path.join(root, "src", "modules", unit), MH07_GRAPH_SCOPE.excluded_directories)
     ).map((file) => ({ path: relativeTo(root, file), source: fs.readFileSync(file, "utf8") }));
 
   const declaredSymbolFindings = (
@@ -1181,9 +1492,23 @@ export function evaluateNeutralModuleBoundaries(
     return findings;
   };
 
-  const violationsFrom = (moduleIdsToScan: readonly string[]): ModuleBoundaryViolation[] =>
-    boundaries.violations.filter(
-      (violation) => moduleIdsToScan.indexOf(violation.from_module) !== -1
+  // Pre-fold, the kernel boundary validator walks `src/modules`; post-fold that
+  // tree is retired, so a boundary violation IS a `module_private` graph edge —
+  // a cross-tree import that bypasses the destination's public index.
+  const domainViolations: ModuleBoundaryViolation[] = domainsShape
+    ? graph.edges
+        .filter((edge) => edge.destination_class === "module_private")
+        .map((edge) => ({
+          importer: edge.importer,
+          imported: edge.imported ?? "",
+          from_module: edge.from_module,
+          to_module: edge.to_module ?? "",
+          reason: `cross-module imports must target ${edge.to_module ?? "the destination"}/index.ts`,
+        })) as unknown as ModuleBoundaryViolation[]
+    : [];
+  const violationsFrom = (unitsToScan: readonly string[]): ModuleBoundaryViolation[] =>
+    (domainsShape ? domainViolations : boundaries.violations).filter(
+      (violation) => unitsToScan.indexOf(violation.from_module) !== -1
     );
 
   const hostFacingEdgesFrom = (moduleIdsToScan: readonly string[]): Mh07GraphEdge[] =>
@@ -1207,7 +1532,9 @@ export function evaluateNeutralModuleBoundaries(
     const memberPath =
       coreHostModule === null
         ? null
-        : path.join(root, "src", "modules", coreHostModule, "workflows", member);
+        : domainsShape
+          ? path.join(root, coreHostModule, member)
+          : path.join(root, "src", "modules", coreHostModule, "workflows", member);
     if (memberPath === null || !fs.existsSync(memberPath)) {
       missingCoreMembers.push(member);
       continue;
@@ -1224,6 +1551,7 @@ export function evaluateNeutralModuleBoundaries(
     coreVerdict !== null &&
     coreVerdict.disposition === "succeeded" &&
     unclassifiedModules.length === 0 &&
+    unclassifiedSources.length === 0 &&
     unclassifiedEdges.length === 0 &&
     graph.unresolved.length === 0 &&
     graph.node_count > 0 &&
@@ -1291,8 +1619,10 @@ export function evaluateNeutralModuleBoundaries(
         MH07_HOST_FACING_CONTRACT_ROLES.indexOf(roleOf(edge.to_module) ?? "") !== -1
     )
   );
-  const contractConsumersWithoutVersion = contractConsumerServices.filter((moduleId) => {
-    const indexPath = path.join(root, "src", "modules", moduleId, "index.ts");
+  const contractConsumersWithoutVersion = contractConsumerServices.filter((unit) => {
+    const indexPath = domainsShape
+      ? path.join(root, unit, "index.ts")
+      : path.join(root, "src", "modules", unit, "index.ts");
     if (!fs.existsSync(indexPath)) return true;
     return fs.readFileSync(indexPath, "utf8").indexOf(MODULE_PUBLIC_API_DECLARATION) === -1;
   });
@@ -1348,12 +1678,18 @@ export function evaluateNeutralModuleBoundaries(
     edge_count: graph.edge_count,
     scanner_version: MH07_SCANNER_VERSION,
     evaluator_version: MH07_EVALUATOR_VERSION,
-    graph_scope_excluded_directories: [...MH07_GRAPH_SCOPE.excluded_directories],
+    tree_model: domainsShape ? "domains" : "modules",
+    graph_scope_excluded_directories: domainsShape
+      ? [...MH07_DOMAIN_GRAPH_SCOPE.excluded_directories]
+      : [...MH07_GRAPH_SCOPE.excluded_directories],
+    graph_scope_excluded_file_suffixes: domainsShape
+      ? [...MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes]
+      : [],
     consumer_scope_excluded_directories: [...MH07_CONSUMER_SCAN_EXCLUDED_DIRECTORIES],
     consumer_roots_scanned: consumerNames,
     core_members: [...NEUTRAL_CORE_MEMBERS],
     core_host_module: coreHostModule,
-    role_registry_digest: digestOf(MH07_MODULE_ROLES),
+    role_registry_digest: digestOf(domainsShape ? MH07_DOMAIN_TREE_ROLES : MH07_MODULE_ROLES),
   };
 
   const observations: Record<string, Record<string, unknown>> = {
@@ -1364,6 +1700,7 @@ export function evaluateNeutralModuleBoundaries(
       missing_core_members: missingCoreMembers,
       forbidden_edges: coreVerdict === null ? null : coreVerdict.facts.forbidden_edges,
       unclassified_modules: unclassifiedModules,
+      unclassified_sources: unclassifiedSources,
       unclassified_edges: unclassifiedEdges,
       unresolved_edges: graph.unresolved,
       ambient_uses: graph.ambient_uses,

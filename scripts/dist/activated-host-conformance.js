@@ -9225,7 +9225,8 @@ function pluginLocalScriptsRoots() {
 }
 function tryScriptsRoot(scriptsRoot) {
   try {
-    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
+    const requireFrom = (0, import_node_module.createRequire)(path3.join(scriptsRoot, "package.json"));
+    return requireFrom("js-yaml");
   } catch {
     return null;
   }
@@ -9249,9 +9250,10 @@ function loadYamlApi() {
     `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
   );
 }
-var path3;
+var import_node_module, path3;
 var init_yaml_loader = __esm({
   "../src/domains/kernel/yaml-loader.ts"() {
+    import_node_module = require("node:module");
     path3 = __toESM(require("node:path"));
     init_plugin_root();
   }
@@ -9925,19 +9927,143 @@ function mh07RequiredConsumerRoots(pluginRoot) {
   for (const name of MH07_REQUIRED_CONSUMERS) roots[name] = path6.join(workspace, name);
   return roots;
 }
-function walkTypeScript(dir, excluded) {
+function walkTypeScript(dir, excluded, excludedSuffixes = []) {
   if (!fs4.existsSync(dir)) return [];
   const found = [];
   for (const entry of fs4.readdirSync(dir, { withFileTypes: true })) {
     const full = path6.join(dir, entry.name);
     if (entry.isDirectory()) {
       if (excluded.indexOf(entry.name) !== -1) continue;
-      found.push(...walkTypeScript(full, excluded));
+      found.push(...walkTypeScript(full, excluded, excludedSuffixes));
     } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+      if (excludedSuffixes.some((suffix) => entry.name.endsWith(suffix))) continue;
       found.push(full);
     }
   }
   return found.sort();
+}
+function mh07IsDomainsShape(root) {
+  return walkTypeScript(
+    path6.join(root, "src", "domains"),
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
+  ).length > 0;
+}
+function mh07UnitOfRelPath(rel2) {
+  for (const unit of Object.keys(MH07_DOMAIN_TREE_ROLES)) {
+    if (rel2 === unit || rel2.indexOf(`${unit}/`) === 0) return unit;
+  }
+  return null;
+}
+function mh07UnclassifiedSources(root) {
+  return walkTypeScript(
+    path6.join(root, "src"),
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
+  ).map((file) => relativeTo(root, file)).filter((rel2) => mh07UnitOfRelPath(rel2) === null);
+}
+function classifyDomainDestination(root, importer, specifier, fromUnit, closure) {
+  if (specifier.indexOf(".") !== 0) {
+    const bare = specifier.indexOf("node:") === 0 ? specifier.slice("node:".length) : specifier;
+    const isBuiltin = specifier.indexOf("node:") === 0 || MH07_NODE_BUILTINS.indexOf(bare) !== -1;
+    return {
+      destination_class: isBuiltin ? "node_builtin" : "external_package",
+      imported: null,
+      to_module: null
+    };
+  }
+  const resolved = resolveRelative(importer, specifier);
+  const rel2 = relativeTo(root, resolved);
+  if (rel2.indexOf("..") === 0 || path6.isAbsolute(rel2)) {
+    return { destination_class: "unclassified", imported: rel2, to_module: null };
+  }
+  if (MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes.some((suffix) => rel2.endsWith(suffix)) || rel2.split("/").some((segment) => MH07_DOMAIN_GRAPH_SCOPE.excluded_directories.indexOf(segment) !== -1)) {
+    return { destination_class: "unclassified", imported: rel2, to_module: null };
+  }
+  const head = rel2.split("/")[0];
+  if (MH07_HOST_FACING_ROOTS.indexOf(head) !== -1) {
+    return { destination_class: "host_facing_mirror", imported: rel2, to_module: head };
+  }
+  const toUnit = mh07UnitOfRelPath(rel2);
+  if (toUnit === null) {
+    return { destination_class: "unclassified", imported: rel2, to_module: null };
+  }
+  let isClosureMember = closure.has(rel2);
+  if (!isClosureMember && rel2.endsWith(".json")) {
+    try {
+      const entry = fs4.lstatSync(resolved);
+      isClosureMember = entry.isFile() && !entry.isSymbolicLink();
+    } catch {
+      isClosureMember = false;
+    }
+  }
+  if (!isClosureMember) {
+    return { destination_class: "unclassified", imported: rel2, to_module: null };
+  }
+  if (toUnit === fromUnit) {
+    return { destination_class: "intra_module", imported: rel2, to_module: toUnit };
+  }
+  const isPublic = rel2 === `${toUnit}/index.ts`;
+  return {
+    destination_class: isPublic ? "module_public_index" : "module_private",
+    imported: rel2,
+    to_module: toUnit
+  };
+}
+function mh07ScanDomainDependencyGraph(root, extract) {
+  const nodes = [];
+  const edges = [];
+  const unresolved2 = [];
+  const ambient = [];
+  const unitFiles = /* @__PURE__ */ new Map();
+  const closure = /* @__PURE__ */ new Set();
+  for (const unit of Object.keys(MH07_DOMAIN_TREE_ROLES)) {
+    const files = walkTypeScript(
+      path6.join(root, unit),
+      MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
+      MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
+    );
+    unitFiles.set(unit, files);
+    for (const file of files) closure.add(relativeTo(root, file));
+  }
+  for (const unit of Object.keys(MH07_DOMAIN_TREE_ROLES)) {
+    const files = unitFiles.get(unit) ?? [];
+    for (const file of files) {
+      const rel2 = relativeTo(root, file);
+      nodes.push(rel2);
+      const extracted = extract(fs4.readFileSync(file, "utf8"));
+      for (const edge of extracted) {
+        if (edge.kind === "unresolved") {
+          const detail = edge.detail ?? "";
+          if (edge.form === "require" && detail.indexOf("require used as a value") === 0) {
+            ambient.push({ importer: rel2, detail });
+          } else {
+            unresolved2.push({ importer: rel2, form: edge.form, detail });
+          }
+          continue;
+        }
+        const specifier = edge.specifier ?? "";
+        const classified = classifyDomainDestination(root, file, specifier, unit, closure);
+        edges.push({
+          importer: rel2,
+          specifier,
+          form: edge.form,
+          imported: classified.imported,
+          destination_class: classified.destination_class,
+          from_module: unit,
+          to_module: classified.to_module
+        });
+      }
+    }
+  }
+  return neutralFreeze({
+    node_count: nodes.length,
+    edge_count: edges.length,
+    nodes: nodes.sort(),
+    edges,
+    unresolved: unresolved2,
+    ambient_uses: ambient
+  });
 }
 function toPosix(value) {
   return value.split(path6.sep).join("/");
@@ -9948,6 +10074,7 @@ function relativeTo(root, target) {
 function resolveRelative(importer, specifier) {
   const base = path6.resolve(path6.dirname(importer), specifier);
   const candidates = [base, `${base}.ts`, path6.join(base, "index.ts")];
+  if (base.endsWith(".js")) candidates.push(`${base.slice(0, -3)}.ts`);
   return candidates.find((candidate) => fs4.existsSync(candidate) && fs4.statSync(candidate).isFile()) ?? base;
 }
 function moduleIdOfPath(root, target, moduleIds) {
@@ -9994,6 +10121,9 @@ function classifyDestination(root, importer, specifier, fromModule, moduleIds) {
   };
 }
 function mh07ScanDependencyGraph(root, extract = extractNeutralImportEdges, moduleIdsOverride) {
+  if (mh07IsDomainsShape(root)) {
+    return mh07ScanDomainDependencyGraph(root, extract);
+  }
   const modulesDir = path6.join(root, "src", "modules");
   const moduleIds = moduleIdsOverride ?? (fs4.existsSync(modulesDir) ? fs4.readdirSync(modulesDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort() : []);
   const files = walkTypeScript(modulesDir, MH07_GRAPH_SCOPE.excluded_directories);
@@ -10304,20 +10434,28 @@ function evaluateNeutralModuleBoundaries(request) {
   const moduleIds = moduleIdsOf(manifests);
   const ownership = port.validateModuleOwnership(emptyModuleInventory(), manifests);
   const boundaries = port.validateModuleBoundaries(root, manifests);
-  const health = port.validateModuleHealth(root, manifests);
+  const domainsShape = mh07IsDomainsShape(root);
+  const health = domainsShape ? port.validateModuleHealth(
+    root,
+    manifests,
+    (moduleId) => MH07_MODULE_FOLD_INDEX[moduleId] ?? `src/domains/${moduleId}/index.ts`
+  ) : port.validateModuleHealth(root, manifests);
   const graph = mh07ScanDependencyGraph(root, port.extractNeutralImportEdges, moduleIds);
-  const roleOf = (moduleId) => moduleId === null ? null : MH07_MODULE_ROLES[moduleId] ?? null;
-  const unclassifiedModules = moduleIds.filter((id) => roleOf(id) === null);
-  const modulesWithRole = (role) => moduleIds.filter((id) => roleOf(id) === role);
+  const roleOf = (unit) => unit === null ? null : (domainsShape ? MH07_DOMAIN_TREE_ROLES[unit] : MH07_MODULE_ROLES[unit]) ?? null;
+  const classifiedUnits = domainsShape ? Object.keys(MH07_DOMAIN_TREE_ROLES) : moduleIds;
+  const unclassifiedModules = domainsShape ? moduleIds.filter((id) => MH07_MODULE_FOLD_INDEX[id] === void 0) : moduleIds.filter((id) => roleOf(id) === null);
+  const unclassifiedSources = domainsShape ? mh07UnclassifiedSources(root) : [];
+  const modulesWithRole = (role) => classifiedUnits.filter((unit) => roleOf(unit) === role);
   const coreModules = modulesWithRole("neutral_core");
   const adapterModules = modulesWithRole("host_adapter");
   const transportModules = modulesWithRole("execution_transport");
   const serviceModules = modulesWithRole("service");
-  const nonAdapterModules = moduleIds.filter((id) => roleOf(id) !== "host_adapter");
-  const sourcesOf = (moduleId) => walkTypeScript(
-    path6.join(root, "src", "modules", moduleId),
-    MH07_GRAPH_SCOPE.excluded_directories
-  ).map((file) => ({ path: relativeTo(root, file), source: fs4.readFileSync(file, "utf8") }));
+  const nonAdapterModules = classifiedUnits.filter((unit) => roleOf(unit) !== "host_adapter");
+  const sourcesOf = (unit) => (domainsShape ? walkTypeScript(
+    path6.join(root, unit),
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
+  ) : walkTypeScript(path6.join(root, "src", "modules", unit), MH07_GRAPH_SCOPE.excluded_directories)).map((file) => ({ path: relativeTo(root, file), source: fs4.readFileSync(file, "utf8") }));
   const declaredSymbolFindings = (moduleIdsToScan, symbols) => {
     const findings = [];
     for (const moduleId of moduleIdsToScan) {
@@ -10331,8 +10469,15 @@ function evaluateNeutralModuleBoundaries(request) {
     }
     return findings;
   };
-  const violationsFrom = (moduleIdsToScan) => boundaries.violations.filter(
-    (violation) => moduleIdsToScan.indexOf(violation.from_module) !== -1
+  const domainViolations = domainsShape ? graph.edges.filter((edge) => edge.destination_class === "module_private").map((edge) => ({
+    importer: edge.importer,
+    imported: edge.imported ?? "",
+    from_module: edge.from_module,
+    to_module: edge.to_module ?? "",
+    reason: `cross-module imports must target ${edge.to_module ?? "the destination"}/index.ts`
+  })) : [];
+  const violationsFrom = (unitsToScan) => (domainsShape ? domainViolations : boundaries.violations).filter(
+    (violation) => unitsToScan.indexOf(violation.from_module) !== -1
   );
   const hostFacingEdgesFrom = (moduleIdsToScan) => graph.edges.filter(
     (edge) => edge.destination_class === "host_facing_mirror" && moduleIdsToScan.indexOf(edge.from_module) !== -1
@@ -10341,7 +10486,7 @@ function evaluateNeutralModuleBoundaries(request) {
   const coreFiles = [];
   const missingCoreMembers = [];
   for (const member of NEUTRAL_CORE_MEMBERS) {
-    const memberPath = coreHostModule === null ? null : path6.join(root, "src", "modules", coreHostModule, "workflows", member);
+    const memberPath = coreHostModule === null ? null : domainsShape ? path6.join(root, coreHostModule, member) : path6.join(root, "src", "modules", coreHostModule, "workflows", member);
     if (memberPath === null || !fs4.existsSync(memberPath)) {
       missingCoreMembers.push(member);
       continue;
@@ -10352,7 +10497,7 @@ function evaluateNeutralModuleBoundaries(request) {
   const unclassifiedEdges = graph.edges.filter(
     (edge) => edge.destination_class === "unclassified"
   );
-  const mod001Satisfied = coreVerdict !== null && coreVerdict.disposition === "succeeded" && unclassifiedModules.length === 0 && unclassifiedEdges.length === 0 && graph.unresolved.length === 0 && graph.node_count > 0 && graph.edge_count > 0 && health.ok && ownership.ok;
+  const mod001Satisfied = coreVerdict !== null && coreVerdict.disposition === "succeeded" && unclassifiedModules.length === 0 && unclassifiedSources.length === 0 && unclassifiedEdges.length === 0 && graph.unresolved.length === 0 && graph.node_count > 0 && graph.edge_count > 0 && health.ok && ownership.ok;
   const adapterViolations = violationsFrom(adapterModules);
   const adapterPolicyOwners = declaredSymbolFindings(
     adapterModules,
@@ -10389,8 +10534,8 @@ function evaluateNeutralModuleBoundaries(request) {
       (edge) => edge.from_module === moduleId && edge.destination_class === "module_public_index" && MH07_HOST_FACING_CONTRACT_ROLES.indexOf(roleOf(edge.to_module) ?? "") !== -1
     )
   );
-  const contractConsumersWithoutVersion = contractConsumerServices.filter((moduleId) => {
-    const indexPath = path6.join(root, "src", "modules", moduleId, "index.ts");
+  const contractConsumersWithoutVersion = contractConsumerServices.filter((unit) => {
+    const indexPath = domainsShape ? path6.join(root, unit, "index.ts") : path6.join(root, "src", "modules", unit, "index.ts");
     if (!fs4.existsSync(indexPath)) return true;
     return fs4.readFileSync(indexPath, "utf8").indexOf(MODULE_PUBLIC_API_DECLARATION) === -1;
   });
@@ -10421,12 +10566,14 @@ function evaluateNeutralModuleBoundaries(request) {
     edge_count: graph.edge_count,
     scanner_version: MH07_SCANNER_VERSION,
     evaluator_version: MH07_EVALUATOR_VERSION,
-    graph_scope_excluded_directories: [...MH07_GRAPH_SCOPE.excluded_directories],
+    tree_model: domainsShape ? "domains" : "modules",
+    graph_scope_excluded_directories: domainsShape ? [...MH07_DOMAIN_GRAPH_SCOPE.excluded_directories] : [...MH07_GRAPH_SCOPE.excluded_directories],
+    graph_scope_excluded_file_suffixes: domainsShape ? [...MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes] : [],
     consumer_scope_excluded_directories: [...MH07_CONSUMER_SCAN_EXCLUDED_DIRECTORIES],
     consumer_roots_scanned: consumerNames,
     core_members: [...NEUTRAL_CORE_MEMBERS],
     core_host_module: coreHostModule,
-    role_registry_digest: digestOf(MH07_MODULE_ROLES)
+    role_registry_digest: digestOf(domainsShape ? MH07_DOMAIN_TREE_ROLES : MH07_MODULE_ROLES)
   };
   const observations = {
     "MHRC-MOD-001": {
@@ -10436,6 +10583,7 @@ function evaluateNeutralModuleBoundaries(request) {
       missing_core_members: missingCoreMembers,
       forbidden_edges: coreVerdict === null ? null : coreVerdict.facts.forbidden_edges,
       unclassified_modules: unclassifiedModules,
+      unclassified_sources: unclassifiedSources,
       unclassified_edges: unclassifiedEdges,
       unresolved_edges: graph.unresolved,
       ambient_uses: graph.ambient_uses,
@@ -10528,7 +10676,7 @@ function evaluateNeutralModuleBoundaries(request) {
     packet: neutralFreeze(packetRecord)
   };
 }
-var fs4, path6, MH07_OWNER_KEY, MH07_SCENARIO_IDS, MH07_PACKET_SCHEMA, MH07_EVIDENCE_PROFILE_ID, MH07_EVALUATOR_VERSION, MH07_SCANNER_VERSION, MH07_GRAPH_SCOPE, MH07_ROLES, MH07_DESTINATION_CLASSES, MH07_EDGE_FORMS, MH07_LIFECYCLE_DECISION_SYMBOLS, MH07_NATIVE_EVENT_BINDING_SYMBOLS, MH07_NODE_BUILTINS, MH07_HOST_FACING_ROOTS, MODULE_PUBLIC_API_DECLARATION, MH07_HOST_FACING_CONTRACT_ROLES, MH07_MODULE_ROLES, MH07_WAVE_OWNER, MH07_SCENARIOS, MH07_EXPECTED_OUTCOME, MH07_PRODUCTION_SCANNER, MH07_REFUSAL_CONTROLS, MH07_REQUIRED_CONSUMERS, MH07_CONSUMER_SCAN_EXCLUDED_DIRECTORIES, DECLARATION_HEADS;
+var fs4, path6, MH07_OWNER_KEY, MH07_SCENARIO_IDS, MH07_PACKET_SCHEMA, MH07_EVIDENCE_PROFILE_ID, MH07_EVALUATOR_VERSION, MH07_SCANNER_VERSION, MH07_GRAPH_SCOPE, MH07_ROLES, MH07_DESTINATION_CLASSES, MH07_EDGE_FORMS, MH07_LIFECYCLE_DECISION_SYMBOLS, MH07_NATIVE_EVENT_BINDING_SYMBOLS, MH07_NODE_BUILTINS, MH07_HOST_FACING_ROOTS, MODULE_PUBLIC_API_DECLARATION, MH07_HOST_FACING_CONTRACT_ROLES, MH07_MODULE_ROLES, MH07_DOMAIN_TREE_ROLES, MH07_DOMAIN_GRAPH_SCOPE, MH07_MODULE_FOLD_INDEX, MH07_WAVE_OWNER, MH07_SCENARIOS, MH07_EXPECTED_OUTCOME, MH07_PRODUCTION_SCANNER, MH07_REFUSAL_CONTROLS, MH07_REQUIRED_CONSUMERS, MH07_CONSUMER_SCAN_EXCLUDED_DIRECTORIES, DECLARATION_HEADS;
 var init_module_boundary_conformance_evaluator = __esm({
   "../src/domains/lifecycle/module-boundary-conformance-evaluator.ts"() {
     fs4 = __toESM(require("node:fs"));
@@ -10641,6 +10789,59 @@ var init_module_boundary_conformance_evaluator = __esm({
       review: "service",
       specialists: "service",
       telemetry: "service"
+    });
+    MH07_DOMAIN_TREE_ROLES = Object.freeze({
+      "src/domains/lifecycle": "neutral_core",
+      "src/adapters": "host_adapter",
+      "src/runtime": "host_adapter",
+      "src/domains/dispatch": "execution_transport",
+      "src/domains/config": "substrate",
+      "src/domains/kernel": "substrate",
+      "src/domains/security": "substrate",
+      "src/domains/state": "substrate",
+      "src/domains/teams": "substrate",
+      "src/domains/distribution": "service",
+      "src/domains/evolve": "service",
+      "src/domains/knowledge": "service",
+      "src/domains/review": "service",
+      "src/domains/telemetry": "service"
+    });
+    MH07_DOMAIN_GRAPH_SCOPE = Object.freeze({
+      excluded_directories: Object.freeze(["resources", "__tests__"]),
+      excluded_file_suffixes: Object.freeze([".test.ts"])
+    });
+    MH07_MODULE_FOLD_INDEX = Object.freeze({
+      kernel: "src/domains/kernel/index.ts",
+      state: "src/domains/state/index.ts",
+      migrations: "src/domains/state/index.ts",
+      workspace: "src/domains/state/index.ts",
+      security: "src/domains/security/index.ts",
+      config: "src/domains/config/index.ts",
+      capability: "src/domains/config/index.ts",
+      prompting: "src/domains/config/index.ts",
+      lifecycle: "src/domains/lifecycle/index.ts",
+      initiatives: "src/domains/lifecycle/index.ts",
+      operations: "src/domains/lifecycle/index.ts",
+      loops: "src/domains/lifecycle/index.ts",
+      intake: "src/domains/lifecycle/index.ts",
+      documents: "src/domains/lifecycle/index.ts",
+      knowledge: "src/domains/knowledge/index.ts",
+      context: "src/domains/knowledge/index.ts",
+      learning: "src/domains/knowledge/index.ts",
+      teams: "src/domains/teams/index.ts",
+      specialists: "src/domains/teams/index.ts",
+      templates: "src/domains/teams/index.ts",
+      dispatch: "src/domains/dispatch/index.ts",
+      communication: "src/domains/dispatch/index.ts",
+      review: "src/domains/review/index.ts",
+      quality: "src/domains/review/index.ts",
+      evolution: "src/domains/evolve/index.ts",
+      evals: "src/domains/evolve/index.ts",
+      telemetry: "src/domains/telemetry/index.ts",
+      dashboard: "src/domains/telemetry/index.ts",
+      distribution: "src/domains/distribution/index.ts",
+      "docs-sync": "src/domains/distribution/index.ts",
+      "host-runtime": "src/adapters/index.ts"
     });
     MH07_WAVE_OWNER = Object.freeze({
       wave_id: "W4",
@@ -43547,6 +43748,7 @@ __export(evolve_exports, {
   HUMAN_ONLY_TARGETS: () => HUMAN_ONLY_TARGETS,
   LEARNING_CANDIDATE_SCHEMA: () => LEARNING_CANDIDATE_SCHEMA,
   LEARNING_CANDIDATE_TYPES: () => LEARNING_CANDIDATE_TYPES,
+  MODULE_PUBLIC_API_VERSION: () => MODULE_PUBLIC_API_VERSION3,
   TASK_CELL_POLICY_EVAL_OBSERVATION_SCHEMA: () => TASK_CELL_POLICY_EVAL_OBSERVATION_SCHEMA,
   TASK_GROUP_SCHEMA_VERSION: () => TASK_GROUP_SCHEMA_VERSION,
   TASK_GROUP_V1_EXAMPLE: () => TASK_GROUP_V1_EXAMPLE,
@@ -43608,6 +43810,7 @@ __export(evolve_exports, {
   validateGoalV1: () => validateGoalV12,
   validateTaskGroupV1: () => validateTaskGroupV1
 });
+var MODULE_PUBLIC_API_VERSION3;
 var init_evolve = __esm({
   "../src/domains/evolve/index.ts"() {
     init_define_schema();
@@ -43621,6 +43824,7 @@ var init_evolve = __esm({
     init_learning_candidate();
     init_learning_signatures();
     init_define_schema();
+    MODULE_PUBLIC_API_VERSION3 = "guild.module.public-api.v1";
   }
 });
 
@@ -49076,11 +49280,14 @@ __export(lifecycle_exports, {
   MAX_OBJECT_KEYS: () => MAX_OBJECT_KEYS,
   MAX_STRING_LENGTH: () => MAX_STRING_LENGTH,
   MH07_DESTINATION_CLASSES: () => MH07_DESTINATION_CLASSES,
+  MH07_DOMAIN_GRAPH_SCOPE: () => MH07_DOMAIN_GRAPH_SCOPE,
+  MH07_DOMAIN_TREE_ROLES: () => MH07_DOMAIN_TREE_ROLES,
   MH07_EDGE_FORMS: () => MH07_EDGE_FORMS,
   MH07_EVALUATOR_VERSION: () => MH07_EVALUATOR_VERSION,
   MH07_EVIDENCE_PROFILE_ID: () => MH07_EVIDENCE_PROFILE_ID,
   MH07_GRAPH_SCOPE: () => MH07_GRAPH_SCOPE,
   MH07_LIFECYCLE_DECISION_SYMBOLS: () => MH07_LIFECYCLE_DECISION_SYMBOLS,
+  MH07_MODULE_FOLD_INDEX: () => MH07_MODULE_FOLD_INDEX,
   MH07_MODULE_ROLES: () => MH07_MODULE_ROLES,
   MH07_NATIVE_EVENT_BINDING_SYMBOLS: () => MH07_NATIVE_EVENT_BINDING_SYMBOLS,
   MH07_OWNER_KEY: () => MH07_OWNER_KEY,
@@ -49346,6 +49553,7 @@ __export(lifecycle_exports, {
   markLaneDeadFromArgs: () => markLaneDeadFromArgs,
   markLaneInProgress: () => markLaneInProgress,
   mh07ScanDependencyGraph: () => mh07ScanDependencyGraph,
+  mh07UnclassifiedSources: () => mh07UnclassifiedSources,
   migrateDocumentRecord: () => migrateDocumentRecord,
   mintRunBinding: () => mintRunBinding,
   neutralAdmissionContextSemanticView: () => neutralAdmissionContextSemanticView,
@@ -49562,6 +49770,7 @@ __export(activated_host_conformance_exports, {
   ACTIVATED_HOST_WORKER_SCHEMA: () => ACTIVATED_HOST_WORKER_SCHEMA,
   CODEX_PROBE_SKILL_NAME: () => CODEX_PROBE_SKILL_NAME,
   CODEX_PROBE_SKILL_PATH: () => CODEX_PROBE_SKILL_PATH,
+  PLUGIN_SOURCE_REPOSITORY: () => PLUGIN_SOURCE_REPOSITORY,
   activatedConsumerRoots: () => activatedConsumerRoots,
   activatedHostCaptureId: () => activatedHostCaptureId,
   captureActivatedHostConformance: () => captureActivatedHostConformance,
@@ -49582,7 +49791,10 @@ __export(activated_host_conformance_exports, {
   snapshotConsumerContentTree: () => snapshotConsumerContentTree,
   snapshotHostExecutable: () => snapshotHostExecutable,
   snapshotOfficialConsumerGitTree: () => snapshotOfficialConsumerGitTree,
+  snapshotOfficialPluginSourceGitTree: () => snapshotOfficialPluginSourceGitTree,
+  snapshotPluginSourceContentTree: () => snapshotPluginSourceContentTree,
   spawnOpenExecutable: () => spawnOpenExecutable,
+  validPluginSourceIdentity: () => validPluginSourceIdentity,
   verifyActivatedHostConformanceReceipt: () => verifyActivatedHostConformanceReceipt,
   verifyActivatedHostPublicEvidence: () => verifyActivatedHostPublicEvidence,
   verifyAttestedGeneratedRuntimePackage: () => verifyAttestedGeneratedRuntimePackage
@@ -53016,6 +53228,81 @@ function validConsumerTreeIdentity(value, expectedName) {
 function validConsumerTreeSet(value) {
   return isRecord7(value) && exactKeys2(value, CONSUMER_NAMES) && CONSUMER_NAMES.every((name) => validConsumerTreeIdentity(value[name], name));
 }
+var PLUGIN_SOURCE_REPOSITORY = "github.com/lookatitude/guild";
+function snapshotPluginSourceContentTree(root) {
+  const physicalRoot = fs77.realpathSync(root);
+  const entries = [];
+  const visit = (directory, prefix) => {
+    for (const entry of fs77.readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
+      const relative20 = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
+      const absolute = path91.join(directory, entry.name);
+      if (entry.isSymbolicLink()) throw new Error(`source twin contains a symlink: ${relative20}`);
+      if (entry.isDirectory()) visit(absolute, relative20);
+      else if (entry.isFile()) entries.push({ path: relative20, sha256: sha256Hex3(readRegularNoFollow(absolute, `source twin file ${relative20}`)) });
+      else throw new Error(`source twin contains a non-regular entry: ${relative20}`);
+      if (entries.length > 1e5) throw new Error("source twin exceeds the bounded file count");
+    }
+  };
+  visit(physicalRoot, "");
+  if (entries.length === 0) throw new Error("source twin is empty");
+  entries.sort((left, right) => left.path.localeCompare(right.path));
+  return Object.freeze({ content_tree_sha256: sha256Hex3(canonical2(entries)), file_count: entries.length });
+}
+function validPluginSourceIdentity(value) {
+  return isRecord7(value) && exactKeys2(value, ["schema_version", "repository", "source_commit", "source_tree", "content_tree_sha256", "file_count"]) && value.schema_version === "guild.plugin_source_identity.v1" && value.repository === PLUGIN_SOURCE_REPOSITORY && typeof value.source_commit === "string" && COMMIT2.test(value.source_commit) && typeof value.source_tree === "string" && COMMIT2.test(value.source_tree) && typeof value.content_tree_sha256 === "string" && SHA2562.test(value.content_tree_sha256) && typeof value.file_count === "number" && Number.isSafeInteger(value.file_count) && value.file_count > 0 && value.file_count <= 1e5;
+}
+function snapshotOfficialPluginSourceGitTree(sourceRoot, destination, expectedCommit) {
+  const root = fs77.realpathSync(sourceRoot);
+  let top;
+  let repository;
+  let headCommit;
+  let sourceTree;
+  let objectFormat;
+  let rows;
+  try {
+    top = fs77.realpathSync(gitText(root, ["--no-replace-objects", "rev-parse", "--show-toplevel"]));
+    repository = normalizedGitHubRepository(gitText(root, ["--no-replace-objects", "remote", "get-url", "origin"]));
+    headCommit = gitText(root, ["--no-replace-objects", "rev-parse", `${expectedCommit}^{commit}`]);
+    sourceTree = gitText(root, ["--no-replace-objects", "rev-parse", `${expectedCommit}^{tree}`]);
+    objectFormat = gitText(root, ["--no-replace-objects", "rev-parse", "--show-object-format"]);
+    rows = (0, import_node_child_process4.execFileSync)("git", ["-C", root, "--no-replace-objects", "ls-tree", "-r", "-z", "--full-tree", expectedCommit, "--", "src"], { maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] }).toString("utf8").split("\0").filter(Boolean);
+  } catch (error) {
+    throw new Error(`plugin source must be an official Git worktree holding the attested commit: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (top !== root) throw new Error("plugin source root must be the Git worktree root");
+  if (repository !== PLUGIN_SOURCE_REPOSITORY) throw new Error(`plugin source origin is not ${PLUGIN_SOURCE_REPOSITORY}`);
+  if (headCommit !== expectedCommit || !COMMIT2.test(headCommit) || !COMMIT2.test(sourceTree) || objectFormat !== "sha1" && objectFormat !== "sha256") {
+    throw new Error("plugin source Git identity does not resolve the attested source commit");
+  }
+  if (hasPathEntryNoFollow(destination)) throw new Error("plugin source staging destination already exists");
+  fs77.mkdirSync(destination, { recursive: true, mode: 448 });
+  const contentEntries = [];
+  for (const row of rows) {
+    const match = /^(\d{6}) (\S+) ([0-9a-f]+)\t(.+)$/.exec(row);
+    if (match === null) throw new Error("plugin source Git tree entry is malformed");
+    const [, mode, type, oid, relative20] = match;
+    if (type !== "blob" || mode !== "100644" && mode !== "100755") throw new Error(`plugin source Git tree contains an unsupported entry: ${relative20}`);
+    const bytes = (0, import_node_child_process4.execFileSync)("git", ["-C", root, "--no-replace-objects", "show", `${expectedCommit}:${relative20}`], { maxBuffer: 256 * 1024 * 1024 });
+    if (gitBlobOid(bytes, objectFormat) !== oid) throw new Error(`plugin source Git object bytes do not match ${relative20}`);
+    const target = path91.join(destination, ...relative20.split("/"));
+    fs77.mkdirSync(path91.dirname(target), { recursive: true, mode: 448 });
+    fs77.writeFileSync(target, bytes, { flag: "wx", mode: mode === "100755" ? 320 : 256 });
+    contentEntries.push({ path: relative20, sha256: sha256Hex3(bytes) });
+  }
+  if (contentEntries.length === 0) throw new Error("plugin source Git tree has no in-scope files");
+  contentEntries.sort((left, right) => left.path.localeCompare(right.path));
+  const content = snapshotPluginSourceContentTree(destination);
+  const expectedHash = sha256Hex3(canonical2(contentEntries));
+  if (content.content_tree_sha256 !== expectedHash || content.file_count !== contentEntries.length) throw new Error("staged plugin source bytes differ from Git");
+  return Object.freeze({
+    schema_version: "guild.plugin_source_identity.v1",
+    repository: PLUGIN_SOURCE_REPOSITORY,
+    source_commit: expectedCommit,
+    source_tree: sourceTree,
+    content_tree_sha256: expectedHash,
+    file_count: contentEntries.length
+  });
+}
 function assertConsumerTreeMatches(root, identity) {
   const content = snapshotConsumerContentTree(root);
   if (content.content_tree_sha256 !== identity.content_tree_sha256 || content.file_count !== identity.file_count) {
@@ -53659,10 +53946,14 @@ function captureActivatedHostConformance(options) {
     openedHostExecutable = openHostExecutable(options.hostId, process.env, stageRoot);
     const hostExecutable = openedHostExecutable.identity;
     const hostVersion = probeHostVersion(options.hostId, openedHostExecutable);
-    const stagedPlugin = path91.join(stageRoot, "plugin");
-    const stagedWebsite = path91.join(stageRoot, "website");
-    const stagedBenchmark = path91.join(stageRoot, "benchmark");
+    const stagedPlugin = path91.join(stageRoot, "activated-package");
+    const boundaryWorkspace = path91.join(stageRoot, "boundary");
+    fs77.mkdirSync(boundaryWorkspace, { recursive: true, mode: 448 });
+    const stagedWebsite = path91.join(boundaryWorkspace, "website");
+    const stagedBenchmark = path91.join(boundaryWorkspace, "benchmark");
     copyPackageTree(fs77.realpathSync(options.packageRoot), stagedPlugin);
+    const stagedPluginSource = path91.join(boundaryWorkspace, "plugin");
+    const moduleBoundaryIdentity = snapshotOfficialPluginSourceGitTree(options.sourceRoot, stagedPluginSource, options.sourceCommit);
     const consumerIdentities = Object.freeze({
       website: snapshotOfficialConsumerGitTree("website", options.consumerRoots.website, stagedWebsite),
       benchmark: snapshotOfficialConsumerGitTree("benchmark", options.consumerRoots.benchmark, stagedBenchmark)
@@ -53693,6 +53984,10 @@ function captureActivatedHostConformance(options) {
     const consumerIdentitiesPath = path91.join(stageRoot, "consumer-identities.json");
     writeExclusive(consumerIdentitiesPath, `${JSON.stringify(consumerIdentities, null, 2)}
 `, 256);
+    const moduleBoundaryIdentityPath = path91.join(stageRoot, "module-boundary-identity.json");
+    const moduleBoundaryIdentityBytes = `${JSON.stringify(moduleBoundaryIdentity, null, 2)}
+`;
+    writeExclusive(moduleBoundaryIdentityPath, moduleBoundaryIdentityBytes, 256);
     const workerCommand = [
       `${safeToken2(sealedRuntime.nodePath, "sealed node executable")} ${safeToken2(sealedRuntime.workerPath, "sealed worker bundle")} worker`,
       `--host ${safeToken2(options.hostId, "host")}`,
@@ -53706,7 +54001,9 @@ function captureActivatedHostConformance(options) {
       `--release ${safeToken2(options.release, "release")}`,
       `--captured-at ${safeToken2(options.capturedAt, "captured_at")}`,
       `--plugin-root ${safeToken2(prepared.packageRoot, "activated plugin root")}`,
-      `--module-boundary-root ${safeToken2(stagedPlugin, "module-boundary plugin root")}`,
+      `--module-boundary-root ${safeToken2(stagedPluginSource, "module-boundary source root")}`,
+      `--module-boundary-identity ${safeToken2(moduleBoundaryIdentityPath, "module-boundary identity")}`,
+      `--module-boundary-identity-sha256 ${sha256Hex3(moduleBoundaryIdentityBytes)}`,
       `--consumer-root website=${safeToken2(activatedWebsite, "activated website root")}`,
       `--consumer-root benchmark=${safeToken2(activatedBenchmark, "activated benchmark root")}`,
       `--consumer-identities ${safeToken2(consumerIdentitiesPath, "consumer identities")}`,
@@ -53739,7 +54036,11 @@ function captureActivatedHostConformance(options) {
       const diagnostic = containsSensitiveOutput(transcript, prepared.environment, liveSensitiveValues()) ? "transcript withheld" : transcript.slice(-1e3);
       return failed2("worker_output_missing", `${error instanceof Error ? error.message : String(error)}${diagnostic ? `; transcript tail: ${diagnostic}` : ""}`);
     }
-    if (!isRecord7(worker) || !exactKeys2(worker, ["schema_version", "ok", "code", "detail", "marker", "challenge", "host_id", "evidence", "package_snapshot", "host_activation", "consumer_trees"]) || worker.schema_version !== ACTIVATED_HOST_WORKER_SCHEMA || worker.ok !== true || worker.code !== "evaluated" || worker.marker !== marker || worker.challenge !== challenge || worker.host_id !== options.hostId || !isRecord7(worker.evidence) || !isRecord7(worker.package_snapshot) || !validConsumerTreeSet(worker.consumer_trees) || canonical2(worker.consumer_trees) !== canonical2(consumerIdentities) || (options.hostId === "claude-code-cli" ? !isRecord7(worker.host_activation) : worker.host_activation !== null)) return failed2("worker_output_invalid", "worker output is incomplete, mismatched, or overclaims");
+    if (!isRecord7(worker) || !exactKeys2(worker, ["schema_version", "ok", "code", "detail", "marker", "challenge", "host_id", "evidence", "package_snapshot", "host_activation", "consumer_trees", "module_boundary_source"]) || worker.schema_version !== ACTIVATED_HOST_WORKER_SCHEMA || worker.ok !== true || worker.code !== "evaluated" || worker.marker !== marker || worker.challenge !== challenge || worker.host_id !== options.hostId || !isRecord7(worker.evidence) || !isRecord7(worker.package_snapshot) || !validConsumerTreeSet(worker.consumer_trees) || canonical2(worker.consumer_trees) !== canonical2(consumerIdentities) || canonical2(worker.module_boundary_source) !== canonical2(moduleBoundaryIdentity) || (options.hostId === "claude-code-cli" ? !isRecord7(worker.host_activation) : worker.host_activation !== null)) return failed2("worker_output_invalid", "worker output is incomplete, mismatched, or overclaims");
+    const boundaryAfterLaunch = snapshotPluginSourceContentTree(stagedPluginSource);
+    if (boundaryAfterLaunch.content_tree_sha256 !== moduleBoundaryIdentity.content_tree_sha256 || boundaryAfterLaunch.file_count !== moduleBoundaryIdentity.file_count) {
+      return failed2("module_boundary_source_drift", "staged module-boundary source twin changed during host execution");
+    }
     if (canonical2(worker.package_snapshot) !== canonical2(bindingOf(options.expectedPackage))) return failed2("runtime_package_mismatch", "worker did not self-snapshot the exact attested package");
     const hostActivation = options.hostId === "codex-cli" ? codexSkillActivation(options.expectedPackage, prepared.packageRoot) : worker.host_activation;
     const activationCheck = validateHostActivation(hostActivation, options.hostId, options.release, options.capturedAt, options.expectedPackage, prepared.packageRoot);
@@ -53777,6 +54078,7 @@ function captureActivatedHostConformance(options) {
       activated_package_snapshot: worker.package_snapshot,
       host_activation: hostActivation,
       consumer_trees: consumerIdentities,
+      module_boundary_source: moduleBoundaryIdentity,
       external_attestation_verified: false,
       authorizes_promotion: false
     };
@@ -53862,7 +54164,8 @@ function runActivatedConformanceWorker(options) {
     evidence: null,
     packageSnapshot: null,
     hostActivation: null,
-    consumerTrees: null
+    consumerTrees: null,
+    moduleBoundarySource: null
   });
   if (!HOSTS.includes(options.hostId)) return failed2("host_identity_invalid", "worker host is not supported");
   if (!SHA2562.test(options.challenge) || !SHA2562.test(options.packageHash) || !SHA2562.test(options.installSurfaceHash) || !COMMIT2.test(options.sourceCommit)) return failed2("worker_identity_invalid", "worker challenge, package hashes, or source commit is malformed");
@@ -53875,9 +54178,16 @@ function runActivatedConformanceWorker(options) {
     if (packageBefore.tree_sha256 !== options.packageHash) {
       return failed2("runtime_package_mismatch", "worker self-snapshot does not match the expected package hash");
     }
-    const boundaryPackageBefore = snapshotMigrationRuntimePackage(options.moduleBoundaryRoot, options.hostId);
-    if (canonical2(boundaryPackageBefore) !== canonical2(packageBefore)) {
-      return failed2("module_boundary_package_mismatch", "MH-07 package twin does not match the activated runtime package");
+    const boundaryIdentity = options.moduleBoundaryIdentity;
+    if (!validPluginSourceIdentity(boundaryIdentity)) {
+      return failed2("module_boundary_identity_invalid", "MH-07 source twin identity is missing or malformed");
+    }
+    if (boundaryIdentity.source_commit !== options.sourceCommit) {
+      return failed2("module_boundary_identity_invalid", "MH-07 source twin is not bound to the attested source commit");
+    }
+    const boundarySourceBefore = snapshotPluginSourceContentTree(options.moduleBoundaryRoot);
+    if (boundarySourceBefore.content_tree_sha256 !== boundaryIdentity.content_tree_sha256 || boundarySourceBefore.file_count !== boundaryIdentity.file_count) {
+      return failed2("module_boundary_source_mismatch", "MH-07 source twin bytes do not match their Git-bound identity");
     }
     for (const name of CONSUMER_NAMES) {
       const root = options.consumerRoots[name];
@@ -53973,9 +54283,9 @@ function runActivatedConformanceWorker(options) {
     if (canonical2(packageAfter) !== canonical2(packageBefore)) {
       return failed2("runtime_package_drift", "worker package self-snapshot changed during owner evaluation");
     }
-    const boundaryPackageAfter = snapshotMigrationRuntimePackage(options.moduleBoundaryRoot, options.hostId);
-    if (canonical2(boundaryPackageAfter) !== canonical2(boundaryPackageBefore)) {
-      return failed2("module_boundary_package_drift", "MH-07 package twin changed during owner evaluation");
+    const boundarySourceAfter = snapshotPluginSourceContentTree(options.moduleBoundaryRoot);
+    if (canonical2(boundarySourceAfter) !== canonical2(boundarySourceBefore)) {
+      return failed2("module_boundary_source_drift", "MH-07 source twin changed during owner evaluation");
     }
     for (const name of CONSUMER_NAMES) {
       try {
@@ -53992,7 +54302,8 @@ function runActivatedConformanceWorker(options) {
       evidence: result2.evidence,
       packageSnapshot: Object.freeze({ ...bindingOf(packageBefore), install_surface_sha256: options.installSurfaceHash }),
       hostActivation,
-      consumerTrees: options.consumerIdentities
+      consumerTrees: options.consumerIdentities,
+      moduleBoundarySource: boundaryIdentity
     };
   } catch (error) {
     return failed2("owner_evaluation_error", error instanceof Error ? error.message : String(error));
@@ -54133,6 +54444,7 @@ var RECEIPT_KEYS = Object.freeze([
   "activated_package_snapshot",
   "host_activation",
   "consumer_trees",
+  "module_boundary_source",
   "external_attestation_verified",
   "authorizes_promotion"
 ]);
@@ -54168,7 +54480,7 @@ function verifyActivatedHostConformanceReceipt(options) {
   } catch {
     return refusal3("worker_output_invalid", "worker result is not JSON");
   }
-  if (!isRecord7(worker) || !exactKeys2(worker, ["schema_version", "ok", "code", "detail", "marker", "challenge", "host_id", "evidence", "package_snapshot", "host_activation", "consumer_trees"]) || worker.schema_version !== ACTIVATED_HOST_WORKER_SCHEMA || worker.ok !== true || worker.code !== "evaluated" || worker.marker !== markerFor(receipt2.challenge) || worker.challenge !== receipt2.challenge || worker.host_id !== receipt2.host_id || canonical2(worker.evidence) !== canonical2(receipt2.evidence) || canonical2(worker.package_snapshot) !== canonical2(receipt2.activated_package_snapshot) || canonical2(worker.consumer_trees) !== canonical2(receipt2.consumer_trees) || (receipt2.host_id === "claude-code-cli" ? canonical2(worker.host_activation) !== canonical2(receipt2.host_activation) : worker.host_activation !== null)) return refusal3("worker_output_invalid", "worker result does not exactly bind the receipt evidence, package snapshot, consumer trees, and host-specific activation identity");
+  if (!isRecord7(worker) || !exactKeys2(worker, ["schema_version", "ok", "code", "detail", "marker", "challenge", "host_id", "evidence", "package_snapshot", "host_activation", "consumer_trees", "module_boundary_source"]) || worker.schema_version !== ACTIVATED_HOST_WORKER_SCHEMA || worker.ok !== true || worker.code !== "evaluated" || worker.marker !== markerFor(receipt2.challenge) || worker.challenge !== receipt2.challenge || worker.host_id !== receipt2.host_id || canonical2(worker.evidence) !== canonical2(receipt2.evidence) || canonical2(worker.package_snapshot) !== canonical2(receipt2.activated_package_snapshot) || canonical2(worker.consumer_trees) !== canonical2(receipt2.consumer_trees) || !validPluginSourceIdentity(worker.module_boundary_source) || canonical2(worker.module_boundary_source) !== canonical2(receipt2.module_boundary_source) || worker.module_boundary_source.source_commit !== options.expectedSourceCommit || (receipt2.host_id === "claude-code-cli" ? canonical2(worker.host_activation) !== canonical2(receipt2.host_activation) : worker.host_activation !== null)) return refusal3("worker_output_invalid", "worker result does not exactly bind the receipt evidence, package snapshot, consumer trees, source twin identity, and host-specific activation identity");
   if (!isRecord7(receipt2.runtime_package) || canonical2(receipt2.runtime_package) !== canonical2(bindingOf(options.expectedPackage))) return refusal3("runtime_package_mismatch", "receipt runtime binding does not match the attested beta package");
   let actualPackage;
   try {
@@ -54266,7 +54578,7 @@ function assertCliPairs(argv, allowed, label) {
   }
 }
 function runCaptureCli(argv) {
-  assertCliPairs(argv, /* @__PURE__ */ new Set(["--host", "--boundary", "--package-root", "--consumer-root", "--out-dir"]), "capture");
+  assertCliPairs(argv, /* @__PURE__ */ new Set(["--host", "--boundary", "--package-root", "--source-root", "--consumer-root", "--out-dir"]), "capture");
   const hostId = cliValue(argv, "--host");
   if (!HOSTS.includes(hostId)) throw new Error("--host must be claude-code-cli or codex-cli");
   const boundary = loadAttestedMigrationBoundary(path91.resolve(cliValue(argv, "--boundary"))).boundary;
@@ -54274,9 +54586,11 @@ function runCaptureCli(argv) {
   const expectedPackage = boundary.packages[hostId];
   verifyAttestedGeneratedRuntimePackage(packageRoot, expectedPackage);
   const consumers = parseConsumerRoots(cliValues(argv, "--consumer-root"));
+  const sourceRootArg = argv.includes("--source-root") ? cliValue(argv, "--source-root") : path91.resolve(__dirname, "..");
   const result2 = captureActivatedHostConformance({
     hostId,
     packageRoot,
+    sourceRoot: fs77.realpathSync(path91.resolve(sourceRootArg)),
     expectedPackage,
     sourceCommit: boundary.source_commit,
     release: boundary.release,
@@ -54350,6 +54664,8 @@ function runWorkerCli(argv) {
     "--captured-at",
     "--plugin-root",
     "--module-boundary-root",
+    "--module-boundary-identity",
+    "--module-boundary-identity-sha256",
     "--consumer-root",
     "--consumer-identities",
     "--out"
@@ -54360,6 +54676,11 @@ function runWorkerCli(argv) {
   const capturedAt = cliValue(argv, "--captured-at");
   const consumerIdentities = JSON.parse(readRegularNoFollow(path91.resolve(cliValue(argv, "--consumer-identities")), "consumer identities").toString("utf8"));
   if (!validConsumerTreeSet(consumerIdentities)) throw new Error("--consumer-identities must bind the official website and benchmark trees");
+  const moduleBoundaryIdentityBytes = readRegularNoFollow(path91.resolve(cliValue(argv, "--module-boundary-identity")), "module-boundary identity");
+  if (argv.includes("--module-boundary-identity-sha256") && sha256Hex3(moduleBoundaryIdentityBytes) !== cliValue(argv, "--module-boundary-identity-sha256")) {
+    throw new Error("--module-boundary-identity bytes do not hash to the command-bound digest");
+  }
+  const moduleBoundaryIdentity = JSON.parse(moduleBoundaryIdentityBytes.toString("utf8"));
   const result2 = runActivatedConformanceWorker({
     hostId,
     challenge,
@@ -54373,6 +54694,7 @@ function runWorkerCli(argv) {
     capturedAt,
     pluginRoot: cliValue(argv, "--plugin-root"),
     moduleBoundaryRoot: cliValue(argv, "--module-boundary-root"),
+    moduleBoundaryIdentity,
     consumerRoots: parseConsumerRoots(cliValues(argv, "--consumer-root")),
     consumerIdentities
   });
@@ -54392,7 +54714,8 @@ function runWorkerCli(argv) {
     evidence: result2.evidence,
     package_snapshot: result2.packageSnapshot,
     host_activation: result2.hostActivation,
-    consumer_trees: result2.consumerTrees
+    consumer_trees: result2.consumerTrees,
+    module_boundary_source: result2.moduleBoundarySource
   };
   const bytes = `${JSON.stringify(payload, null, 2)}
 `;
@@ -54440,6 +54763,7 @@ if (require.main === module) main6();
   ACTIVATED_HOST_WORKER_SCHEMA,
   CODEX_PROBE_SKILL_NAME,
   CODEX_PROBE_SKILL_PATH,
+  PLUGIN_SOURCE_REPOSITORY,
   activatedConsumerRoots,
   activatedHostCaptureId,
   captureActivatedHostConformance,
@@ -54460,7 +54784,10 @@ if (require.main === module) main6();
   snapshotConsumerContentTree,
   snapshotHostExecutable,
   snapshotOfficialConsumerGitTree,
+  snapshotOfficialPluginSourceGitTree,
+  snapshotPluginSourceContentTree,
   spawnOpenExecutable,
+  validPluginSourceIdentity,
   verifyActivatedHostConformanceReceipt,
   verifyActivatedHostPublicEvidence,
   verifyAttestedGeneratedRuntimePackage

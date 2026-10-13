@@ -3259,6 +3259,7 @@ var OWNED_INVENTORY_CATEGORIES = Object.freeze([
 ]);
 
 // src/domains/kernel/yaml-loader.ts
+var import_node_module = require("node:module");
 var path5 = __toESM(require("node:path"));
 
 // src/domains/kernel/plugin-root.ts
@@ -3292,7 +3293,8 @@ function pluginLocalScriptsRoots() {
 }
 function tryScriptsRoot(scriptsRoot) {
   try {
-    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
+    const requireFrom = (0, import_node_module.createRequire)(path5.join(scriptsRoot, "package.json"));
+    return requireFrom("js-yaml");
   } catch {
     return null;
   }
