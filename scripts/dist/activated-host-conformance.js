@@ -49414,9 +49414,12 @@ __export(activated_host_conformance_exports, {
   ACTIVATED_HOST_PUBLIC_EVIDENCE_SCHEMA: () => ACTIVATED_HOST_PUBLIC_EVIDENCE_SCHEMA,
   ACTIVATED_HOST_PUBLIC_MANIFEST_SCHEMA: () => ACTIVATED_HOST_PUBLIC_MANIFEST_SCHEMA,
   ACTIVATED_HOST_WORKER_SCHEMA: () => ACTIVATED_HOST_WORKER_SCHEMA,
+  CODEX_PROBE_SKILL_NAME: () => CODEX_PROBE_SKILL_NAME,
+  CODEX_PROBE_SKILL_PATH: () => CODEX_PROBE_SKILL_PATH,
   activatedConsumerRoots: () => activatedConsumerRoots,
   activatedHostCaptureId: () => activatedHostCaptureId,
   captureActivatedHostConformance: () => captureActivatedHostConformance,
+  claudeEnvironment: () => claudeEnvironment,
   codexExecutionWorkspace: () => codexExecutionWorkspace,
   containsSensitiveOutput: () => containsSensitiveOutput,
   isolatedCodexEnvironment: () => isolatedCodexEnvironment,
@@ -52343,8 +52346,8 @@ var COMMIT2 = /^[0-9a-f]{40}$/;
 var UTC_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 var SESSION_ID = /^[0-9a-f-]{16,64}$/;
 var HOSTS = Object.freeze(["claude-code-cli", "codex-cli"]);
-var CODEX_PROBE_SKILL_NAME = "guild:guild-verify-done";
-var CODEX_PROBE_SKILL_PATH = ".agents/skills/guild/meta/verify-done/SKILL.md";
+var CODEX_PROBE_SKILL_NAME = "guild:guild-quality";
+var CODEX_PROBE_SKILL_PATH = ".agents/skills/guild/quality/SKILL.md";
 var CONSUMER_NAMES = Object.freeze(["website", "benchmark"]);
 var CONSUMER_REPOSITORIES = Object.freeze({
   website: "github.com/lookatitude/guild-website",
@@ -52529,7 +52532,7 @@ var INSTALL_RECEIPT_KEYS = Object.freeze([
   "channel_confidence"
 ]);
 function expectedActivationChannel(release) {
-  return /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(release) ? { channel: "beta", ref: "next", confidence: "version-derived" } : { channel: "stable", ref: "main", confidence: "assumed-default" };
+  return /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(release) ? { channel: "beta", ref: "next", confidence: "launcher-declared" } : { channel: "stable", ref: "main", confidence: "assumed-default" };
 }
 function codexSkillActivation(expectedPackage, packageRoot) {
   const skill = expectedPackage.files.find((entry) => entry.path === CODEX_PROBE_SKILL_PATH);
@@ -53342,6 +53345,9 @@ function hostEnvironment(overrides = {}, source = process.env) {
   for (const key of HOST_ENVIRONMENT_KEYS) if (source[key] !== void 0) env[key] = source[key];
   return { ...env, ...overrides };
 }
+function claudeEnvironment(release, source = process.env) {
+  return hostEnvironment(expectedActivationChannel(release).channel === "beta" ? { GUILD_ACTIVATION_CHANNEL: "beta" } : {}, source);
+}
 function isolatedCodexEnvironment(stageRoot, codexHome, installedRoot, source = process.env) {
   const isolatedHome = path91.join(stageRoot, "isolated-home");
   const xdgRoot = path91.join(stageRoot, "xdg");
@@ -53520,7 +53526,7 @@ function captureActivatedHostConformance(options) {
     } catch (error) {
       return failed2("staged_package_mismatch", error instanceof Error ? error.message : String(error));
     }
-    const prepared = options.hostId === "codex-cli" ? prepareCodexActivation(stageRoot, stagedPlugin, options.expectedPackage, options.release, openedHostExecutable) : { packageRoot: fs77.realpathSync(stagedPlugin), environment: hostEnvironment(), transcriptPrefix: "", sensitiveValues: [], sensitivePath: null, sensitiveIdentity: null };
+    const prepared = options.hostId === "codex-cli" ? prepareCodexActivation(stageRoot, stagedPlugin, options.expectedPackage, options.release, openedHostExecutable) : { packageRoot: fs77.realpathSync(stagedPlugin), environment: claudeEnvironment(options.release), transcriptPrefix: "", sensitiveValues: [], sensitivePath: null, sensitiveIdentity: null };
     const liveSensitiveValues = () => refreshSensitiveJsonValues(prepared.sensitivePath, prepared.sensitiveValues);
     try {
       verifyAttestedGeneratedRuntimePackage(prepared.packageRoot, options.expectedPackage);
@@ -53872,7 +53878,8 @@ function verifyCodexTranscript(rows, receipt2) {
       }
       if (item.type === "agent_message") {
         const declaration = isRecord7(receipt2.host_activation) ? receipt2.host_activation.declaration : null;
-        if (item.text === declaration && skillProbeCount === 0) {
+        if (typeof declaration === "string" && (item.text === declaration || item.text === `${declaration}
+`) && skillProbeCount === 0) {
           if (threadCount !== 1 || turnStarted !== 1 || commandId !== null || commandCompleted !== 0) {
             return refusal3("host_activation_unproven", "Codex model-visible Guild skill declaration is outside the started thread/turn");
           }
@@ -54223,9 +54230,12 @@ if (require.main === module) main6();
   ACTIVATED_HOST_PUBLIC_EVIDENCE_SCHEMA,
   ACTIVATED_HOST_PUBLIC_MANIFEST_SCHEMA,
   ACTIVATED_HOST_WORKER_SCHEMA,
+  CODEX_PROBE_SKILL_NAME,
+  CODEX_PROBE_SKILL_PATH,
   activatedConsumerRoots,
   activatedHostCaptureId,
   captureActivatedHostConformance,
+  claudeEnvironment,
   codexExecutionWorkspace,
   containsSensitiveOutput,
   isolatedCodexEnvironment,

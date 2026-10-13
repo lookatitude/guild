@@ -49388,10 +49388,11 @@ function main6() {
   const cacheFile = cachePath();
   const cache = readCache(cacheFile);
   const versionDerivedBeta = state.version !== null && /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version);
-  if (state.source === "default" && state.version && !versionDerivedBeta) {
+  const launcherDeclaredBeta = versionDerivedBeta && process.env["GUILD_ACTIVATION_CHANNEL"] === "beta";
+  if (state.source === "default" && state.version && (!versionDerivedBeta || launcherDeclaredBeta)) {
     try {
       const receiptPath = path90.join(pluginRoot, RECEIPT_BASENAME);
-      const receiptChannel = state.channel;
+      const receiptChannel = launcherDeclaredBeta ? "beta" : state.channel;
       const descriptor = fs77.openSync(
         receiptPath,
         fs77.constants.O_WRONLY | fs77.constants.O_CREAT | fs77.constants.O_EXCL | fs77.constants.O_NOFOLLOW,
@@ -49411,13 +49412,14 @@ function main6() {
               version: state.version,
               installed_at: (/* @__PURE__ */ new Date()).toISOString(),
               minted_by: "update-check-session-start",
-              // Honesty marker: only an unambiguous stable/main DEFAULT reaches
-              // this branch. Candidate-shaped packages without host identity
-              // deliberately mint nothing. Nothing may clone from this
-              // assumption: codex-cli's capability row is reinstall_command
-              // (never self_update), so the receipt is identification-only.
+              // Honesty marker: only an unambiguous stable/main DEFAULT or a
+              // launcher-declared beta reaches this branch. Other
+              // candidate-shaped packages without host identity mint nothing.
+              // Nothing may clone from this receipt: codex-cli's capability
+              // row is reinstall_command (never self_update), so the receipt
+              // is identification-only.
               managed_by: "host-native",
-              channel_confidence: "assumed-default"
+              channel_confidence: launcherDeclaredBeta ? "launcher-declared" : "assumed-default"
             },
             null,
             2
