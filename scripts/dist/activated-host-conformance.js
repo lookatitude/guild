@@ -1681,6 +1681,16 @@ function deriveNeutralSupportClaim(record) {
     unproven: [...unproven]
   });
 }
+function neutralFullSuiteExpectedOutcomeType(stableId) {
+  if (typeof stableId !== "string") return null;
+  const at = NEUTRAL_FULL_SUITE_SCENARIO_IDS.indexOf(stableId);
+  return at === -1 ? null : NEUTRAL_FULL_SUITE_EXPECTED_OUTCOME_TYPES[at];
+}
+function neutralFullSuiteExpectedDisposition(stableId) {
+  if (typeof stableId !== "string") return null;
+  const at = NEUTRAL_FULL_SUITE_SCENARIO_IDS.indexOf(stableId);
+  return at === -1 ? null : NEUTRAL_FULL_SUITE_EXPECTED_DISPOSITIONS[at];
+}
 function identityComplete(identity) {
   if (identity === void 0 || identity === null || typeof identity !== "object") return false;
   if (typeof identity.contract_version !== "number") return false;
@@ -1704,7 +1714,7 @@ function differingIdentityFields(a, b) {
 function isNeutralRecognizedRuntimeVersion(value) {
   if (typeof value !== "string" || !NEUTRAL_RUNTIME_VERSION_PATTERN.test(value)) return false;
   const major = NEUTRAL_RUNTIME_VERSION_PATTERN.exec(value);
-  return major !== null && major[1] === `${NEUTRAL_RECOGNIZED_RUNTIME_MAJOR}`;
+  return major !== null && NEUTRAL_RECOGNIZED_RUNTIME_MAJORS.some((m) => major[1] === `${m}`);
 }
 function unrecognizedNeutralIdentityFields(identity) {
   const offenders = [];
@@ -1992,12 +2002,13 @@ function evaluateNeutralConformanceDecision(evidence, authority) {
       "scenario_runtime_version_unrecognized",
       [
         "a conformance claim names a runtime identity the core recognizes",
-        `the core recognizes runtime major ${NEUTRAL_RECOGNIZED_RUNTIME_MAJOR}; a parseable version from an unknown major is not recognized`
+        `the core recognizes runtime majors ${NEUTRAL_RECOGNIZED_RUNTIME_MAJORS.join(" and ")}; a parseable version from an unknown major is not recognized`
       ],
       {
         ...baseFacts,
         scope: "authority",
         recognized_runtime_major: NEUTRAL_RECOGNIZED_RUNTIME_MAJOR,
+        recognized_runtime_majors: [...NEUTRAL_RECOGNIZED_RUNTIME_MAJORS],
         unrecognized_runtime_versions: [
           { scope: "authority", runtime_version: authority.identity.runtime_version ?? null }
         ]
@@ -2158,10 +2169,11 @@ function evaluateNeutralConformanceDecision(evidence, authority) {
       baseFacts
     );
   }
+  const fullSuiteTupleSatisfied = required.length === NEUTRAL_FULL_SUITE_SCENARIO_IDS.length && NEUTRAL_FULL_SUITE_SCENARIO_IDS.every((id, index) => required[index] === id);
   const missingRequired = expectedRequired.filter((id) => required.indexOf(id) === -1);
   const extraRequired = required.filter((id) => expectedRequired.indexOf(id) === -1);
   const tupleMisordered = required.length === expectedRequired.length && missingRequired.length === 0 && extraRequired.length === 0 && expectedRequired.some((id, index) => required[index] !== id);
-  if (required.length !== expectedRequired.length || missingRequired.length > 0 || extraRequired.length > 0 || tupleMisordered) {
+  if (!fullSuiteTupleSatisfied && (required.length !== expectedRequired.length || missingRequired.length > 0 || extraRequired.length > 0 || tupleMisordered)) {
     return refuseConformance(
       "scenario_required_set_mismatch",
       [
@@ -2171,6 +2183,7 @@ function evaluateNeutralConformanceDecision(evidence, authority) {
       {
         ...baseFacts,
         declared_required_scenario_ids: [...expectedRequired],
+        declared_full_suite_scenario_ids: [...NEUTRAL_FULL_SUITE_SCENARIO_IDS],
         submitted_required_scenario_ids: [...required],
         omitted_required_scenarios: missingRequired,
         undeclared_scenarios: extraRequired,
@@ -2243,14 +2256,13 @@ function evaluateNeutralConformanceDecision(evidence, authority) {
       { ...baseFacts, unrecognized_reason_codes: invented }
     );
   }
-  const mistyped = results.map((result2) => {
-    const definition2 = scenarios.find((scenario) => scenario.stable_id === result2.stable_id);
-    return {
-      stable_id: result2.stable_id,
-      expected_outcome_type: definition2?.expected_typed_outcome.type ?? null,
-      observed_outcome_type: result2.outcome_type
-    };
-  }).filter((entry) => entry.expected_outcome_type !== entry.observed_outcome_type);
+  const mistyped = results.map((result2) => ({
+    stable_id: result2.stable_id,
+    // The full-suite table covers all 31 scenarios (and agrees with the core
+    // registry on the five it implements — enforced at module load).
+    expected_outcome_type: neutralFullSuiteExpectedOutcomeType(result2.stable_id),
+    observed_outcome_type: result2.outcome_type
+  })).filter((entry) => entry.expected_outcome_type !== entry.observed_outcome_type);
   if (mistyped.length > 0) {
     return neutralOutcome({
       type: "guild.support_transition_outcome.v1",
@@ -2326,11 +2338,12 @@ function evaluateNeutralConformanceDecision(evidence, authority) {
       "scenario_runtime_version_unrecognized",
       [
         "a conformance claim names a runtime identity the core recognizes",
-        `the core recognizes runtime major ${NEUTRAL_RECOGNIZED_RUNTIME_MAJOR}; a parseable version from an unknown major is not recognized`
+        `the core recognizes runtime majors ${NEUTRAL_RECOGNIZED_RUNTIME_MAJORS.join(" and ")}; a parseable version from an unknown major is not recognized`
       ],
       {
         ...baseFacts,
         recognized_runtime_major: NEUTRAL_RECOGNIZED_RUNTIME_MAJOR,
+        recognized_runtime_majors: [...NEUTRAL_RECOGNIZED_RUNTIME_MAJORS],
         unrecognized_runtime_versions: runtimeOffenders
       }
     );
@@ -2528,11 +2541,15 @@ function evaluateNeutralConformanceDecision(evidence, authority) {
       { ...baseFacts, non_fresh_results: notFresh }
     );
   }
-  const mismatched = results.map((result2) => {
+  const mismatched = [];
+  for (const result2 of results) {
     const definition2 = scenarios.find((scenario) => scenario.stable_id === result2.stable_id);
-    const expected = definition2?.expected_typed_outcome.disposition;
-    return { stable_id: result2.stable_id, expected: expected ?? null, observed: result2.disposition };
-  }).filter((entry) => entry.expected !== entry.observed);
+    const coreOwned = definition2 !== void 0;
+    const expected = definition2?.expected_typed_outcome.disposition ?? neutralFullSuiteExpectedDisposition(result2.stable_id) ?? null;
+    if (expected === result2.disposition) continue;
+    if (!coreOwned && result2.disposition === "refused") continue;
+    mismatched.push({ stable_id: result2.stable_id, expected, observed: result2.disposition });
+  }
   if (mismatched.length > 0) {
     return neutralOutcome({
       type: "guild.support_transition_outcome.v1",
@@ -2595,6 +2612,10 @@ function evaluateNeutralConformanceDecision(evidence, authority) {
     ],
     facts: {
       ...baseFacts,
+      // Which core-declared tuple this verdict covers: consumers that require
+      // the full frozen suite (the release emitter and the promotion gate)
+      // must not read a core-5 verdict as a 31-scenario one.
+      required_tuple_scope: fullSuiteTupleSatisfied ? "full_suite_31" : "core_5",
       activated_runtime: evidence.activated_runtime,
       authority_identity: authority.identity,
       authority_journal_id: authority.receipt_journal_id,
@@ -2613,7 +2634,7 @@ function evaluateNeutralConformanceDecision(evidence, authority) {
     }
   });
 }
-var NEUTRAL_SCENARIO_SUITE_ID, NEUTRAL_SCENARIO_SUITE_VERSION, NEUTRAL_CORE_WAVE_OWNER, NEUTRAL_EVIDENCE_PROFILES, NEUTRAL_CORE_SCENARIOS, NEUTRAL_UNEVALUATED_SUPPORT, NEUTRAL_SUPPORT_TRANSITIONS, NEUTRAL_REQUIRED_CORE_SCENARIO_IDS, NEUTRAL_RECEIPT_REF_SCHEMA, NEUTRAL_RECEIPT_REF_PATTERN, NEUTRAL_RUNTIME_VERSION_PATTERN, NEUTRAL_RECOGNIZED_RUNTIME_MAJOR, NEUTRAL_RECOGNIZED_PLATFORMS, NEUTRAL_RECOGNIZED_HOST_IDS, NEUTRAL_SOURCE_COMMIT_PATTERN, NEUTRAL_PACKAGE_HASH_PATTERN, NEUTRAL_ADAPTER_VERSION_PATTERN, NEUTRAL_RECOGNIZED_ADAPTER_MAJOR, NEUTRAL_RELEASE_ID_PATTERN, NEUTRAL_SEMVER_PATTERN, NEUTRAL_JOURNAL_ID_PATTERN, NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS, NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA, NEUTRAL_ATTESTATION_REF_SCHEMA, NEUTRAL_ATTESTATION_SCHEME, NEUTRAL_ATTESTATION_CHAIN_LENGTH, NEUTRAL_ATTESTATION_MESSAGE_CHAINS, NEUTRAL_ATTESTATION_CHECKSUM_CHAINS, NEUTRAL_ATTESTATION_CHAINS, NEUTRAL_ATTESTATION_TREE_HEIGHT, NEUTRAL_ATTESTOR_TRUST_ROOT, NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS, NEUTRAL_MINIMUM_ATTESTOR_QUORUM, NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN, NEUTRAL_ATTESTATION_REF_PATTERN, NEUTRAL_ATTESTATION_SIGNATURE_PATTERN, NEUTRAL_COMMITMENT_PATTERN, NEUTRAL_CLAIMANT_ID_PATTERN, NEUTRAL_EVIDENCE_IDENTITY_FIELDS, NEUTRAL_HEX_ALPHABET, NEUTRAL_SHA256_HEX_PATTERN;
+var NEUTRAL_SCENARIO_SUITE_ID, NEUTRAL_SCENARIO_SUITE_VERSION, NEUTRAL_CORE_WAVE_OWNER, NEUTRAL_EVIDENCE_PROFILES, NEUTRAL_CORE_SCENARIOS, NEUTRAL_UNEVALUATED_SUPPORT, NEUTRAL_SUPPORT_TRANSITIONS, NEUTRAL_REQUIRED_CORE_SCENARIO_IDS, NEUTRAL_FULL_SUITE_SCENARIO_IDS, NEUTRAL_FULL_SUITE_EXPECTED_OUTCOME_TYPES, NEUTRAL_FULL_SUITE_EXPECTED_DISPOSITIONS, NEUTRAL_RECEIPT_REF_SCHEMA, NEUTRAL_RECEIPT_REF_PATTERN, NEUTRAL_RUNTIME_VERSION_PATTERN, NEUTRAL_RECOGNIZED_RUNTIME_MAJOR, NEUTRAL_RECOGNIZED_RUNTIME_MAJORS, NEUTRAL_RECOGNIZED_PLATFORMS, NEUTRAL_RECOGNIZED_HOST_IDS, NEUTRAL_SOURCE_COMMIT_PATTERN, NEUTRAL_PACKAGE_HASH_PATTERN, NEUTRAL_ADAPTER_VERSION_PATTERN, NEUTRAL_RECOGNIZED_ADAPTER_MAJOR, NEUTRAL_RELEASE_ID_PATTERN, NEUTRAL_SEMVER_PATTERN, NEUTRAL_JOURNAL_ID_PATTERN, NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS, NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA, NEUTRAL_ATTESTATION_REF_SCHEMA, NEUTRAL_ATTESTATION_SCHEME, NEUTRAL_ATTESTATION_CHAIN_LENGTH, NEUTRAL_ATTESTATION_MESSAGE_CHAINS, NEUTRAL_ATTESTATION_CHECKSUM_CHAINS, NEUTRAL_ATTESTATION_CHAINS, NEUTRAL_ATTESTATION_TREE_HEIGHT, NEUTRAL_ATTESTOR_TRUST_ROOT, NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS, NEUTRAL_MINIMUM_ATTESTOR_QUORUM, NEUTRAL_ATTESTATION_SIGNATURE_DOMAIN, NEUTRAL_ATTESTATION_REF_PATTERN, NEUTRAL_ATTESTATION_SIGNATURE_PATTERN, NEUTRAL_COMMITMENT_PATTERN, NEUTRAL_CLAIMANT_ID_PATTERN, NEUTRAL_EVIDENCE_IDENTITY_FIELDS, NEUTRAL_HEX_ALPHABET, NEUTRAL_SHA256_HEX_PATTERN;
 var init_neutral_conformance_core = __esm({
   "../src/domains/lifecycle/neutral-conformance-core.ts"() {
     init_neutral_runtime_contracts();
@@ -2885,6 +2906,122 @@ var init_neutral_conformance_core = __esm({
     NEUTRAL_REQUIRED_CORE_SCENARIO_IDS = neutralFreeze(
       NEUTRAL_CORE_SCENARIOS.map((scenario) => scenario.stable_id)
     );
+    NEUTRAL_FULL_SUITE_SCENARIO_IDS = neutralFreeze([
+      "MHRC-LIF-001",
+      "MHRC-LIF-002",
+      "MHRC-LIF-003",
+      "MHRC-LIF-004",
+      "MHRC-EVT-001",
+      "MHRC-EVT-002",
+      "MHRC-SUP-001",
+      "MHRC-SUP-002",
+      "MHRC-SUP-003",
+      "MHRC-SUP-004",
+      "MHRC-SUP-005",
+      "MHRC-SUP-006",
+      "MHRC-UNS-001",
+      "MHRC-UNS-002",
+      "MHRC-UNS-003",
+      "MHRC-RCT-001",
+      "MHRC-RCT-002",
+      "MHRC-RCT-003",
+      "MHRC-RCT-004",
+      "MHRC-RCT-005",
+      "MHRC-MOD-001",
+      "MHRC-MOD-002",
+      "MHRC-MOD-003",
+      "MHRC-MOD-004",
+      "MHRC-STR-001",
+      "MHRC-STR-002",
+      "MHRC-STR-003",
+      "MHRC-STR-004",
+      "MHRC-VER-001",
+      "MHRC-VER-002",
+      "MHRC-VER-003"
+    ]);
+    NEUTRAL_FULL_SUITE_EXPECTED_OUTCOME_TYPES = neutralFreeze([
+      "guild.lifecycle_outcome.v1",
+      "guild.lifecycle_outcome.v1",
+      "guild.lifecycle_outcome.v1",
+      "guild.lifecycle_outcome.v1",
+      "guild.normalized_event_outcome.v1",
+      "guild.normalized_event_outcome.v1",
+      "guild.support_transition_outcome.v1",
+      "guild.support_transition_outcome.v1",
+      "guild.support_transition_outcome.v1",
+      "guild.support_transition_outcome.v1",
+      "guild.support_transition_outcome.v1",
+      "guild.support_transition_outcome.v1",
+      "guild.capability_outcome.v1",
+      "guild.policy_outcome.v1",
+      "guild.capability_outcome.v1",
+      "guild.receipt_outcome.v1",
+      "guild.receipt_outcome.v1",
+      "guild.receipt_outcome.v1",
+      "guild.reconciliation_outcome.v1",
+      "guild.reconciliation_outcome.v1",
+      "guild.boundary_outcome.v1",
+      "guild.boundary_outcome.v1",
+      "guild.boundary_outcome.v1",
+      "guild.boundary_outcome.v1",
+      "guild.migration_outcome.v1",
+      "guild.migration_outcome.v1",
+      "guild.migration_outcome.v1",
+      "guild.migration_outcome.v1",
+      "guild.version_compatibility_outcome.v1",
+      "guild.version_compatibility_outcome.v1",
+      "guild.version_compatibility_outcome.v1"
+    ]);
+    NEUTRAL_FULL_SUITE_EXPECTED_DISPOSITIONS = neutralFreeze([
+      "succeeded",
+      "refused",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "unsupported",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "unsupported",
+      "refused",
+      "failed",
+      "succeeded",
+      "failed",
+      "failed",
+      "degraded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "succeeded",
+      "refused",
+      "refused",
+      "unsupported",
+      "failed"
+    ]);
+    if (NEUTRAL_FULL_SUITE_SCENARIO_IDS.length !== NEUTRAL_FULL_SUITE_EXPECTED_OUTCOME_TYPES.length || NEUTRAL_FULL_SUITE_SCENARIO_IDS.length !== NEUTRAL_FULL_SUITE_EXPECTED_DISPOSITIONS.length) {
+      throw new Error("neutral-conformance-core: the full-suite id, type, and disposition tables disagree in length");
+    }
+    for (const scenario of NEUTRAL_CORE_SCENARIOS) {
+      const expectedType = neutralFullSuiteExpectedOutcomeType(scenario.stable_id);
+      if (expectedType !== scenario.expected_typed_outcome.type) {
+        throw new Error(
+          `neutral-conformance-core: ${scenario.stable_id} declares ${scenario.expected_typed_outcome.type} in the core registry but ${String(expectedType)} in the full-suite table`
+        );
+      }
+      const expectedDisposition = neutralFullSuiteExpectedDisposition(scenario.stable_id);
+      if (expectedDisposition !== scenario.expected_typed_outcome.disposition) {
+        throw new Error(
+          `neutral-conformance-core: ${scenario.stable_id} declares ${scenario.expected_typed_outcome.disposition} in the core registry but ${String(expectedDisposition)} in the full-suite disposition table`
+        );
+      }
+    }
     NEUTRAL_RECEIPT_REF_SCHEMA = "guild.receipt_ref.v1";
     NEUTRAL_RECEIPT_REF_PATTERN = new RegExp(
       "^guild\\.receipt_ref\\.v1:([A-Za-z0-9][A-Za-z0-9._-]{2,})#(0|[1-9][0-9]*)@(nec1:[0-9a-f]{16})$"
@@ -2893,6 +3030,10 @@ var init_neutral_conformance_core = __esm({
       "^guild-(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"
     );
     NEUTRAL_RECOGNIZED_RUNTIME_MAJOR = 2;
+    NEUTRAL_RECOGNIZED_RUNTIME_MAJORS = neutralFreeze([
+      NEUTRAL_RECOGNIZED_RUNTIME_MAJOR,
+      3
+    ]);
     NEUTRAL_RECOGNIZED_PLATFORMS = neutralFreeze([
       "darwin-arm64",
       "darwin-x64",
@@ -4318,6 +4459,11 @@ function assertSourceOwnedRegistry() {
   if (coreDeclared !== spineDeclared) {
     throw new Error(
       `neutral-conformance-assembly: the ${OWNER_MH02} ids disagree with the core scenario registry (${spineDeclared} vs ${coreDeclared})`
+    );
+  }
+  if (NEUTRAL_FULL_SUITE_SCENARIO_IDS.length !== NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS.length || NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS.some((id, index) => NEUTRAL_FULL_SUITE_SCENARIO_IDS[index] !== id)) {
+    throw new Error(
+      "neutral-conformance-assembly: the suite tuple disagrees with the core's full-suite decision tuple"
     );
   }
 }
@@ -53981,6 +54127,33 @@ function workerReceiptRefs(challenge) {
   }
   return refs;
 }
+function workerJournalId(challenge) {
+  return `activated-${challenge.slice(0, 12)}`;
+}
+function journalBoundReceiptRefs(challenge, identity, results) {
+  const authorityBase = {
+    schema_version: NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
+    identity,
+    receipt_journal_id: workerJournalId(challenge),
+    receipt_sequence_range: { first: 1, last: results.length }
+  };
+  const refs = {};
+  let previous = neutralJournalGenesis(authorityBase);
+  results.forEach((result2, index) => {
+    const partial = {
+      sequence: index + 1,
+      scenario_id: result2.stable_id,
+      outcome_type: result2.outcome_type,
+      disposition: result2.disposition,
+      reason_code: result2.reason_code ?? null
+    };
+    const commitment = neutralJournalEntryCommitment(authorityBase, previous, partial);
+    const entry = { ...partial, previous_commitment: previous, entry_commitment: commitment };
+    refs[String(result2.stable_id)] = neutralReceiptReference(authorityBase, entry);
+    previous = commitment;
+  });
+  return refs;
+}
 function runActivatedConformanceWorker(options) {
   const marker = markerFor(options.challenge);
   const failed2 = (code, detail) => ({
@@ -54047,11 +54220,11 @@ function runActivatedConformanceWorker(options) {
       scenario_suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
       release_id: releaseId(options.release, (options.capturedAt ?? "2026-08-21T00:00:00.000Z").slice(0, 10))
     };
-    const request = neutralCanonicalJson({
+    const requestFor = (receiptRefs) => neutralCanonicalJson({
       claim: { claimant_id: "guild.activated-host-capture", activated_runtime: identity },
       owner_inputs: {
         run_id: `run-activated-${options.hostId}-${options.challenge.slice(0, 16)}`,
-        receipt_refs: workerReceiptRefs(options.challenge),
+        receipt_refs: receiptRefs,
         evidence_freshness: freshness,
         journal_root: journalRoot,
         migration_journal_root: migrationJournalRoot,
@@ -54064,12 +54237,47 @@ function runActivatedConformanceWorker(options) {
         release_scenario_evidence: {}
       }
     });
-    const result2 = runNeutralConformanceReleaseIntegration(request);
+    const integrationFailure = (result3) => failed2(
+      "owner_evaluation_refused",
+      `production integration refused: ${String(result3.outcome.reason_code ?? "unnamed")} (control=${String(result3.outcome.facts?.refusal_control ?? "unnamed")}, owner=${String(result3.outcome.facts?.owner_key ?? "unnamed")}, detail=${String(result3.outcome.facts?.owner_detail ?? "unnamed")})`
+    );
+    const firstPass = runNeutralConformanceReleaseIntegration(requestFor(workerReceiptRefs(options.challenge)));
+    if (firstPass.evidence === null || firstPass.packets === null || firstPass.outcome.disposition !== "succeeded") {
+      return integrationFailure(firstPass);
+    }
+    const firstResults = firstPass.evidence.results;
+    const boundRefs = journalBoundReceiptRefs(
+      options.challenge,
+      identity,
+      firstResults
+    );
+    const result2 = runNeutralConformanceReleaseIntegration(requestFor(boundRefs));
     if (result2.evidence === null || result2.packets === null || result2.outcome.disposition !== "succeeded") {
+      return integrationFailure(result2);
+    }
+    const outcomeOnly = (results) => canonical2(
+      results.map((row) => ({
+        stable_id: row.stable_id,
+        outcome_type: row.outcome_type,
+        disposition: row.disposition,
+        reason_code: row.reason_code ?? null,
+        evidence_freshness: row.evidence_freshness
+      }))
+    );
+    const secondResults = result2.evidence.results;
+    if (outcomeOnly(secondResults) !== outcomeOnly(firstResults)) {
       return failed2(
-        "owner_evaluation_refused",
-        `production integration refused: ${String(result2.outcome.reason_code ?? "unnamed")} (control=${String(result2.outcome.facts?.refusal_control ?? "unnamed")}, owner=${String(result2.outcome.facts?.owner_key ?? "unnamed")}, detail=${String(result2.outcome.facts?.owner_detail ?? "unnamed")})`
+        "owner_evaluation_nondeterministic",
+        "the journal-binding re-evaluation observed different outcomes than the pass it records; the capture cannot honestly cite its own journal"
       );
+    }
+    for (const row of secondResults) {
+      if (row.receipt_ref !== boundRefs[String(row.stable_id)]) {
+        return failed2(
+          "receipt_binding_unbound",
+          `scenario ${String(row.stable_id)} does not cite its own journal entry commitment`
+        );
+      }
     }
     const packageAfter = snapshotMigrationRuntimePackage(options.pluginRoot, options.hostId);
     if (canonical2(packageAfter) !== canonical2(packageBefore)) {
