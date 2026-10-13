@@ -40,7 +40,7 @@ export const RELEASE_PACKAGE_NAMES = Object.freeze([
  * bind their complete physical trees separately from Git cleanliness.
  */
 export const LOCKED_SCRIPT_RUNTIME_DIGESTS = Object.freeze({
-  "js-yaml": "sha256:aed429d107470e399343ecdab88c44e948c3e2dcc0eb8f60c86649ce399feda9",
+  "js-yaml": "sha256:e007e4d479d549a08782a6a4e33a5e7ef6b4c6e8bd50a1d5c165eefd8b7a1c7e",
   argparse: "sha256:0e9075c2cc084f6926b4259cd3d8f0157a78b869d5c38601f21d6dc9ae77d281",
 } as const);
 
