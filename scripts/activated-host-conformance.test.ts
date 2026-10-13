@@ -26,6 +26,9 @@ const {
   activatedConsumerRoots,
   activatedHostCaptureId,
   captureActivatedHostConformance,
+  claudeEnvironment,
+  CODEX_PROBE_SKILL_NAME,
+  CODEX_PROBE_SKILL_PATH,
   containsSensitiveOutput,
   codexExecutionWorkspace,
   isolatedCodexEnvironment,
@@ -92,15 +95,15 @@ function packageFixture(host: HostId): {
   fs.mkdirSync(path.join(root, "scripts", "lib", "capability"), { recursive: true });
   fs.mkdirSync(path.join(root, "scripts", "dist"), { recursive: true });
   fs.mkdirSync(path.join(root, "hooks", "dist"), { recursive: true });
-  if (host === "codex-cli") fs.mkdirSync(path.join(root, ".agents", "skills", "guild", "meta", "verify-done"), { recursive: true });
+  if (host === "codex-cli") fs.mkdirSync(path.join(root, ".agents", "skills", "guild", "quality"), { recursive: true });
   fs.writeFileSync(path.join(root, manifest), `${JSON.stringify({ name: "guild", version: RELEASE })}\n`);
   fs.writeFileSync(path.join(root, "hooks", "dist", "pre-tool-use.js"), "module.exports = {};\n");
   fs.writeFileSync(path.join(root, "scripts", "activated-host-conformance.ts"), "export {};\n");
   fs.writeFileSync(path.join(root, "scripts", "dist", "activated-host-conformance.js"), "console.log('sealed fixture');\n");
   fs.writeFileSync(path.join(root, "hooks", "dist", "runtime.cjs"), "module.exports = {};\n");
   if (host === "codex-cli") fs.writeFileSync(
-    path.join(root, ".agents", "skills", "guild", "meta", "verify-done", "SKILL.md"),
-    "---\nname: guild-verify-done\ndescription: Final gate before task close, and the home of Guild's verify-the-claim discipline — fixture\n---\n",
+    path.join(root, ".agents", "skills", "guild", "quality", "SKILL.md"),
+    "---\nname: guild-quality\ndescription: The full guild:quality skill — deterministic SignalScan→SelectMatrix selection, RunChecks under sandbox + canonical fixture\n---\n",
   );
   return { root, runtimePackage: snapshotMigrationRuntimePackage(root, host) };
 }
@@ -204,10 +207,10 @@ function activation(
   if (host === "codex-cli") return {
     schema_version: "guild.codex_model_visible_skill_activation.v1",
     mechanism: "model-visible-plugin-skill",
-    skill_name: "guild:guild-verify-done",
-    skill_path: ".agents/skills/guild/meta/verify-done/SKILL.md",
-    skill_sha256: runtimePackage?.files.find((entry) => entry.path === ".agents/skills/guild/meta/verify-done/SKILL.md")?.sha256,
-    declaration: "GUILD_CODEX_SKILL_VISIBLE:Final gate before task close, and the home of Guild's verify-the-claim discipline",
+    skill_name: "guild:guild-quality",
+    skill_path: ".agents/skills/guild/quality/SKILL.md",
+    skill_sha256: runtimePackage?.files.find((entry) => entry.path === ".agents/skills/guild/quality/SKILL.md")?.sha256,
+    declaration: "GUILD_CODEX_SKILL_VISIBLE:The full guild:quality skill — deterministic SignalScan→SelectMatrix selection, RunChecks under sandbox +",
   };
   const receipt = {
     schema_version: "guild.install_receipt.v1",
@@ -219,7 +222,7 @@ function activation(
     installed_at: installedAt,
     minted_by: "update-check-session-start",
     managed_by: "host-native",
-    channel_confidence: "version-derived",
+    channel_confidence: "launcher-declared",
   };
   return { path: "guild-install-receipt.json", sha256: sha256Hex(`${JSON.stringify(receipt, null, 2)}\n`), receipt };
 }
@@ -240,7 +243,7 @@ function writeSessionReceipt(root: string, host: HostId, installedAt = CAPTURED_
     installed_at: installedAt,
     minted_by: "update-check-session-start",
     managed_by: "host-native",
-    channel_confidence: "version-derived",
+    channel_confidence: "launcher-declared",
   };
   fs.writeFileSync(path.join(root, "guild-install-receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
 }
@@ -297,7 +300,7 @@ function transcript(host: HostId, packageRoot: string, command: string, runtimeP
         { type: "guild.codex_plugin_activation", schema_version: "guild.codex_plugin_activation.v1", marketplace: { marketplaceName: "guild-activated-capture" }, installed: { pluginId: "guild@guild-activated-capture", version: RELEASE, installedPath: packageRoot }, list_entry: { pluginId: "guild@guild-activated-capture", version: RELEASE, installed: true, enabled: true }, activated_package_path: packageRoot, runtime_package: runtimeBinding(runtimePackage) },
         { type: "thread.started", thread_id: session },
         { type: "turn.started" },
-        { type: "item.completed", item: { id: "item-probe", type: "agent_message", text: "GUILD_CODEX_SKILL_VISIBLE:Final gate before task close, and the home of Guild's verify-the-claim discipline" } },
+        { type: "item.completed", item: { id: "item-probe", type: "agent_message", text: "GUILD_CODEX_SKILL_VISIBLE:The full guild:quality skill — deterministic SignalScan→SelectMatrix selection, RunChecks under sandbox +" } },
         { type: "item.started", item: { id: "item-1", type: "command_execution", command: `/bin/zsh -lc '${command}'`, aggregated_output: "", exit_code: null, status: "in_progress" } },
         { type: "item.completed", item: { id: "item-1", type: "command_execution", command: `/bin/zsh -lc '${command}'`, aggregated_output: `${marker}\n`, exit_code: 0, status: "completed" } },
         { type: "item.completed", item: { id: "item-2", type: "agent_message", text: marker } },
@@ -988,6 +991,90 @@ describe("activated-host conformance capture", () => {
     expect(result).toEqual(expect.objectContaining({ ok: false, code: "host_activation_unproven" }));
   });
 
+  function verifyWithClaudeActivation(replacement: any) {
+    const run = verify("claude-code-cli");
+    const worker = JSON.parse(run.rawWorker);
+    worker.host_activation = replacement;
+    const rawWorker = `${JSON.stringify(worker, null, 2)}\n`;
+    const tampered = JSON.parse(JSON.stringify(run.value));
+    tampered.host_activation = replacement;
+    const priorHash = tampered.worker_result_sha256;
+    tampered.worker_result_sha256 = sha256Hex(rawWorker);
+    const rawTranscript = run.rawTranscript.split(priorHash).join(tampered.worker_result_sha256);
+    tampered.transcript_sha256 = sha256Hex(rawTranscript);
+    const { capture_id: _old, ...withoutId } = tampered;
+    tampered.capture_id = activatedHostCaptureId(withoutId);
+    return verifyActivatedHostConformanceReceipt({ receipt: tampered, transcript: rawTranscript, workerResult: rawWorker, packageRoot: run.fixture.root, expectedPackage: run.fixture.runtimePackage, expectedSourceCommit: SOURCE_COMMIT, expectedRelease: RELEASE });
+  }
+
+  it("verifies a beta receipt minted by the shipped SessionStart hook only when the capture declares beta", () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "guild-activated-hook-mint-"));
+    const pkg = path.join(base, "pkg");
+    const home = path.join(base, "home");
+    const cwd = path.join(base, "cwd");
+    fs.mkdirSync(path.join(pkg, ".claude-plugin"), { recursive: true });
+    fs.mkdirSync(path.join(home, ".guild"), { recursive: true });
+    fs.mkdirSync(cwd);
+    fs.writeFileSync(path.join(pkg, ".claude-plugin", "plugin.json"), `${JSON.stringify({ name: "guild", version: RELEASE })}\n`);
+    fs.writeFileSync(path.join(home, ".guild", "update-check.json"), JSON.stringify({
+      schema_version: "guild.update_check_cache.v1", checked_at: "2099-01-01T00:00:00Z", source_repo: "fixture",
+      remote: { latest_tag: "9.9.9", latest_sha: null },
+    }));
+    const receiptPath = path.join(pkg, "guild-install-receipt.json");
+    const runHook = (environment: NodeJS.ProcessEnv) => spawnSync(process.execPath, [path.resolve(__dirname, "../hooks/dist/update-check.js")], {
+      cwd, encoding: "utf8", env: { ...environment, CLAUDE_PLUGIN_ROOT: pkg },
+    });
+    const ambient = { HOME: home, PATH: process.env.PATH };
+    expect(claudeEnvironment("2.7.0", ambient).GUILD_ACTIVATION_CHANNEL).toBeUndefined();
+    expect(runHook(claudeEnvironment("2.7.0", ambient)).status).toBe(0);
+    expect(fs.existsSync(receiptPath)).toBe(false);
+    const environment = claudeEnvironment(RELEASE, ambient);
+    expect(environment.GUILD_ACTIVATION_CHANNEL).toBe("beta");
+    expect(runHook(environment).status).toBe(0);
+    const bytes = fs.readFileSync(receiptPath);
+    const minted = { path: "guild-install-receipt.json", sha256: sha256Hex(bytes), receipt: JSON.parse(bytes.toString("utf8")) };
+    expect(minted.receipt).toEqual(expect.objectContaining({ channel: "beta", ref: "next", version: RELEASE, channel_confidence: "launcher-declared" }));
+    expect(verifyWithClaudeActivation(minted)).toEqual(expect.objectContaining({ ok: true, code: "verified" }));
+  });
+
+  it("refuses a Claude beta receipt that carries the retired version-derived confidence", () => {
+    const bad: any = activation("claude-code-cli");
+    bad.receipt.channel_confidence = "version-derived";
+    bad.sha256 = sha256Hex(`${JSON.stringify(bad.receipt, null, 2)}\n`);
+    expect(verifyWithClaudeActivation(bad)).toEqual(expect.objectContaining({ ok: false, code: "host_activation_unproven" }));
+  });
+
+  it("pins the Codex probe to a model-visible skill shipped in the reshaped Codex package", () => {
+    const packageRoot = path.resolve(__dirname, "../dist/codex");
+    const manifest = JSON.parse(fs.readFileSync(path.join(packageRoot, ".codex-plugin", "plugin.json"), "utf8"));
+    expect(CODEX_PROBE_SKILL_PATH.startsWith(path.normalize(manifest.skills))).toBe(true);
+    const body = fs.readFileSync(path.join(packageRoot, CODEX_PROBE_SKILL_PATH), "utf8");
+    expect(`guild:${/^name: (.+)$/m.exec(body)?.[1]}`).toBe(CODEX_PROBE_SKILL_NAME);
+    expect((/^description: (.+)$/m.exec(body)?.[1] ?? "").trim().split(/\s+/).length).toBeGreaterThanOrEqual(12);
+  });
+
+  function verifyCodexWithProbeText(text: string) {
+    const run = verify("codex-cli");
+    const declaration = (run.value.host_activation as any).declaration;
+    const rawTranscript = run.rawTranscript.split(JSON.stringify(declaration)).join(JSON.stringify(text));
+    const tampered = JSON.parse(JSON.stringify(run.value));
+    tampered.transcript_sha256 = sha256Hex(rawTranscript);
+    const { capture_id: _old, ...withoutId } = tampered;
+    tampered.capture_id = activatedHostCaptureId(withoutId);
+    return { declaration, result: verifyActivatedHostConformanceReceipt({ receipt: tampered, transcript: rawTranscript, workerResult: run.rawWorker, packageRoot: run.fixture.root, expectedPackage: run.fixture.runtimePackage, expectedSourceCommit: SOURCE_COMMIT, expectedRelease: RELEASE }) };
+  }
+
+  it("accepts a Codex probe declaration that ends with exactly one newline", () => {
+    const declaration = (verify("codex-cli").value.host_activation as any).declaration;
+    expect(verifyCodexWithProbeText(`${declaration}\n`).result).toEqual(expect.objectContaining({ ok: true, code: "verified" }));
+  });
+
+  it.each([["two newlines", "\n\n"], ["trailing text", " extra"], ["leading space", null]] as const)("refuses a Codex probe declaration with %s", (_label, suffix) => {
+    const declaration = (verify("codex-cli").value.host_activation as any).declaration;
+    const text = suffix === null ? ` ${declaration}` : `${declaration}${suffix}`;
+    expect(verifyCodexWithProbeText(text).result).toEqual(expect.objectContaining({ ok: false }));
+  });
+
   it("refuses a planted honest 5/31 result set", () => {
     const run = verify("claude-code-cli");
     const tampered = JSON.parse(JSON.stringify(run.value));
@@ -1147,26 +1234,26 @@ describe("activated-host conformance capture", () => {
   it("removes ambient Codex skill-discovery roots from the activated environment", () => {
     const stageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-codex-isolated-discovery-"));
     const ambientHome = fs.mkdtempSync(path.join(os.tmpdir(), "guild-codex-ambient-home-"));
-    const ambientSkill = path.join(ambientHome, ".agents", "skills", "guild", "meta", "verify-done", "SKILL.md");
+    const ambientSkill = path.join(ambientHome, ".agents", "skills", "guild", "quality", "SKILL.md");
     fs.mkdirSync(path.dirname(ambientSkill), { recursive: true });
-    fs.writeFileSync(ambientSkill, "---\nname: guild-verify-done\ndescription: attacker collision\n---\n");
+    fs.writeFileSync(ambientSkill, "---\nname: guild-quality\ndescription: attacker collision\n---\n");
     const environment = isolatedCodexEnvironment(stageRoot, path.join(stageRoot, "codex-home"), path.join(stageRoot, "installed"), { HOME: ambientHome, PATH: process.env.PATH });
     expect(environment.HOME).toBe(path.join(stageRoot, "isolated-home"));
     expect(environment.HOME).not.toBe(ambientHome);
     expect(environment.XDG_CONFIG_HOME).toBe(path.join(stageRoot, "xdg", "config"));
-    expect(fs.existsSync(path.join(environment.HOME!, ".agents", "skills", "guild", "meta", "verify-done", "SKILL.md"))).toBe(false);
+    expect(fs.existsSync(path.join(environment.HOME!, ".agents", "skills", "guild", "quality", "SKILL.md"))).toBe(false);
   });
 
   it("keeps a package-local probe skill outside the empty Codex execution workspace", () => {
     const stageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-codex-empty-workspace-"));
     const packageRoot = path.join(stageRoot, "installed-plugin");
-    const probe = path.join(packageRoot, ".agents", "skills", "guild", "meta", "verify-done", "SKILL.md");
+    const probe = path.join(packageRoot, ".agents", "skills", "guild", "quality", "SKILL.md");
     fs.mkdirSync(path.dirname(probe), { recursive: true });
-    fs.writeFileSync(probe, "---\nname: guild-verify-done\ndescription: package-local collision\n---\n");
+    fs.writeFileSync(probe, "---\nname: guild-quality\ndescription: package-local collision\n---\n");
     const workspace = codexExecutionWorkspace(stageRoot, packageRoot);
     expect(workspace).not.toBe(packageRoot);
     expect(fs.readdirSync(workspace)).toEqual([]);
-    expect(fs.existsSync(path.join(workspace, ".agents", "skills", "guild", "meta", "verify-done", "SKILL.md"))).toBe(false);
+    expect(fs.existsSync(path.join(workspace, ".agents", "skills", "guild", "quality", "SKILL.md"))).toBe(false);
     expect(fs.existsSync(probe)).toBe(true);
   });
 
