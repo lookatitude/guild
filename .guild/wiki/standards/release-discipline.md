@@ -61,6 +61,9 @@ hook defers receipt minting instead of permanently guessing stable or beta.
 5. CI derives the bare tag only from exact `X.Y.Z-beta.N` in the reviewed
    manifest. Branch names, labels, PR titles, and operator input never choose
    the version.
+   Set that version by editing only `.claude-plugin/plugin.json`, then run
+   `npm run sync:claude-install` in `scripts/`; it regenerates every
+   version-bearing file, including `.codex-plugin/plugin.json`.
 6. The tag points to the reviewed merge commit. CI does not create another
    commit and does not rewrite either protected branch.
 7. Release notes are the curated `next -> main` PR body. CI appends a compare

@@ -240,7 +240,11 @@ Release workflow (operator-driven, when `next` is ready):
    `docs/v2`, and a curated PR body suitable as release notes. Exact v2.7.0 has
    a separately named, GitHub-OIDC-attested provenance-only basis that
    explicitly does not establish conformance authority; it is mechanically
-   unavailable to later versions.
+   unavailable to later versions. To set the beta version, edit only
+   `.claude-plugin/plugin.json`, then run `npm run sync:claude-install` in
+   `scripts/`. It regenerates every version-bearing file (`guild.inventory.json`,
+   both `.claude-plugin/` manifests, `.codex-plugin/plugin.json`, and the native
+   package identity); `build:inventory` alone leaves the G7 gate red.
 2. Open the release PR from the repository's exact `next` branch to `main`.
    `branch-policy.yml` rejects every other head branch and all forks.
 3. Merge the PR using GitHub's **Create a merge commit** method. Squash and

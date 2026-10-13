@@ -43,13 +43,16 @@
  */
 
 import { describe, it, expect } from "bun:test";
+import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
-import { checkClaudeInstallSurface } from "./build-host-packages";
+import { buildHostPackages, checkClaudeInstallSurface } from "./build-host-packages";
 // buildInventory (not the private loadInventory) — the latter WRITES
 // guild.inventory.json, the documented side effect that flakes sibling suites.
 import { buildInventory } from "./build-inventory";
+import { verifyGeneratedHostPackages } from "./verify-host-packages";
 import { renderCodexGitInstallManifest, renderCodexPluginJson } from "../src/domains/distribution/index";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "..");
@@ -167,6 +170,55 @@ describe("the manifest is GENERATED, and the drift gate is WIRED to it", () => {
       fs.writeFileSync(abs, original);
     }
   });
+
+  // Issue #151: a release cut bumps only the source version. The G7 gate must
+  // stay red until the one documented command (sync:claude-install) runs, and be
+  // green after it. Runs the real G7 path (build gates + verify) on a temp copy of the tracked tree.
+  it("a source version bump stays red until sync:claude-install, then the gate is green", () => {
+    const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "guild-151-version-surface-"));
+    const distRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-151-dist-"));
+    try {
+      const tracked = execFileSync("git", ["-C", PLUGIN_ROOT, "ls-files", "-z"], { encoding: "utf8" })
+        .split("\0")
+        .filter(Boolean);
+      for (const rel of tracked) {
+        const src = path.join(PLUGIN_ROOT, rel);
+        if (!fs.existsSync(src)) continue;
+        fs.mkdirSync(path.dirname(path.join(fixture, rel)), { recursive: true });
+        fs.copyFileSync(src, path.join(fixture, rel));
+        fs.chmodSync(path.join(fixture, rel), fs.statSync(src).mode);
+      }
+      const manifestPath = path.join(fixture, ".claude-plugin", "plugin.json");
+      const source = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+      source["version"] = "9.9.9-beta.1";
+      fs.writeFileSync(manifestPath, JSON.stringify(source, null, 2) + "\n");
+      execFileSync("git", ["-C", fixture, "init", "-q"]);
+      execFileSync("git", ["-C", fixture, "add", "-A"]);
+
+      const build = (sync: boolean) =>
+        buildHostPackages({
+          root: fixture,
+          distRoot,
+          generatedAt: STAMP,
+          gates: true,
+          syncClaudeInstall: sync,
+          checkClaudeInstall: true,
+        });
+      expect(() => build(false)).toThrow(/identity version is stale/);
+
+      build(true);
+      execFileSync("git", ["-C", fixture, "add", "-A"]);
+      const after = build(false);
+      expect(after.reasons).toEqual([]);
+      expect(after.claudeInstallSurface?.ok).toBe(true);
+      expect(verifyGeneratedHostPackages({ root: fixture, distRoot }).errors).toEqual([]);
+      const codex = JSON.parse(fs.readFileSync(path.join(fixture, MANIFEST_REL), "utf8")) as Record<string, unknown>;
+      expect(codex["version"]).toBe("9.9.9-beta.1");
+    } finally {
+      fs.rmSync(fixture, { recursive: true, force: true });
+      fs.rmSync(distRoot, { recursive: true, force: true });
+    }
+  }, 120_000);
 
   it("GREEN: the committed surface is clean as generated", () => {
     const check = checkClaudeInstallSurface(PLUGIN_ROOT, buildInventory(PLUGIN_ROOT, STAMP) as never, STAMP);
