@@ -71,7 +71,7 @@
  *   host mutation, or user influence occurs anywhere in this file.
  */
 
-import { describe, it, expect, afterAll, mock, spyOn } from "bun:test";
+import { describe, it, expect, beforeAll, afterAll, mock, spyOn } from "bun:test";
 import { spawn } from "child_process";
 import * as crypto from "crypto";
 import * as fs from "fs";
@@ -2765,6 +2765,42 @@ describe("the control battery distinguishes good from bad", () => {
 describe("the FU04 public root-admission bridge", () => {
   const candidateIds = NEUTRAL_ATTESTOR_TRUST_ROOT.map((entry) => entry.attestor_id);
 
+  // FU04 LANDED (fu04-rotation-20261013): the live NEUTRAL_ATTESTOR_TRUST_ROOT
+  // is now the rotated production set, so the shipped signer's predecessor
+  // proving window is permanently CLOSED — exactly the behaviour the
+  // window-closure test below pins. The admission path itself stays under
+  // contract, so this block binds a signer whose live core table is mocked
+  // back to the predecessor snapshot (the state in which the real admission
+  // proofs were produced), using the same in-place mock.module technique the
+  // window-closure test uses.
+  const CORE_PATH = "../src/domains/lifecycle";
+  const SHIPPED_CORE = { ...(require(CORE_PATH) as Record<string, unknown>) };
+  const PREDECESSOR_TABLE = (require(SIGNER_REQUEST) as Record<string, unknown>)
+    .ROOT_ADMISSION_PREDECESSOR_TRUST_ROOT as ReadonlyArray<{
+    attestor_id: string;
+    verification_root: string;
+  }>;
+  const PREDECESSOR_CORE = { ...SHIPPED_CORE, NEUTRAL_ATTESTOR_TRUST_ROOT: PREDECESSOR_TABLE };
+  let openWindowSigner: Record<string, unknown>;
+  beforeAll(() => {
+    mock.module(CORE_PATH, () => PREDECESSOR_CORE);
+    delete require.cache[require.resolve(SIGNER_REQUEST)];
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    openWindowSigner = require(SIGNER_REQUEST) as Record<string, unknown>;
+  });
+  afterAll(() => {
+    mock.module(CORE_PATH, () => SHIPPED_CORE);
+    delete require.cache[require.resolve(SIGNER_REQUEST)];
+  });
+  const Signer = {
+    exported<T>(name: string): T {
+      return openWindowSigner[name] as T;
+    },
+    invoke<T>(name: string, ...args: readonly unknown[]): T {
+      return (openWindowSigner[name] as (...callArgs: readonly unknown[]) => T)(...args);
+    },
+  };
+
   function candidateManifest(roots: readonly string[]) {
     return {
       schema_version: "guild.journal_attestor_root_candidate.v1",
@@ -2812,7 +2848,7 @@ describe("the FU04 public root-admission bridge", () => {
         verification_root: "4dd9eb1f20a5194d38c6ac9cf308dac017ceebac0e85bcd7fbfa26fc43945f37",
       },
     ]);
-    const oldRoots = NEUTRAL_ATTESTOR_TRUST_ROOT.map((entry) => entry.verification_root);
+    const oldRoots = PREDECESSOR_TABLE.map((entry) => entry.verification_root);
     expect(() => Signer.invoke("rootAdmissionManifestDigest", candidateManifest(oldRoots))).toThrow(
       /retired|predecessor|fixture|replacement/i,
     );
@@ -3115,5 +3151,60 @@ describe("the FU04 public root-admission bridge", () => {
     }
     expect(JSON.parse(fs.readFileSync(manifestPath, "utf8"))).toEqual(manifest);
     expect(fs.existsSync(registryPath)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §5b — the FU04 rotation AS SHIPPED (no mocks)
+//
+// The bridge block above deliberately rebinds the signer to the predecessor
+// snapshot to keep the admission path under contract. This block pins the
+// OTHER half: the live, unmocked module state after fu04-rotation-20261013 —
+// the committed admission bundle re-verifies, the shipped trust table IS the
+// admitted candidate set, and the predecessor proving window is closed.
+// ---------------------------------------------------------------------------
+
+describe("the FU04 rotation as shipped", () => {
+  const ROTATION_DIR = path.resolve(PLUGIN_ROOT, ".guild/artifacts/release/fu04-rotation");
+
+  it("re-verifies the committed admission bundle and pins the live trust table to its candidates", () => {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(ROTATION_DIR, "candidate-manifest.json"), "utf8"),
+    ) as { candidates: ReadonlyArray<{ attestor_id: string; verification_root: string }> };
+    const bundle = JSON.parse(
+      fs.readFileSync(path.join(ROTATION_DIR, "admission-bundle.json"), "utf8"),
+    ) as Record<string, unknown>;
+
+    const verified = Signer.invoke<Record<string, unknown>>(
+      "verifyRootAdmissionBundle",
+      manifest,
+      bundle.proofs,
+    );
+    expect(verified.manifest_digest).toBe(bundle.manifest_digest);
+    expect(verified.candidate_root_possession_verified).toBe(true);
+    expect(verified.external_custody_verified).toBe(false);
+    expect(verified.authorizes_rotation).toBe(false);
+
+    expect(
+      NEUTRAL_ATTESTOR_TRUST_ROOT.map(({ attestor_id, verification_root }) => ({
+        attestor_id,
+        verification_root,
+      })),
+    ).toEqual([...manifest.candidates]);
+  });
+
+  it("keeps the predecessor proving window closed in the shipped module", () => {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(ROTATION_DIR, "candidate-manifest.json"), "utf8"),
+    ) as Record<string, unknown>;
+    expect(() =>
+      Signer.invoke("signRootAdmissionProof", {
+        candidate_manifest: manifest,
+        material_path: path.join(ROTATION_DIR, "never-created-material.json"),
+        output_path: path.join(ROTATION_DIR, "never-created-proof.json"),
+        used_key_registry_path: path.join(ROTATION_DIR, "never-created-registry.json"),
+        custody_root_path: ROTATION_DIR,
+      }),
+    ).toThrow(/proving window/i);
   });
 });
