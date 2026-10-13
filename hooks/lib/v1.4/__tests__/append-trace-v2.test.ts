@@ -12,6 +12,7 @@
  * merge happens before the fallback/POSIX branch so behavior is identical.
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";

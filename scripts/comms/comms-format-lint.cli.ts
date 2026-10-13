@@ -1,8 +1,8 @@
 /**
  * Backward-compatible CLI entrypoint.
  *
- * The implementation lives in src/modules/communication/workflows.
+ * The implementation lives in src/domains/dispatch.
  */
-import { main } from "../../src/modules/communication/workflows/comms-format-lint.cli";
+import { commsFormatLintMain as main } from "../../src/domains/dispatch/index";
 
 main();

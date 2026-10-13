@@ -9,6 +9,7 @@
  * to it and misclassify a real worker invocation as the lead's own.
  */
 
+import { describe, it, expect } from "bun:test";
 import { isWorkerInvocation, resolveLaneAttribution, UNATTRIBUTED_WORKER_LANE_ID } from "../lane-attribution";
 
 describe("lane-attribution — isWorkerInvocation", () => {

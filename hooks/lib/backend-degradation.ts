@@ -69,6 +69,7 @@ import type { DispatchAttribution } from "./dispatch-attribution.js";
 // bytes, an 8x regression on the hottest hook Guild ships, which is why
 // `readSnapshotBlockUnmarkedLanes` below reads the frozen run snapshot instead.
 import { DEFAULTS as CONFIG_DEFAULTS } from "../../scripts/lib/shared/config-defaults.js";
+import { durableGuildDir } from "../../src/domains/state";
 
 /** The env var an operator sets to consciously accept a backend downgrade. */
 export const OVERRIDE_ENV = "GUILD_ALLOW_BACKEND_DEGRADE";
@@ -346,7 +347,7 @@ export function isLeadProcess(env: NodeJS.ProcessEnv): boolean {
  * caller (`isSafeRunId`) — this function does not re-derive path safety.
  */
 export function readSnapshotAgentMode(guildRoot: string, runId: string): string | null {
-  const file = path.join(guildRoot, ".guild", "runs", runId, "resolved-settings.json");
+  const file = path.join(durableGuildDir(guildRoot), "runs", runId, "resolved-settings.json");
   let raw: string;
   try {
     raw = fs.readFileSync(file, "utf8");
@@ -452,7 +453,7 @@ export function dispatchAssertsRunId(toolInput: unknown, runId: string): boolean
  * which is trusted unconditionally.
  */
 export function newestRunSignalMs(guildRoot: string, runId: string): number {
-  const dir = path.join(guildRoot, ".guild", "runs", runId);
+  const dir = path.join(durableGuildDir(guildRoot), "runs", runId);
   const candidates = [path.join(dir, "resolved-settings.json")];
   // `handoffs/*` — written by the run's own lanes on completion.
   // `in-progress/*` — the per-lane heartbeat. It IS written by a hook
@@ -670,7 +671,7 @@ export function readSnapshotBlockUnmarkedLanes(
   guildRoot: string,
   runId: string,
 ): boolean | null {
-  const file = path.join(guildRoot, ".guild", "runs", runId, "resolved-settings.json");
+  const file = path.join(durableGuildDir(guildRoot), "runs", runId, "resolved-settings.json");
   let doc: unknown;
   try {
     doc = JSON.parse(fs.readFileSync(file, "utf8"));

@@ -33,7 +33,7 @@
  * Output: path of written checkpoint
  *
  * ── INVARIANTS (VC-K7) ───────────────────────────────────────────────────
- * - Never writes to .guild/wiki/ directly
+ * - Never writes to the wiki directly
  * - Non-`none` verdicts ONLY route to the reflections queue (operator gate)
  * - No permission / sandbox / runtime policy changes
  */
@@ -46,6 +46,11 @@ import * as path from "path";
 // classifyPhase is the GUILD_CHECKPOINT_VERDICT producer when the caller
 // provides a serialized ArtifactSet via GUILD_CHECKPOINT_ARTIFACTS_JSON.
 import { classifyPhase, type ArtifactSet } from "../scripts/lib/learning-signatures";
+// T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
+import { ensureStorageLayout } from "./lib/ensure-layout.js";
+// T10 (KTD38): the four additive work-loop event kinds on the EXISTING JSONL.
+import { emitLoopEvent } from "./lib/loop-events.js";
+import { durableGuildDir } from "../src/domains/state";
 
 // ── Schema constants ───────────────────────────────────────────────────────
 
@@ -341,7 +346,7 @@ function appendKnowledgeLinksIndex(
 ): void {
   if (links.length === 0) return;
 
-  const indexDir = path.join(guildRoot, ".guild", "indexes");
+  const indexDir = path.join(durableGuildDir(guildRoot), "indexes");
   const indexPath = path.join(indexDir, "knowledge-links.json");
 
   // Read existing links (safe — missing file = empty list).
@@ -403,7 +408,7 @@ function appendReflections(
   const nonNone = DECISION_TARGETS.filter((k) => decisions[k] !== "none");
   if (nonNone.length === 0) return; // VC-K7: nothing to queue
 
-  const reflectionsDir = path.join(guildRoot, ".guild", "reflections");
+  const reflectionsDir = path.join(durableGuildDir(guildRoot), "reflections");
   fs.mkdirSync(reflectionsDir, { recursive: true });
   const reflPath = path.join(reflectionsDir, `${runId}.md`);
 
@@ -436,13 +441,13 @@ export function writeCheckpoint(opts: WriteCheckpointOpts): string {
   const decisions: CheckpointDecisions = opts.decisions ?? { ...ALL_NONE_DECISIONS };
 
   // Compute paths
-  const learningDir = path.join(guildRoot, ".guild", "runs", opts.runId, "learning");
+  const learningDir = path.join(durableGuildDir(guildRoot), "runs", opts.runId, "learning");
   fs.mkdirSync(learningDir, { recursive: true });
   const checkpointFile = path.join(learningDir, `${opts.phase}-${opts.runId}.yaml`);
 
   // Relative reflections path (stored in the YAML for reference; actual write uses absolute)
   const reflectionsRelPath = `.guild/reflections/${opts.runId}.md`;
-  const reflectionsAbsPath = path.join(guildRoot, ".guild", "reflections", `${opts.runId}.md`);
+  const reflectionsAbsPath = path.join(durableGuildDir(guildRoot), "reflections", `${opts.runId}.md`);
 
   const observed = opts.observed ?? [];
 
@@ -462,6 +467,25 @@ export function writeCheckpoint(opts: WriteCheckpointOpts): string {
 
   // Append non-none verdicts to reflections queue (VC-K7 guard inside)
   appendReflections(guildRoot, opts.runId, opts.phase, decisions);
+
+  // T10 (KTD38/KTD43/R53): ENQUEUE, never write.
+  //
+  // A `wiki` verdict is the checkpoint saying "this phase produced a decision
+  // worth harvesting". KTD43 is explicit that the checkpoint classifies and may
+  // enqueue harvest but is NEVER the writer, so what happens here is one
+  // additive `harvest_event` at status `planned` on the run's EXISTING event log
+  // — the enqueue signal the harvest writer picks up. No wiki path is touched
+  // and no third log is created (KTD38).
+  if (decisions.wiki !== "none" && decisions.wiki.length > 0) {
+    emitLoopEvent(path.join(durableGuildDir(guildRoot), "runs", opts.runId), {
+      ts: new Date().toISOString(),
+      event: "harvest_event",
+      run_id: opts.runId,
+      op_id: `checkpoint-${opts.phase}-${opts.runId}`,
+      trigger: "harvest",
+      status: "planned",
+    });
+  }
 
   // D-edge-batch: append new edges to the project-level knowledge-links index.
   // Append-only, dedup by {from,to,type}, never auto-promotes (VC-K7).
@@ -485,6 +509,19 @@ function main(): void {
   const phase = process.env["GUILD_PHASE"];
   const evidenceRef = process.env["GUILD_EVIDENCE_REF"] ?? "none";
   const guildRoot = process.env["GUILD_CWD"] ?? process.cwd();
+
+  // T10 (KTD23): layout bootstrap on a write-capable entry. A hook can be the
+  // first thing to touch a root after an upgrade landed, so it runs the
+  // bootstrap itself; on a current root this is a stat plus one marker read.
+  // Fail-open by contract — a refused root still exits 0.
+  const layout = ensureStorageLayout(guildRoot, "emit-learning-checkpoint");
+  // KTD23 fails CLOSED on a layout this build does not understand: a future
+  // marker means every write below would land in a root that is not ours.
+  if (!layout.ok) {
+    process.stderr.write(`warn: [emit-learning-checkpoint] .guild layout refused (${layout.refused}) — no writes\n`);
+    return;
+  }
+
   const verdictPath = process.env["GUILD_CHECKPOINT_VERDICT"];
   // D-edge-batch: path to the JSON file written by the SK-13 skill classifier
   // containing the `KnowledgeLink[]` for this phase.

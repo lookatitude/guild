@@ -18,6 +18,7 @@
  * Pipeline: write-manifest.ts → federated-query.ts (real manifest, no fixtures by hand).
  */
 
+import { describe, test, expect, afterEach } from "bun:test";
 import * as path from "path";
 import {
   WRITE_MANIFEST,

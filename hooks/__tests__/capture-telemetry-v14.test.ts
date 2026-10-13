@@ -24,6 +24,7 @@
  *   [x] Canonical write failures do NOT block execution (exit 0)
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";

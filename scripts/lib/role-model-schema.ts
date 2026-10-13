@@ -5,4 +5,15 @@
  * can move internals without breaking existing imports from scripts/lib.
  */
 
-export * from "../../src/modules/capability/workflows/role-model-schema";
+export {
+  resolveRoles,
+  validateRoleResolutionSet,
+  ROLES,
+  type Role,
+  ROLE_STRENGTHS,
+  type RoleStrength,
+  type RoleResolution,
+  type RoleResolutionSet,
+  type RoleResolveInput,
+  type ValidationResult,
+} from "../../src/domains/config/index";

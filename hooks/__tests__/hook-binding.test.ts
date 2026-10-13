@@ -13,6 +13,7 @@
  * run-trace.test.ts / capture-telemetry.test.ts — this suite pins the GUARD.
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";

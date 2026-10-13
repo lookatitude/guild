@@ -31,6 +31,7 @@
  * committed); this guard is the secondary tripwire for FUTURE *unintended* drift.
  */
 
+import { describe, it, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 

@@ -1,0 +1,22 @@
+{
+  "schema_version": "guild.adapter_map.v1",
+  "family": "pi",
+  "host_ids": [
+    "pi-cli"
+  ],
+  "package_trees": [
+    "pi"
+  ],
+  "projects": {
+    "manifest": "pi-manifest.json",
+    "instructions": ".agents/skills/guild/"
+  },
+  "runtime": [
+    "runtime/",
+    "hooks/dist/"
+  ],
+  "never_projects": [
+    "src/domains/**/*.ts"
+  ],
+  "rungs": "src/adapters/adapter.lock.json#/families/pi"
+}

@@ -5,8 +5,14 @@
  * Proposal classification lives in src/modules/initiatives so the reorg can
  * move internals without breaking existing script paths.
  */
-import { runClassifyProposalCli } from "../src/modules/initiatives/workflows/classify-proposal";
+import { runClassifyProposalCli } from "../src/domains/lifecycle";
 
-export * from "../src/modules/initiatives/workflows/classify-proposal";
+export {
+  classifyProposal,
+  runClassifyProposalCli,
+  type ClassifierTarget,
+  type ClassifyProposalInput,
+  type ClassifyProposalResult,
+} from "../src/domains/lifecycle";
 
 if (require.main === module) runClassifyProposalCli();

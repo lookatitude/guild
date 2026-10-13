@@ -73,12 +73,14 @@ import {
   type ResolvedTierModel,
   type TierHostValue,
   type TierModelSpec,
-} from "../../../src/modules/config/workflows/tier-model";
+} from "../../../src/domains/config/index";
 // guild.model_policy.v2 closed-key validator (T5 dynamic-host-model-routing).
 // The policy is an OPTIONAL settings key during the M0-M2 rollout: registered
 // (accepted + validated at load, §5 fail-closed) but never scaffolded into a
 // fresh settings.json, so `config init` stays byte-identical to the golden.
-import { validateModelPolicy } from "../../../src/modules/capability/workflows/model-policy";
+import { validateModelPolicy } from "../../../src/domains/config/index";
+import { durableGuildDir } from "../state/storage";
+import { ensureStorageLayout } from "../state/ensure-storage-layout";
 export { resolveTierModel };
 export type { ResolvedTierModel, TierHostValue, TierModelSpec };
 
@@ -517,7 +519,7 @@ export const HELP: Record<string, string> = {
     "[] | [spec,plan,build,qa,all] — default approval-gate posture. " +
     "qa auto-proceeds ONLY on a computed ReleaseGate PASS (BLOCK-override still prompts); never ops",
   "defaults.wiki.share_mode": "team | private — wiki share mode (moved here from legacy project.yaml)",
-  "defaults.wiki.autopromote": "false ALWAYS (true REJECTED — agents emit candidates only)",
+  "defaults.wiki.autopromote": "true | false (default true) — harvest auto-promotes decisions on this cwd; false = candidates-only (KTD35)",
   "defaults.quality.budget.per_class_minutes": "int > 0 — per-check-class wall-clock cap",
   "defaults.quality.budget.total_minutes": "int > 0 — whole-phase wall-clock cap",
   "defaults.reporting": "standard | quiet | verbose — default task/progress reporting",
@@ -950,7 +952,7 @@ function loadLocalOverride(
   fileConfig: Partial<GuildSettings>,
   selfBuild: boolean
 ): Partial<GuildSettings> {
-  const localPath = path.join(cwd, ".guild", "settings.local.json");
+  const localPath = path.join(durableGuildDir(cwd), "settings.local.json");
   if (!fs.existsSync(localPath)) return fileConfig; // no-op when absent
 
   let localParsed: Record<string, unknown>;
@@ -1464,8 +1466,11 @@ export function validateDefaults(d: Record<string, unknown>, selfBuild: boolean)
   }
   if (d["adversarial"] === "off" && selfBuild)
     rejects.push(`defaults.adversarial: off is REJECTED for Guild self-build`);
-  if (isPlainObject(d["wiki"]) && (d["wiki"] as Record<string, unknown>)["autopromote"] === true)
-    rejects.push(`defaults.wiki.autopromote: true is REJECTED always (agents emit candidates only)`);
+  if (isPlainObject(d["wiki"])) {
+    const autopromote = (d["wiki"] as Record<string, unknown>)["autopromote"];
+    if (autopromote !== undefined && typeof autopromote !== "boolean")
+      rejects.push(`defaults.wiki.autopromote must be true or false (got ${JSON.stringify(autopromote)})`);
+  }
   if (isPlainObject(d["quality"])) {
     const q = (d["quality"] as Record<string, unknown>)["budget"];
     if (isPlainObject(q)) {
@@ -1620,7 +1625,7 @@ export function validateDefaults(d: Record<string, unknown>, selfBuild: boolean)
 }
 
 function loadFileConfig(cwd: string, selfBuild: boolean): FileLoad {
-  const settingsPath = path.join(cwd, ".guild", "settings.json");
+  const settingsPath = path.join(durableGuildDir(cwd), "settings.json");
 
   if (fs.existsSync(settingsPath)) {
     let parsed: Record<string, unknown>;
@@ -1997,6 +2002,7 @@ function crossHostAvailable(): boolean {
 function main(): void {
   const { cwd: cwdFlag, mode, selfBuild, modelTier, flags } = parseArgs(process.argv.slice(2));
   const cwd = cwdFlag ?? process.env["GUILD_CWD"] ?? process.cwd();
+  ensureStorageLayout(cwd, { detectOnly: true });
 
   if (mode === "scaffold") {
     process.stdout.write(scaffold());
@@ -2035,7 +2041,7 @@ function main(): void {
   // ── resolve mode: delegate to the shared settings-resolver library.
   // This is the canonical path; all workspace inheritance and precedence
   // chain logic lives in lib/settings-resolver.ts.
-  const localPath = path.join(cwd, ".guild", "settings.local.json");
+  const localPath = path.join(durableGuildDir(cwd), "settings.local.json");
   let localLoadedKeys: string[] = [];
 
   // Surface settings.local.json INFO/ERROR log (parity with the old loader's stderr output).

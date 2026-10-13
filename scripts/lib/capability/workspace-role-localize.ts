@@ -28,6 +28,7 @@ import {
   type LegacyHome,
 } from "../core/contracts/adoption-manifest";
 import { commitAdoptionManifest, readAdoptionManifest } from "./adoption-migrate";
+import { durableGuildDir } from "../state/storage";
 
 export const WORKSPACE_ROLE_LOCALIZATION_PLAN_SCHEMA = "guild.workspace_role_localization_plan.v1" as const;
 export const WORKSPACE_ROLE_LOCALIZATION_RESULT_SCHEMA = "guild.workspace_role_localization_result.v1" as const;
@@ -210,7 +211,7 @@ export function applyWorkspaceRoleLocalization(workspaceRootInput: string, plan:
     }
     for (const [projectId, manifest] of validated) {
       const bucket = manifests.get(projectId)!;
-      const manifestPath = path.join(bucket.root, ".guild", "adoption-manifest.json");
+      const manifestPath = path.join(durableGuildDir(bucket.root), "adoption-manifest.json");
       fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
       const receipt = commitAdoptionManifest(bucket.root, manifest, "migration.cutover");
       if (!receipt?.durable) throw new Error(`manifest commitment failed for ${projectId}`);

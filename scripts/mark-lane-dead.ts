@@ -6,10 +6,17 @@
  * internals without breaking existing script paths.
  */
 
-import { runMarkLaneDeadCli } from "../src/modules/lifecycle/workflows/mark-lane-dead";
+import { runMarkLaneDeadCli } from "../src/domains/lifecycle";
 
-export * from "../src/modules/lifecycle/workflows/mark-lane-dead";
+export {
+  parseMarkLaneDeadArgs,
+  markLaneDeadFromArgs,
+  runMarkLaneDeadCli,
+  type MarkLaneDeadArgs,
+} from "../src/domains/lifecycle";
 
-if (require.main === module) {
+// The domain module carries the compiled-bundle CLI gate. This one fires only
+// for a direct TypeScript run, so a bundle never runs the CLI twice.
+if (require.main === module && /\.[cm]?ts$/.test(process.argv[1] ?? "")) {
   runMarkLaneDeadCli();
 }

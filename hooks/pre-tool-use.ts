@@ -67,14 +67,31 @@ import {
 } from "./lib/security/events.js";
 // ISSUE #94: the manifest-absent fallback for `pre_tool_use_ask` reads the same
 // capability rows the manifest is rendered from — see hostSupportsPreToolUseAsk.
-import { HOST_REGISTRY_ROWS } from "../src/modules/host-runtime/workflows/host-registry-schema.js";
+import { HOST_REGISTRY_ROWS } from "../src/domains/config/index.js";
+import { authorizeProjectedToolCall } from "../src/domains/dispatch";
+import {
+  ingestPauseBlocking,
+  readIngestPause,
+  type IngestPauseEntry,
+} from "../src/domains/security";
 import {
   effectiveBypassPolicy,
   readScopeContext,
   readScopeFile,
   resolveScopeDecision,
 } from "./lib/security/enforce.js";
-import { isMcpTool, verifyMcpDescription } from "./lib/security/mcp-hash-pin.js";
+import * as crypto from "node:crypto";
+import {
+  isMcpTool,
+  verifyMcpDescription,
+  effectivePins,
+  shippedPinFor,
+  isWellFormedShippedPins,
+  GUILD_MCP_SERVER_IDS,
+  binaryVouchesForDescription,
+  type ShippedMcpPins,
+  type ShippedPinFailure,
+} from "./lib/security/mcp-hash-pin.js";
 import {
   describeViolation,
   dispatchViolations,
@@ -129,6 +146,11 @@ import {
   type GuildHookEvent,
 } from "./lib/guild-hook-event.js";
 import { evaluateCompatibilitySkillUse } from "./lib/compatibility-skill-guard.js";
+import { runDirOverride } from "./lib/run-dir-override.js";
+import { laneWikiWriteTarget } from "./lib/security/lane-wiki-guard.js";
+import { createGuildStorage } from "../src/domains/state";
+import { durableGuildDir } from "../src/domains/state";
+import { ensureStorageLayout } from "../scripts/lib/state/ensure-storage-layout.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -159,7 +181,7 @@ function isKnownTool(name: string | undefined): name is ToolCallTool {
 }
 
 function readCurrentRunId(cwd: string): string | undefined {
-  const sentinelPath = path.join(resolveGuildRoot(cwd), ".guild", "runs", "current-run-id");
+  const sentinelPath = path.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", "current-run-id");
   try {
     const value = fs.readFileSync(sentinelPath, "utf8").trim();
     return value.length > 0 ? value : undefined;
@@ -230,7 +252,7 @@ function readHostCapability(cwd: string): HostCapabilitySlice | null {
 
   for (const hostId of candidates) {
     try {
-      const manifestPath = path.join(resolveGuildRoot(cwd), ".guild", "hosts", hostId, "capability.json");
+      const manifestPath = path.join(durableGuildDir(resolveGuildRoot(cwd)), "hosts", hostId, "capability.json");
       const raw = fs.readFileSync(manifestPath, "utf8");
       return JSON.parse(raw) as HostCapabilitySlice;
     } catch {
@@ -538,6 +560,60 @@ function runBoundaryGuard(
 // <runDir>/logs/security-events.jsonl. The gate decision NEVER depends on the
 // log write succeeding.
 
+/** Guild's own MCP server ids — the closed, EXACTLY-matched list (see
+ *  GUILD_MCP_SERVER_IDS). Static, so a Guild tool is recognised as Guild's even
+ *  when the pin file cannot be read, which is when fail-closed matters most. */
+const GUILD_MCP_SERVERS = GUILD_MCP_SERVER_IDS;
+
+/**
+ * Load the compile-written pin file (KTD60), verifying that it describes the
+ * binary actually on disk. Cached for the process — PreToolUse is short-lived and
+ * this must not add a stat per tool call.
+ *
+ * Returns the reason on failure rather than a bare `null`: an unreadable,
+ * malformed, or stale-hash pin file used to disable enforcement silently, which
+ * turned the strongest guarantee into the weakest one (codex G-lane r1). Guild's
+ * own tools now REFUSE in that state; third-party tools are untouched.
+ */
+let shippedMcpPinsCache: { pins: ShippedMcpPins | null; failure?: ShippedPinFailure } | undefined;
+function readShippedMcpPins(): { pins: ShippedMcpPins | null; failure?: ShippedPinFailure } {
+  if (shippedMcpPinsCache !== undefined) return shippedMcpPinsCache;
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, "..", "..");
+  let raw: string;
+  try {
+    raw = fs.readFileSync(path.join(pluginRoot, "runtime", "mcp-descriptions.pins.json"), "utf8");
+  } catch {
+    shippedMcpPinsCache = { pins: null, failure: "pins_missing" };
+    return shippedMcpPinsCache;
+  }
+  let doc: unknown;
+  try {
+    doc = JSON.parse(raw);
+  } catch {
+    shippedMcpPinsCache = { pins: null, failure: "pins_malformed" };
+    return shippedMcpPinsCache;
+  }
+  if (!isWellFormedShippedPins(doc)) {
+    shippedMcpPinsCache = { pins: null, failure: "pins_malformed" };
+    return shippedMcpPinsCache;
+  }
+  // The pins are only meaningful for the binary they were generated from. A
+  // swapped or rebuilt-but-unpinned binary must not inherit the old hashes.
+  try {
+    const bin = fs.readFileSync(path.join(pluginRoot, doc.binary), "utf8");
+    const actual = crypto.createHash("sha256").update(bin, "utf8").digest("hex");
+    if (actual !== doc.binary_sha256) {
+      shippedMcpPinsCache = { pins: null, failure: "binary_hash_mismatch" };
+      return shippedMcpPinsCache;
+    }
+  } catch {
+    shippedMcpPinsCache = { pins: null, failure: "binary_hash_mismatch" };
+    return shippedMcpPinsCache;
+  }
+  shippedMcpPinsCache = { pins: doc };
+  return shippedMcpPinsCache;
+}
+
 /** Obtain a live MCP tool description: payload field, else session sidecar. */
 function readMcpDescription(
   payload: GuildHookEvent,
@@ -558,6 +634,204 @@ function readMcpDescription(
     }
   }
   return undefined;
+}
+
+/**
+ * KTD19/KTD28 — the assignment's tool projection, enforced at the real seam.
+ *
+ * The worker's env carries GUILD_RUN_ID, GUILD_TASK_ID and
+ * GUILD_TASK_CELL_INSTANCE_ID (the launcher exports all three at spawn), so the
+ * hook can resolve the worker's own `guild.task_assignment.v2` from the run tree
+ * and refuse any tool outside its projection. Round 1 shipped this check with no
+ * caller; this is the caller.
+ *
+ * Absent env ⇒ NO opinion (return false): a session that is not a TaskCell worker
+ * is not projected and must not be gated by a cell's scope.
+ */
+function runProjectionGate(payload: GuildHookEvent, cwd: string): boolean {
+  const runId = process.env["GUILD_RUN_ID"];
+  const taskId = process.env["GUILD_TASK_ID"];
+  const instanceId = process.env["GUILD_TASK_CELL_INSTANCE_ID"];
+  const toolName = payload.tool_name ?? "";
+  if (
+    typeof runId !== "string" || runId.length === 0 ||
+    typeof taskId !== "string" || taskId.length === 0 ||
+    toolName.length === 0
+  ) {
+    return false;
+  }
+  // plr-wi-15-4: run + task with no instance id is a lane worker whose projection cannot be
+  // verified, not a non-worker. Every isolated launch exports one, so its absence is denied.
+  let verdict: { ok: boolean; reason?: string } = { ok: false, reason: `lane ${taskId} in run ${runId} has no GUILD_TASK_CELL_INSTANCE_ID; its tool projection cannot be verified (KTD28)` };
+  if (typeof instanceId === "string" && instanceId.length > 0) try {
+    const attempt = Number.parseInt(process.env["GUILD_TASK_ATTEMPT"] ?? "1", 10);
+    verdict = authorizeProjectedToolCall({
+      cwd: resolveGuildRoot(cwd),
+      run_id: runId,
+      logical_task_id: taskId,
+      attempt: Number.isInteger(attempt) && attempt >= 1 ? attempt : 1,
+      instance_id: instanceId,
+      tool: toolName,
+    });
+  } catch {
+    // A malformed identity is not a licence to run: the worker declared itself a
+    // projected cell instance and we could not verify its scope.
+    verdict = { ok: false, reason: `projection could not be resolved for ${taskId}` };
+  }
+  if (verdict.ok) return false;
+  // Audit twin, best-effort: the deny never depends on the log write.
+  if (isSafeRunId(runId)) try {
+    appendSecurityEvent(
+      runDirOverride() ?? resolveRunDir(cwd, runId),
+      buildSecurityEvent({
+        run_id: runId,
+        event_type: "capability_scope_violation",
+        decision: "deny",
+        tool: toolName,
+        detail: verdict.reason ?? "tool is outside this assignment's projection",
+      }),
+    );
+  } catch {
+    /* observability only */
+  }
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: verdict.reason ?? "tool is outside this assignment's projection",
+      },
+    }),
+  );
+  return true;
+}
+
+/**
+ * D-PROBE (ingest side): a paused wiki-ingest candidate cannot be written.
+ *
+ * `ingest-similarity` records the pause marker when it answers `should_pause`.
+ * While any entry stands, a Write/Edit to the candidate or under this root's wiki
+ * is denied, and so is a Bash command that names either. The operator clears the
+ * pause with `ingest-similarity --clear-pause`, which this gate routes to `ask`
+ * (deny on a host with no ask: the operator runs it from their own shell).
+ */
+function runIngestPauseGate(payload: GuildHookEvent, cwd: string): boolean {
+  const tool = payload.tool_name ?? "";
+  const ti = (payload.tool_input ?? {}) as Record<string, unknown>;
+  const root = resolveGuildRoot(cwd);
+  let blocking: IngestPauseEntry | null = null;
+  let decision: "deny" | "ask" = "deny";
+  let reason = "";
+  try {
+    if (tool === "Write" || tool === "Edit" || tool === "MultiEdit" || tool === "NotebookEdit") {
+      const target = typeof ti["file_path"] === "string" ? ti["file_path"] : ti["notebook_path"];
+      if (typeof target !== "string" || target.length === 0) return false;
+      blocking = ingestPauseBlocking(root, target);
+      if (blocking === null) return false;
+      reason =
+        `wiki-ingest is paused (${blocking.pause_reason}) on ${blocking.candidate_path}; ` +
+        `the operator must choose supersede / skip / proceed and clear the pause first`;
+    } else if (tool === "Bash") {
+      const command = typeof ti["command"] === "string" ? ti["command"] : "";
+      const entries = readIngestPause(root);
+      if (entries.length === 0) return false;
+      if (/ingest-similarity/.test(command) && /--clear-pause/.test(command)) {
+        blocking = entries[0];
+        decision = hostSupportsPreToolUseAsk(cwd) ? "ask" : "deny";
+        reason =
+          decision === "ask"
+            ? "clearing a wiki-ingest pause is the operator's decision"
+            : "clearing a wiki-ingest pause is the operator's decision; run it from your own shell";
+      } else {
+        blocking =
+          entries.find((e) => command.includes(e.candidate_path)) ??
+          (/\.guild\/wiki\b/.test(command) ? entries[0] : null);
+        if (blocking === null) return false;
+        reason = `wiki-ingest is paused on ${blocking.candidate_path}; a shell write to the wiki is refused`;
+      }
+    } else {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  const runId = resolveRunId(cwd);
+  if (runId !== undefined && isSafeRunId(runId)) try {
+    appendSecurityEvent(
+      runDirOverride() ?? resolveRunDir(cwd, runId),
+      buildSecurityEvent({
+        run_id: runId,
+        event_type: "injection_attempt_detected",
+        decision,
+        tool,
+        detail: reason,
+      }),
+    );
+  } catch {
+    /* observability only */
+  }
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: decision,
+        permissionDecisionReason: reason,
+      },
+    }),
+  );
+  return true;
+}
+
+/**
+ * KTD35 (plr-wi-15-3): a lane worker never writes the wiki. A Write / Edit /
+ * MultiEdit / NotebookEdit whose target resolves physically under <root>/.guild/wiki,
+ * or a Bash command naming any such path, is denied with an event. The worker stages a
+ * candidate under .guild/knowledge/candidates/ and the lead promotes it. The
+ * lead / T0 session sets neither GUILD_TASK_ID nor GUILD_LANE_ID and is untouched.
+ */
+function runLaneWikiWriteGate(payload: GuildHookEvent, cwd: string): boolean {
+  const tool = payload.tool_name ?? "";
+  const ti = (payload.tool_input ?? {}) as Record<string, unknown>;
+  const storage = createGuildStorage(resolveGuildRoot(cwd));
+  const wikiRoots = [storage.project?.knowledge(), storage.workspace?.knowledge()].filter(
+    (r): r is string => typeof r === "string",
+  );
+  const target = laneWikiWriteTarget(process.env, tool, ti, wikiRoots, cwd);
+  if (target === null) return false;
+  const reason =
+    `a lane worker may not write the wiki (${target} resolves under ${wikiRoots.join(" | ")}); ` +
+    `stage a candidate under .guild/knowledge/candidates/ for the lead to promote (KTD35)`;
+  const runId = resolveRunId(cwd);
+  if (runId !== undefined && isSafeRunId(runId)) {
+    try {
+      const laneEnv = process.env["GUILD_LANE_ID"];
+      appendSecurityEvent(
+        runDirOverride() ?? resolveRunDir(cwd, runId),
+        buildSecurityEvent({
+          run_id: runId,
+          lane_id: typeof laneEnv === "string" && isSafeLaneId(laneEnv) ? laneEnv : undefined,
+          event_type: "lane_wiki_write_refused",
+          decision: "deny",
+          tool,
+          detail: reason,
+        }),
+      );
+    } catch {
+      /* observability only */
+    }
+  } else {
+    process.stderr.write("warn: [pre-tool-use] lane_wiki_write_refused not logged (no run id resolvable).\n");
+  }
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: `Guild security (lane_wiki_write_refused): ${reason}`,
+      },
+    }),
+  );
+  return true;
 }
 
 /**
@@ -589,21 +863,35 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
       typeof envTaskId === "string" && envTaskId.length > 0
     ) {
       const scopeFilePath = path.join(
-        resolveGuildRoot(cwd), ".guild", "runs", envRunId, "scope", `${envTaskId}.json`,
+        durableGuildDir(resolveGuildRoot(cwd)), "runs", envRunId, "scope", `${envTaskId}.json`,
       );
       scope = readScopeFile(scopeFilePath, sec.allowed_tools);
     }
   }
 
-  const mcpPinned = isMcpTool(toolName) && sec.tool_description_hashes[toolName] !== undefined;
+  // KTD60: Guild's own MCP tools are pinned by the compile step, so they are
+  // pinned on a fresh install with no operator action. An operator pin in
+  // mcp.tool_description_hashes still wins for the same tool name.
+  const shipped = readShippedMcpPins();
+  const shippedLookup = shippedPinFor(toolName, shipped.pins, shipped.failure, GUILD_MCP_SERVERS);
+  const mcpPins = isMcpTool(toolName)
+    ? effectivePins(toolName, sec.tool_description_hashes, shippedLookup)
+    : sec.tool_description_hashes;
+  const mcpPinned = isMcpTool(toolName) && mcpPins[toolName] !== undefined;
+  // A Guild-owned tool with no usable pin is a fail-closed case, not an unpinned
+  // one: enforcement must not switch off because a file went missing.
+  const guildPinUnavailable =
+    shippedLookup.guildOwned &&
+    shippedLookup.failure !== undefined &&
+    sec.tool_description_hashes[toolName] === undefined;
 
   // Clean fall-through: not a scoped lane AND no pin for this tool ⇒ nothing
   // to enforce (lead/orchestrator + non-Guild sessions unaffected).
-  if (scope === null && !mcpPinned) return false;
+  if (scope === null && !mcpPinned && !guildPinUnavailable) return false;
 
   const runId = resolveRunId(cwd);
   const runDir =
-    runId !== undefined ? (process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId)) : undefined;
+    runId !== undefined ? (runDirOverride() ?? resolveRunDir(cwd, runId)) : undefined;
   const laneEnv = process.env["GUILD_LANE_ID"];
   const laneId =
     typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv) ? laneEnv : undefined;
@@ -751,7 +1039,7 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
   // 3. MCP description hash-pin (independent of scope; only for pinned tools).
   if (mcpPinned) {
     const live = readMcpDescription(payload, runDir, toolName);
-    const r = verifyMcpDescription(toolName, live, sec.tool_description_hashes);
+    const r = verifyMcpDescription(toolName, live, mcpPins);
     if (r.status === "mismatch") {
       const reason =
         `MCP tool "${toolName}" description hash mismatch (pinned ${r.pinned?.slice(0, 12)}…, ` +
@@ -760,9 +1048,29 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
       return gate("ask", "mcp_description_mismatch", `${reason} Confirm before allowing.`);
     }
     if (r.status === "unverifiable") {
-      // Pinned but no live description source — record + proceed (do not brick
-      // every pinned MCP call). Wiring a description source is the followup
-      // that upgrades this to a fail-closed gate.
+      // O1 (plr-wi-15-1): the Claude payload carries no description, so for a
+      // Guild tool the verified runtime/guild-mcp.js stands in for it.
+      if (binaryVouchesForDescription(toolName, sec.tool_description_hashes, shippedLookup)) {
+        emit({
+          event_type: "mcp_description_unverifiable",
+          decision: "allow",
+          tool: toolName,
+          detail: `MCP tool "${toolName}" has no live description; the verified Guild MCP binary stands in for it.`,
+          permission_mode: permissionMode,
+        });
+        return false;
+      }
+      // Guild's own tools otherwise fail CLOSED: we control both ends, so "cannot
+      // verify" is a defect, not a fact of life. Third-party tools keep the shipped
+      // behaviour (record + proceed) so pinning a third-party server does not
+      // brick every call when the host omits the description.
+      if (shippedLookup.guildOwned) {
+        const reason =
+          `MCP tool "${toolName}" is a Guild tool with a shipped pin but no live ` +
+          `description to verify against — refusing rather than trusting it (PI-6).`;
+        emit({ event_type: "mcp_description_unverifiable", decision: "ask", tool: toolName, detail: reason, permission_mode: permissionMode });
+        return gate("ask", "mcp_description_unverifiable", `${reason} Confirm before allowing.`);
+      }
       emit({
         event_type: "mcp_description_unverifiable",
         decision: "allow",
@@ -771,6 +1079,16 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
         permission_mode: permissionMode,
       });
     }
+  }
+
+  // Guild-owned tool, no usable shipped pin and no operator pin: refuse.
+  if (guildPinUnavailable) {
+    const reason =
+      `MCP tool "${toolName}" belongs to a Guild MCP server but its shipped pin is ` +
+      `unusable (${shippedLookup.failure}). Guild's own tools are pinned by the compile ` +
+      `step; an unusable pin file means the install is incomplete or tampered with.`;
+    emit({ event_type: "mcp_description_unpinned", decision: "ask", tool: toolName, detail: reason, permission_mode: permissionMode });
+    return gate("ask", "mcp_description_unpinned", `${reason} Re-install Guild or run \`bun run compile\`.`);
   }
 
   return false;
@@ -831,7 +1149,7 @@ function runDispatchIntegrityGuard(payload: GuildHookEvent, cwd: string): boolea
 
   // Best-effort audit record — never gate on the write.
   try {
-    const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+    const runDir = runDirOverride() ?? resolveRunDir(cwd, runId);
     const laneEnv = process.env["GUILD_LANE_ID"];
     const laneId =
       typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv)
@@ -991,7 +1309,7 @@ function evaluateBackendDegradation(
     typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv)
       ? laneEnv
       : undefined;
-  const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+  const runDir = runDirOverride() ?? resolveRunDir(cwd, runId);
   try {
     appendBackendDegradationEvent(
       runDir,
@@ -1155,7 +1473,7 @@ function evaluateTierDispatch(
     typeof laneEnv === "string" && laneEnv.length > 0 && isSafeLaneId(laneEnv)
       ? laneEnv
       : undefined;
-  const runDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+  const runDir = runDirOverride() ?? resolveRunDir(cwd, runId);
   try {
     appendTierDispatchEvent(
       runDir,
@@ -1238,6 +1556,24 @@ export async function main(): Promise<void> {
 
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
 
+  // KTD23: a future layout is not ours to read or write. This is a security gate,
+  // so skipping it would let every tool through: DENY the call (fail closed), and
+  // do it before any guard below writes a receipt into that .guild/.
+  try {
+    ensureStorageLayout(resolveGuildRoot(cwd), { detectOnly: true });
+  } catch (e) {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: e instanceof Error ? e.message : String(e),
+        },
+      }),
+    );
+    return;
+  }
+
   // Both dispatch guards run BEFORE capability enforcement so an `Agent`
   // dispatch defect is DENIED outright and can never be downgraded to an `ask`
   // (and then approved) by a capability-scope gate. Each is scoped tightly to
@@ -1308,6 +1644,20 @@ export async function main(): Promise<void> {
     return;
   }
 
+  // KTD28 — the assignment's tool projection. A hard DENY, so it runs BEFORE the
+  // security enforcement below: that gate can answer `ask`, and an operator
+  // approving the ask must never run a tool the worker was not granted (the same
+  // reason PCL-09 runs first).
+  if (runProjectionGate(payload, cwd)) return;
+
+  // D-PROBE ingest pause — a hard deny on a paused candidate, before any gate
+  // that could answer an approvable `ask` for the same write.
+  if (runIngestPauseGate(payload, cwd)) return;
+
+  // KTD35 — a lane worker's wiki write is a hard deny, before any gate that
+  // could answer an approvable `ask` for the same write.
+  if (runLaneWikiWriteGate(payload, cwd)) return;
+
   // v2 security ADR — capability-scope enforcement + MCP description hash-pin.
   // Runs BEFORE the boundary guard so a security gate owns stdout for this
   // event. If it emits a permission decision, skip everything else and return.
@@ -1325,8 +1675,8 @@ export async function main(): Promise<void> {
     const bgRunId = resolveRunId(cwd);
     const bgRunDir =
       bgRunId !== undefined
-        ? (process.env["GUILD_RUN_DIR"] ??
-            path.join(resolveGuildRoot(cwd), ".guild", "runs", bgRunId))
+        ? (runDirOverride() ??
+            path.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", bgRunId))
         : undefined;
     const bgLaneEnv = process.env["GUILD_LANE_ID"];
     const bgLaneId =
@@ -1369,8 +1719,8 @@ export async function main(): Promise<void> {
   }
 
   const runDir =
-    process.env["GUILD_RUN_DIR"] ??
-    path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+    runDirOverride() ??
+    path.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", runId);
   const laneId = process.env["GUILD_LANE_ID"];
 
   const entry: SidecarPreEntry = {

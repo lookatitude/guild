@@ -37,6 +37,7 @@
 
 import * as fsNode from "fs";
 import * as path from "path";
+import { ensureStorageLayout } from "./state/ensure-storage-layout";
 
 // ── Injectable filesystem seam ─────────────────────────────────────────────────
 
@@ -348,7 +349,13 @@ export function missingRequiredArtifacts(manifest: ReplayManifest): ReplayArtifa
 
 // ── CLI entrypoint (may use Date.now; never called from lib consumers) ────────
 
-if (require.main === module) {
+// Gate on the exact argv basename: esbuild inlines this module into other
+// bundles, where `require.main === module` is true for every inlined module.
+if (
+  require.main === module &&
+  /^replay-rundir\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")
+) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const runDir = argv[0];
   if (!runDir) {

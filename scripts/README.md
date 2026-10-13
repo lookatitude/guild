@@ -120,10 +120,12 @@ on every refactor that shifts a line. Run it on demand or as an advisory step.
 
 ## Testing
 
-Tests live under `scripts/__tests__/` and run via Jest:
+Tests sit beside the code they cover (`<name>.test.ts` next to the CLI or lib
+module; domain specs beside the domain under `src/domains/<id>/`) and run under
+`bun test` from the plugin root:
 
 ```
-cd scripts && npx jest --no-coverage --silent
+bun test --isolate ./scripts
 ```
 
 Fixtures live under `scripts/fixtures/`. Add a fixture per edge case you care

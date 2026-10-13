@@ -10,6 +10,7 @@
  *  - appends are cumulative (not overwriting)
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";

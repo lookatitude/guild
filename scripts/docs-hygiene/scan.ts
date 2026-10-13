@@ -54,6 +54,7 @@ import * as path from "path";
 import * as os from "os";
 import { parseFrontmatter as parseSharedFrontmatter } from "../lib/frontmatter";
 import { SECRET_PATTERNS } from "../lib/shared/secret-patterns";
+import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
 export { SECRET_PATTERNS };
 
@@ -805,7 +806,7 @@ function scanPendingGradeReview(corpus: string[]) {
 }
 
 // ---- 6. Secrets grep -------------------------------------------------------
-// SECRET_PATTERNS moved to src/modules/security/workflows/secret-patterns.ts
+// SECRET_PATTERNS moved to src/domains/security/secret-patterns.ts
 // (audit remediation item 16 — the security module was importing UPWARD from
 // this self-build docs scanner; imported + re-exported here unchanged so this
 // file's own existing consumers — sanitized-run-export.ts, config-render.ts —
@@ -847,7 +848,13 @@ function scanSecrets(corpus: string[]) {
 // files in any cwd the scrub touches (observed: benchmark + website during
 // the share-dot-guild commit).
 // ---------------------------------------------------------------------------
-if (require.main === module) {
+// Gate on the exact argv basename: esbuild inlines this module into other
+// bundles, where `require.main === module` is true for every inlined module.
+if (
+  require.main === module &&
+  /^scan\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")
+) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
 
 // ---------------------------------------------------------------------------
 // Collect corpora

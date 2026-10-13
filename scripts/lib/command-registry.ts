@@ -55,10 +55,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import {
-  canonicalizeRealPath,
-  isWithin,
-} from "../../src/modules/kernel/workflows/path-containment";
+import { canonicalizeRealPath, isWithin } from "../../src/domains/kernel/index";
 import { splitFrontmatter, parseYaml } from "./frontmatter";
 
 // ---------------------------------------------------------------------------
@@ -448,7 +445,7 @@ const LIVE_SURFACE_DIRS = ["commands", "skills", ".claude-plugin"] as const;
 
 /**
  * MIGRATED to the shared path-containment primitive
- * (`src/modules/kernel/workflows/path-containment.ts`).
+ * (`src/domains/kernel/path-containment.ts`).
  *
  * The private `canonicalAbs`/`isUnderOrEqual` pair that used to live here was
  * BYTE-IDENTICAL to the pair in `skill-source-transform.ts` and near-identical to

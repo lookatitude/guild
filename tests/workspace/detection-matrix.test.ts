@@ -22,6 +22,7 @@
  * "false-positive workspace detection" mitigated by mode override.
  */
 
+import { describe, test, expect, afterEach } from "bun:test";
 import {
   DETECT,
   runScript,

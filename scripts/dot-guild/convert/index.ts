@@ -56,6 +56,12 @@ export interface RunMigrationOptions {
   clock?: Clock;
   /** When true, treat `root` as a workspace and fan out to children (SC-5). Default: auto-detect. */
   workspace?: boolean;
+  /**
+   * When false the report body is computed and returned in `reportBody` but NEVER
+   * written to disk. `planMigration` is the supported way to ask for that; a plan
+   * is a pure read, and a read that leaves a file behind is not a plan.
+   */
+  emitReport?: boolean;
 }
 
 /**
@@ -66,12 +72,13 @@ export function runMigration(opts: RunMigrationOptions): MigrationResult {
   const fs = opts.fs ?? realFs;
   const clock = opts.clock ?? realClock;
   const mode = opts.mode;
+  const emitReport = opts.emitReport !== false;
 
   const units = discoverUnits(fs, opts.root, opts.workspace);
   const children: ChildResult[] = [];
   for (const root of units.roots) {
     try {
-      children.push(processChild(fs, clock, root, mode));
+      children.push(processChild(fs, clock, root, mode, emitReport));
     } catch (e) {
       // Child failure must NOT abort siblings (SC-5 independence).
       const guildDir = path.join(root, ".guild");
@@ -92,6 +99,19 @@ export function runMigration(opts: RunMigrationOptions): MigrationResult {
   }
 
   return { children, workspace: units.workspace };
+}
+
+/**
+ * PURE PLANNING ENTRY. Same detection and same plan as `--mode=dry-run`, with one
+ * difference that is the whole point: it writes NOTHING — no report file, no
+ * snapshot, no converted artifact. The report body is returned in
+ * `child.reportBody` for a caller that wants to print it.
+ *
+ * The layout-upgrade chain calls this (never `runMigration`) on its dry-run leg,
+ * so `config migrate --mode=dry-run` leaves the tree byte-identical.
+ */
+export function planMigration(opts: Omit<RunMigrationOptions, "mode" | "emitReport">): MigrationResult {
+  return runMigration({ ...opts, mode: "dry-run", emitReport: false });
 }
 
 interface Units {
@@ -197,7 +217,7 @@ function discoverUnits(fs: Fs, root: string, forceWorkspace?: boolean): Units {
 }
 
 /** Process a single repo's `.guild/` end-to-end. */
-function processChild(fs: Fs, clock: Clock, root: string, mode: Mode): ChildResult {
+function processChild(fs: Fs, clock: Clock, root: string, mode: Mode, emitReport: boolean): ChildResult {
   const guildDir = path.join(root, ".guild");
   const det: DetectResult = detect(fs, guildDir);
   const stamp = clock.stamp();
@@ -231,7 +251,7 @@ function processChild(fs: Fs, clock: Clock, root: string, mode: Mode): ChildResu
       base.snapshot = snap;
     }
     base.reportBody = renderReport(base, mode, clock.iso());
-    writeReport(fs, base);
+    writeReport(fs, base, emitReport);
     return base;
   }
 
@@ -249,7 +269,7 @@ function processChild(fs: Fs, clock: Clock, root: string, mode: Mode): ChildResu
   if (mode === "skip") {
     base.action = "skip";
     base.reportBody = renderReport(base, mode, clock.iso());
-    writeReport(fs, base); // skip still produces its audit trail (P3 fix)
+    writeReport(fs, base, emitReport); // skip still produces its audit trail (P3 fix)
     return base;
   }
 
@@ -262,7 +282,7 @@ function processChild(fs: Fs, clock: Clock, root: string, mode: Mode): ChildResu
     base.conflicts = out.conflicts;
     base.grades = out.grades;
     base.reportBody = renderReport(base, mode, clock.iso());
-    writeReport(fs, base); // dry-run STILL emits the report (it writes nothing else)
+    writeReport(fs, base, emitReport); // dry-run STILL emits the report (it writes nothing else)
     return base;
   }
 
@@ -273,7 +293,7 @@ function processChild(fs: Fs, clock: Clock, root: string, mode: Mode): ChildResu
   if (!snap.verified) {
     base.error = `snapshot verify failed at ${snap.mismatch} — conversion aborted (snapshot left for inspection)`;
     base.reportBody = renderReport(base, mode, clock.iso());
-    writeReport(fs, base);
+    writeReport(fs, base, emitReport);
     return base;
   }
 
@@ -284,7 +304,7 @@ function processChild(fs: Fs, clock: Clock, root: string, mode: Mode): ChildResu
   base.grades = out.grades;
   base.restoreCommand = buildRestore(snap.destRel, out.removed, out.generated);
   base.reportBody = renderReport(base, mode, clock.iso());
-  writeReport(fs, base);
+  writeReport(fs, base, emitReport);
   return base;
 }
 
@@ -307,7 +327,9 @@ function buildRestore(destRel: string, removed: string[], generated: string[]): 
 }
 
 /** Write the report file unless the classification is silent (v2/none). */
-function writeReport(fs: Fs, child: ChildResult): void {
+function writeReport(fs: Fs, child: ChildResult, emitReport: boolean): void {
+  // A pure plan writes nothing at all — not even its own audit trail.
+  if (!emitReport) return;
   // none + v2 are silent: never write a report file (CF-W1c-1).
   if (child.detect.classification === "none" || child.action === "v2-noop") return;
   fs.writeFileSync(child.reportPath, child.reportBody);

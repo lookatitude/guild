@@ -11,9 +11,10 @@
  * Deterministic: explicit interleavings, no timers.
  */
 
+import { describe, test, expect } from "bun:test";
 import { requireContractModule } from "./_helpers";
 
-const ARBITER_MODULE = "src/modules/capability/workflows/confirmation-arbiter";
+const ARBITER_MODULE = "src/domains/config/confirmation-arbiter";
 const LANE = "T5-policy-resolver";
 
 const KEY_COMPONENTS = [

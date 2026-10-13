@@ -4,6 +4,7 @@
  * Unit tests for MCP tool-description hash pinning (hooks/lib/security/mcp-hash-pin.ts).
  */
 
+import { describe, it, expect } from "bun:test";
 import {
   hashDescription,
   isMcpTool,

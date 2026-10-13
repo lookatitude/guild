@@ -4,7 +4,8 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-memory/dist/index.js"
+        "${CLAUDE_PLUGIN_ROOT}/runtime/guild-mcp.js",
+        "wiki"
       ],
       "env": {},
       "mcp_capability": {
@@ -21,7 +22,8 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/mcp-servers/guild-telemetry/dist/index.js"
+        "${CLAUDE_PLUGIN_ROOT}/runtime/guild-mcp.js",
+        "trace"
       ],
       "env": {},
       "mcp_capability": {

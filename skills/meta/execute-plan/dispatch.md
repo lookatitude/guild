@@ -47,7 +47,7 @@ TaskCell. The host contract does not yet prove child-env carriage, so do not
 reconstruct the plan or issue `Agent()` yourself:
 
 ```
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/agent-team-launcher.ts --team <resolved-team-path> --cwd <repo-root> --agent-mode=agent --run-id <run-id>
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/agent-team-launcher.js --team <resolved-team-path> --cwd <repo-root> --agent-mode=agent --run-id <run-id>
 ```
 
 Only an unscoped unknown/project role can reach the legacy declarative path
@@ -394,7 +394,7 @@ When the target repo IS the Guild plugin itself (self-build), `team.yaml` is com
 When the snapshot-resolved backend is `agent-team` (the D5 ladder resolved `agent_mode` to `team` at intake; team is primary whenever tmux is present — not an opt-in), invoke `scripts/agent-team-launcher.ts` to spawn the tmux session — one pane for the orchestrator plus one pane per specialist, with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` exported in each pane. The launcher is the canonical entry point for the agent-team backend; a real launch writes its session manifest to `.guild/runs/<run-id>/agent-team/session.json` and refuses to spawn nested teams per §7.3. Run it once per execute-plan invocation:
 
 ```
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/agent-team-launcher.ts --team <resolved-team-path> --cwd <repo-root>
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/agent-team-launcher.js --team <resolved-team-path> --cwd <repo-root>
 ```
 
 `<resolved-team-path>` is the **`resolveTeamFile(guildRoot, slug, readActivePhase(cwd))`** result (`scripts/lib/team-file.ts`) — the per-phase `.guild/team/<slug>.<phase>.yaml` (or legacy `.guild/team/<slug>.yaml` on back-compat). **Never reconstruct `.guild/team/<slug>.yaml` here** — pass the resolved path the input step (`## Input`) already computed. The launcher's `slugFromTeamPath` tolerates the `<slug>.<phase>.yaml` basename. Pass `--dry-run` first to preview the resolved commands and in-memory manifest without spawning the session or writing anything; use `--session-name` when a name collision would otherwise block launch.

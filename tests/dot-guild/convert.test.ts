@@ -17,6 +17,7 @@
  *  - Fixtures are plain JS objects (buildFs helpers) — no fixture files needed.
  */
 
+import { describe, test, expect } from "bun:test";
 import * as path from "path";
 import {
   detect,

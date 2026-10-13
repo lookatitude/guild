@@ -5,6 +5,7 @@ name: init
 description: "Init-phase skill — onboard an existing repo or scaffold new-product knowledge; build the wiki and (brownfield) the cheap-scan CodebaseMap + a confidence-tagged architecture-map stub. The deep KnowledgeGraph + tour are lazy and gated, NOT produced at Init. Drives the /guild:init phase entrypoint."
 when_to_use: "First phase of the lifecycle on a fresh or unonboarded repo, or when the user runs /guild:init or smart-detect proposes Init (no wiki/init present)."
 type: meta
+indexed: true
 derived_from_template: guild.skill_template.v1
 ---
 
@@ -40,8 +41,7 @@ first, never auto-skipped.
 On a **workspace** root (detected per the step below): `.guild/workspace.json`
 (`guild.workspace.v1` — bound by pointer to the contract map, never
 schema-copied here; canonical body defined in the workspace-aware-init-and-federation ADR). It is
-written by the Lane-B script, not hand-built: `npx tsx
-${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/workspace/write-manifest.ts --cwd <workspace-root>`. A workspace builds
+written by the Lane-B script, not hand-built: `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-write-manifest.js --cwd <workspace-root>`. A workspace builds
 its **own** `.guild/wiki/**` **only if** `root_wiki` is true (D-OQ2 — the
 workspace root itself has scannable top-level code); a pure federation root
 (e.g. just `docs/` + sub-repos) gets `root_wiki: false` and **no** root wiki.
@@ -50,10 +50,10 @@ No sub-guild's pages are ever copied up (federation, not duplication).
 On a **regular** repo (the default), nothing above is written and the path below
 is byte-for-byte unchanged:
 
-`.guild/init/<slug>.md` (the Init record), `.guild/wiki/**`, `.guild/raw/**`,
+`.guild/init/<slug>.md` (the Init record), `.guild/wiki/**`, `.guild/knowledge/sources/**`,
 `.guild/settings.json` (the project config surface — scaffolded
 fully-documented **if absent**, idempotent, via
-`npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/read-guild-config.ts --scaffold > .guild/settings.json`;
+`node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/read-guild-config.js --scaffold > .guild/settings.json`;
 never clobbered; regenerate/inspect with `/guild:config init|show|validate`),
 and — brownfield, **cheap scan tier only** — `.guild/indexes/codebase-map.json`
 plus a **confidence-tagged** `wiki/concepts/architecture-map.md` **stub**.
@@ -68,8 +68,7 @@ an explicit refresh; the full `learn-*` pipeline also runs at Init under
 
 1. Resolve `guild.phase_entry.v1` (pointer) and fold the Tier-2 `defaults:`.
 2. Detect mode: brownfield vs new-product (`--new`).
-2a. **Detect repo kind (workspace vs regular).** Run `npx tsx
-   ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/workspace/detect.ts --cwd <root>` — it classifies the target
+2a. **Detect repo kind (workspace vs regular).** Run `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-detect.js --cwd <root>` — it classifies the target
    `regular` or `workspace` by stat-ing **immediate children only** (depth
    fixed at 1, no nesting, no knob) for a nested `.git/` **or** `.guild/`, and
    honors `settings.json` `workspace.mode: auto | on | off`. Plain dirs (e.g.
@@ -81,7 +80,7 @@ an explicit refresh; the full `learn-*` pipeline also runs at Init under
    only under `--learn` or `defaults.auto_learn: true` (D3) — no
    ask-before-deep-scan gate.
 4. **Workspace path (federation, not duplication):** write the federation
-   manifest with `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/workspace/write-manifest.ts --cwd
+   manifest with `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-write-manifest.js --cwd
    <workspace-root>` → `.guild/workspace.json` (`guild.workspace.v1`, by
    pointer). The writer sets `root_wiki` per D-OQ2 (true iff the root itself has
    scannable top-level code) and enumerates each detected sub-guild. Build a
@@ -124,7 +123,7 @@ an explicit refresh; the full `learn-*` pipeline also runs at Init under
    `guild:learning-checkpoint` to classify the already-written Init artifacts into
    the 12-target verdict, then emit via the hook — full call signature + the
    `GUILD_PHASE` mapping are canonical in
-   `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the
+   `skills/meta/reflect/references/learning-checkpoint.md §"How a phase skill fires the
    checkpoint"` (do not re-spell). It rides this existing boundary, defaults to
    all-`none` (a near-zero-token no-op), asks no prompt, and introduces no new
    gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`.
@@ -177,3 +176,18 @@ hard set). Writes confined to `.guild/` (DH-3 boundary).
   interactively (never auto-run, never forced).
 - Regular repo with only a `docs/` dir (no nested `.git`/`.guild`) →
   classified `regular`, no `workspace.json`, cheap-scan path byte-unchanged.
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:learn-graph` | `learn` | `../../knowledge/learn/references/learn-graph.md` |
+| `guild:learn-map` | `learn` | `../../knowledge/learn/references/learn-map.md` |
+| `guild:learning-checkpoint` | `reflect` | `../reflect/references/learning-checkpoint.md` |
+| `guild:review-broker` | `review` | `../review/references/review-broker.md` |
+| `guild:wiki-ingest` | `wiki` | `../../knowledge/wiki/references/wiki-ingest.md` |
+| `guild:wiki-query` | `wiki` | `../../knowledge/wiki/references/wiki-query.md` |

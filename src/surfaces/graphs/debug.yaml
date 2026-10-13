@@ -1,0 +1,39 @@
+# guild.workflow_graph.v1 — plugin default for the `debug` class (KTD40).
+# Reproduce first. The inner loop runs against the smallest failing oracle.
+# "This is a feature, not a bug" is a change_class to product, never a new class.
+schema_version: "guild.workflow_graph.v1"
+class: "debug"
+graph_id: "debug.default"
+entry: "recall"
+nodes:
+  - id: "recall"
+    station: "research-synthesis"
+    assembler: "wiki"
+    inner_loop: false
+    skip_when: "recall_hit"
+  - id: "reproduce"
+    station: "debug-reproduce"
+    assembler: "diagnose"
+    inner_loop: false
+  - id: "fix"
+    station: "implementation"
+    assembler: "execute-plan"
+    inner_loop: true
+  - id: "verify"
+    station: "runtime-qa"
+    assembler: "quality"
+    inner_loop: false
+  - id: "harvest"
+    station: "harvest"
+    assembler: "reflect"
+    inner_loop: false
+edges:
+  - { from: "recall", on: "next", to: "reproduce" }
+  - { from: "recall", on: "skip", to: "reproduce" }
+  - { from: "reproduce", on: "next", to: "fix" }
+  - { from: "reproduce", on: "change_class", to: { class: "product", entry: "intake" }, change_class: "product" }
+  - { from: "fix", on: "next", to: "verify" }
+  - { from: "fix", on: "replan", to: "reproduce" }
+  - { from: "verify", on: "next", to: "harvest" }
+  - { from: "verify", on: "replan", to: "fix" }
+  - { from: "harvest", on: "harvest", to: "harvest" }

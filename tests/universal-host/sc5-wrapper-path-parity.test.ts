@@ -19,6 +19,7 @@
  *   RED until L3 — the real guild-run wrapper-vs-native parity run.
  */
 
+import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import {
   CLAUDE_CAPABILITIES,
   CODEX_CAPABILITIES,

@@ -28,10 +28,8 @@ import { redactShareableFile } from "../lib/shared/scrub-redact";
 // a cache entry can never reach a shared tree unredacted. audit.ts carries the
 // matching CI-gating coverage leg (both scrub-policy legs updated together).
 import { spawnSync } from "child_process";
-import {
-  MODEL_CATALOG_CACHE_REL,
-  modelCatalogCacheDir,
-} from "../../src/modules/capability/workflows/catalog-cache";
+import { MODEL_CATALOG_CACHE_REL, modelCatalogCacheDir } from "../../src/domains/config";
+import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
 function walkDir(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
@@ -118,6 +116,7 @@ function warnTrackableModelCatalogCache(workspace: string): number {
 }
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
   const wsArg = args.find(a => a.startsWith("--workspace="));

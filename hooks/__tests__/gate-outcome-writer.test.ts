@@ -7,6 +7,7 @@
  * drives it) against a real run.yaml + review.md/verify.md fixture.
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";

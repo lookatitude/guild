@@ -128,7 +128,7 @@ function readInventory(root: string): InventoryFile {
 export function deriveSpineTables(root: string): SpineTables {
   const manifests = loadModuleManifests(root);
   if (manifests.length === 0) {
-    throw new Error(`no module manifests found under ${path.join(root, "src", "modules")}`);
+    throw new Error(`no module manifests found under ${path.join(root, "src", "domains", "*", "modules")}`);
   }
 
   for (const manifest of manifests) {

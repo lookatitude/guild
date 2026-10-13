@@ -19,6 +19,7 @@
  *   unimplemented; no sanitization before rolling-summary fold.
  */
 
+import { describe, it, expect } from "bun:test";
 import {
   sanitizeForInjection,
   classifyEnvelope,

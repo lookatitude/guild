@@ -169,7 +169,7 @@ const HISTORICAL_SOURCE_SET: ReadonlySet<string> = new Set<string>(HISTORICAL_EV
  * Wire format: `<source>:<locator>[#<anchor>]`
  *   "knowledge_graph:node/domain/dispatch"
  *   "run:run-20260730-131020-dynamic-host-model-routing"
- *   "codebase_map:plugin/src/modules/dispatch/workflows/execution-transport-ports.ts#74"
+ *   "codebase_map:plugin/src/domains/dispatch/execution-transport-ports.ts#74"
  */
 export interface EvidenceRef {
   source: EvidenceSource;

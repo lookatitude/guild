@@ -14,6 +14,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { execFileSync } from "child_process";
+import { durableGuildDir } from "../../lib/state/ensure-storage-layout";
 
 export const SCHEMA = {
   codebaseMap: "guild.codebase_map.v1",
@@ -82,7 +83,7 @@ export interface GuildPaths {
 
 export function guildPaths(cwd: string): GuildPaths {
   const repoRoot = resolveMainRepoRoot(cwd);
-  const guildDir = path.join(repoRoot, ".guild");
+  const guildDir = durableGuildDir(repoRoot);
   const indexesDir = path.join(guildDir, "indexes");
   const runsDir = path.join(guildDir, "runs");
   return {

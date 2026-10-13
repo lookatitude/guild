@@ -35,6 +35,7 @@ import { resolveSettings } from "./lib/settings-resolver";
 import { resolveTierModel, type ResolvedTierModel, type TierHostValue } from "./read-guild-config";
 // W4 D2: runtime tier defaults from the registry (kills DEFAULT_TIERS hand-typed literal).
 import { defaultTiersMap } from "./lib/capability/tier-defaults";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -273,6 +274,7 @@ function loadConfigModels(cwd: string): Pick<ScorerOpts, "scoreWeights" | "thres
 // ── CLI ───────────────────────────────────────────────────────────────────────
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   let rawSignals: string | undefined;
   let cwd: string | undefined;

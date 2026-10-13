@@ -32,7 +32,7 @@
  */
 
 import * as fs from "fs";
-import { deepFreeze } from "../../src/modules/kernel/workflows/sealed-collections";
+import { deepFreeze } from "../../src/domains/kernel";
 import * as path from "path";
 import { spawnSync } from "child_process";
 // Canonical single-source share-set membership (re-arch WAVE 1) — the former
@@ -48,10 +48,8 @@ import { redact } from "../lib/shared/scrub-redact";
 // tracked/trackable cache file is an actionable flag (CI fail). This is the
 // audit.ts half of the two-leg scrub-policy update (scrub.ts warns at scrub
 // time with the same canonical path constants).
-import {
-  MODEL_CATALOG_CACHE_REL,
-  modelCatalogCacheDir,
-} from "../../src/modules/capability/workflows/catalog-cache";
+import { MODEL_CATALOG_CACHE_REL, legacyModelCatalogCacheDir } from "../../src/domains/config";
+import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
 const args = process.argv.slice(2);
 const wsArg   = args.find(a => a.startsWith("--workspace="));
@@ -394,7 +392,7 @@ export function findPackageReceiptLeaks(repoPath: string, trackedOnlyMode = fals
 // Any .guild/ under one of these glob roots is a test fixture, not a leak.
 // `(?:[^/]+/)*` matches zero or more intermediate directory segments — the
 // fixture .guild/ can live directly under fixtures/ OR nested below it.
-// Exported so the exemption-parity test (scripts/dot-guild/__tests__/exemption-parity.test.ts)
+// Exported so the exemption-parity test (scripts/dot-guild/exemption-parity.test.ts)
 // can assert directly against the SAME array — no hand-copied mirror to drift.
 export const FIXTURE_EXEMPT_PATTERNS = deepFreeze([
   /\/benchmark\/fixtures\/(?:[^/]+\/)*\.guild(\/|$)/,
@@ -471,7 +469,9 @@ function findNestedGuildLeaks(repoPath: string, trackedOnlyMode = false): FileFl
  */
 export function findModelCatalogCacheLeaks(repoPath: string, trackedOnlyMode = false): FileFlag[] {
   const flags: FileFlag[] = [];
-  const cacheDir = modelCatalogCacheDir(repoPath);
+  // The leak surface is the repo: the live cache is on the platform cache root
+  // (U-CFG), so only the legacy in-repo location can ever be git-trackable.
+  const cacheDir = legacyModelCatalogCacheDir(repoPath);
   if (!fs.existsSync(cacheDir)) {
     // No cache on disk. Still catch the tracked-file case: anything under the
     // cache path already in the index is a leak even if deleted locally.
@@ -702,6 +702,7 @@ function renderReport(repoResults: Array<{ repo: string; flags: FileFlag[] }>, n
 }
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const now = new Date().toISOString().slice(0, 10);
   const repoResults: Array<{ repo: string; flags: FileFlag[] }> = [];
 

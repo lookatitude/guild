@@ -27,6 +27,7 @@
  * guild-plan.md §15.2 risk row 4 (evolve overfit) + VC-12 (SC-12).
  */
 
+import { describe, it, test, expect } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -39,8 +40,18 @@ interface EvalsJson {
   should_not_trigger: string[];
 }
 
+/**
+ * Load a surface's eval fixture. Two on-disk shapes since the T03 fold (KTD25):
+ * a skill folder (`<skill>/evals.json`) and an L3 chapter of an assembler
+ * (`<assembler>/references/<chapter>.evals.json`). The chapter shape is tried
+ * second so an id that is still a skill keeps resolving to its own folder.
+ */
 function loadEvals(skillPath: string): EvalsJson {
-  const filePath = path.join(SKILLS_ROOT, skillPath, "evals.json");
+  const candidates = [
+    path.join(SKILLS_ROOT, skillPath, "evals.json"),
+    path.join(SKILLS_ROOT, `${skillPath}.evals.json`),
+  ];
+  const filePath = candidates.find((c) => fs.existsSync(c)) ?? candidates[0];
   const raw = fs.readFileSync(filePath, "utf8");
   return JSON.parse(raw) as EvalsJson;
 }
@@ -58,11 +69,13 @@ function anyMatches(items: string[], ...keywords: string[]): boolean {
 // ── Minimum density check ────────────────────────────────────────────────────
 
 const TIER_SKILLS: Array<{ slug: string; path: string }> = [
-  { slug: "learn-map", path: "knowledge/learn-map" },
-  { slug: "learn-graph", path: "knowledge/learn-graph" },
-  { slug: "learn-onboard", path: "knowledge/learn-onboard" },
-  { slug: "learn-diff", path: "knowledge/learn-diff" },
-  { slug: "learn-explain", path: "knowledge/learn-explain" },
+  // The learn-* family became `references/` chapters of the `learn` assembler in
+  // T03; their eval fixtures rode the move and keep scoring the same prose.
+  { slug: "learn-map", path: "knowledge/learn/references/learn-map" },
+  { slug: "learn-graph", path: "knowledge/learn/references/learn-graph" },
+  { slug: "learn-onboard", path: "knowledge/learn/references/learn-onboard" },
+  { slug: "learn-diff", path: "knowledge/learn/references/learn-diff" },
+  { slug: "learn-explain", path: "knowledge/learn/references/learn-explain" },
   { slug: "execute-plan", path: "meta/execute-plan" },
 ];
 
@@ -110,7 +123,7 @@ describe("eval-fixture vocabulary — tiering/recall/escalate cases present (ADR
   // and a "powerful" NOT-trigger case (plain init never invokes powerful — VC-1)
 
   test("learn-map should_trigger includes a cheap-tier / cheap-scan vocabulary case", () => {
-    const ev = loadEvals("knowledge/learn-map");
+    const ev = loadEvals("knowledge/learn/references/learn-map");
     const hasCheap = anyMatches(
       ev.should_trigger,
       "cheap",
@@ -121,7 +134,7 @@ describe("eval-fixture vocabulary — tiering/recall/escalate cases present (ADR
   });
 
   test("learn-map should_not_trigger includes a powerful-tier guard (plain init never calls powerful)", () => {
-    const ev = loadEvals("knowledge/learn-map");
+    const ev = loadEvals("knowledge/learn/references/learn-map");
     const hasPowerfulGuard = anyMatches(
       ev.should_not_trigger,
       "powerful",
@@ -135,7 +148,7 @@ describe("eval-fixture vocabulary — tiering/recall/escalate cases present (ADR
   // and a "cheap-scan" NOT-trigger case
 
   test("learn-graph should_trigger includes a powerful-tier or graph-schema vocabulary case", () => {
-    const ev = loadEvals("knowledge/learn-graph");
+    const ev = loadEvals("knowledge/learn/references/learn-graph");
     const hasPowerful = anyMatches(
       ev.should_trigger,
       "powerful",
@@ -148,7 +161,7 @@ describe("eval-fixture vocabulary — tiering/recall/escalate cases present (ADR
   });
 
   test("learn-graph should_not_trigger includes a cheap-scan guard", () => {
-    const ev = loadEvals("knowledge/learn-graph");
+    const ev = loadEvals("knowledge/learn/references/learn-graph");
     const hasCheapGuard = anyMatches(
       ev.should_not_trigger,
       "cheap",
@@ -161,7 +174,7 @@ describe("eval-fixture vocabulary — tiering/recall/escalate cases present (ADR
   // learn-onboard: settings/config keys must NOT trigger it (they belong to learn-map/learn-graph)
 
   test("learn-onboard should_not_trigger includes at least one settings-config vocabulary guard", () => {
-    const ev = loadEvals("knowledge/learn-onboard");
+    const ev = loadEvals("knowledge/learn/references/learn-onboard");
     const hasSettingsGuard = anyMatches(
       ev.should_not_trigger,
       "settings",
@@ -176,7 +189,7 @@ describe("eval-fixture vocabulary — tiering/recall/escalate cases present (ADR
   // learn-diff: settings/config NOT-trigger guard (prevents routing config edits here)
 
   test("learn-diff should_not_trigger includes a settings-config vocabulary guard", () => {
-    const ev = loadEvals("knowledge/learn-diff");
+    const ev = loadEvals("knowledge/learn/references/learn-diff");
     const hasSettingsGuard = anyMatches(
       ev.should_not_trigger,
       "settings",
@@ -191,7 +204,7 @@ describe("eval-fixture vocabulary — tiering/recall/escalate cases present (ADR
   // learn-explain: settings/config NOT-trigger guard
 
   test("learn-explain should_not_trigger includes a settings-config vocabulary guard", () => {
-    const ev = loadEvals("knowledge/learn-explain");
+    const ev = loadEvals("knowledge/learn/references/learn-explain");
     const hasSettingsGuard = anyMatches(
       ev.should_not_trigger,
       "settings",
@@ -248,13 +261,30 @@ describe("eval-fixture vocabulary — tiering/recall/escalate cases present (ADR
 // ── No trigger/should_not_trigger overlap ────────────────────────────────────
 // A case that appears in both arrays is a definite eval defect.
 
+/** Prompts listed as BOTH a trigger and a non-trigger — a fixture that contradicts itself. */
+function overlapsOf(ev: EvalsJson): string[] {
+  const triggerSet = new Set(ev.should_trigger);
+  return ev.should_not_trigger.filter((s) => triggerSet.has(s));
+}
+
 describe("eval-fixture integrity — no trigger/non-trigger overlap (defect guard)", () => {
   for (const { slug, path: skillPath } of TIER_SKILLS) {
     test(`${slug}: no exact string appears in both should_trigger and should_not_trigger`, () => {
-      const ev = loadEvals(skillPath);
-      const triggerSet = new Set(ev.should_trigger);
-      const overlaps = ev.should_not_trigger.filter((s) => triggerSet.has(s));
-      expect(overlaps).toHaveLength(0);
+      expect(overlapsOf(loadEvals(skillPath))).toHaveLength(0);
     });
   }
+
+  test("CONTROL: a planted self-contradicting fixture is caught", () => {
+    const planted: EvalsJson = { should_trigger: ["map the repo", "x"], should_not_trigger: ["map the repo", "y"] };
+    expect(overlapsOf(planted)).toEqual(["map the repo"]);
+  });
+
+  test("CONTROL: the vocabulary probe finds nothing in a fixture that lacks the words", () => {
+    expect(anyMatches(["plan the release", "deploy it"], "cheap", "scan")).toBe(false);
+    expect(anyMatches(["run a cheap scan"], "cheap", "scan")).toBe(true);
+  });
+
+  test("CONTROL: a missing fixture file throws rather than reading as empty", () => {
+    expect(() => loadEvals("meta/no-such-skill-t13-control")).toThrow();
+  });
 });

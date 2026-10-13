@@ -12,7 +12,7 @@ import {
   writeRunComparison,
   type ComparisonTarget,
   type RecommendationStatus,
-} from "../src/modules/telemetry";
+} from "../src/domains/telemetry";
 
 function usage(message?: string): never {
   if (message) process.stderr.write(`[run-analysis] ${message}\n`);

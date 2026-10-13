@@ -20,6 +20,7 @@
  * Validates the manifest is well-formed JSON and round-trips.
  */
 
+import { describe, test, expect, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -212,9 +213,11 @@ describe("manifest shape — guild.workspace.v1 (e2e via write-manifest.ts)", ()
 
   describe("real-git remote + last_seen_commit population", () => {
     const hasGit = gitAvailable();
-    (hasGit ? test : test.skip)(
+    test(
       "a real-git sub-guild populates remote (host/path) and a 40-char HEAD",
       () => {
+        // git is a hard requirement of every suite here; its absence is a broken host.
+        expect(hasGit).toBe(true);
         root = makeTempRoot();
         plantRealGitSubGuild(root, "plugin", "https://github.com/acme/plugin.git", true);
         const m = writeAndRead(root);

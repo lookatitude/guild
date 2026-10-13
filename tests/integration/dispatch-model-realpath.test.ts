@@ -23,24 +23,22 @@
  *      command with no `--model` and no `GUILD_MODEL` at all.
  */
 
+import { describe, it, test, expect, beforeEach, afterAll, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import {
-  deriveResolveInputsFromM0Evidence,
-  planProductionDispatchModel,
-} from "../../src/modules/dispatch/workflows/task-assignment-v2";
-import { persistInspectionReport } from "../../src/modules/capability/workflows/inspection-persist";
+import { deriveResolveInputsFromM0Evidence, planProductionDispatchModel } from "../../src/domains/dispatch/index";
+import { persistInspectionReport } from "../../src/domains/config";
 import {
   buildModelInspection,
   MODEL_INSPECTION_SCHEMA,
-} from "../../src/modules/capability/workflows/model-inspect";
+} from "../../src/domains/config";
 import {
   loadVerifiedM0Reports,
   ROUTING_FLAG_DEFAULTS,
-} from "../../src/modules/capability/workflows/routing-rollout";
+} from "../../src/domains/config";
 // T8R/F3: the run-identity artifacts a real run owns (frozen session context +
 // content-addressed catalog cache entry) are seeded through the SAME key
 // builder production reads with — a hand-picked filename would prove nothing.
@@ -48,12 +46,13 @@ import {
   createCacheKey,
   MODEL_CATALOG_SCHEMA_VERSION,
   modelCatalogCacheDir,
-} from "../../src/modules/capability/workflows/catalog-cache";
-import { loadRunBinding, mintRunBinding } from "../../src/modules/lifecycle/workflows/run-binding";
-import { selfReferentialHash } from "../../src/modules/teams/workflows/canonical-hash";
-import { recordDecision, writeDecision } from "../../src/modules/teams/workflows/team-decision";
-import { composeProposal, writeProposal } from "../../src/modules/teams/workflows/team-proposal";
-import { createExactClaudePluginFixture } from "../../scripts/__tests__/fixtures/exact-claude-plugin-fixture";
+} from "../../src/domains/config";
+import { loadRunBinding, mintRunBinding } from "../../src/domains/lifecycle";
+import { sessionBindingPath, type SessionBinding } from "../../src/domains/config";
+import { selfReferentialHash } from "../../src/domains/teams";
+import { recordDecision, writeDecision } from "../../src/domains/teams/index";
+import { composeProposal, writeProposal } from "../../src/domains/teams/index";
+import { createExactClaudePluginFixture } from "../fixtures/exact-claude-plugin-fixture";
 
 const SESSION_CONTEXT_SCHEMA = "guild.session_context.v1";
 
@@ -152,7 +151,7 @@ function runLauncher(
   // launcher path. These fixtures are about M0/M1/M2 model selection, not
   // approval, and carry no team-plan trail — opt into the ONE audited escape
   // hatch with a stated reason. The gate's own pins live in
-  // scripts/__tests__/t7-h1-dispatch-approval.test.ts.
+  // src/domains/teams/t7-h1-dispatch-approval.test.ts.
   if (opts.approvalOverride !== false) {
     env.GUILD_DISPATCH_APPROVAL_OVERRIDE =
       "dispatch-model realpath fixture: no team-plan trail; approval verification is pinned separately";
@@ -204,8 +203,31 @@ function runLauncher(
  * the "run-identity contract" probes at the bottom of this file — the fixtures
  * adapt to the contract; they never soften it.
  */
+/**
+ * T06/T08: the launcher copies assignment host/model ids from the run's
+ * `guild.session_binding.v1` and BLOCKS without one, so every pre-minted run
+ * tree seeds it through the same file the lifecycle writes.
+ */
+function seedSessionBinding(root: string, runId: string): void {
+  const runDir = path.join(root, ".guild", "runs", runId);
+  fs.mkdirSync(runDir, { recursive: true });
+  const binding: SessionBinding = {
+    schema_version: "guild.session_binding.v1",
+    run_id: runId,
+    host_family: "claude-code-cli",
+    surface: "cli",
+    detected_at: new Date().toISOString(),
+    models: { cheap: "haiku", mid: "sonnet", powerful: "opus" },
+    model_family: "claude",
+    prompt_compose: { dialect_id: "claude", overlay_ids: [], hash: "sha256:x" },
+    evidence: { cheap: "available", mid: "available", powerful: "available" },
+  };
+  fs.writeFileSync(sessionBindingPath(runDir), `${JSON.stringify(binding, null, 2)}\n`, "utf8");
+}
+
 function seedLifecycleRun(root: string, runId: string): string {
   const binding = mintRunBinding({ root, run_id: runId });
+  seedSessionBinding(root, runId);
   const runsDir = path.join(root, ".guild", "runs");
   fs.mkdirSync(runsDir, { recursive: true });
   fs.writeFileSync(path.join(runsDir, "current-run-id"), `${runId}\n`, "utf8");
@@ -416,6 +438,7 @@ describe("REAL PATH (F5): gated M2 selection through the production function", (
   /** Seed a bound run with verified M0+M1 evidence THROUGH the production writers. */
   function seedBoundEvidence(runId: string): string {
     const binding = mintRunBinding({ root: tmp, run_id: runId });
+    seedSessionBinding(tmp, runId);
     const report = buildModelInspection({
       session_context: {
         schema_version: "guild.session_context.v1",
@@ -674,6 +697,7 @@ describe("REAL PATH (T8R/F3): the M0 inspection report has a production writer",
     catalogModels: typeof CATALOG_MODELS = CATALOG_MODELS,
   ): string {
     const binding = mintRunBinding({ root: tmp, run_id: runId });
+    seedSessionBinding(tmp, runId);
     const sessionContext = {
       schema_version: SESSION_CONTEXT_SCHEMA,
       run_id: runId,

@@ -13,10 +13,12 @@
  * Addresses §15.2 risk row 4 (evolve overfit) and row 3 (decision-capture noise).
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
+import { parseFrontmatter } from "../../scripts/lib/frontmatter";
 
 const SCRIPT = path.resolve(__dirname, "../../scripts/shadow-mode.ts");
 const FIXTURES = path.resolve(__dirname, "fixtures");
@@ -80,23 +82,23 @@ function readReport(tmpDir: string, runId: string): string {
 
 /** Parse the divergence_rate from report front-matter (e.g. "0.300" → 0.3). */
 function parseDivergenceRate(report: string): number {
-  const m = report.match(/^divergence_rate:\s*([\d.]+)/m);
-  if (!m) throw new Error("divergence_rate not found in report front-matter");
-  return parseFloat(m[1]);
+  const value = parseFrontmatter(report)?.["divergence_rate"];
+  if (value === undefined || value === null) throw new Error("divergence_rate not found in report front-matter");
+  return parseFloat(String(value));
 }
 
 /** Parse total_divergences from report front-matter. */
 function parseTotalDivergences(report: string): number {
-  const m = report.match(/^total_divergences:\s*(\d+)/m);
-  if (!m) throw new Error("total_divergences not found in report front-matter");
-  return parseInt(m[1], 10);
+  const value = parseFrontmatter(report)?.["total_divergences"];
+  if (value === undefined || value === null) throw new Error("total_divergences not found in report front-matter");
+  return parseInt(String(value), 10);
 }
 
 /** Parse total_prompts from report front-matter. */
 function parseTotalPrompts(report: string): number {
-  const m = report.match(/^total_prompts:\s*(\d+)/m);
-  if (!m) throw new Error("total_prompts not found in report front-matter");
-  return parseInt(m[1], 10);
+  const value = parseFrontmatter(report)?.["total_prompts"];
+  if (value === undefined || value === null) throw new Error("total_prompts not found in report front-matter");
+  return parseInt(String(value), 10);
 }
 
 // ── historical-agreement ───────────────────────────────────────────────────

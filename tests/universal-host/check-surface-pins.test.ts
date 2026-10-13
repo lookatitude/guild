@@ -11,6 +11,7 @@
  *      detector that always returned `ok` would pass obligation 1 and be useless.
  */
 
+import { describe, it, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -133,7 +134,8 @@ describe("check-surface-pins — detector is live (falsifiability)", () => {
     });
     const text = renderSurfacePinReport(drifted);
     expect(text).toContain("[surface-pins] DRIFT");
-    expect(text).toContain("compute pins AFTER sync");
-    expect(text).toContain("sync-module-resources");
+    expect(text).toContain("compute pins LAST");
+    expect(text).toContain("scripts/compile.ts");
+    expect(text).not.toContain("sync-module-resources");
   });
 });

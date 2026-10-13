@@ -6,7 +6,7 @@ import * as path from "node:path";
 import {
   evaluateTaskCellPolicyPromotion,
   type TaskCellPolicyPromotionInput,
-} from "../src/modules/evals";
+} from "../src/domains/evolve";
 
 function fail(message: string): never {
   process.stderr.write(`[task-cell-policy-eval] ${message}\n`);

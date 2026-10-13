@@ -47,6 +47,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import { loadRunEvents, RunEvent } from "./lib/run-events";
+import { readCompactHistory } from "../src/domains/evolve";
+import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -173,7 +176,7 @@ function tokenizeClause(text: string): string[] {
 // ── Historical trace loading ───────────────────────────────────────────────
 
 function listHistoricalRuns(cwd: string): string[] {
-  const runsDir = path.join(cwd, ".guild", "runs");
+  const runsDir = path.join(durableGuildDir(cwd), "runs");
   if (!fs.existsSync(runsDir)) return [];
   return fs
     .readdirSync(runsDir, { withFileTypes: true })
@@ -269,7 +272,14 @@ function evaluateRun(
 function formatReport(
   skillSlug: string,
   spec: ProposedSpec,
-  outcomes: ShadowOutcome[]
+  outcomes: ShadowOutcome[],
+  /**
+   * How many deltas this skill already carries in compact history (KTD48). Shadow
+   * mode reports it so the gate reads the divergence rate against a skill whose
+   * recent edits are visible — the retired design asked a per-version snapshot tree
+   * the same question.
+   */
+  recordedDeltas: number
 ): string {
   const totalPrompts = outcomes.reduce((a, o) => a + o.prompts, 0);
   const totalDivergences = outcomes.reduce((a, o) => a + o.divergences, 0);
@@ -284,6 +294,7 @@ function formatReport(
   lines.push(`total_prompts: ${totalPrompts}`);
   lines.push(`total_divergences: ${totalDivergences}`);
   lines.push(`divergence_rate: ${divergenceRate.toFixed(3)}`);
+  lines.push(`recorded_deltas: ${recordedDeltas}`);
   lines.push("---");
   lines.push("");
   lines.push(`# Shadow-mode report — ${skillSlug}`);
@@ -330,6 +341,7 @@ function formatReport(
 // ── Main ───────────────────────────────────────────────────────────────────
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const { skill, proposedEdit, runId, cwd: cwdArg } = parseArgs(
     process.argv.slice(2)
   );
@@ -357,16 +369,23 @@ function main(): void {
   const runs = listHistoricalRuns(cwd);
   const outcomes: ShadowOutcome[] = [];
   for (const r of runs) {
-    const runDir = path.join(cwd, ".guild", "runs", r);
+    const runDir = path.join(durableGuildDir(cwd), "runs", r);
     const { events } = loadRunEvents(runDir);
     if (events.length === 0) continue;
     outcomes.push(evaluateRun(r, events, spec, skill!));
   }
 
-  const report = formatReport(skill!, spec, outcomes);
+  // A history that cannot be read is reported as 0, never as a crash: shadow mode is
+  // gate EVIDENCE, and losing the whole report over a bookkeeping file is the wrong trade.
+  let recordedDeltas = 0;
+  try {
+    recordedDeltas = readCompactHistory(skill!, { cwd }).entries.length;
+  } catch {
+    recordedDeltas = 0;
+  }
+  const report = formatReport(skill!, spec, outcomes, recordedDeltas);
   const outFile = path.join(
-    cwd,
-    ".guild",
+    durableGuildDir(cwd),
     "evolve",
     runId,
     "shadow-report.md"

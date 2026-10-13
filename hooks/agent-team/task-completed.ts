@@ -90,12 +90,15 @@ import {
   evaluateContextCompliance,
   recordContextCompliance,
 } from "../lib/context-compliance.js";
-import { readTaskAssignmentV2 } from "../../src/modules/dispatch/workflows/task-assignment-v2.js";
+import { readTaskAssignmentV2 } from "../../src/domains/dispatch/index.js";
 import {
   readTaskAssignment,
   taskAssignmentPath,
-} from "../../src/modules/dispatch/workflows/task-assignment.js";
-import { publishSubmittedHandoffPointer } from "../../src/modules/dispatch/workflows/task-cell-acceptance.js";
+} from "../../src/domains/dispatch/index.js";
+import { publishSubmittedHandoffPointer } from "../../src/domains/dispatch/index.js";
+// T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
+import { ensureStorageLayout } from "../lib/ensure-layout.js";
+import { durableGuildDir } from "../../src/domains/state";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -148,7 +151,7 @@ function deriveRunId(sessionId: string, guildRoot: string): string {
   const bound = resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] });
   if (bound) return bound;
   const legacy = `run-${sessionId}`;
-  if (fs.existsSync(path.join(guildRoot, ".guild", "runs", legacy))) {
+  if (fs.existsSync(path.join(durableGuildDir(guildRoot), "runs", legacy))) {
     process.stderr.write(
       `[task-completed] WARN: legacy read-only fallback run id used: ${legacy}; ` +
         "start/inherit the lifecycle run id to remove this compatibility read.\n",
@@ -168,7 +171,7 @@ function deriveRunId(sessionId: string, guildRoot: string): string {
  * Path: <guild-root>/.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md
  */
 function receiptPath(guildRoot: string, runId: string, specialist: string, taskId: string): string {
-  return path.join(guildRoot, ".guild", "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
+  return path.join(durableGuildDir(guildRoot), "runs", runId, "handoffs", `${specialist}-${taskId}.md`);
 }
 
 /**
@@ -181,7 +184,7 @@ function learningsPath(
   specialist: string,
   taskId: string
 ): string {
-  return path.join(guildRoot, ".guild", "runs", runId, "learnings", `${specialist}-${taskId}.json`);
+  return path.join(durableGuildDir(guildRoot), "runs", runId, "learnings", `${specialist}-${taskId}.json`);
 }
 
 /**
@@ -339,7 +342,7 @@ function nativeTaskCellAssignments(input: {
   taskId: string;
   specialist: string;
 }): TaskCellAssignment[] {
-  const root = path.join(input.guildRoot, ".guild", "runs", input.runId, "task-cells");
+  const root = path.join(durableGuildDir(input.guildRoot), "runs", input.runId, "task-cells");
   const files: string[] = [];
   const walk = (dir: string): void => {
     let entries: fs.Dirent[];
@@ -388,7 +391,7 @@ function publishTaskCellSubmission(input: {
     : portableAssignmentRef(rawAssignmentRef);
   let assignment: TaskCellAssignment | null = null;
   if (assignmentRef) {
-    const legacyRunDir = path.join(input.guildRoot, ".guild", "runs", input.runId);
+    const legacyRunDir = path.join(durableGuildDir(input.guildRoot), "runs", input.runId);
     const legacyRef = portableAssignmentRef(
       path.relative(
         input.guildRoot,
@@ -668,8 +671,21 @@ async function main(): Promise<void> {
   const cwd = payload.cwd ?? process.cwd();
 
   const guildRoot = resolveGuildRoot(cwd);
+
+  // T10 (KTD23): layout bootstrap on a write-capable entry. A hook can be the
+  // first thing to touch a root after an upgrade landed, so it runs the
+  // bootstrap itself; on a current root this is a stat plus one marker read.
+  // Fail-open by contract — a refused root still exits 0.
+  const layout = ensureStorageLayout(guildRoot, "task-completed");
+  // KTD23 fails CLOSED on a layout this build does not understand: a future
+  // marker means every write below would land in a root that is not ours.
+  if (!layout.ok) {
+    process.stderr.write(`warn: [task-completed] .guild layout refused (${layout.refused}) — no writes\n`);
+    return;
+  }
+
   const runId = deriveRunId(sessionId, guildRoot);
-  const runDir = path.join(guildRoot, ".guild", "runs", runId);
+  const runDir = path.join(durableGuildDir(guildRoot), "runs", runId);
   const rPath = receiptPath(guildRoot, runId, specialist, taskId);
 
   // T3b (session_context §5): run-record WRITES below (learnings extraction,
@@ -920,7 +936,7 @@ async function main(): Promise<void> {
   // authorizes nothing. Termination is acceptance-gated — a durable
   // `guild.handoff_acceptance.v1` (deterministic floor + Team Lead + any reviewer
   // cell) authorizes it, and the launcher's `--dismiss-completed` performs the
-  // REAL, confirmed kill (see src/modules/dispatch/workflows/task-cell-acceptance.ts
+  // REAL, confirmed kill (see src/domains/dispatch/task-cell-acceptance.ts
   // and scripts/lib/host/tmux-backend.ts:terminatePane). This hook never claims a
   // dismissal it cannot perform.
   process.stderr.write(

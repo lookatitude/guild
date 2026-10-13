@@ -12,10 +12,12 @@
  * Claude Code runs at SessionStart — so a stale dist fails the test (HK dist-rebuild
  * discipline). A source-path sanity check runs the exported helpers via ts-jest.
  *
- * To regenerate the golden after an INTENTIONAL L4 SKILL.src.md change:
- *   cat fixtures/session-start.json | GUILD_PLUGIN_ROOT=<plugin-root> \
+ * To regenerate the golden after an INTENTIONAL L4 SKILL.src.md or dialect change
+ * (a Claude session: CLAUDE_PLUGIN_ROOT set, no other host signal):
+ *   cat fixtures/session-start.json | env -i PATH="$PATH" CLAUDE_PLUGIN_ROOT=<plugin-root> \
  *     node dist/using-guild-bootstrap.js > __tests__/golden/using-guild-session-start.json
  */
+import { describe, it, test, expect, jest } from "bun:test";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -24,6 +26,7 @@ import {
   buildSessionStartInjection,
   gatewayContext,
 } from "../using-guild-bootstrap";
+import { composeSessionPrompt, detectSession } from "../../src/domains/config";
 // Shared js-yaml frontmatter parser (OD-3 compliant) — detect the leading
 // frontmatter block via the parser's splitter, not a hand-rolled startsWith('---').
 import { splitFrontmatter } from "../../scripts/lib/frontmatter";
@@ -36,6 +39,23 @@ const SKILL_SRC = path.resolve(
   PLUGIN_ROOT,
   "skills/meta/using-guild/SKILL.src.md",
 );
+
+/**
+ * The always-on prefix the hook composes off a Guild root: the WHOLE using-guild
+ * source, then the dialect for the session's model family (R47). The fixture
+ * payload's cwd is not a Guild root, so no project overlay applies.
+ */
+function composedPrefix(pluginRoot: string, env: NodeJS.ProcessEnv): string {
+  const detected = detectSession(env);
+  return gatewayContext(
+    composeSessionPrompt({
+      host_family: detected.host_family,
+      model_family: detected.model_family,
+      pluginRoot,
+      guildDir: null,
+    }).text,
+  );
+}
 
 function runHook(
   stdin: string,
@@ -59,6 +79,21 @@ describe("using-guild-bootstrap.ts (L5b SessionStart injection)", () => {
     expect(stdout).toBe(golden);
   });
 
+  it("CONTROL: a one-byte change to the using-guild source breaks the golden match", () => {
+    const root = fs.mkdtempSync(path.join(require("os").tmpdir(), "ug-drift-"));
+    try {
+      const skillDir = path.join(root, "skills", "meta", "using-guild");
+      fs.mkdirSync(skillDir, { recursive: true });
+      fs.writeFileSync(path.join(skillDir, "SKILL.src.md"), fs.readFileSync(SKILL_SRC, "utf8").replace("# using-guild", "# using-guild!"));
+      const { stdout, status } = runHook(fixture, { GUILD_PLUGIN_ROOT: root, CLAUDE_PLUGIN_ROOT: root });
+      expect(status).toBe(0);
+      expect(stdout.length).toBeGreaterThan(0);
+      expect(stdout).not.toBe(fs.readFileSync(GOLDEN, "utf8"));
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("emits a well-formed hookSpecificOutput.additionalContext SessionStart envelope", () => {
     const { stdout } = runHook(fixture);
     const parsed = JSON.parse(stdout);
@@ -67,11 +102,12 @@ describe("using-guild-bootstrap.ts (L5b SessionStart injection)", () => {
     expect(typeof parsed.hookSpecificOutput.additionalContext).toBe("string");
   });
 
-  it("injects the WHOLE using-guild source verbatim (frontmatter INCLUDED)", () => {
+  it("injects the composed prefix: the WHOLE using-guild source (frontmatter INCLUDED), then the dialect", () => {
     const { stdout } = runHook(fixture);
     const parsed = JSON.parse(stdout);
-    const expected = gatewayContext(fs.readFileSync(SKILL_SRC, "utf8"));
+    const expected = composedPrefix(PLUGIN_ROOT, { ...process.env, CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT });
     expect(parsed.hookSpecificOutput.additionalContext).toBe(expected);
+    expect(parsed.hookSpecificOutput.additionalContext.startsWith(gatewayContext(fs.readFileSync(SKILL_SRC, "utf8")))).toBe(true);
     // Frontmatter (the richest WHEN-to-engage trigger signals) IS injected:
     // the injected context opens with a well-formed `---`-fenced frontmatter block.
     expect(
@@ -85,7 +121,7 @@ describe("using-guild-bootstrap.ts (L5b SessionStart injection)", () => {
 
   it("keeps the committed golden generated from the current using-guild source", () => {
     const golden = JSON.parse(fs.readFileSync(GOLDEN, "utf8"));
-    const expected = gatewayContext(fs.readFileSync(SKILL_SRC, "utf8"));
+    const expected = composedPrefix(PLUGIN_ROOT, { CLAUDE_PLUGIN_ROOT: PLUGIN_ROOT });
     expect(golden.hookSpecificOutput.additionalContext).toBe(expected);
     expect(golden.hookSpecificOutput.additionalContext).toContain("Product-loop intake");
   });
@@ -99,7 +135,7 @@ describe("using-guild-bootstrap.ts (L5b SessionStart injection)", () => {
     expect(status).toBe(0);
     const parsed = JSON.parse(stdout);
     expect(parsed.hookSpecificOutput.additionalContext).toBe(
-      gatewayContext(fs.readFileSync(SKILL_SRC, "utf8"))
+      composedPrefix(PLUGIN_ROOT, { ...process.env, GUILD_PLUGIN_ROOT: PLUGIN_ROOT, CLAUDE_PLUGIN_ROOT: badClaudeRoot }),
     );
     fs.rmSync(badClaudeRoot, { recursive: true, force: true });
   });

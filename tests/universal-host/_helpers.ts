@@ -28,6 +28,7 @@ import {
 // test-local re-implementation (codex G-lane Finding 1).
 import { loadLogicalPackage } from "../../scripts/build-host-packages";
 import type { GuildInventoryV1 } from "../../scripts/lib/inventory-schema";
+import { targets } from "../../scripts/compile";
 import type { LogicalPackage, ExpectedSurfaces } from "../../scripts/lib/equivalence-contract";
 
 /** Plugin root — tests/universal-host/ sits two levels under the plugin repo root. */
@@ -67,7 +68,12 @@ export function expectedSurfacesFromInventory(inv: GuildInventoryV1 = realInvent
     commands: inv.commands.map((e) => e.id),
     skills: inv.skills.map((e) => e.id),
     agents: inv.agents.map((e) => e.id),
-    script_refs: inv.scripts.map((e) => e.id),
+    // A package ships compiled script bundles, not scripts/**.ts (KTD11/KTD28): the
+    // floor is the compile target table plus the inventory's non-TypeScript bundles.
+    script_refs: [
+      ...targets().filter((t) => t.group === "scripts").map((t) => t.out.replace(/\.js$/, "")),
+      ...inv.scripts.filter((e) => !/\.(ts|tsx|mts|cts)$/.test(e.source_path)).map((e) => e.id),
+    ],
   };
 }
 

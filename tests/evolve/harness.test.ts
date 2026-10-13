@@ -12,10 +12,12 @@
  * Addresses §15.2 risk row 4 (evolve overfit to its own evals).
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
+import { parseFrontmatter } from "../../scripts/lib/frontmatter";
 
 const SCRIPT = path.resolve(__dirname, "../../scripts/flip-report.ts");
 const FIXTURES = path.resolve(__dirname, "fixtures");
@@ -59,9 +61,9 @@ function readReport(tmpDir: string, runId: string): string {
 
 /** Parse a numeric field from the YAML front-matter of a flip report. */
 function parseFrontmatterField(report: string, field: string): number {
-  const m = report.match(new RegExp(`^${field}:\\s*(\\d+)`, "m"));
-  if (!m) throw new Error(`field '${field}' not found in report front-matter`);
-  return parseInt(m[1], 10);
+  const value = parseFrontmatter(report)?.[field];
+  if (value === undefined || value === null) throw new Error(`field '${field}' not found in report front-matter`);
+  return parseInt(String(value), 10);
 }
 
 // ── Test fixtures ──────────────────────────────────────────────────────────

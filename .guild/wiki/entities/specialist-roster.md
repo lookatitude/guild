@@ -7,9 +7,10 @@ source_refs:
   - agents/advisor.md
   - agents/context-manager.md
   - agents/developer.md
+  - agents/team-lead.md
   - templates/specialists/
 created_at: 2026-04-24
-updated_at: 2026-08-01
+updated_at: 2026-09-14
 expires_at: null
 supersedes: "plugin/.guild/wiki/entities/specialist-roster.md"
 sensitivity: public
@@ -22,10 +23,11 @@ related: [team-composition, canonical-specialist-roster-groups-and-tiers, machin
 18 specialist roles across 3 groups plus tiered-worker roles, shipped on two
 surfaces (machinery-vs-template-library ADR):
 
-- **3 machinery agents** (`agents/advisor.md`, `agents/context-manager.md`,
-  `agents/developer.md`) — the only registered, host-dispatchable agents the
-  plugin ships. They serve the orchestration machinery itself (escalation net,
-  context assembly, generic lane worker). `context-manager` is the newest
+- **4 machinery agents** (`agents/advisor.md`, `agents/context-manager.md`,
+  `agents/developer.md`, `agents/team-lead.md`) — the only registered,
+  host-dispatchable agents the plugin ships. They serve the orchestration
+  machinery itself (escalation net, context assembly, generic lane worker, and
+  the per-TaskCell lead). `context-manager` is the newest
   (decision `cap-loc-D01`) and shipped only after its written contract landed —
   `scripts/lib/capability/context-manager-contract.ts`, which is what bounds it.
 - **15 specialist type templates** (`templates/specialists/<role>.md`,
@@ -223,6 +225,7 @@ existing `guild:review` / `qa` lanes.
 | `advisor` | `powerful` | `opus` | **NEW** `agents/advisor.md` | Answer one escalated sub-question seeing draft + question only (§3); never raw context. |
 | `context-manager` | `mid` | `sonnet` | **NEW** `agents/context-manager.md` | Assemble bounded context + emit run-scoped capability evidence; writes only under `.guild/{context,artifacts,runs}/**`. Never decides, promotes, or registers. |
 | `developer` | `mid` | `sonnet` | **NEW** `agents/developer.md` | Implement a domain-*less* task lane (draft/reason/build); escalates to advisor when above tier. |
+| `team-lead` | `mid` | `sonnet` | **NEW** `agents/team-lead.md` | Own one TaskCell (KTD19 tier T1): dispatch its specialists, read their `guild.handoff.v2` receipts, report upward only as `guild.goal_status.v1`. Never reviews its own cell. |
 | `doc-writer` | `cheap`→`mid` | `sonnet` | **PROMOTED** `templates/specialists/doc-writer.md` (first-class v2.0) | READMEs, doc-site pages, feature guides, how-tos, onboarding docs, wikis; cheap for mechanical edits, mid for synthesis. |
 
 Notes:
@@ -250,7 +253,7 @@ Notes:
   and `technical-writer` running a `cheap` sub-pass for pure read/summarize and
   mechanical-edit work. The complete map is below.
 
-### Complete default-tier map (all 18 roles)
+### Complete default-tier map (all 19 roles)
 
 Every role, with its default tier and frontmatter `model:` — machinery agents
 read from `agents/<role>.md`, domain roles from
@@ -272,6 +275,7 @@ the `powerful` `advisor` (ADR §3) — neither changes the role's printed defaul
 | `qa` | engineering | `mid` | `sonnet` |
 | `context-manager` | tiered-worker (NEW) | `mid` | `sonnet` |
 | `developer` | tiered-worker (NEW) | `mid` | `sonnet` |
+| `team-lead` | tiered-worker (NEW) | `mid` | `sonnet` |
 | `copywriter` | content & comms | `mid` | `sonnet` |
 | `doc-writer` | content & comms | `cheap`→`mid` | `sonnet` |
 | `technical-writer` | content & comms | `cheap`→`mid` | `sonnet` |
@@ -280,8 +284,8 @@ the `powerful` `advisor` (ADR §3) — neither changes the role's printed defaul
 | `marketing` | commercial | `mid` | `sonnet` |
 | `sales` | commercial | `mid` | `sonnet` |
 
-15 domain type templates (incl. `doc-writer`) + the 3 machinery agents
-(`advisor`, `context-manager`, `developer`) = 18 roles. `powerful` is reserved for the three
+15 domain type templates (incl. `doc-writer`) + the 4 machinery agents
+(`advisor`, `context-manager`, `developer`, `team-lead`) = 19 roles. `powerful` is reserved for the three
 high-stakes / low-frequency roles (`architect`, `security`, `advisor`); no
 implementer or content/commercial role defaults to `powerful`.
 
@@ -314,6 +318,6 @@ is `haiku`.
 
 - `https://guildstack.dev/docs/specialist-roster` — full roster rationale and trigger examples.
 - `https://guildstack.dev/docs/architecture` — where specialists sit in the layered system.
-- `agents/*.md` — the machinery agents (advisor, context-manager, developer).
+- `agents/*.md` — the machinery agents (advisor, context-manager, developer, team-lead).
 - `templates/specialists/*.md` — the domain type templates: live trigger /
   DO-NOT-TRIGGER blocks and skill pulls, inherited verbatim by minted instances.

@@ -1,0 +1,22 @@
+{
+  "schema_version": "guild.adapter_map.v1",
+  "family": "cursor",
+  "host_ids": [
+    "cursor"
+  ],
+  "package_trees": [
+    "cursor"
+  ],
+  "projects": {
+    "manifest": "cursor-manifest.json",
+    "instructions": ".agents/skills/guild/"
+  },
+  "runtime": [
+    "runtime/",
+    "hooks/dist/"
+  ],
+  "never_projects": [
+    "src/domains/**/*.ts"
+  ],
+  "rungs": "src/adapters/adapter.lock.json#/families/cursor"
+}

@@ -27,6 +27,7 @@
  * fixture-driven unit test of the hook-side read.
  */
 
+import { describe, it, expect, afterAll } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";

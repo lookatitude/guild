@@ -6,6 +6,7 @@
  * attribution_specialist stamp. Exercises the real resolver (no injected seams).
  */
 
+import { describe, it, expect } from "bun:test";
 import {
   GENERIC_SUBAGENT_TYPE,
   dispatchViolations,

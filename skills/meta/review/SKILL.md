@@ -3,6 +3,7 @@ name: guild-review
 description: Two-stage review of per-specialist handoff receipts (spec compliance first, then quality), plus Guild's fresh-context code-review request/response discipline — how a lane solicits a reviewer with crafted context, and how it acts on the findings (triage; push back only with technical evidence). Consumes compact receipts from `.guild/runs/<run-id>/handoffs/` — NOT full specialist conversations — and writes `.guild/runs/<run-id>/review.md` with per-lane pass/fail + blocker list. TRIGGER: "review the specialist outputs", "check if this matches the spec", "evaluate the handoffs", "request a code review", "respond to the review findings", "the reviewer found X". DO NOT TRIGGER for: final task-close gating (guild:verify-done), writing more code, or re-planning.
 when_to_use: Sixth step of Guild lifecycle, after guild:execute-plan has collected all handoff receipts. Also during build when a lane requests a fresh-context code review or responds to a reviewer's findings.
 type: meta
+indexed: true
 ---
 
 # guild:review
@@ -63,7 +64,7 @@ Keep `review.md` terse and grep-friendly — it's the compact artifact `guild:ve
 
 ## Learning checkpoint (step 7.5 — advisory, no new gate)
 
-This is the **Development** phase's review boundary. After `review.md` is written and before handoff to `guild:verify-done`, fire the per-phase LearningCheckpoint with `phase=development` and `.guild/runs/<run-id>/review.md` (plus the lane receipts) as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written receipts + review into the 12-target verdict, then emit via the hook — the full call signature + `GUILD_PHASE` mapping are canonical in `skills/meta/learning-checkpoint/SKILL.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`. (One development checkpoint per run, fired here — not in `guild:execute-plan`.)
+This is the **Development** phase's review boundary. After `review.md` is written and before handoff to `guild:verify-done`, fire the per-phase LearningCheckpoint with `phase=development` and `.guild/runs/<run-id>/review.md` (plus the lane receipts) as `evidence_ref`. Invoke `guild:learning-checkpoint` to classify the already-written receipts + review into the 12-target verdict, then emit via the hook — the full call signature + `GUILD_PHASE` mapping are canonical in `skills/meta/reflect/references/learning-checkpoint.md §"How a phase skill fires the checkpoint"` (do not re-spell). It rides this existing boundary, defaults to all-`none` (a near-zero-token no-op), asks no new prompt, and adds no new gate; non-`none` verdicts route only to `.guild/reflections/<run-id>.md`. (One development checkpoint per run, fired here — not in `guild:execute-plan`.)
 
 ## Handoff
 
@@ -77,3 +78,27 @@ When every lane is ✓ at both stages (or Stage 2 follow-ups are acceptable and 
 - `followups` — the Stage 2 follow-up list, carried forward for the next task's plan.
 
 If any lane is still ✗ after a loop-back round, halt and surface the failure to the user. Do not hand off with outstanding blockers — verify-done is the final gate, not a second chance for unresolved spec drift.
+
+## Chapters
+
+Three-stage disclosure (KTD25): this file is the assembler. Each row below is an
+L3 chapter that stays on disk until a request matches it. Compose by pointer —
+read the one chapter you were routed to, and never inline a chapter here.
+
+| Chapter | Covers |
+|---|---|
+| `references/codex-review.md` | DEPRECATED lifecycle entry-point (D-BR-A) — now the internal Codex adapter invoked BY `guild:review-broker`, never called directly from Guild lifecycle gates |
+| `references/review-broker.md` | Host-agnostic broker for cross-family adversarial review — one host drafts an artifact, a DIFFERENT host family critiques it (STRONG independence) |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:codex-review` | this assembler | `references/codex-review.md` |
+| `guild:learning-checkpoint` | `reflect` | `../reflect/references/learning-checkpoint.md` |
+| `guild:loop-implement` | `execute-plan` | `../execute-plan/references/loop-implement.md` |
+| `guild:verify-done` | `quality` | `../../quality/references/verify-done.md` |

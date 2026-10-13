@@ -22,6 +22,7 @@
  * close path is exercised, never a mock.
  */
 
+import { describe, it, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";

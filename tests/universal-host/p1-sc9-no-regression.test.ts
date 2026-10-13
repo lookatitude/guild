@@ -13,7 +13,7 @@
  *
  *   What this file does NOT claim: it is not a re-run of the other suites' own
  *   internal assertions. The LIVE whole-suite no-regression evidence (the full
- *   universal-host + scripts/__tests__ jest run staying green alongside these files)
+ *   universal-host + scripts bun test run staying green alongside these files)
  *   is recorded in the lane handoff — this file is the cheap always-on guard for the
  *   contract surfaces those suites stand on, not a substitute for running them.
  *
@@ -22,6 +22,7 @@
 
 // ── (1) L0 contract surfaces — BEHAVIORAL (these files are edited by L7–L11) ──
 
+import { describe, it, expect } from "bun:test";
 import {
   HOST_REGISTRY_ROWS,
   HOST_IDS,

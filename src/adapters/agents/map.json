@@ -1,0 +1,25 @@
+{
+  "schema_version": "guild.adapter_map.v1",
+  "family": "agents",
+  "host_ids": [
+    "agents-file",
+    "kiro",
+    "qoder",
+    "trae"
+  ],
+  "package_trees": [
+    "agents"
+  ],
+  "projects": {
+    "manifest": "AGENTS.md",
+    "instructions": ".agents/skills/guild/"
+  },
+  "runtime": [
+    "runtime/",
+    "hooks/dist/"
+  ],
+  "never_projects": [
+    "src/domains/**/*.ts"
+  ],
+  "rungs": "src/adapters/adapter.lock.json#/families/agents"
+}

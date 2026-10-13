@@ -2,22 +2,23 @@
 /**
  * Derive the stable identity for a reviewed `next -> main` PR.
  *
- * The current short-path workflow uses only `inspect` and `latest`: it derives
- * X.Y.Z from exact X.Y.Z-beta.N, tags the reviewed merge, and never rewrites a
- * protected branch. `prepare` and `verify` are retained for the deferred
- * release-App metadata-convergence follow-up; the live workflow does not call
- * them.
+ * The release workflow uses only `inspect` and `latest`: `inspect` reads the
+ * exact bare X.Y.Z the release cut put on next, so the tag matches main's
+ * manifest. `prepare` drops the beta identifier from the source manifest when
+ * an operator makes the release cut commit. `verify` is retained for the
+ * deferred release-App follow-up; no workflow calls it.
  */
 
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 const BETA_VERSION_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
 const STABLE_VERSION_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 export interface StableReleaseIdentity {
-  betaVersion: string;
+  sourceVersion: string;
   stableVersion: string;
   tag: string;
 }
@@ -84,11 +85,11 @@ export function prepareStableManifest(root: string): StableReleaseIdentity {
   if (typeof manifest.version !== "string") {
     throw new Error(`${manifestPath} has no usable version field`);
   }
-  const betaVersion = manifest.version;
-  const stableVersion = deriveStableVersion(betaVersion);
+  const sourceVersion = manifest.version;
+  const stableVersion = deriveStableVersion(sourceVersion);
   manifest.version = stableVersion;
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-  return { betaVersion, stableVersion, tag: `v${stableVersion}` };
+  return { sourceVersion, stableVersion, tag: `v${stableVersion}` };
 }
 
 export function inspectStableManifest(root: string): StableReleaseIdentity {
@@ -97,9 +98,18 @@ export function inspectStableManifest(root: string): StableReleaseIdentity {
   if (typeof manifest.version !== "string") {
     throw new Error(`${manifestPath} has no usable version field`);
   }
-  const betaVersion = manifest.version;
-  const stableVersion = deriveStableVersion(betaVersion);
-  return { betaVersion, stableVersion, tag: `v${stableVersion}` };
+  const sourceVersion = manifest.version;
+  // The frozen v2.7.0 provenance basis predates the release cut; the promotion
+  // gate admits only its exact 2.7.0-beta.N shape, so mirror that here.
+  if (BETA_VERSION_RE.test(sourceVersion) && deriveStableVersion(sourceVersion) === "2.7.0") {
+    return { sourceVersion, stableVersion: "2.7.0", tag: "v2.7.0" };
+  }
+  if (!STABLE_VERSION_RE.test(sourceVersion)) {
+    throw new Error(
+      `${manifestPath} carries ${JSON.stringify(sourceVersion)}; a reviewed release must carry exact MAJOR.MINOR.PATCH`
+    );
+  }
+  return { sourceVersion, stableVersion: sourceVersion, tag: `v${sourceVersion}` };
 }
 
 function assertVersion(actual: unknown, stableVersion: string, label: string): void {
@@ -160,7 +170,7 @@ export function verifyStableReleaseMetadata(
 function appendGithubOutput(filePath: string, identity: StableReleaseIdentity): void {
   fs.appendFileSync(
     filePath,
-    `beta_version=${identity.betaVersion}\nstable_version=${identity.stableVersion}\ntag=${identity.tag}\n`
+    `source_version=${identity.sourceVersion}\nstable_version=${identity.stableVersion}\ntag=${identity.tag}\n`
   );
 }
 
@@ -175,6 +185,7 @@ function changedPaths(root: string, base: string, head: string): string[] {
 }
 
 export function main(argv: string[] = process.argv.slice(2)): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const mode = argv.shift();
   let root = ".";
   let githubOutput: string | undefined;

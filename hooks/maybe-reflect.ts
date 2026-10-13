@@ -80,6 +80,9 @@ import { spawnSync } from "child_process";
 import { resolveGuildRoot } from "./lib/guild-root.js";
 import { authorizeHookWrite, formatBindingRejected } from "./lib/hook-binding.js";
 import { detectSelfBuild } from "./lib/self-build.js";
+// T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
+import { ensureStorageLayout } from "./lib/ensure-layout.js";
+import { durableGuildDir } from "../src/domains/state";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -201,7 +204,7 @@ function devteamSubagentGateCheck(
   // Guard 3 — spec lookup. Reflections are only meaningful when there's
   // a written spec to reflect against. GUILD_SPEC_SLUG wins; otherwise
   // "any spec.md exists" is the conservative fallback.
-  const specDir = path.join(resolveGuildRoot(cwd), ".guild", "spec");
+  const specDir = path.join(durableGuildDir(resolveGuildRoot(cwd)), "spec");
   const slug = process.env["GUILD_SPEC_SLUG"];
   if (slug && slug.trim().length > 0) {
     const specPath = path.join(specDir, `${slug}.md`);
@@ -271,12 +274,19 @@ function writeStubSummary(runDir: string, runId: string, events: TelemetryEvent[
  * Returns true if the real summarizer ran, false if it's missing (use stub).
  */
 function tryRealSummarizer(cwd: string, runId: string): boolean {
-  const summarizerPath = path.join(cwd, "scripts", "trace-summarize.ts");
+  // KTD11: plain `node` on the committed compile output, never `npx tsx`. This is
+  // a Stop / SubagentStop path a real session hits, so an `npx` spawn here could
+  // reach the network on a cold cache inside a hook. The summarizer ships as
+  // runtime/scripts/trace-summarize.js next to this bundle (scripts/compile.ts
+  // target table); the plugin root is where THIS bundle lives, not the cwd being
+  // summarized — the old code looked for the summarizer under the user's repo.
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(__dirname, "..", "..");
+  const summarizerPath = path.join(pluginRoot, "runtime", "scripts", "trace-summarize.js");
   if (!fs.existsSync(summarizerPath)) return false;
 
   const result = spawnSync(
-    "npx",
-    ["tsx", summarizerPath, "--run-id", runId, "--cwd", cwd],
+    process.execPath,
+    [summarizerPath, "--run-id", runId, "--cwd", cwd],
     {
       cwd,
       encoding: "utf8",
@@ -287,7 +297,7 @@ function tryRealSummarizer(cwd: string, runId: string): boolean {
 
   if (result.status !== 0) {
     process.stderr.write(
-      `[maybe-reflect] trace-summarize.ts exited ${result.status}: ${result.stderr ?? ""}\n`
+      `[maybe-reflect] trace-summarize exited ${result.status}: ${result.stderr ?? ""}\n`
     );
     return false;
   }
@@ -366,7 +376,7 @@ function evaluateCodexSkipGuard(guildRoot: string): {
     const { armed } = detectSelfBuild(guildRoot);
     if (!armed) return { armed: false, streak: 0 };
 
-    const reflectionsDir = path.join(guildRoot, ".guild", "reflections");
+    const reflectionsDir = path.join(durableGuildDir(guildRoot), "reflections");
     if (!fs.existsSync(reflectionsDir)) return { armed: true, streak: 0 };
 
     const files = fs
@@ -424,7 +434,7 @@ function evaluateCodexSkipGuard(guildRoot: string): {
  */
 function clearCodexSkipSentinel(guildRoot: string): void {
   try {
-    const sentinel = path.join(guildRoot, ".guild", "codex-skip-streak.json");
+    const sentinel = path.join(durableGuildDir(guildRoot), "codex-skip-streak.json");
     if (!fs.existsSync(sentinel)) return;
     fs.rmSync(sentinel);
     process.stderr.write(
@@ -448,7 +458,7 @@ function clearCodexSkipSentinel(guildRoot: string): void {
  */
 function writeCodexSkipSentinel(guildRoot: string, streak: number): void {
   try {
-    const guildDir = path.join(guildRoot, ".guild");
+    const guildDir = durableGuildDir(guildRoot);
     fs.mkdirSync(guildDir, { recursive: true });
     const sentinel = path.join(guildDir, "codex-skip-streak.json");
     const data = {
@@ -496,6 +506,18 @@ async function main(): Promise<void> {
   // Walk up from cwd to find the repo root — ensures .guild/ always lands at
   // the nearest .git / .guild ancestor, never in a subdirectory.
   const guildRoot = resolveGuildRoot(cwd);
+
+  // T10 (KTD23): layout bootstrap on a write-capable entry. A hook can be the
+  // first thing to touch a root after an upgrade landed, so it runs the
+  // bootstrap itself; on a current root this is a stat plus one marker read.
+  // Fail-open by contract — a refused root still exits 0.
+  const layout = ensureStorageLayout(guildRoot, "maybe-reflect");
+  // KTD23 fails CLOSED on a layout this build does not understand: a future
+  // marker means every write below would land in a root that is not ours.
+  if (!layout.ok) {
+    process.stderr.write(`warn: [maybe-reflect] .guild layout refused (${layout.refused}) — no writes\n`);
+    return;
+  }
 
   // Signal 2 (cross-run): codex-skip discipline guard on self-build runs (FU-E).
   //
@@ -558,7 +580,7 @@ async function main(): Promise<void> {
 
   // Load telemetry events — canonical logs/v1.4-events.jsonl first (HK-04);
   // fall back to legacy events.ndjson only when canonical is absent.
-  const eventsRunDir = path.join(guildRoot, ".guild", "runs", runId);
+  const eventsRunDir = path.join(durableGuildDir(guildRoot), "runs", runId);
   const canonicalEventsFile = path.join(eventsRunDir, "logs", "v1.4-events.jsonl");
   const legacyEventsFile = path.join(eventsRunDir, "events.ndjson");
   const eventsFile = fs.existsSync(canonicalEventsFile) ? canonicalEventsFile : legacyEventsFile;
@@ -590,7 +612,7 @@ async function main(): Promise<void> {
   }
 
   // Gate passed — produce summary, then tell orchestrator to reflect
-  const runDir = path.join(guildRoot, ".guild", "runs", runId);
+  const runDir = path.join(durableGuildDir(guildRoot), "runs", runId);
 
   const usedRealSummarizer = tryRealSummarizer(cwd, runId);
   if (!usedRealSummarizer) {

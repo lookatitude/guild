@@ -3,6 +3,7 @@ name: guild-execute-plan
 description: For each specialist lane in the plan: invoke `guild:context-assemble` to build the bundle, auto-score the lane to its lowest viable model tier (dispatched via the Agent `model` param; honors `--model-tier` and per-lane pins), then dispatch each lane via the agent_mode-resolved backend (team / tmux primary; in-process Agent() dispatch for no-tmux hosts; subagent last resort) as an ephemeral one-agent-per-task §task§agent (spawn → work → extract learnings → dismiss). Runs the advisor escalation protocol when a low-tier agent emits `escalate`. Parallelize lanes when `depends-on:` allows. Collect per-lane handoff receipts at `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md`. TRIGGER: "execute the plan", "run the lanes", "start specialist work", "dispatch the team", "dispatch each lane at its tier", "escalate this to the advisor". DO NOT TRIGGER for: explaining the plan (guild:plan owns that), reviewing results (guild:review), writing more tests.
 when_to_use: Fifth step of Guild lifecycle, after plan approved and per-specialist context bundles staged.
 type: meta
+indexed: true
 ---
 
 # guild:execute-plan
@@ -62,7 +63,7 @@ resolution and before spawning, invoke the writer CLI (one file per attempt; a
 re-dispatch overwrites — the writer handles it):
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/write-task-run.ts \
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/write-task-run.js \
   --cwd <repo-root> --run-id <run-id> --task-id <task-id> \
   --specialist <owner-role> \
   --context-bundle .guild/context/<run-id>/<specialist>-<task-id>.md \
@@ -107,7 +108,7 @@ single-host run is therefore `weak`, recorded — never silently `strong`.
 
 Implements the cost-aware-tiering ADR (§2). Each lane is dispatched at the **lowest viable tier** — the default biases cheap; a `powerful` invocation must be justified by the score, an explicit override, or an advisor request.
 
-1. **Auto-score (deterministic, via `scripts/score-tier.ts`).** Invoke the pure, LLM-free scorer — `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/score-tier.ts --signals '<json>' --cwd <repo-root> [--model-tier <pin>]` → `{score, tier, model}` — passing the lane's signals (work-type verb read/summarize=0, draft/extract=+1, architect/review/schema=+2; blast-radius / file count; presence of an upstream `depends-on:` contract; security/correctness sensitivity; prior-attempt escalation on this lane +1, sticky for the run). The scorer is deterministic and costs **zero tokens** (a script call, not an LLM judgment) — so the dispatch trace is reproducible (SC-5). It applies steps 2–4 below internally and returns `score`+`tier`+`model` in one call. The plan's `complexity_score`/`tier` are the authoring estimate; the scorer confirms or supersedes them.
+1. **Auto-score (deterministic, via `scripts/score-tier.ts`).** Invoke the pure, LLM-free scorer — `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/score-tier.js --signals '<json>' --cwd <repo-root> [--model-tier <pin>]` → `{score, tier, model}` — passing the lane's signals (work-type verb read/summarize=0, draft/extract=+1, architect/review/schema=+2; blast-radius / file count; presence of an upstream `depends-on:` contract; security/correctness sensitivity; prior-attempt escalation on this lane +1, sticky for the run). The scorer is deterministic and costs **zero tokens** (a script call, not an LLM judgment) — so the dispatch trace is reproducible (SC-5). It applies steps 2–4 below internally and returns `score`+`tier`+`model` in one call. The plan's `complexity_score`/`tier` are the authoring estimate; the scorer confirms or supersedes them.
 2. **Map score → tier** via the band cutoffs `models.thresholds` (default `{mid:1, powerful:3}`): `0 → cheap`, `1–2 → mid`, `≥3 → powerful`.
 3. **Apply the precedence ladder (normative):** `--model-tier=` CLI escape hatch > per-lane plan `tier:` pin > `settings.json` `models.tiers`/`models.thresholds` > built-in default. A `--model-tier` value pins **every** lane in the run; a per-lane plan `tier:` pin overrides the auto-score for that one lane.
 3b. **Research floor (above the ladder, non-downgradable).** A lane whose participant carries `purpose: research` (authoritative `work_class` metadata from its role definition — never inferred from the lane label) resolves `effective_complexity: hard` / `tier: powerful` (`research_always_hard`), regardless of the auto-score, any `--model-tier` value, or a per-lane pin — the ladder chooses *among tiers at or above the floor*, never below it. The floor is **transitive through every handoff**: advisor consults, retries, resumes, nested delegation, and generic sub-dispatches spawned from a research lane inherit it and cannot downgrade it. Record `forced_floor_reason: research_always_hard` in the dispatch trace and the lane's receipt whenever it fires.
@@ -224,7 +225,7 @@ First, the **env vars**, injected **on the spawned lane agent only** (never the 
   //     env payload without a race-prone pathname backstop.
   //     Do not retype the defaults or read lane.capability_scope yourself.
   const scopeArgs = [
-    "tsx", path.join(pluginRoot, "scripts", "resolve-specialist-capability-scope.ts"),
+    path.join(pluginRoot, "runtime", "scripts", "resolve-specialist-capability-scope.js"),
     "--team", signal.teamPath, "--team-sha256", signal.teamSha256,
     "--cwd", repoRoot, "--run-id", runId,
     "--task-id", lane.taskId, "--role", lane.owner,
@@ -233,7 +234,7 @@ First, the **env vars**, injected **on the spawned lane agent only** (never the 
     scopeArgs.push("--autonomy-contract", JSON.stringify(autonomyRules));
   }
   const scopeResolution = JSON.parse(
-    execFileSync("npx", scopeArgs, { encoding: "utf8" }),
+    execFileSync("node", scopeArgs, { encoding: "utf8" }),
   );
   // (2) ENV — resolver env includes GUILD_RUN_ID + GUILD_TASK_ID and
   //     GUILD_CAPABILITY_SCOPE when resolved.
@@ -295,7 +296,7 @@ First, the **env vars**, injected **on the spawned lane agent only** (never the 
     //     instruction the lane runs as a generic agent that merely LOOKS
     //     compliant — syntactically complete, functionally persona-stripped.
     //     Emit the SAME instruction `buildPrompt` emits
-    //     (`src/modules/prompting/workflows/team-prompt.ts` — keep them in step):
+    //     (`src/domains/config/team-prompt.ts` — keep them in step):
     const adoption = isProject
       ? `Your role definition is at \`${definitionPath}\` — read it FIRST and adopt it ` +
         `fully (persona, boundaries, TRIGGER / DO NOT TRIGGER limits). For each skill listed ` +
@@ -355,7 +356,7 @@ The backend is **not** chosen here, and it is **not** chosen at `guild:team-comp
 - **cmux-first dispatch — the frozen `snapshot.dispatch.backend === "cmux"` rung, checked before tmux at the top of `team` (W4 landed: snapshot-frozen, first-class).** When the run's frozen snapshot records **`snapshot.dispatch.backend: "cmux"`** — resolved ONCE at run-start intake from the `CMUX_WORKSPACE_ID` fact and never re-read from the ambient environment at dispatch time (a legacy snapshot that predates the `dispatch` block falls back to one ambient `CMUX_WORKSPACE_ID` check at dispatch setup, then held constant for the whole run) — dispatch each lane as a **visible cmux terminal surface in the caller's workspace** instead of a tmux pane: one surface per lane via `cmux new-pane` / `cmux new-surface --focus false` (or the host-current equivalent) — **never** a focus-stealing verb; set each lane's own sidebar status/progress (`set-status` / `set-progress`) as it advances, a per-lane signal, never shared/aggregate. Lanes still write their handoff to `.guild/runs/<run-id>/handoffs/<specialist>-<task-id>.md` per the single-channel protocol (`## §task§agent lifecycle` below) — the surface is a dispatch/visibility mechanism, never a second handoff channel. The lead arms a **per-lane completion watcher** on each lane's own handoff file — never one watcher shared across lanes, since a finished lane must be actionable immediately, not sit behind whatever lane a shared watcher happens to be polling next. Once a lane's receipt is accepted, **reap its surface** — do not let finished surfaces linger. **The lead does all commits — lanes dispatched via cmux never commit their own work**, the same invariant as every other backend. **Launcher-owned obligations transfer to the lead.** Dispatching via cmux surfaces bypasses the tmux agent-team launcher, so the lead explicitly assumes what the launcher otherwise owns: (a) the team-mode task-run persistence under `.guild/runs/<run-id>/` — **auto-emit the dispatch receipts the launcher would have** by running the **cmux dispatch-receipt CLI** (`scripts/lib/host/pane-dispatch-trace.ts` — the cmux rung's launcher-bypass entry point, the executable form of "the dispatch records the launcher would have"), never by hand-writing those records. Invoke it ONCE per settled dispatch batch, after the surfaces are created and their pane ids collected — one `guild.trace.dispatch.v1` receipt per lane into the ORCHESTRATING run's `logs/v1.4-events.jsonl` (so `guild:reflect` sees the specialists, not a solo run):
 
     ```bash
-    npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/lib/host/pane-dispatch-trace.ts \
+    node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/pane-dispatch-trace.js \
       --run-id <orchestrating-run-id> --cwd <repo-root> --backend cmux --target "$CMUX_WORKSPACE_ID" \
       --lane <specialist>:<task-id>:<pane-id> [--lane <specialist>:<task-id>:<pane-id> ...]
     ```
@@ -445,7 +446,7 @@ artifact; it does not create a second result.
    acceptance so both pointer classes converge):
 
    ```bash
-   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/task-cell-team-result.ts \
+   node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/task-cell-team-result.js \
      --cwd <repo-root> --run-id <run-id> --station <station>
    ```
 
@@ -457,7 +458,7 @@ artifact; it does not create a second result.
    typed result is the mandatory identity join.
 
 Contract: `guild.team_result.v1` in
-`src/modules/teams/workflows/station-composer.ts`; read/write path in
+`src/domains/teams/station-composer.ts`; read/write path in
 `station-signals.ts`; TaskCell canonical paths in
 `scripts/lib/core/contracts/task-cell-backend.ts`.
 
@@ -548,7 +549,7 @@ first:
    `defaults.resume.enabled` is (`hooks/lib/run-state.ts readResumeEnabled`).
    **Known gap:** this key is not yet wired through `guild:config`'s
    validate/set/resolve surfaces (`scripts/lib/core/config-cli.ts`,
-   `scripts/config-cmd.ts`, `src/modules/config/workflows/settings-reader.ts`)
+   `scripts/config-cmd.ts`, `src/domains/config/settings-reader.ts`)
    — those files are outside this lane's scope — so `guild:config set` and
    `guild:config validate` do not yet recognize it; only a direct hand-edit
    of `settings.json` takes effect. Follow-up: register it as a proper
@@ -713,7 +714,7 @@ the new constraint — absorption is for after Wave 1 has begun.
 While lanes are in flight — parallel waves, or any wait on a lane's receipt — sweep liveness **each poll cycle** with the deterministic report tool; never eyeball heartbeat files or infer a stall from chat silence:
 
 ```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/check-lane-liveness.ts --run-dir <abs path to .guild/runs/<run-id>>
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/check-lane-liveness.js --run-dir <abs path to .guild/runs/<run-id>>
 ```
 
 It reads `run-state.json` (lenient — receipts-only when absent), the structured `in-progress/*.json` heartbeats, and `handoffs/*.md` receipts, and prints a per-lane report `{ lane, status, receipt_present, heartbeat_age_ms, stalled }` (stall threshold `GUILD_HEARTBEAT_TIMEOUT_MS`, default 600000; exit 0 always — it is a report, not a gate). This is the Rung-2/3 (subagent / in-process `agent`) watchdog complement to the team backend's pane-alive + `TeammateIdle` checks — same heartbeat records, one sweep across backends. On `stalled: true` for a lane:
@@ -732,7 +733,7 @@ A lane is **FAILED** when its receipt is missing/malformed (step 4) or the agent
 3. **On exhaustion** (all `max_attempts` attempts FAILED), mark the lane **dead via the bridge CLI** so the in-process / subagent path writes the **same checkpoint the SSH path does** — the single writer is hooks' `markLaneDead`:
 
    ```
-   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/mark-lane-dead.ts <runDir> <laneId> \
+   node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/mark-lane-dead.js <runDir> <laneId> \
      --attempts N [--last-error "..."] [--run-id <run-id>] \
      [--plan-slug <slug>] [--wave-index <n>] [--cwd <repo-root>]
    ```
@@ -747,7 +748,7 @@ The READ/re-enter half of dead-lettering (the WRITE half is `## Lane retry + dea
 
 1. **List resumable dead lanes** via the read-side bridge CLI (the mirror of `mark-lane-dead.ts`) — the `--json` flag is **required** for parseable output (without it the CLI prints a human table):
    ```
-   npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/resume-lanes.ts <runDir> --json
+   node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/resume-lanes.js <runDir> --json
    ```
    It scans `<runDir>/lanes/*/resume.json`, applies the **`guild.lane_resume.v1`** schema-version guard (skips foreign/older versions), honors `defaults.resume.enabled`, joins each lane's `tier` from run-state, sorts by `lane_id`, and writes a **bare JSON array** (one object per resumable dead lane) to stdout:
    ```json
@@ -877,3 +878,39 @@ Once the stop condition is met, hand off to `guild:review` with:
 - `team_result_path` — the companion `guild.team_result.v1` emitted at `.guild/runs/<run-id>/team-result/<station>.json` (or the fail-soft skip note), the typed mirror of the dispatched instances against the composed team_plan.
 
 `guild:review` runs its 2-stage per-task review (spec-conformance then quality) against the receipts in `handoffs_dir`. Do not run review yourself — it is a separate skill with its own responsibilities.
+
+## Chapters
+
+Three-stage disclosure (KTD25): this file is the assembler. Each row below is an
+L3 chapter that stays on disk until a request matches it. Compose by pointer —
+read the one chapter you were routed to, and never inline a chapter here.
+
+| Chapter | Covers |
+|---|---|
+| `references/context-assemble.md` | Assembles per-specialist 3-layer context bundle: Universal (~400 tokens — guild:principles + project-overview + goals) + Role-dependent (~800–1500 — standards + 2–4 entity pages matching role) + Task-dependent (~800–1500 — lane from plan + named refs + upstream contracts + active decisions) |
+| `references/counters-and-concurrency.md` | reference material for this assembler |
+| `references/dispatching-parallel-agents.md` | The discipline for dispatching independent specialist lanes in parallel — respect depends-on edges, isolate context, collect handoff receipts, and never parallelize work with ordering or shared-state hazards |
+| `references/finish-branch.md` | Guild's branch-completion discipline — once work is done and tests pass, present clear integration options (merge, PR, keep, discard) and execute the chosen one safely, then clean up the worktree |
+| `references/io-contract.md` | reference material for this assembler |
+| `references/loop-implement.md` | F-3 implementation-phase adversarial-loop dispatcher — wraps `guild:execute-plan` per lane |
+| `references/loops-applicable-enum.md` | reference material for this assembler |
+| `references/security-review-restart.md` | reference material for this assembler |
+| `references/tdd.md` | Guild's first-class test-first discipline — write the failing test, watch it fail, then write the minimal code that passes |
+| `references/testing-anti-patterns.md` | reference material for this assembler |
+| `references/workflow-and-events.md` | reference material for this assembler |
+| `references/worktrees.md` | Guild's git-worktree isolation discipline — create an isolated worktree with deterministic directory selection and safety verification so a lane runs on a clean tree without disturbing the user's current checkout |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:codex-review` | `review` | `../review/references/codex-review.md` |
+| `guild:context-assemble` | this assembler | `references/context-assemble.md` |
+| `guild:decisions` | `wiki` | `../../knowledge/wiki/references/decisions.md` |
+| `guild:review-broker` | `review` | `../review/references/review-broker.md` |
+| `guild:verify-done` | `quality` | `../../quality/references/verify-done.md` |
+| `guild:wiki-ingest` | `wiki` | `../../knowledge/wiki/references/wiki-ingest.md` |

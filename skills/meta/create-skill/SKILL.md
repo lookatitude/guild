@@ -3,6 +3,7 @@ name: guild-create-skill
 description: Gated mint of a NEW skill — the capability parallel to `guild:create-specialist` for skills, not agents; what phase-aware composition (G-PHASE-COMPOSE) / `guild:team-compose` takes when a phase needs a missing CAPABILITY, not a role. Interview → draft under `.guild/skills/proposed-<name>/` → boundary scan with `DO NOT TRIGGER` edits gated via `guild:evolve-skill` → paired evals + shadow mode → register within `.guild/`. Creation authority is human-requested (explicit request or team-compose option A; no historical extraction prerequisite) or evolution-proposed (all `§11.2.1` signals required). TRIGGER for "create a new skill for <capability>", "mint a skill for a capability gap", "write a new skill from scratch for <X>", "phase-compose flagged a skill gap — create the skill". DO NOT TRIGGER for minting a specialist/agent (`guild:create-specialist`), evolving or re-tuning an existing skill (`guild:evolve-skill`), composing a team (`guild:team-compose`), or rolling back a skill (`guild:rollback-skill`).
 when_to_use: An explicit human request for a new capability, OR a phase-aware composition pass (G-PHASE-COMPOSE) detects a missing CAPABILITY rather than a missing role, OR `guild:team-compose`'s gap-handling option A surfaces a skill (not agent) gap, OR `§11.2.1`-style extraction signals show a recurring capability gap across ≥3 runs with no existing skill covering it. Not for evolving an existing skill (`guild:evolve-skill`) or minting a specialist (`guild:create-specialist`).
 type: meta
+indexed: true
 ---
 
 # guild:create-skill
@@ -64,7 +65,7 @@ Seven ordered steps, each gate passing before the next runs. Full procedure — 
 4. **Propose adjacent-boundary edits** — append a `DO NOT TRIGGER for: <new-capability>` clause to each adjacent skill's `description` so it stops stealing the new skill's triggers.
 5. **Gate boundary edits** — each edit runs through `guild:evolve-skill` paired evals (A = adjacent skill as-is, B = with the clause). A failing edit stops the workflow.
 6. **Gate new skill** — paired evals (A = no-skill baseline, B = proposed skill) always run and always gate. Shadow-mode runs over `.guild/runs/*/` are **required for evolution-proposed** creation; for human-requested creation, replay any applicable corpus that exists, but an empty or irrelevant `.guild/runs/*/` corpus is recorded as `not_applicable` and is not a registration blocker (a fresh project has no runs — without this the waiver would be vacuous on exactly the projects it exists to serve). Also run the **description optimizer** so the final description stays ≤1024 chars with ≥3 trigger phrasings.
-7. **Register** — on both gates passing, move files live within `.guild/` (see DH-3 mint contract), commit the step-5 boundary edits, and refresh the derived registry projection: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/roster-resolve.ts --cwd . --write-registry --quiet` (`.guild/skills/registry.yaml` is a generated index of the `SKILL.md` tree — never hand-maintained). From this point the skill is discoverable to `guild:team-compose` (roster-resolve `project_skills`) and loadable by lanes (specialist prompts direct project-skill loading from `.guild/skills/<name>/SKILL.md`); project-local skills are not host-autoloaded.
+7. **Register** — on both gates passing, move files live within `.guild/` (see DH-3 mint contract), commit the step-5 boundary edits, and refresh the derived registry projection: `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/roster-resolve.js --cwd . --write-registry --quiet` (`.guild/skills/registry.yaml` is a generated index of the `SKILL.md` tree — never hand-maintained). From this point the skill is discoverable to `guild:team-compose` (roster-resolve `project_skills`) and loadable by lanes (specialist prompts direct project-skill loading from `.guild/skills/<name>/SKILL.md`); project-local skills are not host-autoloaded.
 
 ## Extraction signals (§11.2.1 — historical thresholds apply to evolution-proposed only)
 
@@ -84,3 +85,23 @@ Emit a `handoff` block naming the creation run and gate outcome:
 - On **failure** (any gate): write `.guild/evolve/<run-id>/proposed-<name>-rejected.md` with the gate outcomes and surface refinement options.
 
 Payload fields: `run_id`, `skill_name`, `tier`, `creation_authority` (`human-requested`/`evolution-proposed`), `outcome` (`registered`/`rejected`), `gate_failed` (rejection only — one of `extraction-signals`, `boundary-edit`, `new-skill`; `extraction-signals` applies only to evolution-proposed creation), `boundary_edits` (success only — adjacent-skill paths that received `DO NOT TRIGGER` clauses), `proposed_path`/`live_path` (traceability), `degraded` (bool, success only), and `refinement_options` (rejection only).
+
+## Chapters
+
+Three-stage disclosure (KTD25): this file is the assembler. Each row below is an
+L3 chapter that stays on disk until a request matches it. Compose by pointer —
+read the one chapter you were routed to, and never inline a chapter here.
+
+| Chapter | Covers |
+|---|---|
+| `references/writing-skills.md` | The authoring discipline that fills the canonical SKILL.template.md skeleton — a method, not the skeleton |
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:rollback-skill` | `evolve` | `../evolve/references/rollback-skill.md` |

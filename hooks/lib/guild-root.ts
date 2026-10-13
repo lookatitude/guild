@@ -53,6 +53,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { durableGuildDir } from "../../src/domains/state";
 
 /**
  * Walk from startCwd upward to the filesystem root, applying .git-first
@@ -85,7 +86,7 @@ export function resolveGuildRoot(startCwd: string): string {
     // Only remember the FIRST (nearest) one we see; keep walking past it
     // in case a .git shows up further up the chain.
     if (nearestGuildDir === null) {
-      const guildDir = path.join(current, ".guild");
+      const guildDir = durableGuildDir(current);
       if (fs.existsSync(guildDir)) {
         try {
           if (fs.statSync(guildDir).isDirectory()) {

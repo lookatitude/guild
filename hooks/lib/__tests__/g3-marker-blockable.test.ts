@@ -14,6 +14,7 @@
  *      rung.
  */
 
+import { describe, it, expect } from "bun:test";
 import { resolveDispatchAttribution } from "../dispatch-attribution";
 import {
   buildAllowMessage,

@@ -1,1 +1,1 @@
-export * from "../../../src/modules/security/workflows/secrets.js";
+export { applySecretsPolicy, resolveTelemetryField, type ScrubResult } from "../../../src/domains/security/index.js";

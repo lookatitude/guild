@@ -36,6 +36,8 @@ import {
   sinkAuditReflectionHint,
   type RunSinkAudit,
 } from "./lib/run-sinks";
+import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -81,7 +83,7 @@ type TelemetryEvent = RunEvent;
  * `hook_event status:"err"` (e.g. hooks/lib/context-compliance.ts) is
  * visible in buildTimeline() the same way a `tool_call` error is, keeping
  * the Timeline and the frontmatter error count in agreement. Mirrors
- * mcp-servers/guild-telemetry/src/index.ts's normalizeEvent — the same fix
+ * src/runtime/mcp/guild-telemetry/index.ts's normalizeEvent — the same fix
  * already shipped there for this issue's sibling MCP-query symptom.
  */
 function normalizeEvent(raw: TelemetryEvent): TelemetryEvent {
@@ -775,6 +777,7 @@ function buildSummary(
 // ── Main ───────────────────────────────────────────────────────────────────
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const args = process.argv.slice(2);
   const { runId, cwd: cwdArg, out: outArg } = parseArgs(args);
 
@@ -786,7 +789,7 @@ function main(): void {
 
   // Resolve paths
   const cwd = path.resolve(cwdArg);
-  const runDir = path.join(cwd, ".guild", "runs", runId);
+  const runDir = path.join(durableGuildDir(cwd), "runs", runId);
   const defaultOut = path.join(runDir, "summary.md");
   const outFile = outArg ? path.resolve(outArg) : defaultOut;
 

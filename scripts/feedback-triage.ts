@@ -39,6 +39,8 @@ import {
   type RunLearningClassification,
   type RunLearningFinding,
 } from "./lib/run-learning-classifier";
+import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 export const TRIAGE_SCHEMA = "guild.feedback_triage.v1";
 export const FILED_SCHEMA = "guild.feedback_filed.v1";
@@ -81,7 +83,7 @@ export function assertSafeId(kind: string, value: string): void {
 
 export function feedbackDir(cwd: string, runId: string): string {
   assertSafeId("run id", runId);
-  return path.join(cwd, ".guild", "feedback", runId);
+  return path.join(durableGuildDir(cwd), "feedback", runId);
 }
 
 export function runTriage(opts: {
@@ -251,6 +253,7 @@ export function runFile(opts: {
 // ── CLI ─────────────────────────────────────────────────────────────────────
 
 function main(): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const cmd = argv[0];
   let runId: string | null = null;

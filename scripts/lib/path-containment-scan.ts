@@ -99,7 +99,8 @@ const SOURCE_EXT = new Set([".ts", ".tsx", ".mts", ".cts"]);
  * as negative controls proving its fixtures are live. Those transcriptions are real
  * climbs. Scanning tests would flag the proof that the rule works as a violation of
  * the rule — and the obvious "fix" would be to delete the controls, which is exactly
- * the vacuity this whole change is trying not to commit.
+ * the vacuity this whole change is trying not to commit. Tests colocated beside the
+ * code they cover (`*.test.ts`, T13) are skipped by name for the same reason.
  */
 const SKIP_DIRS = new Set(["node_modules", "dist", "__tests__", ".git"]);
 
@@ -117,7 +118,7 @@ export function walkSourceFiles(root: string, rel = "", out: string[] = []): str
     if (e.isDirectory()) {
       if (SKIP_DIRS.has(e.name)) continue;
       walkSourceFiles(root, childRel, out);
-    } else if (SOURCE_EXT.has(path.extname(e.name)) && !e.name.endsWith(".d.ts")) {
+    } else if (SOURCE_EXT.has(path.extname(e.name)) && !e.name.endsWith(".d.ts") && !/\.test\.[cm]?tsx?$/.test(e.name)) {
       out.push(childRel);
     }
   }

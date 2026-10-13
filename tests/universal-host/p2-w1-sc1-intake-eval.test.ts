@@ -16,6 +16,7 @@
  * Falsifiable: if the classifier regresses (a disposition positive drops, or a dev prompt
  * over-fires), the precision/recall floor AND the per-case pins fail.
  */
+import { describe, it, expect } from "bun:test";
 import {
   classifyIntake,
   intakeRouteTarget,

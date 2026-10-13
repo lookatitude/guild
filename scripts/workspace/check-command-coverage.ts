@@ -5,9 +5,17 @@
  * Command coverage now lives in src/modules/docs-sync so the docs-sync module
  * owns its executable workflows.
  */
-export * from "../../src/modules/docs-sync/workflows/check-command-coverage";
+export {
+  isTokenCovered,
+  evaluateCommandCoverage,
+  collectCommandTokens,
+  htmlToText,
+  gatherKnowledgeText,
+  checkCommandCoverageMain as main,
+  type CheckCommandCoverageCoverageResult as CoverageResult,
+} from "../../src/domains/distribution";
 
-import { main } from "../../src/modules/docs-sync/workflows/check-command-coverage";
+import { checkCommandCoverageMain as main } from "../../src/domains/distribution";
 
 if (require.main === module) {
   process.exit(main(process.argv.slice(2)));

@@ -7,6 +7,7 @@
  * bypass-policy decision resolver.
  */
 
+import { describe, it, expect } from "bun:test";
 import {
   anyRuleMatches,
   globToRegExp,

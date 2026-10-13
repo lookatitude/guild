@@ -32,7 +32,7 @@
  */
 
 import * as fs from "fs";
-import { sealSet } from "../../src/modules/kernel/workflows/sealed-collections";
+import { sealSet } from "../../src/domains/kernel/index";
 import * as path from "path";
 // The ONE shared, js-yaml-backed frontmatter/YAML reader (OD-3): all reading
 // goes through it — this file only DUMPS YAML directly.
@@ -40,7 +40,13 @@ import { parseFrontmatter, parseYaml } from "./frontmatter";
 import {
   checkContained,
   isRefused,
-} from "../../src/modules/kernel/workflows/path-containment";
+} from "../../src/domains/kernel/index";
+// KTD20/R59: the mint tree is addressed through GuildStorage.definition, never
+// by hand-joining ".guild". One constructor means one place decides where a
+// project's definitions live, so a layout change moves the mint with it.
+import { createGuildStorage } from "./state/storage";
+import { gateProfileCreation, resolveMintScope, type WorkflowClass } from "../../src/domains/teams";
+import { durableGuildDir } from "./state/storage";
 
 const yaml = require("js-yaml") as {
   dump: (o: unknown, opts?: Record<string, unknown>) => string;
@@ -274,7 +280,7 @@ function readAgentEntry(
  */
 export function checkWorkspaceRosterScopes(workspaceRootInput: string): WorkspaceRosterScopeCheck {
   const workspaceRoot = path.resolve(workspaceRootInput);
-  const manifestPath = path.join(workspaceRoot, ".guild", "workspace.json");
+  const manifestPath = path.join(durableGuildDir(workspaceRoot), "workspace.json");
   const issues: WorkspaceRosterScopeIssue[] = [];
   let manifest: Record<string, unknown>;
   try {
@@ -346,7 +352,7 @@ export function checkWorkspaceRosterScopes(workspaceRootInput: string): Workspac
     Array<{ root_id: string; path: string; scope: string | null; counterpart: string | null }>
   >();
   for (const root of roots) {
-    const dir = path.join(root.root, ".guild", "agents");
+    const dir = path.join(durableGuildDir(root.root), "agents");
     for (const filename of listAgentFiles(dir)) {
       if (filename === "registry.yaml") continue;
       const file = path.join(dir, filename);
@@ -446,8 +452,31 @@ export function checkWorkspaceRosterScopes(workspaceRootInput: string): Workspac
   };
 }
 
+/**
+ * The mint tree for one project root, through the ONE path constructor (KTD20).
+ *
+ * `definition("agents")` and `definition("skills")` are the canonical homes for
+ * minted specialist profiles and project-local skills. Resolution is
+ * PROJECT-FIRST by construction: this returns the consuming repo's own tree, and
+ * plugin `templates/specialists/*.md` is compose-time feedstock only — after a
+ * mint, the live body is the project file this path names, never the install-dir
+ * copy.
+ */
+function definitionTree(projectRoot: string): { agents: string; skills: string } {
+  const storage = createGuildStorage(projectRoot, {
+    activeRoot: projectRoot,
+    profile: "standalone",
+  });
+  return { agents: storage.definition("agents"), skills: storage.definition("skills") };
+}
+
+/** Relative spelling of a definition path, for the entries the roster reports. */
+function definitionRel(projectRoot: string, abs: string): string {
+  return path.relative(path.resolve(projectRoot), abs);
+}
+
 function listProjectSkills(projectRoot: string): RosterSkillEntry[] {
-  const skillsDir = path.join(projectRoot, ".guild", "skills");
+  const skillsDir = definitionTree(projectRoot).skills;
   if (!fs.existsSync(skillsDir)) return [];
   const entries: RosterSkillEntry[] = [];
   for (const e of fs.readdirSync(skillsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -525,10 +554,11 @@ export function resolveRoster(opts: {
   // and `_shared/` are never candidates.
   const project: RosterAgentEntry[] = [];
   const shippedNames = new Set(shipped.map((s) => s.name));
-  for (const f of listAgentFiles(path.join(projectRoot, ".guild", "agents"))) {
+  const projectAgents = definitionTree(projectRoot).agents;
+  for (const f of listAgentFiles(projectAgents)) {
     const entry = readAgentEntry(
       projectRoot,
-      path.join(".guild", "agents", f),
+      definitionRel(projectRoot, path.join(projectAgents, f)),
       "project",
       warnings
     );
@@ -584,12 +614,31 @@ export interface MintResult {
  * instance is guild:evolve-skill's job, not a re-mint). Path safety mirrors the
  * derived-registry writer: symlinked targets or ancestors escaping the project
  * root are refused outright.
+ *
+ * The class gate runs first (KTD55 / R67): only a `product` or `init` run grows
+ * the roster. Any other class, or no class at all, is refused with the
+ * `resolveMintScope` reason, and nothing is written.
  */
 export function mintFromTemplate(opts: {
   pluginRoot: string;
   projectRoot: string;
   name: string;
+  /** The run's bound workflow class; absent is refused. */
+  workflowClass: WorkflowClass | null | undefined;
   /** Run every check and report the would-be action WITHOUT writing anything. */
+  dryRun?: boolean;
+}): MintResult {
+  const target = path.join(definitionTree(path.resolve(opts.projectRoot)).agents, `${opts.name}.md`);
+  const gate = gateProfileCreation({ workflow_class: opts.workflowClass, role: opts.name, writer: "roster.mint" });
+  if (!gate.ok) return { path: target, action: "refused", reason: gate.reason };
+  return copyTemplateInstance(opts);
+}
+
+/** The template → instance copy behind mintFromTemplate, without the class gate. */
+function copyTemplateInstance(opts: {
+  pluginRoot: string;
+  projectRoot: string;
+  name: string;
   dryRun?: boolean;
 }): MintResult {
   const pluginRoot = path.resolve(opts.pluginRoot);
@@ -646,10 +695,11 @@ export function mintFromTemplate(opts: {
   // role already covers it (codex G-lane finding — a second `frontend` under a
   // different filename would produce duplicate registry ids).
   const projWarnings: string[] = [];
-  for (const f of listAgentFiles(path.join(projectRoot, ".guild", "agents"))) {
+  const mintDir = definitionTree(projectRoot).agents;
+  for (const f of listAgentFiles(mintDir)) {
     const existing = readAgentEntry(
       projectRoot,
-      path.join(".guild", "agents", f),
+      definitionRel(projectRoot, path.join(mintDir, f)),
       "project",
       projWarnings
     );
@@ -662,7 +712,7 @@ export function mintFromTemplate(opts: {
     }
   }
 
-  const target = path.join(projectRoot, ".guild", "agents", `${name}.md`);
+  const target = path.join(mintDir, `${name}.md`);
   // Path-safety (same hard rules as writeDerived): never write through a
   // symlink, never let an ancestor's realpath escape the project root.
   let st: fs.Stats | null = null;
@@ -835,7 +885,7 @@ export function deriveAgentsRegistry(
   resolution: RosterResolution,
   opts: { force?: boolean; dryRun?: boolean } = {}
 ): DeriveResult {
-  const target = path.join(resolution.project_root, ".guild", "agents", "registry.yaml");
+  const target = path.join(durableGuildDir(resolution.project_root), "agents", "registry.yaml");
   const items = resolution.project.map((a) =>
     pruneNulls({
       id: a.name,
@@ -872,7 +922,7 @@ export function deriveSkillsRegistry(
   resolution: RosterResolution,
   opts: { force?: boolean; dryRun?: boolean } = {}
 ): DeriveResult {
-  const target = path.join(resolution.project_root, ".guild", "skills", "registry.yaml");
+  const target = path.join(durableGuildDir(resolution.project_root), "skills", "registry.yaml");
   const items = resolution.project_skills.map((s) =>
     pruneNulls({
       id: s.id,
@@ -943,7 +993,7 @@ export function projectInstanceToHostNative(opts: {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
     return { path: "", action: "refused", reason: `unsafe specialist name "${name}"` };
   }
-  const src = path.join(projectRoot, ".guild", "agents", `${name}.md`);
+  const src = path.join(durableGuildDir(projectRoot), "agents", `${name}.md`);
   if (!fs.existsSync(src)) {
     return {
       path: src,
@@ -1041,15 +1091,22 @@ export interface TeamMigrationFileResult {
  * Team files are derived composition artifacts, so the rewrite is a canonical
  * re-dump of the parsed document (data-preserving; comment lines are not).
  * Files that fail the shared YAML parse are refused, never guessed at.
+ *
+ * Class gate (KTD55 / R67): an instance that already exists is re-linked under
+ * any class; an ABSENT one is created only through `mintFromTemplate`, so a
+ * non-minting class (or none) refuses the creation and the role lands in
+ * `failed`. A team file's own `workflow_class:`, when present, is gated too.
  */
 export function migrateTeamRoster(opts: {
   pluginRoot: string;
   projectRoot: string;
+  /** The run's bound workflow class; absent refuses every creation. */
+  workflowClass: WorkflowClass | null | undefined;
   dryRun?: boolean;
 }): TeamMigrationFileResult[] {
   const projectRoot = path.resolve(opts.projectRoot);
   const pluginRoot = path.resolve(opts.pluginRoot);
-  const teamDir = path.join(projectRoot, ".guild", "team");
+  const teamDir = path.join(durableGuildDir(projectRoot), "team");
   if (!fs.existsSync(teamDir)) return [];
   const templateNames = new Set(listSpecialistTemplates(pluginRoot).map((t) => t.name));
 
@@ -1090,7 +1147,24 @@ export function migrateTeamRoster(opts: {
       if (!templateNames.has(role)) continue; // machinery/dev-team stay shipped
       // Probe/execute the mint — dry-run runs the SAME checks without writing,
       // so a dry-run report never overstates what the real run can do.
-      const mint = mintFromTemplate({ pluginRoot, projectRoot, name: role, dryRun: opts.dryRun });
+      // An existing instance is only re-linked; creating one grows the roster
+      // and goes through the class-gated mint.
+      const probe = copyTemplateInstance({ pluginRoot, projectRoot, name: role, dryRun: true });
+      let mint = probe;
+      if (probe.action !== "exists") {
+        const fileClass = asString(doc["workflow_class"]) as WorkflowClass | undefined;
+        const fileScope = fileClass ? resolveMintScope({ workflow_class: fileClass }) : null;
+        mint =
+          fileScope && !fileScope.may_mint
+            ? { path: probe.path, action: "refused", reason: fileScope.reason }
+            : mintFromTemplate({
+                pluginRoot,
+                projectRoot,
+                name: role,
+                workflowClass: opts.workflowClass,
+                dryRun: opts.dryRun,
+              });
+      }
       if (mint.action === "refused") {
         // Leave the entry untouched, but SURFACE it: this lane stays broken.
         failed.push({ role, reason: mint.reason ?? "mint refused" });

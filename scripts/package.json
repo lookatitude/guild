@@ -2,22 +2,18 @@
   "name": "guild-scripts",
   "private": true,
   "scripts": {
-    "test": "npx jest --testPathPattern=__tests__ --no-coverage --runInBand",
+    "test": "cd .. && bun test --isolate scripts",
     "build:activated-host-conformance": "esbuild activated-host-conformance.ts --bundle --platform=node --target=node18 --format=cjs --alias:js-yaml=./node_modules/js-yaml --outfile=dist/activated-host-conformance.js",
     "build:inventory": "npx tsx build-inventory.ts",
     "check:inventory": "npx tsx build-inventory.ts --check",
     "build:hosts": "npx tsx build-host-packages.ts",
     "check:docs-architecture": "npx tsx check-docs-architecture.ts",
-    "check:modules": "npx tsx check-module-ownership.ts",
+    "check:modules": "npx tsx check-domain-ownership.ts",
     "check:path-containment": "npx tsx check-path-containment.ts",
-    "sync:module-resources": "npx tsx sync-module-resources.ts",
-    "check:module-resources": "npx tsx sync-module-resources.ts --check",
-    "sync:live-resources": "npx tsx sync-live-resources.ts",
-    "check:live-resources": "npx tsx sync-live-resources.ts --check",
     "sync:claude-install": "npx tsx build-host-packages.ts --sync-claude-install",
     "check:claude-install": "npx tsx build-host-packages.ts --check-claude-install",
-    "check:module-source-of-truth": "npm run check:modules -- --root .. && npm run check:module-resources -- --root .. && npm run check:live-resources -- --root .. && npm run check:claude-install -- --root ..",
-    "verify:host-packages": "npx tsx sync-live-resources.ts --check --root .. && npx tsx build-host-packages.ts --check-claude-install --root .. && npx tsx verify-host-packages.ts --root ..",
+    "check:module-source-of-truth": "npm run check:modules -- --root .. && npm run check:claude-install -- --root ..",
+    "verify:host-packages": "npx tsx build-host-packages.ts --check-claude-install --root .. && npx tsx verify-host-packages.ts --root ..",
     "check:host-support-matrix": "npx tsx generate-support-matrix.ts --check",
     "check:channel-integrity": "npx tsx check-channel-integrity.ts",
     "check:stable-promotion": "npx tsx check-channel-integrity.ts promotion",
@@ -35,34 +31,16 @@
     "build:verify": "npx tsx build-verify.ts",
     "build:verify:refresh": "npx tsx build-verify.ts --refresh-receipts",
     "desktop-app-smoke": "npx tsx desktop-app-smoke.ts",
-    "verify:desktop-app-smoke": "npx tsx verify-desktop-app-smoke.ts"
+    "verify:desktop-app-smoke": "npx tsx verify-desktop-app-smoke.ts",
+    "lint:layout": "npx tsx lint/layout-laws.ts"
   },
   "dependencies": {
-    "js-yaml": "^4.3.0"
+    "js-yaml": "^4.3.2"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.12",
     "@types/node": "^22.0.0",
     "esbuild": "^0.28.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.2.3",
     "tsx": "^4.21.0",
     "typescript": "^5.5.0"
-  },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "testPathIgnorePatterns": [
-      "/node_modules/",
-      "/__tests__/fixtures/"
-    ],
-    "moduleNameMapper": {
-      "^js-yaml$": "<rootDir>/node_modules/js-yaml",
-      "^(\\.{1,2}/.*)\\.js$": "$1"
-    },
-    "transform": {
-      "^.+\\.tsx?$": ["ts-jest", { "tsconfig": { "module": "commonjs", "target": "es2022" } }]
-    },
-    "testTimeout": 30000
   }
 }

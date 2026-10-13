@@ -1,0 +1,22 @@
+{
+  "schema_version": "guild.adapter_map.v1",
+  "family": "opencode",
+  "host_ids": [
+    "opencode"
+  ],
+  "package_trees": [
+    "opencode"
+  ],
+  "projects": {
+    "manifest": "opencode-manifest.json",
+    "instructions": ".agents/skills/guild/"
+  },
+  "runtime": [
+    "runtime/",
+    "hooks/dist/"
+  ],
+  "never_projects": [
+    "src/domains/**/*.ts"
+  ],
+  "rungs": "src/adapters/adapter.lock.json#/families/opencode"
+}

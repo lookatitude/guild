@@ -32,6 +32,8 @@ import { resolveGuildRoot } from "./lib/guild-root.js";
 import { resolveRunIdForTrace } from "./lib/run-trace.js";
 import { authorizeHookWrite, formatBindingRejected } from "./lib/hook-binding.js";
 import { runLearningBackstop } from "./lib/learning-backstop.js";
+// T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
+import { ensureStorageLayout } from "./lib/ensure-layout.js";
 
 interface HookPayload {
   session_id?: string;
@@ -61,6 +63,18 @@ async function main(): Promise<void> {
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
   // Walk up from cwd to find the repo root — .guild/ lives at the repo root.
   const guildRoot = resolveGuildRoot(cwd);
+
+  // T10 (KTD23): layout bootstrap on a write-capable entry. A hook can be the
+  // first thing to touch a root after an upgrade landed, so it runs the
+  // bootstrap itself; on a current root this is a stat plus one marker read.
+  // Fail-open by contract — a refused root still exits 0.
+  const layout = ensureStorageLayout(guildRoot, "learning-backstop");
+  // KTD23 fails CLOSED on a layout this build does not understand: a future
+  // marker means every write below would land in a root that is not ours.
+  if (!layout.ok) {
+    process.stderr.write(`warn: [learning-backstop] .guild layout refused (${layout.refused}) — no writes\n`);
+    return;
+  }
 
   const runId = resolveRunIdForTrace(guildRoot, {
     GUILD_RUN_ID: process.env["GUILD_RUN_ID"],

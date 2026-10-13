@@ -16,6 +16,7 @@
  *      <runDir>/learn/skipped-files.json.
  */
 
+import { describe, it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -52,7 +53,7 @@ import {
 // property" under ts-jest (no babel-jest hoisting in this project's jest
 // config). hooks/lib/run-trace.ts's own `export *` chain re-reads this same
 // module's exports object on every call, so the spy is visible end-to-end.
-import * as runstartPreflightOriginal from "../../src/modules/lifecycle/workflows/runstart-preflight";
+import * as runstartPreflightOriginal from "../../src/domains/lifecycle";
 
 // Shared js-yaml frontmatter parser (OD-3 compliant) — read run.yaml fields by
 // parsing the document instead of hand-rolled line-anchored regex assertions.
@@ -62,7 +63,7 @@ import {
   defaultJournalIo,
   readCheckpointState,
   scanReceiptJournal,
-} from "../../src/modules/telemetry/workflows/receipt-journal";
+} from "../../src/domains/telemetry";
 
 /** Parse a run.yaml document to its top-level fields (fail-loud null on parse error). */
 const runYamlFields = (text: string) =>
@@ -311,7 +312,7 @@ describe("run-trace lib (Lane B3)", () => {
     });
 
     it("recovers a journal-won start receipt before exposing the full run id", () => {
-      const checkpointWrite = jest.spyOn(defaultJournalIo, "writeCheckpoint")
+      const checkpointWrite = spyOn(defaultJournalIo, "writeCheckpoint")
         .mockImplementationOnce(() => { throw new Error("planted start-checkpoint crash"); });
       let runId: string | null = null;
       try {
@@ -336,7 +337,7 @@ describe("run-trace lib (Lane B3)", () => {
     });
 
     it("removes the full run transaction when its start receipt cannot be appended", () => {
-      const acquire = jest.spyOn(defaultJournalIo, "acquireLock")
+      const acquire = spyOn(defaultJournalIo, "acquireLock")
         .mockImplementation(() => { throw new Error("planted non-recoverable lock failure"); });
       let runId: string | null = "unexpected";
       try {
@@ -517,7 +518,7 @@ describe("run-trace lib (Lane B3)", () => {
   // failure at this boundary.
   describe("resolvePreflightSnapshot (U3/U6 wiring)", () => {
     afterEach(() => {
-      jest.restoreAllMocks();
+      mock.restore();
     });
 
     it("returns a well-shaped ResolvedSettingsSnapshot on a healthy preflight (real, unmocked call)", () => {
@@ -530,10 +531,10 @@ describe("run-trace lib (Lane B3)", () => {
     });
 
     it("degrades to undefined + logs a WARN to stderr when runStartPreflight throws (preflight failure must NEVER block run start)", () => {
-      jest.spyOn(runstartPreflightOriginal, "runStartPreflight").mockImplementationOnce(() => {
+      spyOn(runstartPreflightOriginal, "runStartPreflight").mockImplementationOnce(() => {
         throw new Error("simulated preflight crash");
       });
-      const errSpy = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
+      const errSpy = spyOn(process.stderr, "write").mockImplementation(() => true);
       const snapshot = resolvePreflightSnapshot(root);
       expect(snapshot).toBeUndefined();
       expect(errSpy).toHaveBeenCalledWith(

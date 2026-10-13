@@ -52,7 +52,7 @@
  * Report building is READ-ONLY by construction — it never receives a write path.
  *
  * PLACEMENT: this lives in `scripts/lib/capability/` rather than
- * `src/modules/capability/workflows/` because it composes three contracts owned by
+ * `src/domains/config/` because it composes three contracts owned by
  * the `dispatch` module (adoption-manifest, project-definition-ref,
  * specialist-identity) plus `state`'s frontmatter reader. A module workflow may not
  * import the `scripts/` layer (check-module-ownership enforces it), and routing
@@ -80,7 +80,7 @@ import {
 import {
   checkContained,
   isRefused,
-} from "../../../src/modules/kernel/workflows/path-containment";
+} from "../../../src/domains/kernel/index";
 import {
   PROJECT_DEFINITION_REF_SCHEMA,
   validateProjectDefinitionRefV1,
@@ -104,12 +104,16 @@ import {
   type CompatibilityCatalogEntry,
 } from "./compatibility-catalog";
 import { readCompatibilityAsset, readRuntimeVersion } from "./compatibility-loader";
-import { assertWritableBinding } from "../../../src/modules/lifecycle/workflows/run-binding";
+import { assertWritableBinding } from "../../../src/domains/lifecycle/index";
+import { readWorkflowCursor } from "../../../src/domains/lifecycle";
+import { createGuildStorage } from "../../../src/domains/state";
+import { gateProfileCreation } from "../../../src/domains/teams";
 import {
   appendReceipt,
   makeReceiptInput,
   type ReceiptAppendOutcome,
-} from "../../../src/modules/telemetry";
+} from "../../../src/domains/telemetry";
+import { durableGuildDir } from "../state/storage";
 
 /** The catalog envelope key set, for the nested-object snapshot (CODEX #10). */
 const CATALOG_KEYS = [
@@ -673,7 +677,7 @@ export function buildAdoptionReport(opts: unknown): AdoptionReport {
     }
   };
 
-  const guild = path.join(projRoot, ".guild");
+  const guild = durableGuildDir(projRoot);
   scan(listFiles(path.join(guild, "team"), (n) => n.endsWith(".yaml")), "team_file");
   scan(listFiles(path.join(guild, "plan"), (n) => n.endsWith(".md")), "plan_file");
   scan(listFiles(path.join(guild, "agents"), (n) => n.endsWith(".md")), "project_agent_frontmatter");
@@ -1154,6 +1158,13 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
   const compatibilityOnly: string[] = [];
   const pendingEntries: Array<Omit<AdoptionEntry, "sequence" | "prev_digest">> = [];
   const seenDecisions = new Set<string>();
+  // The run's bound class gates every NEW `.guild/agents/<id>.md` (R67). Read
+  // off the run record's workflow cursor, never taken from the caller: a debug
+  // run cannot adopt its way into a roster it may not mint. No cursor means the
+  // class is unknown, and an unknown class refuses creation.
+  const runClass =
+    readWorkflowCursor(createGuildStorage(projRoot, { activeRoot: projRoot, profile: "standalone" }).project?.runRecord(runId) ?? "")
+      ?.class ?? null;
 
   for (const raw of decisionsRaw) {
     const d = readOptions(raw, DECISION_KEYS);
@@ -1283,6 +1294,10 @@ export function applyAdoptionPlan(opts: unknown): AdoptionApplyOutcome {
           status: "refused",
           reason: `${successorRelPath} already exists with different bytes; resolve it or choose compatibility_only for "${id}"`,
         };
+      }
+      if (kind === "agent" && existing === null) {
+        const gate = gateProfileCreation({ workflow_class: runClass, role: id, writer: "capability.adopt" });
+        if (!gate.ok) return { status: "refused", reason: gate.reason };
       }
       writes.push({
         absTarget,

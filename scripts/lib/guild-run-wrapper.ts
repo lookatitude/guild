@@ -40,6 +40,7 @@ import { DERIVED_HOST_CAPABILITY_ROWS as HOST_CAPABILITY_ROWS, getRegistryEntryF
 // host here is a HostKind-compatible string ("claude" | "codex" | …).
 import { isAntigravityCli, isClaudeCli, isCodexCli, isPiCli } from "./capability/rank";
 import type { HostKind } from "./host-types";
+import { projectSurfaces } from "../../src/adapters";
 
 // ---------------------------------------------------------------------------
 // Request / plan types
@@ -420,6 +421,12 @@ export function planWrapperInvocation(
   }
 
   const env: Record<string, string> = {};
+  // KTD28/T10: the hooks read the verify and compaction rungs from env and
+  // assume `native` when unset. A wrapped host states its own, from the closed
+  // rung matrix, so a missing rung is recorded rather than claimed.
+  const rungEnv = projectSurfaces(request.host, { verify_check_available: false }).env;
+  if (rungEnv.GUILD_VERIFY_RUNG !== "native") env["GUILD_VERIFY_RUNG"] = rungEnv.GUILD_VERIFY_RUNG;
+  if (rungEnv.GUILD_COMPACTION_RUNG !== "native") env["GUILD_COMPACTION_RUNG"] = rungEnv.GUILD_COMPACTION_RUNG;
   if (request.writableRoots && request.writableRoots.length > 0) {
     // Advertised for the wrapper/sandbox layer; host-dependent enforcement.
     env["GUILD_WRITABLE_ROOTS"] = request.writableRoots.join(":");
@@ -456,8 +463,8 @@ export function planWrapperInvocation(
  * guild-run CLI. This is the per-host "wrapper path" artifact (SC-5) emitted into
  * each dist tree's bin/. The launcher itself does no logic — the CLI does.
  *
- * Self-containment: the CLI is resolved relative to THIS package's own bundled
- * scripts/ (build:hosts copies scripts/ into every host tree), so the launcher
+ * Self-containment: the CLI is resolved relative to THIS package's own compiled
+ * runtime/ (build:hosts copies runtime/ into every host tree), so the launcher
  * works from a standalone install. `GUILD_RUN_CLI` overrides it; if neither
  * resolves to a real file, the launcher fails LOUDLY (never silently calls the
  * wrong path).
@@ -480,14 +487,14 @@ export function renderLauncherScript(host: string): string {
     '  case "$SOURCE" in /*) ;; *) SOURCE="$DIR/$SOURCE" ;; esac',
     "done",
     'SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"',
-    "# The CLI is bundled in this package at <pkg>/scripts/guild-run.ts (bin/ is a sibling of scripts/).",
-    'CANDIDATE="$SCRIPT_DIR/../scripts/guild-run.ts"',
+    "# The CLI is the compiled bundle at <pkg>/runtime/scripts/guild-run.js (KTD11: plain node, no tsx).",
+    'CANDIDATE="$SCRIPT_DIR/../runtime/scripts/guild-run.js"',
     'GUILD_RUN="${GUILD_RUN_CLI:-$CANDIDATE}"',
     'if [ ! -f "$GUILD_RUN" ]; then',
-    '  echo "guild-run: cannot locate guild-run.ts (looked at: $CANDIDATE). Set GUILD_RUN_CLI." >&2',
+    '  echo "guild-run: cannot locate guild-run.js (looked at: $CANDIDATE). Set GUILD_RUN_CLI." >&2',
     "  exit 1",
     "fi",
-    `exec npx tsx "$GUILD_RUN" --host ${host} "$@"`,
+    `exec node "$GUILD_RUN" --host ${host} "$@"`,
     "",
   ].join("\n");
 }

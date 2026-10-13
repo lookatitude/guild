@@ -1,0 +1,258 @@
+# compile-gates.yml — the U2 transitional rails for the plugin layout reshape (rev 20).
+#
+# Four gates, added in T02/T13 and held until T16 deletes the transitional ones:
+#
+#   1. compile --check      BLOCKING. The committed Node graph (hooks/dist/**,
+#                           runtime/**) must be byte-identical to a fresh compile.
+#                           This is the R-DIST rail: it runs in the same env shape
+#                           the author plane compiles in, so a stale bundle cannot
+#                           reach a channel branch (KTD6, KTD7, R19, R24).
+#   2. lint:layout          BLOCKING. T16 retired T01's baseline, so any violation
+#                           fails. The raw and
+#                           anti-vacuity passes run alongside so a check that stops
+#                           detecting anything fails loudly rather than passing.
+#   3. bun test             BLOCKING since T13, sharded, `--isolate` (see the job).
+#                           The only runner; T16 deleted Jest.
+#   4. skill-link-integrity BLOCKING since T13: every relative link under skills/
+#                           resolves (a dead link in prompt text never throws).
+#
+# Bun is the AUTHOR and CI runtime (P1/P2). It is never on a user's PATH (KTD10):
+# the user path is plain `node` on the committed outputs, which the
+# `installer without bun` job proves on every run.
+
+name: compile gates
+
+on:
+  pull_request:
+    branches: [next, main]
+  push:
+    branches: [next, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compile-gates-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-check:
+    name: compile --check (blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # The compile resolves esbuild from scripts/node_modules and js-yaml from
+      # hooks/node_modules; the MCP bundle resolves its SDK from each server's own
+      # node_modules. R-DIST: if this install list drifts from what the author
+      # plane has locally, --check false-flags, so keep it exactly these four.
+      - name: Install compile inputs
+        run: |
+          for dir in scripts hooks mcp-servers/guild-memory mcp-servers/guild-telemetry; do
+            (cd "$dir" && (npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline))
+          done
+
+      - name: bun run compile --check
+        run: bun run compile --check
+
+  layout-laws:
+    name: lint:layout (blocking against the T01 baseline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install scripts dependencies
+        working-directory: scripts
+        run: npm ci --prefer-offline || npm install --prefer-offline
+
+      # The lint EXECUTES code (the overlay oracle imports the validator) and
+      # builds a ts.Program per entry file, so it runs under tsx, not plain node.
+      - name: lint:layout (no baseline since T16 — any violation fails)
+        working-directory: scripts
+        run: npm run lint:layout
+
+      # Anti-vacuity: fails on VACUOUS, on OVERFLAG of a negative control, and on
+      # an orphan fixture tree. Without it a check that silently stopped matching
+      # would read as a green gate.
+      - name: lint:layout --fixtures (anti-vacuity)
+        working-directory: scripts
+        run: npx tsx lint/layout-laws.ts --fixtures
+
+      # KTD25 disclosure budgets. The catalog and per-skill legs BLOCK: the 17
+      # frontmatter descriptions are what the host pastes into every session.
+      # The prefix leg is ADVISORY (--advisory-prefix) only because the plugin
+      # AGENTS.md alone is already ~8k tokens — shrinking it is T17's F5, not
+      # this gate's. Drop the flag when F5 lands and the leg blocks too.
+      - name: description budgets (catalog + per-skill block · prefix advisory)
+        working-directory: scripts
+        run: npx tsx lint/description-budget.ts --root .. --advisory-prefix
+
+      - name: skill-link-integrity (every relative link under skills/ resolves)
+        working-directory: scripts
+        run: npx tsx lint/skill-link-integrity.ts --root ..
+
+  bun-test:
+    name: bun test (blocking · shard ${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # drift guards resolve pinned baseline SHAs from history
+
+      # Suites spawn the compiled Node outputs and tsx CLIs; Bun only runs them.
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # The same install list the Jest legs used: suites import across these trees
+      # and spawn their CLIs, and the determinism suite bundles both MCP servers.
+      - name: Install test inputs
+        run: |
+          for dir in scripts hooks hooks/agent-team mcp-servers/guild-memory mcp-servers/guild-telemetry tests; do
+            (cd "$dir" && (npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline))
+          done
+
+      # TRAP: `--isolate` is not optional. Without it Bun runs every file in ONE
+      # global and module registry, so env, mocks and module state leak between
+      # suites (Jest gave each file its own). bunfig.toml has no key for it.
+      - name: bun test --isolate
+        run: bun test --isolate --shard=${{ matrix.shard }}/4
+
+  node-only-runtime:
+    name: user path runs on node with bun absent
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      # No Bun step here ON PURPOSE. Everything below must work on a machine that
+      # has never seen Bun — that is the installer's environment (KTD10).
+      - name: Committed outputs start under plain node
+        run: |
+          set -euo pipefail
+          test ! -x "$(command -v bun 2>/dev/null || echo /nonexistent)" || { echo "bun must not be on PATH for this job"; exit 1; }
+          for id in wiki trace; do
+            out="$(: | node runtime/guild-mcp.js "$id" 2>&1 | head -1)"
+            echo "guild-mcp $id -> $out"
+            case "$out" in *ready*) ;; *) echo "guild-mcp $id did not start"; exit 1;; esac
+          done
+          echo '{}' | node hooks/dist/pre-tool-use.js >/dev/null
+          node runtime/scripts/ensure-storage-layout.js --cwd="$PWD" --print
+
+      # packaged-install-smoke BUILDS host packages, which compiles; the MCP SDK
+      # and zod live only in the mcp-servers lockfiles (codex G-lane r2).
+      - name: Install package-build inputs
+        run: |
+          for dir in scripts hooks mcp-servers/guild-memory mcp-servers/guild-telemetry; do
+            (cd "$dir" && (npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline))
+          done
+
+      - name: Installer runs without bun on PATH
+        working-directory: scripts
+        run: npm run verify:installer
+
+      # A CHECKOUT always has runtime/; an INSTALLED PACKAGE only has what
+      # build-host-packages copies. Every manifest points MCP startup at
+      # runtime/guild-mcp.js, so a package missing it installs a Guild whose MCP
+      # servers cannot start — invisible to every checkout-only test (codex G-lane r1).
+      - name: Packaged install smoke (MCP binary starts from a built package)
+        run: npx --prefix scripts tsx scripts/lint/packaged-install-smoke.ts
+
+  # Split from the correctness job on purpose (codex G-lane r2): a CI runner's wall
+  # clock is noisy, so timings advise; everything that is a fact about behaviour
+  # gates in hot-path-correctness above.
+  hot-path-timings:
+    name: hot-path timings (ADVISORY — wall clock is machine-dependent)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install scripts dependencies
+        working-directory: scripts
+        run: npm ci --prefer-offline || npm install --prefer-offline
+
+      - name: SessionStart marker read ≤50ms · green after_edit ≤250ms
+        run: npx --prefix scripts tsx scripts/lint/hot-path-budget.ts timings --runs=20
+
+  hot-path-correctness:
+    name: hot-path correctness (blocking) + pending T10 rung
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install scripts dependencies
+        working-directory: scripts
+        run: npm ci --prefer-offline || npm install --prefer-offline
+
+      # BLOCKING. Behaviour, not wall clock: the compiled PostToolUse path on a
+      # green edit exits 0 and writes nothing to stdout. Distinct from the rung
+      # oracle below: this leg asserts the hook PAIR is quiet, that one asserts
+      # the hook actually spawned the project check.
+      - name: post_tool_use_hook_green (hook exit 0 · empty stdout)
+        run: npx --prefix scripts tsx scripts/lint/hot-path-budget.ts post-tool-use-green
+
+      # BLOCKING since T10 landed the rung. It drives the SHIPPED PostToolUse
+      # entry against a project that declares a check and asserts the HOOK — not
+      # the harness — spawned it: the marker is written by the check process
+      # itself, so it can only appear if something actually ran it. A regression
+      # that stops spawning the check reads as `rung absent` here.
+      - name: verify_after_edit_rung (hook spawns the declared check)
+        run: npx --prefix scripts tsx scripts/lint/hot-path-budget.ts verify-after-edit-rung
+
+      # BLOCKING. The `status` entrypoint must not load unused domains. The
+      # `config show` row is reported, not gated: it is T06's acceptance oracle
+      # (its allowlist flips to blocking when the policy/inventory split lands).
+      - name: Cheap entrypoints do not load unused domains
+        run: npx --prefix scripts tsx scripts/lint/hot-path-budget.ts require-graph

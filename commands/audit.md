@@ -1,69 +1,10 @@
 ---
 name: audit
-description: "Self-maintenance — static security audit of installed Guild scripts (SHA-256 hashes, network/filesystem flags) + the static boundary-check section. Read-only static analysis. Dispatches to guild:audit."
+description: "Print-only alias (KTD14) — /guild:audit is now `/guild:maintain audit`. Prints the new spelling and exits; dispatches nothing, writes nothing."
 argument-hint: ""
-allowed-tools: Read, Grep, Glob, Bash, Skill
+allowed-tools: Read
 ---
 
-# /guild:audit — self-maintenance (Guild-on-Guild)
+Print exactly this line, then stop. Invoke no skill, run no command, write no file:
 
-Static security audit of installed Guild scripts. Maps to skill
-`guild:audit`. **R** static analysis — includes the static
-**boundary-check** section.
-
-
-## Gates
-
-None — **R** (static analysis only).
-
-## Output
-
-`.guild/audit/<date>.md`, including the **boundary-check** section: it scans
-for any Guild-owned-file signature (frontmatter `type:`, a
-`schema_version: guild.*` marker, or a `task_run`-declared artifact kind)
-written **outside** the consuming repo's `.guild/` (including any runtime
-write into the plugin install dir) and flags each as a boundary violation.
-This is the static belt to the PreToolUse guard's runtime suspenders; both
-reuse existing surfaces and add **no new gate**.
-
-## Run-start preflight (settings-control-and-tmux U3/U6)
-
-Before the static audit begins — and before run-trace start — the run-trace CLI runs this preflight for you — you do **not**
-call `runStartPreflight` yourself.
-
-Since wave 2, `run-trace.js start` (below) is the **sole caller** of
-`runStartPreflight` (`scripts/lib/runstart-preflight.ts`; canonical contract in
-`guild.md §Run-start preflight`): on `start` the CLI resolves the 7-source
-inheritance chain, validates closed keys, probes tmux, detects providers, and
-writes `.guild/runs/<id>/resolved-settings.json` (+ a compact `settings_ref` in
-`run.yaml`) automatically before the run opens. If this command needs the
-resolved config — e.g. the dispatch backend `effective.agent_mode` — read the
-snapshot back with `readResolvedSettingsSnapshot(runId, { cwd })`; never
-re-resolve.
-
-## Run recording
-
-Before the audit skill is invoked, start a run (SC-B, §435):
-
-```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js start \
-  --command=/guild:audit \
-  --cwd "$(pwd)"
-```
-
-`run-class` default (`full`). Records the run before the SHA-256 hash scan
-so the complete session — boundary-check and static analysis — is replayable
-from the entrypoint. Audit writes to `.guild/audit/` — not
-`.guild/initiatives/` (NN#5 unaffected). No `--initiative` flag.
-
-## Dispatch
-
-```
-Skill: guild:audit
-args: $ARGUMENTS
-```
-
-SHA-256 hashes every hook/tooling/MCP file, flags network/egress calls and
-filesystem writes outside `.guild/`, runs the static boundary-check, and
-writes the dated report. Audit logic and `.guild/` writes live in the
-`guild:audit` skill.
+/guild:audit is now /guild:maintain audit — re-run it that way.

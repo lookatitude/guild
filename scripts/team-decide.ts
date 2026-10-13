@@ -4,7 +4,7 @@
  *
  * Stable CLI shim for the REUSABLE pre-dispatch team-decision interaction
  * (lane T6b). Implementation:
- * src/modules/teams/workflows/team-decision-surface.ts.
+ * src/domains/teams/team-decision-surface.ts.
  *
  * Every phase that can dispatch runs `gate` FIRST and stops on a non-zero exit:
  *
@@ -47,7 +47,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
-import { parseYaml } from "../src/modules/state";
+import { parseYaml } from "../src/domains/state";
 import {
   buildProposalReview,
   loadPersistedDecisions,
@@ -56,14 +56,11 @@ import {
   renderProposalReview,
   renderRestructurePlan,
   type LoadedDecision,
-} from "../src/modules/teams/workflows/team-decision-surface";
-import { writeProposal, type TeamProposalV2 } from "../src/modules/teams/workflows/team-proposal";
-import type { TeamScheduleV1 } from "../src/modules/teams/workflows/team-schedule";
-import {
-  recordDecision,
-  writeDecision,
-  type TeamDecisionV1,
-} from "../src/modules/teams/workflows/team-decision";
+} from "../src/domains/teams/index";
+import { writeProposal, type TeamProposalV2 } from "../src/domains/teams/index";
+import type { TeamScheduleV1 } from "../src/domains/teams/index";
+import { recordDecision, writeDecision, type TeamDecisionV1 } from "../src/domains/teams/index";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 const USAGE = [
   "usage: team-decide.ts <review|restructure|gate|persist|record> [flags]",
@@ -103,6 +100,7 @@ function readArtifact(p: unknown): any {
 }
 
 export function main(argv: string[] = process.argv.slice(2)): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const verb = argv[0];
   const parsed = parseFlags(argv.slice(1));
   if ("error" in parsed) {

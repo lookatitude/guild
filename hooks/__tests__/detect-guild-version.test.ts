@@ -17,6 +17,7 @@
  * Tests that require the source run via tsx (pre-build dev path).
  */
 
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";

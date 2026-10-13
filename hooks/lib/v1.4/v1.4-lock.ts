@@ -1,1 +1,9 @@
-export * from "../../../src/modules/lifecycle/workflows/stable-lock.js";
+export {
+  stableLockPath,
+  exclusionSentinelPath,
+  initStableLockfile,
+  withStableLock,
+  withStableLockAsync,
+  clearStaleExclusionSentinel,
+  type WithStableLockOpts,
+} from "../../../src/domains/lifecycle/index.js";

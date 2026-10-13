@@ -5,8 +5,8 @@
  *
  *   npx tsx roster-resolve.ts --cwd <projectRoot> [--plugin-root <dir>]
  *                             [--write-registry] [--check] [--force] [--quiet]
- *   npx tsx roster-resolve.ts mint <name> [--host-native] --cwd <projectRoot> [--plugin-root <dir>]
- *   npx tsx roster-resolve.ts migrate-team-roster --cwd <projectRoot> [--plugin-root <dir>] [--dry-run]
+ *   npx tsx roster-resolve.ts mint <name> --class <workflowClass> [--host-native] --cwd <projectRoot> [--plugin-root <dir>]
+ *   npx tsx roster-resolve.ts migrate-team-roster --class <workflowClass> --cwd <projectRoot> [--plugin-root <dir>] [--dry-run]
  *   npx tsx roster-resolve.ts --check-workspace-scopes --cwd <workspaceRoot>
  *
  * Default: print the guild.roster.v1 resolution as JSON on stdout
@@ -20,6 +20,8 @@
  *                   team-compose fast-mint; refuses if the instance exists —
  *                   reuse, never re-create) and refresh the derived agents
  *                   registry. Exit 0 written, 3 already-exists, 2 refused.
+ *   --class         the run's bound workflow class (R67): only product / init
+ *                   mint; any other class, or none, is refused (exit 2).
  *   --host-native   OPT-IN: additionally project the instance into the
  *                   project's .claude/agents/<name>.md (marker-stamped copy;
  *                   never clobbers a hand-authored file) so a Claude host can
@@ -30,6 +32,8 @@
  *                   no longer registers those agents) — mints the instance
  *                   (idempotent) and re-points the entry at
  *                   .guild/agents/<role>.md. Machinery agents stay shipped.
+ *                   --class gates creation like mint: an absent instance is
+ *                   minted only for product / init; existing ones re-link.
  *                   Exit 0 clean (incl. nothing to do), 2 if any file refused.
  * --write-registry  additionally derive .guild/agents/registry.yaml and
  *                   .guild/skills/registry.yaml as generated projections of
@@ -52,16 +56,21 @@ import {
   projectInstanceToHostNative,
   resolveRoster,
 } from "./lib/roster";
+import type { WorkflowClass } from "../src/domains/teams";
+import { resolvePluginRoot } from "../src/domains/kernel";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 function main(): void {
   const argv = process.argv.slice(2);
   let cwd = ".";
+  ensureStorageLayout(cwd, { detectOnly: true });
   let pluginRoot: string | null = null;
   let writeRegistry = false;
   let check = false;
   let force = false;
   let quiet = false;
   let mintName: string | null = null;
+  let workflowClass: string | null = null;
   let hostNative = false;
   let migrateTeams = false;
   let dryRun = false;
@@ -74,6 +83,7 @@ function main(): void {
     else if (a === "--check-workspace-scopes") checkWorkspaceScopes = true;
     else if (a === "--host-native") hostNative = true;
     else if (a === "--dry-run") dryRun = true;
+    else if (a === "--class" && i + 1 < argv.length) workflowClass = argv[++i];
     else if (a === "--cwd" && i + 1 < argv.length) cwd = argv[++i];
     else if (a === "--plugin-root" && i + 1 < argv.length) pluginRoot = argv[++i];
     else if (a === "--write-registry") writeRegistry = true;
@@ -86,11 +96,7 @@ function main(): void {
     }
   }
 
-  const resolvedPluginRoot =
-    pluginRoot ??
-    process.env["GUILD_PLUGIN_ROOT"] ??
-    process.env["CLAUDE_PLUGIN_ROOT"] ??
-    path.resolve(__dirname, "..");
+  const resolvedPluginRoot = pluginRoot ?? resolvePluginRoot(__dirname);
 
   if (checkWorkspaceScopes) {
     if (mintName !== null || migrateTeams || writeRegistry || check || force || hostNative || dryRun) {
@@ -106,6 +112,7 @@ function main(): void {
     const results = migrateTeamRoster({
       pluginRoot: resolvedPluginRoot,
       projectRoot: path.resolve(cwd),
+      workflowClass: workflowClass as WorkflowClass | null,
       dryRun,
     });
     // Any file-level refusal OR any per-role mint failure fails the command —
@@ -141,6 +148,7 @@ function main(): void {
       pluginRoot: resolvedPluginRoot,
       projectRoot: path.resolve(cwd),
       name: mintName,
+      workflowClass: workflowClass as WorkflowClass | null,
     });
     process.stderr.write(
       `[roster-resolve] mint ${mintName}: ${result.action}${result.reason ? ` — ${result.reason}` : ""} (${result.path})\n`

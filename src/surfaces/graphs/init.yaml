@@ -1,0 +1,43 @@
+# guild.workflow_graph.v1 — plugin default for the `init` class (KTD40).
+# The existing greenfield / brownfield / workspace stations. Cheap by default:
+# the deep learn pipeline is a decision, never an unconditional node (D3).
+schema_version: "guild.workflow_graph.v1"
+class: "init"
+graph_id: "init.default"
+entry: "detect"
+nodes:
+  - id: "detect"
+    station: "ambient-routing"
+    inner_loop: false
+  - id: "greenfield"
+    station: "greenfield-init"
+    assembler: "init"
+    inner_loop: false
+  - id: "brownfield"
+    station: "brownfield-learn"
+    assembler: "init"
+    inner_loop: false
+  - id: "workspace"
+    station: "workspace-federation"
+    assembler: "init"
+    inner_loop: false
+  - id: "learn"
+    station: "brownfield-learn"
+    assembler: "learn"
+    inner_loop: false
+    skip_when: "operator"
+  - id: "harvest"
+    station: "harvest"
+    assembler: "reflect"
+    inner_loop: false
+edges:
+  - { from: "detect", on: "next", to: "brownfield" }
+  - { from: "detect", on: "skip", to: "greenfield" }
+  - { from: "detect", on: "escalate", to: "workspace" }
+  - { from: "greenfield", on: "next", to: "harvest" }
+  - { from: "brownfield", on: "next", to: "learn" }
+  - { from: "brownfield", on: "skip", to: "harvest" }
+  - { from: "workspace", on: "next", to: "brownfield" }
+  - { from: "learn", on: "next", to: "harvest" }
+  - { from: "learn", on: "change_class", to: { class: "product", entry: "intake" }, change_class: "product" }
+  - { from: "harvest", on: "harvest", to: "harvest" }

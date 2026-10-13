@@ -7,6 +7,7 @@
  * silent default-shape drift fails fast. The ONE allowlisted intentional re-baseline is the
  * config-schema-extension golden (LW1-9-signed) — NOT these.
  */
+import { describe, it, expect } from "bun:test";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { classifyIntake } from "../../scripts/lib/classify-intake";
@@ -44,7 +45,7 @@ describe("SC-W1-9 — additive pure surfaces are deterministic (A/B)", () => {
 // allowlist. The ONE intentional default-output delta this wave is the config-schema-
 // extension scaffold, which lives under the CONFIG path (scripts/lib/config-schema.ts +
 // the re-baselined tests/.../config-init-baseline.json) and is byte-pinned separately by
-// scripts/__tests__/config-reconcile.test.ts (`scaffold() === config-init-baseline.json`).
+// scripts/lib/config-reconcile.test.ts (`scaffold() === config-init-baseline.json`).
 // So the command/hook/package allowlist is EMPTY — those entry paths must be byte-identical.
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 const ENTRY_PATHS = ["commands", "hooks", ".claude-plugin"];
@@ -70,7 +71,7 @@ const ENTRY_PATHS = ["commands", "hooks", ".claude-plugin"];
 // migration moved the shared frontmatter/YAML reader behind src/modules/state and
 // the package-local YAML resolver behind src/modules/kernel. `task-completed.js`
 // is rebuilt from the same hook source, but the bundle shape legitimately changes
-// to use the module runtime resolver. scripts/__tests__/claude-host-adapter.test.ts
+// to use the module runtime resolver. scripts/lib/claude-host-adapter.test.ts
 // probes generated Claude hook execution from the installed package layout, so
 // this is an explicit, tested re-baseline rather than silent entrypoint drift.
 // The allowlist stays EXPLICIT (named files, never a wildcard) so any OTHER entry-path
@@ -96,6 +97,28 @@ const ENTRY_PATHS = ["commands", "hooks", ".claude-plugin"];
 //     bundles embedding the additive config-defaults.ts DEFAULTS tree (host_mode +
 //     defaults.lean_lead + defaults.lifecycle_gate) — no other behavior change.
 const ENTRY_ALLOWLIST = new Set<string>([
+  // T12 (domain fold, KTD36): these hook entrypoints and shims changed ONE line each —
+  // the re-export specifier now names the domain home (src/domains/<id>/) instead of the
+  // retired src/modules/<id>/workflows/ path. Verified with `git diff HEAD`: import
+  // specifier only, no behaviour edit. hooks/dist/emit-learning-checkpoint.js is the
+  // recompile of that change.
+  "hooks/dist/emit-learning-checkpoint.js",
+  "hooks/gate-outcome-writer.ts",
+  "hooks/lib/handoff-v2.ts",
+  "hooks/lib/reanchor.ts",
+  "hooks/lib/security/config.ts",
+  "hooks/lib/security/events.ts",
+  "hooks/lib/security/scrubbed-write.ts",
+  "hooks/lib/security/secrets.ts",
+  "hooks/lib/tier-dispatch.ts",
+  "hooks/lib/trace-v2.ts",
+  "hooks/lib/v1.4/log-jsonl-schema.ts",
+  "hooks/lib/v1.4/log-jsonl-sidecar.ts",
+  "hooks/lib/v1.4/log-jsonl-writer.ts",
+  "hooks/lib/v1.4/log-jsonl.ts",
+  "hooks/lib/v1.4/redact-log.ts",
+  "hooks/lib/v1.4/v1.4-lock.ts",
+  "hooks/update-check.ts",
   "hooks/lib/guild-hook-event.ts",
   "hooks/lib/run-state.ts",
   "hooks/dist/run-trace.js",
@@ -198,6 +221,97 @@ const ENTRY_ALLOWLIST = new Set<string>([
   // boundary and the close/reopen regression fixture adopts a canonical run id.
   ".claude-plugin/marketplace.json",
   "hooks/__tests__/run-trace-close-reopen.test.ts",
+  // plugin-layout-reshape T04 (commands fold, 22 -> 13): the ENTIRE commands/ surface
+  // is the deliverable, so every file under it is a VERIFIED intentional delta, not
+  // drift. Thirteen dispatchers (each <=40 lines, one assembler, compiled-Node spawns —
+  // KTD24), the new `maintain` command, eleven KTD14 print-only aliases, and the
+  // allowlist that enumerates them. `.claude-plugin/plugin.json` lists the 24 files.
+  // The layout lint (`no-14th-command-file`, `command-max-40-lines`) and the
+  // re-ratified SC-W2-5 / SC-W3-6 tree pins are the byte-level gates on this set, so
+  // the anti-vacuity floor moves to those guards rather than disappearing. After the
+  // lead commits, HEAD advances and these entries become harmless no-ops.
+  ".claude-plugin/plugin.json",
+  "commands/aliases.allowlist.json",
+  "commands/adopt.md",
+  "commands/audit.md",
+  "commands/build.md",
+  "commands/config.md",
+  "commands/dashboard.md",
+  "commands/evolve.md",
+  "commands/fix.md",
+  "commands/goal.md",
+  "commands/guild.md",
+  "commands/ideate.md",
+  "commands/init.md",
+  "commands/initiative.md",
+  "commands/learn.md",
+  "commands/maintain.md",
+  "commands/migrate.md",
+  "commands/models.md",
+  "commands/ops.md",
+  "commands/plan.md",
+  "commands/qa.md",
+  "commands/resume.md",
+  "commands/rollback.md",
+  "commands/stats.md",
+  "commands/status.md",
+  "commands/wiki.md",
+  // plugin-layout-reshape T13 (bun test migration): every hook suite now imports its
+  // runner from "bun:test" instead of Jest's globals, and the committed bundles were
+  // recompiled because comments in their domain sources name the relocated test
+  // paths (compile --check pins them). No hook source behaviour changed; the hook
+  // suites and the bundle-determinism gate re-prove the surface. After the lead
+  // commits, HEAD advances and these entries become harmless no-ops.
+  "hooks/__tests__/bootstrap-capability.test.ts",
+  "hooks/__tests__/bypass-forcing.test.ts",
+  "hooks/__tests__/capture-telemetry.test.ts",
+  "hooks/__tests__/comms-format-lint.test.ts",
+  "hooks/__tests__/detect-guild-version.test.ts",
+  "hooks/__tests__/emit-learning-checkpoint.test.ts",
+  "hooks/__tests__/gate-outcome-writer.test.ts",
+  "hooks/__tests__/guild-root.test.ts",
+  "hooks/__tests__/handoff-v2.test.ts",
+  "hooks/__tests__/heartbeat-tier-timeout.test.ts",
+  "hooks/__tests__/heartbeat-write.test.ts",
+  "hooks/__tests__/hook-binding.test.ts",
+  "hooks/__tests__/injection-guard.test.ts",
+  "hooks/__tests__/learning-backstop.test.ts",
+  "hooks/__tests__/maybe-reflect.test.ts",
+  "hooks/__tests__/phase-checkpoint-coverage.test.ts",
+  "hooks/__tests__/pre-tool-use-degrade.test.ts",
+  "hooks/__tests__/pre-tool-use-projection-gate.test.ts",
+  "hooks/__tests__/pre-tool-use-security.test.ts",
+  "hooks/__tests__/pre-tool-use-tier-guard.test.ts",
+  "hooks/__tests__/pre-tool-use-turn-bound.test.ts",
+  "hooks/__tests__/run-trace-classify-integration.test.ts",
+  "hooks/__tests__/run-trace-close-checkpoint.test.ts",
+  "hooks/__tests__/scrubbed-write.test.ts",
+  "hooks/__tests__/security-config.test.ts",
+  "hooks/__tests__/security-enforce.test.ts",
+  "hooks/__tests__/security-events.test.ts",
+  "hooks/__tests__/security-mcp-hash-pin.test.ts",
+  "hooks/__tests__/security-secrets.test.ts",
+  "hooks/__tests__/t10-hook-rungs.test.ts",
+  "hooks/__tests__/task-completed-injection.test.ts",
+  "hooks/__tests__/task-completed-scrub.test.ts",
+  "hooks/agent-team/__tests__/bus-emit.test.ts",
+  "hooks/agent-team/__tests__/task-completed-context-compliance.test.ts",
+  "hooks/agent-team/__tests__/task-created.test.ts",
+  "hooks/lib/__tests__/context-compliance.test.ts",
+  "hooks/lib/__tests__/g3-marker-blockable.test.ts",
+  "hooks/lib/__tests__/heartbeat.test.ts",
+  "hooks/lib/__tests__/lane-attribution.test.ts",
+  "hooks/lib/__tests__/run-date.test.ts",
+  "hooks/lib/__tests__/self-build.test.ts",
+  "hooks/lib/__tests__/tier-dispatch.test.ts",
+  "hooks/lib/__tests__/tool-turn-bound.test.ts",
+  "hooks/lib/__tests__/trace-v2.test.ts",
+  "hooks/lib/v1.4/__tests__/append-trace-v2.test.ts",
+  "hooks/lib/v1.4/__tests__/log-jsonl-split-parity.test.ts",
+  // plugin-layout-reshape T16F: the knowledge domain's recall CLI gained the KTD50
+  // phase-start leg, so every bundle that inlines that domain was recompiled
+  // (compile --check pins it). The bootstrap's own behaviour did not change.
+  "hooks/dist/using-guild-bootstrap.js",
 ]);
 
 function gitLines(args: string[]): string[] {
@@ -236,10 +350,15 @@ describe("SC-W1-9 — command/hook/package entry paths byte-identical vs HEAD (A
     // any admitted delta must be absent, so the offending-filter above would still
     // flag them. Versioned manifests are legitimate release deltas, so the
     // controls remain ordinary command/hook entry paths with no admitted change.
+    // T04 admitted the whole commands/ surface (the 22 -> 13 fold), so the controls are
+    // entry paths OUTSIDE that admitted set: a command filename that does not exist in
+    // any layout, and two hook entry paths with no admitted delta.
     for (const notAllowed of [
       "commands/guild-build.md",
-      "commands/status.md",
       "hooks/hooks.json",
+      // T12 admitted emit-learning-checkpoint.js and T16F using-guild-bootstrap.js
+      // (domain recompiles), so the control is a hook entry no lane has touched.
+      "hooks/check-skill-coverage.sh",
     ]) {
       expect(ENTRY_ALLOWLIST.has(notAllowed)).toBe(false);
     }

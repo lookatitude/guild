@@ -5,7 +5,7 @@
       "id": "guild-brainstorm-pos-1",
       "prompt": "Let's plan a new landing page for the pricing page redesign.",
       "expected_skill": "guild-brainstorm",
-      "rationale": "Ambiguous 'plan' framing on a fresh idea — brainstorm kicks in before any spec exists."
+      "rationale": "Ambiguous 'plan' framing on a fresh idea \u2014 brainstorm kicks in before any spec exists."
     },
     {
       "id": "guild-brainstorm-pos-2",
@@ -17,13 +17,13 @@
       "id": "guild-brainstorm-pos-3",
       "prompt": "What are we actually building here?",
       "expected_skill": "guild-brainstorm",
-      "rationale": "Intent clarification — the canonical brainstorm opener."
+      "rationale": "Intent clarification \u2014 the canonical brainstorm opener."
     },
     {
       "id": "guild-brainstorm-pos-4",
       "prompt": "/guild I want to add SSO but haven't thought it through yet.",
       "expected_skill": "guild-brainstorm",
-      "rationale": "Explicit admission of fuzzy scope — brainstorm entry point."
+      "rationale": "Explicit admission of fuzzy scope \u2014 brainstorm entry point."
     },
     {
       "id": "guild-brainstorm-pos-5",
@@ -33,7 +33,7 @@
     },
     {
       "id": "guild-brainstorm-pos-6",
-      "prompt": "I have a vague idea for an onboarding email sequence — let's figure it out.",
+      "prompt": "I have a vague idea for an onboarding email sequence \u2014 let's figure it out.",
       "expected_skill": "guild-brainstorm",
       "rationale": "'Vague idea' + 'figure it out' are brainstorm triggers."
     },
@@ -45,7 +45,7 @@
     },
     {
       "id": "guild-brainstorm-pos-8",
-      "prompt": "We need to redesign the mobile checkout flow — where do we start?",
+      "prompt": "We need to redesign the mobile checkout flow \u2014 where do we start?",
       "expected_skill": "guild-brainstorm",
       "rationale": "'Where do we start' on an undefined problem triggers brainstorm."
     },
@@ -53,37 +53,37 @@
       "id": "guild-brainstorm-neg-1",
       "prompt": "Fix the typo on line 42.",
       "expected_skill": null,
-      "rationale": "Trivial edit — no brainstorming needed."
+      "rationale": "Trivial edit \u2014 no brainstorming needed."
     },
     {
       "id": "guild-brainstorm-neg-2",
       "prompt": "Push my branch to origin.",
       "expected_skill": null,
-      "rationale": "Git operation — outside brainstorm scope."
+      "rationale": "Git operation \u2014 outside brainstorm scope."
     },
     {
       "id": "guild-brainstorm-neg-3",
       "prompt": "Run the tests.",
       "expected_skill": null,
-      "rationale": "Tooling — no brainstorm."
+      "rationale": "Tooling \u2014 no brainstorm."
     },
     {
       "id": "guild-brainstorm-neg-4",
       "prompt": "Dispatch the backend specialist to implement the API we already scoped.",
       "expected_skill": null,
-      "rationale": "Spec exists — execution phase, not brainstorm."
+      "rationale": "Spec exists \u2014 execution phase, not brainstorm."
     },
     {
       "id": "guild-brainstorm-neg-5",
       "prompt": "Compose the team for the spec at .guild/spec/pricing-redesign.md.",
       "expected_skill": "guild-team-compose",
-      "rationale": "Spec already exists — routes to team-compose, not brainstorm."
+      "rationale": "Spec already exists \u2014 routes to team-compose, not brainstorm."
     },
     {
       "id": "guild-brainstorm-neg-6",
       "prompt": "Rename the variable `total` to `subtotal` in checkout.ts.",
       "expected_skill": null,
-      "rationale": "Local refactor — no brainstorm."
+      "rationale": "Local refactor \u2014 no brainstorm."
     },
     {
       "id": "guild-brainstorm-neg-7",
@@ -95,7 +95,7 @@
       "id": "guild-brainstorm-neg-8",
       "prompt": "What's the current CI status?",
       "expected_skill": null,
-      "rationale": "Status query — not brainstorm."
+      "rationale": "Status query \u2014 not brainstorm."
     },
     {
       "id": "guild-team-compose-pos-1",
@@ -111,7 +111,7 @@
     },
     {
       "id": "guild-team-compose-pos-3",
-      "prompt": "Compose specialists — we have the spec ready.",
+      "prompt": "Compose specialists \u2014 we have the spec ready.",
       "expected_skill": "guild-team-compose",
       "rationale": "Explicit 'compose specialists' + spec exists."
     },
@@ -125,13 +125,13 @@
       "id": "guild-team-compose-pos-5",
       "prompt": "Which Guild specialists fit this work?",
       "expected_skill": "guild-team-compose",
-      "rationale": "Specialist fit question — team-compose core query."
+      "rationale": "Specialist fit question \u2014 team-compose core query."
     },
     {
       "id": "guild-team-compose-neg-1",
       "prompt": "Start writing the code.",
       "expected_skill": null,
-      "rationale": "Execution phase — team-compose already done."
+      "rationale": "Execution phase \u2014 team-compose already done."
     },
     {
       "id": "guild-team-compose-neg-2",
@@ -149,7 +149,7 @@
       "id": "guild-team-compose-neg-4",
       "prompt": "Run the tests.",
       "expected_skill": null,
-      "rationale": "Tooling — not team-compose."
+      "rationale": "Tooling \u2014 not team-compose."
     },
     {
       "id": "guild-team-compose-neg-5",
@@ -179,13 +179,13 @@
       "id": "guild-plan-pos-4",
       "prompt": "Plan the lanes for this task.",
       "expected_skill": "guild-plan",
-      "rationale": "Explicit 'plan the lanes' — direct match."
+      "rationale": "Explicit 'plan the lanes' \u2014 direct match."
     },
     {
       "id": "guild-plan-pos-5",
-      "prompt": "We have a team — now plan the work.",
+      "prompt": "We have a team \u2014 now plan the work.",
       "expected_skill": "guild-plan",
-      "rationale": "Team exists, planning next — classic plan trigger."
+      "rationale": "Team exists, planning next \u2014 classic plan trigger."
     },
     {
       "id": "guild-plan-neg-1",
@@ -197,7 +197,7 @@
       "id": "guild-plan-neg-2",
       "prompt": "Start a new brainstorm.",
       "expected_skill": "guild-brainstorm",
-      "rationale": "Brainstorm explicit — wrong phase for plan."
+      "rationale": "Brainstorm explicit \u2014 wrong phase for plan."
     },
     {
       "id": "guild-plan-neg-3",
@@ -215,43 +215,43 @@
       "id": "guild-plan-neg-5",
       "prompt": "Run the tests.",
       "expected_skill": null,
-      "rationale": "Tooling — unrelated to plan."
+      "rationale": "Tooling \u2014 unrelated to plan."
     },
     {
       "id": "guild-context-assemble-pos-1",
       "prompt": "Build the context bundle for backend.",
-      "expected_skill": "guild-context-assemble",
-      "rationale": "Per-specialist bundle assembly is context-assemble core scope."
+      "expected_skill": "guild-execute-plan",
+      "rationale": "Per-specialist bundle assembly is context-assemble core scope. (T03: `guild-context-assemble` folded into `guild-execute-plan`; the assembler is now the routing target.)"
     },
     {
       "id": "guild-context-assemble-pos-2",
       "prompt": "Prepare the brief for copywriter.",
-      "expected_skill": "guild-context-assemble",
-      "rationale": "Per-lane brief preparation is context-assemble."
+      "expected_skill": "guild-execute-plan",
+      "rationale": "Per-lane brief preparation is context-assemble. (T03: `guild-context-assemble` folded into `guild-execute-plan`; the assembler is now the routing target.)"
     },
     {
       "id": "guild-context-assemble-pos-3",
       "prompt": "What context does the architect need for this task?",
-      "expected_skill": "guild-context-assemble",
-      "rationale": "Context-curation question — context-assemble territory."
+      "expected_skill": "guild-execute-plan",
+      "rationale": "Context-curation question \u2014 context-assemble territory. (T03: `guild-context-assemble` folded into `guild-execute-plan`; the assembler is now the routing target.)"
     },
     {
       "id": "guild-context-assemble-pos-4",
       "prompt": "Assemble the per-specialist context for the SEO lane.",
-      "expected_skill": "guild-context-assemble",
-      "rationale": "Explicit 'assemble per-specialist context' phrasing."
+      "expected_skill": "guild-execute-plan",
+      "rationale": "Explicit 'assemble per-specialist context' phrasing. (T03: `guild-context-assemble` folded into `guild-execute-plan`; the assembler is now the routing target.)"
     },
     {
       "id": "guild-context-assemble-pos-5",
       "prompt": "Produce the task bundle for qa.",
-      "expected_skill": "guild-context-assemble",
-      "rationale": "Task bundle production for a named lane — context-assemble."
+      "expected_skill": "guild-execute-plan",
+      "rationale": "Task bundle production for a named lane \u2014 context-assemble. (T03: `guild-context-assemble` folded into `guild-execute-plan`; the assembler is now the routing target.)"
     },
     {
       "id": "guild-context-assemble-neg-1",
       "prompt": "Load all wiki pages.",
       "expected_skill": null,
-      "rationale": "Bulk load contradicts minimal-context principle — not context-assemble."
+      "rationale": "Bulk load contradicts minimal-context principle \u2014 not context-assemble."
     },
     {
       "id": "guild-context-assemble-neg-2",
@@ -275,7 +275,7 @@
       "id": "guild-context-assemble-neg-5",
       "prompt": "Run the tests.",
       "expected_skill": null,
-      "rationale": "Tooling — not context-assemble."
+      "rationale": "Tooling \u2014 not context-assemble."
     },
     {
       "id": "guild-execute-plan-pos-1",
@@ -293,7 +293,7 @@
       "id": "guild-execute-plan-pos-3",
       "prompt": "Start the team's work.",
       "expected_skill": "guild-execute-plan",
-      "rationale": "Kickoff verb + team scope — execute-plan."
+      "rationale": "Kickoff verb + team scope \u2014 execute-plan."
     },
     {
       "id": "guild-execute-plan-pos-4",
@@ -305,13 +305,13 @@
       "id": "guild-execute-plan-pos-5",
       "prompt": "Kick off execution.",
       "expected_skill": "guild-execute-plan",
-      "rationale": "Execution kickoff — execute-plan."
+      "rationale": "Execution kickoff \u2014 execute-plan."
     },
     {
       "id": "guild-execute-plan-neg-1",
       "prompt": "Explain the plan to me.",
       "expected_skill": null,
-      "rationale": "Explanation is read-only — not execution."
+      "rationale": "Explanation is read-only \u2014 not execution."
     },
     {
       "id": "guild-execute-plan-neg-2",
@@ -323,7 +323,7 @@
       "id": "guild-execute-plan-neg-3",
       "prompt": "Write more tests.",
       "expected_skill": null,
-      "rationale": "Open-ended implementation request — not execute-plan dispatch."
+      "rationale": "Open-ended implementation request \u2014 not execute-plan dispatch."
     },
     {
       "id": "guild-execute-plan-neg-4",
@@ -335,7 +335,7 @@
       "id": "guild-execute-plan-neg-5",
       "prompt": "Compose a different team.",
       "expected_skill": "guild-team-compose",
-      "rationale": "Team revision — team-compose, not execute-plan."
+      "rationale": "Team revision \u2014 team-compose, not execute-plan."
     },
     {
       "id": "guild-review-pos-1",
@@ -353,7 +353,7 @@
       "id": "guild-review-pos-3",
       "prompt": "Evaluate the handoffs.",
       "expected_skill": "guild-review",
-      "rationale": "Handoff evaluation — review skill."
+      "rationale": "Handoff evaluation \u2014 review skill."
     },
     {
       "id": "guild-review-pos-4",
@@ -377,13 +377,13 @@
       "id": "guild-review-neg-2",
       "prompt": "Run the tests.",
       "expected_skill": null,
-      "rationale": "Raw test invocation — not review."
+      "rationale": "Raw test invocation \u2014 not review."
     },
     {
       "id": "guild-review-neg-3",
       "prompt": "Re-plan the work.",
       "expected_skill": "guild-plan",
-      "rationale": "Planning phase — not review."
+      "rationale": "Planning phase \u2014 not review."
     },
     {
       "id": "guild-review-neg-4",
@@ -394,44 +394,44 @@
     {
       "id": "guild-review-neg-5",
       "prompt": "Verify we're done.",
-      "expected_skill": "guild-verify-done",
-      "rationale": "Done-gate verification is verify-done, NOT review — key boundary."
+      "expected_skill": "guild-quality",
+      "rationale": "Done-gate verification is verify-done, NOT review \u2014 key boundary. (T03: `guild-verify-done` folded into `guild-quality`; the assembler is now the routing target.)"
     },
     {
       "id": "guild-verify-done-pos-1",
       "prompt": "Is this task done?",
-      "expected_skill": "guild-verify-done",
-      "rationale": "Done-gate question — canonical verify-done trigger."
+      "expected_skill": "guild-quality",
+      "rationale": "Done-gate question \u2014 canonical verify-done trigger. (T03: `guild-verify-done` folded into `guild-quality`; the assembler is now the routing target.)"
     },
     {
       "id": "guild-verify-done-pos-2",
       "prompt": "Run the final check.",
-      "expected_skill": "guild-verify-done",
-      "rationale": "'Final check' invokes the done gate."
+      "expected_skill": "guild-quality",
+      "rationale": "'Final check' invokes the done gate. (T03: `guild-verify-done` folded into `guild-quality`; the assembler is now the routing target.)"
     },
     {
       "id": "guild-verify-done-pos-3",
       "prompt": "Verify the task is complete.",
-      "expected_skill": "guild-verify-done",
-      "rationale": "Literal verb — verify-done."
+      "expected_skill": "guild-quality",
+      "rationale": "Literal verb \u2014 verify-done. (T03: `guild-verify-done` folded into `guild-quality`; the assembler is now the routing target.)"
     },
     {
       "id": "guild-verify-done-pos-4",
       "prompt": "Run the done-gate on this run.",
-      "expected_skill": "guild-verify-done",
-      "rationale": "Names the done-gate primitive."
+      "expected_skill": "guild-quality",
+      "rationale": "Names the done-gate primitive. (T03: `guild-verify-done` folded into `guild-quality`; the assembler is now the routing target.)"
     },
     {
       "id": "guild-verify-done-pos-5",
       "prompt": "Are we ready to close this out?",
-      "expected_skill": "guild-verify-done",
-      "rationale": "Closure-readiness check is verify-done."
+      "expected_skill": "guild-quality",
+      "rationale": "Closure-readiness check is verify-done. (T03: `guild-verify-done` folded into `guild-quality`; the assembler is now the routing target.)"
     },
     {
       "id": "guild-verify-done-neg-1",
       "prompt": "Plan something new.",
       "expected_skill": "guild-plan",
-      "rationale": "Planning phase — not verify-done."
+      "rationale": "Planning phase \u2014 not verify-done."
     },
     {
       "id": "guild-verify-done-neg-2",
@@ -443,19 +443,19 @@
       "id": "guild-verify-done-neg-3",
       "prompt": "Review the diff.",
       "expected_skill": null,
-      "rationale": "Raw diff is ambiguous — neither review nor verify-done should greedily claim it."
+      "rationale": "Raw diff is ambiguous \u2014 neither review nor verify-done should greedily claim it."
     },
     {
       "id": "guild-verify-done-neg-4",
       "prompt": "Run the tests only.",
       "expected_skill": null,
-      "rationale": "Tooling isolation — not verify-done's multi-signal gate."
+      "rationale": "Tooling isolation \u2014 not verify-done's multi-signal gate."
     },
     {
       "id": "guild-verify-done-neg-5",
       "prompt": "Start a brainstorm.",
       "expected_skill": "guild-brainstorm",
-      "rationale": "Brainstorm phase — not verify-done."
+      "rationale": "Brainstorm phase \u2014 not verify-done."
     },
     {
       "id": "boundary-review-vs-verify-done-1",
@@ -466,8 +466,8 @@
     {
       "id": "boundary-review-vs-verify-done-2",
       "prompt": "Is this done?",
-      "expected_skill": "guild-verify-done",
-      "rationale": "Done-gate language belongs to verify-done, not review."
+      "expected_skill": "guild-quality",
+      "rationale": "Done-gate language belongs to verify-done, not review. (T03: `guild-verify-done` folded into `guild-quality`; the assembler is now the routing target.)"
     },
     {
       "id": "boundary-review-vs-verify-done-3",
@@ -479,7 +479,7 @@
       "id": "boundary-plan-vs-brainstorm-1",
       "prompt": "Plan this for me.",
       "expected_skill": "guild-plan",
-      "rationale": "User implies a spec exists — plan, not brainstorm."
+      "rationale": "User implies a spec exists \u2014 plan, not brainstorm."
     },
     {
       "id": "boundary-review-vs-verify-done-4",
@@ -489,21 +489,21 @@
     },
     {
       "id": "boundary-team-compose-vs-specialist-writer-1",
-      "prompt": "We need a data-scientist specialist for this — can you make one?",
+      "prompt": "We need a data-scientist specialist for this \u2014 can you make one?",
       "expected_skill": null,
       "rationale": "Authoring a new specialist type is specialist-agent-writer's job (not a P1 skill); team-compose must NOT claim it."
     },
     {
       "id": "boundary-context-assemble-vs-plan-1",
       "prompt": "Lay out what each lane needs to see.",
-      "expected_skill": "guild-context-assemble",
-      "rationale": "Per-lane context curation is context-assemble, not plan (plan decides WHAT each lane does)."
+      "expected_skill": "guild-execute-plan",
+      "rationale": "Per-lane context curation is context-assemble, not plan (plan decides WHAT each lane does). (T03: `guild-context-assemble` folded into `guild-execute-plan`; the assembler is now the routing target.)"
     },
     {
       "id": "boundary-execute-vs-review-1",
       "prompt": "Kick off the next round and then review it.",
       "expected_skill": "guild-execute-plan",
-      "rationale": "Compound ask — execute-plan fires first; review comes later as a separate invocation, not a single trigger."
+      "rationale": "Compound ask \u2014 execute-plan fires first; review comes later as a separate invocation, not a single trigger."
     }
   ]
 }

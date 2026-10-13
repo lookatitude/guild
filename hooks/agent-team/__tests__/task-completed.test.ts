@@ -17,6 +17,7 @@
  *     (lenient + logged)
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
@@ -29,11 +30,8 @@ const SCRIPT = path.resolve(__dirname, "../task-completed.ts");
 // GUILD_RUN_ID would redirect deriveRunId off the fixture's run).
 import { mintTestBinding } from "../../test-support/mint-binding";
 import { hermeticEnv } from "../../test-support/hermetic-env";
-import {
-  buildTaskCell,
-  writeTaskCell,
-} from "../../../src/modules/dispatch/workflows/task-assignment-v2";
-import { buildTaskAssignment } from "../../../src/modules/dispatch/workflows/task-assignment";
+import { buildTaskCell, writeTaskCell } from "../../../src/domains/dispatch/index";
+import { buildTaskAssignment } from "../../../src/domains/dispatch/index";
 
 function runScript(
   payloadOverride: object,

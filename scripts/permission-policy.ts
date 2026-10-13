@@ -44,6 +44,7 @@ import {
   type GateType,
   type HostMode,
 } from "./lib/permission-policy-schema";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 function parseFlag(argv: string[], name: string): string | undefined {
   const eq = `--${name}=`;
@@ -72,6 +73,7 @@ function loadConfig(argv: string[]): RuntimePermissionConfig {
 }
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const sub = argv[0];
 

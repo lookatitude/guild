@@ -35,6 +35,7 @@ import * as path from "path";
 
 import { makeWikiPageId } from "./lib/schema";
 import type { GraphNode, GraphEdge, KnowledgeSuppressedEntry } from "./lib/schema";
+import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -412,6 +413,7 @@ export async function indexWiki(
 // ---------------------------------------------------------------------------
 
 if (require.main === module) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const wikiDir = argv[0];
   if (!wikiDir || wikiDir.startsWith("--")) {

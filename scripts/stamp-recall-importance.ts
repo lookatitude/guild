@@ -25,6 +25,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { ingestImportanceScore, stampRecallImportance } from "./lib/ingest-importance";
+import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 export interface StampTreeResult {
   scanned: number;
@@ -98,6 +100,7 @@ function importanceAtIngestEnabled(cwd: string): boolean {
 }
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const get = (flag: string): string | undefined => {
     const hit = argv.find((a) => a === flag || a.startsWith(`${flag}=`));
@@ -115,7 +118,7 @@ function main(): void {
     return;
   }
 
-  const wikiDir = path.join(cwd, ".guild", "wiki");
+  const wikiDir = path.join(durableGuildDir(cwd), "wiki");
   const r = stampWikiTree(wikiDir, { dryRun, force });
   process.stdout.write(JSON.stringify({ ...r, gated: false }) + "\n");
 }

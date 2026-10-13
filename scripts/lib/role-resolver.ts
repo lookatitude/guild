@@ -5,4 +5,4 @@
  * move internals without breaking existing imports from scripts/lib.
  */
 
-export * from "../../src/modules/capability/workflows/role-resolver";
+export { availableRegistryRows, resolveRolesForRun, advisorySubstrateFromRoles } from "../../src/domains/config/index";

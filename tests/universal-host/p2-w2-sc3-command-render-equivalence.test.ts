@@ -15,6 +15,7 @@
  * id set is asserted equal to the on-disk `commands/*.md` stems.
  */
 
+import { describe, it, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 

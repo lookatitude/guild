@@ -35,6 +35,7 @@
  * with the code under test.
  */
 
+import { describe, it, test, expect } from "bun:test";
 import { execFileSync } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
@@ -42,11 +43,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { splitFrontmatter, parseYaml } from "../../scripts/lib/frontmatter";
-import { parseModelsArgs } from "../../src/modules/capability/workflows/models-command";
+import { parseModelsArgs } from "../../src/domains/config/index";
+import { moduleManifestFiles } from "../../src/domains/kernel/index";
 import {
   createCacheKey,
   modelCatalogCacheDir,
-} from "../../src/modules/capability/workflows/catalog-cache";
+} from "../../src/domains/config";
 import {
   DECISION_VOCABULARY,
   kindCoverage,
@@ -55,10 +57,10 @@ import {
   preDispatchGate,
   scanCapReintroduction,
   teamPlanDir,
-} from "../../src/modules/teams/workflows/team-decision-surface";
-import { composeProposal, writeProposal } from "../../src/modules/teams/workflows/team-proposal";
-import { recordDecision, writeDecision } from "../../src/modules/teams/workflows/team-decision";
-import { canonicalYaml } from "../../src/modules/teams/workflows/canonical-hash";
+} from "../../src/domains/teams/index";
+import { composeProposal, writeProposal } from "../../src/domains/teams/index";
+import { recordDecision, writeDecision } from "../../src/domains/teams/index";
+import { canonicalYaml } from "../../src/domains/teams";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");
 
@@ -76,7 +78,11 @@ const TSX_CLI = (() => {
   }
 })();
 
-/** Commands that can dispatch a participant and therefore MUST carry the gate. */
+/**
+ * Commands that can dispatch a participant and therefore MUST carry the gate.
+ * `resume` left this list with the 22 -> 13 command fold (T04): it is a sub-verb of
+ * `/guild:status` now, and the gate rides the phase command the resume re-enters.
+ */
 const DISPATCHING_COMMANDS = [
   "build",
   "ideate",
@@ -84,7 +90,6 @@ const DISPATCHING_COMMANDS = [
   "ops",
   "plan",
   "qa",
-  "resume",
   "guild",
 ];
 
@@ -148,20 +153,26 @@ describe("T6b harness", () => {
 // ---------------------------------------------------------------------------
 
 describe("T6b(1) — `guild models` trigger, registration and help", () => {
-  it("ships a command file with a usable trigger surface", () => {
+  it("ships as a print-only alias whose dispatching home is /guild:config", () => {
+    // T04 (22 -> 13): `models` is a KTD14 print-only alias; the verb now lives on
+    // `/guild:config models`. The alias must print and exit — never dispatch.
+    const alias = readCommand("models");
     const fm = commandFrontmatter("models");
     expect(fm["name"]).toBe("models");
-    expect(String(fm["description"]).length).toBeGreaterThan(80);
-    // The description is what a host router matches on: it must name the verb
-    // AND the read-only promise, or the command mis-triggers.
-    expect(String(fm["description"])).toMatch(/models inspect/);
-    expect(String(fm["description"])).toMatch(/READ-ONLY/);
-    expect(String(fm["argument-hint"])).toMatch(/^inspect/);
-    // Read + Bash only: an inspection command that can Write is a contradiction.
-    const tools = String(fm["allowed-tools"]).split(",").map((t) => t.trim());
-    expect(tools.sort()).toEqual(["Bash", "Read"]);
-    expect(tools).not.toContain("Write");
-    expect(tools).not.toContain("Edit");
+    expect(String(fm["description"])).toMatch(/alias/i);
+    expect(String(fm["allowed-tools"]).trim()).toBe("Read");
+    expect(alias).toContain("/guild:config models");
+    expect(alias).not.toMatch(/Skill:/);
+    expect(alias.trimEnd().split("\n").length).toBeLessThanOrEqual(10);
+    const allow = JSON.parse(
+      fs.readFileSync(path.join(PLUGIN_ROOT, "commands", "aliases.allowlist.json"), "utf8")
+    );
+    expect(allow.aliases).toContain("models");
+
+    // The dispatching home documents the verb and keeps the read-only promise.
+    const config = readCommand("config");
+    expect(config).toMatch(/models inspect/);
+    expect(config).toMatch(/READ-ONLY/);
   });
 
   it("is registered in plugin.json, the inventory and the neutral command registry", () => {
@@ -184,22 +195,22 @@ describe("T6b(1) — `guild models` trigger, registration and help", () => {
   });
 
   it("is owned by exactly one module manifest (host packaging needs an owner)", () => {
-    const modulesDir = path.join(PLUGIN_ROOT, "src", "modules");
-    const owners = fs
-      .readdirSync(modulesDir)
-      .filter((d) => fs.existsSync(path.join(modulesDir, d, "module.manifest.json")))
-      .filter((d) => {
-        const m = JSON.parse(
-          fs.readFileSync(path.join(modulesDir, d, "module.manifest.json"), "utf8")
-        );
+    // T16: manifests live beside their fold domain (src/domains/<d>/modules/<id>.manifest.json).
+    const owners = moduleManifestFiles(PLUGIN_ROOT)
+      .filter(({ path: p }) => {
+        const m = JSON.parse(fs.readFileSync(p, "utf8"));
         return (m.owns?.commands ?? []).includes("models");
-      });
+      })
+      .map(({ id }) => id);
     expect(owners).toEqual(["capability"]);
   });
 
   it("help matches the CLI: every documented flag parses, undocumented ones are refused", () => {
-    const hint = String(commandFrontmatter("models")["argument-hint"]);
-    const documented = [...hint.matchAll(/--[a-z-]+/g)].map((m) => m[0]);
+    const row = readCommand("config")
+      .split("\n")
+      .find((l) => l.trimStart().startsWith("| `models`"));
+    if (!row) throw new Error("commands/config.md no longer documents the `models` sub-verb");
+    const documented = [...row.matchAll(/--[a-z-]+/g)].map((m) => m[0]);
     expect(documented.sort()).toEqual(["--cwd", "--json", "--run-id"]);
     for (const flag of documented) {
       const argv = flag === "--json" ? ["inspect", flag] : ["inspect", flag, "value"];
@@ -999,7 +1010,7 @@ describe("T6b(5) — the blocking gate is present on every dispatching command",
     "%s invokes the executable gate and stops on a non-zero exit",
     (id) => {
       const body = readCommand(id);
-      expect(body).toMatch(/scripts\/team-decide\.ts gate/);
+      expect(body).toMatch(/runtime\/scripts\/team-decide\.js" gate/);
       expect(body).toMatch(/STOP on a non-zero exit/);
       // The full decision vocabulary is offered - not a subset.
       for (const verb of DECISION_VOCABULARY) expect(body).toContain(verb);
@@ -1008,7 +1019,7 @@ describe("T6b(5) — the blocking gate is present on every dispatching command",
 
   it("the router points at the delegated gate rather than dispatching itself", () => {
     const body = readCommand("guild");
-    expect(body).toMatch(/scripts\/team-decide\.ts gate/);
+    expect(body).toMatch(/runtime\/scripts\/team-decide\.js" gate/);
     expect(body).toMatch(/--auto-approve` does not cover team approval/);
   });
 

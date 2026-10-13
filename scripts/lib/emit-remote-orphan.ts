@@ -34,6 +34,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { emitTraceEvent } from "./guild-trace-emit";
 import { makeDegradationEvent } from "./guild-trace-events";
+import { durableGuildDir } from "./state/storage";
 
 /** Schema version for the orphan event record. */
 export const REMOTE_ORPHAN_SCHEMA = "guild.degradation_event.v1" as const;
@@ -80,7 +81,7 @@ export function emitRemoteOrphan(
 
   // 2. Full-detail NDJSON record in the DEDICATED remote-orphans sink (NOT the
   //    canonical v1.4 log — a custom schema there would fail the v1.4 validator).
-  const runDir = path.join(cwd, ".guild", "runs", runId);
+  const runDir = path.join(durableGuildDir(cwd), "runs", runId);
   try {
     const sink = path.join(runDir, REMOTE_ORPHAN_SINK_RELPATH);
     fs.mkdirSync(path.dirname(sink), { recursive: true });

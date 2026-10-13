@@ -26,7 +26,7 @@
 #   §"Invariants / non-goals"
 # Lib:    scripts/comms/no-accidental-write.ts (pure, import-safe)
 # CLI:    scripts/comms/no-accidental-write.cli.ts
-# Tests:  scripts/comms/__tests__/no-accidental-write.test.ts
+# Tests:  src/domains/dispatch/no-accidental-write.test.ts
 # Owner:  tooling-engineer.
 
 name: comms-negative (enforce)

@@ -1,0 +1,32 @@
+# guild.workflow_graph.v1 — plugin default for the `research` class (KTD40/KTD49).
+# Experiment is this class; the oracle is a packet field, not a sixth class.
+# Working files are OS temp (KTD34) — they never land in durable .guild/.
+schema_version: "guild.workflow_graph.v1"
+class: "research"
+graph_id: "research.default"
+entry: "recall"
+nodes:
+  - id: "recall"
+    station: "research-synthesis"
+    assembler: "wiki"
+    inner_loop: false
+    skip_when: "recall_hit"
+  - id: "research"
+    station: "research-synthesis"
+    assembler: "learn"
+    inner_loop: true
+  - id: "packet"
+    station: "research-synthesis"
+    inner_loop: false
+  - id: "harvest"
+    station: "harvest"
+    assembler: "reflect"
+    inner_loop: false
+edges:
+  - { from: "recall", on: "next", to: "research" }
+  - { from: "recall", on: "skip", to: "packet" }
+  - { from: "research", on: "next", to: "packet" }
+  - { from: "research", on: "change_class", to: { class: "debug", entry: "recall" }, change_class: "debug" }
+  - { from: "packet", on: "next", to: "harvest" }
+  - { from: "packet", on: "change_class", to: { class: "product", entry: "intake" }, change_class: "product" }
+  - { from: "harvest", on: "harvest", to: "harvest" }

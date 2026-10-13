@@ -8,6 +8,7 @@
  *
  * REAL PATH (no seam): drives the SHIPPED `classifyIntake()` directly.
  */
+import { describe, it, expect } from "bun:test";
 import {
   classifyIntake,
   runIntakeSmoke,

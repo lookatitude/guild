@@ -3,6 +3,7 @@ name: guild-create-specialist
 description: Runs the §12 7-step workflow to mint a new shipping specialist — interview, draft under .guild/agents/proposed/, boundary scan, gate applicable adjacent-boundary edits, gate the new specialist, register live. Creation authority is either human-requested (an explicit request or approved team-compose option A; no historical extraction prerequisite) or evolution-proposed (all §11.2.1 historical extraction signals required). TRIGGER for "create a new Guild specialist for <domain>", "mint a data-scientist specialist", "add a new role — <role>", "incubate a proposed specialist for <domain>". DO NOT TRIGGER for minting a new skill/capability (guild:create-skill), evolving an existing specialist (guild:evolve-skill), composing a team for the current task (guild:team-compose), editing an existing agent's body (specialist-agent-writer dev agent), or rolling back a specialist (guild:rollback-skill).
 when_to_use: An explicit human request, an operator-approved /guild:plan option A after a gap is flagged, OR an evolution/reflection proposal whose §11.2.1 extraction thresholds pass.
 type: meta
+indexed: true
 ---
 
 # guild:create-specialist
@@ -44,11 +45,11 @@ Seven ordered steps, each gate passing before the next runs. Full procedure — 
 
 1. **Interview** — capture the five Input fields; do not invent a role on the user's behalf.
 2. **Draft** — write the proposed files under `.guild/` (see DH-3 mint contract).
-3. **Boundary scan** — description-similarity between the draft and all existing `templates/specialists/*.md` (the shipped type library — if a template already covers the domain, STOP: mint it via `roster-resolve.ts mint <role>` instead of creating a novel type) + machinery `agents/*.md` + `.guild/agents/*.md`; flag overlaps above threshold (cosine ≥ 0.75, or token-Jaccard ≥ 0.35 fallback) as the adjacent-specialist set.
+3. **Boundary scan** — description-similarity between the draft and all existing `templates/specialists/*.md` (the shipped type library — if a template already covers the domain, STOP: mint it via `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/roster-resolve.js mint <role> --class <run class>` instead of creating a novel type) + machinery `agents/*.md` + `.guild/agents/*.md`; flag overlaps above threshold (cosine ≥ 0.75, or token-Jaccard ≥ 0.35 fallback) as the adjacent-specialist set.
 4. **Propose adjacent-boundary edits** — append a `DO NOT TRIGGER for: <new-domain>` clause to each adjacent specialist's `description` (`§12.1` step 4).
 5. **Gate boundary edits** — each edit runs through `guild:evolve-skill` paired evals (A = as-is, B = with the clause); a failing edit stops the workflow.
 6. **Gate new specialist** — paired evals (A = no-specialist baseline, B = proposed) always run. Historical shadow replay is required for evolution-proposed creation; for human-requested creation, replay any applicable corpus that exists, but an empty or irrelevant historical corpus is recorded as `not_applicable` and is not a registration blocker.
-7. **Register** — after every applicable boundary-edit gate and the new-specialist gate pass, move files live within `.guild/` (see DH-3 mint contract), commit any step-5 boundary edits. The new agent file's **existence** at `.guild/agents/<role>.md` IS its registration — `guild:team-compose` enumerates the live tree via `roster-resolve.ts` (ADR §4); there is no candidate list to append to. Then refresh the derived registry projections: `npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/roster-resolve.ts --cwd . --write-registry --quiet` (`.guild/agents/registry.yaml` / `.guild/skills/registry.yaml` are generated indexes of the files — never hand-maintained, never the authority).
+7. **Register** — after every applicable boundary-edit gate and the new-specialist gate pass, move files live within `.guild/` (see DH-3 mint contract), commit any step-5 boundary edits. The new agent file's **existence** at `.guild/agents/<role>.md` IS its registration — `guild:team-compose` enumerates the live tree via `roster-resolve.ts` (ADR §4); there is no candidate list to append to. Then refresh the derived registry projections: `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/roster-resolve.js --cwd . --write-registry --quiet` (`.guild/agents/registry.yaml` / `.guild/skills/registry.yaml` are generated indexes of the files — never hand-maintained, never the authority).
 
 ## Historical extraction signals (§11.2.1 — evolution-proposed only)
 
@@ -68,3 +69,13 @@ Emit a `handoff` block naming the creation run and gate outcome:
 - On **failure** (any gate): write `.guild/evolve/<run-id>/proposed-<role>-rejected.md` with the gate outcomes and surface refinement options.
 
 Payload fields: `run_id`, `role`, `creation_authority` (`human-requested`/`evolution-proposed`), `outcome` (`registered`/`rejected`), `gate_failed` (rejection only — one of `extraction-signals`, `boundary-edit`, `new-specialist`; `extraction-signals` applies only to evolution-proposed creation), `boundary_edits` (success only — adjacent-specialist paths that received `DO NOT TRIGGER` clauses), `proposed_path`/`live_path` (traceability), and `refinement_options` (rejection only).
+
+## Chapter pointers (resolve before you dispatch)
+
+These names appear in the body as if they were skills. They are NOT — the
+T03 fold (KTD25/KTD59) made each one an L3 chapter. Read `guild:<name>` below
+as "load this file and run it in place"; never try to dispatch it as a skill.
+
+| Named in this body | Lives under | Load |
+|---|---|---|
+| `guild:rollback-skill` | `evolve` | `../evolve/references/rollback-skill.md` |

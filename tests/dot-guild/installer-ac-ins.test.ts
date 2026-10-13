@@ -22,6 +22,7 @@
  * install-sh-equivalence.test.ts sibling-path pattern.
  */
 
+import { describe, it, expect } from "bun:test";
 import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";

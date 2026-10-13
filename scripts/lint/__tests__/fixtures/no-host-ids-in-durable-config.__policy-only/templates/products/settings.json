@@ -1,0 +1,6 @@
+{
+  "tiers": { "default": "mid", "floors": { "mid": 3, "powerful": 6 } },
+  "advisorRounds": 2,
+  "wiki": { "autopromote": true },
+  "agent_mode": "auto"
+}

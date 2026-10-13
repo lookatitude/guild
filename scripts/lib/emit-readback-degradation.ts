@@ -28,6 +28,7 @@ import * as path from "node:path";
 // R-TRACE (Wave 6): additive degradation trace — NEVER changes return value
 import { emitTraceEvent } from "./guild-trace-emit";
 import { makeDegradationEvent } from "./guild-trace-events";
+import { durableGuildDir } from "./state/storage";
 
 /** Schema version for the degradation event record. */
 export const READBACK_DEGRADATION_SCHEMA = "guild.degradation_event.v1" as const;
@@ -81,7 +82,7 @@ export function emitReadbackDegradation(
   }
 
   // 2. NDJSON record in the run's v1.4-events.jsonl — queryable by guild-telemetry.
-  const runDir = path.join(cwd, ".guild", "runs", runId);
+  const runDir = path.join(durableGuildDir(cwd), "runs", runId);
   try {
     const eventsLog = path.join(runDir, "logs", "v1.4-events.jsonl");
     fs.mkdirSync(path.dirname(eventsLog), { recursive: true });

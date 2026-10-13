@@ -1,6 +1,6 @@
 {
   "name": "guild",
-  "version": "2.7.0-beta.20",
+  "version": "3.0.0",
   "description": "A team-of-specialists plugin for AI coding hosts: 15 domain specialist type templates across engineering, content, and commercial groups (minted into your project on demand) plus 3 machinery agents, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
   "homepage": "https://guildstack.dev",
   "repository": "https://github.com/lookatitude/guild",
@@ -21,12 +21,23 @@
     "mcp"
   ],
   "skills": [
-    "./skills/core/",
-    "./skills/guild-operations/",
-    "./skills/guild-quality/",
-    "./skills/knowledge/",
-    "./skills/meta/",
-    "./skills/specialists/"
+    "./skills/knowledge/learn/",
+    "./skills/knowledge/wiki/",
+    "./skills/meta/brainstorm/",
+    "./skills/meta/create-skill/",
+    "./skills/meta/create-specialist/",
+    "./skills/meta/diagnose/",
+    "./skills/meta/evolve/",
+    "./skills/meta/execute-plan/",
+    "./skills/meta/init/",
+    "./skills/meta/initiative/",
+    "./skills/meta/plan/",
+    "./skills/meta/reflect/",
+    "./skills/meta/review/",
+    "./skills/meta/team-compose/",
+    "./skills/meta/using-guild/",
+    "./skills/operations/",
+    "./skills/quality/"
   ],
   "commands": [
     "./commands/adopt.md",
@@ -42,6 +53,7 @@
     "./commands/init.md",
     "./commands/initiative.md",
     "./commands/learn.md",
+    "./commands/maintain.md",
     "./commands/migrate.md",
     "./commands/models.md",
     "./commands/ops.md",
@@ -56,6 +68,7 @@
   "agents": [
     "./agents/advisor.md",
     "./agents/context-manager.md",
-    "./agents/developer.md"
+    "./agents/developer.md",
+    "./agents/team-lead.md"
   ]
 }

@@ -1,243 +1,40 @@
 ---
 name: init
-description: "Init — onboard an existing repo or scaffold new-product knowledge; builds wiki + (brownfield) cheap-scan CodebaseMap + architecture-map stub (cheap by default). Full learn-* pipeline runs only under --learn or defaults.auto_learn: true (D3); --learn folds in the former --deep-scan."
-argument-hint: "[--learn] [--new]"
+description: "Init — onboard an existing repo or scaffold new-product knowledge; builds wiki + (brownfield) cheap-scan CodebaseMap + architecture-map stub (cheap by default). The full learn-* pipeline runs only under --learn or defaults.auto_learn (D3). Sub-verb `adopt` localizes shipped capability into this project. Dispatches to guild:init."
+argument-hint: "[--learn] [--new] | adopt <report|catalog|adopt|rollback|status|window|g5> [options]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList
 ---
 
-# /guild:init — phase: Init
+# /guild:init — Init phase
 
-The **Init** phase entrypoint. Onboards an existing repo or scaffolds
-new-product knowledge: builds the wiki and, for a brownfield repo, the
-**cheap scan tier only** — the derived `CodebaseMap` plus a
-confidence-tagged `architecture-map.md` stub. That pair is Init-DONE. The
-deep semantic `KnowledgeGraph` + onboarding tour are **lazy**, gated by the
-`--learn` flag or `defaults.auto_learn: true` config — built via the
-`learn-*` pipeline (same skills as `/guild:learn`), **not** produced at Init
-by default.
-
-Verb↔phase edge: `/guild:init` → Init. Phase concept binding:
-`lifecycle/phase-entrypoints.md` · `lifecycle/lifecycle-overview.md` (one
-state machine, six phase entrypoints).
-
-## Contract binding
-
-Before any producer work begins, this phase **resolves the frozen
-`guild.phase_entry.v1` contract** (`review.learning_checkpoint: true`).
-The Tier-2 `defaults:` config folded at intake is controlled by
-`P1-config-001` — see `/guild:config` for the schema.
-
-## Usage
-
-```
-/guild:init
-/guild:init --learn
-/guild:init --new
-```
-
-All five global flags + `--dry-run` apply.
-
-## Args & local flags
-
-- Args: — (no positional)
-- Local flags:
-  - `--learn` — run the full `learn-*` pipeline now (`guild:learn-map` /
-    `learn-graph` / `learn-knowledge` (cost-gated knowledge tier) /
-    `learn-onboard` / `learn-diff` / `learn-explain`), the same skills
-    `/guild:learn` invokes. Also triggered automatically
-    when `defaults.auto_learn: true` is set in `.guild/settings.json`.
-    Folds in the former `--deep-scan` flag (D3).
-  - `--new` — force the new-product scaffold path.
-
-## Gates (default)
-
-- New-product Q&A **I**
-- G-init review **A**
-
-Note: `--learn` and `defaults.auto_learn: true` both run the full `learn-*`
-pipeline without an extra gate (explicitly requested). The former
-ask-before-deep-scan interactive gate is removed (D3).
-
-## Output artifact
-
-`.guild/guild.yaml`, `.guild/init/<slug>.md`, `.guild/wiki/**`,
-`.guild/raw/**`, `.guild/settings.json` (the project config surface,
-scaffolded fully-documented if absent — see below), and (brownfield, cheap
-scan tier = Init-DONE) `.guild/indexes/codebase-map.json` + confidence-tagged
-`wiki/concepts/architecture-map.md` stub. `knowledge-graph.json` +
-`onboarding-tour.md` are **deferred** — lazy, produced only under `--learn` /
-`defaults.auto_learn` by the `learn-*` pipeline, never at Init by default.
-
-PCR-Init must-exist floor: `.guild/guild.yaml`, `.guild/wiki/index.md`
-(scaffold), `.guild/agents/registry.yaml`, `.guild/skills/registry.yaml`,
-`.guild/workflows/registry.yaml`, `.guild/loops/registry.yaml`,
-`.guild/knowledge/**`, `.guild/memory/**`, `.guild/raw/`,
-`.guild/settings.json` (scaffold), `.guild/init/<slug>.md`,
-`.guild/initiatives/**`, `.guild/runs/`, `.guild/teams/registry.yaml`,
-`.guild/artifacts/**`; brownfield: `.guild/indexes/codebase-map.json`,
-`.guild/wiki/architecture-map.md` stub. Workspace roots additionally include
-`.guild/workspace.json`, `.guild/workspace/**`, and
-`.guild/workspace-knowledge/**`. Binding:
-`docs/v2/lifecycle.html §Host-portable phase contract`. Ref: DRIFT-ANALYSIS
-CMD-006.
-
-### Config scaffold (`.guild/settings.json`)
-
-As part of bootstrap, Init scaffolds the project config surface
-`.guild/settings.json` **if it does not already exist** (idempotent — never
-clobber operator config):
-
-```bash
-test -f .guild/settings.json || npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/read-guild-config.ts --scaffold > .guild/settings.json
-```
-
-It is written with every option = its default + a self-documenting `_help`
-block. CLI flags always override it. Full 7-source resolution precedence
-(lowest to highest): `builtin < workspace < workspace-local < project <
-project-local < rigor < CLI` (`command-surface.md §4.3/§4.4`; `config.md`
-inheritance chain). The scaffold writes the project layer only
-(`<cwd>/.guild/settings.json`); workspace-level keys from the root
-`.guild/settings.json` are inherited automatically at runtime — Init does NOT
-copy or merge them into the child file (preserving workspace-inherits-unless-overridden
-semantics, OD-2).
-
-Re-generate or inspect any time with `/guild:config init|show|validate`. If a
-legacy `.guild/config.yml` is present, run `/guild:migrate` to convert it to
-`settings.json` — `config.yml` is not read at runtime in v2 (the back-compat
-reader was removed in v2.0).
-
-## Run-start preflight (settings-control-and-tmux U3/U6)
-
-Before any `.guild/` inspection — and before run-trace start — the run-trace CLI runs this preflight for you — you do **not**
-call `runStartPreflight` yourself.
-
-Since wave 2, `run-trace.js start` (below) is the **sole caller** of
-`runStartPreflight` (`scripts/lib/runstart-preflight.ts`; canonical contract in
-`guild.md §Run-start preflight`): on `start` the CLI resolves the 7-source
-inheritance chain, validates closed keys, probes tmux, detects providers, and
-writes `.guild/runs/<id>/resolved-settings.json` (+ a compact `settings_ref` in
-`run.yaml`) automatically before the run opens. If this command needs the
-resolved config — e.g. the dispatch backend `effective.agent_mode` — read the
-snapshot back with `readResolvedSettingsSnapshot(runId, { cwd })`; never
-re-resolve.
-
-Note: the config scaffold step (below) writes the project settings layer only —
-it runs AFTER the preflight so that a freshly created `settings.json` is
-available to subsequent phases, but the preflight itself uses whatever is
-already on disk (or inherited from the workspace root).
+Cheap by default: wiki + brownfield cheap-scan map + a confidence-tagged
+architecture-map stub; `--learn` (or `defaults.auto_learn`) folds in the full
+`learn-*` pipeline. Sub-verb `adopt` localizes shipped capability — `report`,
+`status` and an unfrozen `catalog` read-only, the rest ask first.
 
 ## Run recording
 
-Before any `.guild/` inspection, start a run (SC-B, §435):
-
 ```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js start \
-  --command=/guild:init \
-  --cwd "$(pwd)"
-# If --initiative=<id> was supplied by the user, add: --initiative=<id>
+node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js" start --command=/guild:init --phase=init --cwd "$(pwd)"
+# append --initiative=<id> ONLY when the user supplied one (NN#5); never auto-detect
+# sub-verb `adopt` — capability localization, forwarded verbatim
+node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/capability-adopt.js" $REMAINING_ARGS --project-root "$(pwd)"
 ```
-
-Immediately after, record this command's phase token into run-state
-(T0, G-PHASE-COMPOSE; idempotent — best-effort, non-throwing, never blocks
-the lifecycle; `start` writes `current-run-id` synchronously so `phase`
-resolves the open run):
-
-```bash
-node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js phase \
-  --phase=init \
-  --cwd "$(pwd)"
-```
-
-`run-class` default (`full`). Records the run before slug resolution and
-config scaffold so the complete session — including new-product Q&A gates —
-is replayable from the entrypoint. `--initiative` forwarded only when
-user-supplied (NN#5); the init skill writes `.guild/init/` not
-`.guild/initiatives/` — orthogonal and not a NN#5 concern.
-
-## Team decision gate (blocking — team-contracts §4/§5)
-
-Before this phase dispatches **any** participant — worker, advisor, challenger,
-or local/cross-host reviewer — a **persisted** team decision must authorize it.
-An advisory label is never a bypass, and Guild never auto-approves.
-
-1. **Present the proposal** and let the user answer in the decision vocabulary
-   — `approve · add · remove · substitute · edit_dependencies · restructure`
-   (the four edit verbs record a `restructure`, never an approve). The review
-   prints the proposed team, each participant's necessity rationale, excluded
-   roles, obligation coverage, and per-kind gate coverage:
-
-```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/team-decide.ts review \
-  --proposal .guild/runs/<run-id>/team-plan/init.proposal.v<n>.yaml
-```
-
-2. **Restructure loop** — idempotent: each pass produces a NEW proposal version
-   (parent hash chained, prior versions preserved) and returns to `pending`; it
-   never edits approved bytes and never approves anything:
-
-```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/team-decide.ts restructure \
-  --proposal <parent-proposal> --edits <edits.json> \
-  --decided-by user --channel interactive_prompt
-```
-
-   It prints the user's edits, the **coverage impact** (obligations that lost
-   their last owner), and any edit already satisfied by the parent. It exits
-   non-zero on an uncited roster change or a re-introduced cap key — a
-   specialist can never be dropped silently.
-
-3. **Gate the dispatch** — run this and **STOP on a non-zero exit**. It reads
-   the PERSISTED decision trail under `.guild/runs/<run-id>/team-plan/`; an
-   in-memory or agent-asserted approval is never accepted:
-
-```bash
-npx tsx ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/scripts/team-decide.ts gate \
-  --proposal <proposal> --cwd "$(pwd)"
-```
-
-Exit `0` authorizes dispatch and prints the final approved team plus the
-backend scheduling waves. Exit `3` **BLOCKS** — no persisted decision, a
-restructure rather than an approval, a tampered artifact, or a stale /
-hash-mismatched decision after any change to a participant, obligation,
-dependency, tier/purpose, capability scope, backend, wave structure,
-concurrency, cost posture, or review independence. Renewed user approval is
-required; never proceed past a refusal.
-
-Backend capacity shapes **waves**, never the roster: if the backend cannot run
-the approved team at once, propose waves or another backend and ask. Never drop
-a role to fit a host UI or backend.
 
 ## Dispatch
 
-Resolve `guild.phase_entry.v1` (pointer above), confirm the new-product
-gates per the **Gates** block, then drive the Init phase by
-invoking, in order:
+```
+Skill: guild:init
+args: $ARGUMENTS
+```
 
-1. **`guild:init`** (`skills/meta/init`) — the Init-phase producer:
-   bootstraps the wiki, scaffolds `.guild/settings.json` (idempotent), writes
-   `.guild/init/<slug>.md`.
-2. **`guild:learn-map`** (cheap-scan tier) — brownfield only:
-   derives `.guild/indexes/codebase-map.json` + the confidence-tagged
-   `wiki/concepts/architecture-map.md` stub. This is **Init-DONE by default**
-   (cheap scan only — no deep pipeline unless step 3 triggers).
-3. **Full `learn-*` pipeline** — runs **ONLY when** `--learn` is passed
-   **OR** `defaults.auto_learn: true` is set in `.guild/settings.json`.
-   Invokes the same skills as `/guild:learn` (one implementation, two
-   triggers — D3): `guild:learn-map` → `guild:learn-graph` →
-   `guild:learn-knowledge` (knowledge tier — K1–K6; lazy + cost-gated) →
-   `guild:learn-onboard` (`guild:learn-diff` / `guild:learn-explain` are
-   change-analysis and query-time skills, not part of the bootstrap sub-set).
-   `guild:learn-knowledge` runs here byte-identically to its `/guild:learn
-   knowledge` and full `/guild:learn` triggers (SC-8 one-implementation /
-   two-triggers) — see `commands/learn.md` "Relation to `/guild:init --learn`".
-   Without this trigger, the deep `KnowledgeGraph`, knowledge tier, and
-   onboarding tour remain lazy and are never produced at Init.
+## Team decision gate (blocking)
 
-Input gate: a brownfield repo, or `--new` for the greenfield scaffold path.
-Output gate (Init-DONE): the **Output artifact** set above is written.
-Confirmation gates (from **Gates**): new-product Q&A **I** · G-init review
-**A**. (Full learn pipeline runs without extra gate when `--learn` /
-`defaults.auto_learn` — explicitly requested.)
+```bash
+node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/team-decide.js" gate --proposal <proposal> --cwd "$(pwd)"
+```
 
-Thin phase entrypoint — phase logic and all `.guild/` writes live in the
-phase skill set, never in this file.
+Verbs: approve · restructure · add · remove · substitute · edit_dependencies.
+STOP on a non-zero exit — exit 3 BLOCKS (no persisted decision, a restructure rather
+than an approval, a stale or tampered trail).
+`--auto-approve` does not cover team approval: never auto-approve a team decision.

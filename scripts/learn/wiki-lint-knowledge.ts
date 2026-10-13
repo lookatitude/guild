@@ -1,3 +1,6 @@
 #!/usr/bin/env -S npx tsx
 /** Generated host compatibility shim; implementation is module-owned. */
-export * from "../../src/modules/learning/workflows/wiki-lint-knowledge";
+export {
+  lintKnowledgeNodes,
+  type KnowledgeLintFinding,
+} from "../../src/domains/knowledge";

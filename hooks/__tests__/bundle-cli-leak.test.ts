@@ -12,6 +12,7 @@
  * while intentional hook stdout (using-guild-bootstrap's SessionStart context)
  * is preserved.
  */
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

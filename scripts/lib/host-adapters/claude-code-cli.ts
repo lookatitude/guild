@@ -21,6 +21,7 @@ import {
   type DegradationReceipt,
 } from "../adapter-fallback-ladders";
 import { ClaudePaneAdapter } from "../pane-adapter";
+import { durableGuildDir } from "../state/storage";
 
 const HOST_ID: HostId = "claude-code-cli";
 const ENTRY = HOST_REGISTRY_ROWS[HOST_ID];
@@ -76,7 +77,7 @@ function activeGuildRoot(request: MemoryRequest): string {
         ? ((payload as Record<string, unknown>)["cwd"] as string)
         : ".";
   const cleaned = root.replace(/\/+$/, "");
-  return cleaned === ".guild" || cleaned.endsWith("/.guild") ? cleaned : `${cleaned}/.guild`;
+  return cleaned === ".guild" || cleaned.endsWith("/.guild") ? cleaned : durableGuildDir(cleaned || "/");
 }
 
 function taskRunRecord(request: DispatchRequest): Record<string, unknown> {
@@ -172,6 +173,8 @@ export function createClaudeCodeCliAdapter(entry: HostRegistryEntry = ENTRY): Ho
       const prompt = typeof taskRun["prompt"] === "string" ? (taskRun["prompt"] as string) : JSON.stringify(taskRun);
       const runId = typeof taskRun["runId"] === "string" ? (taskRun["runId"] as string) : "run";
       const taskId = typeof taskRun["taskId"] === "string" ? (taskRun["taskId"] as string) : undefined;
+      const taskCellInstanceId =
+        typeof taskRun["taskCellInstanceId"] === "string" ? (taskRun["taskCellInstanceId"] as string) : undefined;
       const specialist = typeof taskRun["specialist"] === "string" ? (taskRun["specialist"] as string) : undefined;
       const wrapperCommand = typeof taskRun["command"] === "string" ? (taskRun["command"] as string) : null;
       const wrapperArgs = Array.isArray(taskRun["args"]) ? (taskRun["args"] as unknown[]).map(String) : null;
@@ -187,8 +190,16 @@ export function createClaudeCodeCliAdapter(entry: HostRegistryEntry = ENTRY): Ho
         prompt,
         hostKind: "claude" as const,
         ...(taskId ? { taskId } : {}),
+        ...(taskCellInstanceId ? { taskCellInstanceId } : {}),
         ...(specialist ? { specialist } : {}),
       };
+      // plr-wi-15-4: a task id without an admitted instance id is refused, not
+      // planned as a worker the projection gate cannot resolve.
+      try {
+        pane.env(paneSpec); // refuses a task id with no admitted instance id
+      } catch (err) {
+        return result("dispatch", "unavailable", (err as Error).message, { taskRun, dispatch_kind: "refused" });
+      }
       return result(
         "dispatch",
         "ok",

@@ -53,6 +53,11 @@ import {
   renderCandidateSection,
   surfaceCapabilityCandidates,
 } from "./lib/capability/candidate-surface";
+import { CURRENT_LAYOUT_VERSION, detect as detectLayout } from "./lib/state/ensure-storage-layout";
+// Narrow, not the barrel: `status` is a KTD29 cheap entrypoint, and pulling the
+// whole state index in would widen its require-graph. These two modules import
+// only node builtins and state-internal path arithmetic.
+import { createGuildStorage, loadJournal, upgradeJournalPath } from "../src/domains/state/index";
 import {
   HASHED_REGISTRIES,
   HASHED_TREES,
@@ -62,11 +67,27 @@ import {
   snapshotTreeHashes,
   type DerivedFacts,
 } from "./lib/capability/profile-emit";
-import {
-  captureMigrationRunBaseline,
-  profileBaselineFromMigrationRunBaseline,
-  validateMigrationRunBaseline,
-} from "./lib/capability/migration-evidence";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
+// The migration-evidence chain is reached ONLY by `baseline` and `emit`. It is
+// loaded from a separate compiled chunk so it stays OUT of this bundle — see
+// `lib/capability/capability-profile-evidence.ts` and KTD29's `status` budget.
+type EvidenceChunk = typeof import("./lib/capability/capability-profile-evidence");
+let evidenceChunk: EvidenceChunk | null = null;
+function evidence(): EvidenceChunk {
+  if (evidenceChunk === null) {
+    // Non-analyzable on purpose: a literal specifier would let esbuild inline
+    // the whole chain back into this bundle. Compiled sibling first (the
+    // shipped `runtime/scripts/` layout), then the source module (tsx / jest).
+    const candidates = [
+      path.join(__dirname, "capability-profile-evidence.js"),
+      path.join(__dirname, "lib", "capability", "capability-profile-evidence"),
+    ];
+    const spec = candidates.find((c) => fs.existsSync(c) || fs.existsSync(`${c}.ts`)) ?? candidates[1];
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    evidenceChunk = require(spec) as EvidenceChunk;
+  }
+  return evidenceChunk;
+}
 import {
   CAPABILITY_RESOLVER_MODES,
   type CapabilityResolverMode,
@@ -200,7 +221,7 @@ function cmdBaseline(argv: string[]): void {
   const runId = flag(argv, "run-id");
   if (runId === null) fail("missing_arg", "--run-id is required");
   try {
-    const baseline = captureMigrationRunBaseline({ projectRoot: root, runId });
+    const baseline = evidence().captureMigrationRunBaseline({ projectRoot: root, runId });
     process.stdout.write(`${JSON.stringify({ status: "written", rel_path: `.guild/runs/${runId}/capability/run-start-baseline.json`, baseline }, null, 2)}\n`);
   } catch (error) {
     fail("baseline_refused", error instanceof Error ? error.message : String(error));
@@ -234,8 +255,8 @@ function cmdEmit(argv: string[]): void {
   if (baselineFile !== null) {
     try {
       const parsed = JSON.parse(fs.readFileSync(baselineFile, "utf8"));
-      const retained = validateMigrationRunBaseline(parsed);
-      baselineHashes = retained ? profileBaselineFromMigrationRunBaseline(retained) : parsed;
+      const retained = evidence().validateMigrationRunBaseline(parsed);
+      baselineHashes = retained ? evidence().profileBaselineFromMigrationRunBaseline(retained) : parsed;
     } catch (e) {
       fail("bad_baseline_file", `${baselineFile}: ${String(e)}`);
     }
@@ -279,16 +300,81 @@ function cmdCandidates(argv: string[]): void {
   const budget = budgetRaw === null ? undefined : parseCount(budgetRaw);
   if (budgetRaw !== null && budget === null) fail("bad_budget", `"${budgetRaw}" is not a count`);
   const surface = surfaceCapabilityCandidates(root, { suggestionBudget: budget ?? undefined });
+  const layout = layoutRow(root);
   if (has(argv, "json")) {
-    process.stdout.write(`${JSON.stringify(surface, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ ...surface, storage_layout: layout }, null, 2)}\n`);
     return;
   }
+  process.stdout.write(`${renderLayoutRow(layout)}\n`);
   process.stdout.write(`${renderCandidateSection(surface)}\n`);
+}
+
+// ── storage layout row (U-UPG) ───────────────────────────────────────────────
+
+/**
+ * What `/guild:status` says about this root's storage layout: the version, and —
+ * when an upgrade did not reach `committed` — the blocked state and why.
+ *
+ * READ-ONLY, like every other line `status` prints. It calls `detect`, never
+ * `ensureStorageLayout`: asking "where am I" must not start an upgrade.
+ */
+export interface LayoutRow {
+  layout_version: number | null;
+  layout_state: string;
+  current_version: number;
+  /** Transaction state of the last upgrade attempt, when a journal exists. */
+  upgrade_state: string | null;
+  blocked: boolean;
+  dirty_paths: string[];
+  question: string | null;
+}
+
+export function layoutRow(root: string): LayoutRow {
+  const status = detectLayout(root);
+  const row: LayoutRow = {
+    layout_version: status.version,
+    layout_state: status.state,
+    current_version: CURRENT_LAYOUT_VERSION,
+    upgrade_state: null,
+    blocked: false,
+    dirty_paths: [],
+    question: null,
+  };
+  if (status.state === "absent") return row;
+  try {
+    const storage = createGuildStorage(root);
+    const journal = loadJournal(upgradeJournalPath((...s: string[]) => storage.runtime(...s)));
+    if (!journal) return row;
+    row.upgrade_state = journal.state;
+    row.blocked = journal.state === "blocked_dirty_durable" || journal.state === "blocked_confirm";
+    row.dirty_paths = journal.dirty_paths;
+    row.question = journal.entries.find((e) => e.question)?.question ?? null;
+  } catch {
+    // No journal home resolvable (sandbox, read-only HOME): the version alone is
+    // still a true answer, and status never fails because of an optional read.
+  }
+  return row;
+}
+
+export function renderLayoutRow(row: LayoutRow): string {
+  const version = row.layout_version === null ? "unmarked" : String(row.layout_version);
+  const head = `Storage layout: ${version} (this build: ${row.current_version}) — ${row.layout_state}`;
+  if (!row.blocked) {
+    return row.upgrade_state && row.upgrade_state !== "committed"
+      ? `${head}; last upgrade ${row.upgrade_state}`
+      : head;
+  }
+  const lines = [`${head}; upgrade ${row.upgrade_state} — this root is reading v1 content`];
+  for (const p of row.dirty_paths) lines.push(`  dirty: ${p}`);
+  if (row.question) lines.push(`  confirm: ${row.question}`);
+  lines.push("  retry: guild config migrate --mode=migrate");
+  return lines.join("\n");
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const [, , sub, ...argv] = process.argv;
   switch (sub) {
     case "hash-tree":

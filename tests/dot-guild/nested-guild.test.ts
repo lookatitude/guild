@@ -10,6 +10,7 @@
  * detection flags exactly the leaks and exempts the rest.
  */
 
+import { describe, test, expect } from "bun:test";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";

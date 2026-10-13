@@ -12,13 +12,14 @@
  * constructor; caller-supplied run_scope is unrepresentable.
  */
 
+import { describe, it, test, expect } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as crypto from "crypto";
 import * as yaml from "js-yaml";
 
-import * as catalogCache from "../../src/modules/capability/workflows/catalog-cache";
+import * as catalogCache from "../../src/domains/config";
 import {
   CACHED_INSPECTION_BUDGET_MS,
   CacheKeyIdentity,
@@ -34,6 +35,7 @@ import {
   isReusableCacheKey,
   isRunLocalCacheKey,
   isSnapshotStale,
+  legacyModelCatalogCacheDir,
   modelCatalogCacheDir,
   nextGeneration,
   publishSnapshot,
@@ -43,7 +45,7 @@ import {
   runScopeFor,
   singleflight,
   singleflightDiscover,
-} from "../../src/modules/capability/workflows/catalog-cache";
+} from "../../src/domains/config";
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "guild-catalog-cache-"));
@@ -85,6 +87,13 @@ function mkKey(salt: string): CatalogCacheKey {
 }
 
 // ── Canonical YAML parity with the contract-fixture reference (js-yaml) ──────
+
+// The file's runtime export set, read from its source: consumers import the
+// domain index (KTD27), so a namespace import can no longer see one file alone.
+const valueExportsOf = (rel: string): string[] =>
+  [...fs.readFileSync(path.resolve(__dirname, "../..", rel), "utf8").matchAll(
+    /^export\s+(?:async\s+)?(?:function\*?|const|let|var|class)\s+([A-Za-z_$][\w$]*)/gm,
+  )].map((m) => m[1]);
 
 describe("canonical YAML byte-parity with the js-yaml reference (team-contracts §1)", () => {
   test("reference tuple and every -CHANGED variant serialize byte-identically", () => {
@@ -285,7 +294,7 @@ describe("sealed cache-key surface (T4-R2-002 encapsulation, permanent reviewer 
   });
 
   test("the module's public runtime surface is exactly the sealed export set (no bypass symbols)", () => {
-    expect(Object.keys(catalogCache).sort()).toEqual([
+    expect(valueExportsOf("src/domains/config/catalog-cache.ts").sort()).toEqual([
       "CACHED_INSPECTION_BUDGET_MS",
       "CACHE_KEY_COMPONENTS",
       "DEFAULT_CATALOG_TTL_SECONDS",
@@ -303,6 +312,7 @@ describe("sealed cache-key surface (T4-R2-002 encapsulation, permanent reviewer 
       "isReusableCacheKey",
       "isRunLocalCacheKey",
       "isSnapshotStale",
+      "legacyModelCatalogCacheDir",
       "modelCatalogCacheDir",
       "nextGeneration",
       "publishSnapshot",
@@ -331,7 +341,10 @@ describe("run-scope quarantine + cache path constants", () => {
 
   test("cache dir constants agree with the scrub-leg path", () => {
     expect(MODEL_CATALOG_CACHE_REL).toBe(".guild/indexes/model-catalog");
-    expect(modelCatalogCacheDir("/ws")).toBe(path.join("/ws", ".guild", "indexes", "model-catalog"));
+    // U-CFG: the live cache lives on the platform cache root, outside the repo; the
+    // scrub leg keeps guarding the LEGACY in-repo location.
+    expect(legacyModelCatalogCacheDir("/ws")).toBe(path.join("/ws", ".guild", "indexes", "model-catalog"));
+    expect(modelCatalogCacheDir("/ws").startsWith(path.join("/ws", ".guild"))).toBe(false);
     expect(isModelCatalogCachePath(".guild/indexes/model-catalog/abc.json")).toBe(true);
     expect(isModelCatalogCachePath(".guild/indexes/other/abc.json")).toBe(false);
   });

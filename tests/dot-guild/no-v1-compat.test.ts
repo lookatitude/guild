@@ -40,7 +40,7 @@
  *   (A) SOURCE tree: scripts/**, hooks/** (.ts), commands/**, skills/**,
  *       templates/**, agents/**, plus scaffold/fixture .json/.yaml.
  *   (B) SHIPPED DIST bundles: hooks/dist, hooks/agent-team/dist,
- *       mcp-servers/<name>/dist — the COMPILED code that actually ships and
+ *       runtime/ — the COMPILED code that actually ships and
  *       runs. The stale-bundle-with-metadata.json bug (source fixed, bundle
  *       stale) lives precisely here, so the gate MUST scan compiled output.
  *       Exempts the allowlisted converter-wiring bundle
@@ -51,6 +51,7 @@
  * regression is immediately actionable.
  */
 
+import { describe, test, expect } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -81,6 +82,13 @@ function walk(
     if (entry.isDirectory()) {
       if (entry.name === "node_modules") continue;
       if (entry.name === "dist" && !opts.includeDist) continue;
+      // SCAN-SCOPE (T02): `runtime/` is COMPILED OUTPUT, the same class as `dist/`
+      // — the single MCP binary plus the CLIs the command surface spawns. It is a
+      // DIST surface, scanned deliberately through SHIPPED_DIST_DIRS below; walking
+      // it as SOURCE too would read vendored SDK text and the compiled converter as
+      // Guild source. Gate the top-level tree only, so a `runtime/` directory
+      // nested inside real source is still scanned.
+      if (entry.name === "runtime" && dir === PLUGIN_ROOT && !opts.includeDist) continue;
       // SCAN-SCOPE: `.guild/` is project-local RUNTIME state (run traces, payloads,
       // context bundles, reflections) — or runtime-shaped fixture data — never shipped
       // plugin source. Skip every `.guild/` subtree wherever it nests (e.g. the
@@ -159,7 +167,7 @@ function scanForPattern(
 // The non-node_modules dist directories that ship compiled, runnable code:
 //   hooks/dist/                  — native hook bundles
 //   hooks/agent-team/dist/       — agent-team hook bundles
-//   mcp-servers/*/dist/          — MCP server bundles
+//   runtime/                     — the single MCP binary + compiled CLIs (KTD3)
 //
 // detect-guild-version.js is the compiled CONVERTER WIRING — allowlisted.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -167,13 +175,32 @@ function scanForPattern(
 const SHIPPED_DIST_DIRS = [
   path.join(PLUGIN_ROOT, "hooks/dist"),
   path.join(PLUGIN_ROOT, "hooks/agent-team/dist"),
-  path.join(PLUGIN_ROOT, "mcp-servers/guild-memory/dist"),
-  path.join(PLUGIN_ROOT, "mcp-servers/guild-telemetry/dist"),
+  // T02/KTD3: the two per-server MCP bundles collapsed into ONE committed binary
+  // (runtime/guild-mcp.js) plus the compiled CLIs the command surface spawns.
+  path.join(PLUGIN_ROOT, "runtime"),
 ];
 
-// The single dist file exempt from the scan: the compiled converter wiring.
+// Dist files exempt from the scan. The rule is the same one the SOURCE scan
+// already applies: the v1 converter is ALLOWED to name v1 shapes — it is the
+// thing that reads them — and third-party code vendored into a bundle is not
+// Guild source. Each entry names why, and nothing else is exempt.
 const DIST_ALLOWLIST = [
+  // Compiled converter wiring (pre-existing).
   path.join(PLUGIN_ROOT, "hooks/dist/detect-guild-version.js"),
+  // T02: the compiled v1→v2 converter itself. Its SOURCE
+  // (scripts/dot-guild/migrate-guild.ts) is already allowlisted above; the
+  // bundle is the same program and must carry the same exemption, or shipping
+  // a compiled converter would fail the gate the converter is exempt from.
+  path.join(PLUGIN_ROOT, "runtime/scripts/migrate-guild.js"),
+  // T07: the upgrade chain's COLD half bundles the same v1 converter (it is the
+  // bridge that supplies it to the step chain), so it carries the converter's
+  // exemption for the same reason migrate-guild.js does.
+  path.join(PLUGIN_ROOT, "runtime/scripts/upgrade-chain.js"),
+  // T02: the single MCP binary statically bundles the MCP SDK and zod. Their
+  // JSDoc carries `@deprecated` on THEIR symbols, not on a live Guild symbol,
+  // so Marker 10 reads vendored text as a Guild violation. Guild's own MCP
+  // source stays in scope through src/runtime/mcp in the SOURCE scan.
+  path.join(PLUGIN_ROOT, "runtime/guild-mcp.js"),
 ];
 
 /** Collect all shipped .js dist bundles, excluding the allowlisted wiring bundle. */
@@ -204,11 +231,11 @@ function scanDistForPattern(pattern: RegExp): string[] {
 //
 // The .ts/.js SOURCE roots that compile into shipped, runnable code. Markers
 // with their OWN bespoke scan (Marker 5 metadata-write) must iterate THESE, not
-// just scripts/ + hooks/. Critically includes `mcp-servers/<name>/src` — an MCP
+// just scripts/ + hooks/. Critically includes `src/runtime/mcp` — an MCP
 // server is real shipped source; a marker there would otherwise only be caught
 // after a dist refresh.
 //
-// Markers that use scanSource() already cover mcp-servers/*/src implicitly (it
+// Markers that use scanSource() already cover src/runtime/mcp implicitly (it
 // walks the whole PLUGIN_ROOT minus node_modules/dist/allowlist). SHIPPED_SOURCE_ROOTS
 // exists for the bespoke-scan markers that do NOT use scanSource.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -216,8 +243,7 @@ function scanDistForPattern(pattern: RegExp): string[] {
 const SHIPPED_SOURCE_ROOTS = [
   path.join(PLUGIN_ROOT, "scripts"),
   path.join(PLUGIN_ROOT, "hooks"),
-  path.join(PLUGIN_ROOT, "mcp-servers/guild-memory/src"),
-  path.join(PLUGIN_ROOT, "mcp-servers/guild-telemetry/src"),
+  path.join(PLUGIN_ROOT, "src/runtime/mcp"),
 ];
 
 /** Collect all .ts source files under SHIPPED_SOURCE_ROOTS, minus allowlist + tests. */
@@ -254,7 +280,7 @@ const ALLOWLIST = [
   // Test SUITES (D3): narrowed — only the test-runner files + fixtures.
   // Non-test .ts under tests/ (e.g. tests/workspace/_fixtures.ts) IS scanned.
   // These are handled by the dedicated isTestAllowlisted() below, not here.
-  path.join(PLUGIN_ROOT, "scripts/__tests__"),
+  path.join(PLUGIN_ROOT, "scripts/fixtures"),
   path.join(PLUGIN_ROOT, "hooks/__tests__"),
   // Docs / history: document what was removed, not live code
   path.join(PLUGIN_ROOT, "MIGRATION.md"),
@@ -269,16 +295,17 @@ const ALLOWLIST = [
 
 /**
  * D3: narrow the tests/ allowlist. Only *.test.ts / *.test.js (the test runners
- * that NAME markers to assert removal) and tests/**\/fixtures/** are exempt.
+ * that NAME markers to assert removal, wherever they are colocated) and
+ * tests/**\/fixtures/** are exempt.
  * A non-test .ts under tests/ (a shared helper, an accidentally-checked-in
  * shim) IS scanned.
  */
 function isTestAllowlisted(filePath: string): boolean {
   const norm = path.normalize(filePath);
+  // Colocated bun suites (src/**, scripts/**) are test runners wherever they live.
+  if (/\.test\.(ts|js)$/.test(norm)) return true;
   const testsRoot = path.normalize(path.join(PLUGIN_ROOT, "tests"));
   if (!norm.startsWith(testsRoot + path.sep)) return false;
-  // Exempt the test-runner files themselves.
-  if (/\.test\.(ts|js)$/.test(norm)) return true;
   // Exempt anything under a fixtures/ directory.
   if (norm.includes(path.sep + "fixtures" + path.sep)) return true;
   return false;
@@ -563,7 +590,7 @@ describe("SC-VALIDATION: no v1 compat outside converter+wiring", () => {
 
   test("Marker 5: metadata.json is not written anywhere outside the converter (source)", () => {
     const hits: string[] = [];
-    // G2: iterate ALL shipped source roots (scripts/ + hooks/ + mcp-servers/*/src),
+    // G2: iterate ALL shipped source roots (scripts/ + hooks/ + src/runtime/mcp),
     // not just scripts/ + hooks/. dist handled by Marker 5b.
     for (const f of shippedSourceTsFiles()) {
       const content = fs.readFileSync(f, "utf8");

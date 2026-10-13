@@ -36,12 +36,8 @@ import {
   type DeadCodeResult,
 } from "./graph-query";
 import type { GraphNode, GraphEdge } from "./schema";
-import {
-  ensureKgIndex,
-  ensureKgProjectionIndex,
-  type IndexBlock,
-} from "../../../src/modules/state/workflows/index-cache";
-import { tokenizeIdentifierAware } from "../../../src/modules/kernel";
+import { ensureKgIndex, ensureKgProjectionIndex, type IndexBlock } from "../../../src/domains/state/index";
+import { tokenizeIdentifierAware } from "../../../src/domains/kernel";
 
 // ── node:sqlite read-only handle (minimal stub; mirrors index-cache.ts) ──────
 

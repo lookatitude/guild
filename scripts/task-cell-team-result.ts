@@ -2,7 +2,7 @@
 
 import * as path from "node:path";
 
-import { isStation } from "../src/modules/teams/workflows/station-composer";
+import { isStation } from "../src/domains/teams";
 import { reconcileStationTaskCellResult } from "./lib/task-cell-launch-plan";
 
 function fail(message: string, code = 2): never {

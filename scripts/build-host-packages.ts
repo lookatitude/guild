@@ -78,19 +78,21 @@ import {
   type ExpectedSurfaces,
 } from "./lib/equivalence-contract";
 import { checkSubset, type PackageReferences } from "./lib/parity-contract";
+import { adapterLockFamilies, checkPackageAgainstMap } from "../src/adapters";
 import { renderLauncherScript } from "./lib/guild-run-wrapper";
 import {
   buildModuleResourcePlan,
-  syncModuleResources,
   type ModuleResourcePlan,
   type ModuleResourceEntry,
 } from "./lib/module-resources";
+import { OWNED_INVENTORY_CATEGORIES, moduleManifestFiles } from "./lib/module-manifest";
 import {
   assertNativeClaudePackageIdentityCurrent,
   assertLockedScriptRuntimeDependencies,
   writeNativeClaudePackageIdentity,
   writeReleasePackageIdentitySet,
 } from "./lib/release-package-identity";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 // ---------------------------------------------------------------------------
 // IO helpers
@@ -338,9 +340,11 @@ class ModuleResourceResolver {
     if (!resource) {
       throw new Error(`missing module resource for ${category}:${entry.id} (${entry.source_path})`);
     }
-    const abs = path.join(this.root, "src", "modules", resource.module_id, resource.resource_path);
+    // T12: the host package is a PROJECTION of the live surface (KTD28). The
+    // renderer reads the authored file itself — there is no mirror to go stale.
+    const abs = path.join(this.root, resource.source_path);
     if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
-      throw new Error(`module resource file is missing for ${category}:${entry.id}: ${abs}`);
+      throw new Error(`projected surface file is missing for ${category}:${entry.id}: ${abs}`);
     }
     return abs;
   }
@@ -373,18 +377,14 @@ class ModuleResourceResolver {
     if (!resource) {
       throw new Error(`missing module resource for ${category}:${sourcePath}`);
     }
-    const abs = path.join(this.root, "src", "modules", resource.module_id, resource.resource_path);
+    const abs = path.join(this.root, resource.source_path);
     if (!copyFileEnsured(abs, destAbs)) {
       throw new Error(`failed to copy module resource for ${category}:${sourcePath}`);
     }
   }
 }
 
-function loadModuleResourceResolver(root: string): ModuleResourceResolver {
-  const check = syncModuleResources({ root, check: true });
-  if (!check.ok) {
-    throw new Error("module resources are stale:\n  " + check.errors.join("\n  "));
-  }
+export function loadModuleResourceResolver(root: string): ModuleResourceResolver {
   return new ModuleResourceResolver(root, buildModuleResourcePlan(root));
 }
 /** Recursively copy a directory, skipping node_modules and ALL symlinks (incl. the
@@ -416,52 +416,68 @@ function copyDirExcludingNodeModules(srcDir: string, destDir: string): boolean {
 }
 const stableJson = (v: unknown): string => JSON.stringify(v, null, 2) + "\n";
 
-/** Module-owned implementations live under src/. Script shims import them, so
- * every generated package that bundles scripts must also bundle src/. */
+/**
+ * KTD28: a host package is a projection, never a copy of the domain tree. Two
+ * parts of src/ ship, and only these:
+ *   - src/surfaces/** — runtime DATA (class graphs, prompt dialects);
+ *   - the module ownership manifests (<tree>/modules/<id>.manifest.json), which
+ *     the shipped activated-host-conformance worker reads in place
+ *     (--module-boundary-root). JSON only, at their source paths.
+ * No src/domains TypeScript ships: every CLI a surface spawns is compiled Node
+ * under runtime/ (KTD11), so nothing on the user path imports a domain file.
+ */
 function copyModuleRuntime(root: string, dest: string): void {
-  copyDirExcludingNodeModules(path.join(root, "src"), path.join(dest, "src"));
-}
-
-// The full production closure of scripts/package.json: js-yaml@4 plus its one
-// dependency. (esprima/sprintf-js were js-yaml@3-era strays — a prod install
-// never materializes them, so listing them would fail the closed vendor check.)
-const SCRIPT_RUNTIME_DEPENDENCIES = ["js-yaml", "argparse"] as const;
-
-/** Copy the vendored script runtime deps, failing CLOSED when one is missing.
- * A silent skip here ships packages whose tsx scripts crash on import
- * (issue #14: fresh `git clone` renders had no scripts/node_modules). */
-function copyScriptRuntimeDependencies(scriptsSrcRoot: string, scriptsDestRoot: string): void {
-  for (const name of SCRIPT_RUNTIME_DEPENDENCIES) {
-    const srcDir = path.join(scriptsSrcRoot, "node_modules", name);
-    if (!copyDirExcludingNodeModules(srcDir, path.join(scriptsDestRoot, "node_modules", name))) {
-      throw new Error(
-        `script runtime dependency "${name}" missing at ${srcDir} — ` +
-          `run \`npm ci --prefix ${scriptsSrcRoot}\` before rendering host packages ` +
-          `(install.sh does this automatically)`
-      );
-    }
+  copyDirExcludingNodeModules(path.join(root, "src", "surfaces"), path.join(dest, "src", "surfaces"));
+  for (const { path: abs } of moduleManifestFiles(root)) {
+    const to = path.join(dest, path.relative(root, abs));
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.copyFileSync(abs, to);
   }
 }
 
-/** Scripts are shipped as runnable TypeScript. Bundle their small production
- * runtime dependency closure so generated packages do not depend on ambient
- * node_modules from the source checkout. */
+const TS_SOURCE = /\.(ts|tsx|mts|cts)$/;
+
+/**
+ * KTD28/KTD11: a package ships compiled Node, never authoring TypeScript. Every
+ * CLI a shipped surface spawns is a `runtime/scripts/*.js` bundle (copied by
+ * copyCompiledRuntime); the only other script artifact is the compiled
+ * activated-host conformance CLI.
+ */
 function copyScriptRuntime(root: string, dest: string): void {
-  copyFileEnsured(path.join(root, "scripts", "package.json"), path.join(dest, "scripts", "package.json"));
-  const lock = path.join(root, "scripts", "package-lock.json");
-  if (fs.existsSync(lock)) {
-    copyFileEnsured(lock, path.join(dest, "scripts", "package-lock.json"));
-  }
-  copyScriptRuntimeDependencies(path.join(root, "scripts"), path.join(dest, "scripts"));
   copyFileRequired(
     path.join(root, "scripts", "dist", "activated-host-conformance.js"),
     path.join(dest, "scripts", "dist", "activated-host-conformance.js"),
     "scripts/dist/activated-host-conformance.js",
   );
-  // Some script modules reuse hook-side runtime libraries, notably
-  // result-contracts -> hooks/lib/handoff-v2. Packages that bundle scripts must
-  // carry those libraries or guild-run fails before its dry-run path can load.
-  copyDirExcludingNodeModules(path.join(root, "hooks", "lib"), path.join(dest, "hooks", "lib"));
+}
+
+/**
+ * The inventory's script entries a package carries: the compiled hook CLI bundles
+ * (`hooks/dist/*.js` a command shells out to). Authoring `scripts/**.ts` stay in
+ * the repo; their spawnable form is the compiled runtime.
+ */
+function copyShippedScripts(inv: GuildInventoryV1, dest: string, resources: ModuleResourceResolver): void {
+  for (const s of inv.scripts) {
+    if (TS_SOURCE.test(s.source_path)) continue;
+    resources.copy("scripts", s, path.join(dest, s.source_path));
+  }
+}
+
+/**
+ * The script surface a package exposes, for the SC-2 equivalence: the compiled
+ * `runtime/scripts/*.js` ids plus the hook CLI bundles. Computed the same way for
+ * the committed tree and a generated package, so equivalence compares the
+ * spawnable surface, not the authoring TypeScript.
+ */
+export function shippedScriptRefs(root: string, inv: Pick<GuildInventoryV1, "scripts">): string[] {
+  const dir = path.join(root, "runtime", "scripts");
+  const compiled = fs.existsSync(dir)
+    ? fs.readdirSync(dir).filter((f) => f.endsWith(".js")).map((f) => `runtime/scripts/${f.replace(/\.js$/, "")}`)
+    : [];
+  const bundles = inv.scripts
+    .filter((s) => !TS_SOURCE.test(s.source_path) && fs.existsSync(path.join(root, s.source_path)))
+    .map((s) => s.id);
+  return [...compiled, ...bundles].sort();
 }
 
 // ---------------------------------------------------------------------------
@@ -474,14 +490,29 @@ function copyScriptRuntime(root: string, dest: string): void {
  * become file-path lists; mcp/hooks pass through.
  */
 export function toNeutralManifest(inv: GuildInventoryV1): GuildPluginManifest {
+  // KTD59 — the glob is the CLOSED list of indexed assembler DIRECTORIES, one
+  // entry per skill the module manifests marked `owns.indexed_skills`.
+  //
+  // TRAP this replaced: emitting `./skills/<tier>/` per distinct tier made the
+  // manifest a tier glob, so every sibling under an indexed skill's tier — L3
+  // chapters, the specialist starter recipes, the playbooks tree — was re-indexed
+  // the moment this render ran. `sync:claude-install` then overwrote a correct
+  // hand-written manifest with the wrong one and reported "matches" (T03 fix-r0).
+  // Per-skill directories make the render reproduce the closed list instead.
   const skillDirs = [
     ...new Set(
-      inv.skills.map((s) => {
-        const tier = s.tier ?? s.source_path.split("/")[1];
-        return `./skills/${tier}/`;
-      })
+      inv.skills
+        .filter((s) => s.indexed === true)
+        .map((s) => `./${s.source_path.replace(/\/SKILL(\.src)?\.md$/, "")}/`)
     ),
   ].sort();
+  if (skillDirs.length === 0) {
+    throw new Error(
+      "build-host-packages: guild.inventory.json marks no skill `indexed: true` — refusing " +
+        "to render a manifest with an empty skills glob (rebuild the inventory: the marker " +
+        "comes from owns.indexed_skills in the module manifests)"
+    );
+  }
 
   const m: GuildPluginManifest = {
     name: inv.manifest.name,
@@ -551,16 +582,16 @@ export function loadLogicalPackage(root: string): LogicalPackage {
     hooks_json: fs.existsSync(hooksJsonPath) ? readJson(hooksJsonPath) : {},
     bootstrap_sh: fs.existsSync(bootstrapPath) ? readText(bootstrapPath) : "",
     mcp_json: fs.existsSync(mcpPath) ? readJson(mcpPath) : {},
-    script_refs: d.scripts.map((s) => s.id),
+    script_refs: shippedScriptRefs(root, d),
   };
 }
 
-function expectedSurfaces(inv: GuildInventoryV1): ExpectedSurfaces {
+function expectedSurfaces(inv: GuildInventoryV1, root: string): ExpectedSurfaces {
   return {
     commands: inv.commands.map((c) => c.id),
     skills: inv.skills.map((s) => s.id),
     agents: inv.agents.map((a) => a.id),
-    script_refs: inv.scripts.map((s) => s.id),
+    script_refs: shippedScriptRefs(root, inv),
   };
 }
 
@@ -598,7 +629,6 @@ const STANDALONE_HOOK_CLI_ENTRYPOINTS: ReadonlyArray<{ ts: string; js: string }>
 /** Ship every standalone hook CLI entrypoint into a rendered package tree. Fails CLOSED. */
 function copyStandaloneHookEntrypoints(root: string, dest: string): void {
   for (const e of STANDALONE_HOOK_CLI_ENTRYPOINTS) {
-    copyFileRequired(path.join(root, e.ts), path.join(dest, e.ts), e.ts);
     copyFileRequired(path.join(root, e.js), path.join(dest, e.js), e.js);
   }
 }
@@ -621,6 +651,29 @@ function copyClaudeHooks(root: string, dest: string, inv: GuildInventoryV1, reso
  * product-template cite. Every installable host package carries the full
  * templates/ tree — minting is host-neutral.
  */
+/**
+ * The committed compile graph (KTD7): `runtime/guild-mcp.js`, `runtime/scripts/*.js`,
+ * and `runtime/mcp-descriptions.pins.json`.
+ *
+ * Every manifest this builder writes points MCP startup at
+ * `${CLAUDE_PLUGIN_ROOT}/runtime/guild-mcp.js`, and hooks/bootstrap.sh spawns
+ * `runtime/scripts/*.js` and now FAILS CLOSED when they are absent. A package
+ * without this directory installs a Guild whose MCP servers cannot start and whose
+ * SessionStart refuses — and no checkout-only test would notice, because the repo
+ * always has the files (codex G-lane r1). Any host package that copies
+ * `mcp-servers/` must copy this too.
+ */
+function copyCompiledRuntime(root: string, dest: string): void {
+  const src = path.join(root, "runtime");
+  if (!fs.existsSync(src)) {
+    throw new Error(
+      "build-host-packages: runtime/ is missing — the compile graph is not built. " +
+        "Run `bun run compile` before packaging (KTD7/KTD10).",
+    );
+  }
+  copyDirExcludingNodeModules(src, path.join(dest, "runtime"));
+}
+
 function copyTemplates(root: string, dest: string): void {
   copyDirExcludingNodeModules(path.join(root, "templates"), path.join(dest, "templates"));
 }
@@ -652,7 +705,7 @@ export function writeClaudeTree(
     resources.copyBySourcePath("skills", sp, path.join(dest, sp));
   }
   for (const e of inv.agents) resources.copy("agents", e, path.join(dest, e.source_path));
-  for (const e of inv.scripts) resources.copy("scripts", e, path.join(dest, e.source_path));
+  copyShippedScripts(inv, dest, resources);
   copyClaudeHooks(root, dest, inv, resources);
   if (inv.mcp_servers.length > 0) {
     resources.copy("mcp_servers", inv.mcp_servers[0], path.join(dest, ".mcp.json"));
@@ -661,11 +714,11 @@ export function writeClaudeTree(
   }
   copyFileEnsured(path.join(root, "AGENTS.md"), path.join(dest, "AGENTS.md"));
   copyFileEnsured(path.join(root, "CLAUDE.md"), path.join(dest, "CLAUDE.md"));
-  copyModuleRuntime(root, dest);
   copyScriptRuntime(root, dest);
-  // MCP server runtime referenced by .mcp.json (so the package is self-contained).
-  copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+  // .mcp.json starts runtime/guild-mcp.js; the compiled graph carries it (KTD3).
+  copyCompiledRuntime(root, dest);
   copyTemplates(root, dest);
+  copyModuleRuntime(root, dest);
   writeLauncher(dest, "claude");
   return dest;
 }
@@ -719,9 +772,11 @@ export function checkClaudeInstallSurface(
 }
 
 export function syncClaudeInstallSurface(root: string, inv: GuildInventoryV1, generatedAt: string): void {
-  const check = syncModuleResources({ root, check: true });
-  if (!check.ok) {
-    throw new Error("module resources are stale:\n  " + check.errors.join("\n  "));
+  // Fail closed: never publish install metadata that names a surface file the
+  // projector cannot read (the inventory is stale, or the file was removed).
+  const resources = loadModuleResourceResolver(root);
+  for (const category of OWNED_INVENTORY_CATEGORIES) {
+    for (const entry of inv[category] as InventoryResourceEntry[]) resources.resolve(category, entry);
   }
   const expected = renderClaudeInstallSurface(inv, generatedAt);
   for (const rel of CLAUDE_INSTALL_SURFACE_FILES) {
@@ -753,17 +808,15 @@ export function writeCodexTree(
     resources.copyBySourcePath("skills", sp, path.join(dest, CODEX_NATIVE_SKILL_ROOT, underSkills));
     resources.copyBySourcePath("skills", sp, path.join(dest, AGENTS_SKILL_ROOT, underSkills));
   }
-  // Bundle the guild-run CLI (scripts/) so the Codex launcher is self-contained,
-  // plus the stdio MCP server runtime Codex can bundle.
-  for (const s of inv.scripts) {
-    resources.copy("scripts", s, path.join(dest, s.source_path));
-  }
-  copyModuleRuntime(root, dest);
+  // The guild-run CLI and the MCP binary ship compiled (runtime/), so the Codex
+  // launcher is self-contained without authoring TypeScript.
+  copyShippedScripts(inv, dest, resources);
   copyScriptRuntime(root, dest);
-  copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+  copyCompiledRuntime(root, dest);
   copyTemplates(root, dest);
   copyStandaloneHookEntrypoints(root, dest);
   writeCodexHookBridge(root, dest);
+  copyModuleRuntime(root, dest);
   writeLauncher(dest, "codex");
   return dest;
 }
@@ -774,7 +827,6 @@ export function writeCodexMarketplaceTree(codexDir: string, distRoot: string): s
   rmrf(dest);
   const pluginDest = path.join(dest, "plugins", "guild");
   copyDirExcludingNodeModules(codexDir, pluginDest);
-  copyScriptRuntimeDependencies(path.join(codexDir, "scripts"), path.join(pluginDest, "scripts"));
   writeFileEnsured(
     path.join(dest, ".agents", "plugins", "marketplace.json"),
     stableJson({
@@ -809,14 +861,12 @@ function exposeGuildSkillTree(root: string, inv: GuildInventoryV1, dest: string,
     const underSkills = sp.replace(/^skills\//, "");
     resources.copyBySourcePath("skills", sp, path.join(dest, AGENTS_SKILL_ROOT, underSkills));
   }
-  for (const s of inv.scripts) {
-    resources.copy("scripts", s, path.join(dest, s.source_path));
-  }
-  copyModuleRuntime(root, dest);
+  copyShippedScripts(inv, dest, resources);
   copyScriptRuntime(root, dest);
-  copyDirExcludingNodeModules(path.join(root, "mcp-servers"), path.join(dest, "mcp-servers"));
+  copyCompiledRuntime(root, dest);
   copyTemplates(root, dest);
   copyStandaloneHookEntrypoints(root, dest);
+  copyModuleRuntime(root, dest);
 }
 
 /** Emit the universal `.agents` package: AGENTS.md + skill tree + CLI + launcher. */
@@ -1132,7 +1182,7 @@ export function buildHostPackages(opts: {
   if (claudeInstallSurface && !claudeInstallSurface.ok) {
     reasons.push(
       ...claudeInstallSurface.stale.map(
-        (s) => `Claude install surface stale: ${s.path} (${s.reason})`
+        (s) => `Claude install surface stale: ${s.path} (${s.reason}); run \`npm run sync:claude-install\` in scripts/`
       )
     );
   }
@@ -1140,7 +1190,7 @@ export function buildHostPackages(opts: {
     // SC-2 — Claude full-tree equivalence with the anti-vacuity floor.
     const committed = loadLogicalPackage(opts.root);
     const generated = loadLogicalPackage(claudeDir);
-    const eq = checkClaudeEquivalence(committed, generated, expectedSurfaces(inv));
+    const eq = checkClaudeEquivalence(committed, generated, expectedSurfaces(inv, opts.root));
     if (!eq.ok) reasons.push(...eq.reasons);
 
     // SC-7b / SC-2-per-new-host — subset: every rendered reference exists in the inventory.
@@ -1171,6 +1221,12 @@ export function buildHostPackages(opts: {
       subsets.push(checkSubset(newHostPackageRefs(hostId, inv, (pkg.commands ?? []).map((c) => c.name)), inv));
     }
     for (const s of subsets) if (!s.ok) reasons.push(...s.reasons);
+
+    // KTD28: each family's package is its adapter map's projection — the named
+    // surfaces are present and no src/domains TypeScript was copied.
+    for (const family of adapterLockFamilies()) {
+      reasons.push(...checkPackageAgainstMap(opts.distRoot, family));
+    }
   }
 
   return {
@@ -1237,6 +1293,7 @@ export function parseArgs(argv: string[]): CliArgs | { error: string } {
 }
 
 function main(): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const parsed = parseArgs(process.argv.slice(2));
   if ("error" in parsed) {
     process.stderr.write(
@@ -1271,7 +1328,7 @@ function main(): number {
   try {
     result = buildHostPackages(parsed);
   } catch (err) {
-    process.stderr.write("build:hosts: " + String(err instanceof Error ? err.message : err) + "\n");
+    process.stderr.write("build:hosts: " + String(err instanceof Error ? (err.stack ?? err.message) : err) + "\n");
     return 1;
   }
 

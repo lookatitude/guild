@@ -7,6 +7,7 @@
  * Layer: host/ — imports from core/contracts + shared/.
  */
 
+import { randomUUID } from "node:crypto";
 import type {
   AdapterResolver,
   MockTransportOpts,
@@ -40,6 +41,7 @@ import {
   binaryForHostKind,
 } from "./tmux-backend";
 import type { HostKind } from "../host-types";
+import { assertIsolatedLaneAdmitted, claimIsolatedLaunches } from "../../../src/domains/dispatch";
 
 /**
  * ISSUE #94 (secondary) — the synthetic PreToolUse event the remote probe feeds
@@ -563,6 +565,28 @@ export class RemoteTeamBackend implements TeamBackend {
       };
     }
 
+    // plr-wi-15-4: every remote lane is an admitted TaskCell instance with a
+    // written v2 assignment before any transport is touched.
+    try {
+      for (const p of planned) {
+        assertIsolatedLaneAdmitted({
+          cwd: req.cwd,
+          runId: req.runId,
+          logicalTaskId: p.spec.taskId,
+          instanceId: p.spec.task_cell_instance_id,
+        });
+      }
+    } catch (error) {
+      return {
+        kind: this.kind,
+        ok: false,
+        plannedCommands,
+        orchestratorPaneId: null,
+        teammatePaneIds: {},
+        notes: [error instanceof Error ? error.message : String(error)],
+      };
+    }
+
     // Phase 1 — connect every DISTINCT host first (fail-fast).
     const seen = new Set<string>();
     const distinctTargets = planned
@@ -634,6 +658,27 @@ export class RemoteTeamBackend implements TeamBackend {
             `hooks — Claude panes there launch BARE (permission-mode bypass flag withheld). ${hp.detail}`,
         );
       }
+    }
+
+    // plr-wi-15-4: consume each lane's one launch claim only after connect and
+    // probe, so a transient SSH failure stays retryable, and before any pane.
+    try {
+      claimIsolatedLaunches({
+        cwd: req.cwd,
+        runId: req.runId,
+        launchId: `remote:${req.targetName}:${process.pid}:${randomUUID()}`,
+        lanes: planned.map((p) => ({ logicalTaskId: p.spec.taskId, instanceId: p.spec.task_cell_instance_id })),
+      });
+    } catch (error) {
+      transport.teardown();
+      return {
+        kind: this.kind,
+        ok: false,
+        plannedCommands,
+        orchestratorPaneId: null,
+        teammatePaneIds: {},
+        notes: [error instanceof Error ? error.message : String(error)],
+      };
     }
 
     // Phase 2 — spawn each pane. The task brief needs no separate delivery: the

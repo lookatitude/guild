@@ -56,6 +56,7 @@ import {
 } from "./core/contracts/team-backend";
 import { HOST_IDS, HOST_REGISTRY_ROWS, type HostRegistryEntry } from "./host-registry-schema";
 import { registryIdToCanonicalHostKind } from "./host-id-namespace";
+import { assertLaneInstanceExported } from "../../src/domains/dispatch";
 import { spawnSync } from "child_process";
 import * as nodefs from "fs";
 import * as nodepath from "path";
@@ -232,6 +233,7 @@ export class ClaudePaneAdapter implements PaneAdapter {
   }
 
   command(spec: PaneSpec): string {
+    assertLaneInstanceExported(spec);
     // D-CAP: pass taskId + capability_scope so paneCommand injects the lane
     // identity and its environment-only capability scope.
     // G-9 / C2-D1: pass specialist so lane panes export GUILD_SPECIALIST
@@ -251,10 +253,14 @@ export class ClaudePaneAdapter implements PaneAdapter {
       undefined,
       [],
       spec.model,
+      spec.assignmentPath,
+      // plr-wi-15-4: the admitted instance id rides with the task id.
+      spec.taskCellInstanceId,
     );
   }
 
   env(spec: PaneSpec): Record<string, string> {
+    assertLaneInstanceExported(spec);
     return {
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
       GUILD_RUN_ID: spec.runId,
@@ -264,6 +270,7 @@ export class ClaudePaneAdapter implements PaneAdapter {
       ...(spec.specialist ? { GUILD_SPECIALIST: spec.specialist } : {}),
       // D-CAP: carry lane identity and the environment-only capability scope.
       ...(spec.taskId ? { GUILD_TASK_ID: spec.taskId } : {}),
+      ...taskCellInstanceEnv(spec),
       ...(spec.capability_scope !== undefined
         ? { GUILD_CAPABILITY_SCOPE: JSON.stringify(spec.capability_scope) }
         : {}),
@@ -1017,6 +1024,7 @@ export class CodexPaneAdapter implements PaneAdapter {
   }
 
   command(spec: PaneSpec): string {
+    assertLaneInstanceExported(spec);
     // Self-contained: export the run id, run `codex exec` with the staging
     // prompt, then keep the pane alive so the operator can inspect handoffs.
     // NO CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS — Codex is not on the Claude bus.
@@ -1109,6 +1117,7 @@ export class CodexPaneAdapter implements PaneAdapter {
   }
 
   env(spec: PaneSpec): Record<string, string> {
+    assertLaneInstanceExported(spec);
     return {
       GUILD_RUN_ID: spec.runId,
       // ISSUE #94 — keep env() in step with command(): the PreToolUse bridge
@@ -1176,6 +1185,7 @@ export class AntigravityPaneAdapter implements PaneAdapter {
   }
 
   command(spec: PaneSpec): string {
+    assertLaneInstanceExported(spec);
     const taskFragment = spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
     const specialistFragment = spec.specialist ? `export GUILD_SPECIALIST=${shellQuote(spec.specialist)}; ` : "";
     const scopeFragment = spec.capability_scope !== undefined
@@ -1191,6 +1201,7 @@ export class AntigravityPaneAdapter implements PaneAdapter {
   }
 
   env(spec: PaneSpec): Record<string, string> {
+    assertLaneInstanceExported(spec);
     return {
       GUILD_RUN_ID: spec.runId,
       ...modelEnv(spec),
@@ -1249,6 +1260,7 @@ export class PiPaneAdapter implements PaneAdapter {
   }
 
   command(spec: PaneSpec): string {
+    assertLaneInstanceExported(spec);
     const taskFragment = spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
     const specialistFragment = spec.specialist ? `export GUILD_SPECIALIST=${shellQuote(spec.specialist)}; ` : "";
     const scopeFragment = spec.capability_scope !== undefined
@@ -1264,6 +1276,7 @@ export class PiPaneAdapter implements PaneAdapter {
   }
 
   env(spec: PaneSpec): Record<string, string> {
+    assertLaneInstanceExported(spec);
     return {
       GUILD_RUN_ID: spec.runId,
       ...modelEnv(spec),
@@ -1370,6 +1383,7 @@ export class WrappedCliPaneAdapter implements PaneAdapter {
   }
 
   command(spec: PaneSpec): string {
+    assertLaneInstanceExported(spec);
     const taskFragment = spec.taskId ? `export GUILD_TASK_ID=${shellQuote(spec.taskId)}; ` : "";
     const specialistFragment = spec.specialist ? `export GUILD_SPECIALIST=${shellQuote(spec.specialist)}; ` : "";
     const scopeFragment = spec.capability_scope !== undefined
@@ -1392,6 +1406,7 @@ export class WrappedCliPaneAdapter implements PaneAdapter {
   }
 
   env(spec: PaneSpec): Record<string, string> {
+    assertLaneInstanceExported(spec);
     return {
       GUILD_RUN_ID: spec.runId,
       ...modelEnv(spec),

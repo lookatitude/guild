@@ -56,9 +56,12 @@ set -euo pipefail
 
 SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
 if [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
-  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+  # Physical paths on both sides: an inherited logical $PWD (a symlinked /tmp,
+  # a caller that chdir'd) otherwise disagrees with the resolved script dir and
+  # the "installing from this checkout" branch below prints absolute paths.
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd -P)"
 else
-  SCRIPT_DIR="$(pwd)"
+  SCRIPT_DIR="$(pwd -P)"
 fi
 
 SOURCE_REPO="${GUILD_SOURCE_REPO:-https://github.com/lookatitude/guild.git}"
@@ -537,7 +540,7 @@ render_host_packages_once() {
     fi
     SOURCE_COMMIT="$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || true)"
     ensure_script_runtime_deps "$SCRIPT_DIR"
-    if [ "$SCRIPT_DIR" = "$(pwd)" ]; then
+    if [ "$SCRIPT_DIR" = "$(pwd -P)" ]; then
       run npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at "$generated_at"
       RENDERED_DIST="dist"
     else

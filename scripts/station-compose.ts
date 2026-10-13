@@ -44,17 +44,16 @@ import {
   composeStationTeam,
   isStation,
   STATIONS,
-  type CellFanout,
   type DecompositionSignals,
   type FanoutOverride,
   type StationSignals,
-} from "../src/modules/teams/workflows/station-composer";
-import {
   emptyStationSignalsV1,
   signalsOf,
   validateStationSignalsV1,
   writeTeamPlan,
-} from "../src/modules/teams/workflows/station-signals";
+} from "../src/domains/teams/index";
+import type { CellFanout } from "../src/domains/dispatch/index";
+import { resolvePluginRoot } from "../src/domains/kernel";
 
 function fail(msg: string): never {
   process.stderr.write(`[station-compose] ${msg}\n`);
@@ -159,11 +158,7 @@ function main(): void {
   }
 
   // (2) Tier index — REUSE the roster enumeration (D4); never re-enumerate.
-  const resolvedPluginRoot =
-    pluginRoot ??
-    process.env["GUILD_PLUGIN_ROOT"] ??
-    process.env["CLAUDE_PLUGIN_ROOT"] ??
-    path.resolve(__dirname, "..");
+  const resolvedPluginRoot = pluginRoot ?? resolvePluginRoot(__dirname);
   const resolution = resolveRoster({
     projectRoot: path.resolve(cwd),
     pluginRoot: resolvedPluginRoot,

@@ -28,6 +28,7 @@
  * `npm run build` in hooks/ after any source edit.
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";

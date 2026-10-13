@@ -32,6 +32,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 /**
  * Allowed (clean) final_status values per
@@ -259,5 +260,6 @@ function cliMain(argv: string[]): number {
 }
 
 if (isMainModule()) {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   process.exit(cliMain(process.argv));
 }

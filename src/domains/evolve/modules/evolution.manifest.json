@@ -1,0 +1,43 @@
+{
+  "schema_version": "guild.module_manifest.v1",
+  "id": "evolution",
+  "title": "Self Evolution",
+  "kind": "capability",
+  "implementation_mode": "workflow-backed",
+  "description": "Owns reflection, learning checkpoints, shadow mode, skill evolution, rollback, and run-learning extraction.",
+  "depends_on": [
+    "initiatives",
+    "kernel",
+    "knowledge",
+    "security",
+    "state"
+  ],
+  "owns": {
+    "commands": [
+      "evolve",
+      "maintain",
+      "rollback"
+    ],
+    "skills": [
+      "guild-evolve",
+      "guild-reflect"
+    ],
+    "hooks": [
+      "Stop:learning-backstop.js",
+      "Stop:maybe-reflect.js",
+      "SubagentStop:maybe-reflect.js"
+    ],
+    "scripts": [
+      "analyze-runs",
+      "evolve-loop",
+      "feedback-triage",
+      "lib/learning-candidate",
+      "lib/learning-signatures",
+      "lib/reaping",
+      "lib/run-learning-classifier",
+      "rollback-walker",
+      "shadow-mode",
+      "stamp-recall-importance"
+    ]
+  }
+}

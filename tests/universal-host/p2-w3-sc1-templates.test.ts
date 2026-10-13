@@ -15,6 +15,7 @@
  *      spy fires on a real forbidden write; plus the producer's own runtime-tree write guard.
  */
 
+import { describe, it, expect, spyOn } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -68,8 +69,7 @@ function spyWrites(): { paths: string[]; restore: () => void } {
   const spies = FS_WRITE_MUTATORS.map((name) => {
     const orig = (fs as unknown as Record<string, unknown>)[name];
     if (typeof orig !== "function") return null;
-    return jest
-      .spyOn(fs as unknown as Record<string, (...a: unknown[]) => unknown>, name as never)
+    return spyOn(fs as unknown as Record<string, (...a: unknown[]) => unknown>, name as never)
       .mockImplementation(((...args: unknown[]) => {
         paths.push(String(args[0]));
         return undefined as never;

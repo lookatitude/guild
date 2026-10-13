@@ -22,6 +22,7 @@
  * reconcile against this reference (asserted live when L9 + config-init-baseline land).
  */
 
+import { describe, it, expect } from "bun:test";
 import {
   reconcile,
   mayReconcileWrite,

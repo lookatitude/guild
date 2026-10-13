@@ -51,6 +51,7 @@ import { spawnSync } from "child_process";
 import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { hostCapabilityCacheDir, hostCapabilityCacheFile } from "../src/domains/state";
 // RE-4: the tmux spawn logic now lives behind the TeamBackend seam. The
 // launcher is the CLI front-end (arg parse + D5 ladder + collision UX +
 // manifest + attach) and delegates compose/probe/spawn to TmuxTeamBackend.
@@ -77,7 +78,7 @@ import {
   expandTaskCellLaunchLanes,
   type TaskCellLaunchLane,
 } from "./lib/task-cell-launch-plan";
-import { writeTeamResult } from "../src/modules/teams/workflows/station-signals";
+import { writeTeamResult } from "../src/domains/teams";
 import type { TaskCellSubstrate } from "./lib/core/contracts/task-cell-backend";
 import { validateProjectDefinitionRefV1 } from "./lib/core/contracts/project-definition-ref";
 import {
@@ -103,8 +104,8 @@ import {
   readRunBindingRecord,
   stagePendingSubstantiveOperation,
   withRunBindingExclusion,
-} from "../src/modules/lifecycle/workflows/run-binding";
-import type { CapabilityResolverMode } from "../src/modules/config";
+} from "../src/domains/lifecycle/index";
+import type { CapabilityResolverMode } from "../src/domains/config";
 // P1-3 A2b: force-reap of dead panes. (Receipt-based `detectDismissible` is
 // retired from the dismiss path — dismissal is acceptance-gated in G4, below.)
 import {
@@ -131,9 +132,9 @@ import {
   markAttemptOrphaned,
   type RunAcceptance,
   type TaskCellInstanceIds,
-} from "../src/modules/dispatch/workflows/task-cell-acceptance";
+} from "../src/domains/dispatch/index";
 
-import { reconcileTaskCellLifecycleTelemetry } from "../src/modules/dispatch/workflows/task-cell-telemetry-reconcile";
+import { reconcileTaskCellLifecycleTelemetry } from "../src/domains/dispatch/index";
 // CH-1/CH-2: mixed-host pane adapters (claude + codex) for a mixed `host:` team.
 import { resolveAdapter } from "./lib/pane-adapter";
 // CH-1: route each specialist to its backend (local tmux vs remote) via the
@@ -152,8 +153,8 @@ import { resolveSettings, isPlainObject } from "./lib/settings-resolver";
 import {
   loadRunBinding,
   readHookBindingEnvelope,
-} from "../src/modules/lifecycle/workflows/run-binding";
-import { assertCanonicalRunId } from "../src/modules/lifecycle/workflows/run-lifecycle";
+} from "../src/domains/lifecycle/index";
+import { assertCanonicalRunId } from "../src/domains/lifecycle/index";
 // MH-04: the substrate DECISION lives behind the versioned execution port
 // (`guild.execution.transports.v1`), never in this launcher. The launcher reads
 // host FACTS through the capability probe below and reports what the port decided.
@@ -169,11 +170,11 @@ import {
   type ExecutionTransportPort,
   type HostExecutionRuntime,
   type TeamDispatchPort,
-} from "../src/modules/dispatch/workflows/execution-transport-ports";
+} from "../src/domains/dispatch/index";
 import {
   TeamDispatchExecutionTransport,
   createHostExecutionRuntime,
-} from "../src/modules/dispatch/workflows/execution-transport-adapters";
+} from "../src/domains/dispatch/index";
 // task-cell-runtime G3: the authoritative `guild.task_assignment.v2` channel
 // (per-attempt, one immutable file per task a specialist owns; no representative-
 // first-task collapse). Replaces v1 as the PRODUCTION write; v1 is retained above
@@ -183,19 +184,28 @@ import {
   planProductionDispatchModel,
   writeTaskCell,
   type ProductionDispatchModelOutcome,
-} from "../src/modules/dispatch/workflows/task-assignment-v2";
-import { createPreviewConfirmationSession } from "../src/modules/dispatch/workflows/confirmation-gate";
+} from "../src/domains/dispatch/index";
+import { createPreviewConfirmationSession } from "../src/domains/dispatch/index";
 // T8R F3: the PRODUCTION writer for M0 inspection evidence. `persistInspectionReport`
 // previously had no production caller at all — `guild models inspect` is read-only by
 // contract — so the M2 gate's evidence dir was always empty in a real run and the
 // derived resolver inputs were always null. Recording happens HERE, once per run on the
 // real dispatch path, and is inert at the ADR defaults (v2 flags off ⇒ no write).
-import { recordRunInspectionEvidence } from "../src/modules/capability/workflows/inspection-record";
-import { readRoutingFlags } from "../src/modules/capability/workflows/routing-rollout";
+import { recordRunInspectionEvidence } from "../src/domains/config/index";
+import { readRoutingFlags } from "../src/domains/config/index";
 // T6 rework F5: the legacy tier→model label for the shadow comparison comes
 // from the SAME unpack point the legacy path uses (models.tiers), never a
 // parallel implementation.
-import { resolveTierModel } from "../src/modules/config/workflows/tier-model";
+import { resolveTierModel } from "../src/domains/config/index";
+import { detectSession, isUnknownHost, readSessionBinding } from "../src/domains/config/index";
+import { createGuildStorage } from "./lib/state/storage";
+import { resolvePolicy } from "../src/domains/config/index";
+import { resolveAssignmentBinding } from "../src/domains/dispatch/index";
+import {
+  reserveInstanceBatch,
+  reserveRefused,
+  resolveMaxInstances,
+} from "../src/domains/dispatch/index";
 // R-016a: bounded retry for the ONE TS-level dispatch call site (RemoteTeamBackend.launch).
 import { runWithRetry, loadRetryOpts } from "./retry-lane";
 // R-016 bridge: on retry exhaustion, mark each remote lane dead via the shared writer.
@@ -216,12 +226,16 @@ import { slugFromTeamPath, phaseFromTeamPath, readActivePhase, resolveDeadLaneKe
 import {
   assertDispatchApproved,
   resolveApprovalOverride,
-} from "../src/modules/teams/workflows/dispatch-approval";
+} from "../src/domains/teams/index";
 // TE-01 CONSOLIDATED (cluster-a-rev2-CONSOLIDATED.md): launcher owns EDIT-3 (tmux/remote);
 // execute-plan SKILL owns EDIT-4 (subagent/in-process) — mutually exclusive, no double-write.
 import { writeTaskRun, readTaskRunCapReqs } from "./write-task-run";
 import { emitReadbackDegradation } from "./lib/emit-readback-degradation"; // W2-A2(d)
-import { captureHostCapabilitySnapshot } from "../src/modules/host-runtime";
+import { captureHostCapabilitySnapshot, familyForHostId, rungKeyForSession, rungPlanForFamily } from "../src/adapters";
+import { recordRungLosses, rungLossesAsRecordedLosses } from "../src/domains/dispatch";
+import { resolvePluginRoot } from "../src/domains/kernel";
+import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 export interface TerminalSubstantiveReconciliation {
   readonly attempted: number;
@@ -917,7 +931,7 @@ function buildManifest(opts: {
 
 function writeManifest(cwd: string, manifest: Manifest): string {
   const runId = manifest.run_id;
-  const dir = path.join(cwd, ".guild", "runs", runId, "agent-team");
+  const dir = path.join(durableGuildDir(cwd), "runs", runId, "agent-team");
   fs.mkdirSync(dir, { recursive: true });
   const out = path.join(dir, "session.json");
   fs.writeFileSync(out, JSON.stringify(manifest, null, 2) + "\n", "utf8");
@@ -967,7 +981,7 @@ function makeLaneModelPlanner(
   let rawSettings: unknown;
   try {
     rawSettings = JSON.parse(
-      fs.readFileSync(path.join(cwd, ".guild", "settings.json"), "utf8"),
+      fs.readFileSync(path.join(durableGuildDir(cwd), "settings.json"), "utf8"),
     );
   } catch {
     rawSettings = undefined;
@@ -1177,8 +1191,7 @@ function specialistIdentity(
   const refProfileHash = ref?.specialist_profile_hash ?? null;
   const refIsComplete = refTypeHash !== null && refProfileHash !== null;
 
-  const runtimeRoot = process.env["GUILD_PLUGIN_ROOT"] ??
-    process.env["CLAUDE_PLUGIN_ROOT"] ?? path.resolve(__dirname, "..");
+  const runtimeRoot = resolvePluginRoot(__dirname);
 
   // PCL-FU-20: the shipped-template compatibility read is LOAD-BEARING and must
   // run BEFORE the complete-ref shortcut. Pre-fix, a lane whose committed
@@ -1308,7 +1321,7 @@ function contextBundleHash(cwd: string, relativePath: string, dryRun: boolean): 
 }
 
 function hostCapabilitiesHash(cwd: string, runId: string, hostId: string, dryRun: boolean): string {
-  const manifest = readRegularFile(path.join(cwd, ".guild", "hosts", hostId, "capability.json"));
+  const manifest = readRegularFile(hostCapabilityCacheFile(cwd, hostId));
   if (manifest) return sha256Prefixed(manifest);
   const captured = captureHostCapabilitySnapshot({ host: hostId, runId });
   if (captured.disposition === "succeeded" && captured.snapshot) {
@@ -1318,14 +1331,33 @@ function hostCapabilitiesHash(cwd: string, runId: string, hostId: string, dryRun
   throw new Error(`no capability manifest or registry snapshot for selected host: ${hostId}`);
 }
 
-function emitTaskCellsV2(
+/**
+ * Resolved policy for the cap, or null when policy cannot be read.
+ *
+ * A null resolves to the BUILT-IN default (4), never to unbounded: a project
+ * whose config file is missing or malformed gets the conservative cap, not a
+ * free pass.
+ */
+function readPolicyForRun(cwd: string): Record<string, unknown> | null {
+  try {
+    return resolvePolicy({ cwd }).policy;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Exported so a fixture can drive the EXACT function every launcher path calls
+ * before it spawns anything — the binding block and the run-scoped admission
+ * below are only meaningful if they are proven on this code, not on a copy.
+ */
+export function emitTaskCellsV2(
   cwd: string,
   runId: string,
   slug: string,
   specialists: readonly TaskCellLaunchLane[],
   phaseId: string,
   substrate: TaskCellSubstrate,
-  hostIdFor: (specialist: TaskCellLaunchLane) => string,
   bindingRef: string | null,
   dryRun: boolean,
 ): number {
@@ -1343,12 +1375,96 @@ function emitTaskCellsV2(
   // next real launch. Pre-fix, this flag only relaxed hash computation while
   // the writes below still ran unconditionally.
   if (dryRun) return 0;
+  // KTD22: the run's session binding is AUTHORITATIVE for assignment host and
+  // model ids when it exists. Host detection and config are not: an initiative
+  // that continues on another host must not inherit yesterday's provider.
+  const runDir = createGuildStorage(cwd, { activeRoot: cwd, profile: "standalone" }).project!.runRecord(runId);
+  // NO FALLBACK. Round 1 fell back to host detection when the run carried no
+  // binding, which is the "unknown host quietly becomes Claude" path KTD22
+  // exists to close — the absence of a binding is exactly the case where nobody
+  // established which host this run is on.
+  const sessionBinding = readSessionBinding(runDir);
+  if (sessionBinding === null) {
+    throw new Error(
+      `binding_blocked: run ${runId} carries no guild.session_binding.v1 — ` +
+        `refusing to emit guild.task_assignment.v2 cells. Assignment host and ` +
+        `model ids are copied from the run binding; bind the run first (KTD22).`,
+    );
+  }
+  // KTD28: the bound host family's rung plan decides whether an isolated worker
+  // may exist at all. Every lost rung is recorded before anything else happens;
+  // a family that cannot spawn or cannot project tools refuses here, so no pane
+  // or process is ever launched with isolation it does not have.
+  // The run may resume on another surface of the same family: the stricter plan wins.
+  // CODEX_HOME alone is a config location this launcher also exports for codex lanes,
+  // so it never names the session; every other host signal still does.
+  const here = detectSession({ ...process.env, CODEX_HOME: undefined });
+  const sameFamily = (familyForHostId(here.host_family) ?? here.host_family) === (familyForHostId(sessionBinding.host_family) ?? sessionBinding.host_family);
+  const rungPlan = [sessionBinding, ...(sameFamily ? [here] : [])]
+    .map((s) => rungPlanForFamily(rungKeyForSession(s), { verify_check_available: false }))
+    .reduce((a, b) => (b.losses.length > a.losses.length ? b : a));
+  const lossesWritten = recordRungLosses({ runDir, run_id: runId, plan: rungPlan });
+  // A loss that did not reach the log is not recorded, whatever the plan says.
+  if (lossesWritten !== rungPlan.losses.length) {
+    throw new Error(
+      `isolated_spawn_refused: recorded: false — ${rungPlan.losses.length - lossesWritten} of ` +
+        `${rungPlan.losses.length} rung losses for host family ${sessionBinding.host_family} could not be ` +
+        `written to the run's event log; no isolated worker runs on unrecorded losses (KTD28).`,
+    );
+  }
+  // An unknown host has no row at all; it is refused below with the more specific
+  // binding_blocked reason (KTD22), so this refusal covers the known families.
+  if (rungPlan.spawn === "lead_only" && rungPlan.family !== null) {
+    throw new Error(
+      `isolated_spawn_refused: host family ${sessionBinding.host_family} has no verified ` +
+        `${rungPlan.losses.filter((l) => l.rung === "spawn" || l.rung === "tool_projection").map((l) => l.rung).join(" + ")} rung — ` +
+        `run the lanes lead_only in the parent session (KTD28). recorded: true — the loss is on the run's event log.`,
+    );
+  }
+  // SessionStart only notes a refused rebind; dispatch is where it must hold.
+  // A known host other than the bound one never dispatches under the old binding.
+  if (!isUnknownHost(here) && !sameFamily) {
+    throw new Error(
+      `binding_blocked: run ${runId} is bound to host family ${sessionBinding.host_family}; ` +
+        `this session is ${here.host_family}. Continue as a new run on this host: guild resume --new-run`,
+    );
+  }
+  const rungLosses = rungLossesAsRecordedLosses(rungPlan);
+  // R46: THE admission entry, the same one `spawnInstance` uses. Each lane's slot
+  // is CLAIMED here — the claim is the lane's own `attempt.json`, which the cell
+  // records below complete — so two interleaved launcher passes over one run
+  // cannot both be admitted. Round 3 found this path still calling an
+  // observe-only check while the claim existed only on the runtime.
+  const admission = reserveInstanceBatch({
+    cwd,
+    run_id: runId,
+    max: resolveMaxInstances(readPolicyForRun(cwd)),
+    lanes: specialists.map((s) => ({ logical_task_id: s.taskId, attempt: 1 })),
+  });
+  if (reserveRefused(admission)) {
+    throw new Error(`${admission.failure}: ${admission.reason}`);
+  }
+  const claimed = admission.reservations;
+  /** Hand every still-unconsumed claim back; a failed emit leaves no slot held. */
+  const releaseClaims = (): void => {
+    for (const claim of claimed) claim.release();
+  };
   let written = 0;
   // Resolved decision 2: the launcher reuses the parent orchestrator as lead, so
   // every cell carries a `lead_binding_id` (no distinct Team Lead instance minted).
   const leadBindingId = `lead-binding-${safeSegment(slug)}`;
+  try {
   for (const s of specialists) {
-    const hostId = hostIdFor(s);
+    const tier = s.tier ?? s.default_tier ?? "mid";
+    const bound = resolveAssignmentBinding({ runDir, tier });
+    if (!bound.ok) {
+      throw new Error(
+        `binding_blocked: refusing to emit guild.task_assignment.v2 for ` +
+          `${s.name}/${s.taskId} — ${(bound as { reason: string }).reason}`,
+      );
+    }
+    const hostId = bound.host_id;
+    const boundModelId = bound.model_id;
     const logicalTaskId = s.taskId;
     const identity = specialistIdentity(cwd, runId, bindingRef, logicalTaskId, s);
     const compatibilityRecordedAtMillis = identity.compatibilityRecordedAt === null
@@ -1389,8 +1505,10 @@ function emitTaskCellsV2(
         adapterId: `${hostId}@${ADAPTER_VERSION}`,
         hostCapabilitiesHash: hostCapabilitiesHash(cwd, runId, hostId, dryRun),
         substrate,
-        modelTier: s.tier ?? s.default_tier ?? "mid",
-        modelId: s.modelProvenance?.selected_model ?? null,
+        modelTier: tier,
+        // The binding's id wins when the run is bound; lane provenance is the
+        // pre-binding fallback, never an override of the run's own snapshot.
+        modelId: boundModelId ?? s.modelProvenance?.selected_model ?? null,
         // objective must be non-empty (D6 fail-closed); fall back for a degenerate
         // team file rather than dropping the lane silently.
         objective: s.scope && s.scope.length > 0 ? s.scope : `implement ${logicalTaskId}`,
@@ -1402,7 +1520,7 @@ function emitTaskCellsV2(
           logical_task_id: d,
           accepted_artifact_ref: null,
         })),
-        projection: { tools, permissions: [], recorded_losses: [] },
+        projection: { tools, permissions: [], recorded_losses: [...rungLosses] },
         autonomyPolicy: "supervised",
         budgets: { tokens: null, wall_clock_ms: null, cost_usd: null },
         deadline: null,
@@ -1411,6 +1529,13 @@ function emitTaskCellsV2(
     });
     writeTaskCell(cwd, cell, { binding_ref: bindingRef });
     written += 1;
+  }
+  } catch (error) {
+    // A refused or malformed lane aborts the whole emit, so no claim may survive
+    // it. Release is placeholder-only: lanes whose real attempt record already
+    // landed keep their slot, exactly as a live attempt should.
+    releaseClaims();
+    throw error;
   }
   return written;
 }
@@ -1529,7 +1654,7 @@ function resolveLifecycleRunId(cwd: string, callerRunId: string | null): string 
   let candidate = callerRunId;
   if (!candidate) {
     source = ".guild/runs/current-run-id";
-    const sentinel = path.join(cwd, ".guild", "runs", "current-run-id");
+    const sentinel = path.join(durableGuildDir(cwd), "runs", "current-run-id");
     try {
       candidate = fs.readFileSync(sentinel, "utf8").trim();
     } catch {
@@ -1553,7 +1678,7 @@ function resolveLifecycleRunId(cwd: string, callerRunId: string | null): string 
 // reads. Absent dir / unreadable files ⇒ empty list (single-host behavior).
 
 function loadHostManifests(cwd: string): RoutableHost[] {
-  const dir = path.join(cwd, ".guild", "hosts");
+  const dir = hostCapabilityCacheDir(cwd);
   let ids: string[];
   try {
     ids = fs.readdirSync(dir);
@@ -1853,7 +1978,7 @@ function readFrozenDispatchResolution(
   runId: string | null
 ): FrozenDispatchResolution | null {
   if (runId === null || runId.length === 0) return null;
-  const snapshotPath = path.join(cwd, ".guild", "runs", runId, "resolved-settings.json");
+  const snapshotPath = path.join(durableGuildDir(cwd), "runs", runId, "resolved-settings.json");
   if (!fs.existsSync(snapshotPath)) return null;
   let parsed: unknown;
   try {
@@ -1963,6 +2088,7 @@ function resolveAgentMode(
 // ── Main ───────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const args = parseArgs(process.argv.slice(2));
 
   // FU08: maintenance modes are side-effecting launch-surface operations too.
@@ -2018,7 +2144,7 @@ async function main(): Promise<void> {
     if (runIds.length === 0) {
       process.stdout.write(
         "[agent-team-launcher] --reap: no runs with session.json found " +
-          `under ${path.join(cwd, ".guild", "runs")}\n`
+          `under ${path.join(durableGuildDir(cwd), "runs")}\n`
       );
       process.exit(0);
     }
@@ -2184,7 +2310,7 @@ async function main(): Promise<void> {
       process.exit(0);
     }
     const runId = args.runId;
-    const runDir = path.join(cwd, ".guild", "runs", runId);
+    const runDir = path.join(durableGuildDir(cwd), "runs", runId);
     const sjPath = sessionJsonPath(cwd, runId);
 
     if (!fs.existsSync(sjPath)) {
@@ -2761,9 +2887,6 @@ async function main(): Promise<void> {
         lanes,
         phaseId,
         "cmux",
-        (lane) =>
-          hostKindToRegistryId(lane.host_kind ?? orchestratorHostKind) ||
-          String(lane.host_kind ?? orchestratorHostKind),
         bindingRef,
         args.dryRun,
       );
@@ -2893,7 +3016,9 @@ async function main(): Promise<void> {
       for (const lane of launchLanes) planLaneModel(lane, lane.taskId);
       if (!args.dryRun) {
         const phaseId = phaseFromTeamPath(args.team) ?? "build";
-        const hostId = hostKindToRegistryId(orchestratorHostKind ?? "claude") || String(orchestratorHostKind ?? "claude");
+        // The host id is NOT derived here any more: it is copied from the run's
+        // guild.session_binding.v1 inside emitTaskCellsV2 (KTD22), so the
+        // `?? "claude"` default that used to live on this line is gone.
         const written = emitTaskCellsV2(
           cwd,
           runId,
@@ -2901,7 +3026,6 @@ async function main(): Promise<void> {
           launchLanes,
           phaseId,
           "in-process",
-          () => hostId,
           bindingRef,
           args.dryRun,
         );
@@ -3190,7 +3314,7 @@ async function main(): Promise<void> {
       if (!args.dryRun) {
         for (const [taskId, sel] of v2ModelByTask) {
           upsertLane(
-            path.join(cwd, ".guild", "runs", runId),
+            path.join(durableGuildDir(cwd), "runs", runId),
             { runId, planSlug: slug, programId: null },
             taskId,
             {
@@ -3316,7 +3440,7 @@ async function main(): Promise<void> {
                   : d.modelParams,
               };
               upsertLane(
-                path.join(cwd, ".guild", "runs", runId),
+                path.join(durableGuildDir(cwd), "runs", runId),
                 { runId, planSlug: slug, programId: null },
                 taskId,
                 { host: hostBlock }
@@ -3384,11 +3508,6 @@ async function main(): Promise<void> {
             remoteLaunchLanes,
             phaseId,
             "remote",
-            (lane) => {
-              const route = routes.find((candidate) => candidate.specialist === lane.name);
-              if (!route) throw new Error(`missing selected remote host for ${lane.name}`);
-              return route.decision.host;
-            },
             launchBindingRef,
             args.dryRun || args.runId === null,
           );
@@ -3454,7 +3573,7 @@ async function main(): Promise<void> {
           // On exhaustion, onExhausted marks every remote lane dead via the shared
           // markLaneDead writer (same checkpoint the prose path writes via mark-lane-dead.ts).
           const retryOpts = loadRetryOpts(cwd);
-          const runDir = path.join(cwd, ".guild", "runs", runId);
+          const runDir = path.join(durableGuildDir(cwd), "runs", runId);
           const init: RunStateInit = { runId, planSlug: slug, programId: null };
 
           let remoteResult;
@@ -3797,10 +3916,6 @@ async function main(): Promise<void> {
       team.specialists as TaskCellLaunchLane[],
       phaseId,
       "tmux",
-      (lane) =>
-        routedHostByRole.get(lane.name) ??
-        hostKindToRegistryId(lane.host_kind ?? orchestratorHostKind) ??
-        String(lane.host_kind ?? orchestratorHostKind),
       launchBindingRef,
       args.dryRun || args.runId === null,
     );
@@ -4003,7 +4118,12 @@ async function main(): Promise<void> {
   process.exit(attach.status ?? 0);
 }
 
-if (require.main === module) {
+// Gate on the exact argv basename: esbuild inlines this module into other
+// bundles, where `require.main === module` is true for every inlined module.
+if (
+  require.main === module &&
+  /^agent-team-launcher\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")
+) {
   main().catch((err) => {
     process.stderr.write(`[agent-team-launcher] FATAL: ${(err as Error).message}\n`);
     process.exit(1);

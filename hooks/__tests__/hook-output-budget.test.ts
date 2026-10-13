@@ -11,6 +11,7 @@
  * cannot pass merely because its command discovery or byte accounting is dead.
  */
 
+import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -305,7 +306,8 @@ describe("hook-output-hygiene W3 — every registered real hook has an enforced 
       },
     });
     expect(result.status).toBe(0);
-    expect(fs.existsSync(path.join(cwd, ".guild", "hosts"))).toBe(true);
+    // T06 (U-CFG): host capability lives on the platform cache, never under .guild.
+    expect(fs.existsSync(path.join(cwd, ".guild", "hosts"))).toBe(false);
     expect(result.stdout).toContain("SELF-BUILD DETECTED");
     expect(result.stdout).toContain("docs-hygiene status: no scan on record");
     expect(

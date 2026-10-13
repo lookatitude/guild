@@ -37,6 +37,8 @@ import {
   RECEIPT_BASENAME,
   RECEIPT_SCHEMA,
 } from "../scripts/lib/update-check";
+import { durableGuildDir } from "../src/domains/state";
+import { ensureStorageLayout } from "../scripts/lib/state/ensure-storage-layout";
 
 function readUpdateConfig(cwd: string): { mode: UpdateMode; cadenceHours: number } {
   const defaults = { mode: "notify" as UpdateMode, cadenceHours: 24 };
@@ -44,7 +46,7 @@ function readUpdateConfig(cwd: string): { mode: UpdateMode; cadenceHours: number
     // The REAL config source of truth (AC-6): workspace + local + project
     // layering with deep merge — never a raw single-file read (codex G-lane
     // MAJOR: a workspace-level `defaults.update.mode: off` must be honored).
-    const { resolveSettings } = require("../src/modules/config/workflows/settings-resolver") as {
+    const { resolveSettings } = require("../src/domains/config") as {
       resolveSettings: (o: { cwd: string }) => { config: Record<string, unknown> };
     };
     const parsed = resolveSettings({ cwd }).config as {
@@ -66,7 +68,7 @@ function readUpdateConfig(cwd: string): { mode: UpdateMode; cadenceHours: number
 }
 
 function stagedMarkerPath(): string {
-  return path.join(os.homedir(), ".guild", "update-staged.json");
+  return path.join(durableGuildDir(os.homedir()), "update-staged.json");
 }
 
 /** true when an auto-update for this exact target was already staged. */
@@ -116,6 +118,12 @@ function main(): void {
   const pluginRoot =
     process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"];
   if (!pluginRoot) return;
+  // KTD23: detect only; a future project layout is not read or written here.
+  try {
+    ensureStorageLayout(process.cwd(), { detectOnly: true });
+  } catch {
+    return;
+  }
 
   const { mode, cadenceHours } = readUpdateConfig(process.cwd());
   if (mode === "off") return;
@@ -161,7 +169,9 @@ function main(): void {
   //     supply channel + commit without requiring `.git` in the package cache;
   //   - when no host identity exists, a canonical `-beta.N` version is
   //     ambiguous because short-path main and next can carry identical bytes;
-  //     do not mint a permanent channel-bearing receipt from that guess.
+  //     do not mint a permanent channel-bearing receipt from that guess unless
+  //     the launcher declares GUILD_ACTIVATION_CHANNEL=beta (the conformance
+  //     capture does, from the attested release identity).
   //   - NEVER written to ~/.guild/receipts. The machine registry is the
   //     installer's ledger: a minted machine receipt would make
   //     `install.sh --update` re-render and RE-REGISTER the marketplace,
@@ -171,10 +181,11 @@ function main(): void {
   // Fail-open: an unwritable package root (or an existing receipt) skips.
   const versionDerivedBeta =
     state.version !== null && /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version);
-  if (state.source === "default" && state.version && !versionDerivedBeta) {
+  const launcherDeclaredBeta = versionDerivedBeta && process.env["GUILD_ACTIVATION_CHANNEL"] === "beta";
+  if (state.source === "default" && state.version && (!versionDerivedBeta || launcherDeclaredBeta)) {
     try {
       const receiptPath = path.join(pluginRoot, RECEIPT_BASENAME);
-      const receiptChannel = state.channel;
+      const receiptChannel = launcherDeclaredBeta ? "beta" : state.channel;
       const descriptor = fs.openSync(
         receiptPath,
         fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW,
@@ -194,13 +205,14 @@ function main(): void {
               version: state.version,
               installed_at: new Date().toISOString(),
               minted_by: "update-check-session-start",
-              // Honesty marker: only an unambiguous stable/main DEFAULT reaches
-              // this branch. Candidate-shaped packages without host identity
-              // deliberately mint nothing. Nothing may clone from this
-              // assumption: codex-cli's capability row is reinstall_command
-              // (never self_update), so the receipt is identification-only.
+              // Honesty marker: only an unambiguous stable/main DEFAULT or a
+              // launcher-declared beta reaches this branch. Other
+              // candidate-shaped packages without host identity mint nothing.
+              // Nothing may clone from this receipt: codex-cli's capability
+              // row is reinstall_command (never self_update), so the receipt
+              // is identification-only.
               managed_by: "host-native",
-              channel_confidence: "assumed-default",
+              channel_confidence: launcherDeclaredBeta ? "launcher-declared" : "assumed-default",
             },
             null,
             2

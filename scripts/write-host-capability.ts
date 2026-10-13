@@ -29,33 +29,34 @@
  *   npx tsx scripts/write-host-capability.ts --cwd <root> \
  *       [--host claude|codex] [--host-id <id>] [--source <label>]
  *
- * Writes:  <cwd>/.guild/hosts/<host-id>/capability.json (atomic temp→rename).
+ * Writes:  <platform cache>/roots/<root-id>/hosts/<host-id>/capability.json (atomic temp→rename).
  * Stdout:  path to the written manifest.
  * Stderr:  diagnostics.
  * Exit:    0 success · 1 bad input (--cwd invalid) · 2 internal error.
  *
- * Invariant: never writes to .guild/wiki/. Writes only under .guild/hosts/.
+ * Invariant: never writes under .guild/ at all — the manifest is machine cache.
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import { probeTmuxAvailable } from "./lib/team-backend";
-import { atomicWrite } from "../src/modules/state";
+import { atomicWrite, hostCapabilityCacheDir, hostCapabilityCacheFile } from "../src/domains/state";
 // G-11 (SC-6): models.tiers values are a union (string | {model,effort?,verbosity?} | null);
 // resolveTierModel is the ONLY place the union is unpacked. It also tolerates the
 // legacy flat form (tiers.cheap = "model-name") this writer historically accepted.
-import { resolveTierModel } from "../src/modules/config/workflows/tier-model";
+import { resolveTierModel } from "../src/domains/config";
 
 // ── Schema (guild.host_capability.v1) ────────────────────────────────────────
 
 import type {
   HostCapabilityManifest,
   HostKind,
-} from "../src/modules/host-runtime/workflows/host-capability-manifest";
+} from "../src/domains/config";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 export type {
   HostCapabilityManifest,
   HostKind,
-} from "../src/modules/host-runtime/workflows/host-capability-manifest";
+} from "../src/domains/config";
 // W4 D1: registry-bridge predicates replace `=== "claude"` literals in this file.
 // Both sites gate on a CLI-NATIVE capability (in-process independent agents, native PreToolUse
 // ask) that the claude desktop/web/app variants do NOT share — so they use the EXACT isClaudeCli,
@@ -63,6 +64,7 @@ export type {
 import { isClaudeCli } from "./lib/capability/rank";
 // W4 D2: runtime tier defaults from the registry (kills DEFAULT_TIER_MODELS hand-typed literal).
 import { defaultTierModels } from "./lib/capability/tier-defaults";
+import { durableGuildDir } from "./lib/state/storage";
 
 // Built-in tier ladder — W4 D2: runtime-from-registry via defaultTierModels().
 // No hand-typed literals; reads from HOST_REGISTRY_ROWS["claude-code-cli"].capabilities.models.
@@ -130,7 +132,7 @@ function readSettingsModels(cwd: string): {
   list?: string[];
 } {
   try {
-    const raw = fs.readFileSync(path.join(cwd, ".guild", "settings.json"), "utf8");
+    const raw = fs.readFileSync(path.join(durableGuildDir(cwd), "settings.json"), "utf8");
     const parsed = JSON.parse(raw) as { models?: { tiers?: unknown; list?: unknown } };
     const models = parsed.models ?? {};
     const out: { tiers?: unknown; list?: string[] } = {};
@@ -202,9 +204,10 @@ export function buildCapability(opts: BuildCapabilityOpts): HostCapabilityManife
 
 export function writeHostCapability(opts: BuildCapabilityOpts): string {
   const manifest = buildCapability(opts);
-  const hostDir = path.join(opts.cwd, ".guild", "hosts", manifest.host_id);
-  fs.mkdirSync(hostDir, { recursive: true });
-  const manifestPath = path.join(hostDir, "capability.json");
+  // Platform CACHE, not `.guild/` (KTD15/KTD22): a capability manifest describes
+  // this machine's host, so it must not travel with the repo.
+  const manifestPath = hostCapabilityCacheFile(opts.cwd, manifest.host_id);
+  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
   // Atomic write: same-directory temp file → rename (never a partial
   // capability.json; never os.tmpdir(), which can throw EXDEV on rename).
   atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
@@ -235,6 +238,7 @@ function parseArgs(argv: string[]): {
 function main(): void {
   const parsed = parseArgs(process.argv.slice(2));
   const cwd = parsed.cwd ?? process.env["GUILD_CWD"] ?? process.cwd();
+  ensureStorageLayout(cwd, { detectOnly: true });
 
   if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
     process.stderr.write(

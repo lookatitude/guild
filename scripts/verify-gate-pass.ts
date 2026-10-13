@@ -49,14 +49,9 @@
 
 import * as fs from "node:fs";
 import { createHash } from "node:crypto";
-import {
-  parseReviewResult,
-  type ReviewResultMinimal,
-} from "../src/modules/distribution/workflows/review-result";
-export {
-  parseReviewResult,
-  type ReviewResultMinimal,
-} from "../src/modules/distribution/workflows/review-result";
+import { parseReviewResult, type ReviewResultMinimal } from "../src/domains/distribution";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
+export { parseReviewResult, type ReviewResultMinimal } from "../src/domains/distribution";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -229,6 +224,7 @@ export function parseVerifyGatePassArgs(
 // ── CLI entry ────────────────────────────────────────────────────────────────
 
 function main(): number {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const parsed = parseVerifyGatePassArgs(process.argv.slice(2));
   if ("error" in parsed) {
     process.stderr.write(parsed.error + "\n");

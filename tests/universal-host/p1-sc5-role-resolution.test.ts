@@ -25,6 +25,7 @@
  * resolver must match this reference (asserted live when L8 lands; see report).
  */
 
+import { describe, it, expect } from "bun:test";
 import {
   resolveRoles,
   validateRoleResolutionSet,

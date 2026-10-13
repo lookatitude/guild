@@ -3,6 +3,7 @@
  * plugin.json `commands` array (MC-1, gap-run-20260611) — a shipped command
  * file missing from the manifest silently fails to register.
  */
+import { describe, it, expect } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 

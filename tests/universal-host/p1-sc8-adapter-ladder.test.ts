@@ -18,6 +18,7 @@
  * runtime adapters against this table (asserted live when the adapters land).
  */
 
+import { describe, it, expect } from "bun:test";
 import {
   RUNGS,
   ADAPTER_SURFACES,

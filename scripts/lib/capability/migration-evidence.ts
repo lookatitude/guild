@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { parseCompatibilityUsageV1 } from "../../../src/modules/capability/workflows/compatibility-usage";
-import { checkContained, isRefused, writeContainedFile } from "../../../src/modules/kernel/workflows/path-containment";
-import { loadYamlApi } from "../../../src/modules/kernel/workflows/yaml-loader";
+import { parseCompatibilityUsageV1 } from "../../../src/domains/config/index";
+import { checkContained, isRefused, writeContainedFile } from "../../../src/domains/kernel/index";
+import { loadYamlApi } from "../../../src/domains/kernel/index";
 import {
   acquireJournalAuthority,
   appendReceipt,
@@ -16,8 +16,8 @@ import {
   scanReceiptJournal,
   type ReceiptAppendInput,
   type ReceiptRecordV1,
-} from "../../../src/modules/telemetry/workflows/receipt-journal";
-import { reconcileReceiptJournal } from "../../../src/modules/telemetry/workflows/receipt-reconcile";
+} from "../../../src/domains/telemetry/index";
+import { reconcileReceiptJournal } from "../../../src/domains/telemetry/index";
 import { validateProjectCapabilityProfileV1 } from "../core/contracts/project-capability-profile";
 import {
   baselineBinding,
@@ -29,21 +29,22 @@ import { extractHandoffEnvelope, validateHandoffV2 } from "../../../hooks/lib/ha
 import {
   CAPABILITY_RUN_START_SNAPSHOT_SCHEMA,
   capabilityRunStartIdentityHash,
-} from "../../../src/modules/lifecycle/workflows/run-lifecycle";
+} from "../../../src/domains/lifecycle/index";
 import {
   completePendingSubstantiveOperation,
   readRunBindingRecord,
   stagePendingSubstantiveOperation,
   withRunBindingExclusion,
-} from "../../../src/modules/lifecycle/workflows/run-binding";
-import { isCanonicalLaneReceipt } from "../../../src/modules/lifecycle/workflows/run-record-validate";
-import { validateFrozenReceiptDocument } from "../../../src/modules/documents";
+} from "../../../src/domains/lifecycle/index";
+import { isCanonicalLaneReceipt } from "../../../src/domains/lifecycle/index";
+import { validateFrozenReceiptDocument } from "../../../src/domains/lifecycle";
 import {
   taskCellPaths,
   validateTaskAssignmentV2,
   validateTaskAttemptV1,
-} from "../../../src/modules/dispatch/workflows/task-cell-contract";
+} from "../../../src/domains/dispatch/index";
 import { redactShareableFile } from "../shared/scrub-redact";
+import { durableGuildDir } from "../state/storage";
 
 export const MIGRATION_BOUNDARY_SCHEMA = "guild.capability_migration_boundary.v1" as const;
 export const MIGRATION_BOUNDARY_CHANNEL = "next" as const;
@@ -414,7 +415,7 @@ function migrationRunCloseIdentityHash(
 }
 
 function receiptPaths(projectRoot: string, runId: string): { journal: string; checkpoint: string } {
-  const root = path.join(fs.realpathSync(projectRoot), ".guild", "runs", runId, "receipts");
+  const root = path.join(durableGuildDir(fs.realpathSync(projectRoot)), "runs", runId, "receipts");
   return { journal: path.join(root, "journal.jsonl"), checkpoint: path.join(root, "checkpoint.json") };
 }
 
@@ -823,7 +824,7 @@ function readQualifyingCompatibilityReceipts(projectRoot: string, runId: string)
   if (compareCheckpointToJournal(readCheckpointState(paths.checkpoint), scan, runId).length > 0) {
     throw new Error("migration run seal requires an intact checkpoint-bound receipt journal");
   }
-  const payloadDir = path.join(fs.realpathSync(projectRoot), ".guild", "runs", runId, "receipts", "payloads");
+  const payloadDir = path.join(durableGuildDir(fs.realpathSync(projectRoot)), "runs", runId, "receipts", "payloads");
   const checked = checkContained(projectRoot, payloadDir, { policy: "physical" });
   if (isRefused(checked)) throw new Error(`migration run seal payload directory refused [${checked.code}]`);
   const payloads = new Map<string, ReturnType<typeof parseCompatibilityUsageV1>>();
@@ -1312,7 +1313,7 @@ export function hashRuntimePackage(packageRoot: string): string {
 }
 
 const COMPATIBILITY_PRODUCER_PATHS = Object.freeze([
-  "scripts/lib/capability/compatibility-loader.ts",
+  "hooks/dist/pre-tool-use.js", // the compatibility loader ships compiled in this bundle (KTD11)
 ]);
 
 export function hashCompatibilityRuntimeProducer(packageRoot: string, hostId: MigrationRuntimeHost): string {
@@ -2159,8 +2160,8 @@ export function createMigrationObservation(options: { pluginRoot: string; runtim
   const publicationProfile = validateProjectCapabilityProfileV1(rawProfile);
   if (!publicationProfile) throw new Error("migration observation final profile became invalid before publication");
   assertProfileMatchesCurrentCapabilityTrees(options.projectRoot, publicationProfile, "migration observation publication");
-  const liveJournalPath = path.join(root, ".guild", "runs", runId, "receipts", "journal.jsonl");
-  const liveCheckpointPath = path.join(root, ".guild", "runs", runId, "receipts", "checkpoint.json");
+  const liveJournalPath = path.join(durableGuildDir(root), "runs", runId, "receipts", "journal.jsonl");
+  const liveCheckpointPath = path.join(durableGuildDir(root), "runs", runId, "receipts", "checkpoint.json");
   const expectedJournal = stagedSnapshots.get(runs[0].journal.path)!;
   const expectedCheckpoint = stagedSnapshots.get(runs[0].checkpoint.path)!;
   for (const [relativePath, bytes] of stagedSnapshots) {

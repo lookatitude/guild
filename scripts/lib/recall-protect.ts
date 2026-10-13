@@ -10,9 +10,5 @@ export type {
   ProtectedChunk,
   ProtectChunksOpts,
   ProtectChunksResult,
-} from "../../src/modules/context/workflows/recall-protect";
-export {
-  RECALL_INTEGRITY_DIRECTIVE,
-  classifyTrustTier,
-  protectChunks,
-} from "../../src/modules/context/workflows/recall-protect";
+} from "../../src/domains/knowledge/index";
+export { RECALL_INTEGRITY_DIRECTIVE, classifyTrustTier, protectChunks } from "../../src/domains/knowledge/index";

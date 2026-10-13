@@ -20,6 +20,7 @@
  * the wrapper lands (guarded section below).
  */
 
+import { describe, it, expect, mock } from "bun:test";
 import {
   EXISTING_CONTRACTS,
   DEFERRED_CONTRACTS,
@@ -276,7 +277,7 @@ describe("SC-6 L3 normalizeWithRepair — bounded loop then fail-closed (real pa
   });
 
   it("the prefixed alias fails closed immediately (rounds_used 0 — no point repairing)", () => {
-    const reask = jest.fn((_p: string): string => VALID_REVIEW_FENCE);
+    const reask = mock((_p: string): string => VALID_REVIEW_FENCE);
     const r = normalizeWithRepair(VALID_REVIEW_FENCE, "guild.review_result.v1", reask, { maxRounds: 2 });
     expect(r.ok).toBe(false);
     expect(r.failed_closed).toBe(true);

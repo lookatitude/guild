@@ -119,7 +119,7 @@ import {
   emitTraceEvent,
   makeAnalysisTraceEvent,
   type AnalysisEventClass,
-} from "../src/modules/telemetry/index.js";
+} from "../src/domains/telemetry/index.js";
 
 // ── v2 observability ADR (D-OBS-1/2/6): guild.trace_event.v2 additive fields,
 // deterministic hook-side span ids, and the redacted guild.trace_payload.v1
@@ -134,6 +134,10 @@ import {
   writePayloadSidecar,
   type TraceTokens,
 } from "./lib/trace-v2.js";
+// T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
+import { ensureStorageLayout } from "./lib/ensure-layout.js";
+import { runDirOverride } from "./lib/run-dir-override.js";
+import { durableGuildDir } from "../src/domains/state";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -223,6 +227,19 @@ async function main(): Promise<void> {
   // Resolve run context — explicit binding env ONLY, verified before any
   // write (T3b, session_context §5). No sentinel, no session/date fallback.
   const cwd = process.env["GUILD_CWD"] ?? payload.cwd ?? process.cwd();
+
+  // T10 (KTD23): layout bootstrap on a write-capable entry. A hook can be the
+  // first thing to touch a root after an upgrade landed, so it runs the
+  // bootstrap itself; on a current root this is a stat plus one marker read.
+  // Fail-open by contract — a refused root still exits 0.
+  const layout = ensureStorageLayout(cwd, "capture-telemetry");
+  // KTD23 fails CLOSED on a layout this build does not understand: a future
+  // marker means every write below would land in a root that is not ours.
+  if (!layout.ok) {
+    process.stderr.write(`warn: [capture-telemetry] .guild layout refused (${layout.refused}) — no writes\n`);
+    return;
+  }
+
   const runId = resolveBoundRunId(cwd);
   if (runId === null) process.exit(0); // fail closed: no write, never block the session
 
@@ -268,7 +285,7 @@ async function main(): Promise<void> {
         `[capture-telemetry] WARN: secrets_policy redaction_patterns failure on prompt (fail_mode_telemetry=${secPolicy.fail_mode_telemetry}): ${scrub.failures.join("; ")}\n`,
       );
       try {
-        const evRunDir = process.env["GUILD_RUN_DIR"] ?? resolveRunDir(cwd, runId);
+        const evRunDir = runDirOverride() ?? resolveRunDir(cwd, runId);
         appendSecurityEvent(
           evRunDir,
           buildSecurityEvent({
@@ -299,7 +316,7 @@ async function main(): Promise<void> {
   // ── guild.trace_event.v2 + payload sidecar (D-OBS-1/2/6) ────────────────────
   // Additive: the frozen v1 fields above are untouched; everything here is
   // optional. Compose with the secrets gatekeeper — never store a raw prompt.
-  const runsDir = path.join(resolveGuildRoot(cwd), ".guild", "runs", runId);
+  const runsDir = path.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", runId);
   const redact = (s: string): string => applySecretsPolicy(s, secPolicy).value;
   const spanId = genSpanId(runId, eventName, ts, actorId);
 

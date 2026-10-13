@@ -275,7 +275,7 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  *        surface), carried in `guild.inventory.json`, named as the executor by
  *        `skills/knowledge/learn-graph/SKILL.md`, and bound to
  *        `scripts/lib/capability/context-manager-contract.ts` by the F5 suite
- *        (`scripts/__tests__/context-manager-contract.test.ts` asserts the
+ *        (`scripts/lib/capability/context-manager-contract.test.ts` asserts the
  *        frontmatter `tools:`/`name:`/`model:` ARE the contract's values).
  *        `check-roster-consistency` green.
  *   The `.claude-plugin/**` FILE SET is UNCHANGED (still exactly the two
@@ -588,13 +588,113 @@ export const PLUGIN_ROOT = path.resolve(__dirname, "../..");
  * `skills/knowledge/learn/SKILL.md` before these values were ratified.
  */
 export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
-  commands: "9f85a4882d919db6195b7a93d4c4290510309ab4",
-  skills: "3dce04393e1538edbd0b9bf7b6a1460cb272bc77",
+  // Re-ratified 2026-09-14 (T04 commands fold): the 22 -> 13 dispatcher cut. Thirteen
+  // thin dispatchers (<=40 lines, one assembler each, compiled-Node spawns), the new
+  // `maintain` command, and eleven KTD14 print-only aliases enumerated in
+  // commands/aliases.allowlist.json (KTD14/KTD20/KTD24/KTD46/KTD69). ANTI-VACUITY:
+  // SC-W2-5 and SC-W3-6 were observed RED against the prior pins and named exactly
+  // commands/** and .claude-plugin/plugin.json before these values were ratified.
+  // Re-ratified (rework-r1, codex G-lane round 1): the gate invocation regains
+  // `--proposal <f> --cwd <root>` (the compiled CLI's actual argument set), config routes
+  // `models`/`migrate` to the CLIs that accept them, `maintain` dispatches one target per
+  // sub-verb, and every lifecycle start stamps `--phase=` + user-supplied-only
+  // `--initiative=`. ANTI-VACUITY: tests/universal-host/t04-command-dispatch-shape.test.ts
+  // was observed 36-failed/10-passed against the round-0 tree and 46/46 after.
+  // Re-ratified (rework-r2, codex G-lane round 2): `/guild:config` translates `init` to the
+  // CLI's `reconcile sync` spelling and stops inserting a second `models inspect` token —
+  // both were argv the compiled parsers refuse. ANTI-VACUITY: t04-command-dispatch-shape
+  // was 11-failed/61-passed against the round-1 tree and 72/72 after.
+  // Re-ratified (codex G-lane round 3, lead fix): the `models` row stops appending a
+  // dispatcher `--cwd "$(pwd)"` after `$REMAINING_ARGS` (it overrode a user --cwd; the
+  // compiled CLI defaults to $PWD and requires the sub-verb first). One line changed.
+  // Re-ratified 2026-09-14 (rework-r3, codex G-lane round 3): `/guild:maintain` drops to
+  // ONE assembler — it dispatches `guild:evolve` and forwards $ARGUMENTS verbatim, so
+  // `wiki revert harvest-123` no longer arrives as `revert revert harvest-123`. The
+  // per-token routing moved into the assembler. ANTI-VACUITY:
+  // t04-command-dispatch-shape was 17-failed/70-passed against the round-2 tree, 87/87 after.
+  // Re-ratified 2026-09-16 (T09 work loop): `maintain wiki revert` row in commands/maintain.md,
+  // the evolve skill's revert pointer, and skills/meta/evolve/references/wiki-revert.md (KTD39).
+  // ANTI-VACUITY: SC-W2-5, SC-W3-6 and check-surface-pins were RED on guild#197 CI against
+  // the prior pins and named exactly commands/** and skills/**.
+  // Re-ratified 2026-09-16 (T11 plugin-wide RSI): `maintain evolve --target=<enum>` and
+  // `maintain rollback` rows on commands/maintain.md, the evolve assembler + chapters
+  // (evolve-targets.md, rollback-skill.md, audit.md). ANTI-VACUITY: check-surface-pins,
+  // SC-W2-5 and SC-W3-6 were RED against the T10 pins before these values.
+  // Re-ratified 2026-09-26 (T12 domain fold): skill/command bodies repoint spawn paths
+  // from the retired module mirrors to the domain tree. ANTI-VACUITY: SC-W2-5 and
+  // SC-W3-6 were RED against the T11 pins before these values.
+  // Re-ratified 2026-09-27 (T14 adapters + MCP): skill bodies spawn the compiled
+  // runtime/scripts entries instead of npx tsx (KTD11). ANTI-VACUITY: the pin guards
+  // were RED against the T13 pins before these values.
+  // Re-ratified 2026-09-28 (T17 plugin-local docs): wiki.md states the promotion law,
+  // the sources/ home and the hybrid-recall fail-open; status.md names the SQLite cache
+  // as platform state. The command registry was re-extracted for those two entries.
+  commands: "3ad08dd9650f6723dacd9ff62369a0fb69526066",
+  // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
+  // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
+  // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
+  // off-glob playbooks tree, principles folded into using-guild (KTD25/KTD59).
+  // Re-ratified again same day (codex G-lane r1): the chapters' relative pointers were
+  // re-based onto their new parents and every assembler gained a chapter-pointer table,
+  // so a `guild:<name>` in a body resolves to a file instead of a deleted skill.
+  // Re-ratified 2026-09-14 (T04): the `evolve` assembler's frontmatter id becomes
+  // `guild-evolve` (was `guild-evolve-skill`), aligned with the directory basename and
+  // the `/guild:maintain evolve` dispatch line (U-S). No skill body changed.
+  // Re-ratified again (rework-r1): the `plan` assembler gains a `## Sub-verbs` route so
+  // `/guild:plan goal` has a handler (P4). No other skill changed.
+  // Re-ratified (rework-r2): the plan assembler's `## Sub-verbs` route moves OUT of the
+  // `## Output` example fence — inside it, the `goal` route was inert example text.
+  // Re-ratified 2026-09-14 (rework-r3): the `evolve` assembler gains a `## Sub-verbs`
+  // section outside every fence, routing evolve | rollback | audit | fix | wiki revert | gc
+  // to chapters that resolve (skill-link-integrity green). Appended at the TAIL so the
+  // line-keyed layout baseline entries for this file are not re-keyed.
+  // Re-ratified (codex G-lane round 6, lead fix): the evolve assembler's `wiki revert`
+  // row no longer points at wiki-ingest.md (no revert handler there); it names the
+  // pending harvest-journal inverse (R54) and stops. One row changed.
+  // Re-ratified 2026-09-26 (T12 domain fold): the shipped skill bodies that cite an
+  // internal source path now cite the DOMAIN path, because the module tree they named
+  // no longer holds the code (KTD36). The surface delta is exactly eight files —
+  // skills/meta/{plan,execute-plan}/SKILL.md, skills/meta/evolve/references/evolve-targets.md,
+  // skills/operations/{SKILL.md,operations-contract.md},
+  // skills/quality/{SKILL.md,quality-contract.md,quality-mechanics.md} — and nothing
+  // else: `commands` does NOT move and neither manifest hash does. ANTI-VACUITY:
+  // check-surface-pins was observed RED against the prior pin on this exact tree and
+  // named ONLY `skills/skills`, before this value was ratified.
+  // Re-ratified 2026-09-26 (T13): five dead chapter links in the evolve assembler's
+  // references/ (evolve-targets.md x4, rollback-skill.md x1) drop a doubled
+  // `references/` prefix so skill-link-integrity, now a blocking CI leg, resolves them.
+  // ANTI-VACUITY: check-surface-pins, SC-W2-5 and SC-W3-6 were RED against the T12
+  // pin on this tree and named ONLY `skills/skills`, before this value was ratified.
+  // Re-ratified 2026-09-26 (T13 rework-r1): the three skill lines that tell an agent
+  // to run `roster-resolve.ts mint` (team-compose SKILL.md x2, create-specialist
+  // SKILL.md + workflow.md) now pass `--class <run class>`, because mint is
+  // class-scoped (R67) and a class-less mint is refused. ANTI-VACUITY:
+  // check-surface-pins, SC-W2-5 and SC-W3-6 were RED against the prior pin on this
+  // tree and named ONLY `skills/skills`, before this value was ratified.
+  // Re-ratified 2026-09-26 (T14 adapters): every skill-body spawn of a `.ts`
+  // script through tsx becomes `node …/runtime/scripts/<id>.js` (KTD11/KTD28), and
+  // the WAVE2 registry was re-extracted with it; the learn stage calls follow. ANTI-VACUITY:
+  // check-surface-pins was RED (registry_stale ×4, tree_pin_stale skills) against the T12 pins.
+  // Re-ratified 2026-09-28 (T15 security gate): wiki-ingest reference states the
+  // should_pause marker is enforced at PreToolUse. ANTI-VACUITY: check-surface-pins and
+  // SC-W3-6 were RED on guild#203 CI against the T14 pin and named only `skills/skills`.
+  // Re-ratified 2026-09-28 (T15F hooks, plr-wi-15-3): decisions reference stages ADR-lite
+  // candidates under .guild/knowledge/candidates/decisions/ for harvest promotion (KTD35).
+  // ANTI-VACUITY: check-surface-pins named only `skills/skills` stale against the T15 pin.
+  // Re-ratified 2026-09-28 (T16 delete copies): wiki references route ingest blobs to
+  // sources/ (KTD47), evolve step 9 names applyEvolveDelta, context-assemble passes
+  // --phase/--cell, init and team-compose drop the retired paths. ANTI-VACUITY:
+  // check-surface-pins named only `skills/skills` stale against the T15F pin.
+  // Re-ratified 2026-09-28 (T17 plugin-local docs): using-guild states the promotion law
+  // and the shipped concern enum, and points the dispatch table at AGENTS.md.
+  skills: "1fea256df205e5a51f3390be6d535f37fe90c0ad",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
 export const RATIFIED_MANIFESTS: Readonly<Record<string, string>> = Object.freeze({
-  ".claude-plugin/plugin.json": "ca3931c342966d58472b83f72861786c119ec393df5f1748ddc0e33c7bced8ae",
+  // Re-ratified 2026-09-14 (T04): the manifest `commands` list is the 13 dispatchers
+  // plus the 11 print-only aliases.
+  ".claude-plugin/plugin.json": "3a37e63ef2587d682a8c1b95ed9ca0524930075cb24cc89666857a74d9060afb",
   ".claude-plugin/marketplace.json": "ad288b80dee07f85a94eee8b9c3e92b18705a94f98e104277a92b4d2e770e2af",
 });
 

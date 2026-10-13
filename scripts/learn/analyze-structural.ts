@@ -17,10 +17,12 @@ import { guildPaths, parseCwd, hasFlag, writeJson, readJson, SCHEMA } from "./li
 import { headSha } from "./lib/git";
 import { walkRepo } from "./lib/walk";
 import { buildPartialGraph, mergeReport } from "./lib/graph";
+import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
 function main(): void {
   const argv = process.argv.slice(2);
   const cwd = parseCwd(argv);
+  ensureStorageLayout(cwd, { detectOnly: true });
   const gp = guildPaths(cwd);
 
   // Prefer the scan's file list; fall back to a fresh walk.

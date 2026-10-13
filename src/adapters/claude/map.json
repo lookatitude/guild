@@ -1,0 +1,29 @@
+{
+  "schema_version": "guild.adapter_map.v1",
+  "family": "claude",
+  "host_ids": [
+    "claude-code-cli",
+    "claude-code-app",
+    "claude-code-web",
+    "claude-ai-connector"
+  ],
+  "package_trees": [
+    "claude-code"
+  ],
+  "projects": {
+    "manifest": ".claude-plugin/plugin.json",
+    "commands": "commands/",
+    "skills": "skills/",
+    "agents": "agents/",
+    "hooks": "hooks/hooks.json",
+    "mcp": ".mcp.json"
+  },
+  "runtime": [
+    "runtime/",
+    "hooks/dist/"
+  ],
+  "never_projects": [
+    "src/domains/**/*.ts"
+  ],
+  "rungs": "src/adapters/adapter.lock.json#/families/claude"
+}

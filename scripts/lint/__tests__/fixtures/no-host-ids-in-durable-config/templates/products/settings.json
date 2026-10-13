@@ -1,0 +1,8 @@
+{
+  "models": {
+    "tiers": {
+      "cheap": { "claude-code-cli": "haiku" },
+      "powerful": { "claude-code-cli": "opus" }
+    }
+  }
+}

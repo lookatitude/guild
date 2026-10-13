@@ -24,6 +24,7 @@
  *   [x] dispatch.rung recorded when GUILD_DISPATCH_RUNG env is set
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";

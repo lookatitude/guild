@@ -21,6 +21,7 @@
  *   - `hooks/lib/run-trace.ts`       → `emitRunClosed` accepts the field in opts
  */
 
+import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -181,7 +182,7 @@ describe("run-trace-close — module import does not trigger CLI side effects (r
   afterEach(() => {
     if (prevGuildCwd === undefined) delete process.env["GUILD_CWD"];
     else process.env["GUILD_CWD"] = prevGuildCwd;
-    jest.restoreAllMocks();
+    mock.restore();
   });
 
   it("never calls process.exit merely from being required", async () => {
@@ -190,11 +191,12 @@ describe("run-trace-close — module import does not trigger CLI side effects (r
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-rtc-import-safety-"));
     process.env["GUILD_CWD"] = tmp;
 
-    const exitSpy = jest.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    const exitSpy = spyOn(process, "exit").mockImplementation((() => undefined) as never);
 
-    jest.isolateModules(() => {
-      require("../run-trace-close");
-    });
+    // A fresh evaluation: the describe block above already imported the module,
+    // so drop it from the require cache before requiring it again.
+    delete require.cache[require.resolve("../run-trace-close")];
+    require("../run-trace-close");
 
     // If the module (incorrectly) ran main() at load time, it registered
     // stdin listeners and is awaiting `readHookStdin()`. Drive stdin's 'end'

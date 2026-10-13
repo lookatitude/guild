@@ -21,6 +21,7 @@
  * no frontmatter — the renderer reconstructs it).
  */
 
+import { describe, it, expect } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 

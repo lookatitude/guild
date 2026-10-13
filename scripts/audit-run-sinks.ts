@@ -25,6 +25,8 @@
 
 import * as path from "path";
 import { isRunSinkDirty, loadRunSinks, renderSinkAuditSection } from "./lib/run-sinks";
+import { durableGuildDir } from "./lib/state/storage";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 function parseArgs(argv: string[]): { runId: string | null; cwd: string } {
   let runId: string | null = null;
@@ -37,12 +39,13 @@ function parseArgs(argv: string[]): { runId: string | null; cwd: string } {
 }
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const { runId, cwd } = parseArgs(process.argv.slice(2));
   if (!runId) {
     process.stderr.write("[audit-run-sinks] ERROR: --run-id <id> is required\n");
     process.exit(2);
   }
-  const runDir = path.join(path.resolve(cwd), ".guild", "runs", runId);
+  const runDir = path.join(durableGuildDir(path.resolve(cwd)), "runs", runId);
   const audit = loadRunSinks(runDir);
   process.stdout.write(renderSinkAuditSection(audit) + "\n");
   if (isRunSinkDirty(audit)) {

@@ -28,6 +28,7 @@
  *   [x] a compliant dispatch writes NO security-event twin
  */
 
+import { describe, it, test, expect, beforeEach, afterEach } from "bun:test";
 import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";

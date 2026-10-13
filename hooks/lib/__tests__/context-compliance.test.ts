@@ -8,6 +8,7 @@
  *   - record path: dedicated context-compliance.jsonl + v1.4 hook_event marker
  */
 
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";

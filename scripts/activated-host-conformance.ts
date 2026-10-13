@@ -14,6 +14,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 
 import {
+  NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
   NEUTRAL_CONTRACT_VERSION,
   NEUTRAL_DISPOSITIONS,
   NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS,
@@ -23,12 +24,15 @@ import {
   NEUTRAL_SCENARIO_SUITE_ID,
   NEUTRAL_SCENARIO_SUITE_VERSION,
   neutralCanonicalJson,
+  neutralJournalEntryCommitment,
+  neutralJournalGenesis,
+  neutralReceiptReference,
+  type NeutralConformanceAuthority,
   type NeutralConformanceEvidence,
-} from "../src/modules/lifecycle";
-import {
-  evaluateTransportedReleaseConformance,
-  runNeutralConformanceReleaseIntegration,
-} from "../src/modules/distribution/workflows/release-conformance-integration";
+  type NeutralReceiptJournalEntry,
+} from "../src/domains/lifecycle";
+import { evaluateTransportedReleaseConformance, runNeutralConformanceReleaseIntegration } from "../src/domains/distribution";
+import { bindHostRuntimePorts } from "../src/adapters";
 import {
   loadAttestedMigrationBoundary,
   snapshotMigrationRuntimePackage,
@@ -38,6 +42,10 @@ import {
 } from "./lib/capability/migration-evidence";
 import { readScalarField } from "./lib/frontmatter";
 import { redactShareableFile } from "./lib/shared/scrub-redact";
+import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
+
+// Composition root: bind the host-runtime ports the distribution domain names (KTD4).
+bindHostRuntimePorts();
 
 export const ACTIVATED_HOST_CONFORMANCE_SCHEMA = "guild.activated_host_conformance.v1" as const;
 export const ACTIVATED_HOST_WORKER_SCHEMA = "guild.activated_host_conformance_worker.v1" as const;
@@ -49,8 +57,8 @@ const COMMIT = /^[0-9a-f]{40}$/;
 const UTC_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const SESSION_ID = /^[0-9a-f-]{16,64}$/;
 const HOSTS: readonly MigrationRuntimeHost[] = Object.freeze(["claude-code-cli", "codex-cli"]);
-const CODEX_PROBE_SKILL_NAME = "guild:guild-verify-done";
-const CODEX_PROBE_SKILL_PATH = ".agents/skills/guild/meta/verify-done/SKILL.md";
+export const CODEX_PROBE_SKILL_NAME = "guild:guild-quality";
+export const CODEX_PROBE_SKILL_PATH = ".agents/skills/guild/quality/SKILL.md";
 const CONSUMER_NAMES = Object.freeze(["website", "benchmark"] as const);
 const CONSUMER_REPOSITORIES = Object.freeze({
   website: "github.com/lookatitude/guild-website",
@@ -83,6 +91,8 @@ export interface VerifyActivatedHostOptions {
 }
 
 export interface ActivatedConformanceWorkerOptions {
+  /** The staged SOURCE twin's binding; see `snapshotOfficialPluginSourceGitTree`. */
+  readonly moduleBoundaryIdentity: unknown;
   readonly hostId: MigrationRuntimeHost;
   readonly challenge: string;
   readonly sourceCommit: string;
@@ -113,6 +123,8 @@ export interface ActivatedConformanceWorkerResult {
   readonly packageSnapshot: PlainRecord | null;
   readonly hostActivation: PlainRecord | null;
   readonly consumerTrees: Readonly<Record<string, ConsumerTreeIdentity>> | null;
+  /** The source-twin identity the worker verified, or null on refusal. */
+  readonly moduleBoundarySource: PluginSourceIdentity | null;
 }
 
 export interface ConsumerTreeIdentity {
@@ -151,6 +163,8 @@ export interface ActivatedHostLaunchResult {
 export interface CaptureActivatedHostOptions {
   readonly hostId: MigrationRuntimeHost;
   readonly packageRoot: string;
+  /** The plugin SOURCE checkout the module-boundary twin is staged from. */
+  readonly sourceRoot: string;
   readonly expectedPackage: MigrationRuntimePackageV1;
   readonly sourceCommit: string;
   readonly release: string;
@@ -355,7 +369,7 @@ const INSTALL_RECEIPT_KEYS = Object.freeze([
 
 function expectedActivationChannel(release: string): { channel: string; ref: string; confidence: string } {
   return /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(release)
-    ? { channel: "beta", ref: "next", confidence: "version-derived" }
+    ? { channel: "beta", ref: "next", confidence: "launcher-declared" }
     : { channel: "stable", ref: "main", confidence: "assumed-default" };
 }
 
@@ -641,8 +655,12 @@ function markerFor(challenge: string): string {
   return `GUILD_ACTIVATED_CONFORMANCE_OK:${challenge}`;
 }
 
-function releaseId(release: string, capturedDay = "2026-08-21"): string {
-  const suffix = release.split("-").slice(1).join("").replace(/[^0-9a-z]/gi, "").toLowerCase().slice(0, 16);
+export function releaseId(release: string, capturedDay = "2026-08-21"): string {
+  // A bare release ("3.0.0") has no prerelease tail; its suffix derives from
+  // the version itself so the id satisfies the core's rel-…-[0-9a-z]{1,16} pin.
+  const parts = release.split("-");
+  const raw = parts.length > 1 ? parts.slice(1).join("") : parts[0];
+  const suffix = raw.replace(/[^0-9a-z]/gi, "").toLowerCase().slice(0, 16);
   return `rel-${capturedDay}-${suffix}`;
 }
 
@@ -775,6 +793,129 @@ function validConsumerTreeIdentity(value: unknown, expectedName: "website" | "be
 
 function validConsumerTreeSet(value: unknown): value is Readonly<Record<string, ConsumerTreeIdentity>> {
   return isRecord(value) && exactKeys(value, CONSUMER_NAMES) && CONSUMER_NAMES.every((name) => validConsumerTreeIdentity(value[name], name));
+}
+
+/** The identity the staged module-boundary SOURCE twin is bound to. */
+export interface PluginSourceIdentity {
+  readonly schema_version: "guild.plugin_source_identity.v1";
+  readonly repository: string;
+  readonly source_commit: string;
+  readonly source_tree: string;
+  readonly content_tree_sha256: string;
+  readonly file_count: number;
+}
+
+export const PLUGIN_SOURCE_REPOSITORY = "github.com/lookatitude/guild";
+
+/**
+ * Content snapshot of the staged SOURCE twin with NO directory exclusions.
+ *
+ * The consumer snapshot excludes build/dependency trees (`dist`, `node_modules`,
+ * …) because consumers legitimately carry them. The source twin is a pure
+ * Git-staged `src/**` tree, and the MH-07 graph scan reads ALL of it — so the
+ * identity must cover every byte the scan can reach, or a path under an
+ * excluded name becomes writable without tripping the before/after binding.
+ */
+export function snapshotPluginSourceContentTree(root: string): { readonly content_tree_sha256: string; readonly file_count: number } {
+  const physicalRoot = fs.realpathSync(root);
+  const entries: Array<{ path: string; sha256: string }> = [];
+  const visit = (directory: string, prefix: string): void => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
+      const relative = prefix.length === 0 ? entry.name : `${prefix}/${entry.name}`;
+      const absolute = path.join(directory, entry.name);
+      if (entry.isSymbolicLink()) throw new Error(`source twin contains a symlink: ${relative}`);
+      if (entry.isDirectory()) visit(absolute, relative);
+      else if (entry.isFile()) entries.push({ path: relative, sha256: sha256Hex(readRegularNoFollow(absolute, `source twin file ${relative}`)) });
+      else throw new Error(`source twin contains a non-regular entry: ${relative}`);
+      if (entries.length > 100_000) throw new Error("source twin exceeds the bounded file count");
+    }
+  };
+  visit(physicalRoot, "");
+  if (entries.length === 0) throw new Error("source twin is empty");
+  entries.sort((left, right) => left.path.localeCompare(right.path));
+  return Object.freeze({ content_tree_sha256: sha256Hex(canonical(entries)), file_count: entries.length });
+}
+
+export function validPluginSourceIdentity(value: unknown): value is PluginSourceIdentity {
+  return isRecord(value) &&
+    exactKeys(value, ["schema_version", "repository", "source_commit", "source_tree", "content_tree_sha256", "file_count"]) &&
+    value.schema_version === "guild.plugin_source_identity.v1" && value.repository === PLUGIN_SOURCE_REPOSITORY &&
+    typeof value.source_commit === "string" && COMMIT.test(value.source_commit) &&
+    typeof value.source_tree === "string" && COMMIT.test(value.source_tree) &&
+    typeof value.content_tree_sha256 === "string" && SHA256.test(value.content_tree_sha256) &&
+    typeof value.file_count === "number" && Number.isSafeInteger(value.file_count) && value.file_count > 0 && value.file_count <= 100_000;
+}
+
+/**
+ * Stage the plugin's `src/**` tree from Git at EXACTLY the attested source
+ * commit — the module-boundary twin MH-07 is evaluated over.
+ *
+ * KTD28 forbids domain TypeScript in the generated host packages, so the
+ * boundary scenarios cannot be derived from the activated package tree (there
+ * is no graph in it). Their frozen evidence profile binds the verdict "to the
+ * source it was produced from": the judged tree is therefore the SOURCE at the
+ * boundary's `source_commit`, staged byte-verified from Git objects exactly as
+ * the consumer trees are, and bound by a content identity the sealed worker
+ * re-derives before and after evaluation.
+ */
+export function snapshotOfficialPluginSourceGitTree(
+  sourceRoot: string,
+  destination: string,
+  expectedCommit: string,
+): PluginSourceIdentity {
+  const root = fs.realpathSync(sourceRoot);
+  let top: string;
+  let repository: string | null;
+  let headCommit: string;
+  let sourceTree: string;
+  let objectFormat: string;
+  let rows: string[];
+  try {
+    // `--no-replace-objects`: a planted `git replace` ref would otherwise let
+    // every read below resolve substituted content under the attested name.
+    top = fs.realpathSync(gitText(root, ["--no-replace-objects", "rev-parse", "--show-toplevel"]));
+    repository = normalizedGitHubRepository(gitText(root, ["--no-replace-objects", "remote", "get-url", "origin"]));
+    headCommit = gitText(root, ["--no-replace-objects", "rev-parse", `${expectedCommit}^{commit}`]);
+    sourceTree = gitText(root, ["--no-replace-objects", "rev-parse", `${expectedCommit}^{tree}`]);
+    objectFormat = gitText(root, ["--no-replace-objects", "rev-parse", "--show-object-format"]);
+    rows = execFileSync("git", ["-C", root, "--no-replace-objects", "ls-tree", "-r", "-z", "--full-tree", expectedCommit, "--", "src"], { maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] })
+      .toString("utf8").split("\0").filter(Boolean);
+  } catch (error) {
+    throw new Error(`plugin source must be an official Git worktree holding the attested commit: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (top !== root) throw new Error("plugin source root must be the Git worktree root");
+  if (repository !== PLUGIN_SOURCE_REPOSITORY) throw new Error(`plugin source origin is not ${PLUGIN_SOURCE_REPOSITORY}`);
+  if (headCommit !== expectedCommit || !COMMIT.test(headCommit) || !COMMIT.test(sourceTree) || (objectFormat !== "sha1" && objectFormat !== "sha256")) {
+    throw new Error("plugin source Git identity does not resolve the attested source commit");
+  }
+  if (hasPathEntryNoFollow(destination)) throw new Error("plugin source staging destination already exists");
+  fs.mkdirSync(destination, { recursive: true, mode: 0o700 });
+  const contentEntries: Array<{ path: string; sha256: string }> = [];
+  for (const row of rows) {
+    const match = /^(\d{6}) (\S+) ([0-9a-f]+)\t(.+)$/.exec(row);
+    if (match === null) throw new Error("plugin source Git tree entry is malformed");
+    const [, mode, type, oid, relative] = match;
+    if (type !== "blob" || (mode !== "100644" && mode !== "100755")) throw new Error(`plugin source Git tree contains an unsupported entry: ${relative}`);
+    const bytes = execFileSync("git", ["-C", root, "--no-replace-objects", "show", `${expectedCommit}:${relative}`], { maxBuffer: 256 * 1024 * 1024 });
+    if (gitBlobOid(bytes, objectFormat as "sha1" | "sha256") !== oid) throw new Error(`plugin source Git object bytes do not match ${relative}`);
+    const target = path.join(destination, ...relative.split("/"));
+    fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(target, bytes, { flag: "wx", mode: mode === "100755" ? 0o500 : 0o400 });
+    contentEntries.push({ path: relative, sha256: sha256Hex(bytes) });
+  }
+  if (contentEntries.length === 0) throw new Error("plugin source Git tree has no in-scope files");
+  contentEntries.sort((left, right) => left.path.localeCompare(right.path));
+  const content = snapshotPluginSourceContentTree(destination);
+  const expectedHash = sha256Hex(canonical(contentEntries));
+  if (content.content_tree_sha256 !== expectedHash || content.file_count !== contentEntries.length) throw new Error("staged plugin source bytes differ from Git");
+  return Object.freeze({
+    schema_version: "guild.plugin_source_identity.v1",
+    repository: PLUGIN_SOURCE_REPOSITORY,
+    source_commit: expectedCommit,
+    source_tree: sourceTree,
+    content_tree_sha256: expectedHash,
+    file_count: contentEntries.length,
+  });
 }
 
 function assertConsumerTreeMatches(root: string, identity: ConsumerTreeIdentity): void {
@@ -1292,6 +1433,15 @@ function hostEnvironment(overrides: NodeJS.ProcessEnv = {}, source: NodeJS.Proce
   return { ...env, ...overrides };
 }
 
+/**
+ * Package bytes cannot tell a beta from a stable short-path release, so the
+ * SessionStart hook mints a beta receipt only when the launcher declares the
+ * channel. The capture declares it from the attested release identity.
+ */
+export function claudeEnvironment(release: string, source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return hostEnvironment(expectedActivationChannel(release).channel === "beta" ? { GUILD_ACTIVATION_CHANNEL: "beta" } : {}, source);
+}
+
 export function isolatedCodexEnvironment(
   stageRoot: string,
   codexHome: string,
@@ -1500,10 +1650,18 @@ export function captureActivatedHostConformance(
     openedHostExecutable = openHostExecutable(options.hostId, process.env, stageRoot);
     const hostExecutable = openedHostExecutable.identity;
     const hostVersion = probeHostVersion(options.hostId, openedHostExecutable);
-    const stagedPlugin = path.join(stageRoot, "plugin");
-    const stagedWebsite = path.join(stageRoot, "website");
-    const stagedBenchmark = path.join(stageRoot, "benchmark");
+    const stagedPlugin = path.join(stageRoot, "activated-package");
+    // The boundary workspace mirrors the REAL repository layout (`plugin` beside
+    // `website`/`benchmark`): a consumer import written as `../../plugin/src/…`
+    // must resolve INTO the judged source twin, or MOD-004 would scan a name
+    // nothing points at and read absence of inspection as a clean boundary.
+    const boundaryWorkspace = path.join(stageRoot, "boundary");
+    fs.mkdirSync(boundaryWorkspace, { recursive: true, mode: 0o700 });
+    const stagedWebsite = path.join(boundaryWorkspace, "website");
+    const stagedBenchmark = path.join(boundaryWorkspace, "benchmark");
     copyPackageTree(fs.realpathSync(options.packageRoot), stagedPlugin);
+    const stagedPluginSource = path.join(boundaryWorkspace, "plugin");
+    const moduleBoundaryIdentity = snapshotOfficialPluginSourceGitTree(options.sourceRoot, stagedPluginSource, options.sourceCommit);
     const consumerIdentities = Object.freeze({
       website: snapshotOfficialConsumerGitTree("website", options.consumerRoots.website, stagedWebsite),
       benchmark: snapshotOfficialConsumerGitTree("benchmark", options.consumerRoots.benchmark, stagedBenchmark),
@@ -1512,7 +1670,7 @@ export function captureActivatedHostConformance(
     catch (error) { return failed("staged_package_mismatch", error instanceof Error ? error.message : String(error)); }
     const prepared = options.hostId === "codex-cli"
       ? prepareCodexActivation(stageRoot, stagedPlugin, options.expectedPackage, options.release, openedHostExecutable)
-      : { packageRoot: fs.realpathSync(stagedPlugin), environment: hostEnvironment(), transcriptPrefix: "", sensitiveValues: [], sensitivePath: null, sensitiveIdentity: null };
+      : { packageRoot: fs.realpathSync(stagedPlugin), environment: claudeEnvironment(options.release), transcriptPrefix: "", sensitiveValues: [], sensitivePath: null, sensitiveIdentity: null };
     const liveSensitiveValues = (): readonly string[] => refreshSensitiveJsonValues(prepared.sensitivePath, prepared.sensitiveValues);
     try { verifyAttestedGeneratedRuntimePackage(prepared.packageRoot, options.expectedPackage); }
     catch (error) { return failed("activated_package_mismatch", error instanceof Error ? error.message : String(error)); }
@@ -1529,6 +1687,9 @@ export function captureActivatedHostConformance(
     const workerOutPath = path.join(stageRoot, "worker-result.json");
     const consumerIdentitiesPath = path.join(stageRoot, "consumer-identities.json");
     writeExclusive(consumerIdentitiesPath, `${JSON.stringify(consumerIdentities, null, 2)}\n`, 0o400);
+    const moduleBoundaryIdentityPath = path.join(stageRoot, "module-boundary-identity.json");
+    const moduleBoundaryIdentityBytes = `${JSON.stringify(moduleBoundaryIdentity, null, 2)}\n`;
+    writeExclusive(moduleBoundaryIdentityPath, moduleBoundaryIdentityBytes, 0o400);
     const workerCommand = [
       `${safeToken(sealedRuntime.nodePath, "sealed node executable")} ${safeToken(sealedRuntime.workerPath, "sealed worker bundle")} worker`,
       `--host ${safeToken(options.hostId, "host")}`,
@@ -1542,7 +1703,9 @@ export function captureActivatedHostConformance(
       `--release ${safeToken(options.release, "release")}`,
       `--captured-at ${safeToken(options.capturedAt, "captured_at")}`,
       `--plugin-root ${safeToken(prepared.packageRoot, "activated plugin root")}`,
-      `--module-boundary-root ${safeToken(stagedPlugin, "module-boundary plugin root")}`,
+      `--module-boundary-root ${safeToken(stagedPluginSource, "module-boundary source root")}`,
+      `--module-boundary-identity ${safeToken(moduleBoundaryIdentityPath, "module-boundary identity")}`,
+      `--module-boundary-identity-sha256 ${sha256Hex(moduleBoundaryIdentityBytes)}`,
       `--consumer-root website=${safeToken(activatedWebsite, "activated website root")}`,
       `--consumer-root benchmark=${safeToken(activatedBenchmark, "activated benchmark root")}`,
       `--consumer-identities ${safeToken(consumerIdentitiesPath, "consumer identities")}`,
@@ -1575,7 +1738,11 @@ export function captureActivatedHostConformance(
       const diagnostic = containsSensitiveOutput(transcript, prepared.environment, liveSensitiveValues()) ? "transcript withheld" : transcript.slice(-1000);
       return failed("worker_output_missing", `${error instanceof Error ? error.message : String(error)}${diagnostic ? `; transcript tail: ${diagnostic}` : ""}`);
     }
-    if (!isRecord(worker) || !exactKeys(worker, ["schema_version", "ok", "code", "detail", "marker", "challenge", "host_id", "evidence", "package_snapshot", "host_activation", "consumer_trees"]) || worker.schema_version !== ACTIVATED_HOST_WORKER_SCHEMA || worker.ok !== true || worker.code !== "evaluated" || worker.marker !== marker || worker.challenge !== challenge || worker.host_id !== options.hostId || !isRecord(worker.evidence) || !isRecord(worker.package_snapshot) || !validConsumerTreeSet(worker.consumer_trees) || canonical(worker.consumer_trees) !== canonical(consumerIdentities) || (options.hostId === "claude-code-cli" ? !isRecord(worker.host_activation) : worker.host_activation !== null)) return failed("worker_output_invalid", "worker output is incomplete, mismatched, or overclaims");
+    if (!isRecord(worker) || !exactKeys(worker, ["schema_version", "ok", "code", "detail", "marker", "challenge", "host_id", "evidence", "package_snapshot", "host_activation", "consumer_trees", "module_boundary_source"]) || worker.schema_version !== ACTIVATED_HOST_WORKER_SCHEMA || worker.ok !== true || worker.code !== "evaluated" || worker.marker !== marker || worker.challenge !== challenge || worker.host_id !== options.hostId || !isRecord(worker.evidence) || !isRecord(worker.package_snapshot) || !validConsumerTreeSet(worker.consumer_trees) || canonical(worker.consumer_trees) !== canonical(consumerIdentities) || canonical(worker.module_boundary_source) !== canonical(moduleBoundaryIdentity) || (options.hostId === "claude-code-cli" ? !isRecord(worker.host_activation) : worker.host_activation !== null)) return failed("worker_output_invalid", "worker output is incomplete, mismatched, or overclaims");
+    const boundaryAfterLaunch = snapshotPluginSourceContentTree(stagedPluginSource);
+    if (boundaryAfterLaunch.content_tree_sha256 !== moduleBoundaryIdentity.content_tree_sha256 || boundaryAfterLaunch.file_count !== moduleBoundaryIdentity.file_count) {
+      return failed("module_boundary_source_drift", "staged module-boundary source twin changed during host execution");
+    }
     if (canonical(worker.package_snapshot) !== canonical(bindingOf(options.expectedPackage))) return failed("runtime_package_mismatch", "worker did not self-snapshot the exact attested package");
     const hostActivation = options.hostId === "codex-cli"
       ? codexSkillActivation(options.expectedPackage, prepared.packageRoot)
@@ -1612,6 +1779,7 @@ export function captureActivatedHostConformance(
       activated_package_snapshot: worker.package_snapshot,
       host_activation: hostActivation,
       consumer_trees: consumerIdentities,
+      module_boundary_source: moduleBoundaryIdentity,
       external_attestation_verified: false,
       authorizes_promotion: false,
     };
@@ -1651,6 +1819,15 @@ export function captureActivatedHostConformance(
   }
 }
 
+/**
+ * PROVISIONAL pass-1 references only. These challenge-derived commitments are
+ * placeholders that no journal carries; the worker NEVER emits them. After the
+ * first evaluation pass fixes the 31 observed outcomes, the worker constructs
+ * the capture journal over exactly those outcomes with the production chain
+ * functions and re-evaluates with references that cite each journal entry's
+ * OWN commitment (A21-X MH-02 producer-side binding, lane-G pin 3): binding is
+ * strengthened at the producer, never relaxed at the verifier.
+ */
 function workerReceiptRefs(challenge: string): Record<string, string> {
   const refs: Record<string, string> = {};
   for (let index = 0; index < NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS.length; index += 1) {
@@ -1659,6 +1836,46 @@ function workerReceiptRefs(challenge: string): Record<string, string> {
     refs[NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS[index]] =
       `guild.receipt_ref.v1:activated-${challenge.slice(0, 12)}#${sequence}@nec1:${commitment}`;
   }
+  return refs;
+}
+
+/** The capture journal id every reference in one capture cites. */
+function workerJournalId(challenge: string): string {
+  return `activated-${challenge.slice(0, 12)}`;
+}
+
+/**
+ * Build the capture journal over the pass-1 observed outcomes and mint the
+ * journal-bound receipt references: one entry per scenario in canonical order,
+ * recording exactly the observed outcome, chained with the production
+ * commitment functions, each reference citing its entry's own commitment.
+ */
+function journalBoundReceiptRefs(
+  challenge: string,
+  identity: Record<string, unknown>,
+  results: ReadonlyArray<Record<string, unknown>>,
+): Record<string, string> {
+  const authorityBase = {
+    schema_version: NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
+    identity,
+    receipt_journal_id: workerJournalId(challenge),
+    receipt_sequence_range: { first: 1, last: results.length },
+  } as unknown as NeutralConformanceAuthority;
+  const refs: Record<string, string> = {};
+  let previous = neutralJournalGenesis(authorityBase);
+  results.forEach((result, index) => {
+    const partial = {
+      sequence: index + 1,
+      scenario_id: result.stable_id,
+      outcome_type: result.outcome_type,
+      disposition: result.disposition,
+      reason_code: result.reason_code ?? null,
+    } as unknown as NeutralReceiptJournalEntry;
+    const commitment = neutralJournalEntryCommitment(authorityBase, previous, partial);
+    const entry = { ...partial, previous_commitment: previous, entry_commitment: commitment };
+    refs[String(result.stable_id)] = neutralReceiptReference(authorityBase, entry);
+    previous = commitment;
+  });
   return refs;
 }
 
@@ -1681,6 +1898,7 @@ export function runActivatedConformanceWorker(
     packageSnapshot: null,
     hostActivation: null,
     consumerTrees: null,
+    moduleBoundarySource: null,
   });
   if (!HOSTS.includes(options.hostId)) return failed("host_identity_invalid", "worker host is not supported");
   if (!SHA256.test(options.challenge) || !SHA256.test(options.packageHash) || !SHA256.test(options.installSurfaceHash) || !COMMIT.test(options.sourceCommit)) return failed("worker_identity_invalid", "worker challenge, package hashes, or source commit is malformed");
@@ -1697,9 +1915,16 @@ export function runActivatedConformanceWorker(
     if (packageBefore.tree_sha256 !== options.packageHash) {
       return failed("runtime_package_mismatch", "worker self-snapshot does not match the expected package hash");
     }
-    const boundaryPackageBefore = snapshotMigrationRuntimePackage(options.moduleBoundaryRoot, options.hostId);
-    if (canonical(boundaryPackageBefore) !== canonical(packageBefore)) {
-      return failed("module_boundary_package_mismatch", "MH-07 package twin does not match the activated runtime package");
+    const boundaryIdentity = options.moduleBoundaryIdentity;
+    if (!validPluginSourceIdentity(boundaryIdentity)) {
+      return failed("module_boundary_identity_invalid", "MH-07 source twin identity is missing or malformed");
+    }
+    if (boundaryIdentity.source_commit !== options.sourceCommit) {
+      return failed("module_boundary_identity_invalid", "MH-07 source twin is not bound to the attested source commit");
+    }
+    const boundarySourceBefore = snapshotPluginSourceContentTree(options.moduleBoundaryRoot);
+    if (boundarySourceBefore.content_tree_sha256 !== boundaryIdentity.content_tree_sha256 || boundarySourceBefore.file_count !== boundaryIdentity.file_count) {
+      return failed("module_boundary_source_mismatch", "MH-07 source twin bytes do not match their Git-bound identity");
     }
     for (const name of CONSUMER_NAMES) {
       const root = options.consumerRoots[name];
@@ -1729,40 +1954,87 @@ export function runActivatedConformanceWorker(
       scenario_suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
       release_id: releaseId(options.release, (options.capturedAt ?? "2026-08-21T00:00:00.000Z").slice(0, 10)),
     };
-    const request = neutralCanonicalJson({
-      claim: { claimant_id: "guild.activated-host-capture", activated_runtime: identity },
-      owner_inputs: {
-        run_id: `run-activated-${options.hostId}-${options.challenge.slice(0, 16)}`,
-        receipt_refs: workerReceiptRefs(options.challenge),
-        evidence_freshness: freshness,
-        journal_root: journalRoot,
-        migration_journal_root: migrationJournalRoot,
-        migration_scenario_evidence: {},
-        plugin_root: fs.realpathSync(options.moduleBoundaryRoot),
-        consumer_roots: Object.fromEntries(
-          Object.entries(options.consumerRoots).map(([name, root]) => [name, fs.realpathSync(root)]),
-        ),
-        release_mode: "production",
-        release_scenario_evidence: {},
-      },
-    });
-    const result = runNeutralConformanceReleaseIntegration(request);
-    if (result.evidence === null || result.packets === null || result.outcome.disposition !== "succeeded") {
-      return failed(
+    const requestFor = (receiptRefs: Record<string, string>): string =>
+      neutralCanonicalJson({
+        claim: { claimant_id: "guild.activated-host-capture", activated_runtime: identity },
+        owner_inputs: {
+          run_id: `run-activated-${options.hostId}-${options.challenge.slice(0, 16)}`,
+          receipt_refs: receiptRefs,
+          evidence_freshness: freshness,
+          journal_root: journalRoot,
+          migration_journal_root: migrationJournalRoot,
+          migration_scenario_evidence: {},
+          plugin_root: fs.realpathSync(options.moduleBoundaryRoot),
+          consumer_roots: Object.fromEntries(
+            Object.entries(options.consumerRoots).map(([name, root]) => [name, fs.realpathSync(root)]),
+          ),
+          release_mode: "production",
+          release_scenario_evidence: {},
+        },
+      });
+    const integrationFailure = (result: ReturnType<typeof runNeutralConformanceReleaseIntegration>) =>
+      failed(
         "owner_evaluation_refused",
         `production integration refused: ${String(result.outcome.reason_code ?? "unnamed")} ` +
           `(control=${String(result.outcome.facts?.refusal_control ?? "unnamed")}, ` +
           `owner=${String(result.outcome.facts?.owner_key ?? "unnamed")}, ` +
           `detail=${String(result.outcome.facts?.owner_detail ?? "unnamed")})`,
       );
+    // Pass 1 — evaluate under PROVISIONAL references to fix the 31 outcomes.
+    const firstPass = runNeutralConformanceReleaseIntegration(requestFor(workerReceiptRefs(options.challenge)));
+    if (firstPass.evidence === null || firstPass.packets === null || firstPass.outcome.disposition !== "succeeded") {
+      return integrationFailure(firstPass);
+    }
+    // Pass 2 — A21-X MH-02 producer-side binding: construct the capture journal
+    // over exactly the pass-1 observed outcomes and re-evaluate with references
+    // citing each journal entry's OWN chain commitment. The emitted evidence
+    // therefore cites a real journal a verifier can rebuild and attestors can
+    // sign, never a challenge-derived placeholder.
+    const firstResults = firstPass.evidence.results as unknown as ReadonlyArray<Record<string, unknown>>;
+    const boundRefs = journalBoundReceiptRefs(
+      options.challenge,
+      identity as unknown as Record<string, unknown>,
+      firstResults,
+    );
+    const result = runNeutralConformanceReleaseIntegration(requestFor(boundRefs));
+    if (result.evidence === null || result.packets === null || result.outcome.disposition !== "succeeded") {
+      return integrationFailure(result);
+    }
+    // The second pass must observe byte-identical outcomes (only the receipt
+    // references may differ); any drift means the evaluation is not the one the
+    // journal records, and the capture fails closed.
+    const outcomeOnly = (results: ReadonlyArray<Record<string, unknown>>): string =>
+      canonical(
+        results.map((row) => ({
+          stable_id: row.stable_id,
+          outcome_type: row.outcome_type,
+          disposition: row.disposition,
+          reason_code: row.reason_code ?? null,
+          evidence_freshness: row.evidence_freshness,
+        })),
+      );
+    const secondResults = result.evidence.results as unknown as ReadonlyArray<Record<string, unknown>>;
+    if (outcomeOnly(secondResults) !== outcomeOnly(firstResults)) {
+      return failed(
+        "owner_evaluation_nondeterministic",
+        "the journal-binding re-evaluation observed different outcomes than the pass it records; the capture cannot honestly cite its own journal",
+      );
+    }
+    for (const row of secondResults) {
+      if (row.receipt_ref !== boundRefs[String(row.stable_id)]) {
+        return failed(
+          "receipt_binding_unbound",
+          `scenario ${String(row.stable_id)} does not cite its own journal entry commitment`,
+        );
+      }
     }
     const packageAfter = snapshotMigrationRuntimePackage(options.pluginRoot, options.hostId);
     if (canonical(packageAfter) !== canonical(packageBefore)) {
       return failed("runtime_package_drift", "worker package self-snapshot changed during owner evaluation");
     }
-    const boundaryPackageAfter = snapshotMigrationRuntimePackage(options.moduleBoundaryRoot, options.hostId);
-    if (canonical(boundaryPackageAfter) !== canonical(boundaryPackageBefore)) {
-      return failed("module_boundary_package_drift", "MH-07 package twin changed during owner evaluation");
+    const boundarySourceAfter = snapshotPluginSourceContentTree(options.moduleBoundaryRoot);
+    if (canonical(boundarySourceAfter) !== canonical(boundarySourceBefore)) {
+      return failed("module_boundary_source_drift", "MH-07 source twin changed during owner evaluation");
     }
     for (const name of CONSUMER_NAMES) {
       try { assertConsumerTreeMatches(options.consumerRoots[name], options.consumerIdentities[name]); }
@@ -1777,6 +2049,7 @@ export function runActivatedConformanceWorker(
       packageSnapshot: Object.freeze({ ...bindingOf(packageBefore), install_surface_sha256: options.installSurfaceHash }),
       hostActivation,
       consumerTrees: options.consumerIdentities,
+      moduleBoundarySource: boundaryIdentity,
     };
   } catch (error) {
     return failed("owner_evaluation_error", error instanceof Error ? error.message : String(error));
@@ -1893,7 +2166,8 @@ function verifyCodexTranscript(rows: readonly PlainRecord[], receipt: PlainRecor
       }
       if (item.type === "agent_message") {
         const declaration = isRecord(receipt.host_activation) ? receipt.host_activation.declaration : null;
-        if (item.text === declaration && skillProbeCount === 0) {
+        // Codex may end the probe line with one newline; nothing else is tolerated.
+        if (typeof declaration === "string" && (item.text === declaration || item.text === `${declaration}\n`) && skillProbeCount === 0) {
           if (threadCount !== 1 || turnStarted !== 1 || commandId !== null || commandCompleted !== 0) {
             return refusal("host_activation_unproven", "Codex model-visible Guild skill declaration is outside the started thread/turn");
           }
@@ -1940,6 +2214,7 @@ const RECEIPT_KEYS = Object.freeze([
   "activated_package_snapshot",
   "host_activation",
   "consumer_trees",
+  "module_boundary_source",
   "external_attestation_verified",
   "authorizes_promotion",
 ]);
@@ -1977,7 +2252,7 @@ export function verifyActivatedHostConformanceReceipt(
   let worker: unknown;
   try { worker = JSON.parse(options.workerResult); }
   catch { return refusal("worker_output_invalid", "worker result is not JSON"); }
-  if (!isRecord(worker) || !exactKeys(worker, ["schema_version", "ok", "code", "detail", "marker", "challenge", "host_id", "evidence", "package_snapshot", "host_activation", "consumer_trees"]) || worker.schema_version !== ACTIVATED_HOST_WORKER_SCHEMA || worker.ok !== true || worker.code !== "evaluated" || worker.marker !== markerFor(receipt.challenge) || worker.challenge !== receipt.challenge || worker.host_id !== receipt.host_id || canonical(worker.evidence) !== canonical(receipt.evidence) || canonical(worker.package_snapshot) !== canonical(receipt.activated_package_snapshot) || canonical(worker.consumer_trees) !== canonical(receipt.consumer_trees) || (receipt.host_id === "claude-code-cli" ? canonical(worker.host_activation) !== canonical(receipt.host_activation) : worker.host_activation !== null)) return refusal("worker_output_invalid", "worker result does not exactly bind the receipt evidence, package snapshot, consumer trees, and host-specific activation identity");
+  if (!isRecord(worker) || !exactKeys(worker, ["schema_version", "ok", "code", "detail", "marker", "challenge", "host_id", "evidence", "package_snapshot", "host_activation", "consumer_trees", "module_boundary_source"]) || worker.schema_version !== ACTIVATED_HOST_WORKER_SCHEMA || worker.ok !== true || worker.code !== "evaluated" || worker.marker !== markerFor(receipt.challenge) || worker.challenge !== receipt.challenge || worker.host_id !== receipt.host_id || canonical(worker.evidence) !== canonical(receipt.evidence) || canonical(worker.package_snapshot) !== canonical(receipt.activated_package_snapshot) || canonical(worker.consumer_trees) !== canonical(receipt.consumer_trees) || !validPluginSourceIdentity(worker.module_boundary_source) || canonical(worker.module_boundary_source) !== canonical(receipt.module_boundary_source) || worker.module_boundary_source.source_commit !== options.expectedSourceCommit || (receipt.host_id === "claude-code-cli" ? canonical(worker.host_activation) !== canonical(receipt.host_activation) : worker.host_activation !== null)) return refusal("worker_output_invalid", "worker result does not exactly bind the receipt evidence, package snapshot, consumer trees, source twin identity, and host-specific activation identity");
 
   if (!isRecord(receipt.runtime_package) || canonical(receipt.runtime_package) !== canonical(bindingOf(options.expectedPackage))) return refusal("runtime_package_mismatch", "receipt runtime binding does not match the attested beta package");
   let actualPackage: MigrationRuntimePackageV1;
@@ -2019,13 +2294,7 @@ export function verifyActivatedHostConformanceReceipt(
     contract_version: receipt.contract_version,
     scenario_suite_id: receipt.scenario_suite_id,
     scenario_suite_version: receipt.scenario_suite_version,
-    release_id: `rel-${String(receipt.captured_at).slice(0, 10)}-${String(receipt.release)
-      .split("-")
-      .slice(1)
-      .join("")
-      .replace(/[^0-9a-z]/gi, "")
-      .toLowerCase()
-      .slice(0, 16)}`,
+    release_id: releaseId(String(receipt.release), String(receipt.captured_at).slice(0, 10)),
   };
   if (
     receipt.contract_version !== NEUTRAL_CONTRACT_VERSION ||
@@ -2098,7 +2367,7 @@ function assertCliPairs(argv: readonly string[], allowed: ReadonlySet<string>, l
 }
 
 function runCaptureCli(argv: readonly string[]): number {
-  assertCliPairs(argv, new Set(["--host", "--boundary", "--package-root", "--consumer-root", "--out-dir"]), "capture");
+  assertCliPairs(argv, new Set(["--host", "--boundary", "--package-root", "--source-root", "--consumer-root", "--out-dir"]), "capture");
   const hostId = cliValue(argv, "--host") as MigrationRuntimeHost;
   if (!HOSTS.includes(hostId)) throw new Error("--host must be claude-code-cli or codex-cli");
   const boundary = loadAttestedMigrationBoundary(path.resolve(cliValue(argv, "--boundary"))).boundary;
@@ -2106,9 +2375,11 @@ function runCaptureCli(argv: readonly string[]): number {
   const expectedPackage = boundary.packages[hostId];
   verifyAttestedGeneratedRuntimePackage(packageRoot, expectedPackage);
   const consumers = parseConsumerRoots(cliValues(argv, "--consumer-root"));
+  const sourceRootArg = argv.includes("--source-root") ? cliValue(argv, "--source-root") : path.resolve(__dirname, "..");
   const result = captureActivatedHostConformance({
     hostId,
     packageRoot,
+    sourceRoot: fs.realpathSync(path.resolve(sourceRootArg)),
     expectedPackage,
     sourceCommit: boundary.source_commit,
     release: boundary.release,
@@ -2172,7 +2443,7 @@ function runWorkerCli(argv: readonly string[]): number {
   const allowed = new Set([
     "--host", "--challenge", "--source-commit", "--package-hash", "--install-surface-hash", "--runtime-version",
     "--host-version", "--platform", "--release", "--captured-at", "--plugin-root",
-    "--module-boundary-root",
+    "--module-boundary-root", "--module-boundary-identity", "--module-boundary-identity-sha256",
     "--consumer-root", "--consumer-identities", "--out",
   ]);
   assertCliPairs(argv, allowed, "worker");
@@ -2181,6 +2452,11 @@ function runWorkerCli(argv: readonly string[]): number {
   const capturedAt = cliValue(argv, "--captured-at");
   const consumerIdentities: unknown = JSON.parse(readRegularNoFollow(path.resolve(cliValue(argv, "--consumer-identities")), "consumer identities").toString("utf8"));
   if (!validConsumerTreeSet(consumerIdentities)) throw new Error("--consumer-identities must bind the official website and benchmark trees");
+  const moduleBoundaryIdentityBytes = readRegularNoFollow(path.resolve(cliValue(argv, "--module-boundary-identity")), "module-boundary identity");
+  if (argv.includes("--module-boundary-identity-sha256") && sha256Hex(moduleBoundaryIdentityBytes) !== cliValue(argv, "--module-boundary-identity-sha256")) {
+    throw new Error("--module-boundary-identity bytes do not hash to the command-bound digest");
+  }
+  const moduleBoundaryIdentity: unknown = JSON.parse(moduleBoundaryIdentityBytes.toString("utf8"));
   const result = runActivatedConformanceWorker({
     hostId,
     challenge,
@@ -2194,6 +2470,7 @@ function runWorkerCli(argv: readonly string[]): number {
     capturedAt,
     pluginRoot: cliValue(argv, "--plugin-root"),
     moduleBoundaryRoot: cliValue(argv, "--module-boundary-root"),
+    moduleBoundaryIdentity,
     consumerRoots: parseConsumerRoots(cliValues(argv, "--consumer-root")),
     consumerIdentities,
   });
@@ -2213,6 +2490,7 @@ function runWorkerCli(argv: readonly string[]): number {
     package_snapshot: result.packageSnapshot,
     host_activation: result.hostActivation,
     consumer_trees: result.consumerTrees,
+    module_boundary_source: result.moduleBoundarySource,
   };
   const bytes = `${JSON.stringify(payload, null, 2)}\n`;
   writeExclusive(path.resolve(cliValue(argv, "--out")), bytes, 0o600);
@@ -2221,6 +2499,7 @@ function runWorkerCli(argv: readonly string[]): number {
 }
 
 function main(): void {
+  ensureStorageLayout(process.cwd(), { detectOnly: true });
   const [subcommand, ...argv] = process.argv.slice(2);
   try {
     if (subcommand === "worker") {
