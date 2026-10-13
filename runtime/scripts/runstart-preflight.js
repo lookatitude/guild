@@ -9078,7 +9078,8 @@ function pluginLocalScriptsRoots() {
 }
 function tryScriptsRoot(scriptsRoot) {
   try {
-    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
+    const requireFrom = (0, import_node_module.createRequire)(path3.join(scriptsRoot, "package.json"));
+    return requireFrom("js-yaml");
   } catch {
     return null;
   }
@@ -9102,9 +9103,10 @@ function loadYamlApi() {
     `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
   );
 }
-var path3;
+var import_node_module, path3;
 var init_yaml_loader = __esm({
   "src/domains/kernel/yaml-loader.ts"() {
+    import_node_module = require("node:module");
     path3 = __toESM(require("node:path"));
     init_plugin_root();
   }
@@ -9778,19 +9780,143 @@ function mh07RequiredConsumerRoots(pluginRoot) {
   for (const name of MH07_REQUIRED_CONSUMERS) roots[name] = path6.join(workspace, name);
   return roots;
 }
-function walkTypeScript(dir, excluded) {
+function walkTypeScript(dir, excluded, excludedSuffixes = []) {
   if (!fs4.existsSync(dir)) return [];
   const found = [];
   for (const entry of fs4.readdirSync(dir, { withFileTypes: true })) {
     const full = path6.join(dir, entry.name);
     if (entry.isDirectory()) {
       if (excluded.indexOf(entry.name) !== -1) continue;
-      found.push(...walkTypeScript(full, excluded));
+      found.push(...walkTypeScript(full, excluded, excludedSuffixes));
     } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+      if (excludedSuffixes.some((suffix) => entry.name.endsWith(suffix))) continue;
       found.push(full);
     }
   }
   return found.sort();
+}
+function mh07IsDomainsShape(root) {
+  return walkTypeScript(
+    path6.join(root, "src", "domains"),
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
+  ).length > 0;
+}
+function mh07UnitOfRelPath(rel2) {
+  for (const unit of Object.keys(MH07_DOMAIN_TREE_ROLES)) {
+    if (rel2 === unit || rel2.indexOf(`${unit}/`) === 0) return unit;
+  }
+  return null;
+}
+function mh07UnclassifiedSources(root) {
+  return walkTypeScript(
+    path6.join(root, "src"),
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
+  ).map((file) => relativeTo(root, file)).filter((rel2) => mh07UnitOfRelPath(rel2) === null);
+}
+function classifyDomainDestination(root, importer, specifier, fromUnit, closure) {
+  if (specifier.indexOf(".") !== 0) {
+    const bare = specifier.indexOf("node:") === 0 ? specifier.slice("node:".length) : specifier;
+    const isBuiltin = specifier.indexOf("node:") === 0 || MH07_NODE_BUILTINS.indexOf(bare) !== -1;
+    return {
+      destination_class: isBuiltin ? "node_builtin" : "external_package",
+      imported: null,
+      to_module: null
+    };
+  }
+  const resolved = resolveRelative(importer, specifier);
+  const rel2 = relativeTo(root, resolved);
+  if (rel2.indexOf("..") === 0 || path6.isAbsolute(rel2)) {
+    return { destination_class: "unclassified", imported: rel2, to_module: null };
+  }
+  if (MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes.some((suffix) => rel2.endsWith(suffix)) || rel2.split("/").some((segment) => MH07_DOMAIN_GRAPH_SCOPE.excluded_directories.indexOf(segment) !== -1)) {
+    return { destination_class: "unclassified", imported: rel2, to_module: null };
+  }
+  const head = rel2.split("/")[0];
+  if (MH07_HOST_FACING_ROOTS.indexOf(head) !== -1) {
+    return { destination_class: "host_facing_mirror", imported: rel2, to_module: head };
+  }
+  const toUnit = mh07UnitOfRelPath(rel2);
+  if (toUnit === null) {
+    return { destination_class: "unclassified", imported: rel2, to_module: null };
+  }
+  let isClosureMember = closure.has(rel2);
+  if (!isClosureMember && rel2.endsWith(".json")) {
+    try {
+      const entry = fs4.lstatSync(resolved);
+      isClosureMember = entry.isFile() && !entry.isSymbolicLink();
+    } catch {
+      isClosureMember = false;
+    }
+  }
+  if (!isClosureMember) {
+    return { destination_class: "unclassified", imported: rel2, to_module: null };
+  }
+  if (toUnit === fromUnit) {
+    return { destination_class: "intra_module", imported: rel2, to_module: toUnit };
+  }
+  const isPublic = rel2 === `${toUnit}/index.ts`;
+  return {
+    destination_class: isPublic ? "module_public_index" : "module_private",
+    imported: rel2,
+    to_module: toUnit
+  };
+}
+function mh07ScanDomainDependencyGraph(root, extract) {
+  const nodes = [];
+  const edges = [];
+  const unresolved2 = [];
+  const ambient = [];
+  const unitFiles = /* @__PURE__ */ new Map();
+  const closure = /* @__PURE__ */ new Set();
+  for (const unit of Object.keys(MH07_DOMAIN_TREE_ROLES)) {
+    const files = walkTypeScript(
+      path6.join(root, unit),
+      MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
+      MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
+    );
+    unitFiles.set(unit, files);
+    for (const file of files) closure.add(relativeTo(root, file));
+  }
+  for (const unit of Object.keys(MH07_DOMAIN_TREE_ROLES)) {
+    const files = unitFiles.get(unit) ?? [];
+    for (const file of files) {
+      const rel2 = relativeTo(root, file);
+      nodes.push(rel2);
+      const extracted = extract(fs4.readFileSync(file, "utf8"));
+      for (const edge of extracted) {
+        if (edge.kind === "unresolved") {
+          const detail = edge.detail ?? "";
+          if (edge.form === "require" && detail.indexOf("require used as a value") === 0) {
+            ambient.push({ importer: rel2, detail });
+          } else {
+            unresolved2.push({ importer: rel2, form: edge.form, detail });
+          }
+          continue;
+        }
+        const specifier = edge.specifier ?? "";
+        const classified = classifyDomainDestination(root, file, specifier, unit, closure);
+        edges.push({
+          importer: rel2,
+          specifier,
+          form: edge.form,
+          imported: classified.imported,
+          destination_class: classified.destination_class,
+          from_module: unit,
+          to_module: classified.to_module
+        });
+      }
+    }
+  }
+  return neutralFreeze({
+    node_count: nodes.length,
+    edge_count: edges.length,
+    nodes: nodes.sort(),
+    edges,
+    unresolved: unresolved2,
+    ambient_uses: ambient
+  });
 }
 function toPosix(value) {
   return value.split(path6.sep).join("/");
@@ -9801,6 +9927,7 @@ function relativeTo(root, target) {
 function resolveRelative(importer, specifier) {
   const base = path6.resolve(path6.dirname(importer), specifier);
   const candidates = [base, `${base}.ts`, path6.join(base, "index.ts")];
+  if (base.endsWith(".js")) candidates.push(`${base.slice(0, -3)}.ts`);
   return candidates.find((candidate) => fs4.existsSync(candidate) && fs4.statSync(candidate).isFile()) ?? base;
 }
 function moduleIdOfPath(root, target, moduleIds) {
@@ -9847,6 +9974,9 @@ function classifyDestination(root, importer, specifier, fromModule, moduleIds) {
   };
 }
 function mh07ScanDependencyGraph(root, extract = extractNeutralImportEdges, moduleIdsOverride) {
+  if (mh07IsDomainsShape(root)) {
+    return mh07ScanDomainDependencyGraph(root, extract);
+  }
   const modulesDir = path6.join(root, "src", "modules");
   const moduleIds = moduleIdsOverride ?? (fs4.existsSync(modulesDir) ? fs4.readdirSync(modulesDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort() : []);
   const files = walkTypeScript(modulesDir, MH07_GRAPH_SCOPE.excluded_directories);
@@ -10157,20 +10287,28 @@ function evaluateNeutralModuleBoundaries(request) {
   const moduleIds = moduleIdsOf(manifests);
   const ownership = port.validateModuleOwnership(emptyModuleInventory(), manifests);
   const boundaries = port.validateModuleBoundaries(root, manifests);
-  const health = port.validateModuleHealth(root, manifests);
+  const domainsShape = mh07IsDomainsShape(root);
+  const health = domainsShape ? port.validateModuleHealth(
+    root,
+    manifests,
+    (moduleId) => MH07_MODULE_FOLD_INDEX[moduleId] ?? `src/domains/${moduleId}/index.ts`
+  ) : port.validateModuleHealth(root, manifests);
   const graph = mh07ScanDependencyGraph(root, port.extractNeutralImportEdges, moduleIds);
-  const roleOf = (moduleId) => moduleId === null ? null : MH07_MODULE_ROLES[moduleId] ?? null;
-  const unclassifiedModules = moduleIds.filter((id) => roleOf(id) === null);
-  const modulesWithRole = (role) => moduleIds.filter((id) => roleOf(id) === role);
+  const roleOf = (unit) => unit === null ? null : (domainsShape ? MH07_DOMAIN_TREE_ROLES[unit] : MH07_MODULE_ROLES[unit]) ?? null;
+  const classifiedUnits = domainsShape ? Object.keys(MH07_DOMAIN_TREE_ROLES) : moduleIds;
+  const unclassifiedModules = domainsShape ? moduleIds.filter((id) => MH07_MODULE_FOLD_INDEX[id] === void 0) : moduleIds.filter((id) => roleOf(id) === null);
+  const unclassifiedSources = domainsShape ? mh07UnclassifiedSources(root) : [];
+  const modulesWithRole = (role) => classifiedUnits.filter((unit) => roleOf(unit) === role);
   const coreModules = modulesWithRole("neutral_core");
   const adapterModules = modulesWithRole("host_adapter");
   const transportModules = modulesWithRole("execution_transport");
   const serviceModules = modulesWithRole("service");
-  const nonAdapterModules = moduleIds.filter((id) => roleOf(id) !== "host_adapter");
-  const sourcesOf = (moduleId) => walkTypeScript(
-    path6.join(root, "src", "modules", moduleId),
-    MH07_GRAPH_SCOPE.excluded_directories
-  ).map((file) => ({ path: relativeTo(root, file), source: fs4.readFileSync(file, "utf8") }));
+  const nonAdapterModules = classifiedUnits.filter((unit) => roleOf(unit) !== "host_adapter");
+  const sourcesOf = (unit) => (domainsShape ? walkTypeScript(
+    path6.join(root, unit),
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
+    MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
+  ) : walkTypeScript(path6.join(root, "src", "modules", unit), MH07_GRAPH_SCOPE.excluded_directories)).map((file) => ({ path: relativeTo(root, file), source: fs4.readFileSync(file, "utf8") }));
   const declaredSymbolFindings = (moduleIdsToScan, symbols) => {
     const findings = [];
     for (const moduleId of moduleIdsToScan) {
@@ -10184,8 +10322,15 @@ function evaluateNeutralModuleBoundaries(request) {
     }
     return findings;
   };
-  const violationsFrom = (moduleIdsToScan) => boundaries.violations.filter(
-    (violation) => moduleIdsToScan.indexOf(violation.from_module) !== -1
+  const domainViolations = domainsShape ? graph.edges.filter((edge) => edge.destination_class === "module_private").map((edge) => ({
+    importer: edge.importer,
+    imported: edge.imported ?? "",
+    from_module: edge.from_module,
+    to_module: edge.to_module ?? "",
+    reason: `cross-module imports must target ${edge.to_module ?? "the destination"}/index.ts`
+  })) : [];
+  const violationsFrom = (unitsToScan) => (domainsShape ? domainViolations : boundaries.violations).filter(
+    (violation) => unitsToScan.indexOf(violation.from_module) !== -1
   );
   const hostFacingEdgesFrom = (moduleIdsToScan) => graph.edges.filter(
     (edge) => edge.destination_class === "host_facing_mirror" && moduleIdsToScan.indexOf(edge.from_module) !== -1
@@ -10194,7 +10339,7 @@ function evaluateNeutralModuleBoundaries(request) {
   const coreFiles = [];
   const missingCoreMembers = [];
   for (const member of NEUTRAL_CORE_MEMBERS) {
-    const memberPath = coreHostModule === null ? null : path6.join(root, "src", "modules", coreHostModule, "workflows", member);
+    const memberPath = coreHostModule === null ? null : domainsShape ? path6.join(root, coreHostModule, member) : path6.join(root, "src", "modules", coreHostModule, "workflows", member);
     if (memberPath === null || !fs4.existsSync(memberPath)) {
       missingCoreMembers.push(member);
       continue;
@@ -10205,7 +10350,7 @@ function evaluateNeutralModuleBoundaries(request) {
   const unclassifiedEdges = graph.edges.filter(
     (edge) => edge.destination_class === "unclassified"
   );
-  const mod001Satisfied = coreVerdict !== null && coreVerdict.disposition === "succeeded" && unclassifiedModules.length === 0 && unclassifiedEdges.length === 0 && graph.unresolved.length === 0 && graph.node_count > 0 && graph.edge_count > 0 && health.ok && ownership.ok;
+  const mod001Satisfied = coreVerdict !== null && coreVerdict.disposition === "succeeded" && unclassifiedModules.length === 0 && unclassifiedSources.length === 0 && unclassifiedEdges.length === 0 && graph.unresolved.length === 0 && graph.node_count > 0 && graph.edge_count > 0 && health.ok && ownership.ok;
   const adapterViolations = violationsFrom(adapterModules);
   const adapterPolicyOwners = declaredSymbolFindings(
     adapterModules,
@@ -10242,8 +10387,8 @@ function evaluateNeutralModuleBoundaries(request) {
       (edge) => edge.from_module === moduleId && edge.destination_class === "module_public_index" && MH07_HOST_FACING_CONTRACT_ROLES.indexOf(roleOf(edge.to_module) ?? "") !== -1
     )
   );
-  const contractConsumersWithoutVersion = contractConsumerServices.filter((moduleId) => {
-    const indexPath = path6.join(root, "src", "modules", moduleId, "index.ts");
+  const contractConsumersWithoutVersion = contractConsumerServices.filter((unit) => {
+    const indexPath = domainsShape ? path6.join(root, unit, "index.ts") : path6.join(root, "src", "modules", unit, "index.ts");
     if (!fs4.existsSync(indexPath)) return true;
     return fs4.readFileSync(indexPath, "utf8").indexOf(MODULE_PUBLIC_API_DECLARATION) === -1;
   });
@@ -10274,12 +10419,14 @@ function evaluateNeutralModuleBoundaries(request) {
     edge_count: graph.edge_count,
     scanner_version: MH07_SCANNER_VERSION,
     evaluator_version: MH07_EVALUATOR_VERSION,
-    graph_scope_excluded_directories: [...MH07_GRAPH_SCOPE.excluded_directories],
+    tree_model: domainsShape ? "domains" : "modules",
+    graph_scope_excluded_directories: domainsShape ? [...MH07_DOMAIN_GRAPH_SCOPE.excluded_directories] : [...MH07_GRAPH_SCOPE.excluded_directories],
+    graph_scope_excluded_file_suffixes: domainsShape ? [...MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes] : [],
     consumer_scope_excluded_directories: [...MH07_CONSUMER_SCAN_EXCLUDED_DIRECTORIES],
     consumer_roots_scanned: consumerNames,
     core_members: [...NEUTRAL_CORE_MEMBERS],
     core_host_module: coreHostModule,
-    role_registry_digest: digestOf(MH07_MODULE_ROLES)
+    role_registry_digest: digestOf(domainsShape ? MH07_DOMAIN_TREE_ROLES : MH07_MODULE_ROLES)
   };
   const observations = {
     "MHRC-MOD-001": {
@@ -10289,6 +10436,7 @@ function evaluateNeutralModuleBoundaries(request) {
       missing_core_members: missingCoreMembers,
       forbidden_edges: coreVerdict === null ? null : coreVerdict.facts.forbidden_edges,
       unclassified_modules: unclassifiedModules,
+      unclassified_sources: unclassifiedSources,
       unclassified_edges: unclassifiedEdges,
       unresolved_edges: graph.unresolved,
       ambient_uses: graph.ambient_uses,
@@ -10381,7 +10529,7 @@ function evaluateNeutralModuleBoundaries(request) {
     packet: neutralFreeze(packetRecord)
   };
 }
-var fs4, path6, MH07_OWNER_KEY, MH07_SCENARIO_IDS, MH07_PACKET_SCHEMA, MH07_EVIDENCE_PROFILE_ID, MH07_EVALUATOR_VERSION, MH07_SCANNER_VERSION, MH07_GRAPH_SCOPE, MH07_ROLES, MH07_DESTINATION_CLASSES, MH07_EDGE_FORMS, MH07_LIFECYCLE_DECISION_SYMBOLS, MH07_NATIVE_EVENT_BINDING_SYMBOLS, MH07_NODE_BUILTINS, MH07_HOST_FACING_ROOTS, MODULE_PUBLIC_API_DECLARATION, MH07_HOST_FACING_CONTRACT_ROLES, MH07_MODULE_ROLES, MH07_WAVE_OWNER, MH07_SCENARIOS, MH07_EXPECTED_OUTCOME, MH07_PRODUCTION_SCANNER, MH07_REFUSAL_CONTROLS, MH07_REQUIRED_CONSUMERS, MH07_CONSUMER_SCAN_EXCLUDED_DIRECTORIES, DECLARATION_HEADS;
+var fs4, path6, MH07_OWNER_KEY, MH07_SCENARIO_IDS, MH07_PACKET_SCHEMA, MH07_EVIDENCE_PROFILE_ID, MH07_EVALUATOR_VERSION, MH07_SCANNER_VERSION, MH07_GRAPH_SCOPE, MH07_ROLES, MH07_DESTINATION_CLASSES, MH07_EDGE_FORMS, MH07_LIFECYCLE_DECISION_SYMBOLS, MH07_NATIVE_EVENT_BINDING_SYMBOLS, MH07_NODE_BUILTINS, MH07_HOST_FACING_ROOTS, MODULE_PUBLIC_API_DECLARATION, MH07_HOST_FACING_CONTRACT_ROLES, MH07_MODULE_ROLES, MH07_DOMAIN_TREE_ROLES, MH07_DOMAIN_GRAPH_SCOPE, MH07_MODULE_FOLD_INDEX, MH07_WAVE_OWNER, MH07_SCENARIOS, MH07_EXPECTED_OUTCOME, MH07_PRODUCTION_SCANNER, MH07_REFUSAL_CONTROLS, MH07_REQUIRED_CONSUMERS, MH07_CONSUMER_SCAN_EXCLUDED_DIRECTORIES, DECLARATION_HEADS;
 var init_module_boundary_conformance_evaluator = __esm({
   "src/domains/lifecycle/module-boundary-conformance-evaluator.ts"() {
     fs4 = __toESM(require("node:fs"));
@@ -10494,6 +10642,59 @@ var init_module_boundary_conformance_evaluator = __esm({
       review: "service",
       specialists: "service",
       telemetry: "service"
+    });
+    MH07_DOMAIN_TREE_ROLES = Object.freeze({
+      "src/domains/lifecycle": "neutral_core",
+      "src/adapters": "host_adapter",
+      "src/runtime": "host_adapter",
+      "src/domains/dispatch": "execution_transport",
+      "src/domains/config": "substrate",
+      "src/domains/kernel": "substrate",
+      "src/domains/security": "substrate",
+      "src/domains/state": "substrate",
+      "src/domains/teams": "substrate",
+      "src/domains/distribution": "service",
+      "src/domains/evolve": "service",
+      "src/domains/knowledge": "service",
+      "src/domains/review": "service",
+      "src/domains/telemetry": "service"
+    });
+    MH07_DOMAIN_GRAPH_SCOPE = Object.freeze({
+      excluded_directories: Object.freeze(["resources", "__tests__"]),
+      excluded_file_suffixes: Object.freeze([".test.ts"])
+    });
+    MH07_MODULE_FOLD_INDEX = Object.freeze({
+      kernel: "src/domains/kernel/index.ts",
+      state: "src/domains/state/index.ts",
+      migrations: "src/domains/state/index.ts",
+      workspace: "src/domains/state/index.ts",
+      security: "src/domains/security/index.ts",
+      config: "src/domains/config/index.ts",
+      capability: "src/domains/config/index.ts",
+      prompting: "src/domains/config/index.ts",
+      lifecycle: "src/domains/lifecycle/index.ts",
+      initiatives: "src/domains/lifecycle/index.ts",
+      operations: "src/domains/lifecycle/index.ts",
+      loops: "src/domains/lifecycle/index.ts",
+      intake: "src/domains/lifecycle/index.ts",
+      documents: "src/domains/lifecycle/index.ts",
+      knowledge: "src/domains/knowledge/index.ts",
+      context: "src/domains/knowledge/index.ts",
+      learning: "src/domains/knowledge/index.ts",
+      teams: "src/domains/teams/index.ts",
+      specialists: "src/domains/teams/index.ts",
+      templates: "src/domains/teams/index.ts",
+      dispatch: "src/domains/dispatch/index.ts",
+      communication: "src/domains/dispatch/index.ts",
+      review: "src/domains/review/index.ts",
+      quality: "src/domains/review/index.ts",
+      evolution: "src/domains/evolve/index.ts",
+      evals: "src/domains/evolve/index.ts",
+      telemetry: "src/domains/telemetry/index.ts",
+      dashboard: "src/domains/telemetry/index.ts",
+      distribution: "src/domains/distribution/index.ts",
+      "docs-sync": "src/domains/distribution/index.ts",
+      "host-runtime": "src/adapters/index.ts"
     });
     MH07_WAVE_OWNER = Object.freeze({
       wave_id: "W4",
@@ -42839,6 +43040,7 @@ __export(evolve_exports, {
   HUMAN_ONLY_TARGETS: () => HUMAN_ONLY_TARGETS,
   LEARNING_CANDIDATE_SCHEMA: () => LEARNING_CANDIDATE_SCHEMA,
   LEARNING_CANDIDATE_TYPES: () => LEARNING_CANDIDATE_TYPES,
+  MODULE_PUBLIC_API_VERSION: () => MODULE_PUBLIC_API_VERSION3,
   TASK_CELL_POLICY_EVAL_OBSERVATION_SCHEMA: () => TASK_CELL_POLICY_EVAL_OBSERVATION_SCHEMA,
   TASK_GROUP_SCHEMA_VERSION: () => TASK_GROUP_SCHEMA_VERSION,
   TASK_GROUP_V1_EXAMPLE: () => TASK_GROUP_V1_EXAMPLE,
@@ -42900,6 +43102,7 @@ __export(evolve_exports, {
   validateGoalV1: () => validateGoalV12,
   validateTaskGroupV1: () => validateTaskGroupV1
 });
+var MODULE_PUBLIC_API_VERSION3;
 var init_evolve = __esm({
   "src/domains/evolve/index.ts"() {
     init_define_schema();
@@ -42913,6 +43116,7 @@ var init_evolve = __esm({
     init_learning_candidate();
     init_learning_signatures();
     init_define_schema();
+    MODULE_PUBLIC_API_VERSION3 = "guild.module.public-api.v1";
   }
 });
 
@@ -48368,11 +48572,14 @@ __export(lifecycle_exports, {
   MAX_OBJECT_KEYS: () => MAX_OBJECT_KEYS,
   MAX_STRING_LENGTH: () => MAX_STRING_LENGTH,
   MH07_DESTINATION_CLASSES: () => MH07_DESTINATION_CLASSES,
+  MH07_DOMAIN_GRAPH_SCOPE: () => MH07_DOMAIN_GRAPH_SCOPE,
+  MH07_DOMAIN_TREE_ROLES: () => MH07_DOMAIN_TREE_ROLES,
   MH07_EDGE_FORMS: () => MH07_EDGE_FORMS,
   MH07_EVALUATOR_VERSION: () => MH07_EVALUATOR_VERSION,
   MH07_EVIDENCE_PROFILE_ID: () => MH07_EVIDENCE_PROFILE_ID,
   MH07_GRAPH_SCOPE: () => MH07_GRAPH_SCOPE,
   MH07_LIFECYCLE_DECISION_SYMBOLS: () => MH07_LIFECYCLE_DECISION_SYMBOLS,
+  MH07_MODULE_FOLD_INDEX: () => MH07_MODULE_FOLD_INDEX,
   MH07_MODULE_ROLES: () => MH07_MODULE_ROLES,
   MH07_NATIVE_EVENT_BINDING_SYMBOLS: () => MH07_NATIVE_EVENT_BINDING_SYMBOLS,
   MH07_OWNER_KEY: () => MH07_OWNER_KEY,
@@ -48638,6 +48845,7 @@ __export(lifecycle_exports, {
   markLaneDeadFromArgs: () => markLaneDeadFromArgs,
   markLaneInProgress: () => markLaneInProgress,
   mh07ScanDependencyGraph: () => mh07ScanDependencyGraph,
+  mh07UnclassifiedSources: () => mh07UnclassifiedSources,
   migrateDocumentRecord: () => migrateDocumentRecord,
   mintRunBinding: () => mintRunBinding,
   neutralAdmissionContextSemanticView: () => neutralAdmissionContextSemanticView,

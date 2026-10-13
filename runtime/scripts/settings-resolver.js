@@ -3135,7 +3135,8 @@ function pluginLocalScriptsRoots() {
 }
 function tryScriptsRoot(scriptsRoot) {
   try {
-    return require(require.resolve("js-yaml", { paths: [scriptsRoot] }));
+    const requireFrom = (0, import_node_module.createRequire)(path2.join(scriptsRoot, "package.json"));
+    return requireFrom("js-yaml");
   } catch {
     return null;
   }
@@ -3159,9 +3160,10 @@ function loadYamlApi() {
     `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
   );
 }
-var path2;
+var import_node_module, path2;
 var init_yaml_loader = __esm({
   "src/domains/kernel/yaml-loader.ts"() {
+    import_node_module = require("node:module");
     path2 = __toESM(require("node:path"));
     init_plugin_root();
   }

@@ -57,3 +57,7 @@ export * from "./learning-signatures";
 export {
   runSelfCheck as runDefineSelfCheck,
 } from "./define-schema";
+
+// MHRC-MOD-004: this domain binds host-facing contracts (the lifecycle public
+// index), so it states the public-API contract version it was built against.
+export const MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1" as const;

@@ -27,6 +27,8 @@ const {
   activatedConsumerRoots,
   activatedHostCaptureId,
   captureActivatedHostConformance,
+  snapshotOfficialPluginSourceGitTree,
+  snapshotPluginSourceContentTree,
   claudeEnvironment,
   CODEX_PROBE_SKILL_NAME,
   CODEX_PROBE_SKILL_PATH,
@@ -84,6 +86,24 @@ function fixtureConsumerTrees(website?: string, benchmark?: string) {
     };
   };
   return { website: identity("website", website, "a"), benchmark: identity("benchmark", benchmark, "c") };
+}
+
+function fixtureBoundaryIdentity(root: string) {
+  // The worker CONSUMES a host-native install receipt from the plugin root
+  // before snapshotting; a fixture whose boundary root IS the plugin root must
+  // bind the post-consumption bytes, so the receipt is outside the identity.
+  const receipt = path.join(root, "guild-install-receipt.json");
+  const receiptBytes = fs.existsSync(receipt) ? fs.readFileSync(receipt) : null;
+  if (receiptBytes !== null) fs.rmSync(receipt);
+  const content = snapshotPluginSourceContentTree(root);
+  if (receiptBytes !== null) fs.writeFileSync(receipt, receiptBytes);
+  return {
+    schema_version: "guild.plugin_source_identity.v1",
+    repository: "github.com/lookatitude/guild",
+    source_commit: SOURCE_COMMIT,
+    source_tree: "e".repeat(40),
+    ...content,
+  };
 }
 
 function packageFixture(host: HostId): {
@@ -270,6 +290,15 @@ function productionWorkerFixture(host: HostId = "claude-code-cli") {
   return { stage, plugin, website, benchmark, runtimePackage: snapshotMigrationRuntimePackage(plugin, host) };
 }
 
+const FIXTURE_BOUNDARY_SOURCE = Object.freeze({
+  schema_version: "guild.plugin_source_identity.v1",
+  repository: "github.com/lookatitude/guild",
+  source_commit: SOURCE_COMMIT,
+  source_tree: "e".repeat(40),
+  content_tree_sha256: "b".repeat(64),
+  file_count: 1,
+});
+
 function workerBytes(host: HostId, runtimePackage: ReturnType<typeof snapshotMigrationRuntimePackage>): string {
   return `${JSON.stringify({
     schema_version: ACTIVATED_HOST_WORKER_SCHEMA,
@@ -283,6 +312,7 @@ function workerBytes(host: HostId, runtimePackage: ReturnType<typeof snapshotMig
     package_snapshot: runtimeBinding(runtimePackage),
     host_activation: host === "codex-cli" ? null : activation(host, CAPTURED_AT, runtimePackage),
     consumer_trees: fixtureConsumerTrees(),
+    module_boundary_source: FIXTURE_BOUNDARY_SOURCE,
   }, null, 2)}\n`;
 }
 
@@ -337,6 +367,7 @@ function receipt(host: HostId, runtimePackage: ReturnType<typeof snapshotMigrati
     activated_package_snapshot: runtimeBinding(runtimePackage),
     host_activation: activation(host, CAPTURED_AT, runtimePackage),
     consumer_trees: fixtureConsumerTrees(),
+    module_boundary_source: FIXTURE_BOUNDARY_SOURCE,
     external_attestation_verified: false,
     authorizes_promotion: false,
   };
@@ -444,6 +475,8 @@ describe("activated-host conformance capture", () => {
       const packageRoot = path.join(distRoot, packageName);
       const runtimePackage = snapshotMigrationRuntimePackage(packageRoot, host);
       writeActivation(packageRoot, host);
+      const boundaryIdentityPath = path.join(distRoot, `${host}.module-boundary-identity.json`);
+      fs.writeFileSync(boundaryIdentityPath, `${JSON.stringify(fixtureBoundaryIdentity(packageRoot))}\n`);
       const out = path.join(distRoot, `${host}.worker.json`);
       const result = spawnSync(process.execPath, [
         path.join(packageRoot, "scripts", "dist", "activated-host-conformance.js"), "worker",
@@ -451,7 +484,7 @@ describe("activated-host conformance capture", () => {
         "--package-hash", runtimePackage.tree_sha256, "--install-surface-hash", runtimePackage.install_surface_sha256, "--runtime-version", RUNTIME_VERSION,
         "--host-version", host === "claude-code-cli" ? "2.1.236" : "0.147.0",
         "--platform", PLATFORM, "--release", RELEASE, "--captured-at", CAPTURED_AT,
-        "--plugin-root", packageRoot, "--module-boundary-root", packageRoot,
+        "--plugin-root", packageRoot, "--module-boundary-root", packageRoot, "--module-boundary-identity", boundaryIdentityPath,
         "--consumer-root", `website=${website}`,
         "--consumer-root", `benchmark=${benchmark}`, "--consumer-identities", consumerIdentitiesPath, "--out", out,
       ], { cwd: packageRoot, encoding: "utf8" });
@@ -482,7 +515,7 @@ describe("activated-host conformance capture", () => {
       release: RELEASE,
       capturedAt: CAPTURED_AT,
       pluginRoot: fixture.plugin,
-      moduleBoundaryRoot: fixture.plugin,
+      moduleBoundaryRoot: fixture.plugin, moduleBoundaryIdentity: fixtureBoundaryIdentity(fixture.plugin),
       consumerRoots: { website: fixture.website, benchmark: fixture.benchmark },
       consumerIdentities: fixtureConsumerTrees(fixture.website, fixture.benchmark),
     });
@@ -516,31 +549,46 @@ describe("activated-host conformance capture", () => {
       release: RELEASE,
       capturedAt: CAPTURED_AT,
       pluginRoot: activatedPlugin,
-      moduleBoundaryRoot: fixture.plugin,
+      moduleBoundaryRoot: fixture.plugin, moduleBoundaryIdentity: fixtureBoundaryIdentity(fixture.plugin),
       consumerRoots: { website: fixture.website, benchmark: fixture.benchmark },
       consumerIdentities: fixtureConsumerTrees(fixture.website, fixture.benchmark),
     });
     expect(result).toEqual(expect.objectContaining({ ok: true, code: "evaluated" }));
   });
 
-  it("refuses a module-boundary package twin whose bytes differ from the activated runtime", () => {
+  it("refuses a module-boundary source twin whose bytes differ from its Git-bound identity", () => {
     const fixture = productionWorkerFixture("codex-cli");
     const activatedPlugin = path.join(fixture.stage, "activated", "plugin");
     fs.mkdirSync(path.dirname(activatedPlugin), { recursive: true });
     fs.cpSync(fixture.plugin, activatedPlugin, { recursive: true });
-    fs.appendFileSync(path.join(fixture.plugin, "hooks", "dist", "runtime.cjs"), "// planted mismatch\n");
+    const boundIdentity = fixtureBoundaryIdentity(fixture.plugin);
+    fs.appendFileSync(path.join(fixture.plugin, "src", "adapters", "modules", "host-runtime.manifest.json"), "\n");
     const result = runActivatedConformanceWorker({
       hostId: "codex-cli", challenge: CHALLENGE, sourceCommit: SOURCE_COMMIT,
       packageHash: fixture.runtimePackage.tree_sha256, installSurfaceHash: fixture.runtimePackage.install_surface_sha256, runtimeVersion: RUNTIME_VERSION,
       hostVersion: "0.147.0", platform: PLATFORM, release: RELEASE, capturedAt: CAPTURED_AT,
-      pluginRoot: activatedPlugin, moduleBoundaryRoot: fixture.plugin,
+      pluginRoot: activatedPlugin, moduleBoundaryRoot: fixture.plugin, moduleBoundaryIdentity: boundIdentity,
       consumerRoots: { website: fixture.website, benchmark: fixture.benchmark },
       consumerIdentities: fixtureConsumerTrees(fixture.website, fixture.benchmark),
     });
-    expect(result).toEqual(expect.objectContaining({ ok: false, code: "module_boundary_package_mismatch" }));
+    expect(result).toEqual(expect.objectContaining({ ok: false, code: "module_boundary_source_mismatch" }));
   });
 
-  it("refuses a module-boundary package twin that changes during owner evaluation", () => {
+  it("refuses a module-boundary source twin bound to a different source commit", () => {
+    const fixture = productionWorkerFixture("codex-cli");
+    const result = runActivatedConformanceWorker({
+      hostId: "codex-cli", challenge: CHALLENGE, sourceCommit: SOURCE_COMMIT,
+      packageHash: fixture.runtimePackage.tree_sha256, installSurfaceHash: fixture.runtimePackage.install_surface_sha256, runtimeVersion: RUNTIME_VERSION,
+      hostVersion: "0.147.0", platform: PLATFORM, release: RELEASE, capturedAt: CAPTURED_AT,
+      pluginRoot: fixture.plugin, moduleBoundaryRoot: fixture.plugin,
+      moduleBoundaryIdentity: { ...fixtureBoundaryIdentity(fixture.plugin), source_commit: "f".repeat(40) },
+      consumerRoots: { website: fixture.website, benchmark: fixture.benchmark },
+      consumerIdentities: fixtureConsumerTrees(fixture.website, fixture.benchmark),
+    });
+    expect(result).toEqual(expect.objectContaining({ ok: false, code: "module_boundary_identity_invalid" }));
+  });
+
+  it("refuses a module-boundary source twin that changes during owner evaluation", () => {
     const fixture = productionWorkerFixture("codex-cli");
     const activatedPlugin = path.join(fixture.stage, "activated", "plugin");
     fs.mkdirSync(path.dirname(activatedPlugin), { recursive: true });
@@ -549,14 +597,14 @@ describe("activated-host conformance capture", () => {
       hostId: "codex-cli", challenge: CHALLENGE, sourceCommit: SOURCE_COMMIT,
       packageHash: fixture.runtimePackage.tree_sha256, installSurfaceHash: fixture.runtimePackage.install_surface_sha256, runtimeVersion: RUNTIME_VERSION,
       hostVersion: "0.147.0", platform: PLATFORM, release: RELEASE, capturedAt: CAPTURED_AT,
-      pluginRoot: activatedPlugin, moduleBoundaryRoot: fixture.plugin,
+      pluginRoot: activatedPlugin, moduleBoundaryRoot: fixture.plugin, moduleBoundaryIdentity: fixtureBoundaryIdentity(fixture.plugin),
       consumerRoots: { website: fixture.website, benchmark: fixture.benchmark },
       consumerIdentities: fixtureConsumerTrees(fixture.website, fixture.benchmark),
       testOnlyAfterInitialBoundarySnapshot: () => {
-        fs.appendFileSync(path.join(fixture.plugin, "hooks", "dist", "runtime.cjs"), "// planted drift\n");
+        fs.appendFileSync(path.join(fixture.plugin, "src", "adapters", "modules", "host-runtime.manifest.json"), "\n");
       },
     });
-    expect(result).toEqual(expect.objectContaining({ ok: false, code: "module_boundary_package_drift" }));
+    expect(result).toEqual(expect.objectContaining({ ok: false, code: "module_boundary_source_drift" }));
   });
 
   it("detects copied auth.json token material before host output can be persisted", () => {
@@ -634,6 +682,8 @@ describe("activated-host conformance capture", () => {
     writeActivation(plugin, "claude-code-cli");
     const consumerIdentitiesPath = path.join(stage, "consumer-identities.json");
     fs.writeFileSync(consumerIdentitiesPath, `${JSON.stringify(fixtureConsumerTrees(website, benchmark))}\n`);
+    const boundaryIdentityPath = path.join(stage, "module-boundary-identity.json");
+    fs.writeFileSync(boundaryIdentityPath, `${JSON.stringify(fixtureBoundaryIdentity(plugin))}\n`);
     const result = spawnSync("npx", [
       "tsx",
       path.resolve(__dirname, "activated-host-conformance.ts"),
@@ -649,7 +699,7 @@ describe("activated-host conformance capture", () => {
       "--release", RELEASE,
       "--captured-at", CAPTURED_AT,
       "--plugin-root", plugin,
-      "--module-boundary-root", plugin,
+      "--module-boundary-root", plugin, "--module-boundary-identity", boundaryIdentityPath,
       "--consumer-root", `website=${website}`,
       "--consumer-root", `benchmark=${benchmark}`,
       "--consumer-identities", consumerIdentitiesPath,
@@ -692,7 +742,7 @@ describe("activated-host conformance capture", () => {
       platform: PLATFORM,
       release: RELEASE,
       pluginRoot: plugin,
-      moduleBoundaryRoot: plugin,
+      moduleBoundaryRoot: plugin, moduleBoundaryIdentity: fixtureBoundaryIdentity(plugin),
       consumerRoots: { website, benchmark },
       consumerIdentities: fixtureConsumerTrees(website, benchmark),
     });
@@ -715,7 +765,7 @@ describe("activated-host conformance capture", () => {
       platform: PLATFORM,
       release: RELEASE,
       pluginRoot: fixture.plugin,
-      moduleBoundaryRoot: fixture.plugin,
+      moduleBoundaryRoot: fixture.plugin, moduleBoundaryIdentity: fixtureBoundaryIdentity(fixture.plugin),
       consumerRoots: { website: fixture.website, benchmark: fixture.benchmark },
       consumerIdentities: fixtureConsumerTrees(fixture.website, fixture.benchmark),
       testOnlyAfterInitialPackageSnapshot: () => {
@@ -732,7 +782,7 @@ describe("activated-host conformance capture", () => {
       hostId: "claude-code-cli", challenge: CHALLENGE, sourceCommit: SOURCE_COMMIT,
       packageHash: fixture.runtimePackage.tree_sha256, installSurfaceHash: fixture.runtimePackage.install_surface_sha256, runtimeVersion: RUNTIME_VERSION,
       hostVersion: "2.1.236", platform: PLATFORM, release: RELEASE,
-      pluginRoot: fixture.plugin, moduleBoundaryRoot: fixture.plugin,
+      pluginRoot: fixture.plugin, moduleBoundaryRoot: fixture.plugin, moduleBoundaryIdentity: fixtureBoundaryIdentity(fixture.plugin),
       consumerRoots: { website: fixture.website, benchmark: fixture.benchmark },
       consumerIdentities: fixtureConsumerTrees(fixture.website, fixture.benchmark),
       testOnlyAfterInitialConsumerSnapshot: () => {
@@ -1138,6 +1188,25 @@ describe("activated-host conformance capture", () => {
     expect(result).toEqual(expect.objectContaining({ ok: false, code: "worker_result_hash_mismatch" }));
   });
 
+  it("stages the module-boundary source twin from Git at exactly the attested commit", () => {
+    const root = path.resolve(__dirname, "..");
+    const head = spawnSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+    const stage = fs.mkdtempSync(path.join(os.tmpdir(), "guild-source-twin-"));
+    const destination = path.join(stage, "plugin-source");
+    const identity = snapshotOfficialPluginSourceGitTree(root, destination, head);
+    expect(identity).toEqual(expect.objectContaining({
+      schema_version: "guild.plugin_source_identity.v1",
+      repository: "github.com/lookatitude/guild",
+      source_commit: head,
+    }));
+    expect(fs.existsSync(path.join(destination, "src", "domains", "lifecycle", "neutral-conformance-core.ts"))).toBe(true);
+    expect(snapshotPluginSourceContentTree(destination)).toEqual({
+      content_tree_sha256: identity.content_tree_sha256,
+      file_count: identity.file_count,
+    });
+    expect(() => snapshotOfficialPluginSourceGitTree(root, path.join(stage, "again"), "f".repeat(40))).toThrow(/attested/i);
+  });
+
   it("refuses a package containing a planted symlink before host execution", () => {
     const fixture = packageFixture("claude-code-cli");
     fs.symlinkSync("scripts/activated-host-conformance.ts", path.join(fixture.root, "planted-link"));
@@ -1145,7 +1214,7 @@ describe("activated-host conformance capture", () => {
     process.env.PATH = "";
     try {
       const result = captureActivatedHostConformance({
-        hostId: "claude-code-cli", packageRoot: fixture.root, expectedPackage: fixture.runtimePackage,
+        hostId: "claude-code-cli", packageRoot: fixture.root, sourceRoot: path.resolve(__dirname, ".."), expectedPackage: fixture.runtimePackage,
         sourceCommit: SOURCE_COMMIT, release: RELEASE, platform: PLATFORM,
         capturedAt: CAPTURED_AT, challenge: CHALLENGE, consumerRoots: { website: fixture.root, benchmark: fixture.root },
         outDir: fs.mkdtempSync(path.join(os.tmpdir(), "guild-activated-symlink-out-")),
