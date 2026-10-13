@@ -14,6 +14,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 
 import {
+  NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
   NEUTRAL_CONTRACT_VERSION,
   NEUTRAL_DISPOSITIONS,
   NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS,
@@ -23,7 +24,12 @@ import {
   NEUTRAL_SCENARIO_SUITE_ID,
   NEUTRAL_SCENARIO_SUITE_VERSION,
   neutralCanonicalJson,
+  neutralJournalEntryCommitment,
+  neutralJournalGenesis,
+  neutralReceiptReference,
+  type NeutralConformanceAuthority,
   type NeutralConformanceEvidence,
+  type NeutralReceiptJournalEntry,
 } from "../src/domains/lifecycle";
 import { evaluateTransportedReleaseConformance, runNeutralConformanceReleaseIntegration } from "../src/domains/distribution";
 import { bindHostRuntimePorts } from "../src/adapters";
@@ -1662,6 +1668,15 @@ export function captureActivatedHostConformance(
   }
 }
 
+/**
+ * PROVISIONAL pass-1 references only. These challenge-derived commitments are
+ * placeholders that no journal carries; the worker NEVER emits them. After the
+ * first evaluation pass fixes the 31 observed outcomes, the worker constructs
+ * the capture journal over exactly those outcomes with the production chain
+ * functions and re-evaluates with references that cite each journal entry's
+ * OWN commitment (A21-X MH-02 producer-side binding, lane-G pin 3): binding is
+ * strengthened at the producer, never relaxed at the verifier.
+ */
 function workerReceiptRefs(challenge: string): Record<string, string> {
   const refs: Record<string, string> = {};
   for (let index = 0; index < NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS.length; index += 1) {
@@ -1670,6 +1685,46 @@ function workerReceiptRefs(challenge: string): Record<string, string> {
     refs[NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS[index]] =
       `guild.receipt_ref.v1:activated-${challenge.slice(0, 12)}#${sequence}@nec1:${commitment}`;
   }
+  return refs;
+}
+
+/** The capture journal id every reference in one capture cites. */
+function workerJournalId(challenge: string): string {
+  return `activated-${challenge.slice(0, 12)}`;
+}
+
+/**
+ * Build the capture journal over the pass-1 observed outcomes and mint the
+ * journal-bound receipt references: one entry per scenario in canonical order,
+ * recording exactly the observed outcome, chained with the production
+ * commitment functions, each reference citing its entry's own commitment.
+ */
+function journalBoundReceiptRefs(
+  challenge: string,
+  identity: Record<string, unknown>,
+  results: ReadonlyArray<Record<string, unknown>>,
+): Record<string, string> {
+  const authorityBase = {
+    schema_version: NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
+    identity,
+    receipt_journal_id: workerJournalId(challenge),
+    receipt_sequence_range: { first: 1, last: results.length },
+  } as unknown as NeutralConformanceAuthority;
+  const refs: Record<string, string> = {};
+  let previous = neutralJournalGenesis(authorityBase);
+  results.forEach((result, index) => {
+    const partial = {
+      sequence: index + 1,
+      scenario_id: result.stable_id,
+      outcome_type: result.outcome_type,
+      disposition: result.disposition,
+      reason_code: result.reason_code ?? null,
+    } as unknown as NeutralReceiptJournalEntry;
+    const commitment = neutralJournalEntryCommitment(authorityBase, previous, partial);
+    const entry = { ...partial, previous_commitment: previous, entry_commitment: commitment };
+    refs[String(result.stable_id)] = neutralReceiptReference(authorityBase, entry);
+    previous = commitment;
+  });
   return refs;
 }
 
@@ -1740,32 +1795,79 @@ export function runActivatedConformanceWorker(
       scenario_suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
       release_id: releaseId(options.release, (options.capturedAt ?? "2026-08-21T00:00:00.000Z").slice(0, 10)),
     };
-    const request = neutralCanonicalJson({
-      claim: { claimant_id: "guild.activated-host-capture", activated_runtime: identity },
-      owner_inputs: {
-        run_id: `run-activated-${options.hostId}-${options.challenge.slice(0, 16)}`,
-        receipt_refs: workerReceiptRefs(options.challenge),
-        evidence_freshness: freshness,
-        journal_root: journalRoot,
-        migration_journal_root: migrationJournalRoot,
-        migration_scenario_evidence: {},
-        plugin_root: fs.realpathSync(options.moduleBoundaryRoot),
-        consumer_roots: Object.fromEntries(
-          Object.entries(options.consumerRoots).map(([name, root]) => [name, fs.realpathSync(root)]),
-        ),
-        release_mode: "production",
-        release_scenario_evidence: {},
-      },
-    });
-    const result = runNeutralConformanceReleaseIntegration(request);
-    if (result.evidence === null || result.packets === null || result.outcome.disposition !== "succeeded") {
-      return failed(
+    const requestFor = (receiptRefs: Record<string, string>): string =>
+      neutralCanonicalJson({
+        claim: { claimant_id: "guild.activated-host-capture", activated_runtime: identity },
+        owner_inputs: {
+          run_id: `run-activated-${options.hostId}-${options.challenge.slice(0, 16)}`,
+          receipt_refs: receiptRefs,
+          evidence_freshness: freshness,
+          journal_root: journalRoot,
+          migration_journal_root: migrationJournalRoot,
+          migration_scenario_evidence: {},
+          plugin_root: fs.realpathSync(options.moduleBoundaryRoot),
+          consumer_roots: Object.fromEntries(
+            Object.entries(options.consumerRoots).map(([name, root]) => [name, fs.realpathSync(root)]),
+          ),
+          release_mode: "production",
+          release_scenario_evidence: {},
+        },
+      });
+    const integrationFailure = (result: ReturnType<typeof runNeutralConformanceReleaseIntegration>) =>
+      failed(
         "owner_evaluation_refused",
         `production integration refused: ${String(result.outcome.reason_code ?? "unnamed")} ` +
           `(control=${String(result.outcome.facts?.refusal_control ?? "unnamed")}, ` +
           `owner=${String(result.outcome.facts?.owner_key ?? "unnamed")}, ` +
           `detail=${String(result.outcome.facts?.owner_detail ?? "unnamed")})`,
       );
+    // Pass 1 — evaluate under PROVISIONAL references to fix the 31 outcomes.
+    const firstPass = runNeutralConformanceReleaseIntegration(requestFor(workerReceiptRefs(options.challenge)));
+    if (firstPass.evidence === null || firstPass.packets === null || firstPass.outcome.disposition !== "succeeded") {
+      return integrationFailure(firstPass);
+    }
+    // Pass 2 — A21-X MH-02 producer-side binding: construct the capture journal
+    // over exactly the pass-1 observed outcomes and re-evaluate with references
+    // citing each journal entry's OWN chain commitment. The emitted evidence
+    // therefore cites a real journal a verifier can rebuild and attestors can
+    // sign, never a challenge-derived placeholder.
+    const firstResults = firstPass.evidence.results as unknown as ReadonlyArray<Record<string, unknown>>;
+    const boundRefs = journalBoundReceiptRefs(
+      options.challenge,
+      identity as unknown as Record<string, unknown>,
+      firstResults,
+    );
+    const result = runNeutralConformanceReleaseIntegration(requestFor(boundRefs));
+    if (result.evidence === null || result.packets === null || result.outcome.disposition !== "succeeded") {
+      return integrationFailure(result);
+    }
+    // The second pass must observe byte-identical outcomes (only the receipt
+    // references may differ); any drift means the evaluation is not the one the
+    // journal records, and the capture fails closed.
+    const outcomeOnly = (results: ReadonlyArray<Record<string, unknown>>): string =>
+      canonical(
+        results.map((row) => ({
+          stable_id: row.stable_id,
+          outcome_type: row.outcome_type,
+          disposition: row.disposition,
+          reason_code: row.reason_code ?? null,
+          evidence_freshness: row.evidence_freshness,
+        })),
+      );
+    const secondResults = result.evidence.results as unknown as ReadonlyArray<Record<string, unknown>>;
+    if (outcomeOnly(secondResults) !== outcomeOnly(firstResults)) {
+      return failed(
+        "owner_evaluation_nondeterministic",
+        "the journal-binding re-evaluation observed different outcomes than the pass it records; the capture cannot honestly cite its own journal",
+      );
+    }
+    for (const row of secondResults) {
+      if (row.receipt_ref !== boundRefs[String(row.stable_id)]) {
+        return failed(
+          "receipt_binding_unbound",
+          `scenario ${String(row.stable_id)} does not cite its own journal entry commitment`,
+        );
+      }
     }
     const packageAfter = snapshotMigrationRuntimePackage(options.pluginRoot, options.hostId);
     if (canonical(packageAfter) !== canonical(packageBefore)) {

@@ -26,7 +26,7 @@ import * as path from "path";
 
 import { NEUTRAL_CORE_MEMBERS, NEUTRAL_FORBIDDEN_BOUNDARY_MATCHERS, NEUTRAL_PURE_INTRINSIC_ROOTS, analyzeNeutralCapabilityUse, evaluateNeutralCoreBoundary, extractNeutralImportSpecifiers, tokenizeNeutralSource } from ".";
 
-import { NEUTRAL_ATTESTATION_CHAIN_LENGTH, NEUTRAL_ATTESTATION_CHAINS, NEUTRAL_ATTESTATION_CHECKSUM_CHAINS, NEUTRAL_ATTESTATION_MESSAGE_CHAINS, NEUTRAL_ATTESTATION_REF_SCHEMA, NEUTRAL_ATTESTATION_SCHEME, NEUTRAL_ATTESTATION_TREE_HEIGHT, NEUTRAL_ATTESTOR_TRUST_ROOT, NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA, NEUTRAL_CORE_SCENARIOS, NEUTRAL_CORE_WAVE_OWNER, NEUTRAL_EVIDENCE_IDENTITY_FIELDS, NEUTRAL_EVIDENCE_PROFILES, NEUTRAL_MINIMUM_ATTESTOR_QUORUM, NEUTRAL_RECEIPT_REF_SCHEMA, NEUTRAL_RECOGNIZED_ADAPTER_MAJOR, NEUTRAL_RECOGNIZED_HOST_IDS, NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS, NEUTRAL_RECOGNIZED_PLATFORMS, NEUTRAL_RECOGNIZED_RUNTIME_MAJOR, NEUTRAL_REQUIRED_CORE_SCENARIO_IDS, NEUTRAL_SCENARIO_SUITE_ID, NEUTRAL_SCENARIO_SUITE_VERSION, NEUTRAL_SUPPORT_TRANSITIONS, NEUTRAL_UNEVALUATED_SUPPORT, applyNeutralSupportTransition, deriveNeutralSupportClaim, evaluateNeutralConformanceDecision, neutralAttestationDigest, neutralAttestationReference, neutralAttestationVerifies, neutralAttestorVerificationKey, neutralJournalEntryCommitment, neutralJournalGenesis, neutralReceiptReference, neutralVerifyAttestationSignature, validateNeutralScenarioRegistry } from ".";
+import { NEUTRAL_ATTESTATION_CHAIN_LENGTH, NEUTRAL_ATTESTATION_CHAINS, NEUTRAL_ATTESTATION_CHECKSUM_CHAINS, NEUTRAL_ATTESTATION_MESSAGE_CHAINS, NEUTRAL_ATTESTATION_REF_SCHEMA, NEUTRAL_ATTESTATION_SCHEME, NEUTRAL_ATTESTATION_TREE_HEIGHT, NEUTRAL_ATTESTOR_TRUST_ROOT, NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA, NEUTRAL_CORE_SCENARIOS, NEUTRAL_CORE_WAVE_OWNER, NEUTRAL_EVIDENCE_IDENTITY_FIELDS, NEUTRAL_EVIDENCE_PROFILES, NEUTRAL_MINIMUM_ATTESTOR_QUORUM, NEUTRAL_RECEIPT_REF_SCHEMA, NEUTRAL_RECOGNIZED_ADAPTER_MAJOR, NEUTRAL_RECOGNIZED_HOST_IDS, NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS, NEUTRAL_RECOGNIZED_PLATFORMS, NEUTRAL_RECOGNIZED_RUNTIME_MAJOR, NEUTRAL_RECOGNIZED_RUNTIME_MAJORS, NEUTRAL_FULL_SUITE_SCENARIO_IDS, NEUTRAL_FULL_SUITE_EXPECTED_OUTCOME_TYPES, NEUTRAL_FULL_SUITE_EXPECTED_DISPOSITIONS, NEUTRAL_REQUIRED_CORE_SCENARIO_IDS, NEUTRAL_SCENARIO_SUITE_ID, NEUTRAL_SCENARIO_SUITE_VERSION, NEUTRAL_SUPPORT_TRANSITIONS, NEUTRAL_UNEVALUATED_SUPPORT, applyNeutralSupportTransition, deriveNeutralSupportClaim, evaluateNeutralConformanceDecision, neutralAttestationDigest, neutralAttestationReference, neutralAttestationVerifies, neutralAttestorVerificationKey, neutralJournalEntryCommitment, neutralJournalGenesis, neutralReceiptReference, neutralVerifyAttestationSignature, validateNeutralScenarioRegistry } from ".";
 import type { NeutralConformanceAuthority, NeutralConformanceEvidence, NeutralEvidenceFreshnessVerdict, NeutralEvidenceIdentity, NeutralJournalAttestation, NeutralReceiptJournalEntry, NeutralScenarioResult, NeutralSupportRecord } from ".";
 
 import { NEUTRAL_LIFECYCLE_PHASES } from ".";
@@ -1661,6 +1661,145 @@ describe("neutral conformance decision", () => {
       expect(outcome.facts.undeclared_scenarios).toEqual(["MHRC-RCT-001"]);
     });
 
+    /**
+     * A21-X MH-02 extension: the FULL 31-scenario frozen-suite tuple is the
+     * second (and last) core-declared required tuple. A 31-tuple submission is
+     * no longer refused at the required-set gate — and nothing downstream
+     * weakens: a structurally perfect 31-bundle with contract-correct outcome
+     * types still dies at receipt binding, because its invented commitments
+     * resolve to no observed journal entry.
+     */
+    it("admits the full 31-scenario tuple and refuses fabrication on receipt binding, never on the tuple", () => {
+      const results = NEUTRAL_FULL_SUITE_SCENARIO_IDS.map((stableId, index) => {
+        const sequence = index + 1;
+        let hex = sequence.toString(16);
+        while (hex.length < 16) hex = `0${hex}`;
+        return {
+          stable_id: stableId,
+          outcome_type: NEUTRAL_FULL_SUITE_EXPECTED_OUTCOME_TYPES[index],
+          disposition: "succeeded",
+          reason_code: null,
+          receipt_ref: `guild.receipt_ref.v1:jrn-run-1#${sequence}@nec1:${hex}`,
+          evidence_identity: { ...BASE_IDENTITY },
+          evidence_freshness: "fresh",
+        };
+      });
+      const outcome = decide(
+        evidence({
+          required_scenario_ids: [...NEUTRAL_FULL_SUITE_SCENARIO_IDS],
+          results: results as never,
+        })
+      );
+      expect(outcome.disposition).toBe("refused");
+      expect(outcome.reason_code).toBe("scenario_receipt_binding_unverified");
+      expect(outcome.facts.may_promote_conformant).toBe(false);
+    });
+
+    it("still refuses a 31-tuple whose order is not the contract's", () => {
+      const rotated = [...NEUTRAL_FULL_SUITE_SCENARIO_IDS];
+      rotated.push(rotated.shift() as string);
+      const outcome = decide(
+        evidence({ required_scenario_ids: rotated, results: evidence().results })
+      );
+      expect(outcome.reason_code).toBe("scenario_required_set_mismatch");
+    });
+
+    /**
+     * A journal-bound full-suite package: 31 records in canonical order, each
+     * with its contract-declared type, a journal recording exactly those
+     * outcomes (chained by the production functions), results citing each
+     * entry's own commitment, and the trust-root attestors over the 31-root.
+     * No off-repository signature exists for a 31-entry root, so a conformant
+     * package built this way must refuse EXACTLY at signature verification —
+     * which is what makes the stage-14 refusals below discriminating.
+     */
+    function fullSuitePackage(
+      perRecord: (record: JournalRecord, index: number) => JournalRecord = (r) => r
+    ): { pkg: NeutralConformanceEvidence; authority: NeutralConformanceAuthority } {
+      const records: JournalRecord[] = NEUTRAL_FULL_SUITE_SCENARIO_IDS.map((stableId, index) => {
+        const disposition = NEUTRAL_FULL_SUITE_EXPECTED_DISPOSITIONS[index];
+        return perRecord(
+          {
+            stable_id: stableId,
+            outcome_type: NEUTRAL_FULL_SUITE_EXPECTED_OUTCOME_TYPES[index] as never,
+            disposition: disposition as never,
+            reason_code: disposition === "succeeded" ? null : "scenario_evidence_incomplete",
+          },
+          index
+        );
+      });
+      const authority = authorityFor(BASE_IDENTITY, {}, records);
+      const results = records.map((record, index) => ({
+        stable_id: record.stable_id,
+        outcome_type: record.outcome_type,
+        disposition: record.disposition,
+        reason_code: record.reason_code,
+        receipt_ref: neutralReceiptReference(authority, authority.observed_entries[index]),
+        evidence_identity: authority.identity,
+        evidence_freshness: "fresh",
+      })) as unknown as NeutralScenarioResult[];
+      const pkg: NeutralConformanceEvidence = {
+        suite_id: NEUTRAL_SCENARIO_SUITE_ID,
+        suite_version: NEUTRAL_SCENARIO_SUITE_VERSION,
+        required_scenario_ids: [...NEUTRAL_FULL_SUITE_SCENARIO_IDS],
+        activated_runtime: authority.identity,
+        results,
+        claimant_id: DEFAULT_CLAIMANT,
+      } as unknown as NeutralConformanceEvidence;
+      return { pkg, authority };
+    }
+
+    it("a conformant journal-bound 31-package refuses ONLY at signature verification", () => {
+      const { pkg, authority } = fullSuitePackage();
+      const outcome = evaluateNeutralConformanceDecision(pkg, authority);
+      expect(outcome.disposition).toBe("refused");
+      expect(outcome.reason_code).toBe("scenario_attestation_signature_unverified");
+    });
+
+    it("an EXPLICIT refusal on an extension scenario is conformant fail-closed behaviour", () => {
+      // MHRC-SUP-001 expects succeeded; an explicit closed-reason refusal,
+      // journal-recorded, still reaches signature verification.
+      const { pkg, authority } = fullSuitePackage((record) =>
+        record.stable_id === "MHRC-SUP-001"
+          ? { ...record, disposition: "refused" as never, reason_code: "scenario_evidence_incomplete" }
+          : record
+      );
+      const outcome = evaluateNeutralConformanceDecision(pkg, authority);
+      expect(outcome.reason_code).toBe("scenario_attestation_signature_unverified");
+    });
+
+    it("a FAILED extension scenario prevents promotion even fully journal-bound (codex P1)", () => {
+      // MHRC-MOD-001 expects succeeded. A failed result — honestly recorded in
+      // the journal and citing its own entry — must never reach signature
+      // verification: with real quorum signatures it would otherwise promote.
+      const { pkg, authority } = fullSuitePackage((record) =>
+        record.stable_id === "MHRC-MOD-001"
+          ? { ...record, disposition: "failed" as never, reason_code: "scenario_result_mismatch" }
+          : record
+      );
+      const outcome = evaluateNeutralConformanceDecision(pkg, authority);
+      expect(outcome.disposition).toBe("failed");
+      expect(outcome.reason_code).toBe("scenario_result_mismatch");
+      expect(
+        (outcome.facts.mismatched_scenarios as Array<{ stable_id: string }>).map((s) => s.stable_id)
+      ).toEqual(["MHRC-MOD-001"]);
+    });
+
+    it("a SUCCEEDED result where the contract expects a refusal prevents promotion", () => {
+      // MHRC-VER-001 expects refused: claiming success on a must-refuse
+      // scenario is the fail-open signature stage 14 exists to catch.
+      const { pkg, authority } = fullSuitePackage((record) =>
+        record.stable_id === "MHRC-VER-001"
+          ? { ...record, disposition: "succeeded" as never, reason_code: null }
+          : record
+      );
+      const outcome = evaluateNeutralConformanceDecision(pkg, authority);
+      expect(outcome.reason_code).toBe("scenario_result_mismatch");
+      expect(
+        (outcome.facts.mismatched_scenarios as Array<{ stable_id: string }>).map((s) => s.stable_id)
+      ).toEqual(["MHRC-VER-001"]);
+    });
+
     /** A closed-but-wrong outcome type is evidence of a different experiment. */
     it("fails a result whose outcome TYPE is not the scenario's expected type", () => {
       const outcome = decide(
@@ -1788,6 +1927,35 @@ describe("neutral conformance decision", () => {
       const outcome = evaluateNeutralConformanceDecision(evidenceFor(authority), authority);
       expect(outcome.reason_code).toBe("scenario_runtime_version_unrecognized");
       expect(outcome.facts.scope).toBe("authority");
+    });
+
+    // ---- A21-X MH-02: the recognition gate admits the v3 line, closed above --
+
+    it("recognizes a guild-3.x runtime at the recognition gate (refusal moves past stage 9)", () => {
+      const outcome = decide(
+        evidence({ activated_runtime: { ...BASE_IDENTITY, runtime_version: "guild-3.0.0" } })
+      );
+      expect(outcome.disposition).toBe("refused");
+      // The identity no longer refuses at RECOGNITION; it refuses later because
+      // it does not equal the authority's identity — which is the proof major 3
+      // passed stage 9 without any other stage weakening.
+      expect(outcome.reason_code).toBe("scenario_identity_binding_mismatch");
+    });
+
+    it("an AUTHORITY naming guild-3.x passes the recognition gate", () => {
+      const authority = authorityFor({ ...BASE_IDENTITY, runtime_version: "guild-3.0.0" });
+      const outcome = evaluateNeutralConformanceDecision(evidenceFor(authority), authority);
+      expect(outcome.reason_code).not.toBe("scenario_runtime_version_unrecognized");
+      expect(outcome.facts.may_promote_conformant).not.toBe(true);
+    });
+
+    it("still refuses guild-4.x: the extension is closed, not a floor", () => {
+      const outcome = decide(
+        evidence({ activated_runtime: { ...BASE_IDENTITY, runtime_version: "guild-4.0.0" } })
+      );
+      expect(outcome.disposition).toBe("refused");
+      expect(outcome.reason_code).toBe("scenario_runtime_version_unrecognized");
+      expect(outcome.facts.recognized_runtime_majors).toEqual([2, 3]);
     });
 
     it("accepts a recognized runtime identity with a pre-release tail", () => {
@@ -2095,6 +2263,9 @@ describe("neutral conformance decision", () => {
 
     it("pins the vocabularies recognition depends on", () => {
       expect(NEUTRAL_RECOGNIZED_RUNTIME_MAJOR).toBe(2);
+      // A21-X MH-02: recognition EXTENDS to the v3 release line; membership
+      // stays a closed, deliberate core change.
+      expect([...NEUTRAL_RECOGNIZED_RUNTIME_MAJORS]).toEqual([2, 3]);
       expect(NEUTRAL_RECOGNIZED_HOST_IDS).toContain("claude-code-cli");
       expect(NEUTRAL_RECOGNIZED_HOST_IDS).not.toContain("invented-host");
       expect(NEUTRAL_RECOGNIZED_PLATFORMS).toContain("darwin-arm64");

@@ -319,10 +319,15 @@ describe("checkStablePromotion — every structural gate passes, the FINAL decis
     expect(result.ok).toBe(false);
     expect(result.code).toBe("conformance_decision_not_promotable");
     expect(result.reason).toMatch(/stage=decision/);
-    // The refused reason is the production decision's own (the core's
-    // required-set gate still pins the recognized 5-tuple — the documented
-    // A21-X seam that keeps fabricated full-suite bundles unpromotable).
-    expect(result.reason).toMatch(/scenario_required_set_mismatch/);
+    // The refused reason is the production decision's own. The A21-X MH-02
+    // extension now ADMITS the full 31-tuple at the required-set gate, so the
+    // refusal moves to substance: the 26 invented results carry a fabricator's
+    // uniform outcome type, not each scenario's contract-declared type. (Even
+    // a type-correct fabrication cannot survive: its invented receipt
+    // commitments resolve to no observed journal entry, and the placeholder
+    // signatures verify under no pinned key.)
+    expect(result.reason).not.toMatch(/scenario_required_set_mismatch/);
+    expect(result.reason).toMatch(/scenario_result_mismatch/);
   });
 
   it("still reaches the decision when the diff is a SUBSET of the allowed set", () => {

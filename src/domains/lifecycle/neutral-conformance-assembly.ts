@@ -100,6 +100,7 @@ import {
   NEUTRAL_CORE_WAVE_OWNER,
   NEUTRAL_EVIDENCE_FRESHNESS_VERDICTS,
   NEUTRAL_EVIDENCE_IDENTITY_FIELDS,
+  NEUTRAL_FULL_SUITE_SCENARIO_IDS,
   NEUTRAL_SCENARIO_SUITE_ID,
   NEUTRAL_SCENARIO_SUITE_VERSION,
 } from "./neutral-conformance-core";
@@ -294,6 +295,17 @@ function assertSourceOwnedRegistry(): void {
   if (coreDeclared !== spineDeclared) {
     throw new Error(
       `neutral-conformance-assembly: the ${OWNER_MH02} ids disagree with the core scenario registry (${spineDeclared} vs ${coreDeclared})`
+    );
+  }
+  // A21-X MH-02: the decision's full-suite tuple is a SECOND independent
+  // transcription of the same frozen contract. The two statements must agree
+  // element-by-element, in order, or neither can back an aggregate.
+  if (
+    NEUTRAL_FULL_SUITE_SCENARIO_IDS.length !== NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS.length ||
+    NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS.some((id, index) => NEUTRAL_FULL_SUITE_SCENARIO_IDS[index] !== id)
+  ) {
+    throw new Error(
+      "neutral-conformance-assembly: the suite tuple disagrees with the core's full-suite decision tuple"
     );
   }
 }
