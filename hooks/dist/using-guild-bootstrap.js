@@ -7234,15 +7234,15 @@ var init_neutral_conformance_core = __esm({
     NEUTRAL_ATTESTOR_TRUST_ROOT = neutralFreeze([
       {
         attestor_id: "guild.release-attestor",
-        verification_root: "2cd0a7a8986e79ec2cb25b5752d5a85a80d10c4d133d6590b91417bf976f3539"
+        verification_root: "d0db503d9b93f5983e05e31c5c9f9e7c974e8cb7d85248c4dba042cf4bd6dabe"
       },
       {
         attestor_id: "guild.host-conformance-witness",
-        verification_root: "584d8e28a2a5c109a2b892b627a3154fef9da46efc45eb79d042611bf09d09ef"
+        verification_root: "a4d8c162e76f5f05cc802cdbbed969f2e10d6c5c1b027ab2f4605399be95b9af"
       },
       {
         attestor_id: "guild.distribution-notary",
-        verification_root: "4dd9eb1f20a5194d38c6ac9cf308dac017ceebac0e85bcd7fbfa26fc43945f37"
+        verification_root: "09580b62dfeb3356d72c2e3d3ad6883acb0177fe5d69554ef2348fe9a4fea52b"
       }
     ]);
     NEUTRAL_RECOGNIZED_JOURNAL_ATTESTORS = neutralFreeze(
