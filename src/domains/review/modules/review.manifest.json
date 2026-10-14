@@ -23,6 +23,7 @@
     ],
     "scripts": [
       "advisory-record-example",
+      "check-handoff-receipts",
       "flip-report",
       "oq11-gate-check",
       "verify-codex-review-trail",

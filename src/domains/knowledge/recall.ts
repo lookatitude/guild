@@ -77,7 +77,7 @@ import type { GraphEdge, GraphNode } from "./knowledge-graph-contract";
 import { kgDeadCode, kgNeighbors, kgTrace } from "./graph-query";
 import type { Direction as StructuralDirection, EvidenceNode, GraphView as StructuralGraphView } from "./graph-query";
 import type { KnowledgeLinksDoc } from "./knowledge-links-contract";
-import { ingestImportanceScore, resolveRecallImportance } from "./ingest-importance";
+import { ingestImportanceScore, resolveRecallImportance, wikiPageCategory } from "./ingest-importance";
 // R-TRACE (Wave 6): additive trace emit — NEVER changes return value
 import { emitTraceEvent } from "../telemetry";
 import { makeAnalysisTraceEvent, makeRecallEvent, makeRecallDecisionEvent } from "../telemetry";
@@ -288,11 +288,6 @@ export function hashQuery(query: string): string {
   return crypto.createHash("sha256").update(query).digest("hex").slice(0, 16);
 }
 
-/** Wiki category from an absolute path under `<wikiBase>/<category>/…`. */
-function categoryFromWikiPath(absPath: string, wikiBase: string): string | undefined {
-  const segs = path.relative(wikiBase, absPath).split(path.sep);
-  return segs.length > 1 ? segs[0] : undefined;
-}
 
 /**
  * Rank scored wiki docs. Default (no composite): BM25 desc, score>0, capped.
@@ -314,7 +309,7 @@ function rankWikiDocs(
     .map((d) => {
       // Prefer the persisted write-time `recall_importance:` score; fall back to the
       // category-derived value for an un-stamped page (byte-identical to pre-lane behavior).
-      const importance = resolveRecallImportance(d.content, categoryFromWikiPath(d.path, wikiBase));
+      const importance = resolveRecallImportance(d.content, wikiPageCategory(d.path, wikiBase));
       let ageMs = 0;
       try { ageMs = now - fs.statSync(d.path).mtimeMs; } catch { /* unstattable → age 0 */ }
       return { d, importance, comp: compositeScore(d.score, importance, ageMs, composite.halfLifeDays) };

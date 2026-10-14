@@ -14,6 +14,7 @@ describe("ingest-importance compatibility shim", () => {
     expect(shim.isRecallImportancePinned).toBe(moduleImpl.isRecallImportancePinned);
     expect(shim.resolveRecallImportance).toBe(moduleImpl.resolveRecallImportance);
     expect(shim.stampRecallImportance).toBe(moduleImpl.stampRecallImportance);
+    expect(shim.wikiPageCategory).toBe(moduleImpl.wikiPageCategory);
   });
 
   test("legacy path stays a thin public wrapper", () => {

@@ -152,6 +152,7 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   { id: "assign-layers", entry: "scripts/learn/assign-layers.ts" },
   { id: "audit-run-sinks", entry: "scripts/audit-run-sinks.ts" },
   { id: "build-tour", entry: "scripts/learn/build-tour.ts" },
+  { id: "check-handoff-receipts", entry: "scripts/check-handoff-receipts.ts" },
   { id: "check-lane-liveness", entry: "scripts/check-lane-liveness.ts" },
   { id: "cost-gate", entry: "scripts/learn/cost-gate.ts" },
   { id: "define-schema", entry: "scripts/lib/define-schema.ts" },

@@ -23,7 +23,7 @@ describe("ingestImportanceScore — the 1–5 category table", () => {
     expect(ingestImportanceScore("concepts")).toBe(3);
     expect(ingestImportanceScore("guides")).toBe(3);
     expect(ingestImportanceScore("context")).toBe(2);
-    expect(ingestImportanceScore("sources")).toBe(2);
+    expect(ingestImportanceScore("sources")).toBe(3);
   });
   it("is case-insensitive and defaults unknown/absent to 3 (== default gate)", () => {
     expect(ingestImportanceScore("DECISIONS")).toBe(5);

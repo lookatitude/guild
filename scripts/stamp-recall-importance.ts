@@ -24,7 +24,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { ingestImportanceScore, stampRecallImportance } from "./lib/ingest-importance";
+import { ingestImportanceScore, parseRecallImportance, stampRecallImportance, wikiPageCategory } from "./lib/ingest-importance";
 import { durableGuildDir } from "./lib/state/storage";
 import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
@@ -34,12 +34,6 @@ export interface StampTreeResult {
   skipped: number;
   changedPaths: string[];
   dryRun: boolean;
-}
-
-/** First path segment under wikiBase = the wiki category (`<wikiBase>/<category>/…`). */
-function categoryFromWikiPath(absPath: string, wikiBase: string): string | undefined {
-  const segs = path.relative(wikiBase, absPath).split(path.sep);
-  return segs.length > 1 ? segs[0] : undefined;
 }
 
 /** Recursively collect `*.md` files under dir. */
@@ -61,6 +55,15 @@ function walkMd(dir: string): string[] {
 }
 
 /**
+ * The score each category was stamped with before #233 moved it. A page still
+ * carrying exactly that value was stamped by the old table, not graded by hand,
+ * so it is re-graded (pinned pages are never touched).
+ */
+const PRE_233_SCORE: Readonly<Record<string, number>> = { sources: 2, source: 2 };
+/** Root `index.md` / `log.md` had no category, so the old table stamped them 3. */
+const PRE_233_ROOT_SCORE: Readonly<Record<string, number>> = { index: 3, log: 3 };
+
+/**
  * Stamp every wiki page under `wikiDir` with its category-derived 1–5
  * `recall_importance:` score. Idempotent (write-once unless `force`); skips
  * pinned pages. `dryRun` computes everything and writes nothing. Pure w.r.t.
@@ -77,8 +80,11 @@ export function stampWikiTree(
     result.scanned++;
     let content: string;
     try { content = fs.readFileSync(file, "utf8"); } catch { result.skipped++; continue; }
-    const score = ingestImportanceScore(categoryFromWikiPath(file, wikiDir));
-    const stamped = stampRecallImportance(content, score, { force: opts.force ?? false });
+    const category = wikiPageCategory(file, wikiDir);
+    const score = ingestImportanceScore(category);
+    const table = path.dirname(file) === wikiDir ? PRE_233_ROOT_SCORE : PRE_233_SCORE;
+    const legacy = category !== undefined && parseRecallImportance(content) === table[category.toLowerCase()];
+    const stamped = stampRecallImportance(content, score, { force: (opts.force ?? false) || legacy });
     if (!stamped.changed) { result.skipped++; continue; }
     result.stamped++;
     result.changedPaths.push(path.relative(wikiDir, file));

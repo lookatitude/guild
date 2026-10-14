@@ -15,4 +15,5 @@ export const parseRecallImportance = importanceImpl.parseRecallImportance;
 export const isRecallImportancePinned = importanceImpl.isRecallImportancePinned;
 export const resolveRecallImportance = importanceImpl.resolveRecallImportance;
 export const stampRecallImportance = importanceImpl.stampRecallImportance;
+export const wikiPageCategory = importanceImpl.wikiPageCategory;
 export type { StampResult } from "../../src/domains/knowledge/index";

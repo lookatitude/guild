@@ -32,7 +32,7 @@ import { isCanonicalRunId } from "./run-lifecycle";
 // is single-sourced in the distribution module (acyclic: distribution does not
 // depend on lifecycle).
 import { validateHandoffV2 } from "../distribution";
-import { RECEIPT_FRONTMATTER_SCHEMA_VERSION, hasCanonicalReceiptWrapper, parseReceiptDocument, readReceiptFrontmatter } from "./document-receipts";
+import { RECEIPT_FRONTMATTER_SCHEMA_VERSION, hasCanonicalReceiptWrapper, missingReceiptSections, parseReceiptDocument, readReceiptMachineBlock, topLevelFencedBlocks, readReceiptFrontmatter } from "./document-receipts";
 import { validateTaskAssignmentV2 } from "../dispatch";
 import { durableGuildDir } from "../state";
 
@@ -166,6 +166,45 @@ function canonicalLaneReceiptIdentity(
   }
   if (!hasCanonicalReceiptWrapper(content)) return null;
   return { taskId: frontmatterTaskId, specialist };
+}
+
+/**
+ * The review / verify-done receipt gate (#235): what a lane receipt lacks
+ * against the dispatch.md handoff contract — the five §8.2 `## <name>`
+ * sections and EXACTLY ONE fenced guild.handoff.v2 block that passes the strict
+ * `validateHandoffV2`. Empty = the receipt meets the contract. Narrower than
+ * `isCanonicalLaneReceipt`, which also needs frozen v1 frontmatter provenance
+ * for share eligibility.
+ */
+export function laneReceiptContractDefects(content: string): string[] {
+  const defects = missingReceiptSections(content).map((s) => `missing_section:${s}`);
+  // The gate is never more lenient than the consumer that reads the block.
+  const consumer = readReceiptMachineBlock(content);
+  if (!consumer.ok) defects.push(`machine_block_unreadable:${consumer.reason}`);
+  const all = topLevelFencedBlocks(content, "guild.handoff.v2");
+  const blocks = all.filter((b) => b.plain);
+  if (blocks.length !== all.length) defects.push("v2_block_noncanonical_fence");
+  if (blocks.length !== 1) return [...defects, `v2_block_count:${blocks.length}`];
+  let envelope: unknown;
+  try {
+    envelope = JSON.parse(blocks[0].body.trim());
+  } catch {
+    return [...defects, "v2_block_invalid_json"];
+  }
+  const v = validateHandoffV2(envelope);
+  if (!v.valid) defects.push(`v2_envelope_invalid:${v.errors.join("; ")}`);
+  if (consumer.ok && stableJson(consumer.block) !== stableJson(envelope)) defects.push("machine_block_mismatch");
+  return defects;
+}
+
+/** JSON with object keys sorted, so two parses of one envelope compare equal. */
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    return `{${Object.keys(obj).sort().map((k) => `${JSON.stringify(k)}:${stableJson(obj[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
 }
 
 export function isCanonicalLaneReceipt(content: string, receiptName?: string): boolean {
