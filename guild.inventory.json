@@ -1414,6 +1414,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/capability/inline-specialist-identity",
+      "source_path": "scripts/lib/capability/inline-specialist-identity.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/capability/migration-evidence",
       "source_path": "scripts/lib/capability/migration-evidence.ts",
       "kind": "lib"

@@ -199,7 +199,12 @@ First, the **env vars**, injected **on the spawned lane agent only** (never the 
   if (isProject && (!spec.definition_ref || spec.definition_ref.schema_version !== "guild.project_definition_ref.v1"))
     throw new Error(`lane ${lane.taskId}: project specialist ${spec.name} has no validated definition_ref`);
   const bundleLint = JSON.parse(runContextBundleLint(bundlePath));
-  if (!bundleLint.pass || JSON.stringify(bundleLint.definition_ref) !== JSON.stringify(spec.definition_ref))
+  // Shipped lanes have no team ref: expect the producer's synthesized plugin-shipped ref (#221).
+  const expectedRef = isProject ? spec.definition_ref
+    : JSON.parse(runDefinitionRefForDispatch(["--name", spec.name, "--definition", spec.definition, "--source", "shipped",
+        ...(spec.tier ? ["--tier", spec.tier] : []), ...(spec.default_tier ? ["--default-tier", spec.default_tier] : []),
+        ...(spec.capability_scope ? ["--capability-scope", spec.capability_scope.join(",")] : [])])).ref;
+  if (!bundleLint.pass || JSON.stringify(bundleLint.definition_ref) !== JSON.stringify(expectedRef))
     throw new Error(`lane ${lane.taskId}: context bundle definition_ref does not match the team`);
   //   NORMALIZE ONCE, then use `definitionPath` for BOTH carriers. The composer
   //   compares TRIMMED, so a padded-but-canonical `"  .guild/agents/x.md  "`

@@ -81,6 +81,109 @@ function indentEnd(lines: string[], start: number): number {
   return lines.length;
 }
 
+/**
+ * Static `require("<literal>")` calls per 0-based line. One pass over the whole
+ * file so block comments, strings, and multi-line template text never yield
+ * edges, while code inside `${...}` still does. Member calls (`x.require`,
+ * across whitespace/newlines) are skipped. Regex literals are not modeled.
+ */
+function staticRequiresByLine(content: string): Map<number, string[]> {
+  const out = new Map<number, string[]>();
+  // Trivia: whitespace, `/* */` (never crossing its first `*/`), or `//` to EOL.
+  const gap = String.raw`(?:\s|\/\*(?:[^*]|\*(?!\/))*\*\/|\/\/[^\n]*\n)*`;
+  const call = new RegExp(
+    String.raw`require${gap}\(${gap}(?:"((?:[^"\\\n]|\\[^\n])+)"|'((?:[^'\\\n]|\\[^\n])+)')${gap}(?:,${gap})?\)`,
+    "y",
+  );
+  // Frames: a template literal, or a `${` interpolation with its brace depth.
+  const stack: Array<{ tpl: true } | { tpl: false; depth: number }> = [];
+  let line = 0;
+  let lastSig = ""; // last non-whitespace code char before the cursor
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
+    if (ch === "\n") line++;
+    const top = stack[stack.length - 1];
+    if (top?.tpl) {
+      if (ch === "\\") {
+        if (content[i + 1] === "\n") line++;
+        i++;
+      } else if (ch === "`") {
+        stack.pop();
+        lastSig = "`";
+      } else if (ch === "$" && content[i + 1] === "{") {
+        stack.push({ tpl: false, depth: 0 });
+        i++;
+        lastSig = "{";
+      }
+      continue;
+    }
+    if (ch === "/" && content[i + 1] === "/") {
+      const nl = content.indexOf("\n", i);
+      if (nl < 0) break;
+      i = nl - 1;
+      continue;
+    }
+    if (ch === "/" && content[i + 1] === "*") {
+      const end = content.indexOf("*/", i + 2);
+      const stop = end < 0 ? content.length : end + 2;
+      for (let j = i; j < stop; j++) if (content[j] === "\n") line++;
+      i = stop - 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      let j = i + 1;
+      while (j < content.length && content[j] !== ch && content[j] !== "\n") {
+        if (content[j] === "\\") {
+          // Line continuation (LF or CRLF) keeps the string open.
+          if (content[j + 1] === "\r" && content[j + 2] === "\n") {
+            line++;
+            j += 3;
+            continue;
+          }
+          if (content[j + 1] === "\n") line++;
+          j += 2;
+          continue;
+        }
+        j++;
+      }
+      i = content[j] === "\n" ? j - 1 : j;
+      lastSig = ch;
+      continue;
+    }
+    if (ch === "`") {
+      stack.push({ tpl: true });
+      continue;
+    }
+    if (top && !top.tpl) {
+      if (ch === "{") top.depth++;
+      else if (ch === "}") {
+        if (top.depth === 0) {
+          stack.pop();
+          continue;
+        }
+        top.depth--;
+      }
+    }
+    if (ch === "r" && !/[\w$]/.test(content[i - 1] ?? "") && lastSig !== ".") {
+      call.lastIndex = i;
+      const m = call.exec(content);
+      if (m) {
+        const list = out.get(line) ?? [];
+        list.push(m[1] ?? m[2]);
+        out.set(line, list);
+        line += m[0].split("\n").length - 1;
+        i = call.lastIndex - 1;
+        lastSig = ")";
+        continue;
+      }
+    }
+    // Spread (`...require(x)`) is not member access.
+    if (ch === "." && content[i - 1] === "." && content[i - 2] === ".") lastSig = "...";
+    else if (!/\s/.test(ch)) lastSig = ch;
+  }
+  return out;
+}
+
 function analyzeJsTs(lines: string[], lang: string): StructuralAnalysis {
   const functions: FunctionInfo[] = [];
   const classes: ClassInfo[] = [];
@@ -89,7 +192,7 @@ function analyzeJsTs(lines: string[], lang: string): StructuralAnalysis {
 
   const reImport =
     /^\s*import\s+(?:type\s+)?(?:(\*\s+as\s+\w+|\{[^}]*\}|\w+)(?:\s*,\s*(\{[^}]*\}))?\s+from\s+)?["']([^"']+)["']/;
-  const reRequire = /(?:const|let|var)\s+(\{[^}]*\}|\w+)\s*=\s*require\(\s*["']([^"']+)["']\s*\)/;
+  const reRequire = /(?:const|let|var)\s+(\{[^}]*\}|\w+)\s*=\s*require\s*\(\s*["']([^"']+)["']\s*\)/;
   const reFn =
     /^\s*(export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/;
   const reArrow =
@@ -99,6 +202,7 @@ function analyzeJsTs(lines: string[], lang: string): StructuralAnalysis {
   const reExportList = /^\s*export\s*\{([^}]*)\}/;
   const reMethod = /^\s*(?:public|private|protected|static|async|get|set|\s)*([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{?/;
 
+  const requiresByLine = staticRequiresByLine(lines.join("\n"));
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
@@ -111,16 +215,23 @@ function analyzeJsTs(lines: string[], lang: string): StructuralAnalysis {
         .map((s) => s.replace(/\s+as\s+\w+/, "").trim())
         .filter(Boolean);
       imports.push({ source: mImp[3], specifiers });
-      continue;
     }
+    // #218: every static require("<literal>") on the line, not only the
+    // declaration form. The declaration keeps its specifiers.
     const mReq = line.match(reRequire);
-    if (mReq) {
-      imports.push({
-        source: mReq[2],
-        specifiers: mReq[1].replace(/[{}]/g, "").split(",").map((s) => s.trim()).filter(Boolean),
-      });
-      continue;
+    let declSource = mReq ? mReq[2] : null;
+    for (const source of requiresByLine.get(i) ?? []) {
+      if (source === declSource) {
+        imports.push({
+          source,
+          specifiers: mReq![1].replace(/[{}]/g, "").split(",").map((s) => s.trim()).filter(Boolean),
+        });
+        declSource = null;
+      } else {
+        imports.push({ source, specifiers: [] });
+      }
     }
+    if (mImp || mReq) continue;
 
     const mClass = line.match(reClass);
     if (mClass) {
