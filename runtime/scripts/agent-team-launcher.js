@@ -9352,8 +9352,8 @@ function realFs() {
 function sessionContextPath(root, runId) {
   return path21.join(durableGuildDir(root), "runs", runId, "session-context.json");
 }
-function writeSessionContext(root, ctx, fs100) {
-  const f = fs100 ?? realFs();
+function writeSessionContext(root, ctx, fs101) {
+  const f = fs101 ?? realFs();
   const p = sessionContextPath(root, ctx.run_id);
   const serialized = JSON.stringify(ctx, null, 2) + "\n";
   const existing = f.readFile(p);
@@ -9366,8 +9366,8 @@ function writeSessionContext(root, ctx, fs100) {
   f.mkdirp(path21.dirname(p));
   f.writeFile(p, serialized);
 }
-function loadSessionContext(root, runId, fs100) {
-  const f = fs100 ?? realFs();
+function loadSessionContext(root, runId, fs101) {
+  const f = fs101 ?? realFs();
   const raw = f.readFile(sessionContextPath(root, runId));
   if (raw === null) return null;
   try {
@@ -9379,8 +9379,8 @@ function loadSessionContext(root, runId, fs100) {
     return null;
   }
 }
-function restoreSessionContext(root, runId, fs100) {
-  const ctx = loadSessionContext(root, runId, fs100);
+function restoreSessionContext(root, runId, fs101) {
+  const ctx = loadSessionContext(root, runId, fs101);
   if (ctx === null) {
     throw new Error(
       `session-context: no frozen record for ${runId} \u2014 resume restores the run's own snapshot; it never re-detects into an existing run`
@@ -45056,8 +45056,8 @@ function runBindingPath(root, runId) {
 function pendingSubstantiveOperationPath(root, runId) {
   return path86.join(durableGuildDir(root), "runs", runId, "capability", "pending-substantive-operation.json");
 }
-function readPendingSubstantiveOperation(root, runId, fs100 = realBindingFs()) {
-  const raw = fs100.readFile(pendingSubstantiveOperationPath(root, runId));
+function readPendingSubstantiveOperation(root, runId, fs101 = realBindingFs()) {
+  const raw = fs101.readFile(pendingSubstantiveOperationPath(root, runId));
   if (raw === null) return null;
   let value;
   try {
@@ -45072,20 +45072,20 @@ function readPendingSubstantiveOperation(root, runId, fs100 = realBindingFs()) {
   }
   return record;
 }
-function writePendingSubstantiveOperation(root, record, fs100) {
+function writePendingSubstantiveOperation(root, record, fs101) {
   const target = pendingSubstantiveOperationPath(root, record.run_id);
   const serialized = `${JSON.stringify(record, null, 2)}
 `;
-  if (fs100.writeFileAtomicContained) {
-    fs100.writeFileAtomicContained(root, target, serialized);
+  if (fs101.writeFileAtomicContained) {
+    fs101.writeFileAtomicContained(root, target, serialized);
     return;
   }
-  fs100.mkdirp(path86.dirname(target));
-  fs100.writeFile(target, serialized);
+  fs101.mkdirp(path86.dirname(target));
+  fs101.writeFile(target, serialized);
 }
 function stagePendingSubstantiveOperation(opts) {
-  const fs100 = opts.fs ?? realBindingFs();
-  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs100);
+  const fs101 = opts.fs ?? realBindingFs();
+  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs101);
   if (prior?.state === "pending" && prior.task_id !== opts.task_id) {
     throw new Error(`pending substantive operation for ${prior.task_id} must be recovered before ${opts.task_id}`);
   }
@@ -45095,14 +45095,14 @@ function stagePendingSubstantiveOperation(opts) {
     state: "pending",
     run_id: opts.run_id,
     task_id: opts.task_id
-  }, fs100);
+  }, fs101);
 }
 function completePendingSubstantiveOperation(opts) {
-  const fs100 = opts.fs ?? realBindingFs();
-  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs100);
+  const fs101 = opts.fs ?? realBindingFs();
+  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs101);
   if (!prior || prior.task_id !== opts.task_id) throw new Error("pending substantive operation completion has no matching transaction");
   if (prior.state === "complete") return;
-  writePendingSubstantiveOperation(opts.root, { ...prior, state: "complete" }, fs100);
+  writePendingSubstantiveOperation(opts.root, { ...prior, state: "complete" }, fs101);
 }
 function assertNoPendingSubstantiveOperation(opts) {
   const record = readPendingSubstantiveOperation(opts.root, opts.run_id, opts.fs ?? realBindingFs());
@@ -45126,9 +45126,9 @@ function initializeRunBindingExclusion(root, runId) {
   initStableLockfile(path86.join(durableGuildDir(root), "runs", runId));
 }
 function mintRunBinding(opts) {
-  const fs100 = opts.fs ?? realBindingFs();
+  const fs101 = opts.fs ?? realBindingFs();
   const p = runBindingPath(opts.root, opts.run_id);
-  if (fs100.exists(p)) {
+  if (fs101.exists(p)) {
     throw new Error(
       `run-binding: a binding for ${opts.run_id} is already minted \u2014 resume restores it (loadRunBinding); it is never re-minted`
     );
@@ -45139,9 +45139,9 @@ function mintRunBinding(opts) {
     binding_ref: `rb-${crypto22.randomBytes(16).toString("hex")}`,
     state: "open"
   };
-  fs100.mkdirp(path86.dirname(p));
+  fs101.mkdirp(path86.dirname(p));
   const contents = JSON.stringify(record, null, 2) + "\n";
-  const created = fs100.writeFileExclusive ? fs100.writeFileExclusive(p, contents) : !fs100.exists(p) && (fs100.writeFile(p, contents), true);
+  const created = fs101.writeFileExclusive ? fs101.writeFileExclusive(p, contents) : !fs101.exists(p) && (fs101.writeFile(p, contents), true);
   if (!created) {
     throw new Error(
       `run-binding: a binding for ${opts.run_id} is already minted \u2014 resume restores it (loadRunBinding); it is never re-minted`
@@ -45165,8 +45165,8 @@ function validateRunBindingRecord(parsed, expectedRunId) {
   };
 }
 function readRunBindingRecord(opts) {
-  const fs100 = opts.fs ?? realBindingFs();
-  const raw = fs100.readFile(runBindingPath(opts.root, opts.run_id));
+  const fs101 = opts.fs ?? realBindingFs();
+  const raw = fs101.readFile(runBindingPath(opts.root, opts.run_id));
   if (raw === null) return { status: "absent" };
   let parsed;
   try {
@@ -45183,10 +45183,10 @@ function loadRunBinding(opts) {
   return read.status === "ok" ? read.record : null;
 }
 function closeRunBinding(opts) {
-  const fs100 = opts.fs ?? realBindingFs();
+  const fs101 = opts.fs ?? realBindingFs();
   const record = loadRunBinding(opts);
   if (record === null || record.state === "closed") return;
-  fs100.writeFile(
+  fs101.writeFile(
     runBindingPath(opts.root, opts.run_id),
     JSON.stringify({ ...record, state: "closed" }, null, 2) + "\n"
   );
@@ -45195,7 +45195,7 @@ function reopenRunBinding(opts, binding_ref) {
   return withRunBindingExclusion(opts.root, opts.run_id, () => reopenRunBindingUnderExclusion(opts, binding_ref));
 }
 function reopenRunBindingUnderExclusion(opts, binding_ref) {
-  const fs100 = opts.fs ?? realBindingFs();
+  const fs101 = opts.fs ?? realBindingFs();
   const read = readRunBindingRecord(opts);
   if (read.status === "absent") throw new BindingRejectedError("binding_not_minted", opts.run_id);
   if (read.status === "malformed") throw new BindingRejectedError("binding_malformed", opts.run_id);
@@ -45205,7 +45205,7 @@ function reopenRunBindingUnderExclusion(opts, binding_ref) {
   }
   if (record.state === "open") return record;
   const reopened = { ...record, state: "open" };
-  fs100.writeFile(runBindingPath(opts.root, opts.run_id), JSON.stringify(reopened, null, 2) + "\n");
+  fs101.writeFile(runBindingPath(opts.root, opts.run_id), JSON.stringify(reopened, null, 2) + "\n");
   return reopened;
 }
 function verifyRunBinding(input) {
@@ -45231,8 +45231,8 @@ function assertWritableBinding(input) {
   if (verdict.ok === false) throw new BindingRejectedError(verdict.reason, input.run_id);
   return verdict.binding;
 }
-function locateCandidateRunId(root, fs100) {
-  const f = fs100 ?? realBindingFs();
+function locateCandidateRunId(root, fs101) {
+  const f = fs101 ?? realBindingFs();
   const candidates = [
     [path86.join(durableGuildDir(root), "runs", "current-run-id"), "sentinel-legacy"],
     [path86.join(durableGuildDir(root), "current-run-id"), "sentinel-b2"]
@@ -45948,7 +45948,7 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
     );
   }
   const { cwd, fs: fsSeam, resolvedAtRef } = opts;
-  const fs100 = fsSeam ?? realProvenanceFsSeam();
+  const fs101 = fsSeam ?? realProvenanceFsSeam();
   const outPath = resolvedSettingsPath(cwd, runId);
   const runsBase = path87.resolve(durableGuildDir(cwd), "runs");
   assertContained(outPath, cwd, "writeResolvedSettingsSnapshot");
@@ -45957,9 +45957,9 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
     resolved_at_ref: resolvedAtRef ?? runId
   };
   const serialized = JSON.stringify(onDisk, null, 2) + "\n";
-  if (fs100.scrubbedWriteDurable) {
+  if (fs101.scrubbedWriteDurable) {
     const runDir4 = path87.join(durableGuildDir(cwd), "runs", runId);
-    const result2 = fs100.scrubbedWriteDurable(outPath, serialized, "config", runDir4, runId);
+    const result2 = fs101.scrubbedWriteDurable(outPath, serialized, "config", runDir4, runId);
     if (result2.blocked) {
       process.stderr.write(
         `[run-lifecycle] WARN: resolved-settings.json write BLOCKED by secret scrub (fail-CLOSED) for run ${runId}. Security event emitted.
@@ -45967,7 +45967,7 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
       );
     }
   } else {
-    fs100.writeFile(outPath, serialized);
+    fs101.writeFile(outPath, serialized);
   }
   return outPath;
 }
@@ -46060,7 +46060,7 @@ function writePluginConfigSnapshot(runId, snapshot, start, env) {
 function readResolvedSettingsSnapshot(runId, opts) {
   if (!validateRunId2(runId)) return null;
   const { cwd, fs: fsSeam } = opts;
-  const fs100 = fsSeam ?? realProvenanceFsSeam();
+  const fs101 = fsSeam ?? realProvenanceFsSeam();
   const filePath = resolvedSettingsPath(cwd, runId);
   const runsBase = path87.resolve(durableGuildDir(cwd), "runs");
   try {
@@ -46068,7 +46068,7 @@ function readResolvedSettingsSnapshot(runId, opts) {
   } catch {
     return null;
   }
-  const raw = fs100.readFile(filePath);
+  const raw = fs101.readFile(filePath);
   if (raw === null) return null;
   try {
     return JSON.parse(raw);
@@ -46127,14 +46127,14 @@ function writeGateBlock(raw, gate, rec) {
   lines.splice(end, 0, gateKeyLine, ...entryLines);
   return lines.join("\n");
 }
-function appendGateOutcome(fs100, root, runId, gate, record) {
+function appendGateOutcome(fs101, root, runId, gate, record) {
   if (!GATE_TOKEN.test(gate)) return false;
   const p = runYamlPath(root, runId);
-  const raw = fs100.readFile(p);
+  const raw = fs101.readFile(p);
   if (raw === null) return false;
   const next = writeGateBlock(raw, gate, record);
   if (next === null) return false;
-  fs100.writeFile(p, next);
+  fs101.writeFile(p, next);
   return true;
 }
 function readRunStartedAt2(runDir4, readFile = (p) => {
@@ -56139,7 +56139,7 @@ __export(agent_team_launcher_exports, {
 module.exports = __toCommonJS(agent_team_launcher_exports);
 var import_child_process7 = require("child_process");
 var import_crypto3 = require("crypto");
-var fs99 = __toESM(require("fs"));
+var fs100 = __toESM(require("fs"));
 var path116 = __toESM(require("path"));
 init_state();
 
@@ -60625,6 +60625,8 @@ function specialistProfileFromAgentFrontmatter(fm, boundType) {
 }
 
 // scripts/lib/capability/definition-ref-for-dispatch.ts
+var crypto29 = __toESM(require("node:crypto"));
+var fs97 = __toESM(require("node:fs"));
 var path111 = __toESM(require("node:path"));
 
 // scripts/lib/core/contracts/adoption-manifest.ts
@@ -61044,13 +61046,63 @@ function deepFreeze5(value) {
   return Object.freeze(value);
 }
 
+// scripts/lib/capability/inline-specialist-identity.ts
+var import_node_crypto10 = require("node:crypto");
+var sha256Prefixed = (content) => `sha256:${(0, import_node_crypto10.createHash)("sha256").update(content).digest("hex")}`;
+function inlineSpecialistIdentity(specialist, definitionBytes, pinnedSkillIds, projectedType) {
+  const inlineType = projectedType ?? {
+    schema_version: SPECIALIST_TYPE_SCHEMA,
+    type_id: specialist.name,
+    version: "inline-team-v1",
+    role: specialist.name,
+    capability_tags: [],
+    compatible_skill_refs: pinnedSkillIds,
+    semantic_tool_requirements: specialist.capability_scope ?? [],
+    default_model_tier: specialist.tier ?? specialist.default_tier ?? "mid",
+    constraints: {
+      definition_source: specialist.definition_source ?? "inline-team",
+      definition_path: specialist.definition ?? null,
+      definition_content_hash: definitionBytes ? sha256Prefixed(definitionBytes) : null
+    },
+    eval_fixture_refs: []
+  };
+  const typeHash = hashSpecialistType(inlineType);
+  const definitionFm = definitionBytes ? parseFrontmatter3(definitionBytes.toString("utf8")) : null;
+  const projectedProfile = definitionFm ? specialistProfileFromAgentFrontmatter(definitionFm, {
+    type_id: inlineType.type_id,
+    type_version: inlineType.version,
+    type_hash: typeHash
+  }) : null;
+  const profile = projectedProfile ?? {
+    schema_version: SPECIALIST_PROFILE_SCHEMA,
+    profile_id: specialist.name,
+    version: "inline-team-v1",
+    derived_from: {
+      type_id: inlineType.type_id,
+      type_version: inlineType.version,
+      type_hash: typeHash
+    },
+    project_instructions: definitionBytes ? `definition_content_hash=${sha256Prefixed(definitionBytes)}` : `inline_team_contract=${sha256Prefixed(JSON.stringify({
+      name: specialist.name,
+      scope: specialist.scope,
+      dependsOn: specialist.dependsOn,
+      capability_scope: specialist.capability_scope ?? []
+    }))}`,
+    local_skill_refs: pinnedSkillIds
+  };
+  return { type: inlineType, typeHash, profile, profileHash: hashSpecialistProfile(profile) };
+}
+
+// scripts/lib/capability/definition-ref-for-dispatch.ts
+init_kernel();
+
 // scripts/lib/definition-artifact-resolver.ts
 var import_node_child_process3 = require("node:child_process");
-var import_node_crypto10 = require("node:crypto");
+var import_node_crypto11 = require("node:crypto");
 var import_node_fs4 = require("node:fs");
 var import_node_path4 = require("node:path");
 function digest(bytes) {
-  return `sha256:${(0, import_node_crypto10.createHash)("sha256").update(bytes).digest("hex")}`;
+  return `sha256:${(0, import_node_crypto11.createHash)("sha256").update(bytes).digest("hex")}`;
 }
 function readContainedRegularFile(root, relativePath) {
   if (!relativePath || (0, import_node_path4.isAbsolute)(relativePath)) throw new Error("path must be project-root-relative");
@@ -61294,7 +61346,7 @@ init_config2();
 // scripts/lib/capability/compatibility-loader.ts
 var fs95 = __toESM(require("node:fs"));
 var path109 = __toESM(require("node:path"));
-var import_node_crypto12 = require("node:crypto");
+var import_node_crypto13 = require("node:crypto");
 init_telemetry();
 init_config2();
 init_config2();
@@ -61303,7 +61355,7 @@ init_lifecycle();
 init_host_id_namespace2();
 
 // scripts/lib/capability/migration-evidence.ts
-var import_node_crypto11 = require("node:crypto");
+var import_node_crypto12 = require("node:crypto");
 var fs94 = __toESM(require("node:fs"));
 var path108 = __toESM(require("node:path"));
 init_config2();
@@ -61621,7 +61673,7 @@ function isHandoffReceiptId2(value) {
   return SHA256.test(value.slice("handoff-sha256:".length));
 }
 function sha2569(bytes) {
-  return (0, import_node_crypto11.createHash)("sha256").update(bytes).digest("hex");
+  return (0, import_node_crypto12.createHash)("sha256").update(bytes).digest("hex");
 }
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
@@ -62132,13 +62184,13 @@ function readCompatibilityAsset(options) {
       const contained = checkContained(root, target, { policy: "physical", requireRegularFileLeaf: true });
       if (isRefused(contained)) return { status: "refused", detail: `compatibility asset refused [${contained.code}]` };
       const bytes = fs95.readFileSync(contained.realPath);
-      const actual = (0, import_node_crypto12.createHash)("sha256").update(bytes).digest("hex");
+      const actual = (0, import_node_crypto13.createHash)("sha256").update(bytes).digest("hex");
       if (actual !== entry.content_hash) return { status: "refused", detail: "compatibility asset bytes do not match the catalog" };
       const emitted = compatibilityUsageForRead({ entry, mode: options.mode, intent: options.intent, synthetic: options.synthetic, specialist_id: options.specialistId });
       if (emitted.status !== "ok") return { status: "refused", detail: emitted.detail };
       const payloadBytes = Buffer.from(`${JSON.stringify(emitted.payload, null, 2)}
 `, "utf8");
-      const payloadHash2 = (0, import_node_crypto12.createHash)("sha256").update(payloadBytes).digest("hex");
+      const payloadHash2 = (0, import_node_crypto13.createHash)("sha256").update(payloadBytes).digest("hex");
       const receipts = path109.join(durableGuildDir(path109.resolve(options.projectRoot)), "runs", options.runId, "receipts");
       const safeOperation = options.operationId.replace(/[^a-zA-Z0-9._-]/g, "-");
       if (!safeOperation || safeOperation.length > 160) return { status: "refused", detail: "operationId is not a bounded identity" };
@@ -62285,7 +62337,67 @@ function readCommittedAdoptionManifest(projectRoot) {
   if (!record) return { status: "uncommitted", detail: "no durable receipt commits the current manifest tip" };
   return { status: "committed", manifest };
 }
-function definitionRefForDispatch(projectRoot, specialist) {
+function shippedDefinitionRef(pluginRoot, lane) {
+  const { name, definition: definition2 } = lane;
+  if (definition2 !== `agents/${name}.md` || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) {
+    return { status: "invalid_request", detail: `shipped specialist ${name} must use definition agents/${name}.md` };
+  }
+  let bytes;
+  try {
+    const realRoot2 = fs97.realpathSync(pluginRoot);
+    const abs = path111.join(realRoot2, definition2);
+    if (!fs97.lstatSync(abs).isFile()) throw new Error("not a regular file");
+    if (fs97.realpathSync(abs) !== abs) {
+      return { status: "invalid_request", detail: `shipped definition ${definition2} resolves outside the plugin tree` };
+    }
+    bytes = fs97.readFileSync(abs);
+  } catch {
+    return { status: "capability_absent", detail: `shipped definition ${definition2} is not readable in the plugin` };
+  }
+  const fm = parseFrontmatter3(bytes.toString("utf8"));
+  if (!fm || fm["name"] !== name) {
+    return { status: "invalid_request", detail: `shipped definition ${definition2} does not declare name ${name}` };
+  }
+  const identity = inlineSpecialistIdentity(
+    {
+      name,
+      definition_source: "shipped",
+      definition: definition2,
+      ...lane.default_tier !== void 0 ? { default_tier: lane.default_tier } : {},
+      ...lane.tier !== void 0 ? { tier: lane.tier } : {},
+      ...lane.capability_scope !== void 0 ? { capability_scope: lane.capability_scope } : {}
+    },
+    bytes,
+    [],
+    null
+  );
+  const ref = validateProjectDefinitionRefV1({
+    schema_version: PROJECT_DEFINITION_REF_SCHEMA,
+    project_id: "plugin",
+    layer: "plugin-shipped",
+    kind: "agent",
+    id: name,
+    relative_path: definition2,
+    content_hash: `sha256:${crypto29.createHash("sha256").update(bytes).digest("hex")}`,
+    source_commit: null,
+    specialist_profile_hash: identity.profileHash,
+    specialist_type_hash: identity.typeHash,
+    skills: []
+  });
+  if (!ref) return { status: "invalid_request", detail: `shipped definition ${definition2} yields an invalid ref` };
+  return { status: "resolved", ref };
+}
+function definitionRefForDispatch(projectRoot, specialist, opts = {}) {
+  if (specialist.definition_source === "shipped") {
+    if (!specialist.definition) return { status: "invalid_request", detail: `shipped specialist ${specialist.name} has no definition path` };
+    return shippedDefinitionRef(opts.pluginRoot ?? resolvePluginRoot(__dirname), {
+      name: specialist.name,
+      definition: specialist.definition,
+      tier: specialist.tier,
+      default_tier: specialist.default_tier,
+      capability_scope: specialist.capability_scope
+    });
+  }
   if (!specialist.definition) return { status: "invalid_request", detail: `project specialist ${specialist.name} has no definition path` };
   const committed = readCommittedAdoptionManifest(projectRoot);
   if (committed.status !== "committed") {
@@ -62571,7 +62683,7 @@ ${USAGE2}`);
 }
 
 // scripts/lib/emit-remote-orphan.ts
-var fs97 = __toESM(require("node:fs"));
+var fs98 = __toESM(require("node:fs"));
 var path114 = __toESM(require("node:path"));
 init_storage();
 var REMOTE_ORPHAN_SCHEMA = "guild.degradation_event.v1";
@@ -62587,7 +62699,7 @@ function emitRemoteOrphan(cwd, runId, message, out = (msg) => process.stderr.wri
   const runDir4 = path114.join(durableGuildDir(cwd), "runs", runId);
   try {
     const sink = path114.join(runDir4, REMOTE_ORPHAN_SINK_RELPATH);
-    fs97.mkdirSync(path114.dirname(sink), { recursive: true });
+    fs98.mkdirSync(path114.dirname(sink), { recursive: true });
     const record = {
       schema_version: REMOTE_ORPHAN_SCHEMA,
       event_name: REMOTE_ORPHAN_EVENT,
@@ -62595,7 +62707,7 @@ function emitRemoteOrphan(cwd, runId, message, out = (msg) => process.stderr.wri
       message,
       at
     };
-    fs97.appendFileSync(sink, JSON.stringify(record) + "\n", "utf8");
+    fs98.appendFileSync(sink, JSON.stringify(record) + "\n", "utf8");
   } catch {
   }
   try {
@@ -63374,7 +63486,7 @@ if (require.main === module && /\.[cm]?ts$/.test(process.argv[1] ?? "")) {
 }
 
 // scripts/lib/emit-readback-degradation.ts
-var fs98 = __toESM(require("node:fs"));
+var fs99 = __toESM(require("node:fs"));
 var path115 = __toESM(require("node:path"));
 init_storage();
 var READBACK_DEGRADATION_SCHEMA = "guild.degradation_event.v1";
@@ -63392,7 +63504,7 @@ function emitReadbackDegradation(cwd, runId, taskId, specialist, out = (msg) => 
   const runDir4 = path115.join(durableGuildDir(cwd), "runs", runId);
   try {
     const eventsLog = path115.join(runDir4, "logs", "v1.4-events.jsonl");
-    fs98.mkdirSync(path115.dirname(eventsLog), { recursive: true });
+    fs99.mkdirSync(path115.dirname(eventsLog), { recursive: true });
     const record = {
       schema_version: READBACK_DEGRADATION_SCHEMA,
       event_name: READBACK_DEGRADATION_EVENT,
@@ -63402,7 +63514,7 @@ function emitReadbackDegradation(cwd, runId, taskId, specialist, out = (msg) => 
       message,
       at
     };
-    fs98.appendFileSync(eventsLog, JSON.stringify(record) + "\n", "utf8");
+    fs99.appendFileSync(eventsLog, JSON.stringify(record) + "\n", "utf8");
   } catch {
   }
   try {
@@ -63817,9 +63929,9 @@ function buildManifest(opts) {
 function writeManifest(cwd, manifest) {
   const runId = manifest.run_id;
   const dir = path116.join(durableGuildDir(cwd), "runs", runId, "agent-team");
-  fs99.mkdirSync(dir, { recursive: true });
+  fs100.mkdirSync(dir, { recursive: true });
   const out = path116.join(dir, "session.json");
-  fs99.writeFileSync(out, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+  fs100.writeFileSync(out, JSON.stringify(manifest, null, 2) + "\n", "utf8");
   return out;
 }
 function makeLaneModelPlanner(cwd, runId, orchestratorHostKind, bindingRef, preview) {
@@ -63827,7 +63939,7 @@ function makeLaneModelPlanner(cwd, runId, orchestratorHostKind, bindingRef, prev
   let rawSettings;
   try {
     rawSettings = JSON.parse(
-      fs99.readFileSync(path116.join(durableGuildDir(cwd), "settings.json"), "utf8")
+      fs100.readFileSync(path116.join(durableGuildDir(cwd), "settings.json"), "utf8")
     );
   } catch {
     rawSettings = void 0;
@@ -63908,13 +64020,13 @@ function makeLaneModelPlanner(cwd, runId, orchestratorHostKind, bindingRef, prev
     return { outcome, laneTier };
   };
 }
-function sha256Prefixed(content) {
+function sha256Prefixed2(content) {
   return `sha256:${(0, import_crypto3.createHash)("sha256").update(content).digest("hex")}`;
 }
 function readRegularFile2(file) {
   try {
-    const stat = fs99.lstatSync(file);
-    return stat.isFile() && !stat.isSymbolicLink() ? fs99.readFileSync(file) : null;
+    const stat = fs100.lstatSync(file);
+    return stat.isFile() && !stat.isSymbolicLink() ? fs100.readFileSync(file) : null;
   } catch {
     return null;
   }
@@ -63993,47 +64105,12 @@ function specialistIdentity(cwd, runId, bindingRef, logicalTaskId, specialist) {
   const templateFm = templateBytes ? parseFrontmatter3(templateBytes.toString("utf8")) : null;
   const projectedType = templateFm ? specialistTypeFromTemplateFrontmatter(templateFm) : null;
   const pinnedSkillIds = (ref?.skills ?? []).map((skill) => skill.id);
-  const inlineType = projectedType ?? {
-    schema_version: SPECIALIST_TYPE_SCHEMA,
-    type_id: specialist.name,
-    version: "inline-team-v1",
-    role: specialist.name,
-    capability_tags: [],
-    compatible_skill_refs: pinnedSkillIds,
-    semantic_tool_requirements: specialist.capability_scope ?? [],
-    default_model_tier: specialist.tier ?? specialist.default_tier ?? "mid",
-    constraints: {
-      definition_source: specialist.definition_source ?? "inline-team",
-      definition_path: specialist.definition ?? null,
-      definition_content_hash: definitionBytes ? sha256Prefixed(definitionBytes) : null
-    },
-    eval_fixture_refs: []
-  };
-  const typeHash = hashSpecialistType(inlineType);
-  const definitionFm = definitionBytes ? parseFrontmatter3(definitionBytes.toString("utf8")) : null;
-  const projectedProfile = definitionFm ? specialistProfileFromAgentFrontmatter(definitionFm, {
-    type_id: inlineType.type_id,
-    type_version: inlineType.version,
-    type_hash: typeHash
-  }) : null;
-  const profile = projectedProfile ?? {
-    schema_version: SPECIALIST_PROFILE_SCHEMA,
-    profile_id: specialist.name,
-    version: "inline-team-v1",
-    derived_from: {
-      type_id: inlineType.type_id,
-      type_version: inlineType.version,
-      type_hash: typeHash
-    },
-    project_instructions: definitionBytes ? `definition_content_hash=${sha256Prefixed(definitionBytes)}` : `inline_team_contract=${sha256Prefixed(JSON.stringify({
-      name: specialist.name,
-      scope: specialist.scope,
-      dependsOn: specialist.dependsOn,
-      capability_scope: specialist.capability_scope ?? []
-    }))}`,
-    local_skill_refs: pinnedSkillIds
-  };
-  const profileHash = hashSpecialistProfile(profile);
+  const {
+    type: inlineType,
+    typeHash,
+    profile,
+    profileHash
+  } = inlineSpecialistIdentity(specialist, definitionBytes, pinnedSkillIds, projectedType);
   if (refIsComplete) {
     if (inlineType.type_id !== specialist.name || profile.profile_id !== specialist.name) {
       throw new Error(
@@ -64057,18 +64134,18 @@ function specialistIdentity(cwd, runId, bindingRef, logicalTaskId, specialist) {
 }
 function contextBundleHash(cwd, relativePath, dryRun) {
   const bytes = readRegularFile2(path116.resolve(cwd, relativePath));
-  if (bytes) return sha256Prefixed(bytes);
-  if (dryRun) return sha256Prefixed(`dry-run-missing-context:${relativePath}`);
+  if (bytes) return sha256Prefixed2(bytes);
+  if (dryRun) return sha256Prefixed2(`dry-run-missing-context:${relativePath}`);
   throw new Error(`missing regular TaskCell context bundle: ${relativePath}`);
 }
 function hostCapabilitiesHash(cwd, runId, hostId, dryRun) {
   const manifest = readRegularFile2(hostCapabilityCacheFile(cwd, hostId));
-  if (manifest) return sha256Prefixed(manifest);
+  if (manifest) return sha256Prefixed2(manifest);
   const captured = captureHostCapabilitySnapshot({ host: hostId, runId });
   if (captured.disposition === "succeeded" && captured.snapshot) {
     return captured.snapshot.snapshot_hash;
   }
-  if (dryRun) return sha256Prefixed(`dry-run-host-capabilities:${hostId}`);
+  if (dryRun) return sha256Prefixed2(`dry-run-host-capabilities:${hostId}`);
   throw new Error(`no capability manifest or registry snapshot for selected host: ${hostId}`);
 }
 function readPolicyForRun(cwd) {
@@ -64265,7 +64342,7 @@ function resolveLifecycleRunId(cwd, callerRunId) {
     source = ".guild/runs/current-run-id";
     const sentinel = path116.join(durableGuildDir(cwd), "runs", "current-run-id");
     try {
-      candidate = fs99.readFileSync(sentinel, "utf8").trim();
+      candidate = fs100.readFileSync(sentinel, "utf8").trim();
     } catch {
       throw new Error(
         "lifecycle run id required: pass --run-id or start the Guild lifecycle so .guild/runs/current-run-id exists"
@@ -64284,14 +64361,14 @@ function loadHostManifests(cwd) {
   const dir = hostCapabilityCacheDir(cwd);
   let ids;
   try {
-    ids = fs99.readdirSync(dir);
+    ids = fs100.readdirSync(dir);
   } catch {
     return [];
   }
   const out = [];
   for (const id of ids) {
     try {
-      const raw = fs99.readFileSync(path116.join(dir, id, "capability.json"), "utf8");
+      const raw = fs100.readFileSync(path116.join(dir, id, "capability.json"), "utf8");
       const m = JSON.parse(raw);
       if (m && typeof m.host_id === "string") out.push(m);
     } catch {
@@ -64414,10 +64491,10 @@ function resolveDispatchPort(runtime, transportId) {
 function readFrozenDispatchResolution(cwd, runId) {
   if (runId === null || runId.length === 0) return null;
   const snapshotPath = path116.join(durableGuildDir(cwd), "runs", runId, "resolved-settings.json");
-  if (!fs99.existsSync(snapshotPath)) return null;
+  if (!fs100.existsSync(snapshotPath)) return null;
   let parsed;
   try {
-    parsed = JSON.parse(fs99.readFileSync(snapshotPath, "utf8"));
+    parsed = JSON.parse(fs100.readFileSync(snapshotPath, "utf8"));
   } catch {
     throw new Error(`frozen dispatch authority is unreadable: ${snapshotPath}`);
   }
@@ -64499,7 +64576,7 @@ async function main7() {
     const operation = args.reap ? "--reap" : "--dismiss-completed";
     const candidates = runIds.flatMap((runId2) => {
       try {
-        const parsed = JSON.parse(fs99.readFileSync(sessionJsonPath(cwd2, runId2), "utf8"));
+        const parsed = JSON.parse(fs100.readFileSync(sessionJsonPath(cwd2, runId2), "utf8"));
         return [{ runId: runId2, panes: parsed.teammate_panes?.length ?? 0 }];
       } catch {
         return [];
@@ -64525,7 +64602,7 @@ async function main7() {
     let totalOrphansReaped = 0;
     for (const runId2 of runIds) {
       const sjPath = sessionJsonPath(cwd2, runId2);
-      if (!fs99.existsSync(sjPath)) continue;
+      if (!fs100.existsSync(sjPath)) continue;
       const result2 = reapDeadMembers(sjPath);
       if (result2.reaped.length > 0) {
         totalReaped += result2.reaped.length;
@@ -64553,7 +64630,7 @@ async function main7() {
         const paneByTask = /* @__PURE__ */ new Map();
         let manifestBackend = "tmux";
         try {
-          const sj = JSON.parse(fs99.readFileSync(sjPath, "utf8"));
+          const sj = JSON.parse(fs100.readFileSync(sjPath, "utf8"));
           manifestBackend = sj.backend === "cmux" ? "cmux" : sj.backend === "in-process" ? "in-process" : "tmux";
           for (const p of sj.teammate_panes ?? []) {
             if (p.specialist && p.pane_id) paneBySpec.set(p.specialist, p.pane_id);
@@ -64650,7 +64727,7 @@ async function main7() {
     const runId2 = args.runId;
     const runDir4 = path116.join(durableGuildDir(cwd2), "runs", runId2);
     const sjPath = sessionJsonPath(cwd2, runId2);
-    if (!fs99.existsSync(sjPath)) {
+    if (!fs100.existsSync(sjPath)) {
       process.stdout.write(
         `[agent-team-launcher] --dismiss-completed: no session.json for run "${runId2}"
 `
@@ -64659,7 +64736,7 @@ async function main7() {
     }
     let sessionManifest;
     try {
-      sessionManifest = JSON.parse(fs99.readFileSync(sjPath, "utf8"));
+      sessionManifest = JSON.parse(fs100.readFileSync(sjPath, "utf8"));
     } catch {
       process.stdout.write(
         `[agent-team-launcher] --dismiss-completed: could not parse session.json for run "${runId2}"
@@ -64853,7 +64930,7 @@ async function main7() {
     );
     process.exit(1);
   }
-  if (!fs99.existsSync(args.team)) {
+  if (!fs100.existsSync(args.team)) {
     process.stderr.write(
       `[agent-team-launcher] ERROR: team file not found: ${args.team}
 `
@@ -64863,7 +64940,7 @@ async function main7() {
   let team;
   let teamRaw;
   try {
-    teamRaw = fs99.readFileSync(args.team, "utf8");
+    teamRaw = fs100.readFileSync(args.team, "utf8");
     team = parseYaml3(teamRaw);
   } catch (err) {
     process.stderr.write(
@@ -65290,7 +65367,7 @@ async function main7() {
         dispatchAllowed: !args.dryRun && directScopedRoles.length === 0,
         previewOnly: args.dryRun || directScopedRoles.length > 0,
         teamPath: path116.resolve(args.team),
-        teamSha256: sha256Prefixed(teamRaw)
+        teamSha256: sha256Prefixed2(teamRaw)
       };
       process.stdout.write(JSON.stringify(signal) + "\n");
       process.exit(0);
@@ -65303,7 +65380,7 @@ async function main7() {
         dispatchAllowed: !args.dryRun && directScopedRoles.length === 0,
         previewOnly: args.dryRun || directScopedRoles.length > 0,
         teamPath: path116.resolve(args.team),
-        teamSha256: sha256Prefixed(teamRaw)
+        teamSha256: sha256Prefixed2(teamRaw)
       };
       process.stdout.write(JSON.stringify(signal) + "\n");
       process.exit(0);
@@ -65334,7 +65411,7 @@ async function main7() {
           dispatchAllowed: !args.dryRun && directScopedRoles.length === 0,
           previewOnly: args.dryRun || directScopedRoles.length > 0,
           teamPath: path116.resolve(args.team),
-          teamSha256: sha256Prefixed(teamRaw)
+          teamSha256: sha256Prefixed2(teamRaw)
         }
       };
       process.stdout.write(JSON.stringify(signal) + "\n");
