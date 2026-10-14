@@ -21,7 +21,7 @@ A lane worker never writes `.guild/wiki/` (KTD35): PreToolUse denies it with a `
 3. **Skill prompts the user** with those three fields verbatim and waits for an answer. Do not synthesize an answer from plan context — that defeats the principle.
 4. **User answers.** The skill then asks the user to rate **significance** (low / medium / high). Low-significance stays in the run transcript (`.guild/runs/<run-id>/assumptions.md` per §8.1) and does **not** persist to the wiki. Medium or high triggers file creation (see §15.2 threshold).
 5. **Skill stages `.guild/knowledge/candidates/decisions/<slug>.md`** using the ADR-lite template below. Slug is a kebab-case summary of the question (e.g. `postgres-vs-dynamodb`). If a prior decision on the same topic exists, set `supersedes:` to that slug.
-6. **The skill does not touch `.guild/wiki/`** — not the page, not `index.md`, not `log.md`. The lead promotes the candidate through harvest, which writes the page and the index/log entries. After operator approval the lead runs the promote CLI in `guild:evolve` `references/wiki-revert.md`.
+6. **The skill does not touch `.guild/wiki/`** — not the page, not `index.md`, not `log.md`. The lead promotes the candidate through harvest, which writes the page and the index/log entries. After operator approval the lead runs the promote CLI in `guild:evolve` (`../../../meta/evolve/references/wiki-revert.md`).
 7. **Specialist receives the answer** and continues its task, citing the candidate slug in its handoff receipt (see "Handoff" below).
 
 ## ADR-lite template
