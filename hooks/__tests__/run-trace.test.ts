@@ -210,6 +210,7 @@ describe("run-trace lib (Lane B3)", () => {
 
   describe("recordStatusLightweight (OQ6)", () => {
     it("when record_status_runs is default (true), writes run.yaml + provenance.json to runs/ ONLY", () => {
+      fs.mkdirSync(path.join(root, ".guild"), { recursive: true }); // an initialized root
       const runId = recordStatusLightweight(root, resolveHost, { cwd: root });
       expect(runId).not.toBeNull();
       const runDir = path.join(root, ".guild", "runs", runId as string);
@@ -236,6 +237,12 @@ describe("run-trace lib (Lane B3)", () => {
       const runId = recordStatusLightweight(root, resolveHost, { cwd: root });
       expect(runId).toBeNull();
       expect(fs.existsSync(path.join(root, ".guild", "runs"))).toBe(false);
+    });
+
+    it("#217: on an uninitialized root (no .guild/) it records nothing and creates no .guild/", () => {
+      const runId = recordStatusLightweight(root, resolveHost, { cwd: root });
+      expect(runId).toBeNull();
+      expect(fs.existsSync(path.join(root, ".guild"))).toBe(false);
     });
   });
 
@@ -746,6 +753,33 @@ describe("run-trace lib (Lane B3)", () => {
         trust: "verified",
         confidence: "high",
       });
+    });
+
+    it("#217: status on an uninitialized git repo writes no .guild/ (bare status is read-only there)", () => {
+      const bare = fs.mkdtempSync(path.join(os.tmpdir(), "guild-runtrace-bare-"));
+      try {
+        spawnSync("git", ["init", "-q"], { cwd: bare });
+        const { exitCode, stdout } = runCli(["status", `--cwd=${bare}`]);
+        expect(exitCode).toBe(0);
+        expect(stdout.trim()).toBe("");
+        expect(fs.existsSync(path.join(bare, ".guild"))).toBe(false);
+      } finally {
+        fs.rmSync(bare, { recursive: true, force: true });
+      }
+    });
+
+    it("#219: start --command=/guild:init scaffolds the .guild/runs/ ignore rule", () => {
+      const repo = fs.mkdtempSync(path.join(os.tmpdir(), "guild-runtrace-init-"));
+      try {
+        spawnSync("git", ["init", "-q"], { cwd: repo });
+        const { exitCode } = runCli(["start", "--command=/guild:init", "--phase=init", `--cwd=${repo}`]);
+        expect(exitCode).toBe(0);
+        expect(fs.existsSync(path.join(repo, ".guild", "runs"))).toBe(true);
+        const st = spawnSync("git", ["status", "--porcelain", "-uall"], { cwd: repo, encoding: "utf8" });
+        expect(st.stdout.trim()).toBe("?? .guild/.gitignore");
+      } finally {
+        fs.rmSync(repo, { recursive: true, force: true });
+      }
     });
 
     it("status sub-command respects OQ6 gate (record_status_runs:false → empty stdout)", () => {
