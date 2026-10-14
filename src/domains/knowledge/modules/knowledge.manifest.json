@@ -33,6 +33,7 @@
       "lib/shared/bm25",
       "lib/shared/graph-scoring",
       "lib/write-back-scored-tier",
+      "wiki-promote",
       "wiki-revert"
     ]
   }

@@ -2389,6 +2389,11 @@
       "kind": "cli"
     },
     {
+      "id": "wiki-promote",
+      "source_path": "scripts/wiki-promote.ts",
+      "kind": "cli"
+    },
+    {
       "id": "wiki-revert",
       "source_path": "scripts/wiki-revert.ts",
       "kind": "cli"

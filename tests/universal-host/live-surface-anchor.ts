@@ -687,7 +687,11 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // check-surface-pins named only `skills/skills` stale against the T15F pin.
   // Re-ratified 2026-09-28 (T17 plugin-local docs): using-guild states the promotion law
   // and the shipped concern enum, and points the dispatch table at AGENTS.md.
-  skills: "1fea256df205e5a51f3390be6d535f37fe90c0ad",
+  // Re-ratified 2026-10-14 (#220/#222): decisions names the wiki-promote CLI for a
+  // staged candidate; wiki-ingest states the normalized 0..1 similarity score and
+  // that a paused page gets no index/log entry. ANTI-VACUITY: check-surface-pins,
+  // SC-W2-5 and SC-W3-6 were RED against the prior pin and named only `skills/skills`.
+  skills: "0d12d3f75876978e47910a4daee588fa11265984",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

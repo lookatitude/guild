@@ -67,6 +67,7 @@ import {
   type HarvestTrigger,
 } from "./harvest-journal";
 import { refreshWikiIndexPaths } from "./wiki-index";
+import { recordDecisionPromotion, recordDecisionRevert } from "./decision-catalog";
 import { checkContained, isRefused, isWithin } from "../kernel";
 
 export const DECISION_SCHEMA = "guild.decision.v1" as const;
@@ -855,6 +856,23 @@ function finishHarvest(
   const wikiAbs = op.wiki_path as string;
   // ── index the page just written (not the recall projection — R62) ─────────
   refreshWikiIndexPaths([path.relative(wikiRoot, wikiAbs).split(path.sep).join("/")], { storage });
+  // ── the human catalog: link from index.md, append log.md (#220) ───────────
+  // Idempotent, so a resumed op re-entering here adds nothing twice. Locked on
+  // index.md: two promotions at once must not each drop the other's link. A
+  // catalog write that did not land leaves the op resumable, never `reported`.
+  const catalogFailed = lifecycleApi().withStableLock(harvestCasLockDir(storage, path.join(wikiRoot, "index.md")), () =>
+    recordDecisionPromotion(
+      wikiRoot,
+      { slug: input.slug, title: input.title, date: now.slice(0, 10) },
+      {
+        writer: assertScrubbedWriter(input.writer ?? scrubbedWikiWriter),
+        runDir: input.runDir,
+        runId: input.run_id,
+        assertTarget: (p) => assertThisCwdWiki(storage, p),
+      },
+    ),
+  );
+  if (catalogFailed) return blockResume(input, op, "wiki-catalog", catalogFailed);
   op.status = "indexed";
   upsertOp(input.run_id, op, storeOpts);
   emitHarvestEvent(input.runDir, input.run_id, op);
@@ -1636,6 +1654,37 @@ export function revertHarvest(
   }
 
   const writer = assertScrubbedWriter(scrubbedWikiWriter);
+  // A decision page the revert will delete must not stay linked from index.md
+  // (#220). The catalog moves FIRST: a refused catalog write then leaves nothing
+  // deleted and the op open, so a retry after the operator fixes it re-runs whole.
+  // A page restored to earlier bytes still exists, so its link stays.
+  {
+    const scope = storage.project ?? storage.workspace;
+    const wikiRoot = scope ? scope.knowledge() : null;
+    for (const { file, write } of plans) {
+      if (write !== null || wikiRoot === null) continue;
+      const relPath = path.relative(wikiRoot, file.path).split(path.sep).join("/");
+      const m = /^decisions\/([^/]+)\.md$/.exec(relPath);
+      if (!m) continue;
+      const catalogFailed = lifecycleApi().withStableLock(harvestCasLockDir(storage, path.join(wikiRoot, "index.md")), () =>
+        recordDecisionRevert(
+          wikiRoot,
+          { slug: m[1]!, date: new Date().toISOString().slice(0, 10) },
+          { writer, runDir, runId, assertTarget: (p) => assertThisCwdWiki(storage, p) },
+        ),
+      );
+      if (catalogFailed) {
+        return {
+          op_id: opId,
+          restored: [],
+          ok: false,
+          blocked_confirm: true,
+          detail: `revert could not update the wiki catalog: ${catalogFailed}. Nothing was restored; the op stays OPEN.`,
+        };
+      }
+    }
+  }
+
   const restored: string[] = [];
   const unverified: RevertBlock[] = [];
   for (const { file, write } of plans) {
