@@ -695,7 +695,7 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // CLI, which the evolve wiki-revert chapter names (KTD35: off the lane surface); wiki-ingest states the normalized 0..1 similarity score and
   // that a paused page gets no index/log entry. ANTI-VACUITY: check-surface-pins,
   // SC-W2-5 and SC-W3-6 were RED against the prior pin and named only `skills/skills`.
-  skills: "d0f146c6e0e76d64de499e6d3c8d60a47fe82a87",
+  skills: "091fa17341b1c9074c096bd4b292a8e51ba3adc0",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
