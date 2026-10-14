@@ -973,8 +973,14 @@ function main() {
     import_map: importMap,
     stats: { file_count: fileEntries.length, module_count: modules.size }
   };
+  let unchanged = false;
   try {
-    writeJson(gp.codebaseMap, codebaseMap);
+    const prior = JSON.parse(fs7.readFileSync(gp.codebaseMap, "utf8"));
+    unchanged = JSON.stringify({ ...prior, generated_from_commit: codebaseMap.generated_from_commit }) === JSON.stringify(codebaseMap);
+  } catch {
+  }
+  try {
+    if (!unchanged) writeJson(gp.codebaseMap, codebaseMap);
   } catch (err) {
     process.stderr.write(`[scan] ERROR writing codebase-map.json: ${String(err)}
 `);
