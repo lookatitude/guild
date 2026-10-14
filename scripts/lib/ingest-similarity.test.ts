@@ -266,7 +266,7 @@ describe("ingestSimilarity", () => {
   //
   // Computed by hand (see bm25Score parity test above):
   //   Existing page "existing.md" → title="existing" (2x) + content tokens.
-  //   Candidate uses same title+content → all tokens match → score ≈ 2.26 >> 0.80.
+  //   Candidate uses same title+content → all tokens match → normalized score = 1 ≥ 0.80.
 
   describe("dup → pause", () => {
     const CONTENT = "configure authentication module settings system";
@@ -386,23 +386,12 @@ describe("ingestSimilarity", () => {
 
   // ── 4. config-threshold ───────────────────────────────────────────────────
   //
-  // A candidate with moderate token overlap (1 shared unique token: "authentication",
-  // appearing 2× in candidate tokens due to title-doubling) scores ≈ 0.576 with
-  // N=1 and the parity constants (k1=1.5, b=0.75).
+  // A candidate with light token overlap (one shared token, "authentication",
+  // doubled by the title weighting) scores ≈ 0.08 on the normalized 0..1 scale
+  // (raw BM25 divided by the candidate's self-score in the same corpus, #222).
   //
-  //   Computed manually:
-  //     Existing page "source.md" (title "source" 2x + content):
-  //       tokens: ["source","source","security","authentication","credentials","token","access"]
-  //       dl = 7, avgdl = 7
-  //     Candidate: title "authentication process" (2x) + content "for new users"
-  //       queryTokens: ["authentication","process","authentication","process","for","new","users"]
-  //     Only "authentication" overlaps (df=1 in N=1 corpus):
-  //       idf = log(4/3) ≈ 0.2877
-  //       per hit: tf=1 in doc, dl/avgdl=1 → 0.2877 * 1.0 = 0.2877
-  //       "authentication" appears 2× in query → total = 2 * 0.2877 ≈ 0.5754
-  //
-  //   With default gate 0.80: 0.5754 < 0.80 → should_pause = false
-  //   With gate 0.40 from settings.json: 0.5754 >= 0.40 → should_pause = true
+  //   With default gate 0.80: 0.08 < 0.80 → should_pause = false
+  //   With gate 0.05 from settings.json: 0.08 >= 0.05 → should_pause = true
 
   describe("config-threshold", () => {
     const EXISTING_CONTENT = "security authentication credentials token access";
@@ -420,7 +409,7 @@ describe("ingestSimilarity", () => {
       const result = ingestSimilarity(tmpDir, CANDIDATE, CATEGORY);
 
       expect(result.gate).toBe(0.80);
-      // Score ≈ 0.576: below default 0.80 → no pause
+      // Score ≈ 0.08: below default 0.80 → no pause
       expect(result.top_score).toBeGreaterThan(0);    // some overlap
       expect(result.top_score).toBeLessThan(0.80);     // but below default gate
       expect(result.should_pause).toBe(false);
@@ -429,13 +418,13 @@ describe("ingestSimilarity", () => {
     it("pauses when gate is lowered below the actual score", () => {
       mkdir(tmpDir, ".guild", "wiki", CATEGORY);
       writeFile(tmpDir, `.guild/wiki/${CATEGORY}/source.md`, EXISTING_CONTENT);
-      // Lower gate to 0.40 (score ≈ 0.576 ≥ 0.40)
-      writeSettings(tmpDir, 0.40);
+      // Lower gate to 0.05 (score ≈ 0.08 ≥ 0.05)
+      writeSettings(tmpDir, 0.05);
 
       const result = ingestSimilarity(tmpDir, CANDIDATE, CATEGORY);
 
-      expect(result.gate).toBe(0.40);
-      expect(result.top_score).toBeGreaterThanOrEqual(0.40);
+      expect(result.gate).toBe(0.05);
+      expect(result.top_score).toBeGreaterThanOrEqual(0.05);
       expect(result.should_pause).toBe(true);
     });
 
@@ -816,5 +805,79 @@ describe("ingest-similarity CLI", () => {
     const result = JSON.parse(stdout.trim()) as { should_pause: boolean; top_path: string | null };
     expect(result.should_pause).toBe(true);
     expect(result.top_path).toContain("standards");
+  });
+});
+
+// ── #222: the gate compares a NORMALIZED score, not raw BM25 ──────────────────
+//
+// Raw BM25 is unbounded and IDF-weighted, so two unrelated decision notes that
+// share "decision", "2026", "08", "the" scored 3.18 against a 0.80 gate and
+// paused. These are the issue's exact repro texts.
+
+describe("#222 normalized similarity gate", () => {
+  let tmpDir: string;
+  const CACHE = "Decision (2026-08-02): the session cache uses LRU eviction capped at 512 entries because the worker memory limit is 256 MB.\n";
+  const AUTH = "Decision (2026-08-09): user sessions expire after 15 minutes idle to satisfy the SOC2 auditor finding AUD-114.\n";
+  const DEPLOY = "Decision (2026-08-20): production deploys go through a canary at 5 percent traffic for 30 minutes before full rollout.\n";
+
+  beforeEach(() => {
+    tmpDir = makeTmpRepo();
+    writeFile(tmpDir, ".guild/wiki/sources/cache-decision.md", CACHE);
+  });
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("an unrelated decision (issue repro: auth vs cache) does not pause", () => {
+    const r = ingestSimilarity(tmpDir, { title: "Auth decision", content: AUTH }, "source");
+    expect(r.top_score).toBeLessThan(r.gate);
+    expect(r.should_pause).toBe(false);
+  });
+
+  it("an unrelated decision (deploy canary vs cache) does not pause", () => {
+    const r = ingestSimilarity(tmpDir, { title: "Deploy decision", content: DEPLOY }, "source");
+    expect(r.should_pause).toBe(false);
+  });
+
+  it("control: a near-verbatim duplicate still pauses", () => {
+    const nearDup = CACHE.replace("512 entries", "512 items");
+    const r = ingestSimilarity(tmpDir, { title: "Cache decision", content: nearDup }, "source");
+    expect(r.should_pause).toBe(true);
+    expect(r.pause_reason).toBe("similarity");
+    expect(r.top_path).toBe(path.join(".guild", "wiki", "sources", "cache-decision.md"));
+  });
+
+  it("top_score lives on the same 0..1 scale as the gate", () => {
+    for (const [title, content] of [["Auth decision", AUTH], ["Cache decision", CACHE]] as const) {
+      const r = ingestSimilarity(tmpDir, { title, content }, "source");
+      expect(r.top_score).toBeGreaterThanOrEqual(0);
+      expect(r.top_score).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("CLI: the issue repro command returns should_pause:false", () => {
+    const contentFile = path.join(tmpDir, "notes", "auth-decision.md");
+    writeFile(tmpDir, "notes/auth-decision.md", AUTH);
+    const { exitCode, stdout } = runIngestSimilarityCLI([
+      "--cwd", tmpDir, "--category", "source", "--title", "Auth decision", "--content-file", contentFile,
+    ]);
+    expect(exitCode).toBe(0);
+    const r = JSON.parse(stdout.trim()) as { should_pause: boolean; top_score: number };
+    expect(r.should_pause).toBe(false);
+    expect(r.top_score).toBeLessThan(0.8);
+  });
+});
+
+describe("#222 control: a copied body under a new title still pauses", () => {
+  it("verbatim body, different title → should_pause:true", () => {
+    const tmpDir = makeTmpRepo();
+    try {
+      const CACHE = "Decision (2026-08-02): the session cache uses LRU eviction capped at 512 entries because the worker memory limit is 256 MB.\n";
+      writeFile(tmpDir, ".guild/wiki/sources/cache-decision.md", CACHE);
+      const r = ingestSimilarity(tmpDir, { title: "LRU cache policy", content: CACHE }, "source");
+      expect(r.should_pause).toBe(true);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
