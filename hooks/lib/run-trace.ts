@@ -1079,7 +1079,7 @@ export function recordStatusLightweight(
 ): string | null {
   // #217: an uninitialized root (no .guild/) is read-only for status — recording
   // a run here would scaffold .guild/ and dirty a clean tree.
-  if (!fs.existsSync(path.join(root, ".guild"))) return null;
+  if (!fs.existsSync(durableGuildDir(root))) return null;
   // OQ6 rollback gate — false reverts /guild:status to pure-read (no run).
   if (!readRecordStatusRuns(root)) return null;
   // The status alias is a distinct production start path. Resolve the same

@@ -106,6 +106,9 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   // inverse (R54/KTD39). Compiled because an operator reaches for it exactly when
   // something went wrong, which is the worst moment to need a working tsx.
   { id: "wiki-revert", entry: "scripts/wiki-revert.ts" },
+  // `guild:decisions` promotion: a staged decision candidate → wiki/decisions via
+  // harvest, with the index.md / log.md entries (#220).
+  { id: "wiki-promote", entry: "scripts/wiki-promote.ts" },
   // `/guild:maintain rollback <skill> [n]` — the compact-history walker (KTD48/R60).
   // Compiled for the same reason as wiki-revert: an operator reaches for rollback
   // exactly when something went wrong, which is the worst moment to need a working tsx.

@@ -60,7 +60,7 @@ node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/cl
   --title "<candidate title>" --content-file <path-to-candidate-text>
 ```
 
-It returns `{ top_score, top_path, gate, should_pause }` — real BM25 (the same `bm25Score` guild-memory uses) over the existing pages **in the target category only**, with `gate` read from `models.ingestSimilarityGate` (config default `0.80`; never hard-coded — threshold changes are config-only). Determinism: same candidate + same wiki state → same verdict.
+It returns `{ top_score, top_path, gate, should_pause }` — real BM25 (the same `bm25Score` guild-memory uses) over the existing pages **in the target category only**, normalized by the candidate's own score so `top_score` is on the gate's 0..1 scale (a verbatim duplicate scores ~1), with `gate` read from `models.ingestSimilarityGate` (config default `0.80`; never hard-coded — threshold changes are config-only). Determinism: same candidate + same wiki state → same verdict.
 
 1. **Do not compute the score yourself** — the model never eyeballs similarity or re-runs BM25 in prose. Use the tool's `should_pause` as the decision.
 2. **If `should_pause: true`** (i.e. `top_score ≥ gate`) — **pause. Do not write.** Surface the collision to the user:
@@ -120,7 +120,7 @@ continue to Handoff).
 
 ## Handoff
 
-After both files are written, update the catalog and log:
+After both files are written, update the catalog and log. Do this only for a page that was written: a page the gate paused, or the user skipped, gets no `index.md` entry and no `log.md` line.
 
 1. Add/update an entry in `.guild/wiki/index.md` (LLM-maintained catalog, `§10.1`): a bullet under the relevant category linking the new page with a one-line summary; create `index.md` (per-category sections) if absent.
 2. Append one heading to `.guild/wiki/log.md` (chronological, append-only), exactly: `## [YYYY-MM-DD] ingested <slug> into <category>`.

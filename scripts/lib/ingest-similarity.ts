@@ -8,7 +8,8 @@
  *
  * The gate prevents near-duplicate or poisoned-overwrite pages from ingesting
  * unchecked into the wiki. It computes the top-1 BM25 score of a candidate page
- * against all existing pages in the target category, reads the configured
+ * against all existing pages in the target category, normalized by the
+ * candidate's self-score so it shares the gate's 0..1 scale (#222), reads the configured
  * threshold (models.ingestSimilarityGate, default 0.80), and returns
  * `should_pause: true` when the top score meets or exceeds the threshold.
  *
@@ -53,10 +54,10 @@ export interface IngestCandidate {
 
 export interface IngestSimilarityResult {
   /**
-   * Top-1 BM25 score of candidate against existing pages in the category.
-   * 0 when no existing pages in category or no token overlap.
-   * Scale: positive float (same as guild-memory bm25Score — k1=1.5, b=0.75,
-   * IDF-weighted; a near-duplicate typically scores >> 1; a novel page scores 0).
+   * Top-1 NORMALIZED BM25 similarity of the candidate against existing pages in
+   * the category: the page's BM25 score divided by the candidate's own score in
+   * the same corpus, clamped to [0, 1]. A verbatim duplicate scores ~1; a novel
+   * page scores 0. Same 0..1 scale as `gate`.
    */
   top_score: number;
   /**
@@ -172,6 +173,8 @@ export function normalizeCategory(category: string): string {
 interface CategoryPage {
   relPath: string; // relative to repo root
   tokens: string[];
+  /** Body only, no file-name title: a duplicate body under a new title still matches. */
+  bodyTokens: string[];
 }
 
 function scanCategoryPages(cwd: string, category: string): CategoryPage[] {
@@ -196,6 +199,7 @@ function scanCategoryPages(cwd: string, category: string): CategoryPage[] {
       pages.push({
         relPath: path.join(".guild", "wiki", canonicalCategory, name),
         tokens,
+        bodyTokens: tokenize(content),
       });
     } catch {
       // Skip unreadable files
@@ -269,16 +273,29 @@ export function ingestSimilarity(
     return compose(0, null);
   }
 
-  // BM25: candidate query tokens vs. each existing page as a document
-  const scores = bm25Score(candidateTokens, pages.map((p) => ({ tokens: p.tokens })));
+  // BM25 over the existing pages PLUS the candidate itself. Raw BM25 is unbounded
+  // and IDF-weighted, so comparing it to a 0..1 gate paused unrelated pages that
+  // shared a few common words (#222). The candidate's self-score is the ceiling a
+  // verbatim duplicate reaches, so `raw / self` puts top_score on the gate's scale:
+  // a duplicate scores ~1, a page sharing only filler words scores low. The body is
+  // scored on its own too, so a copied body under a different title still pauses.
+  const normalized = (query: string[], docs: string[][]): number[] => {
+    const scores = bm25Score(query, [...docs, query].map((tokens) => ({ tokens })));
+    const self = scores[docs.length] ?? 0;
+    return docs.map((_, i) => (self > 0 ? Math.min(1, scores[i]! / self) : 0));
+  };
+  const titled = normalized(candidateTokens, pages.map((p) => p.tokens));
+  const bodyQuery = tokenize(candidate.content);
+  const body = bodyQuery.length > 0 ? normalized(bodyQuery, pages.map((p) => p.bodyTokens)) : [];
 
   // Find top-1
   let topScore = 0;
   let topPath: string | null = null;
-  for (let i = 0; i < scores.length; i++) {
-    if (scores[i] > topScore) {
-      topScore = scores[i];
-      topPath = pages[i].relPath;
+  for (let i = 0; i < pages.length; i++) {
+    const score = Math.max(titled[i] ?? 0, body[i] ?? 0);
+    if (score > topScore) {
+      topScore = score;
+      topPath = pages[i]!.relPath;
     }
   }
 

@@ -15,6 +15,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { spawnSync } from "child_process";
+import { durableGuildDir } from "../../src/domains/state";
 
 const RULES =
   "# Run-local Guild state (telemetry, current-run-id). Remove to share runs.\n" +
@@ -23,7 +24,7 @@ const RULES =
 /** Returns true when it wrote `.guild/.gitignore`. Best-effort; never throws. */
 export function ensureRunsGitignored(root: string): boolean {
   try {
-    const file = path.join(root, ".guild", ".gitignore");
+    const file = path.join(durableGuildDir(root), ".gitignore");
     if (fs.existsSync(file)) return false;
     const inside = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: root, encoding: "utf8" });
     if (inside.status !== 0 || inside.stdout.trim() !== "true") return false;
