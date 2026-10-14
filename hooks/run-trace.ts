@@ -58,6 +58,7 @@
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
 import { ensureStorageLayout } from "../scripts/lib/state/ensure-storage-layout.js";
+import { ensureRunsGitignored } from "./lib/runs-gitignore.js";
 import {
   defaultResolveHost,
   recordStatusLightweight,
@@ -171,6 +172,8 @@ async function main(): Promise<void> {
             snapshot,
             session_identity,
           });
+    // #219: init scaffolds the run-local ignore rule so a re-init stays clean.
+    if (command === "/guild:init") ensureRunsGitignored(root);
     if (runId) process.stdout.write(runId + "\n");
     process.exit(0);
   }
