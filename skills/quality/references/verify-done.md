@@ -24,7 +24,9 @@ Secondary inputs (re-read for the scope check): `.guild/runs/<run-id>/handoffs/*
 All six must pass. Stop at the first failure and record which check failed.
 
 1. **Tests pass.** Run whatever command the spec defined as the acceptance test. `§8.1` makes success criteria a planning-contract precondition, so there is a command to run — if there isn't, that is itself a fail (the spec was approved without a verifiable criterion). Capture exit code and tail of output into the verify report.
-2. **Scope boundary.** Union the `changed_files` across every lane's handoff receipt. For each file, confirm it falls inside the `scope` of the lane that produced it. Any file not traceable to a lane's `scope` is a boundary violation even if review missed it — verify-done is the last place to catch scope creep before merge. **Brownfield cross-check (P3 scope-check, when `diff-learn.json` is present):** the spec's plug point P3 (from the codebase-understanding spec §"Where it sits") feeds this check. Treat its `untraced_files` (changed files no graph node explains) and any `changed_files` whose `affected_layers` exceed what the plan's lanes declared as scope-creep signals — a changed file that the plan-impact step flagged as untraced and that no lane `scope` covers fails this check, not just a soft warning. Do not re-derive the diff here; consume the P2 artifact.
+2. **Scope boundary.** First run the receipt gate and gate on its exit code — never eyeball the receipts:
+   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/check-handoff-receipts.js --cwd <repo-root> --run-id <run-id>`.
+   A non-zero exit **FAILS** this check: a receipt without the five §8.2 `## <name>` sections or exactly one valid ```` ```guild.handoff.v2 ```` fence (a `## files changed` heading or a plain ```` ```json ```` fence) cannot prove its scope. Paste the refused files and defects as the check-2 evidence. Then union the `changed_files` across every lane's handoff receipt. For each file, confirm it falls inside the `scope` of the lane that produced it. Any file not traceable to a lane's `scope` is a boundary violation even if review missed it — verify-done is the last place to catch scope creep before merge. **Brownfield cross-check (P3 scope-check, when `diff-learn.json` is present):** the spec's plug point P3 (from the codebase-understanding spec §"Where it sits") feeds this check. Treat its `untraced_files` (changed files no graph node explains) and any `changed_files` whose `affected_layers` exceed what the plan's lanes declared as scope-creep signals — a changed file that the plan-impact step flagged as untraced and that no lane `scope` covers fails this check, not just a soft warning. Do not re-derive the diff here; consume the P2 artifact.
 3. **Success criteria match.** Walk the spec's `success_criteria` list item by item and tick each off against the receipts' `evidence:` fields and the test output from check 1. A criterion with no corroborating evidence fails here even if tests pass, because `§8.1` makes criteria the contract, not the test suite.
 4. **No open blocker `followups:`.** Scan the union of `followups:` across receipts and `review.md`. A `followup` tagged or phrased as blocking (e.g., "must fix before merge", "blocks release") fails this check. Deferred/nice-to-have follow-ups are allowed through and carried into the run summary.
 5. **Assumptions reviewed.** Surface `.guild/runs/<run-id>/assumptions.md` to the user. The user either acknowledges the log (pass) or disputes a specific assumption (fail — that assumption becomes a blocker to resolve before re-running verify-done). Per `§8.1`, review at the end is the whole point of the assumption log; do not skip it just because review.md was clean.
@@ -47,9 +49,19 @@ Write a single artifact:
 
 It contains, in order:
 
-- **Overall status** — `pass` or `fail`.
+- **Overall status** — the first line after the title is exactly `Overall status: pass` or `Overall status: fail` (consumers grep this literal; do not reword it).
 - **Per-check result** — the six checks above, each with ✓/✗ and the evidence line (test command + exit code, scope-creep file list if any, criterion-to-evidence mapping, blocker-followup list, assumption-review outcome, and the dispatch-integrity Sink audit block + `audit-run-sinks.ts` exit code).
 - **Run summary** — what shipped (changed files grouped by lane), which assumptions were acknowledged, open non-blocking follow-ups to carry forward into the next task's plan.
+
+Start the file from this skeleton; keep the first two lines byte-for-byte (fill `<run-id>`, pick one of `pass`/`fail`):
+
+```markdown
+# Verify — <run-id>
+
+Overall status: pass
+
+1. Tests: ...
+```
 
 Keep it terse and grep-friendly; downstream (`guild:reflect`) reads this file, not the specialist transcripts.
 

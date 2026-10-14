@@ -22,6 +22,8 @@
  * round-trip (which would reformat the whole block — see frontmatter.ts §note).
  */
 
+import * as path from "node:path";
+
 import { readScalarField, splitFrontmatter } from "../state";
 
 /** The frontmatter key the persisted 1–5 machine recall weight is stored under. */
@@ -39,7 +41,9 @@ export function isValidScore(n: unknown): n is number {
  * machine-facing recall weight from the ADR→5 / contract→4 / summary→3 /
  * context→2 design table (docs/v2/knowledge-memory.html §Importance-at-ingest), mapped onto Guild's
  * `.guild/wiki/<category>/` convention. Pure + deterministic. Unknown/absent
- * category → 3 (the neutral middle, == the default importanceGate).
+ * category → 3 (the neutral middle, == the default importanceGate). A `sources/`
+ * page is the synthesized summary of an ingested raw source (the raw copy lives
+ * outside the wiki), so it scores as a summary (3), not as context (#233).
  */
 export function ingestImportanceScore(category: string | undefined): number {
   switch ((category ?? "").toLowerCase()) {
@@ -48,12 +52,27 @@ export function ingestImportanceScore(category: string | undefined): number {
     case "standards": case "standard": case "contracts": case "contract":
       return 4;
     case "recipes": case "recipe": case "concepts": case "concept": case "guides": case "guide":
+    case "sources": case "source":
       return 3;
-    case "context": case "notes": case "note": case "log": case "changelog": case "index": case "sources": case "source":
+    case "context": case "notes": case "note": case "log": case "changelog": case "index":
       return 2;
     default:
       return 3;
   }
+}
+
+/** Root catalog files (wiki-query skips them); scored by their catalog category. */
+const ROOT_CATALOG_CATEGORY: Record<string, string> = { "index.md": "index", "log.md": "log" };
+
+/**
+ * Wiki category of a page at `<wikiBase>/<category>/…`. Root `index.md` /
+ * `log.md` map to their catalog category so they score below the gate instead
+ * of defaulting to the neutral 3 and outranking content (#233). Shared by
+ * recall and the write-time stamper so both derive the same score.
+ */
+export function wikiPageCategory(absPath: string, wikiBase: string): string | undefined {
+  const segs = path.relative(wikiBase, absPath).split(path.sep);
+  return segs.length > 1 ? segs[0] : ROOT_CATALOG_CATEGORY[segs[0].toLowerCase()];
 }
 
 /** Read the persisted 1–5 score from a page's frontmatter, or undefined when absent/invalid. */

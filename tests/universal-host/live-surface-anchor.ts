@@ -695,7 +695,10 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // CLI, which the evolve wiki-revert chapter names (KTD35: off the lane surface); wiki-ingest states the normalized 0..1 similarity score and
   // that a paused page gets no index/log entry. ANTI-VACUITY: check-surface-pins,
   // SC-W2-5 and SC-W3-6 were RED against the prior pin and named only `skills/skills`.
-  skills: "e680efe14531bd191bf3b1b181619695c9168868",
+  // Re-ratified 2026-10-14 (#235): review, verify-done and execute-plan gate lane
+  // receipts on check-handoff-receipts.js; review loads the verify-done chapter and
+  // verify-done pins the `Overall status:` line. check-surface-pins was RED on the prior pin.
+  skills: "afbf97e731dc55a8b3e2d6e7386079ff4c9dc8c1",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
