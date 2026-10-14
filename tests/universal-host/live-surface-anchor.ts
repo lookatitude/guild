@@ -629,7 +629,11 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-09-28 (T17 plugin-local docs): wiki.md states the promotion law,
   // the sources/ home and the hybrid-recall fail-open; status.md names the SQLite cache
   // as platform state. The command registry was re-extracted for those two entries.
-  commands: "3ad08dd9650f6723dacd9ff62369a0fb69526066",
+  // Re-ratified 2026-10-14 (#217 via next, repaired in #232): status.md states that bare
+  // status writes nothing without .guild/, reflowed to stay <=40 lines (KTD24); the
+  // command registry was re-extracted for that entry. ANTI-VACUITY: check-surface-pins,
+  // SC-W2-5 and SC-W3-6 were RED against the prior pin and named only `commands`.
+  commands: "1a544bb20e056b0741f4460938113387afba7a13",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
   // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
@@ -687,11 +691,11 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // check-surface-pins named only `skills/skills` stale against the T15F pin.
   // Re-ratified 2026-09-28 (T17 plugin-local docs): using-guild states the promotion law
   // and the shipped concern enum, and points the dispatch table at AGENTS.md.
-  // Re-ratified 2026-10-14 (#220/#222): decisions names the wiki-promote CLI for a
-  // staged candidate; wiki-ingest states the normalized 0..1 similarity score and
+  // Re-ratified 2026-10-14 (#220/#222): decisions points the lead at the wiki-promote
+  // CLI, which the evolve wiki-revert chapter names (KTD35: off the lane surface); wiki-ingest states the normalized 0..1 similarity score and
   // that a paused page gets no index/log entry. ANTI-VACUITY: check-surface-pins,
   // SC-W2-5 and SC-W3-6 were RED against the prior pin and named only `skills/skills`.
-  skills: "0d12d3f75876978e47910a4daee588fa11265984",
+  skills: "d0f146c6e0e76d64de499e6d3c8d60a47fe82a87",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

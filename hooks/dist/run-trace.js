@@ -49473,10 +49473,11 @@ if (isProcessEntry()) {
 var fs17 = __toESM(require("fs"));
 var path22 = __toESM(require("path"));
 var import_child_process = require("child_process");
+init_state();
 var RULES = "# Run-local Guild state (telemetry, current-run-id). Remove to share runs.\n/runs/\n";
 function ensureRunsGitignored(root) {
   try {
-    const file = path22.join(root, ".guild", ".gitignore");
+    const file = path22.join(durableGuildDir(root), ".gitignore");
     if (fs17.existsSync(file)) return false;
     const inside = (0, import_child_process.spawnSync)("git", ["rev-parse", "--is-inside-work-tree"], { cwd: root, encoding: "utf8" });
     if (inside.status !== 0 || inside.stdout.trim() !== "true") return false;
@@ -50746,7 +50747,7 @@ function startAndCloseRun(root, resolveHost, opts = {}) {
   }
 }
 function recordStatusLightweight(root, resolveHost, opts = {}) {
-  if (!fs83.existsSync(path97.join(root, ".guild"))) return null;
+  if (!fs83.existsSync(durableGuildDir(root))) return null;
   if (!readRecordStatusRuns(root)) return null;
   const preflight = resolveRunStartPreflight(opts.cwd ?? root);
   return startAndCloseRun(root, resolveHost, {
