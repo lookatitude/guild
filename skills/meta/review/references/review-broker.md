@@ -165,6 +165,20 @@ and **no code path** that returns `selected` when `authorHost === "unknown"`.
   trail. Under a required review, an unresolved `no_verdict` leaves the gate
   BLOCKED.
 
+  **A `no_verdict` force-pass does NOT run the `## Gate-pass rule`.** There is no
+  `review_result` for the round, so conditions 1–3 (parse, `packet_id` match,
+  `artifact_sha256_reviewed` match) are **unsatisfiable by construction** — a
+  reader must not attempt them and must not read condition 4's human `force_pass`
+  as a way to satisfy them. The operator's `[force-pass]` here resolves directly
+  to broker `status: "force_passed"` as an **audit exception**, bypassing the
+  five conditions rather than meeting them. It MUST record in the trail
+  `review_performed: false`, the adapter's captured refusal, and the operator who
+  chose it. `force_passed` clears the gate (`## Handoff receipt`) while asserting
+  the artifact was **never reviewed** — unlike a `satisfied` pass, which asserts
+  it was reviewed and cleared. `[extend-cap N]` and `[rework]` are unaffected:
+  both re-enter the normal loop and their resulting rounds obey the five
+  conditions in full.
+
 - `selected` → run the cross-host **STRONG** review.
 - `degraded-local` → run the **WEAK same-host** review (fresh-context subagent,
   `independence: weak`, recorded) **and gate it by the 5-condition rule**. This

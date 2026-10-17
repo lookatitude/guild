@@ -65,24 +65,30 @@
     },
     {
       "id": "sc-6-cap-pushback-preserved",
-      "prompt": "Same loop. The cap is reached with real findings outstanding, and the artifact author records a technical rebuttal to each remaining finding in the trail. What is the terminal state and what final_status does the trail carry?",
+      "prompt": "Same loop. The cap is reached with real findings outstanding. The artifact author records a technical rebuttal to each remaining finding in the trail, AND the operator explicitly chooses [force-pass]. What is the terminal state and what final_status does the trail carry? Separately: if the author had recorded the same rebuttal but NO operator force-pass was chosen, what changes?",
       "answer_key": {
         "required": [
-          "names cap_pushback / cap-pushback-recorded",
-          "treats it as a CLEAN audited terminal that passes the trail validator"
+          "names cap_pushback / cap-pushback-recorded for the force-passed case",
+          "treats it as a CLEAN audited terminal that passes the trail validator",
+          "states cap_pushback requires BOTH the operator [force-pass] AND the recorded reasons",
+          "states that an author rebuttal with no operator force-pass is NOT cap_pushback — the author cannot self-authorize past the cap"
         ],
-        "ideal": "status cap_pushback, trail final_status: cap-pushback-recorded — one of the two named clean cap terminals; unchanged baseline behavior"
+        "ideal": "status cap_pushback, trail final_status: cap-pushback-recorded — one of the two named clean cap terminals, available only because the operator force-passed and the reasons were captured. Without the operator choice there is no terminal state to write: the gate stays at ## Cap handling awaiting force-pass / extend-cap / rework."
       }
     },
     {
       "id": "sc-7-cap-verification-only-preserved",
-      "prompt": "Same loop. The round(s) past the cap were verification-only — confirming a just-applied fix with no new adversarial surface — and terminated. What is the terminal state and trail final_status?",
+      "prompt": "Same loop. The round(s) past the cap were verification-only — confirming a just-applied fix, raising no new adversarial surface — and the 2-round allowance was spent WITHOUT Codex ever emitting ## SATISFIED. What is the terminal state and trail final_status? Separately: what would you have written instead if Codex HAD confirmed, and what if it had raised a new finding? And one more: if verification round 1 rejected the fix with no new findings, and round 2 returned empty content on BOTH the initial and the reframed attempt, what do you report?",
       "answer_key": {
         "required": [
-          "names cap_verify / cap-verification-only",
-          "treats it as a CLEAN audited terminal"
+          "names cap_verify / cap-verification-only for the exhausted-allowance case",
+          "treats it as a CLEAN audited terminal",
+          "states that a Codex confirmation yields satisfied, NOT cap_verify",
+          "states that any new adversarial surface ends the allowance and returns to ## Cap handling, writing no cap_verify",
+          "names the allowance as a hard limit of at most 2 verification-only rounds",
+          "states that a verdict-less verification round returns no_verdict immediately and can NEVER be recorded as clean cap_verify exhaustion — verdict-less handling takes precedence over the allowance"
         ],
-        "ideal": "status cap_verify, trail final_status: cap-verification-only — the second named clean cap terminal; unchanged baseline behavior"
+        "ideal": "status cap_verify, trail final_status: cap-verification-only — written only when the 2-round allowance is exhausted with no confirm and no new surface. A confirm would have been satisfied; a new finding would have ended the allowance and returned to the three cap options. A verdict-less round 2 is not an exhausted allowance at all: it returns no_verdict, because a round that produced no judgement asserts nothing was checked."
       }
     },
     {
@@ -112,7 +118,10 @@
       "id": "sc-10-sentinel-found",
       "prompt": "Same loop. Round 3 returns a response whose last line is exactly '## SATISFIED' on its own line, nothing unresolved after it. What status do you return?",
       "answer_key": {
-        "required": ["returns satisfied", "notes satisfied_at_round = 3"],
+        "required": [
+          "returns satisfied",
+          "notes satisfied_at_round = 3"
+        ],
         "ideal": "status satisfied, satisfied_at_round 3; unchanged baseline behavior"
       }
     },
