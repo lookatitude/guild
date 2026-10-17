@@ -6646,6 +6646,12 @@ var init_model_discovery_contract = __esm({
   }
 });
 
+// src/domains/config/native-config-parser.ts
+var init_native_config_parser = __esm({
+  "src/domains/config/native-config-parser.ts"() {
+  }
+});
+
 // src/domains/config/config-defaults.ts
 function isCanonicalRoleSlug(v) {
   return typeof v === "string" && v.length > 0 && v.length <= CAPABILITY_ROLE_SLUG_MAX_LEN && !CONTROL_CHARS.test(v) && ROLE_SLUG.test(v);
@@ -12516,6 +12522,7 @@ var init_config2 = __esm({
     init_provider_detect();
     init_session_context();
     init_model_discovery_contract();
+    init_native_config_parser();
     init_config_defaults();
     init_policy_keys();
     init_policy_resolver();

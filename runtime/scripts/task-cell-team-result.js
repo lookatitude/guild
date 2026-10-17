@@ -20745,6 +20745,504 @@ var init_model_discovery_contract = __esm({
   }
 });
 
+// src/domains/config/native-config-parser.ts
+function skipInlineWs(c) {
+  while (c.peek() === " " || c.peek() === "	") c.pos++;
+}
+function skipComment(c) {
+  c.pos++;
+  while (!c.eof() && c.peek() !== "\n") {
+    const ch = c.peek();
+    if (ch === "\r") {
+      if (c.peek(1) === "\n") return;
+      c.fail("lone carriage return in comment");
+    }
+    if (isForbiddenStringChar(ch)) c.fail("control character in comment");
+    c.pos++;
+  }
+}
+function skipTrivia(c, acrossNewlines) {
+  for (; ; ) {
+    skipInlineWs(c);
+    if (c.peek() === "#") {
+      skipComment(c);
+      continue;
+    }
+    if (acrossNewlines && c.peek() === "\r" && c.peek(1) === "\n") {
+      c.pos += 2;
+      continue;
+    }
+    if (acrossNewlines && c.peek() === "\n") {
+      c.pos++;
+      continue;
+    }
+    return;
+  }
+}
+function expectLineEnd(c) {
+  skipInlineWs(c);
+  if (c.peek() === "#") skipComment(c);
+  if (c.eof()) return;
+  if (c.peek() === "\r") c.pos++;
+  if (c.peek() === "\n") {
+    c.pos++;
+    return;
+  }
+  c.fail("expected end of line");
+}
+function isForbiddenStringChar(ch) {
+  const code = ch.charCodeAt(0);
+  return code < 32 && ch !== "	" || code === 127;
+}
+function parseBasicString(c) {
+  if (c.peek() === '"' && c.peek(1) === '"') c.fail("multi-line strings are outside the supported grammar");
+  let out = "";
+  for (; ; ) {
+    if (c.eof()) c.fail("unterminated string");
+    const ch = c.next();
+    if (ch === '"') return out;
+    if (ch === "\n") c.fail("newline in single-line string");
+    if (isForbiddenStringChar(ch)) c.fail("control character in string");
+    if (ch !== "\\") {
+      out += ch;
+      continue;
+    }
+    const esc = c.next();
+    switch (esc) {
+      case "b":
+        out += "\b";
+        break;
+      case "t":
+        out += "	";
+        break;
+      case "n":
+        out += "\n";
+        break;
+      case "f":
+        out += "\f";
+        break;
+      case "r":
+        out += "\r";
+        break;
+      case '"':
+        out += '"';
+        break;
+      case "\\":
+        out += "\\";
+        break;
+      case "u":
+      case "U": {
+        const len = esc === "u" ? 4 : 8;
+        const hex2 = c.src.slice(c.pos, c.pos + len);
+        if (!new RegExp(`^[0-9A-Fa-f]{${len}}$`).test(hex2)) c.fail(`invalid \\${esc} escape`);
+        c.pos += len;
+        const cp = parseInt(hex2, 16);
+        if (cp >= 55296 && cp <= 57343 || cp > 1114111) c.fail(`non-scalar \\${esc} escape`);
+        out += String.fromCodePoint(cp);
+        break;
+      }
+      default:
+        c.fail(`unknown escape \\${esc}`);
+    }
+  }
+}
+function parseLiteralString(c) {
+  if (c.peek() === "'" && c.peek(1) === "'") c.fail("multi-line strings are outside the supported grammar");
+  let out = "";
+  for (; ; ) {
+    if (c.eof()) c.fail("unterminated literal string");
+    const ch = c.next();
+    if (ch === "'") return out;
+    if (ch === "\n") c.fail("newline in single-line string");
+    if (isForbiddenStringChar(ch)) c.fail("control character in string");
+    out += ch;
+  }
+}
+function parseKeyPath(c) {
+  const segments = [];
+  for (; ; ) {
+    skipInlineWs(c);
+    let seg;
+    if (c.peek() === '"') {
+      c.pos++;
+      seg = parseBasicString(c);
+    } else if (c.peek() === "'") {
+      c.pos++;
+      seg = parseLiteralString(c);
+    } else {
+      let bare = "";
+      while (BARE_KEY_RE.test(c.peek())) bare += c.next();
+      if (bare === "") c.fail("expected a key");
+      seg = bare;
+    }
+    if (UNSAFE_KEYS.has(seg)) {
+      throw new NativeConfigParseError("toml-unsafe-key", `refusing unsafe key "${seg}"`);
+    }
+    segments.push(seg);
+    skipInlineWs(c);
+    if (c.peek() === ".") {
+      c.pos++;
+      continue;
+    }
+    return segments;
+  }
+}
+function parseScalarToken(c) {
+  let tok = "";
+  while (!c.eof() && !/[\s,\]}#]/.test(c.peek())) tok += c.next();
+  if (tok === "true") return true;
+  if (tok === "false") return false;
+  const dt = DATETIME_RE.exec(tok);
+  if (dt) {
+    const [y, mo, d] = tok.slice(0, 10).split("-").map(Number);
+    const leap = y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+    const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    const dateOk = mo >= 1 && mo <= 12 && d >= 1 && d <= daysInMonth[mo - 1];
+    const time = dt[1] ? tok.slice(11, 19).split(":").map(Number) : null;
+    const timeOk = !time || time[0] < 24 && time[1] < 60 && time[2] <= 60;
+    const offset = /[+-](\d{2}):(\d{2})$/.exec(tok.slice(10));
+    const offsetOk = !offset || Number(offset[1]) < 24 && Number(offset[2]) < 60;
+    if (dateOk && timeOk && offsetOk) return tok;
+    c.fail(`invalid date/time "${tok}"`);
+  }
+  if (/^[+-]?(inf|nan)$/.test(tok)) {
+    return tok.endsWith("nan") ? NaN : tok.startsWith("-") ? -Infinity : Infinity;
+  }
+  if (HEX_RE.test(tok) || OCT_RE.test(tok) || BIN_RE.test(tok)) {
+    return Number(tok.replace(/_/g, ""));
+  }
+  if (INT_RE.test(tok) || FLOAT_RE.test(tok)) {
+    return Number(tok.replace(/_/g, ""));
+  }
+  c.fail(`unrecognized value token "${tok}"`);
+}
+function parseValue(c, ctx) {
+  skipInlineWs(c);
+  const ch = c.peek();
+  if (ch === '"') {
+    c.pos++;
+    return parseBasicString(c);
+  }
+  if (ch === "'") {
+    c.pos++;
+    return parseLiteralString(c);
+  }
+  if (ch === "[") {
+    c.pos++;
+    const arr = [];
+    ctx.closedToHeaders.add(arr);
+    for (; ; ) {
+      skipTrivia(c, true);
+      if (c.peek() === "]") {
+        c.pos++;
+        return arr;
+      }
+      arr.push(parseValue(c, ctx));
+      skipTrivia(c, true);
+      if (c.peek() === ",") {
+        c.pos++;
+        continue;
+      }
+      if (c.peek() === "]") {
+        c.pos++;
+        return arr;
+      }
+      c.fail("expected ',' or ']' in array");
+    }
+  }
+  if (ch === "{") {
+    c.pos++;
+    const table = newTable();
+    ctx.closedInline.add(table);
+    skipInlineWs(c);
+    if (c.peek() === "}") {
+      c.pos++;
+      return table;
+    }
+    for (; ; ) {
+      const keyPath = parseKeyPath(c);
+      skipInlineWs(c);
+      if (c.next() !== "=") c.fail("expected '=' in inline table");
+      const value = parseValue(c, ctx);
+      assignKey(table, keyPath, value, ctx, { insideClosed: true });
+      skipInlineWs(c);
+      const sep20 = c.next();
+      if (sep20 === ",") {
+        skipInlineWs(c);
+        continue;
+      }
+      if (sep20 === "}") return table;
+      c.fail("expected ',' or '}' in inline table");
+    }
+  }
+  return parseScalarToken(c);
+}
+function newTable() {
+  return /* @__PURE__ */ Object.create(null);
+}
+function isTable(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function descend(table, segments, ctx, mode) {
+  let current = table;
+  for (const seg of segments) {
+    const existing = current[seg];
+    if (existing === void 0) {
+      const child = newTable();
+      if (mode === "keyval") ctx.closedToHeaders.add(child);
+      current[seg] = child;
+      current = child;
+    } else if (isTable(existing)) {
+      if (ctx.closedInline.has(existing)) {
+        throw new NativeConfigParseError(
+          "toml-duplicate-key",
+          `inline table "${seg}" is closed and cannot be extended`
+        );
+      }
+      if (mode === "header" && ctx.closedToHeaders.has(existing)) {
+        throw new NativeConfigParseError(
+          "toml-duplicate-key",
+          `key "${seg}" was defined in a key/value position and cannot be reopened by a table header`
+        );
+      }
+      current = existing;
+    } else if (Array.isArray(existing)) {
+      if (ctx.closedToHeaders.has(existing)) {
+        throw new NativeConfigParseError("toml-duplicate-key", `key "${seg}" already holds a value array`);
+      }
+      const last = existing[existing.length - 1];
+      if (!isTable(last)) {
+        throw new NativeConfigParseError("toml-duplicate-key", `key "${seg}" is not a table`);
+      }
+      current = last;
+    } else {
+      throw new NativeConfigParseError("toml-duplicate-key", `key "${seg}" already holds a value`);
+    }
+  }
+  return current;
+}
+function assignKey(table, keyPath, value, ctx, opts = {}) {
+  const parent = descend(table, keyPath.slice(0, -1), ctx, "keyval");
+  const leaf = keyPath[keyPath.length - 1];
+  if (leaf in parent) {
+    throw new NativeConfigParseError("toml-duplicate-key", `duplicate key "${leaf}"`);
+  }
+  if (opts.insideClosed && isTable(value)) ctx.closedInline.add(value);
+  parent[leaf] = value;
+}
+function parseNativeToml(raw) {
+  const root = newTable();
+  const ctx = { closedInline: /* @__PURE__ */ new WeakSet(), closedToHeaders: /* @__PURE__ */ new WeakSet() };
+  const c = new Cursor(raw);
+  let currentTable = root;
+  const explicitHeaders = /* @__PURE__ */ new Set();
+  for (; ; ) {
+    skipTrivia(c, true);
+    if (c.eof()) return root;
+    if (c.peek() === "[") {
+      c.pos++;
+      const isArrayOfTables = c.peek() === "[";
+      if (isArrayOfTables) c.pos++;
+      const keyPath2 = parseKeyPath(c);
+      skipInlineWs(c);
+      if (c.next() !== "]") c.fail("expected ']' closing table header");
+      if (isArrayOfTables && c.next() !== "]") c.fail("expected ']]' closing array-of-tables header");
+      expectLineEnd(c);
+      if (isArrayOfTables) {
+        const parent = descend(root, keyPath2.slice(0, -1), ctx, "header");
+        const leaf = keyPath2[keyPath2.length - 1];
+        const existing = parent[leaf];
+        if (existing === void 0) {
+          const arr = [];
+          parent[leaf] = arr;
+          const t = newTable();
+          arr.push(t);
+          currentTable = t;
+        } else if (Array.isArray(existing) && !ctx.closedToHeaders.has(existing)) {
+          const t = newTable();
+          existing.push(t);
+          currentTable = t;
+        } else {
+          throw new NativeConfigParseError("toml-duplicate-key", `key "${leaf}" already holds a value`);
+        }
+      } else {
+        const headerId = keyPath2.join("\0");
+        if (explicitHeaders.has(headerId)) {
+          throw new NativeConfigParseError("toml-duplicate-key", `table [${keyPath2.join(".")}] defined twice`);
+        }
+        explicitHeaders.add(headerId);
+        const parent = descend(root, keyPath2.slice(0, -1), ctx, "header");
+        const leaf = keyPath2[keyPath2.length - 1];
+        const existing = parent[leaf];
+        if (existing === void 0) {
+          const t = newTable();
+          parent[leaf] = t;
+          currentTable = t;
+        } else if (isTable(existing)) {
+          if (ctx.closedInline.has(existing) || ctx.closedToHeaders.has(existing)) {
+            throw new NativeConfigParseError(
+              "toml-duplicate-key",
+              `key "${leaf}" cannot be reopened by a table header`
+            );
+          }
+          currentTable = existing;
+        } else {
+          throw new NativeConfigParseError("toml-duplicate-key", `key "${leaf}" already holds a value`);
+        }
+      }
+      continue;
+    }
+    const keyPath = parseKeyPath(c);
+    skipInlineWs(c);
+    if (c.next() !== "=") c.fail("expected '=' after key");
+    const value = parseValue(c, ctx);
+    assignKey(currentTable, keyPath, value, ctx);
+    expectLineEnd(c);
+  }
+}
+function claudeConfigRoots(opts) {
+  const join77 = opts.joiner ?? ((...parts) => parts.join("/"));
+  const roots = [];
+  const override = opts.claudeConfigDir?.trim();
+  if (override) roots.push(override);
+  roots.push(join77(opts.homedir, ".claude"), join77(opts.homedir, ".config", "claude"));
+  return roots;
+}
+function codexConfigHome(opts) {
+  const join77 = opts.joiner ?? ((...parts) => parts.join("/"));
+  const override = opts.codexHome?.trim();
+  return override ? override : join77(opts.homedir, ".codex");
+}
+function classifyEntry(alias, entry) {
+  let present2 = 0;
+  let matching = 0;
+  let foreign = 0;
+  let malformed = 0;
+  for (const field of SOURCE_FIELDS) {
+    if (!(field in entry)) continue;
+    present2++;
+    const v = entry[field];
+    if (typeof v !== "string") malformed++;
+    else if (GUILD_SOURCE_RE.test(v.trim())) matching++;
+    else foreign++;
+  }
+  const namesGuild = alias === "guild" || matching > 0;
+  if (!namesGuild) return { kind: "no" };
+  if (malformed > 0) {
+    return { kind: "refuse", detail: `alias "${alias}": a source field is not a string` };
+  }
+  if (matching > 0 && foreign > 0) {
+    return { kind: "refuse", detail: `alias "${alias}": source fields disagree about the origin` };
+  }
+  if (matching === 0 && foreign > 0) return { kind: "no" };
+  void present2;
+  return { kind: "match" };
+}
+function selectCodexMarketplaceIdentity(raw) {
+  let parsed;
+  try {
+    parsed = parseNativeToml(raw);
+  } catch (err) {
+    if (err instanceof NativeConfigParseError) {
+      return { status: "refused", reason: "parse-error", code: err.code, detail: err.message };
+    }
+    return { status: "refused", reason: "parse-error", detail: String(err) };
+  }
+  const marketplaces = parsed["marketplaces"];
+  if (!isTable(marketplaces)) return { status: "absent" };
+  const matches = [];
+  for (const alias of Object.keys(marketplaces)) {
+    const entry = marketplaces[alias];
+    if (!isTable(entry)) continue;
+    const cls = classifyEntry(alias, entry);
+    if (cls.kind === "refuse") {
+      return { status: "refused", reason: "invalid-identity", detail: cls.detail };
+    }
+    if (cls.kind === "no") continue;
+    const ref = entry["ref"];
+    const commit = entry["last_revision"];
+    if (ref !== "main" && ref !== "next") {
+      return {
+        status: "refused",
+        reason: "invalid-identity",
+        detail: `alias "${alias}": ref ${JSON.stringify(ref ?? null)} is not a known channel branch`
+      };
+    }
+    if (typeof commit !== "string" || !SHA40_RE.test(commit)) {
+      return {
+        status: "refused",
+        reason: "invalid-identity",
+        detail: `alias "${alias}": last_revision is not a 40-hex SHA`
+      };
+    }
+    matches.push({
+      alias,
+      identity: { channel: ref === "next" ? "beta" : "stable", commit }
+    });
+  }
+  if (matches.length === 0) return { status: "absent" };
+  const first = matches[0];
+  for (const m of matches.slice(1)) {
+    if (m.identity.channel !== first.identity.channel || m.identity.commit !== first.identity.commit) {
+      return {
+        status: "refused",
+        reason: "conflicting-aliases",
+        detail: `aliases "${first.alias}" and "${m.alias}" disagree on the installed identity`
+      };
+    }
+  }
+  return {
+    status: "selected",
+    identity: first.identity,
+    alias: first.alias,
+    aliases: matches.map((m) => m.alias)
+  };
+}
+var NativeConfigParseError, UNSAFE_KEYS, BARE_KEY_RE, SHA40_RE, DATETIME_RE, INT_RE, HEX_RE, OCT_RE, BIN_RE, FLOAT_RE, Cursor, GUILD_SOURCE_RE, SOURCE_FIELDS;
+var init_native_config_parser = __esm({
+  "src/domains/config/native-config-parser.ts"() {
+    NativeConfigParseError = class extends Error {
+      code;
+      constructor(code, message) {
+        super(`${code}: ${message}`);
+        this.name = "NativeConfigParseError";
+        this.code = code;
+      }
+    };
+    UNSAFE_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
+    BARE_KEY_RE = /^[A-Za-z0-9_-]+$/;
+    SHA40_RE = /^[0-9a-f]{40}$/;
+    DATETIME_RE = /^\d{4}-\d{2}-\d{2}([Tt ]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})?)?$/;
+    INT_RE = /^[+-]?(0|[1-9]\d*(_\d+)*)$/;
+    HEX_RE = /^0x[0-9A-Fa-f]+(_[0-9A-Fa-f]+)*$/;
+    OCT_RE = /^0o[0-7]+(_[0-7]+)*$/;
+    BIN_RE = /^0b[01]+(_[01]+)*$/;
+    FLOAT_RE = /^[+-]?(0|[1-9]\d*(_\d+)*)(\.\d+(_\d+)*)?([eE][+-]?\d+(_\d+)*)?$/;
+    Cursor = class {
+      constructor(src) {
+        this.src = src;
+      }
+      src;
+      pos = 0;
+      peek(offset = 0) {
+        return this.src[this.pos + offset] ?? "";
+      }
+      next() {
+        return this.src[this.pos++] ?? "";
+      }
+      eof() {
+        return this.pos >= this.src.length;
+      }
+      fail(why) {
+        const line = this.src.slice(0, this.pos).split("\n").length;
+        throw new NativeConfigParseError("toml-syntax", `${why} (line ${line})`);
+      }
+    };
+    GUILD_SOURCE_RE = /^(?:https?:\/\/(?:www\.)?github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)lookatitude\/guild(?:\.git)?\/?$/;
+    SOURCE_FIELDS = ["url", "repo", "repository"];
+  }
+});
+
 // src/domains/config/config-defaults.ts
 function isCanonicalRoleSlug(v) {
   return typeof v === "string" && v.length > 0 && v.length <= CAPABILITY_ROLE_SLUG_MAX_LEN && !CONTROL_CHARS.test(v) && ROLE_SLUG.test(v);
@@ -32130,6 +32628,7 @@ __export(config_exports, {
   MODE_TRANSITION_DIRECTIONS: () => MODE_TRANSITION_DIRECTIONS,
   MODULE_PUBLIC_API_VERSION: () => MODULE_PUBLIC_API_VERSION,
   NON_INHERITABLE_KEYS: () => NON_INHERITABLE_KEYS,
+  NativeConfigParseError: () => NativeConfigParseError,
   OPERATOR_BASELINE_POLICY: () => OPERATOR_BASELINE_POLICY,
   PLUGIN_DIALECTS_REL: () => PLUGIN_DIALECTS_REL,
   POLICY_FILES: () => POLICY_FILES,
@@ -32194,6 +32693,8 @@ __export(config_exports, {
   claimPrompt: () => claimPrompt,
   classifyCompatibilityRead: () => classifyCompatibilityRead,
   classifyServedAttempt: () => classifyServedAttempt,
+  claudeConfigRoots: () => claudeConfigRoots,
+  codexConfigHome: () => codexConfigHome,
   compareVersions: () => compareVersions,
   compatibilityUsageForRead: () => compatibilityUsageForRead,
   composePrompt: () => composePrompt,
@@ -32288,6 +32789,7 @@ __export(config_exports, {
   nullIo: () => nullIo,
   parseCompatibilityUsageV1: () => parseCompatibilityUsageV1,
   parseModelsArgs: () => parseModelsArgs,
+  parseNativeToml: () => parseNativeToml,
   parseSelector: () => parseSelector,
   persistIndependenceAdjudication: () => persistIndependenceAdjudication,
   persistInspectionReport: () => persistInspectionReport,
@@ -32352,6 +32854,7 @@ __export(config_exports, {
   rungLoss: () => rungLoss,
   scaffoldFor: () => scaffoldFor,
   scanHostIdentity: () => scanHostIdentity,
+  selectCodexMarketplaceIdentity: () => selectCodexMarketplaceIdentity,
   selectReviewer: () => selectReviewer,
   selectRoute: () => selectRoute,
   sessionBindingPath: () => sessionBindingPath,
@@ -32403,6 +32906,7 @@ var init_config2 = __esm({
     init_provider_detect();
     init_session_context();
     init_model_discovery_contract();
+    init_native_config_parser();
     init_config_defaults();
     init_policy_keys();
     init_policy_resolver();
