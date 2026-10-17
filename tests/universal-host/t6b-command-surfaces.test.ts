@@ -153,21 +153,27 @@ describe("T6b harness", () => {
 // ---------------------------------------------------------------------------
 
 describe("T6b(1) — `guild models` trigger, registration and help", () => {
-  it("ships as a print-only alias whose dispatching home is /guild:config", () => {
-    // T04 (22 -> 13): `models` is a KTD14 print-only alias; the verb now lives on
-    // `/guild:config models`. The alias must print and exit — never dispatch.
-    const alias = readCommand("models");
-    const fm = commandFrontmatter("models");
-    expect(fm["name"]).toBe("models");
-    expect(String(fm["description"])).toMatch(/alias/i);
-    expect(String(fm["allowed-tools"]).trim()).toBe("Read");
-    expect(alias).toContain("/guild:config models");
-    expect(alias).not.toMatch(/Skill:/);
-    expect(alias.trimEnd().split("\n").length).toBeLessThanOrEqual(10);
-    const allow = JSON.parse(
-      fs.readFileSync(path.join(PLUGIN_ROOT, "commands", "aliases.allowlist.json"), "utf8")
-    );
-    expect(allow.aliases).toContain("models");
+  it("ships as a print-only alias whose dispatching home is /guild:config (state-aware, C06E)", () => {
+    // T04 (22 -> 13): `models` was a KTD14 print-only alias, deleted by the C06
+    // retirement after one stable cut. PRE state: alias prints and never
+    // dispatches. RETIRED state: alias AND allowlist are both gone. In BOTH
+    // states the dispatching home carries the verb.
+    const aliasPath = path.join(PLUGIN_ROOT, "commands", "models.md");
+    const allowPath = path.join(PLUGIN_ROOT, "commands", "aliases.allowlist.json");
+    if (fs.existsSync(aliasPath)) {
+      const alias = readCommand("models");
+      const fm = commandFrontmatter("models");
+      expect(fm["name"]).toBe("models");
+      expect(String(fm["description"])).toMatch(/alias/i);
+      expect(String(fm["allowed-tools"]).trim()).toBe("Read");
+      expect(alias).toContain("/guild:config models");
+      expect(alias).not.toMatch(/Skill:/);
+      expect(alias.trimEnd().split("\n").length).toBeLessThanOrEqual(10);
+      const allow = JSON.parse(fs.readFileSync(allowPath, "utf8"));
+      expect(allow.aliases).toContain("models");
+    } else {
+      expect(fs.existsSync(allowPath)).toBe(false);
+    }
 
     // The dispatching home documents the verb and keeps the read-only promise.
     const config = readCommand("config");
@@ -175,26 +181,30 @@ describe("T6b(1) — `guild models` trigger, registration and help", () => {
     expect(config).toMatch(/READ-ONLY/);
   });
 
-  it("is registered in plugin.json, the inventory and the neutral command registry", () => {
+  it("registration follows the alias state; the dispatching home stays registered", () => {
     const manifest = JSON.parse(
       fs.readFileSync(path.join(PLUGIN_ROOT, ".claude-plugin", "plugin.json"), "utf8")
     );
-    expect(manifest.commands).toContain("./commands/models.md");
-
-    const inventory = JSON.parse(
-      fs.readFileSync(path.join(PLUGIN_ROOT, "guild.inventory.json"), "utf8")
-    );
-    const entry = inventory.commands.find((c: { id: string }) => c.id === "models");
-    expect(entry).toBeDefined();
-    expect(entry.source_path).toBe("commands/models.md");
-
-    const registry = JSON.parse(
-      fs.readFileSync(path.join(PLUGIN_ROOT, "command-src", "command-registry.json"), "utf8")
-    );
-    expect(registry.commands.map((c: { id: string }) => c.id)).toContain("models");
+    // The HOME registration holds in every state.
+    expect(manifest.commands).toContain("./commands/config.md");
+    if (fs.existsSync(path.join(PLUGIN_ROOT, "commands", "models.md"))) {
+      expect(manifest.commands).toContain("./commands/models.md");
+      const inventory = JSON.parse(
+        fs.readFileSync(path.join(PLUGIN_ROOT, "guild.inventory.json"), "utf8")
+      );
+      const entry = inventory.commands.find((c: { id: string }) => c.id === "models");
+      expect(entry).toBeDefined();
+      expect(entry.source_path).toBe("commands/models.md");
+      const registry = JSON.parse(
+        fs.readFileSync(path.join(PLUGIN_ROOT, "command-src", "command-registry.json"), "utf8")
+      );
+      expect(registry.commands.map((c: { id: string }) => c.id)).toContain("models");
+    }
+    // RETIRED state: generated manifests/inventory/registry are reconciled by the
+    // C05 integration barrier; no stale-generated assertion here (C06E-AC3).
   });
 
-  it("is owned by exactly one module manifest (host packaging needs an owner)", () => {
+  it("is owned by exactly one module manifest while the alias ships (host packaging needs an owner)", () => {
     // T16: manifests live beside their fold domain (src/domains/<d>/modules/<id>.manifest.json).
     const owners = moduleManifestFiles(PLUGIN_ROOT)
       .filter(({ path: p }) => {
@@ -202,7 +212,12 @@ describe("T6b(1) — `guild models` trigger, registration and help", () => {
         return (m.owns?.commands ?? []).includes("models");
       })
       .map(({ id }) => id);
-    expect(owners).toEqual(["capability"]);
+    if (fs.existsSync(path.join(PLUGIN_ROOT, "commands", "models.md"))) {
+      expect(owners).toEqual(["capability"]);
+    } else {
+      // Retired: at most the stale pre-C05 owner row may remain; never a second owner.
+      expect(owners.length).toBeLessThanOrEqual(1);
+    }
   });
 
   it("help matches the CLI: every documented flag parses, undocumented ones are refused", () => {
@@ -1026,7 +1041,7 @@ describe("T6b(5) — the blocking gate is present on every dispatching command",
   it("anti-vacuity: a non-dispatching read-only command does NOT carry the gate", () => {
     // If this ever matches, the assertion above proves nothing (every file would pass).
     expect(readCommand("status")).not.toMatch(/## Team decision gate/);
-    expect(readCommand("models")).not.toMatch(/## Team decision gate/);
+    expect(readCommand("maintain")).not.toMatch(/## Team decision gate/);
   });
 
   it("the decision vocabulary is exactly the frozen §4 set", () => {
