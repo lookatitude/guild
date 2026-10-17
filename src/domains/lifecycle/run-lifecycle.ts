@@ -803,6 +803,7 @@ export function appendPhase(
   const raw = env.fs.readFile(p);
   if (raw === null) return false; // missing/corrupt → no-op
   const at = env.now();
+  const visits = readPhaseVisits(raw);
 
   // 1. Rewrite the top-level `phase:` scalar (tolerate its absence on old
   //    manifests). The shared helper matches `phase:` at column 0 only — it
@@ -813,7 +814,78 @@ export function appendPhase(
   // 2. Append a { phase, at } entry to the phases_log block.
   next = appendToPhasesLog(next, phase, at);
   env.fs.writeFile(p, next);
+
+  // Semantic phase boundary: the recorded transition concludes the previous
+  // visit (same span as its entry) and enters the new one. Outcome of the
+  // concluded phase is not known here, so it is recorded as unknown.
+  const prior = visits[visits.length - 1];
+  const hasSnapshot = env.fs.exists(pluginConfigSnapshotPath(root, runId));
+  if (prior) {
+    emitLifecycleEvent(env.emitAnalysisEvent, root, runId, hasSnapshot, {
+      ts: at, event_class: "phase_concluded", status: "unknown", phase: prior.phase,
+      span_id: phaseVisitSpanId(runId, visits.length - 1, prior.phase, prior.at),
+      signature: `transition:${prior.phase}->${phase}`,
+    });
+  }
+  emitLifecycleEvent(env.emitAnalysisEvent, root, runId, hasSnapshot, {
+    ts: at, event_class: "phase_entered", status: "ok", phase,
+    span_id: phaseVisitSpanId(runId, visits.length, phase, at),
+  });
   return true;
+}
+
+/** Stable span for one phases_log visit: entry and conclusion share it. */
+export function phaseVisitSpanId(runId: string, index: number, phase: string, at: string): string {
+  return crypto.createHash("sha256").update(`${runId}|phase|${index}|${phase}|${at}`).digest("hex").slice(0, 16);
+}
+
+/** The recorded phases_log visits, in order. Unparseable entries are skipped. */
+function readPhaseVisits(raw: string): Array<{ phase: string; at: string }> {
+  try {
+    const doc = parseYaml(raw);
+    const log = doc !== null && typeof doc === "object" && !Array.isArray(doc)
+      ? (doc as Record<string, unknown>)["phases_log"]
+      : null;
+    if (!Array.isArray(log)) return [];
+    return log.flatMap((entry) => {
+      if (entry === null || typeof entry !== "object") return [];
+      const item = entry as Record<string, unknown>;
+      return typeof item["phase"] === "string" && item["at"] !== undefined && item["at"] !== null
+        ? [{ phase: item["phase"], at: item["at"] instanceof Date ? item["at"].toISOString() : String(item["at"]) }]
+        : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+type LifecycleAnalysisEmitter = (event: GuildTraceAnalysisV2, runDir: string) => boolean;
+
+/** Best-effort semantic emit; a trace failure never breaks the lifecycle write. */
+function emitLifecycleEvent(
+  emit: LifecycleAnalysisEmitter | null | undefined,
+  root: string,
+  runId: string,
+  hasConfigSnapshot: boolean,
+  fields: Pick<GuildTraceAnalysisV2, "ts" | "event_class" | "status" | "span_id"> &
+    Partial<Pick<GuildTraceAnalysisV2, "phase" | "signature">>,
+): void {
+  if (!emit) return;
+  try {
+    emit(
+      makeAnalysisTraceEvent({
+        run_id: runId,
+        lane_id: "",
+        actor_type: "system",
+        actor_id: "run-lifecycle",
+        ...fields,
+        config_snapshot_ref: hasConfigSnapshot ? "plugin-config-snapshot.json" : undefined,
+      }),
+      runDir(root, runId),
+    );
+  } catch {
+    // additive trace only
+  }
 }
 
 /**
@@ -1067,6 +1139,17 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
             runDir(root, runId),
           );
         }
+        if (opts.phase) {
+          env.emitAnalysisEvent(
+            makeAnalysisTraceEvent({
+              ...eventBase,
+              event_class: "phase_entered",
+              phase: opts.phase,
+              span_id: phaseVisitSpanId(runId, 0, opts.phase, nowIso),
+            }),
+            runDir(root, runId),
+          );
+        }
       }
 
       // current-run-id sentinel — interactive command intake ONLY (§5): it may
@@ -1175,6 +1258,19 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
         env.fs.writeFile(sp, "");
       }
       if (env.emitAnalysisEvent) {
+        // The close concludes the last recorded phase visit (same span as its entry).
+        const visits = readPhaseVisits(env.fs.readFile(runYamlPath(root, runId)) ?? "");
+        const last = visits[visits.length - 1];
+        if (last) {
+          emitLifecycleEvent(env.emitAnalysisEvent, root, runId, env.fs.exists(pluginConfigSnapshotPath(root, runId)), {
+            ts: now,
+            event_class: "phase_concluded",
+            status: opts.status === "closed" ? "ok" : "incomplete",
+            phase: last.phase,
+            span_id: phaseVisitSpanId(runId, visits.length - 1, last.phase, last.at),
+            signature: `close:${opts.status}`,
+          });
+        }
         env.emitAnalysisEvent(
           makeAnalysisTraceEvent({
             ts: now,
@@ -1552,6 +1648,14 @@ export function writePluginConfigSnapshot(
   }
   const outPath = pluginConfigSnapshotPath(start.root, runId);
   assertContained(outPath, start.root, "writePluginConfigSnapshot");
+  // Frozen at run start: once run.yaml or the snapshot exists, a later call
+  // (changed settings, a new secret) must never replace or backfill it. A
+  // scrub-blocked start stays snapshot-less rather than gaining a post-start one.
+  if (env.fs.exists(outPath) || env.fs.exists(runYamlPath(start.root, runId))) {
+    throw new Error(
+      `[run-lifecycle] writePluginConfigSnapshot: the plugin config snapshot for ${runId} is frozen at run start; refusing to write it again`,
+    );
+  }
   const host = env.resolveHost(start.host_requested);
   const identity = start.session_identity ?? {};
   const pluginIdentity = derivePluginIdentity(start, env);
@@ -1803,6 +1907,7 @@ export function appendGateOutcome(
   runId: string,
   gate: string,
   record: GateOutcomeRecord,
+  trace: { now?: () => string; emitAnalysisEvent?: LifecycleAnalysisEmitter | null } = {},
 ): boolean {
   if (!GATE_TOKEN.test(gate)) return false; // reject a bad token — never write it
   const p = runYamlPath(root, runId);
@@ -1811,7 +1916,24 @@ export function appendGateOutcome(
   const next = writeGateBlock(raw, gate, record);
   if (next === null) return false;
   fs.writeFile(p, next);
+
+  // Semantic gate boundary. Only an explicit pass/fail maps to ok/error; any
+  // other outcome token stays unknown rather than being read as a pass.
+  const ts = (trace.now ?? (() => new Date().toISOString()))();
+  const emit = trace.emitAnalysisEvent === undefined ? emitToExistingRunLog : trace.emitAnalysisEvent;
+  emitLifecycleEvent(emit, root, runId, fs.readFile(pluginConfigSnapshotPath(root, runId)) !== null, {
+    ts,
+    event_class: "gate_concluded",
+    status: record.outcome === "pass" ? "ok" : record.outcome === "fail" ? "error" : "unknown",
+    span_id: crypto.createHash("sha256").update(`${runId}|gate|${gate}|${ts}`).digest("hex").slice(0, 16),
+    signature: `gate:${gate}`,
+  });
   return true;
+}
+
+/** Default gate emitter: append only into a run whose logs/ dir already exists. */
+function emitToExistingRunLog(event: GuildTraceAnalysisV2, activeRunDir: string): boolean {
+  return fsNode.existsSync(path.join(activeRunDir, "logs")) && emitTraceEvent(event, activeRunDir);
 }
 
 /**
