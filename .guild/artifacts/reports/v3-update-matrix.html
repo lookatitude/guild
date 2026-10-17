@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>v3 Update Matrix</title>
+<style>
+  :root { --bg:#fff; --fg:#1a1d21; --muted:#5b6570; --border:#e4e7ec; --card:#f7f8fa; --ok:#15803d; --warn:#b45309; --accent:#2563eb; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#101316; --fg:#e7eaee; --muted:#9aa4b0; --border:#2a3139; --card:#171c21; --ok:#4ade80; --warn:#fbbf24; --accent:#60a5fa; }
+  }
+  :root[data-theme="dark"] { --bg:#101316; --fg:#e7eaee; --muted:#9aa4b0; --border:#2a3139; --card:#171c21; --ok:#4ade80; --warn:#fbbf24; --accent:#60a5fa; }
+  body { background:var(--bg); color:var(--fg); font:15px/1.55 -apple-system,"Segoe UI",sans-serif; max-width:980px; margin:0 auto; padding:2rem 16px; }
+  h1 { font-size:1.5rem; } h2 { font-size:1.15rem; margin-top:2rem; }
+  table { border-collapse:collapse; width:100%; font-size:.85rem; }
+  th,td { border:1px solid var(--border); padding:.35rem .55rem; text-align:left; vertical-align:top; }
+  th { background:var(--card); }
+  code { background:var(--card); padding:.1em .3em; border-radius:4px; font-size:.85em; }
+  .ok { color:var(--ok); font-weight:600; } .note { color:var(--muted); font-size:.85rem; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:.8rem 1rem; margin:.8rem 0; }
+</style>
+</head>
+<body>
+<h1>v3 Update Matrix — F03 verification</h1>
+<p class="note">Task F03 (v3-completion, run run-20261017-160817-guild) · branch <code>fix/v3c-team-f-host-identity</code> · 2026-10-17</p>
+
+<div class="card">
+<strong>Verdict:</strong> <span class="ok">PASS</span> — all 16 declared host rows have test-backed signal / apply / degradation behavior through the production hook bundle (<code>hooks/dist/update-check.js</code>), with isolated host registries and no real account/config writes. Check command:
+<code>bun test --isolate tests/integration/update-matrix.test.ts scripts/lib/update-check.test.ts scripts/lib/update-capability-rows.test.ts scripts/lib/self-update.test.ts hooks/__tests__/update-check.test.ts</code> → <strong>161 pass / 0 fail</strong> (589 assertions).
+</div>
+
+<h2>The declared matrix (pinned)</h2>
+<p>The integration suite pins all 16 rows byte-for-byte (<code>PINNED_MATRIX</code>) and asserts <code>auto_capable == {claude-code-cli}</code>. Any widened claim fails the suite (F03-AC2).</p>
+<table>
+<tr><th>Host</th><th>check</th><th>apply</th><th>command</th><th>auto</th><th>Verified behavior (simulated registry, production hook)</th></tr>
+<tr><td>claude-code-cli</td><td>marketplace_clone</td><td>marketplace_cli</td><td><code>claude plugin marketplace update … </code></td><td>yes</td><td>stable tag + beta SHA signals; auto stages once, dedupes per host+target; custom CLAUDE_CONFIG_DIR clone resolves beta identity live (no receipt minted)</td></tr>
+<tr><td>codex-cli</td><td>receipt</td><td>reinstall_command</td><td><code>install.sh --update</code></td><td>no</td><td>receipt + native TOML registry (quoted alias, CODEX_HOME with spaces) signal; auto degrades to "cannot auto-apply"; malformed registry refuses → channel-undetermined, no receipt</td></tr>
+<tr><td>pi-cli · antigravity-cli · cursor · github-copilot · opencode · rovo-dev</td><td>receipt</td><td>self_update</td><td><code>guild-run update</code></td><td>no</td><td>stable/beta receipt signals with exact command; auto never applies; offline silent; dev guard silent</td></tr>
+<tr><td>agents-file · kiro · qoder · trae</td><td>receipt</td><td>reinstall_command</td><td><code>install.sh --update</code></td><td>no</td><td>same as above with reinstall command posture</td></tr>
+<tr><td>claude-code-app · claude-code-web · codex-app · claude-ai-connector</td><td>none</td><td>none</td><td>—</td><td>no</td><td>explicit unsupported apply path: signal renders WITHOUT any <code>run:</code> command claim; auto never applies</td></tr>
+</table>
+
+<h2>What this proves — and what it does not (F03-AC2)</h2>
+<ul>
+  <li><strong>Fixture proof:</strong> everything above runs against simulated registries under a fixture <code>HOME</code>/<code>CODEX_HOME</code>/<code>CLAUDE_CONFIG_DIR</code> with an empty <code>PATH</code> (the detached refresh finds no git and fails open — zero network).</li>
+  <li><strong>Not live-host verification:</strong> no host rung becomes verified and no capability row becomes auto-capable from these tests (KTD5, C-UPDATE rule 5). The operator-box live checks remain the <code>verified-multi-host-support</code> receipt path.</li>
+  <li><strong>Explicitly unsupported apply paths</strong> are asserted as unsupported (command-less signal, never staged), not skipped.</li>
+</ul>
+
+<h2>Cross-cutting behaviors verified</h2>
+<ul>
+  <li><strong>TTL/offline + cadence:</strong> the full declared sequence is executed end-to-end: session 1 on a cold cache is silent and spawns the detached refresh (git shim records it; the hook returns before a 3s shim sleep ends), the worker rewrites the cache, and session 2 signals from it. Stale caches still signal immediately from cached data; corrupt caches never crash or block startup (exit 0 everywhere); a fresh cache spawns no refresh.</li>
+  <li><strong>Apply execution is asserted, not inferred from messages:</strong> recording shims for <code>claude</code>/<code>guild-run</code>/<code>curl</code>/<code>bash</code> prove the staged Claude command chain actually executes, and that non-auto rows execute ZERO apply commands.</li>
+  <li><strong>betaSHA vs stableSemVer:</strong> beta compares exact commit refs (same version, different commit signals; same commit silent); commit-less stable receipts compare semver with the candidate-label equal-core suppression.</li>
+  <li><strong>Dev guards:</strong> a git checkout outside a managed root is silent on every host row and never auto-updates; a managed clone under an explicit <code>CLAUDE_CONFIG_DIR</code> is NOT misclassified as dev (F01).</li>
+  <li><strong>Channel honesty:</strong> candidate-shaped version without host identity emits the channel-undetermined line, mints no receipt, claims no channel (F02); known native registry identity stays live evidence (no receipt minted).</li>
+  <li><strong>Parser refusal codes</strong> (shared config-domain parser, F01): <code>toml-syntax</code>, <code>toml-duplicate-key</code>, <code>toml-unsafe-key</code>; selection refusals: <code>parse-error</code>, <code>invalid-identity</code>, <code>conflicting-aliases</code>.</li>
+</ul>
+
+<h2>Reuse statement + residuals (F03-AC3)</h2>
+<ul>
+  <li><strong>Existing updater reused:</strong> F01–F03 changed identity parsing, hook honesty and verification only; the staleness model, cache, receipt schema, capability rows and apply mechanics are the shipped v3 updater, unmodified.</li>
+  <li><strong>Residual for H01/H02:</strong> (1) the codex registry records no installPath, so physical binding is CODEX_HOME containment + observable per-alias directory; a registry-recorded install path would close the gap. (2) smol-toml@1.9.1 passed registry integrity/license/engines checks but was NOT adopted: the hook bundle may only carry dependencies alias-pinned in <code>scripts/compile.ts</code> + declared in <code>hooks/package.json</code> (bundle-determinism rail), both outside F01's write scope; adopting it is an H-lane decision. (3) Cadence results (cold → background refresh → next-session signal) are fixture-proved; live cadence soak stays with H02.</li>
+  <li><strong>Request to C05:</strong> when C05's generated-integration harness lands, regenerate this matrix from it so the pinned table is derived, not hand-maintained.</li>
+</ul>
+</body>
+</html>
