@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local Permission Proposal</title>
+<style>
+:root{--bg:#fff;--fg:#1a1d21;--muted:#5b6470;--line:#d9dee5;--ok:#0a7d33;--bad:#b00020;--code:#f4f6f8}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15181c;--fg:#e8eaed;--muted:#9aa4b0;--line:#333a43;--ok:#54c278;--bad:#ff7a85;--code:#1f242a}}
+:root[data-theme="dark"]{--bg:#15181c;--fg:#e8eaed;--muted:#9aa4b0;--line:#333a43;--ok:#54c278;--bad:#ff7a85;--code:#1f242a}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 -apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:2rem 16px;max-width:900px;margin-inline:auto}
+h1{font-size:1.4rem;margin:0 0 .25rem}h2{font-size:1.05rem;margin:1.6rem 0 .5rem;border-bottom:1px solid var(--line);padding-bottom:.25rem}
+table{border-collapse:collapse;width:100%;font-size:.85rem}th,td{border:1px solid var(--line);padding:.35rem .5rem;text-align:left}
+code{background:var(--code);padding:.1em .3em;border-radius:3px;font-size:.85em;word-break:break-all}
+pre{background:var(--code);padding:.6rem;border-radius:6px;overflow-x:auto;font-size:.8rem}
+.ok{color:var(--ok);font-weight:600}.bad{color:var(--bad);font-weight:600}.meta{color:var(--muted);font-size:.85rem}
+</style>
+</head>
+<body>
+<h1>Local permission pattern audit — staged operator proposal</h1>
+<p class="meta">Task G04 (PCL-FU-24) · run run-20261017-160817-guild · 2026-10-17 · owner: security-auditor (g-security-g04) · PROPOSAL ONLY — no local permission file was changed by this task; D5 (permissions stay proposal-only) intact. The operator applies this only after separate explicit permission.</p>
+
+<h2>1. Current rule — verified against current bytes (G04-AC1)</h2>
+<p>The exact user-owned rule exists today in the umbrella project's local settings file (no other settings were read or reproduced here):</p>
+<ul>
+<li>File: <code>&lt;workspace&gt;/.claude/settings.json local variant (settings.local.json)</code>, <code>permissions.allow</code>, line 7 of the file</li>
+<li>Rule bytes: <code>Bash(cp plugin/.claude/agents/*.md .claude/agents/)</code> (rule sha256 <code>dccdc7a7…13da</code>)</li>
+</ul>
+<p><strong>Risk confirmed:</strong> the wildcard sits before the remainder of the command, so under the documented host glob semantics (<code>*</code> matches any run of characters, spaces and dashes included) inserted options, traversal segments, and extra source arguments also match (fixtures below). <strong>Obsolescence signal:</strong> the copy's destination directory <code>&lt;workspace&gt;/.claude/agents/</code> does not exist today, while the source <code>plugin/.claude/agents/</code> holds exactly three files (<code>command-builder.md</code>, <code>skill-author.md</code>, <code>specialist-agent-writer.md</code>). The rule guards a one-time sync whose target is gone.</p>
+
+<h2>2. Match fixtures (G04-AC2)</h2>
+<p>Deterministic <strong>matcher-level</strong> fixtures (documented glob semantics for simple commands without shell operators: <code>*</code> matches any run of characters). Nothing was executed. A MATCH means <em>this rule would auto-allow the string</em>; NO MATCH means only that this rule stops auto-allowing it — the final decision then falls to the remaining rules and the session's permission mode. Code and raw verdicts: <code>.guild/runs/run-20261017-160817-guild/evidence/G04/</code> (umbrella run record).</p>
+<table>
+<tr><th>Fixture</th><th>Command (sanitized)</th><th>Current rule</th><th>Proposed rules</th></tr>
+<tr><td>intended-1</td><td><code>cp plugin/.claude/agents/command-builder.md .claude/agents/</code></td><td class="ok">MATCH</td><td class="ok">MATCH</td></tr>
+<tr><td>intended-2</td><td><code>cp plugin/.claude/agents/skill-author.md .claude/agents/</code></td><td class="ok">MATCH</td><td class="ok">MATCH</td></tr>
+<tr><td>intended-3</td><td><code>cp plugin/.claude/agents/specialist-agent-writer.md .claude/agents/</code></td><td class="ok">MATCH</td><td class="ok">MATCH</td></tr>
+<tr><td>inject-extra-source</td><td><code>cp plugin/.claude/agents/command-builder.md /Users/x/notes/private-agent.md .claude/agents/</code> — smuggles an arbitrary second source (any cp; plants a foreign agent definition the host would then load)</td><td class="bad">MATCH (defect)</td><td class="ok">NO MATCH</td></tr>
+<tr><td>inject-traversal</td><td><code>cp plugin/.claude/agents/../../../.guild/memory/lessons/private.md .claude/agents/</code> — traversal inside the wildcard, resolving to the workspace root's <code>.guild</code> tree from the session cwd</td><td class="bad">MATCH (defect)</td><td class="ok">NO MATCH</td></tr>
+<tr><td>inject-gnu-option</td><td><code>cp plugin/.claude/agents/ --remove-destination x.md .claude/agents/</code> — inserted long option; takes effect only when the resolved cp is GNU coreutils (brew), since BSD cp stops option parsing at the first operand</td><td class="bad">MATCH (defect)</td><td class="ok">NO MATCH</td></tr>
+</table>
+
+<h2>3. Staged proposal (operator applies; G04-AC3)</h2>
+<p><strong>Recommended disposition: REMOVE the rule.</strong> The destination directory no longer exists (absence is an obsolescence signal, not proof of one-time use — the operator confirms). Removal is the narrowest shape: the rule stops auto-allowing anything; whether a future copy prompts or is allowed is then decided by the remaining rules and the permission mode.</p>
+<p><strong>Fallback (only if the recurring copy is still wanted):</strong> replace the one wildcard rule with three exact rules — no wildcard, one per real source file:</p>
+<pre>"Bash(cp plugin/.claude/agents/command-builder.md .claude/agents/)",
+"Bash(cp plugin/.claude/agents/skill-author.md .claude/agents/)",
+"Bash(cp plugin/.claude/agents/specialist-agent-writer.md .claude/agents/)"</pre>
+<p><strong>Rollback:</strong> first remove any of the three fallback exact rules that were added, then re-insert the original line (exact bytes in §1) into <code>permissions.allow</code>. Local edit outside version control either way.</p>
+<p class="meta">Checks: fixture script exit 0; all three intended copies match the proposed exact rules; all three injection variants match the CURRENT rule (defect confirmed at matcher level, never exercised against the live host) and none match the proposed rules. No permission file was edited; no permission was widened.</p>
+</body>
+</html>
