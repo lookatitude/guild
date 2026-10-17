@@ -139,7 +139,7 @@ describe("install.sh AC-INS contract (dry-run only)", () => {
       // Gated BEFORE render — build-once never even scheduled.
       expect(run.renderCount).toBe(0);
       expect(run.stdout).not.toContain("would run: npx tsx");
-      expect(run.stderr).toMatch(/Refusing to write Guild payload to 2 hosts without consent/);
+      expect(run.stderr).toMatch(/Refusing to write Guild Stack payload to 2 hosts without consent/);
 
       // fs/dist untouched — the gate aborts before any package generation.
       const distAfter = fs.existsSync(path.join(PLUGIN_ROOT, "dist"))
