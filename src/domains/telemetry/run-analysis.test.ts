@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, afterAll, spyOn } from "bun:test";
 import * as fs from "node:fs";
 import * as crypto from "node:crypto";
 import * as os from "node:os";
@@ -6,7 +6,12 @@ import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-import { analyzeRun, compareRuns, resolveComparisonTarget, routeRecommendation, decideRecommendation, updateRecommendationStatus, writeRunComparison, writeRunAnalysis, withRecommendationLock, type RunAnalysis } from ".";
+import { analyzeRun, compareRuns, resolveComparisonTarget, routeRecommendation, decideRecommendation, updateRecommendationStatus, writeRunComparison, writeRunAnalysis, withRecommendationLock, loadOrAnalyzeRun, DETECTOR_IDS, type DetectorId, type RunAnalysis } from ".";
+import {
+  ASSESSED_INPUT, BASELINE_RUN, REQ, TS, V1_BASELINE_SCENARIOS, appendRows, capabilityEvidence, coreProjection, declare,
+  defaultEvents, failedTool, phaseCursor, prove, staleCursor, seedRun as seedGoldenRun, sha, usageEvents, v2, writeRunFile,
+} from "./__fixtures__/run-analysis/scenarios";
+import V1_BASELINE from "./__fixtures__/run-analysis/v1-baseline.json";
 
 const RUN_A = "run-20260812-010000-alpha";
 const RUN_B = "run-20260812-020000-beta";
@@ -1098,3 +1103,700 @@ describe("run-tracing-evaluation — plugin-owned analysis", () => {
     expect(fs.existsSync(path.join(root, ".guild", "recommendations", ".transaction.json"))).toBe(false);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// B02 — C-DETECTORS goldens. Every case name is a named golden fixture; the
+// observed projection is compared exactly. B02_MATRIX_OUT, when set,
+// receives the requirement-to-fixture matrix built from these observations.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type GoldenKind = "positive" | "negative" | "unobservable" | "boundary" | "determinism" | "freshness" | "baseline" | "refusal";
+interface MatrixObservation { row: string; fixture: string; kind: GoldenKind; observed: unknown }
+const matrixObservations: MatrixObservation[] = [];
+
+function diag(analysis: RunAnalysis, detector: DetectorId) {
+  const item = analysis.diagnostics!.results.find((entry) => entry.detector === detector)!;
+  return { state: item.state, reason: item.reason, value: item.value };
+}
+const kinds = (analysis: RunAnalysis) => ({
+  findings: analysis.findings.map((item) => `${item.kind}:${item.signature}`).sort(),
+  recommendations: analysis.recommendations.map((item) => `${item.scope}:${item.kind}`).sort(),
+});
+
+interface DetectorGolden {
+  name: string;
+  row: DetectorId;
+  kind: GoldenKind;
+  build: (root: string, runId: string) => void;
+  observe: (analysis: RunAnalysis) => unknown;
+  expected: unknown;
+}
+
+const R = BASELINE_RUN;
+const line = (n: number) => `.guild/runs/${R}/logs/v1.4-events.jsonl#line:${n}`;
+const twoInstructions = [{ instruction_id: "no-push", requirement_hash: REQ("no-push") }, { instruction_id: "tests-green", requirement_hash: REQ("tests-green") }];
+const instructionView = (analysis: RunAnalysis) => ({
+  aggregate: diag(analysis, "instruction_following").value["aggregate"],
+  state: diag(analysis, "instruction_following").state,
+  reason: diag(analysis, "instruction_following").reason,
+  checks: analysis.diagnostics!.instruction_checks.map((check) => `${check.instruction_id}:${check.status}`),
+  v1: analysis.assessments.instruction_following.status,
+});
+const toolView = (analysis: RunAnalysis) => ({ ...diag(analysis, "tool_coverage"), ...kinds(analysis) });
+
+const DETECTOR_GOLDENS: DetectorGolden[] = [
+  // instruction_following (B02-AC1)
+  { name: "instruction-two-declared-checks-proved", row: "instruction_following", kind: "positive",
+    build: (root, id) => { seedGoldenRun(root, id); declare(root, id, { instructions: twoInstructions }); prove(root, id, { id: "no-push", result: "passed", verifierStatus: "ok" }); prove(root, id, { id: "tests-green", result: "passed", verifierStatus: "ok" }); },
+    observe: instructionView, expected: { aggregate: "satisfied", state: "observed", reason: null, checks: ["no-push:satisfied", "tests-green:satisfied"], v1: "satisfied" } },
+  { name: "instruction-failed-verifier-violates-despite-gate-ok", row: "instruction_following", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); declare(root, id, { instructions: twoInstructions }); prove(root, id, { id: "no-push", result: "passed", verifierStatus: "ok" }); prove(root, id, { id: "tests-green", result: "failed", verifierStatus: "error" }); prove(root, id, { id: "tests-green", result: "passed", verifierStatus: "ok" }); },
+    observe: instructionView, expected: { aggregate: "violated", state: "observed", reason: null, checks: ["no-push:satisfied", "tests-green:violated"], v1: "violated" } },
+  { name: "instruction-no-declaration-no-observation", row: "instruction_following", kind: "unobservable",
+    build: (root, id) => { seedGoldenRun(root, id, { events: defaultEvents(id).filter((event) => !["prompt_received"].includes(String(event["event_class"])) && event["event"] !== "gate_decision") }); },
+    observe: instructionView, expected: { aggregate: "unobservable", state: "unobservable", reason: "no_instruction_declaration", checks: [], v1: "unobservable" } },
+  { name: "instruction-current-telemetry-observability-only-ambiguous", row: "instruction_following", kind: "unobservable",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [v2(id, "gate_concluded", { actor_type: "lead", actor_id: "main", span_id: "gate-review", signature: "gate:review" })]); },
+    observe: instructionView, expected: { aggregate: "ambiguous", state: "ambiguous", reason: "no_instruction_declaration", checks: [], v1: "ambiguous" } },
+  { name: "instruction-stale-input-hash-is-not-proof", row: "instruction_following", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); declare(root, id, { instructions: twoInstructions.slice(0, 1) }); prove(root, id, { id: "no-push", result: "passed", verifierStatus: "ok", inputHash: sha("old inputs") }); },
+    observe: instructionView, expected: { aggregate: "ambiguous", state: "ambiguous", reason: "missing_typed_proof", checks: ["no-push:ambiguous"], v1: "ambiguous" } },
+  { name: "instruction-uncorroborated-self-report-is-not-proof", row: "instruction_following", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); declare(root, id, { instructions: twoInstructions.slice(0, 1) }); prove(root, id, { id: "no-push", result: "passed", verifierStatus: "ok", verifierRef: line(1) }); },
+    observe: instructionView, expected: { aggregate: "ambiguous", state: "ambiguous", reason: "missing_typed_proof", checks: ["no-push:ambiguous"], v1: "ambiguous" } },
+  { name: "instruction-unrelated-ok-gate-never-corroborates", row: "instruction_following", kind: "negative",
+    build: (root, id) => {
+      seedGoldenRun(root, id); declare(root, id, { instructions: twoInstructions.slice(0, 1) });
+      const [unrelated] = appendRows(root, id, [v2(id, "gate_concluded", { actor_type: "lead", actor_id: "main", span_id: "gate-unrelated", signature: "gate:unrelated-approval" })]);
+      prove(root, id, { id: "no-push", result: "passed", verifierStatus: "ok", verifierRef: unrelated });
+    },
+    observe: instructionView, expected: { aggregate: "ambiguous", state: "ambiguous", reason: "missing_typed_proof", checks: ["no-push:ambiguous"], v1: "ambiguous" } },
+  { name: "instruction-incomplete-declared-scope-never-satisfied", row: "instruction_following", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); declare(root, id, { instructions: twoInstructions, complete: false }); prove(root, id, { id: "no-push", result: "passed", verifierStatus: "ok" }); prove(root, id, { id: "tests-green", result: "passed", verifierStatus: "ok" }); },
+    observe: instructionView, expected: { aggregate: "ambiguous", state: "ambiguous", reason: "declared_scope_incomplete", checks: ["no-push:satisfied", "tests-green:satisfied"], v1: "ambiguous" } },
+  // repeated_mistake (B02-AC2 single/two failure; B01-F4)
+  { name: "repeat-two-distinct-failed-attempts", row: "repeated_mistake", kind: "positive",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [failedTool(id, "f-1", { signature: "tool:Bash:abc", task_id: "T1", phase: "execute" }), failedTool(id, "f-2", { signature: "tool:Bash:abc", task_id: "T1", phase: "execute" })]); },
+    observe: (a) => ({ clusters: diag(a, "repeated_mistake").value["clusters"], ...kinds(a) }),
+    expected: { clusters: [{ signature: "tool:Bash:abc", task_id: "T1", phase: "execute", attempts: 2, sources: ["failed_action"], refs: [line(8), line(9)] }], findings: ["repeated_failure:tool:Bash:abc"], recommendations: ["project:clarify_prompt_contract"] } },
+  { name: "repeat-two-failed-verifications-finding", row: "repeated_mistake", kind: "positive",
+    build: (root, id) => { seedGoldenRun(root, id); declare(root, id, { instructions: twoInstructions.slice(1) }); prove(root, id, { id: "tests-green", result: "failed", verifierStatus: "error" }); prove(root, id, { id: "tests-green", result: "failed", verifierStatus: "error" }); },
+    observe: (a) => ({ clusters: (diag(a, "repeated_mistake").value["clusters"] as Array<Record<string, unknown>>).map((c) => `${c["signature"]}:${c["attempts"]}:${(c["sources"] as string[]).join(",")}`), ...kinds(a) }),
+    expected: { clusters: ["instruction:tests-green:2:failed_verifier"], findings: ["repeated_failure:instruction:tests-green"], recommendations: ["project:clarify_prompt_contract"] } },
+  { name: "repeat-same-span-duplicate-failed-proofs-one-attempt", row: "repeated_mistake", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); declare(root, id, { instructions: twoInstructions.slice(1) }); prove(root, id, { id: "tests-green", result: "failed", verifierStatus: "error", span: "gate-dup" }); prove(root, id, { id: "tests-green", result: "failed", verifierStatus: "error", span: "gate-dup" }); },
+    observe: (a) => ({ clusters: diag(a, "repeated_mistake").value["clusters"], signed: diag(a, "repeated_mistake").value["signed_attempts"], checks: instructionView(a).checks, ...kinds(a) }),
+    expected: { clusters: [], signed: 1, checks: ["tests-green:violated"], findings: [], recommendations: [] } },
+  { name: "repeat-single-failure-boundary", row: "repeated_mistake", kind: "boundary",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [failedTool(id, "f-1", { signature: "tool:Bash:abc" })]); },
+    observe: (a) => ({ state: diag(a, "repeated_mistake").state, clusters: diag(a, "repeated_mistake").value["clusters"], ...kinds(a) }),
+    expected: { state: "observed", clusters: [], findings: [], recommendations: [] } },
+  { name: "repeat-one-attempt-plus-semantic-twins", row: "repeated_mistake", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [
+      { ts: "2026-08-12T01:00:07.000Z", event: "tool_call", run_id: id, lane_id: "lane-a", tool: "Bash", command_redacted: "npm test", result_excerpt_redacted: "exit 1", status: "err", latency_ms: 5, span_id: "twin-1" },
+      v2(id, "tool_call_started", { actor_type: "tool", actor_id: "Bash", span_id: "twin-1" }), failedTool(id, "twin-1")]); },
+    observe: (a) => ({ ...diag(a, "repeated_mistake").value, ...kinds(a), duration_ms: a.usage.duration_ms }),
+    expected: { clusters: [], signed_attempts: 1, unsignatured_failures: 0, findings: [], recommendations: [], duration_ms: 15 } },
+  { name: "repeat-signatureless-failures-unobservable", row: "repeated_mistake", kind: "unobservable",
+    build: V1_BASELINE_SCENARIOS["v1-signatureless-semantic-failures"],
+    observe: (a) => ({ ...diag(a, "repeated_mistake"), ...kinds(a) }),
+    expected: { state: "unobservable", reason: "absent_action_signature", value: { clusters: [], signed_attempts: 0, unsignatured_failures: 2 }, findings: [], recommendations: [] } },
+  { name: "repeat-two-unrelated-signatures-stay-separate", row: "repeated_mistake", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [failedTool(id, "f-1", { signature: "tool:Bash:abc" }), failedTool(id, "f-2", { signature: "tool:Bash:def" })]); },
+    observe: (a) => ({ clusters: diag(a, "repeated_mistake").value["clusters"], ...kinds(a) }), expected: { clusters: [], findings: [], recommendations: [] } },
+  { name: "repeat-correction-signatures-cluster", row: "repeated_mistake", kind: "positive",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [1, 2].map((n) => v2(id, "correction_applied", { span_id: `corr-${n}`, signature: "correction:lint", task_id: "T1" }))); },
+    observe: (a) => (diag(a, "repeated_mistake").value["clusters"] as Array<Record<string, unknown>>).map((c) => `${c["signature"]}:${c["attempts"]}:${(c["sources"] as string[]).join(",")}`),
+    expected: ["correction:lint:2:correction_applied"] },
+  // steering (B02-AC2 steering boundary)
+  { name: "steering-two-typed-interventions", row: "steering", kind: "positive",
+    build: V1_BASELINE_SCENARIOS["v1-two-steering"], observe: (a) => ({ ...diag(a, "steering"), ...kinds(a), v1: a.assessments.prompt_efficiency.status }),
+    expected: { state: "observed", reason: null, value: { interventions: 2, by_signature: { "user-steering": 2 }, repeated: true, necessity: "unobservable" }, findings: ["prompt_inefficiency:repeated-user-steering"], recommendations: ["project:update_workflow"], v1: "ambiguous" } },
+  { name: "steering-one-intervention-boundary", row: "steering", kind: "boundary",
+    build: V1_BASELINE_SCENARIOS["v1-one-steering"], observe: (a) => ({ interventions: diag(a, "steering").value["interventions"], ...kinds(a) }),
+    expected: { interventions: 1, findings: [], recommendations: [] } },
+  { name: "steering-duplicate-span-twin-counts-once", row: "steering", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [1, 2].map(() => v2(id, "user_steering_received", { actor_type: "user", actor_id: "operator", span_id: "steer-same", signature: "user-steering" }))); },
+    observe: (a) => ({ interventions: diag(a, "steering").value["interventions"], ...kinds(a) }), expected: { interventions: 1, findings: [], recommendations: [] } },
+  { name: "steering-ordinary-prompts-unclassified", row: "steering", kind: "unobservable",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [1, 2].map((n) => v2(id, "prompt_received", { actor_type: "user", actor_id: "operator", span_id: `p-${n}`, prompt_hash: `h-${n}`, redaction: "omitted" }))); },
+    observe: (a) => ({ state: diag(a, "steering").state, reason: diag(a, "steering").reason, ...kinds(a) }),
+    expected: { state: "unobservable", reason: "no_steering_classification", findings: [], recommendations: [] } },
+  // clarification
+  { name: "clarification-late-after-substantive-action", row: "clarification", kind: "positive",
+    build: (root, id) => { seedGoldenRun(root, id); declare(root, id, { clarify: ["T1"] }); appendRows(root, id, [v2(id, "clarifying_question_asked", { actor_type: "lead", actor_id: "main", span_id: "clar-1", prompt_hash: "q-1", redaction: "omitted", task_id: "T1" })]); },
+    observe: (a) => ({ state: diag(a, "clarification").state, timely: diag(a, "clarification").value["timely"], late: diag(a, "clarification").value["late"], ...kinds(a) }),
+    expected: { state: "observed", timely: 0, late: 1, findings: ["prompt_inefficiency:late-clarification:T1"], recommendations: ["project:update_workflow"] } },
+  { name: "clarification-timely-before-action", row: "clarification", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); declare(root, id, { clarify: ["T9"] }); appendRows(root, id, [
+      v2(id, "clarifying_question_asked", { actor_type: "lead", actor_id: "main", span_id: "clar-9", prompt_hash: "q-9", redaction: "omitted", task_id: "T9" }),
+      v2(id, "tool_call_started", { actor_type: "tool", actor_id: "Bash", span_id: "t9-1", task_id: "T9" })]); },
+    observe: (a) => ({ state: diag(a, "clarification").state, timely: diag(a, "clarification").value["timely"], late: diag(a, "clarification").value["late"], ...kinds(a) }),
+    expected: { state: "observed", timely: 1, late: 0, findings: [], recommendations: [] } },
+  { name: "clarification-without-declared-constraint-ambiguous", row: "clarification", kind: "unobservable",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [v2(id, "clarifying_question_asked", { actor_type: "lead", actor_id: "main", span_id: "clar-1", prompt_hash: "q-1", redaction: "omitted", task_id: "T1" })]); },
+    observe: (a) => ({ state: diag(a, "clarification").state, reason: diag(a, "clarification").reason, unknown: diag(a, "clarification").value["unknown"], ...kinds(a) }),
+    expected: { state: "ambiguous", reason: "no_declared_clarification_constraint", unknown: 1, findings: [], recommendations: [] } },
+  { name: "clarification-absent-unobservable", row: "clarification", kind: "unobservable",
+    build: (root, id) => { seedGoldenRun(root, id); }, observe: (a) => ({ state: diag(a, "clarification").state, reason: diag(a, "clarification").reason }),
+    expected: { state: "unobservable", reason: "no_clarification_correlation" } },
+  // redundant_prompt
+  ...([
+    ["redundant-identical-prompts-unchanged-context", "positive", false, false, { keyed: 2, candidates: 1, findings: 1 }],
+    ["redundant-after-intervening-result", "negative", true, false, { keyed: 2, candidates: 0, findings: 0 }],
+    ["redundant-explicit-retry-authorized", "negative", false, true, { keyed: 2, candidates: 0, findings: 0 }],
+  ] as const).map(([name, kind, intervening, retry, expected]): DetectorGolden => ({
+    name, row: "redundant_prompt", kind,
+    build: (root, id) => {
+      seedGoldenRun(root, id);
+      writeRunFile(root, id, "sidecars/ctx-1.json", { schema_version: "guild.prompt_context.v1", run_id: id, prompt_hash: "p-hash", context_hash: sha("ctx"), retry_authorized: false });
+      writeRunFile(root, id, "sidecars/ctx-2.json", { schema_version: "guild.prompt_context.v1", run_id: id, prompt_hash: "p-hash", context_hash: sha("ctx"), retry_authorized: retry });
+      const prompt = (n: number) => v2(id, "prompt_normalized", { actor_type: "lead", actor_id: "main", span_id: `pn-${n}`, prompt_hash: "p-hash", redaction: "redacted", task_id: "T1", phase: "execute", payload_ref: `sidecars/ctx-${n}.json` });
+      appendRows(root, id, [prompt(1), ...(intervening ? [v2(id, "agent_response_received", { span_id: "resp-1", task_id: "T1" })] : []), prompt(2)]);
+    },
+    observe: (a) => ({ keyed: diag(a, "redundant_prompt").value["keyed"], candidates: (diag(a, "redundant_prompt").value["candidates"] as string[]).length, findings: a.findings.filter((f) => f.signature.startsWith("redundant-prompt:")).length }),
+    expected,
+  })),
+  { name: "redundant-missing-context-hash-unobservable", row: "redundant_prompt", kind: "unobservable",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [1, 2].map((n) => v2(id, "prompt_normalized", { actor_type: "lead", actor_id: "main", span_id: `pn-${n}`, prompt_hash: "p-hash", redaction: "redacted", task_id: "T1", phase: "execute" }))); },
+    observe: (a) => ({ state: diag(a, "redundant_prompt").state, reason: diag(a, "redundant_prompt").reason, ...kinds(a) }),
+    expected: { state: "unobservable", reason: "missing_context_hash", findings: [], recommendations: [] } },
+  // prompt_action_latency
+  ...([
+    ["latency-30001ms-long", "positive", 30_001, false, { state: "observed", long: 1, pairs: 1, waits: 0, malformed: 0 }],
+    ["latency-30000ms-not-long", "boundary", 30_000, false, { state: "observed", long: 0, pairs: 1, waits: 0, malformed: 0 }],
+    ["latency-documented-user-wait-excluded", "negative", 45_000, true, { state: "observed", long: 0, pairs: 0, waits: 1, malformed: 0 }],
+    ["latency-reversed-timestamp-refused", "unobservable", -5, false, { state: "unobservable", long: 0, pairs: 0, waits: 0, malformed: 1 }],
+  ] as const).map(([name, kind, elapsed, wait, expected]): DetectorGolden => ({
+    name, row: "prompt_action_latency", kind,
+    build: (root, id) => {
+      seedGoldenRun(root, id);
+      appendRows(root, id, [
+        v2(id, "prompt_received", { ts: TS(100_000), actor_type: "user", actor_id: "operator", span_id: "lp-1", prompt_hash: "lp", redaction: "omitted" }),
+        ...(wait ? [v2(id, "clarifying_question_asked", { ts: TS(100_500), actor_type: "lead", actor_id: "main", span_id: "lw-1", parent_span_id: "lp-1", prompt_hash: "lq", redaction: "omitted" })] : []),
+        v2(id, "tool_call_started", { ts: TS(100_000 + elapsed), actor_type: "tool", actor_id: "Bash", span_id: "la-1", parent_span_id: "lp-1" }),
+      ]);
+    },
+    observe: (a) => { const d = diag(a, "prompt_action_latency"); return { state: d.state, long: d.value["long_latency"], pairs: d.value["pairs"], waits: d.value["excluded_waits"], malformed: d.value["malformed"] }; },
+    expected,
+  })),
+  // workflow_churn
+  ...([
+    ["churn-required-phase-missing-without-cursor-unknown", "unobservable", null, { skipped: [], unconfirmed: ["review"], dimension: "unobservable", findings: [], recommendations: [] }],
+    ["churn-required-phase-skipped-frozen-cursor", "positive", [["execute"], []], { skipped: ["review"], unconfirmed: [], dimension: "observed", findings: ["workflow_churn:skipped-phase:review"], recommendations: ["project:update_workflow"] }],
+    ["churn-required-phase-explicit-bypass", "positive", [["execute", "review"], ["review"]], { skipped: ["review"], unconfirmed: [], dimension: "observed", findings: ["workflow_churn:skipped-phase:review"], recommendations: ["project:update_workflow"] }],
+    ["churn-cursor-visited-without-entry-telemetry-not-skipped", "negative", [["execute", "review"], []], { skipped: [], unconfirmed: ["review"], dimension: "observed", findings: [], recommendations: [] }],
+  ] as const).map(([name, kind, cursor, expected]): DetectorGolden => ({
+    name, row: "workflow_churn", kind,
+    build: (root, id) => { seedGoldenRun(root, id); declare(root, id, { phases: ["execute", "review"] }); if (cursor) phaseCursor(root, id, [...cursor[0]], [...cursor[1]]); },
+    observe: (a) => { const d = diag(a, "workflow_churn").value; return { skipped: d["skipped_required_phases"], unconfirmed: d["unconfirmed_missing_phases"], dimension: (d["dimension_states"] as Record<string, string>)["skipped_phases"], ...kinds(a) }; },
+    expected,
+  })),
+  ...([
+    ["churn-stale-phase-concluded-cursor-before-closure-not-skipped", "phase_concluded"],
+    ["churn-superseded-close-cursor-not-skipped", "run_closed"],
+  ] as const).map(([name, carrier]): DetectorGolden => ({
+    name, row: "workflow_churn", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); declare(root, id, { phases: ["execute", "review"] }); staleCursor(root, id, ["execute"], carrier); },
+    observe: (a) => { const d = diag(a, "workflow_churn").value; return { skipped: d["skipped_required_phases"], unconfirmed: d["unconfirmed_missing_phases"], dimension: (d["dimension_states"] as Record<string, string>)["skipped_phases"], ...kinds(a) }; },
+    expected: { skipped: [], unconfirmed: ["review"], dimension: "unobservable", findings: [], recommendations: [] },
+  })),
+  { name: "churn-loop-cap-hit", row: "workflow_churn", kind: "positive",
+    build: V1_BASELINE_SCENARIOS["v1-loop-cap-hit"], observe: (a) => ({ caps: diag(a, "workflow_churn").value["cap_hits"], ...kinds(a) }),
+    expected: { caps: 1, findings: ["workflow_churn:loop:L3"], recommendations: ["project:update_workflow"] } },
+  { name: "churn-phase-reentered-twice", row: "workflow_churn", kind: "positive",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, ["phase_entered", "phase_concluded", "phase_entered", "phase_concluded", "phase_entered"].map((cls, n) => v2(id, cls, { span_id: `ph-${Math.floor(n / 2)}`, phase: "review" }))); },
+    observe: (a) => ({ reentries: diag(a, "workflow_churn").value["phase_reentries"], loops: diag(a, "workflow_churn").value["repeated_phase_loops"], ...kinds(a) }),
+    expected: { reentries: { review: 2 }, loops: ["review"], findings: [], recommendations: [] } },
+  { name: "churn-single-visit-and-authorized-iteration", row: "workflow_churn", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [1, 2].map((n) => v2(id, "loop_iteration", { span_id: `it-${n}`, signature: "loop:L3" }))); },
+    observe: (a) => ({ ...diag(a, "workflow_churn").value, dimension_states: undefined, ...kinds(a) }),
+    expected: { cap_hits: 0, phase_reentries: {}, repeated_phase_loops: [], skipped_required_phases: [], unconfirmed_missing_phases: [], repeated_proposals: [], dimension_states: undefined, findings: [], recommendations: [] } },
+  { name: "churn-repeated-proposal-unchanged-input", row: "workflow_churn", kind: "positive",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [1, 2].map((n) => v2(id, "recommendation_created", { span_id: `rc-${n}`, signature: "proposal:x" }))); },
+    observe: (a) => diag(a, "workflow_churn").value["repeated_proposals"], expected: ["proposal:x"] },
+  { name: "churn-changed-input-invalidates-proposal", row: "workflow_churn", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [v2(id, "recommendation_created", { span_id: "rc-1", signature: "proposal:x" }), v2(id, "prompt_received", { actor_type: "user", actor_id: "operator", span_id: "p-new", prompt_hash: "new", redaction: "omitted" }), v2(id, "recommendation_created", { span_id: "rc-2", signature: "proposal:x" })]); },
+    observe: (a) => diag(a, "workflow_churn").value["repeated_proposals"], expected: [] },
+  { name: "churn-missing-phase-loop-evidence-unobservable", row: "workflow_churn", kind: "unobservable",
+    build: (root, id) => { seedGoldenRun(root, id, { events: defaultEvents(id).filter((event) => !["phase_start", "loop_round_start"].includes(String(event["event"]))) }); },
+    observe: (a) => ({ state: diag(a, "workflow_churn").state, reason: diag(a, "workflow_churn").reason }),
+    expected: { state: "unobservable", reason: "missing_phase_loop_or_proposal_evidence" } },
+  // knowledge_memory
+  ...([
+    ["knowledge-hit-consumed-by-passing-verifier", "positive", true, { state: "observed", reason: null, hits: 1, use_links: 1 }],
+    ["knowledge-hit-without-consumption-ambiguous", "negative", false, { state: "ambiguous", reason: "no_result_consumption_link", hits: 1, use_links: 0 }],
+  ] as const).map(([name, kind, consumed, expected]): DetectorGolden => ({
+    name, row: "knowledge_memory", kind,
+    build: (root, id) => {
+      seedGoldenRun(root, id);
+      declare(root, id, { instructions: twoInstructions.slice(0, 1) });
+      const resultRef = writeRunFile(root, id, "knowledge/result-1.md", "wiki page excerpt\n");
+      writeRunFile(root, id, "sidecars/lookup-1.json", { schema_version: "guild.lookup_result.v1", run_id: id, outcome: "hit", result_ref: resultRef });
+      appendRows(root, id, [v2(id, "knowledge_lookup_started", { span_id: "kl-1", prompt_hash: "kq" }), v2(id, "knowledge_lookup_result", { span_id: "kl-1", prompt_hash: "kq", payload_ref: "sidecars/lookup-1.json" })]);
+      prove(root, id, { id: "no-push", result: "passed", verifierStatus: "ok", evidenceRefs: consumed ? [resultRef] : [`.guild/runs/${id}/run.yaml`] });
+    },
+    observe: (a) => { const d = diag(a, "knowledge_memory"); const k = d.value["knowledge"] as Record<string, number>; return { state: d.state, reason: d.reason, hits: k["hits"], use_links: k["use_links"] }; },
+    expected,
+  })),
+  { name: "knowledge-lookup-without-typed-outcome", row: "knowledge_memory", kind: "unobservable",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [v2(id, "knowledge_lookup_result", { span_id: "kl-1", prompt_hash: "kq" })]); },
+    observe: (a) => ({ state: diag(a, "knowledge_memory").state, reason: diag(a, "knowledge_memory").reason }), expected: { state: "unobservable", reason: "no_typed_lookup_outcome" } },
+  { name: "knowledge-no-lookup-unobservable", row: "knowledge_memory", kind: "unobservable",
+    build: (root, id) => { seedGoldenRun(root, id); }, observe: (a) => ({ state: diag(a, "knowledge_memory").state, reason: diag(a, "knowledge_memory").reason }), expected: { state: "unobservable", reason: "no_lookup_evidence" } },
+  // tool_coverage (missing tool versus permission denial)
+  ...([
+    ["tool-gap-project-two-workarounds", "positive", "project", "skill", "deploy-recipe", 2, ["repeated_failure:tool:Bash:deploy", "tool_gap:tool-gap:project:skill:deploy-recipe"], ["project:clarify_prompt_contract", "project:create_skill"]],
+    ["tool-gap-plugin-behavior-two-attempts", "positive", "plugin", "plugin_behavior", "trace-query", 2, ["repeated_failure:tool:Bash:deploy", "tool_gap:tool-gap:plugin:plugin_behavior:trace-query"], ["plugin:tooling_gap", "project:clarify_prompt_contract"]],
+    ["tool-capability-evidence-single-attempt", "boundary", "project", "skill", "deploy-recipe", 1, [], []],
+  ] as const).map(([name, kind, owner, capability, target, attempts, findings, recommendations]): DetectorGolden => ({
+    name, row: "tool_coverage", kind,
+    build: (root, id) => {
+      seedGoldenRun(root, id);
+      capabilityEvidence(root, id, "sidecars/cap-1.json", { action_signature: "tool:Bash:deploy", owner, capability_kind: capability, target });
+      appendRows(root, id, Array.from({ length: attempts }, (_, n) => failedTool(id, `d-${n}`, { signature: "tool:Bash:deploy", ...(n === 0 ? { payload_ref: "sidecars/cap-1.json" } : {}) })));
+    },
+    observe: (a) => { const d = diag(a, "tool_coverage"); return { gap_cause: d.value["gap_cause"], candidates: (d.value["gap_candidates"] as unknown[]).length, ...kinds(a) }; },
+    expected: { gap_cause: attempts >= 2 ? "observed" : "unobservable", candidates: attempts >= 2 ? 1 : 0, findings: attempts >= 2 ? [...findings] : [], recommendations: attempts >= 2 ? [...recommendations] : [] },
+  })),
+  { name: "tool-single-policy-denial-no-missing-skill", row: "tool_coverage", kind: "negative",
+    build: V1_BASELINE_SCENARIOS["v1-policy-denial"], observe: (a) => { const d = toolView(a); return { state: d.state, denials: d.value["denials"], gap_cause: d.value["gap_cause"], findings: d.findings, recommendations: d.recommendations }; },
+    expected: { state: "observed", denials: { policy: 1, user: 0, host_unavailable: 0, capability_absent: 0 }, gap_cause: "unobservable", findings: [], recommendations: [] } },
+  { name: "tool-capability-absent-denials-without-ownership", row: "tool_coverage", kind: "unobservable",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [1, 2].map((n) => v2(id, "tool_call_denied", { actor_type: "tool", actor_id: "Skill", status: "denied", span_id: `cd-${n}`, signature: "capability_absent:Skill:deploy" }))); },
+    observe: (a) => { const d = toolView(a); return { denials: (d.value["denials"] as Record<string, number>)["capability_absent"], gap_cause: d.value["gap_cause"], findings: d.findings, recommendations: d.recommendations }; },
+    expected: { denials: 2, gap_cause: "unobservable", findings: [], recommendations: [] } },
+  { name: "tool-duplicate-mirror-counts-once", row: "tool_coverage", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [
+      { ts: "2026-08-12T01:00:07.000Z", event: "tool_call", run_id: id, lane_id: "lane-a", tool: "Bash", command_redacted: "deploy", result_excerpt_redacted: "exit 1", status: "err", latency_ms: 5, span_id: "m-1" },
+      failedTool(id, "m-1", { signature: "tool:Bash:deploy", payload_ref: "sidecars/cap-1.json" })]);
+      capabilityEvidence(root, id, "sidecars/cap-1.json", { action_signature: "tool:Bash:deploy", owner: "project", capability_kind: "skill", target: "deploy-recipe" }); },
+    observe: (a) => { const d = toolView(a); return { actions: d.value["actions"], outcomes: d.value["outcomes"], findings: d.findings }; },
+    expected: { actions: 2, outcomes: { ok: 1, failed: 1, denied: 0, started_only: 0 }, findings: [] } },
+  // outcome_quality
+  ...([
+    ["outcome-bound-failed-verify-reopened-residual", "positive", "error", "failed", sha(ASSESSED_INPUT), true, { state: "observed", verify: "failed", reopened: true, residual_count: 2 }],
+    ["outcome-passed-verify-at-old-input-hash", "negative", "ok", "passed", sha("old inputs"), true, { state: "ambiguous", verify: "unknown", reopened: null, residual_count: null }],
+    ["outcome-incomplete-finding-list-no-zero-residual", "negative", "error", "failed", sha(ASSESSED_INPUT), false, { state: "observed", verify: "failed", reopened: true, residual_count: null }],
+  ] as const).map(([name, kind, gateStatus, resultValue, hash, complete, expected]): DetectorGolden => ({
+    name, row: "outcome_quality", kind,
+    build: (root, id) => {
+      seedGoldenRun(root, id); declare(root, id);
+      writeRunFile(root, id, "sidecars/verify.json", { schema_version: "guild.outcome_record.v1", run_id: id, kind: "verify", result: resultValue, verified_input_hash: hash, reopen_transitions: 1, findings_complete: complete, unresolved_finding_ids: ["F-1", "F-2"] });
+      appendRows(root, id, [v2(id, "gate_concluded", { actor_type: "lead", actor_id: "main", status: gateStatus, span_id: "verify-1", signature: "gate:verify-done", payload_ref: "sidecars/verify.json" })]);
+    },
+    observe: (a) => { const d = diag(a, "outcome_quality"); return { state: d.state, verify: d.value["verify"], reopened: d.value["reopened"], residual_count: d.value["residual_count"] }; },
+    expected,
+  })),
+  { name: "outcome-no-typed-records-unobservable", row: "outcome_quality", kind: "unobservable",
+    build: (root, id) => { seedGoldenRun(root, id); }, observe: (a) => ({ ...diag(a, "outcome_quality"), value: undefined }), expected: { state: "unobservable", reason: "no_typed_outcome_records", value: undefined } },
+  // recommendation_scope (both scopes)
+  { name: "scope-plugin-invariant-bug-report", row: "recommendation_scope", kind: "positive",
+    build: (root, id) => { seedGoldenRun(root, id); capabilityEvidence(root, id, "sidecars/inv.json", { action_signature: "tool:Bash:trace", owner: "plugin", capability_kind: "plugin_invariant", target: "trace-span-pairing" }); appendRows(root, id, [failedTool(id, "inv-1", { signature: "tool:Bash:trace", payload_ref: "sidecars/inv.json" }), failedTool(id, "inv-2", { signature: "tool:Bash:trace" })]); },
+    observe: (a) => ({ ...diag(a, "recommendation_scope"), ...kinds(a), routing: a.recommendations.map((item) => item.next_action) }),
+    expected: { state: "observed", reason: null, value: { supported: [{ scope: "plugin", kind: "bug_report", target: "trace-span-pairing" }], unowned_failed_actions: 0 }, findings: ["repeated_failure:tool:Bash:trace"], recommendations: ["plugin:bug_report", "project:clarify_prompt_contract"], routing: ["ask_user_before_filing", "queue_proposal_only"] } },
+  { name: "scope-plugin-invariant-single-attempt-no-bug-report", row: "recommendation_scope", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); capabilityEvidence(root, id, "sidecars/inv.json", { action_signature: "tool:Bash:trace", owner: "plugin", capability_kind: "plugin_invariant", target: "trace-span-pairing" }); appendRows(root, id, [failedTool(id, "inv-1", { signature: "tool:Bash:trace", payload_ref: "sidecars/inv.json" })]); },
+    observe: (a) => ({ ...diag(a, "recommendation_scope"), ...kinds(a) }),
+    expected: { state: "ambiguous", reason: "unowned_action_failure", value: { supported: [], unowned_failed_actions: 1 }, findings: [], recommendations: [] } },
+  { name: "scope-project-recipe-gap-create-skill", row: "recommendation_scope", kind: "positive",
+    build: (root, id) => { seedGoldenRun(root, id); capabilityEvidence(root, id, "sidecars/cap-1.json", { action_signature: "tool:Bash:deploy", owner: "project", capability_kind: "skill", target: "deploy-recipe" }); appendRows(root, id, [failedTool(id, "d-0", { signature: "tool:Bash:deploy", payload_ref: "sidecars/cap-1.json" }), failedTool(id, "d-1", { signature: "tool:Bash:deploy" })]); },
+    observe: (a) => ({ supported: diag(a, "recommendation_scope").value["supported"], routing: a.recommendations.filter((item) => item.kind === "create_skill").map((item) => item.next_action) }),
+    expected: { supported: [{ scope: "project", kind: "create_skill", target: "deploy-recipe" }], routing: ["queue_proposal_only"] } },
+  { name: "scope-permission-refusal-no-recommendation", row: "recommendation_scope", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [v2(id, "tool_call_denied", { actor_type: "tool", actor_id: "Write", status: "denied", span_id: "u-1", signature: "user:Write" })]); },
+    observe: (a) => ({ ...diag(a, "recommendation_scope"), ...kinds(a) }),
+    expected: { state: "unobservable", reason: "no_ownership_evidence", value: { supported: [], unowned_failed_actions: 0 }, findings: [], recommendations: [] } },
+  { name: "scope-unowned-failure-ambiguous-routing", row: "recommendation_scope", kind: "unobservable",
+    build: (root, id) => { seedGoldenRun(root, id); appendRows(root, id, [failedTool(id, "x-1", { signature: "tool:Bash:x" })]); },
+    observe: (a) => ({ ...diag(a, "recommendation_scope"), ...kinds(a) }),
+    expected: { state: "ambiguous", reason: "unowned_action_failure", value: { supported: [], unowned_failed_actions: 1 }, findings: [], recommendations: [] } },
+  // usage_outlier single-run state
+  { name: "usage-outlier-single-run-needs-cohort", row: "usage_outlier", kind: "unobservable",
+    build: (root, id) => { seedGoldenRun(root, id); }, observe: (a) => diag(a, "usage_outlier"),
+    expected: { state: "unobservable", reason: "requires_comparison_cohort", value: { availability: { input: "complete", output: "complete", cached: "unobserved", cost_usd: "unobserved", duration_ms: "complete" } } } },
+  { name: "usage-explicit-zero-differs-from-unobserved", row: "usage_outlier", kind: "negative",
+    build: (root, id) => { seedGoldenRun(root, id, { events: usageEvents(id, 0) }); },
+    observe: (a) => ({ cost: a.usage.tokens.cost_usd, cost_state: a.usage.availability!.cost_usd.state, cost_refs: a.usage.availability!.cost_usd.evidence_refs.length, cached_state: a.usage.availability!.cached.state }),
+    expected: { cost: 0, cost_state: "complete", cost_refs: 1, cached_state: "complete" } },
+];
+
+describe("B02 — C-DETECTORS single-run goldens", () => {
+  let root: string;
+  beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-b02-")); });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  for (const golden of DETECTOR_GOLDENS) {
+    it(`[${golden.row}] ${golden.name}`, () => {
+      golden.build(root, R);
+      const analysis = analyzeRun(root, R);
+      const observed = golden.observe(analysis);
+      matrixObservations.push({ row: golden.row, fixture: golden.name, kind: golden.kind, observed });
+      expect(observed).toEqual(golden.expected);
+      expect(analyzeRun(root, R)).toEqual(analysis);
+    });
+  }
+
+  it("[v1] v1-baseline-cores-match-pre-b02-analyzer", () => {
+    const observed: Record<string, string> = {};
+    for (const [name, build] of Object.entries(V1_BASELINE_SCENARIOS)) {
+      const scenarioRoot = fs.mkdtempSync(path.join(os.tmpdir(), "guild-b02-v1-"));
+      try {
+        build(scenarioRoot, R);
+        const core = coreProjection(analyzeRun(scenarioRoot, R));
+        const golden = (V1_BASELINE as { scenarios: Record<string, unknown>; intentional_changes: Record<string, { expected: unknown }> });
+        expect(core).toEqual(golden.scenarios[name] ?? golden.intentional_changes[name].expected);
+        observed[name] = name in golden.scenarios ? "identical_to_pre_b02" : "intentional_change";
+      } finally {
+        fs.rmSync(scenarioRoot, { recursive: true, force: true });
+      }
+    }
+    matrixObservations.push({ row: "v1_core", fixture: "v1-baseline-cores-match-pre-b02-analyzer", kind: "baseline", observed });
+  });
+
+  it("[sidecar] cross-run, escaping, missing and wrong-carrier sidecars never become proof", () => {
+    seedGoldenRun(root, R);
+    declare(root, R, { instructions: twoInstructions.slice(0, 1) });
+    const proof = prove(root, R, { id: "no-push", result: "passed", verifierStatus: "ok" });
+    const file = path.join(root, proof.proofRef);
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(`"run_id":"${R}"`, `"run_id":"run-20260812-020000-beta"`));
+    appendRows(root, R, [
+      v2(R, "gate_concluded", { actor_type: "lead", actor_id: "main", span_id: "g-esc", signature: "gate:x", payload_ref: "../../../etc/passwd" }),
+      v2(R, "gate_concluded", { actor_type: "lead", actor_id: "main", span_id: "g-miss", signature: "gate:y", payload_ref: "sidecars/absent.json" }),
+      v2(R, "tool_call_finished", { actor_type: "tool", actor_id: "Bash", span_id: "g-wrong", duration_ms: 1, payload_ref: "sidecars/declaration.json" }),
+    ]);
+    const analysis = analyzeRun(root, R);
+    const statuses = Object.fromEntries(analysis.diagnostics!.input_manifest.map((entry) => [entry.ref.replace(`.guild/runs/${R}/`, ""), entry.status]));
+    const observed = { statuses, aggregate: instructionView(analysis).aggregate, checks: instructionView(analysis).checks };
+    matrixObservations.push({ row: "sidecar_controls", fixture: "sidecar-cross-run-escape-missing-refused", kind: "refusal", observed });
+    expect(Object.values(statuses).sort()).toEqual(["consumed", "consumed", "missing", "rejected", "rejected"]);
+    expect(statuses[proof.proofRef.replace(`.guild/runs/${R}/`, "")]).toBe("rejected");
+    expect(statuses["sidecars/absent.json"]).toBe("missing");
+    expect(observed.checks).toEqual(["no-push:unobservable"]);
+    expect(observed.aggregate).toBe("ambiguous");
+  });
+
+  it("[sidecar] symlinked sidecar file and symlinked sidecars dir are rejected", () => {
+    seedGoldenRun(root, R);
+    declare(root, R, { instructions: twoInstructions.slice(0, 1) });
+    const proof = prove(root, R, { id: "no-push", result: "passed", verifierStatus: "ok" });
+    const runDir = path.join(root, ".guild", "runs", R);
+    const proofFile = path.join(root, proof.proofRef);
+    fs.renameSync(proofFile, path.join(runDir, "inputs", "proof-target.json"));
+    fs.symlinkSync(path.join(runDir, "inputs", "proof-target.json"), proofFile);
+    const fileLink = analyzeRun(root, R);
+    fs.renameSync(path.join(runDir, "sidecars"), path.join(runDir, "sidecars-real"));
+    fs.symlinkSync(path.join(runDir, "sidecars-real"), path.join(runDir, "sidecars"));
+    const dirLink = analyzeRun(root, R);
+    const status = (analysis: RunAnalysis, ref: string) => analysis.diagnostics!.input_manifest.find((entry) => entry.ref === ref)?.status;
+    const observed = {
+      file_link: { proof: status(fileLink, proof.proofRef), checks: instructionView(fileLink).checks },
+      dir_link: { proof: status(dirLink, proof.proofRef), declaration: status(dirLink, `.guild/runs/${R}/sidecars/declaration.json`), reason: instructionView(dirLink).reason },
+    };
+    matrixObservations.push({ row: "sidecar_controls", fixture: "sidecar-symlinked-file-and-dir-rejected", kind: "refusal", observed });
+    expect(observed).toEqual({
+      file_link: { proof: "rejected", checks: ["no-push:unobservable"] },
+      dir_link: { proof: "rejected", declaration: "rejected", reason: "no_instruction_declaration" },
+    });
+  });
+
+  it("[sidecar] removing a required event keeps the skipped-phase claim unobservable", () => {
+    seedGoldenRun(root, R, { events: defaultEvents(R).filter((event) => event["event_name"] !== "run_closed") });
+    declare(root, R, { phases: ["review"] });
+    const analysis = analyzeRun(root, R);
+    const observed = { eligible: analysis.eligible, missing: analysis.completeness.missing, skipped: diag(analysis, "workflow_churn").value["skipped_required_phases"], findings: kinds(analysis).findings };
+    matrixObservations.push({ row: "workflow_churn", fixture: "churn-removed-run-closed-no-skip-claim", kind: "refusal", observed });
+    expect(observed).toEqual({ eligible: false, missing: ["close"], skipped: [], findings: ["telemetry_gap:missing:close"] });
+  });
+});
+
+describe("B02 — comparison goldens, determinism and cache freshness", () => {
+  let root: string;
+  beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-b02-cmp-")); });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+  const ids = (n: number) => Array.from({ length: n }, (_, index) => `run-20260812-0${index + 1}0000-c${index}`);
+  const dimension = (comparison: ReturnType<typeof compareRuns>, detector: DetectorId) => comparison.diagnostics!.dimensions.find((item) => item.detector === detector)!;
+  const outlier = (costs: number[], provenance: Record<string, unknown> = { model: "claude-opus-5-5", provider: "anthropic" }) => {
+    const runs = ids(costs.length);
+    runs.forEach((id, index) => seedGoldenRun(root, id, { events: usageEvents(id, costs[index]), provenance }));
+    const value = dimension(compareRuns(runs.map((id) => analyzeRun(root, id))), "usage_outlier");
+    const cost = (value.value["metrics"] as Record<string, { state: string; reason: string | null; cohorts: Array<{ median: number; outliers: string[] | null }> }>)["cost_usd"];
+    return { state: cost.state, reason: cost.reason, cohorts: cost.cohorts.map((cohort) => ({ median: cohort.median, outliers: cohort.outliers?.map((id) => runs.indexOf(id)) ?? null })) };
+  };
+  const record = (fixture: string, kind: GoldenKind, observed: unknown, row = "comparison") => matrixObservations.push({ row, fixture, kind, observed });
+
+  it("[usage_outlier] usage-outlier-five-complete-costs", () => {
+    const observed = outlier([1, 1, 1, 1, 3]);
+    record("usage-outlier-five-complete-costs", "positive", observed, "usage_outlier");
+    expect(observed).toEqual({ state: "observed", reason: null, cohorts: [{ median: 1, outliers: [4] }] });
+  });
+
+  it("[usage_outlier] usage-outlier-equal-two-x-median-not-outlier", () => {
+    const observed = outlier([1, 1, 1, 1, 2]);
+    record("usage-outlier-equal-two-x-median-not-outlier", "boundary", observed, "usage_outlier");
+    expect(observed).toEqual({ state: "observed", reason: null, cohorts: [{ median: 1, outliers: [] }] });
+  });
+
+  it("[usage_outlier] usage-outlier-four-runs-unobservable", () => {
+    const observed = outlier([1, 1, 1, 3]);
+    record("usage-outlier-four-runs-unobservable", "unobservable", observed, "usage_outlier");
+    expect(observed).toEqual({ state: "unobservable", reason: "insufficient_comparable_cohort", cohorts: [] });
+  });
+
+  it("[usage_outlier] usage-outlier-unknown-model-unobservable", () => {
+    const observed = outlier([1, 1, 1, 1, 3], {});
+    record("usage-outlier-unknown-model-unobservable", "unobservable", observed, "usage_outlier");
+    expect(observed).toEqual({ state: "unobservable", reason: "insufficient_comparable_cohort", cohorts: [] });
+  });
+
+  it("[usage_outlier] usage-outlier-zero-median-unobservable", () => {
+    const observed = outlier([0, 0, 0, 1, 3]);
+    record("usage-outlier-zero-median-unobservable", "unobservable", observed, "usage_outlier");
+    expect(observed).toEqual({ state: "unobservable", reason: "zero_median", cohorts: [{ median: 0, outliers: null }] });
+  });
+
+  it("[comparison] compare-two-runs-all-dimensions-present", () => {
+    const [a, b] = ids(2);
+    seedGoldenRun(root, a); seedGoldenRun(root, b);
+    const comparison = compareRuns([analyzeRun(root, a), analyzeRun(root, b)]);
+    const observed = {
+      dimensions: comparison.diagnostics!.dimensions.map((item) => `${item.detector}:${item.state}`),
+      runs: comparison.diagnostics!.runs.map((item) => [item.run_id === a ? "a" : "b", item.input_hash !== null, item.eligible]),
+    };
+    record("compare-two-runs-all-dimensions-present", "positive", observed);
+    expect(observed.dimensions).toEqual([
+      "clarification:unobservable", "instruction_following:ambiguous", "knowledge_memory:unobservable", "outcome_quality:unobservable",
+      "prompt_action_latency:unobservable", "recommendation_scope:unobservable", "redundant_prompt:unobservable", "repeated_mistake:unobservable",
+      "steering:unobservable", "tool_coverage:observed", "usage_outlier:unobservable", "workflow_churn:observed",
+    ]);
+    expect(observed.runs).toEqual([["a", true, true], ["b", true, true]]);
+  });
+
+  it("[comparison] compare-n-runs-new-repeated-error-run-changes-cluster-shuffle-does-not", () => {
+    const runs = ids(3);
+    runs.forEach((id) => seedGoldenRun(root, id));
+    const repeat = (id: string) => appendRows(root, id, [failedTool(id, "f-1", { signature: "tool:Bash:abc" }), failedTool(id, "f-2", { signature: "tool:Bash:abc" })]);
+    repeat(runs[0]); repeat(runs[1]);
+    const clusters = (comparison: ReturnType<typeof compareRuns>) => dimension(comparison, "repeated_mistake").value["cross_run_clusters"];
+    const before = compareRuns(runs.map((id) => analyzeRun(root, id)));
+    const shuffled = compareRuns([...runs].reverse().map((id) => analyzeRun(root, id)));
+    repeat(runs[2]);
+    const after = compareRuns(runs.map((id) => analyzeRun(root, id)));
+    const observed = { before: clusters(before), after: clusters(after), shuffle_equal: canonical(before) === canonical(shuffled), v1_repeated: before.repeated_signatures };
+    record("compare-n-runs-new-repeated-error-run-changes-cluster-shuffle-does-not", "determinism", observed);
+    expect(observed.before).toEqual([{ signature: "tool:Bash:abc", runs: [runs[0], runs[1]], occurrences: 4, phases: ["-"] }]);
+    expect(observed.after).toEqual([{ signature: "tool:Bash:abc", runs, occurrences: 6, phases: ["-"] }]);
+    expect(observed.shuffle_equal).toBe(true);
+    expect(before.repeated_signatures).toEqual([{ signature: "tool:Bash:abc", runs: [runs[0], runs[1]], occurrences: 2 }]);
+  });
+
+  it("[comparison] compare-initiative-and-independent-targets", () => {
+    const runs = ids(4);
+    seedGoldenRun(root, runs[0], { initiative: "alpha" }); seedGoldenRun(root, runs[1], { initiative: "alpha" });
+    seedGoldenRun(root, runs[2], { scope: "independent", group: "research" }); seedGoldenRun(root, runs[3], { scope: "independent", group: "research" });
+    const initiative = compareRuns(resolveComparisonTarget(root, { kind: "initiative", id: "alpha" }));
+    const independent = compareRuns(resolveComparisonTarget(root, { kind: "independent", id: "research" }));
+    const observed = { initiative: initiative.diagnostics!.runs.map((item) => item.run_id), independent: independent.diagnostics!.runs.map((item) => item.run_id), dimensions: [initiative, independent].map((item) => item.diagnostics!.dimensions.length) };
+    record("compare-initiative-and-independent-targets", "positive", observed);
+    expect(observed).toEqual({ initiative: runs.slice(0, 2), independent: runs.slice(2), dimensions: [12, 12] });
+  });
+
+  it("[comparison] compare-zero-eligible-runs-unobservable", () => {
+    const runs = ids(2);
+    runs.forEach((id) => seedGoldenRun(root, id, { withConfig: false }));
+    const comparison = compareRuns(runs.map((id) => analyzeRun(root, id)));
+    const observed = sortedReasons(comparison);
+    record("compare-zero-eligible-runs-unobservable", "unobservable", observed);
+    expect(observed).toEqual(Object.fromEntries(DETECTOR_IDS.map((id) => [id, id === "usage_outlier" ? "unobservable:insufficient_comparable_cohort" : "unobservable:no_eligible_runs"])));
+  });
+
+  it("[comparison] compare-incomparable-declared-instruction-scopes", () => {
+    const runs = ids(2);
+    runs.forEach((id, index) => {
+      seedGoldenRun(root, id);
+      declare(root, id, { instructions: [twoInstructions[index]] });
+      prove(root, id, { id: twoInstructions[index].instruction_id, result: "passed", verifierStatus: "ok" });
+    });
+    const value = dimension(compareRuns(runs.map((id) => analyzeRun(root, id))), "instruction_following");
+    const observed = { state: value.state, reason: value.reason, satisfied: (value.value["by_aggregate"] as Record<string, string[]>)["satisfied"].length };
+    record("compare-incomparable-declared-instruction-scopes", "negative", observed, "instruction_following");
+    expect(observed).toEqual({ state: "ambiguous", reason: "incomparable_declared_scopes", satisfied: 2 });
+  });
+
+  it("[comparison] compare-recommendation-kind-cluster-across-runs", () => {
+    const runs = ids(2);
+    for (const id of runs) {
+      seedGoldenRun(root, id);
+      capabilityEvidence(root, id, "sidecars/cap-1.json", { action_signature: "tool:Bash:deploy", owner: "project", capability_kind: "skill", target: "deploy-recipe" });
+      appendRows(root, id, [failedTool(id, "d-0", { signature: "tool:Bash:deploy", payload_ref: "sidecars/cap-1.json" }), failedTool(id, "d-1", { signature: "tool:Bash:deploy" })]);
+    }
+    const comparison = compareRuns(runs.map((id) => analyzeRun(root, id)));
+    record("compare-recommendation-kind-cluster-across-runs", "positive", comparison.diagnostics!.recommendation_clusters, "recommendation_scope");
+    expect(comparison.diagnostics!.recommendation_clusters).toEqual([{ scope: "project", kind: "create_skill", target: "deploy-recipe", runs }]);
+  });
+
+  it("[comparison] compare-legacy-artifact-usage-unknown", () => {
+    const runs = ids(2);
+    runs.forEach((id) => seedGoldenRun(root, id));
+    const [a, b] = runs.map((id) => analyzeRun(root, id));
+    const legacy = { ...b, usage: { ...b.usage, availability: undefined }, diagnostics: undefined } as RunAnalysis;
+    const comparison = compareRuns([a, legacy]);
+    const cost = (dimension(comparison, "usage_outlier").value["metrics"] as Record<string, { unknown: string[] }>)["input"].unknown;
+    const observed = { unknown: cost, legacy_state: dimension(comparison, "steering").by_run[b.run_id].state, legacy_input_hash: comparison.diagnostics!.runs[1].input_hash };
+    record("compare-legacy-artifact-usage-unknown", "unobservable", observed, "usage_outlier");
+    expect(observed).toEqual({ unknown: [b.run_id], legacy_state: "legacy_unknown", legacy_input_hash: null });
+  });
+
+  it("[cache] cache-hit-and-invalidation-by-every-consumed-input", () => {
+    const observed: Record<string, string> = {};
+    const prepare = () => {
+      fs.rmSync(path.join(root, ".guild"), { recursive: true, force: true });
+      seedGoldenRun(root, R);
+      declare(root, R, { instructions: twoInstructions.slice(0, 1) });
+      prove(root, R, { id: "no-push", result: "passed", verifierStatus: "ok" });
+      writeRunAnalysis(root, analyzeRun(root, R));
+    };
+    const runFile = (relative: string) => path.join(root, ".guild", "runs", R, relative);
+    const mutations: Record<string, () => void> = {
+      unchanged: () => undefined,
+      "event-byte": () => fs.appendFileSync(runFile("logs/v1.4-events.jsonl"), "\n"),
+      "run-yaml": () => fs.appendFileSync(runFile("run.yaml"), "# touched\n"),
+      config: () => fs.appendFileSync(runFile("plugin-config-snapshot.json"), " "),
+      provenance: () => fs.appendFileSync(runFile("provenance.json"), " "),
+      "sidecar-proof-byte": () => { const file = fs.readdirSync(runFile("sidecars")).find((name) => name.startsWith("proof-"))!; fs.appendFileSync(runFile(`sidecars/${file}`), " "); },
+      "assessed-input-byte": () => fs.appendFileSync(runFile("inputs/assessed.txt"), "x"),
+      "legacy-artifact": () => {
+        const file = path.join(root, ".guild", "analysis", "runs", R, "analysis.json");
+        const cached = JSON.parse(fs.readFileSync(file, "utf8"));
+        delete cached.diagnostics;
+        fs.writeFileSync(file, JSON.stringify(cached));
+      },
+      ...Object.fromEntries(["assessments", "usage", "completeness"].map((key) => [`truncated-${key}`, () => {
+        const file = path.join(root, ".guild", "analysis", "runs", R, "analysis.json");
+        const cached = JSON.parse(fs.readFileSync(file, "utf8"));
+        delete cached[key];
+        fs.writeFileSync(file, JSON.stringify(cached));
+      }])),
+      "malformed-usage-availability": () => {
+        const file = path.join(root, ".guild", "analysis", "runs", R, "analysis.json");
+        const cached = JSON.parse(fs.readFileSync(file, "utf8"));
+        delete cached.usage.availability.cost_usd;
+        fs.writeFileSync(file, JSON.stringify(cached));
+      },
+      "missing-identity": () => {
+        const file = path.join(root, ".guild", "analysis", "runs", R, "analysis.json");
+        const cached = JSON.parse(fs.readFileSync(file, "utf8"));
+        delete cached.identity;
+        fs.writeFileSync(file, JSON.stringify(cached));
+      },
+      "null-finding": () => {
+        const file = path.join(root, ".guild", "analysis", "runs", R, "analysis.json");
+        const cached = JSON.parse(fs.readFileSync(file, "utf8"));
+        cached.findings = [null];
+        fs.writeFileSync(file, JSON.stringify(cached));
+      },
+      "array-enum-run-scope": () => {
+        const file = path.join(root, ".guild", "analysis", "runs", R, "analysis.json");
+        const cached = JSON.parse(fs.readFileSync(file, "utf8"));
+        cached.identity.run_scope = ["independent"];
+        fs.writeFileSync(file, JSON.stringify(cached));
+      },
+      "array-enum-finding-kind-severity": () => {
+        const file = path.join(root, ".guild", "analysis", "runs", R, "analysis.json");
+        const cached = JSON.parse(fs.readFileSync(file, "utf8"));
+        cached.findings = [{ id: "f-1", kind: ["workflow_churn"], severity: ["medium"], summary: "x", evidence_refs: [], signature: "sig" }];
+        fs.writeFileSync(file, JSON.stringify(cached));
+      },
+      "array-enum-assessment-status": () => {
+        const file = path.join(root, ".guild", "analysis", "runs", R, "analysis.json");
+        const cached = JSON.parse(fs.readFileSync(file, "utf8"));
+        cached.assessments.workflow.status = ["unobservable"];
+        fs.writeFileSync(file, JSON.stringify(cached));
+      },
+      "array-enum-availability-state": () => {
+        const file = path.join(root, ".guild", "analysis", "runs", R, "analysis.json");
+        const cached = JSON.parse(fs.readFileSync(file, "utf8"));
+        const metric = Object.keys(cached.usage.availability)[0];
+        cached.usage.availability[metric].state = ["complete"];
+        fs.writeFileSync(file, JSON.stringify(cached));
+      },
+      "tampered-manifest": () => {
+        const file = path.join(root, ".guild", "analysis", "runs", R, "analysis.json");
+        const cached = JSON.parse(fs.readFileSync(file, "utf8"));
+        cached.diagnostics.input_manifest = [];
+        fs.writeFileSync(file, JSON.stringify(cached));
+      },
+    };
+    for (const [name, mutate] of Object.entries(mutations)) {
+      prepare();
+      mutate();
+      const loaded = loadOrAnalyzeRun(root, R);
+      observed[name] = `${loaded.cache}:${loaded.reason}`;
+      if (loaded.cache === "recomputed") expect(loaded.analysis).toEqual(analyzeRun(root, R));
+    }
+    record("cache-hit-and-invalidation-by-every-consumed-input", "freshness", observed, "cache");
+    expect(observed).toEqual({
+      unchanged: "hit:null", "event-byte": "recomputed:stale_source", "run-yaml": "recomputed:stale_source", config: "recomputed:stale_source",
+      provenance: "recomputed:stale_source", "sidecar-proof-byte": "recomputed:stale_inputs", "assessed-input-byte": "recomputed:stale_inputs",
+      "legacy-artifact": "recomputed:legacy_diagnostics", "tampered-manifest": "recomputed:malformed",
+      "truncated-assessments": "recomputed:malformed", "truncated-usage": "recomputed:malformed", "truncated-completeness": "recomputed:malformed",
+      "malformed-usage-availability": "recomputed:malformed", "missing-identity": "recomputed:malformed", "null-finding": "recomputed:malformed",
+      "array-enum-run-scope": "recomputed:malformed", "array-enum-finding-kind-severity": "recomputed:malformed",
+      "array-enum-assessment-status": "recomputed:malformed", "array-enum-availability-state": "recomputed:malformed",
+    });
+  });
+
+  it("[cache] verification-input-ref-differs-recomputes", () => {
+    seedGoldenRun(root, R);
+    declare(root, R, { instructions: twoInstructions.slice(0, 1) });
+    writeRunFile(root, R, "inputs/verify.txt", ASSESSED_INPUT);
+    prove(root, R, { id: "no-push", result: "passed", verifierStatus: "ok", verificationInputRef: "inputs/verify.txt" });
+    writeRunAnalysis(root, analyzeRun(root, R));
+    const loaded = loadOrAnalyzeRun(root, R);
+    const observed = { cache: `${loaded.cache}:${loaded.reason}`, aggregate: instructionView(loaded.analysis).aggregate };
+    record("cache-verification-input-ref-differs-recomputes", "freshness", observed, "cache");
+    expect(observed).toEqual({ cache: "recomputed:stale_inputs", aggregate: "satisfied" });
+    expect(loaded.analysis).toEqual(analyzeRun(root, R));
+  });
+
+  it("[determinism] same-id-reanalysis-and-input-mutation-freshness", () => {
+    seedGoldenRun(root, R);
+    declare(root, R, { instructions: twoInstructions.slice(0, 1) });
+    const { proofRef } = prove(root, R, { id: "no-push", result: "passed", verifierStatus: "ok" });
+    const first = analyzeRun(root, R);
+    const again = analyzeRun(root, R);
+    fs.appendFileSync(path.join(root, proofRef), " ");
+    const mutated = analyzeRun(root, R);
+    const observed = {
+      same_id_equal: canonical(first) === canonical(again),
+      source_hash_stable: mutated.source_hash === first.source_hash,
+      input_hash_changed: mutated.diagnostics!.input_hash !== first.diagnostics!.input_hash,
+      aggregate_before: instructionView(first).aggregate,
+      aggregate_after: instructionView(mutated).aggregate,
+    };
+    record("same-id-reanalysis-and-input-mutation-freshness", "freshness", observed, "determinism");
+    expect(observed).toEqual({ same_id_equal: true, source_hash_stable: true, input_hash_changed: true, aggregate_before: "satisfied", aggregate_after: "satisfied" });
+  });
+
+  afterAll(() => {
+    const out = process.env["B02_MATRIX_OUT"];
+    if (!out) return;
+    const rows = [...new Set(matrixObservations.map((item) => item.row))].sort();
+    fs.writeFileSync(out, JSON.stringify({
+      schema: "guild.b02.detector_fixture_matrix.v1",
+      test_file: "src/domains/telemetry/run-analysis.test.ts",
+      contract: "C-DETECTORS/v1",
+      rows: Object.fromEntries(rows.map((row) => [row, matrixObservations.filter((item) => item.row === row)
+        .map(({ fixture, kind, observed }) => ({ fixture, kind, observed }))])),
+    }, null, 2) + "\n");
+  });
+});
+
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, item) => item && typeof item === "object" && !Array.isArray(item)
+    ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
+}
+
+function sortedReasons(comparison: ReturnType<typeof compareRuns>): Record<string, string> {
+  return Object.fromEntries(comparison.diagnostics!.dimensions.map((item) => [item.detector, `${item.state}:${item.reason}`]));
+}
