@@ -26190,60 +26190,22 @@ function validateAnalysisTraceEvent(ev) {
       }
     }
   }
-  const eventClass = e["event_class"];
-  if (eventClass === "run_started" && e["run_scope"] === void 0) {
-    return { ok: false, reason: "run_started requires run_scope" };
-  }
-  if (eventClass === "run_attachment_resolved" && (e["run_scope"] === void 0 || e["signature"] === void 0)) {
-    return { ok: false, reason: "run_attachment_resolved requires run_scope and signature" };
-  }
-  if (eventClass === "config_snapshot_written" && e["config_snapshot_ref"] === void 0 && e["payload_ref"] === void 0) {
-    return { ok: false, reason: "config_snapshot_written requires config_snapshot_ref or payload_ref" };
-  }
-  const promptClasses = ["prompt_received", "prompt_normalized", "clarifying_question_asked", "agent_prompt_sent"];
-  if (promptClasses.includes(eventClass) && (e["prompt_hash"] === void 0 || e["redaction"] === void 0 || e["span_id"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires prompt_hash, redaction, and span_id` };
-  }
-  if ((eventClass.startsWith("knowledge_lookup_") || eventClass.startsWith("memory_lookup_")) && (e["span_id"] === void 0 || e["prompt_hash"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and prompt_hash` };
-  }
-  if (eventClass.startsWith("tool_call_") && e["span_id"] === void 0) {
-    return { ok: false, reason: `${eventClass} requires span_id` };
-  }
-  if (["tool_call_finished", "tool_call_failed"].includes(eventClass) && e["duration_ms"] === void 0) {
-    return { ok: false, reason: `${eventClass} requires duration_ms` };
-  }
-  if (["agent_dispatched", "agent_prompt_sent", "agent_handoff_written"].includes(eventClass) && (e["task_id"] === void 0 || e["span_id"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires task_id and span_id` };
-  }
-  if (eventClass === "agent_handoff_written" && e["payload_ref"] === void 0) {
-    return { ok: false, reason: "agent_handoff_written requires payload_ref" };
-  }
-  if (eventClass === "agent_response_received" && e["span_id"] === void 0) {
-    return { ok: false, reason: "agent_response_received requires span_id" };
-  }
-  if (eventClass.startsWith("loop_") && (e["span_id"] === void 0 || e["signature"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and signature` };
-  }
-  if (eventClass.startsWith("phase_") && (e["span_id"] === void 0 || e["phase"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and phase` };
-  }
-  if (eventClass.startsWith("gate_") && (e["span_id"] === void 0 || e["signature"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and signature` };
-  }
-  const evidenceClasses = [
-    "instruction_violation_detected",
-    "user_steering_received",
-    "correction_applied",
-    "repeated_failure_detected",
-    "recommendation_created",
-    "recommendation_routed",
-    "bug_report_prompted"
-  ];
-  if (evidenceClasses.includes(eventClass) && (e["span_id"] === void 0 || e["signature"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and signature` };
-  }
-  return { ok: true };
+  return ANALYSIS_CLASS_VALIDATORS[e["event_class"]](e);
+}
+function requireFields(e, eventClass) {
+  const missing = ANALYSIS_CLASS_REQUIREMENTS[eventClass].filter((key) => e[key] === void 0);
+  return missing.length === 0 ? { ok: true } : { ok: false, reason: `${eventClass} requires ${missing.join(", ")}` };
+}
+function classValidator(eventClass, extra) {
+  return (e) => {
+    const required = requireFields(e, eventClass);
+    if (!required.ok || !extra) return required;
+    const reason = extra(e);
+    return reason === null ? { ok: true } : { ok: false, reason: `${eventClass}: ${reason}` };
+  };
+}
+function toolDenialSignature(cause, tool, action) {
+  return [cause, tool, ...action ? [action] : []].join(":");
 }
 function validateGuildTraceEvent(ev) {
   if (typeof ev !== "object" || ev === null) {
@@ -26289,7 +26251,7 @@ function makeConfigResolutionEvent(fields) {
 function makeSecurityDecisionEvent(fields) {
   return { schema_version: "guild.trace.security_decision.v1", ...fields };
 }
-var ANALYSIS_EVENT_CLASSES, GUILD_TRACE_SCHEMA_VERSIONS, DISPATCH_BACKENDS, RECALL_BRANCHES, SECURITY_OUTCOMES, DEGRADATION_SURFACES, LANE_OUTCOMES;
+var ANALYSIS_EVENT_CLASSES, GUILD_TRACE_SCHEMA_VERSIONS, DISPATCH_BACKENDS, RECALL_BRANCHES, SECURITY_OUTCOMES, DEGRADATION_SURFACES, LANE_OUTCOMES, ANALYSIS_CLASS_REQUIREMENTS, TOOL_DENIAL_CAUSES, TOOL_DENIAL_SIGNATURE, redactedPrompt, ANALYSIS_CLASS_VALIDATORS;
 var init_guild_trace_events = __esm({
   "src/domains/telemetry/guild-trace-events.ts"() {
     ANALYSIS_EVENT_CLASSES = Object.freeze([
@@ -26344,6 +26306,75 @@ var init_guild_trace_events = __esm({
     SECURITY_OUTCOMES = ["allow", "ask", "deny", "audit", "pass-through"];
     DEGRADATION_SURFACES = ["dispatch", "recall", "config", "hook", "host-capability", "other"];
     LANE_OUTCOMES = ["success", "failure", "unknown"];
+    ANALYSIS_CLASS_REQUIREMENTS = Object.freeze({
+      run_started: ["run_scope"],
+      run_closed: ["run_scope"],
+      run_attachment_resolved: ["run_scope", "signature"],
+      config_snapshot_written: [],
+      prompt_received: ["prompt_hash", "redaction", "span_id"],
+      prompt_normalized: ["prompt_hash", "redaction", "span_id"],
+      clarifying_question_asked: ["prompt_hash", "redaction", "span_id"],
+      implementation_authorized: ["span_id", "signature"],
+      agent_dispatched: ["task_id", "span_id"],
+      agent_prompt_sent: ["prompt_hash", "redaction", "span_id", "task_id"],
+      agent_response_received: ["span_id"],
+      agent_handoff_written: ["task_id", "span_id", "payload_ref"],
+      knowledge_lookup_started: ["span_id", "prompt_hash"],
+      knowledge_lookup_result: ["span_id", "prompt_hash"],
+      memory_lookup_started: ["span_id", "prompt_hash"],
+      memory_lookup_result: ["span_id", "prompt_hash"],
+      tool_call_started: ["span_id"],
+      tool_call_finished: ["span_id", "duration_ms"],
+      tool_call_denied: ["span_id", "signature"],
+      tool_call_failed: ["span_id", "duration_ms"],
+      loop_entered: ["span_id", "signature"],
+      loop_iteration: ["span_id", "signature"],
+      loop_exited: ["span_id", "signature"],
+      loop_cap_hit: ["span_id", "signature"],
+      phase_entered: ["span_id", "phase"],
+      phase_concluded: ["span_id", "phase"],
+      gate_started: ["span_id", "signature"],
+      gate_concluded: ["span_id", "signature"],
+      instruction_violation_detected: ["span_id", "signature"],
+      user_steering_received: ["span_id", "signature"],
+      correction_applied: ["span_id", "signature"],
+      repeated_failure_detected: ["span_id", "signature"],
+      recommendation_created: ["span_id", "signature"],
+      recommendation_routed: ["span_id", "signature"],
+      bug_report_prompted: ["span_id", "signature"]
+    });
+    TOOL_DENIAL_CAUSES = Object.freeze(["policy", "user", "host_unavailable", "capability_absent"]);
+    TOOL_DENIAL_SIGNATURE = new RegExp(`^(?:${TOOL_DENIAL_CAUSES.join("|")}):[A-Za-z0-9_.:-]{1,200}$`);
+    redactedPrompt = (e) => e["redaction"] === "none" ? "redaction must be redacted|omitted for a prompt-bearing class" : null;
+    ANALYSIS_CLASS_VALIDATORS = Object.freeze(
+      Object.fromEntries(ANALYSIS_EVENT_CLASSES.map((eventClass) => {
+        switch (eventClass) {
+          case "run_attachment_resolved":
+            return [eventClass, classValidator(eventClass, (e) => String(e["signature"]).startsWith(`${e["run_scope"]}:`) ? null : "signature must start with <run_scope>:")];
+          case "config_snapshot_written":
+            return [eventClass, classValidator(eventClass, (e) => e["config_snapshot_ref"] === void 0 && e["payload_ref"] === void 0 ? "requires config_snapshot_ref or payload_ref" : null)];
+          case "prompt_received":
+          case "prompt_normalized":
+          case "clarifying_question_asked":
+          case "agent_prompt_sent":
+            return [eventClass, classValidator(eventClass, redactedPrompt)];
+          case "tool_call_denied":
+            return [eventClass, classValidator(eventClass, (e) => e["status"] !== "denied" ? "status must be denied" : !TOOL_DENIAL_SIGNATURE.test(String(e["signature"])) ? `signature must be <${TOOL_DENIAL_CAUSES.join("|")}>:<tool>[:<action>]` : null)];
+          case "instruction_violation_detected":
+          case "user_steering_received":
+          case "correction_applied":
+          case "repeated_failure_detected":
+          case "recommendation_created":
+          case "recommendation_routed":
+          case "bug_report_prompted":
+            return [eventClass, classValidator(eventClass, (e) => /^\S{1,256}$/.test(String(e["signature"])) ? null : "signature must be 1-256 non-whitespace chars")];
+          case "tool_call_failed":
+            return [eventClass, classValidator(eventClass, (e) => e["status"] !== "error" ? "status must be error" : null)];
+          default:
+            return [eventClass, classValidator(eventClass)];
+        }
+      }))
+    );
   }
 });
 
@@ -44526,10 +44557,64 @@ function appendPhase(env, root, runId, phase) {
   const raw = env.fs.readFile(p);
   if (raw === null) return false;
   const at = env.now();
+  const visits = readPhaseVisits(raw);
   let next = replaceTopLevelLine(raw, "phase", `phase: ${phase}`).text;
   next = appendToPhasesLog(next, phase, at);
   env.fs.writeFile(p, next);
+  const prior = visits[visits.length - 1];
+  const hasSnapshot = env.fs.exists(pluginConfigSnapshotPath(root, runId));
+  if (prior) {
+    emitLifecycleEvent(env.emitAnalysisEvent, root, runId, hasSnapshot, {
+      ts: at,
+      event_class: "phase_concluded",
+      status: "unknown",
+      phase: prior.phase,
+      span_id: phaseVisitSpanId(runId, visits.length - 1, prior.phase, prior.at),
+      signature: `transition:${prior.phase}->${phase}`
+    });
+  }
+  emitLifecycleEvent(env.emitAnalysisEvent, root, runId, hasSnapshot, {
+    ts: at,
+    event_class: "phase_entered",
+    status: "ok",
+    phase,
+    span_id: phaseVisitSpanId(runId, visits.length, phase, at)
+  });
   return true;
+}
+function phaseVisitSpanId(runId, index, phase, at) {
+  return crypto23.createHash("sha256").update(`${runId}|phase|${index}|${phase}|${at}`).digest("hex").slice(0, 16);
+}
+function readPhaseVisits(raw) {
+  try {
+    const doc = parseYaml(raw);
+    const log = doc !== null && typeof doc === "object" && !Array.isArray(doc) ? doc["phases_log"] : null;
+    if (!Array.isArray(log)) return [];
+    return log.flatMap((entry) => {
+      if (entry === null || typeof entry !== "object") return [];
+      const item = entry;
+      return typeof item["phase"] === "string" && item["at"] !== void 0 && item["at"] !== null ? [{ phase: item["phase"], at: item["at"] instanceof Date ? item["at"].toISOString() : String(item["at"]) }] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+function emitLifecycleEvent(emit, root, runId, hasConfigSnapshot, fields) {
+  if (!emit) return;
+  try {
+    emit(
+      makeAnalysisTraceEvent({
+        run_id: runId,
+        lane_id: "",
+        actor_type: "system",
+        actor_id: "run-lifecycle",
+        ...fields,
+        config_snapshot_ref: hasConfigSnapshot ? "plugin-config-snapshot.json" : void 0
+      }),
+      runDir2(root, runId)
+    );
+  } catch {
+  }
 }
 function appendToPhasesLog(raw, phase, at) {
   const lines = raw.split("\n");
@@ -44701,6 +44786,17 @@ function createRunLifecycle(env) {
               runDir2(root, runId)
             );
           }
+          if (opts.phase) {
+            env.emitAnalysisEvent(
+              makeAnalysisTraceEvent({
+                ...eventBase,
+                event_class: "phase_entered",
+                phase: opts.phase,
+                span_id: phaseVisitSpanId(runId, 0, opts.phase, nowIso)
+              }),
+              runDir2(root, runId)
+            );
+          }
         }
         env.fs.writeFile(sentinelPath(root), runId);
         return runId;
@@ -44764,6 +44860,18 @@ function createRunLifecycle(env) {
           env.fs.writeFile(sp, "");
         }
         if (env.emitAnalysisEvent) {
+          const visits = readPhaseVisits(env.fs.readFile(runYamlPath(root, runId)) ?? "");
+          const last = visits[visits.length - 1];
+          if (last) {
+            emitLifecycleEvent(env.emitAnalysisEvent, root, runId, env.fs.exists(pluginConfigSnapshotPath(root, runId)), {
+              ts: now,
+              event_class: "phase_concluded",
+              status: opts.status === "closed" ? "ok" : "incomplete",
+              phase: last.phase,
+              span_id: phaseVisitSpanId(runId, visits.length - 1, last.phase, last.at),
+              signature: `close:${opts.status}`
+            });
+          }
           env.emitAnalysisEvent(
             makeAnalysisTraceEvent({
               ts: now,
@@ -44940,6 +45048,11 @@ function writePluginConfigSnapshot(runId, snapshot, start, env) {
   }
   const outPath = pluginConfigSnapshotPath(start.root, runId);
   assertContained(outPath, start.root, "writePluginConfigSnapshot");
+  if (env.fs.exists(outPath) || env.fs.exists(runYamlPath(start.root, runId))) {
+    throw new Error(
+      `[run-lifecycle] writePluginConfigSnapshot: the plugin config snapshot for ${runId} is frozen at run start; refusing to write it again`
+    );
+  }
   const host = env.resolveHost(start.host_requested);
   const identity = start.session_identity ?? {};
   const pluginIdentity = derivePluginIdentity(start, env);
@@ -45067,7 +45180,7 @@ function writeGateBlock(raw, gate, rec) {
   lines.splice(end, 0, gateKeyLine, ...entryLines);
   return lines.join("\n");
 }
-function appendGateOutcome(fs89, root, runId, gate, record) {
+function appendGateOutcome(fs89, root, runId, gate, record, trace = {}) {
   if (!GATE_TOKEN.test(gate)) return false;
   const p = runYamlPath(root, runId);
   const raw = fs89.readFile(p);
@@ -45075,7 +45188,19 @@ function appendGateOutcome(fs89, root, runId, gate, record) {
   const next = writeGateBlock(raw, gate, record);
   if (next === null) return false;
   fs89.writeFile(p, next);
+  const ts = (trace.now ?? (() => (/* @__PURE__ */ new Date()).toISOString()))();
+  const emit = trace.emitAnalysisEvent === void 0 ? emitToExistingRunLog : trace.emitAnalysisEvent;
+  emitLifecycleEvent(emit, root, runId, fs89.readFile(pluginConfigSnapshotPath(root, runId)) !== null, {
+    ts,
+    event_class: "gate_concluded",
+    status: record.outcome === "pass" ? "ok" : record.outcome === "fail" ? "error" : "unknown",
+    span_id: crypto23.createHash("sha256").update(`${runId}|gate|${gate}|${ts}`).digest("hex").slice(0, 16),
+    signature: `gate:${gate}`
+  });
   return true;
+}
+function emitToExistingRunLog(event, activeRunDir) {
+  return fsNode.existsSync(path85.join(activeRunDir, "logs")) && emitTraceEvent(event, activeRunDir);
 }
 function readRunStartedAt2(runDir3, readFile = (p) => {
   try {
@@ -49412,6 +49537,7 @@ __export(lifecycle_exports, {
   payloadSidecarPath: () => payloadSidecarPath,
   pendingSubstantiveOperationPath: () => pendingSubstantiveOperationPath,
   persistTmuxTeamArgv: () => persistTmuxTeamArgv,
+  phaseVisitSpanId: () => phaseVisitSpanId,
   pluginGraphPath: () => pluginGraphPath,
   populateReleaseDocsWorkItems: () => populateReleaseDocsWorkItems,
   projectDocumentRecord: () => projectDocumentRecord,
@@ -51548,6 +51674,25 @@ if (isProcessEntry()) {
 }
 
 // hooks/pre-tool-use.ts
+init_telemetry();
+
+// hooks/lib/lane-attribution.ts
+var UNATTRIBUTED_WORKER_LANE_ID = "unattributed-worker";
+function isWorkerInvocation(env = process.env) {
+  const laneId2 = env["GUILD_LANE_ID"];
+  const taskId = env["GUILD_TASK_ID"];
+  return typeof laneId2 === "string" && laneId2.length > 0 || typeof taskId === "string" && taskId.length > 0;
+}
+function resolveLaneAttribution(env = process.env) {
+  for (const candidate of [env["GUILD_LANE_ID"], env["GUILD_TASK_ID"]]) {
+    if (typeof candidate === "string" && candidate.length > 0 && isSafeLaneId(candidate)) {
+      return candidate;
+    }
+  }
+  return isWorkerInvocation(env) ? UNATTRIBUTED_WORKER_LANE_ID : void 0;
+}
+
+// hooks/pre-tool-use.ts
 function renderCommand(toolName, toolInput) {
   if (toolInput === void 0 || toolInput === null) return toolName;
   if (typeof toolInput === "string") return `${toolName} ${toolInput}`;
@@ -51574,6 +51719,77 @@ function resolveRunId(cwd) {
   const envRunId = process.env["GUILD_RUN_ID"];
   if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
   return readCurrentRunId(cwd);
+}
+var DENIAL_CAUSE = {
+  permission_denied: "policy",
+  unsupported_tool: "capability_absent",
+  unavailable_observation: "host_unavailable"
+};
+var signatureToken = (value) => value.replace(/[^A-Za-z0-9_.-]+/g, "_").slice(0, 80) || "unknown";
+function recordedRunId(recordPath) {
+  try {
+    if (!fs88.lstatSync(recordPath).isFile()) return void 0;
+    const m = /^run_id:\s*["']?([^"'\s]+)["']?\s*$/m.exec(fs88.readFileSync(recordPath, "utf8"));
+    return m?.[1];
+  } catch {
+    return void 0;
+  }
+}
+function isPlainWriteTarget(target) {
+  try {
+    const st = fs88.lstatSync(target);
+    return st.isFile() || st.isDirectory();
+  } catch (err) {
+    return err.code === "ENOENT";
+  }
+}
+function traceToolDenial(payload, cwd, gate, reason) {
+  try {
+    const runId = process.env["GUILD_RUN_ID"];
+    if (typeof runId !== "string" || runId.length === 0 || !isSafeRunId(runId)) {
+      process.stderr.write(`warn: [pre-tool-use] tool_call_denied unobservable (no bound run): ${gate}
+`);
+      return;
+    }
+    const runDir3 = runDirOverride() ?? path103.join(durableGuildDir(resolveGuildRoot3(cwd)), "runs", runId);
+    if (recordedRunId(path103.join(runDir3, "run.yaml")) !== runId) {
+      process.stderr.write(`warn: [pre-tool-use] tool_call_denied unobservable (no matching run record): ${gate}
+`);
+      return;
+    }
+    if (!isPlainWriteTarget(path103.join(runDir3, "logs")) || !isPlainWriteTarget(path103.join(runDir3, "logs", "v1.4-events.jsonl"))) {
+      process.stderr.write(`warn: [pre-tool-use] tool_call_denied unobservable (unsafe log target): ${gate}
+`);
+      return;
+    }
+    const tool = signatureToken(payload.tool_name ?? "");
+    const laneId2 = resolveLaneAttribution();
+    const ts = (/* @__PURE__ */ new Date()).toISOString();
+    emitTraceEvent(
+      makeAnalysisTraceEvent({
+        ts,
+        run_id: runId,
+        lane_id: laneId2 ?? "",
+        event_class: "tool_call_denied",
+        actor_type: "tool",
+        actor_id: tool,
+        status: "denied",
+        span_id: genSpanId(runId, `tool_call_denied:${gate}`, ts, laneId2 ?? "main"),
+        parent_span_id: process.env["GUILD_PARENT_SPAN_ID"] || void 0,
+        phase: process.env["GUILD_PHASE"] || void 0,
+        task_id: process.env["GUILD_TASK_ID"] || void 0,
+        redaction: "omitted",
+        signature: toolDenialSignature(DENIAL_CAUSE[reason], tool, signatureToken(gate)),
+        config_snapshot_ref: fs88.existsSync(path103.join(runDir3, "plugin-config-snapshot.json")) ? "plugin-config-snapshot.json" : void 0
+      }),
+      runDir3
+    );
+  } catch (err) {
+    process.stderr.write(
+      `warn: [pre-tool-use] tool_call_denied trace failed (decision unchanged): ${err instanceof Error ? err.message : String(err)}
+`
+    );
+  }
 }
 function readHostCapability(cwd) {
   const addCandidate = (out, value) => {
@@ -51718,6 +51934,7 @@ ${e.new_string}`;
         }
       })
     );
+    traceToolDenial(payload, cwd, "boundary_guard", "unavailable_observation");
     return true;
   }
   process.stdout.write(
@@ -51792,6 +52009,7 @@ function runProjectionGate(payload, cwd) {
     return false;
   }
   let verdict = { ok: false, reason: `lane ${taskId} in run ${runId} has no GUILD_TASK_CELL_INSTANCE_ID; its tool projection cannot be verified (KTD28)` };
+  let denial = "unavailable_observation";
   if (typeof instanceId === "string" && instanceId.length > 0) try {
     const attempt = Number.parseInt(process.env["GUILD_TASK_ATTEMPT"] ?? "1", 10);
     verdict = authorizeProjectedToolCall({
@@ -51802,6 +52020,7 @@ function runProjectionGate(payload, cwd) {
       instance_id: instanceId,
       tool: toolName
     });
+    denial = "permission_denied";
   } catch {
     verdict = { ok: false, reason: `projection could not be resolved for ${taskId}` };
   }
@@ -51828,6 +52047,7 @@ function runProjectionGate(payload, cwd) {
       }
     })
   );
+  traceToolDenial(payload, cwd, "projection", denial);
   return true;
 }
 function runIngestPauseGate(payload, cwd) {
@@ -51886,6 +52106,10 @@ function runIngestPauseGate(payload, cwd) {
       }
     })
   );
+  if (decision === "deny") {
+    const clearPause = tool === "Bash" && /--clear-pause/.test(String(ti["command"] ?? ""));
+    traceToolDenial(payload, cwd, "ingest_pause", clearPause ? "unavailable_observation" : "permission_denied");
+  }
   return true;
 }
 function runLaneWikiWriteGate(payload, cwd) {
@@ -51927,6 +52151,7 @@ function runLaneWikiWriteGate(payload, cwd) {
       }
     })
   );
+  traceToolDenial(payload, cwd, "lane_wiki_write", "permission_denied");
   return true;
 }
 function runSecurityEnforcement(payload, cwd) {
@@ -52003,6 +52228,7 @@ function runSecurityEnforcement(payload, cwd) {
           }
         })
       );
+      traceToolDenial(payload, cwd, eventType, "unavailable_observation");
       return true;
     }
     process.stdout.write(
@@ -52014,6 +52240,7 @@ function runSecurityEnforcement(payload, cwd) {
         }
       })
     );
+    if (permissionDecision === "deny") traceToolDenial(payload, cwd, eventType, "permission_denied");
     return true;
   };
   const hostRes = resolveHostResolution(process.env);
@@ -52131,6 +52358,7 @@ function runDispatchIntegrityGuard(payload, cwd) {
       }
     })
   );
+  traceToolDenial(payload, cwd, "dispatch_integrity", "permission_denied");
   return true;
 }
 function evaluateBackendDegradation(payload, cwd) {
@@ -52346,10 +52574,12 @@ async function main6() {
   if (runDispatchIntegrityGuard(payload, cwd)) return;
   if (backend !== null && backend.deny) {
     emitBackendDegradationDeny(backend.message);
+    traceToolDenial(payload, cwd, "backend_degradation", "permission_denied");
     return;
   }
   if (tier !== null && tier.deny) {
     emitTierDispatchDeny(tier.message);
+    traceToolDenial(payload, cwd, "tier_dispatch", "permission_denied");
     return;
   }
   const runId = resolveRunId(cwd);
@@ -52369,6 +52599,12 @@ async function main6() {
           permissionDecisionReason: compatibilitySkill.reason
         }
       })
+    );
+    traceToolDenial(
+      payload,
+      cwd,
+      "compatibility_skill",
+      /absent from the valid compatibility catalog/.test(compatibilitySkill.reason) ? "unsupported_tool" : /unavailable in resolver mode/.test(compatibilitySkill.reason) ? "permission_denied" : "unavailable_observation"
     );
     return;
   }

@@ -151,6 +151,13 @@ import { laneWikiWriteTarget } from "./lib/security/lane-wiki-guard.js";
 import { createGuildStorage } from "../src/domains/state";
 import { durableGuildDir } from "../src/domains/state";
 import { ensureStorageLayout } from "../scripts/lib/state/ensure-storage-layout.js";
+import {
+  emitTraceEvent,
+  makeAnalysisTraceEvent,
+  toolDenialSignature,
+  type ToolDenialCause,
+} from "../src/domains/telemetry/index.js";
+import { resolveLaneAttribution } from "./lib/lane-attribution.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -194,6 +201,111 @@ function resolveRunId(cwd: string): string | undefined {
   const envRunId = process.env["GUILD_RUN_ID"];
   if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
   return readCurrentRunId(cwd);
+}
+
+// ── B01H: tool_call_denied at the permission decision ──────────────────────
+
+/**
+ * Why a deny was emitted. A permission refusal is never proof that Guild lacks
+ * a tool, so the three stay distinct and map onto the closed denial causes.
+ */
+type DenialReason = "permission_denied" | "unsupported_tool" | "unavailable_observation";
+const DENIAL_CAUSE: Readonly<Record<DenialReason, ToolDenialCause>> = {
+  permission_denied: "policy",
+  unsupported_tool: "capability_absent",
+  unavailable_observation: "host_unavailable",
+};
+
+const signatureToken = (value: string): string =>
+  value.replace(/[^A-Za-z0-9_.-]+/g, "_").slice(0, 80) || "unknown";
+
+/** `run_id` of a regular-file run record, else undefined (never reads a special file). */
+function recordedRunId(recordPath: string): string | undefined {
+  try {
+    if (!fs.lstatSync(recordPath).isFile()) return undefined;
+    const m = /^run_id:\s*["']?([^"'\s]+)["']?\s*$/m.exec(fs.readFileSync(recordPath, "utf8"));
+    return m?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+/** Absent, or a real dir/regular file: never a FIFO, socket, device, or symlink. */
+function isPlainWriteTarget(target: string): boolean {
+  try {
+    const st = fs.lstatSync(target);
+    return st.isFile() || st.isDirectory();
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "ENOENT";
+  }
+}
+
+/**
+ * Record a deny the hook has ALREADY written to stdout. Called after the
+ * decision so a trace failure can never suppress or alter it, and never
+ * throws. Run identity is the binding env only (C2: the sentinel never
+ * authorizes a runtime write); no run, an unsafe id, or an id with no run
+ * record leaves the denial unobservable rather than inventing a run tree.
+ * The row carries the tool and gate only: no command, content, or prompt.
+ */
+function traceToolDenial(
+  payload: GuildHookEvent,
+  cwd: string,
+  gate: string,
+  reason: DenialReason,
+): void {
+  try {
+    const runId = process.env["GUILD_RUN_ID"];
+    if (typeof runId !== "string" || runId.length === 0 || !isSafeRunId(runId)) {
+      process.stderr.write(`warn: [pre-tool-use] tool_call_denied unobservable (no bound run): ${gate}\n`);
+      return;
+    }
+    const runDir = runDirOverride() ?? path.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", runId);
+    // The run RECORD, not the dir: an earlier security-event append may already
+    // have created the dir for an id that names no run. The record must name
+    // THIS run, so an override pointing at run B never takes run A's denial.
+    if (recordedRunId(path.join(runDir, "run.yaml")) !== runId) {
+      process.stderr.write(`warn: [pre-tool-use] tool_call_denied unobservable (no matching run record): ${gate}\n`);
+      return;
+    }
+    // The write is synchronous and runs after the decision: a FIFO, socket, or
+    // symlink at the log path would block or redirect it, so only a regular
+    // file (or nothing yet) is ever written.
+    if (!isPlainWriteTarget(path.join(runDir, "logs")) || !isPlainWriteTarget(path.join(runDir, "logs", "v1.4-events.jsonl"))) {
+      process.stderr.write(`warn: [pre-tool-use] tool_call_denied unobservable (unsafe log target): ${gate}\n`);
+      return;
+    }
+    const tool = signatureToken(payload.tool_name ?? "");
+    const laneId = resolveLaneAttribution();
+    const ts = new Date().toISOString();
+    emitTraceEvent(
+      makeAnalysisTraceEvent({
+        ts,
+        run_id: runId,
+        lane_id: laneId ?? "",
+        event_class: "tool_call_denied",
+        actor_type: "tool",
+        actor_id: tool,
+        status: "denied",
+        span_id: genSpanId(runId, `tool_call_denied:${gate}`, ts, laneId ?? "main"),
+        parent_span_id: process.env["GUILD_PARENT_SPAN_ID"] || undefined,
+        phase: process.env["GUILD_PHASE"] || undefined,
+        task_id: process.env["GUILD_TASK_ID"] || undefined,
+        redaction: "omitted",
+        signature: toolDenialSignature(DENIAL_CAUSE[reason], tool, signatureToken(gate)),
+        config_snapshot_ref: fs.existsSync(path.join(runDir, "plugin-config-snapshot.json"))
+          ? "plugin-config-snapshot.json"
+          : undefined,
+      }),
+      runDir,
+    );
+  } catch (err) {
+    process.stderr.write(
+      `warn: [pre-tool-use] tool_call_denied trace failed (decision unchanged): ${
+        err instanceof Error ? err.message : String(err)
+      }\n`,
+    );
+  }
 }
 
 // ── HK-07: host-capability reader + approval_request writer ────────────────
@@ -531,6 +643,7 @@ function runBoundaryGuard(
         },
       }),
     );
+    traceToolDenial(payload, cwd, "boundary_guard", "unavailable_observation");
     return true;
   }
 
@@ -663,6 +776,8 @@ function runProjectionGate(payload: GuildHookEvent, cwd: string): boolean {
   // plr-wi-15-4: run + task with no instance id is a lane worker whose projection cannot be
   // verified, not a non-worker. Every isolated launch exports one, so its absence is denied.
   let verdict: { ok: boolean; reason?: string } = { ok: false, reason: `lane ${taskId} in run ${runId} has no GUILD_TASK_CELL_INSTANCE_ID; its tool projection cannot be verified (KTD28)` };
+  // An unverifiable projection is a missing observation, not a refused grant.
+  let denial: DenialReason = "unavailable_observation";
   if (typeof instanceId === "string" && instanceId.length > 0) try {
     const attempt = Number.parseInt(process.env["GUILD_TASK_ATTEMPT"] ?? "1", 10);
     verdict = authorizeProjectedToolCall({
@@ -673,6 +788,7 @@ function runProjectionGate(payload: GuildHookEvent, cwd: string): boolean {
       instance_id: instanceId,
       tool: toolName,
     });
+    denial = "permission_denied";
   } catch {
     // A malformed identity is not a licence to run: the worker declared itself a
     // projected cell instance and we could not verify its scope.
@@ -703,6 +819,7 @@ function runProjectionGate(payload: GuildHookEvent, cwd: string): boolean {
       },
     }),
   );
+  traceToolDenial(payload, cwd, "projection", denial);
   return true;
 }
 
@@ -779,6 +896,11 @@ function runIngestPauseGate(payload: GuildHookEvent, cwd: string): boolean {
       },
     }),
   );
+  if (decision === "deny") {
+    // The clear-pause command is refused only because this host cannot ask.
+    const clearPause = tool === "Bash" && /--clear-pause/.test(String(ti["command"] ?? ""));
+    traceToolDenial(payload, cwd, "ingest_pause", clearPause ? "unavailable_observation" : "permission_denied");
+  }
   return true;
 }
 
@@ -831,6 +953,7 @@ function runLaneWikiWriteGate(payload: GuildHookEvent, cwd: string): boolean {
       },
     }),
   );
+  traceToolDenial(payload, cwd, "lane_wiki_write", "permission_denied");
   return true;
 }
 
@@ -965,6 +1088,7 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
           },
         }),
       );
+      traceToolDenial(payload, cwd, eventType, "unavailable_observation");
       return true;
     }
     process.stdout.write(
@@ -976,6 +1100,7 @@ function runSecurityEnforcement(payload: GuildHookEvent, cwd: string): boolean {
         },
       }),
     );
+    if (permissionDecision === "deny") traceToolDenial(payload, cwd, eventType, "permission_denied");
     return true;
   };
 
@@ -1179,6 +1304,7 @@ function runDispatchIntegrityGuard(payload: GuildHookEvent, cwd: string): boolea
       },
     }),
   );
+  traceToolDenial(payload, cwd, "dispatch_integrity", "permission_denied");
   return true;
 }
 
@@ -1571,6 +1697,8 @@ export async function main(): Promise<void> {
         },
       }),
     );
+    // No tool_call_denied here: a future layout is not ours to write, so this
+    // denial stays unobservable in the trace by design.
     return;
   }
 
@@ -1606,6 +1734,7 @@ export async function main(): Promise<void> {
   // the rest of the hook (telemetry sidecar) still runs.
   if (backend !== null && backend.deny) {
     emitBackendDegradationDeny(backend.message);
+    traceToolDenial(payload, cwd, "backend_degradation", "permission_denied");
     return;
   }
 
@@ -1615,6 +1744,7 @@ export async function main(): Promise<void> {
   // the rest of the hook (telemetry sidecar) still runs.
   if (tier !== null && tier.deny) {
     emitTierDispatchDeny(tier.message);
+    traceToolDenial(payload, cwd, "tier_dispatch", "permission_denied");
     return;
   }
 
@@ -1640,6 +1770,18 @@ export async function main(): Promise<void> {
           permissionDecisionReason: compatibilitySkill.reason,
         },
       }),
+    );
+    // Only a catalog miss means the capability is absent; a resolver mode is a
+    // policy; every other PCL-09 refusal is a missing receipt observation.
+    traceToolDenial(
+      payload,
+      cwd,
+      "compatibility_skill",
+      /absent from the valid compatibility catalog/.test(compatibilitySkill.reason)
+        ? "unsupported_tool"
+        : /unavailable in resolver mode/.test(compatibilitySkill.reason)
+          ? "permission_denied"
+          : "unavailable_observation",
     );
     return;
   }
