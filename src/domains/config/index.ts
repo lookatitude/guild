@@ -116,6 +116,21 @@ export {
   type ToolVersionRange,
 } from "./model-discovery-contract";
 
+// Native-host configuration identity parsing (C-UPDATE): the one shared,
+// read-only, fail-closed parser for host registry/config files.
+export {
+  claudeConfigRoots,
+  codexConfigHome,
+  NativeConfigParseError,
+  parseNativeToml,
+  selectCodexMarketplaceIdentity,
+  type CodexIdentitySelection,
+  type NativeChannelIdentity,
+  type NativeConfigRefusalCode,
+  type NativeTomlTable,
+  type NativeTomlValue,
+} from "./native-config-parser";
+
 // ── from src/modules/config ──────────────────────────────────────────
 export const MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1" as const;
 
