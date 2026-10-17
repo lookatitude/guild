@@ -38843,6 +38843,15 @@ function normalizeMatchers(entries) {
   for (const e of entries ?? []) if (typeof e === "string" && e.length > 0) s.add(normRel(e));
   return s;
 }
+function exportedEntryMatchers(nodes) {
+  const s = /* @__PURE__ */ new Set();
+  for (const n of nodes) if (n.type === "function" && n.exported === true) s.add(n.id);
+  return s;
+}
+function effectiveMatchers(nodes, opts) {
+  if (opts.entryPoints !== void 0) return normalizeMatchers(opts.entryPoints);
+  return opts.deriveExported === true ? exportedEntryMatchers(nodes) : /* @__PURE__ */ new Set();
+}
 function isEntryNode(node, matchers) {
   if (isEntryPoint(node)) return true;
   return matchers.has(node.id) || matchers.has(simpleName(node.id)) || matchers.has(nodeRelPath(node.id));
@@ -38989,12 +38998,12 @@ function kgDeadCode(graph, opts = {}) {
   for (const e of graph.edges) {
     if (e.type === "calls") inbound.add(e.target);
   }
-  const matchers = normalizeMatchers(opts.entryPoints);
+  const matchers = effectiveMatchers(graph.nodes, opts);
   const dead = graph.nodes.filter((n) => isFreeFunction(n) && !inbound.has(n.id) && !isEntryNode(n, matchers)).map((n) => toEvidence(n, 0)).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   return { tier: EVIDENCE_TIER, nodes: dead };
 }
 function kgEntryPoints(graph, opts = {}) {
-  const matchers = normalizeMatchers(opts.entryPoints);
+  const matchers = effectiveMatchers(graph.nodes, opts);
   return graph.nodes.filter((n) => n.type === "function" && isEntryNode(n, matchers)).map((n) => toEvidence(n, 0)).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 function collectExports(node, out) {
