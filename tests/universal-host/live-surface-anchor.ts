@@ -720,7 +720,11 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
 export const RATIFIED_MANIFESTS: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-09-14 (T04): the manifest `commands` list is the 13 dispatchers
   // plus the 11 print-only aliases.
-  ".claude-plugin/plugin.json": "3a37e63ef2587d682a8c1b95ed9ca0524930075cb24cc89666857a74d9060afb",
+  // Re-ratified 2026-10-17 (v3-completion C05): the manifest regeneration after the
+  // C06 alias retirement drops the 11 ./commands/<alias>.md registrations — exactly
+  // the 13 dispatchers remain. ANTI-VACUITY: SC-W3-6(A)/SC-W2-5 were observed RED
+  // against the prior pin (version-stripped hash aa360e26...) before ratification.
+  ".claude-plugin/plugin.json": "aa360e26c51dab8ed86421730318b6d9324316ada37e5fc246a00e0efa01aa5c",
   ".claude-plugin/marketplace.json": "ad288b80dee07f85a94eee8b9c3e92b18705a94f98e104277a92b4d2e770e2af",
 });
 
