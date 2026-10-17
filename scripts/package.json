@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "test": "cd .. && bun test --isolate scripts",
-    "build:activated-host-conformance": "bun ../scripts/compile.ts --only=scripts",
+    "build:activated-host-conformance": "bun ../scripts/compile.ts --only=conformance",
     "build:inventory": "npx tsx build-inventory.ts",
     "check:inventory": "npx tsx build-inventory.ts --check",
     "build:hosts": "npx tsx build-host-packages.ts",

@@ -58,7 +58,7 @@ export interface Target {
    * whose committed copy was built from elsewhere overrides it.
    */
   absWorkingDir?: string;
-  group: "hooks" | "agent-team" | "mcp" | "scripts";
+  group: "hooks" | "agent-team" | "mcp" | "scripts" | "conformance";
 }
 
 /** hooks/*.ts → hooks/dist/*.js. Was a 3,500-char one-liner in hooks/package.json. */
@@ -252,7 +252,11 @@ export function targets(): Target[] {
     // absWorkingDir reproduces the scripts/-cwd npm build, whose module header
     // comments are cwd-relative and therefore part of the output bytes.
     absWorkingDir: "scripts",
-    group: "scripts",
+    // NOT group "scripts": that group is the floor SC-2 derives for "compiled
+    // bundles the host package ships" (tests/universal-host/_helpers.ts). This
+    // worker is a conformance harness and ships in no package, so filing it
+    // under "scripts" would demand a script_ref the package must never carry.
+    group: "conformance",
   });
   return t;
 }
@@ -440,7 +444,7 @@ function strayOutputs(expected: string[]): string[] {
   return committedOutputs().filter((f) => !known.has(f));
 }
 
-const GROUPS = ["hooks", "agent-team", "mcp", "scripts"];
+const GROUPS = ["hooks", "agent-team", "mcp", "scripts", "conformance"];
 
 function main(argv: string[]): number {
   assertLockedEsbuild();
