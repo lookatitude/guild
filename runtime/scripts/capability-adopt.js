@@ -45737,7 +45737,7 @@ var init_verify_installer = __esm({
           "would run: claude plugin marketplace add dist/claude-code",
           "would run: claude plugin marketplace update guild",
           "would run: claude plugin install guild@guild",
-          "Guild installed into Claude Code."
+          "Guild Stack installed into Claude Code."
         ]
       },
       {
@@ -45793,7 +45793,7 @@ var init_verify_installer = __esm({
           "cursor (new-CLI)",
           "would prepare package tree: dist/cursor",
           "would wire launcher: dist/cursor/bin/guild-run --host cursor",
-          "Guild package prepared for cursor.",
+          "Guild Stack package prepared for cursor.",
           "cursor-manifest.json (installability: target).",
           "dist/cursor/bin/guild-run --host cursor --prompt"
         ]
@@ -45805,7 +45805,7 @@ var init_verify_installer = __esm({
           "github-copilot (new-CLI)",
           "would prepare package tree: dist/github-copilot",
           "would wire launcher: dist/github-copilot/bin/guild-run --host github-copilot",
-          "Guild package prepared for github-copilot.",
+          "Guild Stack package prepared for github-copilot.",
           "github-copilot-manifest.json (installability: target).",
           "dist/github-copilot/bin/guild-run --host github-copilot --prompt"
         ]
@@ -45817,7 +45817,7 @@ var init_verify_installer = __esm({
           "opencode (new-CLI)",
           "would prepare package tree: dist/opencode",
           "would wire launcher: dist/opencode/bin/guild-run --host opencode",
-          "Guild package prepared for opencode.",
+          "Guild Stack package prepared for opencode.",
           "opencode-manifest.json (installability: target).",
           "dist/opencode/bin/guild-run --host opencode --prompt"
         ]
@@ -45829,7 +45829,7 @@ var init_verify_installer = __esm({
           "rovo-dev (new-CLI)",
           "would prepare package tree: dist/rovo-dev",
           "would wire launcher: dist/rovo-dev/bin/guild-run --host rovo-dev",
-          "Guild package prepared for rovo-dev.",
+          "Guild Stack package prepared for rovo-dev.",
           "rovo-dev-manifest.json (installability: target).",
           "dist/rovo-dev/bin/guild-run --host rovo-dev --prompt"
         ]
@@ -45840,7 +45840,7 @@ var init_verify_installer = __esm({
         snippets: [
           BUILD_ONCE_SNIPPET,
           "kiro (new-IDE, agents-file binding)",
-          "Guild package for kiro is the universal AGENTS.md package (adapter_binding: agents-file):",
+          "Guild Stack package for kiro is the universal AGENTS.md package (adapter_binding: agents-file):",
           "dist/agents/AGENTS.md",
           "dist/agents/.agents/skills/guild",
           "Copy it into your kiro project root (marker: .kiro/). kiro reads root AGENTS.md."
@@ -45851,7 +45851,7 @@ var init_verify_installer = __esm({
         snippets: [
           BUILD_ONCE_SNIPPET,
           "qoder (new-IDE, agents-file binding)",
-          "Guild package for qoder is the universal AGENTS.md package (adapter_binding: agents-file):",
+          "Guild Stack package for qoder is the universal AGENTS.md package (adapter_binding: agents-file):",
           "dist/agents/AGENTS.md",
           "dist/agents/.agents/skills/guild",
           "Copy it into your qoder project root (marker: .qoder/). qoder reads root AGENTS.md."
@@ -45862,7 +45862,7 @@ var init_verify_installer = __esm({
         snippets: [
           BUILD_ONCE_SNIPPET,
           "trae (new-IDE, agents-file binding)",
-          "Guild package for trae is the universal AGENTS.md package (adapter_binding: agents-file):",
+          "Guild Stack package for trae is the universal AGENTS.md package (adapter_binding: agents-file):",
           "dist/agents/AGENTS.md",
           "dist/agents/.agents/skills/guild",
           "Copy it into your trae project root (marker: .trae/). trae reads root AGENTS.md."
