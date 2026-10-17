@@ -921,6 +921,7 @@ describe("T04 C02E-I — analyze integrated route", () => {
   /** Fixture value for a chapter placeholder token; unknown placeholders fail the test. */
   function bindPlaceholder(inner: string, root: string): string | string[] {
     if (inner === "run-id" || inner === "id" || inner === "source-id" || inner === "source") return "run-20260101-000000-x";
+    if (inner === "analysis-id") return "an-1";
     if (inner === "run-id..." || inner === "id...") return ["run-20260101-000000-x", "run-20260101-000001-y"];
     if (inner === "run|comparison") return "run";
     if (inner === "accept|reject") return "accept";
