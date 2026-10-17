@@ -184,6 +184,14 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   // `/guild:maintain analyze` (C-CLI): the run-analysis CLI ships as compiled
   // Node at runtime/scripts/run-analysis.js — never tsx on the user path.
   { id: "run-analysis", entry: "scripts/run-analysis.ts" },
+  // NOT CLIs. The lazy domain-barrel chunks (C04/KTD29): the cheap bundles reach
+  // lifecycle / telemetry / adapters only through non-analyzable requires that
+  // resolve these compiled siblings at run time, so the heavy graphs stay OUT of
+  // the cheap entrypoints (config-cmd was 12 domains wide). Dropping one breaks
+  // that call path in a shipped package (KTD10 fail-closed).
+  { id: "lifecycle-api", entry: "src/domains/lifecycle/index.ts" },
+  { id: "telemetry-api", entry: "src/domains/telemetry/index.ts" },
+  { id: "adapters-api", entry: "src/adapters/index.ts" },
   { id: "run-lifecycle", entry: "scripts/lib/run-lifecycle.ts" },
   { id: "score-tier", entry: "scripts/score-tier.ts" },
   { id: "stamp-recall-importance", entry: "scripts/stamp-recall-importance.ts" },
