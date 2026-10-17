@@ -17,6 +17,8 @@
  * parsed in-domain with zero dependencies. Anything outside that grammar throws.
  */
 
+import { PROTO_POISON_KEYS } from "../security";
+
 export type NativeTomlValue =
   | string
   | number
@@ -43,7 +45,7 @@ export class NativeConfigParseError extends Error {
 }
 
 /** Keys that could poison a prototype chain. unsafeKeyBehaviour = throw. */
-const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+const UNSAFE_KEYS = PROTO_POISON_KEYS;
 
 const BARE_KEY_RE = /^[A-Za-z0-9_-]+$/;
 const SHA40_RE = /^[0-9a-f]{40}$/;
