@@ -798,3 +798,276 @@ describe("T04 R2-4 — every sub-verb row spawns argv its compiled parser accept
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// C02E — `/guild:maintain analyze` routes to the compiled run-analysis parser
+// (C-CLI). Two groups by name prefix: "analyze dispatcher mapping" is C02's to
+// turn green (commands/maintain.md only); "analyze integrated route" is C03's
+// (evolve chapter + full-route reachability). Planted red-first on unchanged
+// source; the compiled target is runtime/scripts/run-analysis.js — author-plane
+// tsx or a print-only alias can never satisfy these.
+// ---------------------------------------------------------------------------
+
+const RUN_ANALYSIS_JS = path.join(PLUGIN_ROOT, "runtime", "scripts", "run-analysis.js");
+const EVOLVE_DIR = path.dirname(EVOLVE_SKILL);
+const ANALYZE_CHAPTER = path.join(EVOLVE_DIR, "references", "run-analysis.md");
+
+/** What maintain's dispatch hands the assembler for a given user input. */
+function maintainForwards(userInput: string): string {
+  const m = readCommand("maintain").match(/## Dispatch\n\n```\n([\s\S]*?)```/);
+  if (!m) throw new Error("commands/maintain.md has no fenced ## Dispatch block");
+  const argsLine = m[1].split("\n").find((l) => l.trimStart().startsWith("args:"));
+  if (!argsLine) throw new Error("maintain dispatch has no args line");
+  return argsLine
+    .replace(/^\s*args:\s*/, "")
+    .trim()
+    .split(/\s+/)
+    .map((tok) => (tok === "$ARGUMENTS" ? userInput : tok === "$REMAINING_ARGS" ? userInput.split(/\s+/).slice(1).join(" ") : tok))
+    .join(" ")
+    .trim();
+}
+
+describe("T04 C02E-D — analyze dispatcher mapping", () => {
+  it("analyze dispatcher mapping: the maintain argument-hint names the analyze token", () => {
+    const hint = readCommand("maintain").match(/argument-hint:\s*"(.*)"/)?.[1] ?? "";
+    expect(hint).toContain("analyze");
+  });
+
+  it("analyze dispatcher mapping: the sub-verb table routes analyze to the run-analysis chapter", () => {
+    const row = readCommand("maintain")
+      .split("\n")
+      .find((l) => /^\|\s*`analyze/.test(l));
+    expect(row).toBeDefined();
+    expect(row).toMatch(/references\/run-analysis\.md/);
+  });
+
+  it("analyze dispatcher mapping: every public analyze invocation forwards verbatim to the one assembler", () => {
+    expect(skillTargets("maintain")).toEqual(["guild:evolve"]);
+    for (const input of [
+      "analyze run run-20260101-000000-demo",
+      "analyze compare run-a run-b",
+      "analyze initiative init-1",
+      "analyze independent group-1",
+      "analyze inspect run run-20260101-000000-demo",
+      "analyze recommendation decide run-a rec-1 accept --expected-analysis-id an-1 --expected-input-hash sha256:ab",
+      "analyze recommendation status run-a rec-1 implemented",
+    ]) {
+      expect(maintainForwards(input)).toBe(input);
+    }
+  });
+
+  it("analyze dispatcher mapping: stray tokens and hostile IDs pass through untouched for the parser to refuse", () => {
+    // IDs never become shell fragments: dispatch is a verbatim $ARGUMENTS hand-off,
+    // so an injection-shaped id reaches the CLOSED parser as one literal token.
+    const hostile = 'analyze run run-$(touch_pwned) --nope';
+    expect(maintainForwards(hostile)).toBe(hostile);
+    const m = readCommand("maintain").match(/## Dispatch\n\n```\n([\s\S]*?)```/);
+    expect(m![1].split("\n").filter((l) => l.trim())).toEqual(["Skill: guild:evolve", "args: $ARGUMENTS"]);
+  });
+
+  it("analyze dispatcher mapping: no print-only analyze alias ships (stale-alias negative)", () => {
+    expect(fs.existsSync(path.join(COMMANDS, "analyze.md"))).toBe(false);
+    const allow = JSON.parse(fs.readFileSync(path.join(COMMANDS, "aliases.allowlist.json"), "utf8")) as { aliases?: Array<{ file?: string }> } | string[];
+    expect(JSON.stringify(allow)).not.toContain("analyze");
+  });
+});
+
+describe("T04 C02E-I — analyze integrated route", () => {
+  it("analyze integrated route: the evolve assembler routes analyze to an existing chapter", () => {
+    const row = stripFences(fs.readFileSync(EVOLVE_SKILL, "utf8"))
+      .split("\n")
+      .find((l) => /^\|\s*`analyze/.test(l));
+    expect(row).toBeDefined();
+    expect(row).toMatch(/references\/run-analysis\.md/);
+    expect(fs.existsSync(ANALYZE_CHAPTER)).toBe(true);
+  });
+
+  /**
+   * The seven public C-CLI mappings, each as the CANONICAL token sequence the
+   * chapter must document and an EXECUTABLE argv (placeholders bound to fixture
+   * values). `expectParserAccepted` = the parser accepted the mapping's shape:
+   * exit 0 (valid success, incl. diagnostic states) or exit 1 (operational
+   * refusal on fixture data) — never exit 2 (usage).
+   */
+  const PUBLIC_MAPPINGS: Array<{ id: string; documented: string; argv: string[] }> = [
+    { id: "run analyze", documented: "run analyze", argv: ["run", "analyze", "run-20260101-000000-x"] },
+    { id: "run compare", documented: "run compare", argv: ["run", "compare", "run-20260101-000000-x", "run-20260101-000001-y"] },
+    { id: "initiative analyze", documented: "initiative analyze", argv: ["initiative", "analyze", "init-1"] },
+    { id: "independent analyze", documented: "independent-runs analyze", argv: ["independent-runs", "analyze", "group-1"] },
+    { id: "inspect", documented: "artifact inspect", argv: ["artifact", "inspect", "run", "run-20260101-000000-x"] },
+    {
+      id: "recommendation decide",
+      documented: "recommendation decide",
+      argv: [
+        "recommendation", "decide", "run-20260101-000000-x", "rec-1", "accept",
+        "--expected-analysis-id", "an-1", "--expected-input-hash",
+        "sha256:00000000000000000000000000000000000000000000000000000000000000ab",
+      ],
+    },
+    { id: "recommendation status", documented: "recommendation status", argv: ["recommendation", "status", "run-20260101-000000-x", "rec-1", "implemented"] },
+  ];
+
+  /** Every fenced code line of the chapter (the commands it teaches verbatim). */
+  function chapterFencedLines(): string[] {
+    const out: string[] = [];
+    let inFence = false;
+    for (const line of fs.readFileSync(ANALYZE_CHAPTER, "utf8").split("\n")) {
+      if (line.startsWith("```")) { inFence = !inFence; continue; }
+      if (inFence && line.trim()) out.push(line);
+    }
+    return out;
+  }
+
+  /** Fixture value for a chapter placeholder token; unknown placeholders fail the test. */
+  function bindPlaceholder(inner: string, root: string): string | string[] {
+    if (inner === "run-id" || inner === "id" || inner === "source-id" || inner === "source") return "run-20260101-000000-x";
+    if (inner === "run-id..." || inner === "id...") return ["run-20260101-000000-x", "run-20260101-000001-y"];
+    if (inner === "run|comparison") return "run";
+    if (inner === "accept|reject") return "accept";
+    if (inner === "initiative-id") return "init-1";
+    if (inner === "group-id") return "group-1";
+    if (inner === "rec" || inner === "recommendation-id") return "rec-1";
+    if (inner === "status") return "implemented";
+    if (/hash|sha256/.test(inner)) return "sha256:00000000000000000000000000000000000000000000000000000000000000ab";
+    if (inner === "root" || inner === "project-root") return root;
+    throw new Error(`chapter uses an unknown placeholder <${inner}> — extend C-CLI binding or fix the chapter`);
+  }
+
+  /**
+   * Parse ONE taught invocation line into an executable argv: strip quotes and a
+   * trailing comment, require `node` + the compiled path, bind <placeholders>.
+   */
+  function parseTaughtInvocation(line: string, root: string): { script: string; argv: string[]; mapping: string } {
+    const noComment = line.replace(/\s#.*$/, "").trim();
+    const rawTokens = noComment.match(/"[^"]*"|\S+/g) ?? [];
+    const tokens = rawTokens.map((t) => t.replace(/^"|"$/g, ""));
+    if (tokens[0] !== "node") throw new Error(`taught invocation does not start with node: ${line}`);
+    if (!/runtime\/scripts\/run-analysis\.js$/.test(tokens[1] ?? "")) {
+      throw new Error(`taught invocation's second token is not the compiled run-analysis path: ${line}`);
+    }
+    // The EXTRACTED executable is what runs (codex C02E r3/r4): only the four
+    // exact plugin-root placeholder spellings resolve — a misspelled variable
+    // must NOT repair to the package executable. The resolved path must be this
+    // package's compiled CLI and must exist.
+    const script = tokens[1].replace(
+      /^(?:\$GUILD_PLUGIN_ROOT|\$\{GUILD_PLUGIN_ROOT\}|\$CLAUDE_PLUGIN_ROOT|\$\{CLAUDE_PLUGIN_ROOT\})(?=\/)/,
+      PLUGIN_ROOT,
+    );
+    if (script.includes("$")) throw new Error(`taught executable uses an unsupported variable: ${tokens[1]}`);
+    if (!path.isAbsolute(script)) throw new Error(`taught executable is not plugin-root-anchored: ${tokens[1]}`);
+    const argv: string[] = [];
+    for (const tok of tokens.slice(2)) {
+      const m = tok.match(/^<(.+)>$/) ?? tok.match(/^\[<(.+)>\]$/);
+      if (tok === "$(pwd)" || tok === '"$(pwd)"') {
+        argv.push(root);
+      } else if (m) {
+        const bound = bindPlaceholder(m[1], root);
+        argv.push(...(Array.isArray(bound) ? bound : [bound]));
+      } else {
+        argv.push(tok);
+      }
+    }
+    return { script, argv, mapping: argv.slice(0, 2).join(" ") };
+  }
+
+  /** Execute the EXTRACTED executable with the extracted argv under plain node. */
+  function runTaught(script: string, argv: string[]): { code: number; stdout: string; stderr: string } {
+    try {
+      const stdout = execFileSync(process.execPath, [script, ...argv], {
+        cwd: PLUGIN_ROOT,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      return { code: 0, stdout, stderr: "" };
+    } catch (err) {
+      const e = err as { status?: number; stdout?: string; stderr?: string };
+      return { code: e.status ?? -1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" };
+    }
+  }
+
+  it("analyze integrated route: ANTI-VACUITY — a misspelled plugin-root variable never repairs to the package executable", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-c02e-neg-"));
+    try {
+      expect(() =>
+        parseTaughtInvocation('node "$GUILD_PLUGIN_ROOT_TYPO/runtime/scripts/run-analysis.js" run analyze <run-id> --cwd <root>', root),
+      ).toThrow(/unsupported variable/);
+      expect(() =>
+        parseTaughtInvocation('node "relative/runtime/scripts/run-analysis.js" run analyze <run-id> --cwd <root>', root),
+      ).toThrow(/not plugin-root-anchored/);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("analyze integrated route: every fenced chapter line is author-plane-free (incl. multiline tsx splits)", () => {
+    for (const line of chapterFencedLines()) {
+      expect({ line, authorPlaneFree: !/\b(npx|tsx|bun)\b/.test(line) }).toEqual({ line, authorPlaneFree: true });
+    }
+  });
+
+  it.each(PUBLIC_MAPPINGS.map((m) => [m.id, m] as const))(
+    "analyze integrated route: %s — the chapter's own invocation, placeholder-bound, is parser-accepted; +--nope refuses (exit 2)",
+    (_id, m) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-c02e-"));
+      try {
+        fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
+        // Find THE taught invocation line for this mapping and execute IT —
+        // tokens in comments cannot satisfy this, and a taught line missing a
+        // required id parses to an argv the parser refuses as usage (exit 2),
+        // failing the positive leg (codex C02E r2).
+        const taught = chapterFencedLines().find(
+          (l) => /^\s*node\b/.test(l) && l.includes("run-analysis.js") && l.replace(/\s#.*$/, "").includes(m.documented),
+        );
+        expect({ mapping: m.id, taught }).toEqual({ mapping: m.id, taught: expect.any(String) });
+        const parsed = parseTaughtInvocation(taught!, root);
+        // The taught argv is bound to the canonical C-CLI token sequence.
+        for (let i = 0; i < m.argv.length; i++) {
+          if (m.argv[i].startsWith("run-2026") || m.argv[i].startsWith("sha256:") || ["init-1", "group-1", "rec-1"].includes(m.argv[i])) continue;
+          expect({ mapping: m.id, position: i, token: parsed.argv[i] }).toEqual({ mapping: m.id, position: i, token: m.argv[i] });
+        }
+        expect(parsed.argv).toContain("--cwd");
+        // The extracted executable must BE this package's compiled CLI and exist.
+        expect(parsed.script).toBe(RUN_ANALYSIS_JS);
+        expect(fs.existsSync(parsed.script)).toBe(true);
+        const positive = runTaught(parsed.script, parsed.argv);
+        // Parser accepted the documented shape: operational outcome, never usage.
+        expect({ mapping: m.id, accepted: positive.code === 0 || positive.code === 1 }).toEqual({ mapping: m.id, accepted: true });
+        expect(positive.stderr).not.toMatch(/^usage:/m);
+        const negative = runTaught(parsed.script, [...parsed.argv, "--nope"]);
+        expect({ mapping: m.id, code: negative.code }).toEqual({ mapping: m.id, code: 2 });
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("analyze integrated route: inspect on a missing artifact is a valid exit-0 diagnostic (C-CLI exit codes)", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-c02e-"));
+    try {
+      fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
+      const r = runCompiledCli("run-analysis.js", ["artifact", "inspect", "run", "run-20260101-000000-none", "--cwd", root]);
+      expect(r.code).toBe(0);
+      expect((JSON.parse(r.stdout) as { state: string }).state).toBe("missing");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("analyze integrated route: the compiled target exists and cannot be satisfied by tsx substitution", () => {
+    expect(fs.existsSync(RUN_ANALYSIS_JS)).toBe(true);
+    const firstLine = fs.readFileSync(RUN_ANALYSIS_JS, "utf8").split("\n", 1)[0];
+    if (firstLine.startsWith("#!")) expect(firstLine).not.toMatch(/\b(npx|tsx|bun)\b/);
+  });
+
+  it("analyze integrated route: incomplete or misplaced expected-flag pairs are usage refusals (exit 2)", () => {
+    const halfPair = runCompiledCli("run-analysis.js", [
+      "recommendation", "decide", "run-a", "rec-1", "accept", "--expected-analysis-id", "an-1",
+    ]);
+    expect(halfPair.code).toBe(2);
+    expect(halfPair.stderr).toMatch(/must be passed together/);
+    const misplaced = runCompiledCli("run-analysis.js", [
+      "recommendation", "status", "run-a", "rec-1", "implemented", "--expected-analysis-id", "an-1", "--expected-input-hash", "sha256:ab",
+    ]);
+    expect(misplaced.code).toBe(2);
+  });
+});
