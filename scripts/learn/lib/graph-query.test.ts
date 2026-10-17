@@ -435,3 +435,50 @@ describe("[G3] resolveEntryPointConfig — on-disk union (model-free, injectable
     expect(resolveEntryPointConfig({ repoRoot: "/repo", readFile: read2 })).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// I14 (legacy G2) — opt-in exported derivation (deriveExported)
+// ---------------------------------------------------------------------------
+
+describe("I14 — deriveExported derives the public surface from provable flags", () => {
+  test("deriveExported: exported zero-inbound fns are NOT dead (TS + Python)", () => {
+    const g = buildGraph();
+    // Bare call keeps the CLRA-oracle-pinned legacy semantics (both dead):
+    const bare = new Set(kgDeadCode(g).nodes.map((n) => n.id));
+    expect(bare.has("function:src/b.ts:unusedHelper")).toBe(true);
+    expect(bare.has("function:py/b.py:unused_helper")).toBe(true);
+    // Opt-in derivation excludes the provably exported/importable surface:
+    const derived = new Set(kgDeadCode(g, { deriveExported: true }).nodes.map((n) => n.id));
+    expect(derived.has("function:src/b.ts:unusedHelper")).toBe(false);
+    expect(derived.has("function:py/b.py:unused_helper")).toBe(false);
+  });
+
+  test("supplied entryPoints (even []) are authoritative over deriveExported", () => {
+    const g = buildGraph();
+    const dead = new Set(
+      kgDeadCode(g, { deriveExported: true, entryPoints: [] }).nodes.map((n) => n.id),
+    );
+    expect(dead.has("function:src/b.ts:unusedHelper")).toBe(true); // derivation suppressed
+  });
+
+  test("pre-I14 graph (flags stripped): deriveExported degrades to exact legacy behavior", () => {
+    const g = buildGraph();
+    const stripped: GraphView = {
+      nodes: g.nodes.map((n) => {
+        const { exported: _x, ...rest } = n as GraphNode & { exported?: unknown };
+        return rest as GraphNode;
+      }),
+      edges: g.edges,
+    };
+    expect(new Set(kgDeadCode(stripped, { deriveExported: true }).nodes.map((n) => n.id)))
+      .toEqual(new Set(kgDeadCode(g).nodes.map((n) => n.id)));
+  });
+
+  test("kgEntryPoints with deriveExported includes the exported surface", () => {
+    const g = buildGraph();
+    const bare = new Set(kgEntryPoints(g).map((n) => n.id));
+    expect(bare.has("function:src/b.ts:unusedHelper")).toBe(false);
+    const derived = new Set(kgEntryPoints(g, { deriveExported: true }).map((n) => n.id));
+    expect(derived.has("function:src/b.ts:unusedHelper")).toBe(true);
+  });
+});

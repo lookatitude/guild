@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>I05 legacy G5 validation</title>
+<style>
+:root{--bg:#fff;--fg:#1a1d21;--mut:#5c6670;--line:#d9dee3;--pass:#0a7d33;--res:#b04700;--sup:#5a51b3;--code:#f4f6f8}
+:root:not([data-theme="light"]){color-scheme:light dark}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15181b;--fg:#e8eaed;--mut:#9aa4ae;--line:#333a41;--pass:#4cc273;--res:#f09050;--sup:#a79df0;--code:#20252a}}
+:root[data-theme="dark"]{--bg:#15181b;--fg:#e8eaed;--mut:#9aa4ae;--line:#333a41;--pass:#4cc273;--res:#f09050;--sup:#a79df0;--code:#20252a}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,Segoe UI,sans-serif;max-width:1080px;margin:2rem auto;padding:0 16px}
+h1{font-size:1.4rem}h2{font-size:1.1rem;margin-top:2rem}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--code)}
+code,pre{background:var(--code);border-radius:4px;padding:1px 5px;font-size:12.5px;word-break:break-all}
+pre{padding:8px;overflow-x:auto}
+.meta{color:var(--mut);font-size:13px}
+.b{display:inline-block;padding:0 8px;border-radius:10px;font-weight:600;font-size:12px}
+.b.pass{color:var(--pass);border:1px solid var(--pass)}
+.b.res{color:var(--res);border:1px solid var(--res)}
+.b.sup{color:var(--sup);border:1px solid var(--sup)}
+.sum{display:flex;gap:18px;margin:12px 0}
+</style></head><body>
+<h1>I05 — Manifest drift coverage and v3 replacement</h1>
+<p class="meta">Inherited legacy G5 · owner architect (team I) · run run-20261017-160817-guild · branch <code>fix/v3c-team-i-inherited-validation</code> · validated at plugin <code>ee6cbbe9 (origin/next)</code> · 2026-10-17</p>
+<div class="sum"><span class="b pass">PASS 2</span><span class="b res">RESIDUAL 2</span><span class="b sup">SUPERSEDED 1</span></div>
+<p class="meta">Fingerprint reconciliation: guild.inventory.json drifted from the plan pin (post-plan commit 3bf18fc8 on next); reconciled — counts below are from the current inventory. See evidence/I05/fingerprint-reconciliation.txt.</p>
+<h2>Checks (actually run)</h2>
+<table><tr><th>Command (cwd plugin worktree)</th><th>Exit</th><th>Result</th><th>Evidence</th></tr>
+<tr><td><code>bun tests/rearch/r-decl.ts --prove</code></td><td>0</td><td>REAL-PATH: all shipped W7 exemplars validate AND match their prose (rail GREEN); all anti-vacuity proofs passed</td><td><code>.guild/runs/run-20261017-160817-guild/evidence/I05/r-decl-prove.log</code></td></tr>
+<tr><td><code>bun scripts/lint/layout-laws.ts</code></td><td>0</td><td>29 PASS, 0 violations, 0 baselined, 0 open</td><td><code>.guild/runs/run-20261017-160817-guild/evidence/I05/layout-laws.log</code></td></tr>
+<tr><td><code>bun test --isolate scripts/lib/command-registry-source.test.ts tests/rails/inventory-drift-gate.test.ts</code></td><td>0</td><td>38 pass, 0 fail across 2 files — the registry and inventory gates cited in rows 4-5, executed</td><td><code>.guild/runs/run-20261017-160817-guild/evidence/I05/bun-test-supplemental.log</code></td></tr>
+</table>
+<h2>Subclaim matrix</h2>
+<table><tr><th>#</th><th>Subclaim</th><th>Current producer</th><th>Consumer / live caller</th><th>Golden / test</th><th>Expected</th><th>Actual</th><th>Disposition</th></tr>
+<tr><td>1</td><td>four current R-DECL exemplars</td><td><code>tests/rearch/r-decl.ts:59-64 EXEMPLARS: skills/specialists/architect-tradeoff-matrix/SKILL.md, skills/specialists/backend-service-integration/SKILL.md, agents/advisor.md, agents/developer.md; validator src/domains/distribution/surface-manifest.ts:92 validateSurfaceManifest</code></td><td><code>tests/rearch/run-all.ts:39; CI .github/workflows/rearch-rails.yml:66,:70</code></td><td><code>r-decl --prove control 'REAL-PATH: all shipped W7 exemplars validate AND match their prose'; scripts/lib/rearch-surface-manifest-parity.test.ts (byte parity vs HEAD)</code></td><td>exemplars schema-valid, prose-equivalent, drift trips the rail</td><td>as expected; anti-vacuity controls (dispatch/tier/gate/name/schema) all trip — executed</td><td><span class="b pass">PASS</span><br>Executed prove run with planted-drift refusals.</td></tr>
+<tr><td>2</td><td>remaining live skill surfaces</td><td><code>r-decl.ts:32-34 — a live-surface file WITHOUT a surface_manifest block is out of scope ('W7 is a slice, not the full rework')</code></td><td><code>none beyond R-DECL</code></td><td><code>none for the 73 uncovered skills</code></td><td>manifest + drift refusal on the agreed next tranche, or a ratified replacement</td><td>current inventory: 75 SKILL.md on disk (58 specialists, 13 meta, 2 knowledge, 1 playbook, 1 operations, 1 quality), 17 indexed in .claude-plugin/plugin.json, 76 inventory entries (incl. using-guild SKILL.src.md); only 2 skills carry surface_manifest — rollout halted at the W7 slice</td><td><span class="b res">RESIDUAL</span><br>No tranche shipped and no supersession ratified; the old ~146 count is replaced by the current 75/24/4 inventory.</td></tr>
+<tr><td>3</td><td>machinery-agent surfaces</td><td><code>agents/team-lead.md:15 and agents/context-manager.md:14 both carry surface_manifest:</code></td><td><code>r-decl.ts:59-64 omits both; rearch-surface-manifest-parity.test.ts:52-56 covers only 3 surfaces (not developer either)</code></td><td><code>layout-laws agents-glob-4 (scripts/lint/layout-laws.ts:1926) checks the agent SET only, not manifests</code></td><td>every live manifest is drift-gated</td><td>2 of 4 agent manifests live but ungated — silent drift possible</td><td><span class="b res">RESIDUAL</span><br>Live manifests outside the rail's scope.</td></tr>
+<tr><td>4</td><td>command registry replacement</td><td><code>command-src/command-registry.json + scripts/lib/command-registry.ts (host-neutral registry as source of truth)</code></td><td><code>scripts/build-host-packages.ts:119, :303-304 copy the registry into packages; r-decl.ts:52-58 documents the command exclusion</code></td><td><code>scripts/lib/command-registry-source.test.ts:77 same command-id set as commands/*.md; :99 byte-for-byte render; :122-143 anti-vacuity mutations</code></td><td>commands declarative without surface_manifest</td><td>as expected over the full 24-file corpus (13 dispatchers + 11 print-only aliases)</td><td><span class="b sup">SUPERSEDED</span><br>Ratification anchors: KTD12 (capability coverage replaces file-count identity) and KTD69 (13 command files) are operator-locked laws, and r-decl.ts:52-58 records the command exclusion; the registry drift gates were executed in the supplemental check.</td></tr>
+<tr><td>5</td><td>current inventory/layout equivalence</td><td><code>src/domains/distribution/build-inventory.ts -&gt; guild.inventory.json</code></td><td><code>CI rearch-rails.yml:88 check:inventory before verify:host-packages (:133)</code></td><td><code>tests/rails/inventory-drift-gate.test.ts (fresh passes, mutation fails, missing file fails, ordering pinned); layout-laws skills-glob-17 (:1905), agents-glob-4 (:1926), no-14th-command-file (:2374) — all PASS in the executed log</code></td><td>inventory and layout gates both green and consistent</td><td>both executed green; caveat: layout-laws never reads guild.inventory.json, so no rule asserts the two agree (e.g. the 76-vs-75 SKILL.src.md entry)</td><td><span class="b pass">PASS</span><br>Each gate green and executed; the cross-check gap is recorded as an optional follow-on.</td></tr>
+</table>
+<h2>Residual follow-on plans (require ratification before programme close)</h2>
+<table><tr><th>Row</th><th>Scope</th><th>Tests</th><th>Owner</th><th>Constraints</th><th>Bounded task</th></tr>
+<tr><td>2</td><td>Either add surface_manifest to the 17 indexed assemblers and widen EXEMPLARS (or make R-DECL auto-discover every file carrying ^surface_manifest:), or record a ratified decision that full rollout is superseded by KTD12 capability coverage + the description-budget lint</td><td>widened r-decl --prove still trips all anti-vacuity controls over the expanded set</td><td>architect</td><td>C-ARCH: no new surface homes; decision requires operator ratification</td><td>follow-on plan, unratified</td></tr>
+<tr><td>3</td><td>Add agents/team-lead.md and agents/context-manager.md to EXEMPLARS (and optionally developer/team-lead/context-manager to the parity test)</td><td>planted drift in either manifest fails r-decl</td><td>architect</td><td>smallest-change rail widening; no manifest content edits</td><td>follow-on plan, unratified</td></tr></table>
+<h2>Notes</h2><ul><li>Row 5 optional follow-on: a layout-law asserting inventory skills/agents/commands equal the glob-derived sets would close the inventory&lt;-&gt;layout cross-check gap.</li></ul>
+<p class="meta">Archive closure, source presence, exports and passing schema fixtures alone never establish operational completion. Every PASS cites a real producer and an executed test at the stated scope; live-caller status and wiring caveats are recorded per row, and a PASS does not extend beyond its row's stated scope. Evidence paths under .guild/runs/ refer to the UMBRELLA workspace run directory (the workspace root two levels above this repo), not to this repository.</p>
+</body></html>

@@ -648,3 +648,233 @@ describe("G1 gate 5 — perf note (recorded, not gated)", () => {
     expect(canonicalize(g).nodes.length).toBe(g.nodes.length);
   });
 });
+
+// ---------------------------------------------------------------------------
+// I14 (legacy G2) — provable `exported` symbol metadata
+// ---------------------------------------------------------------------------
+
+describe("I14 gate — exported flag is provable syntax, never a name guess", () => {
+  function extractOne(name: string, content: string) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "i14-exported-"));
+    try {
+      fs.writeFileSync(path.join(dir, name), content);
+      return runOn(dir, [name]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  const flag = (g: { nodes: GraphNode[] }, id: string) =>
+    (g.nodes.find((n) => n.id === id) as { exported?: unknown } | undefined)?.exported;
+
+  test("TS: direct export, unexported same-name sibling file state, default + list + alias", () => {
+    const g = extractOne("x.ts", [
+      "export function pub(): number { return 1; }",
+      "function priv(): number { return 2; }",
+      "function viaList(): number { return 3; }",
+      "function viaAlias(): number { return 4; }",
+      "function viaDefault(): number { return 5; }",
+      "export { viaList, viaAlias as renamed };",
+      "export default viaDefault;",
+    ].join("\n"));
+    expect(flag(g, "function:x.ts:pub")).toBe(true);
+    expect(flag(g, "function:x.ts:priv")).toBe(false);
+    expect(flag(g, "function:x.ts:viaList")).toBe(true);
+    expect(flag(g, "function:x.ts:viaAlias")).toBe(true); // alias exports the LOCAL name
+    expect(flag(g, "function:x.ts:viaDefault")).toBe(true);
+  });
+
+  test("TS: `export { x } from './y'` re-exports a FOREIGN binding — local x stays unexported", () => {
+    const g = extractOne("x.ts", [
+      "function x(): number { return 1; }",
+      "export { x } from './y';",
+    ].join("\n"));
+    expect(flag(g, "function:x.ts:x")).toBe(false);
+  });
+
+  test("TS: methods inherit the class flag; exported class vs unexported class", () => {
+    const g = extractOne("x.ts", [
+      "export class Pub {",
+      "  m(): number { return 1; }",
+      "}",
+      "class Priv {",
+      "  m(): number { return 2; }",
+      "}",
+    ].join("\n"));
+    expect(flag(g, "class:x.ts:Pub")).toBe(true);
+    expect(flag(g, "function:x.ts:Pub.m")).toBe(true);
+    expect(flag(g, "class:x.ts:Priv")).toBe(false);
+    expect(flag(g, "function:x.ts:Priv.m")).toBe(false);
+  });
+
+  test("Python: module-level def/class are importable (exported); methods inherit", () => {
+    const g = extractOne("m.py", [
+      "def top():",
+      "    return 1",
+      "class C:",
+      "    def m(self):",
+      "        return 2",
+    ].join("\n"));
+    expect(flag(g, "function:m.py:top")).toBe(true);
+    expect(flag(g, "class:m.py:C")).toBe(true);
+    expect(flag(g, "function:m.py:C.m")).toBe(true);
+  });
+
+  test("anti-vacuity: removing the export keyword flips the flag (same symbol id)", () => {
+    const withExport = extractOne("x.ts", "export function f(): number { return 1; }");
+    const without = extractOne("x.ts", "function f(): number { return 1; }");
+    expect(flag(withExport, "function:x.ts:f")).toBe(true);
+    expect(flag(without, "function:x.ts:f")).toBe(false);
+  });
+
+  test("schema validation passes a graph carrying exported flags (additive metadata)", () => {
+    const g = extractOne("x.ts", "export function f(): number { return 1; }");
+    const result = validateGraph(fullGraphI14(g));
+    expect(result.success).toBe(true);
+    const node = (result.data?.nodes ?? []).find((n: GraphNode) => n.id === "function:x.ts:f") as
+      | { exported?: unknown }
+      | undefined;
+    expect(node?.exported).toBe(true); // sanitize/normalize preserve the flag
+  });
+
+  function fullGraphI14(g: { nodes: GraphNode[]; edges: GraphEdge[] }) {
+    return {
+      version: "guild.knowledge_graph.v1",
+      kind: "codebase",
+      generated_from_commit: "fixture",
+      project: { name: "i14-fixture", description: "" },
+      nodes: g.nodes,
+      edges: g.edges,
+    };
+  }
+});
+
+describe("I14 round-2 — export-scan negatives (codex findings F1-F3)", () => {
+  function extractOne2(name: string, content: string) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "i14-neg-"));
+    try {
+      fs.writeFileSync(path.join(dir, name), content);
+      return runOn(dir, [name]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  const flag2 = (g: { nodes: GraphNode[] }, id: string) =>
+    (g.nodes.find((n) => n.id === id) as { exported?: unknown } | undefined)?.exported;
+
+  test("F1a: `export { f };` inside a block comment does NOT export f", () => {
+    const g = extractOne2("x.ts", [
+      "function f(): number { return 1; }",
+      "/*",
+      "export { f };",
+      "*/",
+    ].join("\n"));
+    expect(flag2(g, "function:x.ts:f")).toBe(false);
+  });
+
+  test("F1b: `export { f };` inside a template literal does NOT export f", () => {
+    const g = extractOne2("x.ts", [
+      "function f(): number { return 1; }",
+      "const s = `",
+      "export { f };",
+      "`;",
+    ].join("\n"));
+    expect(flag2(g, "function:x.ts:f")).toBe(false);
+  });
+
+  test("F2: `export { f }` with `from './other'` on the NEXT line does NOT export local f", () => {
+    const g = extractOne2("x.ts", [
+      "function f(): number { return 1; }",
+      "export { f }",
+      "from './other';",
+    ].join("\n"));
+    expect(flag2(g, "function:x.ts:f")).toBe(false);
+  });
+
+  test("F3: `export type { T }` and per-entry `type` do NOT create runtime exports", () => {
+    const g = extractOne2("x.ts", [
+      "class T {",
+      "  m(): number { return 1; }",
+      "}",
+      "class T2 {",
+      "  n(): number { return 3; }",
+      "}",
+      "function f(): number { return 2; }",
+      "export type { T };",
+      "export { type T2, f };",
+    ].join("\n"));
+    expect(flag2(g, "class:x.ts:T")).toBe(false);
+    expect(flag2(g, "function:x.ts:T.m")).toBe(false);
+    expect(flag2(g, "class:x.ts:T2")).toBe(false); // per-entry type exclusion
+    expect(flag2(g, "function:x.ts:T2.n")).toBe(false);
+    expect(flag2(g, "function:x.ts:f")).toBe(true); // the runtime entry still exports
+  });
+
+  test("F1c (round 2): a backtick inside a comment does not poison template state", () => {
+    const g = extractOne2("x.ts", [
+      "function f(): number { return 1; }",
+      "/* ` */",
+      "const s = `",
+      "export { f };",
+      "`;",
+    ].join("\n"));
+    expect(flag2(g, "function:x.ts:f")).toBe(false);
+  });
+
+  test("F2c (round 3): a block-comment line before the `from` clause is still a foreign re-export", () => {
+    const g = extractOne2("x.ts", [
+      "function f(): number { return 1; }",
+      "export { f }",
+      "/* re-exported from a sibling module */",
+      "from './other';",
+    ].join("\n"));
+    expect(flag2(g, "function:x.ts:f")).toBe(false);
+  });
+
+  test("F2d (round 3): a SPANNING block comment before the `from` clause is handled", () => {
+    const g = extractOne2("x.ts", [
+      "function f(): number { return 1; }",
+      "export { f }",
+      "/* spanning",
+      "   comment */",
+      "from './other';",
+    ].join("\n"));
+    expect(flag2(g, "function:x.ts:f")).toBe(false);
+  });
+
+  test("F2e (round 4): `*/ from` on the comment-close line is still a foreign re-export", () => {
+    const g = extractOne2("x.ts", [
+      "function f(): number { return 1; }",
+      "export { f }",
+      "/* spanning",
+      "*/ from './other';",
+    ].join("\n"));
+    expect(flag2(g, "function:x.ts:f")).toBe(false);
+  });
+
+  test("F2f (round 5): a comment OPENED after the brace carries into the lookahead", () => {
+    const g = extractOne2("x.ts", [
+      "function f(): number { return 1; }",
+      "export { f } /* spanning",
+      "*/ from './other';",
+    ].join("\n"));
+    expect(flag2(g, "function:x.ts:f")).toBe(false);
+  });
+
+  test("F2g (round 5 control): a REAL local export with a trailing comment still exports", () => {
+    const g = extractOne2("x.ts", [
+      "function f(): number { return 1; }",
+      "export { f }; /* local surface */",
+    ].join("\n"));
+    expect(flag2(g, "function:x.ts:f")).toBe(true);
+  });
+
+  test("F2b (round 2): a comment line before the `from` clause is still a foreign re-export", () => {
+    const g = extractOne2("x.ts", [
+      "function f(): number { return 1; }",
+      "export { f }",
+      "// re-exported from a sibling module",
+      "from './other';",
+    ].join("\n"));
+    expect(flag2(g, "function:x.ts:f")).toBe(false);
+  });
+});

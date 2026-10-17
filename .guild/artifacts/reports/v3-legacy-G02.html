@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>I02 legacy G2 validation</title>
+<style>
+:root{--bg:#fff;--fg:#1a1d21;--mut:#5c6670;--line:#d9dee3;--pass:#0a7d33;--res:#b04700;--sup:#5a51b3;--code:#f4f6f8}
+:root:not([data-theme="light"]){color-scheme:light dark}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15181b;--fg:#e8eaed;--mut:#9aa4ae;--line:#333a41;--pass:#4cc273;--res:#f09050;--sup:#a79df0;--code:#20252a}}
+:root[data-theme="dark"]{--bg:#15181b;--fg:#e8eaed;--mut:#9aa4ae;--line:#333a41;--pass:#4cc273;--res:#f09050;--sup:#a79df0;--code:#20252a}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,Segoe UI,sans-serif;max-width:1080px;margin:2rem auto;padding:0 16px}
+h1{font-size:1.4rem}h2{font-size:1.1rem;margin-top:2rem}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--code)}
+code,pre{background:var(--code);border-radius:4px;padding:1px 5px;font-size:12.5px;word-break:break-all}
+pre{padding:8px;overflow-x:auto}
+.meta{color:var(--mut);font-size:13px}
+.b{display:inline-block;padding:0 8px;border-radius:10px;font-weight:600;font-size:12px}
+.b.pass{color:var(--pass);border:1px solid var(--pass)}
+.b.res{color:var(--res);border:1px solid var(--res)}
+.b.sup{color:var(--sup);border:1px solid var(--sup)}
+.sum{display:flex;gap:18px;margin:12px 0}
+</style></head><body>
+<h1>I02 — Export-derived public entry points</h1>
+<p class="meta">Inherited legacy G2 · owner tooling (team I) · run run-20261017-160817-guild · branch <code>fix/v3c-team-i-inherited-validation</code> · validated at plugin <code>ee6cbbe9 (origin/next)</code> · 2026-10-17</p>
+<div class="sum"><span class="b pass">PASS 1</span><span class="b res">RESIDUAL 4</span><span class="b sup">SUPERSEDED 0</span></div>
+
+<h2>Checks (actually run)</h2>
+<table><tr><th>Command (cwd plugin worktree)</th><th>Exit</th><th>Result</th><th>Evidence</th></tr>
+<tr><td><code>bun test --isolate scripts/learn/lib/impact.test.ts scripts/learn/lib/graph-query.test.ts</code></td><td>0</td><td>43 pass, 0 fail across 2 files</td><td><code>.guild/runs/run-20261017-160817-guild/evidence/I02/bun-test.log</code></td></tr>
+</table>
+<h2>Subclaim matrix</h2>
+<table><tr><th>#</th><th>Subclaim</th><th>Current producer</th><th>Consumer / live caller</th><th>Golden / test</th><th>Expected</th><th>Actual</th><th>Disposition</th></tr>
+<tr><td>1</td><td>exported symbol metadata producer</td><td><code>parser has it: scripts/learn/lib/extract.ts:21 'exported: boolean;' (:249/:261/:271); DROPPED before the graph: scripts/learn/lib/structural.ts:582-592 makeBundle emits symbolNodes without it (structural.ts:552 calls analyzeSource only for importSpecs)</code></td><td><code>src/domains/knowledge/graph-query.ts:41 states 'the graph carries no exported flag'</code></td><td><code>none for graph-level exported metadata</code></td><td>each symbol node carries an exported flag</td><td>flag exists in the parser layer only; never reaches the graph</td><td><span class="b res">RESIDUAL</span><br>The metadata producer for the graph does not exist; bounded implementation task I14.</td></tr>
+<tr><td>2</td><td>impact automatic public-entry derivation (no entryPoints)</td><td><code>scripts/learn/lib/impact.ts:121 ENTRY_POINT_NAMES=['main','__main__']; :416 suppliedEntry from opts; :56-61 'must be supplied by the caller'</code></td><td><code>none — computeImpact (:408) has no production caller and no CLI entry</code></td><td><code>impact.test.ts:62 covers the main-name heuristic only</code></td><td>no-options run derives the public-surface entry set</td><td>only the main/__main__ heuristic plus caller-supplied entries; no package/config/exported derivation</td><td><span class="b res">RESIDUAL</span><br>Automatic derivation absent; bounded implementation task I14.</td></tr>
+<tr><td>3</td><td>dead-code automatic public-entry derivation</td><td><code>src/domains/knowledge/graph-query.ts:53-62 resolveEntryPointConfig unions package.json main/bin/exports + .guild/settings.json models.entryPoints + .guild/indexes/entry_points.json + explicit (re-exported scripts/learn/lib/graph-query.ts:11)</code></td><td><code>NO production caller; the live caller ignores it: src/domains/knowledge/recall.ts:724 'evidence = kgDeadCode(view).nodes;' passes no entryPoints, so exported API is reported dead in live recall</code></td><td><code>graph-query.test.ts:403 'unions package.json + settings + entry_points.json + explicit (sorted, normalised)' — unit only, injected reader</code></td><td>dead-code derives public entries automatically on the live path</td><td>manifest derivation exists but is unwired; no exported-flag derivation</td><td><span class="b res">RESIDUAL</span><br>Dormant derivation + a live caller that bypasses it; bounded implementation task I14.</td></tr>
+<tr><td>4</td><td>explicit entry-point compatibility</td><td><code>graph-query.ts:478 normalizeMatchers(opts.entryPoints) — id, simple name AND file relpath; impact.ts:332-336 resolveEntryPoints — node id or simple name ONLY (no relpath matching)</code></td><td><code>kgDeadCode / kgEntryPoints / computeImpact option paths</code></td><td><code>graph-query.test.ts:231 (name), :242 (node id), :259 (file relpath), :283/:293/:301 kgEntryPoints, :307 'dead-code and entry-points use ONE consistent rule' (graph-query internal); impact.test.ts:187 supplied non-main NAME honored</code></td><td>explicit entries honored at each module's documented scope</td><td>graph-query honors id/name/relpath under one rule (executed); impact honors id/simple-name only — the two modules do NOT share one matching rule</td><td><span class="b pass">PASS</span><br>Each module honors explicit entries at its own documented scope with executed tests; the graph-query-vs-impact matcher asymmetry (relpath absent from impact) is recorded and is an I14 invariant to preserve or deliberately unify, not silently change.</td></tr>
+<tr><td>5</td><td>unsupported-language behavior (no invented exports)</td><td><code>graph layer safe: structural.ts:435 returns null for unknown languages; parser layer NOT safe: scripts/learn/lib/extract.ts:361/:371 analyzeGeneric pushes exported:true for java/rust/c# even on 'private' matches (Go capitalization rule :366)</code></td><td><code>scripts/learn/content-analyze.ts:493 'if (!fn.exported) continue;' consumes the invented flag</code></td><td><code>none</code></td><td>missing metadata preserves legacy behavior, never invents exports</td><td>analyzeGeneric invents exported:true; consumed by content-analyze</td><td><span class="b res">RESIDUAL</span><br>Invented exports on the generic-language path with a real consumer and no test.</td></tr>
+</table>
+<h2>Residual follow-on plans (require ratification before programme close)</h2>
+<table><tr><th>Row</th><th>Scope</th><th>Tests</th><th>Owner</th><th>Constraints</th><th>Bounded task</th></tr>
+<tr><td>1</td><td>Thread exported from extractFile (structural.ts:431) into symbolNodes; include in bundleChecksum + cache version stamp</td><td>extract-structural.test.ts: export vs non-export, Python top-level</td><td>tooling</td><td>schema validators pass unknown keys (schema.ts:499, ~1002; sanitize :355-368; GraphNode [k:string]:unknown) — additive, no schema break; old graphs without the flag stay valid</td><td>I14</td></tr>
+<tr><td>2</td><td>impact.ts derives entries from node.exported + resolveEntryPointConfig sources when entryPoints is absent; explicit entryPoints (incl. []) stays authoritative</td><td>impact.test.ts 'exported fn is entry without opts'; equivalence: no-options vs explicit-equivalent sets</td><td>tooling</td><td>TS compiler facilities only; no string-name publicness guess; no new dependency</td><td>I14</td></tr>
+<tr><td>3</td><td>recall.ts:724 passes resolveEntryPointConfig({repoRoot}) + exported-flag entries into kgDeadCode</td><td>real-path test: package.json exports file's functions not dead in recall</td><td>tooling</td><td>use existing public domain indexes; no sibling-domain deep import</td><td>I14</td></tr>
+<tr><td>5</td><td>analyzeGeneric sets exported per language visibility (pub/public/capitalized) else false/unknown — never invented true</td><td>extract test: Java private method not exported</td><td>tooling</td><td>unresolvable syntax stays an explicit residual, not false exported=true</td><td>I14 (explicit-residual matrix for unproven languages)</td></tr></table>
+<h2>Notes</h2><ul><li>Baseline residual recorded for I14 per the task step: rows 1, 2, 3, 5 are the separately bounded I14 scope; row 4 is the compatibility invariant I14 must preserve.</li><li>Wiring caveat shared with I01: impact/graph-query CLIs have no skill caller; recall.ts:724 is the one live consumer of kgDeadCode.</li></ul>
+<p class="meta">Archive closure, source presence, exports and passing schema fixtures alone never establish operational completion. Every PASS cites a real producer and an executed test at the stated scope; live-caller status and wiring caveats are recorded per row, and a PASS does not extend beyond its row's stated scope. Evidence paths under .guild/runs/ refer to the UMBRELLA workspace run directory (the workspace root two levels above this repo), not to this repository.</p>
+</body></html>
