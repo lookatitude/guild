@@ -504,10 +504,23 @@ describe("T04 P4 — the goal sub-verb has a real route", () => {
     ).toBe(false);
   });
 
-  it("the goal command file is a print-only alias pointing at /guild:plan goal", () => {
-    const alias = readCommand("goal");
-    expect(alias).toContain("/guild:plan goal");
-    expect(alias).not.toMatch(/Skill:/);
+  it("the goal capability survives alias retirement (state-aware, C06E)", () => {
+    // PRE-retirement: goal.md is a print-only alias AND the allowlist names it.
+    // RETIRED: goal.md and the allowlist are BOTH gone and /guild:plan still
+    // carries the goal sub-verb. A partial state fails either branch (KTD14).
+    const goalPath = path.join(COMMANDS, "goal.md");
+    const allowPath = path.join(COMMANDS, "aliases.allowlist.json");
+    if (fs.existsSync(goalPath)) {
+      const alias = readCommand("goal");
+      expect(alias).toContain("/guild:plan goal");
+      expect(alias).not.toMatch(/Skill:/);
+      expect(fs.existsSync(allowPath)).toBe(true);
+      expect((JSON.parse(fs.readFileSync(allowPath, "utf8")) as { aliases: string[] }).aliases).toContain("goal");
+    } else {
+      expect(fs.existsSync(allowPath)).toBe(false);
+      const hint = readCommand("plan").match(/argument-hint:\s*"(.*)"/)?.[1] ?? "";
+      expect(hint).toContain("goal");
+    }
   });
 });
 
@@ -867,8 +880,11 @@ describe("T04 C02E-D — analyze dispatcher mapping", () => {
 
   it("analyze dispatcher mapping: no print-only analyze alias ships (stale-alias negative)", () => {
     expect(fs.existsSync(path.join(COMMANDS, "analyze.md"))).toBe(false);
-    const allow = JSON.parse(fs.readFileSync(path.join(COMMANDS, "aliases.allowlist.json"), "utf8")) as { aliases?: Array<{ file?: string }> } | string[];
-    expect(JSON.stringify(allow)).not.toContain("analyze");
+    // State-aware (codex C06E r1 F2): after KTD14 retirement the allowlist is gone.
+    const allowPath = path.join(COMMANDS, "aliases.allowlist.json");
+    if (fs.existsSync(allowPath)) {
+      expect(JSON.stringify(JSON.parse(fs.readFileSync(allowPath, "utf8")))).not.toContain("analyze");
+    }
   });
 });
 
