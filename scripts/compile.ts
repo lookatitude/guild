@@ -52,6 +52,18 @@ export interface Target {
    * in the mcp-servers/* lockfiles CI installs.
    */
   nodePaths?: string[];
+  /**
+   * esbuild's `absWorkingDir`. Module header comments are written relative to it,
+   * so it is part of the output bytes. Defaults to the repo root; only a target
+   * whose committed copy was built from elsewhere overrides it.
+   */
+  absWorkingDir?: string;
+  /**
+   * Rewrite an `npx tsx` / `bun` shebang to `node` (see `normalizeShebang`).
+   * Defaults true. False ONLY where the committed bytes predate the rule and
+   * changing them is a separate decision from checking them.
+   */
+  normalizeShebang?: boolean;
   group: "hooks" | "agent-team" | "mcp" | "scripts";
 }
 
@@ -234,6 +246,24 @@ export function targets(): Target[] {
   for (const s of RUNTIME_SCRIPT_IDS) {
     t.push({ id: `scripts/${s.id}`, entry: s.entry, out: `runtime/scripts/${s.id}.js`, yamlFrom: "scripts", group: "scripts" });
   }
+  // The activated-host conformance worker. It was built by its own esbuild target
+  // in scripts/package.json with byte-identical options, which left it OUTSIDE
+  // --check: editing anything it bundles drifted the shipped copy silently, and
+  // only the conformance suite's own byte-identical assertion caught it (#241).
+  t.push({
+    id: "scripts/activated-host-conformance",
+    entry: "scripts/activated-host-conformance.ts",
+    out: "scripts/dist/activated-host-conformance.js",
+    yamlFrom: "scripts",
+    // Both knobs reproduce the scripts/-cwd npm build EXACTLY, so adding this
+    // target checks the committed bundle without rewriting it. Its shebang is
+    // still `npx tsx`, which the KTD10/KTD11 rule would rewrite to `node` —
+    // that is a real defect in the shipped artifact, and fixing it is a content
+    // change that belongs in its own commit, not smuggled in by a check.
+    absWorkingDir: "scripts",
+    normalizeShebang: false,
+    group: "scripts",
+  });
   return t;
 }
 
@@ -243,6 +273,30 @@ export function targets(): Target[] {
 
 /* eslint-disable @typescript-eslint/no-var-requires */
 const esbuild = require(path.join(ROOT, "scripts", "node_modules", "esbuild")) as typeof import("esbuild");
+
+/**
+ * Bundle bytes depend on the esbuild version, so a stale scripts/node_modules
+ * silently produces a different committed surface than CI. That cost a full
+ * debugging detour (#241): 0.27.7 was installed against a lockfile pinning
+ * 0.28.2, and the ~87 drifted files read as platform-dependent output. The
+ * lockfile is the pin; this makes the pin ENFORCED rather than merely declared.
+ */
+function assertLockedEsbuild(): void {
+  const lockPath = path.join(ROOT, "scripts", "package-lock.json");
+  const lock = JSON.parse(fs.readFileSync(lockPath, "utf8")) as {
+    packages?: Record<string, { version?: string }>;
+  };
+  const locked = lock.packages?.["node_modules/esbuild"]?.version;
+  if (!locked) throw new Error("scripts/package-lock.json does not pin esbuild");
+  const loaded = (esbuild as unknown as { version: string }).version;
+  if (loaded !== locked) {
+    throw new Error(
+      `esbuild ${loaded} is installed but scripts/package-lock.json pins ${locked}. ` +
+        "Bundle bytes differ between versions, so this would drift every output. " +
+        "Run `npm ci` in scripts/.",
+    );
+  }
+}
 
 /**
  * The esbuild `alias` map for one target. Exported because it IS the #75 fix:
@@ -263,9 +317,9 @@ export function aliasForTarget(t: Target): Record<string, string> {
  */
 export function buildOptionsForTarget(t: Target, outAbs: string): import("esbuild").BuildOptions {
   return {
-    absWorkingDir: ROOT,
-    entryPoints: [t.entry],
-    outfile: path.relative(ROOT, outAbs),
+    absWorkingDir: t.absWorkingDir ? path.join(ROOT, t.absWorkingDir) : ROOT,
+    entryPoints: [t.absWorkingDir ? path.relative(t.absWorkingDir, t.entry) : t.entry],
+    outfile: outAbs,
     bundle: true,
     platform: "node",
     target: "node18",
@@ -281,7 +335,7 @@ function buildOne(t: Target, outAbs: string): void {
   if (r.errors.length) {
     throw new Error(`esbuild failed for ${t.id}:\n${r.errors.map((e) => e.text).join("\n")}`);
   }
-  normalizeShebang(outAbs);
+  if (t.normalizeShebang !== false) normalizeShebang(outAbs);
 }
 
 /**
@@ -362,7 +416,7 @@ function compileAll(outRoot: string, only?: string): string[] {
 }
 
 /** Every directory the compile OWNS: nothing else may live under them (KTD7/KTD9). */
-const OWNED_OUTPUT_ROOTS = ["hooks/dist", "hooks/agent-team/dist", "runtime"];
+const OWNED_OUTPUT_ROOTS = ["hooks/dist", "hooks/agent-team/dist", "runtime", "scripts/dist"];
 
 /** Every committed file under the owned roots, repo-relative. */
 function committedOutputs(): string[] {
@@ -393,6 +447,7 @@ function strayOutputs(expected: string[]): string[] {
 const GROUPS = ["hooks", "agent-team", "mcp", "scripts"];
 
 function main(argv: string[]): number {
+  assertLockedEsbuild();
   const check = argv.includes("--check");
   const onlyArg = argv.find((a) => a.startsWith("--only="));
   const only = onlyArg ? onlyArg.slice("--only=".length) : undefined;
