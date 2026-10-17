@@ -11,7 +11,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { parseYaml } from "../state";
-import { validateGuildTraceEvent, type AnalysisEventClass } from "./guild-trace-events";
+import { collapseSpanTwins, toolActionSignature, validateGuildTraceEvent, type AnalysisEventClass } from "./guild-trace-events";
 import { durableGuildDir } from "../state";
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -99,9 +99,70 @@ export interface RunAnalysis {
     specialists_dispatched: string[];
     tokens: { input: number; output: number; cached: number; total: number; cost_usd: number };
     duration_ms: number;
+    /** Additive (C-ANALYSIS usage_availability). Absent on legacy artifacts: every metric is unknown. */
+    availability?: Record<UsageMetric, UsageMetricAvailability>;
   };
   findings: AnalysisFinding[];
   recommendations: Recommendation[];
+  /** Additive C-DETECTORS/v1 diagnostics. Absent on legacy artifacts; never relabels a v1 field. */
+  diagnostics?: RunDiagnostics;
+}
+
+export const DETECTOR_IDS = Object.freeze([
+  "clarification", "instruction_following", "knowledge_memory", "outcome_quality", "prompt_action_latency",
+  "recommendation_scope", "redundant_prompt", "repeated_mistake", "steering", "tool_coverage", "usage_outlier", "workflow_churn",
+] as const);
+export type DetectorId = (typeof DETECTOR_IDS)[number];
+export type DetectorState = "observed" | "ambiguous" | "unobservable";
+export interface DetectorResult {
+  detector: DetectorId;
+  state: DetectorState;
+  value: Record<string, unknown>;
+  evidence_refs: string[];
+  reason: string | null;
+}
+export interface InstructionCheck {
+  instruction_id: string;
+  requirement_hash: string;
+  status: AssessmentStatus;
+  evidence_refs: string[];
+  proof_refs: string[];
+}
+export interface InputManifestEntry {
+  ref: string;
+  sha256: string | null;
+  status: "consumed" | "missing" | "rejected" | "unrecognized";
+}
+export interface AnalysisCohort {
+  run_class: string | null;
+  model: string | null;
+  provider: string | null;
+  config_hash: string | null;
+}
+export interface RunDiagnostics {
+  contract: "C-DETECTORS/v1";
+  input_manifest: InputManifestEntry[];
+  input_hash: string;
+  cohort: AnalysisCohort;
+  results: DetectorResult[];
+  instruction_checks: InstructionCheck[];
+}
+export const USAGE_METRICS = Object.freeze(["input", "output", "cached", "cost_usd", "duration_ms"] as const);
+export type UsageMetric = (typeof USAGE_METRICS)[number];
+export interface UsageMetricAvailability {
+  state: "unobserved" | "partial" | "complete";
+  evidence_refs: string[];
+  missing_reason: null | "host_unavailable" | "unwired" | "legacy_unknown" | "incomplete_observation";
+}
+export interface ComparisonDimension extends DetectorResult {
+  by_run: Record<string, { state: DetectorState | "legacy_unknown"; eligible: boolean; value: Record<string, unknown> }>;
+  comparable_runs: string[];
+}
+export interface ComparisonDiagnostics {
+  contract: "C-DETECTORS/v1";
+  runs: Array<{ run_id: string; source_hash: string; input_hash: string | null; eligible: boolean }>;
+  dimensions: ComparisonDimension[];
+  recommendation_clusters: Array<{ scope: RecommendationScope; kind: RecommendationKind; target: string; runs: string[] }>;
 }
 
 export interface RunComparison {
@@ -112,6 +173,8 @@ export interface RunComparison {
   completeness: { eligible_runs: number; total_runs: number; average_score: number };
   repeated_signatures: Array<{ signature: string; runs: string[]; occurrences: number }>;
   recommendations: Recommendation[];
+  /** Additive per-dimension evidence/availability; comparison_id and core fields are unchanged. */
+  diagnostics?: ComparisonDiagnostics;
 }
 
 export type ComparisonTarget =
@@ -390,6 +453,7 @@ const RECOMMENDATION_KINDS = new Set<RecommendationKind>([
 ]);
 const CONFIDENCE_VALUES = new Set(["low", "medium", "high"]);
 const SEVERITY_VALUES = new Set(["low", "medium", "high"]);
+const FINDING_KINDS = new Set<string>(["instruction_violation", "repeated_failure", "tool_gap", "workflow_churn", "prompt_inefficiency", "telemetry_gap"]);
 const PLUGIN_RECOMMENDATION_KINDS = new Set<RecommendationKind>([
   "bug_report", "feature_request", "telemetry_gap", "workflow_engine_gap", "tooling_gap", "docs_sync_gap",
 ]);
@@ -1357,42 +1421,737 @@ function finding(
   };
 }
 
-function detectFindings(analysisId: string, events: LoadedEvent[]): AnalysisFinding[] {
-  const findings: AnalysisFinding[] = [];
-  const failures = new Map<string, string[]>();
-  const steeringRefs: string[] = [];
+// ─────────────────────────────────────────────────────────────────────────────
+// C-DETECTORS/v1 additive diagnostics. Every detector reads only validated
+// frozen rows plus typed sidecars named by an explicit payload_ref; each
+// consumed sidecar byte enters diagnostics.input_manifest/input_hash. A
+// missing input is unobservable, never a measured zero or a positive proof.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DIAGNOSTICS_CONTRACT = "C-DETECTORS/v1" as const;
+const HASH_REF = /^sha256:[a-f0-9]{64}$/;
+const SIDECAR_MAX_BYTES = 1024 * 1024;
+const LONG_LATENCY_MS = 30_000;
+const OUTLIER_MIN_COHORT = 5;
+const REPEAT_THRESHOLD = 2;
+const SUBSTANTIVE_CLASSES = ["tool_call_started", "tool_call_finished", "tool_call_failed", "tool_call_denied", "agent_dispatched", "agent_prompt_sent"];
+const RESULT_CLASSES = ["agent_response_received", "agent_handoff_written", "tool_call_finished", "tool_call_failed"];
+const INPUT_CHANGE_CLASSES = ["prompt_received", "implementation_authorized", "config_snapshot_written"];
+const DENIAL_CAUSES = ["policy", "user", "host_unavailable", "capability_absent"] as const;
+const PROJECT_CAPABILITY_KINDS: Readonly<Record<string, RecommendationKind>> = Object.freeze({
+  skill: "create_skill", agent: "create_agent", workflow: "update_workflow", knowledge: "update_knowledge", settings: "change_settings",
+});
+const PLUGIN_CAPABILITY_KINDS: Readonly<Record<string, RecommendationKind>> = Object.freeze({
+  plugin_behavior: "tooling_gap", plugin_invariant: "bug_report",
+});
+
+/** Typed sidecar schema -> the analysis.v2 classes allowed to reference it. */
+const SIDECAR_CARRIERS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  "guild.analysis_declaration.v1": ["run_started", "implementation_authorized"],
+  "guild.instruction_evidence.v1": ["gate_concluded"],
+  "guild.outcome_record.v1": ["gate_concluded"],
+  "guild.capability_evidence.v1": ["tool_call_denied", "tool_call_failed"],
+  "guild.lookup_result.v1": ["knowledge_lookup_result", "memory_lookup_result"],
+  "guild.prompt_context.v1": ["prompt_normalized", "agent_prompt_sent"],
+  "guild.phase_cursor.v1": ["run_closed", "phase_concluded"],
+});
+const SIDECAR_CARRIER_CLASSES = new Set(Object.values(SIDECAR_CARRIERS).flat());
+
+const arrayOf = (value: unknown, test: (item: unknown) => boolean): boolean => Array.isArray(value) && value.every(test);
+const keysOf = (...keys: string[]): ReadonlySet<string> => new Set(["schema_version", "run_id", ...keys]);
+const hashRef = (value: unknown): boolean => typeof value === "string" && HASH_REF.test(value);
+const runEvidenceRef = (runId: string) => (value: unknown): boolean =>
+  typeof value === "string" && validEvidenceRef(value) && evidenceRunId(value) === runId;
+
+const SIDECAR_VALIDATORS: Readonly<Record<string, (value: Record<string, unknown>, runId: string) => boolean>> = Object.freeze({
+  "guild.analysis_declaration.v1": (v) => {
+    const instructions = Array.isArray(v["instructions"]) ? v["instructions"].map(asRecord) : null;
+    return hasOnlyKeys(v, keysOf("assessed_input_hash", "assessed_input_ref", "instructions", "instructions_complete", "clarification_required_tasks", "required_phases")) &&
+      hashRef(v["assessed_input_hash"]) && nonEmptyString(v["assessed_input_ref"]) && instructions !== null &&
+      instructions.every((item) => hasOnlyKeys(item, new Set(["instruction_id", "requirement_hash"])) &&
+        typeof item["instruction_id"] === "string" && SAFE_ID.test(item["instruction_id"]) && hashRef(item["requirement_hash"])) &&
+      new Set(instructions.map((item) => item["instruction_id"])).size === instructions.length &&
+      typeof v["instructions_complete"] === "boolean" &&
+      arrayOf(v["clarification_required_tasks"], nonEmptyString) && arrayOf(v["required_phases"], nonEmptyString);
+  },
+  "guild.instruction_evidence.v1": (v, runId) =>
+    hasOnlyKeys(v, keysOf("instruction_id", "requirement_hash", "verifier_kind", "verifier_ref", "result", "verified_input_hash", "verification_input_ref", "evidence_refs")) &&
+    typeof v["instruction_id"] === "string" && SAFE_ID.test(v["instruction_id"]) && hashRef(v["requirement_hash"]) &&
+    ["done_when", "configured_check", "review_gate"].includes(String(v["verifier_kind"])) && runEvidenceRef(runId)(v["verifier_ref"]) &&
+    ["passed", "failed", "unobservable"].includes(String(v["result"])) && hashRef(v["verified_input_hash"]) &&
+    nonEmptyString(v["verification_input_ref"]) && arrayOf(v["evidence_refs"], runEvidenceRef(runId)),
+  "guild.outcome_record.v1": (v) =>
+    hasOnlyKeys(v, keysOf("kind", "result", "verified_input_hash", "reopen_transitions", "findings_complete", "unresolved_finding_ids")) &&
+    ["review", "verify"].includes(String(v["kind"])) && ["passed", "failed"].includes(String(v["result"])) &&
+    hashRef(v["verified_input_hash"]) && integerAtLeast(v["reopen_transitions"], 0) && typeof v["findings_complete"] === "boolean" &&
+    arrayOf(v["unresolved_finding_ids"], (id) => typeof id === "string" && SAFE_ID.test(id)),
+  "guild.capability_evidence.v1": (v, runId) =>
+    hasOnlyKeys(v, keysOf("action_signature", "owner", "capability_kind", "target", "evidence_refs")) &&
+    typeof v["action_signature"] === "string" && /^\S{1,256}$/.test(v["action_signature"]) &&
+    ((v["owner"] === "project" && String(v["capability_kind"]) in PROJECT_CAPABILITY_KINDS) ||
+      (v["owner"] === "plugin" && String(v["capability_kind"]) in PLUGIN_CAPABILITY_KINDS)) &&
+    typeof v["target"] === "string" && SAFE_ID.test(v["target"]) && arrayOf(v["evidence_refs"], runEvidenceRef(runId)),
+  "guild.lookup_result.v1": (v, runId) =>
+    hasOnlyKeys(v, keysOf("outcome", "result_ref")) && ["hit", "miss"].includes(String(v["outcome"])) && runEvidenceRef(runId)(v["result_ref"]),
+  "guild.prompt_context.v1": (v) =>
+    hasOnlyKeys(v, keysOf("prompt_hash", "context_hash", "retry_authorized")) && nonEmptyString(v["prompt_hash"]) &&
+    hashRef(v["context_hash"]) && typeof v["retry_authorized"] === "boolean",
+  "guild.phase_cursor.v1": (v) =>
+    hasOnlyKeys(v, keysOf("visited_phases", "bypassed_phases")) &&
+    arrayOf(v["visited_phases"], nonEmptyString) && arrayOf(v["bypassed_phases"], nonEmptyString),
+});
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+function sortedUnique(values: Iterable<string>): string[] {
+  return [...new Set(values)].sort();
+}
+
+interface AdditiveInput { entry: InputManifestEntry; bytes: string | null }
+interface Sidecar { ref: string; schema: string; value: Record<string, unknown>; carrier: LoadedEvent }
+
+/** Read one run-relative additive input exactly once; unsafe/missing refs are recorded, never followed. */
+function readAdditiveInput(store: Map<string, AdditiveInput>, dir: string, runId: string, relative: unknown): AdditiveInput {
+  const text = typeof relative === "string" ? relative : "";
+  const candidate = text && !path.isAbsolute(text) && !text.includes("#") ? `.guild/runs/${runId}/${text}` : "";
+  const ref = candidate && validEvidenceRef(candidate) && evidenceRunId(candidate) === runId
+    ? candidate
+    : `invalid-ref:${sha256(String(relative)).slice(0, 16)}`;
+  const existing = store.get(ref);
+  if (existing) return existing;
+  let input: AdditiveInput = { entry: { ref, sha256: null, status: "rejected" }, bytes: null };
+  if (ref.startsWith(".guild/")) {
+    let file: string | null = null;
+    let unsafe = false;
+    try { file = resolveRunInputFile(dir, text); } catch { unsafe = true; }
+    if (!unsafe && file === null) input = { entry: { ref, sha256: null, status: "missing" }, bytes: null };
+    if (!unsafe && file !== null && fs.statSync(file).size <= SIDECAR_MAX_BYTES) {
+      const bytes = fs.readFileSync(file, "utf8");
+      input = { entry: { ref, sha256: `sha256:${sha256(bytes)}`, status: "consumed" }, bytes };
+    }
+  }
+  store.set(ref, input);
+  return input;
+}
+
+function readSidecars(store: Map<string, AdditiveInput>, dir: string, runId: string, events: readonly LoadedEvent[]): Sidecar[] {
+  const sidecars: Sidecar[] = [];
   for (const event of events) {
     const value = event.value;
-    const semanticFailure = value["schema_version"] === "guild.trace.analysis.v2" &&
-      ["tool_call_failed", "repeated_failure_detected"].includes(String(value["event_class"]));
-    const toolFailure = value["event"] === "tool_call" && value["status"] === "err";
-    if (semanticFailure || toolFailure) {
-      const signature = scalar(value, "signature") ?? [value["tool"], value["command_redacted"], value["result_excerpt_redacted"]].map(String).join("|");
-      failures.set(signature, [...(failures.get(signature) ?? []), event.ref]);
+    if (value["schema_version"] !== "guild.trace.analysis.v2" || value["payload_ref"] === undefined ||
+        !SIDECAR_CARRIER_CLASSES.has(String(value["event_class"]))) continue;
+    const input = readAdditiveInput(store, dir, runId, value["payload_ref"]);
+    if (input.bytes === null) continue;
+    let record: Record<string, unknown>;
+    try { record = asRecord(JSON.parse(input.bytes)); } catch { if (input.entry.status === "consumed") input.entry.status = "unrecognized"; continue; }
+    const schema = String(record["schema_version"]);
+    const validator = SIDECAR_VALIDATORS[schema];
+    if (!validator) { if (input.entry.status === "consumed") input.entry.status = "unrecognized"; continue; }
+    if (record["run_id"] !== runId || !SIDECAR_CARRIERS[schema].includes(String(value["event_class"])) || !validator(record, runId)) {
+      input.entry.status = "rejected";
+      continue;
     }
-    if (value["event_class"] === "instruction_violation_detected") {
-      findings.push(finding(analysisId, "instruction_violation", "high", "The trace records an instruction violation.", [event.ref], scalar(value, "signature") ?? "instruction-violation"));
-    }
-    if (value["event_class"] === "tool_call_denied") {
-      findings.push(finding(analysisId, "tool_gap", "medium", "A required tool action was denied.", [event.ref], scalar(value, "signature") ?? "tool-denied"));
-    }
-    if (value["event_class"] === "loop_cap_hit") {
-      findings.push(finding(analysisId, "workflow_churn", "medium", "A workflow loop reached its cap.", [event.ref], scalar(value, "signature") ?? "loop-cap"));
-    }
-    if (value["event_class"] === "user_steering_received") steeringRefs.push(event.ref);
+    sidecars.push({ ref: input.entry.ref, schema, value: record, carrier: event });
   }
-  for (const [signature, refs] of [...failures.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    if (refs.length >= 2) {
-      findings.push(finding(analysisId, "repeated_failure", "high", `The same failed action recurred ${refs.length} times.`, refs, signature));
+  return sidecars;
+}
+
+/** One correlated action: span twins collapse (B01-F4); rows without a span stay distinct. */
+interface ActionGroup { rows: LoadedEvent[]; refs: string[]; line: number }
+
+function actionGroups(events: readonly LoadedEvent[], runId: string): ActionGroup[] {
+  const byRef = new Map(events.map((event) => [event.ref, event]));
+  return collapseSpanTwins(events, runId).map((action) => {
+    const rows = action.refs.map((ref) => byRef.get(ref)).filter((row): row is LoadedEvent => row !== undefined).sort((a, b) => a.line - b.line);
+    return { rows, refs: [...action.refs], line: rows[0]?.line ?? 0 };
+  }).filter((group) => group.rows.length > 0).sort((a, b) => a.line - b.line);
+}
+
+const classOf = (event: LoadedEvent): string =>
+  event.value["schema_version"] === "guild.trace.analysis.v2" ? String(event.value["event_class"]) : "";
+const groupHas = (group: ActionGroup, classes: readonly string[]): boolean => group.rows.some((row) => classes.includes(classOf(row)));
+const rowsOf = (group: ActionGroup, classes: readonly string[]): LoadedEvent[] => group.rows.filter((row) => classes.includes(classOf(row)));
+function groupField(group: ActionGroup, key: string): string | null {
+  for (const row of group.rows) {
+    const value = scalar(row.value, key);
+    if (value !== null) return value;
+  }
+  return null;
+}
+function rowTime(event: LoadedEvent): number {
+  const value = scalar(event.value, "ts") ?? scalar(event.value, "at");
+  return value === null ? Number.NaN : Date.parse(value);
+}
+const isLegacyToolFailure = (event: LoadedEvent): boolean => event.value["event"] === "tool_call" && event.value["status"] === "err";
+const isFailureRow = (event: LoadedEvent): boolean =>
+  isLegacyToolFailure(event) || ["tool_call_failed", "repeated_failure_detected"].includes(classOf(event));
+
+/** v1 repeated_failure key: typed signature first, else the legacy mirror triple; none means unsignatured. */
+function failureSignature(group: ActionGroup): string | null {
+  const typed = group.rows.filter((row) => classOf(row) !== "");
+  for (const row of [...typed.filter(isFailureRow), ...typed]) {
+    const signature = scalar(row.value, "signature");
+    if (signature !== null) return signature;
+  }
+  const legacy = group.rows.find(isLegacyToolFailure);
+  return legacy ? [legacy.value["tool"], legacy.value["command_redacted"], legacy.value["result_excerpt_redacted"]].map(String).join("|") : null;
+}
+
+/** Span-independent tool action key used for gap ownership matching. */
+function toolActionKey(group: ActionGroup): string | null {
+  const denied = rowsOf(group, ["tool_call_denied"])[0];
+  if (denied) return String(denied.value["signature"]).split(":").slice(1).join(":") || null;
+  for (const row of group.rows) {
+    if (classOf(row) !== "" && scalar(row.value, "signature") !== null) return scalar(row.value, "signature");
+  }
+  const legacy = group.rows.find((row) => row.value["event"] === "tool_call");
+  return legacy ? toolActionSignature(String(legacy.value["tool"]), String(legacy.value["command_redacted"])) : null;
+}
+
+interface DetectorContext {
+  runId: string;
+  events: LoadedEvent[];
+  groups: ActionGroup[];
+  sidecars: Sidecar[];
+  declaration: Sidecar | null;
+  declarationReason: string | null;
+  store: Map<string, AdditiveInput>;
+  dir: string;
+  eligible: boolean;
+  closeRefs: string[];
+  instructionObservableRefs: string[];
+  v1ViolationRefs: string[];
+}
+
+interface DetectorOutput {
+  result: DetectorResult;
+  findings?: Array<Omit<AnalysisFinding, "id">>;
+  supported?: SupportedRecommendation[];
+}
+
+interface SupportedRecommendation {
+  scope: RecommendationScope;
+  kind: RecommendationKind;
+  target: string;
+  severity: Recommendation["severity"];
+  summary: string;
+  evidence_refs: string[];
+}
+
+function result(detector: DetectorId, state: DetectorState, value: Record<string, unknown>, refs: Iterable<string>, reason: string | null): DetectorResult {
+  return { detector, state, value, evidence_refs: sortedUnique(refs), reason };
+}
+
+/** A proof binds only when the frozen verification input hashes to both its claim and the assessed set. */
+function boundInput(ctx: DetectorContext, claimed: unknown, inputRef: unknown): { bound: boolean; ref: string | null } {
+  if (!ctx.declaration || claimed !== ctx.declaration.value["assessed_input_hash"]) return { bound: false, ref: null };
+  if (inputRef === undefined) return { bound: true, ref: null };
+  const input = readAdditiveInput(ctx.store, ctx.dir, ctx.runId, inputRef);
+  return { bound: input.bytes !== null && input.entry.sha256 === claimed, ref: input.entry.ref };
+}
+
+/**
+ * The verifier row must be execution-bound to THIS proof: it is the proof's own
+ * carrier, or a gate row carrying a proof for the same obligation and input hash.
+ * Any other gate_concluded/ok never corroborates.
+ */
+function verifierCorroborates(ctx: DetectorContext, sidecar: Sidecar): boolean {
+  const proof = sidecar.value;
+  const verifier = ctx.events.find((event) => event.ref === proof["verifier_ref"]);
+  if (!verifier || classOf(verifier) !== "gate_concluded") return false;
+  const bound = verifier.ref === sidecar.carrier.ref || ctx.sidecars.some((other) => other.schema === "guild.instruction_evidence.v1" &&
+    other.carrier.ref === verifier.ref && other.value["instruction_id"] === proof["instruction_id"] &&
+    other.value["requirement_hash"] === proof["requirement_hash"] && other.value["verified_input_hash"] === proof["verified_input_hash"]);
+  if (!bound) return false;
+  return (proof["result"] === "passed" && verifier.value["status"] === "ok") || (proof["result"] === "failed" && verifier.value["status"] === "error");
+}
+
+interface ProofVerdict { sidecar: Sidecar; valid: boolean; refs: string[] }
+
+function instructionProofs(ctx: DetectorContext): ProofVerdict[] {
+  return ctx.sidecars.filter((item) => item.schema === "guild.instruction_evidence.v1").map((sidecar) => {
+    const proof = sidecar.value;
+    const binding = boundInput(ctx, proof["verified_input_hash"], proof["verification_input_ref"]);
+    const valid = proof["result"] !== "unobservable" && binding.bound && verifierCorroborates(ctx, sidecar);
+    return { sidecar, valid, refs: sortedUnique([sidecar.ref, String(proof["verifier_ref"]), ...(binding.ref ? [binding.ref] : [])]) };
+  });
+}
+
+function detectInstructionFollowing(ctx: DetectorContext): DetectorOutput & { checks: InstructionCheck[]; aggregate: AssessmentStatus; typedViolationRefs: string[]; satisfiedRefs: string[] } {
+  const proofs = instructionProofs(ctx);
+  const declared = ctx.declaration ? (ctx.declaration.value["instructions"] as Array<Record<string, string>>) : [];
+  const violationRows = ctx.events.filter((event) => classOf(event) === "instruction_violation_detected");
+  const checks: InstructionCheck[] = declared.map((item) => {
+    const mine = proofs.filter(({ sidecar }) => sidecar.value["instruction_id"] === item.instruction_id && sidecar.value["requirement_hash"] === item.requirement_hash);
+    const passed = mine.filter((proof) => proof.valid && proof.sidecar.value["result"] === "passed");
+    const failed = mine.filter((proof) => proof.valid && proof.sidecar.value["result"] === "failed");
+    const violations = violationRows.filter((event) => [item.instruction_id, `instruction:${item.instruction_id}`].includes(String(event.value["signature"])));
+    const status: AssessmentStatus = failed.length > 0 || violations.length > 0 ? "violated"
+      : passed.length > 0 ? "satisfied" : mine.length > 0 ? "ambiguous" : "unobservable";
+    return {
+      instruction_id: item.instruction_id,
+      requirement_hash: item.requirement_hash,
+      status,
+      evidence_refs: sortedUnique([...violations.map((event) => event.ref), ...mine.flatMap((proof) => proof.sidecar.value["evidence_refs"] as string[])]),
+      proof_refs: sortedUnique(mine.flatMap((proof) => proof.refs)),
+    };
+  }).sort((a, b) => a.instruction_id.localeCompare(b.instruction_id));
+  const typedViolationRefs = checks.filter((check) => check.status === "violated").flatMap((check) => [...check.evidence_refs, ...check.proof_refs]);
+  const complete = ctx.declaration !== null && ctx.declaration.value["instructions_complete"] === true && checks.length > 0;
+  const aggregate: AssessmentStatus = typedViolationRefs.length > 0 || ctx.v1ViolationRefs.length > 0 ? "violated"
+    : complete && checks.every((check) => check.status === "satisfied") ? "satisfied"
+      : ctx.instructionObservableRefs.length > 0 || proofs.length > 0 ? "ambiguous" : "unobservable";
+  const satisfiedRefs = aggregate === "satisfied" ? checks.flatMap((check) => [...check.evidence_refs, ...check.proof_refs, ctx.declaration!.ref]) : [];
+  const counts = Object.fromEntries((["satisfied", "violated", "ambiguous", "unobservable"] as const).map((status) => [status, checks.filter((check) => check.status === status).length]));
+  const reason = aggregate === "satisfied" || aggregate === "violated" ? null
+    : ctx.declaration === null ? (ctx.declarationReason ?? "no_instruction_declaration")
+      : !complete ? "declared_scope_incomplete" : "missing_typed_proof";
+  return {
+    result: result("instruction_following", aggregate === "satisfied" || aggregate === "violated" ? "observed" : aggregate === "ambiguous" ? "ambiguous" : "unobservable", {
+      aggregate,
+      declared: checks.length,
+      declared_complete: complete,
+      counts,
+      requirement_hashes: sortedUnique(checks.map((check) => check.requirement_hash)),
+    }, [...typedViolationRefs, ...ctx.v1ViolationRefs, ...satisfiedRefs, ...(aggregate === "ambiguous" ? ctx.instructionObservableRefs : [])], reason),
+    checks,
+    aggregate,
+    typedViolationRefs,
+    satisfiedRefs,
+  };
+}
+
+function detectRepeatedMistake(ctx: DetectorContext, proofs: ProofVerdict[]): DetectorOutput {
+  const attempts: Array<{ signature: string; task: string | null; phase: string | null; refs: string[]; source: string }> = [];
+  let unsignatured = 0;
+  for (const group of ctx.groups) {
+    if (group.rows.some(isFailureRow)) {
+      const signature = failureSignature(group);
+      if (signature === null) unsignatured++;
+      else attempts.push({ signature, task: groupField(group, "task_id"), phase: groupField(group, "phase"), refs: group.refs, source: "failed_action" });
+    } else if (groupHas(group, ["correction_applied"])) {
+      attempts.push({ signature: groupField(group, "signature")!, task: groupField(group, "task_id"), phase: groupField(group, "phase"), refs: group.refs, source: "correction_applied" });
     }
   }
-  if (steeringRefs.length >= 2) {
+  // Failed-proof carriers sharing one span are one attempt (same span dedupe as tool rows).
+  const verifierAttempts = new Map<string, (typeof attempts)[number]>();
+  for (const proof of proofs.filter((item) => item.valid && item.sidecar.value["result"] === "failed")) {
+    const signature = `instruction:${String(proof.sidecar.value["instruction_id"])}`;
+    const group = ctx.groups.find((candidate) => candidate.refs.includes(proof.sidecar.carrier.ref));
+    const key = `${signature}|${group ? group.refs[0] : proof.sidecar.carrier.ref}`;
+    const prior = verifierAttempts.get(key);
+    if (prior) { prior.refs = sortedUnique([...prior.refs, ...proof.refs]); continue; }
+    verifierAttempts.set(key, { signature, task: scalar(proof.sidecar.carrier.value, "task_id"), phase: scalar(proof.sidecar.carrier.value, "phase"), refs: [...proof.refs], source: "failed_verifier" });
+  }
+  attempts.push(...verifierAttempts.values());
+  const clusters = new Map<string, typeof attempts>();
+  for (const attempt of attempts) {
+    const key = `${attempt.signature}|${attempt.task ?? "-"}|${attempt.phase ?? "-"}`;
+    clusters.set(key, [...(clusters.get(key) ?? []), attempt]);
+  }
+  const repeated = [...clusters.values()].filter((items) => items.length >= REPEAT_THRESHOLD).map((items) => ({
+    signature: items[0].signature,
+    task_id: items[0].task,
+    phase: items[0].phase,
+    attempts: items.length,
+    sources: sortedUnique(items.map((item) => item.source)),
+    refs: sortedUnique(items.flatMap((item) => item.refs)),
+  })).sort((a, b) => `${a.signature}|${a.task_id}|${a.phase}`.localeCompare(`${b.signature}|${b.task_id}|${b.phase}`));
+  const state: DetectorState = attempts.length > 0 ? "observed" : "unobservable";
+  // v1 detectFindings keys tool failures only; repeated failed verifications surface here.
+  const findings = repeated.filter((item) => item.sources.includes("failed_verifier")).map((item) => ({
+    kind: "repeated_failure" as const, severity: "high" as const,
+    summary: `The same failed verification recurred ${item.attempts} times.`, evidence_refs: item.refs, signature: item.signature,
+  }));
+  return {
+    findings,
+    result: result("repeated_mistake", state, { clusters: repeated, signed_attempts: attempts.length, unsignatured_failures: unsignatured },
+      repeated.flatMap((item) => item.refs),
+      state === "observed" ? null : unsignatured > 0 ? "absent_action_signature" : "no_failure_or_correction_evidence"),
+  };
+}
+
+function detectSteering(ctx: DetectorContext): DetectorOutput {
+  const interventions = ctx.groups.filter((group) => groupHas(group, ["user_steering_received"]));
+  const bySignature: Record<string, number> = {};
+  for (const group of interventions) {
+    const signature = groupField(group, "signature") ?? "unknown";
+    bySignature[signature] = (bySignature[signature] ?? 0) + 1;
+  }
+  return {
+    result: result("steering", interventions.length > 0 ? "observed" : "unobservable", {
+      interventions: interventions.length,
+      by_signature: Object.fromEntries(Object.entries(bySignature).sort(([a], [b]) => a.localeCompare(b))),
+      repeated: interventions.length >= REPEAT_THRESHOLD,
+      necessity: "unobservable",
+    }, interventions.flatMap((group) => group.refs), interventions.length > 0 ? null : "no_steering_classification"),
+  };
+}
+
+function firstSubstantive(ctx: DetectorContext, after: number, matches: (group: ActionGroup) => boolean, before = Number.POSITIVE_INFINITY): ActionGroup | null {
+  return ctx.groups.find((group) => group.line > after && group.line < before && groupHas(group, SUBSTANTIVE_CLASSES) && matches(group)) ?? null;
+}
+
+function detectClarification(ctx: DetectorContext): DetectorOutput {
+  const required = new Set(ctx.declaration ? ctx.declaration.value["clarification_required_tasks"] as string[] : []);
+  const clarifications = ctx.groups.filter((group) => groupHas(group, ["clarifying_question_asked"]));
+  const pairs: Array<{ task_id: string | null; order: string; constraint: string; timing: string }> = [];
+  const findings: Array<Omit<AnalysisFinding, "id">> = [];
+  const refs: string[] = [];
+  for (const group of clarifications) {
+    const task = groupField(group, "task_id");
+    const action = task === null ? null : firstSubstantive(ctx, 0, (candidate) => groupField(candidate, "task_id") === task);
+    const order = task === null ? "uncorrelated" : action === null ? "no_action" : action.line < group.line ? "action_first" : "clarification_first";
+    const declared = task !== null && required.has(task);
+    const timing = !declared || order === "uncorrelated" ? "unknown" : order === "action_first" ? "late" : "timely";
+    pairs.push({ task_id: task, order, constraint: declared ? "declared" : "undeclared", timing });
+    if (timing === "unknown") continue;
+    const evidence = [...group.refs, ...(action?.refs ?? []), ctx.declaration!.ref];
+    refs.push(...evidence);
+    if (timing === "late") {
+      findings.push({ kind: "prompt_inefficiency", severity: "low", summary: `A required clarification for task ${task} was asked after the first substantive action.`, evidence_refs: sortedUnique(evidence), signature: `late-clarification:${task}` });
+    }
+  }
+  const count = (timing: string): number => pairs.filter((pair) => pair.timing === timing).length;
+  const state: DetectorState = count("late") + count("timely") > 0 ? "observed" : pairs.length > 0 ? "ambiguous" : "unobservable";
+  return {
+    result: result("clarification", state, { timely: count("timely"), late: count("late"), unknown: count("unknown"), pairs },
+      state === "ambiguous" ? clarifications.flatMap((group) => group.refs) : refs,
+      state === "observed" ? null : state === "ambiguous" ? "no_declared_clarification_constraint" : "no_clarification_correlation"),
+    findings,
+  };
+}
+
+function detectRedundantPrompt(ctx: DetectorContext): DetectorOutput {
+  const contexts = new Map(ctx.sidecars.filter((item) => item.schema === "guild.prompt_context.v1").map((item) => [item.carrier.ref, item]));
+  const prompts = ctx.groups.filter((group) => groupHas(group, ["prompt_normalized", "agent_prompt_sent"]));
+  const last = new Map<string, ActionGroup>();
+  const candidates = new Map<string, string[]>();
+  let unkeyed = 0;
+  for (const group of prompts) {
+    const row = rowsOf(group, ["prompt_normalized", "agent_prompt_sent"])[0];
+    const context = contexts.get(row.ref);
+    const promptHash = scalar(row.value, "prompt_hash");
+    const task = groupField(group, "task_id");
+    const phase = groupField(group, "phase");
+    if (!context || context.value["prompt_hash"] !== promptHash || task === null || phase === null) { unkeyed++; continue; }
+    const key = sha256(canonicalJson([promptHash, task, phase, context.value["context_hash"]])).slice(0, 16);
+    const prior = last.get(key);
+    last.set(key, group);
+    if (!prior || context.value["retry_authorized"] === true) continue;
+    const intervening = ctx.groups.some((candidate) => candidate.line > prior.line && candidate.line < group.line &&
+      groupHas(candidate, RESULT_CLASSES) && [null, task].includes(groupField(candidate, "task_id")));
+    if (intervening) continue;
+    candidates.set(key, sortedUnique([...(candidates.get(key) ?? []), ...prior.refs, ...group.refs, context.ref]));
+  }
+  const clusters = [...candidates.entries()].map(([key, refs]) => ({ signature: `redundant-prompt:${key}`, refs })).sort((a, b) => a.signature.localeCompare(b.signature));
+  const keyed = prompts.length - unkeyed;
+  return {
+    result: result("redundant_prompt", keyed > 0 ? "observed" : "unobservable", { prompts: prompts.length, keyed, unkeyed, candidates: clusters.map((item) => item.signature) },
+      clusters.flatMap((item) => item.refs), keyed > 0 ? null : prompts.length > 0 ? "missing_context_hash" : "no_normalized_prompts"),
+    findings: clusters.map((item) => ({ kind: "prompt_inefficiency" as const, severity: "low" as const, summary: "An identical prompt was resent against unchanged bound inputs without an intervening result.", evidence_refs: item.refs, signature: item.signature })),
+  };
+}
+
+function detectPromptActionLatency(ctx: DetectorContext): DetectorOutput {
+  const samples: number[] = [];
+  const refs: string[] = [];
+  let long = 0;
+  let waits = 0;
+  let malformed = 0;
+  for (const group of ctx.groups.filter((candidate) => groupHas(candidate, ["prompt_received", "agent_prompt_sent"]))) {
+    const prompt = rowsOf(group, ["prompt_received", "agent_prompt_sent"])[0];
+    const span = scalar(prompt.value, "span_id");
+    if (span === null) continue;
+    const correlated = (candidate: ActionGroup): boolean => candidate.rows.some((row) => scalar(row.value, "parent_span_id") === span);
+    const action = firstSubstantive(ctx, group.line, correlated);
+    if (!action) continue;
+    if (ctx.groups.some((candidate) => candidate.line > group.line && candidate.line < action.line && groupHas(candidate, ["clarifying_question_asked"]) && correlated(candidate))) {
+      waits++;
+      continue;
+    }
+    const elapsed = rowTime(action.rows[0]) - rowTime(prompt);
+    if (!Number.isFinite(elapsed) || elapsed < 0) { malformed++; continue; }
+    samples.push(elapsed);
+    if (elapsed > LONG_LATENCY_MS) { long++; refs.push(prompt.ref, ...action.refs); }
+  }
+  const state: DetectorState = samples.length + waits > 0 ? "observed" : "unobservable";
+  return {
+    result: result("prompt_action_latency", state, {
+      pairs: samples.length, samples_ms: samples.sort((a, b) => a - b), long_latency: long, excluded_waits: waits, malformed,
+      threshold_ms: LONG_LATENCY_MS,
+    }, refs, state === "observed" ? null : malformed > 0 ? "malformed_timestamps" : "no_correlated_prompt_action"),
+  };
+}
+
+function detectWorkflowChurn(ctx: DetectorContext): DetectorOutput {
+  const findings: Array<Omit<AnalysisFinding, "id">> = [];
+  const capRefs = [
+    ...ctx.groups.filter((group) => groupHas(group, ["loop_cap_hit"])).flatMap((group) => group.refs),
+    ...ctx.events.filter((event) => event.value["event"] === "loop_round_end" && event.value["terminated"] === "cap_hit").map((event) => event.ref),
+  ];
+  const loopRows = ctx.events.filter((event) => categoryOf(event.value) === "loop");
+  const entries = ctx.events.filter((event) => classOf(event) === "phase_entered" || event.value["event"] === "phase_start");
+  const exits = ctx.events.filter((event) => classOf(event) === "phase_concluded" || event.value["event"] === "phase_end");
+  const reentries: Record<string, number> = {};
+  const reentryRefs: string[] = [];
+  for (const entry of entries) {
+    const phase = scalar(entry.value, "phase")!;
+    if (exits.some((exit) => exit.line < entry.line && scalar(exit.value, "phase") === phase)) {
+      reentries[phase] = (reentries[phase] ?? 0) + 1;
+      reentryRefs.push(entry.ref);
+    }
+  }
+  const repeatedLoops = Object.keys(reentries).filter((phase) => reentries[phase] >= REPEAT_THRESHOLD).sort();
+  const requiredPhases = ctx.declaration ? ctx.declaration.value["required_phases"] as string[] : [];
+  const entered = new Set(entries.map((entry) => scalar(entry.value, "phase")));
+  // A skip needs the frozen graph cursor carried by the final close row; an earlier
+  // (phase_concluded or superseded close) cursor is not final history, so the gap stays unconfirmed.
+  const finalClose = ctx.events.filter((event) => categoryOf(event.value) === "close").sort((a, b) => b.line - a.line)[0] ?? null;
+  const cursor = ctx.sidecars.find((item) => item.schema === "guild.phase_cursor.v1" && item.carrier.ref === finalClose?.ref) ?? null;
+  const closed = ctx.declaration !== null && ctx.closeRefs.length > 0;
+  const missing = closed ? sortedUnique(requiredPhases.filter((phase) => !entered.has(phase))) : [];
+  const skipped = cursor ? missing.filter((phase) => (cursor.value["bypassed_phases"] as string[]).includes(phase) ||
+    !(cursor.value["visited_phases"] as string[]).includes(phase)) : [];
+  const unconfirmed = missing.filter((phase) => !skipped.includes(phase));
+  for (const phase of skipped) {
+    findings.push({ kind: "workflow_churn", severity: "medium", summary: `Required phase ${phase} was never entered before the run closed.`, evidence_refs: sortedUnique([ctx.declaration!.ref, ...ctx.closeRefs, cursor!.ref, cursor!.carrier.ref]), signature: `skipped-phase:${phase}` });
+  }
+  const proposals = ctx.groups.filter((group) => groupHas(group, ["recommendation_created"]));
+  const repeatedProposals = new Map<string, string[]>();
+  const lastProposal = new Map<string, ActionGroup>();
+  for (const group of proposals) {
+    const signature = groupField(group, "signature")!;
+    const prior = lastProposal.get(signature);
+    lastProposal.set(signature, group);
+    if (!prior || ctx.groups.some((candidate) => candidate.line > prior.line && candidate.line < group.line && groupHas(candidate, INPUT_CHANGE_CLASSES))) continue;
+    repeatedProposals.set(signature, sortedUnique([...(repeatedProposals.get(signature) ?? []), ...prior.refs, ...group.refs]));
+  }
+  const dimensionStates = {
+    loops: loopRows.length > 0 ? "observed" : "unobservable",
+    phases: entries.length > 0 && exits.length > 0 ? "observed" : "unobservable",
+    skipped_phases: closed && cursor ? "observed" : "unobservable",
+    proposals: proposals.length > 0 ? "observed" : "unobservable",
+  };
+  const observed = Object.values(dimensionStates).includes("observed");
+  return {
+    result: result("workflow_churn", observed ? "observed" : "unobservable", {
+      cap_hits: capRefs.length,
+      phase_reentries: Object.fromEntries(Object.entries(reentries).sort(([a], [b]) => a.localeCompare(b))),
+      repeated_phase_loops: repeatedLoops,
+      skipped_required_phases: skipped,
+      unconfirmed_missing_phases: unconfirmed,
+      repeated_proposals: [...repeatedProposals.keys()].sort(),
+      dimension_states: dimensionStates,
+    }, [...capRefs, ...(repeatedLoops.length > 0 ? reentryRefs : []), ...findings.flatMap((item) => item.evidence_refs), ...[...repeatedProposals.values()].flat()],
+    observed ? null : "missing_phase_loop_or_proposal_evidence"),
+    findings,
+  };
+}
+
+function detectKnowledgeMemory(ctx: DetectorContext, proofs: ProofVerdict[]): DetectorOutput {
+  const consumed = new Set(proofs.filter((proof) => proof.valid && proof.sidecar.value["result"] === "passed")
+    .flatMap((proof) => proof.sidecar.value["evidence_refs"] as string[]));
+  const refs: string[] = [];
+  const summary = (kind: "knowledge" | "memory") => {
+    const lookups = ctx.groups.filter((group) => groupHas(group, [`${kind}_lookup_started`, `${kind}_lookup_result`])).length;
+    const outcomes = ctx.sidecars.filter((item) => item.schema === "guild.lookup_result.v1" && classOf(item.carrier) === `${kind}_lookup_result`);
+    const hits = outcomes.filter((item) => item.value["outcome"] === "hit");
+    const links = hits.filter((item) => consumed.has(String(item.value["result_ref"])));
+    refs.push(...links.flatMap((item) => [item.ref, item.carrier.ref, String(item.value["result_ref"])]));
+    return { lookups, typed_results: outcomes.length, hits: hits.length, misses: outcomes.length - hits.length, use_links: links.length };
+  };
+  const knowledge = summary("knowledge");
+  const memory = summary("memory");
+  const links = knowledge.use_links + memory.use_links;
+  const typed = knowledge.typed_results + memory.typed_results;
+  const lookups = knowledge.lookups + memory.lookups;
+  const state: DetectorState = links > 0 ? "observed" : typed > 0 ? "ambiguous" : "unobservable";
+  return {
+    result: result("knowledge_memory", state, { knowledge, memory }, refs,
+      state === "observed" ? null : typed > 0 ? "no_result_consumption_link" : lookups > 0 ? "no_typed_lookup_outcome" : "no_lookup_evidence"),
+  };
+}
+
+function detectToolCoverage(ctx: DetectorContext): DetectorOutput & { supportedOnly: SupportedRecommendation[]; unowned: number } {
+  const toolGroups = ctx.groups.filter((group) => group.rows.some((row) => categoryOf(row.value) === "tool"));
+  const denials: Record<string, number> = Object.fromEntries(DENIAL_CAUSES.map((cause) => [cause, 0]));
+  const outcomes = { ok: 0, failed: 0, denied: 0, started_only: 0 };
+  const attempts = new Map<string, ActionGroup[]>();
+  for (const group of toolGroups) {
+    const denial = rowsOf(group, ["tool_call_denied"])[0];
+    if (denial) {
+      outcomes.denied++;
+      const cause = String(denial.value["signature"]).split(":", 1)[0];
+      denials[cause] = (denials[cause] ?? 0) + 1;
+      // Policy/user refusal and host unavailability are permission outcomes, never a missing capability.
+      if (cause !== "capability_absent") continue;
+    } else if (group.rows.some(isFailureRow)) outcomes.failed++;
+    else if (groupHas(group, ["tool_call_finished"]) || group.rows.some((row) => row.value["event"] === "tool_call")) { outcomes.ok++; continue; }
+    else { outcomes.started_only++; continue; }
+    const key = toolActionKey(group);
+    if (key !== null) attempts.set(key, [...(attempts.get(key) ?? []), group]);
+  }
+  const evidence = ctx.sidecars.filter((item) => item.schema === "guild.capability_evidence.v1");
+  const candidates: Array<Record<string, unknown>> = [];
+  const supported: SupportedRecommendation[] = [];
+  const findings: Array<Omit<AnalysisFinding, "id">> = [];
+  const supportedOnly: SupportedRecommendation[] = [];
+  const owned = new Set<string>();
+  for (const item of evidence) {
+    const signature = String(item.value["action_signature"]);
+    const groups = attempts.get(signature) ?? [];
+    if (!groups.some((group) => group.refs.includes(item.carrier.ref))) continue;
+    owned.add(signature);
+    const owner = item.value["owner"] as RecommendationScope;
+    const capability = String(item.value["capability_kind"]);
+    const target = String(item.value["target"]);
+    const refs = sortedUnique([...groups.flatMap((group) => group.refs), item.ref, ...(item.value["evidence_refs"] as string[])]);
+    if (groups.length < REPEAT_THRESHOLD) continue;
+    if (capability === "plugin_invariant") {
+      supportedOnly.push({ scope: "plugin", kind: "bug_report", target, severity: "high", summary: `Plugin-owned invariant ${target} failed during action ${signature}.`, evidence_refs: refs });
+      continue;
+    }
+    const kind = owner === "project" ? PROJECT_CAPABILITY_KINDS[capability] : PLUGIN_CAPABILITY_KINDS[capability];
+    candidates.push({ action_signature: signature, owner, capability_kind: capability, target, attempts: groups.length });
+    const summary = `Action ${signature} failed ${groups.length} times and typed evidence names missing ${owner} capability ${target}.`;
+    supported.push({ scope: owner, kind, target, severity: "medium", summary, evidence_refs: refs });
+    findings.push({ kind: "tool_gap", severity: "medium", summary, evidence_refs: refs, signature: `tool-gap:${owner}:${capability}:${target}` });
+  }
+  const unowned = [...attempts.keys()].filter((key) => !owned.has(key)).length;
+  return {
+    result: result("tool_coverage", toolGroups.length > 0 ? "observed" : "unobservable", {
+      actions: toolGroups.length, outcomes, denials,
+      gap_candidates: candidates.sort((a, b) => String(a["action_signature"]).localeCompare(String(b["action_signature"]))),
+      gap_cause: candidates.length > 0 ? "observed" : "unobservable",
+    }, [...findings.flatMap((item) => item.evidence_refs), ...toolGroups.filter((group) => groupHas(group, ["tool_call_denied"])).flatMap((group) => group.refs)],
+    toolGroups.length > 0 ? null : "no_tool_actions"),
+    findings,
+    supported,
+    supportedOnly,
+    unowned,
+  };
+}
+
+function detectOutcomeQuality(ctx: DetectorContext): DetectorOutput {
+  const records = ctx.sidecars.filter((item) => item.schema === "guild.outcome_record.v1");
+  const bound = records.filter((item) => boundInput(ctx, item.value["verified_input_hash"], undefined).bound &&
+    ((item.value["result"] === "passed" && item.carrier.value["status"] === "ok") || (item.value["result"] === "failed" && item.carrier.value["status"] === "error")));
+  const latest = (kind: string): string => {
+    const match = bound.filter((item) => item.value["kind"] === kind).sort((a, b) => b.carrier.line - a.carrier.line)[0];
+    return match ? String(match.value["result"]) : "unknown";
+  };
+  const reopen = bound.length > 0 ? Math.max(...bound.map((item) => Number(item.value["reopen_transitions"]))) : null;
+  const complete = bound.length > 0 && bound.every((item) => item.value["findings_complete"] === true);
+  const residual = complete ? sortedUnique(bound.flatMap((item) => item.value["unresolved_finding_ids"] as string[])) : null;
+  const state: DetectorState = bound.length > 0 ? "observed" : records.length > 0 ? "ambiguous" : "unobservable";
+  return {
+    result: result("outcome_quality", state, {
+      review: latest("review"), verify: latest("verify"), reopen_transitions: reopen, reopened: reopen === null ? null : reopen >= 1,
+      residual_finding_ids: residual, residual_count: residual === null ? null : residual.length, unbound_records: records.length - bound.length,
+    }, bound.flatMap((item) => [item.ref, item.carrier.ref]),
+    state === "observed" ? null : state === "ambiguous" ? "unbound_verifier_input" : "no_typed_outcome_records"),
+  };
+}
+
+function usageOutlierSingle(availability: Record<UsageMetric, UsageMetricAvailability>): DetectorOutput {
+  return {
+    result: result("usage_outlier", "unobservable", {
+      availability: Object.fromEntries(USAGE_METRICS.map((metric) => [metric, availability[metric].state])),
+    }, [], "requires_comparison_cohort"),
+  };
+}
+
+/** Per-metric availability (C-ANALYSIS). Refs follow the same span dedupe as the v1 totals. */
+function usageAvailability(events: readonly LoadedEvent[], groups: readonly ActionGroup[], eligible: boolean): Record<UsageMetric, UsageMetricAvailability> {
+  const semanticSpans = new Set(events.filter(({ value }) => value["schema_version"] === "guild.trace.analysis.v2")
+    .map(({ value }) => scalar(value, "span_id")).filter((value): value is string => value !== null));
+  const counted = new Set(events.filter(({ value }) => {
+    const span = scalar(value, "span_id");
+    return value["schema_version"] === "guild.trace.analysis.v2" || !span || !semanticSpans.has(span);
+  }).map((event) => event.ref));
+  const explicit = (event: LoadedEvent, metric: UsageMetric): boolean => {
+    const tokens = asRecord(event.value["tokens"]);
+    const has = (value: unknown): boolean => typeof value === "number" && Number.isFinite(value) && value >= 0;
+    if (metric === "input") return has(tokens["input"]) || has(event.value["tokens_in"]);
+    if (metric === "output") return has(tokens["output"]) || has(event.value["tokens_out"]);
+    if (metric === "duration_ms") return has(event.value["duration_ms"]) || has(event.value["latency_ms"]);
+    return has(tokens[metric]);
+  };
+  const tokenBoundary = (group: ActionGroup): boolean => groupHas(group, ["agent_response_received"]) ||
+    group.rows.some((row) => row.value["tokens"] !== undefined || row.value["tokens_in"] !== undefined || row.value["tokens_out"] !== undefined);
+  const durationBoundary = (group: ActionGroup): boolean => groupHas(group, ["tool_call_finished", "tool_call_failed"]) ||
+    group.rows.some((row) => row.value["event"] === "tool_call" || row.value["event"] === "phase_end");
+  return Object.fromEntries(USAGE_METRICS.map((metric) => {
+    const refs = sortedUnique(events.filter((event) => counted.has(event.ref) && explicit(event, metric)).map((event) => event.ref));
+    const boundaries = groups.filter(metric === "duration_ms" ? durationBoundary : tokenBoundary);
+    const covered = boundaries.length > 0 && boundaries.every((group) => group.rows.some((row) => counted.has(row.ref) && explicit(row, metric)));
+    const state: UsageMetricAvailability["state"] = refs.length === 0 ? "unobserved" : eligible && covered ? "complete" : "partial";
+    return [metric, { state, evidence_refs: refs, missing_reason: state === "complete" ? null : "incomplete_observation" }];
+  })) as Record<UsageMetric, UsageMetricAvailability>;
+}
+
+function knownIdentity(values: Array<string | null>): string | null {
+  const known = sortedUnique(values.filter((value): value is string => value !== null && value !== "unknown"));
+  return known.length === 1 && values.every((value) => value === null || value === known[0]) ? known[0] : null;
+}
+
+function analysisCohort(manifest: Record<string, unknown>, provenanceRaw: string, configSnapshot: Record<string, unknown> | null, events: readonly LoadedEvent[]): AnalysisCohort {
+  let provenance: Record<string, unknown> = {};
+  try { provenance = asRecord(JSON.parse(provenanceRaw)); } catch { /* absent or malformed provenance names no model */ }
+  const inspections = events.filter(({ value }) => value["schema_version"] === "guild.trace.model_inspection.v1" && value["identity_trust"] === "verified")
+    .map(({ value }) => scalar(value, "actual_model"));
+  const modelSources = [scalar(provenance, "model"), ...inspections].filter((value): value is string => value !== null);
+  return {
+    run_class: scalar(manifest, "run_class"),
+    model: modelSources.length > 0 ? knownIdentity(modelSources) : null,
+    provider: knownIdentity([scalar(provenance, "provider")]),
+    config_hash: configSnapshot ? `sha256:${sha256(canonicalJson({ effective: configSnapshot["effective"], plugin: configSnapshot["plugin"] }))}` : null,
+  };
+}
+
+function inputManifestHash(entries: readonly InputManifestEntry[]): string {
+  return `sha256:${sha256(canonicalJson(entries))}`;
+}
+
+function detectFindings(analysisId: string, events: LoadedEvent[], groups: readonly ActionGroup[]): AnalysisFinding[] {
+  const findings: AnalysisFinding[] = [];
+  const failures = new Map<string, ActionGroup[]>();
+  const steering: ActionGroup[] = [];
+  for (const group of groups) {
+    if (group.rows.some(isFailureRow)) {
+      // B01-F4: span twins are one attempt; an unsigned failure is never keyed as "undefined|undefined|undefined".
+      const signature = failureSignature(group);
+      if (signature !== null) failures.set(signature, [...(failures.get(signature) ?? []), group]);
+    }
+    for (const row of rowsOf(group, ["instruction_violation_detected"]).slice(0, 1)) {
+      findings.push(finding(analysisId, "instruction_violation", "high", "The trace records an instruction violation.", group.refs, scalar(row.value, "signature") ?? "instruction-violation"));
+    }
+    // A tool denial is an observed permission outcome (diagnostics.tool_coverage), never an automatic tool_gap.
+    for (const row of rowsOf(group, ["loop_cap_hit"]).slice(0, 1)) {
+      findings.push(finding(analysisId, "workflow_churn", "medium", "A workflow loop reached its cap.", group.refs, scalar(row.value, "signature") ?? "loop-cap"));
+    }
+    if (groupHas(group, ["user_steering_received"])) steering.push(group);
+  }
+  void events;
+  for (const [signature, attempts] of [...failures.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    if (attempts.length >= REPEAT_THRESHOLD) {
+      findings.push(finding(analysisId, "repeated_failure", "high", `The same failed action recurred ${attempts.length} times.`, attempts.flatMap((group) => group.refs), signature));
+    }
+  }
+  if (steering.length >= REPEAT_THRESHOLD) {
     findings.push(finding(
       analysisId,
       "prompt_inefficiency",
       "medium",
-      `The run required ${steeringRefs.length} user steering interventions.`,
-      steeringRefs,
+      `The run required ${steering.length} user steering interventions.`,
+      steering.flatMap((group) => group.refs),
       "repeated-user-steering",
     ));
   }
@@ -1415,57 +2174,107 @@ function recommendationRoutingFields(scope: RecommendationScope): Pick<Recommend
   };
 }
 
-function recommendationsFor(analysisId: string, runId: string, findings: AnalysisFinding[]): Recommendation[] {
-  return findings.map((item) => {
+function recommendationsFor(analysisId: string, runId: string, findings: AnalysisFinding[], supported: readonly SupportedRecommendation[] = []): Recommendation[] {
+  // v1 routing for v1 finding kinds is unchanged. tool_gap findings now exist only
+  // with typed ownership evidence, so their scope/kind come from that evidence.
+  const v1 = findings.filter((item) => item.kind !== "tool_gap").map((item) => {
     const scope: RecommendationScope = item.kind === "telemetry_gap" ? "plugin" : "project";
-    const kind = item.kind === "repeated_failure" ? "clarify_prompt_contract" :
-      item.kind === "tool_gap" ? "create_skill" :
+    const kind: RecommendationKind = item.kind === "repeated_failure" ? "clarify_prompt_contract" :
       item.kind === "telemetry_gap" ? "telemetry_gap" : "update_workflow";
-    const signature = evidenceSignature(scope, kind, item.evidence_refs);
+    return { scope, kind, severity: item.severity, summary: item.summary, evidence_refs: item.evidence_refs };
+  });
+  const seen = new Set<string>();
+  return [...v1, ...supported].map((item) => {
+    const refs = sortedUnique(item.evidence_refs);
+    const signature = evidenceSignature(item.scope, item.kind, refs);
     return {
       schema_version: "guild.recommendation.v1",
       id: stableId("rec", signature),
       source_id: runId,
       source_analysis_id: analysisId,
-      scope,
-      kind,
-      confidence: item.evidence_refs.length >= 2 ? "high" : "medium",
+      scope: item.scope,
+      kind: item.kind,
+      confidence: refs.length >= 2 ? "high" : "medium",
       severity: item.severity,
-      evidence_refs: item.evidence_refs,
+      evidence_refs: refs,
       evidence_signature: signature,
       affected_runs: [runId],
       proposed_action: item.summary,
       status: "proposed",
-      ...recommendationRoutingFields(scope),
+      ...recommendationRoutingFields(item.scope),
     } as Recommendation;
-  }).sort((a, b) => a.id.localeCompare(b.id));
+  }).filter((item) => !seen.has(item.evidence_signature) && seen.add(item.evidence_signature) !== undefined)
+    .sort((a, b) => a.id.localeCompare(b.id));
 }
 
 function assessment(observableRefs: string[], violatedRefs: string[] = []): { status: AssessmentStatus; evidence_refs: string[] } {
   if (observableRefs.length === 0) return { status: "unobservable", evidence_refs: [] };
   if (violatedRefs.length > 0) return { status: "violated", evidence_refs: [...new Set([...observableRefs, ...violatedRefs])].sort() };
-  // Observability alone is not positive proof. A satisfied verdict requires an
-  // explicit positive detector; until one exists, retain the honest ambiguity.
+  // Observability alone is not positive proof. Only the C-DETECTORS typed-proof
+  // aggregate (complete declared set, every instruction proved) may be satisfied.
   return { status: "ambiguous", evidence_refs: observableRefs.slice().sort() };
 }
 
-export function analyzeRun(root: string, runId: string): RunAnalysis {
+interface RunInputs {
+  dir: string;
+  manifest: Record<string, unknown>;
+  provenanceRaw: string;
+  configRef: string | null;
+  configSnapshot: Record<string, unknown> | null;
+  events: LoadedEvent[];
+  parseErrors: number;
+  invalidRecords: number;
+  sourceHash: string;
+  store: Map<string, AdditiveInput>;
+  sidecars: Sidecar[];
+  declaration: Sidecar | null;
+  declarationReason: string | null;
+}
+
+/** Load core (source_hash-bound) and additive (input_hash-bound) inputs without running detectors. */
+function collectRunInputs(root: string, runId: string): RunInputs {
   const dir = runDir(root, runId);
   const runFile = resolveRunInputFile(dir, "run.yaml");
   const runRaw = runFile ? readText(runFile) : null;
   if (runRaw === null) throw new Error(`run ${runId} has no run.yaml`);
   const manifest = asRecord(parseYaml(runRaw));
   const { events, raw: eventsRaw, parseErrors, invalidRecords } = loadEvents(root, runId);
+  const configRef = scalar(manifest, "config_snapshot_ref");
+  const configPath = configRef ? resolveRunInputFile(dir, configRef) : null;
+  const provenancePath = resolveRunInputFile(dir, "provenance.json");
+  const provenanceRaw = provenancePath ? readText(provenancePath) ?? "" : "";
+  const sourceHash = sha256(runRaw + "\n" + provenanceRaw + "\n" + (configPath ? readText(configPath) ?? "" : "") + "\n" + eventsRaw);
+  const store = new Map<string, AdditiveInput>();
+  const sidecars = readSidecars(store, dir, runId, events);
+  const declarations = sidecars.filter((item) => item.schema === "guild.analysis_declaration.v1");
+  let declaration: Sidecar | null = null;
+  let declarationReason: string | null = null;
+  if (new Set(declarations.map((item) => canonicalJson(item.value))).size > 1) declarationReason = "conflicting_instruction_declarations";
+  else if (declarations.length > 0) {
+    const assessed = readAdditiveInput(store, dir, runId, declarations[0].value["assessed_input_ref"]);
+    if (assessed.bytes !== null && assessed.entry.sha256 === declarations[0].value["assessed_input_hash"]) declaration = declarations[0];
+    else declarationReason = "assessed_input_unbound";
+  }
+  return {
+    dir, manifest, provenanceRaw, configRef, configSnapshot: readConfigSnapshot(configPath, runId),
+    events, parseErrors, invalidRecords, sourceHash, store, sidecars, declaration, declarationReason,
+  };
+}
+
+function manifestEntries(store: Map<string, AdditiveInput>): InputManifestEntry[] {
+  return [...store.values()].map(({ entry }) => ({ ref: entry.ref, sha256: entry.sha256, status: entry.status })).sort((a, b) => a.ref.localeCompare(b.ref));
+}
+
+export function analyzeRun(root: string, runId: string): RunAnalysis {
+  const inputs = collectRunInputs(root, runId);
+  const { manifest, events, parseErrors, invalidRecords, sourceHash, configRef } = inputs;
   const scope = scalar(manifest, "run_scope");
   const initiativeId = scalar(manifest, "initiative_attachment");
   const independentGroup = scalar(manifest, "independent_run_group");
   const runScope = scope === "initiative" || scope === "independent"
     ? scope
     : initiativeId !== null ? "initiative" : "unknown";
-  const configRef = scalar(manifest, "config_snapshot_ref");
-  const configPath = configRef ? resolveRunInputFile(dir, configRef) : null;
-  const configSnapshot = readConfigSnapshot(configPath, runId);
-  const configExists = configSnapshot !== null;
+  const configExists = inputs.configSnapshot !== null;
   const identityComplete = runScope !== "unknown" &&
     (runScope === "initiative" ? initiativeId !== null : independentGroup !== null);
   const categories = new Set(events.map((event) => categoryOf(event.value)).filter((value): value is EvidenceCategory => value !== null));
@@ -1483,10 +2292,9 @@ export function analyzeRun(root: string, runId: string): RunAnalysis {
   ];
   const denominator = COMPLETENESS_REQUIREMENTS.length;
   const score = Math.round((present.length / denominator) * 100);
-  const provenancePath = resolveRunInputFile(dir, "provenance.json");
-  const sourceHash = sha256(runRaw + "\n" + (provenancePath ? readText(provenancePath) ?? "" : "") + "\n" + (configPath ? readText(configPath) ?? "" : "") + "\n" + eventsRaw);
   const analysisId = `analysis:${runId}:${sourceHash.slice(0, 12)}`;
-  const findings = detectFindings(analysisId, events);
+  const groups = actionGroups(events, runId);
+  const findings = detectFindings(analysisId, events, groups);
   if (missing.length > 0) {
     findings.push(finding(
       analysisId,
@@ -1496,7 +2304,6 @@ export function analyzeRun(root: string, runId: string): RunAnalysis {
       [`.guild/runs/${runId}/run.yaml`],
       `missing:${[...new Set(missing)].sort().join("|")}`,
     ));
-    findings.sort((a, b) => a.id.localeCompare(b.id));
   }
   const instructionRefs = [...evidenceFor(events, "prompt"), ...evidenceFor(events, "gate")];
   const violationRefs = findings.filter((item) => item.kind === "instruction_violation").flatMap((item) => item.evidence_refs);
@@ -1509,6 +2316,53 @@ export function analyzeRun(root: string, runId: string): RunAnalysis {
   const isLightweight = manifest["run_class"] === "lightweight";
   const eligible = isLightweight ||
     (identityComplete && configExists && parseErrors === 0 && invalidRecords === 0 && REQUIRED_COVERAGE.every((category) => categories.has(category)));
+
+  const ctx: DetectorContext = {
+    runId, events, groups, sidecars: inputs.sidecars, declaration: inputs.declaration, declarationReason: inputs.declarationReason,
+    store: inputs.store, dir: inputs.dir, eligible,
+    closeRefs: events.filter((event) => categoryOf(event.value) === "close").map((event) => event.ref),
+    instructionObservableRefs: instructionRefs, v1ViolationRefs: violationRefs,
+  };
+  const usage = tokenUsage(events);
+  const availability = usageAvailability(events, groups, eligible);
+  const instruction = detectInstructionFollowing(ctx);
+  const proofs = instructionProofs(ctx);
+  const tools = detectToolCoverage(ctx);
+  const outputs: DetectorOutput[] = [
+    instruction,
+    detectRepeatedMistake(ctx, proofs),
+    detectSteering(ctx),
+    detectClarification(ctx),
+    detectRedundantPrompt(ctx),
+    usageOutlierSingle(availability),
+    detectPromptActionLatency(ctx),
+    detectWorkflowChurn(ctx),
+    detectKnowledgeMemory(ctx, proofs),
+    tools,
+    detectOutcomeQuality(ctx),
+  ];
+  const supported = [...tools.supported ?? [], ...tools.supportedOnly];
+  const unownedFailures = groups.filter((group) => group.rows.some(isFailureRow)).length -
+    new Set(supported.flatMap((item) => groups.filter((group) => group.rows.some(isFailureRow) && group.refs.some((ref) => item.evidence_refs.includes(ref))))).size;
+  const scopeState: DetectorState = supported.length > 0 ? "observed" : unownedFailures > 0 ? "ambiguous" : "unobservable";
+  outputs.push({
+    result: result("recommendation_scope", scopeState, {
+      supported: supported.map((item) => ({ scope: item.scope, kind: item.kind, target: item.target }))
+        .sort((a, b) => `${a.scope}|${a.kind}|${a.target}`.localeCompare(`${b.scope}|${b.kind}|${b.target}`)),
+      unowned_failed_actions: unownedFailures,
+    }, supported.flatMap((item) => item.evidence_refs),
+    scopeState === "observed" ? null : scopeState === "ambiguous" ? "unowned_action_failure" : "no_ownership_evidence"),
+  });
+  if (eligible) {
+    for (const extra of outputs.flatMap((output) => output.findings ?? [])) {
+      findings.push(finding(analysisId, extra.kind, extra.severity, extra.summary, extra.evidence_refs, extra.signature));
+    }
+  }
+  const uniqueFindings = [...new Map(findings.map((item) => [item.id, item])).values()].sort((a, b) => a.id.localeCompare(b.id));
+  const inputManifest = manifestEntries(inputs.store);
+  const instructionAssessment = !eligible ? { status: "unobservable" as const, evidence_refs: [] }
+    : instruction.aggregate === "satisfied" ? { status: "satisfied" as const, evidence_refs: sortedUnique([...instructionRefs, ...instruction.satisfiedRefs]) }
+      : assessment(instructionRefs, [...violationRefs, ...instruction.typedViolationRefs]);
   return {
     schema_version: "guild.run_analysis.v1",
     analysis_id: analysisId,
@@ -1525,15 +2379,355 @@ export function analyzeRun(root: string, runId: string): RunAnalysis {
     },
     completeness: { score, present: present.sort(), missing: [...new Set(missing)] },
     assessments: {
-      instruction_following: eligible ? assessment(instructionRefs, violationRefs) : { status: "unobservable", evidence_refs: [] },
+      instruction_following: instructionAssessment,
       prompt_efficiency: eligible ? assessment(promptRefs) : { status: "unobservable", evidence_refs: [] },
       workflow: eligible ? assessment(workflowRefs) : { status: "unobservable", evidence_refs: [] },
       tool_coverage: eligible ? assessment(toolRefs) : { status: "unobservable", evidence_refs: [] },
     },
-    usage: tokenUsage(events),
-    findings,
-    recommendations: recommendationsFor(analysisId, runId, findings),
+    usage: { ...usage, availability },
+    findings: uniqueFindings,
+    recommendations: recommendationsFor(analysisId, runId, uniqueFindings, eligible ? supported : []),
+    diagnostics: {
+      contract: DIAGNOSTICS_CONTRACT,
+      input_manifest: inputManifest,
+      input_hash: inputManifestHash(inputManifest),
+      cohort: analysisCohort(manifest, inputs.provenanceRaw, inputs.configSnapshot, events),
+      results: outputs.map((output) => output.result).sort((a, b) => a.detector.localeCompare(b.detector)),
+      instruction_checks: instruction.checks,
+    },
   };
+}
+
+/** Strict shape of the cached core: a truncated or hand-edited artifact never counts as a hit. */
+function cachedCoreWellFormed(cached: Record<string, unknown>): boolean {
+  const strings = (value: unknown): boolean => arrayOf(value, (item) => typeof item === "string");
+  const count = (value: unknown): boolean => typeof value === "number" && Number.isFinite(value) && value >= 0;
+  const assessments = asRecord(cached["assessments"]);
+  const completeness = asRecord(cached["completeness"]);
+  const usage = asRecord(cached["usage"]);
+  const tokens = asRecord(usage["tokens"]);
+  const availability = asRecord(usage["availability"]);
+  const identity = asRecord(cached["identity"]);
+  const nullableString = (value: unknown): boolean => value === null || nonEmptyString(value);
+  return typeof cached["eligible"] === "boolean" &&
+    hasOnlyKeys(identity, new Set(["run_scope", "initiative_id", "independent_group_id", "config_snapshot_ref", "host", "phase"])) &&
+    typeof identity["run_scope"] === "string" && ["initiative", "independent", "unknown"].includes(identity["run_scope"]) && nullableString(identity["initiative_id"]) &&
+    nullableString(identity["independent_group_id"]) && nullableString(identity["config_snapshot_ref"]) &&
+    nonEmptyString(identity["host"]) && nullableString(identity["phase"]) &&
+    arrayOf(cached["findings"], (item) => {
+      const finding = item !== null && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : null;
+      return finding !== null && hasOnlyKeys(finding, new Set(["id", "kind", "severity", "summary", "evidence_refs", "signature"])) &&
+        nonEmptyString(finding["id"]) && typeof finding["kind"] === "string" && FINDING_KINDS.has(finding["kind"]) && typeof finding["severity"] === "string" && SEVERITY_VALUES.has(finding["severity"]) &&
+        typeof finding["summary"] === "string" && stringArray(finding["evidence_refs"]) && nonEmptyString(finding["signature"]);
+    }) &&
+    hasOnlyKeys(assessments, new Set(["instruction_following", "prompt_efficiency", "workflow", "tool_coverage"])) &&
+    ["instruction_following", "prompt_efficiency", "workflow", "tool_coverage"].every((key) => {
+      const item = asRecord(assessments[key]);
+      return typeof item["status"] === "string" && ["satisfied", "violated", "ambiguous", "unobservable"].includes(item["status"]) && strings(item["evidence_refs"]);
+    }) &&
+    typeof completeness["score"] === "number" && completeness["score"] >= 0 && completeness["score"] <= 100 &&
+    strings(completeness["present"]) && strings(completeness["missing"]) &&
+    count(usage["llm_event_count"]) && strings(usage["specialists_dispatched"]) && count(usage["duration_ms"]) &&
+    ["input", "output", "cached", "total", "cost_usd"].every((key) => count(tokens[key])) &&
+    USAGE_METRICS.every((metric) => {
+      const item = asRecord(availability[metric]);
+      return typeof item["state"] === "string" && ["complete", "partial", "unobserved"].includes(item["state"]) && strings(item["evidence_refs"]);
+    });
+}
+
+export interface CachedRunAnalysis {
+  analysis: RunAnalysis;
+  cache: "hit" | "recomputed";
+  reason: null | "missing" | "legacy_diagnostics" | "stale_source" | "stale_inputs" | "malformed";
+}
+
+/**
+ * Reuse .guild/analysis/runs/<id>/analysis.json only when it strictly validates
+ * and both the current core source_hash and the additive input_hash match the
+ * frozen inputs. Anything else recomputes through analyzeRun (no stale reuse).
+ */
+export function loadOrAnalyzeRun(root: string, runId: string): CachedRunAnalysis {
+  assertSafeId(runId, "run id");
+  const inputs = collectRunInputs(root, runId);
+  const currentInputHash = inputManifestHash(manifestEntries(inputs.store));
+  const file = path.join(durableGuildDir(root), "analysis", "runs", runId, "analysis.json");
+  const raw = readExistingContainedText(root, file);
+  const recompute = (reason: CachedRunAnalysis["reason"]): CachedRunAnalysis => ({ analysis: analyzeRun(root, runId), cache: "recomputed", reason });
+  if (raw === null) return recompute("missing");
+  let cached: Record<string, unknown>;
+  try { cached = asRecord(JSON.parse(raw)); } catch { return recompute("malformed"); }
+  if (cached["schema_version"] !== "guild.run_analysis.v1" || cached["run_id"] !== runId ||
+      typeof cached["source_hash"] !== "string" || cached["analysis_id"] !== `analysis:${runId}:${String(cached["source_hash"]).slice(0, 12)}` ||
+      !Array.isArray(cached["recommendations"])) return recompute("malformed");
+  try { (cached["recommendations"] as unknown[]).forEach((item, index) => assertRecommendation(item, `cached recommendation ${index + 1}`)); }
+  catch { return recompute("malformed"); }
+  const diagnostics = asRecord(cached["diagnostics"]);
+  if (diagnostics["contract"] !== DIAGNOSTICS_CONTRACT || !Array.isArray(diagnostics["input_manifest"]) || !Array.isArray(diagnostics["results"])) {
+    return recompute(cached["diagnostics"] === undefined ? "legacy_diagnostics" : "malformed");
+  }
+  if (!cachedCoreWellFormed(cached)) return recompute("malformed");
+  if (diagnostics["input_hash"] !== inputManifestHash(diagnostics["input_manifest"] as InputManifestEntry[])) return recompute("malformed");
+  if (cached["source_hash"] !== inputs.sourceHash) return recompute("stale_source");
+  if (diagnostics["input_hash"] !== currentInputHash) return recompute("stale_inputs");
+  return { analysis: cached as unknown as RunAnalysis, cache: "hit", reason: null };
+}
+
+export type ArtifactInspectionKind = "run" | "comparison";
+export type ArtifactInspectionState = "current" | "stale" | "missing" | "unsupported" | "refused";
+export interface ArtifactInspection {
+  ok: boolean;
+  state: ArtifactInspectionState;
+  kind: ArtifactInspectionKind;
+  source_id: string;
+  artifact_ref: string | null;
+  schema_version: string | null;
+  source_analysis_id: string | null;
+  source_hash: string | null;
+  current_source_hash: string | null;
+  input_hash: string | null;
+  current_input_hash: string | null;
+  /** True only for a current artifact with a supported diagnostics contract: the browser-decision precondition. */
+  eligible: boolean;
+  reason: string | null;
+}
+
+const INPUT_HASH_FORMAT = /^sha256:[a-f0-9]{64}$/;
+const SOURCE_HASH_FORMAT = /^[a-f0-9]{64}$/;
+const ANALYSIS_ID_FORMAT = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,255}$/;
+
+class InspectionRefusal extends Error {
+  constructor(readonly reason: string) { super(reason); }
+}
+
+function inspectionRefusal(reason: string): never {
+  throw new InspectionRefusal(reason);
+}
+
+/** Current core + additive hashes through the analyzer's own input collector; null when the run is gone. */
+function currentRunHashes(root: string, runId: string): { sourceHash: string; inputHash: string } | null {
+  const runs = path.join(durableGuildDir(path.resolve(root)), "runs");
+  try { fs.lstatSync(path.join(runs, runId)); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    inspectionRefusal("unsafe_source_inputs");
+  }
+  let inputs: RunInputs;
+  try { inputs = collectRunInputs(root, runId); } catch (error) {
+    if (error instanceof Error && /has no run\.yaml/.test(error.message)) return null;
+    inspectionRefusal("unsafe_source_inputs");
+  }
+  // The same verification-input reads boundInput performs during detection, so the manifest matches analyzeRun's.
+  for (const proof of inputs.sidecars) {
+    if (inputs.declaration && proof.schema === "guild.instruction_evidence.v1" && proof.value["verification_input_ref"] !== undefined &&
+        proof.value["verified_input_hash"] === inputs.declaration.value["assessed_input_hash"]) {
+      try { readAdditiveInput(inputs.store, inputs.dir, runId, proof.value["verification_input_ref"]); } catch { inspectionRefusal("unsafe_source_inputs"); }
+    }
+  }
+  return { sourceHash: inputs.sourceHash, inputHash: inputManifestHash(manifestEntries(inputs.store)) };
+}
+
+/** No-follow read of one analyzer artifact; null when absent, refusal when any component is a symlink or escapes. */
+function readArtifactNoFollow(root: string, relative: string): string | null {
+  let file: string | null;
+  try { file = resolveRunInputFile(path.resolve(root), relative); } catch { inspectionRefusal("unsafe_artifact_path"); }
+  if (file === null) return null;
+  try { return fs.readFileSync(file, "utf8"); } catch { inspectionRefusal("artifact_unreadable"); }
+}
+
+const DETECTOR_STATES = new Set(["observed", "ambiguous", "unobservable"]);
+const plainObject = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+
+/** Closed shape of one detector result (or comparison dimension); exactly one per DETECTOR_IDS entry. */
+function detectorResultsWellFormed(value: unknown, dimension?: { runIds: readonly string[] }): boolean {
+  const keys = new Set(["detector", "state", "value", "evidence_refs", "reason", ...(dimension ? ["by_run", "comparable_runs"] : [])]);
+  if (!Array.isArray(value) || value.length !== DETECTOR_IDS.length) return false;
+  const seen = new Set<string>();
+  return value.every((item) => {
+    if (!plainObject(item) || !hasOnlyKeys(item, keys) || typeof item["detector"] !== "string" ||
+        !(DETECTOR_IDS as readonly string[]).includes(item["detector"]) || seen.has(item["detector"]) ||
+        typeof item["state"] !== "string" || !DETECTOR_STATES.has(item["state"]) || !plainObject(item["value"]) ||
+        !stringArray(item["evidence_refs"]) || !(item["reason"] === null || typeof item["reason"] === "string")) return false;
+    seen.add(item["detector"]);
+    if (!dimension) return true;
+    const byRun = item["by_run"];
+    return plainObject(byRun) && Object.keys(byRun).length === dimension.runIds.length &&
+      dimension.runIds.every((id) => {
+        const entry = byRun[id];
+        return plainObject(entry) && hasOnlyKeys(entry, new Set(["state", "eligible", "value"])) &&
+          typeof entry["state"] === "string" && (DETECTOR_STATES.has(entry["state"]) || entry["state"] === "legacy_unknown") &&
+          typeof entry["eligible"] === "boolean" && plainObject(entry["value"]);
+      }) &&
+      arrayOf(item["comparable_runs"], (id) => typeof id === "string" && dimension.runIds.includes(id));
+  });
+}
+
+function inspectRunArtifact(root: string, runId: string, base: ArtifactInspection, raw: string): ArtifactInspection {
+  let cached: Record<string, unknown>;
+  try { cached = asRecord(JSON.parse(raw)); } catch { inspectionRefusal("malformed_artifact"); }
+  const schema = cached["schema_version"];
+  if (schema !== "guild.run_analysis.v1") return { ...base, state: "unsupported", schema_version: typeof schema === "string" ? schema : null, reason: "unknown_core_schema" };
+  const sourceHash = cached["source_hash"];
+  if (cached["run_id"] !== runId || typeof sourceHash !== "string" || !SOURCE_HASH_FORMAT.test(sourceHash) ||
+      cached["analysis_id"] !== `analysis:${runId}:${sourceHash.slice(0, 12)}` || !Array.isArray(cached["recommendations"])) {
+    inspectionRefusal("malformed_artifact");
+  }
+  try { (cached["recommendations"] as unknown[]).forEach((item, index) => assertRecommendation(item, `recommendation ${index + 1}`)); }
+  catch { inspectionRefusal("malformed_artifact"); }
+  const current = currentRunHashes(root, runId);
+  const recorded: ArtifactInspection = {
+    ...base, schema_version: schema, source_analysis_id: cached["analysis_id"] as string, source_hash: sourceHash,
+    current_source_hash: current?.sourceHash ?? null, current_input_hash: current?.inputHash ?? null,
+  };
+  const diagnostics = cached["diagnostics"];
+  if (diagnostics === undefined) return { ...recorded, state: "unsupported", reason: "legacy_diagnostics_missing" };
+  const contract = asRecord(diagnostics)["contract"];
+  if (contract !== DIAGNOSTICS_CONTRACT) {
+    const claimed = asRecord(diagnostics)["input_hash"];
+    return { ...recorded, input_hash: typeof claimed === "string" && INPUT_HASH_FORMAT.test(claimed) ? claimed : null, state: "unsupported", reason: "unknown_diagnostics_contract" };
+  }
+  const record = asRecord(diagnostics);
+  const manifest = record["input_manifest"];
+  const inputHash = record["input_hash"];
+  if (!Array.isArray(manifest) || !detectorResultsWellFormed(record["results"]) || typeof inputHash !== "string" ||
+      !INPUT_HASH_FORMAT.test(inputHash) || inputHash !== inputManifestHash(manifest as InputManifestEntry[]) || !cachedCoreWellFormed(cached)) {
+    inspectionRefusal("malformed_artifact");
+  }
+  const withInput = { ...recorded, input_hash: inputHash };
+  if (current === null) return { ...withInput, state: "stale", reason: "source_inputs_missing" };
+  if (current.sourceHash !== sourceHash) return { ...withInput, state: "stale", reason: "stale_source" };
+  if (current.inputHash !== inputHash) return { ...withInput, state: "stale", reason: "stale_inputs" };
+  return { ...withInput, state: "current", eligible: true, reason: null };
+}
+
+function comparisonRunsHash(runs: ReadonlyArray<{ run_id: string; source_hash: string; input_hash: string | null }>): string {
+  return `sha256:${sha256(canonicalJson(runs.map(({ run_id, source_hash, input_hash }) => ({ run_id, source_hash, input_hash }))))}`;
+}
+
+function inspectComparisonArtifact(root: string, comparisonId: string, base: ArtifactInspection, raw: string): ArtifactInspection {
+  let cached: Record<string, unknown>;
+  try { cached = asRecord(JSON.parse(raw)); } catch { inspectionRefusal("malformed_artifact"); }
+  const schema = cached["schema_version"];
+  if (schema !== "guild.run_comparison.v1") return { ...base, state: "unsupported", schema_version: typeof schema === "string" ? schema : null, reason: "unknown_core_schema" };
+  const runIds = cached["run_ids"];
+  const sourceHashes = cached["source_hashes"];
+  if (cached["comparison_id"] !== comparisonId || !arrayOf(runIds, (id) => typeof id === "string" && SAFE_ID.test(id)) ||
+      !arrayOf(sourceHashes, (hash) => typeof hash === "string" && SOURCE_HASH_FORMAT.test(hash)) ||
+      (runIds as string[]).length < 2 || (runIds as string[]).length !== (sourceHashes as string[]).length ||
+      (runIds as string[]).some((id, index, all) => index > 0 && all[index - 1].localeCompare(id) >= 0) ||
+      !Array.isArray(cached["recommendations"])) {
+    inspectionRefusal("malformed_artifact");
+  }
+  const ids = runIds as string[];
+  const hashes = sourceHashes as string[];
+  const material = ids.map((id, index) => `${id}:${hashes[index]}`).join("|");
+  if (stableId("comparison", material) !== comparisonId) inspectionRefusal("malformed_artifact");
+  try { (cached["recommendations"] as unknown[]).forEach((item, index) => assertRecommendation(item, `recommendation ${index + 1}`)); }
+  catch { inspectionRefusal("malformed_artifact"); }
+  const current = ids.map((id) => currentRunHashes(root, id));
+  const currentMaterial = current.every((item) => item !== null)
+    ? ids.map((id, index) => `${id}:${current[index]!.sourceHash}`).join("|")
+    : null;
+  const recorded: ArtifactInspection = {
+    ...base, schema_version: schema, source_analysis_id: comparisonId, source_hash: sha256(material),
+    current_source_hash: currentMaterial === null ? null : sha256(currentMaterial),
+    current_input_hash: currentMaterial === null ? null
+      : comparisonRunsHash(ids.map((id, index) => ({ run_id: id, source_hash: current[index]!.sourceHash, input_hash: current[index]!.inputHash }))),
+  };
+  const diagnostics = cached["diagnostics"];
+  if (diagnostics === undefined) return { ...recorded, state: "unsupported", reason: "legacy_diagnostics_missing" };
+  const record = asRecord(diagnostics);
+  if (record["contract"] !== DIAGNOSTICS_CONTRACT) return { ...recorded, state: "unsupported", reason: "unknown_diagnostics_contract" };
+  const retained = record["runs"];
+  if (!Array.isArray(retained) || retained.length !== ids.length || !retained.every((value, index) => {
+    if (!plainObject(value) || !hasOnlyKeys(value, new Set(["run_id", "source_hash", "input_hash", "eligible"]))) return false;
+    return value["run_id"] === ids[index] && value["source_hash"] === hashes[index] && typeof value["eligible"] === "boolean" &&
+      (value["input_hash"] === null || (typeof value["input_hash"] === "string" && INPUT_HASH_FORMAT.test(value["input_hash"])));
+  }) || !detectorResultsWellFormed(record["dimensions"], { runIds: ids })) inspectionRefusal("malformed_artifact");
+  const retainedRuns = retained as Array<{ run_id: string; source_hash: string; input_hash: string | null }>;
+  const withInput = { ...recorded, input_hash: comparisonRunsHash(retainedRuns) };
+  if (retainedRuns.some((item) => item.input_hash === null)) return { ...withInput, state: "unsupported", reason: "retained_run_legacy_diagnostics" };
+  if (currentMaterial === null) return { ...withInput, state: "stale", reason: "retained_run_missing" };
+  if (withInput.current_source_hash !== withInput.source_hash) return { ...withInput, state: "stale", reason: "stale_source" };
+  if (withInput.current_input_hash !== withInput.input_hash) return { ...withInput, state: "stale", reason: "stale_inputs" };
+  return { ...withInput, state: "current", eligible: true, reason: null };
+}
+
+/**
+ * C-CLI read-only freshness inspection. Recomputes the current core source_hash
+ * and additive input_hash through the analyzer's own collectors and compares
+ * them with the canonical artifact. Never creates a directory, lock, journal,
+ * queue, sidecar or index; unsafe or malformed input reports `refused`.
+ */
+export function inspectAnalysisArtifact(root: string, kind: ArtifactInspectionKind, sourceId: string): ArtifactInspection {
+  const base: ArtifactInspection = {
+    ok: true, state: "missing", kind, source_id: sourceId, artifact_ref: null, schema_version: null, source_analysis_id: null,
+    source_hash: null, current_source_hash: null, input_hash: null, current_input_hash: null, eligible: false, reason: null,
+  };
+  try {
+    if (kind !== "run" && kind !== "comparison") inspectionRefusal("unknown_artifact_kind");
+    try { assertRecommendationSourceId(sourceId, "source id"); } catch { inspectionRefusal("unsafe_source_id"); }
+    const artifactRef = kind === "run"
+      ? `.guild/analysis/runs/${sourceId}/analysis.json`
+      : `.guild/analysis/comparisons/${sourceId}/comparison.json`;
+    const located = { ...base, artifact_ref: artifactRef };
+    const raw = readArtifactNoFollow(root, artifactRef);
+    if (raw === null) {
+      if (kind === "run") {
+        const current = currentRunHashes(root, sourceId);
+        return { ...located, current_source_hash: current?.sourceHash ?? null, current_input_hash: current?.inputHash ?? null, reason: "artifact_missing" };
+      }
+      return { ...located, reason: "artifact_missing" };
+    }
+    return kind === "run" ? inspectRunArtifact(root, sourceId, located, raw) : inspectComparisonArtifact(root, sourceId, located, raw);
+  } catch (error) {
+    if (!(error instanceof InspectionRefusal)) throw error;
+    return { ...base, ok: false, state: "refused", eligible: false, reason: error.reason };
+  }
+}
+
+export interface ExpectedDecisionContext {
+  analysisId: string;
+  inputHash: string;
+}
+
+function assertExpectedContextShape(expected: ExpectedDecisionContext | undefined): void {
+  if (expected === undefined) return;
+  if (typeof expected.analysisId !== "string" || !ANALYSIS_ID_FORMAT.test(expected.analysisId)) {
+    throw new Error("expected-analysis-id must be a producer-issued analysis identity");
+  }
+  if (typeof expected.inputHash !== "string" || !INPUT_HASH_FORMAT.test(expected.inputHash)) {
+    throw new Error("expected-input-hash must be sha256:<64 lowercase hex>");
+  }
+}
+
+/**
+ * Runs inside the recommendation lock, before any journal/draft/queue/activity
+ * mutation. Browser-bound consent (expected context) needs an exact, current,
+ * supported identity. Historical operator decisions keep manual authority over
+ * legacy diagnostics but never over a changed core source.
+ */
+function assertDecisionContext(root: string, sourceId: string, expected: ExpectedDecisionContext | undefined): void {
+  const runArtifact = path.join(durableGuildDir(root), "analysis", "runs", sourceId, "analysis.json");
+  const kind: ArtifactInspectionKind = fs.existsSync(runArtifact) ? "run" : "comparison";
+  const inspection = inspectAnalysisArtifact(root, kind, sourceId);
+  if (expected !== undefined) {
+    const changed = inspection.state !== "current" ? `${inspection.state}:${inspection.reason}`
+      : inspection.source_analysis_id !== expected.analysisId ? "analysis_identity_changed"
+        : inspection.input_hash !== expected.inputHash || inspection.current_input_hash !== expected.inputHash ? "input_hash_changed"
+          : null;
+    if (changed !== null) throw new Error(`expected_context_changed: ${changed}`);
+    return;
+  }
+  if (inspection.state === "missing") return; // canonicalSourceAnalysisId reports the missing source unchanged.
+  if (inspection.state === "refused") throw new Error(`recommendation source refused: ${inspection.reason}`);
+  if (inspection.state === "stale" || (inspection.state === "unsupported" && inspection.source_hash !== null &&
+      inspection.current_source_hash !== inspection.source_hash)) {
+    throw new Error(`source_context_stale: ${inspection.reason === "legacy_diagnostics_missing" ? "stale_source" : inspection.reason}`);
+  }
+  // An unknown contract still recorded additive inputs; manual authority holds only while they provably match.
+  if (inspection.state === "unsupported" && inspection.reason === "unknown_diagnostics_contract" &&
+      (inspection.input_hash === null || inspection.input_hash !== inspection.current_input_hash)) {
+    throw new Error("source_context_stale: stale_inputs");
+  }
 }
 
 function renderAnalysis(analysis: RunAnalysis): string {
@@ -1690,6 +2884,134 @@ export function resolveComparisonTarget(root: string, target: ComparisonTarget):
   return analyses;
 }
 
+function median(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+const metricTotal = (analysis: RunAnalysis, metric: UsageMetric): number =>
+  metric === "duration_ms" ? analysis.usage.duration_ms : analysis.usage.tokens[metric];
+
+/** >2x median within >=5 eligible complete runs sharing run class, model, provider and config cohort. */
+function compareUsageOutlier(sorted: readonly RunAnalysis[]): Omit<ComparisonDimension, "by_run" | "comparable_runs"> & { comparable: string[] } {
+  const metrics: Record<string, unknown> = {};
+  const refs: string[] = [];
+  const comparable = new Set<string>();
+  let observed = false;
+  let zeroMedian = false;
+  for (const metric of USAGE_METRICS) {
+    let metricObserved = false;
+    let metricZeroMedian = false;
+    const complete: Record<string, number> = {};
+    const partial: Record<string, number> = {};
+    const unknown: string[] = [];
+    const cohorts = new Map<string, RunAnalysis[]>();
+    for (const analysis of sorted) {
+      const availability = analysis.usage.availability?.[metric];
+      if (!availability || availability.state === "unobserved") { unknown.push(analysis.run_id); continue; }
+      if (availability.state === "partial") { partial[analysis.run_id] = metricTotal(analysis, metric); continue; }
+      complete[analysis.run_id] = metricTotal(analysis, metric);
+      const cohort = analysis.diagnostics?.cohort;
+      if (!analysis.eligible || !cohort || Object.values(cohort).some((value) => value === null)) continue;
+      const key = canonicalJson(cohort);
+      cohorts.set(key, [...(cohorts.get(key) ?? []), analysis]);
+    }
+    const evaluated = [...cohorts.entries()].filter(([, runs]) => runs.length >= OUTLIER_MIN_COHORT).map(([key, runs]) => {
+      const middle = median(runs.map((analysis) => metricTotal(analysis, metric)));
+      if (middle <= 0) { zeroMedian = true; metricZeroMedian = true; }
+      const outliers = middle > 0 ? runs.filter((analysis) => metricTotal(analysis, metric) > 2 * middle) : [];
+      runs.forEach((analysis) => comparable.add(analysis.run_id));
+      outliers.forEach((analysis) => refs.push(...(analysis.usage.availability?.[metric].evidence_refs ?? [])));
+      if (middle > 0) { observed = true; metricObserved = true; }
+      return { cohort: sha256(key).slice(0, 16), runs: runs.map((analysis) => analysis.run_id), median: middle, outliers: middle > 0 ? outliers.map((analysis) => analysis.run_id) : null };
+    }).sort((a, b) => a.cohort.localeCompare(b.cohort));
+    metrics[metric] = {
+      state: metricObserved ? "observed" : "unobservable",
+      reason: metricObserved ? null : metricZeroMedian ? "zero_median" : "insufficient_comparable_cohort",
+      complete_totals: complete, partial_subtotals: partial, unknown, cohorts: evaluated,
+    };
+  }
+  return {
+    detector: "usage_outlier",
+    state: observed ? "observed" : "unobservable",
+    value: { min_cohort: OUTLIER_MIN_COHORT, metrics },
+    evidence_refs: sortedUnique(refs),
+    reason: observed ? null : zeroMedian ? "zero_median" : "insufficient_comparable_cohort",
+    comparable: [...comparable].sort(),
+  };
+}
+
+function detectorValue(analysis: RunAnalysis, detector: DetectorId): DetectorResult | null {
+  return analysis.diagnostics?.results.find((item) => item.detector === detector) ?? null;
+}
+
+function compareDiagnostics(sorted: readonly RunAnalysis[]): ComparisonDiagnostics {
+  const eligible = sorted.filter((analysis) => analysis.eligible);
+  const dimensions: ComparisonDimension[] = DETECTOR_IDS.map((detector) => {
+    const byRun: ComparisonDimension["by_run"] = Object.fromEntries(sorted.map((analysis) => {
+      const item = detectorValue(analysis, detector);
+      return [analysis.run_id, { state: item?.state ?? "legacy_unknown", eligible: analysis.eligible, value: item?.value ?? {} }];
+    }));
+    const states = eligible.map((analysis) => byRun[analysis.run_id].state);
+    const observedRuns = eligible.filter((analysis) => byRun[analysis.run_id].state === "observed").map((analysis) => analysis.run_id);
+    const refs = eligible.flatMap((analysis) => detectorValue(analysis, detector)?.evidence_refs ?? []);
+    let state: DetectorState = states.includes("observed") ? "observed" : states.includes("ambiguous") ? "ambiguous" : "unobservable";
+    let reason: string | null = state === "unobservable" ? (eligible.length === 0 ? "no_eligible_runs" : "no_observations") : null;
+    let value: Record<string, unknown> = {};
+    let comparable = observedRuns;
+    if (detector === "usage_outlier") {
+      const outlier = compareUsageOutlier(sorted);
+      return { detector, state: outlier.state, value: outlier.value, evidence_refs: outlier.evidence_refs, reason: outlier.reason, by_run: byRun, comparable_runs: outlier.comparable };
+    }
+    if (detector === "instruction_following") {
+      const scopes = Object.fromEntries(observedRuns.map((runId) => [runId, (byRun[runId].value["requirement_hashes"] as string[] | undefined) ?? []]));
+      const distinct = new Set(Object.values(scopes).map((hashes) => hashes.join(",")));
+      value = {
+        by_aggregate: Object.fromEntries((["satisfied", "violated", "ambiguous", "unobservable"] as const).map((status) => [status,
+          eligible.filter((analysis) => byRun[analysis.run_id].value["aggregate"] === status).map((analysis) => analysis.run_id)])),
+        requirement_scopes: scopes,
+      };
+      if (distinct.size > 1) { state = "ambiguous"; reason = "incomparable_declared_scopes"; comparable = []; }
+    }
+    if (detector === "repeated_mistake") {
+      const clusters = new Map<string, { runs: Set<string>; occurrences: number; phases: Set<string> }>();
+      for (const analysis of eligible) {
+        for (const cluster of (byRun[analysis.run_id].value["clusters"] as Array<Record<string, unknown>> | undefined) ?? []) {
+          const current = clusters.get(String(cluster["signature"])) ?? { runs: new Set<string>(), occurrences: 0, phases: new Set<string>() };
+          current.runs.add(analysis.run_id);
+          current.occurrences += Number(cluster["attempts"]);
+          current.phases.add(String(cluster["phase"] ?? "-"));
+          clusters.set(String(cluster["signature"]), current);
+        }
+      }
+      value = {
+        cross_run_clusters: [...clusters.entries()].filter(([, item]) => item.runs.size >= REPEAT_THRESHOLD)
+          .map(([signature, item]) => ({ signature, runs: [...item.runs].sort(), occurrences: item.occurrences, phases: [...item.phases].sort() }))
+          .sort((a, b) => a.signature.localeCompare(b.signature)),
+      };
+    }
+    return { detector, state, value, evidence_refs: sortedUnique(refs), reason, by_run: byRun, comparable_runs: comparable };
+  });
+  const clusters = new Map<string, { scope: RecommendationScope; kind: RecommendationKind; target: string; runs: Set<string> }>();
+  for (const analysis of eligible) {
+    for (const item of (detectorValue(analysis, "recommendation_scope")?.value["supported"] as Array<{ scope: RecommendationScope; kind: RecommendationKind; target: string }> | undefined) ?? []) {
+      const key = `${item.scope}|${item.kind}|${item.target}`;
+      const current = clusters.get(key) ?? { ...item, runs: new Set<string>() };
+      current.runs.add(analysis.run_id);
+      clusters.set(key, current);
+    }
+  }
+  return {
+    contract: DIAGNOSTICS_CONTRACT,
+    runs: sorted.map((analysis) => ({ run_id: analysis.run_id, source_hash: analysis.source_hash, input_hash: analysis.diagnostics?.input_hash ?? null, eligible: analysis.eligible })),
+    dimensions,
+    recommendation_clusters: [...clusters.values()].filter((item) => item.runs.size >= REPEAT_THRESHOLD)
+      .map((item) => ({ scope: item.scope, kind: item.kind, target: item.target, runs: [...item.runs].sort() }))
+      .sort((a, b) => `${a.scope}|${a.kind}|${a.target}`.localeCompare(`${b.scope}|${b.kind}|${b.target}`)),
+  };
+}
+
 export function compareRuns(analyses: readonly RunAnalysis[]): RunComparison {
   if (analyses.length < 2) throw new Error("comparison requires at least two run analyses");
   const sorted = [...analyses].sort((a, b) => a.run_id.localeCompare(b.run_id));
@@ -1745,6 +3067,7 @@ export function compareRuns(analyses: readonly RunAnalysis[]): RunComparison {
     },
     repeated_signatures: repeated,
     recommendations,
+    diagnostics: compareDiagnostics(sorted),
   };
 }
 
@@ -1804,14 +3127,20 @@ export function decideRecommendation(
   sourceId: string,
   recommendationId: string,
   decision: "accept" | "reject",
+  expected?: ExpectedDecisionContext,
 ): RecommendationDecisionResult {
   assertSafeId(recommendationId, "recommendation id");
-  return withRecommendationLock(root, () => withFileTransaction(root, [
-    recommendationSourceFile(root, sourceId),
-    path.join(durableGuildDir(root), "recommendations", "queue.jsonl"),
-    path.join(durableGuildDir(root), "recommendations", "activity.jsonl"),
-    path.join(durableGuildDir(root), "recommendations", "drafts", `${recommendationId}.md`),
-  ], () => decideRecommendationUnlocked(root, sourceId, recommendationId, decision)));
+  assertRecommendationSourceId(sourceId, "recommendation source id");
+  assertExpectedContextShape(expected);
+  return withRecommendationLock(root, () => {
+    assertDecisionContext(root, sourceId, expected);
+    return withFileTransaction(root, [
+      recommendationSourceFile(root, sourceId),
+      path.join(durableGuildDir(root), "recommendations", "queue.jsonl"),
+      path.join(durableGuildDir(root), "recommendations", "activity.jsonl"),
+      path.join(durableGuildDir(root), "recommendations", "drafts", `${recommendationId}.md`),
+    ], () => decideRecommendationUnlocked(root, sourceId, recommendationId, decision));
+  });
 }
 
 function updateRecommendationStatusUnlocked(

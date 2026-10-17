@@ -31,6 +31,8 @@
  * Owned by: tooling-engineer (scripts/ scope per AGENTS.md)
  */
 
+import * as crypto from "crypto";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared base
 // ─────────────────────────────────────────────────────────────────────────────
@@ -728,58 +730,226 @@ export function validateAnalysisTraceEvent(ev: unknown): ValidationResult {
       }
     }
   }
-  const eventClass = e["event_class"] as AnalysisEventClass;
-  if (eventClass === "run_started" && e["run_scope"] === undefined) {
-    return { ok: false, reason: "run_started requires run_scope" };
+  return ANALYSIS_CLASS_VALIDATORS[e["event_class"] as AnalysisEventClass](e);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-class typed validators (closed: one entry per ANALYSIS_EVENT_CLASSES)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type AnalysisEnvelopeField =
+  | "span_id" | "task_id" | "phase" | "prompt_hash" | "redaction" | "payload_ref"
+  | "duration_ms" | "signature" | "run_scope";
+
+/**
+ * Envelope fields each class must carry. `Record<AnalysisEventClass, …>` makes
+ * the table closed: adding a class without its requirement row is a type error.
+ * `config_snapshot_written` additionally needs config_snapshot_ref OR
+ * payload_ref (checked in its validator).
+ */
+export const ANALYSIS_CLASS_REQUIREMENTS: Readonly<Record<AnalysisEventClass, readonly AnalysisEnvelopeField[]>> = Object.freeze({
+  run_started: ["run_scope"],
+  run_closed: ["run_scope"],
+  run_attachment_resolved: ["run_scope", "signature"],
+  config_snapshot_written: [],
+  prompt_received: ["prompt_hash", "redaction", "span_id"],
+  prompt_normalized: ["prompt_hash", "redaction", "span_id"],
+  clarifying_question_asked: ["prompt_hash", "redaction", "span_id"],
+  implementation_authorized: ["span_id", "signature"],
+  agent_dispatched: ["task_id", "span_id"],
+  agent_prompt_sent: ["prompt_hash", "redaction", "span_id", "task_id"],
+  agent_response_received: ["span_id"],
+  agent_handoff_written: ["task_id", "span_id", "payload_ref"],
+  knowledge_lookup_started: ["span_id", "prompt_hash"],
+  knowledge_lookup_result: ["span_id", "prompt_hash"],
+  memory_lookup_started: ["span_id", "prompt_hash"],
+  memory_lookup_result: ["span_id", "prompt_hash"],
+  tool_call_started: ["span_id"],
+  tool_call_finished: ["span_id", "duration_ms"],
+  tool_call_denied: ["span_id", "signature"],
+  tool_call_failed: ["span_id", "duration_ms"],
+  loop_entered: ["span_id", "signature"],
+  loop_iteration: ["span_id", "signature"],
+  loop_exited: ["span_id", "signature"],
+  loop_cap_hit: ["span_id", "signature"],
+  phase_entered: ["span_id", "phase"],
+  phase_concluded: ["span_id", "phase"],
+  gate_started: ["span_id", "signature"],
+  gate_concluded: ["span_id", "signature"],
+  instruction_violation_detected: ["span_id", "signature"],
+  user_steering_received: ["span_id", "signature"],
+  correction_applied: ["span_id", "signature"],
+  repeated_failure_detected: ["span_id", "signature"],
+  recommendation_created: ["span_id", "signature"],
+  recommendation_routed: ["span_id", "signature"],
+  bug_report_prompted: ["span_id", "signature"],
+});
+
+/** Why a tool call was denied. Kept distinct so one denial never reads as a missing skill. */
+export const TOOL_DENIAL_CAUSES = Object.freeze(["policy", "user", "host_unavailable", "capability_absent"] as const);
+export type ToolDenialCause = (typeof TOOL_DENIAL_CAUSES)[number];
+const TOOL_DENIAL_SIGNATURE = new RegExp(`^(?:${TOOL_DENIAL_CAUSES.join("|")}):[A-Za-z0-9_.:-]{1,200}$`);
+
+function requireFields(e: Record<string, unknown>, eventClass: AnalysisEventClass): ValidationResult {
+  const missing = ANALYSIS_CLASS_REQUIREMENTS[eventClass].filter((key) => e[key] === undefined);
+  return missing.length === 0
+    ? { ok: true }
+    : { ok: false, reason: `${eventClass} requires ${missing.join(", ")}` };
+}
+
+type AnalysisClassValidator = (e: Record<string, unknown>) => ValidationResult;
+
+function classValidator(
+  eventClass: AnalysisEventClass,
+  extra?: (e: Record<string, unknown>) => string | null,
+): AnalysisClassValidator {
+  return (e) => {
+    const required = requireFields(e, eventClass);
+    if (!required.ok || !extra) return required;
+    const reason = extra(e);
+    return reason === null ? { ok: true } : { ok: false, reason: `${eventClass}: ${reason}` };
+  };
+}
+
+// Prompt-bearing classes reference a sidecar only after redaction; "none" would
+// let payload_ref name an unredacted body.
+const redactedPrompt = (e: Record<string, unknown>): string | null =>
+  e["redaction"] === "none" ? "redaction must be redacted|omitted for a prompt-bearing class" : null;
+
+export const ANALYSIS_CLASS_VALIDATORS: Readonly<Record<AnalysisEventClass, AnalysisClassValidator>> = Object.freeze(
+  Object.fromEntries(ANALYSIS_EVENT_CLASSES.map((eventClass) => {
+    switch (eventClass) {
+      case "run_attachment_resolved":
+        return [eventClass, classValidator(eventClass, (e) =>
+          String(e["signature"]).startsWith(`${e["run_scope"]}:`) ? null : "signature must start with <run_scope>:")];
+      case "config_snapshot_written":
+        return [eventClass, classValidator(eventClass, (e) =>
+          e["config_snapshot_ref"] === undefined && e["payload_ref"] === undefined
+            ? "requires config_snapshot_ref or payload_ref" : null)];
+      case "prompt_received":
+      case "prompt_normalized":
+      case "clarifying_question_asked":
+      case "agent_prompt_sent":
+        return [eventClass, classValidator(eventClass, redactedPrompt)];
+      case "tool_call_denied":
+        return [eventClass, classValidator(eventClass, (e) =>
+          e["status"] !== "denied" ? "status must be denied"
+            : !TOOL_DENIAL_SIGNATURE.test(String(e["signature"]))
+              ? `signature must be <${TOOL_DENIAL_CAUSES.join("|")}>:<tool>[:<action>]` : null)];
+      case "instruction_violation_detected":
+      case "user_steering_received":
+      case "correction_applied":
+      case "repeated_failure_detected":
+      case "recommendation_created":
+      case "recommendation_routed":
+      case "bug_report_prompted":
+        // Evidence signatures are typed grouping keys. Prose is never a
+        // steering, correction, or ownership assertion (C-DETECTORS field_rule).
+        return [eventClass, classValidator(eventClass, (e) =>
+          /^\S{1,256}$/.test(String(e["signature"])) ? null : "signature must be 1-256 non-whitespace chars")];
+      case "tool_call_failed":
+        return [eventClass, classValidator(eventClass, (e) => e["status"] !== "error" ? "status must be error" : null)];
+      default:
+        return [eventClass, classValidator(eventClass)];
+    }
+  })) as Record<AnalysisEventClass, AnalysisClassValidator>,
+);
+
+/** Typed denial signature: `<cause>:<tool>[:<action-signature>]`. */
+export function toolDenialSignature(cause: ToolDenialCause, tool: string, action?: string): string {
+  return [cause, tool, ...(action ? [action] : [])].join(":");
+}
+
+/**
+ * Span-independent action signature for a tool call: the same tool + redacted
+ * command in one run produces the same key, so two distinct failed attempts
+ * group while a single attempt's twins (shared span) are collapsed separately.
+ */
+export function toolActionSignature(tool: string, commandRedacted: string): string {
+  const digest = crypto.createHash("sha256").update(`${tool}\n${commandRedacted}`).digest("hex").slice(0, 16);
+  return `tool:${tool}:${digest}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Span-correlated twins
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One canonical-log row as a consumer loaded it (value + stable evidence ref). */
+export interface TraceRowRef {
+  readonly value: Record<string, unknown>;
+  readonly ref: string;
+}
+
+/** One observed action: the representative row plus every row ref that shares its span. */
+export interface CorrelatedAction<T extends TraceRowRef = TraceRowRef> {
+  readonly action: T;
+  readonly refs: readonly string[];
+  readonly span_id: string | null;
+}
+
+/** Higher wins: a terminal class outranks its started row; a failure outranks ok. */
+const TWIN_TERMINAL_SUFFIXES = ["_finished", "_failed", "_denied", "_concluded", "_exited", "_result", "_closed", "_cap_hit"] as const;
+const TWIN_STATUS_RANK: Readonly<Record<AnalysisEventStatus, number>> = { ok: 0, unknown: 1, incomplete: 2, denied: 3, error: 4 };
+
+function twinRank(value: Record<string, unknown>): [number, number, number] {
+  const typed = value["schema_version"] === "guild.trace.analysis.v2" ? 1 : 0;
+  const cls = typeof value["event_class"] === "string" ? value["event_class"] as string : "";
+  const terminal = TWIN_TERMINAL_SUFFIXES.some((suffix) => cls.endsWith(suffix)) ? 1 : 0;
+  const status = TWIN_STATUS_RANK[value["status"] as AnalysisEventStatus] ?? -1;
+  return [typed, terminal, status];
+}
+
+function outranks(a: [number, number, number], b: [number, number, number]): boolean {
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i];
+  return false;
+}
+
+/** A row may join an action only if it belongs to this run and, when typed, validates. */
+function twinEligible(value: Record<string, unknown>, runId: string): boolean {
+  const schema = value["schema_version"];
+  if (typeof schema === "string" && schema.startsWith("guild.trace.")) {
+    return value["run_id"] === runId && validateGuildTraceEvent(value).ok;
   }
-  if (eventClass === "run_attachment_resolved" && (e["run_scope"] === undefined || e["signature"] === undefined)) {
-    return { ok: false, reason: "run_attachment_resolved requires run_scope and signature" };
+  const rowRun = value["run_id"];
+  return rowRun === undefined || rowRun === runId;
+}
+
+/**
+ * Collapse span-correlated twins into one action. The canonical log carries a
+ * legacy/hook mirror and the typed analysis.v2 rows for the same tool call (and
+ * started/finished pairs) under one span_id; counting rows would double every
+ * action. Rows are validated before selection: a foreign-run row, or a typed
+ * guild.trace.* row that is missing run_id or fails its validator, is dropped,
+ * never counted and never correlated. Rows without a span stay distinct (no
+ * guessed correlation). The representative is the strongest row: a typed
+ * analysis.v2 row over a mirror, a terminal class (failed/denied/finished)
+ * over its started row, then the most severe status, so a started/ok row never
+ * masks a failure. Order follows first appearance.
+ *
+ * Contract: the consumer is run-analysis action counting (finding eligibility,
+ * repeated_failure). Wiring it into run-analysis.ts is owned by task B02.
+ */
+export function collapseSpanTwins<T extends TraceRowRef>(rows: readonly T[], runId: string): CorrelatedAction<T>[] {
+  const actions: Array<{ action: T; refs: string[]; span_id: string | null }> = [];
+  const bySpan = new Map<string, { action: T; refs: string[]; span_id: string | null }>();
+  for (const row of rows) {
+    if (!twinEligible(row.value, runId)) continue;
+    const span = typeof row.value["span_id"] === "string" && row.value["span_id"] !== "" ? row.value["span_id"] as string : null;
+    if (span === null) {
+      actions.push({ action: row, refs: [row.ref], span_id: null });
+      continue;
+    }
+    const existing = bySpan.get(span);
+    if (!existing) {
+      const entry = { action: row, refs: [row.ref], span_id: span };
+      bySpan.set(span, entry);
+      actions.push(entry);
+      continue;
+    }
+    existing.refs.push(row.ref);
+    if (outranks(twinRank(row.value), twinRank(existing.action.value))) existing.action = row;
   }
-  if (eventClass === "config_snapshot_written" && e["config_snapshot_ref"] === undefined && e["payload_ref"] === undefined) {
-    return { ok: false, reason: "config_snapshot_written requires config_snapshot_ref or payload_ref" };
-  }
-  const promptClasses: AnalysisEventClass[] = ["prompt_received", "prompt_normalized", "clarifying_question_asked", "agent_prompt_sent"];
-  if (promptClasses.includes(eventClass) &&
-      (e["prompt_hash"] === undefined || e["redaction"] === undefined || e["span_id"] === undefined)) {
-    return { ok: false, reason: `${eventClass} requires prompt_hash, redaction, and span_id` };
-  }
-  if ((eventClass.startsWith("knowledge_lookup_") || eventClass.startsWith("memory_lookup_")) &&
-      (e["span_id"] === undefined || e["prompt_hash"] === undefined)) {
-    return { ok: false, reason: `${eventClass} requires span_id and prompt_hash` };
-  }
-  if (eventClass.startsWith("tool_call_") && e["span_id"] === undefined) {
-    return { ok: false, reason: `${eventClass} requires span_id` };
-  }
-  if (["tool_call_finished", "tool_call_failed"].includes(eventClass) && e["duration_ms"] === undefined) {
-    return { ok: false, reason: `${eventClass} requires duration_ms` };
-  }
-  if (["agent_dispatched", "agent_prompt_sent", "agent_handoff_written"].includes(eventClass) &&
-      (e["task_id"] === undefined || e["span_id"] === undefined)) {
-    return { ok: false, reason: `${eventClass} requires task_id and span_id` };
-  }
-  if (eventClass === "agent_handoff_written" && e["payload_ref"] === undefined) {
-    return { ok: false, reason: "agent_handoff_written requires payload_ref" };
-  }
-  if (eventClass === "agent_response_received" && e["span_id"] === undefined) {
-    return { ok: false, reason: "agent_response_received requires span_id" };
-  }
-  if (eventClass.startsWith("loop_") && (e["span_id"] === undefined || e["signature"] === undefined)) {
-    return { ok: false, reason: `${eventClass} requires span_id and signature` };
-  }
-  if (eventClass.startsWith("phase_") && (e["span_id"] === undefined || e["phase"] === undefined)) {
-    return { ok: false, reason: `${eventClass} requires span_id and phase` };
-  }
-  if (eventClass.startsWith("gate_") && (e["span_id"] === undefined || e["signature"] === undefined)) {
-    return { ok: false, reason: `${eventClass} requires span_id and signature` };
-  }
-  const evidenceClasses: AnalysisEventClass[] = [
-    "instruction_violation_detected", "user_steering_received", "correction_applied", "repeated_failure_detected",
-    "recommendation_created", "recommendation_routed", "bug_report_prompted",
-  ];
-  if (evidenceClasses.includes(eventClass) && (e["span_id"] === undefined || e["signature"] === undefined)) {
-    return { ok: false, reason: `${eventClass} requires span_id and signature` };
-  }
-  return { ok: true };
+  return actions.map(({ action, refs, span_id }) => ({ action, refs: [...new Set(refs)].sort(), span_id }));
 }
 
 /** Validate any guild.trace.*.v1 event — dispatches to the appropriate typed validator. */
