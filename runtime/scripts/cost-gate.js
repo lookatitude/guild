@@ -6628,9 +6628,239 @@ var init_model_discovery_contract = __esm({
   }
 });
 
+// src/domains/security/safe-object.ts
+var PROTO_POISON_KEYS;
+var init_safe_object = __esm({
+  "src/domains/security/safe-object.ts"() {
+    init_kernel();
+    PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
+  }
+});
+
+// src/domains/security/injection-guard.ts
+var init_injection_guard = __esm({
+  "src/domains/security/injection-guard.ts"() {
+  }
+});
+
+// src/domains/security/redact-log.ts
+var FIELD_SIZE_CAP_BYTES, TOKEN_SHAPE_PATTERNS, SENSITIVE_HOME_DIRS, REDACTABLE_FIELD_NAMES, REDACTABLE_FIELDS;
+var init_redact_log = __esm({
+  "src/domains/security/redact-log.ts"() {
+    init_kernel();
+    FIELD_SIZE_CAP_BYTES = 4 * 1024;
+    TOKEN_SHAPE_PATTERNS = Object.freeze([
+      Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
+      Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
+      Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
+      Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
+      Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
+      Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
+      Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
+      Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
+      Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
+    ]);
+    SENSITIVE_HOME_DIRS = Object.freeze([
+      ".claude",
+      ".codex",
+      ".ssh",
+      ".aws",
+      ".gnupg"
+    ]);
+    REDACTABLE_FIELD_NAMES = Object.freeze([
+      "command_redacted",
+      "result_excerpt_redacted",
+      "payload_excerpt_redacted",
+      "prompt_excerpt",
+      "assumption_text",
+      "result"
+    ]);
+    REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
+  }
+});
+
+// src/domains/security/secrets.ts
+var init_secrets = __esm({
+  "src/domains/security/secrets.ts"() {
+    init_redact_log();
+  }
+});
+
+// src/domains/security/config.ts
+var init_config = __esm({
+  "src/domains/security/config.ts"() {
+    init_state();
+    init_state();
+  }
+});
+
+// src/domains/security/events.ts
+var SECURITY_EVENT_TYPES, KNOWN_GUILD_HOST_KINDS, KNOWN_GUILD_HOST_ID_SET;
+var init_events = __esm({
+  "src/domains/security/events.ts"() {
+    init_state();
+    init_redact_log();
+    init_state();
+    SECURITY_EVENT_TYPES = Object.freeze([
+      "capability_scope_violation",
+      "capability_scope_degrade",
+      "bypass_permission_allowed",
+      "mcp_description_mismatch",
+      "mcp_description_unverifiable",
+      "mcp_description_unpinned",
+      "secret_scrub_failure",
+      "injection_attempt_detected",
+      "secret_scrub_blocked",
+      "recall_quarantine",
+      "dispatch_attribution_missing",
+      "backend_degradation",
+      "tier_dispatch_untiered",
+      "harvest_promoted",
+      "harvest_refused",
+      "playbook_auto_replace",
+      "wiki_cas_conflict",
+      "harvest_reverted",
+      "lane_wiki_write_refused",
+      "queue_drain_refused"
+    ]);
+    KNOWN_GUILD_HOST_KINDS = Object.freeze([
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "agents-file",
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector"
+    ]);
+    KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
+  }
+});
+
+// src/domains/security/scrubbed-write.ts
+var init_scrubbed_write = __esm({
+  "src/domains/security/scrubbed-write.ts"() {
+    init_secrets();
+    init_config();
+    init_events();
+  }
+});
+
+// src/domains/security/share-set.ts
+var path17, SHARED_SCRUBBED_NAMES, CANONICAL_RUN_LOG;
+var init_share_set = __esm({
+  "src/domains/security/share-set.ts"() {
+    path17 = __toESM(require("path"));
+    init_kernel();
+    SHARED_SCRUBBED_NAMES = sealSet([
+      "verify.md",
+      "review.md",
+      "provenance.json",
+      "summary.md",
+      "run.yaml",
+      "run-state.json"
+    ], "SHARED_SCRUBBED_NAMES");
+    CANONICAL_RUN_LOG = path17.join("logs", "v1.4-events.jsonl");
+  }
+});
+
+// src/domains/security/secret-patterns.ts
+var SECRET_PATTERNS;
+var init_secret_patterns = __esm({
+  "src/domains/security/secret-patterns.ts"() {
+    SECRET_PATTERNS = Object.freeze([
+      // NOTE: labels deliberately drop the `=` so the redaction replacement
+      // (e.g. `<REDACTED:password-assignment>`) cannot itself re-match the pattern
+      // on a subsequent scrub pass. Idempotency depends on this — every label below
+      // is checked against every pattern above it, and none re-matches.
+      Object.freeze([Object.freeze(/password\s*=\s*["']?[^\s"']{6,}/), "password-assignment"]),
+      Object.freeze([Object.freeze(/api_key\s*=\s*["']?[^\s"']{6,}/i), "api_key-assignment"]),
+      Object.freeze([Object.freeze(/secret\s*=\s*["']?[^\s"']{8,}/i), "secret-assignment"]),
+      Object.freeze([Object.freeze(/AKIA[0-9A-Z]{16}/), "AWS access key"]),
+      Object.freeze([Object.freeze(/AIza[0-9A-Za-z_-]{35}/), "GCP API key"]),
+      Object.freeze([Object.freeze(/ghp_[0-9A-Za-z]{36}/), "GitHub personal access token"]),
+      Object.freeze([Object.freeze(/ghs_[0-9A-Za-z]{36}/), "GitHub server token"]),
+      Object.freeze([Object.freeze(/-----BEGIN (?:RSA |EC )?PRIVATE KEY/), "PEM private key block"]),
+      // ── Provider credential / bearer-token forms (T6B-R1-B1) ─────────────────
+      // Round-1 review proved the list above blind to the shapes an inspection
+      // surface is most likely to echo out of a persisted artifact: an
+      // `Authorization: Bearer …` header, a `sk-…` provider key, and the
+      // `<something>_token = …` assignment family. A display surface that renders
+      // a persisted evidence string verbatim leaked all three past the applier.
+      //
+      // Every pattern is anchored on the CREDENTIAL PREFIX (not on entropy) so it
+      // stays specific, and each replacement label is inert against every pattern
+      // in this list (no whitespace/`:`/`=` follows the trigger word in a label),
+      // which is what keeps `redact` idempotent.
+      Object.freeze([Object.freeze(/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i), "bearer-token"]),
+      Object.freeze([Object.freeze(/\bauthorization\s*:\s*["']?[A-Za-z0-9._~+/=-]{12,}/i), "authorization-header"]),
+      Object.freeze([Object.freeze(/\b(?:auth|access|refresh|id|api|bearer|session)[-_]?token\s*[:=]\s*["']?[^\s"',]{8,}/i), "token-assignment"]),
+      // OpenAI/Anthropic-style provider keys: sk-…, sk-proj-…, sk-ant-….
+      Object.freeze([Object.freeze(/\bsk-[A-Za-z0-9_-]{12,}/), "provider-api-key"]),
+      Object.freeze([Object.freeze(/\bxox[abprs]-[A-Za-z0-9-]{10,}/), "Slack token"]),
+      Object.freeze([Object.freeze(/\bgh[uor]_[0-9A-Za-z]{36}/), "GitHub token"]),
+      Object.freeze([Object.freeze(/\bglpat-[0-9A-Za-z_-]{20}/), "GitLab personal access token"]),
+      Object.freeze([Object.freeze(/\bnpm_[0-9A-Za-z]{36}/), "npm token"]),
+      Object.freeze([Object.freeze(/\bhf_[0-9A-Za-z]{34}/), "HuggingFace token"]),
+      // ── Personally identifying forms retained by public evidence projections ─
+      // Task objectives and handoff prose are operator-authored and can contain
+      // direct contact details or tenant identifiers. Those artifacts are copied
+      // into migration evidence, so the share scrubber must recognize them before
+      // publication. Keep the patterns prefix-shaped and their labels inert so the
+      // redaction remains deterministic and idempotent.
+      Object.freeze([Object.freeze(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i), "email-address"]),
+      Object.freeze([Object.freeze(/\b(?:acct|cus|cust|usr)_[A-Za-z0-9][A-Za-z0-9_-]{4,}\b/i), "customer-identifier"]),
+      Object.freeze([Object.freeze(/\b(?:customer|account|user)[_-]?id\s*[:=]\s*["']?[A-Za-z0-9][A-Za-z0-9._-]{3,}/i), "customer-identifier"]),
+      // High-entropy string heuristic: 40+ hex chars (SHA-like)
+      Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
+    ]);
+  }
+});
+
+// src/domains/security/scrub-redact.ts
+var init_scrub_redact = __esm({
+  "src/domains/security/scrub-redact.ts"() {
+    init_secret_patterns();
+    init_state();
+  }
+});
+
+// src/domains/security/d5-permission-content.ts
+var init_d5_permission_content = __esm({
+  "src/domains/security/d5-permission-content.ts"() {
+  }
+});
+
+// src/domains/security/ingest-pause.ts
+var init_ingest_pause = __esm({
+  "src/domains/security/ingest-pause.ts"() {
+    init_state();
+  }
+});
+
+// src/domains/security/index.ts
+var init_security = __esm({
+  "src/domains/security/index.ts"() {
+    init_safe_object();
+    init_injection_guard();
+    init_scrubbed_write();
+    init_redact_log();
+    init_share_set();
+    init_scrub_redact();
+    init_secret_patterns();
+    init_events();
+    init_d5_permission_content();
+    init_ingest_pause();
+    init_config();
+    init_secrets();
+  }
+});
+
 // src/domains/config/native-config-parser.ts
 var init_native_config_parser = __esm({
   "src/domains/config/native-config-parser.ts"() {
+    init_security();
   }
 });
 
@@ -7112,235 +7342,6 @@ var init_session_binding = __esm({
 var init_config_validation = __esm({
   "src/domains/config/config-validation.ts"() {
     init_host_id_namespace();
-  }
-});
-
-// src/domains/security/safe-object.ts
-var PROTO_POISON_KEYS;
-var init_safe_object = __esm({
-  "src/domains/security/safe-object.ts"() {
-    init_kernel();
-    PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
-  }
-});
-
-// src/domains/security/injection-guard.ts
-var init_injection_guard = __esm({
-  "src/domains/security/injection-guard.ts"() {
-  }
-});
-
-// src/domains/security/redact-log.ts
-var FIELD_SIZE_CAP_BYTES, TOKEN_SHAPE_PATTERNS, SENSITIVE_HOME_DIRS, REDACTABLE_FIELD_NAMES, REDACTABLE_FIELDS;
-var init_redact_log = __esm({
-  "src/domains/security/redact-log.ts"() {
-    init_kernel();
-    FIELD_SIZE_CAP_BYTES = 4 * 1024;
-    TOKEN_SHAPE_PATTERNS = Object.freeze([
-      Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
-      Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
-      Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
-      Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
-      Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
-      Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
-      Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
-      Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
-      Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
-    ]);
-    SENSITIVE_HOME_DIRS = Object.freeze([
-      ".claude",
-      ".codex",
-      ".ssh",
-      ".aws",
-      ".gnupg"
-    ]);
-    REDACTABLE_FIELD_NAMES = Object.freeze([
-      "command_redacted",
-      "result_excerpt_redacted",
-      "payload_excerpt_redacted",
-      "prompt_excerpt",
-      "assumption_text",
-      "result"
-    ]);
-    REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
-  }
-});
-
-// src/domains/security/secrets.ts
-var init_secrets = __esm({
-  "src/domains/security/secrets.ts"() {
-    init_redact_log();
-  }
-});
-
-// src/domains/security/config.ts
-var init_config = __esm({
-  "src/domains/security/config.ts"() {
-    init_state();
-    init_state();
-  }
-});
-
-// src/domains/security/events.ts
-var SECURITY_EVENT_TYPES, KNOWN_GUILD_HOST_KINDS, KNOWN_GUILD_HOST_ID_SET;
-var init_events = __esm({
-  "src/domains/security/events.ts"() {
-    init_state();
-    init_redact_log();
-    init_state();
-    SECURITY_EVENT_TYPES = Object.freeze([
-      "capability_scope_violation",
-      "capability_scope_degrade",
-      "bypass_permission_allowed",
-      "mcp_description_mismatch",
-      "mcp_description_unverifiable",
-      "mcp_description_unpinned",
-      "secret_scrub_failure",
-      "injection_attempt_detected",
-      "secret_scrub_blocked",
-      "recall_quarantine",
-      "dispatch_attribution_missing",
-      "backend_degradation",
-      "tier_dispatch_untiered",
-      "harvest_promoted",
-      "harvest_refused",
-      "playbook_auto_replace",
-      "wiki_cas_conflict",
-      "harvest_reverted",
-      "lane_wiki_write_refused",
-      "queue_drain_refused"
-    ]);
-    KNOWN_GUILD_HOST_KINDS = Object.freeze([
-      "claude-code-cli",
-      "codex-cli",
-      "pi-cli",
-      "antigravity-cli",
-      "agents-file",
-      "claude-code-app",
-      "claude-code-web",
-      "codex-app",
-      "claude-ai-connector"
-    ]);
-    KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
-  }
-});
-
-// src/domains/security/scrubbed-write.ts
-var init_scrubbed_write = __esm({
-  "src/domains/security/scrubbed-write.ts"() {
-    init_secrets();
-    init_config();
-    init_events();
-  }
-});
-
-// src/domains/security/share-set.ts
-var path17, SHARED_SCRUBBED_NAMES, CANONICAL_RUN_LOG;
-var init_share_set = __esm({
-  "src/domains/security/share-set.ts"() {
-    path17 = __toESM(require("path"));
-    init_kernel();
-    SHARED_SCRUBBED_NAMES = sealSet([
-      "verify.md",
-      "review.md",
-      "provenance.json",
-      "summary.md",
-      "run.yaml",
-      "run-state.json"
-    ], "SHARED_SCRUBBED_NAMES");
-    CANONICAL_RUN_LOG = path17.join("logs", "v1.4-events.jsonl");
-  }
-});
-
-// src/domains/security/secret-patterns.ts
-var SECRET_PATTERNS;
-var init_secret_patterns = __esm({
-  "src/domains/security/secret-patterns.ts"() {
-    SECRET_PATTERNS = Object.freeze([
-      // NOTE: labels deliberately drop the `=` so the redaction replacement
-      // (e.g. `<REDACTED:password-assignment>`) cannot itself re-match the pattern
-      // on a subsequent scrub pass. Idempotency depends on this — every label below
-      // is checked against every pattern above it, and none re-matches.
-      Object.freeze([Object.freeze(/password\s*=\s*["']?[^\s"']{6,}/), "password-assignment"]),
-      Object.freeze([Object.freeze(/api_key\s*=\s*["']?[^\s"']{6,}/i), "api_key-assignment"]),
-      Object.freeze([Object.freeze(/secret\s*=\s*["']?[^\s"']{8,}/i), "secret-assignment"]),
-      Object.freeze([Object.freeze(/AKIA[0-9A-Z]{16}/), "AWS access key"]),
-      Object.freeze([Object.freeze(/AIza[0-9A-Za-z_-]{35}/), "GCP API key"]),
-      Object.freeze([Object.freeze(/ghp_[0-9A-Za-z]{36}/), "GitHub personal access token"]),
-      Object.freeze([Object.freeze(/ghs_[0-9A-Za-z]{36}/), "GitHub server token"]),
-      Object.freeze([Object.freeze(/-----BEGIN (?:RSA |EC )?PRIVATE KEY/), "PEM private key block"]),
-      // ── Provider credential / bearer-token forms (T6B-R1-B1) ─────────────────
-      // Round-1 review proved the list above blind to the shapes an inspection
-      // surface is most likely to echo out of a persisted artifact: an
-      // `Authorization: Bearer …` header, a `sk-…` provider key, and the
-      // `<something>_token = …` assignment family. A display surface that renders
-      // a persisted evidence string verbatim leaked all three past the applier.
-      //
-      // Every pattern is anchored on the CREDENTIAL PREFIX (not on entropy) so it
-      // stays specific, and each replacement label is inert against every pattern
-      // in this list (no whitespace/`:`/`=` follows the trigger word in a label),
-      // which is what keeps `redact` idempotent.
-      Object.freeze([Object.freeze(/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i), "bearer-token"]),
-      Object.freeze([Object.freeze(/\bauthorization\s*:\s*["']?[A-Za-z0-9._~+/=-]{12,}/i), "authorization-header"]),
-      Object.freeze([Object.freeze(/\b(?:auth|access|refresh|id|api|bearer|session)[-_]?token\s*[:=]\s*["']?[^\s"',]{8,}/i), "token-assignment"]),
-      // OpenAI/Anthropic-style provider keys: sk-…, sk-proj-…, sk-ant-….
-      Object.freeze([Object.freeze(/\bsk-[A-Za-z0-9_-]{12,}/), "provider-api-key"]),
-      Object.freeze([Object.freeze(/\bxox[abprs]-[A-Za-z0-9-]{10,}/), "Slack token"]),
-      Object.freeze([Object.freeze(/\bgh[uor]_[0-9A-Za-z]{36}/), "GitHub token"]),
-      Object.freeze([Object.freeze(/\bglpat-[0-9A-Za-z_-]{20}/), "GitLab personal access token"]),
-      Object.freeze([Object.freeze(/\bnpm_[0-9A-Za-z]{36}/), "npm token"]),
-      Object.freeze([Object.freeze(/\bhf_[0-9A-Za-z]{34}/), "HuggingFace token"]),
-      // ── Personally identifying forms retained by public evidence projections ─
-      // Task objectives and handoff prose are operator-authored and can contain
-      // direct contact details or tenant identifiers. Those artifacts are copied
-      // into migration evidence, so the share scrubber must recognize them before
-      // publication. Keep the patterns prefix-shaped and their labels inert so the
-      // redaction remains deterministic and idempotent.
-      Object.freeze([Object.freeze(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i), "email-address"]),
-      Object.freeze([Object.freeze(/\b(?:acct|cus|cust|usr)_[A-Za-z0-9][A-Za-z0-9_-]{4,}\b/i), "customer-identifier"]),
-      Object.freeze([Object.freeze(/\b(?:customer|account|user)[_-]?id\s*[:=]\s*["']?[A-Za-z0-9][A-Za-z0-9._-]{3,}/i), "customer-identifier"]),
-      // High-entropy string heuristic: 40+ hex chars (SHA-like)
-      Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
-    ]);
-  }
-});
-
-// src/domains/security/scrub-redact.ts
-var init_scrub_redact = __esm({
-  "src/domains/security/scrub-redact.ts"() {
-    init_secret_patterns();
-    init_state();
-  }
-});
-
-// src/domains/security/d5-permission-content.ts
-var init_d5_permission_content = __esm({
-  "src/domains/security/d5-permission-content.ts"() {
-  }
-});
-
-// src/domains/security/ingest-pause.ts
-var init_ingest_pause = __esm({
-  "src/domains/security/ingest-pause.ts"() {
-    init_state();
-  }
-});
-
-// src/domains/security/index.ts
-var init_security = __esm({
-  "src/domains/security/index.ts"() {
-    init_safe_object();
-    init_injection_guard();
-    init_scrubbed_write();
-    init_redact_log();
-    init_share_set();
-    init_scrub_redact();
-    init_secret_patterns();
-    init_events();
-    init_d5_permission_content();
-    init_ingest_pause();
-    init_config();
-    init_secrets();
   }
 });
 

@@ -21412,6 +21412,7 @@ function selectCodexMarketplaceIdentity(raw) {
 var NativeConfigParseError, UNSAFE_KEYS, BARE_KEY_RE, SHA40_RE, DATETIME_RE, INT_RE, HEX_RE, OCT_RE, BIN_RE, FLOAT_RE, Cursor, GUILD_SOURCE_RE, SOURCE_FIELDS;
 var init_native_config_parser = __esm({
   "src/domains/config/native-config-parser.ts"() {
+    init_security();
     NativeConfigParseError = class extends Error {
       code;
       constructor(code, message) {
@@ -21420,7 +21421,7 @@ var init_native_config_parser = __esm({
         this.code = code;
       }
     };
-    UNSAFE_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
+    UNSAFE_KEYS = PROTO_POISON_KEYS;
     BARE_KEY_RE = /^[A-Za-z0-9_-]+$/;
     SHA40_RE = /^[0-9a-f]{40}$/;
     DATETIME_RE = /^\d{4}-\d{2}-\d{2}([Tt ]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})?)?$/;

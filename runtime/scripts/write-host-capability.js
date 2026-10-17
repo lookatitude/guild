@@ -9403,6 +9403,980 @@ var init_model_discovery_contract = __esm({
   }
 });
 
+// src/domains/security/safe-object.ts
+var PROTO_POISON_KEYS;
+var init_safe_object = __esm({
+  "src/domains/security/safe-object.ts"() {
+    init_kernel();
+    PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
+  }
+});
+
+// src/domains/security/injection-guard.ts
+function sanitizeForInjection(text) {
+  const matchedPatterns = PATTERNS.filter(([, re]) => re.test(text)).map(([name]) => name);
+  return { result: matchedPatterns.length ? "flagged" : "clean", sanitized: text, matchedPatterns };
+}
+var PATTERNS;
+var init_injection_guard = __esm({
+  "src/domains/security/injection-guard.ts"() {
+    PATTERNS = [
+      ["ignore-previous-instructions", /\bignore\b(?:\s+\w+){0,3}\s+\b(instructions?|prompt|context|directives?)\b/i],
+      ["disregard-previous-instructions", /\bdisregard\b(?:\s+\w+){0,3}\s+\b(instructions?|prompt|context)\b/i],
+      ["forget-previous-instructions", /\bforget\b(?:\s+(?:your|my|all|previous|prior|past|earlier)){1,3}\s+\b(instructions?|prompt|context|rules?)\b/i],
+      ["override-previous-instructions", /\boverride\b(?:\s+\w+){0,3}\s+\b(instructions?|context|prompt)\b/i],
+      ["you-are-now", /you\s+are\s+now\s+(a|an|the|going|able|authorized|required)/i],
+      ["act-as-if", /act\s+as\s+(if|though|a|an|the)\b/i],
+      ["pretend-you-are", /pretend\s+(you\s+are|to\s+be)\b/i],
+      ["your-new-instructions", /your\s+(new|updated|actual|real|true)\s+(instructions?|persona|role|identity|task)/i],
+      ["system-prompt", /system\s+prompt/i],
+      ["markdown-system-block", /```\s*system\b/i],
+      ["anthropic-format-human", /\n\s*human\s*:/i],
+      ["anthropic-format-assistant", /\n\s*assistant\s*:/i],
+      ["html-comment-injection", /<!--\s*(ignore|override|instruction|system|disregard)/i],
+      ["jailbreak", /\bjailbreak\b/i]
+    ];
+  }
+});
+
+// src/domains/security/redact-log.ts
+function redactTokenShapes(input) {
+  let out = input;
+  for (const re of TOKEN_SHAPE_PATTERNS) {
+    out = out.replace(new RegExp(re.source, re.flags), TOKEN_REDACTED);
+  }
+  return out;
+}
+function redactHomeDirPaths(input) {
+  return input.replace(HOME_DIR_PATTERN, (_match, root, dir) => {
+    return `${root}/${dir}/${PATH_REDACTED}`;
+  });
+}
+function redactKeyValueSecrets(input) {
+  return input.replace(
+    KV_SECRET_PATTERN,
+    (_match, key, sep19) => `${key}${sep19}${KV_REDACTED}`
+  );
+}
+function allWordsWordish(words) {
+  let opaqueBudget = 1;
+  for (const word of words) {
+    if (word.length === 0 || word.length >= 20) return false;
+    let upper = 0;
+    let lower = 0;
+    let digits = 0;
+    for (const ch of word) {
+      if (ch >= "a" && ch <= "z") lower++;
+      else if (ch >= "A" && ch <= "Z") upper++;
+      else digits++;
+    }
+    if (lower === 0) {
+      if (word.length > 8) return false;
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+    } else if (upper > 3 || digits > 4) {
+      return false;
+    }
+  }
+  return true;
+}
+function isSafeDotGuildToken(token) {
+  const normalized = token.replace(/^(?:\.{1,2}\/)?\.guild\//, "");
+  const root = normalized.split("/", 1)[0] ?? "";
+  if (!DOT_GUILD_ROOTS.has(root)) return false;
+  const runNormalized = normalized.replace(
+    /(^|\/)run-\d{8}-\d{6}-/g,
+    "$1run-"
+  );
+  const words = runNormalized.split(/[/._-]+/).filter(Boolean);
+  let opaqueBudget = 1;
+  let numericWords = 0;
+  for (const word of words) {
+    if (word.length === 0 || word.length >= 20) return false;
+    if (/^[a-z][a-z0-9]*$/.test(word)) continue;
+    if (/^\d+$/.test(word)) {
+      numericWords += 1;
+      if (numericWords > 3) return false;
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+      continue;
+    }
+    if (/^[A-Z][A-Z0-9]{0,7}$/.test(word)) {
+      if (word.length > 2 && --opaqueBudget < 0) return false;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+function isRelativePathToken(candidate, fullInput, matchIndex) {
+  if (candidate.includes("+") || candidate.includes("=")) return false;
+  let start = matchIndex;
+  const startFloor = Math.max(0, matchIndex - MAX_PATH_TOKEN_LEN);
+  while (start > startFloor && PATH_TOKEN_CHAR.test(fullInput[start - 1])) start--;
+  if (start === startFloor && start > 0 && PATH_TOKEN_CHAR.test(fullInput[start - 1])) {
+    return false;
+  }
+  let end = matchIndex + candidate.length;
+  const endCeil = Math.min(fullInput.length, end + MAX_PATH_TOKEN_LEN);
+  while (end < endCeil && PATH_TOKEN_CHAR.test(fullInput[end])) end++;
+  if (end === endCeil && end < fullInput.length && PATH_TOKEN_CHAR.test(fullInput[end])) {
+    return false;
+  }
+  const token = fullInput.slice(start, end);
+  if (token.length > MAX_PATH_TOKEN_LEN) return false;
+  const isDotGuildPath = DOT_GUILD_PATH_SHAPE.test(token);
+  if (!PATH_SHAPE.test(token) && !isDotGuildPath) return false;
+  const slashCount = token.split("/").length - 1;
+  if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
+  if (isDotGuildPath) return isSafeDotGuildToken(token);
+  return allWordsWordish(token.split(/[/._-]+/).filter(Boolean));
+}
+function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
+  if (matchIndex >= 4 && fullInput.slice(matchIndex - 4, matchIndex) === "run-") {
+    return true;
+  }
+  const lookBackStart = Math.max(0, matchIndex - 16);
+  const before = fullInput.slice(lookBackStart, matchIndex).toLowerCase();
+  if (/\b(commit|sha|tree|parent|head|merge|object|branch)\s*[:=]?\s*$/.test(before)) {
+    return true;
+  }
+  if (/^[0-9a-f]{40}$/.test(candidate) || /^[0-9a-f]{64}$/.test(candidate)) {
+    return true;
+  }
+  if (isRelativePathToken(candidate, fullInput, matchIndex)) {
+    return true;
+  }
+  return false;
+}
+function redactHighEntropy(input) {
+  return input.replace(HIGH_ENTROPY_PATTERN, (match, offset) => {
+    if (isWhitelistedHighEntropy(match, input, offset)) {
+      return match;
+    }
+    return HIGH_ENTROPY_REDACTED;
+  });
+}
+function truncateToCap(input, cap = FIELD_SIZE_CAP_BYTES) {
+  const byteLen = Buffer.byteLength(input, "utf8");
+  if (byteLen <= cap) return input;
+  const buf = Buffer.from(input, "utf8");
+  const truncated = buf.slice(0, cap).toString("utf8");
+  const cleaned = truncated.replace(/\uFFFD+$/u, "");
+  return cleaned + TRUNCATION_SUFFIX;
+}
+function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
+  if (typeof input !== "string") return input;
+  let out = redactTokenShapes(input);
+  out = redactHomeDirPaths(out);
+  out = redactKeyValueSecrets(out);
+  out = redactHighEntropy(out);
+  out = truncateToCap(out, cap);
+  return out;
+}
+function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
+  const out = { ...event };
+  for (const [k, v] of Object.entries(out)) {
+    if (REDACTABLE_FIELDS.has(k) && typeof v === "string") {
+      out[k] = redactField(v, cap);
+    }
+  }
+  return out;
+}
+var TOKEN_REDACTED, PATH_REDACTED, KV_REDACTED, HIGH_ENTROPY_REDACTED, TRUNCATION_SUFFIX, FIELD_SIZE_CAP_BYTES, TOKEN_SHAPE_PATTERNS, SENSITIVE_HOME_DIRS, HOME_DIR_PATTERN, KV_SECRET_PATTERN, PATH_TOKEN_CHAR, PATH_SHAPE, DOT_GUILD_PATH_SHAPE, DOT_GUILD_ROOTS, PATH_EXTENSION, MAX_PATH_TOKEN_LEN, HIGH_ENTROPY_PATTERN, REDACTABLE_FIELD_NAMES, REDACTABLE_FIELDS;
+var init_redact_log = __esm({
+  "src/domains/security/redact-log.ts"() {
+    init_kernel();
+    TOKEN_REDACTED = "[REDACTED_TOKEN]";
+    PATH_REDACTED = "[REDACTED]";
+    KV_REDACTED = "[REDACTED]";
+    HIGH_ENTROPY_REDACTED = "<HIGH_ENTROPY_REDACTED>";
+    TRUNCATION_SUFFIX = "... [TRUNCATED]";
+    FIELD_SIZE_CAP_BYTES = 4 * 1024;
+    TOKEN_SHAPE_PATTERNS = Object.freeze([
+      Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
+      Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
+      Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
+      Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
+      Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
+      Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
+      Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
+      Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
+      Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
+    ]);
+    SENSITIVE_HOME_DIRS = Object.freeze([
+      ".claude",
+      ".codex",
+      ".ssh",
+      ".aws",
+      ".gnupg"
+    ]);
+    HOME_DIR_PATTERN = /(~|\/Users\/[^/\s]+|\/home\/[^/\s]+)\/(\.claude|\.codex|\.ssh|\.aws|\.gnupg)\/[^\s'"]+/g;
+    KV_SECRET_PATTERN = /\b(password|token|api[_-]?key|secret|authorization|bearer)(\s*[:=]\s*)(\S+)/gi;
+    PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
+    PATH_SHAPE = /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
+    DOT_GUILD_PATH_SHAPE = /^(?:\.{1,2}\/)?\.guild(?:\/[A-Za-z0-9._-]+)+$/;
+    DOT_GUILD_ROOTS = /* @__PURE__ */ new Set([
+      "agents",
+      "artifacts",
+      "context",
+      "evolve",
+      "indexes",
+      "init",
+      "initiatives",
+      "knowledge",
+      "loops",
+      "memory",
+      "plan",
+      "prd",
+      "raw",
+      "reflections",
+      "runs",
+      "skills",
+      "spec",
+      "team",
+      "teams",
+      "wiki",
+      "workflows",
+      "workspace",
+      "workspace-knowledge"
+    ]);
+    PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
+    MAX_PATH_TOKEN_LEN = 512;
+    HIGH_ENTROPY_PATTERN = /[A-Za-z0-9+/=]{20,}/g;
+    REDACTABLE_FIELD_NAMES = Object.freeze([
+      "command_redacted",
+      "result_excerpt_redacted",
+      "payload_excerpt_redacted",
+      "prompt_excerpt",
+      "assumption_text",
+      "result"
+    ]);
+    REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
+  }
+});
+
+// src/domains/security/secrets.ts
+function applySecretsPolicy(value, policy, opts) {
+  if (typeof value !== "string") {
+    return { value: typeof value === "string" ? value : String(value ?? ""), ok: true, failures: [] };
+  }
+  let out = redactField(value, opts?.noTruncate ? Number.POSITIVE_INFINITY : void 0);
+  const failures = [];
+  for (const pat of policy.redaction_patterns) {
+    let re;
+    try {
+      re = new RegExp(pat, "g");
+    } catch (err) {
+      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
+      continue;
+    }
+    try {
+      out = out.replace(re, "[REDACTED]");
+    } catch (err) {
+      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return { value: out, ok: failures.length === 0, failures };
+}
+var init_secrets = __esm({
+  "src/domains/security/secrets.ts"() {
+    init_redact_log();
+  }
+});
+
+// src/domains/security/config.ts
+function securityDefaults() {
+  return {
+    bypass_permissions_policy: "audit",
+    secrets_policy: {
+      env_allowlist: [],
+      redaction_patterns: [],
+      fail_mode_durable: "closed",
+      fail_mode_telemetry: "open"
+    },
+    tool_description_hashes: {},
+    mcp_availability: {
+      stdio_available: true,
+      http_available: false,
+      bridge_package: null
+    },
+    allowed_tools: []
+  };
+}
+function isPlainObject5(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function isStringArray2(v) {
+  return Array.isArray(v) && v.every((x) => typeof x === "string");
+}
+function parseSecurityConfig(parsed) {
+  const out = securityDefaults();
+  if (!isPlainObject5(parsed)) return out;
+  if (isPlainObject5(parsed["security"])) {
+    const bpp = parsed["security"]["bypass_permissions_policy"];
+    if (bpp === "deny" || bpp === "audit" || bpp === "allow") {
+      out.bypass_permissions_policy = bpp;
+    }
+  }
+  if (isPlainObject5(parsed["secrets_policy"])) {
+    const sp = parsed["secrets_policy"];
+    if (isStringArray2(sp["env_allowlist"])) out.secrets_policy.env_allowlist = sp["env_allowlist"];
+    if (isStringArray2(sp["redaction_patterns"])) {
+      out.secrets_policy.redaction_patterns = sp["redaction_patterns"];
+    }
+    if (sp["fail_mode_durable"] === "closed" || sp["fail_mode_durable"] === "open") {
+      out.secrets_policy.fail_mode_durable = sp["fail_mode_durable"];
+    }
+    if (sp["fail_mode_telemetry"] === "open" || sp["fail_mode_telemetry"] === "closed") {
+      out.secrets_policy.fail_mode_telemetry = sp["fail_mode_telemetry"];
+    }
+  }
+  if (isPlainObject5(parsed["defaults"])) {
+    const defs = parsed["defaults"];
+    if (isStringArray2(defs["allowed_tools"])) {
+      out.allowed_tools = defs["allowed_tools"];
+    }
+  }
+  if (isPlainObject5(parsed["mcp"])) {
+    const mcp = parsed["mcp"];
+    if (isPlainObject5(mcp["tool_description_hashes"])) {
+      const hashes = {};
+      for (const [k, v] of Object.entries(mcp["tool_description_hashes"])) {
+        if (typeof v === "string") hashes[k] = v;
+      }
+      out.tool_description_hashes = hashes;
+    }
+    if (typeof mcp["stdio_available"] === "boolean") {
+      out.mcp_availability.stdio_available = mcp["stdio_available"];
+    }
+    if (typeof mcp["http_available"] === "boolean") {
+      out.mcp_availability.http_available = mcp["http_available"];
+    }
+    if (mcp["bridge_package"] === null || typeof mcp["bridge_package"] === "string") {
+      out.mcp_availability.bridge_package = mcp["bridge_package"];
+    }
+  }
+  return out;
+}
+function readSecurityConfig(cwd) {
+  const settingsPath = path22.join(durableGuildDir(resolveGuildRoot(cwd)), "settings.json");
+  let raw;
+  try {
+    raw = fs16.readFileSync(settingsPath, "utf8");
+  } catch {
+    return securityDefaults();
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return securityDefaults();
+  }
+  return parseSecurityConfig(parsed);
+}
+var fs16, path22;
+var init_config = __esm({
+  "src/domains/security/config.ts"() {
+    fs16 = __toESM(require("node:fs"));
+    path22 = __toESM(require("node:path"));
+    init_state();
+    init_state();
+  }
+});
+
+// src/domains/security/events.ts
+function normalizeSecurityHostId(value) {
+  const s = value.trim();
+  if (KNOWN_GUILD_HOST_ID_SET.has(s)) return s;
+  return LEGACY_HOST_ALIASES2[s] ?? null;
+}
+function resolveHostResolution(env) {
+  const explicit = (env["GUILD_HOST_ID"] ?? "").trim();
+  if (explicit.length > 0) return { id: explicit, degraded: false, rawUnknown: "" };
+  const rawHost = (env["GUILD_HOST"] ?? "").trim().toLowerCase();
+  if (rawHost.length === 0) return { id: "claude-code-cli", degraded: false, rawUnknown: "" };
+  const normalized = normalizeSecurityHostId(rawHost);
+  if (normalized) return { id: normalized, degraded: false, rawUnknown: "" };
+  return { id: rawHost, degraded: true, rawUnknown: rawHost };
+}
+function resolveHostId() {
+  return resolveHostResolution(process.env).id;
+}
+function buildSecurityEvent(input) {
+  const rec = {
+    schema_version: SECURITY_EVENT_SCHEMA_VERSION,
+    ts: (/* @__PURE__ */ new Date()).toISOString(),
+    run_id: input.run_id,
+    event_type: input.event_type,
+    decision: input.decision,
+    tool: input.tool,
+    detail: redactField(input.detail ?? ""),
+    host: typeof input.host === "string" && input.host.length > 0 ? input.host : resolveHostId()
+  };
+  if (typeof input.lane_id === "string" && input.lane_id.length > 0) rec.lane_id = input.lane_id;
+  if (input.policy !== void 0) rec.policy = input.policy;
+  if (typeof input.permission_mode === "string" && input.permission_mode.length > 0) {
+    rec.permission_mode = input.permission_mode;
+  }
+  if (typeof input.dispatch_rung === "string" && input.dispatch_rung.length > 0) {
+    rec.dispatch_rung = input.dispatch_rung;
+  }
+  return rec;
+}
+function appendSecurityEvent(runDir3, record) {
+  try {
+    const logsDir2 = path23.join(runDir3, "logs");
+    fs17.mkdirSync(logsDir2, { recursive: true });
+    fs17.appendFileSync(path23.join(logsDir2, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `warn: [security-events] write failed: ${err instanceof Error ? err.message : String(err)}
+`
+    );
+    return false;
+  }
+}
+function resolveRunDir(cwd, runId, explicitRunDir) {
+  if (typeof explicitRunDir === "string" && explicitRunDir.length > 0) return explicitRunDir;
+  return path23.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", runId);
+}
+var fs17, path23, SECURITY_EVENT_TYPES, SECURITY_EVENT_SCHEMA_VERSION, KNOWN_GUILD_HOST_KINDS, KNOWN_GUILD_HOST_ID_SET, LEGACY_HOST_ALIASES2;
+var init_events = __esm({
+  "src/domains/security/events.ts"() {
+    fs17 = __toESM(require("node:fs"));
+    path23 = __toESM(require("node:path"));
+    init_state();
+    init_redact_log();
+    init_state();
+    SECURITY_EVENT_TYPES = Object.freeze([
+      "capability_scope_violation",
+      "capability_scope_degrade",
+      "bypass_permission_allowed",
+      "mcp_description_mismatch",
+      "mcp_description_unverifiable",
+      "mcp_description_unpinned",
+      "secret_scrub_failure",
+      "injection_attempt_detected",
+      "secret_scrub_blocked",
+      "recall_quarantine",
+      "dispatch_attribution_missing",
+      "backend_degradation",
+      "tier_dispatch_untiered",
+      "harvest_promoted",
+      "harvest_refused",
+      "playbook_auto_replace",
+      "wiki_cas_conflict",
+      "harvest_reverted",
+      "lane_wiki_write_refused",
+      "queue_drain_refused"
+    ]);
+    SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
+    KNOWN_GUILD_HOST_KINDS = Object.freeze([
+      "claude-code-cli",
+      "codex-cli",
+      "pi-cli",
+      "antigravity-cli",
+      "agents-file",
+      "claude-code-app",
+      "claude-code-web",
+      "codex-app",
+      "claude-ai-connector"
+    ]);
+    KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
+    LEGACY_HOST_ALIASES2 = {
+      claude: "claude-code-cli",
+      "claude-code-desktop": "claude-code-app",
+      codex: "codex-cli",
+      "codex-plugin": "codex-cli",
+      agents: "agents-file",
+      ".agents": "agents-file",
+      pi: "pi-cli",
+      antigravity: "antigravity-cli",
+      "antigravity-2": "antigravity-cli"
+    };
+  }
+});
+
+// src/domains/security/scrubbed-write.ts
+function guildRootFromRunDir(runDir3) {
+  return path24.resolve(runDir3, "../../..");
+}
+function writeScrubApprovalRequest(runDir3, runId, surface, outPath, laneId2) {
+  try {
+    const approvalDir = path24.join(runDir3, "agent-bus", "approvals");
+    fs18.mkdirSync(approvalDir, { recursive: true });
+    const ts = (/* @__PURE__ */ new Date()).toISOString();
+    const safeTs = ts.replace(/[:.]/g, "-");
+    const fileName = `${safeTs}-scrub-blocked.json`;
+    const record = {
+      schema_version: "guild.approval_request.v1",
+      ts,
+      run_id: runId,
+      tool: "scrubbedWrite",
+      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path24.basename(outPath)}`,
+      permission_mode: "blocked",
+      surface
+    };
+    if (laneId2) record["lane_id"] = laneId2;
+    const rawContent = JSON.stringify(record, null, 2) + "\n";
+    let content = rawContent;
+    try {
+      const secConfig = readSecurityConfig(guildRootFromRunDir(runDir3));
+      const scrubResult = applySecretsPolicy(rawContent, secConfig.secrets_policy, { noTruncate: true });
+      content = scrubResult.value;
+    } catch {
+    }
+    fs18.writeFileSync(path24.join(approvalDir, fileName), content, "utf8");
+  } catch {
+  }
+}
+function scrubbedWrite(outPath, content, opts) {
+  const guildRoot = guildRootFromRunDir(opts.runDir);
+  let policy;
+  try {
+    const secConfig = readSecurityConfig(guildRoot);
+    policy = secConfig.secrets_policy;
+  } catch {
+    policy = {
+      env_allowlist: [],
+      redaction_patterns: [],
+      fail_mode_durable: "closed",
+      fail_mode_telemetry: "open"
+    };
+  }
+  const scrubResult = applySecretsPolicy(content, policy, { noTruncate: true });
+  const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
+  if (scrubResult.ok) {
+    try {
+      fs18.mkdirSync(path24.dirname(outPath), { recursive: true });
+      fs18.writeFileSync(outPath, scrubResult.value, "utf8");
+    } catch (err) {
+      process.stderr.write(
+        `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ${err instanceof Error ? err.message : String(err)}
+`
+      );
+      return { written: false, blocked: false };
+    }
+    const result2 = { written: true, blocked: false };
+    if (opts.surface === "bus") {
+      result2.sha256 = crypto6.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+    }
+    return result2;
+  }
+  if (failMode === "open") {
+    process.stderr.write(
+      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path24.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
+`
+    );
+    try {
+      fs18.mkdirSync(path24.dirname(outPath), { recursive: true });
+      fs18.writeFileSync(outPath, scrubResult.value, "utf8");
+    } catch (err) {
+      process.stderr.write(
+        `[scrubbed-write] ERROR: fail-open write failed: ${err instanceof Error ? err.message : String(err)}
+`
+      );
+      return { written: false, blocked: false };
+    }
+    try {
+      const evt = buildSecurityEvent({
+        run_id: opts.runId,
+        lane_id: opts.laneId,
+        event_type: "secret_scrub_blocked",
+        decision: "degraded",
+        tool: "scrubbedWrite",
+        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path24.basename(outPath)}. Built-in-redacted content written.`,
+        permission_mode: "degraded"
+      });
+      appendSecurityEvent(opts.runDir, evt);
+    } catch {
+    }
+    const result2 = { written: true, blocked: false };
+    if (opts.surface === "bus") {
+      result2.sha256 = crypto6.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+    }
+    return result2;
+  }
+  process.stderr.write(
+    `[scrubbed-write] BLOCKED: secret scrub failed for durable surface "${opts.surface}" at ${outPath} \u2014 file NOT written. Failures: ${scrubResult.failures.join("; ")}
+`
+  );
+  try {
+    const evt = buildSecurityEvent({
+      run_id: opts.runId,
+      lane_id: opts.laneId,
+      event_type: "secret_scrub_blocked",
+      decision: "blocked",
+      tool: "scrubbedWrite",
+      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path24.basename(outPath)} \u2014 write blocked (fail-closed).`,
+      permission_mode: "blocked"
+    });
+    appendSecurityEvent(opts.runDir, evt);
+  } catch {
+  }
+  writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
+  return { written: false, blocked: true };
+}
+var fs18, path24, crypto6;
+var init_scrubbed_write = __esm({
+  "src/domains/security/scrubbed-write.ts"() {
+    fs18 = __toESM(require("node:fs"));
+    path24 = __toESM(require("node:path"));
+    crypto6 = __toESM(require("node:crypto"));
+    init_secrets();
+    init_config();
+    init_events();
+  }
+});
+
+// src/domains/security/share-set.ts
+var path25, SHARED_SCRUBBED_NAMES, CANONICAL_RUN_LOG;
+var init_share_set = __esm({
+  "src/domains/security/share-set.ts"() {
+    path25 = __toESM(require("path"));
+    init_kernel();
+    SHARED_SCRUBBED_NAMES = sealSet([
+      "verify.md",
+      "review.md",
+      "provenance.json",
+      "summary.md",
+      "run.yaml",
+      "run-state.json"
+    ], "SHARED_SCRUBBED_NAMES");
+    CANONICAL_RUN_LOG = path25.join("logs", "v1.4-events.jsonl");
+  }
+});
+
+// src/domains/security/secret-patterns.ts
+var SECRET_PATTERNS;
+var init_secret_patterns = __esm({
+  "src/domains/security/secret-patterns.ts"() {
+    SECRET_PATTERNS = Object.freeze([
+      // NOTE: labels deliberately drop the `=` so the redaction replacement
+      // (e.g. `<REDACTED:password-assignment>`) cannot itself re-match the pattern
+      // on a subsequent scrub pass. Idempotency depends on this — every label below
+      // is checked against every pattern above it, and none re-matches.
+      Object.freeze([Object.freeze(/password\s*=\s*["']?[^\s"']{6,}/), "password-assignment"]),
+      Object.freeze([Object.freeze(/api_key\s*=\s*["']?[^\s"']{6,}/i), "api_key-assignment"]),
+      Object.freeze([Object.freeze(/secret\s*=\s*["']?[^\s"']{8,}/i), "secret-assignment"]),
+      Object.freeze([Object.freeze(/AKIA[0-9A-Z]{16}/), "AWS access key"]),
+      Object.freeze([Object.freeze(/AIza[0-9A-Za-z_-]{35}/), "GCP API key"]),
+      Object.freeze([Object.freeze(/ghp_[0-9A-Za-z]{36}/), "GitHub personal access token"]),
+      Object.freeze([Object.freeze(/ghs_[0-9A-Za-z]{36}/), "GitHub server token"]),
+      Object.freeze([Object.freeze(/-----BEGIN (?:RSA |EC )?PRIVATE KEY/), "PEM private key block"]),
+      // ── Provider credential / bearer-token forms (T6B-R1-B1) ─────────────────
+      // Round-1 review proved the list above blind to the shapes an inspection
+      // surface is most likely to echo out of a persisted artifact: an
+      // `Authorization: Bearer …` header, a `sk-…` provider key, and the
+      // `<something>_token = …` assignment family. A display surface that renders
+      // a persisted evidence string verbatim leaked all three past the applier.
+      //
+      // Every pattern is anchored on the CREDENTIAL PREFIX (not on entropy) so it
+      // stays specific, and each replacement label is inert against every pattern
+      // in this list (no whitespace/`:`/`=` follows the trigger word in a label),
+      // which is what keeps `redact` idempotent.
+      Object.freeze([Object.freeze(/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i), "bearer-token"]),
+      Object.freeze([Object.freeze(/\bauthorization\s*:\s*["']?[A-Za-z0-9._~+/=-]{12,}/i), "authorization-header"]),
+      Object.freeze([Object.freeze(/\b(?:auth|access|refresh|id|api|bearer|session)[-_]?token\s*[:=]\s*["']?[^\s"',]{8,}/i), "token-assignment"]),
+      // OpenAI/Anthropic-style provider keys: sk-…, sk-proj-…, sk-ant-….
+      Object.freeze([Object.freeze(/\bsk-[A-Za-z0-9_-]{12,}/), "provider-api-key"]),
+      Object.freeze([Object.freeze(/\bxox[abprs]-[A-Za-z0-9-]{10,}/), "Slack token"]),
+      Object.freeze([Object.freeze(/\bgh[uor]_[0-9A-Za-z]{36}/), "GitHub token"]),
+      Object.freeze([Object.freeze(/\bglpat-[0-9A-Za-z_-]{20}/), "GitLab personal access token"]),
+      Object.freeze([Object.freeze(/\bnpm_[0-9A-Za-z]{36}/), "npm token"]),
+      Object.freeze([Object.freeze(/\bhf_[0-9A-Za-z]{34}/), "HuggingFace token"]),
+      // ── Personally identifying forms retained by public evidence projections ─
+      // Task objectives and handoff prose are operator-authored and can contain
+      // direct contact details or tenant identifiers. Those artifacts are copied
+      // into migration evidence, so the share scrubber must recognize them before
+      // publication. Keep the patterns prefix-shaped and their labels inert so the
+      // redaction remains deterministic and idempotent.
+      Object.freeze([Object.freeze(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i), "email-address"]),
+      Object.freeze([Object.freeze(/\b(?:acct|cus|cust|usr)_[A-Za-z0-9][A-Za-z0-9_-]{4,}\b/i), "customer-identifier"]),
+      Object.freeze([Object.freeze(/\b(?:customer|account|user)[_-]?id\s*[:=]\s*["']?[A-Za-z0-9][A-Za-z0-9._-]{3,}/i), "customer-identifier"]),
+      // High-entropy string heuristic: 40+ hex chars (SHA-like)
+      Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
+    ]);
+  }
+});
+
+// src/domains/security/scrub-redact.ts
+function redact(content) {
+  let opPaths = 0;
+  let out = content.replace(OPERATOR_PATH_RE, () => {
+    opPaths++;
+    return WORKSPACE_ROOT_MARKER;
+  });
+  out = out.replace(TILDE_CLAUDE_PROJECT_RE, () => {
+    opPaths++;
+    return OPERATOR_MEMORY_ROOT_MARKER;
+  });
+  out = out.replace(PRIVATE_HOME_PATH_RE, () => {
+    opPaths++;
+    return PRIVATE_HOME_MARKER;
+  });
+  const secrets = [];
+  const lines = out.split("\n");
+  out = lines.map((line, i) => {
+    let l = line;
+    for (const [re, label] of SECRET_PATTERNS) {
+      const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+      if (g.test(l)) {
+        secrets.push({ category: label, line: i + 1 });
+        l = l.replace(
+          new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g"),
+          `<SECRET-REDACTED:${label}>`
+        );
+      }
+    }
+    return l;
+  }).join("\n");
+  return { out, opPaths, secrets };
+}
+var OPERATOR_PATH_RE, WORKSPACE_ROOT_MARKER, TILDE_CLAUDE_PROJECT_RE, OPERATOR_MEMORY_ROOT_MARKER, PRIVATE_HOME_PATH_RE, PRIVATE_HOME_MARKER;
+var init_scrub_redact = __esm({
+  "src/domains/security/scrub-redact.ts"() {
+    init_secret_patterns();
+    init_state();
+    OPERATOR_PATH_RE = /\/Users\/[^/\s]+\/Projects\/[^/\s]+/g;
+    WORKSPACE_ROOT_MARKER = "<workspace-root>";
+    TILDE_CLAUDE_PROJECT_RE = /~\/\.claude\/projects\/-Users-[^/\s]+-Projects-[^/\s]+/g;
+    OPERATOR_MEMORY_ROOT_MARKER = "<operator-memory-root>";
+    PRIVATE_HOME_PATH_RE = /\/(?:Users|home)\/[A-Za-z0-9._-]+(?=[/\s"',:;)\]}]|$)/g;
+    PRIVATE_HOME_MARKER = "<private-home>";
+  }
+});
+
+// src/domains/security/d5-permission-content.ts
+function splitSentences(text) {
+  const out = [];
+  const words = text.split(/[ \t]+/);
+  let current = [];
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    current.push(w);
+    if (!/[.!?]["')\]]*$/.test(w)) continue;
+    const next = words[i + 1];
+    if (next === void 0) break;
+    const bare = w.replace(/^["'(\[]+/, "").replace(/["')\]]+$/, "").toLowerCase();
+    if (NON_TERMINAL_ABBREVIATIONS.has(bare)) continue;
+    if (/^[A-Z]\.$/.test(w)) continue;
+    if (/^[a-z]/.test(next)) continue;
+    out.push(current.join(" "));
+    current = [];
+  }
+  if (current.length > 0) out.push(current.join(" "));
+  return out;
+}
+function sentences(text) {
+  const out = [];
+  for (const unit of blockUnits(text)) out.push(...unit.sentences);
+  return out;
+}
+function blockUnits(text, opts = {}) {
+  const lines = text.split("\n");
+  const blocks = [];
+  let current = [];
+  let fencedLines = [];
+  let fence = null;
+  const flush = () => {
+    if (current.length > 0) blocks.push({ lines: current, fenced: false });
+    current = [];
+  };
+  const flushFenced = () => {
+    if (fencedLines.length > 0 && opts.includeFenced) blocks.push({ lines: fencedLines, fenced: true });
+    fencedLines = [];
+  };
+  for (const line of lines) {
+    const fenceMatch = /^[ \t]*(`{3,}|~{3,})(.*)$/.exec(line);
+    if (fenceMatch) {
+      const marker = fenceMatch[1];
+      const rest = fenceMatch[2];
+      if (fence === null) {
+        if (marker[0] === "`" && rest.includes("`")) {
+          current.push(line);
+          continue;
+        }
+        flush();
+        fence = marker;
+        continue;
+      }
+      if (marker[0] === fence[0] && marker.length >= fence.length && rest.trim() === "") {
+        fence = null;
+        flushFenced();
+        continue;
+      }
+      fencedLines.push(line);
+      continue;
+    }
+    if (fence !== null) {
+      fencedLines.push(line);
+      continue;
+    }
+    if (line.trim() === "") {
+      flush();
+      continue;
+    }
+    const isHeading = /^[ \t]*#{1,6}[ \t]+/.test(line);
+    const isListItem = /^[ \t]*([-*+]|\d+[.)])[ \t]+/.test(line);
+    const isTableRow = /^[ \t]*\|/.test(line);
+    if (isHeading || isTableRow) {
+      flush();
+      blocks.push({ lines: [line], fenced: false });
+      continue;
+    }
+    if (isListItem) {
+      flush();
+      current.push(line);
+      continue;
+    }
+    current.push(line);
+  }
+  flush();
+  flushFenced();
+  const out = [];
+  for (const { lines: block, fenced } of blocks) {
+    if (fenced) {
+      const whole = block.map((l) => l.trim()).filter((l) => l !== "").join(" ");
+      if (whole !== "") out.push({ whole, sentences: splitSentences(whole).map((t) => t.trim()).filter((t) => t !== ""), fenced: true });
+      continue;
+    }
+    const first = block[0];
+    if (/^[ \t]*\|/.test(first)) {
+      const cells = first.split("|").map((c) => c.trim()).filter((c) => c !== "");
+      if (cells.every((c) => /^:?-{2,}:?$/.test(c))) continue;
+      out.push({ whole: cells.join(" "), sentences: [cells.join(" "), ...cells], fenced: false });
+      continue;
+    }
+    const joined = block.map((l) => l.trim()).join(" ").replace(/^[ \t]*([-*+]|\d+[.)])[ \t]+/, "").replace(/^[ \t]*#{1,6}[ \t]+/, "").trim();
+    const pieces = [];
+    for (const piece of splitSentences(joined)) {
+      const t = piece.trim();
+      if (t !== "") pieces.push(t);
+    }
+    if (joined !== "") out.push({ whole: joined, sentences: pieces, fenced: false });
+  }
+  return out;
+}
+function headingsIn(text) {
+  const out = [];
+  for (const line of text.split("\n")) {
+    const m = /^[ \t]*#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$/.exec(line);
+    if (m) out.push(m[1]);
+  }
+  return out;
+}
+function isPermissionSentence(sentence) {
+  const plain = sentence.replace(/[_*~`]+/g, " ");
+  if (PERMISSION_STATE_RE.test(plain)) return true;
+  return PERMISSION_NOUN_RE.test(plain) && MODALITY_RE.test(plain);
+}
+function classifyPermissionContent(input) {
+  const span = input.span ?? "";
+  const before = input.beforeSpan ?? "";
+  const after = input.replacement ?? "";
+  if (PERMISSION_HEADING_RE.test(span)) {
+    return {
+      isPermissionEdit: true,
+      reason: "heading",
+      detail: `the span '${span}' names a permissions/approval block`
+    };
+  }
+  for (const [side, text] of [["current", before], ["proposed", after]]) {
+    for (const heading of headingsIn(text)) {
+      if (PERMISSION_HEADING_RE.test(heading)) {
+        return {
+          isPermissionEdit: true,
+          reason: "nested_heading",
+          detail: `the ${side} span contains a nested '${heading}' permissions block`
+        };
+      }
+    }
+    if (PERMISSION_KEY_RE.test(text)) {
+      return {
+        isPermissionEdit: true,
+        reason: "frontmatter_key",
+        detail: `the ${side} text declares a permissions key`
+      };
+    }
+  }
+  if (before.trim() !== after.trim()) {
+    for (const [side, text] of [["current", before], ["proposed", after]]) {
+      const units = blockUnits(text, { includeFenced: true });
+      const hit = units.flatMap((u) => u.sentences).find(isPermissionSentence) ?? units.map((u) => u.whole).find(isPermissionSentence) ?? [text.replace(/\s+/g, " ").trim()].find((t) => t !== "" && isPermissionSentence(t));
+      if (hit) {
+        return {
+          isPermissionEdit: true,
+          reason: "approval_language",
+          detail: `the ${side} span changes what is allowed or requires approval ("${hit.slice(0, 60)}")`
+        };
+      }
+    }
+  }
+  return { isPermissionEdit: false };
+}
+var PERMISSION_HEADING_RE, PERMISSION_KEY_RE, PERMISSION_NOUN_RE, MODALITY_RE, PERMISSION_STATE_RE, NON_TERMINAL_ABBREVIATIONS;
+var init_d5_permission_content = __esm({
+  "src/domains/security/d5-permission-content.ts"() {
+    PERMISSION_HEADING_RE = /(^|[^a-z0-9])(permissions?|approval|approvals|allowed[- ]tools|allowlist|denylist|allow|deny)([^a-z0-9]|$)/i;
+    PERMISSION_KEY_RE = /^[ \t]*(permissions?|allowed[-_]tools|allow|deny|tools)[ \t]*:/im;
+    PERMISSION_NOUN_RE = /\boperator[ \t]+clicks?\b|\b(approvals?|approved?|approve|permissions?|permit(?:s|ted)?|allowed[- ]tools|allowlist|denylist|allow(?:s|ed|ing)?|den(?:y|ies|ied)|gate(?:s|d)?|confirm(?:s|ed|ation)?|consent|authoriz(?:e|es|ed|ation)|forbidden|prohibited|sandbox(?:ed|ing)?|privileges?)\b|\bblock(?:s|ed|ing)?\b(?![ \t]+on\b)/i;
+    MODALITY_RE = /\b(must|never|always|shall|should|require[sd]?|need(?:s|ed)?|no|without|skip(?:s|ping)?|bypass(?:es|ing|ed)?|auto[- ]?approve[d]?|unattended|do not|don't|cannot|can't|refuse[sd]?)\b/i;
+    PERMISSION_STATE_RE = /(:[ \t]*|(?:\bis\b|\bare\b)[ \t]+)(blocked|allowed|denied|permitted|forbidden|prohibited|auto[- ]?approved|unrestricted|sandboxed)\b/i;
+    NON_TERMINAL_ABBREVIATIONS = /* @__PURE__ */ new Set([
+      "dr.",
+      "mr.",
+      "mrs.",
+      "ms.",
+      "prof.",
+      "sr.",
+      "jr.",
+      "st.",
+      "vs.",
+      "etc.",
+      "e.g.",
+      "i.e.",
+      "cf.",
+      "no.",
+      "fig.",
+      "approx.",
+      "dept.",
+      "inc.",
+      "ltd.",
+      "co.",
+      "u.s.",
+      "u.k.",
+      "a.m.",
+      "p.m."
+    ]);
+  }
+});
+
+// src/domains/security/ingest-pause.ts
+var init_ingest_pause = __esm({
+  "src/domains/security/ingest-pause.ts"() {
+    init_state();
+  }
+});
+
+// src/domains/security/index.ts
+var init_security = __esm({
+  "src/domains/security/index.ts"() {
+    init_safe_object();
+    init_injection_guard();
+    init_scrubbed_write();
+    init_redact_log();
+    init_share_set();
+    init_scrub_redact();
+    init_secret_patterns();
+    init_events();
+    init_d5_permission_content();
+    init_ingest_pause();
+    init_config();
+    init_secrets();
+  }
+});
+
 // src/domains/config/native-config-parser.ts
 function skipInlineWs(c) {
   while (c.peek() === " " || c.peek() === "	") c.pos++;
@@ -9859,6 +10833,7 @@ function selectCodexMarketplaceIdentity(raw) {
 var NativeConfigParseError, UNSAFE_KEYS, BARE_KEY_RE, SHA40_RE, DATETIME_RE, INT_RE, HEX_RE, OCT_RE, BIN_RE, FLOAT_RE, Cursor, GUILD_SOURCE_RE, SOURCE_FIELDS;
 var init_native_config_parser = __esm({
   "src/domains/config/native-config-parser.ts"() {
+    init_security();
     NativeConfigParseError = class extends Error {
       code;
       constructor(code, message) {
@@ -9867,7 +10842,7 @@ var init_native_config_parser = __esm({
         this.code = code;
       }
     };
-    UNSAFE_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
+    UNSAFE_KEYS = PROTO_POISON_KEYS;
     BARE_KEY_RE = /^[A-Za-z0-9_-]+$/;
     SHA40_RE = /^[0-9a-f]{40}$/;
     DATETIME_RE = /^\d{4}-\d{2}-\d{2}([Tt ]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})?)?$/;
@@ -10511,15 +11486,15 @@ var init_policy_keys = __esm({
 
 // src/domains/config/policy-resolver.ts
 function hasDanglingLink(file) {
-  let p = path22.resolve(file);
+  let p = path26.resolve(file);
   for (; ; ) {
     let isLink = false;
     try {
-      isLink = fs16.lstatSync(p).isSymbolicLink();
+      isLink = fs19.lstatSync(p).isSymbolicLink();
     } catch {
     }
-    if (isLink && !fs16.existsSync(p)) return true;
-    const parent = path22.dirname(p);
+    if (isLink && !fs19.existsSync(p)) return true;
+    const parent = path26.dirname(p);
     if (parent === p) return false;
     p = parent;
   }
@@ -10527,7 +11502,7 @@ function hasDanglingLink(file) {
 function readJsonFile(file) {
   let raw;
   try {
-    raw = fs16.readFileSync(file, "utf8");
+    raw = fs19.readFileSync(file, "utf8");
   } catch (e) {
     if (e.code === "ENOENT" && !hasDanglingLink(file)) return null;
     throw new PolicyRejectedError("not-policy", file, `policy config: ${file} is unreadable (${e.message}).`);
@@ -10699,17 +11674,17 @@ function writePolicyOverlay(overlayFile, key, value, knownHostIds = []) {
   const parsed = readJsonFile(overlayFile);
   if (parsed !== null) existing = parsed;
   setByPath2(existing, canonical, value);
-  fs16.mkdirSync(path22.dirname(overlayFile), { recursive: true });
+  fs19.mkdirSync(path26.dirname(overlayFile), { recursive: true });
   const tmp = `${overlayFile}.tmp`;
-  fs16.writeFileSync(tmp, `${JSON.stringify(existing, null, 2)}
+  fs19.writeFileSync(tmp, `${JSON.stringify(existing, null, 2)}
 `, "utf8");
-  fs16.renameSync(tmp, overlayFile);
+  fs19.renameSync(tmp, overlayFile);
 }
-var fs16, path22, POLICY_FILES, POLICY_OVERLAY_FILE, ALIASES_BY_CANONICAL;
+var fs19, path26, POLICY_FILES, POLICY_OVERLAY_FILE, ALIASES_BY_CANONICAL;
 var init_policy_resolver = __esm({
   "src/domains/config/policy-resolver.ts"() {
-    fs16 = __toESM(require("node:fs"));
-    path22 = __toESM(require("node:path"));
+    fs19 = __toESM(require("node:fs"));
+    path26 = __toESM(require("node:path"));
     init_policy_keys();
     init_state();
     POLICY_FILES = Object.freeze({
@@ -10763,11 +11738,11 @@ function isUnknownHost(d) {
   return d.host_family === UNKNOWN_HOST_FAMILY;
 }
 function sessionBindingPath(runDir3) {
-  return path23.join(runDir3, SESSION_BINDING_FILE);
+  return path27.join(runDir3, SESSION_BINDING_FILE);
 }
 function readSessionBinding(runDir3) {
   try {
-    const parsed = JSON.parse(fs17.readFileSync(sessionBindingPath(runDir3), "utf8"));
+    const parsed = JSON.parse(fs20.readFileSync(sessionBindingPath(runDir3), "utf8"));
     return parsed?.schema_version === "guild.session_binding.v1" ? parsed : null;
   } catch {
     return null;
@@ -10805,7 +11780,7 @@ function bindSession(opts) {
     prompt_compose: opts.promptCompose,
     evidence: opts.detected.evidence
   };
-  fs17.mkdirSync(opts.runDir, { recursive: true });
+  fs20.mkdirSync(opts.runDir, { recursive: true });
   const created = createExclusive(sessionBindingPath(opts.runDir), binding);
   if (created) return { ok: true, binding, created: true };
   const winner = readSessionBinding(opts.runDir);
@@ -10824,7 +11799,7 @@ function bindSession(opts) {
 }
 function createExclusive(file, binding) {
   try {
-    fs17.writeFileSync(file, `${JSON.stringify(binding, null, 2)}
+    fs20.writeFileSync(file, `${JSON.stringify(binding, null, 2)}
 `, { encoding: "utf8", flag: "wx" });
     return true;
   } catch (e) {
@@ -10869,11 +11844,11 @@ function bindSessionForRun(opts) {
 `);
   return { ok: true, binding, created: true };
 }
-var fs17, path23, SESSION_BINDING_FILE, UNKNOWN_HOST_FAMILY, UNKNOWN_MODEL_FAMILY, HOST_TO_MODEL_FAMILY, ENV_SIGNALS, KNOWN_FAMILIES2;
+var fs20, path27, SESSION_BINDING_FILE, UNKNOWN_HOST_FAMILY, UNKNOWN_MODEL_FAMILY, HOST_TO_MODEL_FAMILY, ENV_SIGNALS, KNOWN_FAMILIES2;
 var init_session_binding = __esm({
   "src/domains/config/session-binding.ts"() {
-    fs17 = __toESM(require("node:fs"));
-    path23 = __toESM(require("node:path"));
+    fs20 = __toESM(require("node:fs"));
+    path27 = __toESM(require("node:path"));
     SESSION_BINDING_FILE = "session-binding.json";
     UNKNOWN_HOST_FAMILY = "unknown";
     UNKNOWN_MODEL_FAMILY = "unknown";
@@ -11197,980 +12172,6 @@ var init_config_validation = __esm({
       "runs_threshold",
       "wiki_file_threshold"
     ]);
-  }
-});
-
-// src/domains/security/safe-object.ts
-var PROTO_POISON_KEYS;
-var init_safe_object = __esm({
-  "src/domains/security/safe-object.ts"() {
-    init_kernel();
-    PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
-  }
-});
-
-// src/domains/security/injection-guard.ts
-function sanitizeForInjection(text) {
-  const matchedPatterns = PATTERNS.filter(([, re]) => re.test(text)).map(([name]) => name);
-  return { result: matchedPatterns.length ? "flagged" : "clean", sanitized: text, matchedPatterns };
-}
-var PATTERNS;
-var init_injection_guard = __esm({
-  "src/domains/security/injection-guard.ts"() {
-    PATTERNS = [
-      ["ignore-previous-instructions", /\bignore\b(?:\s+\w+){0,3}\s+\b(instructions?|prompt|context|directives?)\b/i],
-      ["disregard-previous-instructions", /\bdisregard\b(?:\s+\w+){0,3}\s+\b(instructions?|prompt|context)\b/i],
-      ["forget-previous-instructions", /\bforget\b(?:\s+(?:your|my|all|previous|prior|past|earlier)){1,3}\s+\b(instructions?|prompt|context|rules?)\b/i],
-      ["override-previous-instructions", /\boverride\b(?:\s+\w+){0,3}\s+\b(instructions?|context|prompt)\b/i],
-      ["you-are-now", /you\s+are\s+now\s+(a|an|the|going|able|authorized|required)/i],
-      ["act-as-if", /act\s+as\s+(if|though|a|an|the)\b/i],
-      ["pretend-you-are", /pretend\s+(you\s+are|to\s+be)\b/i],
-      ["your-new-instructions", /your\s+(new|updated|actual|real|true)\s+(instructions?|persona|role|identity|task)/i],
-      ["system-prompt", /system\s+prompt/i],
-      ["markdown-system-block", /```\s*system\b/i],
-      ["anthropic-format-human", /\n\s*human\s*:/i],
-      ["anthropic-format-assistant", /\n\s*assistant\s*:/i],
-      ["html-comment-injection", /<!--\s*(ignore|override|instruction|system|disregard)/i],
-      ["jailbreak", /\bjailbreak\b/i]
-    ];
-  }
-});
-
-// src/domains/security/redact-log.ts
-function redactTokenShapes(input) {
-  let out = input;
-  for (const re of TOKEN_SHAPE_PATTERNS) {
-    out = out.replace(new RegExp(re.source, re.flags), TOKEN_REDACTED);
-  }
-  return out;
-}
-function redactHomeDirPaths(input) {
-  return input.replace(HOME_DIR_PATTERN, (_match, root, dir) => {
-    return `${root}/${dir}/${PATH_REDACTED}`;
-  });
-}
-function redactKeyValueSecrets(input) {
-  return input.replace(
-    KV_SECRET_PATTERN,
-    (_match, key, sep19) => `${key}${sep19}${KV_REDACTED}`
-  );
-}
-function allWordsWordish(words) {
-  let opaqueBudget = 1;
-  for (const word of words) {
-    if (word.length === 0 || word.length >= 20) return false;
-    let upper = 0;
-    let lower = 0;
-    let digits = 0;
-    for (const ch of word) {
-      if (ch >= "a" && ch <= "z") lower++;
-      else if (ch >= "A" && ch <= "Z") upper++;
-      else digits++;
-    }
-    if (lower === 0) {
-      if (word.length > 8) return false;
-      if (word.length > 2 && --opaqueBudget < 0) return false;
-    } else if (upper > 3 || digits > 4) {
-      return false;
-    }
-  }
-  return true;
-}
-function isSafeDotGuildToken(token) {
-  const normalized = token.replace(/^(?:\.{1,2}\/)?\.guild\//, "");
-  const root = normalized.split("/", 1)[0] ?? "";
-  if (!DOT_GUILD_ROOTS.has(root)) return false;
-  const runNormalized = normalized.replace(
-    /(^|\/)run-\d{8}-\d{6}-/g,
-    "$1run-"
-  );
-  const words = runNormalized.split(/[/._-]+/).filter(Boolean);
-  let opaqueBudget = 1;
-  let numericWords = 0;
-  for (const word of words) {
-    if (word.length === 0 || word.length >= 20) return false;
-    if (/^[a-z][a-z0-9]*$/.test(word)) continue;
-    if (/^\d+$/.test(word)) {
-      numericWords += 1;
-      if (numericWords > 3) return false;
-      if (word.length > 2 && --opaqueBudget < 0) return false;
-      continue;
-    }
-    if (/^[A-Z][A-Z0-9]{0,7}$/.test(word)) {
-      if (word.length > 2 && --opaqueBudget < 0) return false;
-      continue;
-    }
-    return false;
-  }
-  return true;
-}
-function isRelativePathToken(candidate, fullInput, matchIndex) {
-  if (candidate.includes("+") || candidate.includes("=")) return false;
-  let start = matchIndex;
-  const startFloor = Math.max(0, matchIndex - MAX_PATH_TOKEN_LEN);
-  while (start > startFloor && PATH_TOKEN_CHAR.test(fullInput[start - 1])) start--;
-  if (start === startFloor && start > 0 && PATH_TOKEN_CHAR.test(fullInput[start - 1])) {
-    return false;
-  }
-  let end = matchIndex + candidate.length;
-  const endCeil = Math.min(fullInput.length, end + MAX_PATH_TOKEN_LEN);
-  while (end < endCeil && PATH_TOKEN_CHAR.test(fullInput[end])) end++;
-  if (end === endCeil && end < fullInput.length && PATH_TOKEN_CHAR.test(fullInput[end])) {
-    return false;
-  }
-  const token = fullInput.slice(start, end);
-  if (token.length > MAX_PATH_TOKEN_LEN) return false;
-  const isDotGuildPath = DOT_GUILD_PATH_SHAPE.test(token);
-  if (!PATH_SHAPE.test(token) && !isDotGuildPath) return false;
-  const slashCount = token.split("/").length - 1;
-  if (slashCount < 2 && !PATH_EXTENSION.test(token)) return false;
-  if (isDotGuildPath) return isSafeDotGuildToken(token);
-  return allWordsWordish(token.split(/[/._-]+/).filter(Boolean));
-}
-function isWhitelistedHighEntropy(candidate, fullInput, matchIndex) {
-  if (matchIndex >= 4 && fullInput.slice(matchIndex - 4, matchIndex) === "run-") {
-    return true;
-  }
-  const lookBackStart = Math.max(0, matchIndex - 16);
-  const before = fullInput.slice(lookBackStart, matchIndex).toLowerCase();
-  if (/\b(commit|sha|tree|parent|head|merge|object|branch)\s*[:=]?\s*$/.test(before)) {
-    return true;
-  }
-  if (/^[0-9a-f]{40}$/.test(candidate) || /^[0-9a-f]{64}$/.test(candidate)) {
-    return true;
-  }
-  if (isRelativePathToken(candidate, fullInput, matchIndex)) {
-    return true;
-  }
-  return false;
-}
-function redactHighEntropy(input) {
-  return input.replace(HIGH_ENTROPY_PATTERN, (match, offset) => {
-    if (isWhitelistedHighEntropy(match, input, offset)) {
-      return match;
-    }
-    return HIGH_ENTROPY_REDACTED;
-  });
-}
-function truncateToCap(input, cap = FIELD_SIZE_CAP_BYTES) {
-  const byteLen = Buffer.byteLength(input, "utf8");
-  if (byteLen <= cap) return input;
-  const buf = Buffer.from(input, "utf8");
-  const truncated = buf.slice(0, cap).toString("utf8");
-  const cleaned = truncated.replace(/\uFFFD+$/u, "");
-  return cleaned + TRUNCATION_SUFFIX;
-}
-function redactField(input, cap = FIELD_SIZE_CAP_BYTES) {
-  if (typeof input !== "string") return input;
-  let out = redactTokenShapes(input);
-  out = redactHomeDirPaths(out);
-  out = redactKeyValueSecrets(out);
-  out = redactHighEntropy(out);
-  out = truncateToCap(out, cap);
-  return out;
-}
-function redactEventFields(event, cap = FIELD_SIZE_CAP_BYTES) {
-  const out = { ...event };
-  for (const [k, v] of Object.entries(out)) {
-    if (REDACTABLE_FIELDS.has(k) && typeof v === "string") {
-      out[k] = redactField(v, cap);
-    }
-  }
-  return out;
-}
-var TOKEN_REDACTED, PATH_REDACTED, KV_REDACTED, HIGH_ENTROPY_REDACTED, TRUNCATION_SUFFIX, FIELD_SIZE_CAP_BYTES, TOKEN_SHAPE_PATTERNS, SENSITIVE_HOME_DIRS, HOME_DIR_PATTERN, KV_SECRET_PATTERN, PATH_TOKEN_CHAR, PATH_SHAPE, DOT_GUILD_PATH_SHAPE, DOT_GUILD_ROOTS, PATH_EXTENSION, MAX_PATH_TOKEN_LEN, HIGH_ENTROPY_PATTERN, REDACTABLE_FIELD_NAMES, REDACTABLE_FIELDS;
-var init_redact_log = __esm({
-  "src/domains/security/redact-log.ts"() {
-    init_kernel();
-    TOKEN_REDACTED = "[REDACTED_TOKEN]";
-    PATH_REDACTED = "[REDACTED]";
-    KV_REDACTED = "[REDACTED]";
-    HIGH_ENTROPY_REDACTED = "<HIGH_ENTROPY_REDACTED>";
-    TRUNCATION_SUFFIX = "... [TRUNCATED]";
-    FIELD_SIZE_CAP_BYTES = 4 * 1024;
-    TOKEN_SHAPE_PATTERNS = Object.freeze([
-      Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
-      Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
-      Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
-      Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
-      Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
-      Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
-      Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
-      Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
-      Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
-    ]);
-    SENSITIVE_HOME_DIRS = Object.freeze([
-      ".claude",
-      ".codex",
-      ".ssh",
-      ".aws",
-      ".gnupg"
-    ]);
-    HOME_DIR_PATTERN = /(~|\/Users\/[^/\s]+|\/home\/[^/\s]+)\/(\.claude|\.codex|\.ssh|\.aws|\.gnupg)\/[^\s'"]+/g;
-    KV_SECRET_PATTERN = /\b(password|token|api[_-]?key|secret|authorization|bearer)(\s*[:=]\s*)(\S+)/gi;
-    PATH_TOKEN_CHAR = /[A-Za-z0-9._/-]/;
-    PATH_SHAPE = /^(?:\.{1,2}\/)?[A-Za-z0-9_][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
-    DOT_GUILD_PATH_SHAPE = /^(?:\.{1,2}\/)?\.guild(?:\/[A-Za-z0-9._-]+)+$/;
-    DOT_GUILD_ROOTS = /* @__PURE__ */ new Set([
-      "agents",
-      "artifacts",
-      "context",
-      "evolve",
-      "indexes",
-      "init",
-      "initiatives",
-      "knowledge",
-      "loops",
-      "memory",
-      "plan",
-      "prd",
-      "raw",
-      "reflections",
-      "runs",
-      "skills",
-      "spec",
-      "team",
-      "teams",
-      "wiki",
-      "workflows",
-      "workspace",
-      "workspace-knowledge"
-    ]);
-    PATH_EXTENSION = /\.[A-Za-z0-9]{1,8}$/;
-    MAX_PATH_TOKEN_LEN = 512;
-    HIGH_ENTROPY_PATTERN = /[A-Za-z0-9+/=]{20,}/g;
-    REDACTABLE_FIELD_NAMES = Object.freeze([
-      "command_redacted",
-      "result_excerpt_redacted",
-      "payload_excerpt_redacted",
-      "prompt_excerpt",
-      "assumption_text",
-      "result"
-    ]);
-    REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
-  }
-});
-
-// src/domains/security/secrets.ts
-function applySecretsPolicy(value, policy, opts) {
-  if (typeof value !== "string") {
-    return { value: typeof value === "string" ? value : String(value ?? ""), ok: true, failures: [] };
-  }
-  let out = redactField(value, opts?.noTruncate ? Number.POSITIVE_INFINITY : void 0);
-  const failures = [];
-  for (const pat of policy.redaction_patterns) {
-    let re;
-    try {
-      re = new RegExp(pat, "g");
-    } catch (err) {
-      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
-      continue;
-    }
-    try {
-      out = out.replace(re, "[REDACTED]");
-    } catch (err) {
-      failures.push(`${pat}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-  return { value: out, ok: failures.length === 0, failures };
-}
-var init_secrets = __esm({
-  "src/domains/security/secrets.ts"() {
-    init_redact_log();
-  }
-});
-
-// src/domains/security/config.ts
-function securityDefaults() {
-  return {
-    bypass_permissions_policy: "audit",
-    secrets_policy: {
-      env_allowlist: [],
-      redaction_patterns: [],
-      fail_mode_durable: "closed",
-      fail_mode_telemetry: "open"
-    },
-    tool_description_hashes: {},
-    mcp_availability: {
-      stdio_available: true,
-      http_available: false,
-      bridge_package: null
-    },
-    allowed_tools: []
-  };
-}
-function isPlainObject5(v) {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-function isStringArray2(v) {
-  return Array.isArray(v) && v.every((x) => typeof x === "string");
-}
-function parseSecurityConfig(parsed) {
-  const out = securityDefaults();
-  if (!isPlainObject5(parsed)) return out;
-  if (isPlainObject5(parsed["security"])) {
-    const bpp = parsed["security"]["bypass_permissions_policy"];
-    if (bpp === "deny" || bpp === "audit" || bpp === "allow") {
-      out.bypass_permissions_policy = bpp;
-    }
-  }
-  if (isPlainObject5(parsed["secrets_policy"])) {
-    const sp = parsed["secrets_policy"];
-    if (isStringArray2(sp["env_allowlist"])) out.secrets_policy.env_allowlist = sp["env_allowlist"];
-    if (isStringArray2(sp["redaction_patterns"])) {
-      out.secrets_policy.redaction_patterns = sp["redaction_patterns"];
-    }
-    if (sp["fail_mode_durable"] === "closed" || sp["fail_mode_durable"] === "open") {
-      out.secrets_policy.fail_mode_durable = sp["fail_mode_durable"];
-    }
-    if (sp["fail_mode_telemetry"] === "open" || sp["fail_mode_telemetry"] === "closed") {
-      out.secrets_policy.fail_mode_telemetry = sp["fail_mode_telemetry"];
-    }
-  }
-  if (isPlainObject5(parsed["defaults"])) {
-    const defs = parsed["defaults"];
-    if (isStringArray2(defs["allowed_tools"])) {
-      out.allowed_tools = defs["allowed_tools"];
-    }
-  }
-  if (isPlainObject5(parsed["mcp"])) {
-    const mcp = parsed["mcp"];
-    if (isPlainObject5(mcp["tool_description_hashes"])) {
-      const hashes = {};
-      for (const [k, v] of Object.entries(mcp["tool_description_hashes"])) {
-        if (typeof v === "string") hashes[k] = v;
-      }
-      out.tool_description_hashes = hashes;
-    }
-    if (typeof mcp["stdio_available"] === "boolean") {
-      out.mcp_availability.stdio_available = mcp["stdio_available"];
-    }
-    if (typeof mcp["http_available"] === "boolean") {
-      out.mcp_availability.http_available = mcp["http_available"];
-    }
-    if (mcp["bridge_package"] === null || typeof mcp["bridge_package"] === "string") {
-      out.mcp_availability.bridge_package = mcp["bridge_package"];
-    }
-  }
-  return out;
-}
-function readSecurityConfig(cwd) {
-  const settingsPath = path24.join(durableGuildDir(resolveGuildRoot(cwd)), "settings.json");
-  let raw;
-  try {
-    raw = fs18.readFileSync(settingsPath, "utf8");
-  } catch {
-    return securityDefaults();
-  }
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return securityDefaults();
-  }
-  return parseSecurityConfig(parsed);
-}
-var fs18, path24;
-var init_config = __esm({
-  "src/domains/security/config.ts"() {
-    fs18 = __toESM(require("node:fs"));
-    path24 = __toESM(require("node:path"));
-    init_state();
-    init_state();
-  }
-});
-
-// src/domains/security/events.ts
-function normalizeSecurityHostId(value) {
-  const s = value.trim();
-  if (KNOWN_GUILD_HOST_ID_SET.has(s)) return s;
-  return LEGACY_HOST_ALIASES2[s] ?? null;
-}
-function resolveHostResolution(env) {
-  const explicit = (env["GUILD_HOST_ID"] ?? "").trim();
-  if (explicit.length > 0) return { id: explicit, degraded: false, rawUnknown: "" };
-  const rawHost = (env["GUILD_HOST"] ?? "").trim().toLowerCase();
-  if (rawHost.length === 0) return { id: "claude-code-cli", degraded: false, rawUnknown: "" };
-  const normalized = normalizeSecurityHostId(rawHost);
-  if (normalized) return { id: normalized, degraded: false, rawUnknown: "" };
-  return { id: rawHost, degraded: true, rawUnknown: rawHost };
-}
-function resolveHostId() {
-  return resolveHostResolution(process.env).id;
-}
-function buildSecurityEvent(input) {
-  const rec = {
-    schema_version: SECURITY_EVENT_SCHEMA_VERSION,
-    ts: (/* @__PURE__ */ new Date()).toISOString(),
-    run_id: input.run_id,
-    event_type: input.event_type,
-    decision: input.decision,
-    tool: input.tool,
-    detail: redactField(input.detail ?? ""),
-    host: typeof input.host === "string" && input.host.length > 0 ? input.host : resolveHostId()
-  };
-  if (typeof input.lane_id === "string" && input.lane_id.length > 0) rec.lane_id = input.lane_id;
-  if (input.policy !== void 0) rec.policy = input.policy;
-  if (typeof input.permission_mode === "string" && input.permission_mode.length > 0) {
-    rec.permission_mode = input.permission_mode;
-  }
-  if (typeof input.dispatch_rung === "string" && input.dispatch_rung.length > 0) {
-    rec.dispatch_rung = input.dispatch_rung;
-  }
-  return rec;
-}
-function appendSecurityEvent(runDir3, record) {
-  try {
-    const logsDir2 = path25.join(runDir3, "logs");
-    fs19.mkdirSync(logsDir2, { recursive: true });
-    fs19.appendFileSync(path25.join(logsDir2, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
-    return true;
-  } catch (err) {
-    process.stderr.write(
-      `warn: [security-events] write failed: ${err instanceof Error ? err.message : String(err)}
-`
-    );
-    return false;
-  }
-}
-function resolveRunDir(cwd, runId, explicitRunDir) {
-  if (typeof explicitRunDir === "string" && explicitRunDir.length > 0) return explicitRunDir;
-  return path25.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", runId);
-}
-var fs19, path25, SECURITY_EVENT_TYPES, SECURITY_EVENT_SCHEMA_VERSION, KNOWN_GUILD_HOST_KINDS, KNOWN_GUILD_HOST_ID_SET, LEGACY_HOST_ALIASES2;
-var init_events = __esm({
-  "src/domains/security/events.ts"() {
-    fs19 = __toESM(require("node:fs"));
-    path25 = __toESM(require("node:path"));
-    init_state();
-    init_redact_log();
-    init_state();
-    SECURITY_EVENT_TYPES = Object.freeze([
-      "capability_scope_violation",
-      "capability_scope_degrade",
-      "bypass_permission_allowed",
-      "mcp_description_mismatch",
-      "mcp_description_unverifiable",
-      "mcp_description_unpinned",
-      "secret_scrub_failure",
-      "injection_attempt_detected",
-      "secret_scrub_blocked",
-      "recall_quarantine",
-      "dispatch_attribution_missing",
-      "backend_degradation",
-      "tier_dispatch_untiered",
-      "harvest_promoted",
-      "harvest_refused",
-      "playbook_auto_replace",
-      "wiki_cas_conflict",
-      "harvest_reverted",
-      "lane_wiki_write_refused",
-      "queue_drain_refused"
-    ]);
-    SECURITY_EVENT_SCHEMA_VERSION = "guild.security_event.v1";
-    KNOWN_GUILD_HOST_KINDS = Object.freeze([
-      "claude-code-cli",
-      "codex-cli",
-      "pi-cli",
-      "antigravity-cli",
-      "agents-file",
-      "claude-code-app",
-      "claude-code-web",
-      "codex-app",
-      "claude-ai-connector"
-    ]);
-    KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
-    LEGACY_HOST_ALIASES2 = {
-      claude: "claude-code-cli",
-      "claude-code-desktop": "claude-code-app",
-      codex: "codex-cli",
-      "codex-plugin": "codex-cli",
-      agents: "agents-file",
-      ".agents": "agents-file",
-      pi: "pi-cli",
-      antigravity: "antigravity-cli",
-      "antigravity-2": "antigravity-cli"
-    };
-  }
-});
-
-// src/domains/security/scrubbed-write.ts
-function guildRootFromRunDir(runDir3) {
-  return path26.resolve(runDir3, "../../..");
-}
-function writeScrubApprovalRequest(runDir3, runId, surface, outPath, laneId2) {
-  try {
-    const approvalDir = path26.join(runDir3, "agent-bus", "approvals");
-    fs20.mkdirSync(approvalDir, { recursive: true });
-    const ts = (/* @__PURE__ */ new Date()).toISOString();
-    const safeTs = ts.replace(/[:.]/g, "-");
-    const fileName = `${safeTs}-scrub-blocked.json`;
-    const record = {
-      schema_version: "guild.approval_request.v1",
-      ts,
-      run_id: runId,
-      tool: "scrubbedWrite",
-      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path26.basename(outPath)}`,
-      permission_mode: "blocked",
-      surface
-    };
-    if (laneId2) record["lane_id"] = laneId2;
-    const rawContent = JSON.stringify(record, null, 2) + "\n";
-    let content = rawContent;
-    try {
-      const secConfig = readSecurityConfig(guildRootFromRunDir(runDir3));
-      const scrubResult = applySecretsPolicy(rawContent, secConfig.secrets_policy, { noTruncate: true });
-      content = scrubResult.value;
-    } catch {
-    }
-    fs20.writeFileSync(path26.join(approvalDir, fileName), content, "utf8");
-  } catch {
-  }
-}
-function scrubbedWrite(outPath, content, opts) {
-  const guildRoot = guildRootFromRunDir(opts.runDir);
-  let policy;
-  try {
-    const secConfig = readSecurityConfig(guildRoot);
-    policy = secConfig.secrets_policy;
-  } catch {
-    policy = {
-      env_allowlist: [],
-      redaction_patterns: [],
-      fail_mode_durable: "closed",
-      fail_mode_telemetry: "open"
-    };
-  }
-  const scrubResult = applySecretsPolicy(content, policy, { noTruncate: true });
-  const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
-  if (scrubResult.ok) {
-    try {
-      fs20.mkdirSync(path26.dirname(outPath), { recursive: true });
-      fs20.writeFileSync(outPath, scrubResult.value, "utf8");
-    } catch (err) {
-      process.stderr.write(
-        `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ${err instanceof Error ? err.message : String(err)}
-`
-      );
-      return { written: false, blocked: false };
-    }
-    const result2 = { written: true, blocked: false };
-    if (opts.surface === "bus") {
-      result2.sha256 = crypto6.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
-    }
-    return result2;
-  }
-  if (failMode === "open") {
-    process.stderr.write(
-      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path26.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
-`
-    );
-    try {
-      fs20.mkdirSync(path26.dirname(outPath), { recursive: true });
-      fs20.writeFileSync(outPath, scrubResult.value, "utf8");
-    } catch (err) {
-      process.stderr.write(
-        `[scrubbed-write] ERROR: fail-open write failed: ${err instanceof Error ? err.message : String(err)}
-`
-      );
-      return { written: false, blocked: false };
-    }
-    try {
-      const evt = buildSecurityEvent({
-        run_id: opts.runId,
-        lane_id: opts.laneId,
-        event_type: "secret_scrub_blocked",
-        decision: "degraded",
-        tool: "scrubbedWrite",
-        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path26.basename(outPath)}. Built-in-redacted content written.`,
-        permission_mode: "degraded"
-      });
-      appendSecurityEvent(opts.runDir, evt);
-    } catch {
-    }
-    const result2 = { written: true, blocked: false };
-    if (opts.surface === "bus") {
-      result2.sha256 = crypto6.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
-    }
-    return result2;
-  }
-  process.stderr.write(
-    `[scrubbed-write] BLOCKED: secret scrub failed for durable surface "${opts.surface}" at ${outPath} \u2014 file NOT written. Failures: ${scrubResult.failures.join("; ")}
-`
-  );
-  try {
-    const evt = buildSecurityEvent({
-      run_id: opts.runId,
-      lane_id: opts.laneId,
-      event_type: "secret_scrub_blocked",
-      decision: "blocked",
-      tool: "scrubbedWrite",
-      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path26.basename(outPath)} \u2014 write blocked (fail-closed).`,
-      permission_mode: "blocked"
-    });
-    appendSecurityEvent(opts.runDir, evt);
-  } catch {
-  }
-  writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
-  return { written: false, blocked: true };
-}
-var fs20, path26, crypto6;
-var init_scrubbed_write = __esm({
-  "src/domains/security/scrubbed-write.ts"() {
-    fs20 = __toESM(require("node:fs"));
-    path26 = __toESM(require("node:path"));
-    crypto6 = __toESM(require("node:crypto"));
-    init_secrets();
-    init_config();
-    init_events();
-  }
-});
-
-// src/domains/security/share-set.ts
-var path27, SHARED_SCRUBBED_NAMES, CANONICAL_RUN_LOG;
-var init_share_set = __esm({
-  "src/domains/security/share-set.ts"() {
-    path27 = __toESM(require("path"));
-    init_kernel();
-    SHARED_SCRUBBED_NAMES = sealSet([
-      "verify.md",
-      "review.md",
-      "provenance.json",
-      "summary.md",
-      "run.yaml",
-      "run-state.json"
-    ], "SHARED_SCRUBBED_NAMES");
-    CANONICAL_RUN_LOG = path27.join("logs", "v1.4-events.jsonl");
-  }
-});
-
-// src/domains/security/secret-patterns.ts
-var SECRET_PATTERNS;
-var init_secret_patterns = __esm({
-  "src/domains/security/secret-patterns.ts"() {
-    SECRET_PATTERNS = Object.freeze([
-      // NOTE: labels deliberately drop the `=` so the redaction replacement
-      // (e.g. `<REDACTED:password-assignment>`) cannot itself re-match the pattern
-      // on a subsequent scrub pass. Idempotency depends on this — every label below
-      // is checked against every pattern above it, and none re-matches.
-      Object.freeze([Object.freeze(/password\s*=\s*["']?[^\s"']{6,}/), "password-assignment"]),
-      Object.freeze([Object.freeze(/api_key\s*=\s*["']?[^\s"']{6,}/i), "api_key-assignment"]),
-      Object.freeze([Object.freeze(/secret\s*=\s*["']?[^\s"']{8,}/i), "secret-assignment"]),
-      Object.freeze([Object.freeze(/AKIA[0-9A-Z]{16}/), "AWS access key"]),
-      Object.freeze([Object.freeze(/AIza[0-9A-Za-z_-]{35}/), "GCP API key"]),
-      Object.freeze([Object.freeze(/ghp_[0-9A-Za-z]{36}/), "GitHub personal access token"]),
-      Object.freeze([Object.freeze(/ghs_[0-9A-Za-z]{36}/), "GitHub server token"]),
-      Object.freeze([Object.freeze(/-----BEGIN (?:RSA |EC )?PRIVATE KEY/), "PEM private key block"]),
-      // ── Provider credential / bearer-token forms (T6B-R1-B1) ─────────────────
-      // Round-1 review proved the list above blind to the shapes an inspection
-      // surface is most likely to echo out of a persisted artifact: an
-      // `Authorization: Bearer …` header, a `sk-…` provider key, and the
-      // `<something>_token = …` assignment family. A display surface that renders
-      // a persisted evidence string verbatim leaked all three past the applier.
-      //
-      // Every pattern is anchored on the CREDENTIAL PREFIX (not on entropy) so it
-      // stays specific, and each replacement label is inert against every pattern
-      // in this list (no whitespace/`:`/`=` follows the trigger word in a label),
-      // which is what keeps `redact` idempotent.
-      Object.freeze([Object.freeze(/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i), "bearer-token"]),
-      Object.freeze([Object.freeze(/\bauthorization\s*:\s*["']?[A-Za-z0-9._~+/=-]{12,}/i), "authorization-header"]),
-      Object.freeze([Object.freeze(/\b(?:auth|access|refresh|id|api|bearer|session)[-_]?token\s*[:=]\s*["']?[^\s"',]{8,}/i), "token-assignment"]),
-      // OpenAI/Anthropic-style provider keys: sk-…, sk-proj-…, sk-ant-….
-      Object.freeze([Object.freeze(/\bsk-[A-Za-z0-9_-]{12,}/), "provider-api-key"]),
-      Object.freeze([Object.freeze(/\bxox[abprs]-[A-Za-z0-9-]{10,}/), "Slack token"]),
-      Object.freeze([Object.freeze(/\bgh[uor]_[0-9A-Za-z]{36}/), "GitHub token"]),
-      Object.freeze([Object.freeze(/\bglpat-[0-9A-Za-z_-]{20}/), "GitLab personal access token"]),
-      Object.freeze([Object.freeze(/\bnpm_[0-9A-Za-z]{36}/), "npm token"]),
-      Object.freeze([Object.freeze(/\bhf_[0-9A-Za-z]{34}/), "HuggingFace token"]),
-      // ── Personally identifying forms retained by public evidence projections ─
-      // Task objectives and handoff prose are operator-authored and can contain
-      // direct contact details or tenant identifiers. Those artifacts are copied
-      // into migration evidence, so the share scrubber must recognize them before
-      // publication. Keep the patterns prefix-shaped and their labels inert so the
-      // redaction remains deterministic and idempotent.
-      Object.freeze([Object.freeze(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i), "email-address"]),
-      Object.freeze([Object.freeze(/\b(?:acct|cus|cust|usr)_[A-Za-z0-9][A-Za-z0-9_-]{4,}\b/i), "customer-identifier"]),
-      Object.freeze([Object.freeze(/\b(?:customer|account|user)[_-]?id\s*[:=]\s*["']?[A-Za-z0-9][A-Za-z0-9._-]{3,}/i), "customer-identifier"]),
-      // High-entropy string heuristic: 40+ hex chars (SHA-like)
-      Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
-    ]);
-  }
-});
-
-// src/domains/security/scrub-redact.ts
-function redact(content) {
-  let opPaths = 0;
-  let out = content.replace(OPERATOR_PATH_RE, () => {
-    opPaths++;
-    return WORKSPACE_ROOT_MARKER;
-  });
-  out = out.replace(TILDE_CLAUDE_PROJECT_RE, () => {
-    opPaths++;
-    return OPERATOR_MEMORY_ROOT_MARKER;
-  });
-  out = out.replace(PRIVATE_HOME_PATH_RE, () => {
-    opPaths++;
-    return PRIVATE_HOME_MARKER;
-  });
-  const secrets = [];
-  const lines = out.split("\n");
-  out = lines.map((line, i) => {
-    let l = line;
-    for (const [re, label] of SECRET_PATTERNS) {
-      const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
-      if (g.test(l)) {
-        secrets.push({ category: label, line: i + 1 });
-        l = l.replace(
-          new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g"),
-          `<SECRET-REDACTED:${label}>`
-        );
-      }
-    }
-    return l;
-  }).join("\n");
-  return { out, opPaths, secrets };
-}
-var OPERATOR_PATH_RE, WORKSPACE_ROOT_MARKER, TILDE_CLAUDE_PROJECT_RE, OPERATOR_MEMORY_ROOT_MARKER, PRIVATE_HOME_PATH_RE, PRIVATE_HOME_MARKER;
-var init_scrub_redact = __esm({
-  "src/domains/security/scrub-redact.ts"() {
-    init_secret_patterns();
-    init_state();
-    OPERATOR_PATH_RE = /\/Users\/[^/\s]+\/Projects\/[^/\s]+/g;
-    WORKSPACE_ROOT_MARKER = "<workspace-root>";
-    TILDE_CLAUDE_PROJECT_RE = /~\/\.claude\/projects\/-Users-[^/\s]+-Projects-[^/\s]+/g;
-    OPERATOR_MEMORY_ROOT_MARKER = "<operator-memory-root>";
-    PRIVATE_HOME_PATH_RE = /\/(?:Users|home)\/[A-Za-z0-9._-]+(?=[/\s"',:;)\]}]|$)/g;
-    PRIVATE_HOME_MARKER = "<private-home>";
-  }
-});
-
-// src/domains/security/d5-permission-content.ts
-function splitSentences(text) {
-  const out = [];
-  const words = text.split(/[ \t]+/);
-  let current = [];
-  for (let i = 0; i < words.length; i++) {
-    const w = words[i];
-    current.push(w);
-    if (!/[.!?]["')\]]*$/.test(w)) continue;
-    const next = words[i + 1];
-    if (next === void 0) break;
-    const bare = w.replace(/^["'(\[]+/, "").replace(/["')\]]+$/, "").toLowerCase();
-    if (NON_TERMINAL_ABBREVIATIONS.has(bare)) continue;
-    if (/^[A-Z]\.$/.test(w)) continue;
-    if (/^[a-z]/.test(next)) continue;
-    out.push(current.join(" "));
-    current = [];
-  }
-  if (current.length > 0) out.push(current.join(" "));
-  return out;
-}
-function sentences(text) {
-  const out = [];
-  for (const unit of blockUnits(text)) out.push(...unit.sentences);
-  return out;
-}
-function blockUnits(text, opts = {}) {
-  const lines = text.split("\n");
-  const blocks = [];
-  let current = [];
-  let fencedLines = [];
-  let fence = null;
-  const flush = () => {
-    if (current.length > 0) blocks.push({ lines: current, fenced: false });
-    current = [];
-  };
-  const flushFenced = () => {
-    if (fencedLines.length > 0 && opts.includeFenced) blocks.push({ lines: fencedLines, fenced: true });
-    fencedLines = [];
-  };
-  for (const line of lines) {
-    const fenceMatch = /^[ \t]*(`{3,}|~{3,})(.*)$/.exec(line);
-    if (fenceMatch) {
-      const marker = fenceMatch[1];
-      const rest = fenceMatch[2];
-      if (fence === null) {
-        if (marker[0] === "`" && rest.includes("`")) {
-          current.push(line);
-          continue;
-        }
-        flush();
-        fence = marker;
-        continue;
-      }
-      if (marker[0] === fence[0] && marker.length >= fence.length && rest.trim() === "") {
-        fence = null;
-        flushFenced();
-        continue;
-      }
-      fencedLines.push(line);
-      continue;
-    }
-    if (fence !== null) {
-      fencedLines.push(line);
-      continue;
-    }
-    if (line.trim() === "") {
-      flush();
-      continue;
-    }
-    const isHeading = /^[ \t]*#{1,6}[ \t]+/.test(line);
-    const isListItem = /^[ \t]*([-*+]|\d+[.)])[ \t]+/.test(line);
-    const isTableRow = /^[ \t]*\|/.test(line);
-    if (isHeading || isTableRow) {
-      flush();
-      blocks.push({ lines: [line], fenced: false });
-      continue;
-    }
-    if (isListItem) {
-      flush();
-      current.push(line);
-      continue;
-    }
-    current.push(line);
-  }
-  flush();
-  flushFenced();
-  const out = [];
-  for (const { lines: block, fenced } of blocks) {
-    if (fenced) {
-      const whole = block.map((l) => l.trim()).filter((l) => l !== "").join(" ");
-      if (whole !== "") out.push({ whole, sentences: splitSentences(whole).map((t) => t.trim()).filter((t) => t !== ""), fenced: true });
-      continue;
-    }
-    const first = block[0];
-    if (/^[ \t]*\|/.test(first)) {
-      const cells = first.split("|").map((c) => c.trim()).filter((c) => c !== "");
-      if (cells.every((c) => /^:?-{2,}:?$/.test(c))) continue;
-      out.push({ whole: cells.join(" "), sentences: [cells.join(" "), ...cells], fenced: false });
-      continue;
-    }
-    const joined = block.map((l) => l.trim()).join(" ").replace(/^[ \t]*([-*+]|\d+[.)])[ \t]+/, "").replace(/^[ \t]*#{1,6}[ \t]+/, "").trim();
-    const pieces = [];
-    for (const piece of splitSentences(joined)) {
-      const t = piece.trim();
-      if (t !== "") pieces.push(t);
-    }
-    if (joined !== "") out.push({ whole: joined, sentences: pieces, fenced: false });
-  }
-  return out;
-}
-function headingsIn(text) {
-  const out = [];
-  for (const line of text.split("\n")) {
-    const m = /^[ \t]*#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$/.exec(line);
-    if (m) out.push(m[1]);
-  }
-  return out;
-}
-function isPermissionSentence(sentence) {
-  const plain = sentence.replace(/[_*~`]+/g, " ");
-  if (PERMISSION_STATE_RE.test(plain)) return true;
-  return PERMISSION_NOUN_RE.test(plain) && MODALITY_RE.test(plain);
-}
-function classifyPermissionContent(input) {
-  const span = input.span ?? "";
-  const before = input.beforeSpan ?? "";
-  const after = input.replacement ?? "";
-  if (PERMISSION_HEADING_RE.test(span)) {
-    return {
-      isPermissionEdit: true,
-      reason: "heading",
-      detail: `the span '${span}' names a permissions/approval block`
-    };
-  }
-  for (const [side, text] of [["current", before], ["proposed", after]]) {
-    for (const heading of headingsIn(text)) {
-      if (PERMISSION_HEADING_RE.test(heading)) {
-        return {
-          isPermissionEdit: true,
-          reason: "nested_heading",
-          detail: `the ${side} span contains a nested '${heading}' permissions block`
-        };
-      }
-    }
-    if (PERMISSION_KEY_RE.test(text)) {
-      return {
-        isPermissionEdit: true,
-        reason: "frontmatter_key",
-        detail: `the ${side} text declares a permissions key`
-      };
-    }
-  }
-  if (before.trim() !== after.trim()) {
-    for (const [side, text] of [["current", before], ["proposed", after]]) {
-      const units = blockUnits(text, { includeFenced: true });
-      const hit = units.flatMap((u) => u.sentences).find(isPermissionSentence) ?? units.map((u) => u.whole).find(isPermissionSentence) ?? [text.replace(/\s+/g, " ").trim()].find((t) => t !== "" && isPermissionSentence(t));
-      if (hit) {
-        return {
-          isPermissionEdit: true,
-          reason: "approval_language",
-          detail: `the ${side} span changes what is allowed or requires approval ("${hit.slice(0, 60)}")`
-        };
-      }
-    }
-  }
-  return { isPermissionEdit: false };
-}
-var PERMISSION_HEADING_RE, PERMISSION_KEY_RE, PERMISSION_NOUN_RE, MODALITY_RE, PERMISSION_STATE_RE, NON_TERMINAL_ABBREVIATIONS;
-var init_d5_permission_content = __esm({
-  "src/domains/security/d5-permission-content.ts"() {
-    PERMISSION_HEADING_RE = /(^|[^a-z0-9])(permissions?|approval|approvals|allowed[- ]tools|allowlist|denylist|allow|deny)([^a-z0-9]|$)/i;
-    PERMISSION_KEY_RE = /^[ \t]*(permissions?|allowed[-_]tools|allow|deny|tools)[ \t]*:/im;
-    PERMISSION_NOUN_RE = /\boperator[ \t]+clicks?\b|\b(approvals?|approved?|approve|permissions?|permit(?:s|ted)?|allowed[- ]tools|allowlist|denylist|allow(?:s|ed|ing)?|den(?:y|ies|ied)|gate(?:s|d)?|confirm(?:s|ed|ation)?|consent|authoriz(?:e|es|ed|ation)|forbidden|prohibited|sandbox(?:ed|ing)?|privileges?)\b|\bblock(?:s|ed|ing)?\b(?![ \t]+on\b)/i;
-    MODALITY_RE = /\b(must|never|always|shall|should|require[sd]?|need(?:s|ed)?|no|without|skip(?:s|ping)?|bypass(?:es|ing|ed)?|auto[- ]?approve[d]?|unattended|do not|don't|cannot|can't|refuse[sd]?)\b/i;
-    PERMISSION_STATE_RE = /(:[ \t]*|(?:\bis\b|\bare\b)[ \t]+)(blocked|allowed|denied|permitted|forbidden|prohibited|auto[- ]?approved|unrestricted|sandboxed)\b/i;
-    NON_TERMINAL_ABBREVIATIONS = /* @__PURE__ */ new Set([
-      "dr.",
-      "mr.",
-      "mrs.",
-      "ms.",
-      "prof.",
-      "sr.",
-      "jr.",
-      "st.",
-      "vs.",
-      "etc.",
-      "e.g.",
-      "i.e.",
-      "cf.",
-      "no.",
-      "fig.",
-      "approx.",
-      "dept.",
-      "inc.",
-      "ltd.",
-      "co.",
-      "u.s.",
-      "u.k.",
-      "a.m.",
-      "p.m."
-    ]);
-  }
-});
-
-// src/domains/security/ingest-pause.ts
-var init_ingest_pause = __esm({
-  "src/domains/security/ingest-pause.ts"() {
-    init_state();
-  }
-});
-
-// src/domains/security/index.ts
-var init_security = __esm({
-  "src/domains/security/index.ts"() {
-    init_safe_object();
-    init_injection_guard();
-    init_scrubbed_write();
-    init_redact_log();
-    init_share_set();
-    init_scrub_redact();
-    init_secret_patterns();
-    init_events();
-    init_d5_permission_content();
-    init_ingest_pause();
-    init_config();
-    init_secrets();
   }
 });
 
