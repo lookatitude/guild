@@ -33,11 +33,18 @@ import { ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
 function walkDir(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
+  // Iterative walk: a run dir can hold hundreds of thousands of fixture files,
+  // and a recursive spread-push (`results.push(...walkDir(full))`) overflows
+  // the call stack on arrays that large.
   const results: string[] = [];
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, e.name);
-    if (e.isDirectory()) results.push(...walkDir(full));
-    else if (e.isFile()) results.push(full);
+  const pending: string[] = [dir];
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    for (const e of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, e.name);
+      if (e.isDirectory()) pending.push(full);
+      else if (e.isFile()) results.push(full);
+    }
   }
   return results;
 }
@@ -82,7 +89,16 @@ function processRun(runDir: string, dryRun: boolean): { files: number; changed: 
     if (dryRun && (didChange || secrets.length > 0)) {
       process.stdout.write(`  [dry-run] ${path.basename(runDir)}/${rel}: paths=${opPaths} secrets=${secrets.length}${didChange ? " [WOULD CHANGE]" : ""}\n`);
     }
-    if (!dryRun && didChange) fs.writeFileSync(absPath, out, "utf8");
+    if (!dryRun && didChange) {
+      try {
+        fs.writeFileSync(absPath, out, "utf8");
+      } catch (err) {
+        // Read-only preservation snapshots nest share-named files the walker
+        // reaches but must not (and cannot) rewrite; they are outside the git
+        // share-set (the .gitignore re-include is one level deep). Warn, don't die.
+        process.stderr.write(`[scrub] WARNING: ${path.basename(runDir)}/${rel}: unwritable, left unredacted (${(err as NodeJS.ErrnoException).code}).\n`);
+      }
+    }
   }
   return { files, changed, excluded, secrets: secretCount };
 }
