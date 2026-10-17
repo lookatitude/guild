@@ -23,7 +23,10 @@ import * as os from "os";
 import * as path from "path";
 import { execFileSync } from "child_process";
 import {
+  claudeConfigRoots,
+  codexConfigHome,
   HOST_REGISTRY_ROWS,
+  selectCodexMarketplaceIdentity,
   type HostId,
 } from "../../src/domains/config";
 import type { UpdateCaps } from "../../src/domains/config/index";
@@ -184,7 +187,12 @@ export interface NativeHostIdentity {
 export function readNativeHostIdentity(
   hostId: string,
   pluginRoot: string,
-  opts: { homedir?: string; codexHome?: string; fsi?: typeof fs } = {}
+  opts: {
+    homedir?: string;
+    codexHome?: string;
+    claudeConfigDir?: string;
+    fsi?: typeof fs;
+  } = {}
 ): NativeHostIdentity | null {
   const fsi = opts.fsi ?? fs;
   const home = opts.homedir ?? os.homedir();
@@ -199,30 +207,65 @@ export function readNativeHostIdentity(
     typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
 
   if (hostId === "claude-code-cli" || hostId === "claude-code-app" || hostId === "claude-code-web") {
-    for (const configRoot of [path.join(home, ".claude"), path.join(home, ".config", "claude")]) {
+    const roots = claudeConfigRoots({
+      homedir: home,
+      claudeConfigDir: opts.claudeConfigDir ?? process.env.CLAUDE_CONFIG_DIR,
+      joiner: path.join,
+    });
+    for (const configRoot of roots) {
       try {
         const installed = JSON.parse(
           fsi.readFileSync(path.join(configRoot, "plugins", "installed_plugins.json"), "utf8")
         ) as { plugins?: Record<string, unknown> };
-        const rawEntries = installed.plugins?.["guild@guild"];
-        const entries = Array.isArray(rawEntries) ? rawEntries : rawEntries ? [rawEntries] : [];
-        const entry = entries.find((candidate) => {
-          if (typeof candidate !== "object" || candidate === null) return false;
-          const installPath = (candidate as Record<string, unknown>).installPath;
-          return typeof installPath === "string" && realPath(installPath) === realPath(pluginRoot);
-        }) as Record<string, unknown> | undefined;
-        if (!entry || !isSha(entry.gitCommitSha)) continue;
+        const plugins = installed.plugins ?? {};
+
+        // Enumerate EVERY registered plugin alias and select by PHYSICAL install
+        // identity (realpath match against this package root) — never by a
+        // guessed "guild@guild" spelling (C-UPDATE identity.selection).
+        const matches: Array<{ marketplace: string; commit: string }> = [];
+        let malformedMatch = false;
+        for (const aliasKey of Object.keys(plugins)) {
+          const rawEntries = plugins[aliasKey];
+          const entries = Array.isArray(rawEntries) ? rawEntries : rawEntries ? [rawEntries] : [];
+          for (const candidate of entries) {
+            if (typeof candidate !== "object" || candidate === null) continue;
+            const { installPath, gitCommitSha } = candidate as Record<string, unknown>;
+            if (typeof installPath !== "string" || realPath(installPath) !== realPath(pluginRoot)) continue;
+            // This registration NAMES our physical install. A malformed commit
+            // on it is ambiguity about this very package, not noise to skip
+            // (codex G-lane F4): record it so the identity refuses below.
+            if (!isSha(gitCommitSha)) {
+              malformedMatch = true;
+              continue;
+            }
+            const at = aliasKey.lastIndexOf("@");
+            matches.push({
+              marketplace: at > 0 ? aliasKey.slice(at + 1) : aliasKey,
+              commit: gitCommitSha,
+            });
+          }
+        }
+        if (malformedMatch) return null;
+        if (matches.length === 0) continue;
+        // Conflicting registrations of the SAME physical install refuse: an
+        // ambiguous identity never establishes a channel (F01-AC3).
+        const first = matches[0];
+        if (matches.some((m) => m.commit !== first.commit || m.marketplace !== first.marketplace)) {
+          return null;
+        }
 
         const known = JSON.parse(
           fsi.readFileSync(path.join(configRoot, "plugins", "known_marketplaces.json"), "utf8")
-        ) as { guild?: { installLocation?: unknown } };
-        const installLocation = known.guild?.installLocation;
+        ) as Record<string, { installLocation?: unknown } | undefined>;
+        const installLocation = known[first.marketplace]?.installLocation;
         if (typeof installLocation !== "string") continue;
         const gitDir = resolveGitDir(path.join(realPath(installLocation), ".git"), fsi);
         if (!gitDir) continue;
         const branch = readGitHead(gitDir, fsi).branch;
-        if (branch !== "main" && branch !== "next") continue;
-        return { channel: branch === "next" ? "beta" : "stable", commit: entry.gitCommitSha };
+        // Only the known channel branches establish identity; anything else
+        // refuses rather than deriving a channel from version shape.
+        if (branch !== "main" && branch !== "next") return null;
+        return { channel: branch === "next" ? "beta" : "stable", commit: first.commit };
       } catch {
         // Try the next supported Claude config root.
       }
@@ -232,16 +275,52 @@ export function readNativeHostIdentity(
 
   if (hostId === "codex-cli" || hostId === "codex-app") {
     try {
-      const configuredCodexHome = opts.codexHome ?? process.env.CODEX_HOME ?? path.join(home, ".codex");
+      const configuredCodexHome = codexConfigHome({
+        homedir: home,
+        codexHome: opts.codexHome ?? process.env.CODEX_HOME,
+        joiner: path.join,
+      });
+      // PHYSICAL binding (codex G-lane F1): the Codex registry describes the
+      // packages Codex manages under its own home. A package root OUTSIDE
+      // CODEX_HOME is not the install the registry names, so its entries must
+      // not establish this package's identity.
+      const realCodexHome = realPath(configuredCodexHome);
+      const realRoot = realPath(pluginRoot);
+      if (realRoot !== realCodexHome && !realRoot.startsWith(realCodexHome + path.sep)) {
+        return null;
+      }
       const raw = fsi.readFileSync(path.join(configuredCodexHome, "config.toml"), "utf8");
-      const section = /(?:^|\n)\[marketplaces\.guild\]\s*\n([\s\S]*?)(?=\n\[|$)/.exec(raw)?.[1];
-      if (!section) return null;
-      const field = (name: string): string | null =>
-        new RegExp(`^${name}\\s*=\\s*"([^"]+)"\\s*$`, "m").exec(section)?.[1] ?? null;
-      const ref = field("ref");
-      const commit = field("last_revision");
-      if ((ref !== "main" && ref !== "next") || !isSha(commit)) return null;
-      return { channel: ref === "next" ? "beta" : "stable", commit };
+      // Shared fail-closed parser (config domain): duplicate/unsafe keys,
+      // malformed documents, unknown refs, non-SHA revisions, and alias
+      // conflicts all refuse (status !== "selected") instead of guessing.
+      const selection = selectCodexMarketplaceIdentity(raw);
+      if (selection.status !== "selected") return null;
+      // Per-alias physical binding, tightened to what is OBSERVABLE and
+      // order-independent across AGREEING aliases: when any agreeing alias's
+      // conventional marketplace directory exists on disk, the package root
+      // must sit inside one of them — a sibling package under CODEX_HOME is
+      // not the install those registrations name. When no such directory is
+      // observable we do not guess a layout (C-UPDATE: roots/aliases are never
+      // guessed) and CODEX_HOME containment stands.
+      let sawAliasDir = false;
+      for (const alias of selection.aliases) {
+        // An alias participates in path binding only as a SINGLE directory
+        // name: "..", ".", or separator-bearing aliases would traverse out of
+        // the marketplaces root and bind unrelated packages (codex G-lane R4).
+        if (alias === "." || alias === ".." || /[/\\]/.test(alias)) continue;
+        const aliasDir = path.join(configuredCodexHome, "marketplaces", alias);
+        try {
+          if (!fsi.statSync(aliasDir).isDirectory()) continue;
+        } catch {
+          continue; // this alias's layout is not observable
+        }
+        sawAliasDir = true;
+        const realAliasDir = realPath(aliasDir);
+        if (realRoot === realAliasDir || realRoot.startsWith(realAliasDir + path.sep)) {
+          return selection.identity;
+        }
+      }
+      return sawAliasDir ? null : selection.identity;
     } catch {
       return null;
     }
@@ -334,7 +413,12 @@ export function branchToChannel(branch: string | null): Channel {
  */
 export function resolveInstallState(
   pluginRoot: string,
-  opts: { homedir?: string; fsi?: typeof fs; nativeIdentity?: NativeHostIdentity | null } = {}
+  opts: {
+    homedir?: string;
+    fsi?: typeof fs;
+    nativeIdentity?: NativeHostIdentity | null;
+    claudeConfigDir?: string;
+  } = {}
 ): InstallState {
   const fsi = opts.fsi ?? fs;
   const home = opts.homedir ?? os.homedir();
@@ -349,11 +433,14 @@ export function resolveInstallState(
   const version = readInstalledVersion(pluginRoot, fsi);
   // Compare in REAL path space on both sides — on macOS the tmp/home tree is
   // symlinked (/var → /private/var), so an unresolved prefix never matches a
-  // realpath'd root.
-  const managedRoots = [
-    path.join(home, ".claude", "plugins"),
-    path.join(home, ".config", "claude", "plugins"),
-  ].map((m) => {
+  // realpath'd root. The managed area under an explicit CLAUDE_CONFIG_DIR is
+  // honored too: a valid custom-root install must never be classified as a dev
+  // checkout just because it sits outside ~/.claude (F01-AC2).
+  const managedRoots = claudeConfigRoots({
+    homedir: home,
+    claudeConfigDir: opts.claudeConfigDir ?? process.env.CLAUDE_CONFIG_DIR,
+    joiner: path.join,
+  }).map((root) => path.join(root, "plugins")).map((m) => {
     try {
       return fsi.realpathSync(m);
     } catch {
