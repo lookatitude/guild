@@ -1462,7 +1462,7 @@ export function loadMigrationBoundary(boundaryPath: string): MigrationBoundaryV1
   return loadAttestedMigrationBoundary(boundaryPath).boundary;
 }
 
-function verifyMigrationBoundaryProvenance(boundaryPath: string, boundary: MigrationBoundaryV1): string {
+function verifyMigrationBoundaryProvenance(boundaryPath: string, boundary: Pick<MigrationBoundaryV1, "workflow" | "source_commit">): string {
   if (boundary.workflow.repository !== PRODUCTION_REPOSITORY) throw new Error("migration boundary is not issued by the production repository");
   const ghEnvironment: NodeJS.ProcessEnv = { ...process.env, GH_HOST: "github.com" };
   delete ghEnvironment["GH_ENTERPRISE_TOKEN"];
@@ -2458,4 +2458,359 @@ export function writeMigrationBoundary(outputDirectory: string, boundary: Migrat
     fs.closeSync(descriptor);
   }
   return target;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G02 — content-addressed compaction wire (A02-ratified dossier
+// .guild/artifacts/contracts/v3-migration-compaction-wire.json, digest
+// 54f61a6d3ab5b3664ce7118b4717a09ae67c2a897db2b59542d9b37d88cb4a1a).
+// Additive only: every v1 boundary / v4 window / v1-v2 observation / v1
+// transition-restart byte, hash and signature stays untouched. Compaction adds
+// NO restart or reset authority and never alters counters by normalization.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const CAPABILITY_PACKAGE_MANIFEST_SCHEMA = "guild.capability_package_manifest.v1" as const;
+export const MIGRATION_BOUNDARY_SCHEMA_V2 = "guild.capability_migration_boundary.v2" as const;
+export const PACKAGE_MANIFEST_STORE_RELPATH = ".guild/artifacts/capability/package-manifests/sha256" as const;
+export const BOUNDARY_STORE_RELPATH = ".guild/artifacts/capability/boundaries/sha256" as const;
+export const MAX_PACKAGE_MANIFEST_BLOB_BYTES = 8_388_608;
+export const MAX_BOUNDARY_WIRE_BYTES = 1_048_576;
+export const MAX_FILES_PER_PACKAGE = 4096;
+
+export interface CapabilityPackageManifestV1 extends MigrationRuntimePackageV1 {
+  readonly schema_version: typeof CAPABILITY_PACKAGE_MANIFEST_SCHEMA;
+}
+
+export interface MigrationPackageRefV1 extends MigrationRuntimeBindingV1 {
+  /** Digest of the content-addressed manifest blob (identity = sha256 of its canonical bytes). */
+  readonly package_manifest_sha256: string;
+}
+
+export interface MigrationBoundaryV2 {
+  readonly schema_version: typeof MIGRATION_BOUNDARY_SCHEMA_V2;
+  readonly channel: typeof MIGRATION_BOUNDARY_CHANNEL;
+  readonly release: string;
+  readonly source_commit: string;
+  readonly source_tree_hash: string;
+  readonly merged_at: string;
+  readonly package_refs: {
+    readonly "claude-code-cli": MigrationPackageRefV1;
+    readonly "codex-cli": MigrationPackageRefV1;
+  };
+  readonly workflow: MigrationBoundaryV1["workflow"];
+  readonly event_sha256: string;
+  readonly boundary_hash: string;
+}
+
+export interface MigrationBoundaryRefV1 {
+  readonly boundary_hash: string;
+  readonly path: string;
+  /** sha256 of the RAW stored boundary bytes (never of a reserialization). */
+  readonly sha256: string;
+  readonly wire_version: typeof MIGRATION_BOUNDARY_SCHEMA | typeof MIGRATION_BOUNDARY_SCHEMA_V2;
+}
+
+export type MigrationBoundaryAnyWire =
+  | { readonly wire_version: typeof MIGRATION_BOUNDARY_SCHEMA; readonly boundary: MigrationBoundaryV1 }
+  | { readonly wire_version: typeof MIGRATION_BOUNDARY_SCHEMA_V2; readonly boundary: MigrationBoundaryV2 };
+
+export function validateCapabilityPackageManifest(value: unknown): CapabilityPackageManifestV1 | null {
+  const record = plainRecord(value);
+  if (!record || record.schema_version !== CAPABILITY_PACKAGE_MANIFEST_SCHEMA) return null;
+  if (!exactKeys(record, ["schema_version", "host_id", "manifest_path", "manifest_sha256", "producer_sha256", "tree_sha256", "install_surface_sha256", "files", "install_files"])) return null;
+  const { schema_version: _schema, ...packageFields } = record;
+  const runtimePackage = validateRuntimePackage(packageFields);
+  if (!runtimePackage) return null;
+  // The blob's identity is sha256 over its STORED canonical bytes, so the
+  // stored array order must already be the canonical sorted order — a permuted
+  // list would alias the same tree digest under a different blob identity.
+  const rawFiles = record.files as readonly unknown[];
+  const rawInstall = record.install_files as readonly unknown[];
+  for (let index = 0; index < runtimePackage.files.length; index += 1) {
+    if ((plainRecord(rawFiles[index]) ?? {}).path !== runtimePackage.files[index].path) return null;
+  }
+  for (let index = 0; index < runtimePackage.install_files.length; index += 1) {
+    if ((plainRecord(rawInstall[index]) ?? {}).path !== runtimePackage.install_files[index].path) return null;
+  }
+  return Object.freeze({ schema_version: CAPABILITY_PACKAGE_MANIFEST_SCHEMA, ...runtimePackage });
+}
+
+/** Content-addressed identity: no self-hash field, the whole object is the preimage. */
+export function capabilityPackageManifestDigest(manifest: CapabilityPackageManifestV1): string {
+  return sha256(canonical(manifest));
+}
+
+function digestBlobTarget(projectRoot: string, storeRelPath: string, digest: string, label: string): { root: string; target: string } {
+  if (!SHA256.test(digest)) throw new Error(`${label} digest is not lowercase-hex sha256`);
+  const root = fs.realpathSync(projectRoot);
+  return { root, target: path.join(root, storeRelPath, `${digest}.json`) };
+}
+
+function readDigestAddressedBlob(projectRoot: string, storeRelPath: string, digest: string, maxBytes: number, label: string): Buffer {
+  const { root, target } = digestBlobTarget(projectRoot, storeRelPath, digest, label);
+  try { fs.lstatSync(target); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new Error(`${label} blob missing: ${digest}`);
+    throw error;
+  }
+  const checked = checkContained(root, target, { policy: "physical", requireRegularFileLeaf: true });
+  if (isRefused(checked)) throw new Error(`${label} blob refused [${checked.code}]: ${digest}`);
+  const descriptor = fs.openSync(checked.realPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  let bytes: Buffer;
+  try {
+    const stats = fs.fstatSync(descriptor);
+    if (!stats.isFile()) throw new Error(`${label} blob is not a regular file: ${digest}`);
+    if (stats.size > maxBytes) throw new Error(`${label} blob exceeds the ${maxBytes}-byte bound: ${digest}`);
+    // Bounded read from the already-open descriptor: a file grown between the
+    // fstat above and this read still cannot exceed the limit.
+    const buffer = Buffer.alloc(maxBytes + 1);
+    let total = 0;
+    while (total <= maxBytes) {
+      const read = fs.readSync(descriptor, buffer, total, maxBytes + 1 - total, total);
+      if (read === 0) break;
+      total += read;
+    }
+    if (total > maxBytes) throw new Error(`${label} blob exceeds the ${maxBytes}-byte bound: ${digest}`);
+    bytes = buffer.subarray(0, total);
+  } finally { fs.closeSync(descriptor); }
+  // Raw stored bytes verify against the digest BEFORE any parse or materialization.
+  if (sha256(bytes) !== digest) throw new Error(`${label} blob is tampered (raw-byte digest mismatch before parse): ${digest}`);
+  return bytes;
+}
+
+function writeDigestAddressedBlob(projectRoot: string, storeRelPath: string, bytes: Buffer, label: string): { path: string; sha256: string } {
+  const digest = sha256(bytes);
+  const { root, target } = digestBlobTarget(projectRoot, storeRelPath, digest, label);
+  const relativePath = `${storeRelPath}/${digest}.json`;
+  let exists = true;
+  try { fs.lstatSync(target); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    exists = false;
+  }
+  if (exists) {
+    // Immutable store: an existing blob at this digest must be byte-identical
+    // (the read re-verifies the raw digest and throws on tampering).
+    readDigestAddressedBlob(projectRoot, storeRelPath, digest, Math.max(bytes.length, 1), label);
+    return { path: relativePath, sha256: digest };
+  }
+  const written = writeContainedFile(projectRoot, target, bytes, { policy: "physical" });
+  if (!written.written) throw new Error(`${label} blob write refused [${written.code}]: ${digest}`);
+  return { path: relativePath, sha256: digest };
+}
+
+export function writeCapabilityPackageManifest(projectRoot: string, value: unknown): { path: string; package_manifest_sha256: string } {
+  const manifest = validateCapabilityPackageManifest(value);
+  if (!manifest) throw new Error("refusing to write an invalid capability package manifest");
+  const bytes = Buffer.from(canonical(manifest), "utf8");
+  if (bytes.length > MAX_PACKAGE_MANIFEST_BLOB_BYTES) throw new Error("capability package manifest exceeds the blob byte bound");
+  const written = writeDigestAddressedBlob(projectRoot, PACKAGE_MANIFEST_STORE_RELPATH, bytes, "capability package manifest");
+  return { path: written.path, package_manifest_sha256: written.sha256 };
+}
+
+export function readCapabilityPackageManifest(projectRoot: string, digest: string): CapabilityPackageManifestV1 {
+  const bytes = readDigestAddressedBlob(projectRoot, PACKAGE_MANIFEST_STORE_RELPATH, digest, MAX_PACKAGE_MANIFEST_BLOB_BYTES, "capability package manifest");
+  const raw = bytes.toString("utf8");
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); }
+  catch (error) { throw new Error(`capability package manifest blob is not valid JSON: ${error instanceof Error ? error.message : String(error)}`); }
+  const manifest = validateCapabilityPackageManifest(parsed);
+  if (!manifest) throw new Error(`capability package manifest blob is invalid: ${digest}`);
+  // digest == sha256(raw) was verified before parse, so raw == canonical(manifest)
+  // implies digest == sha256(canonical(manifest)) — the content-addressed identity.
+  if (raw !== canonical(manifest)) throw new Error(`capability package manifest identity mismatch (stored bytes are not the canonical rendering): ${digest}`);
+  return manifest;
+}
+
+export function buildCapabilityPackageManifest(runtimePackage: MigrationRuntimePackageV1): CapabilityPackageManifestV1 {
+  const manifest = validateCapabilityPackageManifest({ schema_version: CAPABILITY_PACKAGE_MANIFEST_SCHEMA, ...runtimePackage });
+  if (!manifest) throw new Error("runtime package does not form a valid capability package manifest");
+  return manifest;
+}
+
+function validateMigrationPackageRef(value: unknown, expectedHost: MigrationRuntimeHost): MigrationPackageRefV1 | null {
+  const record = plainRecord(value);
+  if (!record || !exactKeys(record, ["host_id", "manifest_path", "manifest_sha256", "producer_sha256", "tree_sha256", "install_surface_sha256", "package_manifest_sha256"])) return null;
+  if (typeof record.package_manifest_sha256 !== "string" || !SHA256.test(record.package_manifest_sha256)) return null;
+  const { package_manifest_sha256: packageManifestSha, ...binding } = record;
+  const validatedBinding = validateRuntimeBinding(binding, expectedHost);
+  if (!validatedBinding) return null;
+  return Object.freeze({ ...validatedBinding, package_manifest_sha256: packageManifestSha as string });
+}
+
+function boundaryHashV2(value: Omit<MigrationBoundaryV2, "boundary_hash">): string {
+  return sha256(canonical(value));
+}
+
+export function validateMigrationBoundaryV2(value: unknown): MigrationBoundaryV2 | null {
+  const record = plainRecord(value);
+  if (!record || !exactKeys(record, [
+    "schema_version", "channel", "release", "source_commit", "source_tree_hash",
+    "merged_at", "package_refs", "workflow", "event_sha256", "boundary_hash",
+  ])) return null;
+  if (record.schema_version !== MIGRATION_BOUNDARY_SCHEMA_V2 || record.channel !== MIGRATION_BOUNDARY_CHANNEL) return null;
+  if (typeof record.release !== "string" || !BETA.test(record.release)) return null;
+  if (typeof record.source_commit !== "string" || !COMMIT.test(record.source_commit)) return null;
+  if (typeof record.source_tree_hash !== "string" || !/^sha256:[0-9a-f]{64}$/.test(record.source_tree_hash)) return null;
+  const mergedAt = canonicalInstant(record.merged_at);
+  if (mergedAt === null || mergedAt !== record.merged_at) return null;
+  if (typeof record.event_sha256 !== "string" || !SHA256.test(record.event_sha256)) return null;
+  if (typeof record.boundary_hash !== "string" || !SHA256.test(record.boundary_hash)) return null;
+  const packageRefs = plainRecord(record.package_refs);
+  if (!packageRefs || !exactKeys(packageRefs, ["claude-code-cli", "codex-cli"])) return null;
+  const claudeRef = validateMigrationPackageRef(packageRefs["claude-code-cli"], "claude-code-cli");
+  const codexRef = validateMigrationPackageRef(packageRefs["codex-cli"], "codex-cli");
+  if (!claudeRef || !codexRef) return null;
+  const workflow = plainRecord(record.workflow);
+  if (!workflow || !exactKeys(workflow, ["repository", "run_id", "run_attempt", "event", "ref"])) return null;
+  if (typeof workflow.repository !== "string" || !REPOSITORY.test(workflow.repository)) return null;
+  if (typeof workflow.run_id !== "string" || !/^[1-9]\d*$/.test(workflow.run_id)) return null;
+  if (!Number.isSafeInteger(workflow.run_attempt) || (workflow.run_attempt as number) < 1) return null;
+  if (workflow.event !== "push" || workflow.ref !== "refs/heads/next") return null;
+  const candidate = {
+    schema_version: MIGRATION_BOUNDARY_SCHEMA_V2,
+    channel: MIGRATION_BOUNDARY_CHANNEL,
+    release: record.release,
+    source_commit: record.source_commit,
+    source_tree_hash: record.source_tree_hash,
+    merged_at: record.merged_at,
+    package_refs: { "claude-code-cli": claudeRef, "codex-cli": codexRef },
+    workflow: {
+      repository: workflow.repository as string,
+      run_id: workflow.run_id as string,
+      run_attempt: workflow.run_attempt as number,
+      event: "push" as const,
+      ref: "refs/heads/next" as const,
+    },
+    event_sha256: record.event_sha256,
+  };
+  // Same self-hash-excluded preimage rule as the v1 boundaryHash: the signature
+  // binds package_manifest_sha256 and therefore transitively binds the file
+  // lists without embedding them.
+  if (record.boundary_hash !== boundaryHashV2(candidate)) return null;
+  return Object.freeze({ ...candidate, boundary_hash: record.boundary_hash }) as MigrationBoundaryV2;
+}
+
+/** Resolve one package ref to its manifest blob with full identity validation. */
+export function resolveMigrationPackageRef(projectRoot: string, ref: MigrationPackageRefV1): CapabilityPackageManifestV1 {
+  const manifest = readCapabilityPackageManifest(projectRoot, ref.package_manifest_sha256);
+  const bindingMatches = manifest.host_id === ref.host_id
+    && manifest.manifest_path === ref.manifest_path
+    && manifest.manifest_sha256 === ref.manifest_sha256
+    && manifest.producer_sha256 === ref.producer_sha256
+    && manifest.tree_sha256 === ref.tree_sha256
+    && manifest.install_surface_sha256 === ref.install_surface_sha256;
+  // A mismatch is tampered_ref — never a silent preference for either side.
+  if (!bindingMatches) throw new Error(`tampered package manifest ref: inline binding fields do not equal the resolved blob ${ref.package_manifest_sha256}`);
+  return manifest;
+}
+
+export interface ResolvedMigrationBoundaryView {
+  readonly wire_version: MigrationBoundaryRefV1["wire_version"];
+  readonly boundary_hash: string;
+  readonly release: string;
+  readonly source_commit: string;
+  readonly source_tree_hash: string;
+  readonly merged_at: string;
+  readonly packages: MigrationBoundaryV1["packages"];
+  readonly workflow: MigrationBoundaryV1["workflow"];
+  readonly event_sha256: string;
+}
+
+/** Materialize a resolved boundary view; a v2 wire record hydrates its manifests. */
+export function hydrateMigrationBoundary(projectRoot: string, wire: MigrationBoundaryAnyWire): ResolvedMigrationBoundaryView {
+  if (wire.wire_version === MIGRATION_BOUNDARY_SCHEMA) {
+    const { schema_version: _schema, channel: _channel, boundary_hash, ...rest } = wire.boundary;
+    return Object.freeze({ wire_version: wire.wire_version, boundary_hash, ...rest });
+  }
+  const { schema_version: _schema, channel: _channel, boundary_hash, package_refs, ...rest } = wire.boundary;
+  const packages = Object.freeze({
+    "claude-code-cli": stripManifestSchema(resolveMigrationPackageRef(projectRoot, package_refs["claude-code-cli"])),
+    "codex-cli": stripManifestSchema(resolveMigrationPackageRef(projectRoot, package_refs["codex-cli"])),
+  });
+  return Object.freeze({ wire_version: wire.wire_version, boundary_hash, ...rest, packages });
+}
+
+function stripManifestSchema(manifest: CapabilityPackageManifestV1): MigrationRuntimePackageV1 {
+  const { schema_version: _schema, ...runtimePackage } = manifest;
+  return Object.freeze(runtimePackage);
+}
+
+export function validateMigrationBoundaryRef(value: unknown): MigrationBoundaryRefV1 | null {
+  const record = plainRecord(value);
+  if (!record || !exactKeys(record, ["boundary_hash", "path", "sha256", "wire_version"])) return null;
+  if (typeof record.boundary_hash !== "string" || !SHA256.test(record.boundary_hash)) return null;
+  if (typeof record.sha256 !== "string" || !SHA256.test(record.sha256)) return null;
+  if (record.wire_version !== MIGRATION_BOUNDARY_SCHEMA && record.wire_version !== MIGRATION_BOUNDARY_SCHEMA_V2) return null;
+  if (record.path !== `${BOUNDARY_STORE_RELPATH}/${record.sha256}.json`) return null;
+  return Object.freeze({ boundary_hash: record.boundary_hash, path: record.path, sha256: record.sha256, wire_version: record.wire_version });
+}
+
+function dispatchBoundaryWire(parsed: unknown, label: string): MigrationBoundaryAnyWire {
+  const record = plainRecord(parsed);
+  const wireVersion = record?.schema_version;
+  if (wireVersion === MIGRATION_BOUNDARY_SCHEMA) {
+    const boundary = validateMigrationBoundary(parsed);
+    if (!boundary) throw new Error(`${label}: v1 boundary bytes are invalid or their hash binding does not verify`);
+    return { wire_version: MIGRATION_BOUNDARY_SCHEMA, boundary };
+  }
+  if (wireVersion === MIGRATION_BOUNDARY_SCHEMA_V2) {
+    const boundary = validateMigrationBoundaryV2(parsed);
+    if (!boundary) throw new Error(`${label}: v2 boundary bytes are invalid or their hash binding does not verify`);
+    return { wire_version: MIGRATION_BOUNDARY_SCHEMA_V2, boundary };
+  }
+  // Unknown wire majors never parse as a known one (fail closed).
+  throw new Error(`${label}: unknown boundary wire version ${String(wireVersion)}`);
+}
+
+/** Persist exact boundary wire bytes into the content-addressed store. */
+export function persistMigrationBoundaryWire(projectRoot: string, bytes: Buffer): MigrationBoundaryRefV1 {
+  if (bytes.length > MAX_BOUNDARY_WIRE_BYTES) throw new Error("migration boundary wire bytes exceed the byte bound");
+  let parsed: unknown;
+  try { parsed = JSON.parse(bytes.toString("utf8")); }
+  catch (error) { throw new Error(`migration boundary wire bytes are not valid JSON: ${error instanceof Error ? error.message : String(error)}`); }
+  const wire = dispatchBoundaryWire(parsed, "migration boundary wire");
+  const written = writeDigestAddressedBlob(projectRoot, BOUNDARY_STORE_RELPATH, bytes, "migration boundary wire");
+  return Object.freeze({ boundary_hash: wire.boundary.boundary_hash, path: written.path, sha256: written.sha256, wire_version: wire.wire_version });
+}
+
+export function resolveMigrationBoundaryRef(projectRoot: string, value: unknown): MigrationBoundaryAnyWire {
+  const ref = validateMigrationBoundaryRef(value);
+  if (!ref) throw new Error("migration boundary ref is invalid");
+  const bytes = readDigestAddressedBlob(projectRoot, BOUNDARY_STORE_RELPATH, ref.sha256, MAX_BOUNDARY_WIRE_BYTES, "migration boundary wire");
+  let parsed: unknown;
+  try { parsed = JSON.parse(bytes.toString("utf8")); }
+  catch (error) { throw new Error(`migration boundary wire blob is not valid JSON: ${error instanceof Error ? error.message : String(error)}`); }
+  const wire = dispatchBoundaryWire(parsed, `migration boundary ref ${ref.sha256}`);
+  // The ref's declared wire version and boundary hash must match the stored
+  // record exactly; hydration dispatches to the ORIGINAL validator per version.
+  if (wire.wire_version !== ref.wire_version) throw new Error(`migration boundary ref ${ref.sha256} declares ${ref.wire_version} but the stored record is ${wire.wire_version}`);
+  if (wire.boundary.boundary_hash !== ref.boundary_hash) throw new Error(`migration boundary ref ${ref.sha256} boundary_hash does not match the stored record`);
+  return wire;
+}
+
+/**
+ * Re-establish REMOTE provenance for a content-addressed boundary wire blob.
+ * Local digest validity is not remote provenance: this runs the same gh
+ * attestation + workflow-run verification the v1 loader uses, over the exact
+ * stored bytes. Offline/401/403/429/missing-gh failures surface as provenance
+ * verification errors and never relabel local data as remotely verified.
+ */
+export function verifyMigrationBoundaryWireProvenance(projectRoot: string, value: unknown): string {
+  const ref = validateMigrationBoundaryRef(value);
+  if (!ref) throw new Error("migration boundary ref is invalid");
+  const bytes = readDigestAddressedBlob(projectRoot, BOUNDARY_STORE_RELPATH, ref.sha256, MAX_BOUNDARY_WIRE_BYTES, "migration boundary wire");
+  let parsed: unknown;
+  try { parsed = JSON.parse(bytes.toString("utf8")); }
+  catch (error) { throw new Error(`migration boundary wire blob is not valid JSON: ${error instanceof Error ? error.message : String(error)}`); }
+  const wire = dispatchBoundaryWire(parsed, `migration boundary ref ${ref.sha256}`);
+  if (wire.wire_version !== ref.wire_version || wire.boundary.boundary_hash !== ref.boundary_hash) {
+    throw new Error(`migration boundary ref ${ref.sha256} does not match the stored record`);
+  }
+  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "guild-migration-boundary-wire-"));
+  const snapshotPath = path.join(temporaryDirectory, `${ref.sha256}.json`);
+  try {
+    const descriptor = fs.openSync(snapshotPath, "wx", 0o600);
+    try { fs.writeFileSync(descriptor, bytes); fs.fsyncSync(descriptor); }
+    finally { fs.closeSync(descriptor); }
+    return verifyMigrationBoundaryProvenance(snapshotPath, wire.boundary);
+  } finally { fs.rmSync(temporaryDirectory, { recursive: true, force: true }); }
 }

@@ -40886,9 +40886,29 @@ function computePhysicalNativeClaudePayloadDigest(packageRoot) {
     for (const entry of entries) {
       const relativePath = relativeDirectory ? path77.join(relativeDirectory, entry.name) : entry.name;
       const normalized = normalizedRelativePath(relativePath);
-      if (normalized === NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE || normalized === RELEASE_PACKAGE_INSTALL_RECEIPT_FILE || normalized === ".codex-marketplace-install.json" || normalized === ".in_use" || normalized.startsWith(".in_use/") || isDetachedReleaseEvidenceRecord(normalized)) continue;
+      if (normalized === NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE || normalized === RELEASE_PACKAGE_INSTALL_RECEIPT_FILE || normalized === ".codex-marketplace-install.json" || normalized === ".in_use" || normalized.startsWith(".in_use/")) continue;
       const absolutePath = path77.join(directory, entry.name);
       const stats = fs66.lstatSync(absolutePath);
+      if (isDetachedReleaseEvidenceRecord(normalized)) {
+        if (entry.isSymbolicLink() || stats.isSymbolicLink()) {
+          throw new Error(`detached release-evidence record is a symlink: ${normalized}`);
+        }
+        if (!entry.isFile() || !stats.isFile()) {
+          throw new Error(`detached release-evidence record is not a regular file: ${normalized}`);
+        }
+        const descriptor = fs66.openSync(
+          absolutePath,
+          fs66.constants.O_RDONLY | fs66.constants.O_NOFOLLOW | fs66.constants.O_NONBLOCK
+        );
+        try {
+          if (!fs66.fstatSync(descriptor).isFile()) {
+            throw new Error(`detached release-evidence record is not a regular file: ${normalized}`);
+          }
+        } finally {
+          fs66.closeSync(descriptor);
+        }
+        continue;
+      }
       if (normalized === ".git") {
         if (entry.isSymbolicLink() || stats.isSymbolicLink()) {
           throw new Error("native Claude package root .git metadata is not physical");
