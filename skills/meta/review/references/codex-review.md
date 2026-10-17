@@ -307,11 +307,25 @@ clean terminal: it writes its value verbatim and DELIBERATELY fails
    no recorded rationale stays the `force_passed` audit exception.
 2. **Verification-only round beyond cap** — `final_status: cap-verification-only`.
    The round(s) taken past the cap were **verification-only**: confirming a
-   just-applied fix, raising NO new adversarial surface. This is bounded (it ends
-   the moment Codex confirms — write `satisfied` then — or is exhausted) and is
-   distinct from `[extend-cap N]`, which re-opens a fresh adversarial round. Use
-   it to let Codex re-check the exact fix its last finding demanded without
-   treating that as an unbounded extension.
+   just-applied fix, raising NO new adversarial surface. It is distinct from
+   `[extend-cap N]`, which re-opens a fresh adversarial round. Use it to let
+   Codex re-check the exact fix its last finding demanded without treating that
+   as an unbounded extension.
+
+   **The allowance is at most 2 verification-only rounds per gate, and the three
+   exits are exhaustive** — "bounded" is a hard count, not a judgement call:
+   - **Codex confirms** (emits `## SATISFIED`) → write `satisfied`, NOT
+     `cap_verify`. A confirmed fix is an ordinary clean pass.
+   - **Codex raises any new adversarial surface** → the round was not
+     verification-only. The allowance ends immediately, nothing is written as
+     `cap_verify`, and control returns to `## Cap handling`'s three options.
+   - **Both rounds are spent with no confirm and no new surface** → the
+     allowance is **exhausted**: write `cap_verify` / `cap-verification-only`.
+     This is the only transition that produces this terminal state.
+
+   The trail MUST record each verification-only round and which of the three
+   exits fired, or `scripts/verify-codex-review-trail.ts` cannot tell an
+   exhausted allowance from an unbounded extension.
 
 Record the chosen terminal state's `final_status:` in the trail (`## Trail
 format`) and carry it in the in-memory `status` (`## Output shape`).
