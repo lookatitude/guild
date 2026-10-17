@@ -181,6 +181,9 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   { id: "resolve-specialist-capability-scope", entry: "scripts/resolve-specialist-capability-scope.ts" },
   { id: "retention", entry: "scripts/lib/retention.ts" },
   { id: "roster-resolve", entry: "scripts/roster-resolve.ts" },
+  // `/guild:maintain analyze` (C-CLI): the run-analysis CLI ships as compiled
+  // Node at runtime/scripts/run-analysis.js — never tsx on the user path.
+  { id: "run-analysis", entry: "scripts/run-analysis.ts" },
   { id: "run-lifecycle", entry: "scripts/lib/run-lifecycle.ts" },
   { id: "score-tier", entry: "scripts/score-tier.ts" },
   { id: "stamp-recall-importance", entry: "scripts/stamp-recall-importance.ts" },
@@ -276,7 +279,8 @@ export function buildOptionsForTarget(t: Target, outAbs: string): import("esbuil
   };
 }
 
-function buildOne(t: Target, outAbs: string): void {
+/** Exported so compiled-fixture tests build through the REAL path (incl. shebang rewrite). */
+export function buildOne(t: Target, outAbs: string): void {
   const r = esbuild.buildSync(buildOptionsForTarget(t, outAbs));
   if (r.errors.length) {
     throw new Error(`esbuild failed for ${t.id}:\n${r.errors.map((e) => e.text).join("\n")}`);
