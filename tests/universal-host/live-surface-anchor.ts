@@ -698,7 +698,14 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-10-14 (#235): review, verify-done and execute-plan gate lane
   // receipts on check-handoff-receipts.js; review loads the verify-done chapter and
   // verify-done pins the `Overall status:` line. check-surface-pins was RED on the prior pin.
-  skills: "afbf97e731dc55a8b3e2d6e7386079ff4c9dc8c1",
+  // Re-ratified 2026-10-17 (#240): the G-lane Codex round answered. review-broker
+  // defines the no_verdict force-pass as an audit exception that bypasses the
+  // 5-condition gate-pass rule; codex-review bounds the verification allowance at
+  // 2 rounds with four exhaustive exits, verdict-less first; scenarios SC6/SC7 now
+  // assert the operator force-pass, the Codex confirm, and the verdict-less
+  // intersection. ANTI-VACUITY: SC-W3-6(B) and check-surface-pins were RED against
+  // the prior pin, naming exactly the three changed files and `skills/skills`.
+  skills: "3a656cd3b7918e952f41b9938d38443088a9028e",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
