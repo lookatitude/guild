@@ -58,12 +58,6 @@ export interface Target {
    * whose committed copy was built from elsewhere overrides it.
    */
   absWorkingDir?: string;
-  /**
-   * Rewrite an `npx tsx` / `bun` shebang to `node` (see `normalizeShebang`).
-   * Defaults true. False ONLY where the committed bytes predate the rule and
-   * changing them is a separate decision from checking them.
-   */
-  normalizeShebang?: boolean;
   group: "hooks" | "agent-team" | "mcp" | "scripts";
 }
 
@@ -255,13 +249,9 @@ export function targets(): Target[] {
     entry: "scripts/activated-host-conformance.ts",
     out: "scripts/dist/activated-host-conformance.js",
     yamlFrom: "scripts",
-    // Both knobs reproduce the scripts/-cwd npm build EXACTLY, so adding this
-    // target checks the committed bundle without rewriting it. Its shebang is
-    // still `npx tsx`, which the KTD10/KTD11 rule would rewrite to `node` —
-    // that is a real defect in the shipped artifact, and fixing it is a content
-    // change that belongs in its own commit, not smuggled in by a check.
+    // absWorkingDir reproduces the scripts/-cwd npm build, whose module header
+    // comments are cwd-relative and therefore part of the output bytes.
     absWorkingDir: "scripts",
-    normalizeShebang: false,
     group: "scripts",
   });
   return t;
@@ -330,12 +320,18 @@ export function buildOptionsForTarget(t: Target, outAbs: string): import("esbuil
   };
 }
 
-function buildOne(t: Target, outAbs: string): void {
+/**
+ * The ONE build path. Exported so a test asserting a shipped bundle is current
+ * rebuilds it exactly as the compile does, instead of re-declaring the options
+ * and drifting from them (that duplication is what hid the conformance bundle
+ * from --check in the first place).
+ */
+export function buildOne(t: Target, outAbs: string): void {
   const r = esbuild.buildSync(buildOptionsForTarget(t, outAbs));
   if (r.errors.length) {
     throw new Error(`esbuild failed for ${t.id}:\n${r.errors.map((e) => e.text).join("\n")}`);
   }
-  if (t.normalizeShebang !== false) normalizeShebang(outAbs);
+  normalizeShebang(outAbs);
 }
 
 /**
