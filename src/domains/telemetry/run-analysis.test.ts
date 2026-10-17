@@ -6,7 +6,7 @@ import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-import { analyzeRun, compareRuns, resolveComparisonTarget, routeRecommendation, decideRecommendation, updateRecommendationStatus, writeRunComparison, writeRunAnalysis, withRecommendationLock, loadOrAnalyzeRun, DETECTOR_IDS, type DetectorId, type RunAnalysis } from ".";
+import { analyzeRun, compareRuns, resolveComparisonTarget, routeRecommendation, decideRecommendation, updateRecommendationStatus, writeRunComparison, writeRunAnalysis, withRecommendationLock, loadOrAnalyzeRun, inspectAnalysisArtifact, DETECTOR_IDS, type DetectorId, type RunAnalysis } from ".";
 import {
   ASSESSED_INPUT, BASELINE_RUN, REQ, TS, V1_BASELINE_SCENARIOS, appendRows, capabilityEvidence, coreProjection, declare,
   defaultEvents, failedTool, phaseCursor, prove, staleCursor, seedRun as seedGoldenRun, sha, usageEvents, v2, writeRunFile,
@@ -1800,3 +1800,412 @@ function canonical(value: unknown): string {
 function sortedReasons(comparison: ReturnType<typeof compareRuns>): Record<string, string> {
   return Object.fromEntries(comparison.diagnostics!.dimensions.map((item) => [item.detector, `${item.state}:${item.reason}`]));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// B03 — read-only freshness inspection and recommendation authority.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function treeSnapshot(dir: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const walk = (current: string): void => {
+    if (!fs.existsSync(current)) return;
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const file = path.join(current, entry.name);
+      const key = path.relative(dir, file);
+      if (entry.isSymbolicLink()) out[key] = `symlink:${fs.readlinkSync(file)}`;
+      else if (entry.isDirectory()) { out[`${key}/`] = "dir"; walk(file); }
+      else out[key] = fs.readFileSync(file, "utf8");
+    }
+  };
+  walk(dir);
+  return out;
+}
+
+/** RUN_A with one consumed sidecar plus one plugin and one project recommendation. */
+function seedDecidable(root: string): RunAnalysis {
+  seedRun(root, RUN_A);
+  phaseCursor(root, RUN_A, ["plan", "execute"]);
+  const analysis = analyzeRun(root, RUN_A);
+  const evidence = [`.guild/runs/${RUN_A}/run.yaml`];
+  analysis.recommendations = [
+    {
+      ...recommendationEnvelope(RUN_A, "project", "create_skill", evidence), id: "rec-project", source_analysis_id: analysis.analysis_id,
+      scope: "project", kind: "create_skill", confidence: "high", severity: "medium", evidence_refs: evidence, affected_runs: [RUN_A],
+      proposed_action: "Draft a project skill.", suggested_owner: "project", next_action: "queue_proposal_only", requires_user_approval: true,
+      status: "proposed", routing: { action: "queue_proposal_only", requires_user_approval: true, target: "project-local" },
+    },
+    {
+      ...recommendationEnvelope(RUN_A, "plugin", "telemetry_gap", evidence), id: "rec-plugin", source_analysis_id: analysis.analysis_id,
+      scope: "plugin", kind: "telemetry_gap", confidence: "high", severity: "medium", evidence_refs: evidence, affected_runs: [RUN_A],
+      proposed_action: "Draft a Guild issue.", suggested_owner: "guild-plugin", next_action: "ask_user_before_filing", requires_user_approval: true,
+      status: "proposed", routing: { action: "ask_user_before_filing", requires_user_approval: true, target: "guild-plugin" },
+    },
+  ];
+  writeRunAnalysis(root, analysis);
+  return analysis;
+}
+
+describe("B03 — read-only inspection and decision authority", () => {
+  let root: string;
+  beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-run-analysis-b03-")); });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  const artifactFile = (r: string) => path.join(r, ".guild", "analysis", "runs", RUN_A, "analysis.json");
+  const editArtifact = (r: string, edit: (cached: Record<string, any>) => void) => {
+    const cached = JSON.parse(fs.readFileSync(artifactFile(r), "utf8"));
+    edit(cached);
+    fs.writeFileSync(artifactFile(r), JSON.stringify(cached));
+  };
+
+  it("[inspect] run-inspect-reports-every-state-with-canonical-id-and-exact-hash-binding", () => {
+    seedRun(root, RUN_A);
+    phaseCursor(root, RUN_A, ["plan", "execute"]);
+    const fresh = analyzeRun(root, RUN_A);
+    expect(inspectAnalysisArtifact(root, "run", RUN_A)).toMatchObject({
+      ok: true, state: "missing", reason: "artifact_missing", source_hash: null,
+      current_source_hash: fresh.source_hash, current_input_hash: fresh.diagnostics!.input_hash, eligible: false,
+    });
+    writeRunAnalysis(root, fresh);
+    expect(inspectAnalysisArtifact(root, "run", RUN_A)).toEqual({
+      ok: true, state: "current", kind: "run", source_id: RUN_A, artifact_ref: `.guild/analysis/runs/${RUN_A}/analysis.json`,
+      schema_version: "guild.run_analysis.v1", source_analysis_id: fresh.analysis_id, source_hash: fresh.source_hash,
+      current_source_hash: fresh.source_hash, input_hash: fresh.diagnostics!.input_hash, current_input_hash: fresh.diagnostics!.input_hash,
+      eligible: true, reason: null,
+    });
+
+    const sidecar = path.join(root, ".guild", "runs", RUN_A, "sidecars", "cursor.json");
+    const sidecarBytes = fs.readFileSync(sidecar, "utf8");
+    fs.appendFileSync(sidecar, " ");
+    const staleInputs = inspectAnalysisArtifact(root, "run", RUN_A);
+    expect(staleInputs).toMatchObject({ state: "stale", reason: "stale_inputs", source_hash: fresh.source_hash, current_source_hash: fresh.source_hash, eligible: false });
+    expect(staleInputs.current_input_hash).not.toBe(fresh.diagnostics!.input_hash);
+    fs.writeFileSync(sidecar, sidecarBytes);
+
+    appendRepeatedFailure(root, RUN_A);
+    const staleSource = inspectAnalysisArtifact(root, "run", RUN_A);
+    expect(staleSource).toMatchObject({ state: "stale", reason: "stale_source", source_hash: fresh.source_hash, eligible: false });
+    expect(staleSource.current_source_hash).toBe(analyzeRun(root, RUN_A).source_hash);
+
+    const unsupported: Array<[string, (cached: Record<string, any>) => void, string]> = [
+      ["legacy", (cached) => { delete cached.diagnostics; }, "legacy_diagnostics_missing"],
+      ["contract", (cached) => { cached.diagnostics.contract = "C-DETECTORS/v9"; }, "unknown_diagnostics_contract"],
+      ["core-schema", (cached) => { cached.schema_version = "guild.run_analysis.v9"; }, "unknown_core_schema"],
+    ];
+    for (const [, edit, reason] of unsupported) {
+      writeRunAnalysis(root, analyzeRun(root, RUN_A));
+      editArtifact(root, edit);
+      expect(inspectAnalysisArtifact(root, "run", RUN_A)).toMatchObject({ ok: true, state: "unsupported", reason, eligible: false });
+    }
+
+    const refused: Array<[string, () => void, string]> = [
+      ["malformed-json", () => fs.writeFileSync(artifactFile(root), "{ not json"), "malformed_artifact"],
+      ["forged-analysis-id", () => editArtifact(root, (cached) => { cached.analysis_id = `analysis:${RUN_A}:000000000000`; }), "malformed_artifact"],
+      ["tampered-input-hash", () => editArtifact(root, (cached) => { cached.diagnostics.input_hash = `sha256:${"0".repeat(64)}`; }), "malformed_artifact"],
+      ["foreign-recommendation", () => editArtifact(root, (cached) => { cached.recommendations = [{ id: "../x" }]; }), "malformed_artifact"],
+    ];
+    for (const [, corrupt, reason] of refused) {
+      writeRunAnalysis(root, analyzeRun(root, RUN_A));
+      corrupt();
+      expect(inspectAnalysisArtifact(root, "run", RUN_A)).toMatchObject({ ok: false, state: "refused", reason, eligible: false });
+    }
+    expect(inspectAnalysisArtifact(root, "run", "../escape")).toMatchObject({ state: "refused", reason: "unsafe_source_id" });
+    expect(inspectAnalysisArtifact(root, "run", "queue")).toMatchObject({ state: "refused", reason: "unsafe_source_id" });
+  });
+
+  it("[inspect] inspect-refuses-symlinked-artifact-and-run-inputs", () => {
+    seedRun(root, RUN_A);
+    writeRunAnalysis(root, analyzeRun(root, RUN_A));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "guild-run-analysis-b03-outside-"));
+    try {
+      const analysisDir = path.join(root, ".guild", "analysis", "runs", RUN_A);
+      fs.cpSync(analysisDir, path.join(outside, RUN_A), { recursive: true });
+      fs.rmSync(analysisDir, { recursive: true });
+      fs.symlinkSync(path.join(outside, RUN_A), analysisDir);
+      expect(inspectAnalysisArtifact(root, "run", RUN_A)).toMatchObject({ state: "refused", reason: "unsafe_artifact_path" });
+      fs.rmSync(analysisDir);
+      fs.cpSync(path.join(outside, RUN_A), analysisDir, { recursive: true });
+      const config = path.join(root, ".guild", "runs", RUN_A, "plugin-config-snapshot.json");
+      fs.renameSync(config, path.join(outside, "config.json"));
+      fs.symlinkSync(path.join(outside, "config.json"), config);
+      expect(inspectAnalysisArtifact(root, "run", RUN_A)).toMatchObject({ state: "refused", reason: "unsafe_source_inputs" });
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("[inspect] inspect-makes-no-writes-in-any-state", () => {
+    seedRun(root, RUN_A);
+    phaseCursor(root, RUN_A, ["plan", "execute"]);
+    const kinds = ["run", "comparison"] as const;
+    const probe = () => kinds.forEach((kind) => [RUN_A, "comparison-0000000000000000", "../escape", "activity"].forEach((id) => inspectAnalysisArtifact(root, kind, id)));
+    const bare = treeSnapshot(root);
+    probe();
+    expect(treeSnapshot(root)).toEqual(bare);
+    expect(fs.existsSync(path.join(root, ".guild", "analysis"))).toBe(false);
+    expect(fs.existsSync(path.join(root, ".guild", "recommendations"))).toBe(false);
+    writeRunAnalysis(root, analyzeRun(root, RUN_A));
+    fs.appendFileSync(path.join(root, ".guild", "runs", RUN_A, "sidecars", "cursor.json"), " ");
+    const written = treeSnapshot(root);
+    probe();
+    expect(treeSnapshot(root)).toEqual(written);
+    expect(fs.existsSync(path.join(root, ".guild", "recommendations", ".write.lock"))).toBe(false);
+    expect(fs.existsSync(path.join(root, ".guild", "recommendations", ".transaction.json"))).toBe(false);
+  });
+
+  it("[inspect] comparison-inspect-binds-every-retained-run-source-and-input-hash", () => {
+    seedRun(root, RUN_A);
+    seedRun(root, RUN_B);
+    phaseCursor(root, RUN_B, ["plan", "execute"]);
+    const comparison = compareRuns([analyzeRun(root, RUN_A), analyzeRun(root, RUN_B)]);
+    writeRunComparison(root, comparison);
+    const current = inspectAnalysisArtifact(root, "comparison", comparison.comparison_id);
+    expect(current).toMatchObject({
+      ok: true, state: "current", kind: "comparison", source_analysis_id: comparison.comparison_id, schema_version: "guild.run_comparison.v1",
+      artifact_ref: `.guild/analysis/comparisons/${comparison.comparison_id}/comparison.json`, eligible: true, reason: null,
+    });
+    expect(current.source_hash).toBe(current.current_source_hash);
+    expect(current.input_hash).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(current.input_hash).toBe(current.current_input_hash);
+
+    const sidecar = path.join(root, ".guild", "runs", RUN_B, "sidecars", "cursor.json");
+    fs.appendFileSync(sidecar, " ");
+    expect(inspectAnalysisArtifact(root, "comparison", comparison.comparison_id)).toMatchObject({ state: "stale", reason: "stale_inputs", source_hash: current.source_hash, current_source_hash: current.source_hash });
+    appendRepeatedFailure(root, RUN_A);
+    expect(inspectAnalysisArtifact(root, "comparison", comparison.comparison_id)).toMatchObject({ state: "stale", reason: "stale_source" });
+    fs.rmSync(path.join(root, ".guild", "runs", RUN_A), { recursive: true });
+    expect(inspectAnalysisArtifact(root, "comparison", comparison.comparison_id)).toMatchObject({ state: "stale", reason: "retained_run_missing", current_source_hash: null });
+
+    const file = path.join(root, ".guild", "analysis", "comparisons", comparison.comparison_id, "comparison.json");
+    const cached = JSON.parse(fs.readFileSync(file, "utf8"));
+    fs.writeFileSync(file, JSON.stringify({ ...cached, diagnostics: undefined }));
+    expect(inspectAnalysisArtifact(root, "comparison", comparison.comparison_id)).toMatchObject({ state: "unsupported", reason: "legacy_diagnostics_missing", eligible: false });
+    fs.writeFileSync(file, JSON.stringify({ ...cached, diagnostics: { ...cached.diagnostics, runs: cached.diagnostics.runs.map((run: Record<string, unknown>) => ({ ...run, input_hash: null })) } }));
+    expect(inspectAnalysisArtifact(root, "comparison", comparison.comparison_id)).toMatchObject({ state: "unsupported", reason: "retained_run_legacy_diagnostics" });
+    fs.writeFileSync(file, JSON.stringify({ ...cached, run_ids: [RUN_B, RUN_A] }));
+    expect(inspectAnalysisArtifact(root, "comparison", comparison.comparison_id)).toMatchObject({ state: "refused", reason: "malformed_artifact" });
+    fs.writeFileSync(file, JSON.stringify({ ...cached, source_hashes: [cached.source_hashes[1], cached.source_hashes[0]] }));
+    expect(inspectAnalysisArtifact(root, "comparison", comparison.comparison_id)).toMatchObject({ state: "refused", reason: "malformed_artifact" });
+  });
+
+  it("[decide] conditional-decide-requires-exact-identity-supported-diagnostics-and-fresh-inputs", () => {
+    const analysis = seedDecidable(root);
+    const expected = { analysisId: analysis.analysis_id, inputHash: analysis.diagnostics!.input_hash };
+    const unchanged = treeSnapshot(root);
+    const refusals: Array<[string, () => void, Partial<typeof expected> | null, RegExp]> = [
+      ["malformed-hash", () => undefined, { inputHash: "sha256:XYZ" }, /expected-input-hash/],
+      ["path-like-analysis-id", () => undefined, { analysisId: "../analysis" }, /expected-analysis-id/],
+      ["other-analysis-id", () => undefined, { analysisId: `analysis:${RUN_A}:000000000000` }, /expected_context_changed: analysis_identity_changed/],
+      ["other-input-hash", () => undefined, { inputHash: `sha256:${"0".repeat(64)}` }, /expected_context_changed: input_hash_changed/],
+      ["sidecar-changed", () => fs.appendFileSync(path.join(root, ".guild", "runs", RUN_A, "sidecars", "cursor.json"), " "), null, /expected_context_changed: stale:stale_inputs/],
+      ["legacy-diagnostics", () => editArtifact(root, (cached) => { delete cached.diagnostics; }), null, /expected_context_changed: unsupported:legacy_diagnostics_missing/],
+    ];
+    for (const [label, mutate, override, refusal] of refusals) {
+      fs.rmSync(path.join(root, ".guild"), { recursive: true, force: true });
+      seedDecidable(root);
+      mutate();
+      const before = treeSnapshot(root);
+      for (const id of ["rec-plugin", "rec-project"]) {
+        expect(() => decideRecommendation(root, RUN_A, id, "accept", { ...expected, ...override }), label).toThrow(refusal);
+      }
+      expect(treeSnapshot(root), label).toEqual(before);
+    }
+    fs.rmSync(path.join(root, ".guild"), { recursive: true, force: true });
+    seedDecidable(root);
+    expect(treeSnapshot(root)).toEqual(unchanged);
+    expect(decideRecommendation(root, RUN_A, "rec-plugin", "accept", expected)).toMatchObject({ status: "accepted", effect: "plugin_draft_written" });
+    expect(decideRecommendation(root, RUN_A, "rec-project", "accept", expected)).toMatchObject({ status: "queued", effect: "project_proposal_queued" });
+    const after = treeSnapshot(root);
+    const changed = Object.keys({ ...unchanged, ...after }).filter((key) => unchanged[key] !== after[key]).sort();
+    expect(changed).toEqual([
+      ".guild/recommendations/activity.jsonl",
+      ".guild/recommendations/drafts/",
+      ".guild/recommendations/drafts/rec-plugin.md",
+      ".guild/recommendations/queue.jsonl",
+      `.guild/recommendations/${RUN_A}.jsonl`,
+    ]);
+    expect(after[".guild/recommendations/drafts/rec-plugin.md"]).toContain("external filing has not occurred");
+  });
+
+  it("[decide] historical-direct-decide-keeps-manual-authority-but-cannot-bypass-source-freshness", () => {
+    seedDecidable(root);
+    fs.appendFileSync(path.join(root, ".guild", "runs", RUN_A, "sidecars", "cursor.json"), " ");
+    const before = treeSnapshot(root);
+    expect(() => decideRecommendation(root, RUN_A, "rec-plugin", "accept")).toThrow(/source_context_stale: stale_inputs/);
+    expect(treeSnapshot(root)).toEqual(before);
+
+    fs.rmSync(path.join(root, ".guild"), { recursive: true, force: true });
+    seedDecidable(root);
+    editArtifact(root, (cached) => { delete cached.diagnostics; });
+    expect(decideRecommendation(root, RUN_A, "rec-plugin", "accept")).toMatchObject({ status: "accepted", effect: "plugin_draft_written" });
+    appendRepeatedFailure(root, RUN_A);
+    const stale = treeSnapshot(root);
+    expect(() => decideRecommendation(root, RUN_A, "rec-project", "accept")).toThrow(/source_context_stale: stale_source/);
+    expect(treeSnapshot(root)).toEqual(stale);
+  });
+
+  it("[regenerate] regeneration-preserves-progressed-decisions-and-invalidates-prior-consent", () => {
+    const analysis = seedDecidable(root);
+    const expected = { analysisId: analysis.analysis_id, inputHash: analysis.diagnostics!.input_hash };
+    decideRecommendation(root, RUN_A, "rec-project", "accept", expected);
+    decideRecommendation(root, RUN_A, "rec-plugin", "accept", expected);
+    fs.appendFileSync(path.join(root, ".guild", "runs", RUN_A, "logs", "v1.4-events.jsonl"),
+      JSON.stringify({ ts: "2026-08-12T01:00:09.000Z", event: "phase_start", run_id: RUN_A, phase: "review" }) + "\n");
+    const regenerated = loadOrAnalyzeRun(root, RUN_A);
+    expect(regenerated).toMatchObject({ cache: "recomputed", reason: "stale_source" });
+    regenerated.analysis.recommendations = analysis.recommendations.map((item) => ({ ...item, source_analysis_id: regenerated.analysis.analysis_id }));
+    writeRunAnalysis(root, regenerated.analysis);
+    const inspected = inspectAnalysisArtifact(root, "run", RUN_A);
+    expect(inspected).toMatchObject({ state: "current", source_analysis_id: regenerated.analysis.analysis_id });
+    expect(inspected.source_analysis_id).not.toBe(analysis.analysis_id);
+    const statuses = Object.fromEntries(fs.readFileSync(path.join(root, ".guild", "recommendations", `${RUN_A}.jsonl`), "utf8").trim().split("\n")
+      .map((row) => JSON.parse(row)).map((row) => [row.id, row.status]));
+    expect(statuses).toEqual({ "rec-plugin": "accepted", "rec-project": "queued" });
+    expect(loadOrAnalyzeRun(root, RUN_A)).toMatchObject({ cache: "hit" });
+    const before = treeSnapshot(root);
+    expect(() => decideRecommendation(root, RUN_A, "rec-project", "accept", expected)).toThrow(/expected_context_changed: analysis_identity_changed/);
+    expect(treeSnapshot(root)).toEqual(before);
+    expect(decideRecommendation(root, RUN_A, "rec-project", "accept", { analysisId: inspected.source_analysis_id!, inputHash: inspected.input_hash! }))
+      .toMatchObject({ status: "queued", effect: "project_proposal_queued" });
+  });
+
+  it("[decide] unknown-contract-direct-decide-cannot-skip-additive-freshness", () => {
+    seedDecidable(root);
+    editArtifact(root, (cached) => { cached.diagnostics.contract = "C-DETECTORS/v9"; });
+    fs.appendFileSync(path.join(root, ".guild", "runs", RUN_A, "sidecars", "cursor.json"), " ");
+    const inspected = inspectAnalysisArtifact(root, "run", RUN_A);
+    expect(inspected).toMatchObject({ state: "unsupported", reason: "unknown_diagnostics_contract", eligible: false });
+    expect(inspected.source_hash).toBe(inspected.current_source_hash);
+    const before = treeSnapshot(root);
+    for (const id of ["rec-plugin", "rec-project"]) {
+      expect(() => decideRecommendation(root, RUN_A, id, "accept")).toThrow(/source_context_stale: stale_inputs/);
+    }
+    expect(treeSnapshot(root)).toEqual(before);
+
+    fs.rmSync(path.join(root, ".guild"), { recursive: true, force: true });
+    seedDecidable(root);
+    editArtifact(root, (cached) => { cached.diagnostics.contract = "C-DETECTORS/v9"; delete cached.diagnostics.input_hash; });
+    const unverifiable = treeSnapshot(root);
+    expect(() => decideRecommendation(root, RUN_A, "rec-plugin", "accept")).toThrow(/source_context_stale: stale_inputs/);
+    expect(treeSnapshot(root)).toEqual(unverifiable);
+
+    fs.rmSync(path.join(root, ".guild"), { recursive: true, force: true });
+    seedDecidable(root);
+    editArtifact(root, (cached) => { cached.diagnostics.contract = "C-DETECTORS/v9"; });
+    expect(decideRecommendation(root, RUN_A, "rec-plugin", "accept")).toMatchObject({ status: "accepted", effect: "plugin_draft_written" });
+  });
+
+  it("[inspect] distinct-verification-input-ref-is-current-when-fresh-and-stale-when-mutated", () => {
+    const seed = (): { expected: { analysisId: string; inputHash: string }; verify: string } => {
+      seedGoldenRun(root, R);
+      declare(root, R, { instructions: twoInstructions.slice(0, 1) });
+      const verify = path.join(root, writeRunFile(root, R, "inputs/verify.txt", ASSESSED_INPUT));
+      prove(root, R, { id: "no-push", result: "passed", verifierStatus: "ok", verificationInputRef: "inputs/verify.txt" });
+      const analysis = analyzeRun(root, R);
+      expect(analysis.diagnostics!.input_manifest.map((entry) => entry.ref)).toContain(`.guild/runs/${R}/inputs/verify.txt`);
+      const evidence = [`.guild/runs/${R}/run.yaml`];
+      analysis.recommendations = [{
+        ...recommendationEnvelope(R, "project", "create_skill", evidence), id: "rec-verify", source_analysis_id: analysis.analysis_id,
+        scope: "project", kind: "create_skill", confidence: "high", severity: "medium", evidence_refs: evidence, affected_runs: [R],
+        proposed_action: "Draft a project skill.", suggested_owner: "project", next_action: "queue_proposal_only", requires_user_approval: true,
+        status: "proposed", routing: { action: "queue_proposal_only", requires_user_approval: true, target: "project-local" },
+      }];
+      writeRunAnalysis(root, analysis);
+      return { expected: { analysisId: analysis.analysis_id, inputHash: analysis.diagnostics!.input_hash }, verify };
+    };
+    const fresh = seed();
+    expect(inspectAnalysisArtifact(root, "run", R)).toMatchObject({
+      state: "current", eligible: true, reason: null, input_hash: fresh.expected.inputHash, current_input_hash: fresh.expected.inputHash,
+    });
+    expect(decideRecommendation(root, R, "rec-verify", "accept", fresh.expected)).toMatchObject({ status: "queued", effect: "project_proposal_queued" });
+
+    fs.rmSync(path.join(root, ".guild"), { recursive: true, force: true });
+    const mutated = seed();
+    fs.appendFileSync(mutated.verify, "changed");
+    expect(inspectAnalysisArtifact(root, "run", R)).toMatchObject({ state: "stale", reason: "stale_inputs", eligible: false });
+    const before = treeSnapshot(root);
+    expect(() => decideRecommendation(root, R, "rec-verify", "accept", mutated.expected)).toThrow(/expected_context_changed: stale:stale_inputs/);
+    expect(() => decideRecommendation(root, R, "rec-verify", "accept")).toThrow(/source_context_stale: stale_inputs/);
+    expect(treeSnapshot(root)).toEqual(before);
+  });
+
+  it("[inspect] malformed-diagnostic-results-and-comparison-dimensions-refuse-and-never-authorize", () => {
+    const analysis = seedDecidable(root);
+    const expected = { analysisId: analysis.analysis_id, inputHash: analysis.diagnostics!.input_hash };
+    const runCorruptions: Array<[string, (cached: Record<string, any>) => void]> = [
+      ["results-null-entry", (cached) => { cached.diagnostics.results = [null]; }],
+      ["results-null-among-valid", (cached) => { cached.diagnostics.results[0] = null; }],
+      ["results-string-state", (cached) => { cached.diagnostics.results[0].state = 7; }],
+      ["results-unknown-state", (cached) => { cached.diagnostics.results[0].state = "satisfied"; }],
+      ["results-extra-key", (cached) => { cached.diagnostics.results[0].injected = true; }],
+      ["results-missing-detector", (cached) => { cached.diagnostics.results.pop(); }],
+      ["results-duplicate-detector", (cached) => { cached.diagnostics.results[1] = cached.diagnostics.results[0]; }],
+      ["results-string-value", (cached) => { cached.diagnostics.results[0].value = "x"; }],
+    ];
+    for (const [label, edit] of runCorruptions) {
+      fs.rmSync(path.join(root, ".guild"), { recursive: true, force: true });
+      seedDecidable(root);
+      editArtifact(root, edit);
+      expect(inspectAnalysisArtifact(root, "run", RUN_A), label).toMatchObject({ ok: false, state: "refused", reason: "malformed_artifact", eligible: false });
+      const before = treeSnapshot(root);
+      expect(() => decideRecommendation(root, RUN_A, "rec-plugin", "accept", expected), label).toThrow(/expected_context_changed: refused:malformed_artifact/);
+      expect(() => decideRecommendation(root, RUN_A, "rec-plugin", "accept"), label).toThrow(/recommendation source refused: malformed_artifact/);
+      expect(treeSnapshot(root), label).toEqual(before);
+    }
+
+    seedRun(root, RUN_B);
+    const comparison = compareRuns([analyzeRun(root, RUN_A), analyzeRun(root, RUN_B)]);
+    writeRunComparison(root, comparison);
+    expect(inspectAnalysisArtifact(root, "comparison", comparison.comparison_id)).toMatchObject({ state: "current" });
+    const file = path.join(root, ".guild", "analysis", "comparisons", comparison.comparison_id, "comparison.json");
+    const cached = JSON.parse(fs.readFileSync(file, "utf8"));
+    const dims = cached.diagnostics.dimensions as Array<Record<string, any>>;
+    const comparisonCorruptions: Array<[string, unknown]> = [
+      ["dimensions-null-entry", { ...cached.diagnostics, dimensions: [null] }],
+      ["dimensions-missing", { ...cached.diagnostics, dimensions: undefined }],
+      ["dimension-string-state", { ...cached.diagnostics, dimensions: [{ ...dims[0], state: 7 }, ...dims.slice(1)] }],
+      ["dimension-extra-key", { ...cached.diagnostics, dimensions: [{ ...dims[0], injected: true }, ...dims.slice(1)] }],
+      ["dimension-by-run-extra-key", { ...cached.diagnostics, dimensions: [{ ...dims[0], by_run: Object.fromEntries(Object.entries(dims[0].by_run).map(([id, entry]) => [id, { ...(entry as object), injected: 1 }])) }, ...dims.slice(1)] }],
+      ["dimension-foreign-comparable-run", { ...cached.diagnostics, dimensions: [{ ...dims[0], comparable_runs: ["run-other"] }, ...dims.slice(1)] }],
+      ["runs-entry-extra-key", { ...cached.diagnostics, runs: cached.diagnostics.runs.map((run: Record<string, unknown>) => ({ ...run, injected: 1 })) }],
+    ];
+    for (const [label, diagnostics] of comparisonCorruptions) {
+      fs.writeFileSync(file, JSON.stringify({ ...cached, diagnostics }));
+      expect(inspectAnalysisArtifact(root, "comparison", comparison.comparison_id), label).toMatchObject({ ok: false, state: "refused", reason: "malformed_artifact", eligible: false });
+    }
+  });
+
+  it("[inspect] unreadable-artifact-and-unstatable-run-refuse-without-raw-errors", () => {
+    seedDecidable(root);
+    const target = fs.realpathSync(artifactFile(root));
+    const original = fs.readFileSync;
+    const read = spyOn(fs, "readFileSync").mockImplementation(((file: fs.PathOrFileDescriptor, ...rest: unknown[]) => {
+      if (String(file) === target) throw Object.assign(new Error(`EACCES: permission denied, open '${target}'`), { code: "EACCES" });
+      return (original as (...args: unknown[]) => unknown)(file, ...rest);
+    }) as typeof fs.readFileSync);
+    try {
+      expect(inspectAnalysisArtifact(root, "run", RUN_A)).toMatchObject({ ok: false, state: "refused", reason: "artifact_unreadable", eligible: false });
+    } finally {
+      read.mockRestore();
+    }
+    fs.rmSync(path.join(root, ".guild"), { recursive: true, force: true });
+    fs.mkdirSync(path.join(root, ".guild"), { recursive: true });
+    fs.writeFileSync(path.join(root, ".guild", "runs"), "not a directory");
+    expect(inspectAnalysisArtifact(root, "run", RUN_A)).toMatchObject({ ok: false, state: "refused", reason: "unsafe_source_inputs", eligible: false });
+  });
+
+  it("[recovery] conditional-decide-recovery-rejects-capability-journal-before-consent", () => {
+    const analysis = seedDecidable(root);
+    const injected = path.join(root, ".guild", "skills", "injected.md");
+    const journal = path.join(root, ".guild", "recommendations", ".transaction.json");
+    fs.writeFileSync(journal, JSON.stringify({
+      schema_version: "guild.recommendation_transaction.v1",
+      transaction_id: "transaction-capability-escape",
+      files: [{ path: path.relative(root, injected), previous: "malicious capability\n" }],
+    }) + "\n");
+    expect(() => decideRecommendation(root, RUN_A, "rec-plugin", "accept", { analysisId: analysis.analysis_id, inputHash: analysis.diagnostics!.input_hash }))
+      .toThrow(/analyzer-owned|transaction target/i);
+    expect(fs.existsSync(injected)).toBe(false);
+    expect(fs.existsSync(path.join(root, ".guild", "recommendations", "drafts"))).toBe(false);
+    expect(fs.existsSync(path.join(root, ".guild", "recommendations", "activity.jsonl"))).toBe(false);
+  });
+});

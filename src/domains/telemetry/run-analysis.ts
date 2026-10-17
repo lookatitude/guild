@@ -2472,6 +2472,264 @@ export function loadOrAnalyzeRun(root: string, runId: string): CachedRunAnalysis
   return { analysis: cached as unknown as RunAnalysis, cache: "hit", reason: null };
 }
 
+export type ArtifactInspectionKind = "run" | "comparison";
+export type ArtifactInspectionState = "current" | "stale" | "missing" | "unsupported" | "refused";
+export interface ArtifactInspection {
+  ok: boolean;
+  state: ArtifactInspectionState;
+  kind: ArtifactInspectionKind;
+  source_id: string;
+  artifact_ref: string | null;
+  schema_version: string | null;
+  source_analysis_id: string | null;
+  source_hash: string | null;
+  current_source_hash: string | null;
+  input_hash: string | null;
+  current_input_hash: string | null;
+  /** True only for a current artifact with a supported diagnostics contract: the browser-decision precondition. */
+  eligible: boolean;
+  reason: string | null;
+}
+
+const INPUT_HASH_FORMAT = /^sha256:[a-f0-9]{64}$/;
+const SOURCE_HASH_FORMAT = /^[a-f0-9]{64}$/;
+const ANALYSIS_ID_FORMAT = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,255}$/;
+
+class InspectionRefusal extends Error {
+  constructor(readonly reason: string) { super(reason); }
+}
+
+function inspectionRefusal(reason: string): never {
+  throw new InspectionRefusal(reason);
+}
+
+/** Current core + additive hashes through the analyzer's own input collector; null when the run is gone. */
+function currentRunHashes(root: string, runId: string): { sourceHash: string; inputHash: string } | null {
+  const runs = path.join(durableGuildDir(path.resolve(root)), "runs");
+  try { fs.lstatSync(path.join(runs, runId)); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    inspectionRefusal("unsafe_source_inputs");
+  }
+  let inputs: RunInputs;
+  try { inputs = collectRunInputs(root, runId); } catch (error) {
+    if (error instanceof Error && /has no run\.yaml/.test(error.message)) return null;
+    inspectionRefusal("unsafe_source_inputs");
+  }
+  // The same verification-input reads boundInput performs during detection, so the manifest matches analyzeRun's.
+  for (const proof of inputs.sidecars) {
+    if (inputs.declaration && proof.schema === "guild.instruction_evidence.v1" && proof.value["verification_input_ref"] !== undefined &&
+        proof.value["verified_input_hash"] === inputs.declaration.value["assessed_input_hash"]) {
+      try { readAdditiveInput(inputs.store, inputs.dir, runId, proof.value["verification_input_ref"]); } catch { inspectionRefusal("unsafe_source_inputs"); }
+    }
+  }
+  return { sourceHash: inputs.sourceHash, inputHash: inputManifestHash(manifestEntries(inputs.store)) };
+}
+
+/** No-follow read of one analyzer artifact; null when absent, refusal when any component is a symlink or escapes. */
+function readArtifactNoFollow(root: string, relative: string): string | null {
+  let file: string | null;
+  try { file = resolveRunInputFile(path.resolve(root), relative); } catch { inspectionRefusal("unsafe_artifact_path"); }
+  if (file === null) return null;
+  try { return fs.readFileSync(file, "utf8"); } catch { inspectionRefusal("artifact_unreadable"); }
+}
+
+const DETECTOR_STATES = new Set(["observed", "ambiguous", "unobservable"]);
+const plainObject = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+
+/** Closed shape of one detector result (or comparison dimension); exactly one per DETECTOR_IDS entry. */
+function detectorResultsWellFormed(value: unknown, dimension?: { runIds: readonly string[] }): boolean {
+  const keys = new Set(["detector", "state", "value", "evidence_refs", "reason", ...(dimension ? ["by_run", "comparable_runs"] : [])]);
+  if (!Array.isArray(value) || value.length !== DETECTOR_IDS.length) return false;
+  const seen = new Set<string>();
+  return value.every((item) => {
+    if (!plainObject(item) || !hasOnlyKeys(item, keys) || typeof item["detector"] !== "string" ||
+        !(DETECTOR_IDS as readonly string[]).includes(item["detector"]) || seen.has(item["detector"]) ||
+        typeof item["state"] !== "string" || !DETECTOR_STATES.has(item["state"]) || !plainObject(item["value"]) ||
+        !stringArray(item["evidence_refs"]) || !(item["reason"] === null || typeof item["reason"] === "string")) return false;
+    seen.add(item["detector"]);
+    if (!dimension) return true;
+    const byRun = item["by_run"];
+    return plainObject(byRun) && Object.keys(byRun).length === dimension.runIds.length &&
+      dimension.runIds.every((id) => {
+        const entry = byRun[id];
+        return plainObject(entry) && hasOnlyKeys(entry, new Set(["state", "eligible", "value"])) &&
+          typeof entry["state"] === "string" && (DETECTOR_STATES.has(entry["state"]) || entry["state"] === "legacy_unknown") &&
+          typeof entry["eligible"] === "boolean" && plainObject(entry["value"]);
+      }) &&
+      arrayOf(item["comparable_runs"], (id) => typeof id === "string" && dimension.runIds.includes(id));
+  });
+}
+
+function inspectRunArtifact(root: string, runId: string, base: ArtifactInspection, raw: string): ArtifactInspection {
+  let cached: Record<string, unknown>;
+  try { cached = asRecord(JSON.parse(raw)); } catch { inspectionRefusal("malformed_artifact"); }
+  const schema = cached["schema_version"];
+  if (schema !== "guild.run_analysis.v1") return { ...base, state: "unsupported", schema_version: typeof schema === "string" ? schema : null, reason: "unknown_core_schema" };
+  const sourceHash = cached["source_hash"];
+  if (cached["run_id"] !== runId || typeof sourceHash !== "string" || !SOURCE_HASH_FORMAT.test(sourceHash) ||
+      cached["analysis_id"] !== `analysis:${runId}:${sourceHash.slice(0, 12)}` || !Array.isArray(cached["recommendations"])) {
+    inspectionRefusal("malformed_artifact");
+  }
+  try { (cached["recommendations"] as unknown[]).forEach((item, index) => assertRecommendation(item, `recommendation ${index + 1}`)); }
+  catch { inspectionRefusal("malformed_artifact"); }
+  const current = currentRunHashes(root, runId);
+  const recorded: ArtifactInspection = {
+    ...base, schema_version: schema, source_analysis_id: cached["analysis_id"] as string, source_hash: sourceHash,
+    current_source_hash: current?.sourceHash ?? null, current_input_hash: current?.inputHash ?? null,
+  };
+  const diagnostics = cached["diagnostics"];
+  if (diagnostics === undefined) return { ...recorded, state: "unsupported", reason: "legacy_diagnostics_missing" };
+  const contract = asRecord(diagnostics)["contract"];
+  if (contract !== DIAGNOSTICS_CONTRACT) {
+    const claimed = asRecord(diagnostics)["input_hash"];
+    return { ...recorded, input_hash: typeof claimed === "string" && INPUT_HASH_FORMAT.test(claimed) ? claimed : null, state: "unsupported", reason: "unknown_diagnostics_contract" };
+  }
+  const record = asRecord(diagnostics);
+  const manifest = record["input_manifest"];
+  const inputHash = record["input_hash"];
+  if (!Array.isArray(manifest) || !detectorResultsWellFormed(record["results"]) || typeof inputHash !== "string" ||
+      !INPUT_HASH_FORMAT.test(inputHash) || inputHash !== inputManifestHash(manifest as InputManifestEntry[]) || !cachedCoreWellFormed(cached)) {
+    inspectionRefusal("malformed_artifact");
+  }
+  const withInput = { ...recorded, input_hash: inputHash };
+  if (current === null) return { ...withInput, state: "stale", reason: "source_inputs_missing" };
+  if (current.sourceHash !== sourceHash) return { ...withInput, state: "stale", reason: "stale_source" };
+  if (current.inputHash !== inputHash) return { ...withInput, state: "stale", reason: "stale_inputs" };
+  return { ...withInput, state: "current", eligible: true, reason: null };
+}
+
+function comparisonRunsHash(runs: ReadonlyArray<{ run_id: string; source_hash: string; input_hash: string | null }>): string {
+  return `sha256:${sha256(canonicalJson(runs.map(({ run_id, source_hash, input_hash }) => ({ run_id, source_hash, input_hash }))))}`;
+}
+
+function inspectComparisonArtifact(root: string, comparisonId: string, base: ArtifactInspection, raw: string): ArtifactInspection {
+  let cached: Record<string, unknown>;
+  try { cached = asRecord(JSON.parse(raw)); } catch { inspectionRefusal("malformed_artifact"); }
+  const schema = cached["schema_version"];
+  if (schema !== "guild.run_comparison.v1") return { ...base, state: "unsupported", schema_version: typeof schema === "string" ? schema : null, reason: "unknown_core_schema" };
+  const runIds = cached["run_ids"];
+  const sourceHashes = cached["source_hashes"];
+  if (cached["comparison_id"] !== comparisonId || !arrayOf(runIds, (id) => typeof id === "string" && SAFE_ID.test(id)) ||
+      !arrayOf(sourceHashes, (hash) => typeof hash === "string" && SOURCE_HASH_FORMAT.test(hash)) ||
+      (runIds as string[]).length < 2 || (runIds as string[]).length !== (sourceHashes as string[]).length ||
+      (runIds as string[]).some((id, index, all) => index > 0 && all[index - 1].localeCompare(id) >= 0) ||
+      !Array.isArray(cached["recommendations"])) {
+    inspectionRefusal("malformed_artifact");
+  }
+  const ids = runIds as string[];
+  const hashes = sourceHashes as string[];
+  const material = ids.map((id, index) => `${id}:${hashes[index]}`).join("|");
+  if (stableId("comparison", material) !== comparisonId) inspectionRefusal("malformed_artifact");
+  try { (cached["recommendations"] as unknown[]).forEach((item, index) => assertRecommendation(item, `recommendation ${index + 1}`)); }
+  catch { inspectionRefusal("malformed_artifact"); }
+  const current = ids.map((id) => currentRunHashes(root, id));
+  const currentMaterial = current.every((item) => item !== null)
+    ? ids.map((id, index) => `${id}:${current[index]!.sourceHash}`).join("|")
+    : null;
+  const recorded: ArtifactInspection = {
+    ...base, schema_version: schema, source_analysis_id: comparisonId, source_hash: sha256(material),
+    current_source_hash: currentMaterial === null ? null : sha256(currentMaterial),
+    current_input_hash: currentMaterial === null ? null
+      : comparisonRunsHash(ids.map((id, index) => ({ run_id: id, source_hash: current[index]!.sourceHash, input_hash: current[index]!.inputHash }))),
+  };
+  const diagnostics = cached["diagnostics"];
+  if (diagnostics === undefined) return { ...recorded, state: "unsupported", reason: "legacy_diagnostics_missing" };
+  const record = asRecord(diagnostics);
+  if (record["contract"] !== DIAGNOSTICS_CONTRACT) return { ...recorded, state: "unsupported", reason: "unknown_diagnostics_contract" };
+  const retained = record["runs"];
+  if (!Array.isArray(retained) || retained.length !== ids.length || !retained.every((value, index) => {
+    if (!plainObject(value) || !hasOnlyKeys(value, new Set(["run_id", "source_hash", "input_hash", "eligible"]))) return false;
+    return value["run_id"] === ids[index] && value["source_hash"] === hashes[index] && typeof value["eligible"] === "boolean" &&
+      (value["input_hash"] === null || (typeof value["input_hash"] === "string" && INPUT_HASH_FORMAT.test(value["input_hash"])));
+  }) || !detectorResultsWellFormed(record["dimensions"], { runIds: ids })) inspectionRefusal("malformed_artifact");
+  const retainedRuns = retained as Array<{ run_id: string; source_hash: string; input_hash: string | null }>;
+  const withInput = { ...recorded, input_hash: comparisonRunsHash(retainedRuns) };
+  if (retainedRuns.some((item) => item.input_hash === null)) return { ...withInput, state: "unsupported", reason: "retained_run_legacy_diagnostics" };
+  if (currentMaterial === null) return { ...withInput, state: "stale", reason: "retained_run_missing" };
+  if (withInput.current_source_hash !== withInput.source_hash) return { ...withInput, state: "stale", reason: "stale_source" };
+  if (withInput.current_input_hash !== withInput.input_hash) return { ...withInput, state: "stale", reason: "stale_inputs" };
+  return { ...withInput, state: "current", eligible: true, reason: null };
+}
+
+/**
+ * C-CLI read-only freshness inspection. Recomputes the current core source_hash
+ * and additive input_hash through the analyzer's own collectors and compares
+ * them with the canonical artifact. Never creates a directory, lock, journal,
+ * queue, sidecar or index; unsafe or malformed input reports `refused`.
+ */
+export function inspectAnalysisArtifact(root: string, kind: ArtifactInspectionKind, sourceId: string): ArtifactInspection {
+  const base: ArtifactInspection = {
+    ok: true, state: "missing", kind, source_id: sourceId, artifact_ref: null, schema_version: null, source_analysis_id: null,
+    source_hash: null, current_source_hash: null, input_hash: null, current_input_hash: null, eligible: false, reason: null,
+  };
+  try {
+    if (kind !== "run" && kind !== "comparison") inspectionRefusal("unknown_artifact_kind");
+    try { assertRecommendationSourceId(sourceId, "source id"); } catch { inspectionRefusal("unsafe_source_id"); }
+    const artifactRef = kind === "run"
+      ? `.guild/analysis/runs/${sourceId}/analysis.json`
+      : `.guild/analysis/comparisons/${sourceId}/comparison.json`;
+    const located = { ...base, artifact_ref: artifactRef };
+    const raw = readArtifactNoFollow(root, artifactRef);
+    if (raw === null) {
+      if (kind === "run") {
+        const current = currentRunHashes(root, sourceId);
+        return { ...located, current_source_hash: current?.sourceHash ?? null, current_input_hash: current?.inputHash ?? null, reason: "artifact_missing" };
+      }
+      return { ...located, reason: "artifact_missing" };
+    }
+    return kind === "run" ? inspectRunArtifact(root, sourceId, located, raw) : inspectComparisonArtifact(root, sourceId, located, raw);
+  } catch (error) {
+    if (!(error instanceof InspectionRefusal)) throw error;
+    return { ...base, ok: false, state: "refused", eligible: false, reason: error.reason };
+  }
+}
+
+export interface ExpectedDecisionContext {
+  analysisId: string;
+  inputHash: string;
+}
+
+function assertExpectedContextShape(expected: ExpectedDecisionContext | undefined): void {
+  if (expected === undefined) return;
+  if (typeof expected.analysisId !== "string" || !ANALYSIS_ID_FORMAT.test(expected.analysisId)) {
+    throw new Error("expected-analysis-id must be a producer-issued analysis identity");
+  }
+  if (typeof expected.inputHash !== "string" || !INPUT_HASH_FORMAT.test(expected.inputHash)) {
+    throw new Error("expected-input-hash must be sha256:<64 lowercase hex>");
+  }
+}
+
+/**
+ * Runs inside the recommendation lock, before any journal/draft/queue/activity
+ * mutation. Browser-bound consent (expected context) needs an exact, current,
+ * supported identity. Historical operator decisions keep manual authority over
+ * legacy diagnostics but never over a changed core source.
+ */
+function assertDecisionContext(root: string, sourceId: string, expected: ExpectedDecisionContext | undefined): void {
+  const runArtifact = path.join(durableGuildDir(root), "analysis", "runs", sourceId, "analysis.json");
+  const kind: ArtifactInspectionKind = fs.existsSync(runArtifact) ? "run" : "comparison";
+  const inspection = inspectAnalysisArtifact(root, kind, sourceId);
+  if (expected !== undefined) {
+    const changed = inspection.state !== "current" ? `${inspection.state}:${inspection.reason}`
+      : inspection.source_analysis_id !== expected.analysisId ? "analysis_identity_changed"
+        : inspection.input_hash !== expected.inputHash || inspection.current_input_hash !== expected.inputHash ? "input_hash_changed"
+          : null;
+    if (changed !== null) throw new Error(`expected_context_changed: ${changed}`);
+    return;
+  }
+  if (inspection.state === "missing") return; // canonicalSourceAnalysisId reports the missing source unchanged.
+  if (inspection.state === "refused") throw new Error(`recommendation source refused: ${inspection.reason}`);
+  if (inspection.state === "stale" || (inspection.state === "unsupported" && inspection.source_hash !== null &&
+      inspection.current_source_hash !== inspection.source_hash)) {
+    throw new Error(`source_context_stale: ${inspection.reason === "legacy_diagnostics_missing" ? "stale_source" : inspection.reason}`);
+  }
+  // An unknown contract still recorded additive inputs; manual authority holds only while they provably match.
+  if (inspection.state === "unsupported" && inspection.reason === "unknown_diagnostics_contract" &&
+      (inspection.input_hash === null || inspection.input_hash !== inspection.current_input_hash)) {
+    throw new Error("source_context_stale: stale_inputs");
+  }
+}
+
 function renderAnalysis(analysis: RunAnalysis): string {
   const missing = analysis.completeness.missing.length > 0 ? analysis.completeness.missing.map((item) => `- ${item}`).join("\n") : "- none";
   const findings = analysis.findings.length > 0
@@ -2869,14 +3127,20 @@ export function decideRecommendation(
   sourceId: string,
   recommendationId: string,
   decision: "accept" | "reject",
+  expected?: ExpectedDecisionContext,
 ): RecommendationDecisionResult {
   assertSafeId(recommendationId, "recommendation id");
-  return withRecommendationLock(root, () => withFileTransaction(root, [
-    recommendationSourceFile(root, sourceId),
-    path.join(durableGuildDir(root), "recommendations", "queue.jsonl"),
-    path.join(durableGuildDir(root), "recommendations", "activity.jsonl"),
-    path.join(durableGuildDir(root), "recommendations", "drafts", `${recommendationId}.md`),
-  ], () => decideRecommendationUnlocked(root, sourceId, recommendationId, decision)));
+  assertRecommendationSourceId(sourceId, "recommendation source id");
+  assertExpectedContextShape(expected);
+  return withRecommendationLock(root, () => {
+    assertDecisionContext(root, sourceId, expected);
+    return withFileTransaction(root, [
+      recommendationSourceFile(root, sourceId),
+      path.join(durableGuildDir(root), "recommendations", "queue.jsonl"),
+      path.join(durableGuildDir(root), "recommendations", "activity.jsonl"),
+      path.join(durableGuildDir(root), "recommendations", "drafts", `${recommendationId}.md`),
+    ], () => decideRecommendationUnlocked(root, sourceId, recommendationId, decision));
+  });
 }
 
 function updateRecommendationStatusUnlocked(
