@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v3 Package Timing</title>
+<style>
+:root { --bg:#ffffff; --fg:#1a1d21; --muted:#5b6470; --line:#e3e7ec; --ok:#0a7d4f; --accent:#2155cd; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#14171a; --fg:#e8eaed; --muted:#9aa4af; --line:#2a2f35; --ok:#4cc38a; --accent:#7aa2ff; } }
+:root[data-theme="dark"] { --bg:#14171a; --fg:#e8eaed; --muted:#9aa4af; --line:#2a2f35; --ok:#4cc38a; --accent:#7aa2ff; }
+body { background:var(--bg); color:var(--fg); font:15px/1.55 -apple-system,Segoe UI,sans-serif; margin:0; padding:2rem 16px; }
+main { max-width:860px; margin:0 auto; }
+h1 { font-size:1.4rem; margin:0 0 .3rem; } h2 { font-size:1.05rem; margin:1.6rem 0 .5rem; }
+table { border-collapse:collapse; width:100%; font-size:.92rem; }
+th,td { text-align:left; padding:.35rem .6rem; border-bottom:1px solid var(--line); }
+th { color:var(--muted); font-weight:600; }
+code { font-size:.85em; background:color-mix(in srgb, var(--line) 45%, transparent); padding:.1em .3em; border-radius:4px; overflow-wrap:anywhere; }
+.ok { color:var(--ok); font-weight:600; }
+p.meta { color:var(--muted); margin:.2rem 0 1rem; }
+small { color:var(--muted); }
+</style>
+</head>
+<body><main>
+<h1>v3 final package timing — C07</h1>
+<p class="meta">Candidate: the exact C05 payload commit <code>1fc993e7</code> in an isolated checkout (<code>/tmp/guild-c07-candidate</code>), idle machine, 2026-10-18, Darwin 27.0.0 arm64 (Apple M-series). Interpreters: the hot-path-budget oracle runs under <strong>Bun 1.4.2</strong> (it reports Bun's node-compat string "node v26.3.0" and its spawns inherit Bun, per the instrument's design); the production after-edit sets run under the real <strong>node v26.12.0</strong>, the interpreter <code>hooks.json</code> uses. Native Claude payload identity <code>sha256:9a6a1af4d68c77641fc8f5023c371db17df05b9bc7e94b4ac9f07ca16599c96c</code>. Percentiles are nearest-rank over each 20-sample set; full per-set instrument logs are preserved at <code>.guild/runs/run-20261017-160817-guild/evidence/C07/</code> (<code>oracle-set-{1,2,3}.log</code>, <code>node-afteredit-set-{1,2,3}.log</code>, <code>interpreters.txt</code>, <code>identity.txt</code>) in the umbrella run record.</p>
+
+<h2>Three independent 20-run oracle sets (hot-path-budget timings, Bun 1.4.2)</h2>
+<table>
+<tr><th>Set</th><th>Criterion</th><th>Budget p95</th><th>p50</th><th>p95</th><th>max</th><th></th></tr>
+<tr><td>1</td><td>session_start_marker_read</td><td>50ms</td><td>6.2</td><td>10.4</td><td>14.4</td><td class="ok">OK</td></tr>
+<tr><td>1</td><td>post_tool_use_hook_green (pair)</td><td>250ms</td><td>115.0</td><td>127.7</td><td>147.0</td><td class="ok">OK</td></tr>
+<tr><td>2</td><td>session_start_marker_read</td><td>50ms</td><td>6.3</td><td>9.0</td><td>11.8</td><td class="ok">OK</td></tr>
+<tr><td>2</td><td>post_tool_use_hook_green (pair)</td><td>250ms</td><td>120.3</td><td>145.8</td><td>167.4</td><td class="ok">OK</td></tr>
+<tr><td>3</td><td>session_start_marker_read</td><td>50ms</td><td>8.2</td><td>11.4</td><td>16.2</td><td class="ok">OK</td></tr>
+<tr><td>3</td><td>post_tool_use_hook_green (pair)</td><td>250ms</td><td>124.4</td><td>151.4</td><td>189.2</td><td class="ok">OK</td></tr>
+</table>
+<p><small>The oracle prints aggregates only; each set's complete stdout is the preserved raw evidence.</small></p>
+
+<h2>Three production-interpreter after-edit sets (plain node v26.12.0, 20 samples each)</h2>
+<p>The KTD29 after-edit criterion under the real hook interpreter, every sample proven green by the configured child's marker. Printed samples are rounded to 1ms; statistics are nearest-rank over the unrounded values (full logs preserved).</p>
+<table>
+<tr><th>Set</th><th>p50</th><th>p95</th><th>max</th><th>raw (ms, rounded)</th></tr>
+<tr><td>1</td><td>198.6</td><td class="ok">203.5</td><td>205.7</td><td>196,197,197,198,198,198,198,198,199,199,199,199,199,199,201,201,201,203,204,206</td></tr>
+<tr><td>2</td><td>198.1</td><td class="ok">203.8</td><td>309.2</td><td>194,196,196,196,196,197,197,197,198,198,199,199,199,200,200,201,202,203,204,309</td></tr>
+<tr><td>3</td><td>198.9</td><td class="ok">212.3</td><td>213.2</td><td>197,197,197,197,198,198,198,198,198,199,199,199,200,200,200,201,204,205,212,213</td></tr>
+</table>
+<p>Informational: pre-tool-use p95 ~122ms; pre+post pair p95 ~326ms under node, of which ~160ms is twice the bare <code>node -e ''</code> startup floor (79ms median on this machine).</p>
+
+<h2>Correctness on the same payload</h2>
+<p><code>hooks/__tests__/post-tool-use-hot-path.test.ts</code> 4 pass per set (real configured child wrote the green marker each timed sample; red check surfaces on stderr; discovery membership pinned). <code>verify-after-edit-rung</code> green; <code>require-graph</code> OK — <code>config show --sources</code> at the five C-PERF buckets (blocking), no WIDE entry. Candidate bundle identities (full list in <code>evidence/C07/identity.txt</code>): <code>pre-tool-use.js 079376da…</code>, <code>post-tool-use.js 18d692f5…</code>, <code>run-analysis.js</code> + the three lazy domain chunks present.</p>
+
+<h2>Handoff to B04 / G05</h2>
+<p>The consumable binding is <code>.guild/runs/run-20261017-160817-guild/handoffs/team-c-C07.md</code>: candidate commit <code>1fc993e7</code>, native payload identity <code>sha256:9a6a1af4d68c77641fc8f5023c371db17df05b9bc7e94b4ac9f07ca16599c96c</code>, and this report's timing receipt. B04 must consume those exact bytes; any later edit to generated inputs invalidates this evidence and reopens C04/C04H through a C05 regeneration — final bytes are never replaced inside this verification lane.</p>
+
+<h2>Verdict</h2>
+<p class="ok">All three oracle sets meet p95 startup ≤ 50ms and after-edit ≤ 250ms, the three production-node sets meet the after-edit ≤ 250ms target (startup is measured by the oracle instrument only), and no WIDE config bucket remains; the tested payload is exactly C05's (the follow-up commit c6dfe775 changes two colocated test files only — zero payload bytes).</p>
+</main></body>
+</html>
