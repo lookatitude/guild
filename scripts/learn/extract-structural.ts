@@ -118,13 +118,12 @@ function main(): void {
     process.exit(1);
   }
 
-  // File list: for --incremental, ALWAYS the LIVE tree (walkRepo) so add/delete is
-  // lossless even when .guild/indexes/codebase-map.json is stale (FIX-T4.1-2). A
-  // full build prefers the deterministic scan's shared inventory, else a walk.
-  const cm = readJson<{ files: { path: string }[] }>(gp.codebaseMap);
-  const relFiles = incremental
-    ? walkRepo(repoRoot).files
-    : cm?.files?.map((f) => f.path) ?? walkRepo(repoRoot).files;
+  // File list: ALWAYS the LIVE tree (walkRepo). I15 (legacy G3-F2): a full build
+  // previously trusted a possibly-stale .guild/indexes/codebase-map.json, so a
+  // deleted file's map entry became a phantom file node. Both modes now share
+  // walkRepo's inventory/ignore semantics; the scan command and its map remain
+  // independently scoped (the map is no longer consulted here).
+  const relFiles = walkRepo(repoRoot).files;
   const readFile = (abs: string) => fs.readFileSync(abs, "utf8");
 
   const existing = readJson<ExistingGraph>(outPath);
@@ -133,11 +132,11 @@ function main(): void {
   let structural: StructuralGraph;
   let bundles: FileBundle[];
   let stats: RefreshStats | { mode: "full" } = { mode: "full" };
-  // The merge base: a full run unions structural into the existing graph as-is
-  // (preserves the long-standing full-path behavior). An incremental run first
-  // STRIPS this extractor's prior structural items so the freshly assembled
-  // subgraph replaces them wholesale (cascade-delete of changed/deleted files),
-  // while every foreign (LLM-tier) node/edge is preserved.
+  // The merge base: EVERY mode first STRIPS this extractor's prior structural
+  // items so the freshly assembled subgraph replaces them wholesale
+  // (cascade-delete of changed/deleted/descoped files), while every foreign
+  // (LLM-tier) node/edge is preserved. I15 (legacy G3-F4): the full path
+  // previously unioned as-is, so nodes of files that LEFT scope lingered.
   let mergeNodes = existing?.nodes ?? [];
   let mergeEdges = existing?.edges ?? [];
 
@@ -165,31 +164,39 @@ function main(): void {
     structural = r.structural;
     bundles = r.bundles;
     stats = r.stats;
-    const stripped = stripStructural(mergeNodes, mergeEdges);
-    mergeNodes = stripped.nodes;
-    mergeEdges = stripped.edges;
   } else {
     if (incremental) {
       process.stderr.write(
         `[extract-structural] --incremental: no usable cache at ` +
         `${path.relative(repoRoot, cachePath)} → full rebuild (seeding cache)\n`,
       );
-      // An --incremental run with no USABLE cache (missing / empty / version-stale /
-      // or REFUSED because git-tracked, FIX-T4.1-r7) still owes incremental == full:
-      // STRIP the prior structural tier from the existing graph so the freshly
-      // assembled subgraph replaces it wholesale (stale/edited/deleted structural
-      // nodes do not survive the merge). A plain full run (`incremental` false)
-      // keeps the long-standing union-as-is behavior and does NOT strip.
-      const stripped = stripStructural(mergeNodes, mergeEdges);
-      mergeNodes = stripped.nodes;
-      mergeEdges = stripped.edges;
     }
     bundles = buildBundles(repoRoot, relFiles, readFile);
     structural = assembleStructuralGraph(repoRoot, bundles);
   }
 
+  // I15 (legacy G3-F4): EVERY mode strips the prior structural tier so the
+  // freshly assembled subgraph replaces it wholesale — stale, edited, deleted
+  // and REMOVED-FROM-SCOPE structural nodes/edges do not survive the merge,
+  // while every foreign (LLM-tier) node is preserved (collided nodes revert to
+  // pure-LLM; stripStructural semantics). Previously only --incremental
+  // stripped; the plain full run unioned as-is and leaked stale nodes.
+  const stripped = stripStructural(mergeNodes, mergeEdges);
+  mergeNodes = stripped.nodes;
+  mergeEdges = stripped.edges;
+
   // Merge into the existing graph (if any) without clobbering LLM-tier nodes.
-  const merged = mergeStructuralInto(mergeNodes, mergeEdges, structural);
+  const mergedRaw = mergeStructuralInto(mergeNodes, mergeEdges, structural);
+
+  // I15: a (foreign or structural) edge survives only when BOTH endpoints
+  // resolve in the merged graph — a foreign edge whose structural endpoint was
+  // pruned would otherwise dangle. Removals are counted and reported.
+  const mergedIds = new Set(mergedRaw.nodes.map((n) => n.id));
+  const keptEdges = mergedRaw.edges.filter(
+    (e) => mergedIds.has(e.source) && mergedIds.has(e.target),
+  );
+  const danglingEdgesRemoved = mergedRaw.edges.length - keptEdges.length;
+  const merged = { nodes: mergedRaw.nodes, edges: keptEdges };
 
   const out: Record<string, unknown> = {
     version: existing?.version ?? SCHEMA.knowledgeGraph,
@@ -265,6 +272,7 @@ function main(): void {
     structural_edge_count: subset.edges.length,
     refresh_mode: stats.mode,
     ...refresh,
+    dangling_edges_removed: danglingEdgesRemoved,
     model_calls: 0,
     network_calls: 0,
   };
@@ -280,6 +288,7 @@ function main(): void {
   process.stderr.write(
     `[extract-structural] ${subset.nodes.length} structural nodes · ` +
     `${subset.edges.length} structural edges · ${relFiles.length} files · ${modeNote} · ` +
+    `${danglingEdgesRemoved} dangling edges removed · ` +
     `${elapsedMs}ms · 0 model calls → ${path.relative(repoRoot, outPath)}\n`,
   );
   if (hasFlag(argv, "print")) process.stdout.write(JSON.stringify(out, null, 2) + "\n");

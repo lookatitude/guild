@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>I07 legacy G7 validation</title>
+<style>
+:root{--bg:#fff;--fg:#1a1d21;--mut:#5c6670;--line:#d9dee3;--pass:#0a7d33;--res:#b04700;--sup:#5a51b3;--code:#f4f6f8}
+:root:not([data-theme="light"]){color-scheme:light dark}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15181b;--fg:#e8eaed;--mut:#9aa4ae;--line:#333a41;--pass:#4cc273;--res:#f09050;--sup:#a79df0;--code:#20252a}}
+:root[data-theme="dark"]{--bg:#15181b;--fg:#e8eaed;--mut:#9aa4ae;--line:#333a41;--pass:#4cc273;--res:#f09050;--sup:#a79df0;--code:#20252a}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,Segoe UI,sans-serif;max-width:1080px;margin:2rem auto;padding:0 16px}
+h1{font-size:1.4rem}h2{font-size:1.1rem;margin-top:2rem}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--code)}
+code,pre{background:var(--code);border-radius:4px;padding:1px 5px;font-size:12.5px;word-break:break-all}
+pre{padding:8px;overflow-x:auto}
+.meta{color:var(--mut);font-size:13px}
+.b{display:inline-block;padding:0 8px;border-radius:10px;font-weight:600;font-size:12px}
+.b.pass{color:var(--pass);border:1px solid var(--pass)}
+.b.res{color:var(--res);border:1px solid var(--res)}
+.b.sup{color:var(--sup);border:1px solid var(--sup)}
+.sum{display:flex;gap:18px;margin:12px 0}
+</style></head><body>
+<h1>I07 — Retired install flip and current package parity</h1>
+<p class="meta">Inherited legacy G7 · owner architect (team I) · run run-20261017-160817-guild · branch <code>fix/v3c-team-i-inherited-validation</code> · validated at plugin <code>ee6cbbe9 (origin/next)</code> · 2026-10-17</p>
+<div class="sum"><span class="b pass">PASS 2</span><span class="b res">RESIDUAL 2</span><span class="b sup">SUPERSEDED 0</span></div>
+
+<h2>Checks (actually run)</h2>
+<table><tr><th>Command (cwd plugin worktree)</th><th>Exit</th><th>Result</th><th>Evidence</th></tr>
+<tr><td><code>bun test --isolate src/domains/distribution/per-host-packaging.test.ts tests/universal-host/sc2-full-tree-equivalence.test.ts</code></td><td>0</td><td>51 pass, 0 fail across 2 files</td><td><code>.guild/runs/run-20261017-160817-guild/evidence/I07/bun-test.log</code></td></tr>
+</table>
+<h2>Subclaim matrix</h2>
+<table><tr><th>#</th><th>Subclaim</th><th>Current producer</th><th>Consumer / live caller</th><th>Golden / test</th><th>Expected</th><th>Actual</th><th>Disposition</th></tr>
+<tr><td>1</td><td>old generated-dist flip supersession</td><td><code>install.sh:544 renders dist on demand (build-host-packages --out dist); :628-635 CLAUDE_MARKETPLACE_PATH=$RENDERED_DIST/claude-code -&gt; claude plugin validate/marketplace add/install; release binding: release/guild-release-contract.v1.json (guild.release_claim.v1: archive_path guild-66ee3496….tar.gz, source_commit, archive_sha256, manifest_sha256; commit c43843f8)</code></td><td><code>the native marketplace still installs from the authored root: .claude-plugin/marketplace.json source './'; /dist/ is gitignored (.gitignore:8)</code></td><td><code>none asserting which channel is canonical</code></td><td>the v2 'flip .claude-plugin -&gt; committed dist' formally replaced</td><td>flip never happened; v3 model is render-at-install + hash-bound release archive, with the marketplace reading the authored tree — two coexisting channels, undecided; AGENTS.md 'dist/ — committed per-host packages' is stale</td><td><span class="b res">RESIDUAL</span><br>Supersession-in-fact, unratified: the replacement (render-at-install + MH-09 release claim) ships and is executed, but KTD28 ratifies projection-only packages, not install-channel selection — the channel decision and the stale AGENTS.md dist/ line remain open.</td></tr>
+<tr><td>2</td><td>single authored surface home</td><td><code>scripts/build-host-packages.ts:700-707 copies commands/agents/skills from the single authored tree (KTD2)</code></td><td><code>install.sh:544/547/568 render from the root</code></td><td><code>layout-laws no-authored-registry-sot + related checks PASS (executed); SC-2 floor tests below</code></td><td>packages are pure copies of one authoring home</td><td>as expected</td><td><span class="b pass">PASS</span><br>No mirrors; copy-from-root proven by executed gates.</td></tr>
+<tr><td>3</td><td>generated package full-tree parity (SC-2)</td><td><code>writeClaudeTree (scripts/build-host-packages.ts) + checkClaudeEquivalence (scripts/lib/equivalence-contract.ts)</code></td><td><code>tests/universal-host/sc2-full-tree-equivalence.test.ts:165 fresh render in tmp</code></td><td><code>:175 fresh tree equals committed tree across the full tree; :183 floor satisfied on BOTH sides; :58 MISLOAD FAILS when skills dropped; :70 MISLOAD FAILS per floored surface; :120 contract spans all eight logical surfaces</code></td><td>full-tree parity with planted-drift refusal</td><td>as expected, executed (51 pass)</td><td><span class="b pass">PASS</span><br>Anti-vacuous full-tree parity on a fresh render.</td></tr>
+<tr><td>4</td><td>rollback identity preservation</td><td><code>scenario only: scripts/fixtures/release-conformance/conformance-scenarios.v1.json MHRC-STR-003 'Rollback restores legacy selection without deleting evidence'; identity files src/domains/distribution/release-package-identity.ts:19-23</code></td><td><code>.guild/artifacts/release/v3.0.0/conformance.json lists MHRC-STR-003 among evaluated scenario ids</code></td><td><code>NO .ts test references MHRC-STR-003 (nearest: scripts/neutral-conformance-mh09.test.ts:1110 MHRC-SUP-005); release contract records install/activate/update/uninstall outcome 'refused' (operator evidence unavailable), host_support.supported:false</code></td><td>an executed rollback proves package identity survives</td><td>no executed rollback evidence exists</td><td><span class="b res">RESIDUAL</span><br>Scenario declared but never exercised by a test or live run.</td></tr>
+</table>
+<h2>Residual follow-on plans (require ratification before programme close)</h2>
+<table><tr><th>Row</th><th>Scope</th><th>Tests</th><th>Owner</th><th>Constraints</th><th>Bounded task</th></tr>
+<tr><td>1</td><td>Correct the stale AGENTS.md dist/ line and record the dual-channel decision (marketplace './' vs install.sh rendered dist) as a ratified supersession of the v2 flip</td><td>doc-level; optionally a gate asserting /dist/ stays gitignored and marketplace source stays './'</td><td>architect (docs leg: docs/v2 + AGENTS.md)</td><td>AGENTS.md amendments are operator-controlled (C-ARCH rule 1); needs explicit ratification</td><td>follow-on plan, unratified</td></tr>
+<tr><td>4</td><td>Add an MHRC-STR-003 case to scripts/neutral-conformance-mh09.test.ts (positive + weak-evidence refusal) and an install.sh rollback path restoring the prior guild-install-receipt.json / release identity</td><td>rollback fixture: install vN, install vN+1, rollback -&gt; identity tuple equals vN and evidence retained</td><td>architect + tooling</td><td>C-RELEASE evidence rules; no live protected-state mutation in tests (disposable fixtures)</td><td>follow-on plan, unratified</td></tr></table>
+
+<p class="meta">Archive closure, source presence, exports and passing schema fixtures alone never establish operational completion. Every PASS cites a real producer and an executed test at the stated scope; live-caller status and wiring caveats are recorded per row, and a PASS does not extend beyond its row's stated scope. Evidence paths under .guild/runs/ refer to the UMBRELLA workspace run directory (the workspace root two levels above this repo), not to this repository.</p>
+</body></html>

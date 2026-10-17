@@ -87,9 +87,12 @@ export type StructuralProfile = Record<(typeof STRUCTURAL_PROFILE_KEYS)[number],
  * cfg bumped 1→2 at FIX-T4.1-r5: persisted bundles now carry an integrity
  * `checksum` field, so a pre-r5 cache (no checksum) is a different shape — the
  * version mismatch drops it wholesale and re-extracts cleanly.
+ *
+ * cfg bumped 2→3 at I14 (legacy G2): symbol nodes now carry an `exported`
+ * boolean, so a pre-I14 cache (no flag) is a different shape and is dropped.
  */
 export const STRUCTURAL_CACHE_VERSION =
-  `${STRUCTURAL_EXTRACTOR}|sp:${STRUCTURAL_PROFILE_KEYS.length}|cfg:2`;
+  `${STRUCTURAL_EXTRACTOR}|sp:${STRUCTURAL_PROFILE_KEYS.length}|cfg:3`;
 
 export interface StructuralGraph {
   nodes: GraphNode[];
@@ -108,6 +111,16 @@ interface Symbol {
   bases?: string[];
   /** class-only: implements targets (simple names) */
   ifaces?: string[];
+  /**
+   * I14 (legacy G2): provably exported from its module. TS/JS: a syntactic
+   * `export` marker — the `export` keyword on the declaration, a local export
+   * list (`export { a, b as c }` — exports the LOCAL names; a list with a
+   * `from` clause re-exports a FOREIGN binding and marks nothing local), or an
+   * `export default <name>` statement. Methods inherit their class's flag.
+   * Python: module-level (indent-0) defs/classes; methods inherit the class.
+   * Never guessed from a name; unprovable syntax stays false.
+   */
+  exported?: boolean;
 }
 
 interface FileExtract {
@@ -312,6 +325,99 @@ function splitNames(raw: string | undefined): string[] {
     .filter((s) => /^[A-Za-z_$][\w$]*$/.test(s));
 }
 
+// I14 (legacy G2): a local export list (`export { a, b as c }`) exports the
+// LOCAL names a and b. Exclusions (each a reproduced codex round-1 finding):
+//   - a `from` clause (same line OR the next statement line) re-exports a
+//     FOREIGN binding and exports no local symbol;
+//   - `export type { T }` and per-entry `type T` are type-only — never a
+//     runtime entry;
+//   - lines inside block comments or template literals are not statements.
+const RE_TS_EXPORT_LIST = /^\s*export\s*\{([^}]*)\}(.*)$/;
+const RE_TS_EXPORT_DEFAULT_NAME = /^\s*export\s+default\s+([A-Za-z_$][\w$]*)\s*;?\s*$/;
+
+/** Locally exported names from export lists + `export default <name>` statements. */
+function tsExportedNames(lines: string[]): Set<string> {
+  const out = new Set<string>();
+  let inBlockComment = false;
+  let inTemplate = false;
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    // Line-scan state: skip export statements inside block comments / template
+    // literals (same granularity as the extractor's other line regexes).
+    const scannable = !inBlockComment && !inTemplate;
+    // Update state from this line (naive but deterministic: unescaped backtick
+    // parity toggles template state; /* and */ toggle comment state).
+    let s = raw;
+    if (inBlockComment) {
+      const close = s.indexOf("*/");
+      if (close === -1) continue;
+      inBlockComment = false;
+      s = s.slice(close + 2);
+    }
+    // Strip comment text BEFORE counting backticks: a backtick inside a comment
+    // must not toggle template state (codex round-2 F1).
+    let noLine = s.replace(/\/\*.*?\*\//g, " ").replace(/\/\/.*$/, "");
+    const openIdx = noLine.indexOf("/*");
+    if (openIdx !== -1) {
+      inBlockComment = true;
+      noLine = noLine.slice(0, openIdx);
+    }
+    const ticks = (noLine.replace(/\\`/g, "").match(/`/g) ?? []).length;
+    if (ticks % 2 === 1) inTemplate = !inTemplate;
+    if (!scannable) continue;
+    const line = noLine;
+
+    const mList = line.match(RE_TS_EXPORT_LIST);
+    if (mList && !/^\s*export\s+type\b/.test(line)) {
+      // Foreign re-export: `from` on the same line, or — when nothing but
+      // whitespace/comments follows the brace — leading `from` on the next
+      // statement line. The after-brace text is comment-stripped first, and an
+      // unclosed /* seeds the lookahead's comment state (codex rounds 2-5 F2).
+      let afterBrace = mList[2].replace(/\/\*.*?\*\//g, " ").replace(/\/\/.*$/, "");
+      const braceOpen = afterBrace.indexOf("/*");
+      const seedComment = braceOpen !== -1;
+      if (seedComment) afterBrace = afterBrace.slice(0, braceOpen);
+      if (/\bfrom\b/.test(afterBrace)) continue;
+      if (/^\s*$/.test(afterBrace)) {
+        // Skip blank and comment-only lines (// and single-line or spanning
+        // /* */ blocks) before the possible `from` clause (codex rounds 2-3 F2).
+        let k = i + 1;
+        // Seed from the after-brace text AND the outer scanner state: a comment
+        // opened on this line was already stripped from `line`, leaving its
+        // openness recorded only in `inBlockComment`.
+        let inComment = seedComment || inBlockComment;
+        let remainder: string | null = null; // first non-comment statement text
+        while (k < lines.length) {
+          let rest = lines[k];
+          if (inComment) {
+            const close = rest.indexOf("*/");
+            if (close === -1) { k++; continue; }
+            inComment = false;
+            rest = rest.slice(close + 2);
+          }
+          rest = rest.replace(/\/\*.*?\*\//g, " ").replace(/\/\/.*$/, "");
+          const open = rest.indexOf("/*");
+          if (open !== -1) { inComment = true; rest = rest.slice(0, open); }
+          if (/^\s*$/.test(rest)) { k++; continue; }
+          remainder = rest; // the comment-stripped remainder, NOT the raw line
+          break;
+        }
+        if (remainder !== null && /^\s*from\b/.test(remainder)) continue;
+      }
+      for (const entry of mList[1].split(",")) {
+        const trimmed = entry.trim();
+        if (/^type\s/.test(trimmed)) continue; // type-only entry
+        const local = trimmed.split(/\s+as\s+/)[0].trim();
+        if (/^[A-Za-z_$][\w$]*$/.test(local)) out.add(local);
+      }
+      continue;
+    }
+    const mDef = line.match(RE_TS_EXPORT_DEFAULT_NAME);
+    if (mDef) out.add(mDef[1]);
+  }
+  return out;
+}
+
 function extractTsJs(rel: string, lang: string, lines: string[]): FileExtract {
   const fileId = `file:${rel}`;
   const symbols: Symbol[] = [];
@@ -319,6 +425,7 @@ function extractTsJs(rel: string, lang: string, lines: string[]): FileExtract {
   const callables: Symbol[] = [];
   const contains: GraphEdge[] = [];
   const claimed = new Set<number>(); // lines already consumed by a class body scan
+  const exportedNames = tsExportedNames(lines); // I14: list/default-statement exports
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -333,7 +440,8 @@ function extractTsJs(rel: string, lang: string, lines: string[]): FileExtract {
         ? splitNames(mClass[2])
         : splitNames(mIface![2]);
       const ifaces = mClass ? splitNames(mClass[3]) : [];
-      const sym: Symbol = { kind: "class", id, simpleName: name, range: [i + 1, end], bases, ifaces };
+      const clsExported = /^\s*export\b/.test(line) || exportedNames.has(name);
+      const sym: Symbol = { kind: "class", id, simpleName: name, range: [i + 1, end], bases, ifaces, exported: clsExported };
       symbols.push(sym);
       classes.push(sym);
       contains.push(edge(fileId, id, "contains", 1));
@@ -346,7 +454,7 @@ function extractTsJs(rel: string, lang: string, lines: string[]): FileExtract {
         if (/^\s*(?:if|for|while|switch|catch|return)\b/.test(lines[j])) continue;
         const mEnd = blockEnd(lines, j);
         const mId = `function:${rel}:${name}.${mm[1]}`;
-        const mSym: Symbol = { kind: "function", id: mId, simpleName: mm[1], range: [j + 1, mEnd] };
+        const mSym: Symbol = { kind: "function", id: mId, simpleName: mm[1], range: [j + 1, mEnd], exported: clsExported };
         symbols.push(mSym);
         callables.push(mSym);
         contains.push(edge(id, mId, "contains", 1));
@@ -361,7 +469,8 @@ function extractTsJs(rel: string, lang: string, lines: string[]): FileExtract {
     const mFn = line.match(RE_TS_FN);
     if (mFn) {
       const id = `function:${rel}:${mFn[1]}`;
-      const sym: Symbol = { kind: "function", id, simpleName: mFn[1], range: [i + 1, blockEnd(lines, i)] };
+      const exported = /^\s*export\b/.test(line) || exportedNames.has(mFn[1]);
+      const sym: Symbol = { kind: "function", id, simpleName: mFn[1], range: [i + 1, blockEnd(lines, i)], exported };
       symbols.push(sym); callables.push(sym);
       contains.push(edge(fileId, id, "contains", 1));
       continue;
@@ -369,7 +478,8 @@ function extractTsJs(rel: string, lang: string, lines: string[]): FileExtract {
     const mArrow = line.match(RE_TS_ARROW);
     if (mArrow) {
       const id = `function:${rel}:${mArrow[1]}`;
-      const sym: Symbol = { kind: "function", id, simpleName: mArrow[1], range: [i + 1, blockEnd(lines, i)] };
+      const exported = /^\s*export\b/.test(line) || exportedNames.has(mArrow[1]);
+      const sym: Symbol = { kind: "function", id, simpleName: mArrow[1], range: [i + 1, blockEnd(lines, i)], exported };
       symbols.push(sym); callables.push(sym);
       contains.push(edge(fileId, id, "contains", 1));
       continue;
@@ -399,7 +509,8 @@ function extractPython(rel: string, lines: string[]): FileExtract {
       const end = indentEnd(lines, i);
       const id = `class:${rel}:${name}`;
       const bases = splitNames(mClass[3]).filter((b) => b !== "object");
-      const sym: Symbol = { kind: "class", id, simpleName: name, range: [i + 1, end], bases, ifaces: [] };
+      const clsExported = (mClass[1]?.length ?? 0) === 0; // I14: module-level = importable
+      const sym: Symbol = { kind: "class", id, simpleName: name, range: [i + 1, end], bases, ifaces: [], exported: clsExported };
       symbols.push(sym); classes.push(sym);
       contains.push(edge(fileId, id, "contains", 1));
 
@@ -408,7 +519,7 @@ function extractPython(rel: string, lines: string[]): FileExtract {
         if (!mm) continue;
         const mEnd = indentEnd(lines, j);
         const mId = `function:${rel}:${name}.${mm[2]}`;
-        const mSym: Symbol = { kind: "function", id: mId, simpleName: mm[2], range: [j + 1, mEnd] };
+        const mSym: Symbol = { kind: "function", id: mId, simpleName: mm[2], range: [j + 1, mEnd], exported: clsExported };
         symbols.push(mSym); callables.push(mSym);
         contains.push(edge(id, mId, "contains", 1));
         for (let k = j; k < mEnd; k++) claimed.add(k);
@@ -420,7 +531,7 @@ function extractPython(rel: string, lines: string[]): FileExtract {
     const mDef = line.match(RE_PY_DEF);
     if (mDef && (mDef[1]?.length ?? 0) === 0) {
       const id = `function:${rel}:${mDef[2]}`;
-      const sym: Symbol = { kind: "function", id, simpleName: mDef[2], range: [i + 1, indentEnd(lines, i)] };
+      const sym: Symbol = { kind: "function", id, simpleName: mDef[2], range: [i + 1, indentEnd(lines, i)], exported: true };
       symbols.push(sym); callables.push(sym);
       contains.push(edge(fileId, id, "contains", 1));
     }
@@ -589,6 +700,7 @@ export function makeBundle(rel: string, content: string | null): FileBundle {
       name: symbolNodeName(sym),
       source_refs: [`${rel}#L${sym.range[0]}-L${sym.range[1]}`],
       confidence: "high",
+      exported: sym.exported === true, // I14 (legacy G2): provable export marker
       sp: computeProfile(slice, sigLine),
       extractor: STRUCTURAL_EXTRACTOR,
     } as GraphNode;

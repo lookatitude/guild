@@ -14,6 +14,12 @@ export interface GraphNode {
   source_refs: string[];
   confidence: "high" | "medium" | "low";
   category?: string;
+  /**
+   * I14 (legacy G2): provably exported from its module (structural extractor's
+   * syntactic export marker). Absent on pre-I14 graphs and on non-symbol nodes
+   * — consumers must treat a missing flag as unknown, never as false-exported.
+   */
+  exported?: boolean;
   importance?: string;
   importance_score?: number;
   topic_path?: string[];

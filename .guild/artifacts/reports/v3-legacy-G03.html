@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>I03 legacy G3 validation</title>
+<style>
+:root{--bg:#fff;--fg:#1a1d21;--mut:#5c6670;--line:#d9dee3;--pass:#0a7d33;--res:#b04700;--sup:#5a51b3;--code:#f4f6f8}
+:root:not([data-theme="light"]){color-scheme:light dark}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15181b;--fg:#e8eaed;--mut:#9aa4ae;--line:#333a41;--pass:#4cc273;--res:#f09050;--sup:#a79df0;--code:#20252a}}
+:root[data-theme="dark"]{--bg:#15181b;--fg:#e8eaed;--mut:#9aa4ae;--line:#333a41;--pass:#4cc273;--res:#f09050;--sup:#a79df0;--code:#20252a}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,Segoe UI,sans-serif;max-width:1080px;margin:2rem auto;padding:0 16px}
+h1{font-size:1.4rem}h2{font-size:1.1rem;margin-top:2rem}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--code)}
+code,pre{background:var(--code);border-radius:4px;padding:1px 5px;font-size:12.5px;word-break:break-all}
+pre{padding:8px;overflow-x:auto}
+.meta{color:var(--mut);font-size:13px}
+.b{display:inline-block;padding:0 8px;border-radius:10px;font-weight:600;font-size:12px}
+.b.pass{color:var(--pass);border:1px solid var(--pass)}
+.b.res{color:var(--res);border:1px solid var(--res)}
+.b.sup{color:var(--sup);border:1px solid var(--sup)}
+.sum{display:flex;gap:18px;margin:12px 0}
+</style></head><body>
+<h1>I03 — Full-build inventory freshness and pruning</h1>
+<p class="meta">Inherited legacy G3 · owner tooling (team I) · run run-20261017-160817-guild · branch <code>fix/v3c-team-i-inherited-validation</code> · validated at plugin <code>ee6cbbe9 (origin/next)</code> · 2026-10-17</p>
+<div class="sum"><span class="b pass">PASS 1</span><span class="b res">RESIDUAL 4</span><span class="b sup">SUPERSEDED 0</span></div>
+<p class="meta">Fingerprint reconciliation: scripts/learn/scan.ts drifted from the plan pin (post-plan commit 1c6c9178 on next); reconciled — validation anchors cite current lines. See evidence/I03/fingerprint-reconciliation.txt.</p>
+<h2>Checks (actually run)</h2>
+<table><tr><th>Command (cwd plugin worktree)</th><th>Exit</th><th>Result</th><th>Evidence</th></tr>
+<tr><td><code>bun test --isolate scripts/learn/extract-structural.test.ts scripts/learn/lib/incremental.test.ts</code></td><td>0</td><td>93 pass, 0 fail across 2 files</td><td><code>.guild/runs/run-20261017-160817-guild/evidence/I03/bun-test.log</code></td></tr>
+</table>
+<h2>Subclaim matrix</h2>
+<table><tr><th>#</th><th>Subclaim</th><th>Current producer</th><th>Consumer / live caller</th><th>Golden / test</th><th>Expected</th><th>Actual</th><th>Disposition</th></tr>
+<tr><td>1</td><td>F2 stale-map full-build trust</td><td><code>scripts/learn/extract-structural.ts:125-127</code><br><pre>const relFiles = incremental ? walkRepo(repoRoot).files : cm?.files?.map((f) =&gt; f.path) ?? walkRepo(repoRoot).files;</pre></td><td><code>full (non-incremental) CLI path; a deleted file's map entry reaches structural.ts:619-624 (content=null) and makeBundle (:561) still emits its fileNode — phantom node written</code></td><td><code>incremental.test.ts:960 'FIX-T4.1-2 — incremental add/delete is lossless under a STALE codebase-map' (:1026/:1032/:1038) covers --incremental ONLY; no full-build stale-map test</code></td><td>full build revalidates/refreshes a stale map or fails loud</td><td>full build trusts cm.files verbatim; phantom nodes for deleted files</td><td><span class="b res">RESIDUAL</span><br>The exact G3-F2 defect is still present on the full path; bounded implementation task I15.</td></tr>
+<tr><td>2</td><td>F4 removed-from-scope nodes pruned on full rebuild</td><td><code>extract-structural.ts:181-182 'A plain full run (incremental false) keeps the long-standing union-as-is behavior and does NOT strip.'; :192 mergeStructuralInto only unions</code></td><td><code>full CLI path</code></td><td><code>none for full-path pruning</code></td><td>removed-from-scope file's nodes pruned on rebuild</td><td>union-as-is; stale nodes linger</td><td><span class="b res">RESIDUAL</span><br>G3-F4 unfixed on the full path; bounded implementation task I15.</td></tr>
+<tr><td>3</td><td>deleted-file orphan edges</td><td><code>stripStructural runs only on incremental (extract-structural.ts:168, :183)</code></td><td><code>incremental path: PASS evidence incremental.test.ts:217 'delete b.py -&gt; its nodes gone, edges referencing it gone, no dangling refs'; full path: schema validator drops dangling-TARGET edges (schema.ts ~520-527) but stale surviving nodes keep their edges valid</code></td><td><code>incremental.test.ts:217 (incremental only)</code></td><td>no orphan structural node/edge survives any rebuild mode</td><td>incremental clean; full rebuild preserves orphans via surviving stale nodes</td><td><span class="b res">RESIDUAL</span><br>Residual on the full path only; same bounded fix as row 2 (I15).</td></tr>
+<tr><td>4</td><td>foreign semantic/LLM node preservation</td><td><code>structural.ts:877 stripStructural skips non-structural extractors and reverts collided nodes; :935 mergeStructuralInto keeps existing LLM-tier values on collision</code></td><td><code>incremental path + I15's future full path</code></td><td><code>incremental.test.ts:248 'pure structural removed; LLM kept; collided node reverted to pure-LLM'; :285 strip+re-merge equals clean rebuild + LLM tier; extract-structural.test.ts:301 collision keeps LLM fields</code></td><td>foreign semantic nodes preserved across structural rebuilds</td><td>as expected, executed with anti-vacuity cases</td><td><span class="b pass">PASS</span><br>Scope: helper-level preservation semantics (stripStructural/mergeStructuralInto) with anti-vacuity tests, exercised live only by the incremental CLI path today; I15 must carry the same invariant onto the full path.</td></tr>
+<tr><td>5</td><td>edge-count display discrepancy (7 vs 8)</td><td><code>no plugin producer — source is .guild/reflections/g16-dogfood-findings.md:54-58 (benchmark UI Selection panel, benchmark serve); plugin emits sidecar structural_edge_count (extract-structural.ts:265, stderr :281-282)</code></td><td><code>benchmark repo UI</code></td><td><code>none</code></td><td>display count matches structural edges</td><td>not reproduced on the current graph; likely benchmark-repo scope</td><td><span class="b res">RESIDUAL</span><br>Unreproduced and probably out-of-repo; I15 changes it only after a current reproducer and separately ratified scope (per plan).</td></tr>
+</table>
+<h2>Residual follow-on plans (require ratification before programme close)</h2>
+<table><tr><th>Row</th><th>Scope</th><th>Tests</th><th>Owner</th><th>Constraints</th><th>Bounded task</th></tr>
+<tr><td>1</td><td>Full extraction uses walkRepo(repoRoot) inventory/ignore semantics (scripts/learn/lib/walk.ts:15) instead of trusting cm.files; no new canonical scanner; scan.ts untouched</td><td>CLI test: stale map + full run == clean rebuild structural subset</td><td>tooling</td><td>walkRepo already used by incremental (:126) and the fallback (:127); determinism (shuffled input) required</td><td>I15</td></tr>
+<tr><td>2</td><td>Full path calls stripStructural (structural.ts:877) before mergeStructuralInto (:935), mirroring the :183-185 incremental pattern</td><td>anti-vacuity CLI test: full run -&gt; delete/ignore a file -&gt; full run -&gt; no file/function node remains</td><td>tooling</td><td>preserve foreign semantic nodes (row 4 invariant); dangling-edge count reported</td><td>I15</td></tr>
+<tr><td>3</td><td>same change as row 2; additionally assert no edge endpoint references the deleted file</td><td>same fixture, edge-endpoint assertion</td><td>tooling</td><td>preserve a foreign-to-live structural edge only when both endpoints resolve</td><td>I15</td></tr>
+<tr><td>5</td><td>Reproduce the tokenizeIdentifierAware 7-vs-8 count against the current graph; if it reproduces, scope the display fix in the benchmark repo</td><td>reproducer script comparing structural call edges vs UI neighborhood count</td><td>eval (reproducer); benchmark repo (fix)</td><td>separately ratified scope required before any change (plan I15 step 4); cross-repo — outside Team I write scope</td><td>follow-on plan, requires ratification</td></tr></table>
+<h2>Notes</h2><ul><li>walkRepo confirmed at scripts/learn/lib/walk.ts:15, already used by incremental and the no-map fallback; I15 helpers confirmed: stripStructural structural.ts:877, mergeStructuralInto :935, structuralSubset :920, buildBundles :630, assembleStructuralGraph :648, makeBundle :561.</li></ul>
+<p class="meta">Archive closure, source presence, exports and passing schema fixtures alone never establish operational completion. Every PASS cites a real producer and an executed test at the stated scope; live-caller status and wiring caveats are recorded per row, and a PASS does not extend beyond its row's stated scope. Evidence paths under .guild/runs/ refer to the UMBRELLA workspace run directory (the workspace root two levels above this repo), not to this repository.</p>
+</body></html>
