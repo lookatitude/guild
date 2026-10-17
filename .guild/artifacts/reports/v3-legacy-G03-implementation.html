@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>I15 legacy G3 (implementation) validation</title>
+<style>
+:root{--bg:#fff;--fg:#1a1d21;--mut:#5c6670;--line:#d9dee3;--pass:#0a7d33;--res:#b04700;--sup:#5a51b3;--code:#f4f6f8}
+:root:not([data-theme="light"]){color-scheme:light dark}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15181b;--fg:#e8eaed;--mut:#9aa4ae;--line:#333a41;--pass:#4cc273;--res:#f09050;--sup:#a79df0;--code:#20252a}}
+:root[data-theme="dark"]{--bg:#15181b;--fg:#e8eaed;--mut:#9aa4ae;--line:#333a41;--pass:#4cc273;--res:#f09050;--sup:#a79df0;--code:#20252a}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,Segoe UI,sans-serif;max-width:1080px;margin:2rem auto;padding:0 16px}
+h1{font-size:1.4rem}h2{font-size:1.1rem;margin-top:2rem}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--code)}
+code,pre{background:var(--code);border-radius:4px;padding:1px 5px;font-size:12.5px;word-break:break-all}
+pre{padding:8px;overflow-x:auto}
+.meta{color:var(--mut);font-size:13px}
+.b{display:inline-block;padding:0 8px;border-radius:10px;font-weight:600;font-size:12px}
+.b.pass{color:var(--pass);border:1px solid var(--pass)}
+.b.res{color:var(--res);border:1px solid var(--res)}
+.b.sup{color:var(--sup);border:1px solid var(--sup)}
+.sum{display:flex;gap:18px;margin:12px 0}
+</style></head><body>
+<h1>I15 — Retained G3 full-build freshness and pruning — implementation</h1>
+<p class="meta">Inherited legacy G3 (implementation) · owner tooling (team I) · run run-20261017-160817-guild · branch <code>fix/v3c-team-i-inherited-validation</code> · validated at plugin <code>4f8f19fd (I14) + I15 changes</code> · 2026-10-17</p>
+<div class="sum"><span class="b pass">PASS 4</span><span class="b res">RESIDUAL 1</span><span class="b sup">SUPERSEDED 0</span></div>
+
+<h2>Checks (actually run)</h2>
+<table><tr><th>Command (cwd plugin worktree)</th><th>Exit</th><th>Result</th><th>Evidence</th></tr>
+<tr><td><code>bun test --isolate scripts/learn/extract-structural.test.ts scripts/learn/lib/incremental.test.ts scripts/learn/full-build-freshness.test.ts</code></td><td>0</td><td>all pass incl. the 7 new real-CLI I15 gates</td><td><code>.guild/runs/run-20261017-160817-guild/evidence/I15/bun-test.log</code></td></tr>
+<tr><td><code>bun test --isolate scripts/learn/ src/domains/knowledge/</code></td><td>0</td><td>1186 pass, 0 fail across 43 files — no regression (CLRA goldens included)</td><td><code>run inline</code></td></tr>
+</table>
+<h2>Subclaim matrix</h2>
+<table><tr><th>#</th><th>Subclaim</th><th>Current producer</th><th>Consumer / live caller</th><th>Golden / test</th><th>Expected</th><th>Actual</th><th>Disposition</th></tr>
+<tr><td>1</td><td>G3-F2: full build no longer trusts a stale CodebaseMap</td><td><code>scripts/learn/extract-structural.ts — relFiles = walkRepo(repoRoot).files for EVERY mode; the codebase-map is no longer consulted (scan.ts and its map remain independently scoped, untouched)</code></td><td><code>full and incremental CLI paths</code></td><td><code>full-build-freshness.test.ts 'G3-F2: the stale map's phantom entries produce NO nodes' — a planted stale map listing a deleted + a descoped file yields no phantom node; the added file (absent from the map) is extracted</code></td><td>live walkRepo inventory/ignore semantics; fail-safe against stale maps</td><td>implemented and executed via the real CLI on disposable git repos</td><td><span class="b pass">PASS</span><br>The exact G3-F2 defect scenario is reproduced and refused.</td></tr>
+<tr><td>2</td><td>G3-F4: full rebuild prunes removed-from-scope structural nodes</td><td><code>extract-structural.ts — stripStructural (structural.ts:877) + mergeStructuralInto (:935) now run on EVERY mode, mirroring the proven incremental pattern; the full path's union-as-is behavior is removed</code></td><td><code>full CLI path</code></td><td><code>'G3-F4: the changed callable surface is replaced, not unioned'; deleted/descoped file nodes absent; 'anti-vacuity + lossless: full rebuild structural subset == clean rebuild of the live tree' (byte equality)</code></td><td>no stale node/edge survives a full rebuild</td><td>implemented and executed; determinism gate repeats the run byte-identically</td><td><span class="b pass">PASS</span><br>Anti-vacuity fixture: delete + descope + change, then byte-compare against a clean build.</td></tr>
+<tr><td>3</td><td>foreign semantic preservation + dangling-edge accounting</td><td><code>extract-structural.ts — post-merge endpoint resolution keeps an edge only when BOTH endpoints resolve; removals counted as dangling_edges_removed in the sidecar and stderr; foreign (LLM-tier) nodes preserved by stripStructural semantics</code></td><td><code>both CLI modes</code></td><td><code>'foreign semantic node survives the full rebuild; its dangling edge does not' (seeded concept node + two foreign edges: surviving endpoint kept, pruned endpoint's edge removed); 'removed dangling edges are counted in the sidecar' (&gt;=1)</code></td><td>preserve foreign-to-live edges only when both endpoints resolve; report removals</td><td>implemented and executed</td><td><span class="b pass">PASS</span><br>Both the preservation and the removal are asserted with a planted foreign node.</td></tr>
+<tr><td>4</td><td>full/incremental cache compatibility after I14 metadata</td><td><code>STRUCTURAL_CACHE_VERSION cfg:3 (bumped in I14) + the shared strip/merge helpers</code></td><td><code>incremental cache load path</code></td><td><code>scripts/learn/lib/incremental.test.ts full suite (incl. FIX-T4.1-2 stale-map lossless block) green under the new flags and the always-strip flow</code></td><td>incremental == full equivalence preserved</td><td>executed green (110 tests in the extraction pair; 1186 across the domains)</td><td><span class="b pass">PASS</span><br>The equivalence suite is the compatibility control.</td></tr>
+<tr><td>5</td><td>edge-count display discrepancy</td><td><code>unchanged — plugin emits structural_edge_count + the new dangling_edges_removed in the sidecar</code></td><td><code>benchmark repo UI</code></td><td><code>none (no current reproducer)</code></td><td>changes only after I03 supplies a current reproducer and a separately ratified scope (plan I15 step 4)</td><td>not touched, per plan</td><td><span class="b res">RESIDUAL</span><br>Explicitly out of this lane until reproduced and ratified (I03 report row 5).</td></tr>
+</table>
+<h2>Residual follow-on plans (require ratification before programme close)</h2>
+<table><tr><th>Row</th><th>Scope</th><th>Tests</th><th>Owner</th><th>Constraints</th><th>Bounded task</th></tr>
+<tr><td>5</td><td>Reproduce the tokenizeIdentifierAware 7-vs-8 display count on a current graph; fix (if real) lands in the benchmark repo</td><td>reproducer comparing structural call edges vs UI neighborhood count</td><td>eval + benchmark repo</td><td>cross-repo; separately ratified scope required</td><td>follow-on plan, unratified</td></tr></table>
+<h2>Notes</h2><ul><li>Behavior change recorded: a plain full run now (a) scans the live tree instead of the map and (b) strips the prior structural tier before merging. Both are the ratified I15 steps; the incremental path's long-tested helpers are reused rather than re-implemented.</li><li>C05 owns generated-output integration; this lane touched source + colocated tests only.</li></ul>
+<p class="meta">Archive closure, source presence, exports and passing schema fixtures alone never establish operational completion. Every PASS cites a real producer and an executed test at the stated scope; live-caller status and wiring caveats are recorded per row, and a PASS does not extend beyond its row's stated scope. Evidence paths under .guild/runs/ refer to the UMBRELLA workspace run directory (the workspace root two levels above this repo), not to this repository.</p>
+</body></html>
