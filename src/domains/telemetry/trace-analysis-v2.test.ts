@@ -4,8 +4,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
+// Internal-only name (off the index since the C06E orphan trim): module import.
+import { ANALYSIS_CLASS_REQUIREMENTS } from "./guild-trace-events";
 import {
-  ANALYSIS_CLASS_REQUIREMENTS,
   ANALYSIS_EVENT_CLASSES,
   analyzeRun,
   collapseSpanTwins,
