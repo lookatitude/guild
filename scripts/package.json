@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "test": "cd .. && bun test --isolate scripts",
-    "build:activated-host-conformance": "esbuild activated-host-conformance.ts --bundle --platform=node --target=node18 --format=cjs --alias:js-yaml=./node_modules/js-yaml --outfile=dist/activated-host-conformance.js",
+    "build:activated-host-conformance": "bun ../scripts/compile.ts --only=conformance",
     "build:inventory": "npx tsx build-inventory.ts",
     "check:inventory": "npx tsx build-inventory.ts --check",
     "build:hosts": "npx tsx build-host-packages.ts",
@@ -39,7 +39,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "esbuild": "^0.28.0",
+    "esbuild": "0.28.2",
     "tsx": "^4.21.0",
     "typescript": "^5.5.0"
   }
