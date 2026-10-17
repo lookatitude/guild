@@ -312,20 +312,29 @@ clean terminal: it writes its value verbatim and DELIBERATELY fails
    Codex re-check the exact fix its last finding demanded without treating that
    as an unbounded extension.
 
-   **The allowance is at most 2 verification-only rounds per gate, and the three
+   **The allowance is at most 2 verification-only rounds per gate, and the four
    exits are exhaustive** — "bounded" is a hard count, not a judgement call:
+   - **Any round goes VERDICT-LESS** → `## Verdict-less rounds` step 4 governs
+     and **takes precedence over every other exit here**: return `no_verdict`
+     immediately. A verification round that produced no judgement is not a
+     verification-only round — it asserts nothing was checked. It does not spend
+     the allowance, does not count toward exhaustion, and can **never** produce
+     `cap_verify`. This exit is tested first, before the three below.
    - **Codex confirms** (emits `## SATISFIED`) → write `satisfied`, NOT
      `cap_verify`. A confirmed fix is an ordinary clean pass.
    - **Codex raises any new adversarial surface** → the round was not
      verification-only. The allowance ends immediately, nothing is written as
      `cap_verify`, and control returns to `## Cap handling`'s three options.
-   - **Both rounds are spent with no confirm and no new surface** → the
-     allowance is **exhausted**: write `cap_verify` / `cap-verification-only`.
-     This is the only transition that produces this terminal state.
+   - **Both rounds are spent — each having produced an actual judgement — with
+     no confirm and no new surface** → the allowance is **exhausted**: write
+     `cap_verify` / `cap-verification-only`. This is the only transition that
+     produces this terminal state. A round that went verdict-less never reaches
+     this exit, so a refusal can never be recorded as clean exhaustion.
 
-   The trail MUST record each verification-only round and which of the three
+   The trail MUST record each verification-only round and which of the four
    exits fired, or `scripts/verify-codex-review-trail.ts` cannot tell an
-   exhausted allowance from an unbounded extension.
+   exhausted allowance from an unbounded extension, nor a genuine exhaustion
+   from a refusal mis-recorded as one.
 
 Record the chosen terminal state's `final_status:` in the trail (`## Trail
 format`) and carry it in the in-memory `status` (`## Output shape`).

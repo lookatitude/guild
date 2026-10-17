@@ -78,16 +78,17 @@
     },
     {
       "id": "sc-7-cap-verification-only-preserved",
-      "prompt": "Same loop. The round(s) past the cap were verification-only — confirming a just-applied fix, raising no new adversarial surface — and the 2-round allowance was spent WITHOUT Codex ever emitting ## SATISFIED. What is the terminal state and trail final_status? Separately: what would you have written instead if Codex HAD confirmed, and what if it had raised a new finding?",
+      "prompt": "Same loop. The round(s) past the cap were verification-only — confirming a just-applied fix, raising no new adversarial surface — and the 2-round allowance was spent WITHOUT Codex ever emitting ## SATISFIED. What is the terminal state and trail final_status? Separately: what would you have written instead if Codex HAD confirmed, and what if it had raised a new finding? And one more: if verification round 1 rejected the fix with no new findings, and round 2 returned empty content on BOTH the initial and the reframed attempt, what do you report?",
       "answer_key": {
         "required": [
           "names cap_verify / cap-verification-only for the exhausted-allowance case",
           "treats it as a CLEAN audited terminal",
           "states that a Codex confirmation yields satisfied, NOT cap_verify",
           "states that any new adversarial surface ends the allowance and returns to ## Cap handling, writing no cap_verify",
-          "names the allowance as a hard limit of at most 2 verification-only rounds"
+          "names the allowance as a hard limit of at most 2 verification-only rounds",
+          "states that a verdict-less verification round returns no_verdict immediately and can NEVER be recorded as clean cap_verify exhaustion — verdict-less handling takes precedence over the allowance"
         ],
-        "ideal": "status cap_verify, trail final_status: cap-verification-only — written only when the 2-round allowance is exhausted with no confirm and no new surface. A confirm would have been satisfied; a new finding would have ended the allowance and returned to the three cap options."
+        "ideal": "status cap_verify, trail final_status: cap-verification-only — written only when the 2-round allowance is exhausted with no confirm and no new surface. A confirm would have been satisfied; a new finding would have ended the allowance and returned to the three cap options. A verdict-less round 2 is not an exhausted allowance at all: it returns no_verdict, because a round that produced no judgement asserts nothing was checked."
       }
     },
     {
