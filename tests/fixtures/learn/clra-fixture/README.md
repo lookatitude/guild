@@ -15,7 +15,7 @@ output against this one oracle, so the gates stay consistent and non-vacuous.
 clra-fixture/
 ├── src/                 TypeScript mirror
 │   ├── a.ts             entry point (main); cross-file + intra-file calls; clone pair
-│   ├── b.ts             utility module; a DEAD function (unusedHelper)
+│   ├── b.ts             utility module; DEAD functions (exported unusedHelper, internal unusedInternal)
 │   └── shapes.ts        Circle extends Shape implements Drawable
 ├── py/                  Python mirror of the same shapes
 │   ├── a.py             entry point (main); calls; clone pair
@@ -38,7 +38,9 @@ All ids follow the LOCKED node-id convention from
 | `imports` | `{ importer, source, symbols[] }[]` | `importer` is a `file:` id; `source` is the module specifier as written; `symbols` are the imported names |
 | `inherits` | `{ child, parent }[]` | class inheritance edges (`extends` / `class Child(Parent)`) |
 | `implements` | `{ class, interface }[]` | interface implementation edges (TS-only) |
-| `deadCode` | `string[]` of `function:` ids | functions with **zero callers that are not entry points** |
+| `deadCode` | `string[]` of `function:` ids | functions with **zero callers that are not entry points** (pure reachability: `kgDeadCode(g, { deriveExported: false })`) |
+| `exported` | `string[]` of `function:` ids | free functions the parser proves exported (`export` keyword; Python module level) |
+| `publicDeadCode` | `string[]` of `function:` ids | `deadCode` minus `exported` — the BARE `kgDeadCode(g)` answer |
 | `entryPoints` | `string[]` of `function:` ids | program entry points (excluded from dead-code) |
 | `clonePairs` | `[idA, idB][]` | near-duplicate function pairs (for similarity / G8) |
 
@@ -62,8 +64,9 @@ All ids follow the LOCKED node-id convention from
 ```ts
 const oracle = JSON.parse(fs.readFileSync(".../clra-fixture.expected.json", "utf8"));
 // G3 example:
-const dead = kgDeadCode(graph).filter(isFunctionNode);
-expect(new Set(dead)).toEqual(new Set(oracle.deadCode));
+expect(new Set(kgDeadCode(graph).nodes.map((n) => n.id))).toEqual(new Set(oracle.publicDeadCode));
+expect(new Set(kgDeadCode(graph, { deriveExported: false }).nodes.map((n) => n.id)))
+  .toEqual(new Set(oracle.deadCode));
 ```
 
 The conformance suite ([`../../clra-conformance.test.ts`](../../clra-conformance.test.ts))

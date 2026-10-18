@@ -35,7 +35,7 @@ import {
   type VerificationStatus,
 } from "./host-public-state";
 import { generateSupportMatrix, validateSupportMatrix } from "./support-matrix";
-import { loadCommittedReceipts } from "./host-smoke-store";
+import { loadCommittedReceipts, readGuildSourceVersion } from "./host-smoke-store";
 import { HOST_IDS, HOST_REGISTRY_ROWS, type HostId } from "./host-registry-schema";
 
 const GENERATED_AT = "2026-07-04T00:00:00Z";
@@ -49,12 +49,13 @@ function makeReceipt(host: HostId, publicState: PublicState, boxId = "box-t"): H
     public_state_claimed: publicState,
     verification_status_claimed: "verified" as const,
     checks: [{ concern: "binary_present", state: "verified", evidence: "test" }],
+    source_commit: "0123456789abcdef0123-456789abcdef01234567",
   };
   return {
     schema_version: "guild.host_smoke_receipt.v1",
     identity,
     smoke_digest: computeSmokeDigest(identity),
-    freshness: { captured_at: "2026-07-04", guild_version: "2.0.0" },
+    freshness: { captured_at: "2026-07-04", guild_version: readGuildSourceVersion() },
   };
 }
 

@@ -39,7 +39,25 @@
   ],
   "deadCode": [
     "function:src/b.ts:unusedHelper",
+    "function:src/b.ts:unusedInternal",
     "function:py/b.py:unused_helper"
+  ],
+  "exported": [
+    "function:src/a.ts:sumList1",
+    "function:src/a.ts:sumListTwo",
+    "function:src/a.ts:main",
+    "function:src/b.ts:add",
+    "function:src/b.ts:multiply",
+    "function:src/b.ts:unusedHelper",
+    "function:py/a.py:sum_list_one",
+    "function:py/a.py:sum_list_two",
+    "function:py/a.py:main",
+    "function:py/b.py:add",
+    "function:py/b.py:multiply",
+    "function:py/b.py:unused_helper"
+  ],
+  "publicDeadCode": [
+    "function:src/b.ts:unusedInternal"
   ],
   "entryPoints": [
     "function:src/a.ts:main",
