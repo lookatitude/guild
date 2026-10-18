@@ -58,7 +58,9 @@ export function supersededWikiPages(wikiDir: string): Set<string> {
   }
 
   const resolve = (ref: string): string | undefined => {
-    let r = ref.replace(/\\/g, "/").replace(/^decision:/, "").replace(/^\.\//, "");
+    let r = ref.replace(/\\/g, "/");
+    if (r.startsWith("decision:")) r = r.slice("decision:".length);
+    if (r.startsWith("./")) r = r.slice(2);
     r = r.replace(/^\.guild\/wiki\//, "").replace(/^wiki\//, "");
     const hit = byRel.get(r);
     if (hit) return hit;

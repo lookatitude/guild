@@ -114,7 +114,7 @@ describe("TI-SEC-1 guild-telemetry D-RECALL", () => {
   it("trace_cost_rollup never returns injected bucket keys raw", async () => {
     const { text, json } = await call("trace_cost_rollup", { run_id: "run-c" });
     expect(text).not.toContain("Ignore all previous instructions");
-    expect(json.totals).toEqual({ input: 5, output: 3, cached: 0, total: 8 });
+    expect(json.totals).toEqual({ input: 5, output: 3, cached: 0, total: 8, cost_usd: null });
     expect(json.by_model).toHaveLength(1);
     expect(json.by_model[0].model).toStartWith("[QUARANTINED:");
     expect(json.by_tier[0].tier).toStartWith("[QUARANTINED:");

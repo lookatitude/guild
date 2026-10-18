@@ -20,7 +20,7 @@ afterAll(() => {
 const manifestAgents = fs
   .readdirSync(path.join(PLUGIN_ROOT, "agents"))
   .filter((f) => f.endsWith(".md"))
-  .filter((f) => /^surface_manifest:\s*$/m.test(fs.readFileSync(path.join(PLUGIN_ROOT, "agents", f), "utf8")))
+  .filter((f) => fs.readFileSync(path.join(PLUGIN_ROOT, "agents", f), "utf8").split("\n").some((line) => line.trimEnd() === "surface_manifest:"))
   .map((f) => `agents/${f}`)
   .sort();
 

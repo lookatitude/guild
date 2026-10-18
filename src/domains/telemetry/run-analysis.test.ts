@@ -211,7 +211,8 @@ describe("run-tracing-evaluation — plugin-owned analysis", () => {
       expect(found).toHaveLength(1);
       expect(found[0].severity).toBe("high");
       expect(found[0].evidence_refs).toHaveLength(1);
-      expect(found[0].signature).toMatch(/^runaway_repetition:Agent:[0-9a-f]{12}$/);
+      expect(found[0].signature.startsWith("runaway_repetition:Agent:")).toBe(true);
+      expect(found[0].signature.slice("runaway_repetition:Agent:".length)).toMatch(/^[0-9a-f]{12}$/);
       expect(analysis.findings.some((item) => item.kind === "repeated_failure")).toBe(false);
       expect(analysis).toEqual(analyzeRun(root, RUN_A));
     });
