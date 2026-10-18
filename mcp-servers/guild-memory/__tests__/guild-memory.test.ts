@@ -354,12 +354,13 @@ describe("guild-memory MCP server", () => {
         const index = payload.pages.find((p: any) => p.path === "index.md");
         // index.md carries NO frontmatter block at all (matches this repo's
         // real .guild/wiki/index.md shape) — title must fall back to the H1.
-        expect(index.title).toBe("Wiki index");
+        // TI-SEC-1: a title is page text, so it comes back D-RECALL wrapped.
+        expect(index.title).toBe('<guild:recall trust_tier="untrusted">Wiki index</guild:recall>');
         const decision = payload.pages.find(
           (p: any) => p.path === "decisions/bm25-over-embeddings.md"
         );
-        expect(decision.title).toBe(
-          "BM25 chosen over embeddings for initial wiki search"
+        expect(decision.title).toMatch(
+          /^<guild:recall trust_tier="\w+">BM25 chosen over embeddings for initial wiki search<\/guild:recall>$/
         );
       } finally {
         await client.close();
