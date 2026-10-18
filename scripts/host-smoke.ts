@@ -44,7 +44,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, type Dirent } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, type Dirent } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { HOST_IDS, HOST_REGISTRY_ROWS, type HostId } from "./lib/host-registry-schema";
@@ -62,7 +62,7 @@ import {
 import { readGuildSourceVersion, serializeReceipt, writeCommittedReceipt } from "./lib/host-smoke-store";
 import { redact } from "./lib/shared/scrub-redact";
 import { durableGuildDir } from "./lib/state/storage";
-import { runIsolatedInstall, type IsolatedInstallHost } from "./lib/isolated-host-install";
+import { isolatedEnv, runIsolatedInstall, type IsolatedInstallHost } from "./lib/isolated-host-install";
 import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 const GUILD_VERSION = readGuildSourceVersion();
@@ -128,9 +128,14 @@ function pluginRoot(): string {
  * neutralizes it. No-op for every other host.
  */
 function hostSpawnEnv(host: HostId): NodeJS.ProcessEnv | undefined {
+  const isolated = isolatedProbeEnv[host];
+  if (isolated) return host === "codex-cli" ? { ...isolated, CODEX_DISABLE_PLUGINS: "1" } : isolated;
   if (host === "codex-cli") return { ...process.env, CODEX_DISABLE_PLUGINS: "1" };
   return undefined;
 }
+
+/** Under --isolated-install, version probes also run with HOME and the host config root in OS temp. */
+const isolatedProbeEnv: Partial<Record<HostId, NodeJS.ProcessEnv>> = {};
 
 /** Count files whose basename matches `pred` under a dir tree. Deterministic; no clock/nonce. */
 function countFiles(root: string, pred: (name: string) => boolean): number {
@@ -491,9 +496,23 @@ function isolatedActivation(host: IsolatedInstallHost, isolatedRoot: string, pac
   return runIsolatedInstall({ host, bin, packagesRoot: join(isolatedRoot, "packages"), isolatedRoot, expectedVersion: GUILD_VERSION }).checks;
 }
 
+/**
+ * Build from a shared clone of HEAD inside the isolated root: the build
+ * rewrites derived files under its --root, so it must never run on the checkout.
+ * The checkout's node_modules are linked in read-only use.
+ */
 function buildPackagesInto(isolatedRoot: string): { ok: boolean; detail: string } {
-  const r = spawnSync("npx", ["tsx", join(__dirname, "build-host-packages.ts"), "--root", pluginRoot(), "--out", join(isolatedRoot, "packages")], {
-    cwd: __dirname,
+  const source = join(isolatedRoot, "source");
+  const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: pluginRoot(), encoding: "utf8" }).stdout.trim();
+  const clone = spawnSync("git", ["clone", "--quiet", "--shared", "--no-checkout", pluginRoot(), source], { encoding: "utf8" });
+  const checkout = clone.status === 0 ? spawnSync("git", ["-C", source, "checkout", "--quiet", "--detach", head], { encoding: "utf8" }) : clone;
+  if (!head || checkout.status !== 0) return { ok: false, detail: scrub(`snapshot of HEAD failed: ${(checkout.stderr ?? "").trim().slice(0, 200)}`) };
+  for (const rel of ["scripts", "hooks", join("hooks", "agent-team"), join("mcp-servers", "guild-memory"), join("mcp-servers", "guild-telemetry")]) {
+    const modules = join(pluginRoot(), rel, "node_modules");
+    if (existsSync(modules) && existsSync(join(source, rel))) symlinkSync(modules, join(source, rel, "node_modules"));
+  }
+  const r = spawnSync("npx", ["tsx", join(source, "scripts", "build-host-packages.ts"), "--root", source, "--out", join(isolatedRoot, "packages")], {
+    cwd: join(source, "scripts"),
     encoding: "utf8",
     timeout: 600_000,
   });
@@ -529,6 +548,9 @@ function main(): void {
     ? mkdtempSync(join(tmpdir(), "guild-isolated-install-"))
     : null;
   const packagesBuilt = isolatedRoot ? buildPackagesInto(isolatedRoot) : { ok: false, detail: "not requested" };
+  if (isolatedRoot) {
+    for (const host of ISOLATED_INSTALL_HOSTS) isolatedProbeEnv[host] = isolatedEnv(host as IsolatedInstallHost, join(isolatedRoot, `${host}-probe`));
+  }
   for (const host of targets) {
     const activation = isolatedRoot && ISOLATED_INSTALL_HOSTS.includes(host) && onPath(HOST_REGISTRY_ROWS[host].detection.bin ?? "")
       ? isolatedActivation(host as IsolatedInstallHost, isolatedRoot, packagesBuilt)

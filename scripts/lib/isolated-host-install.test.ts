@@ -121,6 +121,7 @@ function checkState(result: ReturnType<typeof run>, concern: string): { state: s
 
 describe("checkIsolatedRoot — the live-config guard", () => {
   it("refuses a root inside the real HOME .claude", () => {
+    // @control: a root inside the live .claude must never pass the guard.
     const r = checkIsolatedRoot(join(realHome, ".claude", "iso"), realHome, sandbox);
     expect(r.ok).toBe(false);
     expect(r.code).toBe("isolated_root_in_live_config");
@@ -141,6 +142,7 @@ describe("checkIsolatedRoot — the live-config guard", () => {
   });
 
   it("refuses a symlinked root that resolves into the real HOME config", () => {
+    // @control: a symlink must not launder a live-config root past the guard.
     const { symlinkSync } = require("node:fs") as typeof import("node:fs");
     const link = join(sandbox, "sneaky");
     symlinkSync(join(realHome, ".claude"), link);
@@ -193,6 +195,7 @@ describe("runIsolatedInstall — claude-code-cli", () => {
   });
 
   it("PLANTED CONTROL: a host that writes the real HOME config is refused", () => {
+    // @control: a planted write to the live install state must flip the run to refused.
     const r = run("claude-code-cli", fakeClaude({ plantLiveWrite: join(realHome, ".claude", "plugins", "installed_plugins.json") }));
     expect(r.ok).toBe(false);
     expect(r.code).toBe("live_config_mutated");
@@ -200,7 +203,28 @@ describe("runIsolatedInstall — claude-code-cli", () => {
     expect(checkState(r, "real_install_activation").evidence).toContain("live_config_mutated");
   });
 
+  it("PLANTED CONTROL: a write inside an existing live plugin cache file is refused", () => {
+    // @control: changed bytes deep in the live cache must flip the run to refused.
+    const cached = join(realHome, ".claude", "plugins", "cache", "other", "other", "1.0.0", "hooks", "hooks.json");
+    mkdirSync(join(cached, ".."), { recursive: true });
+    writeFileSync(cached, "{}\n");
+    const r = run("claude-code-cli", fakeClaude({ plantLiveWrite: cached }));
+    expect(r.code).toBe("live_config_mutated");
+  });
+
+  it("PLANTED CONTROL: a per-host root symlinked into the live config is refused", () => {
+    // @control: a planted <root>/claude symlink must not redirect the install.
+    const { symlinkSync } = require("node:fs") as typeof import("node:fs");
+    mkdirSync(isolatedRoot, { recursive: true });
+    symlinkSync(join(realHome, ".claude"), join(isolatedRoot, "claude"));
+    const bin = fakeClaude();
+    const r = run("claude-code-cli", bin);
+    expect(r.code).toBe("isolated_root_not_fresh");
+    expect(existsSync(join(realHome, ".claude", "claude-config"))).toBe(false);
+  });
+
   it("PLANTED CONTROL: an install path outside the isolated root is refused", () => {
+    // @control: an install the host reports outside the root must be refused.
     const r = run("claude-code-cli", fakeClaude({ escapeInstall: true }));
     expect(r.code).toBe("install_path_escaped");
   });

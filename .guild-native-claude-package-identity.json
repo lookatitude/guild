@@ -1,5 +1,5 @@
 {
   "schema_version": "guild.native_claude_package_identity.v1",
   "release_version": "3.2.0-beta.1",
-  "payload_digest": "sha256:726c74a66df19c6fd511c13ced8969f4c604c6ef2c0e917716674e803ae3836e"
+  "payload_digest": "sha256:b65e85fb80d0615fa7182554a2b304f993b17ab77c011ccebe008afabe4b3627"
 }

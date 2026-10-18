@@ -18,7 +18,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { ISOLATED_INSTALL_EVIDENCE_PREFIX, type SmokeCheck } from "./host-public-state";
@@ -28,6 +28,7 @@ export type IsolatedInstallHost = "claude-code-cli" | "codex-cli";
 export const ISOLATED_INSTALL_REFUSALS = Object.freeze([
   "isolated_root_in_live_config",
   "isolated_root_outside_os_temp",
+  "isolated_root_not_fresh",
   "package_build_failed",
   "marketplace_add_failed",
   "plugin_install_failed",
@@ -103,10 +104,11 @@ export function checkIsolatedRoot(root: string, realHome: string = homedir(), tm
 }
 
 /**
- * Digest of the live install state a real install would change. Directory
- * entries are listed to a fixed depth; files are hashed. Routine session files
- * (e.g. ~/.claude.json) are deliberately not watched: a concurrent live session
- * rewrites them.
+ * Digest of the live install state a real install would change: the install
+ * and settings files are hashed, the plugin cache and marketplace trees are
+ * listed in full (name, size, mtime; symlinks not followed). ~/.claude.json is
+ * deliberately not watched: a concurrent live session rewrites it constantly,
+ * and HOME is redirected, so the host's own path for it is the isolated copy.
  */
 export function snapshotLiveConfig(realHome: string): string {
   const files = [
@@ -115,24 +117,37 @@ export function snapshotLiveConfig(realHome: string): string {
     ".claude/plugins/known_marketplaces.json",
     ".codex/config.toml",
   ];
-  const dirs: Array<[string, number]> = [[".claude/plugins/cache", 2], [".codex/plugins", 3]];
+  const trees = [".claude/plugins/cache", ".claude/plugins/marketplaces", ".codex/plugins"];
   const parts: string[] = [];
   for (const rel of files) {
     const p = join(realHome, rel);
     parts.push(`${rel}=${existsSync(p) ? createHash("sha256").update(readFileSync(p)).digest("hex") : "absent"}`);
   }
-  const list = (dir: string, depth: number, prefix: string): string[] => {
-    if (depth === 0 || !existsSync(dir) || !statSync(dir).isDirectory()) return [];
-    return readdirSync(dir).sort().flatMap((name) => [`${prefix}${name}`, ...list(join(dir, name), depth - 1, `${prefix}${name}/`)]);
+  const list = (dir: string, prefix: string): string[] => {
+    let names: string[];
+    try {
+      names = readdirSync(dir).sort();
+    } catch {
+      return [];
+    }
+    return names.flatMap((name) => {
+      const full = join(dir, name);
+      const st = lstatSync(full);
+      const row = `${prefix}${name}:${st.size}:${st.mtimeMs}`;
+      return st.isDirectory() ? [row, ...list(full, `${prefix}${name}/`)] : [row];
+    });
   };
-  for (const [rel, depth] of dirs) parts.push(`${rel}/[${list(join(realHome, rel), depth, "").join(",")}]`);
+  for (const rel of trees) parts.push(`${rel}/[${list(join(realHome, rel), "").join(",")}]`);
   return parts.join("\n");
 }
 
 const ENV_ALLOWLIST = Object.freeze(["PATH", "LANG", "LC_ALL", "TERM", "USER", "LOGNAME", "SHELL"]);
 
-/** Allowlisted env with HOME/TMPDIR/XDG_* and the host config root inside `hostRoot`. */
-function isolatedEnv(host: IsolatedInstallHost, hostRoot: string): NodeJS.ProcessEnv {
+/**
+ * Allowlisted env with HOME/TMPDIR/XDG_* and the host config root inside
+ * `hostRoot`. Nothing else is inherited: no CLAUDE_*, CODEX_*, GUILD_* or keys.
+ */
+export function isolatedEnv(host: IsolatedInstallHost, hostRoot: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const key of ENV_ALLOWLIST) if (process.env[key] !== undefined) env[key] = process.env[key];
   const roots: Record<string, string> = {
@@ -308,6 +323,14 @@ function codexFlow(o: IsolatedInstallOptions, hostRoot: string, env: NodeJS.Proc
   };
 }
 
+function isSymlink(p: string): boolean {
+  try {
+    return lstatSync(p).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
 function refused(code: string, detail: string): string {
   return `isolated-install refused ${code}: ${detail}`;
 }
@@ -334,10 +357,16 @@ export function runIsolatedInstall(o: IsolatedInstallOptions): IsolatedInstallRe
   if (!guard.ok) return build({ verdict: guard });
 
   const hostRoot = join(o.isolatedRoot, o.host === "claude-code-cli" ? "claude" : "codex");
+  // A pre-existing host root (or a symlink planted there) could redirect writes.
+  if (existsSync(hostRoot) || isSymlink(hostRoot)) {
+    return build({ verdict: { ok: false, code: "isolated_root_not_fresh", detail: "the per-host config root already exists" } });
+  }
+  mkdirSync(hostRoot, { recursive: true, mode: 0o700 });
+  const hostGuard = checkIsolatedRoot(hostRoot, realHome, o.tmpRoot ?? tmpdir());
+  if (!hostGuard.ok) return build({ verdict: hostGuard });
   const before = snapshotLiveConfig(realHome);
   let step: Step;
   try {
-    mkdirSync(hostRoot, { recursive: true, mode: 0o700 });
     const env = isolatedEnv(o.host, hostRoot);
     step = o.host === "claude-code-cli" ? claudeFlow(o, hostRoot, env) : codexFlow(o, hostRoot, env);
   } catch (err) {
