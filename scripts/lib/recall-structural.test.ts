@@ -55,7 +55,7 @@ function writeWikiFile(repo: string, relPath: string, content: string): void {
   fs.writeFileSync(abs, content, "utf8");
 }
 
-interface GNode { id: string; type: string; name: string; source_refs: string[]; confidence?: string; category?: string }
+interface GNode { id: string; type: string; name: string; source_refs: string[]; confidence?: string; category?: string; exported?: boolean }
 interface GEdge { source: string; target: string; type: string; direction?: string; weight?: number }
 
 function writeGraph(repo: string, nodes: GNode[], edges: GEdge[]): void {
@@ -672,5 +672,54 @@ describe("G7 finding-2 (r3) — a CATEGORY-scoped query stays parity-safe when t
 
     expect(outcome.engagement.off).toBe(false);
     expect(outcome.engagement.on).toBe(true); // SQLite engaged → global threshold (1) crossed by 3 files
+  });
+});
+
+// ── I14 (legacy G2): the live dead-code branch derives the public surface ──────
+describe("I14 — recall dead-code excludes exported + package.json entry surface", () => {
+  // Three zero-inbound free functions: one provably exported, one in the file
+  // package.json `main` names, one internal. Only the internal one is dead.
+  function deadGraph(withFlags: boolean): GNode[] {
+    const flag = (v: boolean) => (withFlags ? { exported: v } : {});
+    return [
+      { id: "function:src/api.ts:publicApi", type: "function", name: "publicApi", source_refs: ["src/api.ts#L1-L3"], ...flag(true) },
+      { id: "function:src/cli.ts:runCli", type: "function", name: "runCli", source_refs: ["src/cli.ts#L1-L3"], ...flag(false) },
+      { id: "function:src/util.ts:internalHelper", type: "function", name: "internalHelper", source_refs: ["src/util.ts#L1-L3"], ...flag(false) },
+    ];
+  }
+  const deadPaths = (r: RecallResult) => r.chunks.map((c) => c.source_path).sort();
+
+  test("exported fn and package.json main file are not dead; internal fn is", () => {
+    const repo = mkTmpRepo();
+    writeGraph(repo, deadGraph(true), []);
+    fs.writeFileSync(path.join(repo, "package.json"), JSON.stringify({ name: "x", main: "./src/cli.ts" }));
+    const r = recall("find dead code", { cwd: repo, _bm25Disabled: true, _kgDisabled: true });
+    expect(r.source).toBe("structural");
+    expect(deadPaths(r)).toEqual(["src/util.ts"]);
+  });
+
+  test("planted negative: without package.json the main-file fn is dead again", () => {
+    const repo = mkTmpRepo();
+    writeGraph(repo, deadGraph(true), []);
+    const r = recall("find dead code", { cwd: repo, _bm25Disabled: true, _kgDisabled: true });
+    expect(deadPaths(r)).toEqual(["src/cli.ts", "src/util.ts"]);
+  });
+
+  test("malformed package.json (null / array / scalar) does not break graph-derived results", () => {
+    for (const body of ["null", "[]", "42", "{not json"]) {
+      const repo = mkTmpRepo();
+      writeGraph(repo, deadGraph(true), []);
+      fs.writeFileSync(path.join(repo, "package.json"), body);
+      const r = recall("find dead code", { cwd: repo, _bm25Disabled: true, _kgDisabled: true });
+      expect(r.source).toBe("structural");
+      expect(deadPaths(r)).toEqual(["src/cli.ts", "src/util.ts"]);
+    }
+  });
+
+  test("legacy graph (no exported flags) keeps reachability semantics", () => {
+    const repo = mkTmpRepo();
+    writeGraph(repo, deadGraph(false), []);
+    const r = recall("find dead code", { cwd: repo, _bm25Disabled: true, _kgDisabled: true });
+    expect(deadPaths(r)).toEqual(["src/api.ts", "src/cli.ts", "src/util.ts"]);
   });
 });
