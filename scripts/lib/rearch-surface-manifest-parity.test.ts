@@ -53,6 +53,9 @@ const EXEMPLARS: Exemplar[] = [
   { rel: "skills/specialists/architect-tradeoff-matrix/SKILL.md", kind: "skill" },
   { rel: "skills/specialists/backend-service-integration/SKILL.md", kind: "skill" },
   { rel: "agents/advisor.md", kind: "agent" },
+  { rel: "agents/developer.md", kind: "agent" },
+  { rel: "agents/team-lead.md", kind: "agent" },
+  { rel: "agents/context-manager.md", kind: "agent" },
 ];
 
 /** The pre-conversion baseline = the file at git HEAD (before this additive edit). */

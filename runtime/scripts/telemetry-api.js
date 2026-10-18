@@ -9285,7 +9285,7 @@ var RECOMMENDATION_KINDS = /* @__PURE__ */ new Set([
 ]);
 var CONFIDENCE_VALUES = /* @__PURE__ */ new Set(["low", "medium", "high"]);
 var SEVERITY_VALUES = /* @__PURE__ */ new Set(["low", "medium", "high"]);
-var FINDING_KINDS = /* @__PURE__ */ new Set(["instruction_violation", "repeated_failure", "tool_gap", "workflow_churn", "prompt_inefficiency", "telemetry_gap"]);
+var FINDING_KINDS = /* @__PURE__ */ new Set(["instruction_violation", "repeated_failure", "runaway_repetition", "tool_gap", "workflow_churn", "prompt_inefficiency", "telemetry_gap"]);
 var PLUGIN_RECOMMENDATION_KINDS = /* @__PURE__ */ new Set([
   "bug_report",
   "feature_request",
@@ -10782,6 +10782,25 @@ function analysisCohort(manifest, provenanceRaw, configSnapshot, events) {
 function inputManifestHash(entries) {
   return `sha256:${sha2564(canonicalJson2(entries))}`;
 }
+var RUNAWAY_MAX_UNIT = 60;
+var RUNAWAY_MIN_REPEATS = 10;
+var RUNAWAY_MIN_SPAN = 200;
+function runawayRepetitionUnit(text) {
+  const cp = Array.from(text);
+  for (let period = 1; period <= RUNAWAY_MAX_UNIT; period++) {
+    let runStart = 0;
+    for (let i = 0; i + period <= cp.length; i++) {
+      if (i + period < cp.length && cp[i] === cp[i + period]) continue;
+      const span = i + period - runStart;
+      if (span >= RUNAWAY_MIN_SPAN && span >= period * RUNAWAY_MIN_REPEATS) {
+        const unit = cp.slice(runStart, runStart + period).join("");
+        if (/[\p{L}\p{N}]/u.test(unit)) return unit;
+      }
+      runStart = i + 1;
+    }
+  }
+  return null;
+}
 function detectFindings(analysisId, events, groups) {
   const findings = [];
   const failures = /* @__PURE__ */ new Map();
@@ -10799,7 +10818,19 @@ function detectFindings(analysisId, events, groups) {
     }
     if (groupHas(group, ["user_steering_received"])) steering.push(group);
   }
-  void events;
+  for (const event of events) {
+    const excerpt = event.value["event"] === "tool_call" && event.value["tool"] === "Agent" ? event.value["result_excerpt_redacted"] : null;
+    const unit = typeof excerpt === "string" ? runawayRepetitionUnit(excerpt) : null;
+    if (unit === null) continue;
+    findings.push(finding(
+      analysisId,
+      "runaway_repetition",
+      "high",
+      "An agent output repeated the same text back to back (decoder loop).",
+      [event.ref],
+      `runaway_repetition:Agent:${sha2564(unit).slice(0, 12)}`
+    ));
+  }
   for (const [signature, attempts] of [...failures.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     if (attempts.length >= REPEAT_THRESHOLD) {
       findings.push(finding(analysisId, "repeated_failure", "high", `The same failed action recurred ${attempts.length} times.`, attempts.flatMap((group) => group.refs), signature));

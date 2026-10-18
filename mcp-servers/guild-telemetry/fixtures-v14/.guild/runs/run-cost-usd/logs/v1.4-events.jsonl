@@ -1,0 +1,6 @@
+{"ts":"2026-05-02T10:00:00.000Z","event":"specialist_dispatch","run_id":"run-cost-usd","specialist":"backend","tier":"mid","model":"sonnet","tokens":{"input":100,"output":40,"cost_usd":0.12}}
+{"ts":"2026-05-02T10:00:01.000Z","event":"specialist_dispatch","run_id":"run-cost-usd","specialist":"architect","tier":"powerful","model":"opus","tokens":{"input":200,"output":90,"cost_usd":0.3}}
+{"ts":"2026-05-02T10:00:02.000Z","event":"specialist_dispatch","run_id":"run-cost-usd","specialist":"backend","tier":"mid","model":"sonnet","tokens":{"input":10,"output":4,"cost_usd":"0.5"}}
+{"ts":"2026-05-02T10:00:03.000Z","event":"specialist_dispatch","run_id":"run-cost-usd","specialist":"writer","tier":"cheap","model":"haiku","tokens":{"input":5,"output":2}}
+{"ts":"2026-05-02T10:00:04.000Z","event":"specialist_dispatch","run_id":"run-cost-usd","specialist":"writer","tier":"cheap","model":"haiku","tokens":{"input":5,"output":2,"cost_usd":null}}
+{"ts":"2026-05-02T10:00:05.000Z","event":"specialist_dispatch","run_id":"run-cost-usd","specialist":"writer","tier":"cheap","model":"haiku","tokens":{"input":5,"output":2,"cost_usd":-1}}

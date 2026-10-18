@@ -45,6 +45,7 @@ import { REPO, RailResult, report, read, proveAssert } from "./_common";
 import { splitFrontmatter, readScalarField } from "../../scripts/lib/frontmatter";
 import { validateSurfaceManifest, SurfaceManifest } from "../../scripts/lib/surface-manifest";
 import * as yaml from "js-yaml";
+import * as fs from "fs";
 import * as path from "path";
 
 /**
@@ -61,6 +62,8 @@ export const EXEMPLARS: string[] = [
   "skills/specialists/backend-service-integration/SKILL.md",
   "agents/advisor.md",
   "agents/developer.md",
+  "agents/team-lead.md",
+  "agents/context-manager.md",
 ];
 
 /** Canonical `model:` → tier map (capability/tier-defaults.ts CLAUDE_TIER_FALLBACK, inverted). */
@@ -191,7 +194,7 @@ export function crossCheck(content: string, m: SurfaceManifest, file: string): D
   return out;
 }
 
-export function run(): RailResult {
+export function run(root: string = REPO): RailResult {
   const out: RailResult = {
     rail: "R-DECL",
     pass: true,
@@ -201,8 +204,18 @@ export function run(): RailResult {
       `${EXEMPLARS.length} W7 exemplars checked: schema-valid AND prose-≡ (name/description/when_to_use/type-tier/gates/dispatch)`,
     ],
   };
+  // G05 R2: a machinery agent that carries a manifest is never outside the rail.
+  let agentFiles: string[] = [];
+  try { agentFiles = fs.readdirSync(path.join(root, "agents")).filter((n) => n.endsWith(".md")); } catch { /* no agents dir */ }
+  for (const name of agentFiles) {
+    const rel = `agents/${name}`;
+    if (!EXEMPLARS.includes(rel) && extractManifestBlock(read(path.join(root, rel))) !== null) {
+      out.pass = false;
+      out.violations.push(`[${rel}] carries a surface_manifest: block but is not an R-DECL exemplar`);
+    }
+  }
   for (const f of EXEMPLARS) {
-    const content = read(path.join(REPO, f));
+    const content = read(path.join(root, f));
     if (content === "") {
       out.pass = false;
       out.violations.push(`[${f}] file unreadable`);
