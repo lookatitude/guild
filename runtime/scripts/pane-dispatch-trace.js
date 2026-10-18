@@ -3087,7 +3087,7 @@ __export(pane_dispatch_trace_exports, {
   parseLaneSpec: () => parseLaneSpec
 });
 module.exports = __toCommonJS(pane_dispatch_trace_exports);
-var path18 = __toESM(require("node:path"));
+var path19 = __toESM(require("node:path"));
 
 // src/domains/telemetry/receipt-journal.ts
 var fs11 = __toESM(require("node:fs"));
@@ -7762,61 +7762,89 @@ function validateAnalysisTraceEvent(ev) {
       }
     }
   }
-  const eventClass = e["event_class"];
-  if (eventClass === "run_started" && e["run_scope"] === void 0) {
-    return { ok: false, reason: "run_started requires run_scope" };
-  }
-  if (eventClass === "run_attachment_resolved" && (e["run_scope"] === void 0 || e["signature"] === void 0)) {
-    return { ok: false, reason: "run_attachment_resolved requires run_scope and signature" };
-  }
-  if (eventClass === "config_snapshot_written" && e["config_snapshot_ref"] === void 0 && e["payload_ref"] === void 0) {
-    return { ok: false, reason: "config_snapshot_written requires config_snapshot_ref or payload_ref" };
-  }
-  const promptClasses = ["prompt_received", "prompt_normalized", "clarifying_question_asked", "agent_prompt_sent"];
-  if (promptClasses.includes(eventClass) && (e["prompt_hash"] === void 0 || e["redaction"] === void 0 || e["span_id"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires prompt_hash, redaction, and span_id` };
-  }
-  if ((eventClass.startsWith("knowledge_lookup_") || eventClass.startsWith("memory_lookup_")) && (e["span_id"] === void 0 || e["prompt_hash"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and prompt_hash` };
-  }
-  if (eventClass.startsWith("tool_call_") && e["span_id"] === void 0) {
-    return { ok: false, reason: `${eventClass} requires span_id` };
-  }
-  if (["tool_call_finished", "tool_call_failed"].includes(eventClass) && e["duration_ms"] === void 0) {
-    return { ok: false, reason: `${eventClass} requires duration_ms` };
-  }
-  if (["agent_dispatched", "agent_prompt_sent", "agent_handoff_written"].includes(eventClass) && (e["task_id"] === void 0 || e["span_id"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires task_id and span_id` };
-  }
-  if (eventClass === "agent_handoff_written" && e["payload_ref"] === void 0) {
-    return { ok: false, reason: "agent_handoff_written requires payload_ref" };
-  }
-  if (eventClass === "agent_response_received" && e["span_id"] === void 0) {
-    return { ok: false, reason: "agent_response_received requires span_id" };
-  }
-  if (eventClass.startsWith("loop_") && (e["span_id"] === void 0 || e["signature"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and signature` };
-  }
-  if (eventClass.startsWith("phase_") && (e["span_id"] === void 0 || e["phase"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and phase` };
-  }
-  if (eventClass.startsWith("gate_") && (e["span_id"] === void 0 || e["signature"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and signature` };
-  }
-  const evidenceClasses = [
-    "instruction_violation_detected",
-    "user_steering_received",
-    "correction_applied",
-    "repeated_failure_detected",
-    "recommendation_created",
-    "recommendation_routed",
-    "bug_report_prompted"
-  ];
-  if (evidenceClasses.includes(eventClass) && (e["span_id"] === void 0 || e["signature"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and signature` };
-  }
-  return { ok: true };
+  return ANALYSIS_CLASS_VALIDATORS[e["event_class"]](e);
 }
+var ANALYSIS_CLASS_REQUIREMENTS = Object.freeze({
+  run_started: ["run_scope"],
+  run_closed: ["run_scope"],
+  run_attachment_resolved: ["run_scope", "signature"],
+  config_snapshot_written: [],
+  prompt_received: ["prompt_hash", "redaction", "span_id"],
+  prompt_normalized: ["prompt_hash", "redaction", "span_id"],
+  clarifying_question_asked: ["prompt_hash", "redaction", "span_id"],
+  implementation_authorized: ["span_id", "signature"],
+  agent_dispatched: ["task_id", "span_id"],
+  agent_prompt_sent: ["prompt_hash", "redaction", "span_id", "task_id"],
+  agent_response_received: ["span_id"],
+  agent_handoff_written: ["task_id", "span_id", "payload_ref"],
+  knowledge_lookup_started: ["span_id", "prompt_hash"],
+  knowledge_lookup_result: ["span_id", "prompt_hash"],
+  memory_lookup_started: ["span_id", "prompt_hash"],
+  memory_lookup_result: ["span_id", "prompt_hash"],
+  tool_call_started: ["span_id"],
+  tool_call_finished: ["span_id", "duration_ms"],
+  tool_call_denied: ["span_id", "signature"],
+  tool_call_failed: ["span_id", "duration_ms"],
+  loop_entered: ["span_id", "signature"],
+  loop_iteration: ["span_id", "signature"],
+  loop_exited: ["span_id", "signature"],
+  loop_cap_hit: ["span_id", "signature"],
+  phase_entered: ["span_id", "phase"],
+  phase_concluded: ["span_id", "phase"],
+  gate_started: ["span_id", "signature"],
+  gate_concluded: ["span_id", "signature"],
+  instruction_violation_detected: ["span_id", "signature"],
+  user_steering_received: ["span_id", "signature"],
+  correction_applied: ["span_id", "signature"],
+  repeated_failure_detected: ["span_id", "signature"],
+  recommendation_created: ["span_id", "signature"],
+  recommendation_routed: ["span_id", "signature"],
+  bug_report_prompted: ["span_id", "signature"]
+});
+var TOOL_DENIAL_CAUSES = Object.freeze(["policy", "user", "host_unavailable", "capability_absent"]);
+var TOOL_DENIAL_SIGNATURE = new RegExp(`^(?:${TOOL_DENIAL_CAUSES.join("|")}):[A-Za-z0-9_.:-]{1,200}$`);
+function requireFields(e, eventClass) {
+  const missing = ANALYSIS_CLASS_REQUIREMENTS[eventClass].filter((key) => e[key] === void 0);
+  return missing.length === 0 ? { ok: true } : { ok: false, reason: `${eventClass} requires ${missing.join(", ")}` };
+}
+function classValidator(eventClass, extra) {
+  return (e) => {
+    const required = requireFields(e, eventClass);
+    if (!required.ok || !extra) return required;
+    const reason = extra(e);
+    return reason === null ? { ok: true } : { ok: false, reason: `${eventClass}: ${reason}` };
+  };
+}
+var redactedPrompt = (e) => e["redaction"] === "none" ? "redaction must be redacted|omitted for a prompt-bearing class" : null;
+var ANALYSIS_CLASS_VALIDATORS = Object.freeze(
+  Object.fromEntries(ANALYSIS_EVENT_CLASSES.map((eventClass) => {
+    switch (eventClass) {
+      case "run_attachment_resolved":
+        return [eventClass, classValidator(eventClass, (e) => String(e["signature"]).startsWith(`${e["run_scope"]}:`) ? null : "signature must start with <run_scope>:")];
+      case "config_snapshot_written":
+        return [eventClass, classValidator(eventClass, (e) => e["config_snapshot_ref"] === void 0 && e["payload_ref"] === void 0 ? "requires config_snapshot_ref or payload_ref" : null)];
+      case "prompt_received":
+      case "prompt_normalized":
+      case "clarifying_question_asked":
+      case "agent_prompt_sent":
+        return [eventClass, classValidator(eventClass, redactedPrompt)];
+      case "tool_call_denied":
+        return [eventClass, classValidator(eventClass, (e) => e["status"] !== "denied" ? "status must be denied" : !TOOL_DENIAL_SIGNATURE.test(String(e["signature"])) ? `signature must be <${TOOL_DENIAL_CAUSES.join("|")}>:<tool>[:<action>]` : null)];
+      case "instruction_violation_detected":
+      case "user_steering_received":
+      case "correction_applied":
+      case "repeated_failure_detected":
+      case "recommendation_created":
+      case "recommendation_routed":
+      case "bug_report_prompted":
+        return [eventClass, classValidator(eventClass, (e) => /^\S{1,256}$/.test(String(e["signature"])) ? null : "signature must be 1-256 non-whitespace chars")];
+      case "tool_call_failed":
+        return [eventClass, classValidator(eventClass, (e) => e["status"] !== "error" ? "status must be error" : null)];
+      default:
+        return [eventClass, classValidator(eventClass)];
+    }
+  }))
+);
 function validateGuildTraceEvent(ev) {
   if (typeof ev !== "object" || ev === null) {
     return { ok: false, reason: "event must be a non-null object" };
@@ -7902,8 +7930,47 @@ var TASK_CELL_LIFECYCLE_EVENTS = Object.freeze([
 var EVENT_NAMES = new Set(TASK_CELL_LIFECYCLE_EVENTS);
 
 // src/domains/telemetry/run-analysis.ts
+var path17 = __toESM(require("node:path"));
+var SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 var REQUIRED_COVERAGE = Object.freeze(["prompt", "agent", "tool", "phase", "loop", "gate", "close"]);
 var COMPLETENESS_REQUIREMENTS = Object.freeze(["run identity", "plugin-config-snapshot.json", "trace parseability", "trace validity", ...REQUIRED_COVERAGE]);
+var DETECTOR_IDS = Object.freeze([
+  "clarification",
+  "instruction_following",
+  "knowledge_memory",
+  "outcome_quality",
+  "prompt_action_latency",
+  "recommendation_scope",
+  "redundant_prompt",
+  "repeated_mistake",
+  "steering",
+  "tool_coverage",
+  "usage_outlier",
+  "workflow_churn"
+]);
+var USAGE_METRICS = Object.freeze(["input", "output", "cached", "cost_usd", "duration_ms"]);
+function asRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+function validEvidenceRef(value) {
+  if (!value.startsWith(".guild/") || value.includes("\\") || /[\0\r\n]/.test(value)) return false;
+  const filePart = value.split("#", 1)[0];
+  const normalized = path17.posix.normalize(filePart);
+  return normalized === filePart && !normalized.split("/").includes("..");
+}
+function evidenceRunId(value) {
+  const match = /^\.guild\/runs\/([^/]+)\//.exec(value.split("#", 1)[0]);
+  return match?.[1] ?? null;
+}
+function nonEmptyString(value) {
+  return typeof value === "string" && value.length > 0;
+}
+function integerAtLeast(value, minimum) {
+  return typeof value === "number" && Number.isInteger(value) && value >= minimum;
+}
+function hasOnlyKeys(value, allowed) {
+  return Object.keys(value).every((key) => allowed.has(key));
+}
 var EVENT_CLASS_CATEGORY = Object.freeze({
   run_started: null,
   run_closed: "close",
@@ -7941,6 +8008,45 @@ var EVENT_CLASS_CATEGORY = Object.freeze({
   recommendation_routed: null,
   bug_report_prompted: null
 });
+var HASH_REF = /^sha256:[a-f0-9]{64}$/;
+var SIDECAR_MAX_BYTES = 1024 * 1024;
+var PROJECT_CAPABILITY_KINDS = Object.freeze({
+  skill: "create_skill",
+  agent: "create_agent",
+  workflow: "update_workflow",
+  knowledge: "update_knowledge",
+  settings: "change_settings"
+});
+var PLUGIN_CAPABILITY_KINDS = Object.freeze({
+  plugin_behavior: "tooling_gap",
+  plugin_invariant: "bug_report"
+});
+var SIDECAR_CARRIERS = Object.freeze({
+  "guild.analysis_declaration.v1": ["run_started", "implementation_authorized"],
+  "guild.instruction_evidence.v1": ["gate_concluded"],
+  "guild.outcome_record.v1": ["gate_concluded"],
+  "guild.capability_evidence.v1": ["tool_call_denied", "tool_call_failed"],
+  "guild.lookup_result.v1": ["knowledge_lookup_result", "memory_lookup_result"],
+  "guild.prompt_context.v1": ["prompt_normalized", "agent_prompt_sent"],
+  "guild.phase_cursor.v1": ["run_closed", "phase_concluded"]
+});
+var SIDECAR_CARRIER_CLASSES = new Set(Object.values(SIDECAR_CARRIERS).flat());
+var arrayOf = (value, test) => Array.isArray(value) && value.every(test);
+var keysOf = (...keys) => /* @__PURE__ */ new Set(["schema_version", "run_id", ...keys]);
+var hashRef = (value) => typeof value === "string" && HASH_REF.test(value);
+var runEvidenceRef = (runId) => (value) => typeof value === "string" && validEvidenceRef(value) && evidenceRunId(value) === runId;
+var SIDECAR_VALIDATORS = Object.freeze({
+  "guild.analysis_declaration.v1": (v) => {
+    const instructions = Array.isArray(v["instructions"]) ? v["instructions"].map(asRecord) : null;
+    return hasOnlyKeys(v, keysOf("assessed_input_hash", "assessed_input_ref", "instructions", "instructions_complete", "clarification_required_tasks", "required_phases")) && hashRef(v["assessed_input_hash"]) && nonEmptyString(v["assessed_input_ref"]) && instructions !== null && instructions.every((item) => hasOnlyKeys(item, /* @__PURE__ */ new Set(["instruction_id", "requirement_hash"])) && typeof item["instruction_id"] === "string" && SAFE_ID.test(item["instruction_id"]) && hashRef(item["requirement_hash"])) && new Set(instructions.map((item) => item["instruction_id"])).size === instructions.length && typeof v["instructions_complete"] === "boolean" && arrayOf(v["clarification_required_tasks"], nonEmptyString) && arrayOf(v["required_phases"], nonEmptyString);
+  },
+  "guild.instruction_evidence.v1": (v, runId) => hasOnlyKeys(v, keysOf("instruction_id", "requirement_hash", "verifier_kind", "verifier_ref", "result", "verified_input_hash", "verification_input_ref", "evidence_refs")) && typeof v["instruction_id"] === "string" && SAFE_ID.test(v["instruction_id"]) && hashRef(v["requirement_hash"]) && ["done_when", "configured_check", "review_gate"].includes(String(v["verifier_kind"])) && runEvidenceRef(runId)(v["verifier_ref"]) && ["passed", "failed", "unobservable"].includes(String(v["result"])) && hashRef(v["verified_input_hash"]) && nonEmptyString(v["verification_input_ref"]) && arrayOf(v["evidence_refs"], runEvidenceRef(runId)),
+  "guild.outcome_record.v1": (v) => hasOnlyKeys(v, keysOf("kind", "result", "verified_input_hash", "reopen_transitions", "findings_complete", "unresolved_finding_ids")) && ["review", "verify"].includes(String(v["kind"])) && ["passed", "failed"].includes(String(v["result"])) && hashRef(v["verified_input_hash"]) && integerAtLeast(v["reopen_transitions"], 0) && typeof v["findings_complete"] === "boolean" && arrayOf(v["unresolved_finding_ids"], (id) => typeof id === "string" && SAFE_ID.test(id)),
+  "guild.capability_evidence.v1": (v, runId) => hasOnlyKeys(v, keysOf("action_signature", "owner", "capability_kind", "target", "evidence_refs")) && typeof v["action_signature"] === "string" && /^\S{1,256}$/.test(v["action_signature"]) && (v["owner"] === "project" && String(v["capability_kind"]) in PROJECT_CAPABILITY_KINDS || v["owner"] === "plugin" && String(v["capability_kind"]) in PLUGIN_CAPABILITY_KINDS) && typeof v["target"] === "string" && SAFE_ID.test(v["target"]) && arrayOf(v["evidence_refs"], runEvidenceRef(runId)),
+  "guild.lookup_result.v1": (v, runId) => hasOnlyKeys(v, keysOf("outcome", "result_ref")) && ["hit", "miss"].includes(String(v["outcome"])) && runEvidenceRef(runId)(v["result_ref"]),
+  "guild.prompt_context.v1": (v) => hasOnlyKeys(v, keysOf("prompt_hash", "context_hash", "retry_authorized")) && nonEmptyString(v["prompt_hash"]) && hashRef(v["context_hash"]) && typeof v["retry_authorized"] === "boolean",
+  "guild.phase_cursor.v1": (v) => hasOnlyKeys(v, keysOf("visited_phases", "bypassed_phases")) && arrayOf(v["visited_phases"], nonEmptyString) && arrayOf(v["bypassed_phases"], nonEmptyString)
+});
 
 // scripts/lib/guild-trace-emit.ts
 var emitTraceEvent2 = emitTraceEvent;
@@ -7950,15 +8056,15 @@ var makeDispatchEvent2 = makeDispatchEvent;
 
 // scripts/lib/state/ensure-storage-layout.ts
 var fs14 = __toESM(require("node:fs"));
-var path17 = __toESM(require("node:path"));
+var path18 = __toESM(require("node:path"));
 var CURRENT_LAYOUT_VERSION = 2;
 function markerPath(root) {
-  return path17.join(root, ".guild", "storage-layout.json");
+  return path18.join(root, ".guild", "storage-layout.json");
 }
 function detect2(cwd = process.cwd()) {
   const root = resolveGuildRoot(cwd);
   const marker = markerPath(root);
-  if (!fs14.existsSync(path17.join(root, ".guild"))) {
+  if (!fs14.existsSync(path18.join(root, ".guild"))) {
     return { state: "absent", version: null, root, marker };
   }
   let version = null;
@@ -7976,9 +8082,9 @@ var upgradeChunk = null;
 function upgradeChain() {
   if (upgradeChunk === null) {
     const candidates = [
-      path17.join(__dirname, "upgrade-chain.js"),
-      path17.join(__dirname, "lib", "state", "upgrade-chain"),
-      path17.join(__dirname, "upgrade-chain")
+      path18.join(__dirname, "upgrade-chain.js"),
+      path18.join(__dirname, "lib", "state", "upgrade-chain"),
+      path18.join(__dirname, "upgrade-chain")
     ];
     const spec = candidates.find((c) => fs14.existsSync(c) || fs14.existsSync(`${c}.ts`)) ?? candidates[2];
     upgradeChunk = require(spec);
@@ -8034,7 +8140,7 @@ if (isProcessEntry()) {
 // scripts/lib/host/pane-dispatch-trace.ts
 var PANE_BACKEND_RUNG = 1;
 var DEFAULT_PANE_DISPATCH_PHASE = "execute";
-var EVENTS_RELPATH = path18.join("logs", "v1.4-events.jsonl");
+var EVENTS_RELPATH = path19.join("logs", "v1.4-events.jsonl");
 var SURFACE_TO_BACKEND = {
   tmux: "tmux",
   cmux: "cmux",
@@ -8050,7 +8156,7 @@ function emitPaneDispatchEvents(opts) {
     const surface = opts.surface ?? "tmux";
     const backend = SURFACE_TO_BACKEND[surface] ?? "unknown";
     const paneBackend = surface !== backend ? surface : void 0;
-    const runDir = path18.join(durableGuildDir(opts.cwd), "runs", opts.runId);
+    const runDir = path19.join(durableGuildDir(opts.cwd), "runs", opts.runId);
     const now = opts.now ?? (() => /* @__PURE__ */ new Date());
     let emitted = 0;
     for (const lane of opts.lanes) {
@@ -8133,7 +8239,7 @@ ${USAGE}`);
     process.exit(1);
   }
   const emitted = emitPaneDispatchEvents({
-    cwd: path18.resolve(parsed.cwd),
+    cwd: path19.resolve(parsed.cwd),
     runId: parsed.runId,
     target: parsed.target,
     surface: parsed.surface,

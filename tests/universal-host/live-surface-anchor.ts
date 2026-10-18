@@ -633,7 +633,12 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // status writes nothing without .guild/, reflowed to stay <=40 lines (KTD24); the
   // command registry was re-extracted for that entry. ANTI-VACUITY: check-surface-pins,
   // SC-W2-5 and SC-W3-6 were RED against the prior pin and named only `commands`.
-  commands: "1a544bb20e056b0741f4460938113387afba7a13",
+  // Re-ratified 2026-10-17 (v3-completion Team C): C02 added the `analyze` row to
+  // commands/maintain.md; C06 deleted the eleven KTD14 print-only aliases plus
+  // commands/aliases.allowlist.json after the v3.0.0 stable cut shipped them —
+  // exactly the 13 dispatchers remain. ANTI-VACUITY: SC-W2-5/SC-W3-6 were observed
+  // RED against the prior pins naming commands/** before this value was ratified.
+  commands: "41692cc4045cf206c6de68682458b13254e1ca70",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
   // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
@@ -705,14 +710,21 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // assert the operator force-pass, the Codex confirm, and the verdict-less
   // intersection. ANTI-VACUITY: SC-W3-6(B) and check-surface-pins were RED against
   // the prior pin, naming exactly the three changed files and `skills/skills`.
-  skills: "3a656cd3b7918e952f41b9938d38443088a9028e",
+  // Re-ratified 2026-10-17 (v3-completion Team C): C03 added the analyze row to
+  // skills/meta/evolve/SKILL.md and the new references/run-analysis.md chapter.
+  // ANTI-VACUITY: SC-W3-6(B) was observed RED against the prior pin first.
+  skills: "1fc706b7891bf21f4e1c276f2fb8ca2626fb1c58",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
 export const RATIFIED_MANIFESTS: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-09-14 (T04): the manifest `commands` list is the 13 dispatchers
   // plus the 11 print-only aliases.
-  ".claude-plugin/plugin.json": "3a37e63ef2587d682a8c1b95ed9ca0524930075cb24cc89666857a74d9060afb",
+  // Re-ratified 2026-10-17 (v3-completion C05): the manifest regeneration after the
+  // C06 alias retirement drops the 11 ./commands/<alias>.md registrations — exactly
+  // the 13 dispatchers remain. ANTI-VACUITY: SC-W3-6(A)/SC-W2-5 were observed RED
+  // against the prior pin (version-stripped hash aa360e26...) before ratification.
+  ".claude-plugin/plugin.json": "aa360e26c51dab8ed86421730318b6d9324316ada37e5fc246a00e0efa01aa5c",
   ".claude-plugin/marketplace.json": "ad288b80dee07f85a94eee8b9c3e92b18705a94f98e104277a92b4d2e770e2af",
 });
 

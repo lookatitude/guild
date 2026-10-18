@@ -40,7 +40,50 @@ import { DERIVED_HOST_CAPABILITY_ROWS as HOST_CAPABILITY_ROWS, getRegistryEntryF
 // host here is a HostKind-compatible string ("claude" | "codex" | …).
 import { isAntigravityCli, isClaudeCli, isCodexCli, isPiCli } from "./capability/rank";
 import type { HostKind } from "./host-types";
-import { projectSurfaces } from "../../src/adapters";
+
+// The adapters barrel, loaded lazily from a separate compiled chunk (C04/KTD29): a
+// top-level `import { projectSurfaces } from "../../src/adapters"` made esbuild pull
+// the adapters graph — and through it lifecycle/dispatch/distribution — into every
+// bundle that reaches this file (config-cmd.js was 12 domains wide). Author plane
+// (.ts) requires the source barrel; compiled plane (.js) walks up to the package's
+// runtime/scripts/adapters-api.js and fails closed when absent (KTD10: no tsx
+// fallback). Both specifiers are non-analyzable on purpose.
+function adaptersApi(): typeof import("../../src/adapters") {
+  const nodeFs = require("node:fs") as typeof import("node:fs");
+  const nodePath = require("node:path") as typeof import("node:path");
+  if (__filename.endsWith(".ts")) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require(nodePath.join(__dirname, "..", "..", "src", "adapters")) as typeof import("../../src/adapters");
+  }
+  // Bounded to the owning package (codex C04 r1): sibling chunk first, else the
+  // NEAREST package root must carry it — never a checkout's copy past that root.
+  const sibling = nodePath.join(__dirname, "adapters-api.js");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  if (nodeFs.existsSync(sibling)) return require(sibling) as typeof import("../../src/adapters");
+  for (let dir = nodePath.dirname(__dirname); ; ) {
+    const isPackageRoot =
+      nodeFs.existsSync(nodePath.join(dir, "runtime")) ||
+      nodeFs.existsSync(nodePath.join(dir, ".claude-plugin")) ||
+      nodeFs.existsSync(nodePath.join(dir, ".codex-plugin")) ||
+      nodeFs.existsSync(nodePath.join(dir, "guild.inventory.json"));
+    if (isPackageRoot) {
+      const chunk = nodePath.join(dir, "runtime", "scripts", "adapters-api.js");
+      if (!nodeFs.existsSync(chunk)) {
+        throw new Error(
+          `guild: runtime/scripts/adapters-api.js missing from package root ${dir} — incomplete package; run \`bun run compile\` (KTD10 fail-closed)`,
+        );
+      }
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return require(chunk) as typeof import("../../src/adapters");
+    }
+    const parent = nodePath.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error(
+    `guild: no package root found above ${__dirname} for adapters-api.js (KTD10 fail-closed)`,
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Request / plan types
@@ -424,7 +467,7 @@ export function planWrapperInvocation(
   // KTD28/T10: the hooks read the verify and compaction rungs from env and
   // assume `native` when unset. A wrapped host states its own, from the closed
   // rung matrix, so a missing rung is recorded rather than claimed.
-  const rungEnv = projectSurfaces(request.host, { verify_check_available: false }).env;
+  const rungEnv = adaptersApi().projectSurfaces(request.host, { verify_check_available: false }).env;
   if (rungEnv.GUILD_VERIFY_RUNG !== "native") env["GUILD_VERIFY_RUNG"] = rungEnv.GUILD_VERIFY_RUNG;
   if (rungEnv.GUILD_COMPACTION_RUNG !== "native") env["GUILD_COMPACTION_RUNG"] = rungEnv.GUILD_COMPACTION_RUNG;
   if (request.writableRoots && request.writableRoots.length > 0) {

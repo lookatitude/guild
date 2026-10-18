@@ -332,13 +332,98 @@ describe("authored Verification Contract fixtures", () => {
     fs.mkdirSync(path.join(root, "commands"), { recursive: true });
     fs.writeFileSync(
       path.join(root, "commands", "aliases.allowlist.json"),
-      JSON.stringify({ aliases: ["audit", "stats"] }),
+      JSON.stringify({ aliases: RETIRED_ALIAS_NAMES }),
     );
-    fs.writeFileSync(path.join(root, "commands", "audit.md"), "print-only\n");
+    for (const a of RETIRED_ALIAS_NAMES) {
+      if (a !== "stats") fs.writeFileSync(path.join(root, "commands", `${a}.md`), "print-only\n");
+    }
     expect(mirrorArchiveFindings(root)).toEqual([
       "_archive: _archive",
       "alias missing: commands/stats.md",
       "dual copy: src/modules/wiki/resources",
+    ]);
+  });
+
+  test("KTD14 · alias retirement is all-or-nothing: both whole states pass, every partial refuses", () => {
+    // The LIVE repo must be in one of the two whole states right now.
+    expect(aliasStateFindings()).toEqual([]);
+    expect(aliasCapabilityFindings()).toEqual([]);
+
+    const mk = (name: string, files: string[], allow?: string[]): string => {
+      const root = path.join(scratch, name);
+      fs.mkdirSync(path.join(root, "commands"), { recursive: true });
+      for (const f of files) fs.writeFileSync(path.join(root, "commands", `${f}.md`), "x\n");
+      if (allow) {
+        fs.writeFileSync(
+          path.join(root, "commands", "aliases.allowlist.json"),
+          JSON.stringify({ aliases: allow }),
+        );
+      }
+      return root;
+    };
+    const DISPATCHERS_13 = [
+      "build", "config", "guild", "ideate", "init", "initiative", "learn",
+      "maintain", "ops", "plan", "qa", "status", "wiki",
+    ];
+
+    const ALL_11 = [...RETIRED_ALIAS_NAMES];
+    // Whole PRE state: full allowlist + every listed alias file -> clean.
+    const pre = mk("ktd14-pre", [...DISPATCHERS_13, ...ALL_11], ALL_11);
+    expect(aliasStateFindings(pre)).toEqual([]);
+
+    // Whole RETIRED state: no allowlist, exactly the 13 dispatchers -> clean.
+    const retired = mk("ktd14-retired", DISPATCHERS_13);
+    expect(aliasStateFindings(retired)).toEqual([]);
+
+    // Partial 1: allowlist kept but an alias file deleted -> refused.
+    const partial1 = mk("ktd14-partial1", [...DISPATCHERS_13, ...ALL_11.filter((a) => a !== "stats")], ALL_11);
+    expect(aliasStateFindings(partial1)).toEqual(["alias missing: commands/stats.md"]);
+
+    // Partial 5 (codex r1 F1): SYNCHRONIZED pruning — allowlist cut down to the
+    // surviving alias so list and files agree -> still refused.
+    const partial5 = mk("ktd14-partial5", [...DISPATCHERS_13, "goal"], ["goal"]);
+    expect(aliasStateFindings(partial5)).toEqual([
+      "allowlist drifted: [goal] != the 11 retired aliases",
+    ]);
+
+    // Partial 2: allowlist deleted but a retired alias file lingers -> refused.
+    const partial2 = mk("ktd14-partial2", [...DISPATCHERS_13, "stats"]);
+    expect(aliasStateFindings(partial2)).toEqual([
+      "alias lingers: commands/stats.md",
+      "unexpected command file: commands/stats.md",
+    ]);
+
+    // Partial 3: retirement that also dropped a REAL dispatcher -> refused.
+    const partial3 = mk("ktd14-partial3", DISPATCHERS_13.filter((d) => d !== "plan"));
+    expect(aliasStateFindings(partial3)).toEqual(["dispatcher missing: commands/plan.md"]);
+
+    // Partial 4: a stray 14th command file after retirement -> refused.
+    const partial4 = mk("ktd14-partial4", [...DISPATCHERS_13, "extra"]);
+    expect(aliasStateFindings(partial4)).toEqual(["unexpected command file: commands/extra.md"]);
+
+    // Capability orphan: a destination dispatcher that lost its sub-verb token.
+    const orphan = mk("ktd14-orphan", DISPATCHERS_13);
+    const verbsByDispatcher = new Map<string, string[]>();
+    for (const [, dispatcher, verb] of RETIRED_CAPABILITY_DESTINATIONS) {
+      verbsByDispatcher.set(dispatcher, [...(verbsByDispatcher.get(dispatcher) ?? []), verb]);
+    }
+    for (const [dispatcher, verbs] of verbsByDispatcher) {
+      fs.writeFileSync(
+        path.join(orphan, "commands", `${dispatcher}.md`),
+        `---\nargument-hint: "<${verbs.join(" | ")}>"\n---\n`,
+      );
+    }
+    // Neither descriptive prose NOR a descriptive table cell is a route
+    // (codex r1/r2 F3): tokens outside the hint and outside a backticked
+    // token-column cell stay orphaned.
+    fs.writeFileSync(
+      path.join(orphan, "commands", "status.md"),
+      "Removed capabilities: dashboard resume stats\n\n| Removed capabilities | dashboard resume stats |\n| `removed dashboard` | No longer supported |\n| `removed resume` | gone |\n| `removed stats` | gone |\n",
+    );
+    expect(aliasCapabilityFindings(orphan)).toEqual([
+      'capability orphan: dashboard -> commands/status.md lacks token "dashboard"',
+      'capability orphan: resume -> commands/status.md lacks token "resume"',
+      'capability orphan: stats -> commands/status.md lacks token "stats"',
     ]);
   });
 
@@ -459,16 +544,108 @@ function surfaceHomeFindings(root = PLUGIN_ROOT): string[] {
   return out.sort();
 }
 
+/** KTD14: the 11 print-only alias names of the 22->13 fold, pinned for retirement. */
+const RETIRED_ALIAS_NAMES = [
+  "adopt", "audit", "dashboard", "evolve", "fix", "goal",
+  "migrate", "models", "resume", "rollback", "stats",
+];
+
+/** The 13 real dispatchers that must remain after retirement. */
+const DISPATCHER_NAMES = [
+  "build", "config", "guild", "ideate", "init", "initiative", "learn",
+  "maintain", "ops", "plan", "qa", "status", "wiki",
+];
+
+/** Where each retired alias's capability must live on (dispatcher, sub-verb token). */
+const RETIRED_CAPABILITY_DESTINATIONS: Array<[string, string, string]> = [
+  ["adopt", "init", "adopt"],
+  ["audit", "maintain", "audit"],
+  ["dashboard", "status", "dashboard"],
+  ["evolve", "maintain", "evolve"],
+  ["fix", "maintain", "fix"],
+  ["goal", "plan", "goal"],
+  ["migrate", "config", "migrate"],
+  ["models", "config", "models"],
+  ["resume", "status", "resume"],
+  ["rollback", "maintain", "rollback"],
+  ["stats", "status", "stats"],
+];
+
+/**
+ * KTD14 state-aware alias invariant (C06E): the repo is in exactly one of two
+ * states — PRE-retirement (allowlist present, every listed alias file present)
+ * or RETIRED (allowlist absent, none of the 11 retired files present, exactly
+ * the 13 dispatchers remain). Any partial deletion is a finding. Never reads
+ * generated inventory (that parity is C05's barrier).
+ */
+function aliasStateFindings(root = PLUGIN_ROOT): string[] {
+  const out: string[] = [];
+  const commandsDir = path.join(root, "commands");
+  const allowPath = path.join(commandsDir, "aliases.allowlist.json");
+  if (fs.existsSync(allowPath)) {
+    const allow = JSON.parse(fs.readFileSync(allowPath, "utf8")) as { aliases: string[] };
+    // The allowlist is mutable; the retirement SET is not. A pruned allowlist
+    // (synchronized partial deletion) is a finding, not a smaller contract
+    // (codex C06E r1 F1).
+    const listed = [...allow.aliases].sort();
+    if (JSON.stringify(listed) !== JSON.stringify([...RETIRED_ALIAS_NAMES].sort())) {
+      out.push(`allowlist drifted: [${listed.join(", ")}] != the 11 retired aliases`);
+    }
+    for (const a of allow.aliases) {
+      if (!fs.existsSync(path.join(commandsDir, `${a}.md`))) out.push(`alias missing: commands/${a}.md`);
+    }
+  } else if (fs.existsSync(commandsDir)) {
+    for (const a of RETIRED_ALIAS_NAMES) {
+      if (fs.existsSync(path.join(commandsDir, `${a}.md`))) out.push(`alias lingers: commands/${a}.md`);
+    }
+    const remaining = fs
+      .readdirSync(commandsDir)
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => f.slice(0, -3))
+      .sort();
+    for (const d of DISPATCHER_NAMES) if (!remaining.includes(d)) out.push(`dispatcher missing: commands/${d}.md`);
+    for (const r of remaining) if (!DISPATCHER_NAMES.includes(r)) out.push(`unexpected command file: commands/${r}.md`);
+  }
+  return out.sort();
+}
+
+/**
+ * KTD12 leg of the retirement (C06E): every retired token keeps a destination —
+ * the named dispatcher still exists and still names the sub-verb token. Applies
+ * in BOTH states, so deleting an alias can never orphan its capability.
+ */
+function aliasCapabilityFindings(root = PLUGIN_ROOT): string[] {
+  const out: string[] = [];
+  for (const [alias, dispatcher, verb] of RETIRED_CAPABILITY_DESTINATIONS) {
+    const file = path.join(root, "commands", `${dispatcher}.md`);
+    if (!fs.existsSync(file)) {
+      out.push(`capability orphan: ${alias} -> commands/${dispatcher}.md absent`);
+      continue;
+    }
+    // The token must appear in a ROUTE context — the frontmatter argument-hint
+    // or a sub-verb table row — never satisfied by descriptive prose like
+    // "Removed capabilities: ..." (codex C06E r1 F3).
+    const body = fs.readFileSync(file, "utf8");
+    const hint = body.match(/argument-hint:\s*"(.*)"/)?.[1] ?? "";
+    // A route is the verb as a whole token in the hint, or a sub-verb table row
+    // whose TOKEN column (first cell, backticked) starts with the verb. A
+    // descriptive cell elsewhere in a table is not a route (codex r2).
+    const hintRouted = new RegExp(`(^|[^A-Za-z0-9-])${verb}($|[^A-Za-z0-9-])`).test(hint);
+    const rowRouted = body
+      .split("\n")
+      .some((l) => new RegExp(`^\\|\\s*\`${verb}(?:[\\s\`<\\[])`).test(l.trim()));
+    if (!hintRouted && !rowRouted) {
+      out.push(`capability orphan: ${alias} -> commands/${dispatcher}.md lacks token "${verb}"`);
+    }
+  }
+  return out.sort();
+}
+
 function mirrorArchiveFindings(root = PLUGIN_ROOT): string[] {
   const tree = u9Walk(root);
   const out = [...dualCopies(tree)];
   for (const d of tree.dirs) if (path.basename(d) === "_archive") out.push(`_archive: ${d}`);
-  const allow = JSON.parse(
-    fs.readFileSync(path.join(root, "commands", "aliases.allowlist.json"), "utf8"),
-  ) as { aliases: string[] };
-  for (const a of allow.aliases) {
-    if (!fs.existsSync(path.join(root, "commands", `${a}.md`))) out.push(`alias missing: commands/${a}.md`);
-  }
+  out.push(...aliasStateFindings(root));
   return out.sort();
 }
 

@@ -91,6 +91,8 @@ describe("post-tool-use.ts — #58 attribution_specialist on the Agent dispatch 
     expect(analysisEvents(runDir).map((event) => event.event_class)).toEqual([
       "tool_call_started",
       "tool_call_finished",
+      "agent_dispatched",
+      "agent_prompt_sent",
     ]);
   });
 

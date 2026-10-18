@@ -27,16 +27,6 @@
   },
   "commands": [
     {
-      "id": "adopt",
-      "source_path": "commands/adopt.md",
-      "description": "Print-only alias (KTD14) — /guild:adopt is now `/guild:init adopt`. Prints the new spelling and exits; dispatches nothing, writes nothing."
-    },
-    {
-      "id": "audit",
-      "source_path": "commands/audit.md",
-      "description": "Print-only alias (KTD14) — /guild:audit is now `/guild:maintain audit`. Prints the new spelling and exits; dispatches nothing, writes nothing."
-    },
-    {
       "id": "build",
       "source_path": "commands/build.md",
       "description": "Development — per lane: assemble the specialist context bundle, dispatch the lane on the backend locked in at intake (snapshot effective.agent_mode), collect the handoff receipt, then run the G-lane review gate. Dispatches to guild:execute-plan."
@@ -45,26 +35,6 @@
       "id": "config",
       "source_path": "commands/config.md",
       "description": "Project config surface — resolve, render, validate and edit .guild/ policy config, pin per-run roles, detect providers, re-pin MCP hashes, and reconcile against the typed schema. Sub-verbs `models` (READ-ONLY session-binding evidence) and `migrate` (v1->v2 layout inspect / dry-run / retry) route to their own CLIs, not to config-cmd."
-    },
-    {
-      "id": "dashboard",
-      "source_path": "commands/dashboard.md",
-      "description": "Print-only alias (KTD14) — /guild:dashboard is now `/guild:status dashboard`. Prints the new spelling and exits; dispatches nothing, writes nothing."
-    },
-    {
-      "id": "evolve",
-      "source_path": "commands/evolve.md",
-      "description": "Print-only alias (KTD14) — /guild:evolve is now `/guild:maintain evolve`. Prints the new spelling and exits; dispatches nothing, writes nothing."
-    },
-    {
-      "id": "fix",
-      "source_path": "commands/fix.md",
-      "description": "Print-only alias (KTD14) — /guild:fix is now `/guild:maintain fix`. Prints the new spelling and exits; dispatches nothing, writes nothing."
-    },
-    {
-      "id": "goal",
-      "source_path": "commands/goal.md",
-      "description": "Print-only alias (KTD14) — /guild:goal is now `/guild:plan goal`. Prints the new spelling and exits; dispatches nothing, writes nothing."
     },
     {
       "id": "guild",
@@ -94,17 +64,7 @@
     {
       "id": "maintain",
       "source_path": "commands/maintain.md",
-      "description": "Self-heal + RSI — sub-verbs evolve | rollback | audit | fix | gc | wiki revert. ONE assembler: every sub-verb dispatches guild:evolve, which routes the token to its own chapter (`guild:evolve §Sub-verbs`). One gate, two homes: project targets write this repo's .guild/, machinery targets write a candidate a human commits."
-    },
-    {
-      "id": "migrate",
-      "source_path": "commands/migrate.md",
-      "description": "Print-only alias (KTD14) — /guild:migrate is now `/guild:config migrate`. Prints the new spelling and exits; dispatches nothing, writes nothing."
-    },
-    {
-      "id": "models",
-      "source_path": "commands/models.md",
-      "description": "Print-only alias (KTD14) — /guild:models is now `/guild:config models`. Prints the new spelling and exits; dispatches nothing, writes nothing."
+      "description": "Self-heal + RSI — sub-verbs evolve | rollback | audit | fix | gc | wiki revert | analyze. ONE assembler: every sub-verb dispatches guild:evolve, which routes the token to its own chapter (`guild:evolve §Sub-verbs`). One gate, two homes: project targets write this repo's .guild/, machinery targets write a candidate a human commits."
     },
     {
       "id": "ops",
@@ -120,21 +80,6 @@
       "id": "qa",
       "source_path": "commands/qa.md",
       "description": "Quality — the one user-facing review gate: SignalScan, a surfaced selection matrix, checks under the run sandbox and budget, then the computed ReleaseGate recommendation. Opt-in phase; never auto-entered, never silently skipped. Dispatches to guild:quality."
-    },
-    {
-      "id": "resume",
-      "source_path": "commands/resume.md",
-      "description": "Print-only alias (KTD14) — /guild:resume is now `/guild:status resume`. Prints the new spelling and exits; dispatches nothing, writes nothing."
-    },
-    {
-      "id": "rollback",
-      "source_path": "commands/rollback.md",
-      "description": "Print-only alias (KTD14) — /guild:rollback is now `/guild:maintain rollback`. Prints the new spelling and exits; dispatches nothing, writes nothing."
-    },
-    {
-      "id": "stats",
-      "source_path": "commands/stats.md",
-      "description": "Print-only alias (KTD14) — /guild:stats is now `/guild:status stats`. Prints the new spelling and exits; dispatches nothing, writes nothing."
     },
     {
       "id": "status",

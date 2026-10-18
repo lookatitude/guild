@@ -341,26 +341,15 @@ const CHEAP_ENTRYPOINTS: Array<{ id: string; argv: string[]; allow: string[]; bl
     blocking: true,
   },
   {
-    // MEASURED on the post-T12 tree: still WIDE, 13 domains (was 15 modules).
-    // The fold was expected to cut this and did not. Before, every module barrel
-    // reached all 14 through `state -> migrations -> lifecycle`; `migrations` is
-    // now inside `state`, so that particular edge is gone — but the twelve domain
-    // barrels are still mutually reachable, and `index-only-domain-imports` (KTD27)
-    // REQUIRES a src/ file to import a sibling domain through its index. Narrowing
-    // this needs the domains themselves to be less entangled (a dependency cut),
-    // which is not something a mechanical relocation can deliver.
-    //
-    // Post-fold measurement, `runtime/scripts/config-cmd.js`:
-    //   allowed:  adapters, config, kernel, security, state
-    //   also in:  dispatch, distribution, evolve, knowledge, lifecycle, review,
-    //             teams, telemetry
-    //
-    // Kept reporting, not gating, so the criterion stays visible and honest.
+    // BLOCKING since the C04 dependency cut: the heavy barrels load through the
+    // compiled lifecycle-api / telemetry-api / adapters-api chunks (non-analyzable
+    // requires), so a literal sibling-barrel import anywhere on this graph
+    // re-inlines 7+ domains and fails here. Fix the import, never the allowlist:
+    // the five buckets are C-PERF's config_allowed_buckets.
     id: "config show --sources",
     argv: ["runtime/scripts/config-cmd.js", "show", "--sources"],
     allow: ["state", "config", "security", "adapters", "kernel"],
-    blocking: false,
-    note: "the domain barrels are still mutually reachable; a dependency cut, not a relocation, narrows this",
+    blocking: true,
   },
 ];
 

@@ -178,6 +178,16 @@ function digest(value: unknown): string {
 }
 
 /**
+ * F8: a signature is a typed grouping key. Host-supplied gate/layer text may
+ * carry whitespace ("G-lane: B01"), which would split one gate into several
+ * keys, so whitespace runs collapse to "_" and the token is length-capped.
+ */
+function signatureToken(value: string | undefined, fallback: string): string {
+  const token = (value ?? "").trim().replace(/\s+/g, "_").slice(0, 120);
+  return token.length > 0 ? token : fallback;
+}
+
+/**
  * Determine if the tool response signals an error.
  * Treats explicit success:false or presence of error field as not-ok.
  */
@@ -433,9 +443,9 @@ async function main(): Promise<void> {
           ? "plugin-config-snapshot.json"
           : undefined,
         signature: eventName.startsWith("loop_")
-          ? `${event.loop_layer ?? "unknown"}:${event.loop_round ?? 0}`
+          ? `${signatureToken(event.loop_layer, "unknown")}:${event.loop_round ?? 0}`
           : eventName === "codex_review_round"
-            ? `${event.loop_gate ?? "review"}:${event.loop_round ?? 0}`
+            ? `${signatureToken(event.loop_gate, "review")}:${event.loop_round ?? 0}`
             : undefined,
       }),
       runsDir,

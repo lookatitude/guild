@@ -27,6 +27,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
+import { readScalarField } from "../scripts/lib/frontmatter";
 import {
   appendEvent,
   buildToolCallFromPair,
@@ -81,7 +82,15 @@ import {
   readHookStdin,
   type GuildHookEvent,
 } from "./lib/guild-hook-event.js";
-import { emitTraceEvent, makeAnalysisTraceEvent } from "../src/domains/telemetry/index.js";
+import * as crypto from "node:crypto";
+import {
+  emitTraceEvent,
+  makeAnalysisTraceEvent,
+  toolActionSignature,
+  type GuildTraceAnalysisV2,
+} from "../src/domains/telemetry/index.js";
+import { genSpanId } from "./lib/trace-v2.js";
+import { redactField } from "./lib/v1.4/redact-log.js";
 import { createGuildStorage, durableGuildDir } from "../src/domains/state";
 import { refreshTouched } from "../src/domains/knowledge";
 // T16I (KTD33/KTD43): the lead session drains the T0 write queue from its own tool result.
@@ -155,6 +164,53 @@ function resultExcerpt(
     id: cap.id,
     ...(cap.runDir === undefined ? {} : { runDir: cap.runDir }),
   }).text;
+}
+
+// ── B01H: semantic classes observed at the tool boundary ─────────────────────
+
+/** The same single-line rendering pre-tool-use.ts stores (redacted) in its sidecar. */
+function renderCommand(toolName: string, toolInput: unknown): string {
+  if (toolInput === undefined || toolInput === null) return toolName;
+  if (typeof toolInput === "string") return `${toolName} ${toolInput}`;
+  try {
+    return `${toolName} ${JSON.stringify(toolInput)}`;
+  } catch {
+    return toolName;
+  }
+}
+
+/** Hash of the REDACTED text only: a raw prompt never reaches a digest or the log. */
+function redactedHash(value: unknown): string {
+  const text = typeof value === "string" ? value : JSON.stringify(value ?? "");
+  return crypto.createHash("sha256").update(redactField(text)).digest("hex").slice(0, 16);
+}
+
+const SAFE_TASK_ID = /^[A-Za-z0-9._-]{1,128}$/;
+
+/**
+ * The task a handoff receipt names in its own typed field (`"task_id": "…"` in
+ * the guild.handoff.v2 JSON, or a `task_id:` frontmatter line). Never parsed
+ * from the file name or prose.
+ */
+function handoffTaskId(content: string): string | undefined {
+  const fromJson = /"task_id"\s*:\s*"([^"\n]{1,128})"/.exec(content)?.[1];
+  const candidate = fromJson ?? readScalarField(content, "task_id");
+  return candidate !== undefined && SAFE_TASK_ID.test(candidate) ? candidate : undefined;
+}
+
+/** `handoffs/<file>` when the written path is a receipt inside THIS run, else null. */
+function handoffRef(runDir: string, filePath: string, guildRoot: string): string | null {
+  try {
+    const abs = path.isAbsolute(filePath) ? filePath : path.resolve(guildRoot, filePath);
+    if (!fs.existsSync(abs) || !fs.existsSync(runDir)) return null;
+    const rel = path.relative(fs.realpathSync(runDir), fs.realpathSync(abs));
+    const parts = rel.split(path.sep);
+    return parts.length === 2 && parts[0] === "handoffs" && parts[1] !== "" && !rel.startsWith("..")
+      ? `handoffs/${parts[1]}`
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 // ── HK-06: durable-surface PostToolUse scrub-in-place helpers ────────────────
@@ -697,6 +753,9 @@ export async function main(): Promise<void> {
           ? { latency_ms_override: payload.duration_ms }
           : {}),
       });
+      // F2: a missing PRE is an observability gap, not a success. An explicit
+      // failed tool_response stays a failure.
+      if (isOk(payload) === "err") event.status = "err";
     } else {
       event = buildToolCallFromPair(pre, {
         ts_post: tsPost,
@@ -768,6 +827,10 @@ export async function main(): Promise<void> {
       }),
       runDir,
     );
+    // Span-independent action key: two distinct failed attempts of the same
+    // redacted command group; one attempt's twins collapse by span instead.
+    const actionCommand =
+      event.command_redacted !== "" ? event.command_redacted : redactField(renderCommand(toolName, payload.tool_input));
     emitTraceEvent(
       makeAnalysisTraceEvent({
         ...common,
@@ -776,9 +839,90 @@ export async function main(): Promise<void> {
         status: event.status === "err" ? "error" : event.status === "n/a" ? "unknown" : "ok",
         duration_ms: event.latency_ms,
         tokens,
+        signature: event.status === "err" ? toolActionSignature(toolName, actionCommand) : undefined,
       }),
       runDir,
     );
+
+    // Semantic classes this tool call carries. Each gets its own span with the
+    // tool span as parent: a question, dispatch, or receipt is not another
+    // twin of the tool action and must not be hidden behind its terminal row.
+    // Bodies are never inline and no sidecar is written (redaction: omitted).
+    const semantic = (
+      eventClass: GuildTraceAnalysisV2["event_class"],
+      spanId: string,
+      fields: Partial<GuildTraceAnalysisV2>,
+    ): void => {
+      emitTraceEvent(
+        makeAnalysisTraceEvent({
+          ...common,
+          ts: new Date(startedMs).toISOString(),
+          event_class: eventClass,
+          actor_type: attributionLaneId !== undefined ? "agent" : "lead",
+          actor_id: attributionLaneId ?? "main",
+          status: event.status === "err" ? "error" : "ok",
+          span_id: spanId,
+          parent_span_id: traceV2.span_id,
+          ...fields,
+        }),
+        runDir,
+      );
+    };
+    const childSpan = (eventClass: string): string =>
+      genSpanId(runId, `${eventClass}:${traceV2.span_id}`, tsPost, attributionLaneId ?? "main");
+    const toolInput = (payload.tool_input ?? {}) as Record<string, unknown>;
+    if (toolName === "AskUserQuestion") {
+      semantic("clarifying_question_asked", childSpan("clarifying_question_asked"), {
+        prompt_hash: redactedHash(toolInput["questions"] ?? toolInput),
+        redaction: "omitted",
+      });
+    } else if (toolName === "Agent") {
+      const dispatchTask = resolveDispatchAttribution(payload.tool_input)?.taskId;
+      if (dispatchTask !== undefined && SAFE_TASK_ID.test(dispatchTask)) {
+        // One dispatch, two facets: dispatched + prompt sent share its span.
+        const dispatchSpan = childSpan("agent_dispatched");
+        semantic("agent_dispatched", dispatchSpan, { task_id: dispatchTask });
+        semantic("agent_prompt_sent", dispatchSpan, {
+          task_id: dispatchTask,
+          prompt_hash: redactedHash(toolInput["prompt"] ?? ""),
+          redaction: "omitted",
+        });
+      } else {
+        process.stderr.write(
+          "warn: [post-tool-use] agent_dispatched unobservable: dispatch carries no GUILD_TASK_ID.\n",
+        );
+      }
+    } else if ((toolName === "Write" || toolName === "Edit") && event.status !== "err") {
+      const target = typeof toolInput["file_path"] === "string" ? (toolInput["file_path"] as string) : "";
+      const ref = target !== "" ? handoffRef(runDir, target, guildRoot) : null;
+      if (ref !== null) {
+        let receiptTask: string | undefined;
+        try {
+          receiptTask = handoffTaskId(fs.readFileSync(path.join(runDir, ref), "utf8"));
+        } catch {
+          receiptTask = undefined;
+        }
+        // Only a typed receipt task_id proves a handoff; the env id alone does
+        // not. A receipt naming another task than the bound lane is refused:
+        // neither id can be trusted, so no row is better than a wrong one.
+        const envTask = process.env["GUILD_TASK_ID"];
+        if (receiptTask === undefined) {
+          process.stderr.write(
+            "warn: [post-tool-use] agent_handoff_written unobservable: receipt names no task_id.\n",
+          );
+        } else if (envTask !== undefined && envTask !== "" && envTask !== receiptTask) {
+          process.stderr.write(
+            "warn: [post-tool-use] agent_handoff_written refused: receipt task_id differs from GUILD_TASK_ID.\n",
+          );
+        } else {
+          semantic("agent_handoff_written", childSpan("agent_handoff_written"), {
+            task_id: receiptTask,
+            payload_ref: ref,
+            redaction: "redacted",
+          });
+        }
+      }
+    }
   } catch (err) {
     process.stderr.write(
       `warn: [post-tool-use] tool_call emit failed: ${
