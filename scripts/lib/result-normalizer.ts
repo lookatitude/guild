@@ -149,9 +149,11 @@ export function normalizeResult(raw: string, wire: string): NormalizeResult {
   if (!PHASE1_NORMALIZER_TARGETS.has(wire)) {
     const hint = PROSE_ALIASES[wire]
       ? ` — did you mean "${PROSE_ALIASES[wire]}"? (the real wire string carries no "guild." prefix)`
-      : findContract(wire)
-        ? " — this contract is DEFERRED (no producer/validator yet); not a Phase-1 normalizer target"
-        : " — unknown contract";
+      : findContract(wire)?.legacy_only
+        ? " — this contract is legacy-only (no live producer or caller); not a Phase-1 normalizer target"
+        : findContract(wire)
+          ? " — this contract is DEFERRED (no producer/validator yet); not a Phase-1 normalizer target"
+          : " — unknown contract";
     return {
       ok: false,
       wire_schema_version: wire,

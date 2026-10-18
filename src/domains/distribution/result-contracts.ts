@@ -68,6 +68,13 @@ export interface ResultContractEntry {
   purpose: string;
   /** For deferred contracts: the phase/producer that will introduce it. */
   deferred_until?: string;
+  /**
+   * The non-test source file that consumes this contract by wire string, and the
+   * function it calls. Only contracts with a live caller are normalizer targets.
+   */
+  live_caller?: { path: string; call: string };
+  /** A validator with no producer or caller: kept for reading old records, never a target. */
+  legacy_only?: true;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,11 +82,10 @@ export interface ResultContractEntry {
 // ---------------------------------------------------------------------------
 
 /**
- * The orchestration-result contracts with a real validator. The first two have
- * live producers (handoff.v2, review_result.v1); the other four were previously
- * deferred and now ship in v2 (validators defined in `result-contracts-v2.ts`) so
- * a host emitting one is normalized the moment its producer lands — no
- * fail-closed "unknown contract" gap. All six are valid normalizer targets.
+ * The orchestration-result contracts with a real validator. Only the first two
+ * have live callers (handoff.v2, review_result.v1) and are normalizer targets.
+ * The other four (validators in `result-contracts-v2.ts`) have no producer or
+ * caller: they are `legacy_only` and the normalizer refuses them.
  */
 export const EXISTING_CONTRACTS: readonly ResultContractEntry[] = deepFreeze([
   {
@@ -88,6 +94,7 @@ export const EXISTING_CONTRACTS: readonly ResultContractEntry[] = deepFreeze([
     validator_kind: "strict",
     source_path: "plugin/hooks/lib/handoff-v2.ts",
     purpose: "Specialist lane result (dispatch envelope).",
+    live_caller: { path: "scripts/task-cell-host-conformance.ts", call: "normalizeResult" },
   },
   {
     wire_schema_version: "review_result.v1", // NOTE: no `guild.` prefix (correction #1).
@@ -95,6 +102,7 @@ export const EXISTING_CONTRACTS: readonly ResultContractEntry[] = deepFreeze([
     validator_kind: "lenient",
     source_path: "plugin/scripts/verify-gate-pass.ts", // correction #2.
     purpose: "Advisory/adversarial review result (gate-pass binding).",
+    live_caller: { path: "scripts/verify-gate-pass.ts", call: "parseReviewResult" },
   },
   {
     wire_schema_version: "guild.phase_result.v1",
@@ -102,6 +110,7 @@ export const EXISTING_CONTRACTS: readonly ResultContractEntry[] = deepFreeze([
     validator_kind: "strict",
     source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
     purpose: "Phase close summary and gate predicate.",
+    legacy_only: true,
   },
   {
     wire_schema_version: "guild.permission_receipt.v1",
@@ -109,6 +118,7 @@ export const EXISTING_CONTRACTS: readonly ResultContractEntry[] = deepFreeze([
     validator_kind: "strict",
     source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
     purpose: "Requested/selected host mode and gate policy.",
+    legacy_only: true,
   },
   {
     wire_schema_version: "guild.host_event.v1",
@@ -116,6 +126,7 @@ export const EXISTING_CONTRACTS: readonly ResultContractEntry[] = deepFreeze([
     validator_kind: "strict",
     source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
     purpose: "Normalized hook/tool/session event.",
+    legacy_only: true,
   },
   {
     wire_schema_version: "guild.qa_result.v1",
@@ -123,6 +134,7 @@ export const EXISTING_CONTRACTS: readonly ResultContractEntry[] = deepFreeze([
     validator_kind: "strict",
     source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
     purpose: "Test matrix execution, gaps, failures, release predicate.",
+    legacy_only: true,
   },
 ]);
 
@@ -139,8 +151,11 @@ export const RESULT_CONTRACTS: readonly ResultContractEntry[] = Object.freeze([
   ...DEFERRED_CONTRACTS,
 ]);
 
-/** The set of wire schema_version strings a Phase-1 normalizer is allowed to target. */
-export const PHASE1_NORMALIZER_TARGETS: ReadonlySet<string> = sealSet(EXISTING_CONTRACTS.map((c) => c.wire_schema_version), "PHASE1_NORMALIZER_TARGETS");
+/** The wire strings a Phase-1 normalizer may target: contracts with a live caller, never legacy-only ones. */
+export const PHASE1_NORMALIZER_TARGETS: ReadonlySet<string> = sealSet(
+  EXISTING_CONTRACTS.filter((c) => c.live_caller !== undefined && c.legacy_only !== true).map((c) => c.wire_schema_version),
+  "PHASE1_NORMALIZER_TARGETS",
+);
 
 // ---------------------------------------------------------------------------
 // Bound validators (by reference — NOT redefined here)
@@ -166,7 +181,7 @@ export const CONTRACT_VALIDATORS: Record<
     const { result, reasons } = parseReviewResult(raw);
     return { valid: result !== null, errors: reasons };
   },
-  // The four formerly-deferred contracts — now shipped (result-contracts-v2.ts).
+  // The four legacy-only contracts (result-contracts-v2.ts) — bound, never targets.
   "guild.phase_result.v1": validatePhaseResultV1,
   "guild.permission_receipt.v1": validatePermissionReceiptV1,
   "guild.host_event.v1": validateHostEventV1,

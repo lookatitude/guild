@@ -27,15 +27,17 @@ import {
   selectValidReceipt,
   validateSmokeReceipt,
   computeSmokeDigest,
+  groupSourceCommit,
   type DisplaySupport,
   type GateableRow,
   type HostSmokeReceipt,
 } from "./host-public-state";
-import { loadCommittedReceipts } from "./host-smoke-store";
+import { loadCommittedReceipts, readGuildSourceVersion } from "./host-smoke-store";
 import { generateSupportMatrix, validateSupportMatrix } from "./support-matrix";
 import { HOST_IDS, HOST_REGISTRY_ROWS, type HostId } from "./host-registry-schema";
 
 const GENERATED_AT = "2026-07-04T00:00:00Z";
+const CURRENT_VERSION = readGuildSourceVersion();
 
 function makeReceipt(host: HostId, publicState: string, boxId = "box-t"): HostSmokeReceipt {
   const identity = {
@@ -45,12 +47,13 @@ function makeReceipt(host: HostId, publicState: string, boxId = "box-t"): HostSm
     public_state_claimed: publicState as HostSmokeReceipt["identity"]["public_state_claimed"],
     verification_status_claimed: "verified" as const,
     checks: [{ concern: "binary_present", state: "verified", evidence: "test" }],
+    source_commit: "0123456789abcdef0123-456789abcdef01234567",
   };
   return {
     schema_version: "guild.host_smoke_receipt.v1",
     identity,
     smoke_digest: computeSmokeDigest(identity),
-    freshness: { captured_at: "2026-07-04", guild_version: "2.0.0" },
+    freshness: { captured_at: "2026-07-04", guild_version: CURRENT_VERSION },
   };
 }
 
@@ -161,9 +164,70 @@ describe("host-public-state — two-field honesty model", () => {
       makeReceipt("pi-cli", "verified_wrapped", "box-a"),
       // A second box claiming a different (still bucket-valid for a different bucket) value is
       // filtered out by bucket mismatch, so craft two same-bucket-but-different by forcing native.
-    ], GENERATED_AT);
+    ], GENERATED_AT, { guild_version: CURRENT_VERSION });
     expect(sel.has_valid_receipt).toBe(true); // single valid receipt → no conflict
     expect(sel.conflict).toBeNull();
+  });
+
+  it("G08 R3 — a guild_version-mismatched receipt is refused, never selected via fallback", () => {
+    const old = makeReceipt("pi-cli", "verified_wrapped");
+    old.freshness.guild_version = "2.0.0";
+    const sel = selectValidReceipt("pi-cli", "wrapped-cli", [old], GENERATED_AT, { guild_version: "3.2.0-beta.1" });
+    expect(sel.has_valid_receipt).toBe(false);
+    expect(sel.chosen).toBeNull();
+    expect(sel.refused.join("\n")).toMatch(/guild_version 2\.0\.0 !== 3\.2\.0-beta\.1/);
+    // DISCRIMINATING: the same receipt bound to its own version is selected.
+    expect(selectValidReceipt("pi-cli", "wrapped-cli", [old], GENERATED_AT, { guild_version: "2.0.0" }).has_valid_receipt).toBe(true);
+  });
+
+  it("G08 R3 — a commit-mismatched (or commit-less) receipt is refused when the caller binds a commit", () => {
+    const commitA = "a".repeat(40);
+    const commitB = "b".repeat(40);
+    const withCommit = (commit: string | undefined): HostSmokeReceipt => {
+      const r = makeReceipt("pi-cli", "verified_wrapped");
+      const identity = { ...r.identity, ...(commit ? { source_commit: groupSourceCommit(commit) } : {}) };
+      return { ...r, identity, smoke_digest: computeSmokeDigest(identity) };
+    };
+    const binding = { guild_version: CURRENT_VERSION, source_commit: commitB };
+    const mismatched = selectValidReceipt("pi-cli", "wrapped-cli", [withCommit(commitA)], GENERATED_AT, binding);
+    expect(mismatched.has_valid_receipt).toBe(false);
+    expect(mismatched.refused.join("\n")).toMatch(/source_commit/);
+    expect(selectValidReceipt("pi-cli", "wrapped-cli", [withCommit(undefined)], GENERATED_AT, binding).has_valid_receipt).toBe(false);
+    // A mismatched receipt alongside a matching one never wins: the matching one is chosen.
+    const mixed = selectValidReceipt("pi-cli", "wrapped-cli", [withCommit(commitA), withCommit(commitB)], GENERATED_AT, binding);
+    expect(mixed.has_valid_receipt).toBe(true);
+    expect(mixed.chosen!.identity.source_commit).toBe(groupSourceCommit(commitB));
+  });
+
+  it("G08 R3 — the live matrix refuses a receipt that records no source commit", () => {
+    const r = makeReceipt("cursor", "verified_wrapped");
+    const { source_commit: _commit, ...identity } = r.identity;
+    const commitless = { ...r, identity, smoke_digest: computeSmokeDigest(identity) };
+    const cursor = (receipts: HostSmokeReceipt[]) => generateSupportMatrix(GENERATED_AT, { cursor: receipts }).rows.find((row) => row.host_id === "cursor")!;
+    expect(cursor([commitless]).has_valid_receipt).toBe(false);
+    // DISCRIMINATING: the same receipt with its commit recorded promotes.
+    expect(cursor([r]).has_valid_receipt).toBe(true);
+  });
+
+  it("G08 R3 — an all-stale pool is refused (staleness disqualifies, no stale fallback)", () => {
+    const stale = makeReceipt("pi-cli", "verified_wrapped");
+    stale.freshness.captured_at = "2025-01-01";
+    const sel = selectValidReceipt("pi-cli", "wrapped-cli", [stale], "2026-07-04T00:00:00Z", { guild_version: CURRENT_VERSION });
+    expect(sel.has_valid_receipt).toBe(false);
+    expect(sel.chosen).toBeNull();
+    expect(sel.stale).toBe(true);
+    // DISCRIMINATING: inside the horizon it is selected.
+    expect(selectValidReceipt("pi-cli", "wrapped-cli", [stale], "2025-02-01T00:00:00Z", { guild_version: CURRENT_VERSION }).has_valid_receipt).toBe(true);
+  });
+
+  it("G08 R3 — the live matrix binds the manifest version: a committed receipt re-stamped to another version stops promoting", () => {
+    const committed = loadCommittedReceipts();
+    const restamped = Object.fromEntries(
+      Object.entries(committed).map(([h, rs]) => [h, rs.map((r) => ({ ...r, freshness: { ...r.freshness, guild_version: "0.0.1" } }))]),
+    );
+    const res = validateSupportMatrix(generateSupportMatrix(GENERATED_AT, restamped));
+    expect(res.valid).toBe(false);
+    expect(res.errors.join("\n")).toMatch(/claude-code-cli/);
   });
 
   it("derive functions cover the honest no-receipt path per bucket", () => {
