@@ -107,10 +107,11 @@ export function extractManifestBlock(content: string): unknown {
 /**
  * A top-level frontmatter field as its PARSED YAML value (undefined when absent).
  * A YAML-clean frontmatter is parsed whole. A YAML-hostile one (the unquoted skill
- * `description:` convention) falls back to that key's own entry (its column-0 line
- * plus indented continuation lines), parsed alone. Only a single-line plain scalar
- * that YAML rejects is taken as its literal trimmed text; any other unparseable
- * entry is undefined, so it never matches a manifest value.
+ * `description:` convention) falls back to that key's own entry: the shortest slice
+ * from its column-0 line to a later column-0 line that parses to exactly that one key
+ * (so indented and quoted column-0 continuations are kept). Only a single-line plain
+ * scalar that YAML rejects is taken as its literal trimmed text; any other
+ * unparseable entry is undefined, so it never matches a manifest value.
  */
 export function frontmatterValue(content: string, key: string): unknown {
   const fm = parseFrontmatter(content);
@@ -122,12 +123,18 @@ export function frontmatterValue(content: string, key: string): unknown {
   if (start === -1) return undefined;
   let end = start + 1;
   while (end < lines.length && (lines[end].trim() === "" || /^[ \t]/.test(lines[end]))) end++;
-  while (end > start + 1 && lines[end - 1].trim() === "") end--;
-  const entry = parseYaml(lines.slice(start, end).join("\n"));
-  if (typeof entry === "object" && entry !== null && !Array.isArray(entry) && key in entry) {
-    const v = (entry as Record<string, unknown>)[key];
-    return v === null ? undefined : v;
+  for (let e = end; e <= lines.length; e++) {
+    if (e < lines.length && (lines[e].trim() === "" || /^[ \t]/.test(lines[e]))) continue;
+    const entry = parseYaml(lines.slice(start, e).join("\n"));
+    if (typeof entry === "object" && entry !== null && !Array.isArray(entry)) {
+      const keys = Object.keys(entry);
+      if (keys.length === 1 && keys[0] === key) {
+        const v = (entry as Record<string, unknown>)[key];
+        return v === null ? undefined : v;
+      }
+    }
   }
+  while (end > start + 1 && lines[end - 1].trim() === "") end--;
   const raw = lines[start].slice(key.length + 1).trim();
   if (end > start + 1 || raw === "" || "\"'[{|>&*!".includes(raw[0])) return undefined;
   return raw;

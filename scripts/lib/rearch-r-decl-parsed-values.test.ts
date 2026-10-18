@@ -77,6 +77,7 @@ describe("C3 — R-DECL prose-≡ uses parsed YAML values", () => {
 
   test("fallback reads continuation lines: a folded multi-line value parses whole", () => {
     expect(frontmatterValue(`---\n${HOSTILE}when_to_use: "same\n  text"\n---\n`, "when_to_use")).toBe("same text");
+    expect(frontmatterValue(`---\n${HOSTILE}when_to_use: "same\ntext"\ntype: x\n---\n`, "when_to_use")).toBe("same text");
     expect(frontmatterValue(`---\n${HOSTILE}when_to_use: same text\n  extra drift\n---\n`, "when_to_use")).toBe(
       "same text extra drift",
     );
