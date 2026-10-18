@@ -107,25 +107,30 @@ export function extractManifestBlock(content: string): unknown {
 /**
  * A top-level frontmatter field as its PARSED YAML value (undefined when absent).
  * A YAML-clean frontmatter is parsed whole. A YAML-hostile one (the unquoted skill
- * `description:` convention) falls back to that one column-0 line: a quoted scalar
- * must parse to a string (else undefined, so a malformed value never matches); a
- * plain scalar that does not parse to a string is its literal trimmed text.
+ * `description:` convention) falls back to that key's own entry (its column-0 line
+ * plus indented continuation lines), parsed alone. Only a single-line plain scalar
+ * that YAML rejects is taken as its literal trimmed text; any other unparseable
+ * entry is undefined, so it never matches a manifest value.
  */
 export function frontmatterValue(content: string, key: string): unknown {
   const fm = parseFrontmatter(content);
   if (fm !== null) return fm[key] === null ? undefined : fm[key];
   const { frontmatter } = splitFrontmatter(content);
   if (frontmatter === null) return undefined;
-  const prefix = key + ":";
-  for (const ln of frontmatter.split("\n")) {
-    if (!ln.startsWith(prefix)) continue;
-    const raw = ln.slice(prefix.length).trim();
-    if (raw === "") return undefined;
-    const parsed = parseYaml(raw);
-    if (raw[0] === '"' || raw[0] === "'") return typeof parsed === "string" ? parsed : undefined;
-    return typeof parsed === "string" ? parsed : raw;
+  const lines = frontmatter.split("\n");
+  const start = lines.findIndex((ln) => ln.startsWith(key + ":"));
+  if (start === -1) return undefined;
+  let end = start + 1;
+  while (end < lines.length && (lines[end].trim() === "" || /^[ \t]/.test(lines[end]))) end++;
+  while (end > start + 1 && lines[end - 1].trim() === "") end--;
+  const entry = parseYaml(lines.slice(start, end).join("\n"));
+  if (typeof entry === "object" && entry !== null && !Array.isArray(entry) && key in entry) {
+    const v = (entry as Record<string, unknown>)[key];
+    return v === null ? undefined : v;
   }
-  return undefined;
+  const raw = lines[start].slice(key.length + 1).trim();
+  if (end > start + 1 || raw === "" || "\"'[{|>&*!".includes(raw[0])) return undefined;
+  return raw;
 }
 
 /** True iff the body's dispatch wiring (anywhere in the prose) names `target`. */

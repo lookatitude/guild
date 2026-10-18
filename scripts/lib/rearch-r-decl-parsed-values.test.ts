@@ -65,4 +65,24 @@ describe("C3 — R-DECL prose-≡ uses parsed YAML values", () => {
   test("a malformed quoted frontmatter scalar does not match anything", () => {
     expect(frontmatterValue('---\nname: x\ndescription: "unterminated\n---\n', "description")).toBeUndefined();
   });
+
+  const HOSTILE = "description: Does a thing. Output: a table.\n";
+
+  test("fallback keeps YAML types: a typed scalar never equals its quoted string", () => {
+    for (const v of ["true", "123", "[x]"]) {
+      expect(frontmatterValue(`---\n${HOSTILE}when_to_use: ${v}\n---\n`, "when_to_use")).not.toBe(v);
+    }
+    expect(frontmatterValue(`---\n${HOSTILE}when_to_use: null\n---\n`, "when_to_use")).toBeUndefined();
+  });
+
+  test("fallback reads continuation lines: a folded multi-line value parses whole", () => {
+    expect(frontmatterValue(`---\n${HOSTILE}when_to_use: "same\n  text"\n---\n`, "when_to_use")).toBe("same text");
+    expect(frontmatterValue(`---\n${HOSTILE}when_to_use: same text\n  extra drift\n---\n`, "when_to_use")).toBe(
+      "same text extra drift",
+    );
+  });
+
+  test("fallback refuses a multi-line entry YAML rejects", () => {
+    expect(frontmatterValue(`---\n${HOSTILE}when_to_use: a: b\n  c\n---\n`, "when_to_use")).toBeUndefined();
+  });
 });
