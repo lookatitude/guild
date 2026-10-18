@@ -99,9 +99,10 @@ minting instead of permanently guessing stable or beta.
    npm --prefix scripts run build:inventory -- --root ..
    npm --prefix scripts run sync:claude-install -- --root ..
    npm --prefix scripts run build:hosts -- --root .. --sync-native-identity
+   npm --prefix scripts run build:verify:refresh   # operator box: receipts bind the version
    git add .claude-plugin/plugin.json .claude-plugin/marketplace.json \
      .codex-plugin/plugin.json guild.inventory.json \
-     .guild-native-claude-package-identity.json
+     .guild-native-claude-package-identity.json evidence/host-smoke
    git commit -m "chore(release): cut vX.Y.Z"
    gh pr create --base next --title "chore(release): cut vX.Y.Z"
    ```
@@ -150,8 +151,11 @@ minting instead of permanently guessing stable or beta.
 7. Open the dev-version bump PR into `next`. Set `version` in
    `.claude-plugin/plugin.json` to the next target (for example
    `X.(Y+1).0-beta.1`), run the same `build:inventory`, `sync:claude-install`,
-   and `build:hosts -- --sync-native-identity` commands, commit the same five
-   files, and merge before any code PR.
+   and `build:hosts -- --sync-native-identity` commands plus `build:verify:refresh`
+   on the operator box, commit the same five files with the refreshed
+   `evidence/host-smoke` receipts, and merge before any code PR. Host-smoke
+   receipts are bound to the manifest version, so `check:host-support-matrix`
+   fails a version change that does not refresh them.
 
 ## Bounded v2.7.0 provenance-only basis
 

@@ -2726,3 +2726,159 @@ describe("G02 — offline / provenance-authority outage and recovery", () => {
     }
   });
 });
+
+describe("G13 R4-R6 — migration-window transaction planted controls", () => {
+  const HOOK = join(__dirname, "../../../hooks/dist/capture-telemetry.js");
+  const runRealHook = (projectRoot: string): void => {
+    const payload = JSON.stringify({ hook_event_name: "PostToolUse", session_id: "g13-r6", tool_name: "Bash", tool_input: { command: "ls" }, tool_response: { stdout: "x" }, cwd: projectRoot });
+    const res = actualChildProcess.spawnSync("node", [HOOK], { cwd: projectRoot, input: payload, encoding: "utf8", env: { ...process.env, CLAUDE_PLUGIN_ROOT: join(__dirname, "../../.."), CLAUDE_PROJECT_DIR: projectRoot } });
+    expect(res.status).toBe(0);
+  };
+  const legacyRestartFixture = (label: string) => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const first = boundaryFixture("2.7.0-beta.2", 1787299200);
+    const next = boundaryFixture("2.7.0-beta.3", 1787904000);
+    const started = startMigrationWindow({ projectRoot, projectId: "fx-project", mode: "observe", boundaryPath: first.boundaryPath, actor: "operator" });
+    const evidence = observationFixture(projectRoot, first, `run-20260821-090000-${label}`, false, "observe", "2026-08-21T09:00:00.000Z");
+    const legacyWindow = validateMigrationWindow({ ...started, releases: [first.boundary], observations: [asLegacyObservation(evidence.observation)] })!;
+    writeMigrationWindow(projectRoot, legacyWindow);
+    // A Guild root marker, so the real hook treats this as a project it may write to.
+    if (!existsSync(join(projectRoot, ".guild/guild.yaml"))) writeFileSync(join(projectRoot, ".guild/guild.yaml"), "kind: project\n");
+    return { projectRoot, first, next, cleanup: () => { for (const dir of [projectRoot, first.root, next.root]) rmSync(dir, { recursive: true, force: true }); } };
+  };
+  const snapshot = (projectRoot: string) => ({
+    window: readFileSync(join(projectRoot, MIGRATION_WINDOW_RELPATH), "utf8"),
+    gates: readFileSync(join(projectRoot, FEATURE_GATE_RELPATH), "utf8"),
+  });
+
+  it("R4 — a pending manifest that substitutes the root is refused with zero writes outside the trusted root", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "guild-window-project-"));
+    const outside = mkdtempSync(join(tmpdir(), "guild-window-substituted-root-"));
+    const fixture = boundaryFixture("2.7.0-beta.2", 1787299200);
+    const unlink = spyOn(fsNamespace, "unlinkSync").mockImplementationOnce(() => { throw new Error("planted cleanup crash"); });
+    try {
+      expect(() => startMigrationWindow({ projectRoot, projectId: "fx-project", mode: "observe", boundaryPath: fixture.boundaryPath, actor: "operator" })).toThrow(/planted cleanup crash/i);
+      unlink.mockRestore();
+      const intentPath = join(projectRoot, MIGRATION_TRANSITION_RELPATH);
+      const intent = JSON.parse(readFileSync(intentPath, "utf8"));
+      const before = snapshot(projectRoot);
+      for (const plant of [
+        (body: Record<string, any>) => ({ ...body, project_root: outside }),
+        (body: Record<string, any>) => ({ ...body, next_window: { ...body.next_window, root: outside } }),
+        (body: Record<string, any>) => ({ ...body, next_window: { ...body.next_window, restart_history: { path: join(outside, "x.json"), sha256: "a".repeat(64) } } }),
+      ]) {
+        const { intent_hash: _hash, ...body } = intent;
+        const forged = plant(body);
+        writeFileSync(intentPath, `${JSON.stringify({ ...forged, intent_hash: createHash("sha256").update(canonical(forged)).digest("hex") }, null, 2)}\n`);
+        expect(() => recoverMigrationTransition(projectRoot)).toThrow(/invalid or tampered/i);
+        expect(snapshot(projectRoot)).toEqual(before);
+      }
+      expect(fsNamespace.readdirSync(outside)).toEqual([]);
+      // DISCRIMINATING: the untouched intent still recovers forward under the trusted root.
+      writeFileSync(intentPath, `${JSON.stringify(intent, null, 2)}\n`);
+      expect(recoverMigrationTransition(projectRoot)).toBe(true);
+      expect(fsNamespace.readdirSync(outside)).toEqual([]);
+    } finally {
+      unlink.mockRestore();
+      for (const dir of [projectRoot, outside, fixture.root]) rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("R5 — a post-write image that differs from the intended postimage rolls every target back to the snapshot", () => {
+    const fx = legacyRestartFixture("g13-r5");
+    const realRename = fsNamespace.renameSync.bind(fsNamespace);
+    let planted = true;
+    const rename = spyOn(fsNamespace, "renameSync").mockImplementation(((source: string, destination: string) => {
+      realRename(source, destination);
+      if (planted && String(destination).endsWith(MIGRATION_WINDOW_RELPATH)) {
+        planted = false;
+        const landed = JSON.parse(readFileSync(destination, "utf8"));
+        writeFileSync(destination, `${JSON.stringify({ ...landed, actor: "someone-else" }, null, 2)}\n`);
+      }
+    }) as typeof fsNamespace.renameSync);
+    try {
+      const before = snapshot(fx.projectRoot);
+      expect(() => restartMigrationWindow({ projectRoot: fx.projectRoot, boundaryPath: fx.next.boundaryPath, actor: "operator", reason: "upgrade the legacy evidence window" })).toThrow(/postimage mismatch.*migration-window\.json.*rolled back/i);
+      expect(planted).toBe(false);
+      expect(snapshot(fx.projectRoot)).toEqual(before);
+      expect(existsSync(join(fx.projectRoot, MIGRATION_TRANSITION_RELPATH))).toBe(false);
+      expect(existsSync(join(fx.projectRoot, MIGRATION_RESTART_HISTORY_RELPATH)) ? fsNamespace.readdirSync(join(fx.projectRoot, MIGRATION_RESTART_HISTORY_RELPATH)) : []).toEqual([]);
+      // DISCRIMINATING: the same restart with a faithful write lands.
+      rename.mockRestore();
+      expect(restartMigrationWindow({ projectRoot: fx.projectRoot, boundaryPath: fx.next.boundaryPath, actor: "operator", reason: "upgrade the legacy evidence window" }).status).toBe("restarted");
+    } finally { rename.mockRestore(); fx.cleanup(); }
+  });
+
+  it("R5 — a rollback whose restore write is itself corrupted keeps the intent and does not claim success", () => {
+    const fx = legacyRestartFixture("g13-r5-bad-restore");
+    const realRename = fsNamespace.renameSync.bind(fsNamespace);
+    let windowRenames = 0;
+    const rename = spyOn(fsNamespace, "renameSync").mockImplementation(((source: string, destination: string) => {
+      realRename(source, destination);
+      // 1st window rename = the apply write, 2nd = the rollback restore: corrupt both.
+      if (String(destination).endsWith(MIGRATION_WINDOW_RELPATH) && windowRenames++ < 2) writeFileSync(destination, "{}\n");
+    }) as typeof fsNamespace.renameSync);
+    try {
+      let message = "";
+      try { restartMigrationWindow({ projectRoot: fx.projectRoot, boundaryPath: fx.next.boundaryPath, actor: "operator", reason: "upgrade the legacy evidence window" }); }
+      catch (error) { message = (error as Error).message; }
+      expect(windowRenames).toBe(2);
+      expect(message).toMatch(/rollback did not restore .*migration-window\.json.*intent retained/i);
+      expect(message).not.toMatch(/rolled back to the snapshot/i);
+      expect(existsSync(join(fx.projectRoot, MIGRATION_TRANSITION_RELPATH))).toBe(true);
+    } finally { rename.mockRestore(); fx.cleanup(); }
+  });
+
+  it("R6 — files the real compiled hook creates under .guild during apply are enumerated, kept, and accounted for", () => {
+    expect(existsSync(HOOK)).toBe(true);
+    const fx = legacyRestartFixture("g13-r6");
+    const realRename = fsNamespace.renameSync.bind(fsNamespace);
+    let hookRan = false;
+    // Make room for the hook's own state files so it has something to create.
+    for (const rel of [".guild/storage-layout.json", ".guild/wiki/glossary.md"]) rmSync(join(fx.projectRoot, rel), { force: true });
+    const rename = spyOn(fsNamespace, "renameSync").mockImplementation(((source: string, destination: string) => {
+      realRename(source, destination);
+      if (!hookRan && String(destination).endsWith(MIGRATION_WINDOW_RELPATH)) { hookRan = true; runRealHook(fx.projectRoot); }
+    }) as typeof fsNamespace.renameSync);
+    try {
+      const result = restartMigrationWindow({ projectRoot: fx.projectRoot, boundaryPath: fx.next.boundaryPath, actor: "operator", reason: "upgrade the legacy evidence window" });
+      expect(hookRan).toBe(true);
+      expect(result.status).toBe("restarted");
+      expect(result.foreign_guild_writes.length).toBeGreaterThan(0);
+      for (const rel of result.foreign_guild_writes) {
+        expect(rel.startsWith(".guild/")).toBe(true);
+        expect(existsSync(join(fx.projectRoot, rel))).toBe(true);
+      }
+      // The transaction's own targets are never reported as foreign.
+      expect(result.foreign_guild_writes).not.toContain(MIGRATION_WINDOW_RELPATH);
+      expect(result.foreign_guild_writes).not.toContain(result.history_path);
+      expect(readMigrationWindow(fx.projectRoot)).toEqual(result.window);
+    } finally { rename.mockRestore(); fx.cleanup(); }
+  });
+
+  it("R6 — a rollback keeps hook-created .guild files and names them instead of deleting them", () => {
+    const fx = legacyRestartFixture("g13-r6-rollback");
+    const realRename = fsNamespace.renameSync.bind(fsNamespace);
+    let planted = true;
+    for (const rel of [".guild/storage-layout.json", ".guild/wiki/glossary.md"]) rmSync(join(fx.projectRoot, rel), { force: true });
+    const rename = spyOn(fsNamespace, "renameSync").mockImplementation(((source: string, destination: string) => {
+      realRename(source, destination);
+      if (planted && String(destination).endsWith(MIGRATION_WINDOW_RELPATH)) {
+        planted = false;
+        runRealHook(fx.projectRoot);
+        writeFileSync(destination, "{}\n");
+      }
+    }) as typeof fsNamespace.renameSync);
+    try {
+      const before = snapshot(fx.projectRoot);
+      let message = "";
+      try { restartMigrationWindow({ projectRoot: fx.projectRoot, boundaryPath: fx.next.boundaryPath, actor: "operator", reason: "upgrade the legacy evidence window" }); }
+      catch (error) { message = (error as Error).message; }
+      expect(message).toMatch(/rolled back/i);
+      expect(snapshot(fx.projectRoot)).toEqual(before);
+      const kept = /foreign \.guild writes kept: (.+)$/.exec(message)?.[1].split(", ") ?? [];
+      expect(kept.length).toBeGreaterThan(0);
+      for (const rel of kept) expect(existsSync(join(fx.projectRoot, rel))).toBe(true);
+    } finally { rename.mockRestore(); fx.cleanup(); }
+  });
+});

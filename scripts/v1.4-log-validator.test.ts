@@ -223,6 +223,22 @@ describe("v1.4-log-validator — original wrapped v1.4 EVENT_TYPES (back-compat,
     expect(validateEvent(line)).toEqual({ ok: true, errors: [] });
   });
 
+  it("accepts an owner-architect loop row on the L-arch layer and refuses an unknown layer", () => {
+    const row = (loop_layer: string) => ({
+      ts: "2026-06-15T03:16:21.505Z",
+      event: "loop_round_start",
+      run_id: "run-2026-06-15T03-14-57-320Z",
+      lane_id: "phase:plan",
+      loop_layer,
+      round_number: 1,
+      cap: 4,
+    });
+    expect(validateEvent(row("L-arch"))).toEqual({ ok: true, errors: [] });
+    const bad = validateEvent(row("L-bogus"));
+    expect(bad.ok).toBe(false);
+    expect(bad.errors.join("\n")).toContain("loop_layer");
+  });
+
   it("rejects an unknown event token that is neither a wrapped type, a hook name, nor a trace schema", () => {
     const result = validateEvent({ ts: "2026-06-15T03:16:21.505Z", event: "not_a_real_event" });
     expect(result.ok).toBe(false);

@@ -59,6 +59,22 @@ export const CLAUDE_TIER_FALLBACK: Record<Tier, string> = {
 };
 
 /**
+ * Provider `model:` → tier, read off `CLAUDE_TIER_FALLBACK` (opus=powerful,
+ * sonnet=mid, haiku=cheap; substring, case-insensitive). The ONE model→tier
+ * rule: roster.ts, workspace-role-localize.ts and the R-DECL rail import it.
+ * An unknown or empty model returns null; a caller that must fill a tier field
+ * applies its own fallback (every current caller uses "mid").
+ */
+export function tierForModel(model: string | null): Tier | null {
+  if (!model) return null;
+  const m = model.toLowerCase();
+  for (const tier of ["powerful", "mid", "cheap"] as const) {
+    if (m.includes(CLAUDE_TIER_FALLBACK[tier])) return tier;
+  }
+  return null;
+}
+
+/**
  * Compute the per-host tier→model map from the registry rows. For each HostKind
  * that resolves to a registry row:
  *   - If the row's `capabilities.models.<tier>.model` is non-null, use it.

@@ -14,6 +14,8 @@
  *                      disagrees on at least one sample — proving (A) has teeth.
  *   (C) SINGLE-IMPL:   exactly one source file DEFINES inShareSet, and neither
  *                      scrub.ts nor audit.ts redefines the share-set names set.
+ *
+ * refresh_trigger: {"owner": "tooling-engineer", "when": "An intentional change to the scrub share-set membership rule in the source file, with a security review. Update the frozen reference in the same commit; never edit it to match an unplanned diff.", "source": "src/domains/security/share-set.ts"}
  */
 
 import { describe, test, expect } from "bun:test";
