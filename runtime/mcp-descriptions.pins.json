@@ -2,7 +2,7 @@
   "schema_version": "guild.mcp_description_pins.v2",
   "generated_by": "scripts/compile.ts",
   "binary": "runtime/guild-mcp.js",
-  "binary_sha256": "10655b81efa7e7b9e5627df04ba25f4caa5c472fb72d7cb533e43cd31ecdd8fb",
+  "binary_sha256": "09c7e7ac6fa1c9b93344a52bc6f53cba10afbd0543f5e42ca10c44a338d01afd",
   "servers": {
     "guild-telemetry": {
       "mcp_id": "trace",

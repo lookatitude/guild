@@ -3,6 +3,7 @@ import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { OWNER_ARCHITECT_LAYER } from "../src/domains/lifecycle";
 
 // new-run-id.ts deleted in SC-8 W2B-4; run-lifecycle.ts:startRun is the sole sentinel writer.
 const EMIT_LOOP_EVENT = path.resolve(__dirname, "emit-loop-event.ts");
@@ -111,5 +112,40 @@ describe("run scoping and loop event helpers", () => {
         terminator: "security",
       }),
     ]);
+  });
+
+  // G11 R1: the owner-architect loop (OWNER_ARCHITECT_LAYER) must be emittable,
+  // and the layer whitelist must still refuse anything it does not name.
+  function emitStart(layer: string) {
+    return spawnSync(
+      "npx",
+      [
+        "tsx", EMIT_LOOP_EVENT, "--cwd", tmpDir, "--run-id", "run-layer-check",
+        "--event", "loop_round_start", "--layer", layer,
+        "--lane", "phase:plan", "--round", "1", "--cap", "4",
+      ],
+      { encoding: "utf8", timeout: 15000, env: SPAWN_ENV },
+    );
+  }
+  const layerLog = () =>
+    path.join(tmpDir, ".guild", "runs", "run-layer-check", "logs", "v1.4-events.jsonl");
+
+  it("accepts an owner-architect loop event on the L-arch layer", () => {
+    expect(OWNER_ARCHITECT_LAYER).toBe("L-arch");
+    const res = emitStart(OWNER_ARCHITECT_LAYER);
+    expect(res.status).toBe(0);
+    expect(res.stderr).toBe("");
+    const rows = fs.readFileSync(layerLog(), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(rows).toEqual([
+      expect.objectContaining({ event: "loop_round_start", loop_layer: "L-arch", round_number: 1, cap: 4 }),
+    ]);
+  });
+
+  it("still refuses an unknown loop layer and writes nothing", () => {
+    for (const layer of ["L-unknown", "l-arch", "L5"]) {
+      const res = emitStart(layer);
+      expect(res.stderr).toContain("--layer is required for loop round events");
+    }
+    expect(fs.existsSync(layerLog())).toBe(false);
   });
 });

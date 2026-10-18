@@ -408,6 +408,20 @@ describe("run-tracing-evaluation — plugin-owned analysis", () => {
     expect(analyzeRun(root, RUN_A).eligible).toBe(true);
   });
 
+  it("accepts an owner-architect L-arch loop row and still refuses an unknown loop layer", () => {
+    const relayer = (layer: string) => {
+      const dir = seedRun(root, RUN_A);
+      const log = path.join(dir, "logs", "v1.4-events.jsonl");
+      const rows = fs.readFileSync(log, "utf8").split("\n").filter(Boolean)
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .map((event) => event["event"] === "loop_round_start" ? { ...event, loop_layer: layer } : event);
+      fs.writeFileSync(log, rows.map((event) => JSON.stringify(event)).join("\n") + "\n");
+      return analyzeRun(root, RUN_A);
+    };
+    expect(relayer("L-arch").completeness.missing).not.toContain("trace validity");
+    expect(relayer("L-bogus").completeness.missing).toContain("trace validity");
+  });
+
   it("counts valid-JSON non-object trace rows as invalid instead of silently dropping them", () => {
     const dir = seedRun(root, RUN_A);
     fs.appendFileSync(path.join(dir, "logs", "v1.4-events.jsonl"), "[]\n42\nnull\n");

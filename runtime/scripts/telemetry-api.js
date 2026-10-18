@@ -9826,7 +9826,7 @@ function rewriteRecommendation(root, sourceId, recommendationId, status, effect)
 var V14_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 var ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 var V14_PHASES = /* @__PURE__ */ new Set(["brainstorm", "team-compose", "plan", "context", "execute", "review", "verify", "reflect"]);
-var V14_LOOPS = /* @__PURE__ */ new Set(["L1", "L2", "L3", "L4", "security-review"]);
+var V14_LOOPS = /* @__PURE__ */ new Set(["L1", "L2", "L3", "L4", "security-review", "L-arch"]);
 var DEGRADATION_KINDS = /* @__PURE__ */ new Set([
   "coordination.parallelism",
   "backend_rung",

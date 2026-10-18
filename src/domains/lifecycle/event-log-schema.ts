@@ -26,7 +26,7 @@ export type Phase =
   | "verify"
   | "reflect";
 
-export type LoopLayer = "L1" | "L2" | "L3" | "L4" | "security-review";
+export type LoopLayer = "L1" | "L2" | "L3" | "L4" | "security-review" | "L-arch";
 
 /**
  * Closed enum for `tool_call.tool`. 17 values per schema doc §7. Validators

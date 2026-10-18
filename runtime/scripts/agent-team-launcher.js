@@ -17938,6 +17938,14 @@ var init_purpose_provenance = __esm({
 });
 
 // src/domains/config/tier-defaults.ts
+function tierForModel(model) {
+  if (!model) return null;
+  const m = model.toLowerCase();
+  for (const tier of ["powerful", "mid", "cheap"]) {
+    if (m.includes(CLAUDE_TIER_FALLBACK[tier])) return tier;
+  }
+  return null;
+}
 function tierDefaults(descriptors = HOST_REGISTRY_ROWS) {
   const result2 = {};
   for (const [hk, registryId] of Object.entries(HOSTKIND_TO_REGISTRY_ID)) {
@@ -19713,6 +19721,7 @@ __export(config_exports, {
   tierDefaultsForHost: () => tierDefaultsForHost,
   tierForCanonicalId: () => tierForCanonicalId,
   tierForComplexity: () => tierForComplexity,
+  tierForModel: () => tierForModel,
   toolVersionInRange: () => toolVersionInRange,
   totalCatalogOrder: () => totalCatalogOrder,
   validateAdjudicationRef: () => validateAdjudicationRef,
@@ -29441,7 +29450,7 @@ var init_emit_loop_event = __esm({
     init_state();
     init_state();
     VALID_EVENTS = /* @__PURE__ */ new Set(["loop_round_start", "loop_round_end", "codex_review_round"]);
-    VALID_LAYERS = /* @__PURE__ */ new Set(["L1", "L2", "L3", "L4", "security-review"]);
+    VALID_LAYERS = /* @__PURE__ */ new Set(["L1", "L2", "L3", "L4", "security-review", "L-arch"]);
     VALID_TERMINATED = /* @__PURE__ */ new Set([
       "satisfied",
       "malformed_termination",
@@ -50723,6 +50732,7 @@ var import_util5 = require("util");
 
 // scripts/lib/roster.ts
 init_kernel();
+init_config2();
 
 // scripts/lib/frontmatter.ts
 init_state();
@@ -50740,14 +50750,6 @@ var AUGMENTING_AGENT_IDS = sealSet(
   "AUGMENTING_AGENT_IDS"
 );
 var SPECIALIST_TEMPLATE_VERSION = "guild.specialist_template.v1";
-function tierForModel(model) {
-  if (!model) return null;
-  const m = model.toLowerCase();
-  if (m.includes("opus")) return "powerful";
-  if (m.includes("sonnet")) return "mid";
-  if (m.includes("haiku")) return "cheap";
-  return null;
-}
 
 // scripts/lib/core/contracts/specialist-identity.ts
 var SPECIALIST_TYPE_SCHEMA = "guild.specialist_type.v2";

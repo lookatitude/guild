@@ -17010,7 +17010,7 @@ var init_emit_loop_event = __esm({
     init_state();
     init_state();
     VALID_EVENTS = /* @__PURE__ */ new Set(["loop_round_start", "loop_round_end", "codex_review_round"]);
-    VALID_LAYERS = /* @__PURE__ */ new Set(["L1", "L2", "L3", "L4", "security-review"]);
+    VALID_LAYERS = /* @__PURE__ */ new Set(["L1", "L2", "L3", "L4", "security-review", "L-arch"]);
     VALID_TERMINATED = /* @__PURE__ */ new Set([
       "satisfied",
       "malformed_termination",
@@ -27550,6 +27550,14 @@ var init_purpose_provenance = __esm({
 });
 
 // src/domains/config/tier-defaults.ts
+function tierForModel(model) {
+  if (!model) return null;
+  const m = model.toLowerCase();
+  for (const tier of ["powerful", "mid", "cheap"]) {
+    if (m.includes(CLAUDE_TIER_FALLBACK[tier])) return tier;
+  }
+  return null;
+}
 function tierDefaults(descriptors = HOST_REGISTRY_ROWS) {
   const result2 = {};
   for (const [hk, registryId] of Object.entries(HOSTKIND_TO_REGISTRY_ID)) {
@@ -29325,6 +29333,7 @@ __export(config_exports, {
   tierDefaultsForHost: () => tierDefaultsForHost,
   tierForCanonicalId: () => tierForCanonicalId,
   tierForComplexity: () => tierForComplexity,
+  tierForModel: () => tierForModel,
   toolVersionInRange: () => toolVersionInRange,
   totalCatalogOrder: () => totalCatalogOrder,
   validateAdjudicationRef: () => validateAdjudicationRef,
@@ -42399,6 +42408,7 @@ init_security();
 
 // hooks/lib/tier-dispatch.ts
 init_state();
+init_config2();
 var OVERRIDE_ENV2 = "GUILD_ALLOW_UNTIERED_DISPATCH";
 var TIER_DISPATCH_EVENT = "tier_dispatch";
 var TIER_DISPATCH_SCHEMA = "guild.tier_dispatch.v1";
@@ -42407,11 +42417,6 @@ var TIER_ENV = "GUILD_TIER";
 var TIER_SCORE_ENV = "GUILD_TIER_SCORE";
 var MISSING_MODEL = "MISSING";
 var TIERS = ["cheap", "mid", "powerful"];
-var CLAUDE_TIER_FALLBACK2 = {
-  cheap: "haiku",
-  mid: "sonnet",
-  powerful: "opus"
-};
 var SAFE_MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 function safeModelName(value) {
   if (value.length === 0) return MISSING_MODEL;
@@ -42490,9 +42495,9 @@ function unpackTierHostValue(v) {
 function readConfiguredTierModels(guildRoot, hostId) {
   const claudeHost = hostId.startsWith("claude");
   const out = {
-    cheap: claudeHost ? CLAUDE_TIER_FALLBACK2.cheap : null,
-    mid: claudeHost ? CLAUDE_TIER_FALLBACK2.mid : null,
-    powerful: claudeHost ? CLAUDE_TIER_FALLBACK2.powerful : null
+    cheap: claudeHost ? CLAUDE_TIER_FALLBACK.cheap : null,
+    mid: claudeHost ? CLAUDE_TIER_FALLBACK.mid : null,
+    powerful: claudeHost ? CLAUDE_TIER_FALLBACK.powerful : null
   };
   let doc;
   try {
