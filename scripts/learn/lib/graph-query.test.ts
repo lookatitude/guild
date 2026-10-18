@@ -185,10 +185,10 @@ describe("[G3] kgTrace — depth-bounded call-chain BFS", () => {
 // ---------------------------------------------------------------------------
 
 describe("[G3] kgDeadCode — zero-inbound free functions minus entry points", () => {
-  test("dead-code list EQUALS oracle.deadCode (precision & recall = 1.0)", () => {
+  test("dead-code list (deriveExported: false) EQUALS oracle.deadCode (precision & recall = 1.0)", () => {
     const g = buildGraph();
     const o = loadOracle();
-    const dead = new Set(kgDeadCode(g).nodes.map((n) => n.id));
+    const dead = new Set(kgDeadCode(g, { deriveExported: false }).nodes.map((n) => n.id));
     expect(dead).toEqual(new Set(o.deadCode));
   });
 
@@ -204,7 +204,7 @@ describe("[G3] kgDeadCode — zero-inbound free functions minus entry points", (
 
   test("anti-vacuity: adding a caller to a dead fn removes it from the list", () => {
     const g = buildGraph();
-    expect(new Set(kgDeadCode(g).nodes.map((n) => n.id)).has("function:src/b.ts:unusedHelper")).toBe(true);
+    expect(new Set(kgDeadCode(g, { deriveExported: false }).nodes.map((n) => n.id)).has("function:src/b.ts:unusedHelper")).toBe(true);
 
     const withCaller: GraphView = {
       nodes: g.nodes,
@@ -216,7 +216,7 @@ describe("[G3] kgDeadCode — zero-inbound free functions minus entry points", (
         },
       ],
     };
-    expect(new Set(kgDeadCode(withCaller).nodes.map((n) => n.id)).has("function:src/b.ts:unusedHelper")).toBe(false);
+    expect(new Set(kgDeadCode(withCaller, { deriveExported: false }).nodes.map((n) => n.id)).has("function:src/b.ts:unusedHelper")).toBe(false);
   });
 
   test("methods are not flagged dead (model-free scope guard)", () => {
@@ -231,7 +231,7 @@ describe("[G3] kgDeadCode — zero-inbound free functions minus entry points", (
   test("a non-`main` entry point supplied by simple name is NOT reported dead", () => {
     const g = buildGraph();
     // Baseline: unusedHelper has zero inbound calls → dead by default.
-    expect(new Set(kgDeadCode(g).nodes.map((n) => n.id)).has("function:src/b.ts:unusedHelper")).toBe(true);
+    expect(new Set(kgDeadCode(g, { deriveExported: false }).nodes.map((n) => n.id)).has("function:src/b.ts:unusedHelper")).toBe(true);
     // Declare it exported/public surface by simple name → excluded.
     const dead = new Set(kgDeadCode(g, { entryPoints: ["unusedHelper"] }).nodes.map((n) => n.id));
     expect(dead.has("function:src/b.ts:unusedHelper")).toBe(false);
@@ -259,7 +259,7 @@ describe("[G3] kgDeadCode — zero-inbound free functions minus entry points", (
   test("an entry supplied by file relpath excludes every free function in that file", () => {
     const g = buildGraph();
     // unusedHelper lives in src/b.ts; declaring the file as public surface excludes it.
-    expect(new Set(kgDeadCode(g).nodes.map((n) => n.id)).has("function:src/b.ts:unusedHelper")).toBe(true);
+    expect(new Set(kgDeadCode(g, { deriveExported: false }).nodes.map((n) => n.id)).has("function:src/b.ts:unusedHelper")).toBe(true);
     const dead = new Set(kgDeadCode(g, { entryPoints: ["src/b.ts"] }).nodes.map((n) => n.id));
     expect(dead.has("function:src/b.ts:unusedHelper")).toBe(false);
     // A leading "./" on the same path is normalised to the same match.
@@ -283,7 +283,7 @@ describe("[G3] kgEntryPoints — name-heuristic + configured entries (Finding 2)
   test("a configured non-`main` entry (by simple name) IS included in kgEntryPoints", () => {
     const g = buildGraph();
     // Baseline: unusedHelper is NOT an entry point by the name heuristic alone.
-    expect(new Set(kgEntryPoints(g).map((n) => n.id)).has("function:src/b.ts:unusedHelper")).toBe(false);
+    expect(new Set(kgEntryPoints(g, { deriveExported: false }).map((n) => n.id)).has("function:src/b.ts:unusedHelper")).toBe(false);
     // Configure it → now kgEntryPoints includes it (was the round-3 MAJOR: it ignored config).
     const eps = new Set(kgEntryPoints(g, { entryPoints: ["unusedHelper"] }).map((n) => n.id));
     expect(eps.has("function:src/b.ts:unusedHelper")).toBe(true);
@@ -437,31 +437,42 @@ describe("[G3] resolveEntryPointConfig — on-disk union (model-free, injectable
 });
 
 // ---------------------------------------------------------------------------
-// I14 (legacy G2) — opt-in exported derivation (deriveExported)
+// I14 (legacy G2) — exported derivation is the bare default
 // ---------------------------------------------------------------------------
 
-describe("I14 — deriveExported derives the public surface from provable flags", () => {
-  test("deriveExported: exported zero-inbound fns are NOT dead (TS + Python)", () => {
+describe("I14 — the bare call derives the public surface from provable flags", () => {
+  test("bare call: exported zero-inbound fns are NOT dead (TS + Python)", () => {
     const g = buildGraph();
-    // Bare call keeps the CLRA-oracle-pinned legacy semantics (both dead):
     const bare = new Set(kgDeadCode(g).nodes.map((n) => n.id));
-    expect(bare.has("function:src/b.ts:unusedHelper")).toBe(true);
-    expect(bare.has("function:py/b.py:unused_helper")).toBe(true);
-    // Opt-in derivation excludes the provably exported/importable surface:
-    const derived = new Set(kgDeadCode(g, { deriveExported: true }).nodes.map((n) => n.id));
-    expect(derived.has("function:src/b.ts:unusedHelper")).toBe(false);
-    expect(derived.has("function:py/b.py:unused_helper")).toBe(false);
+    expect(bare.has("function:src/b.ts:unusedHelper")).toBe(false);
+    expect(bare.has("function:py/b.py:unused_helper")).toBe(false);
+    // The non-exported zero-inbound fn stays dead (derivation is not a blanket pass):
+    expect(bare.has("function:src/b.ts:unusedInternal")).toBe(true);
   });
 
-  test("supplied entryPoints (even []) are authoritative over deriveExported", () => {
+  test("deriveExported: false opts out to pure internal reachability", () => {
     const g = buildGraph();
-    const dead = new Set(
-      kgDeadCode(g, { deriveExported: true, entryPoints: [] }).nodes.map((n) => n.id),
-    );
+    const legacy = new Set(kgDeadCode(g, { deriveExported: false }).nodes.map((n) => n.id));
+    expect(legacy.has("function:src/b.ts:unusedHelper")).toBe(true);
+    expect(legacy.has("function:py/b.py:unused_helper")).toBe(true);
+  });
+
+  test("supplied entryPoints (even []) are authoritative over the derivation", () => {
+    const g = buildGraph();
+    const dead = new Set(kgDeadCode(g, { entryPoints: [] }).nodes.map((n) => n.id));
     expect(dead.has("function:src/b.ts:unusedHelper")).toBe(true); // derivation suppressed
   });
 
-  test("pre-I14 graph (flags stripped): deriveExported degrades to exact legacy behavior", () => {
+  test("configEntryPoints are unioned with the derivation, never suppress it", () => {
+    const g = buildGraph();
+    const dead = new Set(
+      kgDeadCode(g, { configEntryPoints: ["unusedInternal"] }).nodes.map((n) => n.id),
+    );
+    expect(dead.has("function:src/b.ts:unusedInternal")).toBe(false); // config entry
+    expect(dead.has("function:src/b.ts:unusedHelper")).toBe(false); // still derived
+  });
+
+  test("pre-I14 graph (flags stripped): the bare call is exact legacy behavior", () => {
     const g = buildGraph();
     const stripped: GraphView = {
       nodes: g.nodes.map((n) => {
@@ -470,15 +481,16 @@ describe("I14 — deriveExported derives the public surface from provable flags"
       }),
       edges: g.edges,
     };
-    expect(new Set(kgDeadCode(stripped, { deriveExported: true }).nodes.map((n) => n.id)))
-      .toEqual(new Set(kgDeadCode(g).nodes.map((n) => n.id)));
+    expect(new Set(kgDeadCode(stripped).nodes.map((n) => n.id)))
+      .toEqual(new Set(kgDeadCode(g, { deriveExported: false }).nodes.map((n) => n.id)));
   });
 
-  test("kgEntryPoints with deriveExported includes the exported surface", () => {
+  test("bare kgEntryPoints includes the exported surface; opt-out does not", () => {
     const g = buildGraph();
     const bare = new Set(kgEntryPoints(g).map((n) => n.id));
-    expect(bare.has("function:src/b.ts:unusedHelper")).toBe(false);
-    const derived = new Set(kgEntryPoints(g, { deriveExported: true }).map((n) => n.id));
-    expect(derived.has("function:src/b.ts:unusedHelper")).toBe(true);
+    expect(bare.has("function:src/b.ts:unusedHelper")).toBe(true);
+    expect(bare.has("function:src/b.ts:unusedInternal")).toBe(false);
+    const legacy = new Set(kgEntryPoints(g, { deriveExported: false }).map((n) => n.id));
+    expect(legacy.has("function:src/b.ts:unusedHelper")).toBe(false);
   });
 });
