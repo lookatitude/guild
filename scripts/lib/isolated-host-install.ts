@@ -122,7 +122,14 @@ export function snapshotLiveConfig(realHome: string): string {
   const parts: string[] = [];
   for (const rel of files) {
     const p = join(realHome, rel);
-    parts.push(`${rel}=${existsSync(p) ? createHash("sha256").update(readFileSync(p)).digest("hex") : "absent"}`);
+    let digest: string;
+    try {
+      digest = createHash("sha256").update(readFileSync(p)).digest("hex");
+    } catch (err) {
+      if (!isAbsence(err)) throw err; // unreadable is not absent: the caller refuses
+      digest = "absent";
+    }
+    parts.push(`${rel}=${digest}`);
   }
   const list = (dir: string, prefix: string): string[] => {
     let names: string[];
@@ -354,7 +361,15 @@ function refused(code: string, detail: string): string {
  */
 export function runIsolatedInstall(o: IsolatedInstallOptions): IsolatedInstallResult {
   const realHome = o.realHome ?? homedir();
-  const guard = checkIsolatedRoot(o.isolatedRoot, realHome, o.tmpRoot ?? tmpdir());
+  // Resolving the live config dirs can itself fail (EACCES); that refuses too.
+  const guarded = (root: string): Verdict => {
+    try {
+      return checkIsolatedRoot(root, realHome, o.tmpRoot ?? tmpdir());
+    } catch {
+      return { ok: false, code: "live_config_unreadable", detail: "the live HOME config dirs could not be resolved" };
+    }
+  };
+  const guard = guarded(o.isolatedRoot);
   const build = (step: Step): IsolatedInstallResult => {
     const v = step.verdict;
     return {
@@ -375,7 +390,7 @@ export function runIsolatedInstall(o: IsolatedInstallOptions): IsolatedInstallRe
     return build({ verdict: { ok: false, code: "isolated_root_not_fresh", detail: "the per-host config root already exists" } });
   }
   mkdirSync(hostRoot, { recursive: true, mode: 0o700 });
-  const hostGuard = checkIsolatedRoot(hostRoot, realHome, o.tmpRoot ?? tmpdir());
+  const hostGuard = guarded(hostRoot);
   if (!hostGuard.ok) return build({ verdict: hostGuard });
   const snapshot = (): string | null => {
     try {

@@ -244,6 +244,22 @@ describe("runIsolatedInstall — claude-code-cli", () => {
     }
   });
 
+  it("refuses with an exact code when a watched live file cannot be read", () => {
+    // @control: a permission-denied file must refuse, never read as absent.
+    const { symlinkSync } = require("node:fs") as typeof import("node:fs");
+    const locked = join(realHome, "locked");
+    mkdirSync(locked);
+    writeFileSync(join(locked, "settings.json"), "{}\n");
+    rmSync(join(realHome, ".claude", "settings.json"));
+    symlinkSync(join(locked, "settings.json"), join(realHome, ".claude", "settings.json"));
+    chmodSync(locked, 0o000);
+    try {
+      expect(run("claude-code-cli", fakeClaude()).code).toBe("live_config_unreadable");
+    } finally {
+      chmodSync(locked, 0o755);
+    }
+  });
+
   it("PLANTED CONTROL: an install path outside the isolated root is refused", () => {
     // @control: an install the host reports outside the root must be refused.
     const r = run("claude-code-cli", fakeClaude({ escapeInstall: true }));
