@@ -44,6 +44,7 @@
 import { REPO, RailResult, report, read, proveAssert } from "./_common";
 import { splitFrontmatter, readScalarField } from "../../scripts/lib/frontmatter";
 import { validateSurfaceManifest, SurfaceManifest } from "../../scripts/lib/surface-manifest";
+import { CLAUDE_TIER_FALLBACK } from "../../scripts/lib/capability/tier-defaults";
 import * as yaml from "js-yaml";
 import * as fs from "fs";
 import * as path from "path";
@@ -66,12 +67,10 @@ export const EXEMPLARS: string[] = [
   "agents/context-manager.md",
 ];
 
-/** Canonical `model:` → tier map (capability/tier-defaults.ts CLAUDE_TIER_FALLBACK, inverted). */
-const MODEL_TO_TIER: Record<string, string> = {
-  haiku: "cheap",
-  sonnet: "mid",
-  opus: "powerful",
-};
+/** Canonical `model:` → tier map: CLAUDE_TIER_FALLBACK inverted (exact alias match). */
+const MODEL_TO_TIER: Record<string, string> = Object.fromEntries(
+  Object.entries(CLAUDE_TIER_FALLBACK).map(([tier, model]) => [model, tier]),
+);
 
 /**
  * Extract the `surface_manifest:` sub-block as a standalone object. We do NOT

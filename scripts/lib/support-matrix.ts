@@ -27,9 +27,12 @@ import {
   selectValidReceipt,
   type DisplaySupport,
   type HostSmokeReceipt,
+  type ReceiptSourceBinding,
   type PublicState,
   type VerificationStatus,
 } from "./host-public-state";
+
+import { readGuildSourceVersion } from "./host-smoke-store";
 
 export const SUPPORT_MATRIX_SCHEMA = "guild.support_matrix.v1";
 
@@ -273,6 +276,7 @@ function lifecycleFor(host: HostId, baseCells: Record<MatrixOperation, SupportCe
 export function generateSupportMatrix(
   generatedAt = "2026-06-18T00:00:00Z",
   receiptsByHost: Record<string, HostSmokeReceipt[]> = {},
+  sourceBinding: ReceiptSourceBinding = { guild_version: readGuildSourceVersion(), require_source_commit: true },
 ): SupportMatrix {
   const progressEvents = reviewProgressScenarios();
   const rows: HostSupportRow[] = [];
@@ -329,7 +333,7 @@ export function generateSupportMatrix(
       final_state,
     };
     const bucket = bucketForRow(derivable);
-    const selection = selectValidReceipt(host, bucket, receiptsByHost[host] ?? [], generatedAt);
+    const selection = selectValidReceipt(host, bucket, receiptsByHost[host] ?? [], generatedAt, sourceBinding);
     const verification_status = deriveVerificationStatus(derivable, bucket, selection.has_valid_receipt);
     const current_public_state = deriveCurrentPublicState(host, bucket, verification_status);
     const display_support = deriveDisplaySupport(current_public_state, verification_status, { bucket, hostId: host });

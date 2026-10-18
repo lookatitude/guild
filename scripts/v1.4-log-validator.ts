@@ -61,6 +61,7 @@ export const LOOP_LAYER_VALUES = Object.freeze([
   "L3",
   "L4",
   "security-review",
+  "L-arch",
 ] as const);
 
 export const TOOL_CALL_TOOL_VALUES = Object.freeze([

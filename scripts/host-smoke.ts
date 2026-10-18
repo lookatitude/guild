@@ -43,6 +43,7 @@ import { HOST_IDS, HOST_REGISTRY_ROWS, type HostId } from "./lib/host-registry-s
 import {
   bucketForRow,
   computeSmokeDigest,
+  groupSourceCommit,
   verifiedStateForBucket,
   type HostBucket,
   type HostSmokeReceipt,
@@ -50,12 +51,30 @@ import {
   type SmokeReceiptIdentity,
   SMOKE_RECEIPT_SCHEMA,
 } from "./lib/host-public-state";
-import { serializeReceipt, writeCommittedReceipt } from "./lib/host-smoke-store";
+import { readGuildSourceVersion, serializeReceipt, writeCommittedReceipt } from "./lib/host-smoke-store";
 import { redact } from "./lib/shared/scrub-redact";
 import { durableGuildDir } from "./lib/state/storage";
 import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
-const GUILD_VERSION = "2.0.0";
+const GUILD_VERSION = readGuildSourceVersion();
+
+/**
+ * HEAD of the plugin checkout, grouped — only when the tree is clean, so the
+ * receipt never names a commit that is not the source it smoked. Read once per
+ * run: this run's own receipt writes would otherwise dirty the tree.
+ */
+let sourceCommitMemo: { value: string | undefined } | null = null;
+function cleanSourceCommit(): string | undefined {
+  sourceCommitMemo ??= { value: readCleanSourceCommit() };
+  return sourceCommitMemo.value;
+}
+function readCleanSourceCommit(): string | undefined {
+  const git = (args: string[]) => spawnSync("git", args, { cwd: pluginRoot(), encoding: "utf8" });
+  const head = git(["rev-parse", "HEAD"]);
+  const status = git(["status", "--porcelain"]);
+  if (head.status !== 0 || status.status !== 0 || status.stdout.trim() !== "") return undefined;
+  return groupSourceCommit(head.stdout.trim());
+}
 
 /**
  * Map a registry host id to its guild-run wrapper host-kind key
@@ -203,6 +222,17 @@ function bootstrapPlanCheck(host: HostId): SmokeCheck {
   }
 }
 
+/**
+ * Recorded on every CLI receipt: this smoke never performs a real install +
+ * activation (that mutates the operator's live host config), so the receipt says so
+ * instead of letting presence probes read as an install.
+ */
+const INSTALL_ACTIVATION_REFUSED: SmokeCheck = {
+  concern: "real_install_activation",
+  state: "refused",
+  evidence: "not performed: host-smoke runs presence/version/dry-run probes only; a real install + activate mutates the operator's live host config and was not run",
+};
+
 function cliSmoke(host: HostId, boxId: string, capturedAt: string): SmokeOutcome {
   const det = HOST_REGISTRY_ROWS[host].detection;
   const bin = det.bin;
@@ -225,6 +255,7 @@ function cliSmoke(host: HostId, boxId: string, capturedAt: string): SmokeOutcome
       state: "verified",
       evidence: `bin/guild-run --host ${host} launcher wiring (concern 11)`,
     },
+    INSTALL_ACTIVATION_REFUSED,
   ];
   const bucket = bucketForRow({
     host_id: host,
@@ -321,9 +352,10 @@ function nativeSmoke(host: HostId, boxId: string, capturedAt: string): SmokeOutc
     { concern: "commands_present", state: "verified", evidence: `commands/ present (${commandCount} command files)` },
     {
       concern: "native_plugin_load",
-      state: "verified",
-      evidence: "Guild plugin natively loaded (manifest + wired hooks + skills + commands) at claude-code-cli host scope",
+      state: "inferred",
+      evidence: "inferred from on-disk manifest + wired hooks + skills + commands; plugin load was not observed through the claude host",
     },
+    INSTALL_ACTIVATION_REFUSED,
   ];
   const bucket = bucketForRow({
     host_id: host,
@@ -381,6 +413,8 @@ function buildReceipt(
     // Scrub each check field defensively (construction-time scrub, ADR §6.4).
     checks: checks.map((c) => ({ concern: c.concern, state: c.state, evidence: scrub(c.evidence) })),
   };
+  const sourceCommit = cleanSourceCommit();
+  if (sourceCommit) identity.source_commit = sourceCommit;
   return {
     schema_version: SMOKE_RECEIPT_SCHEMA,
     identity,

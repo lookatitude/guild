@@ -1080,7 +1080,7 @@ function rewriteRecommendation(
 const V14_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const V14_PHASES = new Set(["brainstorm", "team-compose", "plan", "context", "execute", "review", "verify", "reflect"]);
-const V14_LOOPS = new Set(["L1", "L2", "L3", "L4", "security-review"]);
+const V14_LOOPS = new Set(["L1", "L2", "L3", "L4", "security-review", "L-arch"]);
 const DEGRADATION_KINDS = new Set([
   "coordination.parallelism", "backend_rung", "dispatch.deferred", "feature_degraded",
   "degraded_retrieval", "tier_degraded", "degraded_reason",

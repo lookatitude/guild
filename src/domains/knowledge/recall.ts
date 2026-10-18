@@ -75,7 +75,7 @@ import type { GraphEdge, GraphNode } from "./knowledge-graph-contract";
 // kgTrace/kgNeighbors/kgDeadCode read the FROZEN knowledge-graph.json with
 // per-node file:line provenance + trust tiering. Same cross-module import shape
 // docs-sync/workflows already uses for scripts/learn/lib/*.
-import { kgDeadCode, kgNeighbors, kgTrace } from "./graph-query";
+import { kgDeadCode, kgNeighbors, kgTrace, resolveEntryPointConfig } from "./graph-query";
 import type { Direction as StructuralDirection, EvidenceNode, GraphView as StructuralGraphView } from "./graph-query";
 import type { KnowledgeLinksDoc } from "./knowledge-links-contract";
 import { ingestImportanceScore, resolveRecallImportance, wikiPageCategory } from "./ingest-importance";
@@ -725,7 +725,8 @@ function structuralBranch(
   // Route to the committed model-free query.
   let evidence: EvidenceNode[];
   if (intent.kind === "deadcode") {
-    evidence = kgDeadCode(view).nodes;
+    // I14: exported flags (derived by default) + the repo's on-disk entry surface.
+    evidence = kgDeadCode(view, { configEntryPoints: resolveEntryPointConfig({ repoRoot: cwd }) }).nodes;
   } else if (intent.kind === "neighbors") {
     evidence = kgNeighbors(view, intent.target ?? "", 1).nodes;
   } else {

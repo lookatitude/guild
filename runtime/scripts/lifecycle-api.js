@@ -17802,7 +17802,7 @@ var init_emit_loop_event = __esm({
     init_state();
     init_state();
     VALID_EVENTS = /* @__PURE__ */ new Set(["loop_round_start", "loop_round_end", "codex_review_round"]);
-    VALID_LAYERS = /* @__PURE__ */ new Set(["L1", "L2", "L3", "L4", "security-review"]);
+    VALID_LAYERS = /* @__PURE__ */ new Set(["L1", "L2", "L3", "L4", "security-review", "L-arch"]);
     VALID_TERMINATED = /* @__PURE__ */ new Set([
       "satisfied",
       "malformed_termination",
@@ -28342,6 +28342,14 @@ var init_purpose_provenance = __esm({
 });
 
 // src/domains/config/tier-defaults.ts
+function tierForModel(model) {
+  if (!model) return null;
+  const m = model.toLowerCase();
+  for (const tier of ["powerful", "mid", "cheap"]) {
+    if (m.includes(CLAUDE_TIER_FALLBACK[tier])) return tier;
+  }
+  return null;
+}
 function tierDefaults(descriptors = HOST_REGISTRY_ROWS) {
   const result2 = {};
   for (const [hk, registryId] of Object.entries(HOSTKIND_TO_REGISTRY_ID)) {
@@ -30117,6 +30125,7 @@ __export(config_exports, {
   tierDefaultsForHost: () => tierDefaultsForHost,
   tierForCanonicalId: () => tierForCanonicalId,
   tierForComplexity: () => tierForComplexity,
+  tierForModel: () => tierForModel,
   toolVersionInRange: () => toolVersionInRange,
   totalCatalogOrder: () => totalCatalogOrder,
   validateAdjudicationRef: () => validateAdjudicationRef,
@@ -34131,7 +34140,8 @@ var init_result_contracts = __esm({
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/hooks/lib/handoff-v2.ts",
-        purpose: "Specialist lane result (dispatch envelope)."
+        purpose: "Specialist lane result (dispatch envelope).",
+        live_caller: { path: "scripts/task-cell-host-conformance.ts", call: "normalizeResult" }
       },
       {
         wire_schema_version: "review_result.v1",
@@ -34140,35 +34150,40 @@ var init_result_contracts = __esm({
         validator_kind: "lenient",
         source_path: "plugin/scripts/verify-gate-pass.ts",
         // correction #2.
-        purpose: "Advisory/adversarial review result (gate-pass binding)."
+        purpose: "Advisory/adversarial review result (gate-pass binding).",
+        live_caller: { path: "scripts/verify-gate-pass.ts", call: "parseReviewResult" }
       },
       {
         wire_schema_version: "guild.phase_result.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Phase close summary and gate predicate."
+        purpose: "Phase close summary and gate predicate.",
+        legacy_only: true
       },
       {
         wire_schema_version: "guild.permission_receipt.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Requested/selected host mode and gate policy."
+        purpose: "Requested/selected host mode and gate policy.",
+        legacy_only: true
       },
       {
         wire_schema_version: "guild.host_event.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Normalized hook/tool/session event."
+        purpose: "Normalized hook/tool/session event.",
+        legacy_only: true
       },
       {
         wire_schema_version: "guild.qa_result.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Test matrix execution, gaps, failures, release predicate."
+        purpose: "Test matrix execution, gaps, failures, release predicate.",
+        legacy_only: true
       }
     ]);
     DEFERRED_CONTRACTS = Object.freeze([]);
@@ -34176,7 +34191,10 @@ var init_result_contracts = __esm({
       ...EXISTING_CONTRACTS,
       ...DEFERRED_CONTRACTS
     ]);
-    PHASE1_NORMALIZER_TARGETS = sealSet(EXISTING_CONTRACTS.map((c) => c.wire_schema_version), "PHASE1_NORMALIZER_TARGETS");
+    PHASE1_NORMALIZER_TARGETS = sealSet(
+      EXISTING_CONTRACTS.filter((c) => c.live_caller !== void 0 && c.legacy_only !== true).map((c) => c.wire_schema_version),
+      "PHASE1_NORMALIZER_TARGETS"
+    );
   }
 });
 
@@ -39705,7 +39723,9 @@ function exportedEntryMatchers(nodes) {
 }
 function effectiveMatchers(nodes, opts) {
   if (opts.entryPoints !== void 0) return normalizeMatchers(opts.entryPoints);
-  return opts.deriveExported === true ? exportedEntryMatchers(nodes) : /* @__PURE__ */ new Set();
+  const s = opts.deriveExported === false ? /* @__PURE__ */ new Set() : exportedEntryMatchers(nodes);
+  for (const m of normalizeMatchers(opts.configEntryPoints)) s.add(m);
+  return s;
 }
 function isEntryNode(node, matchers) {
   if (isEntryPoint(node)) return true;
@@ -39874,6 +39894,7 @@ function manifestEntryPoints(repoRoot, read) {
   } catch {
     return [];
   }
+  if (!pkg || typeof pkg !== "object" || Array.isArray(pkg)) return [];
   const out = [];
   if (typeof pkg.main === "string") out.push(pkg.main);
   if (typeof pkg.bin === "string") out.push(pkg.bin);
@@ -40299,7 +40320,7 @@ function structuralBranch(query, cwd, category, limit, runDir3, runId) {
   const view = { nodes, edges };
   let evidence;
   if (intent.kind === "deadcode") {
-    evidence = kgDeadCode(view).nodes;
+    evidence = kgDeadCode(view, { configEntryPoints: resolveEntryPointConfig({ repoRoot: cwd }) }).nodes;
   } else if (intent.kind === "neighbors") {
     evidence = kgNeighbors(view, intent.target ?? "", 1).nodes;
   } else {

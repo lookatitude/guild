@@ -8069,7 +8069,7 @@ function redactHomeDirPaths(input) {
 function redactKeyValueSecrets(input) {
   return input.replace(
     KV_SECRET_PATTERN,
-    (_match, key, sep15) => `${key}${sep15}${KV_REDACTED}`
+    (_match, key, sep14) => `${key}${sep14}${KV_REDACTED}`
   );
 }
 function allWordsWordish(words) {
@@ -12290,88 +12290,19 @@ var init_research_packet = __esm({
   }
 });
 
-// src/domains/knowledge/wiki-supersede.ts
-function walkMd(dir, out) {
-  let entries;
-  try {
-    entries = fs32.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  for (const e of entries) {
-    const full = path37.join(dir, e.name);
-    if (e.isDirectory()) walkMd(full, out);
-    else if (e.isFile() && e.name.endsWith(".md")) out.push(full);
-  }
-}
-function refsOf(value) {
-  const list = Array.isArray(value) ? value : [value];
-  return list.filter((v) => typeof v === "string").map((v) => v.trim()).filter((v) => v !== "" && v !== "null");
-}
-function supersededWikiPages(wikiDir2) {
-  const files = [];
-  walkMd(wikiDir2, files);
-  const superseded = /* @__PURE__ */ new Set();
-  if (files.length === 0) return superseded;
-  const byRel = /* @__PURE__ */ new Map();
-  const bySlug = /* @__PURE__ */ new Map();
-  for (const abs of files) {
-    const rel2 = path37.relative(wikiDir2, abs).split(path37.sep).join("/");
-    byRel.set(rel2, abs);
-    byRel.set(rel2.slice(0, -3), abs);
-    const slug = path37.basename(abs, ".md");
-    bySlug.set(slug, [...bySlug.get(slug) ?? [], abs]);
-  }
-  const resolve30 = (ref) => {
-    let r = ref.replace(/\\/g, "/").replace(/^decision:/, "").replace(/^\.\//, "");
-    r = r.replace(/^\.guild\/wiki\//, "").replace(/^wiki\//, "");
-    const hit = byRel.get(r);
-    if (hit) return hit;
-    if (r.includes("/")) return void 0;
-    const slugHits = bySlug.get(r.replace(/\.md$/, ""));
-    return slugHits?.length === 1 ? slugHits[0] : void 0;
-  };
-  for (const abs of files) {
-    let content;
-    try {
-      content = fs32.readFileSync(abs, "utf8");
-    } catch {
-      continue;
-    }
-    const fm = parseFrontmatter(content);
-    if (!fm) continue;
-    if (typeof fm["status"] === "string" && fm["status"].trim().toLowerCase() === "superseded") {
-      superseded.add(abs);
-    }
-    for (const ref of refsOf(fm["supersedes"])) {
-      const target = resolve30(ref);
-      if (target && target !== abs) superseded.add(target);
-    }
-  }
-  return superseded;
-}
-var fs32, path37;
-var init_wiki_supersede = __esm({
-  "src/domains/knowledge/wiki-supersede.ts"() {
-    fs32 = __toESM(require("node:fs"));
-    path37 = __toESM(require("node:path"));
-    init_state();
-  }
-});
-
 // src/domains/knowledge/fs-scanner.ts
 function safeReadDir(dir) {
   try {
-    return fs33.readdirSync(dir, { withFileTypes: true });
+    return fs32.readdirSync(dir, { withFileTypes: true });
   } catch {
     return [];
   }
 }
 function safeReadFile2(p) {
   try {
-    const stat = fs33.statSync(p);
+    const stat = fs32.statSync(p);
     if (stat.size > MAX_FILE_BYTES) return null;
-    return fs33.readFileSync(p, "utf8");
+    return fs32.readFileSync(p, "utf8");
   } catch {
     return null;
   }
@@ -12379,11 +12310,11 @@ function safeReadFile2(p) {
 function walkFiles(dir, extensions) {
   const out = [];
   for (const entry of safeReadDir(dir)) {
-    const full = path38.join(dir, entry.name);
+    const full = path37.join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...walkFiles(full, extensions));
     } else if (entry.isFile()) {
-      const ext = path38.extname(entry.name).toLowerCase();
+      const ext = path37.extname(entry.name).toLowerCase();
       if (extensions.includes(ext)) out.push(full);
     }
   }
@@ -12395,7 +12326,7 @@ function extractTitle2(content, filePath) {
     const m = line.match(/^#\s+(.+?)\s*$/);
     if (m) return m[1].trim();
   }
-  return path38.basename(filePath, path38.extname(filePath));
+  return path37.basename(filePath, path37.extname(filePath));
 }
 function queryTerms(query) {
   return query.toLowerCase().split(/\s+/).map((t) => t.trim()).filter((t) => t.length > 0);
@@ -12428,9 +12359,9 @@ function fsScan(query, guildRoot, opts = {}) {
   const guildDir = durableGuildDir2(guildRoot);
   const existingDirs = [];
   for (const rel2 of dirs) {
-    const abs = path38.join(guildDir, rel2);
+    const abs = path37.join(guildDir, rel2);
     try {
-      if (fs33.statSync(abs).isDirectory()) existingDirs.push(abs);
+      if (fs32.statSync(abs).isDirectory()) existingDirs.push(abs);
     } catch {
     }
   }
@@ -12438,11 +12369,9 @@ function fsScan(query, guildRoot, opts = {}) {
   if (terms.length === 0) {
     return { source: "fs-scanner", hits: [], scannedDirs: existingDirs };
   }
-  const superseded = supersededWikiPages(path38.join(guildDir, "wiki"));
   const scored = [];
   for (const dir of existingDirs) {
     for (const file of walkFiles(dir, extensions)) {
-      if (superseded.has(file)) continue;
       const content = safeReadFile2(file);
       if (content === null) continue;
       const lower = content.toLowerCase();
@@ -12503,13 +12432,12 @@ function runFsScannerCli() {
   }
   process.stdout.write(JSON.stringify(result2, null, 2) + "\n");
 }
-var fs33, path38, DEFAULT_LIMIT, DEFAULT_DIRS, DEFAULT_EXTENSIONS, MAX_FILE_BYTES;
+var fs32, path37, DEFAULT_LIMIT, DEFAULT_DIRS, DEFAULT_EXTENSIONS, MAX_FILE_BYTES;
 var init_fs_scanner = __esm({
   "src/domains/knowledge/fs-scanner.ts"() {
-    fs33 = __toESM(require("fs"));
-    path38 = __toESM(require("path"));
+    fs32 = __toESM(require("fs"));
+    path37 = __toESM(require("path"));
     init_state();
-    init_wiki_supersede();
     DEFAULT_LIMIT = 10;
     DEFAULT_DIRS = ["wiki", "runs"];
     DEFAULT_EXTENSIONS = [".md", ".txt", ".yaml", ".yml"];
@@ -12534,8 +12462,6 @@ function wikiRecall(query, cwd, config, opts = {}) {
     return null;
   }
   const { dbPath } = ensureResult;
-  const repoRoot = resolveMainRepoRoot(cwd);
-  const superseded = supersededWikiPages(path39.join(durableGuildDir2(repoRoot), "wiki"));
   let db;
   try {
     db = openDatabase3(dbPath);
@@ -12550,7 +12476,7 @@ function wikiRecall(query, cwd, config, opts = {}) {
            WHERE  wiki_fts MATCH ?
            ORDER  BY rank   -- bm25() is negative; ASC = most relevant first
            LIMIT  ?`
-      ).all(safeQuery, limit + superseded.size).filter((r) => !superseded.has(path39.join(repoRoot, typeof r["path"] === "string" ? r["path"] : ""))).slice(0, limit);
+      ).all(safeQuery, limit);
     } catch {
       db.close();
       return null;
@@ -12559,10 +12485,10 @@ function wikiRecall(query, cwd, config, opts = {}) {
     const rawHits = [];
     for (const r of rows) {
       const relPath = typeof r["path"] === "string" ? r["path"] : "";
-      const absPath = path39.join(cwd, relPath);
+      const absPath = path38.join(cwd, relPath);
       let content;
       try {
-        content = fs34.readFileSync(absPath, "utf8");
+        content = fs33.readFileSync(absPath, "utf8");
       } catch {
         content = typeof r["snippet"] === "string" ? r["snippet"] : "";
       }
@@ -12634,7 +12560,7 @@ function runWikiRecallCli() {
     process.exit(1);
   }
   if (runId && !runDir) {
-    runDir = path39.join(durableGuildDir2(cwd), "runs", runId);
+    runDir = path38.join(durableGuildDir2(cwd), "runs", runId);
   }
   const indexOff = (process.env["GUILD_INDEX"] ?? "auto") === "off";
   const thresholdOverride = parseInt(process.env["GUILD_WIKI_THRESHOLD"] ?? "", 10);
@@ -12657,13 +12583,12 @@ function runWikiRecallCli() {
   };
   process.stdout.write(JSON.stringify(safeResult, null, 2) + "\n");
 }
-var fs34, path39, DEFAULT_LIMIT2;
+var fs33, path38, DEFAULT_LIMIT2;
 var init_wiki_recall = __esm({
   "src/domains/knowledge/wiki-recall.ts"() {
-    fs34 = __toESM(require("node:fs"));
-    path39 = __toESM(require("node:path"));
+    fs33 = __toESM(require("node:fs"));
+    path38 = __toESM(require("node:path"));
     init_state();
-    init_wiki_supersede();
     init_recall_protect();
     init_state();
     init_recall_protect();
@@ -12707,7 +12632,9 @@ function exportedEntryMatchers(nodes) {
 }
 function effectiveMatchers(nodes, opts) {
   if (opts.entryPoints !== void 0) return normalizeMatchers(opts.entryPoints);
-  return opts.deriveExported === true ? exportedEntryMatchers(nodes) : /* @__PURE__ */ new Set();
+  const s = opts.deriveExported === false ? /* @__PURE__ */ new Set() : exportedEntryMatchers(nodes);
+  for (const m of normalizeMatchers(opts.configEntryPoints)) s.add(m);
+  return s;
 }
 function isEntryNode(node, matchers) {
   if (isEntryPoint(node)) return true;
@@ -12859,10 +12786,66 @@ function kgDeadCode(graph, opts = {}) {
   const dead = graph.nodes.filter((n) => isFreeFunction(n) && !inbound.has(n.id) && !isEntryNode(n, matchers)).map((n) => toEvidence(n, 0)).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   return { tier: EVIDENCE_TIER, nodes: dead };
 }
-var EVIDENCE_TIER, LINE_REF_RE, ENTRY_POINT_NAMES;
+function collectExports(node, out) {
+  if (typeof node === "string") out.push(node);
+  else if (node && typeof node === "object") {
+    for (const v of Object.values(node)) collectExports(v, out);
+  }
+}
+function manifestEntryPoints(repoRoot, read) {
+  let pkg;
+  try {
+    pkg = JSON.parse(read(path39.join(repoRoot, "package.json")));
+  } catch {
+    return [];
+  }
+  if (!pkg || typeof pkg !== "object" || Array.isArray(pkg)) return [];
+  const out = [];
+  if (typeof pkg.main === "string") out.push(pkg.main);
+  if (typeof pkg.bin === "string") out.push(pkg.bin);
+  else if (pkg.bin && typeof pkg.bin === "object") {
+    for (const v of Object.values(pkg.bin)) {
+      if (typeof v === "string") out.push(v);
+    }
+  }
+  collectExports(pkg.exports, out);
+  return out;
+}
+function settingsEntryPoints(guildDir, read) {
+  try {
+    const s = JSON.parse(read(path39.join(guildDir, "settings.json")));
+    const ep = s.models?.entryPoints;
+    return Array.isArray(ep) ? ep.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function indexEntryPoints(indexesDir, read) {
+  try {
+    const j = JSON.parse(read(path39.join(indexesDir, "entry_points.json")));
+    const arr = Array.isArray(j) ? j : j && typeof j === "object" && Array.isArray(j.entryPoints) ? j.entryPoints : [];
+    return arr.filter((x) => typeof x === "string");
+  } catch {
+    return [];
+  }
+}
+function resolveEntryPointConfig(src) {
+  const guildDir = src.guildDir ?? durableGuildDir2(src.repoRoot);
+  const indexesDir = src.indexesDir ?? path39.join(guildDir, "indexes");
+  const read = src.readFile ?? ((p) => fs34.readFileSync(p, "utf8"));
+  const all = /* @__PURE__ */ new Set();
+  for (const m of manifestEntryPoints(src.repoRoot, read)) all.add(normRel(m));
+  for (const m of settingsEntryPoints(guildDir, read)) all.add(normRel(m));
+  for (const m of indexEntryPoints(indexesDir, read)) all.add(normRel(m));
+  for (const m of src.explicit ?? []) if (typeof m === "string" && m.length > 0) all.add(normRel(m));
+  return [...all].sort();
+}
+var fs34, path39, EVIDENCE_TIER, LINE_REF_RE, ENTRY_POINT_NAMES;
 var init_graph_query = __esm({
   "src/domains/knowledge/graph-query.ts"() {
+    fs34 = __toESM(require("fs"));
     init_kernel();
+    path39 = __toESM(require("path"));
     init_state();
     EVIDENCE_TIER = "trusted";
     LINE_REF_RE = /#L\d+-L\d+$/;
@@ -15575,12 +15558,12 @@ function parseValue(c, ctx) {
       const value = parseValue(c, ctx);
       assignKey(table, keyPath, value, ctx, { insideClosed: true });
       skipInlineWs(c);
-      const sep15 = c.next();
-      if (sep15 === ",") {
+      const sep14 = c.next();
+      if (sep14 === ",") {
         skipInlineWs(c);
         continue;
       }
-      if (sep15 === "}") return table;
+      if (sep14 === "}") return table;
       c.fail("expected ',' or '}' in inline table");
     }
   }
@@ -22835,6 +22818,14 @@ var init_purpose_provenance = __esm({
 });
 
 // src/domains/config/tier-defaults.ts
+function tierForModel(model) {
+  if (!model) return null;
+  const m = model.toLowerCase();
+  for (const tier of ["powerful", "mid", "cheap"]) {
+    if (m.includes(CLAUDE_TIER_FALLBACK[tier])) return tier;
+  }
+  return null;
+}
 function tierDefaults(descriptors = HOST_REGISTRY_ROWS) {
   const result2 = {};
   for (const [hk, registryId] of Object.entries(HOSTKIND_TO_REGISTRY_ID)) {
@@ -24610,6 +24601,7 @@ __export(config_exports, {
   tierDefaultsForHost: () => tierDefaultsForHost,
   tierForCanonicalId: () => tierForCanonicalId,
   tierForComplexity: () => tierForComplexity,
+  tierForModel: () => tierForModel,
   toolVersionInRange: () => toolVersionInRange,
   totalCatalogOrder: () => totalCatalogOrder,
   validateAdjudicationRef: () => validateAdjudicationRef,
@@ -24901,8 +24893,7 @@ function sqliteBranch(query, cwd, indexConfig, limit, runDir, runId) {
 function fileBm25Branch(query, cwd, category, limit, runDir, runId, composite) {
   const wikiBase = path58.join(durableGuildDir2(cwd), "wiki");
   const scanDir = category ? path58.join(wikiBase, category) : wikiBase;
-  const superseded = supersededWikiPages(wikiBase);
-  const files = walkMdFiles(scanDir).filter((f) => !superseded.has(f));
+  const files = walkMdFiles(scanDir);
   if (files.length === 0) return null;
   const queryTokens = tokenizeIdentifierAware(query);
   if (queryTokens.length === 0) return null;
@@ -25066,7 +25057,7 @@ function structuralBranch(query, cwd, category, limit, runDir, runId) {
   const view = { nodes, edges };
   let evidence;
   if (intent.kind === "deadcode") {
-    evidence = kgDeadCode(view).nodes;
+    evidence = kgDeadCode(view, { configEntryPoints: resolveEntryPointConfig({ repoRoot: cwd }) }).nodes;
   } else if (intent.kind === "neighbors") {
     evidence = kgNeighbors(view, intent.target ?? "", 1).nodes;
   } else {
@@ -25353,7 +25344,6 @@ var init_recall = __esm({
     init_state();
     init_wiki_recall();
     init_fs_scanner();
-    init_wiki_supersede();
     init_recall_protect();
     init_kernel();
     init_bm25();
@@ -25902,6 +25892,12 @@ function analyzePython(lines) {
   }
   return finalize(lines, "python", functions, classes, imports, exports2);
 }
+function genericExported(lang, match) {
+  const name = match[1];
+  if (lang === "go") return /^[A-Z]/.test(name);
+  const prefix = match[0].slice(0, match[0].lastIndexOf(name));
+  return /\b(?:export|public)\b/.test(prefix) || /\bpub\b(?!\s*\()/.test(prefix);
+}
 function analyzeGeneric(lines, lang) {
   const functions = [];
   const classes = [];
@@ -25920,17 +25916,17 @@ function analyzeGeneric(lines, lang) {
     }
     const mClass = line.match(reClass);
     if (mClass) {
-      classes.push({ name: mClass[1], lineRange: [i + 1, blockEnd(lines, i)], exported: true, methods: [] });
+      classes.push({ name: mClass[1], lineRange: [i + 1, blockEnd(lines, i)], exported: genericExported(lang, mClass), methods: [] });
       continue;
     }
     const mGo = line.match(reGoFn);
     if (mGo) {
-      functions.push({ name: mGo[1], lineRange: [i + 1, blockEnd(lines, i)], exported: /^[A-Z]/.test(mGo[1]) });
+      functions.push({ name: mGo[1], lineRange: [i + 1, blockEnd(lines, i)], exported: genericExported(lang, mGo) });
       continue;
     }
     const mFn = line.match(reFn);
     if (mFn && !/\b(if|for|while|switch|return)\b/.test(mFn[1])) {
-      functions.push({ name: mFn[1], lineRange: [i + 1, blockEnd(lines, i)], exported: true });
+      functions.push({ name: mFn[1], lineRange: [i + 1, blockEnd(lines, i)], exported: genericExported(lang, mFn) });
     }
   }
   return finalize(lines, lang, functions, classes, imports, exports2);
@@ -26578,9 +26574,9 @@ function toPosixRel(p) {
 function buildBasenameMapFromList(relpaths) {
   const map = /* @__PURE__ */ new Map();
   for (const relpath of relpaths) {
-    const basename19 = path10.basename(relpath, path10.extname(relpath));
-    if (!map.has(basename19)) {
-      map.set(basename19, relpath);
+    const basename18 = path10.basename(relpath, path10.extname(relpath));
+    if (!map.has(basename18)) {
+      map.set(basename18, relpath);
     }
   }
   return map;
@@ -26645,8 +26641,8 @@ async function indexWiki(wikiDir2, opts) {
     };
     nodes.push(node);
     const emittedTargets = /* @__PURE__ */ new Set();
-    for (const basename19 of desc.wikilinks) {
-      const targetRelpath = basenameMap.get(basename19);
+    for (const basename18 of desc.wikilinks) {
+      const targetRelpath = basenameMap.get(basename18);
       if (!targetRelpath) continue;
       const targetId = makeWikiPageId(targetRelpath);
       if (emittedTargets.has(targetId)) continue;

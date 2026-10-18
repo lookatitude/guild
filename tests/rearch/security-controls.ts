@@ -6,7 +6,10 @@
  * Every security control in the Guild plugin expressed as a structured record.
  * The R-SEC rail (r-sec.ts) reads this manifest and asserts:
  *   - every enforcer_file EXISTS on disk
- *   - every hostile_test EXISTS on disk
+ *   - every hostile_test EXISTS on disk, is a file `bun test` runs, and holds
+ *     each named hostile_test_titles entry as a test title
+ *   - every wrap_check holds (each MCP tool handler calls a D-RECALL wrapper)
+ *   - every MCP server source under src/runtime/mcp/ is covered by a wrap_check
  *   - (advisory) flags any control whose enforcer_kind is "prose-only"
  *
  * Sources audited:
@@ -57,8 +60,38 @@ export interface SecurityControl {
    * Recorded explicitly so the manifest cannot overclaim a flagging control as a hard block.
    */
   disposition?: "block" | "flag-and-audit";
+  /**
+   * Optional exact test titles that MUST appear in hostile_test as an
+   * `it(...)` / `test(...)` title. Binds the check set to the named test, not
+   * just to the file, so deleting or renaming the test fails R-SEC.
+   */
+  hostile_test_titles?: string[];
+  /**
+   * Optional structural proof that a read surface still routes its output
+   * through the enforcer. R-SEC (STRICT) requires: `file` imports every
+   * `primitives` symbol from a path containing `import_from`; each `wrappers`
+   * function is defined in `file` and calls a primitive or a wrapper listed
+   * before it; the `registerTool(` handlers are exactly the `tools` keys; each
+   * handler calls every listed wrapper at least the pinned number of times; and
+   * each handler calls the raw `result_builders` at most `max_results` times.
+   * Removing any one wrapper call, or adding a raw result path, fails the rail.
+   * It is a call-level guard: a handler that calls the wrapper but returns the
+   * raw value instead is caught by the bound hostile_test_titles (they drive the
+   * compiled binary with an injected page), not by this check.
+   */
+  wrap_check?: WrapCheck;
   /** Optional notes. */
   notes?: string;
+}
+
+export interface WrapCheck {
+  file: string;
+  primitives: string[];
+  import_from: string;
+  wrappers: string[];
+  /** Raw MCP result constructors (e.g. jsonResult) a handler may only call up to max_results. */
+  result_builders: string[];
+  tools: Record<string, { calls: Record<string, number>; max_results: number }>;
 }
 
 export const SECURITY_CONTROLS: SecurityControl[] = [
@@ -391,6 +424,97 @@ export const SECURITY_CONTROLS: SecurityControl[] = [
       "containing a sk-ant-* token and asserts the returned record.detail does not contain " +
       "the raw token. The audit-trail appendSecurityEvent test reads the JSONL file and " +
       "asserts the event was written (proves it is not a no-op).",
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SEC-15: hostile security config is sanitized to the documented defaults
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    control_id: "SEC-15",
+    what_it_protects:
+      "Hostile .guild/settings.json security blocks: an out-of-enum " +
+      "bypass_permissions_policy or fail_mode_durable, a non-array env_allowlist, or a " +
+      "non-string MCP hash cannot widen policy; each falls back to the canonical default.",
+    enforcer_file: "src/domains/security/config.ts",
+    enforcer_function: "parseSecurityConfig",
+    enforcer_kind: "code",
+    hostile_test: "hooks/__tests__/security-config.test.ts",
+    hostile_test_titles: ["ignores invalid enum values and falls back to defaults"],
+    anti_vacuity_control:
+      "The named test feeds bypass_permissions_policy 'yolo', fail_mode_durable 'maybe', " +
+      "env_allowlist 'notarray' and a numeric hash, and asserts each lands on the DEFAULTS " +
+      "value while the valid string hash is kept (the parser is not a blanket reset).",
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SEC-16 / SEC-17: MCP read paths go through D-RECALL (TI-SEC-1, PR #249)
+  // ─────────────────────────────────────────────────────────────────────────
+  {
+    control_id: "SEC-16",
+    what_it_protects:
+      "Prompt-injection via the model-callable guild-memory MCP tools: wiki_search " +
+      "excerpts, wiki_get bodies and frontmatter, and wiki_list titles are quarantined " +
+      "or trust-tier wrapped before they leave the server.",
+    enforcer_file: "src/runtime/mcp/guild-memory/index.ts",
+    enforcer_function: "protectPage / protectMeta (protectChunks, protectFields)",
+    enforcer_kind: "code",
+    hostile_test: "mcp-servers/guild-memory/__tests__/recall-protect.test.ts",
+    hostile_test_titles: [
+      "wiki_search quarantines an injected page and wraps clean excerpts",
+      "wiki_get quarantines an injected page and returns no raw body or frontmatter",
+      "wiki_list never returns an injected page's title raw",
+    ],
+    wrap_check: {
+      file: "src/runtime/mcp/guild-memory/index.ts",
+      primitives: ["protectChunks", "protectFields"],
+      import_from: "domains/knowledge",
+      wrappers: ["protectPage", "protectMeta"],
+      result_builders: ["jsonResult", "textResult"],
+      tools: {
+        wiki_search: { calls: { protectPage: 1, protectMeta: 1 }, max_results: 1 },
+        wiki_get: { calls: { protectPage: 1, protectMeta: 1 }, max_results: 1 },
+        wiki_list: { calls: { protectPage: 1, protectMeta: 1 }, max_results: 1 },
+      },
+    },
+    anti_vacuity_control:
+      "The hostile tests drive the compiled runtime/guild-mcp.js over stdio with an " +
+      "injected wiki page and assert a quarantine marker and no raw injection text. " +
+      "R-SEC --prove strips the wrapper call from one tool handler in a planted copy " +
+      "and asserts the wrap_check trips.",
+  },
+  {
+    control_id: "SEC-17",
+    what_it_protects:
+      "Prompt-injection via the model-callable guild-telemetry MCP tools: run-record " +
+      "free text from trace_summary, trace_query, trace_list_runs and trace_cost_rollup " +
+      "is quarantined or untrusted-wrapped before it leaves the server.",
+    enforcer_file: "src/runtime/mcp/guild-telemetry/index.ts",
+    enforcer_function: "protectRunValue / summaryResult (protectFields)",
+    enforcer_kind: "code",
+    hostile_test: "mcp-servers/guild-telemetry/__tests__/recall-protect.test.ts",
+    hostile_test_titles: [
+      "trace_query quarantines injected free text and wraps clean prompts",
+      "trace_summary never returns an injected stored summary raw",
+      "trace_list_runs never returns injected run-record text raw",
+      "trace_cost_rollup never returns injected bucket keys raw",
+    ],
+    wrap_check: {
+      file: "src/runtime/mcp/guild-telemetry/index.ts",
+      primitives: ["protectFields"],
+      import_from: "domains/knowledge",
+      wrappers: ["protectRunValue", "summaryResult"],
+      result_builders: ["jsonResult", "textResult"],
+      tools: {
+        trace_summary: { calls: { summaryResult: 3 }, max_results: 0 },
+        trace_query: { calls: { protectRunValue: 1 }, max_results: 1 },
+        trace_list_runs: { calls: { protectRunValue: 1 }, max_results: 1 },
+        trace_cost_rollup: { calls: { protectRunValue: 1 }, max_results: 1 },
+      },
+    },
+    anti_vacuity_control:
+      "The hostile tests drive the compiled runtime/guild-mcp.js trace server with an " +
+      "injected run record and assert quarantine. R-SEC --prove removes the D-RECALL " +
+      "import in a planted copy and asserts the wrap_check trips.",
   },
 ];
 
