@@ -169,6 +169,7 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
     //    launch path while preventing any actual pane/session creation.
     const env = { ...process.env, NODE_NO_WARNINGS: "1" } as NodeJS.ProcessEnv;
     delete env["TMUX"]; // force new-session mode regardless of the test runner's env
+    delete env["CMUX_WORKSPACE_ID"]; // a cmux shell would switch the launcher to the cmux substrate
     env["GUILD_HOST_ID"] = "claude";
     env["GUILD_HOST"] = "claude";
     env["GUILD_CROSS_HOST_ENABLED"] = "1";

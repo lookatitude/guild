@@ -157,6 +157,19 @@ interface HookRun {
  * setup file already strips the runner's own, and this keeps the guarantee local
  * to the spawn so the test does not depend on setup ordering.
  */
+// End-to-end wall clock includes a node process spawn, which a loaded CI runner
+// stretches 3x+. GUILD_WALLCLOCK_BUDGET_MULTIPLIER (CI sets it) scales ONLY that
+// leg; the rung's own duration_ms stays at the unscaled 250ms budget. Local: 1.
+function wallClockBudgetMs(budgetMs: number): number {
+  const raw = process.env.GUILD_WALLCLOCK_BUDGET_MULTIPLIER;
+  if (raw === undefined || raw === "") return budgetMs;
+  const factor = Number(raw);
+  if (!Number.isFinite(factor) || factor < 1) {
+    throw new Error(`GUILD_WALLCLOCK_BUDGET_MULTIPLIER must be a number >= 1, got ${JSON.stringify(raw)}`);
+  }
+  return budgetMs * factor;
+}
+
 function runHook(entry: string, input: string, env: Record<string, string>): HookRun {
   const base: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
@@ -200,6 +213,21 @@ afterEach(() => {
 // ── F1 ───────────────────────────────────────────────────────────────────────
 
 describe("F1 a green verify.after_edit adds no assistant tokens and completes ≤250ms", () => {
+  it("the CI wall-clock multiplier scales 250ms and rejects a value below 1", () => {
+    const saved = process.env.GUILD_WALLCLOCK_BUDGET_MULTIPLIER;
+    try {
+      delete process.env.GUILD_WALLCLOCK_BUDGET_MULTIPLIER;
+      expect(wallClockBudgetMs(250)).toBe(250);
+      process.env.GUILD_WALLCLOCK_BUDGET_MULTIPLIER = "4";
+      expect(wallClockBudgetMs(250)).toBe(1000);
+      process.env.GUILD_WALLCLOCK_BUDGET_MULTIPLIER = "0.5";
+      expect(() => wallClockBudgetMs(250)).toThrow(/>= 1/);
+    } finally {
+      if (saved === undefined) delete process.env.GUILD_WALLCLOCK_BUDGET_MULTIPLIER;
+      else process.env.GUILD_WALLCLOCK_BUDGET_MULTIPLIER = saved;
+    }
+  });
+
   it("passes silently, records the pass, and stays inside the budget", () => {
     tmp = makeRoot();
     const marker = declareCheck(
@@ -218,7 +246,7 @@ describe("F1 a green verify.after_edit adds no assistant tokens and completes �
       expect(r.stdout).toBe("");
     }
     expect(fs.existsSync(marker)).toBe(true);
-    expect(Math.min(...runs.map((r) => r.ms))).toBeLessThanOrEqual(250);
+    expect(Math.min(...runs.map((r) => r.ms))).toBeLessThanOrEqual(wallClockBudgetMs(250));
 
     const record = readJson(path.join(runDirOf(tmp), "rungs", "verify-after-edit.json"));
     expect(record["schema_version"]).toBe("guild.rung_record.v1");
