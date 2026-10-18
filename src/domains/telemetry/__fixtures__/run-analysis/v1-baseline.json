@@ -1,0 +1,1429 @@
+{
+  "schema": "guild.b02.v1_baseline.v1",
+  "generated_from": "pre-B02 analyzer src/domains/telemetry/run-analysis.ts @ f610d24c (sha256:26a0530eef6faf687bdaa60d48fcffa20619d152f5acc7440dc2a0d5d55339b7) on __fixtures__/run-analysis/scenarios.ts V1_BASELINE_SCENARIOS",
+  "projection": "coreProjection(): v1 core minus path-bound source_hash/analysis_id/finding+recommendation ids",
+  "scenarios": {
+    "v1-default-complete-run": {
+      "eligible": true,
+      "identity": {
+        "run_scope": "initiative",
+        "initiative_id": "alpha",
+        "independent_group_id": null,
+        "config_snapshot_ref": "plugin-config-snapshot.json",
+        "host": "codex",
+        "phase": "ops"
+      },
+      "completeness": {
+        "score": 100,
+        "present": [
+          "agent",
+          "close",
+          "gate",
+          "loop",
+          "phase",
+          "plugin-config-snapshot.json",
+          "prompt",
+          "run identity",
+          "tool",
+          "trace parseability",
+          "trace validity"
+        ],
+        "missing": []
+      },
+      "assessments": {
+        "instruction_following": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "prompt_efficiency": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1"
+          ]
+        },
+        "workflow": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:4",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:5",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "tool_coverage": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:3"
+          ]
+        }
+      },
+      "usage": {
+        "llm_event_count": 2,
+        "specialists_dispatched": [
+          "tooling"
+        ],
+        "tokens": {
+          "input": 10,
+          "output": 5,
+          "cached": 0,
+          "total": 15,
+          "cost_usd": 0
+        },
+        "duration_ms": 10
+      },
+      "findings": [],
+      "recommendations": []
+    },
+    "v1-missing-config-snapshot": {
+      "eligible": false,
+      "identity": {
+        "run_scope": "initiative",
+        "initiative_id": "alpha",
+        "independent_group_id": null,
+        "config_snapshot_ref": null,
+        "host": "codex",
+        "phase": "ops"
+      },
+      "completeness": {
+        "score": 91,
+        "present": [
+          "agent",
+          "close",
+          "gate",
+          "loop",
+          "phase",
+          "prompt",
+          "run identity",
+          "tool",
+          "trace parseability",
+          "trace validity"
+        ],
+        "missing": [
+          "plugin-config-snapshot.json"
+        ]
+      },
+      "assessments": {
+        "instruction_following": {
+          "status": "unobservable",
+          "evidence_refs": []
+        },
+        "prompt_efficiency": {
+          "status": "unobservable",
+          "evidence_refs": []
+        },
+        "workflow": {
+          "status": "unobservable",
+          "evidence_refs": []
+        },
+        "tool_coverage": {
+          "status": "unobservable",
+          "evidence_refs": []
+        }
+      },
+      "usage": {
+        "llm_event_count": 2,
+        "specialists_dispatched": [
+          "tooling"
+        ],
+        "tokens": {
+          "input": 10,
+          "output": 5,
+          "cached": 0,
+          "total": 15,
+          "cost_usd": 0
+        },
+        "duration_ms": 10
+      },
+      "findings": [
+        {
+          "kind": "telemetry_gap",
+          "severity": "medium",
+          "summary": "Analysis evidence is incomplete: plugin-config-snapshot.json.",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/run.yaml"
+          ],
+          "signature": "missing:plugin-config-snapshot.json"
+        }
+      ],
+      "recommendations": [
+        {
+          "scope": "plugin",
+          "kind": "telemetry_gap",
+          "confidence": "medium",
+          "severity": "medium",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/run.yaml"
+          ],
+          "proposed_action": "Analysis evidence is incomplete: plugin-config-snapshot.json.",
+          "status": "proposed",
+          "routing": {
+            "action": "ask_user_before_filing",
+            "requires_user_approval": true,
+            "target": "guild-plugin"
+          }
+        }
+      ]
+    },
+    "v1-malformed-trace-line": {
+      "eligible": false,
+      "identity": {
+        "run_scope": "initiative",
+        "initiative_id": "alpha",
+        "independent_group_id": null,
+        "config_snapshot_ref": "plugin-config-snapshot.json",
+        "host": "codex",
+        "phase": "ops"
+      },
+      "completeness": {
+        "score": 91,
+        "present": [
+          "agent",
+          "close",
+          "gate",
+          "loop",
+          "phase",
+          "plugin-config-snapshot.json",
+          "prompt",
+          "run identity",
+          "tool",
+          "trace validity"
+        ],
+        "missing": [
+          "trace parseability"
+        ]
+      },
+      "assessments": {
+        "instruction_following": {
+          "status": "unobservable",
+          "evidence_refs": []
+        },
+        "prompt_efficiency": {
+          "status": "unobservable",
+          "evidence_refs": []
+        },
+        "workflow": {
+          "status": "unobservable",
+          "evidence_refs": []
+        },
+        "tool_coverage": {
+          "status": "unobservable",
+          "evidence_refs": []
+        }
+      },
+      "usage": {
+        "llm_event_count": 2,
+        "specialists_dispatched": [
+          "tooling"
+        ],
+        "tokens": {
+          "input": 10,
+          "output": 5,
+          "cached": 0,
+          "total": 15,
+          "cost_usd": 0
+        },
+        "duration_ms": 10
+      },
+      "findings": [
+        {
+          "kind": "telemetry_gap",
+          "severity": "medium",
+          "summary": "Analysis evidence is incomplete: trace parseability.",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/run.yaml"
+          ],
+          "signature": "missing:trace parseability"
+        }
+      ],
+      "recommendations": [
+        {
+          "scope": "plugin",
+          "kind": "telemetry_gap",
+          "confidence": "medium",
+          "severity": "medium",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/run.yaml"
+          ],
+          "proposed_action": "Analysis evidence is incomplete: trace parseability.",
+          "status": "proposed",
+          "routing": {
+            "action": "ask_user_before_filing",
+            "requires_user_approval": true,
+            "target": "guild-plugin"
+          }
+        }
+      ]
+    },
+    "v1-independent-scope": {
+      "eligible": true,
+      "identity": {
+        "run_scope": "independent",
+        "initiative_id": null,
+        "independent_group_id": "research",
+        "config_snapshot_ref": "plugin-config-snapshot.json",
+        "host": "codex",
+        "phase": "ops"
+      },
+      "completeness": {
+        "score": 100,
+        "present": [
+          "agent",
+          "close",
+          "gate",
+          "loop",
+          "phase",
+          "plugin-config-snapshot.json",
+          "prompt",
+          "run identity",
+          "tool",
+          "trace parseability",
+          "trace validity"
+        ],
+        "missing": []
+      },
+      "assessments": {
+        "instruction_following": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "prompt_efficiency": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1"
+          ]
+        },
+        "workflow": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:4",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:5",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "tool_coverage": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:3"
+          ]
+        }
+      },
+      "usage": {
+        "llm_event_count": 2,
+        "specialists_dispatched": [
+          "tooling"
+        ],
+        "tokens": {
+          "input": 10,
+          "output": 5,
+          "cached": 0,
+          "total": 15,
+          "cost_usd": 0
+        },
+        "duration_ms": 10
+      },
+      "findings": [],
+      "recommendations": []
+    },
+    "v1-single-legacy-failure": {
+      "eligible": true,
+      "identity": {
+        "run_scope": "initiative",
+        "initiative_id": "alpha",
+        "independent_group_id": null,
+        "config_snapshot_ref": "plugin-config-snapshot.json",
+        "host": "codex",
+        "phase": "ops"
+      },
+      "completeness": {
+        "score": 100,
+        "present": [
+          "agent",
+          "close",
+          "gate",
+          "loop",
+          "phase",
+          "plugin-config-snapshot.json",
+          "prompt",
+          "run identity",
+          "tool",
+          "trace parseability",
+          "trace validity"
+        ],
+        "missing": []
+      },
+      "assessments": {
+        "instruction_following": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "prompt_efficiency": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1"
+          ]
+        },
+        "workflow": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:4",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:5",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "tool_coverage": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:3",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8"
+          ]
+        }
+      },
+      "usage": {
+        "llm_event_count": 2,
+        "specialists_dispatched": [
+          "tooling"
+        ],
+        "tokens": {
+          "input": 10,
+          "output": 5,
+          "cached": 0,
+          "total": 15,
+          "cost_usd": 0
+        },
+        "duration_ms": 11
+      },
+      "findings": [],
+      "recommendations": []
+    },
+    "v1-two-legacy-failures": {
+      "eligible": true,
+      "identity": {
+        "run_scope": "initiative",
+        "initiative_id": "alpha",
+        "independent_group_id": null,
+        "config_snapshot_ref": "plugin-config-snapshot.json",
+        "host": "codex",
+        "phase": "ops"
+      },
+      "completeness": {
+        "score": 100,
+        "present": [
+          "agent",
+          "close",
+          "gate",
+          "loop",
+          "phase",
+          "plugin-config-snapshot.json",
+          "prompt",
+          "run identity",
+          "tool",
+          "trace parseability",
+          "trace validity"
+        ],
+        "missing": []
+      },
+      "assessments": {
+        "instruction_following": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "prompt_efficiency": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1"
+          ]
+        },
+        "workflow": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:4",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:5",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "tool_coverage": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:3",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:9"
+          ]
+        }
+      },
+      "usage": {
+        "llm_event_count": 2,
+        "specialists_dispatched": [
+          "tooling"
+        ],
+        "tokens": {
+          "input": 10,
+          "output": 5,
+          "cached": 0,
+          "total": 15,
+          "cost_usd": 0
+        },
+        "duration_ms": 12
+      },
+      "findings": [
+        {
+          "kind": "repeated_failure",
+          "severity": "high",
+          "summary": "The same failed action recurred 2 times.",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:9"
+          ],
+          "signature": "Bash|failing command|failed"
+        }
+      ],
+      "recommendations": [
+        {
+          "scope": "project",
+          "kind": "clarify_prompt_contract",
+          "confidence": "high",
+          "severity": "high",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:9"
+          ],
+          "proposed_action": "The same failed action recurred 2 times.",
+          "status": "proposed",
+          "routing": {
+            "action": "queue_proposal_only",
+            "requires_user_approval": true,
+            "target": "project-local"
+          }
+        }
+      ]
+    },
+    "v1-two-typed-signed-failures": {
+      "eligible": true,
+      "identity": {
+        "run_scope": "initiative",
+        "initiative_id": "alpha",
+        "independent_group_id": null,
+        "config_snapshot_ref": "plugin-config-snapshot.json",
+        "host": "codex",
+        "phase": "ops"
+      },
+      "completeness": {
+        "score": 100,
+        "present": [
+          "agent",
+          "close",
+          "gate",
+          "loop",
+          "phase",
+          "plugin-config-snapshot.json",
+          "prompt",
+          "run identity",
+          "tool",
+          "trace parseability",
+          "trace validity"
+        ],
+        "missing": []
+      },
+      "assessments": {
+        "instruction_following": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "prompt_efficiency": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1"
+          ]
+        },
+        "workflow": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:4",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:5",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "tool_coverage": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:3",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:9"
+          ]
+        }
+      },
+      "usage": {
+        "llm_event_count": 2,
+        "specialists_dispatched": [
+          "tooling"
+        ],
+        "tokens": {
+          "input": 10,
+          "output": 5,
+          "cached": 0,
+          "total": 15,
+          "cost_usd": 0
+        },
+        "duration_ms": 20
+      },
+      "findings": [
+        {
+          "kind": "repeated_failure",
+          "severity": "high",
+          "summary": "The same failed action recurred 2 times.",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:9"
+          ],
+          "signature": "tool:Bash:abc"
+        }
+      ],
+      "recommendations": [
+        {
+          "scope": "project",
+          "kind": "clarify_prompt_contract",
+          "confidence": "high",
+          "severity": "high",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:9"
+          ],
+          "proposed_action": "The same failed action recurred 2 times.",
+          "status": "proposed",
+          "routing": {
+            "action": "queue_proposal_only",
+            "requires_user_approval": true,
+            "target": "project-local"
+          }
+        }
+      ]
+    },
+    "v1-one-steering": {
+      "eligible": true,
+      "identity": {
+        "run_scope": "initiative",
+        "initiative_id": "alpha",
+        "independent_group_id": null,
+        "config_snapshot_ref": "plugin-config-snapshot.json",
+        "host": "codex",
+        "phase": "ops"
+      },
+      "completeness": {
+        "score": 100,
+        "present": [
+          "agent",
+          "close",
+          "gate",
+          "loop",
+          "phase",
+          "plugin-config-snapshot.json",
+          "prompt",
+          "run identity",
+          "tool",
+          "trace parseability",
+          "trace validity"
+        ],
+        "missing": []
+      },
+      "assessments": {
+        "instruction_following": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "prompt_efficiency": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1"
+          ]
+        },
+        "workflow": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:4",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:5",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "tool_coverage": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:3"
+          ]
+        }
+      },
+      "usage": {
+        "llm_event_count": 2,
+        "specialists_dispatched": [
+          "tooling"
+        ],
+        "tokens": {
+          "input": 10,
+          "output": 5,
+          "cached": 0,
+          "total": 15,
+          "cost_usd": 0
+        },
+        "duration_ms": 10
+      },
+      "findings": [],
+      "recommendations": []
+    },
+    "v1-two-steering": {
+      "eligible": true,
+      "identity": {
+        "run_scope": "initiative",
+        "initiative_id": "alpha",
+        "independent_group_id": null,
+        "config_snapshot_ref": "plugin-config-snapshot.json",
+        "host": "codex",
+        "phase": "ops"
+      },
+      "completeness": {
+        "score": 100,
+        "present": [
+          "agent",
+          "close",
+          "gate",
+          "loop",
+          "phase",
+          "plugin-config-snapshot.json",
+          "prompt",
+          "run identity",
+          "tool",
+          "trace parseability",
+          "trace validity"
+        ],
+        "missing": []
+      },
+      "assessments": {
+        "instruction_following": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "prompt_efficiency": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1"
+          ]
+        },
+        "workflow": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:4",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:5",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "tool_coverage": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:3"
+          ]
+        }
+      },
+      "usage": {
+        "llm_event_count": 2,
+        "specialists_dispatched": [
+          "tooling"
+        ],
+        "tokens": {
+          "input": 10,
+          "output": 5,
+          "cached": 0,
+          "total": 15,
+          "cost_usd": 0
+        },
+        "duration_ms": 10
+      },
+      "findings": [
+        {
+          "kind": "prompt_inefficiency",
+          "severity": "medium",
+          "summary": "The run required 2 user steering interventions.",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:9"
+          ],
+          "signature": "repeated-user-steering"
+        }
+      ],
+      "recommendations": [
+        {
+          "scope": "project",
+          "kind": "update_workflow",
+          "confidence": "high",
+          "severity": "medium",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:9"
+          ],
+          "proposed_action": "The run required 2 user steering interventions.",
+          "status": "proposed",
+          "routing": {
+            "action": "queue_proposal_only",
+            "requires_user_approval": true,
+            "target": "project-local"
+          }
+        }
+      ]
+    },
+    "v1-loop-cap-hit": {
+      "eligible": true,
+      "identity": {
+        "run_scope": "initiative",
+        "initiative_id": "alpha",
+        "independent_group_id": null,
+        "config_snapshot_ref": "plugin-config-snapshot.json",
+        "host": "codex",
+        "phase": "ops"
+      },
+      "completeness": {
+        "score": 100,
+        "present": [
+          "agent",
+          "close",
+          "gate",
+          "loop",
+          "phase",
+          "plugin-config-snapshot.json",
+          "prompt",
+          "run identity",
+          "tool",
+          "trace parseability",
+          "trace validity"
+        ],
+        "missing": []
+      },
+      "assessments": {
+        "instruction_following": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "prompt_efficiency": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1"
+          ]
+        },
+        "workflow": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:4",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:5",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8"
+          ]
+        },
+        "tool_coverage": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:3"
+          ]
+        }
+      },
+      "usage": {
+        "llm_event_count": 2,
+        "specialists_dispatched": [
+          "tooling"
+        ],
+        "tokens": {
+          "input": 10,
+          "output": 5,
+          "cached": 0,
+          "total": 15,
+          "cost_usd": 0
+        },
+        "duration_ms": 10
+      },
+      "findings": [
+        {
+          "kind": "workflow_churn",
+          "severity": "medium",
+          "summary": "A workflow loop reached its cap.",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8"
+          ],
+          "signature": "loop:L3"
+        }
+      ],
+      "recommendations": [
+        {
+          "scope": "project",
+          "kind": "update_workflow",
+          "confidence": "medium",
+          "severity": "medium",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8"
+          ],
+          "proposed_action": "A workflow loop reached its cap.",
+          "status": "proposed",
+          "routing": {
+            "action": "queue_proposal_only",
+            "requires_user_approval": true,
+            "target": "project-local"
+          }
+        }
+      ]
+    },
+    "v1-instruction-violation": {
+      "eligible": true,
+      "identity": {
+        "run_scope": "initiative",
+        "initiative_id": "alpha",
+        "independent_group_id": null,
+        "config_snapshot_ref": "plugin-config-snapshot.json",
+        "host": "codex",
+        "phase": "ops"
+      },
+      "completeness": {
+        "score": 100,
+        "present": [
+          "agent",
+          "close",
+          "gate",
+          "loop",
+          "phase",
+          "plugin-config-snapshot.json",
+          "prompt",
+          "run identity",
+          "tool",
+          "trace parseability",
+          "trace validity"
+        ],
+        "missing": []
+      },
+      "assessments": {
+        "instruction_following": {
+          "status": "violated",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8"
+          ]
+        },
+        "prompt_efficiency": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1"
+          ]
+        },
+        "workflow": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:4",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:5",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "tool_coverage": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:3"
+          ]
+        }
+      },
+      "usage": {
+        "llm_event_count": 2,
+        "specialists_dispatched": [
+          "tooling"
+        ],
+        "tokens": {
+          "input": 10,
+          "output": 5,
+          "cached": 0,
+          "total": 15,
+          "cost_usd": 0
+        },
+        "duration_ms": 10
+      },
+      "findings": [
+        {
+          "kind": "instruction_violation",
+          "severity": "high",
+          "summary": "The trace records an instruction violation.",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8"
+          ],
+          "signature": "instruction:no-push"
+        }
+      ],
+      "recommendations": [
+        {
+          "scope": "project",
+          "kind": "update_workflow",
+          "confidence": "medium",
+          "severity": "high",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8"
+          ],
+          "proposed_action": "The trace records an instruction violation.",
+          "status": "proposed",
+          "routing": {
+            "action": "queue_proposal_only",
+            "requires_user_approval": true,
+            "target": "project-local"
+          }
+        }
+      ]
+    },
+    "v1-span-twin-usage": {
+      "eligible": true,
+      "identity": {
+        "run_scope": "initiative",
+        "initiative_id": "alpha",
+        "independent_group_id": null,
+        "config_snapshot_ref": "plugin-config-snapshot.json",
+        "host": "codex",
+        "phase": "ops"
+      },
+      "completeness": {
+        "score": 100,
+        "present": [
+          "agent",
+          "close",
+          "gate",
+          "loop",
+          "phase",
+          "plugin-config-snapshot.json",
+          "prompt",
+          "run identity",
+          "tool",
+          "trace parseability",
+          "trace validity"
+        ],
+        "missing": []
+      },
+      "assessments": {
+        "instruction_following": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "prompt_efficiency": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1"
+          ]
+        },
+        "workflow": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:4",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:5",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+          ]
+        },
+        "tool_coverage": {
+          "status": "ambiguous",
+          "evidence_refs": [
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:3",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8",
+            ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:9"
+          ]
+        }
+      },
+      "usage": {
+        "llm_event_count": 3,
+        "specialists_dispatched": [
+          "tooling"
+        ],
+        "tokens": {
+          "input": 17,
+          "output": 8,
+          "cached": 0,
+          "total": 25,
+          "cost_usd": 0
+        },
+        "duration_ms": 30
+      },
+      "findings": [],
+      "recommendations": []
+    }
+  },
+  "intentional_changes": {
+    "v1-policy-denial": {
+      "reason": "B02 step 3 / C-DETECTORS tool_coverage: one explicit denial is an observed permission outcome; it never auto-creates tool_gap or create_skill.",
+      "pre_b02": {
+        "eligible": true,
+        "identity": {
+          "run_scope": "initiative",
+          "initiative_id": "alpha",
+          "independent_group_id": null,
+          "config_snapshot_ref": "plugin-config-snapshot.json",
+          "host": "codex",
+          "phase": "ops"
+        },
+        "completeness": {
+          "score": 100,
+          "present": [
+            "agent",
+            "close",
+            "gate",
+            "loop",
+            "phase",
+            "plugin-config-snapshot.json",
+            "prompt",
+            "run identity",
+            "tool",
+            "trace parseability",
+            "trace validity"
+          ],
+          "missing": []
+        },
+        "assessments": {
+          "instruction_following": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+            ]
+          },
+          "prompt_efficiency": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1"
+            ]
+          },
+          "workflow": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:4",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:5",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+            ]
+          },
+          "tool_coverage": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:3",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8"
+            ]
+          }
+        },
+        "usage": {
+          "llm_event_count": 2,
+          "specialists_dispatched": [
+            "tooling"
+          ],
+          "tokens": {
+            "input": 10,
+            "output": 5,
+            "cached": 0,
+            "total": 15,
+            "cost_usd": 0
+          },
+          "duration_ms": 10
+        },
+        "findings": [
+          {
+            "kind": "tool_gap",
+            "severity": "medium",
+            "summary": "A required tool action was denied.",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8"
+            ],
+            "signature": "policy:Bash"
+          }
+        ],
+        "recommendations": [
+          {
+            "scope": "project",
+            "kind": "create_skill",
+            "confidence": "medium",
+            "severity": "medium",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8"
+            ],
+            "proposed_action": "A required tool action was denied.",
+            "status": "proposed",
+            "routing": {
+              "action": "queue_proposal_only",
+              "requires_user_approval": true,
+              "target": "project-local"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "eligible": true,
+        "identity": {
+          "run_scope": "initiative",
+          "initiative_id": "alpha",
+          "independent_group_id": null,
+          "config_snapshot_ref": "plugin-config-snapshot.json",
+          "host": "codex",
+          "phase": "ops"
+        },
+        "completeness": {
+          "score": 100,
+          "present": [
+            "agent",
+            "close",
+            "gate",
+            "loop",
+            "phase",
+            "plugin-config-snapshot.json",
+            "prompt",
+            "run identity",
+            "tool",
+            "trace parseability",
+            "trace validity"
+          ],
+          "missing": []
+        },
+        "assessments": {
+          "instruction_following": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+            ]
+          },
+          "prompt_efficiency": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1"
+            ]
+          },
+          "workflow": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:4",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:5",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+            ]
+          },
+          "tool_coverage": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:3",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8"
+            ]
+          }
+        },
+        "usage": {
+          "llm_event_count": 2,
+          "specialists_dispatched": [
+            "tooling"
+          ],
+          "tokens": {
+            "input": 10,
+            "output": 5,
+            "cached": 0,
+            "total": 15,
+            "cost_usd": 0
+          },
+          "duration_ms": 10
+        },
+        "findings": [],
+        "recommendations": []
+      }
+    },
+    "v1-signatureless-semantic-failures": {
+      "reason": "B01-F4 / C-DETECTORS repeated_mistake: an absent action signature is unobservable; the pre-B02 'undefined|undefined|undefined' key was a false repeat.",
+      "pre_b02": {
+        "eligible": true,
+        "identity": {
+          "run_scope": "initiative",
+          "initiative_id": "alpha",
+          "independent_group_id": null,
+          "config_snapshot_ref": "plugin-config-snapshot.json",
+          "host": "codex",
+          "phase": "ops"
+        },
+        "completeness": {
+          "score": 100,
+          "present": [
+            "agent",
+            "close",
+            "gate",
+            "loop",
+            "phase",
+            "plugin-config-snapshot.json",
+            "prompt",
+            "run identity",
+            "tool",
+            "trace parseability",
+            "trace validity"
+          ],
+          "missing": []
+        },
+        "assessments": {
+          "instruction_following": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+            ]
+          },
+          "prompt_efficiency": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1"
+            ]
+          },
+          "workflow": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:4",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:5",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+            ]
+          },
+          "tool_coverage": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:3",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:9"
+            ]
+          }
+        },
+        "usage": {
+          "llm_event_count": 2,
+          "specialists_dispatched": [
+            "tooling"
+          ],
+          "tokens": {
+            "input": 10,
+            "output": 5,
+            "cached": 0,
+            "total": 15,
+            "cost_usd": 0
+          },
+          "duration_ms": 20
+        },
+        "findings": [
+          {
+            "kind": "repeated_failure",
+            "severity": "high",
+            "summary": "The same failed action recurred 2 times.",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:9"
+            ],
+            "signature": "undefined|undefined|undefined"
+          }
+        ],
+        "recommendations": [
+          {
+            "scope": "project",
+            "kind": "clarify_prompt_contract",
+            "confidence": "high",
+            "severity": "high",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:9"
+            ],
+            "proposed_action": "The same failed action recurred 2 times.",
+            "status": "proposed",
+            "routing": {
+              "action": "queue_proposal_only",
+              "requires_user_approval": true,
+              "target": "project-local"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "eligible": true,
+        "identity": {
+          "run_scope": "initiative",
+          "initiative_id": "alpha",
+          "independent_group_id": null,
+          "config_snapshot_ref": "plugin-config-snapshot.json",
+          "host": "codex",
+          "phase": "ops"
+        },
+        "completeness": {
+          "score": 100,
+          "present": [
+            "agent",
+            "close",
+            "gate",
+            "loop",
+            "phase",
+            "plugin-config-snapshot.json",
+            "prompt",
+            "run identity",
+            "tool",
+            "trace parseability",
+            "trace validity"
+          ],
+          "missing": []
+        },
+        "assessments": {
+          "instruction_following": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+            ]
+          },
+          "prompt_efficiency": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:1"
+            ]
+          },
+          "workflow": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:4",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:5",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:6"
+            ]
+          },
+          "tool_coverage": {
+            "status": "ambiguous",
+            "evidence_refs": [
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:3",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:8",
+              ".guild/runs/run-20260812-010000-alpha/logs/v1.4-events.jsonl#line:9"
+            ]
+          }
+        },
+        "usage": {
+          "llm_event_count": 2,
+          "specialists_dispatched": [
+            "tooling"
+          ],
+          "tokens": {
+            "input": 10,
+            "output": 5,
+            "cached": 0,
+            "total": 15,
+            "cost_usd": 0
+          },
+          "duration_ms": 20
+        },
+        "findings": [],
+        "recommendations": []
+      }
+    }
+  }
+}

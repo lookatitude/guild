@@ -84,6 +84,26 @@ describe("composite recall — integration (re-rank + gate)", () => {
     fs.rmSync(repo, { recursive: true, force: true });
   });
 
+  test("#233: ingested sources/ pages survive the gate; root index.md/log.md catalogs do not outrank them", () => {
+    const repo = mkRepo();
+    writePage(repo, "sources/cache-decision.md", "# Cache decision\n\nThe session cache uses LRU eviction capped at 512 entries.\n", 0, NOW);
+    writePage(repo, "index.md", "# Index\n\n## Sources\n- [cache decision](sources/cache-decision.md): session cache LRU eviction capped entries.\n", 0, NOW);
+    writePage(repo, "log.md", "# Log\n\n## [2026-08-02] ingested cache-decision into sources — cache eviction\n", 0, NOW);
+
+    const res = recall("cache eviction", {
+      cwd: repo,
+      limit: 10,
+      _kgDisabled: true,
+      composite: { importanceGate: 3, halfLifeDays: 90, nowMs: NOW },
+    });
+    const paths = res.chunks.map((c) => c.source_path.replace(/\\/g, "/"));
+    expect(paths[0]).toBe(".guild/wiki/sources/cache-decision.md");
+    expect(paths).not.toContain(".guild/wiki/index.md");
+    expect(paths).not.toContain(".guild/wiki/log.md");
+
+    fs.rmSync(repo, { recursive: true, force: true });
+  });
+
   test("WITHOUT composite: BM25-only — the low-importance page is NOT gated out", () => {
     const repo = mkRepo();
     writePage(repo, "decisions/d.md", "# D\n\nauthentication flow decision token.\n", 0, NOW);

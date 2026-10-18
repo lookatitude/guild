@@ -93,6 +93,7 @@ import {
 } from "./lib/core/contracts/specialist-identity";
 import { parseFrontmatter } from "./lib/frontmatter";
 import { definitionRefForDispatch } from "./lib/capability/definition-ref-for-dispatch";
+import { inlineSpecialistIdentity } from "./lib/capability/inline-specialist-identity";
 import { buildCompatibilityCatalog, type CompatibilityCatalog } from "./lib/capability/compatibility-catalog";
 import { readCompatibilityAsset } from "./lib/capability/compatibility-loader";
 import {
@@ -1234,51 +1235,12 @@ function specialistIdentity(
     ? specialistTypeFromTemplateFrontmatter(templateFm)
     : null;
   const pinnedSkillIds = (ref?.skills ?? []).map((skill) => skill.id);
-  const inlineType: SpecialistTypeV2 = projectedType ?? {
-    schema_version: SPECIALIST_TYPE_SCHEMA,
-    type_id: specialist.name,
-    version: "inline-team-v1",
-    role: specialist.name,
-    capability_tags: [],
-    compatible_skill_refs: pinnedSkillIds,
-    semantic_tool_requirements: specialist.capability_scope ?? [],
-    default_model_tier: specialist.tier ?? specialist.default_tier ?? "mid",
-    constraints: {
-      definition_source: specialist.definition_source ?? "inline-team",
-      definition_path: specialist.definition ?? null,
-      definition_content_hash: definitionBytes ? sha256Prefixed(definitionBytes) : null,
-    },
-    eval_fixture_refs: [],
-  };
-  const typeHash = hashSpecialistType(inlineType);
-  const definitionFm = definitionBytes ? parseFrontmatter(definitionBytes.toString("utf8")) : null;
-  const projectedProfile = definitionFm
-    ? specialistProfileFromAgentFrontmatter(definitionFm, {
-        type_id: inlineType.type_id,
-        type_version: inlineType.version,
-        type_hash: typeHash,
-      })
-    : null;
-  const profile: SpecialistProfileV1 = projectedProfile ?? {
-    schema_version: SPECIALIST_PROFILE_SCHEMA,
-    profile_id: specialist.name,
-    version: "inline-team-v1",
-    derived_from: {
-      type_id: inlineType.type_id,
-      type_version: inlineType.version,
-      type_hash: typeHash,
-    },
-    project_instructions: definitionBytes
-      ? `definition_content_hash=${sha256Prefixed(definitionBytes)}`
-      : `inline_team_contract=${sha256Prefixed(JSON.stringify({
-          name: specialist.name,
-          scope: specialist.scope,
-          dependsOn: specialist.dependsOn,
-          capability_scope: specialist.capability_scope ?? [],
-        }))}`,
-    local_skill_refs: pinnedSkillIds,
-  };
-  const profileHash = hashSpecialistProfile(profile);
+  const {
+    type: inlineType,
+    typeHash,
+    profile,
+    profileHash,
+  } = inlineSpecialistIdentity(specialist, definitionBytes, pinnedSkillIds, projectedType);
 
   // PCL-FU-20: when the lane carries a complete committed ref AND the shipped
   // template was really read, the identity derived from those bytes is the

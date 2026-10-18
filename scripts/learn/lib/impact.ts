@@ -53,13 +53,15 @@
  *   in. This keeps the reverse-reachable claim scoped to the call graph, not
  *   overclaimed to every textual change.
  *
- * ── Entry-point rule (documented; the graph carries no `exported` flag) ──
+ * ── Entry-point rule (documented) ──
  *   A `function` node is an entry point iff (a) its simple name is a conventional
  *   program entry name (`main`, `__main__` — the deterministic name heuristic),
  *   OR (b) it is named in the caller-supplied entry-point set (by node id OR
- *   simple name). The structural layer records no export/visibility, so an
- *   "exported public surface" entry set must be supplied by the caller via
- *   `ImpactOptions.entryPoints`. `entryDistance` is null for a symbol no entry
+ *   simple name), OR (c) — I14 (legacy G2) — `entryPoints` was OMITTED and the
+ *   node carries the structural extractor's provable `exported: true` flag.
+ *   A SUPPLIED set (including `[]`) is authoritative and suppresses the exported
+ *   derivation; a pre-I14 graph carries no flags, so the omitted path degrades to
+ *   the exact legacy heuristic. `entryDistance` is null for a symbol no entry
  *   point reaches — an honest "not reachable from a known entry" signal, never a
  *   silent 0.
  *
@@ -328,12 +330,21 @@ function resolveFileSeeds(nodes: GraphNode[], files: Set<string>): Set<string> {
   return hits;
 }
 
-/** Entry-point node ids: heuristic (main/__main__) ∪ supplied (id or simple name). */
-function resolveEntryPoints(nodes: GraphNode[], supplied: Set<string>): Set<string> {
+/**
+ * Entry-point node ids: heuristic (main/__main__) ∪ supplied (id or simple name).
+ * I14: `supplied === null` means the caller omitted `entryPoints` — derive the
+ * surface from provable `exported: true` function nodes instead (empty on a
+ * pre-I14 graph, which is the exact legacy behavior).
+ */
+function resolveEntryPoints(nodes: GraphNode[], supplied: Set<string> | null): Set<string> {
   const eps = new Set<string>();
   for (const n of nodes) {
     if (isEntryPointNode(n)) eps.add(n.id);
-    else if (supplied.has(n.id) || supplied.has(simpleName(n.id))) eps.add(n.id);
+    else if (supplied !== null) {
+      if (supplied.has(n.id) || supplied.has(simpleName(n.id))) eps.add(n.id);
+    } else if (n.type === "function" && (n as { exported?: unknown }).exported === true) {
+      eps.add(n.id);
+    }
   }
   return eps;
 }
@@ -413,7 +424,8 @@ export function computeImpact(graph: GraphView, opts: ImpactOptions = {}): Impac
 
   const changedFilesSet = new Set<string>(opts.changedFiles ?? []);
   const changedSymbolsSet = new Set<string>(opts.changedSymbols ?? []);
-  const suppliedEntry = new Set<string>(opts.entryPoints ?? []);
+  // I14: a supplied set (incl. []) is authoritative; omitted → exported derivation.
+  const suppliedEntry = opts.entryPoints !== undefined ? new Set<string>(opts.entryPoints) : null;
 
   // Seeds = function nodes in changed files ∪ resolved changed symbols.
   const seeds = new Set<string>([

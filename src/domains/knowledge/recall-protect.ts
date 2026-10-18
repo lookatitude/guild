@@ -58,6 +58,12 @@ export interface RawRecallHit {
    * excerpt or snippet for the MCP path or index-unreadable fallback.
    */
   content: string;
+  /**
+   * Text to emit instead of `content` (an excerpt, a title, one field). The probe
+   * runs on BOTH, so a clean page cannot smuggle a flagged render; `content`
+   * alone decides the trust tier, so the excerpt keeps its page's frontmatter tier.
+   */
+  render?: string;
 }
 
 /**
@@ -405,15 +411,24 @@ export function protectChunks(
 
   for (const hit of rawHits) {
     const { source_path, content } = hit;
+    const render = hit.render ?? content;
 
     // Step 1: Injection probe — MUST run on ALL paths (full file / snippet / excerpt).
     // An FTS5 snippet or MCP excerpt can carry injected directives just as a full
     // file can. Skipping this probe on any fallback path is a D-RECALL bypass.
-    const probe = sanitizeForInjection(content);
+    const pageProbe = sanitizeForInjection(content);
+    const probe = pageProbe.result === "flagged" || hit.render === undefined
+      ? pageProbe
+      : sanitizeForInjection(render);
     if (probe.result === "flagged") {
       const patterns = probe.matchedPatterns.join(", ");
+      // The file name is page-controlled text too: a flagged name is not echoed.
+      const name = path.basename(source_path);
+      const shownName = sanitizeForInjection(name).result === "flagged"
+        ? "[unsafe name]"
+        : neutralizeRecallTags(name);
       const marker =
-        `[QUARANTINED: recalled chunk from ${neutralizeRecallTags(path.basename(source_path))} ` +
+        `[QUARANTINED: recalled chunk from ${shownName} ` +
         `flagged for injection (patterns: ${patterns}) — excluded]`;
       chunks.push({
         source_path,
@@ -468,9 +483,9 @@ export function protectChunks(
     let rendered: string;
     if (tier === "operator") {
       // Operator pages are authoritative — include without wrapping.
-      rendered = content;
+      rendered = render;
     } else {
-      rendered = `<guild:recall trust_tier="${tier}">${neutralizeRecallTags(content)}</guild:recall>`;
+      rendered = `<guild:recall trust_tier="${tier}">${neutralizeRecallTags(render)}</guild:recall>`;
       wrappedCount++;
     }
     chunks.push({ source_path, trust_tier: tier, quarantined: false, rendered });
@@ -478,4 +493,69 @@ export function protectChunks(
 
   const directive = wrappedCount > 0 ? RECALL_INTEGRITY_DIRECTIVE : null;
   return { chunks, directive };
+}
+
+// ── protectFields ─────────────────────────────────────────────────────────────
+
+/** A token with no whitespace or markup: an id, enum, date, path, or model name. */
+const IDENTIFIER_RE = /^[A-Za-z0-9_.\-/:#@+()]{0,64}$/;
+const MAX_FIELD_DEPTH = 32;
+
+interface ProtectFieldsOpts extends ProtectChunksOpts {
+  /** Text that decides the trust tier (e.g. the whole page); defaults to each leaf. */
+  tierContent?: string;
+  /** Keys whose string values are free text by meaning: always protected, never exempt. */
+  freeTextKeys?: ReadonlySet<string>;
+}
+
+interface ProtectFieldsResult<T> {
+  value: T;
+  /** True when at least one leaf was emitted inside a `<guild:recall>` wrapper. */
+  wrapped: boolean;
+}
+
+/**
+ * D-RECALL for structured output (MCP JSON). Identifier-shaped string leaves and
+ * keys pass raw when they also pass the probe with separators read as spaces
+ * (`Ignore.all.previous.instructions` is a sentence). Every other string leaf,
+ * and every leaf under a `freeTextKeys` key, goes through protectChunks:
+ * quarantine marker, or trust-tier wrapped. Shared
+ * and cyclic nodes (YAML aliases) are emitted once; nesting stops at
+ * MAX_FIELD_DEPTH so a crafted record cannot exhaust the stack.
+ */
+export function protectFields<T>(
+  value: T,
+  sourcePath: string,
+  opts: ProtectFieldsOpts = {},
+): ProtectFieldsResult<T> {
+  let wrapped = false;
+  const seen = new Set<object>();
+  const leaf = (s: string, freeText = false): string => {
+    if (!freeText && IDENTIFIER_RE.test(s)) {
+      const spaced = s.replace(/[_.\-/:#@+()]+/g, " ");
+      const [probe] = protectChunks([{ source_path: sourcePath, content: spaced, render: s }], opts).chunks;
+      return probe.quarantined ? probe.rendered : s;
+    }
+    const [chunk] = protectChunks(
+      [{ source_path: sourcePath, content: opts.tierContent ?? s, render: s }],
+      opts,
+    ).chunks;
+    if (!chunk.quarantined && chunk.trust_tier !== "operator") wrapped = true;
+    return chunk.rendered;
+  };
+  const walk = (v: unknown, depth: number, freeText = false): unknown => {
+    if (typeof v === "string") return leaf(v, freeText);
+    if (!v || typeof v !== "object") return v;
+    if (depth >= MAX_FIELD_DEPTH) return "[depth limit]";
+    if (seen.has(v)) return "[yaml alias]";
+    seen.add(v);
+    if (Array.isArray(v)) return v.map((x) => walk(x, depth + 1, freeText));
+    return Object.fromEntries(
+      Object.entries(v).map(([k, x]) => [
+        leaf(k),
+        walk(x, depth + 1, freeText || (opts.freeTextKeys?.has(k) ?? false)),
+      ]),
+    );
+  };
+  return { value: walk(value, 0) as T, wrapped };
 }

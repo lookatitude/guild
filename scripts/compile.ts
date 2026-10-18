@@ -52,7 +52,13 @@ export interface Target {
    * in the mcp-servers/* lockfiles CI installs.
    */
   nodePaths?: string[];
-  group: "hooks" | "agent-team" | "mcp" | "scripts";
+  /**
+   * esbuild's `absWorkingDir`. Module header comments are written relative to it,
+   * so it is part of the output bytes. Defaults to the repo root; only a target
+   * whose committed copy was built from elsewhere overrides it.
+   */
+  absWorkingDir?: string;
+  group: "hooks" | "agent-team" | "mcp" | "scripts" | "conformance";
 }
 
 /** hooks/*.ts → hooks/dist/*.js. Was a 3,500-char one-liner in hooks/package.json. */
@@ -106,6 +112,9 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   // inverse (R54/KTD39). Compiled because an operator reaches for it exactly when
   // something went wrong, which is the worst moment to need a working tsx.
   { id: "wiki-revert", entry: "scripts/wiki-revert.ts" },
+  // `guild:decisions` promotion: a staged decision candidate → wiki/decisions via
+  // harvest, with the index.md / log.md entries (#220).
+  { id: "wiki-promote", entry: "scripts/wiki-promote.ts" },
   // `/guild:maintain rollback <skill> [n]` — the compact-history walker (KTD48/R60).
   // Compiled for the same reason as wiki-revert: an operator reaches for rollback
   // exactly when something went wrong, which is the worst moment to need a working tsx.
@@ -149,6 +158,7 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   { id: "assign-layers", entry: "scripts/learn/assign-layers.ts" },
   { id: "audit-run-sinks", entry: "scripts/audit-run-sinks.ts" },
   { id: "build-tour", entry: "scripts/learn/build-tour.ts" },
+  { id: "check-handoff-receipts", entry: "scripts/check-handoff-receipts.ts" },
   { id: "check-lane-liveness", entry: "scripts/check-lane-liveness.ts" },
   { id: "cost-gate", entry: "scripts/learn/cost-gate.ts" },
   { id: "define-schema", entry: "scripts/lib/define-schema.ts" },
@@ -177,6 +187,17 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   { id: "resolve-specialist-capability-scope", entry: "scripts/resolve-specialist-capability-scope.ts" },
   { id: "retention", entry: "scripts/lib/retention.ts" },
   { id: "roster-resolve", entry: "scripts/roster-resolve.ts" },
+  // `/guild:maintain analyze` (C-CLI): the run-analysis CLI ships as compiled
+  // Node at runtime/scripts/run-analysis.js — never tsx on the user path.
+  { id: "run-analysis", entry: "scripts/run-analysis.ts" },
+  // NOT CLIs. The lazy domain-barrel chunks (C04/KTD29): the cheap bundles reach
+  // lifecycle / telemetry / adapters only through non-analyzable requires that
+  // resolve these compiled siblings at run time, so the heavy graphs stay OUT of
+  // the cheap entrypoints (config-cmd was 12 domains wide). Dropping one breaks
+  // that call path in a shipped package (KTD10 fail-closed).
+  { id: "lifecycle-api", entry: "src/domains/lifecycle/index.ts" },
+  { id: "telemetry-api", entry: "src/domains/telemetry/index.ts" },
+  { id: "adapters-api", entry: "src/adapters/index.ts" },
   { id: "run-lifecycle", entry: "scripts/lib/run-lifecycle.ts" },
   { id: "score-tier", entry: "scripts/score-tier.ts" },
   { id: "stamp-recall-importance", entry: "scripts/stamp-recall-importance.ts" },
@@ -230,6 +251,24 @@ export function targets(): Target[] {
   for (const s of RUNTIME_SCRIPT_IDS) {
     t.push({ id: `scripts/${s.id}`, entry: s.entry, out: `runtime/scripts/${s.id}.js`, yamlFrom: "scripts", group: "scripts" });
   }
+  // The activated-host conformance worker. It was built by its own esbuild target
+  // in scripts/package.json with byte-identical options, which left it OUTSIDE
+  // --check: editing anything it bundles drifted the shipped copy silently, and
+  // only the conformance suite's own byte-identical assertion caught it (#241).
+  t.push({
+    id: "scripts/activated-host-conformance",
+    entry: "scripts/activated-host-conformance.ts",
+    out: "scripts/dist/activated-host-conformance.js",
+    yamlFrom: "scripts",
+    // absWorkingDir reproduces the scripts/-cwd npm build, whose module header
+    // comments are cwd-relative and therefore part of the output bytes.
+    absWorkingDir: "scripts",
+    // NOT group "scripts": that group is the floor SC-2 derives for "compiled
+    // bundles the host package ships" (tests/universal-host/_helpers.ts). This
+    // worker is a conformance harness and ships in no package, so filing it
+    // under "scripts" would demand a script_ref the package must never carry.
+    group: "conformance",
+  });
   return t;
 }
 
@@ -239,6 +278,30 @@ export function targets(): Target[] {
 
 /* eslint-disable @typescript-eslint/no-var-requires */
 const esbuild = require(path.join(ROOT, "scripts", "node_modules", "esbuild")) as typeof import("esbuild");
+
+/**
+ * Bundle bytes depend on the esbuild version, so a stale scripts/node_modules
+ * silently produces a different committed surface than CI. That cost a full
+ * debugging detour (#241): 0.27.7 was installed against a lockfile pinning
+ * 0.28.2, and the ~87 drifted files read as platform-dependent output. The
+ * lockfile is the pin; this makes the pin ENFORCED rather than merely declared.
+ */
+function assertLockedEsbuild(): void {
+  const lockPath = path.join(ROOT, "scripts", "package-lock.json");
+  const lock = JSON.parse(fs.readFileSync(lockPath, "utf8")) as {
+    packages?: Record<string, { version?: string }>;
+  };
+  const locked = lock.packages?.["node_modules/esbuild"]?.version;
+  if (!locked) throw new Error("scripts/package-lock.json does not pin esbuild");
+  const loaded = (esbuild as unknown as { version: string }).version;
+  if (loaded !== locked) {
+    throw new Error(
+      `esbuild ${loaded} is installed but scripts/package-lock.json pins ${locked}. ` +
+        "Bundle bytes differ between versions, so this would drift every output. " +
+        "Run `npm ci` in scripts/.",
+    );
+  }
+}
 
 /**
  * The esbuild `alias` map for one target. Exported because it IS the #75 fix:
@@ -259,9 +322,9 @@ export function aliasForTarget(t: Target): Record<string, string> {
  */
 export function buildOptionsForTarget(t: Target, outAbs: string): import("esbuild").BuildOptions {
   return {
-    absWorkingDir: ROOT,
-    entryPoints: [t.entry],
-    outfile: path.relative(ROOT, outAbs),
+    absWorkingDir: t.absWorkingDir ? path.join(ROOT, t.absWorkingDir) : ROOT,
+    entryPoints: [t.absWorkingDir ? path.relative(t.absWorkingDir, t.entry) : t.entry],
+    outfile: outAbs,
     bundle: true,
     platform: "node",
     target: "node18",
@@ -272,7 +335,13 @@ export function buildOptionsForTarget(t: Target, outAbs: string): import("esbuil
   };
 }
 
-function buildOne(t: Target, outAbs: string): void {
+/**
+ * The ONE build path. Exported so a test asserting a shipped bundle is current
+ * rebuilds it exactly as the compile does, instead of re-declaring the options
+ * and drifting from them (that duplication is what hid the conformance bundle
+ * from --check in the first place).
+ */
+export function buildOne(t: Target, outAbs: string): void {
   const r = esbuild.buildSync(buildOptionsForTarget(t, outAbs));
   if (r.errors.length) {
     throw new Error(`esbuild failed for ${t.id}:\n${r.errors.map((e) => e.text).join("\n")}`);
@@ -358,7 +427,7 @@ function compileAll(outRoot: string, only?: string): string[] {
 }
 
 /** Every directory the compile OWNS: nothing else may live under them (KTD7/KTD9). */
-const OWNED_OUTPUT_ROOTS = ["hooks/dist", "hooks/agent-team/dist", "runtime"];
+const OWNED_OUTPUT_ROOTS = ["hooks/dist", "hooks/agent-team/dist", "runtime", "scripts/dist"];
 
 /** Every committed file under the owned roots, repo-relative. */
 function committedOutputs(): string[] {
@@ -386,9 +455,10 @@ function strayOutputs(expected: string[]): string[] {
   return committedOutputs().filter((f) => !known.has(f));
 }
 
-const GROUPS = ["hooks", "agent-team", "mcp", "scripts"];
+const GROUPS = ["hooks", "agent-team", "mcp", "scripts", "conformance"];
 
 function main(argv: string[]): number {
+  assertLockedEsbuild();
   const check = argv.includes("--check");
   const onlyArg = argv.find((a) => a.startsWith("--only="));
   const only = onlyArg ? onlyArg.slice("--only=".length) : undefined;

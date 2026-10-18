@@ -63,15 +63,45 @@
 import * as fs from "fs";
 import * as path from "path";
 
-// Lazy barrel access (deferred require): a top-level `import … from "../../lifecycle"`
-// makes capability/index eagerly initialize the lifecycle barrel, which re-exports
-// `require.main`-gated CLI modules (check-lane-liveness, …) that misfire when a hook
-// bundle — which reaches capability/index via runstart-preflight — eagerly loads
-// them. Deferring to call time (this file's writers only, never a hook path) keeps
-// the barrel out of the eager graph. Mirrors settings-reader.ts's lazy capability access.
+// Lazy barrel access from a separate compiled chunk (C04/KTD29). The old literal
+// `require("../lifecycle")` deferred EXECUTION but esbuild still bundled the whole
+// lifecycle graph into every bundle reaching this file (config-cmd.js was 12 domains
+// wide). Author plane (.ts) requires the source barrel; compiled plane (.js) walks up
+// to the package's runtime/scripts/lifecycle-api.js and fails closed when absent
+// (KTD10: no tsx fallback). Both specifiers are non-analyzable on purpose.
 function lifecycleApi(): typeof import("../lifecycle") {
+  if (__filename.endsWith(".ts")) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require(path.join(__dirname, "..", "lifecycle")) as typeof import("../lifecycle");
+  }
+  // Bounded to the owning package (codex C04 r1): sibling chunk first, else the
+  // NEAREST package root must carry it — never a checkout's copy past that root.
+  const sibling = path.join(__dirname, "lifecycle-api.js");
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require("../lifecycle");
+  if (fs.existsSync(sibling)) return require(sibling) as typeof import("../lifecycle");
+  for (let dir = path.dirname(__dirname); ; ) {
+    const isPackageRoot =
+      fs.existsSync(path.join(dir, "runtime")) ||
+      fs.existsSync(path.join(dir, ".claude-plugin")) ||
+      fs.existsSync(path.join(dir, ".codex-plugin")) ||
+      fs.existsSync(path.join(dir, "guild.inventory.json"));
+    if (isPackageRoot) {
+      const chunk = path.join(dir, "runtime", "scripts", "lifecycle-api.js");
+      if (!fs.existsSync(chunk)) {
+        throw new Error(
+          `guild: runtime/scripts/lifecycle-api.js missing from package root ${dir} — incomplete package; run \`bun run compile\` (KTD10 fail-closed)`,
+        );
+      }
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return require(chunk) as typeof import("../lifecycle");
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error(
+    `guild: no package root found above ${__dirname} for lifecycle-api.js (KTD10 fail-closed)`,
+  );
 }
 import {
   buildIndependenceAdjudication,

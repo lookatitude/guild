@@ -629,7 +629,16 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-09-28 (T17 plugin-local docs): wiki.md states the promotion law,
   // the sources/ home and the hybrid-recall fail-open; status.md names the SQLite cache
   // as platform state. The command registry was re-extracted for those two entries.
-  commands: "3ad08dd9650f6723dacd9ff62369a0fb69526066",
+  // Re-ratified 2026-10-14 (#217 via next, repaired in #232): status.md states that bare
+  // status writes nothing without .guild/, reflowed to stay <=40 lines (KTD24); the
+  // command registry was re-extracted for that entry. ANTI-VACUITY: check-surface-pins,
+  // SC-W2-5 and SC-W3-6 were RED against the prior pin and named only `commands`.
+  // Re-ratified 2026-10-17 (v3-completion Team C): C02 added the `analyze` row to
+  // commands/maintain.md; C06 deleted the eleven KTD14 print-only aliases plus
+  // commands/aliases.allowlist.json after the v3.0.0 stable cut shipped them —
+  // exactly the 13 dispatchers remain. ANTI-VACUITY: SC-W2-5/SC-W3-6 were observed
+  // RED against the prior pins naming commands/** before this value was ratified.
+  commands: "41692cc4045cf206c6de68682458b13254e1ca70",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
   // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
@@ -687,14 +696,35 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // check-surface-pins named only `skills/skills` stale against the T15F pin.
   // Re-ratified 2026-09-28 (T17 plugin-local docs): using-guild states the promotion law
   // and the shipped concern enum, and points the dispatch table at AGENTS.md.
-  skills: "1fea256df205e5a51f3390be6d535f37fe90c0ad",
+  // Re-ratified 2026-10-14 (#220/#222): decisions points the lead at the wiki-promote
+  // CLI, which the evolve wiki-revert chapter names (KTD35: off the lane surface); wiki-ingest states the normalized 0..1 similarity score and
+  // that a paused page gets no index/log entry. ANTI-VACUITY: check-surface-pins,
+  // SC-W2-5 and SC-W3-6 were RED against the prior pin and named only `skills/skills`.
+  // Re-ratified 2026-10-14 (#235): review, verify-done and execute-plan gate lane
+  // receipts on check-handoff-receipts.js; review loads the verify-done chapter and
+  // verify-done pins the `Overall status:` line. check-surface-pins was RED on the prior pin.
+  // Re-ratified 2026-10-17 (#240): the G-lane Codex round answered. review-broker
+  // defines the no_verdict force-pass as an audit exception that bypasses the
+  // 5-condition gate-pass rule; codex-review bounds the verification allowance at
+  // 2 rounds with four exhaustive exits, verdict-less first; scenarios SC6/SC7 now
+  // assert the operator force-pass, the Codex confirm, and the verdict-less
+  // intersection. ANTI-VACUITY: SC-W3-6(B) and check-surface-pins were RED against
+  // the prior pin, naming exactly the three changed files and `skills/skills`.
+  // Re-ratified 2026-10-17 (v3-completion Team C): C03 added the analyze row to
+  // skills/meta/evolve/SKILL.md and the new references/run-analysis.md chapter.
+  // ANTI-VACUITY: SC-W3-6(B) was observed RED against the prior pin first.
+  skills: "1fc706b7891bf21f4e1c276f2fb8ca2626fb1c58",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
 export const RATIFIED_MANIFESTS: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-09-14 (T04): the manifest `commands` list is the 13 dispatchers
   // plus the 11 print-only aliases.
-  ".claude-plugin/plugin.json": "3a37e63ef2587d682a8c1b95ed9ca0524930075cb24cc89666857a74d9060afb",
+  // Re-ratified 2026-10-17 (v3-completion C05): the manifest regeneration after the
+  // C06 alias retirement drops the 11 ./commands/<alias>.md registrations — exactly
+  // the 13 dispatchers remain. ANTI-VACUITY: SC-W3-6(A)/SC-W2-5 were observed RED
+  // against the prior pin (version-stripped hash aa360e26...) before ratification.
+  ".claude-plugin/plugin.json": "aa360e26c51dab8ed86421730318b6d9324316ada37e5fc246a00e0efa01aa5c",
   ".claude-plugin/marketplace.json": "ad288b80dee07f85a94eee8b9c3e92b18705a94f98e104277a92b4d2e770e2af",
 });
 

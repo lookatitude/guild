@@ -7,8 +7,9 @@ allowed-tools: Read, Grep, Glob, Bash, Skill, AskUserQuestion
 
 # /guild:status — where am I
 
-Resolves run state by filesystem scan, or the optional SQLite read-through cache
-on platform state (off the repo) unless `--no-index`. The bare form writes no `.guild/` data.
+Resolves run state by filesystem scan, or the optional SQLite read-through cache on platform
+state (off the repo) unless `--no-index`. Bare status writes nothing without `.guild/`; with it,
+only a lightweight run under `.guild/runs/` (`record_status_runs: false` turns that off).
 
 ```bash
 node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js" status --cwd "$(pwd)"
@@ -26,8 +27,7 @@ node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/c
 | `stats` | usage + telemetry dashboard over `.guild/runs/**`; pure read |
 | `dashboard` | clone / serve the benchmark UI over this project's runs + knowledge |
 
-The active team resolves through `resolveTeamFile`; a legacy single-file `team.yaml` is
-surfaced once as legacy and status never acts on it.
+The active team resolves through `resolveTeamFile`; a legacy `team.yaml` is surfaced once, never acted on.
 
 ## Dispatch
 

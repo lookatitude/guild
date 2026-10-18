@@ -7,6 +7,7 @@
 
 export {
   isCanonicalLaneReceipt,
+  laneReceiptContractDefects,
   validateRunRecordDir,
   scanRunsRoot,
   RUN_RECORD_VALIDATION_SCHEMA,

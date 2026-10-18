@@ -4,13 +4,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
-import { buildSync } from "esbuild";
 import * as yaml from "js-yaml";
 
 import { NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS } from "../src/domains/lifecycle";
 import { snapshotMigrationRuntimePackage } from "./lib/capability/migration-evidence";
 import { buildHostPackages, AGENTS_SKILL_ROOT } from "./build-host-packages";
 import { moduleManifestFiles } from "./lib/module-manifest";
+import { targets, buildOne } from "./compile";
 
 /** The module ownership manifests, at their source paths (what a package ships). */
 function copyModuleManifests(plugin: string): void {
@@ -436,20 +436,21 @@ describe("activated-host conformance capture", () => {
   });
 
   it("keeps the shipped worker bundle byte-identical to a fresh source build", () => {
+    // Rebuild through compile.ts's own target + build path. This test used to
+    // re-declare the esbuild options, which is exactly how the bundle stayed
+    // outside `compile --check` while still claiming to be verified.
+    const target = targets().find((t) => t.out === "scripts/dist/activated-host-conformance.js");
+    expect(target, "the conformance bundle must be a compile.ts target").toBeDefined();
     const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "guild-activated-bundle-")), "activated-host-conformance.js");
-    buildSync({
-      entryPoints: [path.resolve(__dirname, "activated-host-conformance.ts")],
-      bundle: true,
-      platform: "node",
-      target: "node18",
-      format: "cjs",
-      alias: { "js-yaml": path.resolve(__dirname, "node_modules/js-yaml") },
-      outfile: out,
-      logLevel: "silent",
-      // The npm build runs from scripts/; module header comments are cwd-relative.
-      absWorkingDir: path.resolve(__dirname),
-    });
+    buildOne(target!, out);
     expect(fs.readFileSync(out)).toEqual(fs.readFileSync(path.resolve(__dirname, "dist/activated-host-conformance.js")));
+  });
+
+  it("ships the worker bundle with a node shebang, never npx tsx (KTD10/KTD11)", () => {
+    // The bundle is mode 0755, so a direct execution follows this line. `npx tsx`
+    // here would spawn a real npx on the user path, reachable on a cold cache.
+    const first = fs.readFileSync(path.resolve(__dirname, "dist/activated-host-conformance.js"), "utf8").split("\n", 1)[0];
+    expect(first).toBe("#!/usr/bin/env node");
   });
 
   it("bundles js-yaml into the relocatable sealed worker instead of resolving it from ambient disk", () => {

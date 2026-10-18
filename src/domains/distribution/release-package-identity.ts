@@ -258,11 +258,37 @@ export function computePhysicalNativeClaudePayloadDigest(packageRoot: string): s
         normalized === RELEASE_PACKAGE_INSTALL_RECEIPT_FILE ||
         normalized === ".codex-marketplace-install.json" ||
         normalized === ".in_use" ||
-        normalized.startsWith(".in_use/") ||
-        isDetachedReleaseEvidenceRecord(normalized)
+        normalized.startsWith(".in_use/")
       ) continue;
       const absolutePath = path.join(directory, entry.name);
       const stats = fs.lstatSync(absolutePath);
+      if (isDetachedReleaseEvidenceRecord(normalized)) {
+        // PCL-FU-27: a detached release-evidence record is excluded from the
+        // payload digest ONLY as a physical regular file. A symlink, FIFO,
+        // directory, or any other shape planted at a recognized record path
+        // fails closed instead of being silently skipped.
+        if (entry.isSymbolicLink() || stats.isSymbolicLink()) {
+          throw new Error(`detached release-evidence record is a symlink: ${normalized}`);
+        }
+        if (!entry.isFile() || !stats.isFile()) {
+          throw new Error(`detached release-evidence record is not a regular file: ${normalized}`);
+        }
+        // No-follow, non-blocking open + fstat recheck defeats a path
+        // replacement racing the lstat above (O_NONBLOCK keeps a racing FIFO
+        // from hanging the open; fstat then rejects it as non-regular).
+        const descriptor = fs.openSync(
+          absolutePath,
+          fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+        );
+        try {
+          if (!fs.fstatSync(descriptor).isFile()) {
+            throw new Error(`detached release-evidence record is not a regular file: ${normalized}`);
+          }
+        } finally {
+          fs.closeSync(descriptor);
+        }
+        continue;
+      }
       if (normalized === ".git") {
         if (entry.isSymbolicLink() || stats.isSymbolicLink()) {
           throw new Error("native Claude package root .git metadata is not physical");

@@ -217,6 +217,7 @@ export {
 } from "./event-log-sidecar";
 export {
   isCanonicalLaneReceipt,
+  laneReceiptContractDefects,
   RUN_RECORD_FINDING_CODES,
   RUN_RECORD_VALIDATION_SCHEMA,
   type RunRecordFinding,

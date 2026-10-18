@@ -22,7 +22,13 @@ Three required inputs, all produced upstream:
 2. The spec — `.guild/spec/<slug>.md` (from `guild:brainstorm`, §7.1) or a user-provided spec path recorded in the plan frontmatter. Stage 1 compares against this.
 3. The plan — `.guild/plan/<slug>.md` with `approved: true`. Fixes each lane's `scope`, `owner`, `depends-on`, autonomy policy; Stage 1 uses `scope` as the contract a lane's `changed_files` must satisfy.
 
-If any receipt is missing, malformed, or unreadable, halt and loop back to `guild:execute-plan` — review cannot synthesize a receipt that was never written.
+Before Stage 1, run the receipt gate and gate on its exit code — never judge receipt shape by eye:
+
+```bash
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/check-handoff-receipts.js --cwd <repo-root> --run-id <run-id>
+```
+
+Exit 0 → every receipt has the five §8.2 `## <name>` sections and exactly one valid ```` ```guild.handoff.v2 ```` fence; proceed. A non-zero exit → do **not** write a passing `review.md`: record each refused receipt and its defects as a Stage 1 blocker, halt, and loop back to `guild:execute-plan` (a `## files changed` heading or a plain ```` ```json ```` fence is a malformed receipt). Review cannot synthesize a receipt that was never written.
 
 ## Stage 1 — spec compliance
 
@@ -68,7 +74,7 @@ This is the **Development** phase's review boundary. After `review.md` is writte
 
 ## Handoff
 
-When every lane is ✓ at both stages (or Stage 2 follow-ups are acceptable and no ✗ blockers remain), hand off to `guild:verify-done` with:
+When every lane is ✓ at both stages (or Stage 2 follow-ups are acceptable and no ✗ blockers remain), hand off to `guild:verify-done`. It is a chapter, not a skill: Read `../../quality/references/verify-done.md` and run it in place. It writes `.guild/runs/<run-id>/verify.md` (never another file name) whose first line after the title is exactly `Overall status: pass` or `Overall status: fail`. Pass it:
 
 - `run_id` — the run directory name.
 - `review_path` — absolute path to `.guild/runs/<run-id>/review.md`.

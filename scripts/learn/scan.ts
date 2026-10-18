@@ -91,8 +91,18 @@ function main(): void {
     stats: { file_count: fileEntries.length, module_count: modules.size },
   };
 
+  // #219: if only HEAD moved (e.g. the commit recording the previous init), the
+  // existing map is still exact — keep it so a re-init does not dirty the tree.
+  let unchanged = false;
   try {
-    writeJson(gp.codebaseMap, codebaseMap);
+    const prior = JSON.parse(fs.readFileSync(gp.codebaseMap, "utf8")) as Record<string, unknown>;
+    unchanged =
+      JSON.stringify({ ...prior, generated_from_commit: codebaseMap.generated_from_commit }) ===
+      JSON.stringify(codebaseMap);
+  } catch { /* absent or unreadable — write fresh */ }
+
+  try {
+    if (!unchanged) writeJson(gp.codebaseMap, codebaseMap);
   } catch (err) {
     process.stderr.write(`[scan] ERROR writing codebase-map.json: ${String(err)}\n`);
     process.exit(1);

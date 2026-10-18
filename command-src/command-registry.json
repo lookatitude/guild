@@ -2,26 +2,6 @@
   "schema_version": "guild.command.v1",
   "commands": [
     {
-      "id": "adopt",
-      "name": "adopt",
-      "description": "Print-only alias (KTD14) — /guild:adopt is now `/guild:init adopt`. Prints the new spelling and exits; dispatches nothing, writes nothing.",
-      "argument_hint": "",
-      "allowed_tools": [
-        "Read"
-      ],
-      "body": "\nPrint exactly this line, then stop. Invoke no skill, run no command, write no file:\n\n/guild:adopt is now /guild:init adopt — re-run it that way.\n"
-    },
-    {
-      "id": "audit",
-      "name": "audit",
-      "description": "Print-only alias (KTD14) — /guild:audit is now `/guild:maintain audit`. Prints the new spelling and exits; dispatches nothing, writes nothing.",
-      "argument_hint": "",
-      "allowed_tools": [
-        "Read"
-      ],
-      "body": "\nPrint exactly this line, then stop. Invoke no skill, run no command, write no file:\n\n/guild:audit is now /guild:maintain audit — re-run it that way.\n"
-    },
-    {
       "id": "build",
       "name": "build",
       "description": "Development — per lane: assemble the specialist context bundle, dispatch the lane on the backend locked in at intake (snapshot effective.agent_mode), collect the handoff receipt, then run the G-lane review gate. Dispatches to guild:execute-plan.",
@@ -53,46 +33,6 @@
         "Bash"
       ],
       "body": "\n# /guild:config — policy config\n\nDurable config is policy only: it never stores a host family or a concrete model id\n(KTD22). Route on the FIRST token; `$REMAINING_ARGS` is every token after it, consumed\nexactly once. `config-cmd.js` has no `init` and rejects `models` / `migrate`.\n\n```bash\n# set|role|show|validate|providers|ui|update-mcp-hashes|reconcile — forwarded verbatim\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/config-cmd.js\" $ARGUMENTS --cwd \"$(pwd)\"\n# init — the CLI spells it `reconcile sync` (never-clobber); translate, do not forward\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/config-cmd.js\" reconcile sync --cwd \"$(pwd)\" $REMAINING_ARGS\n# models — $REMAINING_ARGS ALREADY starts with the CLI's sub-verb; never insert another. The CLI defaults --cwd to $PWD, so a user --cwd is never overridden.\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/models-cmd.js\" $REMAINING_ARGS\n# migrate — v1->v2 layout inspect / dry-run / retry (dry-run is the default)\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/migrate-guild.js\" --root=\"$(pwd)\" $REMAINING_ARGS\n```\n\n| Sub-verb | Grammar |\n|---|---|\n| `models` | READ-ONLY routing evidence — `models inspect [--run-id <id>] [--json] [--cwd <path>]` |\n| `migrate` | `migrate [--root=<path>] [--mode=migrate|dry-run|skip] [--workspace] [--accept-grades]` |\n\nA danger key needs `--confirm`; `show --sources` annotates inheritance and\n`show --render` fails closed on a secret leak. No sub-verb prints the accepted list.\n\n## Dispatch\n\n```\nSkill: guild:using-guild\nargs: $ARGUMENTS\n```\n\nThe CLIs above own every write; the assembler explains which knob applies here.\n"
-    },
-    {
-      "id": "dashboard",
-      "name": "dashboard",
-      "description": "Print-only alias (KTD14) — /guild:dashboard is now `/guild:status dashboard`. Prints the new spelling and exits; dispatches nothing, writes nothing.",
-      "argument_hint": "",
-      "allowed_tools": [
-        "Read"
-      ],
-      "body": "\nPrint exactly this line, then stop. Invoke no skill, run no command, write no file:\n\n/guild:dashboard is now /guild:status dashboard — re-run it that way.\n"
-    },
-    {
-      "id": "evolve",
-      "name": "evolve",
-      "description": "Print-only alias (KTD14) — /guild:evolve is now `/guild:maintain evolve`. Prints the new spelling and exits; dispatches nothing, writes nothing.",
-      "argument_hint": "",
-      "allowed_tools": [
-        "Read"
-      ],
-      "body": "\nPrint exactly this line, then stop. Invoke no skill, run no command, write no file:\n\n/guild:evolve is now /guild:maintain evolve — re-run it that way.\n"
-    },
-    {
-      "id": "fix",
-      "name": "fix",
-      "description": "Print-only alias (KTD14) — /guild:fix is now `/guild:maintain fix`. Prints the new spelling and exits; dispatches nothing, writes nothing.",
-      "argument_hint": "",
-      "allowed_tools": [
-        "Read"
-      ],
-      "body": "\nPrint exactly this line, then stop. Invoke no skill, run no command, write no file:\n\n/guild:fix is now /guild:maintain fix — re-run it that way.\n"
-    },
-    {
-      "id": "goal",
-      "name": "goal",
-      "description": "Print-only alias (KTD14) — /guild:goal is now `/guild:plan goal`. Prints the new spelling and exits; dispatches nothing, writes nothing.",
-      "argument_hint": "",
-      "allowed_tools": [
-        "Read"
-      ],
-      "body": "\nPrint exactly this line, then stop. Invoke no skill, run no command, write no file:\n\n/guild:goal is now /guild:plan goal — re-run it that way.\n"
     },
     {
       "id": "guild",
@@ -196,8 +136,8 @@
     {
       "id": "maintain",
       "name": "maintain",
-      "description": "Self-heal + RSI — sub-verbs evolve | rollback | audit | fix | gc | wiki revert. ONE assembler: every sub-verb dispatches guild:evolve, which routes the token to its own chapter (`guild:evolve §Sub-verbs`). One gate, two homes: project targets write this repo's .guild/, machinery targets write a candidate a human commits.",
-      "argument_hint": "<evolve <id> [--target=<type>] [--auto] | rollback <skill> [n] | audit | fix [run-id|symptom] | gc | wiki revert>",
+      "description": "Self-heal + RSI — sub-verbs evolve | rollback | audit | fix | gc | wiki revert | analyze. ONE assembler: every sub-verb dispatches guild:evolve, which routes the token to its own chapter (`guild:evolve §Sub-verbs`). One gate, two homes: project targets write this repo's .guild/, machinery targets write a candidate a human commits.",
+      "argument_hint": "<evolve <id> [--target=<type>] [--auto] | rollback <skill> [n] | audit | fix [run-id|symptom] | gc | wiki revert | analyze <run|compare|initiative|independent|inspect|recommendation> ...>",
       "allowed_tools": [
         "Read",
         "Write",
@@ -209,27 +149,7 @@
         "Skill",
         "AskUserQuestion"
       ],
-      "body": "\n# /guild:maintain — self-maintenance\n\nOne entry, one assembler. `$ARGUMENTS` is forwarded VERBATIM — the sub-verb token is\nthe assembler's to read, never re-inserted here. An unknown sub-verb prints usage.\n\n## Run recording\n\n```bash\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js\" start --command=/guild:maintain --cwd \"$(pwd)\"\n```\n\n## Sub-verbs (routed by `guild:evolve §Sub-verbs`)\n\n| Token | Chapter the assembler loads |\n|---|---|\n| `evolve <id> [--target=<type>] [--auto]` | `references/evolve-targets.md` — target enum + the two homes |\n| `rollback <skill> [n]` | `references/rollback-skill.md` — restore the inverse span |\n| `audit` | `references/audit.md` — static script + boundary audit |\n| `fix [run-id\\|symptom]` | `../diagnose/references/systematic-debug.md` |\n| `wiki revert` | `references/wiki-revert.md` — the harvest-journal inverse |\n| `gc` | durable-state sweep + scratch janitor (storage domain, U-STOR) |\n\n## Dispatch\n\n```\nSkill: guild:evolve\nargs: $ARGUMENTS\n```\n\n`--target=<type>` names one of the eleven evolve targets; omitted, the assembler infers\nit. `--auto` runs unattended and is the cheap curator only: it carries `playbook` and\n`skill`, and fails closed with `next_need: operator` on everything else. Machinery\ntargets never write the install tree — they write a candidate a human commits.\n"
-    },
-    {
-      "id": "migrate",
-      "name": "migrate",
-      "description": "Print-only alias (KTD14) — /guild:migrate is now `/guild:config migrate`. Prints the new spelling and exits; dispatches nothing, writes nothing.",
-      "argument_hint": "",
-      "allowed_tools": [
-        "Read"
-      ],
-      "body": "\nPrint exactly this line, then stop. Invoke no skill, run no command, write no file:\n\n/guild:migrate is now /guild:config migrate — re-run it that way.\n"
-    },
-    {
-      "id": "models",
-      "name": "models",
-      "description": "Print-only alias (KTD14) — /guild:models is now `/guild:config models`. Prints the new spelling and exits; dispatches nothing, writes nothing.",
-      "argument_hint": "",
-      "allowed_tools": [
-        "Read"
-      ],
-      "body": "\nPrint exactly this line, then stop. Invoke no skill, run no command, write no file:\n\n/guild:models is now /guild:config models — re-run it that way.\n"
+      "body": "\n# /guild:maintain — self-maintenance\n\nOne entry, one assembler. `$ARGUMENTS` is forwarded VERBATIM — the sub-verb token is the assembler's to read, never re-inserted here. An unknown sub-verb prints usage.\n\n## Run recording\n\n```bash\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js\" start --command=/guild:maintain --cwd \"$(pwd)\"\n```\n\n## Sub-verbs (routed by `guild:evolve §Sub-verbs`)\n\n| Token | Chapter the assembler loads |\n|---|---|\n| `evolve <id> [--target=<type>] [--auto]` | `references/evolve-targets.md` — target enum + the two homes |\n| `rollback <skill> [n]` | `references/rollback-skill.md` — restore the inverse span |\n| `audit` | `references/audit.md` — static script + boundary audit |\n| `fix [run-id\\|symptom]` | `../diagnose/references/systematic-debug.md` |\n| `wiki revert` | `references/wiki-revert.md` — the harvest-journal inverse |\n| `analyze <run\\|compare\\|initiative\\|independent\\|inspect\\|recommendation> ...` | `references/run-analysis.md` — compiled run-analysis CLI (C-CLI argv, read vs gated writes) |\n| `gc` | durable-state sweep + scratch janitor (storage domain, U-STOR) |\n\n## Dispatch\n\n```\nSkill: guild:evolve\nargs: $ARGUMENTS\n```\n\n`--target=<type>` names one of the eleven evolve targets; omitted, the assembler infers\nit. `--auto` runs unattended and is the cheap curator only: it carries `playbook` and\n`skill`, and fails closed with `next_need: operator` on everything else. Machinery\ntargets never write the install tree — they write a candidate a human commits.\n"
     },
     {
       "id": "ops",
@@ -295,36 +215,6 @@
       "body": "\n# /guild:qa — Quality phase\n\nRuns *after* a passing `.guild/runs/<run-id>/verify.md`, never instead of it. No\npassing verify for the run ⇒ route back to Development and say so; proceeding\nanyway is an operator decision recorded in the quality report.\n\n## Run recording\n\n```bash\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js\" start --command=/guild:qa --phase=qa --cwd \"$(pwd)\"\n# append --initiative=<id> ONLY when the user supplied one (NN#5); never auto-detect\n```\n\n## Dispatch\n\n```\nSkill: guild:quality\nargs: $ARGUMENTS\n```\n\nRelease / blocker gate **I** — a BLOCK override stays human-gated even under\n`--auto-approve=all`. Checks, evidence and `.guild/` writes are the assembler's.\n\n## Team decision gate (blocking)\n\n```bash\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/team-decide.js\" gate --proposal <proposal> --cwd \"$(pwd)\"\n```\n\nVerbs: approve · restructure · add · remove · substitute · edit_dependencies.\nSTOP on a non-zero exit — exit 3 BLOCKS (no persisted decision, a restructure rather\nthan an approval, a stale or tampered trail).\n`--auto-approve` does not cover team approval: never auto-approve a team decision.\n"
     },
     {
-      "id": "resume",
-      "name": "resume",
-      "description": "Print-only alias (KTD14) — /guild:resume is now `/guild:status resume`. Prints the new spelling and exits; dispatches nothing, writes nothing.",
-      "argument_hint": "",
-      "allowed_tools": [
-        "Read"
-      ],
-      "body": "\nPrint exactly this line, then stop. Invoke no skill, run no command, write no file:\n\n/guild:resume is now /guild:status resume — re-run it that way.\n"
-    },
-    {
-      "id": "rollback",
-      "name": "rollback",
-      "description": "Print-only alias (KTD14) — /guild:rollback is now `/guild:maintain rollback`. Prints the new spelling and exits; dispatches nothing, writes nothing.",
-      "argument_hint": "",
-      "allowed_tools": [
-        "Read"
-      ],
-      "body": "\nPrint exactly this line, then stop. Invoke no skill, run no command, write no file:\n\n/guild:rollback is now /guild:maintain rollback — re-run it that way.\n"
-    },
-    {
-      "id": "stats",
-      "name": "stats",
-      "description": "Print-only alias (KTD14) — /guild:stats is now `/guild:status stats`. Prints the new spelling and exits; dispatches nothing, writes nothing.",
-      "argument_hint": "",
-      "allowed_tools": [
-        "Read"
-      ],
-      "body": "\nPrint exactly this line, then stop. Invoke no skill, run no command, write no file:\n\n/guild:stats is now /guild:status stats — re-run it that way.\n"
-    },
-    {
       "id": "status",
       "name": "status",
       "description": "Orchestrator read — current run state, furthest phase, next gate, blockers, layout version, and the per-phase active team. Sub-verbs `resume` (continue from the next pending gate), `stats` (telemetry dashboard) and `dashboard` (launch the benchmark UI). Read-only except where `resume` advances the run.",
@@ -337,7 +227,7 @@
         "Skill",
         "AskUserQuestion"
       ],
-      "body": "\n# /guild:status — where am I\n\nResolves run state by filesystem scan, or the optional SQLite read-through cache\non platform state (off the repo) unless `--no-index`. The bare form writes no `.guild/` data.\n\n```bash\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js\" status --cwd \"$(pwd)\"\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/capability-profile.js\" candidates --cwd \"$(pwd)\"\n# sub-verbs, flags forwarded verbatim:\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/resume-lanes.js\" <runDir> --json      $REMAINING_ARGS\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/dashboard-launch.js\" $REMAINING_ARGS\n```\n\n## Sub-verbs\n\n| Token | Scope |\n|---|---|\n| `resume` | continue the active run from the next pending gate; `--restart` clears run state after confirming |\n| `stats` | usage + telemetry dashboard over `.guild/runs/**`; pure read |\n| `dashboard` | clone / serve the benchmark UI over this project's runs + knowledge |\n\nThe active team resolves through `resolveTeamFile`; a legacy single-file `team.yaml` is\nsurfaced once as legacy and status never acts on it.\n\n## Dispatch\n\n```\nSkill: guild:using-guild\nargs: $ARGUMENTS\n```\n\nRead-only: the assembler names the phase and next gate, the CLIs produce the state,\nand `resume` hands off to that phase's own command.\n"
+      "body": "\n# /guild:status — where am I\n\nResolves run state by filesystem scan, or the optional SQLite read-through cache on platform\nstate (off the repo) unless `--no-index`. Bare status writes nothing without `.guild/`; with it,\nonly a lightweight run under `.guild/runs/` (`record_status_runs: false` turns that off).\n\n```bash\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js\" status --cwd \"$(pwd)\"\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/capability-profile.js\" candidates --cwd \"$(pwd)\"\n# sub-verbs, flags forwarded verbatim:\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/resume-lanes.js\" <runDir> --json      $REMAINING_ARGS\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/dashboard-launch.js\" $REMAINING_ARGS\n```\n\n## Sub-verbs\n\n| Token | Scope |\n|---|---|\n| `resume` | continue the active run from the next pending gate; `--restart` clears run state after confirming |\n| `stats` | usage + telemetry dashboard over `.guild/runs/**`; pure read |\n| `dashboard` | clone / serve the benchmark UI over this project's runs + knowledge |\n\nThe active team resolves through `resolveTeamFile`; a legacy `team.yaml` is surfaced once, never acted on.\n\n## Dispatch\n\n```\nSkill: guild:using-guild\nargs: $ARGUMENTS\n```\n\nRead-only: the assembler names the phase and next gate, the CLIs produce the state,\nand `resume` hands off to that phase's own command.\n"
     },
     {
       "id": "wiki",

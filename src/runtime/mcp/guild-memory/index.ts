@@ -56,7 +56,15 @@ import { splitFrontmatter } from "../../../domains/state/index";
 // The §10.1.1 wiki-page frontmatter field vocabulary — single source of truth
 // for the `type:` enum (context|standard|product|entity|concept|decision|source).
 // Zero runtime deps (pure constants), inlined by esbuild like the imports above.
-import { WikiPageType, isWikiPageType } from "../../../domains/knowledge/index";
+import {
+  WikiPageType,
+  isWikiPageType,
+  neutralizeRecallTags,
+  protectChunks,
+  protectFields,
+  RECALL_INTEGRITY_DIRECTIVE,
+  type ProtectedChunk,
+} from "../../../domains/knowledge/index";
 
 // ─── Wiki root resolution ────────────────────────────────────────────────
 
@@ -354,6 +362,7 @@ interface WikiPage {
   title: string;        // derived — see deriveTitle
   frontmatter: Frontmatter;
   body: string;
+  content: string;      // raw file text — what the D-RECALL probe and tier classify read
 }
 
 function walkDir(dir: string): string[] {
@@ -393,6 +402,7 @@ function loadAllPages(wikiRoot: string): WikiPage[] {
       title: deriveTitle(frontmatter, body, rel),
       frontmatter,
       body,
+      content,
     });
   }
   return pages;
@@ -457,6 +467,72 @@ function resolveInsideWiki(wikiRoot: string, rel: string): string | null {
   return full;
 }
 
+// ─── D-RECALL (TI-SEC-1) ─────────────────────────────────────────────────
+//
+// Every wiki text this server returns goes through protectChunks, the same
+// probe → quarantine | trust-tier wrap pipeline wikiRecall uses. The whole page
+// is probed and classified; `render` is the slice actually returned. Metadata
+// copied out of a page goes through protectFields: identifier tokens pass raw,
+// free text is wrapped in the page's tier. Paths are probed (safePath) and
+// tag-neutralised but never wrapped, so they still round-trip into wiki_get.
+// The probe also reads every DECODED frontmatter string: YAML escapes such as
+// `\u0069` pass a raw-text probe and decode into the directive. A quarantined
+// page returns no frontmatter-derived metadata at all. The page path is probed
+// too; a quarantined hit shows its path only when the path itself is clean.
+// YAML aliases can build cycles (`a: &x [*x]`), so both walks track visited nodes.
+
+function stringLeaves(
+  value: unknown,
+  out: string[] = [],
+  seen = new Set<object>(),
+  depth = 0,
+): string[] {
+  if (typeof value === "string") out.push(value);
+  else if (value && typeof value === "object") {
+    if (seen.has(value) || depth >= 32) return out;
+    seen.add(value);
+    for (const [k, v] of Object.entries(value)) {
+      if (!Array.isArray(value)) out.push(k);
+      stringLeaves(v, out, seen, depth + 1);
+    }
+  }
+  return out;
+}
+
+function safePath(relPath: string, chunk: ProtectedChunk): string | null {
+  if (!chunk.quarantined) return relPath;
+  return protectChunks([{ source_path: "wiki/path", content: relPath }]).chunks[0].quarantined
+    ? null
+    : relPath;
+}
+
+function protectPage(
+  page: { relPath: string; content: string; frontmatter: Frontmatter },
+  render: string,
+): ProtectedChunk {
+  const content = [page.content, page.relPath, ...stringLeaves(page.frontmatter)].join("\n");
+  return protectChunks(
+    [{ source_path: `wiki/${page.relPath}`, content, render }],
+    { callerTool: "guild-memory" },
+  ).chunks[0];
+}
+
+/** Frontmatter-derived fields: identifiers raw, free text wrapped in the page tier. */
+function protectMeta<T>(page: { relPath: string; content: string }, meta: T, wrapped: boolean[]): T {
+  const out = protectFields(meta, `wiki/${page.relPath}`, {
+    callerTool: "guild-memory",
+    tierContent: page.content,
+  });
+  wrapped.push(out.wrapped);
+  return out.value;
+}
+
+function recallDirective(chunks: ProtectedChunk[], metaWrapped: boolean[] = []): string | null {
+  return chunks.some((c) => !c.quarantined && c.trust_tier !== "operator") || metaWrapped.includes(true)
+    ? RECALL_INTEGRITY_DIRECTIVE
+    : null;
+}
+
 // ─── MCP server ──────────────────────────────────────────────────────────
 
 function jsonResult(value: unknown): {
@@ -504,7 +580,9 @@ export function buildServer(): McpServer {
         "Run a BM25 ranked search over .guild/wiki/ pages, optionally " +
         "filtered by category (the wiki directory segment, e.g. 'decisions'). " +
         "Returns page path, category, frontmatter type/frontmatter_category, " +
-        "one-line excerpt, BM25 score, confidence, and source_refs (array).",
+        "one-line excerpt, BM25 score, confidence, and source_refs (array). " +
+        "Excerpts are D-RECALL protected: trust-tier wrapped, or quarantined " +
+        "when the page fails the injection probe.",
       inputSchema: {
         query: z.string().min(1).describe("Free-text query"),
         category: z
@@ -530,23 +608,41 @@ export function buildServer(): McpServer {
       const scoped = category ? all.filter((p) => p.category === category) : all;
       const ranked = rankPages(scoped, query, limit ?? 20);
       const qTokens = tokenize(query);
-      const results = ranked.map((r) => ({
-        path: r.page.relPath,
-        category: r.page.category,
-        type: r.page.type ?? null,
-        // Whether `type` conforms to the §10.1.1 closed enum (wiki-frontmatter-
-        // contract.ts) — false for absent/legacy/non-conforming pages, which a
-        // read-only server must still surface (never filter out).
-        type_valid: isWikiPageType(r.page.type),
-        frontmatter_category: r.page.frontmatterCategory ?? null,
-        score: Math.round(r.score * 10000) / 10000,
-        excerpt: excerpt(r.page.body, qTokens),
-        confidence: (r.page.frontmatter.confidence as string) ?? null,
-        source_refs: Array.isArray(r.page.frontmatter.source_refs)
-          ? (r.page.frontmatter.source_refs as string[])
-          : [],
-      }));
-      return jsonResult({ results, total: ranked.length, wiki_root: wikiRoot });
+      const chunks: ProtectedChunk[] = [];
+      const metaWrapped: boolean[] = [];
+      const results = ranked.map((r) => {
+        const chunk = protectPage(r.page, excerpt(r.page.body, qTokens));
+        chunks.push(chunk);
+        const shownPath = safePath(r.page.relPath, chunk);
+        const meta = protectMeta(r.page, {
+          type: chunk.quarantined ? null : r.page.type ?? null,
+          // Whether `type` conforms to the §10.1.1 closed enum (wiki-frontmatter-
+          // contract.ts) — false for absent/legacy/non-conforming pages, which a
+          // read-only server must still surface (never filter out).
+          type_valid: !chunk.quarantined && isWikiPageType(r.page.type),
+          frontmatter_category: chunk.quarantined ? null : r.page.frontmatterCategory ?? null,
+          score: Math.round(r.score * 10000) / 10000,
+          confidence: chunk.quarantined ? null : (r.page.frontmatter.confidence as string) ?? null,
+          source_refs:
+            !chunk.quarantined && Array.isArray(r.page.frontmatter.source_refs)
+              ? (r.page.frontmatter.source_refs as string[])
+              : [],
+        }, metaWrapped);
+        return {
+          path: shownPath === null ? null : neutralizeRecallTags(shownPath),
+          category: shownPath === null ? null : neutralizeRecallTags(r.page.category),
+          ...meta,
+          excerpt: chunk.rendered,
+          trust_tier: chunk.trust_tier,
+          quarantined: chunk.quarantined,
+        };
+      });
+      return jsonResult({
+        results,
+        total: ranked.length,
+        wiki_root: wikiRoot,
+        recall_directive: recallDirective(chunks, metaWrapped),
+      });
     }
   );
 
@@ -557,6 +653,7 @@ export function buildServer(): McpServer {
       title: "Read a wiki page",
       description:
         "Return the full content and parsed YAML frontmatter for a wiki page. " +
+        "The body is D-RECALL protected (trust-tier wrapped, or quarantined). " +
         "`path` must be a relative path inside the wiki root.",
       inputSchema: {
         path: z
@@ -576,10 +673,16 @@ export function buildServer(): McpServer {
       if (!fs.existsSync(abs)) return errorResult(`Page not found: ${rel}`);
       const content = fs.readFileSync(abs, "utf8");
       const { frontmatter, body } = parseFrontmatter(content);
+      const relPath = path.relative(wikiRoot, abs).split(path.sep).join("/");
+      const chunk = protectPage({ relPath, content, frontmatter }, body);
+      const metaWrapped: boolean[] = [];
       return jsonResult({
-        path: rel,
-        frontmatter,
-        body,
+        path: safePath(neutralizeRecallTags(rel), chunk),
+        frontmatter: chunk.quarantined ? null : protectMeta({ relPath, content }, frontmatter, metaWrapped),
+        body: chunk.rendered,
+        trust_tier: chunk.trust_tier,
+        quarantined: chunk.quarantined,
+        recall_directive: recallDirective([chunk], metaWrapped),
       });
     }
   );
@@ -620,18 +723,34 @@ export function buildServer(): McpServer {
         }
         return true;
       });
-      const pages = filtered.map((p) => ({
-        path: p.relPath,
-        category: p.category,
-        type: p.type ?? null,
-        type_valid: isWikiPageType(p.type),
-        frontmatter_category: p.frontmatterCategory ?? null,
-        title: p.title,
-        confidence: (p.frontmatter.confidence as string) ?? null,
-        updated: pageUpdated(p.frontmatter) ?? null,
-      }));
-      pages.sort((a, b) => a.path.localeCompare(b.path));
-      return jsonResult({ pages, total: pages.length, wiki_root: wikiRoot });
+      const chunks: ProtectedChunk[] = [];
+      const metaWrapped: boolean[] = [];
+      const pages = filtered.map((p) => {
+        const chunk = protectPage(p, p.title);
+        chunks.push(chunk);
+        const shownPath = safePath(p.relPath, chunk);
+        return {
+          path: shownPath === null ? null : neutralizeRecallTags(shownPath),
+          category: shownPath === null ? null : neutralizeRecallTags(p.category),
+          ...protectMeta(p, {
+            type: chunk.quarantined ? null : p.type ?? null,
+            type_valid: !chunk.quarantined && isWikiPageType(p.type),
+            frontmatter_category: chunk.quarantined ? null : p.frontmatterCategory ?? null,
+            confidence: chunk.quarantined ? null : (p.frontmatter.confidence as string) ?? null,
+            updated: chunk.quarantined ? null : pageUpdated(p.frontmatter) ?? null,
+          }, metaWrapped),
+          title: chunk.rendered,
+          trust_tier: chunk.trust_tier,
+          quarantined: chunk.quarantined,
+        };
+      });
+      pages.sort((a, b) => (a.path ?? "").localeCompare(b.path ?? ""));
+      return jsonResult({
+        pages,
+        total: pages.length,
+        wiki_root: wikiRoot,
+        recall_directive: recallDirective(chunks, metaWrapped),
+      });
     }
   );
 

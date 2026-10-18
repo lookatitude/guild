@@ -127,5 +127,6 @@ as "load this file and run it in place"; never try to dispatch it as a skill.
 | `fix [run-id\|symptom]` | `../diagnose/references/systematic-debug.md` |
 | `wiki revert <harvest_id>` | `references/wiki-revert.md` |
 | `gc` | the durable-state sweep + scratch janitor owned by the storage domain (U-STOR); no chapter to load yet — report that and stop |
+| `analyze <run\|compare\|initiative\|independent\|inspect\|recommendation> ...` | `references/run-analysis.md` — the compiled run-analysis CLI: exact C-CLI argv, read-only inspect vs derived-artifact writes vs explicitly gated recommendation decisions |
 
 An unrecognized first token is not a route: print the table above as usage and invoke nothing. The promotion gate applies to `evolve` and `rollback` exactly as `## Non-destructive rule` states — routing through this section never bypasses it.

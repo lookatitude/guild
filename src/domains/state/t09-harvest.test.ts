@@ -780,9 +780,10 @@ describe("CAS compare-and-write holds the page lock (codex G-lane r1 P1)", () =>
     let heldDuringWrite = false;
     const probeWriter: WikiWriter = Object.assign(
       (absPath: string, content: string, opts: { runDir: string; runId: string }) => {
-        heldDuringWrite = fs.existsSync(
-          path.join(lockDir, "logs", ".lock.exclusion"),
-        );
+        // The page write only: index.md / log.md are written after it (#220).
+        if (absPath === wikiAbs) {
+          heldDuringWrite = fs.existsSync(path.join(lockDir, "logs", ".lock.exclusion"));
+        }
         return scrubbedWikiWriter(absPath, content, opts);
       },
       { __guild_scrubbed_writer__: true as const },

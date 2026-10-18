@@ -154,11 +154,43 @@ function findParentWorkspace(activeRoot: string): { root: string; entry: Workspa
   const parent = path.dirname(activeRoot);
   if (parent === activeRoot) return null;
   const activeResolved = path.resolve(activeRoot);
-  for (const entry of workspaceEntries(parent)) {
-    const childRoot = path.resolve(parent, entry.path);
-    if (childRoot === activeResolved) return { root: parent, entry };
+  const manifest = readWorkspaceManifest(parent);
+  if (manifest?.is_workspace && Array.isArray(manifest.sub_guilds)) {
+    for (const entry of manifest.sub_guilds) {
+      if (typeof entry.name !== "string" || typeof entry.path !== "string") continue;
+      const childRoot = path.resolve(parent, entry.path);
+      if (childRoot === activeResolved) return { root: parent, entry };
+    }
+    return null;
   }
-  return null;
+  // No parent manifest: a "marked child" is any immediate child with .git or
+  // .guild (immediateMarkedChildren), so activeRoot's membership depends ONLY on
+  // activeRoot's own markers. Probing them directly replaces a readdir of every
+  // sibling plus 2-5 stats each — the pre-tool-use hot-path storm (C04 profiles:
+  // 432ms of existsSync when the root's parent is a large directory such as
+  // os.tmpdir in the budget fixture). Same result, O(1) probes.
+  // Enumeration used Dirent.isDirectory(), which excludes symlinked children;
+  // preserve that with lstat so a symlink to a marked project does not acquire
+  // membership (codex C04H r1 F1).
+  try {
+    if (!fs.lstatSync(activeResolved).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  const hasGit = fs.existsSync(path.join(activeRoot, ".git"));
+  const hasGuild = fs.existsSync(path.join(activeRoot, ".guild"));
+  if (!hasGit && !hasGuild) return null;
+  const name = path.basename(activeResolved);
+  return {
+    root: parent,
+    entry: {
+      name,
+      path: name,
+      kind: hasGuild ? "sub-guild" : "sub-project",
+      has_wiki: fs.existsSync(path.join(activeRoot, ".guild", "wiki")),
+      has_indexes: fs.existsSync(path.join(activeRoot, ".guild", "indexes")),
+    },
+  };
 }
 
 function canonicalMemory(activeRoot: string): GuildDiscovery["canonicalMemory"] {

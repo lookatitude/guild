@@ -605,15 +605,22 @@ export const CANONICAL_RECEIPT_SECTIONS = Object.freeze([
   "followups",
 ] as const);
 
-/** Strip fenced blocks before matching headings so machine JSON cannot spoof the wrapper. */
-function receiptWrapperText(content: string): string {
+/** Top-level fenced blocks plus the text outside them (CommonMark fence nesting). */
+function scanReceiptFences(content: string): { wrapper: string; blocks: { info: string; body: string; plain: boolean }[] } {
   const output: string[] = [];
-  let fence: { marker: "`" | "~"; length: number } | null = null;
+  const blocks: { info: string; body: string; plain: boolean }[] = [];
+  let fence: { marker: "`" | "~"; length: number; info: string; body: string[]; plain: boolean } | null = null;
   for (const line of content.split(/\r?\n/)) {
     if (fence === null) {
-      const opened = /^[ \t]{0,3}(`{3,}|~{3,})(?:[^\n]*)$/.exec(line);
+      const opened = /^[ \t]{0,3}(`{3,}|~{3,})([^\n]*)$/.exec(line);
       if (opened) {
-        fence = { marker: opened[1][0] as "`" | "~", length: opened[1].length };
+        fence = {
+          marker: opened[1][0] as "`" | "~",
+          length: opened[1].length,
+          info: opened[2].trim(),
+          body: [],
+          plain: line.startsWith("```") && opened[1] === "```",
+        };
         continue;
       }
       output.push(line);
@@ -621,18 +628,43 @@ function receiptWrapperText(content: string): string {
     }
     const trimmed = line.replace(/^[ \t]{0,3}/, "");
     const marker = fence.marker === "`" ? "`" : "~";
-    if (new RegExp(`^${marker}{${fence.length},}[ \\t]*$`).test(trimmed)) fence = null;
+    if (new RegExp(`^${marker}{${fence.length},}[ \\t]*$`).test(trimmed)) {
+      blocks.push({ info: fence.info, body: fence.body.join("\n"), plain: fence.plain && /^```[ \t]*$/.test(line) });
+      fence = null;
+      continue;
+    }
+    fence.body.push(line);
   }
-  return output.join("\n");
+  return { wrapper: output.join("\n"), blocks };
+}
+
+/** Strip fenced blocks before matching headings so machine JSON cannot spoof the wrapper. */
+function receiptWrapperText(content: string): string {
+  return scanReceiptFences(content).wrapper;
+}
+
+/**
+ * The CLOSED top-level fences whose info string is exactly `info`. A fence
+ * nested inside another fence is that fence's content, never a block. `plain`
+ * marks the canonical shape `readReceiptMachineBlock` reads: an unindented
+ * ``` opener and closer (no tildes, no longer runs).
+ */
+export function topLevelFencedBlocks(content: string, info: string): { body: string; plain: boolean }[] {
+  return scanReceiptFences(content).blocks.filter((b) => b.info === info).map(({ body, plain }) => ({ body, plain }));
+}
+
+/** The canonical §8.2 sections a receipt's wrapper (outside fences) lacks. */
+export function missingReceiptSections(input: unknown): string[] {
+  if (typeof input !== "string") return [...CANONICAL_RECEIPT_SECTIONS];
+  const wrapper = receiptWrapperText(input);
+  return CANONICAL_RECEIPT_SECTIONS.filter(
+    (section) => !new RegExp(`^##\\s+${section}\\b`, "m").test(wrapper),
+  );
 }
 
 /** Shared runtime/lifecycle predicate for the canonical §8.2 receipt wrapper. */
 export function hasCanonicalReceiptWrapper(input: unknown): boolean {
-  if (typeof input !== "string") return false;
-  const wrapper = receiptWrapperText(input);
-  return CANONICAL_RECEIPT_SECTIONS.every((section) =>
-    new RegExp(`^##\\s+${section}\\b`, "m").test(wrapper)
-  );
+  return typeof input === "string" && missingReceiptSections(input).length === 0;
 }
 
 /**

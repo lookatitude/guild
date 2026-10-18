@@ -1,14 +1,13 @@
 ---
 name: maintain
-description: "Self-heal + RSI — sub-verbs evolve | rollback | audit | fix | gc | wiki revert. ONE assembler: every sub-verb dispatches guild:evolve, which routes the token to its own chapter (`guild:evolve §Sub-verbs`). One gate, two homes: project targets write this repo's .guild/, machinery targets write a candidate a human commits."
-argument-hint: "<evolve <id> [--target=<type>] [--auto] | rollback <skill> [n] | audit | fix [run-id|symptom] | gc | wiki revert>"
+description: "Self-heal + RSI — sub-verbs evolve | rollback | audit | fix | gc | wiki revert | analyze. ONE assembler: every sub-verb dispatches guild:evolve, which routes the token to its own chapter (`guild:evolve §Sub-verbs`). One gate, two homes: project targets write this repo's .guild/, machinery targets write a candidate a human commits."
+argument-hint: "<evolve <id> [--target=<type>] [--auto] | rollback <skill> [n] | audit | fix [run-id|symptom] | gc | wiki revert | analyze <run|compare|initiative|independent|inspect|recommendation> ...>"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion
 ---
 
 # /guild:maintain — self-maintenance
 
-One entry, one assembler. `$ARGUMENTS` is forwarded VERBATIM — the sub-verb token is
-the assembler's to read, never re-inserted here. An unknown sub-verb prints usage.
+One entry, one assembler. `$ARGUMENTS` is forwarded VERBATIM — the sub-verb token is the assembler's to read, never re-inserted here. An unknown sub-verb prints usage.
 
 ## Run recording
 
@@ -25,6 +24,7 @@ node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/c
 | `audit` | `references/audit.md` — static script + boundary audit |
 | `fix [run-id\|symptom]` | `../diagnose/references/systematic-debug.md` |
 | `wiki revert` | `references/wiki-revert.md` — the harvest-journal inverse |
+| `analyze <run\|compare\|initiative\|independent\|inspect\|recommendation> ...` | `references/run-analysis.md` — compiled run-analysis CLI (C-CLI argv, read vs gated writes) |
 | `gc` | durable-state sweep + scratch janitor (storage domain, U-STOR) |
 
 ## Dispatch

@@ -5,14 +5,6 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __esm = (fn, res, err) => function __init() {
-  if (err) throw err[0];
-  try {
-    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
-  } catch (e) {
-    throw err = [e], e;
-  }
-};
 var __commonJS = (cb, mod) => function __require() {
   try {
     return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
@@ -41,67 +33,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// src/domains/state/guild-root.ts
-function resolveGuildRoot(startDir) {
-  const resolvedStart = path.resolve(startDir);
-  let current = resolvedStart;
-  let nearestGuildDir = null;
-  for (; ; ) {
-    if (fs.existsSync(path.join(current, ".git"))) return current;
-    if (nearestGuildDir === null) {
-      const guildDir = path.join(current, ".guild");
-      try {
-        if (fs.existsSync(guildDir) && fs.statSync(guildDir).isDirectory()) nearestGuildDir = current;
-      } catch {
-      }
-    }
-    const parent = path.dirname(current);
-    if (parent === current) return nearestGuildDir ?? resolvedStart;
-    current = parent;
-  }
-}
-var fs, path;
-var init_guild_root = __esm({
-  "src/domains/state/guild-root.ts"() {
-    fs = __toESM(require("node:fs"));
-    path = __toESM(require("node:path"));
-  }
-});
-
-// src/domains/kernel/module-manifest.ts
-var OWNED_INVENTORY_CATEGORIES;
-var init_module_manifest = __esm({
-  "src/domains/kernel/module-manifest.ts"() {
-    OWNED_INVENTORY_CATEGORIES = Object.freeze([
-      "commands",
-      "skills",
-      "agents",
-      "hooks",
-      "mcp_servers",
-      "scripts"
-    ]);
-  }
-});
-
-// src/domains/kernel/plugin-root.ts
-function findPluginRoot(fromDir) {
-  let dir = path5.resolve(fromDir);
-  for (; ; ) {
-    if (fs5.existsSync(path5.join(dir, PLUGIN_ROOT_MARKER))) return dir;
-    const parent = path5.dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-}
-var fs5, path5, PLUGIN_ROOT_MARKER;
-var init_plugin_root = __esm({
-  "src/domains/kernel/plugin-root.ts"() {
-    fs5 = __toESM(require("node:fs"));
-    path5 = __toESM(require("node:path"));
-    PLUGIN_ROOT_MARKER = path5.join("runtime", "guild-mcp.js");
-  }
-});
 
 // scripts/node_modules/js-yaml/lib/common.js
 var require_common = __commonJS({
@@ -3146,6 +3077,342 @@ var require_js_yaml = __commonJS({
   }
 });
 
+// scripts/learn/cost-gate.ts
+var cost_gate_exports = {};
+__export(cost_gate_exports, {
+  AVG_TOKENS_PER_FILE: () => AVG_TOKENS_PER_FILE,
+  CONFIRM_RATIO: () => CONFIRM_RATIO,
+  computeTokensEstimate: () => computeTokensEstimate,
+  gateDecision: () => gateDecision,
+  gateExitCode: () => gateExitCode,
+  runCostGate: () => runCostGate,
+  scanCorpusFiles: () => scanCorpusFiles
+});
+module.exports = __toCommonJS(cost_gate_exports);
+
+// scripts/lib/state/ensure-storage-layout.ts
+var fs2 = __toESM(require("node:fs"));
+var path2 = __toESM(require("node:path"));
+
+// src/domains/state/guild-root.ts
+var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
+function resolveGuildRoot(startDir) {
+  const resolvedStart = path.resolve(startDir);
+  let current = resolvedStart;
+  let nearestGuildDir = null;
+  for (; ; ) {
+    if (fs.existsSync(path.join(current, ".git"))) return current;
+    if (nearestGuildDir === null) {
+      const guildDir = path.join(current, ".guild");
+      try {
+        if (fs.existsSync(guildDir) && fs.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return nearestGuildDir ?? resolvedStart;
+    current = parent;
+  }
+}
+
+// scripts/lib/state/ensure-storage-layout.ts
+var CURRENT_LAYOUT_VERSION = 2;
+function markerPath(root) {
+  return path2.join(root, ".guild", "storage-layout.json");
+}
+function detect(cwd = process.cwd()) {
+  const root = resolveGuildRoot(cwd);
+  const marker = markerPath(root);
+  if (!fs2.existsSync(path2.join(root, ".guild"))) {
+    return { state: "absent", version: null, root, marker };
+  }
+  let version = null;
+  try {
+    const parsed = JSON.parse(fs2.readFileSync(marker, "utf8"));
+    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
+  } catch {
+    version = null;
+  }
+  if (version === null) return { state: "unmarked", version, root, marker };
+  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
+  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
+}
+var upgradeChunk = null;
+function upgradeChain() {
+  if (upgradeChunk === null) {
+    const candidates = [
+      path2.join(__dirname, "upgrade-chain.js"),
+      path2.join(__dirname, "lib", "state", "upgrade-chain"),
+      path2.join(__dirname, "upgrade-chain")
+    ];
+    const spec = candidates.find((c) => fs2.existsSync(c) || fs2.existsSync(`${c}.ts`)) ?? candidates[2];
+    upgradeChunk = require(spec);
+  }
+  return upgradeChunk;
+}
+function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
+  const status = detect(cwd);
+  if (status.state === "current") return status;
+  if (status.state === "future") {
+    throw new Error(
+      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
+    );
+  }
+  if (status.state === "absent" || opts.detectOnly === true) return status;
+  const chain = upgradeChain();
+  const result = chain.runLayoutUpgrade({
+    root: status.root,
+    fromVersion: status.version,
+    toVersion: CURRENT_LAYOUT_VERSION,
+    dryRun: opts.dryRun === true
+  });
+  const after = detect(cwd);
+  return { ...after, upgrade: result };
+}
+function isProcessEntry() {
+  const entry = process.argv[1];
+  if (typeof entry !== "string" || entry === "") return false;
+  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
+}
+if (isProcessEntry()) {
+  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
+  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
+  try {
+    const status = ensureStorageLayout(cwd, {
+      dryRun: process.argv.includes("--dry-run"),
+      detectOnly: process.argv.includes("--detect-only")
+    });
+    if (process.argv.includes("--print")) {
+      process.stdout.write(JSON.stringify(status) + "\n");
+    } else if (status.upgrade && status.upgrade.state !== "committed") {
+      process.stderr.write(`${status.upgrade.report}
+`);
+    }
+    process.exit(0);
+  } catch (e) {
+    process.stderr.write(`${e.message}
+`);
+    process.exit(1);
+  }
+}
+
+// scripts/learn/lib/paths.ts
+function parseCwd(argv) {
+  const idx = argv.indexOf("--cwd");
+  if (idx !== -1 && argv[idx + 1]) return argv[idx + 1];
+  return process.env["GUILD_CWD"] ?? process.cwd();
+}
+function hasFlag(argv, name) {
+  return argv.includes(`--${name}`);
+}
+
+// scripts/learn/lib/walk.ts
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
+
+// scripts/learn/lib/ignore.ts
+var fs3 = __toESM(require("fs"));
+var path3 = __toESM(require("path"));
+var DEFAULT_IGNORE_PATTERNS = Object.freeze([
+  "node_modules/",
+  ".git/",
+  "vendor/",
+  "venv/",
+  ".venv/",
+  "__pycache__/",
+  // Guild derived-index dir is never itself indexed (derived, rebuildable).
+  // Any external/forked plugin's dotfolder is excluded by the user's
+  // .guildignore, not hardcoded here (keeps the engine free of external refs).
+  ".guild/",
+  "dist/",
+  "build/",
+  "out/",
+  "coverage/",
+  ".next/",
+  ".cache/",
+  ".turbo/",
+  "target/",
+  "obj/",
+  // Generated module-resource mirrors (src/modules/<id>/resources/**) are
+  // byte-for-byte copies of first-party source (scripts/**, hooks/**) produced by
+  // sync:module-resources for host packaging — exactly like dist/. Indexing them
+  // duplicates every mirrored node (~31% of the graph) and makes each source file
+  // look like it has an exact clone. Exclude the generated tree; the canonical
+  // source is indexed from its real path.
+  "src/modules/*/resources/",
+  // Test directories and fixtures are not first-party knowledge — they must be
+  // excluded from the cost-gate corpus AND from knowledge discovery so the two
+  // share one policy (L13-fix BLOCKER 2 / L17 residual). Without `tests/` the
+  // L12 re-run produced 43 nodes sourced from plugin tests/ (boundary, evolve,
+  // shadow, wiki-lint READMEs + workspace/_fixtures.ts). These dir patterns use
+  // trailing-slash (dirOnly) matching — same as fixtures/ — so they prune whole
+  // subtrees, not just files with those names.
+  "tests/",
+  "test/",
+  "__tests__/",
+  "fixtures/",
+  "testdata/",
+  "__fixtures__/",
+  "*.lock",
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+  "*.png",
+  "*.jpg",
+  "*.jpeg",
+  "*.gif",
+  "*.svg",
+  "*.ico",
+  "*.woff",
+  "*.woff2",
+  "*.ttf",
+  "*.eot",
+  "*.mp3",
+  "*.mp4",
+  "*.pdf",
+  "*.zip",
+  "*.tar",
+  "*.gz",
+  "*.min.js",
+  "*.min.css",
+  "*.map",
+  "*.generated.*",
+  ".idea/",
+  ".vscode/",
+  "LICENSE",
+  ".gitignore",
+  ".editorconfig",
+  ".prettierrc",
+  ".eslintrc*",
+  "*.log"
+]);
+function globToRegExp(pattern) {
+  let p = pattern;
+  const dirOnly = p.endsWith("/");
+  if (dirOnly) p = p.slice(0, -1);
+  const anchored = p.startsWith("/");
+  if (anchored) p = p.slice(1);
+  const hasSlash = p.includes("/");
+  let re = "";
+  for (let i = 0; i < p.length; i++) {
+    const c = p[i];
+    if (c === "*") {
+      if (p[i + 1] === "*") {
+        re += "(?:.*)";
+        i++;
+        if (p[i + 1] === "/") i++;
+      } else {
+        re += "[^/]*";
+      }
+    } else if (c === "?") {
+      re += "[^/]";
+    } else if ("\\^$.|+()[]{}".includes(c)) {
+      re += "\\" + c;
+    } else {
+      re += c;
+    }
+  }
+  let body;
+  if (hasSlash || anchored) {
+    body = "^" + re + (dirOnly ? "(?:/.*)?$" : "(?:/.*)?$");
+  } else {
+    body = "(?:^|/)" + re + (dirOnly ? "(?:/.*)?$" : "(?:/.*)?$");
+  }
+  return { source: body, dirOnly };
+}
+function compile(patterns) {
+  const rules = [];
+  for (const raw of patterns) {
+    const line = raw.replace(/\r$/, "");
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    let body = trimmed;
+    const negated = body.startsWith("!");
+    if (negated) body = body.slice(1);
+    const { source, dirOnly } = globToRegExp(body);
+    rules.push({ re: new RegExp(source), negated, dirOnly });
+  }
+  return rules;
+}
+function createIgnoreFilter(projectRoot) {
+  const patterns = [...DEFAULT_IGNORE_PATTERNS];
+  const rootIgnore = path3.join(projectRoot, ".guildignore");
+  if (fs3.existsSync(rootIgnore)) {
+    patterns.push(...fs3.readFileSync(rootIgnore, "utf-8").split("\n"));
+  }
+  const rules = compile(patterns);
+  return {
+    isIgnored(relativePath) {
+      const rel2 = relativePath.replace(/\\/g, "/").replace(/^\.\//, "");
+      let ignored = false;
+      for (const rule of rules) {
+        if (rule.re.test(rel2)) ignored = !rule.negated;
+      }
+      return ignored;
+    }
+  };
+}
+
+// scripts/learn/lib/walk.ts
+function walkRepo(repoRoot, maxFiles = 2e4) {
+  const filter = createIgnoreFilter(repoRoot);
+  const out = [];
+  const visit = (absDir) => {
+    if (out.length >= maxFiles) return;
+    let entries;
+    try {
+      entries = fs4.readdirSync(absDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const e of entries) {
+      const abs = path4.join(absDir, e.name);
+      const rel2 = path4.relative(repoRoot, abs).replace(/\\/g, "/");
+      if (e.isDirectory()) {
+        if (filter.isIgnored(rel2) || filter.isIgnored(rel2 + "/")) continue;
+        visit(abs);
+      } else if (e.isFile()) {
+        if (filter.isIgnored(rel2)) continue;
+        out.push(rel2);
+        if (out.length >= maxFiles) return;
+      }
+    }
+  };
+  visit(repoRoot);
+  out.sort();
+  return { files: out, filter };
+}
+
+// src/domains/kernel/module-manifest.ts
+var OWNED_INVENTORY_CATEGORIES = Object.freeze([
+  "commands",
+  "skills",
+  "agents",
+  "hooks",
+  "mcp_servers",
+  "scripts"
+]);
+
+// src/domains/kernel/yaml-loader.ts
+var import_node_module = require("node:module");
+var path6 = __toESM(require("node:path"));
+
+// src/domains/kernel/plugin-root.ts
+var fs5 = __toESM(require("node:fs"));
+var path5 = __toESM(require("node:path"));
+var PLUGIN_ROOT_MARKER = path5.join("runtime", "guild-mcp.js");
+function findPluginRoot(fromDir) {
+  let dir = path5.resolve(fromDir);
+  for (; ; ) {
+    if (fs5.existsSync(path5.join(dir, PLUGIN_ROOT_MARKER))) return dir;
+    const parent = path5.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
 // src/domains/kernel/yaml-loader.ts
 function pluginLocalScriptsRoots() {
   const own = findPluginRoot(__dirname);
@@ -3188,20 +3455,6 @@ function loadYamlApi() {
     `Guild needs the js-yaml package and could not resolve it. Fix: npm install --prefix <plugin-root>/scripts (roots tried: ${tried.join(", ")})`
   );
 }
-var import_node_module, path6;
-var init_yaml_loader = __esm({
-  "src/domains/kernel/yaml-loader.ts"() {
-    import_node_module = require("node:module");
-    path6 = __toESM(require("node:path"));
-    init_plugin_root();
-  }
-});
-
-// src/domains/kernel/identifier-tokenize.ts
-var init_identifier_tokenize = __esm({
-  "src/domains/kernel/identifier-tokenize.ts"() {
-  }
-});
 
 // src/domains/kernel/sealed-collections.ts
 function regExpWritesLastIndex(re) {
@@ -3212,6 +3465,7 @@ function freezeRegExpSafely(re) {
   Object.freeze(re);
   return true;
 }
+var SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
 function refuseMutator(label, method) {
   return () => {
     throw new TypeError(
@@ -3289,14 +3543,21 @@ function deepFreeze(value, options = {}) {
 function frozenList(items, options = {}) {
   return deepFreeze(items.slice(), options);
 }
-var SEALED_BRAND;
-var init_sealed_collections = __esm({
-  "src/domains/kernel/sealed-collections.ts"() {
-    SEALED_BRAND = /* @__PURE__ */ Symbol.for("guild.sealed_collection.v1");
-  }
-});
 
 // src/domains/kernel/path-containment.ts
+var fs6 = __toESM(require("node:fs"));
+var path7 = __toESM(require("node:path"));
+var CONTAINMENT_REFUSAL_CODES = Object.freeze([
+  "root-unresolvable",
+  "no-existing-ancestor",
+  "dangling-symlink",
+  "physical-symlink",
+  "outside-root",
+  "leaf-not-regular-file",
+  "mkdir-failed",
+  "parent-traversal",
+  "destination-moved"
+]);
 function isRefused(r) {
   return "code" in r;
 }
@@ -3428,493 +3689,508 @@ function prepareContainedWrite(root, target, options = {}) {
     realDir
   });
 }
-var fs6, path7, CONTAINMENT_REFUSAL_CODES;
-var init_path_containment = __esm({
-  "src/domains/kernel/path-containment.ts"() {
-    fs6 = __toESM(require("node:fs"));
-    path7 = __toESM(require("node:path"));
-    CONTAINMENT_REFUSAL_CODES = Object.freeze([
-      "root-unresolvable",
-      "no-existing-ancestor",
-      "dangling-symlink",
-      "physical-symlink",
-      "outside-root",
-      "leaf-not-regular-file",
-      "mkdir-failed",
-      "parent-traversal",
-      "destination-moved"
-    ]);
-  }
-});
 
 // src/domains/kernel/runtime-tree-guard.ts
-var RUNTIME_SUBTREE_SEGMENTS;
-var init_runtime_tree_guard = __esm({
-  "src/domains/kernel/runtime-tree-guard.ts"() {
-    init_path_containment();
-    init_sealed_collections();
-    RUNTIME_SUBTREE_SEGMENTS = sealSet(
-      [
-        "skills",
-        "agents",
-        "commands",
-        "hooks",
-        ".claude-plugin",
-        "dist",
-        "src",
-        "templates"
-      ],
-      "RUNTIME_SUBTREE_SEGMENTS"
-    );
-  }
-});
+var RUNTIME_SUBTREE_SEGMENTS = sealSet(
+  [
+    "skills",
+    "agents",
+    "commands",
+    "hooks",
+    ".claude-plugin",
+    "dist",
+    "src",
+    "templates"
+  ],
+  "RUNTIME_SUBTREE_SEGMENTS"
+);
 
 // src/domains/kernel/tier-bus.ts
-var BUS_TIERS, LEAD_ROLE_IDS, TIER_BUS_CONTRACT;
-var init_tier_bus = __esm({
-  "src/domains/kernel/tier-bus.ts"() {
-    init_sealed_collections();
-    BUS_TIERS = frozenList(["T0", "T1", "T2"]);
-    LEAD_ROLE_IDS = frozenList(["team-lead", "lead", "orchestrator"]);
-    TIER_BUS_CONTRACT = deepFreeze({
-      tiers: BUS_TIERS,
-      upward_envelopes: { T2: "guild.handoff.v2", T1: "guild.goal_status.v1" },
-      lead_roles: LEAD_ROLE_IDS,
-      tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
-    });
-  }
-});
-
-// src/domains/kernel/canonical-hash.ts
-var init_canonical_hash = __esm({
-  "src/domains/kernel/canonical-hash.ts"() {
-  }
-});
-
-// src/domains/kernel/index.ts
-var init_kernel = __esm({
-  "src/domains/kernel/index.ts"() {
-    init_module_manifest();
-    init_yaml_loader();
-    init_identifier_tokenize();
-    init_sealed_collections();
-    init_path_containment();
-    init_runtime_tree_guard();
-    init_tier_bus();
-    init_plugin_root();
-    init_canonical_hash();
-  }
+var BUS_TIERS = frozenList(["T0", "T1", "T2"]);
+var LEAD_ROLE_IDS = frozenList(["team-lead", "lead", "orchestrator"]);
+var TIER_BUS_CONTRACT = deepFreeze({
+  tiers: BUS_TIERS,
+  upward_envelopes: { T2: "guild.handoff.v2", T1: "guild.goal_status.v1" },
+  lead_roles: LEAD_ROLE_IDS,
+  tier_source: "the attempt record on disk, or the run's minted binding_ref \u2014 never the payload"
 });
 
 // src/domains/config/host-capabilities-schema.ts
-var UPDATE_COMMANDS, INJECTION_SUPPORT, INJECTION_SUPPORT_SET, CLAUDE_CAPABILITIES, CODEX_CAPABILITIES, NO_HOOKS, AGENTS_FILE_CAPABILITIES, REQUIRED_HOOK_EVENTS;
-var init_host_capabilities_schema = __esm({
-  "src/domains/config/host-capabilities-schema.ts"() {
-    UPDATE_COMMANDS = {
-      marketplace_cli: "claude plugin marketplace update guild && claude plugin update guild@guild",
-      self_update: "guild-run update",
-      reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
-    };
-    INJECTION_SUPPORT = Object.freeze(["verified", "target", "absent"]);
-    INJECTION_SUPPORT_SET = new Set(INJECTION_SUPPORT);
-    CLAUDE_CAPABILITIES = {
-      schema_version: "guild.host_capabilities.v1",
-      host_kind: "claude",
-      family: "claude",
-      surface_kind: "cli",
-      package: {
-        installable: true,
-        installability: "verified",
-        manifest_format: "claude-plugin",
-        update: { check: "marketplace_clone", apply: "marketplace_cli", command: UPDATE_COMMANDS.marketplace_cli, auto_capable: true }
-      },
-      bootstrap: {
-        context_injection: "hookSpecificOutput.additionalContext",
-        skill_autoload: true,
-        prompt_transform: false,
-        wrapper_injection: true
-      },
-      commands: { slash_commands: true, command_files: "markdown" },
-      skills: { native_skills: true, skill_dir: ".claude/skills" },
-      agents: { native_agents: true, agent_format: "claude-md" },
-      injection: {
-        // No injection probe has EVER run on any host — the capability is unbuilt (S7
-        // landed the transport half only). A dispatch surface exists, so "target".
-        definition_injection: false,
-        definition_injection_support: "target",
-        skill_bundle_injection: false,
-        skill_bundle_injection_support: "target",
-        dynamic_registration: false,
-        dynamic_registration_support: "target",
-        fallback: "prompt_text",
-        definition_injection_verified_by: null,
-        skill_bundle_injection_verified_by: null,
-        dynamic_registration_verified_by: null
-      },
-      hooks: {
-        // All ten events are bound in the live hooks/hooks.json (verified).
-        session_start: true,
-        user_prompt_submit: true,
-        pre_tool_use: true,
-        post_tool_use: true,
-        stop: true,
-        pre_compact: true,
-        subagent_stop: true,
-        task_created: true,
-        task_completed: true,
-        teammate_idle: true
-      },
-      permissions: {
-        deny: true,
-        ask: true,
-        ask_mode: "pre_tool_use",
-        accept_edits_without_prompt: true,
-        auto_approve_tools: true,
-        bypass_prompts: true,
-        bypass_sandbox: false,
-        permission_prompt_layer: true,
-        launch_modes: {
-          read_only: ["--tools", "Read,Grep,Glob"],
-          ask: ["--permission-mode", "default"],
-          accept_edits: ["--permission-mode", "acceptEdits"],
-          auto: ["--permission-mode", "auto"],
-          bypass_all: ["--permission-mode", "bypassPermissions"]
-        }
-      },
-      dispatch: {
-        tmux_processes: true,
-        plain_processes: true,
-        independent_agents: true,
-        subagents: true,
-        inline: true
-      },
-      interaction: {
-        native_questions: true,
-        terminal_prompt: true,
-        file_bus_questions: true
-      },
-      sessions: { continue: true, resume_by_id: true, fork: true },
-      structured_output: {
-        native_json: true,
-        schema_validation: true,
-        repair_prompt: true
-      },
-      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-      tools: {
-        read: "native",
-        search: "native",
-        shell: "native",
-        edit: "native",
-        write: "native",
-        browser: "bridge",
-        web: "native",
-        mcp: "native"
-      },
-      mcp: { stdio: true, http: false },
-      models: {
-        cheap: { model: "haiku" },
-        mid: { model: "sonnet" },
-        powerful: { model: "opus" }
-      }
-    };
-    CODEX_CAPABILITIES = {
-      schema_version: "guild.host_capabilities.v1",
-      host_kind: "codex",
-      family: "codex",
-      surface_kind: "cli",
-      // installable:false is the honest MACHINE state — the Codex renderer exists but
-      // per-host-packaging.ts marks it DORMANT; a non-Claude render must not be treated
-      // as installable until proven. installability:"target" records that the renderer
-      // exists; both flip to verified/true at SC-3 (real Codex install + bootstrap).
-      package: {
-        installable: false,
-        installability: "target",
-        manifest_format: "codex-plugin",
-        // NOT self_update (operator decision, initiative cross-host-release-
-        // distribution, 2026-07-26). Codex OWNS the installed cache: `codex plugin
-        // list` tracks the registered marketplace source, so a Guild-side staged
-        // swap of the cache mutates manager state behind Codex's back and the next
-        // `codex plugin add` reinstalls the old payload. A minted receipt also
-        // cannot know a native install's channel, so a self-update could silently
-        // re-clone the wrong ref. `install.sh --update` is coherent for BOTH
-        // populations: receipted installs re-render properly; host-native installs
-        // are detected and told the precise codex command for their registered
-        // source type (git → marketplace upgrade + plugin add; local → reinstall).
-        update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
-      },
-      bootstrap: {
-        // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
-        // file (AGENTS.md) / the generated wrapper (ADR P0: Codex "plugin-or-skill").
-        context_injection: "instruction_file",
-        skill_autoload: false,
-        // Verified: Codex has no native skill dir (per-host-packaging flags skills unsupported).
-        prompt_transform: false,
-        // INFERRED
-        wrapper_injection: true
-        // The generated guild-run wrapper injects bootstrap.
-      },
-      commands: {
-        // Verified: Codex has no .md slash-command format; commands render as workflow descriptors.
-        slash_commands: false,
-        command_files: "none"
-      },
-      skills: { native_skills: false, skill_dir: null },
-      // Verified (per-host-packaging).
-      agents: { native_agents: false, agent_format: null },
-      // Verified (per-host-packaging flags agents unsupported).
-      injection: {
-        // No injection probe has EVER run on any host — the capability is unbuilt (S7
-        // landed the transport half only). A dispatch surface exists, so "target".
-        definition_injection: false,
-        definition_injection_support: "target",
-        skill_bundle_injection: false,
-        skill_bundle_injection_support: "target",
-        dynamic_registration: false,
-        dynamic_registration_support: "absent",
-        fallback: "prompt_text",
-        definition_injection_verified_by: null,
-        skill_bundle_injection_verified_by: null,
-        dynamic_registration_verified_by: null
-      },
-      hooks: {
-        // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
-        // Claude-equivalent hooks" claim was empirically false. Codex accepts a
-        // Claude-shaped hooks manifest and fires both events the generated
-        // codex-hooks.json registers — UserPromptSubmit has carried the prompt
-        // bridge since the package existed, and SessionStart now carries the
-        // update-check signal, LIVE-VERIFIED in a real codex session (the model
-        // quoted the injected line verbatim). Remaining events stay false until
-        // individually verified.
-        session_start: true,
-        user_prompt_submit: true,
-        // CONFIRMED ON-BOX (issue #94, codex-cli 0.146.0, isolated CODEX_HOME).
-        // A PreToolUse hook emitting the Claude-shaped
-        // {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}
-        // BLOCKS the tool call:
-        //     hook: PreToolUse Blocked
-        //     ERROR codex_core::tools::router: error=Command blocked by PreToolUse hook: …
-        // and the model stops. CONTROL (same config, non-matching command) reached
-        // `hook: PreToolUse Completed` and executed — so the deny, not the sandbox,
-        // is causal. This retires the old INFERRED `false` (never verified).
-        //
-        // CAVEAT THAT DOES NOT BELONG IN THIS BOOLEAN, but governs how it may be
-        // consumed: codex gates hooks behind PERSISTED HOOK TRUST. With the same
-        // hooks.json but no trust, the hook SILENTLY never runs (no warning, tool
-        // executes). So "codex supports PreToolUse deny" (this row) must never be
-        // read as "enforcement is live on this box" — that needs a probe of actual
-        // execution (probeCodexPreToolUseEnforcement, scripts/lib/pane-adapter.ts),
-        // which is what the codex-pane bypass flag is gated on.
-        pre_tool_use: true,
-        post_tool_use: false,
-        stop: false,
-        pre_compact: false,
-        subagent_stop: false,
-        task_created: false,
-        task_completed: false,
-        teammate_idle: false
-      },
-      permissions: {
-        // `deny` CONFIRMED ON-BOX (issue #94) — see hooks.pre_tool_use above: a
-        // PreToolUse hook decision of "deny" is honoured and blocks the call.
-        deny: true,
-        ask: true,
-        // Codex prompts for approval by default.
-        // STILL NULL, DELIBERATELY. Codex has a PreToolUse DENY layer but no
-        // PreToolUse ASK primitive (`permissionDecision:"ask"` is not an accepted
-        // codex decision). Guild's own enforcement already handles this: the
-        // manifest written by write-host-capability.ts carries
-        // `tool_support.pre_tool_use_ask: false` for every non-Claude-CLI host, and
-        // hooks/pre-tool-use.ts's HK-07 gate degrades ask -> file-bus
-        // approval_request + `deny`. VERIFIED end-to-end for codex in issue #94.
-        // Flipping this to "pre_tool_use" would re-enable an ask codex rejects.
-        ask_mode: null,
-        accept_edits_without_prompt: false,
-        // INFERRED
-        auto_approve_tools: false,
-        // INFERRED
-        bypass_prompts: true,
-        // Codex YOLO / --dangerously-bypass exists (AC19).
-        bypass_sandbox: true,
-        // INFERRED — YOLO bypasses the sandbox.
-        permission_prompt_layer: false,
-        // INFERRED
-        launch_modes: {
-          // INFERRED — only bypass_all has a well-known Codex flag today. ask/auto/
-          // accept_edits/read_only recipes are confirmed at L3; OMITTED here rather
-          // than guessed, so their absence reads as "degrade/record", not "supported".
-          // CONFIRMED ON-BOX (issue #94, codex-cli 0.146.0): the flag exists and
-          // takes effect. Note what it does NOT do — a PreToolUse hook deny still
-          // blocked the tool call under this flag, so the bypass suppresses codex's
-          // own approval/sandbox layer and leaves Guild's gate intact.
-          bypass_all: ["--dangerously-bypass-approvals-and-sandbox"]
-        }
-      },
-      dispatch: {
-        tmux_processes: true,
-        // Codex is a CLI process — tmux panes work.
-        plain_processes: true,
-        independent_agents: false,
-        // INFERRED — no native agent-team primitive.
-        subagents: false,
-        // INFERRED
-        inline: true
-      },
-      interaction: {
-        native_questions: false,
-        // INFERRED — no AskUserQuestion equivalent; use terminal/file-bus.
-        terminal_prompt: true,
-        file_bus_questions: true
-        // Guild file-bus approval works on any FS host.
-      },
-      sessions: {
-        continue: true,
-        // INFERRED — Codex has session continuation.
-        resume_by_id: true,
-        // INFERRED
-        fork: false
-        // INFERRED
-      },
-      structured_output: {
-        native_json: false,
-        // INFERRED — no guaranteed native JSON mode; use fenced-block + repair.
-        schema_validation: false,
-        // Guild-side validation (validateHandoffV2) instead.
-        repair_prompt: true
-        // Bounded repair prompt is the fallback (ADR §Result contracts).
-      },
-      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-      tools: {
-        read: "native",
-        search: "native",
-        shell: "native",
-        edit: "native",
-        write: "native",
-        browser: "none",
-        // INFERRED — no native browser; record fallback (AC29).
-        web: "emulated",
-        // INFERRED
-        mcp: "native"
-        // Codex supports stdio MCP.
-      },
-      mcp: { stdio: true, http: false },
-      // Verified: Codex supports stdio MCP only (per-host-packaging flags HTTP unsupported).
-      models: {
-        // Codex model ids are host-specific and not pinned in this repo yet; null =
-        // "no Guild-mapped model at this tier" (settings models.tiers.codex is null today).
-        cheap: { model: null },
-        mid: { model: null },
-        powerful: { model: null }
-      }
-    };
-    NO_HOOKS = {
-      session_start: false,
-      user_prompt_submit: false,
-      pre_tool_use: false,
-      post_tool_use: false,
-      stop: false,
-      pre_compact: false,
-      subagent_stop: false,
-      task_created: false,
-      task_completed: false,
-      teammate_idle: false
-    };
-    AGENTS_FILE_CAPABILITIES = {
-      schema_version: "guild.host_capabilities.v1",
-      host_kind: "agents-file",
-      family: "agents",
-      surface_kind: "file",
-      package: {
-        installable: false,
-        installability: "target",
-        manifest_format: "agents-file",
-        update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
-      },
-      bootstrap: {
-        context_injection: "instruction_file",
-        skill_autoload: false,
-        prompt_transform: false,
-        wrapper_injection: true
-      },
-      commands: { slash_commands: false, command_files: "none" },
-      skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
-      agents: { native_agents: false, agent_format: null },
-      injection: {
-        // No dispatch surface ⇒ nothing to inject INTO. Structural, not pessimistic.
-        definition_injection: false,
-        definition_injection_support: "absent",
-        skill_bundle_injection: false,
-        skill_bundle_injection_support: "absent",
-        dynamic_registration: false,
-        dynamic_registration_support: "absent",
-        fallback: "none",
-        definition_injection_verified_by: null,
-        skill_bundle_injection_verified_by: null,
-        dynamic_registration_verified_by: null
-      },
-      hooks: NO_HOOKS,
-      permissions: {
-        deny: false,
-        ask: true,
-        ask_mode: null,
-        accept_edits_without_prompt: false,
-        auto_approve_tools: false,
-        bypass_prompts: false,
-        bypass_sandbox: false,
-        permission_prompt_layer: false,
-        launch_modes: {}
-      },
-      dispatch: {
-        tmux_processes: false,
-        plain_processes: false,
-        independent_agents: false,
-        subagents: false,
-        inline: false
-      },
-      interaction: {
-        native_questions: false,
-        terminal_prompt: false,
-        file_bus_questions: true
-      },
-      sessions: { continue: false, resume_by_id: false, fork: false },
-      structured_output: {
-        native_json: false,
-        schema_validation: false,
-        repair_prompt: true
-      },
-      artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
-      tools: {
-        read: "native",
-        search: "native",
-        shell: "native",
-        edit: "native",
-        write: "native",
-        browser: "none",
-        web: "emulated",
-        mcp: "none"
-      },
-      mcp: { stdio: false, http: false },
-      models: {
-        cheap: { model: null },
-        mid: { model: null },
-        powerful: { model: null }
-      }
-    };
-    REQUIRED_HOOK_EVENTS = Object.freeze([
-      "session_start",
-      "user_prompt_submit",
-      "pre_tool_use",
-      "post_tool_use",
-      "stop",
-      "pre_compact",
-      "subagent_stop",
-      "task_created",
-      "task_completed",
-      "teammate_idle"
-    ]);
+var UPDATE_COMMANDS = {
+  marketplace_cli: "claude plugin marketplace update guild && claude plugin update guild@guild",
+  self_update: "guild-run update",
+  reinstall_command: "curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update"
+};
+var INJECTION_SUPPORT = Object.freeze(["verified", "target", "absent"]);
+var INJECTION_SUPPORT_SET = new Set(INJECTION_SUPPORT);
+var CLAUDE_CAPABILITIES = {
+  schema_version: "guild.host_capabilities.v1",
+  host_kind: "claude",
+  family: "claude",
+  surface_kind: "cli",
+  package: {
+    installable: true,
+    installability: "verified",
+    manifest_format: "claude-plugin",
+    update: { check: "marketplace_clone", apply: "marketplace_cli", command: UPDATE_COMMANDS.marketplace_cli, auto_capable: true }
+  },
+  bootstrap: {
+    context_injection: "hookSpecificOutput.additionalContext",
+    skill_autoload: true,
+    prompt_transform: false,
+    wrapper_injection: true
+  },
+  commands: { slash_commands: true, command_files: "markdown" },
+  skills: { native_skills: true, skill_dir: ".claude/skills" },
+  agents: { native_agents: true, agent_format: "claude-md" },
+  injection: {
+    // No injection probe has EVER run on any host — the capability is unbuilt (S7
+    // landed the transport half only). A dispatch surface exists, so "target".
+    definition_injection: false,
+    definition_injection_support: "target",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "target",
+    dynamic_registration: false,
+    dynamic_registration_support: "target",
+    fallback: "prompt_text",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
+  hooks: {
+    // All ten events are bound in the live hooks/hooks.json (verified).
+    session_start: true,
+    user_prompt_submit: true,
+    pre_tool_use: true,
+    post_tool_use: true,
+    stop: true,
+    pre_compact: true,
+    subagent_stop: true,
+    task_created: true,
+    task_completed: true,
+    teammate_idle: true
+  },
+  permissions: {
+    deny: true,
+    ask: true,
+    ask_mode: "pre_tool_use",
+    accept_edits_without_prompt: true,
+    auto_approve_tools: true,
+    bypass_prompts: true,
+    bypass_sandbox: false,
+    permission_prompt_layer: true,
+    launch_modes: {
+      read_only: ["--tools", "Read,Grep,Glob"],
+      ask: ["--permission-mode", "default"],
+      accept_edits: ["--permission-mode", "acceptEdits"],
+      auto: ["--permission-mode", "auto"],
+      bypass_all: ["--permission-mode", "bypassPermissions"]
+    }
+  },
+  dispatch: {
+    tmux_processes: true,
+    plain_processes: true,
+    independent_agents: true,
+    subagents: true,
+    inline: true
+  },
+  interaction: {
+    native_questions: true,
+    terminal_prompt: true,
+    file_bus_questions: true
+  },
+  sessions: { continue: true, resume_by_id: true, fork: true },
+  structured_output: {
+    native_json: true,
+    schema_validation: true,
+    repair_prompt: true
+  },
+  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+  tools: {
+    read: "native",
+    search: "native",
+    shell: "native",
+    edit: "native",
+    write: "native",
+    browser: "bridge",
+    web: "native",
+    mcp: "native"
+  },
+  mcp: { stdio: true, http: false },
+  models: {
+    cheap: { model: "haiku" },
+    mid: { model: "sonnet" },
+    powerful: { model: "opus" }
   }
-});
+};
+var CODEX_CAPABILITIES = {
+  schema_version: "guild.host_capabilities.v1",
+  host_kind: "codex",
+  family: "codex",
+  surface_kind: "cli",
+  // installable:false is the honest MACHINE state — the Codex renderer exists but
+  // per-host-packaging.ts marks it DORMANT; a non-Claude render must not be treated
+  // as installable until proven. installability:"target" records that the renderer
+  // exists; both flip to verified/true at SC-3 (real Codex install + bootstrap).
+  package: {
+    installable: false,
+    installability: "target",
+    manifest_format: "codex-plugin",
+    // NOT self_update (operator decision, initiative cross-host-release-
+    // distribution, 2026-07-26). Codex OWNS the installed cache: `codex plugin
+    // list` tracks the registered marketplace source, so a Guild-side staged
+    // swap of the cache mutates manager state behind Codex's back and the next
+    // `codex plugin add` reinstalls the old payload. A minted receipt also
+    // cannot know a native install's channel, so a self-update could silently
+    // re-clone the wrong ref. `install.sh --update` is coherent for BOTH
+    // populations: receipted installs re-render properly; host-native installs
+    // are detected and told the precise codex command for their registered
+    // source type (git → marketplace upgrade + plugin add; local → reinstall).
+    update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
+  },
+  bootstrap: {
+    // Codex has no hookSpecificOutput injection; bootstrap rides an instruction
+    // file (AGENTS.md) / the generated wrapper (ADR P0: Codex "plugin-or-skill").
+    context_injection: "instruction_file",
+    skill_autoload: false,
+    // Verified: Codex has no native skill dir (per-host-packaging flags skills unsupported).
+    prompt_transform: false,
+    // INFERRED
+    wrapper_injection: true
+    // The generated guild-run wrapper injects bootstrap.
+  },
+  commands: {
+    // Verified: Codex has no .md slash-command format; commands render as workflow descriptors.
+    slash_commands: false,
+    command_files: "none"
+  },
+  skills: { native_skills: false, skill_dir: null },
+  // Verified (per-host-packaging).
+  agents: { native_agents: false, agent_format: null },
+  // Verified (per-host-packaging flags agents unsupported).
+  injection: {
+    // No injection probe has EVER run on any host — the capability is unbuilt (S7
+    // landed the transport half only). A dispatch surface exists, so "target".
+    definition_injection: false,
+    definition_injection_support: "target",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "target",
+    dynamic_registration: false,
+    dynamic_registration_support: "absent",
+    fallback: "prompt_text",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
+  hooks: {
+    // CORRECTED (wi-04 close-out, 2026-07-26): the old "no native
+    // Claude-equivalent hooks" claim was empirically false. Codex accepts a
+    // Claude-shaped hooks manifest and fires both events the generated
+    // codex-hooks.json registers — UserPromptSubmit has carried the prompt
+    // bridge since the package existed, and SessionStart now carries the
+    // update-check signal, LIVE-VERIFIED in a real codex session (the model
+    // quoted the injected line verbatim). Remaining events stay false until
+    // individually verified.
+    session_start: true,
+    user_prompt_submit: true,
+    // CONFIRMED ON-BOX (issue #94, codex-cli 0.146.0, isolated CODEX_HOME).
+    // A PreToolUse hook emitting the Claude-shaped
+    // {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}
+    // BLOCKS the tool call:
+    //     hook: PreToolUse Blocked
+    //     ERROR codex_core::tools::router: error=Command blocked by PreToolUse hook: …
+    // and the model stops. CONTROL (same config, non-matching command) reached
+    // `hook: PreToolUse Completed` and executed — so the deny, not the sandbox,
+    // is causal. This retires the old INFERRED `false` (never verified).
+    //
+    // CAVEAT THAT DOES NOT BELONG IN THIS BOOLEAN, but governs how it may be
+    // consumed: codex gates hooks behind PERSISTED HOOK TRUST. With the same
+    // hooks.json but no trust, the hook SILENTLY never runs (no warning, tool
+    // executes). So "codex supports PreToolUse deny" (this row) must never be
+    // read as "enforcement is live on this box" — that needs a probe of actual
+    // execution (probeCodexPreToolUseEnforcement, scripts/lib/pane-adapter.ts),
+    // which is what the codex-pane bypass flag is gated on.
+    pre_tool_use: true,
+    post_tool_use: false,
+    stop: false,
+    pre_compact: false,
+    subagent_stop: false,
+    task_created: false,
+    task_completed: false,
+    teammate_idle: false
+  },
+  permissions: {
+    // `deny` CONFIRMED ON-BOX (issue #94) — see hooks.pre_tool_use above: a
+    // PreToolUse hook decision of "deny" is honoured and blocks the call.
+    deny: true,
+    ask: true,
+    // Codex prompts for approval by default.
+    // STILL NULL, DELIBERATELY. Codex has a PreToolUse DENY layer but no
+    // PreToolUse ASK primitive (`permissionDecision:"ask"` is not an accepted
+    // codex decision). Guild's own enforcement already handles this: the
+    // manifest written by write-host-capability.ts carries
+    // `tool_support.pre_tool_use_ask: false` for every non-Claude-CLI host, and
+    // hooks/pre-tool-use.ts's HK-07 gate degrades ask -> file-bus
+    // approval_request + `deny`. VERIFIED end-to-end for codex in issue #94.
+    // Flipping this to "pre_tool_use" would re-enable an ask codex rejects.
+    ask_mode: null,
+    accept_edits_without_prompt: false,
+    // INFERRED
+    auto_approve_tools: false,
+    // INFERRED
+    bypass_prompts: true,
+    // Codex YOLO / --dangerously-bypass exists (AC19).
+    bypass_sandbox: true,
+    // INFERRED — YOLO bypasses the sandbox.
+    permission_prompt_layer: false,
+    // INFERRED
+    launch_modes: {
+      // INFERRED — only bypass_all has a well-known Codex flag today. ask/auto/
+      // accept_edits/read_only recipes are confirmed at L3; OMITTED here rather
+      // than guessed, so their absence reads as "degrade/record", not "supported".
+      // CONFIRMED ON-BOX (issue #94, codex-cli 0.146.0): the flag exists and
+      // takes effect. Note what it does NOT do — a PreToolUse hook deny still
+      // blocked the tool call under this flag, so the bypass suppresses codex's
+      // own approval/sandbox layer and leaves Guild's gate intact.
+      bypass_all: ["--dangerously-bypass-approvals-and-sandbox"]
+    }
+  },
+  dispatch: {
+    tmux_processes: true,
+    // Codex is a CLI process — tmux panes work.
+    plain_processes: true,
+    independent_agents: false,
+    // INFERRED — no native agent-team primitive.
+    subagents: false,
+    // INFERRED
+    inline: true
+  },
+  interaction: {
+    native_questions: false,
+    // INFERRED — no AskUserQuestion equivalent; use terminal/file-bus.
+    terminal_prompt: true,
+    file_bus_questions: true
+    // Guild file-bus approval works on any FS host.
+  },
+  sessions: {
+    continue: true,
+    // INFERRED — Codex has session continuation.
+    resume_by_id: true,
+    // INFERRED
+    fork: false
+    // INFERRED
+  },
+  structured_output: {
+    native_json: false,
+    // INFERRED — no guaranteed native JSON mode; use fenced-block + repair.
+    schema_validation: false,
+    // Guild-side validation (validateHandoffV2) instead.
+    repair_prompt: true
+    // Bounded repair prompt is the fallback (ADR §Result contracts).
+  },
+  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+  tools: {
+    read: "native",
+    search: "native",
+    shell: "native",
+    edit: "native",
+    write: "native",
+    browser: "none",
+    // INFERRED — no native browser; record fallback (AC29).
+    web: "emulated",
+    // INFERRED
+    mcp: "native"
+    // Codex supports stdio MCP.
+  },
+  mcp: { stdio: true, http: false },
+  // Verified: Codex supports stdio MCP only (per-host-packaging flags HTTP unsupported).
+  models: {
+    // Codex model ids are host-specific and not pinned in this repo yet; null =
+    // "no Guild-mapped model at this tier" (settings models.tiers.codex is null today).
+    cheap: { model: null },
+    mid: { model: null },
+    powerful: { model: null }
+  }
+};
+var NO_HOOKS = {
+  session_start: false,
+  user_prompt_submit: false,
+  pre_tool_use: false,
+  post_tool_use: false,
+  stop: false,
+  pre_compact: false,
+  subagent_stop: false,
+  task_created: false,
+  task_completed: false,
+  teammate_idle: false
+};
+var AGENTS_FILE_CAPABILITIES = {
+  schema_version: "guild.host_capabilities.v1",
+  host_kind: "agents-file",
+  family: "agents",
+  surface_kind: "file",
+  package: {
+    installable: false,
+    installability: "target",
+    manifest_format: "agents-file",
+    update: { check: "receipt", apply: "reinstall_command", command: UPDATE_COMMANDS.reinstall_command, auto_capable: false }
+  },
+  bootstrap: {
+    context_injection: "instruction_file",
+    skill_autoload: false,
+    prompt_transform: false,
+    wrapper_injection: true
+  },
+  commands: { slash_commands: false, command_files: "none" },
+  skills: { native_skills: false, skill_dir: ".agents/skills/guild" },
+  agents: { native_agents: false, agent_format: null },
+  injection: {
+    // No dispatch surface ⇒ nothing to inject INTO. Structural, not pessimistic.
+    definition_injection: false,
+    definition_injection_support: "absent",
+    skill_bundle_injection: false,
+    skill_bundle_injection_support: "absent",
+    dynamic_registration: false,
+    dynamic_registration_support: "absent",
+    fallback: "none",
+    definition_injection_verified_by: null,
+    skill_bundle_injection_verified_by: null,
+    dynamic_registration_verified_by: null
+  },
+  hooks: NO_HOOKS,
+  permissions: {
+    deny: false,
+    ask: true,
+    ask_mode: null,
+    accept_edits_without_prompt: false,
+    auto_approve_tools: false,
+    bypass_prompts: false,
+    bypass_sandbox: false,
+    permission_prompt_layer: false,
+    launch_modes: {}
+  },
+  dispatch: {
+    tmux_processes: false,
+    plain_processes: false,
+    independent_agents: false,
+    subagents: false,
+    inline: false
+  },
+  interaction: {
+    native_questions: false,
+    terminal_prompt: false,
+    file_bus_questions: true
+  },
+  sessions: { continue: false, resume_by_id: false, fork: false },
+  structured_output: {
+    native_json: false,
+    schema_validation: false,
+    repair_prompt: true
+  },
+  artifacts: { direct_filesystem: true, file_bus: true, app_upload: false },
+  tools: {
+    read: "native",
+    search: "native",
+    shell: "native",
+    edit: "native",
+    write: "native",
+    browser: "none",
+    web: "emulated",
+    mcp: "none"
+  },
+  mcp: { stdio: false, http: false },
+  models: {
+    cheap: { model: null },
+    mid: { model: null },
+    powerful: { model: null }
+  }
+};
+var REQUIRED_HOOK_EVENTS = Object.freeze([
+  "session_start",
+  "user_prompt_submit",
+  "pre_tool_use",
+  "post_tool_use",
+  "stop",
+  "pre_compact",
+  "subagent_stop",
+  "task_created",
+  "task_completed",
+  "teammate_idle"
+]);
 
 // src/domains/config/host-registry-schema.ts
+var HOST_IDS = Object.freeze([
+  // keep CLI/file (5)
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  // keep-as-refuse (4) — RETAINED verbatim
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+  // new CLI-with-binary (4) — verified_multi_host L0 ADR §2.1
+  "cursor",
+  "github-copilot",
+  "opencode",
+  "rovo-dev",
+  // new IDE-embedded (3) — bind the universal agents-file adapter (adapter_binding: "agents-file").
+  // `trae-cn` is NOT distinct — it folds into `trae` (L0 ADR §9). host id set = 16.
+  "kiro",
+  "qoder",
+  "trae"
+]);
+var HOST_FAMILIES = Object.freeze([
+  "claude",
+  "codex",
+  "agents",
+  "pi",
+  "antigravity",
+  "cursor",
+  "copilot",
+  "opencode",
+  "rovo"
+]);
+var AUTH_PROBES = Object.freeze([
+  "codex_stored_or_env",
+  "none",
+  "cursor_stored",
+  "gh_auth",
+  "opencode_stored_or_env",
+  "acli_stored"
+]);
+var CLAUDE_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-code-cli",
+  family: "claude",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  detection: { bin: "claude", requires_auth: false, auth_probe: "none" },
+  installability: "native",
+  result_adapter: false,
+  // Claude is the reference author host, not a cross reviewer for itself.
+  dispatch_selectable: true,
+  capabilities: CLAUDE_CAPABILITIES,
+  provenance: "verified"
+};
+var CODEX_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "codex-cli",
+  family: "codex",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  detection: { bin: "codex", requires_auth: true, auth_probe: "codex_stored_or_env" },
+  // installability:"target" mirrors the P0 capability row (renderer exists, install unproven).
+  installability: "target",
+  result_adapter: true,
+  // The only selectable cross reviewer today (provider-detect codex-plugin/codex-cli).
+  dispatch_selectable: true,
+  capabilities: CODEX_CAPABILITIES,
+  provenance: "verified"
+  // columns verified from plugin facts; the embedded caps row carries its own INFERRED notes.
+};
 function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectable = surface_kind === "cli") {
   return {
     schema_version: "guild.host_capabilities.v1",
@@ -4022,461 +4298,372 @@ function inferredCaps(host_kind, family, surface_kind = "cli", dispatch_selectab
     models: { cheap: { model: null }, mid: { model: null }, powerful: { model: null } }
   };
 }
-var HOST_IDS, HOST_FAMILIES, AUTH_PROBES, CLAUDE_ENTRY, CODEX_ENTRY, AGENTS_FILE_ENTRY, PI_ENTRY, ANTIGRAVITY_ENTRY, CLAUDE_APP_ENTRY, CLAUDE_WEB_ENTRY, CODEX_APP_ENTRY, CLAUDE_AI_CONNECTOR_ENTRY, CURSOR_ENTRY, GITHUB_COPILOT_ENTRY, OPENCODE_ENTRY, ROVO_DEV_ENTRY, KIRO_ENTRY, QODER_ENTRY, TRAE_ENTRY, HOST_REGISTRY_ROWS, HOST_ID_SET, FAMILY_SET, AUTH_PROBE_SET;
-var init_host_registry_schema = __esm({
-  "src/domains/config/host-registry-schema.ts"() {
-    init_kernel();
-    init_host_capabilities_schema();
-    HOST_IDS = Object.freeze([
-      // keep CLI/file (5)
-      "claude-code-cli",
-      "codex-cli",
-      "pi-cli",
-      "antigravity-cli",
-      "agents-file",
-      // keep-as-refuse (4) — RETAINED verbatim
-      "claude-code-app",
-      "claude-code-web",
-      "codex-app",
-      "claude-ai-connector",
-      // new CLI-with-binary (4) — verified_multi_host L0 ADR §2.1
-      "cursor",
-      "github-copilot",
-      "opencode",
-      "rovo-dev",
-      // new IDE-embedded (3) — bind the universal agents-file adapter (adapter_binding: "agents-file").
-      // `trae-cn` is NOT distinct — it folds into `trae` (L0 ADR §9). host id set = 16.
-      "kiro",
-      "qoder",
-      "trae"
-    ]);
-    HOST_FAMILIES = Object.freeze([
-      "claude",
-      "codex",
-      "agents",
-      "pi",
-      "antigravity",
-      "cursor",
-      "copilot",
-      "opencode",
-      "rovo"
-    ]);
-    AUTH_PROBES = Object.freeze([
-      "codex_stored_or_env",
-      "none",
-      "cursor_stored",
-      "gh_auth",
-      "opencode_stored_or_env",
-      "acli_stored"
-    ]);
-    CLAUDE_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "claude-code-cli",
-      family: "claude",
-      adapter_binding: "self",
-      surface_kind: "cli",
-      detection: { bin: "claude", requires_auth: false, auth_probe: "none" },
-      installability: "native",
-      result_adapter: false,
-      // Claude is the reference author host, not a cross reviewer for itself.
-      dispatch_selectable: true,
-      capabilities: CLAUDE_CAPABILITIES,
-      provenance: "verified"
-    };
-    CODEX_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "codex-cli",
-      family: "codex",
-      adapter_binding: "self",
-      surface_kind: "cli",
-      detection: { bin: "codex", requires_auth: true, auth_probe: "codex_stored_or_env" },
-      // installability:"target" mirrors the P0 capability row (renderer exists, install unproven).
-      installability: "target",
-      result_adapter: true,
-      // The only selectable cross reviewer today (provider-detect codex-plugin/codex-cli).
-      dispatch_selectable: true,
-      capabilities: CODEX_CAPABILITIES,
-      provenance: "verified"
-      // columns verified from plugin facts; the embedded caps row carries its own INFERRED notes.
-    };
-    AGENTS_FILE_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "agents-file",
-      family: "agents",
-      // "self": agents-file is the universal AGENTS.md adapter/renderer ITSELF (the IDE rows
-      // dereference it via adapter_binding: "agents-file"; this row is the target of that binding).
-      adapter_binding: "self",
-      // `agents-file` is the universal AGENTS.md package target — a FILE surface, not a CLI.
-      surface_kind: "file",
-      detection: { bin: null, requires_auth: false, auth_probe: "none" },
-      installability: "target",
-      result_adapter: false,
-      // INFERRED — no cross-review adapter; verify at live-host availability.
-      // FLIPPED from `true` (gap-audit C-agents-file), applying the SAME G4b
-      // host-reachability rule that flipped kiro/qoder/trae — see KIRO_ENTRY's comment.
-      // The prior value was annotated INFERRED with the rationale "a host consuming
-      // AGENTS.md can run a lane". That is a true statement about the CLASS of consuming
-      // hosts, but `dispatch_selectable` is read per-ROW as "a lane can be dispatched into
-      // THIS row", and under that reading it is false by construction:
-      //   - `agents-file` is not a member of the `HostKind` union (host-types.ts), so no
-      //     TeamBackend/pane path can name it;
-      //   - the generic pane adapter requires `surface_kind:"cli"` (pane-adapter.ts), and
-      //     this row is `surface_kind:"file"` — no PaneAdapter exists or can exist;
-      //   - guild-run-wrapper.ts takes a `HostKind`, so it cannot wrap this row either;
-      //   - decisively, THIS ROW'S OWN ADAPTER refuses: createAgentsFileAdapter().dispatch()
-      //     returns `status:"degraded"`, `command:null`, "agents-file is an instruction
-      //     package target, not a process launcher".
-      // The G4b lane carved this row out as a documented exception rather than flipping it.
-      // That carve-out is superseded here because the field has REAL per-row consumers that
-      // read it as selectability: config-cli.ts builds the operator-pinnable host set from
-      // `dispatch_selectable === true`, and role-model-schema.ts picks the host/advisory
-      // substrate from `installability !== "none" && dispatch_selectable`. With `true` and
-      // `installability:"target"`, Guild could select `agents-file` as a run's host substrate
-      // and then dispatch into an adapter that returns `command: null`. A concrete
-      // AGENTS.md-consuming host carries its OWN row (kiro/qoder/trae dereference this one);
-      // this row is the render TARGET, never a dispatch destination.
-      dispatch_selectable: false,
-      capabilities: AGENTS_FILE_CAPABILITIES,
-      // file surface — matches top-level surface_kind.
-      provenance: "inferred"
-    };
-    PI_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "pi-cli",
-      family: "pi",
-      adapter_binding: "self",
-      surface_kind: "cli",
-      detection: { bin: "pi", requires_auth: false, auth_probe: "none" },
-      // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
-      installability: "target",
-      // VERIFIED-as-target: CLI present; Guild-package install into pi unproven.
-      result_adapter: false,
-      // VERIFIED: no Guild cross-review adapter ships for pi (detect-only, provider-detect.ts:206).
-      dispatch_selectable: true,
-      // VERIFIED: pi is a CLI process a lane can run on.
-      capabilities: {
-        ...inferredCaps("pi-cli", "pi"),
-        // VERIFIED on-host (pi --help, 0.79.3):
-        sessions: { continue: true, resume_by_id: true, fork: true },
-        // --continue/-c, --resume/-r + --session-id, --fork
-        structured_output: { native_json: true, schema_validation: false, repair_prompt: true },
-        // --mode json
-        permissions: {
-          ...inferredCaps("pi-cli", "pi").permissions,
-          // G4b: carries forward the Phase-1 hand-authored host-capabilities-schema.ts
-          // PI_CAPABILITIES.permissions.deny value (a field the inferredCaps() default
-          // left false) — pi's --tools allowlist lets an invocation deny specific tools,
-          // so `deny:true` is the correct capability. Recorded here (not just in the
-          // now-superseded PI_CAPABILITIES row) so the registry stays the single source.
-          deny: true
-        }
-      },
-      provenance: "verified"
-      // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
-    };
-    ANTIGRAVITY_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "antigravity-cli",
-      family: "antigravity",
-      adapter_binding: "self",
-      surface_kind: "cli",
-      // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
-      detection: { bin: "agy", requires_auth: false, auth_probe: "none" },
-      installability: "target",
-      // VERIFIED-as-target: CLI present; Guild-package install unproven.
-      result_adapter: false,
-      // VERIFIED: no Guild cross-review adapter ships for antigravity (detect-only, provider-detect.ts:207).
-      dispatch_selectable: true,
-      // VERIFIED: agy is a CLI process a lane can run on.
-      capabilities: {
-        ...inferredCaps("antigravity-cli", "antigravity"),
-        // VERIFIED on-host (agy --help, 1.0.8):
-        sessions: { continue: true, resume_by_id: true, fork: false },
-        // --continue/-c, --conversation <id>; no fork flag
-        permissions: {
-          ...inferredCaps("antigravity-cli", "antigravity").permissions,
-          bypass_prompts: true,
-          // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
-          launch_modes: { bypass_all: ["--dangerously-skip-permissions"] },
-          // G4b: carries forward two Phase-1 hand-authored host-capabilities-schema.ts
-          // ANTIGRAVITY_CAPABILITIES fields the inferredCaps() default did not set —
-          // `deny` (agy can refuse a tool) and `bypass_sandbox` (the same
-          // --dangerously-skip-permissions flag that sets bypass_prompts above also lifts
-          // the sandbox restriction agy's separate --sandbox toggle would otherwise apply).
-          // Recorded here so the registry — not a second hand-authored row — is the one
-          // source of truth (closes the "two diverged capability truths" audit finding).
-          deny: true,
-          bypass_sandbox: true
-        }
-      },
-      provenance: "verified"
-      // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
-    };
-    CLAUDE_APP_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "claude-code-app",
-      family: "claude",
-      adapter_binding: "self",
-      surface_kind: "app",
-      detection: { bin: null, requires_auth: false, auth_probe: "none" },
-      installability: "none",
-      result_adapter: false,
-      dispatch_selectable: false,
-      capabilities: inferredCaps("claude-code-app", "claude", "app"),
-      provenance: "inferred"
-    };
-    CLAUDE_WEB_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "claude-code-web",
-      family: "claude",
-      adapter_binding: "self",
-      surface_kind: "app",
-      detection: { bin: null, requires_auth: false, auth_probe: "none" },
-      installability: "none",
-      result_adapter: false,
-      dispatch_selectable: false,
-      capabilities: inferredCaps("claude-code-web", "claude", "app"),
-      provenance: "inferred"
-    };
-    CODEX_APP_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "codex-app",
-      family: "codex",
-      adapter_binding: "self",
-      surface_kind: "app",
-      detection: { bin: null, requires_auth: false, auth_probe: "none" },
-      installability: "none",
-      result_adapter: false,
-      dispatch_selectable: false,
-      capabilities: inferredCaps("codex-app", "codex", "app"),
-      provenance: "inferred"
-    };
-    CLAUDE_AI_CONNECTOR_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "claude-ai-connector",
-      family: "claude",
-      adapter_binding: "self",
-      surface_kind: "app",
-      detection: { bin: null, requires_auth: false, auth_probe: "none" },
-      installability: "none",
-      result_adapter: false,
-      dispatch_selectable: false,
-      capabilities: inferredCaps("claude-ai-connector", "claude", "app"),
-      provenance: "inferred"
-    };
-    CURSOR_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "cursor",
-      family: "cursor",
-      adapter_binding: "self",
-      surface_kind: "cli",
-      detection: { bin: "cursor-agent", requires_auth: true, auth_probe: "cursor_stored", subcommand: null, marker: null },
-      installability: "target",
-      result_adapter: false,
-      dispatch_selectable: true,
-      capabilities: inferredCaps("cursor", "cursor", "cli"),
-      // STAYS inferred (issue #110): detection bin + `-p` flag shape + requires_auth
-      // were live-checked 2026-07-30, but no authenticated completion has run —
-      // partial verification does not flip the row.
-      provenance: "inferred"
-    };
-    GITHUB_COPILOT_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "github-copilot",
-      family: "copilot",
-      adapter_binding: "self",
-      surface_kind: "cli",
-      // capability is a subcommand of the shared `gh` bin (`gh copilot`).
-      detection: { bin: "gh", requires_auth: true, auth_probe: "gh_auth", subcommand: "copilot", marker: null },
-      installability: "target",
-      result_adapter: false,
-      dispatch_selectable: true,
-      capabilities: inferredCaps("github-copilot", "copilot", "cli"),
-      // Columns + detection live-checked 2026-07-30 (issue #104/#110): `gh copilot -p`
-      // real completion end to end through guild-run; per-host receipt + live
-      // self-update swap. Capability RUNGS stay INFERRED (adapter-fallback-ladders
-      // INFERRED_HOSTS) until all cells are live-verified.
-      provenance: "verified"
-    };
-    OPENCODE_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "opencode",
-      family: "opencode",
-      adapter_binding: "self",
-      surface_kind: "cli",
-      detection: { bin: "opencode", requires_auth: true, auth_probe: "opencode_stored_or_env", subcommand: null, marker: null },
-      installability: "target",
-      result_adapter: false,
-      dispatch_selectable: true,
-      capabilities: inferredCaps("opencode", "opencode", "cli"),
-      // Columns + detection live-checked 2026-07-30 (issue #104/#110): real completion
-      // via `opencode run` (the `-p` shape was refuted and corrected, PR #109);
-      // per-host receipt + live self-update swap. Capability RUNGS stay INFERRED
-      // (adapter-fallback-ladders INFERRED_HOSTS) until all cells are live-verified.
-      provenance: "verified"
-    };
-    ROVO_DEV_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "rovo-dev",
-      family: "rovo",
-      adapter_binding: "self",
-      surface_kind: "cli",
-      // capability is a subcommand of the shared `acli` bin (`acli rovodev`).
-      detection: { bin: "acli", requires_auth: true, auth_probe: "acli_stored", subcommand: "rovodev", marker: null },
-      installability: "target",
-      result_adapter: false,
-      dispatch_selectable: true,
-      capabilities: inferredCaps("rovo-dev", "rovo", "cli"),
-      provenance: "inferred"
-    };
-    KIRO_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "kiro",
-      family: "agents",
-      adapter_binding: "agents-file",
-      surface_kind: "file",
-      detection: {
-        bin: null,
-        requires_auth: false,
-        auth_probe: "none",
-        subcommand: null,
-        marker: { config_dir: ".kiro", scope: "project", agents_placement: "AGENTS.md" }
-      },
-      installability: "target",
-      result_adapter: false,
-      // G4b (host-reachability audit): FLIPPED from true — an agents-file surface is a
-      // FILE the host reads (root AGENTS.md), never a pane a lane can be dispatched into.
-      // `dispatch_selectable:true` was a lie: no HostKind member, no PaneAdapter, no
-      // legacy hand-authored HOST_CAPABILITY_ROWS row ever backed it (confirmed
-      // unreachable through EVERY dispatch surface; the registry-DERIVED map now carries
-      // a row per registry id, but a capability row is not a dispatch surface). The
-      // honest column for a pane-less file surface is false.
-      dispatch_selectable: false,
-      capabilities: inferredCaps("kiro", "agents", "file"),
-      provenance: "inferred"
-    };
-    QODER_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "qoder",
-      family: "agents",
-      adapter_binding: "agents-file",
-      surface_kind: "file",
-      detection: {
-        bin: null,
-        requires_auth: false,
-        auth_probe: "none",
-        subcommand: null,
-        marker: { config_dir: ".qoder", scope: "project", agents_placement: "AGENTS.md" }
-      },
-      installability: "target",
-      result_adapter: false,
-      // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
-      // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
-      dispatch_selectable: false,
-      capabilities: inferredCaps("qoder", "agents", "file"),
-      provenance: "inferred"
-    };
-    TRAE_ENTRY = {
-      schema_version: "guild.host_registry.v1",
-      host_id: "trae",
-      family: "agents",
-      adapter_binding: "agents-file",
-      surface_kind: "file",
-      detection: {
-        bin: null,
-        requires_auth: false,
-        auth_probe: "none",
-        subcommand: null,
-        marker: { config_dir: ".trae", scope: "project", agents_placement: "AGENTS.md" }
-      },
-      installability: "target",
-      result_adapter: false,
-      // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
-      // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
-      dispatch_selectable: false,
-      capabilities: inferredCaps("trae", "agents", "file"),
-      provenance: "inferred"
-    };
-    HOST_REGISTRY_ROWS = deepFreeze({
-      "claude-code-cli": CLAUDE_ENTRY,
-      "codex-cli": CODEX_ENTRY,
-      "pi-cli": PI_ENTRY,
-      "antigravity-cli": ANTIGRAVITY_ENTRY,
-      "agents-file": AGENTS_FILE_ENTRY,
-      "claude-code-app": CLAUDE_APP_ENTRY,
-      "claude-code-web": CLAUDE_WEB_ENTRY,
-      "codex-app": CODEX_APP_ENTRY,
-      "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY,
-      cursor: CURSOR_ENTRY,
-      "github-copilot": GITHUB_COPILOT_ENTRY,
-      opencode: OPENCODE_ENTRY,
-      "rovo-dev": ROVO_DEV_ENTRY,
-      kiro: KIRO_ENTRY,
-      qoder: QODER_ENTRY,
-      trae: TRAE_ENTRY
-    });
-    HOST_ID_SET = new Set(HOST_IDS);
-    FAMILY_SET = new Set(HOST_FAMILIES);
-    AUTH_PROBE_SET = new Set(AUTH_PROBES);
-  }
+var AGENTS_FILE_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "agents-file",
+  family: "agents",
+  // "self": agents-file is the universal AGENTS.md adapter/renderer ITSELF (the IDE rows
+  // dereference it via adapter_binding: "agents-file"; this row is the target of that binding).
+  adapter_binding: "self",
+  // `agents-file` is the universal AGENTS.md package target — a FILE surface, not a CLI.
+  surface_kind: "file",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "target",
+  result_adapter: false,
+  // INFERRED — no cross-review adapter; verify at live-host availability.
+  // FLIPPED from `true` (gap-audit C-agents-file), applying the SAME G4b
+  // host-reachability rule that flipped kiro/qoder/trae — see KIRO_ENTRY's comment.
+  // The prior value was annotated INFERRED with the rationale "a host consuming
+  // AGENTS.md can run a lane". That is a true statement about the CLASS of consuming
+  // hosts, but `dispatch_selectable` is read per-ROW as "a lane can be dispatched into
+  // THIS row", and under that reading it is false by construction:
+  //   - `agents-file` is not a member of the `HostKind` union (host-types.ts), so no
+  //     TeamBackend/pane path can name it;
+  //   - the generic pane adapter requires `surface_kind:"cli"` (pane-adapter.ts), and
+  //     this row is `surface_kind:"file"` — no PaneAdapter exists or can exist;
+  //   - guild-run-wrapper.ts takes a `HostKind`, so it cannot wrap this row either;
+  //   - decisively, THIS ROW'S OWN ADAPTER refuses: createAgentsFileAdapter().dispatch()
+  //     returns `status:"degraded"`, `command:null`, "agents-file is an instruction
+  //     package target, not a process launcher".
+  // The G4b lane carved this row out as a documented exception rather than flipping it.
+  // That carve-out is superseded here because the field has REAL per-row consumers that
+  // read it as selectability: config-cli.ts builds the operator-pinnable host set from
+  // `dispatch_selectable === true`, and role-model-schema.ts picks the host/advisory
+  // substrate from `installability !== "none" && dispatch_selectable`. With `true` and
+  // `installability:"target"`, Guild could select `agents-file` as a run's host substrate
+  // and then dispatch into an adapter that returns `command: null`. A concrete
+  // AGENTS.md-consuming host carries its OWN row (kiro/qoder/trae dereference this one);
+  // this row is the render TARGET, never a dispatch destination.
+  dispatch_selectable: false,
+  capabilities: AGENTS_FILE_CAPABILITIES,
+  // file surface — matches top-level surface_kind.
+  provenance: "inferred"
+};
+var PI_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "pi-cli",
+  family: "pi",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  detection: { bin: "pi", requires_auth: false, auth_probe: "none" },
+  // VERIFIED on-host 2026-06-16: `pi` 0.79.3 at /opt/homebrew/bin/pi.
+  installability: "target",
+  // VERIFIED-as-target: CLI present; Guild-package install into pi unproven.
+  result_adapter: false,
+  // VERIFIED: no Guild cross-review adapter ships for pi (detect-only, provider-detect.ts:206).
+  dispatch_selectable: true,
+  // VERIFIED: pi is a CLI process a lane can run on.
+  capabilities: {
+    ...inferredCaps("pi-cli", "pi"),
+    // VERIFIED on-host (pi --help, 0.79.3):
+    sessions: { continue: true, resume_by_id: true, fork: true },
+    // --continue/-c, --resume/-r + --session-id, --fork
+    structured_output: { native_json: true, schema_validation: false, repair_prompt: true },
+    // --mode json
+    permissions: {
+      ...inferredCaps("pi-cli", "pi").permissions,
+      // G4b: carries forward the Phase-1 hand-authored host-capabilities-schema.ts
+      // PI_CAPABILITIES.permissions.deny value (a field the inferredCaps() default
+      // left false) — pi's --tools allowlist lets an invocation deny specific tools,
+      // so `deny:true` is the correct capability. Recorded here (not just in the
+      // now-superseded PI_CAPABILITIES row) so the registry stays the single source.
+      deny: true
+    }
+  },
+  provenance: "verified"
+  // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
+};
+var ANTIGRAVITY_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "antigravity-cli",
+  family: "antigravity",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  // VERIFIED on-host 2026-06-16: the CLI is `agy` 1.0.8 (~/.local/bin/agy) — NOT `antigravity`. Detection bin corrected.
+  detection: { bin: "agy", requires_auth: false, auth_probe: "none" },
+  installability: "target",
+  // VERIFIED-as-target: CLI present; Guild-package install unproven.
+  result_adapter: false,
+  // VERIFIED: no Guild cross-review adapter ships for antigravity (detect-only, provider-detect.ts:207).
+  dispatch_selectable: true,
+  // VERIFIED: agy is a CLI process a lane can run on.
+  capabilities: {
+    ...inferredCaps("antigravity-cli", "antigravity"),
+    // VERIFIED on-host (agy --help, 1.0.8):
+    sessions: { continue: true, resume_by_id: true, fork: false },
+    // --continue/-c, --conversation <id>; no fork flag
+    permissions: {
+      ...inferredCaps("antigravity-cli", "antigravity").permissions,
+      bypass_prompts: true,
+      // --dangerously-skip-permissions auto-approves all tool-permission prompts (agy also has a separate --sandbox restrict toggle)
+      launch_modes: { bypass_all: ["--dangerously-skip-permissions"] },
+      // G4b: carries forward two Phase-1 hand-authored host-capabilities-schema.ts
+      // ANTIGRAVITY_CAPABILITIES fields the inferredCaps() default did not set —
+      // `deny` (agy can refuse a tool) and `bypass_sandbox` (the same
+      // --dangerously-skip-permissions flag that sets bypass_prompts above also lifts
+      // the sandbox restriction agy's separate --sandbox toggle would otherwise apply).
+      // Recorded here so the registry — not a second hand-authored row — is the one
+      // source of truth (closes the "two diverged capability truths" audit finding).
+      deny: true,
+      bypass_sandbox: true
+    }
+  },
+  provenance: "verified"
+  // 3 columns + detection live-checked; browser rung still INFERRED (adapter-fallback-ladders INFERRED_HOSTS).
+};
+var CLAUDE_APP_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-code-app",
+  family: "claude",
+  adapter_binding: "self",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("claude-code-app", "claude", "app"),
+  provenance: "inferred"
+};
+var CLAUDE_WEB_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-code-web",
+  family: "claude",
+  adapter_binding: "self",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("claude-code-web", "claude", "app"),
+  provenance: "inferred"
+};
+var CODEX_APP_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "codex-app",
+  family: "codex",
+  adapter_binding: "self",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("codex-app", "codex", "app"),
+  provenance: "inferred"
+};
+var CLAUDE_AI_CONNECTOR_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "claude-ai-connector",
+  family: "claude",
+  adapter_binding: "self",
+  surface_kind: "app",
+  detection: { bin: null, requires_auth: false, auth_probe: "none" },
+  installability: "none",
+  result_adapter: false,
+  dispatch_selectable: false,
+  capabilities: inferredCaps("claude-ai-connector", "claude", "app"),
+  provenance: "inferred"
+};
+var CURSOR_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "cursor",
+  family: "cursor",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  detection: { bin: "cursor-agent", requires_auth: true, auth_probe: "cursor_stored", subcommand: null, marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("cursor", "cursor", "cli"),
+  // STAYS inferred (issue #110): detection bin + `-p` flag shape + requires_auth
+  // were live-checked 2026-07-30, but no authenticated completion has run —
+  // partial verification does not flip the row.
+  provenance: "inferred"
+};
+var GITHUB_COPILOT_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "github-copilot",
+  family: "copilot",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  // capability is a subcommand of the shared `gh` bin (`gh copilot`).
+  detection: { bin: "gh", requires_auth: true, auth_probe: "gh_auth", subcommand: "copilot", marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("github-copilot", "copilot", "cli"),
+  // Columns + detection live-checked 2026-07-30 (issue #104/#110): `gh copilot -p`
+  // real completion end to end through guild-run; per-host receipt + live
+  // self-update swap. Capability RUNGS stay INFERRED (adapter-fallback-ladders
+  // INFERRED_HOSTS) until all cells are live-verified.
+  provenance: "verified"
+};
+var OPENCODE_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "opencode",
+  family: "opencode",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  detection: { bin: "opencode", requires_auth: true, auth_probe: "opencode_stored_or_env", subcommand: null, marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("opencode", "opencode", "cli"),
+  // Columns + detection live-checked 2026-07-30 (issue #104/#110): real completion
+  // via `opencode run` (the `-p` shape was refuted and corrected, PR #109);
+  // per-host receipt + live self-update swap. Capability RUNGS stay INFERRED
+  // (adapter-fallback-ladders INFERRED_HOSTS) until all cells are live-verified.
+  provenance: "verified"
+};
+var ROVO_DEV_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "rovo-dev",
+  family: "rovo",
+  adapter_binding: "self",
+  surface_kind: "cli",
+  // capability is a subcommand of the shared `acli` bin (`acli rovodev`).
+  detection: { bin: "acli", requires_auth: true, auth_probe: "acli_stored", subcommand: "rovodev", marker: null },
+  installability: "target",
+  result_adapter: false,
+  dispatch_selectable: true,
+  capabilities: inferredCaps("rovo-dev", "rovo", "cli"),
+  provenance: "inferred"
+};
+var KIRO_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "kiro",
+  family: "agents",
+  adapter_binding: "agents-file",
+  surface_kind: "file",
+  detection: {
+    bin: null,
+    requires_auth: false,
+    auth_probe: "none",
+    subcommand: null,
+    marker: { config_dir: ".kiro", scope: "project", agents_placement: "AGENTS.md" }
+  },
+  installability: "target",
+  result_adapter: false,
+  // G4b (host-reachability audit): FLIPPED from true — an agents-file surface is a
+  // FILE the host reads (root AGENTS.md), never a pane a lane can be dispatched into.
+  // `dispatch_selectable:true` was a lie: no HostKind member, no PaneAdapter, no
+  // legacy hand-authored HOST_CAPABILITY_ROWS row ever backed it (confirmed
+  // unreachable through EVERY dispatch surface; the registry-DERIVED map now carries
+  // a row per registry id, but a capability row is not a dispatch surface). The
+  // honest column for a pane-less file surface is false.
+  dispatch_selectable: false,
+  capabilities: inferredCaps("kiro", "agents", "file"),
+  provenance: "inferred"
+};
+var QODER_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "qoder",
+  family: "agents",
+  adapter_binding: "agents-file",
+  surface_kind: "file",
+  detection: {
+    bin: null,
+    requires_auth: false,
+    auth_probe: "none",
+    subcommand: null,
+    marker: { config_dir: ".qoder", scope: "project", agents_placement: "AGENTS.md" }
+  },
+  installability: "target",
+  result_adapter: false,
+  // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
+  // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
+  dispatch_selectable: false,
+  capabilities: inferredCaps("qoder", "agents", "file"),
+  provenance: "inferred"
+};
+var TRAE_ENTRY = {
+  schema_version: "guild.host_registry.v1",
+  host_id: "trae",
+  family: "agents",
+  adapter_binding: "agents-file",
+  surface_kind: "file",
+  detection: {
+    bin: null,
+    requires_auth: false,
+    auth_probe: "none",
+    subcommand: null,
+    marker: { config_dir: ".trae", scope: "project", agents_placement: "AGENTS.md" }
+  },
+  installability: "target",
+  result_adapter: false,
+  // G4b: FLIPPED from true (see KIRO_ENTRY comment — agents-file is a file surface,
+  // never a pane; dispatch_selectable:true was unreachable-through-every-surface).
+  dispatch_selectable: false,
+  capabilities: inferredCaps("trae", "agents", "file"),
+  provenance: "inferred"
+};
+var HOST_REGISTRY_ROWS = deepFreeze({
+  "claude-code-cli": CLAUDE_ENTRY,
+  "codex-cli": CODEX_ENTRY,
+  "pi-cli": PI_ENTRY,
+  "antigravity-cli": ANTIGRAVITY_ENTRY,
+  "agents-file": AGENTS_FILE_ENTRY,
+  "claude-code-app": CLAUDE_APP_ENTRY,
+  "claude-code-web": CLAUDE_WEB_ENTRY,
+  "codex-app": CODEX_APP_ENTRY,
+  "claude-ai-connector": CLAUDE_AI_CONNECTOR_ENTRY,
+  cursor: CURSOR_ENTRY,
+  "github-copilot": GITHUB_COPILOT_ENTRY,
+  opencode: OPENCODE_ENTRY,
+  "rovo-dev": ROVO_DEV_ENTRY,
+  kiro: KIRO_ENTRY,
+  qoder: QODER_ENTRY,
+  trae: TRAE_ENTRY
 });
+var HOST_ID_SET = new Set(HOST_IDS);
+var FAMILY_SET = new Set(HOST_FAMILIES);
+var AUTH_PROBE_SET = new Set(AUTH_PROBES);
 
 // src/domains/config/host-id-namespace.ts
+var HOST_ID_SET2 = new Set(HOST_IDS);
+var LEGACY_HOST_ALIASES = {
+  claude: "claude-code-cli",
+  "claude-code-desktop": "claude-code-app",
+  codex: "codex-cli",
+  "codex-plugin": "codex-cli",
+  agents: "agents-file",
+  ".agents": "agents-file",
+  pi: "pi-cli",
+  antigravity: "antigravity-cli",
+  "antigravity-2": "antigravity-cli"
+};
 function normalizeHostId(value) {
   const s = value.trim();
   if (HOST_ID_SET2.has(s)) return s;
   return LEGACY_HOST_ALIASES[s] ?? null;
 }
-var HOST_ID_SET2, LEGACY_HOST_ALIASES;
-var init_host_id_namespace = __esm({
-  "src/domains/config/host-id-namespace.ts"() {
-    init_host_registry_schema();
-    HOST_ID_SET2 = new Set(HOST_IDS);
-    LEGACY_HOST_ALIASES = {
-      claude: "claude-code-cli",
-      "claude-code-desktop": "claude-code-app",
-      codex: "codex-cli",
-      "codex-plugin": "codex-cli",
-      agents: "agents-file",
-      ".agents": "agents-file",
-      pi: "pi-cli",
-      antigravity: "antigravity-cli",
-      "antigravity-2": "antigravity-cli"
-    };
-  }
-});
 
 // src/domains/config/adapter-fallback-ladders.ts
-var RUNGS, ADAPTER_SURFACES, INFERRED_HOSTS, RUNG_SET, SURFACE_SET;
-var init_adapter_fallback_ladders = __esm({
-  "src/domains/config/adapter-fallback-ladders.ts"() {
-    init_host_registry_schema();
-    init_kernel();
-    RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"]);
-    ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"]);
-    INFERRED_HOSTS = sealSet([
-      "agents-file",
-      "pi-cli",
-      "antigravity-cli",
-      "claude-code-app",
-      "claude-code-web",
-      "codex-app",
-      "claude-ai-connector",
-      // verified-multi-host new hosts — off-box target rows, no live-host verification yet.
-      "cursor",
-      "github-copilot",
-      "opencode",
-      "rovo-dev",
-      "kiro",
-      "qoder",
-      "trae"
-    ], "INFERRED_HOSTS");
-    RUNG_SET = new Set(RUNGS);
-    SURFACE_SET = new Set(ADAPTER_SURFACES);
-  }
-});
+var RUNGS = Object.freeze(["native", "wrapped", "bridged", "emulated", "degraded"]);
+var ADAPTER_SURFACES = Object.freeze(["interaction", "session", "semantic_tool", "browser"]);
+var INFERRED_HOSTS = sealSet([
+  "agents-file",
+  "pi-cli",
+  "antigravity-cli",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+  // verified-multi-host new hosts — off-box target rows, no live-host verification yet.
+  "cursor",
+  "github-copilot",
+  "opencode",
+  "rovo-dev",
+  "kiro",
+  "qoder",
+  "trae"
+], "INFERRED_HOSTS");
+var RUNG_SET = new Set(RUNGS);
+var SURFACE_SET = new Set(ADAPTER_SURFACES);
 
 // src/domains/config/host-profiles-validate.ts
+var KNOWN_HOST_IDS = new Set(HOST_IDS);
+var VALID_HOST_PROFILE_ENTRY_KEYS = sealSet(["models", "enabled"], "VALID_HOST_PROFILE_ENTRY_KEYS");
+var VALID_HOST_PROFILE_MODEL_KEYS = sealSet(["cheap", "mid", "powerful"], "VALID_HOST_PROFILE_MODEL_KEYS");
 function isPlainObject(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -4534,79 +4721,60 @@ function filterHostProfiles(raw) {
   }
   return out;
 }
-var KNOWN_HOST_IDS, VALID_HOST_PROFILE_ENTRY_KEYS, VALID_HOST_PROFILE_MODEL_KEYS;
-var init_host_profiles_validate = __esm({
-  "src/domains/config/host-profiles-validate.ts"() {
-    init_host_registry_schema();
-    init_kernel();
-    init_host_id_namespace();
-    KNOWN_HOST_IDS = new Set(HOST_IDS);
-    VALID_HOST_PROFILE_ENTRY_KEYS = sealSet(["models", "enabled"], "VALID_HOST_PROFILE_ENTRY_KEYS");
-    VALID_HOST_PROFILE_MODEL_KEYS = sealSet(["cheap", "mid", "powerful"], "VALID_HOST_PROFILE_MODEL_KEYS");
-  }
-});
 
 // src/domains/config/host-registry.ts
 function deriveCapabilityRow(row) {
   return row.capabilities;
 }
+var DERIVED_HOST_CAPABILITY_ROWS = (() => {
+  const out = {};
+  for (const id of HOST_IDS) {
+    out[id] = deriveCapabilityRow(HOST_REGISTRY_ROWS[id]);
+  }
+  out["claude"] = out["claude-code-cli"];
+  out["codex"] = out["codex-cli"];
+  out["pi"] = out["pi-cli"];
+  out["antigravity"] = out["antigravity-cli"];
+  out["antigravity-2"] = out["antigravity-cli"];
+  return out;
+})();
+var FAMILY_TO_ROW = (() => {
+  const out = {};
+  for (const id of HOST_IDS) {
+    const row = HOST_REGISTRY_ROWS[id];
+    const existing = out[row.family];
+    if (!existing || !existing.result_adapter && row.result_adapter) {
+      out[row.family] = row;
+    }
+  }
+  return out;
+})();
 function resultAdapterForFamily(family) {
   return FAMILY_TO_ROW[family]?.result_adapter ?? false;
 }
-var DERIVED_HOST_CAPABILITY_ROWS, FAMILY_TO_ROW;
-var init_host_registry = __esm({
-  "src/domains/config/host-registry.ts"() {
-    init_host_registry_schema();
-    init_host_id_namespace();
-    DERIVED_HOST_CAPABILITY_ROWS = (() => {
-      const out = {};
-      for (const id of HOST_IDS) {
-        out[id] = deriveCapabilityRow(HOST_REGISTRY_ROWS[id]);
-      }
-      out["claude"] = out["claude-code-cli"];
-      out["codex"] = out["codex-cli"];
-      out["pi"] = out["pi-cli"];
-      out["antigravity"] = out["antigravity-cli"];
-      out["antigravity-2"] = out["antigravity-cli"];
-      return out;
-    })();
-    FAMILY_TO_ROW = (() => {
-      const out = {};
-      for (const id of HOST_IDS) {
-        const row = HOST_REGISTRY_ROWS[id];
-        const existing = out[row.family];
-        if (!existing || !existing.result_adapter && row.result_adapter) {
-          out[row.family] = row;
-        }
-      }
-      return out;
-    })();
-  }
-});
 
 // src/domains/config/host-adapter-contract.ts
-var HOST_ADAPTER_OPERATIONS;
-var init_host_adapter_contract = __esm({
-  "src/domains/config/host-adapter-contract.ts"() {
-    init_host_registry_schema();
-    init_host_id_namespace();
-    init_adapter_fallback_ladders();
-    HOST_ADAPTER_OPERATIONS = Object.freeze([
-      "capabilities",
-      "bootstrap",
-      "preflight",
-      "dispatch",
-      "collect",
-      "renderCommandSurface",
-      "renderPackage",
-      "renderPermissionDecision",
-      "resolveModelParams",
-      "memory"
-    ]);
-  }
-});
+var HOST_ADAPTER_OPERATIONS = Object.freeze([
+  "capabilities",
+  "bootstrap",
+  "preflight",
+  "dispatch",
+  "collect",
+  "renderCommandSurface",
+  "renderPackage",
+  "renderPermissionDecision",
+  "resolveModelParams",
+  "memory"
+]);
+
+// src/domains/state/atomic-write.ts
+var fs8 = __toESM(require("fs"));
+var path9 = __toESM(require("path"));
+var crypto = __toESM(require("crypto"));
 
 // src/domains/state/plugin-install-guard.ts
+var fs7 = __toESM(require("node:fs"));
+var path8 = __toESM(require("node:path"));
 function assertNotUnderPluginInstall(absPath, pluginInstallRoot) {
   const root = pluginInstallRoot ?? process.env["GUILD_PLUGIN_ROOT"] ?? process.env["CLAUDE_PLUGIN_ROOT"] ?? process.env["CODEX_PLUGIN_ROOT"];
   if (!root) return;
@@ -4618,13 +4786,6 @@ function assertNotUnderPluginInstall(absPath, pluginInstallRoot) {
     throw new Error(`project-created Guild artifact would be written under plugin install dir: ${absPath}`);
   }
 }
-var fs7, path8;
-var init_plugin_install_guard = __esm({
-  "src/domains/state/plugin-install-guard.ts"() {
-    fs7 = __toESM(require("node:fs"));
-    path8 = __toESM(require("node:path"));
-  }
-});
 
 // src/domains/state/atomic-write.ts
 function atomicWrite(targetPath, content, pluginInstallRoot) {
@@ -4657,77 +4818,39 @@ function writeThroughTemp(targetPath, content, durable, pluginInstallRoot) {
     throw err;
   }
 }
-var fs8, path9, crypto;
-var init_atomic_write = __esm({
-  "src/domains/state/atomic-write.ts"() {
-    fs8 = __toESM(require("fs"));
-    path9 = __toESM(require("path"));
-    crypto = __toESM(require("crypto"));
-    init_plugin_install_guard();
-  }
-});
 
 // src/domains/state/dependency-graph-schema.ts
-var DEPENDENCY_GRAPH_SCHEMA_VERSION, DEPENDENCY_GRAPH_V1_EXAMPLE;
-var init_dependency_graph_schema = __esm({
-  "src/domains/state/dependency-graph-schema.ts"() {
-    init_kernel();
-    DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
-    DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
-      schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
-      nodes: [
-        { id: "guild-plugin", path: "plugin" },
-        { id: "guild-website", path: "website" },
-        { id: "guild-benchmark", path: "benchmark" }
-      ],
-      edges: [
-        { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
-        { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
-      ]
-    });
-  }
+var DEPENDENCY_GRAPH_SCHEMA_VERSION = "guild.dependency_graph.v1";
+var DEPENDENCY_GRAPH_V1_EXAMPLE = deepFreeze({
+  schema_version: DEPENDENCY_GRAPH_SCHEMA_VERSION,
+  nodes: [
+    { id: "guild-plugin", path: "plugin" },
+    { id: "guild-website", path: "website" },
+    { id: "guild-benchmark", path: "benchmark" }
+  ],
+  edges: [
+    { from: "guild-website", to: "guild-plugin", reason: "docs the plugin surface" },
+    { from: "guild-benchmark", to: "guild-plugin", reason: "evals the plugin behavior" }
+  ]
 });
 
 // src/domains/state/storage-roots.ts
+var path10 = __toESM(require("node:path"));
 function durableGuildDir2(activeRoot) {
   return path10.join(activeRoot, ".guild");
 }
-var path10;
-var init_storage_roots = __esm({
-  "src/domains/state/storage-roots.ts"() {
-    path10 = __toESM(require("node:path"));
-  }
-});
-
-// src/domains/state/dependency-graph-reader.ts
-var init_dependency_graph_reader = __esm({
-  "src/domains/state/dependency-graph-reader.ts"() {
-    init_dependency_graph_schema();
-    init_storage_roots();
-  }
-});
-
-// src/domains/state/frontmatter.ts
-var init_frontmatter = __esm({
-  "src/domains/state/frontmatter.ts"() {
-    init_kernel();
-  }
-});
-
-// src/domains/state/guild-discovery.ts
-var init_guild_discovery = __esm({
-  "src/domains/state/guild-discovery.ts"() {
-    init_guild_root();
-  }
-});
 
 // src/domains/state/index-migrate.ts
+var import_node_child_process = require("node:child_process");
+var fs9 = __toESM(require("node:fs"));
+var path11 = __toESM(require("node:path"));
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
   const db = new DatabaseSync(dbPath);
   db.exec("PRAGMA busy_timeout = 5000");
   return db;
 }
+var CURRENT_SCHEMA_VERSION = 3;
 function resolveGuildRoot2(cwd) {
   try {
     const raw = (0, import_node_child_process.execFileSync)("git", ["rev-parse", "--git-common-dir"], {
@@ -4742,6 +4865,168 @@ function resolveGuildRoot2(cwd) {
   }
   return path11.resolve(cwd);
 }
+var MIGRATIONS = [
+  // ── v1: core tables ───────────────────────────────────────────────────────
+  {
+    version: 1,
+    tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
+    up(db) {
+      db.exec(`
+        DROP TABLE IF EXISTS kg_nodes;
+        DROP TABLE IF EXISTS kg_edges;
+        DROP TABLE IF EXISTS kl_edges;
+        DROP TABLE IF EXISTS run_provenance;
+        DROP TABLE IF EXISTS wiki_fts;
+        DROP TABLE IF EXISTS _fingerprints;
+      `);
+      db.exec(`
+        CREATE TABLE kg_nodes (
+          id         TEXT NOT NULL PRIMARY KEY,
+          type       TEXT,
+          name       TEXT,
+          source_refs TEXT,
+          confidence TEXT,
+          layer      TEXT,
+          data       TEXT
+        );
+
+        CREATE TABLE kg_edges (
+          id        INTEGER PRIMARY KEY,
+          source    TEXT NOT NULL,
+          target    TEXT NOT NULL,
+          type      TEXT,
+          direction TEXT,
+          weight    REAL,
+          data      TEXT
+        );
+
+        CREATE TABLE kl_edges (
+          id        INTEGER PRIMARY KEY,
+          from_node TEXT NOT NULL,
+          to_node   TEXT NOT NULL,
+          type      TEXT,
+          run_id    TEXT,
+          data      TEXT
+        );
+
+        CREATE TABLE run_provenance (
+          run_id TEXT NOT NULL PRIMARY KEY,
+          ts     TEXT,
+          data   TEXT
+        );
+
+        CREATE TABLE _fingerprints (
+          table_name   TEXT NOT NULL PRIMARY KEY,
+          source_path  TEXT NOT NULL,
+          sha256       TEXT NOT NULL,
+          populated_at TEXT NOT NULL
+        );
+      `);
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE wiki_fts USING fts5(
+            path      UNINDEXED,
+            title,
+            content,
+            tokenize='porter ascii'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE TABLE wiki_fts (
+            path    TEXT,
+            title   TEXT,
+            content TEXT
+          );
+        `);
+      }
+    }
+  },
+  // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
+  //
+  // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
+  // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
+  // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
+  //
+  // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
+  // production code writes to sub_guild_root/.guild/. NOTE: the populate/
+  // invalidate function (ensureFederationWikiCache) was removed in
+  // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
+  // schema migration is retained (harmless empty table) since altering the
+  // migration ladder is a separate, out-of-scope decision.
+  {
+    version: 2,
+    tables: ["federation_wiki_cache"],
+    up(db) {
+      db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
+      db.exec(`
+        CREATE TABLE federation_wiki_cache (
+          sub_guild_root TEXT NOT NULL,
+          path           TEXT NOT NULL,
+          title          TEXT,
+          snippet        TEXT,
+          PRIMARY KEY (sub_guild_root, path)
+        );
+      `);
+    }
+  },
+  // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
+  //
+  // Two OPTIONAL acceleration tables projected from the canonical, file-first
+  // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
+  // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
+  // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
+  // remains the source of truth that returns IDENTICAL answers.
+  //
+  //   kg_calls       — denormalized `calls` edges (source, target, confidence),
+  //                    indexed on source AND target so the call-graph BFS
+  //                    (kgTrace / kgDeadCode) is fetched without parsing the
+  //                    whole JSON graph.
+  //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
+  //                    node, so identifier search (`process_order` →
+  //                    `processOrder`) is an index lookup, not a full node scan.
+  //                    Tokens are PRE-SPLIT with the shared identifier-aware
+  //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
+  //                    document and query side, so the FTS built-in tokenizer
+  //                    only has to whitespace-split — the camel/snake behaviour
+  //                    lives in the (deterministic, model-free) projection feed.
+  {
+    version: 3,
+    tables: ["kg_calls", "kg_symbols_fts"],
+    up(db) {
+      db.exec(`
+        DROP TABLE IF EXISTS kg_calls;
+        DROP TABLE IF EXISTS kg_symbols_fts;
+      `);
+      db.exec(`
+        CREATE TABLE kg_calls (
+          id         INTEGER PRIMARY KEY,
+          source     TEXT NOT NULL,
+          target     TEXT NOT NULL,
+          confidence TEXT
+        );
+        CREATE INDEX kg_calls_source ON kg_calls (source);
+        CREATE INDEX kg_calls_target ON kg_calls (target);
+      `);
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
+            node_id UNINDEXED,
+            name_tokens,
+            tokenize='ascii'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE TABLE kg_symbols_fts (
+            node_id     TEXT,
+            name_tokens TEXT
+          );
+        `);
+      }
+    }
+  }
+];
 function runMigrations(dbPath) {
   let db;
   let fromVersion = 0;
@@ -4825,438 +5110,247 @@ function runIndexMigrateCli() {
     process.exit(1);
   }
 }
-var import_node_child_process, fs9, path11, CURRENT_SCHEMA_VERSION, MIGRATIONS;
-var init_index_migrate = __esm({
-  "src/domains/state/index-migrate.ts"() {
-    import_node_child_process = require("node:child_process");
-    fs9 = __toESM(require("node:fs"));
-    path11 = __toESM(require("node:path"));
-    CURRENT_SCHEMA_VERSION = 3;
-    MIGRATIONS = [
-      // ── v1: core tables ───────────────────────────────────────────────────────
-      {
-        version: 1,
-        tables: ["kg_nodes", "kg_edges", "kl_edges", "run_provenance", "wiki_fts", "_fingerprints"],
-        up(db) {
-          db.exec(`
-        DROP TABLE IF EXISTS kg_nodes;
-        DROP TABLE IF EXISTS kg_edges;
-        DROP TABLE IF EXISTS kl_edges;
-        DROP TABLE IF EXISTS run_provenance;
-        DROP TABLE IF EXISTS wiki_fts;
-        DROP TABLE IF EXISTS _fingerprints;
-      `);
-          db.exec(`
-        CREATE TABLE kg_nodes (
-          id         TEXT NOT NULL PRIMARY KEY,
-          type       TEXT,
-          name       TEXT,
-          source_refs TEXT,
-          confidence TEXT,
-          layer      TEXT,
-          data       TEXT
-        );
-
-        CREATE TABLE kg_edges (
-          id        INTEGER PRIMARY KEY,
-          source    TEXT NOT NULL,
-          target    TEXT NOT NULL,
-          type      TEXT,
-          direction TEXT,
-          weight    REAL,
-          data      TEXT
-        );
-
-        CREATE TABLE kl_edges (
-          id        INTEGER PRIMARY KEY,
-          from_node TEXT NOT NULL,
-          to_node   TEXT NOT NULL,
-          type      TEXT,
-          run_id    TEXT,
-          data      TEXT
-        );
-
-        CREATE TABLE run_provenance (
-          run_id TEXT NOT NULL PRIMARY KEY,
-          ts     TEXT,
-          data   TEXT
-        );
-
-        CREATE TABLE _fingerprints (
-          table_name   TEXT NOT NULL PRIMARY KEY,
-          source_path  TEXT NOT NULL,
-          sha256       TEXT NOT NULL,
-          populated_at TEXT NOT NULL
-        );
-      `);
-          try {
-            db.exec(`
-          CREATE VIRTUAL TABLE wiki_fts USING fts5(
-            path      UNINDEXED,
-            title,
-            content,
-            tokenize='porter ascii'
-          );
-        `);
-          } catch {
-            db.exec(`
-          CREATE TABLE wiki_fts (
-            path    TEXT,
-            title   TEXT,
-            content TEXT
-          );
-        `);
-          }
-        }
-      },
-      // ── v2: federation_wiki_cache (TE-14) ────────────────────────────────────
-      //
-      // Stores a flat BM25-ready snapshot of each federated sub-guild's wiki.
-      // Primary key is (sub_guild_root, path) — one row per page per sub-guild.
-      // Fingerprint key in _fingerprints: "federation_wiki_cache:<sub_guild_root>".
-      //
-      // BOUNDARY: this table ONLY lives in the workspace-root index.sqlite; no
-      // production code writes to sub_guild_root/.guild/. NOTE: the populate/
-      // invalidate function (ensureFederationWikiCache) was removed in
-      // plugin-audit-remediation G5a (2026-07) as zero-consumer dead code — this
-      // schema migration is retained (harmless empty table) since altering the
-      // migration ladder is a separate, out-of-scope decision.
-      {
-        version: 2,
-        tables: ["federation_wiki_cache"],
-        up(db) {
-          db.exec(`DROP TABLE IF EXISTS federation_wiki_cache;`);
-          db.exec(`
-        CREATE TABLE federation_wiki_cache (
-          sub_guild_root TEXT NOT NULL,
-          path           TEXT NOT NULL,
-          title          TEXT,
-          snippet        TEXT,
-          PRIMARY KEY (sub_guild_root, path)
-        );
-      `);
-        }
-      },
-      // ── v3: optional structural projection (T5.1 / G5) ───────────────────────
-      //
-      // Two OPTIONAL acceleration tables projected from the canonical, file-first
-      // knowledge-graph.json (goals.md §G5). Both are pure, threshold-gated,
-      // fingerprinted, fully-rebuildable caches: deleting index.sqlite loses
-      // nothing, and `index: off` (in-process JSON BFS via lib/graph-query.ts)
-      // remains the source of truth that returns IDENTICAL answers.
-      //
-      //   kg_calls       — denormalized `calls` edges (source, target, confidence),
-      //                    indexed on source AND target so the call-graph BFS
-      //                    (kgTrace / kgDeadCode) is fetched without parsing the
-      //                    whole JSON graph.
-      //   kg_symbols_fts — FTS5 over the camel/snake-split tokens of each named
-      //                    node, so identifier search (`process_order` →
-      //                    `processOrder`) is an index lookup, not a full node scan.
-      //                    Tokens are PRE-SPLIT with the shared identifier-aware
-      //                    tokenizer (bm25.ts:tokenizeIdentifierAware) on BOTH the
-      //                    document and query side, so the FTS built-in tokenizer
-      //                    only has to whitespace-split — the camel/snake behaviour
-      //                    lives in the (deterministic, model-free) projection feed.
-      {
-        version: 3,
-        tables: ["kg_calls", "kg_symbols_fts"],
-        up(db) {
-          db.exec(`
-        DROP TABLE IF EXISTS kg_calls;
-        DROP TABLE IF EXISTS kg_symbols_fts;
-      `);
-          db.exec(`
-        CREATE TABLE kg_calls (
-          id         INTEGER PRIMARY KEY,
-          source     TEXT NOT NULL,
-          target     TEXT NOT NULL,
-          confidence TEXT
-        );
-        CREATE INDEX kg_calls_source ON kg_calls (source);
-        CREATE INDEX kg_calls_target ON kg_calls (target);
-      `);
-          try {
-            db.exec(`
-          CREATE VIRTUAL TABLE kg_symbols_fts USING fts5(
-            node_id UNINDEXED,
-            name_tokens,
-            tokenize='ascii'
-          );
-        `);
-          } catch {
-            db.exec(`
-          CREATE TABLE kg_symbols_fts (
-            node_id     TEXT,
-            name_tokens TEXT
-          );
-        `);
-          }
-        }
-      }
-    ];
-    if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-      runIndexMigrateCli();
-    }
-  }
-});
-
-// src/domains/state/index-cache.ts
-var init_index_cache = __esm({
-  "src/domains/state/index-cache.ts"() {
-    init_index_migrate();
-    init_kernel();
-    init_storage_roots();
-  }
-});
+if (typeof module !== "undefined" && require.main === module && /^index-migrate\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+  runIndexMigrateCli();
+}
 
 // src/domains/state/storage-policy.ts
-var path12, NON_DURABLE_CLASSES, DURABLE_CLASSES, KTD16_FROZEN_PREFIXES, DURABLE_SUBTREES;
-var init_storage_policy = __esm({
-  "src/domains/state/storage-policy.ts"() {
-    path12 = __toESM(require("node:path"));
-    init_kernel();
-    NON_DURABLE_CLASSES = sealSet(
-      ["runtime", "cache", "managed-resource", "temporary"],
-      "NON_DURABLE_CLASSES"
-    );
-    DURABLE_CLASSES = sealSet(
-      ["canonical", "durable-record"],
-      "DURABLE_CLASSES"
-    );
-    KTD16_FROZEN_PREFIXES = deepFreeze([
-      "runs",
-      "analysis",
-      "recommendations"
-    ]);
-    DURABLE_SUBTREES = deepFreeze({
-      /** Canonical knowledge (KTD35/KTD70). */
-      knowledge: "wiki",
-      /**
-       * The definition tree root is `.guild/` itself: `agents/`, `skills/` and `teams/`
-       * already sit there (KTD20).
-       */
-      definitionsRoot: "",
-      /**
-       * `definition("sources", id)` — the one logical name that maps elsewhere, onto
-       * the durable sources tree that already exists, so R59 does not invent a third home.
-       */
-      sources: path12.join("knowledge", "sources"),
-      initiatives: "initiatives",
-      /** KTD16 freeze. */
-      runs: "runs",
-      artifacts: "artifacts"
-    });
-  }
+var path12 = __toESM(require("node:path"));
+var NON_DURABLE_CLASSES = sealSet(
+  ["runtime", "cache", "managed-resource", "temporary"],
+  "NON_DURABLE_CLASSES"
+);
+var DURABLE_CLASSES = sealSet(
+  ["canonical", "durable-record"],
+  "DURABLE_CLASSES"
+);
+var KTD16_FROZEN_PREFIXES = deepFreeze([
+  "runs",
+  "analysis",
+  "recommendations"
+]);
+var DURABLE_SUBTREES = deepFreeze({
+  /** Canonical knowledge (KTD35/KTD70). */
+  knowledge: "wiki",
+  /**
+   * The definition tree root is `.guild/` itself: `agents/`, `skills/` and `teams/`
+   * already sit there (KTD20).
+   */
+  definitionsRoot: "",
+  /**
+   * `definition("sources", id)` — the one logical name that maps elsewhere, onto
+   * the durable sources tree that already exists, so R59 does not invent a third home.
+   */
+  sources: path12.join("knowledge", "sources"),
+  initiatives: "initiatives",
+  /** KTD16 freeze. */
+  runs: "runs",
+  artifacts: "artifacts"
 });
 
 // src/domains/state/storage-artifact-registry.ts
-var STORAGE_ARTIFACT_REGISTRY, BY_ID;
-var init_storage_artifact_registry = __esm({
-  "src/domains/state/storage-artifact-registry.ts"() {
-    init_kernel();
-    init_storage_policy();
-    STORAGE_ARTIFACT_REGISTRY = deepFreeze([
-      // ── canonical: the knowledge a user would mourn ───────────────────────────
-      {
-        id: "root-identity",
-        storageClass: "canonical",
-        scope: "project",
-        shareable: true,
-        rebuildable: false,
-        retention: { kind: "permanent" },
-        cleanupOwner: "never",
-        description: ".guild/guild.yaml \u2014 root identity (workspace or project)."
-      },
-      {
-        id: "project-config",
-        storageClass: "canonical",
-        scope: "project",
-        shareable: true,
-        rebuildable: false,
-        retention: { kind: "permanent" },
-        cleanupOwner: "never",
-        description: ".guild/config/{project,workspace}.json \u2014 policy-only durable config; host/model identity is refused here (KTD22)."
-      },
-      {
-        id: "wiki-page",
-        storageClass: "canonical",
-        scope: "project",
-        shareable: true,
-        rebuildable: false,
-        retention: { kind: "permanent" },
-        cleanupOwner: "never",
-        description: ".guild/wiki/** \u2014 synthesized knowledge, decisions, standards, glossary."
-      },
-      {
-        id: "definition-agent",
-        storageClass: "canonical",
-        scope: "project",
-        shareable: true,
-        rebuildable: false,
-        retention: { kind: "permanent" },
-        cleanupOwner: "never",
-        description: ".guild/agents/*.md \u2014 minted specialist profiles (KTD20); never overwritten by feedstock."
-      },
-      {
-        id: "definition-skill",
-        storageClass: "canonical",
-        scope: "project",
-        shareable: true,
-        rebuildable: false,
-        retention: { kind: "permanent" },
-        cleanupOwner: "never",
-        description: ".guild/skills/<name>/SKILL.md \u2014 project-authored skills (KTD20)."
-      },
-      {
-        id: "definition-source",
-        storageClass: "durable-record",
-        scope: "project",
-        shareable: false,
-        rebuildable: false,
-        retention: { kind: "permanent" },
-        cleanupOwner: "never",
-        description: 'definition("sources", <id>) \u2014 ingested blobs kept as durable sources (KTD47/R59). Replaces the retired raw sources tree.'
-      },
-      {
-        id: "initiative-record",
-        storageClass: "durable-record",
-        scope: "project",
-        shareable: true,
-        rebuildable: false,
-        retention: { kind: "until-archive" },
-        cleanupOwner: "initiative-archive",
-        description: ".guild/initiatives/{active,archived}/** \u2014 durable work records."
-      },
-      {
-        id: "run-record",
-        storageClass: "durable-record",
-        scope: "project",
-        shareable: true,
-        rebuildable: false,
-        retention: { kind: "until-archive" },
-        cleanupOwner: "initiative-archive",
-        description: ".guild/runs/<run-id>/** \u2014 the KTD16 frozen run record the benchmark reads (logs/v1.4-events.jsonl)."
-      },
-      {
-        id: "analysis-artifact",
-        storageClass: "durable-record",
-        scope: "project",
-        shareable: true,
-        rebuildable: true,
-        retention: { kind: "until-archive" },
-        cleanupOwner: "initiative-archive",
-        description: ".guild/analysis/** and .guild/recommendations/** \u2014 KTD16 producer outputs."
-      },
-      // ── runtime: needed while something runs, not truth afterwards ────────────
-      {
-        id: "layout-journal",
-        storageClass: "runtime",
-        scope: "local",
-        shareable: false,
-        rebuildable: false,
-        retention: { kind: "ttl", ttl_hours: 24 * 30 },
-        cleanupOwner: "cache-gc",
-        description: "<state>/roots/<root-id>/journal/** \u2014 the layout-upgrade journal, deliberately OUTSIDE .guild (KTD23; T07 writes it)."
-      },
-      {
-        id: "evolve-compact-history",
-        storageClass: "runtime",
-        scope: "local",
-        shareable: false,
-        rebuildable: false,
-        retention: { kind: "ttl", ttl_hours: 24 * 90 },
-        cleanupOwner: "cache-gc",
-        description: "<state>/roots/<root-id>/evolve-history/<key>.json \u2014 guild.evolve_history.v1: the inverse span + before/after hash of each applied evolve delta. Replaces the retired per-version snapshot tree (KTD48/R60); NOT run-scoped, because rollback must work in a later session."
-      },
-      {
-        id: "run-lease",
-        storageClass: "runtime",
-        scope: "local",
-        shareable: false,
-        rebuildable: false,
-        retention: { kind: "run-scoped" },
-        cleanupOwner: "run-close",
-        description: "<state>/roots/<root-id>/runs/<run-id>/** \u2014 leases and live execution state."
-      },
-      // ── cache: derived, rebuildable, off the repo ─────────────────────────────
-      {
-        id: "index-sqlite",
-        storageClass: "cache",
-        scope: "local",
-        shareable: false,
-        rebuildable: true,
-        retention: { kind: "ttl", ttl_hours: 24 * 30 },
-        cleanupOwner: "cache-gc",
-        description: "BM25/recall SQLite index \u2014 rebuildable from the wiki (was .guild/index.sqlite)."
-      },
-      {
-        id: "codebase-map",
-        storageClass: "cache",
-        scope: "local",
-        shareable: false,
-        rebuildable: true,
-        retention: { kind: "ttl", ttl_hours: 24 * 14 },
-        cleanupOwner: "cache-gc",
-        description: "CodebaseMap cheap-scan output \u2014 rebuildable by learn-map."
-      },
-      {
-        id: "knowledge-graph",
-        storageClass: "cache",
-        scope: "local",
-        shareable: false,
-        rebuildable: true,
-        retention: { kind: "ttl", ttl_hours: 24 * 30 },
-        cleanupOwner: "cache-gc",
-        description: "KnowledgeGraph + knowledge-links recall projection \u2014 rebuildable by learn-graph."
-      },
-      {
-        id: "model-catalog",
-        storageClass: "cache",
-        scope: "local",
-        shareable: false,
-        rebuildable: true,
-        retention: { kind: "ttl", ttl_hours: 24 * 7 },
-        cleanupOwner: "cache-gc",
-        description: "Provider/model catalog \u2014 refetched on miss; never durable truth (KTD22)."
-      },
-      // ── managed resources: things with an owner and a reaper ──────────────────
-      {
-        id: "lane-worktree",
-        storageClass: "managed-resource",
-        scope: "local",
-        shareable: false,
-        rebuildable: true,
-        retention: { kind: "run-scoped" },
-        cleanupOwner: "resource-reaper",
-        description: "<worktrees>/<root-id>/<run-id>/<lane-id> \u2014 managed lane worktree; dirty trees are preserved."
-      },
-      // ── temporary: scratch, deleted on close ──────────────────────────────────
-      {
-        id: "run-scratch",
-        storageClass: "temporary",
-        scope: "local",
-        shareable: false,
-        rebuildable: true,
-        retention: { kind: "run-scoped" },
-        cleanupOwner: "run-close",
-        description: "temporary(<run-id>) \u2014 research/experiment working files (KTD34/R51). Never a durable tree; deleted by closeRun."
-      },
-      {
-        id: "session-scratch",
-        storageClass: "temporary",
-        scope: "local",
-        shareable: false,
-        rebuildable: true,
-        retention: { kind: "ttl", ttl_hours: 24 },
-        cleanupOwner: "scratch-janitor",
-        description: "temporary() with no run \u2014 swept by the 24h janitor after a crash or reboot."
-      }
-    ]);
-    BY_ID = new Map(STORAGE_ARTIFACT_REGISTRY.map((p) => [p.id, p]));
+var STORAGE_ARTIFACT_REGISTRY = deepFreeze([
+  // ── canonical: the knowledge a user would mourn ───────────────────────────
+  {
+    id: "root-identity",
+    storageClass: "canonical",
+    scope: "project",
+    shareable: true,
+    rebuildable: false,
+    retention: { kind: "permanent" },
+    cleanupOwner: "never",
+    description: ".guild/guild.yaml \u2014 root identity (workspace or project)."
+  },
+  {
+    id: "project-config",
+    storageClass: "canonical",
+    scope: "project",
+    shareable: true,
+    rebuildable: false,
+    retention: { kind: "permanent" },
+    cleanupOwner: "never",
+    description: ".guild/config/{project,workspace}.json \u2014 policy-only durable config; host/model identity is refused here (KTD22)."
+  },
+  {
+    id: "wiki-page",
+    storageClass: "canonical",
+    scope: "project",
+    shareable: true,
+    rebuildable: false,
+    retention: { kind: "permanent" },
+    cleanupOwner: "never",
+    description: ".guild/wiki/** \u2014 synthesized knowledge, decisions, standards, glossary."
+  },
+  {
+    id: "definition-agent",
+    storageClass: "canonical",
+    scope: "project",
+    shareable: true,
+    rebuildable: false,
+    retention: { kind: "permanent" },
+    cleanupOwner: "never",
+    description: ".guild/agents/*.md \u2014 minted specialist profiles (KTD20); never overwritten by feedstock."
+  },
+  {
+    id: "definition-skill",
+    storageClass: "canonical",
+    scope: "project",
+    shareable: true,
+    rebuildable: false,
+    retention: { kind: "permanent" },
+    cleanupOwner: "never",
+    description: ".guild/skills/<name>/SKILL.md \u2014 project-authored skills (KTD20)."
+  },
+  {
+    id: "definition-source",
+    storageClass: "durable-record",
+    scope: "project",
+    shareable: false,
+    rebuildable: false,
+    retention: { kind: "permanent" },
+    cleanupOwner: "never",
+    description: 'definition("sources", <id>) \u2014 ingested blobs kept as durable sources (KTD47/R59). Replaces the retired raw sources tree.'
+  },
+  {
+    id: "initiative-record",
+    storageClass: "durable-record",
+    scope: "project",
+    shareable: true,
+    rebuildable: false,
+    retention: { kind: "until-archive" },
+    cleanupOwner: "initiative-archive",
+    description: ".guild/initiatives/{active,archived}/** \u2014 durable work records."
+  },
+  {
+    id: "run-record",
+    storageClass: "durable-record",
+    scope: "project",
+    shareable: true,
+    rebuildable: false,
+    retention: { kind: "until-archive" },
+    cleanupOwner: "initiative-archive",
+    description: ".guild/runs/<run-id>/** \u2014 the KTD16 frozen run record the benchmark reads (logs/v1.4-events.jsonl)."
+  },
+  {
+    id: "analysis-artifact",
+    storageClass: "durable-record",
+    scope: "project",
+    shareable: true,
+    rebuildable: true,
+    retention: { kind: "until-archive" },
+    cleanupOwner: "initiative-archive",
+    description: ".guild/analysis/** and .guild/recommendations/** \u2014 KTD16 producer outputs."
+  },
+  // ── runtime: needed while something runs, not truth afterwards ────────────
+  {
+    id: "layout-journal",
+    storageClass: "runtime",
+    scope: "local",
+    shareable: false,
+    rebuildable: false,
+    retention: { kind: "ttl", ttl_hours: 24 * 30 },
+    cleanupOwner: "cache-gc",
+    description: "<state>/roots/<root-id>/journal/** \u2014 the layout-upgrade journal, deliberately OUTSIDE .guild (KTD23; T07 writes it)."
+  },
+  {
+    id: "evolve-compact-history",
+    storageClass: "runtime",
+    scope: "local",
+    shareable: false,
+    rebuildable: false,
+    retention: { kind: "ttl", ttl_hours: 24 * 90 },
+    cleanupOwner: "cache-gc",
+    description: "<state>/roots/<root-id>/evolve-history/<key>.json \u2014 guild.evolve_history.v1: the inverse span + before/after hash of each applied evolve delta. Replaces the retired per-version snapshot tree (KTD48/R60); NOT run-scoped, because rollback must work in a later session."
+  },
+  {
+    id: "run-lease",
+    storageClass: "runtime",
+    scope: "local",
+    shareable: false,
+    rebuildable: false,
+    retention: { kind: "run-scoped" },
+    cleanupOwner: "run-close",
+    description: "<state>/roots/<root-id>/runs/<run-id>/** \u2014 leases and live execution state."
+  },
+  // ── cache: derived, rebuildable, off the repo ─────────────────────────────
+  {
+    id: "index-sqlite",
+    storageClass: "cache",
+    scope: "local",
+    shareable: false,
+    rebuildable: true,
+    retention: { kind: "ttl", ttl_hours: 24 * 30 },
+    cleanupOwner: "cache-gc",
+    description: "BM25/recall SQLite index \u2014 rebuildable from the wiki (was .guild/index.sqlite)."
+  },
+  {
+    id: "codebase-map",
+    storageClass: "cache",
+    scope: "local",
+    shareable: false,
+    rebuildable: true,
+    retention: { kind: "ttl", ttl_hours: 24 * 14 },
+    cleanupOwner: "cache-gc",
+    description: "CodebaseMap cheap-scan output \u2014 rebuildable by learn-map."
+  },
+  {
+    id: "knowledge-graph",
+    storageClass: "cache",
+    scope: "local",
+    shareable: false,
+    rebuildable: true,
+    retention: { kind: "ttl", ttl_hours: 24 * 30 },
+    cleanupOwner: "cache-gc",
+    description: "KnowledgeGraph + knowledge-links recall projection \u2014 rebuildable by learn-graph."
+  },
+  {
+    id: "model-catalog",
+    storageClass: "cache",
+    scope: "local",
+    shareable: false,
+    rebuildable: true,
+    retention: { kind: "ttl", ttl_hours: 24 * 7 },
+    cleanupOwner: "cache-gc",
+    description: "Provider/model catalog \u2014 refetched on miss; never durable truth (KTD22)."
+  },
+  // ── managed resources: things with an owner and a reaper ──────────────────
+  {
+    id: "lane-worktree",
+    storageClass: "managed-resource",
+    scope: "local",
+    shareable: false,
+    rebuildable: true,
+    retention: { kind: "run-scoped" },
+    cleanupOwner: "resource-reaper",
+    description: "<worktrees>/<root-id>/<run-id>/<lane-id> \u2014 managed lane worktree; dirty trees are preserved."
+  },
+  // ── temporary: scratch, deleted on close ──────────────────────────────────
+  {
+    id: "run-scratch",
+    storageClass: "temporary",
+    scope: "local",
+    shareable: false,
+    rebuildable: true,
+    retention: { kind: "run-scoped" },
+    cleanupOwner: "run-close",
+    description: "temporary(<run-id>) \u2014 research/experiment working files (KTD34/R51). Never a durable tree; deleted by closeRun."
+  },
+  {
+    id: "session-scratch",
+    storageClass: "temporary",
+    scope: "local",
+    shareable: false,
+    rebuildable: true,
+    retention: { kind: "ttl", ttl_hours: 24 },
+    cleanupOwner: "scratch-janitor",
+    description: "temporary() with no run \u2014 swept by the 24h janitor after a crash or reboot."
   }
-});
+]);
+var BY_ID = new Map(STORAGE_ARTIFACT_REGISTRY.map((p) => [p.id, p]));
 
 // src/domains/state/storage-fs.ts
+var fs10 = __toESM(require("node:fs"));
+var path13 = __toESM(require("node:path"));
 function lstatSafe(p) {
   try {
     return fs10.lstatSync(p);
@@ -5295,42 +5389,15 @@ function removeContainedTree(abs, root) {
   fs10.rmSync(real, { recursive: true, force: true });
   return real;
 }
-var fs10, path13;
-var init_storage_fs = __esm({
-  "src/domains/state/storage-fs.ts"() {
-    fs10 = __toESM(require("node:fs"));
-    path13 = __toESM(require("node:path"));
-  }
-});
 
 // src/domains/state/storage-layout.ts
-var POLICY_CONFIG_FILES;
-var init_storage_layout = __esm({
-  "src/domains/state/storage-layout.ts"() {
-    init_guild_discovery();
-    init_storage_fs();
-    init_storage_policy();
-    init_storage_roots();
-    POLICY_CONFIG_FILES = Object.freeze({
-      project: "config/project.json",
-      workspace: "config/workspace.json"
-    });
-  }
-});
-
-// src/domains/state/storage-janitor.ts
-var init_storage_janitor = __esm({
-  "src/domains/state/storage-janitor.ts"() {
-    init_storage_layout();
-    init_storage_fs();
-  }
+var POLICY_CONFIG_FILES = Object.freeze({
+  project: "config/project.json",
+  workspace: "config/workspace.json"
 });
 
 // src/domains/state/upgrade-glossary.ts
-var GLOSSARY_FEEDSTOCK;
-var init_upgrade_glossary = __esm({
-  "src/domains/state/upgrade-glossary.ts"() {
-    GLOSSARY_FEEDSTOCK = `---
+var GLOSSARY_FEEDSTOCK = `---
 schema_version: guild.glossary.v1
 title: Glossary
 description: Guild operating terms. Add this project's own terms below; Guild never overwrites this file.
@@ -5377,18 +5444,25 @@ prefix (KTD70).
 
 Add yours here. This file is yours once it exists.
 `;
-  }
-});
 
 // src/domains/state/upgrade-journal.ts
-var LOCK_STALE_MS;
-var init_upgrade_journal = __esm({
-  "src/domains/state/upgrade-journal.ts"() {
-    LOCK_STALE_MS = 15 * 60 * 1e3;
-  }
-});
+var LOCK_STALE_MS = 15 * 60 * 1e3;
 
 // src/domains/state/upgrade-steps.ts
+var crypto2 = __toESM(require("node:crypto"));
+var fs11 = __toESM(require("node:fs"));
+var path14 = __toESM(require("node:path"));
+var KNOWLEDGE_PREFIX = `.guild/${DURABLE_SUBTREES.knowledge}`;
+var DERIVED_PATTERNS = Object.freeze([
+  /^indexes(\/|$)/,
+  /^index\.sqlite$/,
+  /^hosts(\/|$)/,
+  /^current-run-id$/,
+  /^agents\/registry\.yaml$/,
+  /^skills\/registry\.yaml$/,
+  /^bus\/\.lock$/,
+  /(^|\/)\.tmp-[^/]+$/
+]);
 function classifyPath(relToGuild) {
   const rel2 = relToGuild.split(path14.sep).join("/");
   return DERIVED_PATTERNS.some((re) => re.test(rel2)) ? "derived" : "durable";
@@ -5456,6 +5530,119 @@ function flatten(value, prefix = "", out = {}) {
   }
   return out;
 }
+var v1Content = {
+  id: "v1-content",
+  cls: "durable",
+  source: "proposal \xA721.7",
+  affects: [".guild"],
+  apply(ctx) {
+    if (!ctx.v1) {
+      return {
+        status: "skipped",
+        detail: "no v1 converter provided by this entry point; legacy content left untouched",
+        paths: []
+      };
+    }
+    const r = ctx.v1({ root: ctx.root, dryRun: ctx.dryRun });
+    const complaints = [r.error, ...r.warnings ?? []].filter((m) => typeof m === "string" && m !== "");
+    if (complaints.length > 0 || r.action === "error" || r.action === "corrupt-blocked") {
+      return {
+        status: "failed",
+        detail: `v1 converter reported ${complaints.length || 1} problem(s): ${complaints.join("; ") || r.action}`,
+        paths: []
+      };
+    }
+    if (r.classification === "v2" || r.classification === "none" || r.action === "v2-noop" || r.action === "none") {
+      return { status: "skipped", detail: `v1 converter: ${r.classification}/${r.action} \u2014 nothing to convert`, paths: [] };
+    }
+    return {
+      status: "completed",
+      detail: `v1 converter: ${r.classification}/${r.action}, ${r.changed} artifact(s)`,
+      paths: [".guild"]
+    };
+  }
+};
+var settingsPolicySplit = {
+  id: "settings-policy-split",
+  cls: "durable",
+  source: "proposal \xA721.6",
+  affects: [".guild/settings.json", ".guild/config"],
+  apply(ctx) {
+    const legacy = readIfFile(path14.join(ctx.guildDir, "settings.json"));
+    if (legacy === null) return { status: "skipped", detail: "no .guild/settings.json to split", paths: [] };
+    let parsed;
+    try {
+      parsed = JSON.parse(legacy);
+    } catch {
+      return { status: "skipped", detail: ".guild/settings.json is not parseable JSON \u2014 preserved, not split", paths: [] };
+    }
+    if (!ctx.policy) {
+      return { status: "skipped", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
+    }
+    const cfg = ctx.policy;
+    const flat = flatten(parsed);
+    const policy = {};
+    let dropped = 0;
+    for (const [key, value] of Object.entries(flat)) {
+      const canonical = cfg.canonicalPolicyKey(key);
+      if (!cfg.isPolicyKey(canonical)) {
+        dropped += 1;
+        continue;
+      }
+      if (cfg.findHostIdentity(canonical, value) !== null) {
+        dropped += 1;
+        continue;
+      }
+      setByPath(policy, canonical, value);
+    }
+    const targets = [];
+    if (ctx.storage.project) targets.push(ctx.storage.project.config());
+    if (ctx.storage.workspace) targets.push(ctx.storage.workspace.config());
+    if (targets.length === 0) return { status: "skipped", detail: "root owns no durable config scope", paths: [] };
+    const written = [];
+    for (const target of targets) {
+      const existing = readIfFile(target);
+      let base = {};
+      if (existing !== null) {
+        try {
+          const value = JSON.parse(existing);
+          if (value === null || typeof value !== "object" || Array.isArray(value)) {
+            throw new Error("top level is not a JSON object");
+          }
+          base = value;
+        } catch (e) {
+          const where = rel(ctx, target);
+          return {
+            status: "blocked_confirm",
+            detail: `${where} is not parseable JSON (${e.message}) \u2014 left byte-identical, not replaced`,
+            paths: [where],
+            question: `settings-policy-split cannot read ${where}: ${e.message}. Fix or remove that file, then re-run the upgrade. Replace it with a fresh policy file?`
+          };
+        }
+      }
+      let added = 0;
+      for (const [key, value] of Object.entries(flatten(policy))) {
+        if (getByPath(base, key) !== void 0) continue;
+        setByPath(base, key, value);
+        added += 1;
+      }
+      if (added === 0) continue;
+      writeFile(ctx, target, `${JSON.stringify(base, null, 2)}
+`);
+      written.push(rel(ctx, target));
+    }
+    if (written.length === 0) {
+      return { status: "skipped", detail: "policy keys already present in every scoped config file", paths: [] };
+    }
+    return {
+      status: "completed",
+      detail: `split ${Object.keys(flatten(policy)).length} policy key(s) into ${written.join(" + ")}` + (dropped > 0 ? `; ${dropped} non-policy/inventory key(s) not transferred (KTD22)` : "") + (written.length === 2 ? "; hybrid root \u2014 the legacy dual-role file was split into both scopes" : ""),
+      paths: written
+    };
+  }
+};
+var PINNED_KEYS = /^(host|host_id|host_family|model|model_id|model_name|models)$/;
+var TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}([Tt ].*)?$/;
 function isPlainScalar(v) {
   return typeof v === "string" || typeof v === "number" || typeof v === "boolean";
 }
@@ -5510,6 +5697,8 @@ function sameData(a, b) {
   }
   return a === b;
 }
+var BLOCK_SCALAR = /:\s*[|>]([0-9]?)[+-]?\s*(#.*)?$/;
+var MAP_ENTRY = /^(\s*)(?:(-)(\s+))?("[^"]*"|'[^']*'|[^\s#][^:]*?):(?:(\s+)(.*))?$/;
 function splitInlineValue(rawValue) {
   if (rawValue.trimStart().startsWith("#")) return { value: "", comment: rawValue.trim() };
   const quote = /^["']/.exec(rawValue.trimStart());
@@ -5738,6 +5927,116 @@ function stripHostIdentityFromYaml(text, cfg, commentsOf = commentsIn) {
   if (lost.length > 0) return { next: text, removed: [], lostComments: lost };
   return { next, removed };
 }
+var ktd22Strip = {
+  id: "ktd22-host-identity-strip",
+  cls: "durable",
+  source: "KTD22 / R38",
+  affects: [".guild/initiatives", ".guild/team", ".guild/teams"],
+  apply(ctx) {
+    if (!ctx.policy) {
+      return { status: "skipped", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
+    }
+    const cfg = ctx.policy;
+    const roots = ["initiatives", "team", "teams"].map((d) => path14.join(ctx.guildDir, d));
+    const touched = [];
+    let removedTotal = 0;
+    for (const dir of roots) {
+      if (!isContainedRealDir(dir, ctx.guildDir)) continue;
+      for (const abs of filesUnder(dir)) {
+        if (!/\.ya?ml$/.test(abs)) continue;
+        const text = readIfFile(abs);
+        if (text === null) continue;
+        const { next, removed, parseError, blockReason, blockLine, lostComments } = stripHostIdentityFromYaml(text, cfg);
+        if (parseError !== void 0) {
+          const where = rel(ctx, abs);
+          return {
+            status: "blocked_confirm",
+            detail: `${where} is not parseable YAML (${parseError}) \u2014 left byte-identical, not rewritten`,
+            paths: [where],
+            question: `ktd22-host-identity-strip cannot parse ${where}: ${parseError}. Fix that file, then re-run the upgrade. Skip it and continue?`
+          };
+        }
+        if (lostComments !== void 0 && lostComments.length > 0) {
+          return {
+            status: "failed",
+            detail: `${rel(ctx, abs)}: the strip would drop ${lostComments.length} comment(s) (${lostComments.join(" / ")}) \u2014 nothing was written`,
+            paths: [rel(ctx, abs)]
+          };
+        }
+        if (blockReason !== void 0) {
+          const where = blockLine === void 0 ? rel(ctx, abs) : `${rel(ctx, abs)}:${blockLine}`;
+          return {
+            status: "blocked_confirm",
+            detail: `${where} carries host/model identity this step cannot remove by line (${blockReason}) \u2014 left byte-identical`,
+            paths: [rel(ctx, abs)],
+            question: `ktd22-host-identity-strip cannot safely edit ${where}: ${blockReason}. Remove the host/model identity there by hand, then re-run the upgrade. Skip it and continue?`
+          };
+        }
+        if (removed.length === 0) continue;
+        writeFile(ctx, abs, next);
+        touched.push(rel(ctx, abs));
+        removedTotal += removed.length;
+      }
+    }
+    if (touched.length === 0) {
+      return { status: "skipped", detail: "no host or model identity pinned in durable initiative/team files", paths: [] };
+    }
+    return {
+      status: "completed",
+      detail: `stripped ${removedTotal} host/model pin(s) from ${touched.length} durable file(s)`,
+      paths: touched
+    };
+  }
+};
+var CACHE_TARGETS = Object.freeze(["indexes", "index.sqlite", "hosts"]);
+var cachesOut = {
+  id: "caches-out",
+  cls: "safe-local",
+  source: "proposal \xA721.11",
+  affects: [],
+  apply(ctx) {
+    const removed = [];
+    for (const name of CACHE_TARGETS) {
+      const abs = path14.join(ctx.guildDir, name);
+      const st = lstatSafe(abs);
+      if (!st) continue;
+      if (classifyPath(name) !== "derived") {
+        return {
+          status: "blocked_confirm",
+          detail: `refusing to remove non-derived path .guild/${name}`,
+          paths: [rel(ctx, abs)],
+          question: `caches-out wants to delete .guild/${name}, which is not classified derived. Delete it?`
+        };
+      }
+      if (ctx.dryRun) {
+        removed.push(rel(ctx, abs));
+        continue;
+      }
+      if (st.isDirectory()) {
+        if (removeContainedTree(abs, ctx.guildDir) !== null) removed.push(rel(ctx, abs));
+      } else {
+        fs11.rmSync(abs, { force: true });
+        removed.push(rel(ctx, abs));
+      }
+    }
+    if (removed.length === 0) return { status: "skipped", detail: "no derived cache left under .guild", paths: [] };
+    return {
+      status: "completed",
+      detail: `removed ${removed.length} derived cache path(s); V2 rebuilds them on the platform cache root`,
+      paths: removed
+    };
+  }
+};
+var TERMINAL_STATUSES = Object.freeze([
+  "closed",
+  "complete",
+  "completed",
+  "done",
+  "failed",
+  "aborted",
+  "cancelled",
+  "canceled"
+]);
 function terminalRunStatus(runYaml) {
   let doc;
   try {
@@ -5751,486 +6050,214 @@ function terminalRunStatus(runYaml) {
   const status = value.trim().toLowerCase();
   return TERMINAL_STATUSES.includes(status) ? status : null;
 }
-var crypto2, fs11, path14, KNOWLEDGE_PREFIX, DERIVED_PATTERNS, v1Content, settingsPolicySplit, PINNED_KEYS, TIMESTAMP_RE, BLOCK_SCALAR, MAP_ENTRY, ktd22Strip, CACHE_TARGETS, cachesOut, TERMINAL_STATUSES, closedRunReceipts, currentRunIdRetire, LEGACY_VERSION_TREE, skillVersionsDelete, AUTHORED_REGISTRIES, DERIVED_REGISTRIES, registryYamlRetire, glossaryCreate, UPGRADE_STEPS, UPGRADE_STEP_IDS;
-var init_upgrade_steps = __esm({
-  "src/domains/state/upgrade-steps.ts"() {
-    crypto2 = __toESM(require("node:crypto"));
-    fs11 = __toESM(require("node:fs"));
-    path14 = __toESM(require("node:path"));
-    init_upgrade_glossary();
-    init_storage_fs();
-    init_storage_policy();
-    init_kernel();
-    KNOWLEDGE_PREFIX = `.guild/${DURABLE_SUBTREES.knowledge}`;
-    DERIVED_PATTERNS = Object.freeze([
-      /^indexes(\/|$)/,
-      /^index\.sqlite$/,
-      /^hosts(\/|$)/,
-      /^current-run-id$/,
-      /^agents\/registry\.yaml$/,
-      /^skills\/registry\.yaml$/,
-      /^bus\/\.lock$/,
-      /(^|\/)\.tmp-[^/]+$/
-    ]);
-    v1Content = {
-      id: "v1-content",
-      cls: "durable",
-      source: "proposal \xA721.7",
-      affects: [".guild"],
-      apply(ctx) {
-        if (!ctx.v1) {
-          return {
-            status: "skipped",
-            detail: "no v1 converter provided by this entry point; legacy content left untouched",
-            paths: []
-          };
-        }
-        const r = ctx.v1({ root: ctx.root, dryRun: ctx.dryRun });
-        const complaints = [r.error, ...r.warnings ?? []].filter((m) => typeof m === "string" && m !== "");
-        if (complaints.length > 0 || r.action === "error" || r.action === "corrupt-blocked") {
-          return {
-            status: "failed",
-            detail: `v1 converter reported ${complaints.length || 1} problem(s): ${complaints.join("; ") || r.action}`,
-            paths: []
-          };
-        }
-        if (r.classification === "v2" || r.classification === "none" || r.action === "v2-noop" || r.action === "none") {
-          return { status: "skipped", detail: `v1 converter: ${r.classification}/${r.action} \u2014 nothing to convert`, paths: [] };
-        }
-        return {
-          status: "completed",
-          detail: `v1 converter: ${r.classification}/${r.action}, ${r.changed} artifact(s)`,
-          paths: [".guild"]
-        };
+var closedRunReceipts = {
+  id: "closed-run-receipts",
+  cls: "durable",
+  source: "proposal \xA721.10",
+  affects: [".guild/runs"],
+  apply(ctx) {
+    const runsDir = path14.join(ctx.guildDir, "runs");
+    if (!isContainedRealDir(runsDir, ctx.guildDir)) {
+      return { status: "skipped", detail: "no .guild/runs tree", paths: [] };
+    }
+    const written = [];
+    let open = 0;
+    for (const name of readdirSafe(runsDir)) {
+      if (name.startsWith("_")) continue;
+      const runDir = path14.join(runsDir, name);
+      if (!isContainedRealDir(runDir, ctx.guildDir)) continue;
+      const receipt = path14.join(runDir, "receipt.json");
+      if (lstatSafe(receipt)) continue;
+      const runYaml = readIfFile(path14.join(runDir, "run.yaml"));
+      if (runYaml === null) continue;
+      const status = terminalRunStatus(runYaml);
+      if (status === null) {
+        open += 1;
+        continue;
       }
-    };
-    settingsPolicySplit = {
-      id: "settings-policy-split",
-      cls: "durable",
-      source: "proposal \xA721.6",
-      affects: [".guild/settings.json", ".guild/config"],
-      apply(ctx) {
-        const legacy = readIfFile(path14.join(ctx.guildDir, "settings.json"));
-        if (legacy === null) return { status: "skipped", detail: "no .guild/settings.json to split", paths: [] };
-        let parsed;
-        try {
-          parsed = JSON.parse(legacy);
-        } catch {
-          return { status: "skipped", detail: ".guild/settings.json is not parseable JSON \u2014 preserved, not split", paths: [] };
-        }
-        if (!ctx.policy) {
-          return { status: "skipped", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
-        }
-        const cfg = ctx.policy;
-        const flat = flatten(parsed);
-        const policy = {};
-        let dropped = 0;
-        for (const [key, value] of Object.entries(flat)) {
-          const canonical = cfg.canonicalPolicyKey(key);
-          if (!cfg.isPolicyKey(canonical)) {
-            dropped += 1;
-            continue;
-          }
-          if (cfg.findHostIdentity(canonical, value) !== null) {
-            dropped += 1;
-            continue;
-          }
-          setByPath(policy, canonical, value);
-        }
-        const targets = [];
-        if (ctx.storage.project) targets.push(ctx.storage.project.config());
-        if (ctx.storage.workspace) targets.push(ctx.storage.workspace.config());
-        if (targets.length === 0) return { status: "skipped", detail: "root owns no durable config scope", paths: [] };
-        const written = [];
-        for (const target of targets) {
-          const existing = readIfFile(target);
-          let base = {};
-          if (existing !== null) {
-            try {
-              const value = JSON.parse(existing);
-              if (value === null || typeof value !== "object" || Array.isArray(value)) {
-                throw new Error("top level is not a JSON object");
-              }
-              base = value;
-            } catch (e) {
-              const where = rel(ctx, target);
-              return {
-                status: "blocked_confirm",
-                detail: `${where} is not parseable JSON (${e.message}) \u2014 left byte-identical, not replaced`,
-                paths: [where],
-                question: `settings-policy-split cannot read ${where}: ${e.message}. Fix or remove that file, then re-run the upgrade. Replace it with a fresh policy file?`
-              };
-            }
-          }
-          let added = 0;
-          for (const [key, value] of Object.entries(flatten(policy))) {
-            if (getByPath(base, key) !== void 0) continue;
-            setByPath(base, key, value);
-            added += 1;
-          }
-          if (added === 0) continue;
-          writeFile(ctx, target, `${JSON.stringify(base, null, 2)}
-`);
-          written.push(rel(ctx, target));
-        }
-        if (written.length === 0) {
-          return { status: "skipped", detail: "policy keys already present in every scoped config file", paths: [] };
-        }
-        return {
-          status: "completed",
-          detail: `split ${Object.keys(flatten(policy)).length} policy key(s) into ${written.join(" + ")}` + (dropped > 0 ? `; ${dropped} non-policy/inventory key(s) not transferred (KTD22)` : "") + (written.length === 2 ? "; hybrid root \u2014 the legacy dual-role file was split into both scopes" : ""),
-          paths: written
-        };
-      }
-    };
-    PINNED_KEYS = /^(host|host_id|host_family|model|model_id|model_name|models)$/;
-    TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}([Tt ].*)?$/;
-    BLOCK_SCALAR = /:\s*[|>]([0-9]?)[+-]?\s*(#.*)?$/;
-    MAP_ENTRY = /^(\s*)(?:(-)(\s+))?("[^"]*"|'[^']*'|[^\s#][^:]*?):(?:(\s+)(.*))?$/;
-    ktd22Strip = {
-      id: "ktd22-host-identity-strip",
-      cls: "durable",
-      source: "KTD22 / R38",
-      affects: [".guild/initiatives", ".guild/team", ".guild/teams"],
-      apply(ctx) {
-        if (!ctx.policy) {
-          return { status: "skipped", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
-        }
-        const cfg = ctx.policy;
-        const roots = ["initiatives", "team", "teams"].map((d) => path14.join(ctx.guildDir, d));
-        const touched = [];
-        let removedTotal = 0;
-        for (const dir of roots) {
-          if (!isContainedRealDir(dir, ctx.guildDir)) continue;
-          for (const abs of filesUnder(dir)) {
-            if (!/\.ya?ml$/.test(abs)) continue;
-            const text = readIfFile(abs);
-            if (text === null) continue;
-            const { next, removed, parseError, blockReason, blockLine, lostComments } = stripHostIdentityFromYaml(text, cfg);
-            if (parseError !== void 0) {
-              const where = rel(ctx, abs);
-              return {
-                status: "blocked_confirm",
-                detail: `${where} is not parseable YAML (${parseError}) \u2014 left byte-identical, not rewritten`,
-                paths: [where],
-                question: `ktd22-host-identity-strip cannot parse ${where}: ${parseError}. Fix that file, then re-run the upgrade. Skip it and continue?`
-              };
-            }
-            if (lostComments !== void 0 && lostComments.length > 0) {
-              return {
-                status: "failed",
-                detail: `${rel(ctx, abs)}: the strip would drop ${lostComments.length} comment(s) (${lostComments.join(" / ")}) \u2014 nothing was written`,
-                paths: [rel(ctx, abs)]
-              };
-            }
-            if (blockReason !== void 0) {
-              const where = blockLine === void 0 ? rel(ctx, abs) : `${rel(ctx, abs)}:${blockLine}`;
-              return {
-                status: "blocked_confirm",
-                detail: `${where} carries host/model identity this step cannot remove by line (${blockReason}) \u2014 left byte-identical`,
-                paths: [rel(ctx, abs)],
-                question: `ktd22-host-identity-strip cannot safely edit ${where}: ${blockReason}. Remove the host/model identity there by hand, then re-run the upgrade. Skip it and continue?`
-              };
-            }
-            if (removed.length === 0) continue;
-            writeFile(ctx, abs, next);
-            touched.push(rel(ctx, abs));
-            removedTotal += removed.length;
-          }
-        }
-        if (touched.length === 0) {
-          return { status: "skipped", detail: "no host or model identity pinned in durable initiative/team files", paths: [] };
-        }
-        return {
-          status: "completed",
-          detail: `stripped ${removedTotal} host/model pin(s) from ${touched.length} durable file(s)`,
-          paths: touched
-        };
-      }
-    };
-    CACHE_TARGETS = Object.freeze(["indexes", "index.sqlite", "hosts"]);
-    cachesOut = {
-      id: "caches-out",
-      cls: "safe-local",
-      source: "proposal \xA721.11",
-      affects: [],
-      apply(ctx) {
-        const removed = [];
-        for (const name of CACHE_TARGETS) {
-          const abs = path14.join(ctx.guildDir, name);
-          const st = lstatSafe(abs);
-          if (!st) continue;
-          if (classifyPath(name) !== "derived") {
-            return {
-              status: "blocked_confirm",
-              detail: `refusing to remove non-derived path .guild/${name}`,
-              paths: [rel(ctx, abs)],
-              question: `caches-out wants to delete .guild/${name}, which is not classified derived. Delete it?`
-            };
-          }
-          if (ctx.dryRun) {
-            removed.push(rel(ctx, abs));
-            continue;
-          }
-          if (st.isDirectory()) {
-            if (removeContainedTree(abs, ctx.guildDir) !== null) removed.push(rel(ctx, abs));
-          } else {
-            fs11.rmSync(abs, { force: true });
-            removed.push(rel(ctx, abs));
-          }
-        }
-        if (removed.length === 0) return { status: "skipped", detail: "no derived cache left under .guild", paths: [] };
-        return {
-          status: "completed",
-          detail: `removed ${removed.length} derived cache path(s); V2 rebuilds them on the platform cache root`,
-          paths: removed
-        };
-      }
-    };
-    TERMINAL_STATUSES = Object.freeze([
-      "closed",
-      "complete",
-      "completed",
-      "done",
-      "failed",
-      "aborted",
-      "cancelled",
-      "canceled"
-    ]);
-    closedRunReceipts = {
-      id: "closed-run-receipts",
-      cls: "durable",
-      source: "proposal \xA721.10",
-      affects: [".guild/runs"],
-      apply(ctx) {
-        const runsDir = path14.join(ctx.guildDir, "runs");
-        if (!isContainedRealDir(runsDir, ctx.guildDir)) {
-          return { status: "skipped", detail: "no .guild/runs tree", paths: [] };
-        }
-        const written = [];
-        let open = 0;
-        for (const name of readdirSafe(runsDir)) {
-          if (name.startsWith("_")) continue;
-          const runDir = path14.join(runsDir, name);
-          if (!isContainedRealDir(runDir, ctx.guildDir)) continue;
-          const receipt = path14.join(runDir, "receipt.json");
-          if (lstatSafe(receipt)) continue;
-          const runYaml = readIfFile(path14.join(runDir, "run.yaml"));
-          if (runYaml === null) continue;
-          const status = terminalRunStatus(runYaml);
-          if (status === null) {
-            open += 1;
-            continue;
-          }
-          writeFile(
-            ctx,
-            receipt,
-            `${JSON.stringify(
-              {
-                schema_version: "guild.run_receipt.v1",
-                run_id: name,
-                status,
-                source: "layout-upgrade",
-                generated_at: ctx.now()
-              },
-              null,
-              2
-            )}
+      writeFile(
+        ctx,
+        receipt,
+        `${JSON.stringify(
+          {
+            schema_version: "guild.run_receipt.v1",
+            run_id: name,
+            status,
+            source: "layout-upgrade",
+            generated_at: ctx.now()
+          },
+          null,
+          2
+        )}
 `
-          );
-          written.push(rel(ctx, receipt));
-        }
-        if (written.length === 0) {
-          return {
-            status: "skipped",
-            detail: `every legacy run already has a receipt or is not terminal (${open} left open)`,
-            paths: []
-          };
-        }
-        return {
-          status: "completed",
-          detail: `wrote ${written.length} run receipt(s); ${open} non-terminal run(s) left untouched (never falsely closed)`,
-          paths: written
-        };
-      }
+      );
+      written.push(rel(ctx, receipt));
+    }
+    if (written.length === 0) {
+      return {
+        status: "skipped",
+        detail: `every legacy run already has a receipt or is not terminal (${open} left open)`,
+        paths: []
+      };
+    }
+    return {
+      status: "completed",
+      detail: `wrote ${written.length} run receipt(s); ${open} non-terminal run(s) left untouched (never falsely closed)`,
+      paths: written
     };
-    currentRunIdRetire = {
-      id: "current-run-id-retire",
-      cls: "safe-local",
-      source: "proposal \xA721.10",
-      affects: [],
-      apply(ctx) {
-        const abs = path14.join(ctx.guildDir, "current-run-id");
+  }
+};
+var currentRunIdRetire = {
+  id: "current-run-id-retire",
+  cls: "safe-local",
+  source: "proposal \xA721.10",
+  affects: [],
+  apply(ctx) {
+    const abs = path14.join(ctx.guildDir, "current-run-id");
+    const text = readIfFile(abs);
+    if (text === null) return { status: "skipped", detail: "no current-run-id sentinel", paths: [] };
+    const captured = text.trim();
+    if (classifyPath("current-run-id") !== "derived") {
+      return {
+        status: "blocked_confirm",
+        detail: "current-run-id is not classified derived",
+        paths: [rel(ctx, abs)],
+        question: "current-run-id-retire wants to delete .guild/current-run-id. Delete it?"
+      };
+    }
+    if (!ctx.dryRun) fs11.rmSync(abs, { force: true });
+    return {
+      status: "completed",
+      detail: `captured run binding "${captured}" and retired the singleton sentinel; V2 writers never recreate it`,
+      paths: [rel(ctx, abs)]
+    };
+  }
+};
+var LEGACY_VERSION_TREE = "skill-versions";
+var skillVersionsDelete = {
+  id: "skill-versions-delete",
+  cls: "safe-local",
+  source: "proposal \xA721.12 / R60",
+  affects: [],
+  apply(ctx) {
+    const dir = path14.join(ctx.guildDir, LEGACY_VERSION_TREE);
+    if (!isContainedRealDir(dir, ctx.guildDir)) {
+      return { status: "skipped", detail: `no leftover ${LEGACY_VERSION_TREE} tree`, paths: [] };
+    }
+    const snapshots = filesUnder(dir);
+    if (snapshots.length === 0) {
+      if (!ctx.dryRun) removeContainedTree(dir, ctx.guildDir);
+      return { status: "completed", detail: `removed the empty ${LEGACY_VERSION_TREE} tree`, paths: [rel(ctx, dir)] };
+    }
+    const live = /* @__PURE__ */ new Set();
+    const skillsDir = path14.join(ctx.guildDir, "skills");
+    if (isContainedRealDir(skillsDir, ctx.guildDir)) {
+      for (const abs of filesUnder(skillsDir)) {
         const text = readIfFile(abs);
-        if (text === null) return { status: "skipped", detail: "no current-run-id sentinel", paths: [] };
-        const captured = text.trim();
-        if (classifyPath("current-run-id") !== "derived") {
-          return {
-            status: "blocked_confirm",
-            detail: "current-run-id is not classified derived",
-            paths: [rel(ctx, abs)],
-            question: "current-run-id-retire wants to delete .guild/current-run-id. Delete it?"
-          };
-        }
-        if (!ctx.dryRun) fs11.rmSync(abs, { force: true });
-        return {
-          status: "completed",
-          detail: `captured run binding "${captured}" and retired the singleton sentinel; V2 writers never recreate it`,
-          paths: [rel(ctx, abs)]
-        };
+        if (text !== null) live.add(sha256(text));
       }
+    }
+    const unique = snapshots.filter((abs) => {
+      const text = readIfFile(abs);
+      return text === null || !live.has(sha256(text));
+    });
+    if (unique.length > 0) {
+      return {
+        status: "blocked_confirm",
+        detail: `${unique.length} legacy snapshot(s) carry content no live skill body has`,
+        paths: unique.slice(0, 10).map((abs) => rel(ctx, abs)),
+        question: `skill-versions-delete found ${unique.length} snapshot(s) under .guild/${LEGACY_VERSION_TREE}/ whose content is NOT in any live .guild/skills/** body, so they are not derived. Review them and either keep the tree or remove it yourself, then re-run \`config migrate --mode=migrate\`.`
+      };
+    }
+    if (!ctx.dryRun) removeContainedTree(dir, ctx.guildDir);
+    return {
+      status: "completed",
+      detail: `removed ${snapshots.length} redundant snapshot(s); every one matched a live skill body`,
+      paths: [rel(ctx, dir)]
     };
-    LEGACY_VERSION_TREE = "skill-versions";
-    skillVersionsDelete = {
-      id: "skill-versions-delete",
-      cls: "safe-local",
-      source: "proposal \xA721.12 / R60",
-      affects: [],
-      apply(ctx) {
-        const dir = path14.join(ctx.guildDir, LEGACY_VERSION_TREE);
-        if (!isContainedRealDir(dir, ctx.guildDir)) {
-          return { status: "skipped", detail: `no leftover ${LEGACY_VERSION_TREE} tree`, paths: [] };
-        }
-        const snapshots = filesUnder(dir);
-        if (snapshots.length === 0) {
-          if (!ctx.dryRun) removeContainedTree(dir, ctx.guildDir);
-          return { status: "completed", detail: `removed the empty ${LEGACY_VERSION_TREE} tree`, paths: [rel(ctx, dir)] };
-        }
-        const live = /* @__PURE__ */ new Set();
-        const skillsDir = path14.join(ctx.guildDir, "skills");
-        if (isContainedRealDir(skillsDir, ctx.guildDir)) {
-          for (const abs of filesUnder(skillsDir)) {
-            const text = readIfFile(abs);
-            if (text !== null) live.add(sha256(text));
-          }
-        }
-        const unique = snapshots.filter((abs) => {
-          const text = readIfFile(abs);
-          return text === null || !live.has(sha256(text));
-        });
-        if (unique.length > 0) {
-          return {
-            status: "blocked_confirm",
-            detail: `${unique.length} legacy snapshot(s) carry content no live skill body has`,
-            paths: unique.slice(0, 10).map((abs) => rel(ctx, abs)),
-            question: `skill-versions-delete found ${unique.length} snapshot(s) under .guild/${LEGACY_VERSION_TREE}/ whose content is NOT in any live .guild/skills/** body, so they are not derived. Review them and either keep the tree or remove it yourself, then re-run \`config migrate --mode=migrate\`.`
-          };
-        }
-        if (!ctx.dryRun) removeContainedTree(dir, ctx.guildDir);
-        return {
-          status: "completed",
-          detail: `removed ${snapshots.length} redundant snapshot(s); every one matched a live skill body`,
-          paths: [rel(ctx, dir)]
-        };
-      }
-    };
-    AUTHORED_REGISTRIES = Object.freeze(["loops/registry.yaml", "workflows/registry.yaml"]);
-    DERIVED_REGISTRIES = Object.freeze(["agents/registry.yaml", "skills/registry.yaml"]);
-    registryYamlRetire = {
-      id: "registry-yaml-retire",
-      cls: "durable",
-      source: "KTD56 / R68",
-      affects: [".guild/loops", ".guild/workflows", ".guild/agents/registry.yaml", ".guild/skills/registry.yaml"],
-      apply(ctx) {
-        const changed = [];
-        for (const relPath of DERIVED_REGISTRIES) {
-          const abs = path14.join(ctx.guildDir, relPath);
-          if (!lstatSafe(abs)) continue;
-          if (classifyPath(relPath) !== "derived") continue;
-          if (!ctx.dryRun) fs11.rmSync(abs, { force: true });
-          changed.push(rel(ctx, abs));
-        }
-        for (const relPath of AUTHORED_REGISTRIES) {
-          const abs = path14.join(ctx.guildDir, relPath);
-          const text = readIfFile(abs);
-          if (text === null) continue;
-          const target = path14.join(ctx.guildDir, "artifacts", "legacy", relPath.replace("/", "-"));
-          if (lstatSafe(target)) continue;
-          writeFile(ctx, target, text);
-          if (!ctx.dryRun) fs11.rmSync(abs, { force: true });
-          changed.push(`${rel(ctx, abs)} \u2192 ${rel(ctx, target)}`);
-        }
-        if (changed.length === 0) {
-          return { status: "skipped", detail: "no registry YAML left to retire", paths: [] };
-        }
-        return {
-          status: "completed",
-          detail: `retired ${changed.length} registry file(s); authored ones were preserved under artifacts/legacy/, not deleted`,
-          paths: changed
-        };
-      }
-    };
-    glossaryCreate = {
-      id: "glossary-create",
-      cls: "durable",
-      source: "R80 / KTD70",
-      // The KNOWLEDGE TREE, not just the file: a durable step must not write into a
-      // tree whose tracked pages are dirty, even when its own target does not exist yet.
-      affects: [KNOWLEDGE_PREFIX],
-      apply(ctx) {
-        const abs = knowledgeDir(ctx, "glossary.md");
-        if (lstatSafe(abs)) {
-          return {
-            status: "skipped",
-            detail: "project glossary already exists \u2014 feedstock never replaces it (R80)",
-            paths: []
-          };
-        }
-        writeFile(ctx, abs, GLOSSARY_FEEDSTOCK);
-        return { status: "completed", detail: "created the root glossary page from plugin feedstock", paths: [rel(ctx, abs)] };
-      }
-    };
-    UPGRADE_STEPS = deepFreeze([
-      v1Content,
-      settingsPolicySplit,
-      ktd22Strip,
-      cachesOut,
-      closedRunReceipts,
-      currentRunIdRetire,
-      skillVersionsDelete,
-      registryYamlRetire,
-      glossaryCreate
-    ]);
-    UPGRADE_STEP_IDS = Object.freeze(UPGRADE_STEPS.map((s) => s.id));
   }
-});
-
-// src/domains/state/upgrade-runner.ts
-var init_upgrade_runner = __esm({
-  "src/domains/state/upgrade-runner.ts"() {
-    init_storage_layout();
-    init_storage_roots();
-    init_storage_fs();
-    init_storage_policy();
-    init_upgrade_journal();
-    init_upgrade_steps();
+};
+var AUTHORED_REGISTRIES = Object.freeze(["loops/registry.yaml", "workflows/registry.yaml"]);
+var DERIVED_REGISTRIES = Object.freeze(["agents/registry.yaml", "skills/registry.yaml"]);
+var registryYamlRetire = {
+  id: "registry-yaml-retire",
+  cls: "durable",
+  source: "KTD56 / R68",
+  affects: [".guild/loops", ".guild/workflows", ".guild/agents/registry.yaml", ".guild/skills/registry.yaml"],
+  apply(ctx) {
+    const changed = [];
+    for (const relPath of DERIVED_REGISTRIES) {
+      const abs = path14.join(ctx.guildDir, relPath);
+      if (!lstatSafe(abs)) continue;
+      if (classifyPath(relPath) !== "derived") continue;
+      if (!ctx.dryRun) fs11.rmSync(abs, { force: true });
+      changed.push(rel(ctx, abs));
+    }
+    for (const relPath of AUTHORED_REGISTRIES) {
+      const abs = path14.join(ctx.guildDir, relPath);
+      const text = readIfFile(abs);
+      if (text === null) continue;
+      const target = path14.join(ctx.guildDir, "artifacts", "legacy", relPath.replace("/", "-"));
+      if (lstatSafe(target)) continue;
+      writeFile(ctx, target, text);
+      if (!ctx.dryRun) fs11.rmSync(abs, { force: true });
+      changed.push(`${rel(ctx, abs)} \u2192 ${rel(ctx, target)}`);
+    }
+    if (changed.length === 0) {
+      return { status: "skipped", detail: "no registry YAML left to retire", paths: [] };
+    }
+    return {
+      status: "completed",
+      detail: `retired ${changed.length} registry file(s); authored ones were preserved under artifacts/legacy/, not deleted`,
+      paths: changed
+    };
   }
-});
+};
+var glossaryCreate = {
+  id: "glossary-create",
+  cls: "durable",
+  source: "R80 / KTD70",
+  // The KNOWLEDGE TREE, not just the file: a durable step must not write into a
+  // tree whose tracked pages are dirty, even when its own target does not exist yet.
+  affects: [KNOWLEDGE_PREFIX],
+  apply(ctx) {
+    const abs = knowledgeDir(ctx, "glossary.md");
+    if (lstatSafe(abs)) {
+      return {
+        status: "skipped",
+        detail: "project glossary already exists \u2014 feedstock never replaces it (R80)",
+        paths: []
+      };
+    }
+    writeFile(ctx, abs, GLOSSARY_FEEDSTOCK);
+    return { status: "completed", detail: "created the root glossary page from plugin feedstock", paths: [rel(ctx, abs)] };
+  }
+};
+var UPGRADE_STEPS = deepFreeze([
+  v1Content,
+  settingsPolicySplit,
+  ktd22Strip,
+  cachesOut,
+  closedRunReceipts,
+  currentRunIdRetire,
+  skillVersionsDelete,
+  registryYamlRetire,
+  glossaryCreate
+]);
+var UPGRADE_STEP_IDS = Object.freeze(UPGRADE_STEPS.map((s) => s.id));
 
 // src/domains/state/wiki-importance.ts
-var STRUCTURAL_BASENAMES;
-var init_wiki_importance = __esm({
-  "src/domains/state/wiki-importance.ts"() {
-    init_kernel();
-    init_frontmatter();
-    STRUCTURAL_BASENAMES = sealSet([
-      "index.md",
-      "readme.md",
-      "log.md",
-      "query.md",
-      "transfer-manifest.md"
-    ], "STRUCTURAL_BASENAMES");
-  }
-});
-
-// src/domains/state/detect.ts
-var init_detect = __esm({
-  "src/domains/state/detect.ts"() {
-    init_storage_roots();
-  }
-});
+var STRUCTURAL_BASENAMES = sealSet([
+  "index.md",
+  "readme.md",
+  "log.md",
+  "query.md",
+  "transfer-manifest.md"
+], "STRUCTURAL_BASENAMES");
 
 // src/domains/state/federated-query.ts
+var fs12 = __toESM(require("fs"));
+var path15 = __toESM(require("path"));
 function federatedQuery(root, query, scope) {
   const manifestPath = path15.join(durableGuildDir2(root), "workspace.json");
   if (!fs12.existsSync(manifestPath)) {
@@ -6309,19 +6336,13 @@ function runFederatedQueryCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var fs12, path15;
-var init_federated_query = __esm({
-  "src/domains/state/federated-query.ts"() {
-    fs12 = __toESM(require("fs"));
-    path15 = __toESM(require("path"));
-    init_storage_roots();
-    if (typeof module !== "undefined" && require.main === module && /^federated-query\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-      runFederatedQueryCli();
-    }
-  }
-});
+if (typeof module !== "undefined" && require.main === module && /^federated-query\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+  runFederatedQueryCli();
+}
 
 // src/domains/state/promote-upstream.ts
+var fs13 = __toESM(require("fs"));
+var path16 = __toESM(require("path"));
 function validateRunId(runId) {
   if (!runId || !runId.trim()) return false;
   if (runId.includes("\0")) return false;
@@ -6527,821 +6548,653 @@ function runPromoteUpstreamCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var fs13, path16;
-var init_promote_upstream = __esm({
-  "src/domains/state/promote-upstream.ts"() {
-    fs13 = __toESM(require("fs"));
-    path16 = __toESM(require("path"));
-    init_atomic_write();
-    init_kernel();
-    init_storage_roots();
-    if (typeof module !== "undefined" && require.main === module && /^promote-upstream\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
-      runPromoteUpstreamCli();
-    }
-  }
-});
-
-// src/domains/state/write-manifest.ts
-var init_write_manifest = __esm({
-  "src/domains/state/write-manifest.ts"() {
-    init_detect();
-    init_atomic_write();
-    init_storage_roots();
-  }
-});
-
-// src/domains/state/index.ts
-var init_state = __esm({
-  "src/domains/state/index.ts"() {
-    init_atomic_write();
-    init_dependency_graph_reader();
-    init_dependency_graph_schema();
-    init_frontmatter();
-    init_guild_discovery();
-    init_guild_root();
-    init_index_cache();
-    init_storage_artifact_registry();
-    init_storage_fs();
-    init_storage_janitor();
-    init_storage_layout();
-    init_storage_policy();
-    init_storage_roots();
-    init_upgrade_glossary();
-    init_upgrade_journal();
-    init_upgrade_runner();
-    init_upgrade_steps();
-    init_index_migrate();
-    init_wiki_importance();
-    init_detect();
-    init_federated_query();
-    init_promote_upstream();
-    init_write_manifest();
-    init_plugin_install_guard();
-  }
-});
+if (typeof module !== "undefined" && require.main === module && /^promote-upstream\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
+  runPromoteUpstreamCli();
+}
 
 // src/domains/config/provider-detect.ts
-var PROVIDER_REGISTRY;
-var init_provider_detect = __esm({
-  "src/domains/config/provider-detect.ts"() {
-    init_host_registry();
-    init_state();
-    PROVIDER_REGISTRY = [
-      // The author host itself — always "detected on the host", never a cross reviewer
-      // for a same-family author (the AC-8 guard handles that).
-      { id: "claude", kind: "host", family: "claude", hasAdapter: resultAdapterForFamily("claude"), requiresAuth: false },
-      // Codex reference adapters (the only selectable cross reviewers today).
-      { id: "codex-plugin", kind: "plugin-adapter", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
-      { id: "codex-cli", kind: "cli", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
-      // Detect-only until adapters ship (OD-6) — pi/antigravity rows carry result_adapter:false.
-      // (The former `gemini-cli` provider was removed when Gemini was sunset 2026-06-14.)
-      { id: "pi", kind: "cli", family: "pi", bin: "pi", hasAdapter: resultAdapterForFamily("pi"), requiresAuth: false },
-      // VERIFIED on-host 2026-06-16: the Antigravity CLI is `agy` (1.0.8), not `antigravity` — detection must probe `agy` or it never finds the host.
-      { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
-    ];
-  }
-});
-
-// src/domains/config/session-context.ts
-var init_session_context = __esm({
-  "src/domains/config/session-context.ts"() {
-    init_provider_detect();
-    init_state();
-  }
-});
+var PROVIDER_REGISTRY = [
+  // The author host itself — always "detected on the host", never a cross reviewer
+  // for a same-family author (the AC-8 guard handles that).
+  { id: "claude", kind: "host", family: "claude", hasAdapter: resultAdapterForFamily("claude"), requiresAuth: false },
+  // Codex reference adapters (the only selectable cross reviewers today).
+  { id: "codex-plugin", kind: "plugin-adapter", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
+  { id: "codex-cli", kind: "cli", family: "codex", bin: "codex", hasAdapter: resultAdapterForFamily("codex"), requiresAuth: true },
+  // Detect-only until adapters ship (OD-6) — pi/antigravity rows carry result_adapter:false.
+  // (The former `gemini-cli` provider was removed when Gemini was sunset 2026-06-14.)
+  { id: "pi", kind: "cli", family: "pi", bin: "pi", hasAdapter: resultAdapterForFamily("pi"), requiresAuth: false },
+  // VERIFIED on-host 2026-06-16: the Antigravity CLI is `agy` (1.0.8), not `antigravity` — detection must probe `agy` or it never finds the host.
+  { id: "antigravity", kind: "cli", family: "antigravity", bin: "agy", hasAdapter: resultAdapterForFamily("antigravity"), requiresAuth: false }
+];
 
 // src/domains/config/model-discovery-contract.ts
-var FAILURE_REASONS;
-var init_model_discovery_contract = __esm({
-  "src/domains/config/model-discovery-contract.ts"() {
-    init_session_context();
-    FAILURE_REASONS = Object.freeze([
-      "timeout_budget_exceeded",
-      "parse_rejected",
-      "io_unavailable",
-      "tool_version_out_of_range",
-      "subprocess_failed",
-      "http_error",
-      "auth_unavailable",
-      "surface_absent"
-    ]);
-  }
-});
+var FAILURE_REASONS = Object.freeze([
+  "timeout_budget_exceeded",
+  "parse_rejected",
+  "io_unavailable",
+  "tool_version_out_of_range",
+  "subprocess_failed",
+  "http_error",
+  "auth_unavailable",
+  "surface_absent"
+]);
+
+// src/domains/security/safe-object.ts
+var PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
+
+// src/domains/security/redact-log.ts
+var FIELD_SIZE_CAP_BYTES = 4 * 1024;
+var TOKEN_SHAPE_PATTERNS = Object.freeze([
+  Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
+  Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
+  Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
+  Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
+  Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
+  Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
+  Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
+  Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
+]);
+var SENSITIVE_HOME_DIRS = Object.freeze([
+  ".claude",
+  ".codex",
+  ".ssh",
+  ".aws",
+  ".gnupg"
+]);
+var REDACTABLE_FIELD_NAMES = Object.freeze([
+  "command_redacted",
+  "result_excerpt_redacted",
+  "payload_excerpt_redacted",
+  "prompt_excerpt",
+  "assumption_text",
+  "result"
+]);
+var REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
+
+// src/domains/security/events.ts
+var SECURITY_EVENT_TYPES = Object.freeze([
+  "capability_scope_violation",
+  "capability_scope_degrade",
+  "bypass_permission_allowed",
+  "mcp_description_mismatch",
+  "mcp_description_unverifiable",
+  "mcp_description_unpinned",
+  "secret_scrub_failure",
+  "injection_attempt_detected",
+  "secret_scrub_blocked",
+  "recall_quarantine",
+  "dispatch_attribution_missing",
+  "backend_degradation",
+  "tier_dispatch_untiered",
+  "harvest_promoted",
+  "harvest_refused",
+  "playbook_auto_replace",
+  "wiki_cas_conflict",
+  "harvest_reverted",
+  "lane_wiki_write_refused",
+  "queue_drain_refused"
+]);
+var KNOWN_GUILD_HOST_KINDS = Object.freeze([
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector"
+]);
+var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
+
+// src/domains/security/share-set.ts
+var path17 = __toESM(require("path"));
+var SHARED_SCRUBBED_NAMES = sealSet([
+  "verify.md",
+  "review.md",
+  "provenance.json",
+  "summary.md",
+  "run.yaml",
+  "run-state.json"
+], "SHARED_SCRUBBED_NAMES");
+var CANONICAL_RUN_LOG = path17.join("logs", "v1.4-events.jsonl");
+
+// src/domains/security/secret-patterns.ts
+var SECRET_PATTERNS = Object.freeze([
+  // NOTE: labels deliberately drop the `=` so the redaction replacement
+  // (e.g. `<REDACTED:password-assignment>`) cannot itself re-match the pattern
+  // on a subsequent scrub pass. Idempotency depends on this — every label below
+  // is checked against every pattern above it, and none re-matches.
+  Object.freeze([Object.freeze(/password\s*=\s*["']?[^\s"']{6,}/), "password-assignment"]),
+  Object.freeze([Object.freeze(/api_key\s*=\s*["']?[^\s"']{6,}/i), "api_key-assignment"]),
+  Object.freeze([Object.freeze(/secret\s*=\s*["']?[^\s"']{8,}/i), "secret-assignment"]),
+  Object.freeze([Object.freeze(/AKIA[0-9A-Z]{16}/), "AWS access key"]),
+  Object.freeze([Object.freeze(/AIza[0-9A-Za-z_-]{35}/), "GCP API key"]),
+  Object.freeze([Object.freeze(/ghp_[0-9A-Za-z]{36}/), "GitHub personal access token"]),
+  Object.freeze([Object.freeze(/ghs_[0-9A-Za-z]{36}/), "GitHub server token"]),
+  Object.freeze([Object.freeze(/-----BEGIN (?:RSA |EC )?PRIVATE KEY/), "PEM private key block"]),
+  // ── Provider credential / bearer-token forms (T6B-R1-B1) ─────────────────
+  // Round-1 review proved the list above blind to the shapes an inspection
+  // surface is most likely to echo out of a persisted artifact: an
+  // `Authorization: Bearer …` header, a `sk-…` provider key, and the
+  // `<something>_token = …` assignment family. A display surface that renders
+  // a persisted evidence string verbatim leaked all three past the applier.
+  //
+  // Every pattern is anchored on the CREDENTIAL PREFIX (not on entropy) so it
+  // stays specific, and each replacement label is inert against every pattern
+  // in this list (no whitespace/`:`/`=` follows the trigger word in a label),
+  // which is what keeps `redact` idempotent.
+  Object.freeze([Object.freeze(/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i), "bearer-token"]),
+  Object.freeze([Object.freeze(/\bauthorization\s*:\s*["']?[A-Za-z0-9._~+/=-]{12,}/i), "authorization-header"]),
+  Object.freeze([Object.freeze(/\b(?:auth|access|refresh|id|api|bearer|session)[-_]?token\s*[:=]\s*["']?[^\s"',]{8,}/i), "token-assignment"]),
+  // OpenAI/Anthropic-style provider keys: sk-…, sk-proj-…, sk-ant-….
+  Object.freeze([Object.freeze(/\bsk-[A-Za-z0-9_-]{12,}/), "provider-api-key"]),
+  Object.freeze([Object.freeze(/\bxox[abprs]-[A-Za-z0-9-]{10,}/), "Slack token"]),
+  Object.freeze([Object.freeze(/\bgh[uor]_[0-9A-Za-z]{36}/), "GitHub token"]),
+  Object.freeze([Object.freeze(/\bglpat-[0-9A-Za-z_-]{20}/), "GitLab personal access token"]),
+  Object.freeze([Object.freeze(/\bnpm_[0-9A-Za-z]{36}/), "npm token"]),
+  Object.freeze([Object.freeze(/\bhf_[0-9A-Za-z]{34}/), "HuggingFace token"]),
+  // ── Personally identifying forms retained by public evidence projections ─
+  // Task objectives and handoff prose are operator-authored and can contain
+  // direct contact details or tenant identifiers. Those artifacts are copied
+  // into migration evidence, so the share scrubber must recognize them before
+  // publication. Keep the patterns prefix-shaped and their labels inert so the
+  // redaction remains deterministic and idempotent.
+  Object.freeze([Object.freeze(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i), "email-address"]),
+  Object.freeze([Object.freeze(/\b(?:acct|cus|cust|usr)_[A-Za-z0-9][A-Za-z0-9_-]{4,}\b/i), "customer-identifier"]),
+  Object.freeze([Object.freeze(/\b(?:customer|account|user)[_-]?id\s*[:=]\s*["']?[A-Za-z0-9][A-Za-z0-9._-]{3,}/i), "customer-identifier"]),
+  // High-entropy string heuristic: 40+ hex chars (SHA-like)
+  Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
+]);
 
 // src/domains/config/config-defaults.ts
+var DEFAULT_ESCALATION_MARKERS = Object.freeze([
+  "I'm not sure",
+  "unclear",
+  "cannot determine",
+  "I don't know",
+  "ambiguous",
+  "uncertain",
+  "not enough information"
+]);
+var NON_INHERITABLE_KEYS = sealSet([
+  "initiative_default",
+  // OD-1: attach-to-wrong-initiative risk
+  "workspace"
+  // workspace.mode is root-detection-only
+], "NON_INHERITABLE_KEYS");
+var LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
+var SIDECAR_MAX_BYTES = 1024 * 1024;
+var CAPABILITY_RESOLVER_MODES = Object.freeze([
+  "legacy",
+  "observe",
+  "shadow",
+  "project-local",
+  "strict"
+]);
+var CAPABILITY_AUTO_CREATE_POLICIES = Object.freeze(["never", "on_approval"]);
+var CAPABILITY_RESOLVER_MODE_AFTER_F7 = "observe";
+var CAPABILITY_RESOLVER_MODE_DEFAULT = CAPABILITY_RESOLVER_MODE_AFTER_F7;
+var CAPABILITY_SUGGESTION_BUDGET_MIN = 0;
+var CAPABILITY_SUGGESTION_BUDGET_MAX = 4;
+var CAPABILITY_ROLE_SLUG_MAX_LEN = 64;
+var ROLE_SLUG = /^[a-z0-9][a-z0-9._-]*$/;
+var CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 function isCanonicalRoleSlug(v) {
   return typeof v === "string" && v.length > 0 && v.length <= CAPABILITY_ROLE_SLUG_MAX_LEN && !CONTROL_CHARS.test(v) && ROLE_SLUG.test(v);
 }
 function roleSlugDedupKey(slug) {
   return slug.toLowerCase();
 }
-var DEFAULT_ESCALATION_MARKERS, NON_INHERITABLE_KEYS, LOG_ROTATION_THRESHOLD_BYTES, SIDECAR_MAX_BYTES, CAPABILITY_RESOLVER_MODES, CAPABILITY_AUTO_CREATE_POLICIES, CAPABILITY_RESOLVER_MODE_AFTER_F7, CAPABILITY_RESOLVER_MODE_DEFAULT, CAPABILITY_SUGGESTION_BUDGET_MIN, CAPABILITY_SUGGESTION_BUDGET_MAX, CAPABILITY_ROLE_SLUG_MAX_LEN, ROLE_SLUG, CONTROL_CHARS, DEFAULTS;
-var init_config_defaults = __esm({
-  "src/domains/config/config-defaults.ts"() {
-    init_kernel();
-    DEFAULT_ESCALATION_MARKERS = Object.freeze([
-      "I'm not sure",
-      "unclear",
-      "cannot determine",
-      "I don't know",
-      "ambiguous",
-      "uncertain",
-      "not enough information"
-    ]);
-    NON_INHERITABLE_KEYS = sealSet([
-      "initiative_default",
-      // OD-1: attach-to-wrong-initiative risk
-      "workspace"
-      // workspace.mode is root-detection-only
-    ], "NON_INHERITABLE_KEYS");
-    LOG_ROTATION_THRESHOLD_BYTES = 10 * 1024 * 1024;
-    SIDECAR_MAX_BYTES = 1024 * 1024;
-    CAPABILITY_RESOLVER_MODES = Object.freeze([
-      "legacy",
-      "observe",
-      "shadow",
-      "project-local",
-      "strict"
-    ]);
-    CAPABILITY_AUTO_CREATE_POLICIES = Object.freeze(["never", "on_approval"]);
-    CAPABILITY_RESOLVER_MODE_AFTER_F7 = "observe";
-    CAPABILITY_RESOLVER_MODE_DEFAULT = CAPABILITY_RESOLVER_MODE_AFTER_F7;
-    CAPABILITY_SUGGESTION_BUDGET_MIN = 0;
-    CAPABILITY_SUGGESTION_BUDGET_MAX = 4;
-    CAPABILITY_ROLE_SLUG_MAX_LEN = 64;
-    ROLE_SLUG = /^[a-z0-9][a-z0-9._-]*$/;
-    CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
-    DEFAULTS = deepFreeze({
-      rigor: "standard",
-      auto_approve: [],
-      review: "local",
-      host: "auto",
-      /**
-       * rf-wi-01 (v23x-deferred-followups G1) — the sanctioned P1-L10 host-autonomy
-       * override (host_mode × guild_gates orthogonality invariant, permission-policy-schema.ts).
-       * null (default) = no override; the host's own default ("ask", lifted to "bypass_all" for
-       * unattended team panes per issue #54) applies. NOT under `security.` — the #54 lane
-       * explicitly reverted an ad-hoc `security.host_mode` key because it bypassed this schema;
-       * this top-level placement (sibling of the `host` dispatch selector) is the registered
-       * replacement. One of only three keys ever legitimately null-typed at the top level.
-       */
-      host_mode: null,
-      roles: { host: null, advisory: null, adversarial: null },
-      host_profiles: {},
-      initiative_default: null,
-      index: "auto",
-      record_status_runs: true,
-      codex_skip_enforcement: "warn",
-      agent_mode: "auto",
-      workspace: { mode: "auto" },
-      models: {
-        enabled: true,
-        // G4b (host-reachability): every host in the registry's HOST_IDS gets an
-        // explicit tier slot — NOT generated by importing HOST_IDS here (this file's
-        // own contract, stated in the module doc comment above, is to stay free of
-        // internal runtime imports so core settings code can load it before the
-        // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
-        // roster (host-registry-schema.ts) enumerated by hand; a test
-        // (scripts/lib/config-defaults-tiers-host-ids.test.ts) asserts the two
-        // stay in sync so this can never silently drift again the way it had (7 of
-        // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
-        // non-null model — every other host's registry row carries `models.<tier>.model:
-        // null` (no Guild-mapped model), so `null` here is the HONEST default, not a
-        // gap (see tier-defaults.ts's `tierDefaults()` for the runtime-computed
-        // equivalent this static scaffold mirrors).
-        tiers: {
-          cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
-          mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
-          powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null }
-        },
-        scoreWeights: {
-          workType: 0,
-          blastRadius: 1,
-          dependsOn: 1,
-          security: 1,
-          priorEscalation: 1
-        },
-        thresholds: { mid: 1, powerful: 3 },
-        advisorRounds: 2,
-        escalationMarkers: DEFAULT_ESCALATION_MARKERS,
-        recallBeforeRead: true,
-        recallScoreThreshold: 0.4,
-        structuredOutputRequired: true,
-        cacheTTL: { coordinator: "1h", leaf: "5m" },
-        importanceGate: 3,
-        compositeRecall: true,
-        importanceAtIngest: true,
-        ingestSimilarityGate: 0.8,
-        shortOutputThreshold: {},
-        knowledge: {
-          maxDepth: 8,
-          maxBranching: 12,
-          minTopicImportance: 0.4,
-          relMinConf: 0.5,
-          maxFiles: 3e3,
-          maxTokens: 1e6,
-          batchSize: 20
-        }
-      },
-      security: {
-        bypass_permissions_policy: "audit"
-      },
-      secrets_policy: {
-        env_allowlist: [],
-        redaction_patterns: [],
-        fail_mode_durable: "closed",
-        fail_mode_telemetry: "open"
-      },
-      mcp: {
-        tool_description_hashes: {},
-        stdio_available: true,
-        http_available: false,
-        bridge_package: null
-      },
-      /**
-       * Project-capability localization (spec S5; decisions cap-loc-D04 new-install
-       * policy, cap-loc-D03 migration window). Closes audit gaps D12 (no config keys
-       * existed), F3 (resolver-mode ownership undefined) and F10 (budget "3–4").
-       *
-       * These keys select WHICH DEFINITIONS RESOLVE — they are deliberately NOT
-       * security-sensitive (`isSecuritySensitiveKey` matches none of them, correctly).
-       * What a lane may DO stays with `capability_scope` and the permission keys.
-       *
-       * Scope is `project` for all four, which is what the CONFIG_SCHEMA generator
-       * already emits unconditionally — capability ownership is per project by
-       * definition (the umbrella and each child answer "what roles do I need"
-       * independently, and D03 has the four repos migrating at different rates). Per
-       * S5 spec-call #2, per-key `scope` is NOT introduced here: the right values fall
-       * out with zero generator change, and adding it would touch every existing key.
-       */
-      capability: {
-        /**
-         * Which resolver mode this project is in on D03's migration ladder. Config
-         * records WHERE WE ARE, never WHETHER WE MAY MOVE — advance conditions are
-         * gate criteria the initiative evaluates, and a mode change is a deliberate
-         * write.
-         *
-         * DEFAULT IS `observe` (D04), unlocked by F7 landing — see
-         * CAPABILITY_RESOLVER_MODE_DEFAULT above for what would revert it. Never
-         * silently defaulted: an unset value resolves with provenance `default`, so
-         * `config show --sources` shows it was never chosen.
-         */
-        resolver_mode: CAPABILITY_RESOLVER_MODE_DEFAULT,
-        /**
-         * Max capability proposals surfaced per project (D04/F10: fixed at 4, not
-         * "3–4"). Range [0, 4] — the same ceiling S1's profile validator enforces, so
-         * the two cannot disagree. 0 is legal: "profile but never propose".
-         */
-        suggestion_budget: 4,
-        /**
-         * Roles a new install starts with. EMPTY BY DESIGN — a non-empty default would
-         * ship a roster, which is precisely what localization exists to stop. Empty ⇒
-         * Learn proposes.
-         */
-        starter_roles: [],
-        /** Whether an approved proposal may auto-advance the resolver mode (D04). */
-        auto_create_policy: "on_approval"
-      },
-      statusline: false,
-      adversarial_review_provider: "auto",
-      loops: null,
-      loop_cap: 16,
-      codex_cap: 5,
-      // guild.model_policy.v2 (dynamic-host-model-routing T5): durable operator model
-      // routing intent. null = not configured — v2 routing stays off and the legacy
-      // tier maps drive generic preferences for the §6 migration window. When set, the
-      // object must pass the §5 closed-key validator (config-cli validateModelPolicy).
-      model_policy: null,
-      defaults: {
-        auto_learn: false,
-        adversarial: "on",
-        team: { size: null, always_include: [] },
-        review_workflow: "standard",
-        skill_policy: "standard",
-        gates: { auto_approve: [] },
-        wiki: { share_mode: "team", autopromote: true },
-        quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
-        reporting: "standard",
-        index: {
-          enabled: true,
-          kg_node_threshold: 2e3,
-          kg_size_threshold_mb: 1,
-          links_edge_threshold: 2e3,
-          runs_threshold: 20,
-          wiki_file_threshold: 500
-        },
-        cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
-        retry: { max_attempts: 1, backoff: "exponential" },
-        resume: { enabled: true },
-        heartbeat_timeout_ms: 6e5,
-        capability_manifest_ttl_s: 3600,
-        // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
-        // the SessionStart signal; `auto` additionally stages the host apply path;
-        // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
-        update: { mode: "notify", cadence_hours: 24 },
-        allowed_tools: [],
-        /**
-         * rf-wi-01 (G1) — registers the guard hooks/lib/lean-lead-guard.ts already reads
-         * tolerantly. enabled: advisory master toggle. hands_on_edit_threshold: direct lead
-         * Edit/Write ops before the inline-shortcut-expired advisory fires (SKILL.md
-         * "Inline shortcut under high autonomy").
-         */
-        lean_lead: { enabled: true, hands_on_edit_threshold: 8 },
-        /**
-         * rf-wi-01 (G1) — registers the guard hooks/lib/lifecycle-gate.ts already reads
-         * tolerantly. enabled: master toggle. adhoc_activity_threshold: ad-hoc (non-skill)
-         * activity count before the lifecycle gate advisory fires.
-         */
-        lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 },
-        /**
-         * Issue #93 — dispatch-safety knobs for the #56 backend-degradation guard
-         * (hooks/lib/backend-degradation.ts).
-         *
-         * `block_unmarked_lanes` engages STRICT mode: a Guild lane dispatch carrying
-         * NO structured producer marker (`prompt_only` evidence — the hand-rolled
-         * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded.
-         *
-         * DEFAULT IS `false` ON PURPOSE, and that is load-bearing rather than
-         * timidity. `classifyLaneEvidence` grades a fully-substituted lane brief that
-         * was merely QUOTED in a prompt as `prompt_only` too — by text it is
-         * indistinguishable from the real dispatch (backend-degradation.ts's
-         * lane-brief signature note, adversarial review round 3). So strict mode
-         * trades the no-false-positive-on-a-quoted-brief invariant for tighter drift
-         * coverage, which is an operator's call to make, never a shipped default.
-         *
-         * PR #85 (G3) shipped this rung as the env flag `GUILD_BLOCK_UNMARKED_LANES`
-         * only, deliberately deferring schema registration to avoid colliding with
-         * rf-wi-01's closed-schema work. That work landed (PR #87), so this is the
-         * promised followup: the key is now discoverable and validated, and the env
-         * var survives as a per-session OVERRIDE (both directions) on top of it.
-         */
-        dispatch: { block_unmarked_lanes: false }
-      }
-    });
+var DEFAULTS = deepFreeze({
+  rigor: "standard",
+  auto_approve: [],
+  review: "local",
+  host: "auto",
+  /**
+   * rf-wi-01 (v23x-deferred-followups G1) — the sanctioned P1-L10 host-autonomy
+   * override (host_mode × guild_gates orthogonality invariant, permission-policy-schema.ts).
+   * null (default) = no override; the host's own default ("ask", lifted to "bypass_all" for
+   * unattended team panes per issue #54) applies. NOT under `security.` — the #54 lane
+   * explicitly reverted an ad-hoc `security.host_mode` key because it bypassed this schema;
+   * this top-level placement (sibling of the `host` dispatch selector) is the registered
+   * replacement. One of only three keys ever legitimately null-typed at the top level.
+   */
+  host_mode: null,
+  roles: { host: null, advisory: null, adversarial: null },
+  host_profiles: {},
+  initiative_default: null,
+  index: "auto",
+  record_status_runs: true,
+  codex_skip_enforcement: "warn",
+  agent_mode: "auto",
+  workspace: { mode: "auto" },
+  models: {
+    enabled: true,
+    // G4b (host-reachability): every host in the registry's HOST_IDS gets an
+    // explicit tier slot — NOT generated by importing HOST_IDS here (this file's
+    // own contract, stated in the module doc comment above, is to stay free of
+    // internal runtime imports so core settings code can load it before the
+    // host-runtime layer). The literal key set below IS the full 16-id HOST_IDS
+    // roster (host-registry-schema.ts) enumerated by hand; a test
+    // (scripts/lib/config-defaults-tiers-host-ids.test.ts) asserts the two
+    // stay in sync so this can never silently drift again the way it had (7 of
+    // 16 hosts were missing a slot before this fix). Only claude-code-cli has a
+    // non-null model — every other host's registry row carries `models.<tier>.model:
+    // null` (no Guild-mapped model), so `null` here is the HONEST default, not a
+    // gap (see tier-defaults.ts's `tierDefaults()` for the runtime-computed
+    // equivalent this static scaffold mirrors).
+    tiers: {
+      cheap: { "claude-code-cli": "haiku", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+      mid: { "claude-code-cli": "sonnet", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null },
+      powerful: { "claude-code-cli": "opus", "codex-cli": null, "pi-cli": null, "antigravity-cli": null, "agents-file": null, "claude-code-app": null, "claude-code-web": null, "codex-app": null, "claude-ai-connector": null, cursor: null, "github-copilot": null, opencode: null, "rovo-dev": null, kiro: null, qoder: null, trae: null }
+    },
+    scoreWeights: {
+      workType: 0,
+      blastRadius: 1,
+      dependsOn: 1,
+      security: 1,
+      priorEscalation: 1
+    },
+    thresholds: { mid: 1, powerful: 3 },
+    advisorRounds: 2,
+    escalationMarkers: DEFAULT_ESCALATION_MARKERS,
+    recallBeforeRead: true,
+    recallScoreThreshold: 0.4,
+    structuredOutputRequired: true,
+    cacheTTL: { coordinator: "1h", leaf: "5m" },
+    importanceGate: 3,
+    compositeRecall: true,
+    importanceAtIngest: true,
+    ingestSimilarityGate: 0.8,
+    shortOutputThreshold: {},
+    knowledge: {
+      maxDepth: 8,
+      maxBranching: 12,
+      minTopicImportance: 0.4,
+      relMinConf: 0.5,
+      maxFiles: 3e3,
+      maxTokens: 1e6,
+      batchSize: 20
+    }
+  },
+  security: {
+    bypass_permissions_policy: "audit"
+  },
+  secrets_policy: {
+    env_allowlist: [],
+    redaction_patterns: [],
+    fail_mode_durable: "closed",
+    fail_mode_telemetry: "open"
+  },
+  mcp: {
+    tool_description_hashes: {},
+    stdio_available: true,
+    http_available: false,
+    bridge_package: null
+  },
+  /**
+   * Project-capability localization (spec S5; decisions cap-loc-D04 new-install
+   * policy, cap-loc-D03 migration window). Closes audit gaps D12 (no config keys
+   * existed), F3 (resolver-mode ownership undefined) and F10 (budget "3–4").
+   *
+   * These keys select WHICH DEFINITIONS RESOLVE — they are deliberately NOT
+   * security-sensitive (`isSecuritySensitiveKey` matches none of them, correctly).
+   * What a lane may DO stays with `capability_scope` and the permission keys.
+   *
+   * Scope is `project` for all four, which is what the CONFIG_SCHEMA generator
+   * already emits unconditionally — capability ownership is per project by
+   * definition (the umbrella and each child answer "what roles do I need"
+   * independently, and D03 has the four repos migrating at different rates). Per
+   * S5 spec-call #2, per-key `scope` is NOT introduced here: the right values fall
+   * out with zero generator change, and adding it would touch every existing key.
+   */
+  capability: {
+    /**
+     * Which resolver mode this project is in on D03's migration ladder. Config
+     * records WHERE WE ARE, never WHETHER WE MAY MOVE — advance conditions are
+     * gate criteria the initiative evaluates, and a mode change is a deliberate
+     * write.
+     *
+     * DEFAULT IS `observe` (D04), unlocked by F7 landing — see
+     * CAPABILITY_RESOLVER_MODE_DEFAULT above for what would revert it. Never
+     * silently defaulted: an unset value resolves with provenance `default`, so
+     * `config show --sources` shows it was never chosen.
+     */
+    resolver_mode: CAPABILITY_RESOLVER_MODE_DEFAULT,
+    /**
+     * Max capability proposals surfaced per project (D04/F10: fixed at 4, not
+     * "3–4"). Range [0, 4] — the same ceiling S1's profile validator enforces, so
+     * the two cannot disagree. 0 is legal: "profile but never propose".
+     */
+    suggestion_budget: 4,
+    /**
+     * Roles a new install starts with. EMPTY BY DESIGN — a non-empty default would
+     * ship a roster, which is precisely what localization exists to stop. Empty ⇒
+     * Learn proposes.
+     */
+    starter_roles: [],
+    /** Whether an approved proposal may auto-advance the resolver mode (D04). */
+    auto_create_policy: "on_approval"
+  },
+  statusline: false,
+  adversarial_review_provider: "auto",
+  loops: null,
+  loop_cap: 16,
+  codex_cap: 5,
+  // guild.model_policy.v2 (dynamic-host-model-routing T5): durable operator model
+  // routing intent. null = not configured — v2 routing stays off and the legacy
+  // tier maps drive generic preferences for the §6 migration window. When set, the
+  // object must pass the §5 closed-key validator (config-cli validateModelPolicy).
+  model_policy: null,
+  defaults: {
+    auto_learn: false,
+    adversarial: "on",
+    team: { size: null, always_include: [] },
+    review_workflow: "standard",
+    skill_policy: "standard",
+    gates: { auto_approve: [] },
+    wiki: { share_mode: "team", autopromote: true },
+    quality: { budget: { per_class_minutes: 10, total_minutes: 30 } },
+    reporting: "standard",
+    index: {
+      enabled: true,
+      kg_node_threshold: 2e3,
+      kg_size_threshold_mb: 1,
+      links_edge_threshold: 2e3,
+      runs_threshold: 20,
+      wiki_file_threshold: 500
+    },
+    cross_host: { enabled: false, hosts: {}, fallback_to_claude: true },
+    retry: { max_attempts: 1, backoff: "exponential" },
+    resume: { enabled: true },
+    heartbeat_timeout_ms: 6e5,
+    capability_manifest_ttl_s: 3600,
+    // plugin-update-lifecycle G1 AC-6: update-signal behavior. `notify` prints
+    // the SessionStart signal; `auto` additionally stages the host apply path;
+    // `off` silences everything. cadence_hours bounds the ls-remote cache TTL.
+    update: { mode: "notify", cadence_hours: 24 },
+    allowed_tools: [],
+    /**
+     * rf-wi-01 (G1) — registers the guard hooks/lib/lean-lead-guard.ts already reads
+     * tolerantly. enabled: advisory master toggle. hands_on_edit_threshold: direct lead
+     * Edit/Write ops before the inline-shortcut-expired advisory fires (SKILL.md
+     * "Inline shortcut under high autonomy").
+     */
+    lean_lead: { enabled: true, hands_on_edit_threshold: 8 },
+    /**
+     * rf-wi-01 (G1) — registers the guard hooks/lib/lifecycle-gate.ts already reads
+     * tolerantly. enabled: master toggle. adhoc_activity_threshold: ad-hoc (non-skill)
+     * activity count before the lifecycle gate advisory fires.
+     */
+    lifecycle_gate: { enabled: true, adhoc_activity_threshold: 20 },
+    /**
+     * Issue #93 — dispatch-safety knobs for the #56 backend-degradation guard
+     * (hooks/lib/backend-degradation.ts).
+     *
+     * `block_unmarked_lanes` engages STRICT mode: a Guild lane dispatch carrying
+     * NO structured producer marker (`prompt_only` evidence — the hand-rolled
+     * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded.
+     *
+     * DEFAULT IS `false` ON PURPOSE, and that is load-bearing rather than
+     * timidity. `classifyLaneEvidence` grades a fully-substituted lane brief that
+     * was merely QUOTED in a prompt as `prompt_only` too — by text it is
+     * indistinguishable from the real dispatch (backend-degradation.ts's
+     * lane-brief signature note, adversarial review round 3). So strict mode
+     * trades the no-false-positive-on-a-quoted-brief invariant for tighter drift
+     * coverage, which is an operator's call to make, never a shipped default.
+     *
+     * PR #85 (G3) shipped this rung as the env flag `GUILD_BLOCK_UNMARKED_LANES`
+     * only, deliberately deferring schema registration to avoid colliding with
+     * rf-wi-01's closed-schema work. That work landed (PR #87), so this is the
+     * promised followup: the key is now discoverable and validated, and the env
+     * var survives as a per-session OVERRIDE (both directions) on top of it.
+     */
+    dispatch: { block_unmarked_lanes: false }
   }
 });
 
 // src/domains/config/policy-keys.ts
-var POLICY_KEYS, BY_KEY, POLICY_KEY_ALIASES, HOST_FAMILY_TOKENS, MODEL_FAMILY_TOKENS, MODEL_NAME_PATTERNS, INVENTORY_KEY_PATTERNS;
-var init_policy_keys = __esm({
-  "src/domains/config/policy-keys.ts"() {
-    init_kernel();
-    POLICY_KEYS = deepFreeze([
-      // Tier SELECTORS — which tier a lane starts at, never which model serves it.
-      {
-        key: "tiers.default",
-        type: "enum",
-        values: ["cheap", "mid", "powerful"],
-        default: "mid",
-        note: "tier a lane starts at when its score names none; the adapter maps tier\u2192model at dispatch"
-      },
-      // Score floors — the complexity score at which a lane is promoted a tier.
-      {
-        key: "tiers.floors.mid",
-        type: "number",
-        min: 0,
-        max: 10,
-        default: 3,
-        note: "complexity-score floor at which a lane resolves to the mid tier"
-      },
-      {
-        key: "tiers.floors.powerful",
-        type: "number",
-        min: 0,
-        max: 10,
-        default: 6,
-        note: "complexity-score floor at which a lane resolves to the powerful tier"
-      },
-      {
-        key: "advisorRounds",
-        type: "integer",
-        min: 0,
-        max: 10,
-        default: 2,
-        note: "advisor escalation rounds a cell may spend before it blocks with next_need: budget (R72)"
-      },
-      {
-        key: "budget.tokens",
-        type: "integer",
-        min: 0,
-        default: null,
-        note: "optional per-run token cap; null = uncapped. D-PROBE and inner verify do not decrement it"
-      },
-      {
-        key: "budget.usd",
-        type: "number",
-        min: 0,
-        default: null,
-        note: "optional per-run spend cap in USD; null = uncapped"
-      },
-      {
-        key: "team.compose_scope",
-        type: "enum",
-        values: ["phase", "goal"],
-        default: "phase",
-        note: "whether team-compose mints per phase or slices a roster per goal (KTD62)"
-      },
-      {
-        key: "recall.backend",
-        type: "enum",
-        values: ["bm25", "hybrid"],
-        default: "bm25",
-        note: "recall backend; embeddings are cache only and a missing model fails open to bm25 (KTD67)"
-      },
-      {
-        key: "recall.thresholds.min_score",
-        type: "number",
-        min: 0,
-        max: 1,
-        default: 0.2,
-        note: "minimum BM25 score a recall hit needs to enter a bundle"
-      },
-      {
-        key: "recall.thresholds.max_hits",
-        type: "integer",
-        min: 1,
-        max: 100,
-        default: 8,
-        note: "maximum recall hits a lane bundle may carry"
-      },
-      {
-        key: "review.critic",
-        type: "enum",
-        values: ["off", "advisor"],
-        default: "advisor",
-        note: "who plays critic; `advisor` is the machinery agent, never a new model family (KTD68)"
-      },
-      {
-        key: "review.independence",
-        type: "boolean",
-        default: true,
-        note: "a Team Lead may not review its own cell (KTD58); false only for single-agent local runs"
-      },
-      {
-        key: "wiki.autopromote",
-        type: "boolean",
-        default: true,
-        note: "harvest auto-promotes decisions on this cwd; false = candidates-only (KTD35)"
-      },
-      {
-        key: "agent_mode",
-        type: "enum",
-        values: ["auto", "team", "agent", "subagent"],
-        default: "auto",
-        note: "dispatch backend PREFERENCE only; never a statement about which host is running"
-      },
-      {
-        key: "dispatch.max_instances",
-        type: "integer",
-        min: 1,
-        max: 32,
-        default: 4,
-        note: "live worker instances one run may hold at once; CONCURRENCY, not a roster cap (R46/KTD30)"
-      }
-    ]);
-    BY_KEY = new Map(POLICY_KEYS.map((s) => [s.key, s]));
-    POLICY_KEY_ALIASES = Object.freeze({
-      "defaults.wiki.autopromote": "wiki.autopromote",
-      "defaults.agent_mode": "agent_mode",
-      "defaults.team.compose_scope": "team.compose_scope",
-      "defaults.recall.backend": "recall.backend",
-      "defaults.review.critic": "review.critic",
-      "defaults.advisorRounds": "advisorRounds"
-    });
-    HOST_FAMILY_TOKENS = Object.freeze([
-      "claude",
-      "codex",
-      "cursor",
-      "gemini",
-      "copilot",
-      "windsurf",
-      "aider",
-      "antigravity",
-      "pi",
-      "cline",
-      "continue",
-      "zed"
-    ]);
-    MODEL_FAMILY_TOKENS = Object.freeze([
-      "anthropic",
-      "openai",
-      "google"
-    ]);
-    MODEL_NAME_PATTERNS = Object.freeze([
-      /\bopus\b/i,
-      /\bsonnet\b/i,
-      /\bhaiku\b/i,
-      /\bfable\b/i,
-      /\bgpt-?[0-9]/i,
-      /\bo[1-9](?:-(?:mini|pro|preview))?\b/i,
-      /\bgemini-[0-9]/i,
-      /\bclaude-[a-z0-9]/i,
-      /\bllama-?[0-9]/i,
-      /\bmistral\b/i,
-      /\bgrok-?[0-9]/i,
-      /\bdeepseek\b/i,
-      /\bqwen\b/i
-    ]);
-    INVENTORY_KEY_PATTERNS = Object.freeze([
-      /^models(\.|$)/,
-      /^defaults\.models(\.|$)/,
-      /^host_profiles(\.|$)/,
-      /^defaults\.host_profiles(\.|$)/,
-      /^host(\.|$)/,
-      /^defaults\.host(\.|$)/,
-      /^roles\.[^.]+\.host(\.|$)/,
-      /^defaults\.cross_host(\.|$)/
-    ]);
+var POLICY_KEYS = deepFreeze([
+  // Tier SELECTORS — which tier a lane starts at, never which model serves it.
+  {
+    key: "tiers.default",
+    type: "enum",
+    values: ["cheap", "mid", "powerful"],
+    default: "mid",
+    note: "tier a lane starts at when its score names none; the adapter maps tier\u2192model at dispatch"
+  },
+  // Score floors — the complexity score at which a lane is promoted a tier.
+  {
+    key: "tiers.floors.mid",
+    type: "number",
+    min: 0,
+    max: 10,
+    default: 3,
+    note: "complexity-score floor at which a lane resolves to the mid tier"
+  },
+  {
+    key: "tiers.floors.powerful",
+    type: "number",
+    min: 0,
+    max: 10,
+    default: 6,
+    note: "complexity-score floor at which a lane resolves to the powerful tier"
+  },
+  {
+    key: "advisorRounds",
+    type: "integer",
+    min: 0,
+    max: 10,
+    default: 2,
+    note: "advisor escalation rounds a cell may spend before it blocks with next_need: budget (R72)"
+  },
+  {
+    key: "budget.tokens",
+    type: "integer",
+    min: 0,
+    default: null,
+    note: "optional per-run token cap; null = uncapped. D-PROBE and inner verify do not decrement it"
+  },
+  {
+    key: "budget.usd",
+    type: "number",
+    min: 0,
+    default: null,
+    note: "optional per-run spend cap in USD; null = uncapped"
+  },
+  {
+    key: "team.compose_scope",
+    type: "enum",
+    values: ["phase", "goal"],
+    default: "phase",
+    note: "whether team-compose mints per phase or slices a roster per goal (KTD62)"
+  },
+  {
+    key: "recall.backend",
+    type: "enum",
+    values: ["bm25", "hybrid"],
+    default: "bm25",
+    note: "recall backend; embeddings are cache only and a missing model fails open to bm25 (KTD67)"
+  },
+  {
+    key: "recall.thresholds.min_score",
+    type: "number",
+    min: 0,
+    max: 1,
+    default: 0.2,
+    note: "minimum BM25 score a recall hit needs to enter a bundle"
+  },
+  {
+    key: "recall.thresholds.max_hits",
+    type: "integer",
+    min: 1,
+    max: 100,
+    default: 8,
+    note: "maximum recall hits a lane bundle may carry"
+  },
+  {
+    key: "review.critic",
+    type: "enum",
+    values: ["off", "advisor"],
+    default: "advisor",
+    note: "who plays critic; `advisor` is the machinery agent, never a new model family (KTD68)"
+  },
+  {
+    key: "review.independence",
+    type: "boolean",
+    default: true,
+    note: "a Team Lead may not review its own cell (KTD58); false only for single-agent local runs"
+  },
+  {
+    key: "wiki.autopromote",
+    type: "boolean",
+    default: true,
+    note: "harvest auto-promotes decisions on this cwd; false = candidates-only (KTD35)"
+  },
+  {
+    key: "agent_mode",
+    type: "enum",
+    values: ["auto", "team", "agent", "subagent"],
+    default: "auto",
+    note: "dispatch backend PREFERENCE only; never a statement about which host is running"
+  },
+  {
+    key: "dispatch.max_instances",
+    type: "integer",
+    min: 1,
+    max: 32,
+    default: 4,
+    note: "live worker instances one run may hold at once; CONCURRENCY, not a roster cap (R46/KTD30)"
   }
+]);
+var BY_KEY = new Map(POLICY_KEYS.map((s) => [s.key, s]));
+var POLICY_KEY_ALIASES = Object.freeze({
+  "defaults.wiki.autopromote": "wiki.autopromote",
+  "defaults.agent_mode": "agent_mode",
+  "defaults.team.compose_scope": "team.compose_scope",
+  "defaults.recall.backend": "recall.backend",
+  "defaults.review.critic": "review.critic",
+  "defaults.advisorRounds": "advisorRounds"
 });
+var HOST_FAMILY_TOKENS = Object.freeze([
+  "claude",
+  "codex",
+  "cursor",
+  "gemini",
+  "copilot",
+  "windsurf",
+  "aider",
+  "antigravity",
+  "pi",
+  "cline",
+  "continue",
+  "zed"
+]);
+var MODEL_FAMILY_TOKENS = Object.freeze([
+  "anthropic",
+  "openai",
+  "google"
+]);
+var MODEL_NAME_PATTERNS = Object.freeze([
+  /\bopus\b/i,
+  /\bsonnet\b/i,
+  /\bhaiku\b/i,
+  /\bfable\b/i,
+  /\bgpt-?[0-9]/i,
+  /\bo[1-9](?:-(?:mini|pro|preview))?\b/i,
+  /\bgemini-[0-9]/i,
+  /\bclaude-[a-z0-9]/i,
+  /\bllama-?[0-9]/i,
+  /\bmistral\b/i,
+  /\bgrok-?[0-9]/i,
+  /\bdeepseek\b/i,
+  /\bqwen\b/i
+]);
+var INVENTORY_KEY_PATTERNS = Object.freeze([
+  /^models(\.|$)/,
+  /^defaults\.models(\.|$)/,
+  /^host_profiles(\.|$)/,
+  /^defaults\.host_profiles(\.|$)/,
+  /^host(\.|$)/,
+  /^defaults\.host(\.|$)/,
+  /^roles\.[^.]+\.host(\.|$)/,
+  /^defaults\.cross_host(\.|$)/
+]);
 
 // src/domains/config/policy-resolver.ts
-var POLICY_FILES, ALIASES_BY_CANONICAL;
-var init_policy_resolver = __esm({
-  "src/domains/config/policy-resolver.ts"() {
-    init_policy_keys();
-    init_state();
-    POLICY_FILES = Object.freeze({
-      project: "config/project.json",
-      projectLocal: "config/project.local.json",
-      workspace: "config/workspace.json",
-      workspaceLocal: "config/workspace.local.json"
-    });
-    ALIASES_BY_CANONICAL = (() => {
-      const m = /* @__PURE__ */ new Map();
-      for (const [legacy, target] of Object.entries(POLICY_KEY_ALIASES)) {
-        m.set(target, [...m.get(target) ?? [], legacy]);
-      }
-      return m;
-    })();
-  }
+var POLICY_FILES = Object.freeze({
+  project: "config/project.json",
+  projectLocal: "config/project.local.json",
+  workspace: "config/workspace.json",
+  workspaceLocal: "config/workspace.local.json"
 });
+var ALIASES_BY_CANONICAL = (() => {
+  const m = /* @__PURE__ */ new Map();
+  for (const [legacy, target] of Object.entries(POLICY_KEY_ALIASES)) {
+    m.set(target, [...m.get(target) ?? [], legacy]);
+  }
+  return m;
+})();
 
 // src/domains/config/session-binding.ts
-var HOST_TO_MODEL_FAMILY, ENV_SIGNALS, KNOWN_FAMILIES;
-var init_session_binding = __esm({
-  "src/domains/config/session-binding.ts"() {
-    HOST_TO_MODEL_FAMILY = Object.freeze({
-      claude: "anthropic",
-      codex: "openai",
-      copilot: "openai",
-      cursor: "openai",
-      gemini: "google",
-      antigravity: "google"
-    });
-    ENV_SIGNALS = Object.freeze([
-      { env: "GUILD_HOST_FAMILY", fromValue: true },
-      { env: "CLAUDE_PLUGIN_ROOT", family: "claude" },
-      { env: "CLAUDECODE", family: "claude" },
-      { env: "CODEX_HOME", family: "codex" },
-      { env: "CODEX_SANDBOX", family: "codex" },
-      { env: "CURSOR_TRACE_ID", family: "cursor" },
-      { env: "GEMINI_CLI", family: "gemini" }
-    ]);
-    KNOWN_FAMILIES = /* @__PURE__ */ new Set([...Object.keys(HOST_TO_MODEL_FAMILY), "cline", "zed", "aider", "windsurf", "pi"]);
-  }
+var HOST_TO_MODEL_FAMILY = Object.freeze({
+  claude: "anthropic",
+  codex: "openai",
+  copilot: "openai",
+  cursor: "openai",
+  gemini: "google",
+  antigravity: "google"
 });
+var ENV_SIGNALS = Object.freeze([
+  { env: "GUILD_HOST_FAMILY", fromValue: true },
+  { env: "CLAUDE_PLUGIN_ROOT", family: "claude" },
+  { env: "CLAUDECODE", family: "claude" },
+  { env: "CODEX_HOME", family: "codex" },
+  { env: "CODEX_SANDBOX", family: "codex" },
+  { env: "CURSOR_TRACE_ID", family: "cursor" },
+  { env: "GEMINI_CLI", family: "gemini" }
+]);
+var KNOWN_FAMILIES = /* @__PURE__ */ new Set([...Object.keys(HOST_TO_MODEL_FAMILY), "cline", "zed", "aider", "windsurf", "pi"]);
 
-// src/domains/config/config-validation.ts
-var init_config_validation = __esm({
-  "src/domains/config/config-validation.ts"() {
-    init_host_id_namespace();
-  }
-});
+// src/domains/config/settings-resolver.ts
+var fs16 = __toESM(require("fs"));
+var path20 = __toESM(require("path"));
+var crypto3 = __toESM(require("crypto"));
 
-// src/domains/security/safe-object.ts
-var PROTO_POISON_KEYS;
-var init_safe_object = __esm({
-  "src/domains/security/safe-object.ts"() {
-    init_kernel();
-    PROTO_POISON_KEYS = sealSet(["__proto__", "prototype", "constructor"], "PROTO_POISON_KEYS");
-  }
-});
-
-// src/domains/security/injection-guard.ts
-var init_injection_guard = __esm({
-  "src/domains/security/injection-guard.ts"() {
-  }
-});
-
-// src/domains/security/redact-log.ts
-var FIELD_SIZE_CAP_BYTES, TOKEN_SHAPE_PATTERNS, SENSITIVE_HOME_DIRS, REDACTABLE_FIELD_NAMES, REDACTABLE_FIELDS;
-var init_redact_log = __esm({
-  "src/domains/security/redact-log.ts"() {
-    init_kernel();
-    FIELD_SIZE_CAP_BYTES = 4 * 1024;
-    TOKEN_SHAPE_PATTERNS = Object.freeze([
-      Object.freeze(/Authorization:\s*Bearer\s+[A-Za-z0-9._\-+/=]+/g),
-      Object.freeze(/\bBearer\s+[A-Za-z0-9._\-+/=]{16,}/g),
-      Object.freeze(/\bsk-(ant-)?[A-Za-z0-9_-]{20,}/g),
-      Object.freeze(/\bghp_[A-Za-z0-9]{36}\b/g),
-      Object.freeze(/\bgh[suor]_[A-Za-z0-9]{36}\b/g),
-      Object.freeze(/\bgithub_pat_[A-Za-z0-9_]{82}\b/g),
-      Object.freeze(/\bxox[bp]-[A-Za-z0-9-]{10,}/g),
-      Object.freeze(/\bAKIA[0-9A-Z]{16}\b/g),
-      Object.freeze(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g)
-    ]);
-    SENSITIVE_HOME_DIRS = Object.freeze([
-      ".claude",
-      ".codex",
-      ".ssh",
-      ".aws",
-      ".gnupg"
-    ]);
-    REDACTABLE_FIELD_NAMES = Object.freeze([
-      "command_redacted",
-      "result_excerpt_redacted",
-      "payload_excerpt_redacted",
-      "prompt_excerpt",
-      "assumption_text",
-      "result"
-    ]);
-    REDACTABLE_FIELDS = sealSet(REDACTABLE_FIELD_NAMES, "REDACTABLE_FIELDS");
-  }
-});
-
-// src/domains/security/secrets.ts
-var init_secrets = __esm({
-  "src/domains/security/secrets.ts"() {
-    init_redact_log();
-  }
-});
-
-// src/domains/security/config.ts
-var init_config = __esm({
-  "src/domains/security/config.ts"() {
-    init_state();
-    init_state();
-  }
-});
-
-// src/domains/security/events.ts
-var SECURITY_EVENT_TYPES, KNOWN_GUILD_HOST_KINDS, KNOWN_GUILD_HOST_ID_SET;
-var init_events = __esm({
-  "src/domains/security/events.ts"() {
-    init_state();
-    init_redact_log();
-    init_state();
-    SECURITY_EVENT_TYPES = Object.freeze([
-      "capability_scope_violation",
-      "capability_scope_degrade",
-      "bypass_permission_allowed",
-      "mcp_description_mismatch",
-      "mcp_description_unverifiable",
-      "mcp_description_unpinned",
-      "secret_scrub_failure",
-      "injection_attempt_detected",
-      "secret_scrub_blocked",
-      "recall_quarantine",
-      "dispatch_attribution_missing",
-      "backend_degradation",
-      "tier_dispatch_untiered",
-      "harvest_promoted",
-      "harvest_refused",
-      "playbook_auto_replace",
-      "wiki_cas_conflict",
-      "harvest_reverted",
-      "lane_wiki_write_refused",
-      "queue_drain_refused"
-    ]);
-    KNOWN_GUILD_HOST_KINDS = Object.freeze([
-      "claude-code-cli",
-      "codex-cli",
-      "pi-cli",
-      "antigravity-cli",
-      "agents-file",
-      "claude-code-app",
-      "claude-code-web",
-      "codex-app",
-      "claude-ai-connector"
-    ]);
-    KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
-  }
-});
-
-// src/domains/security/scrubbed-write.ts
-var init_scrubbed_write = __esm({
-  "src/domains/security/scrubbed-write.ts"() {
-    init_secrets();
-    init_config();
-    init_events();
-  }
-});
-
-// src/domains/security/share-set.ts
-var path17, SHARED_SCRUBBED_NAMES, CANONICAL_RUN_LOG;
-var init_share_set = __esm({
-  "src/domains/security/share-set.ts"() {
-    path17 = __toESM(require("path"));
-    init_kernel();
-    SHARED_SCRUBBED_NAMES = sealSet([
-      "verify.md",
-      "review.md",
-      "provenance.json",
-      "summary.md",
-      "run.yaml",
-      "run-state.json"
-    ], "SHARED_SCRUBBED_NAMES");
-    CANONICAL_RUN_LOG = path17.join("logs", "v1.4-events.jsonl");
-  }
-});
-
-// src/domains/security/secret-patterns.ts
-var SECRET_PATTERNS;
-var init_secret_patterns = __esm({
-  "src/domains/security/secret-patterns.ts"() {
-    SECRET_PATTERNS = Object.freeze([
-      // NOTE: labels deliberately drop the `=` so the redaction replacement
-      // (e.g. `<REDACTED:password-assignment>`) cannot itself re-match the pattern
-      // on a subsequent scrub pass. Idempotency depends on this — every label below
-      // is checked against every pattern above it, and none re-matches.
-      Object.freeze([Object.freeze(/password\s*=\s*["']?[^\s"']{6,}/), "password-assignment"]),
-      Object.freeze([Object.freeze(/api_key\s*=\s*["']?[^\s"']{6,}/i), "api_key-assignment"]),
-      Object.freeze([Object.freeze(/secret\s*=\s*["']?[^\s"']{8,}/i), "secret-assignment"]),
-      Object.freeze([Object.freeze(/AKIA[0-9A-Z]{16}/), "AWS access key"]),
-      Object.freeze([Object.freeze(/AIza[0-9A-Za-z_-]{35}/), "GCP API key"]),
-      Object.freeze([Object.freeze(/ghp_[0-9A-Za-z]{36}/), "GitHub personal access token"]),
-      Object.freeze([Object.freeze(/ghs_[0-9A-Za-z]{36}/), "GitHub server token"]),
-      Object.freeze([Object.freeze(/-----BEGIN (?:RSA |EC )?PRIVATE KEY/), "PEM private key block"]),
-      // ── Provider credential / bearer-token forms (T6B-R1-B1) ─────────────────
-      // Round-1 review proved the list above blind to the shapes an inspection
-      // surface is most likely to echo out of a persisted artifact: an
-      // `Authorization: Bearer …` header, a `sk-…` provider key, and the
-      // `<something>_token = …` assignment family. A display surface that renders
-      // a persisted evidence string verbatim leaked all three past the applier.
-      //
-      // Every pattern is anchored on the CREDENTIAL PREFIX (not on entropy) so it
-      // stays specific, and each replacement label is inert against every pattern
-      // in this list (no whitespace/`:`/`=` follows the trigger word in a label),
-      // which is what keeps `redact` idempotent.
-      Object.freeze([Object.freeze(/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i), "bearer-token"]),
-      Object.freeze([Object.freeze(/\bauthorization\s*:\s*["']?[A-Za-z0-9._~+/=-]{12,}/i), "authorization-header"]),
-      Object.freeze([Object.freeze(/\b(?:auth|access|refresh|id|api|bearer|session)[-_]?token\s*[:=]\s*["']?[^\s"',]{8,}/i), "token-assignment"]),
-      // OpenAI/Anthropic-style provider keys: sk-…, sk-proj-…, sk-ant-….
-      Object.freeze([Object.freeze(/\bsk-[A-Za-z0-9_-]{12,}/), "provider-api-key"]),
-      Object.freeze([Object.freeze(/\bxox[abprs]-[A-Za-z0-9-]{10,}/), "Slack token"]),
-      Object.freeze([Object.freeze(/\bgh[uor]_[0-9A-Za-z]{36}/), "GitHub token"]),
-      Object.freeze([Object.freeze(/\bglpat-[0-9A-Za-z_-]{20}/), "GitLab personal access token"]),
-      Object.freeze([Object.freeze(/\bnpm_[0-9A-Za-z]{36}/), "npm token"]),
-      Object.freeze([Object.freeze(/\bhf_[0-9A-Za-z]{34}/), "HuggingFace token"]),
-      // ── Personally identifying forms retained by public evidence projections ─
-      // Task objectives and handoff prose are operator-authored and can contain
-      // direct contact details or tenant identifiers. Those artifacts are copied
-      // into migration evidence, so the share scrubber must recognize them before
-      // publication. Keep the patterns prefix-shaped and their labels inert so the
-      // redaction remains deterministic and idempotent.
-      Object.freeze([Object.freeze(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i), "email-address"]),
-      Object.freeze([Object.freeze(/\b(?:acct|cus|cust|usr)_[A-Za-z0-9][A-Za-z0-9_-]{4,}\b/i), "customer-identifier"]),
-      Object.freeze([Object.freeze(/\b(?:customer|account|user)[_-]?id\s*[:=]\s*["']?[A-Za-z0-9][A-Za-z0-9._-]{3,}/i), "customer-identifier"]),
-      // High-entropy string heuristic: 40+ hex chars (SHA-like)
-      Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
-    ]);
-  }
-});
-
-// src/domains/security/scrub-redact.ts
-var init_scrub_redact = __esm({
-  "src/domains/security/scrub-redact.ts"() {
-    init_secret_patterns();
-    init_state();
-  }
-});
-
-// src/domains/security/d5-permission-content.ts
-var init_d5_permission_content = __esm({
-  "src/domains/security/d5-permission-content.ts"() {
-  }
-});
-
-// src/domains/security/ingest-pause.ts
-var init_ingest_pause = __esm({
-  "src/domains/security/ingest-pause.ts"() {
-    init_state();
-  }
-});
-
-// src/domains/security/index.ts
-var init_security = __esm({
-  "src/domains/security/index.ts"() {
-    init_safe_object();
-    init_injection_guard();
-    init_scrubbed_write();
-    init_redact_log();
-    init_share_set();
-    init_scrub_redact();
-    init_secret_patterns();
-    init_events();
-    init_d5_permission_content();
-    init_ingest_pause();
-    init_config();
-    init_secrets();
-  }
-});
+// src/domains/config/settings-reader.ts
+var fs15 = __toESM(require("fs"));
+var path19 = __toESM(require("path"));
 
 // src/domains/config/model-policy.ts
+var POLICY_PURPOSES = Object.freeze([
+  "general",
+  "implementation",
+  "planning",
+  "research",
+  "advisory",
+  "adversarial",
+  "security",
+  "adversarial-security"
+]);
+var REVIEW_CLASS_PURPOSES = Object.freeze([
+  "advisory",
+  "adversarial",
+  "security",
+  "adversarial-security"
+]);
 function isReviewClassPurpose(p) {
   return REVIEW_CLASS_PURPOSES.includes(p);
 }
+var COMPLEXITIES = Object.freeze(["easy", "medium", "hard"]);
+var CONDITION_KINDS = Object.freeze([
+  "always",
+  "producer_model_family_is",
+  "producer_model_family_is_not"
+]);
+var INDEPENDENCE_LEVELS = Object.freeze(["none", "prefer_cross_family", "require_cross_family"]);
+var POLICY_TIERS = Object.freeze(["cheap", "mid", "powerful"]);
 function parseSelector(raw) {
   if (typeof raw !== "string" || raw.length === 0) {
     throw new Error(`selector_malformed: empty or non-string selector`);
@@ -7392,6 +7245,7 @@ function parseSelector(raw) {
     `selector_malformed: "${raw}" is not id:/alias:/expr: (bare strings and unknown prefixes are rejected)`
   );
 }
+var COMPLEXITY_ORDER = { easy: 0, medium: 1, hard: 2 };
 function maxComplexity(a, b) {
   return COMPLEXITY_ORDER[a] >= COMPLEXITY_ORDER[b] ? a : b;
 }
@@ -7627,228 +7481,199 @@ function validateModelPolicy(input, opts) {
   }
   return rejects;
 }
-var POLICY_PURPOSES, REVIEW_CLASS_PURPOSES, COMPLEXITIES, CONDITION_KINDS, INDEPENDENCE_LEVELS, POLICY_TIERS, COMPLEXITY_ORDER, OPERATOR_BASELINE_POLICY;
-var init_model_policy = __esm({
-  "src/domains/config/model-policy.ts"() {
-    init_kernel();
-    POLICY_PURPOSES = Object.freeze([
-      "general",
-      "implementation",
-      "planning",
-      "research",
-      "advisory",
-      "adversarial",
-      "security",
-      "adversarial-security"
-    ]);
-    REVIEW_CLASS_PURPOSES = Object.freeze([
-      "advisory",
-      "adversarial",
-      "security",
-      "adversarial-security"
-    ]);
-    COMPLEXITIES = Object.freeze(["easy", "medium", "hard"]);
-    CONDITION_KINDS = Object.freeze([
-      "always",
-      "producer_model_family_is",
-      "producer_model_family_is_not"
-    ]);
-    INDEPENDENCE_LEVELS = Object.freeze(["none", "prefer_cross_family", "require_cross_family"]);
-    POLICY_TIERS = Object.freeze(["cheap", "mid", "powerful"]);
-    COMPLEXITY_ORDER = { easy: 0, medium: 1, hard: 2 };
-    OPERATOR_BASELINE_POLICY = deepFreeze({
-      version: 2,
-      allow_advertised_attempt: false,
-      purposes: {
-        general: {
-          min_effective_complexity: "easy",
-          independence: "none",
-          confirm_on_degradation: true,
-          routes: [
-            {
-              complexity: "easy",
-              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "expr:tier=cheap" }],
-              provider_default: "allow_last_resort"
-            },
-            {
-              complexity: "medium",
-              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "expr:tier=mid" }],
-              provider_default: "allow_last_resort"
-            },
-            {
-              complexity: "hard",
-              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
-              provider_default: "allow_last_resort"
-            }
-          ]
+var OPERATOR_BASELINE_POLICY = deepFreeze({
+  version: 2,
+  allow_advertised_attempt: false,
+  purposes: {
+    general: {
+      min_effective_complexity: "easy",
+      independence: "none",
+      confirm_on_degradation: true,
+      routes: [
+        {
+          complexity: "easy",
+          preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
+          fallbacks: [{ selector: "expr:tier=cheap" }],
+          provider_default: "allow_last_resort"
         },
-        implementation: {
-          min_effective_complexity: "easy",
-          independence: "none",
-          confirm_on_degradation: true,
-          routes: [
-            {
-              complexity: "easy",
-              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "expr:tier=cheap" }],
-              provider_default: "allow_last_resort"
-            },
-            {
-              complexity: "medium",
-              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "expr:tier=mid" }],
-              provider_default: "allow_last_resort"
-            },
-            {
-              complexity: "hard",
-              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
-              provider_default: "allow_last_resort"
-            }
-          ]
+        {
+          complexity: "medium",
+          preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
+          fallbacks: [{ selector: "expr:tier=mid" }],
+          provider_default: "allow_last_resort"
         },
-        planning: {
-          min_effective_complexity: "easy",
-          independence: "none",
-          confirm_on_degradation: true,
-          routes: [
-            {
-              complexity: "easy",
-              preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "expr:tier=cheap" }],
-              provider_default: "allow_last_resort"
-            },
-            {
-              complexity: "medium",
-              preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "expr:tier=mid" }],
-              provider_default: "allow_last_resort"
-            },
-            {
-              complexity: "hard",
-              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
-              provider_default: "allow_last_resort"
-            }
-          ]
-        },
-        research: {
-          // Redundant with the §3 forced floor; stated for closure.
-          min_effective_complexity: "hard",
-          independence: "none",
-          confirm_on_degradation: true,
-          routes: [
-            {
-              complexity: "hard",
-              // the ONLY reachable value (research_always_hard, §3)
-              preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
-              provider_default: "forbid"
-            }
-          ]
-        },
-        advisory: {
-          min_effective_complexity: "easy",
-          independence: "prefer_cross_family",
-          confirm_on_degradation: true,
-          routes: [
-            {
-              complexity: "any",
-              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
-              fallbacks: [{ selector: "expr:model_family=gpt;tier=powerful" }],
-              provider_default: "forbid"
-            }
-          ]
-        },
-        adversarial: {
-          min_effective_complexity: "easy",
-          // Same-family fallback allowed but ALWAYS weak-labelled (resolution §7a).
-          independence: "prefer_cross_family",
-          confirm_on_degradation: true,
-          routes: [
-            {
-              // Producer is not gpt-family → gpt reviewer is cross-family.
-              complexity: "any",
-              condition: { kind: "producer_model_family_is_not", model_family: "gpt" },
-              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
-              fallbacks: [{ selector: "id:claude-opus-4-8" }],
-              // may be same-family as producer ⇒ weak, labelled
-              provider_default: "forbid"
-            },
-            {
-              // Producer IS gpt-family → claude reviewer restores independence.
-              complexity: "any",
-              condition: { kind: "producer_model_family_is", model_family: "gpt" },
-              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
-              fallbacks: [{ selector: "expr:model_family=claude;tier=powerful" }],
-              provider_default: "forbid"
-            },
-            {
-              // Producer family unknown → weak either way (resolution §7a); review still runs.
-              complexity: "any",
-              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
-              fallbacks: [{ selector: "id:claude-opus-4-8" }],
-              provider_default: "forbid"
-            }
-          ]
-        },
-        security: {
-          min_effective_complexity: "easy",
-          independence: "none",
-          // same-family claude is deliberate (pinned-model rationale)
-          confirm_on_degradation: true,
-          routes: [
-            {
-              complexity: "any",
-              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
-              // pinned id REQUIRED (§5)
-              fallbacks: [{ selector: "expr:model_family=claude;tier=powerful" }],
-              provider_default: "forbid"
-            }
-          ]
-        },
-        "adversarial-security": {
-          min_effective_complexity: "easy",
-          independence: "require_cross_family",
-          // adjudicated weak ⇒ NO strong sign-off (resolution §7a)
-          confirm_on_degradation: true,
-          routes: [
-            {
-              // Producer not gpt-family → gpt reviewer is cross-family.
-              complexity: "any",
-              condition: { kind: "producer_model_family_is_not", model_family: "gpt" },
-              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
-              // Cannot restore independence on this branch ⇒ weak ⇒ NO strong sign-off.
-              fallbacks: [{ selector: "id:claude-opus-4-8" }],
-              provider_default: "forbid"
-            },
-            {
-              // Producer IS gpt-family → claude restores family independence.
-              complexity: "any",
-              condition: { kind: "producer_model_family_is", model_family: "gpt" },
-              preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
-              fallbacks: [],
-              // nothing further — beyond this there is NO strong sign-off
-              provider_default: "forbid"
-            },
-            {
-              // Producer family unknown → weak regardless; NO strong sign-off.
-              complexity: "any",
-              preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
-              fallbacks: [{ selector: "id:claude-opus-4-8" }],
-              provider_default: "forbid"
-            }
-          ]
+        {
+          complexity: "hard",
+          preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+          fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+          provider_default: "allow_last_resort"
         }
-      }
-    });
+      ]
+    },
+    implementation: {
+      min_effective_complexity: "easy",
+      independence: "none",
+      confirm_on_degradation: true,
+      routes: [
+        {
+          complexity: "easy",
+          preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
+          fallbacks: [{ selector: "expr:tier=cheap" }],
+          provider_default: "allow_last_resort"
+        },
+        {
+          complexity: "medium",
+          preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
+          fallbacks: [{ selector: "expr:tier=mid" }],
+          provider_default: "allow_last_resort"
+        },
+        {
+          complexity: "hard",
+          preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+          fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+          provider_default: "allow_last_resort"
+        }
+      ]
+    },
+    planning: {
+      min_effective_complexity: "easy",
+      independence: "none",
+      confirm_on_degradation: true,
+      routes: [
+        {
+          complexity: "easy",
+          preferred: [{ selector: "alias:haiku", effort: null, capabilities: [] }],
+          fallbacks: [{ selector: "expr:tier=cheap" }],
+          provider_default: "allow_last_resort"
+        },
+        {
+          complexity: "medium",
+          preferred: [{ selector: "alias:sonnet", effort: null, capabilities: [] }],
+          fallbacks: [{ selector: "expr:tier=mid" }],
+          provider_default: "allow_last_resort"
+        },
+        {
+          complexity: "hard",
+          preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+          fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+          provider_default: "allow_last_resort"
+        }
+      ]
+    },
+    research: {
+      // Redundant with the §3 forced floor; stated for closure.
+      min_effective_complexity: "hard",
+      independence: "none",
+      confirm_on_degradation: true,
+      routes: [
+        {
+          complexity: "hard",
+          // the ONLY reachable value (research_always_hard, §3)
+          preferred: [{ selector: "id:claude-fable-5", effort: null, capabilities: [] }],
+          fallbacks: [{ selector: "id:claude-opus-4-8" }, { selector: "expr:tier=powerful" }],
+          provider_default: "forbid"
+        }
+      ]
+    },
+    advisory: {
+      min_effective_complexity: "easy",
+      independence: "prefer_cross_family",
+      confirm_on_degradation: true,
+      routes: [
+        {
+          complexity: "any",
+          preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+          fallbacks: [{ selector: "expr:model_family=gpt;tier=powerful" }],
+          provider_default: "forbid"
+        }
+      ]
+    },
+    adversarial: {
+      min_effective_complexity: "easy",
+      // Same-family fallback allowed but ALWAYS weak-labelled (resolution §7a).
+      independence: "prefer_cross_family",
+      confirm_on_degradation: true,
+      routes: [
+        {
+          // Producer is not gpt-family → gpt reviewer is cross-family.
+          complexity: "any",
+          condition: { kind: "producer_model_family_is_not", model_family: "gpt" },
+          preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+          fallbacks: [{ selector: "id:claude-opus-4-8" }],
+          // may be same-family as producer ⇒ weak, labelled
+          provider_default: "forbid"
+        },
+        {
+          // Producer IS gpt-family → claude reviewer restores independence.
+          complexity: "any",
+          condition: { kind: "producer_model_family_is", model_family: "gpt" },
+          preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
+          fallbacks: [{ selector: "expr:model_family=claude;tier=powerful" }],
+          provider_default: "forbid"
+        },
+        {
+          // Producer family unknown → weak either way (resolution §7a); review still runs.
+          complexity: "any",
+          preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+          fallbacks: [{ selector: "id:claude-opus-4-8" }],
+          provider_default: "forbid"
+        }
+      ]
+    },
+    security: {
+      min_effective_complexity: "easy",
+      independence: "none",
+      // same-family claude is deliberate (pinned-model rationale)
+      confirm_on_degradation: true,
+      routes: [
+        {
+          complexity: "any",
+          preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
+          // pinned id REQUIRED (§5)
+          fallbacks: [{ selector: "expr:model_family=claude;tier=powerful" }],
+          provider_default: "forbid"
+        }
+      ]
+    },
+    "adversarial-security": {
+      min_effective_complexity: "easy",
+      independence: "require_cross_family",
+      // adjudicated weak ⇒ NO strong sign-off (resolution §7a)
+      confirm_on_degradation: true,
+      routes: [
+        {
+          // Producer not gpt-family → gpt reviewer is cross-family.
+          complexity: "any",
+          condition: { kind: "producer_model_family_is_not", model_family: "gpt" },
+          preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+          // Cannot restore independence on this branch ⇒ weak ⇒ NO strong sign-off.
+          fallbacks: [{ selector: "id:claude-opus-4-8" }],
+          provider_default: "forbid"
+        },
+        {
+          // Producer IS gpt-family → claude restores family independence.
+          complexity: "any",
+          condition: { kind: "producer_model_family_is", model_family: "gpt" },
+          preferred: [{ selector: "id:claude-opus-4-8", effort: null, capabilities: [] }],
+          fallbacks: [],
+          // nothing further — beyond this there is NO strong sign-off
+          provider_default: "forbid"
+        },
+        {
+          // Producer family unknown → weak regardless; NO strong sign-off.
+          complexity: "any",
+          preferred: [{ selector: "id:gpt-5.6-sol", effort: "xhigh", capabilities: [] }],
+          fallbacks: [{ selector: "id:claude-opus-4-8" }],
+          provider_default: "forbid"
+        }
+      ]
+    }
   }
 });
 
 // src/domains/config/workspace-manifest.ts
+var fs14 = __toESM(require("fs"));
+var path18 = __toESM(require("path"));
 function parseWorkspaceManifest(manifestPath) {
   let raw;
   try {
@@ -7886,16 +7711,13 @@ function discoverWorkspace(startDir) {
   }
   return null;
 }
-var fs14, path18;
-var init_workspace_manifest = __esm({
-  "src/domains/config/workspace-manifest.ts"() {
-    fs14 = __toESM(require("fs"));
-    path18 = __toESM(require("path"));
-    init_state();
-  }
-});
 
 // src/domains/config/settings-reader.ts
+var yaml = loadYamlApi();
+var HOST_MODES = ["read_only", "ask", "accept_edits", "auto", "bypass_all"];
+var DEFAULTS2 = DEFAULTS;
+var VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
+var KNOWN_HOST_IDS2 = new Set(HOST_IDS);
 function sparseRoles(raw) {
   const out = {};
   for (const k of ["host", "advisory", "adversarial"]) {
@@ -7919,10 +7741,84 @@ function sparseTierHostMap(raw) {
   }
   return out;
 }
+var VALID_LOOPS = /* @__PURE__ */ new Set(["none", "spec", "plan", "implementation", "all"]);
+var VALID_RIGOR = /* @__PURE__ */ new Set(["quick", "standard", "deep"]);
+var VALID_REVIEW = /* @__PURE__ */ new Set(["local", "cross", "off"]);
+var DISPATCH_HOST_IDS = new Set(
+  HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
+);
 function normalizeDispatchHostId(value) {
   const normalized = normalizeHostId(value);
   return normalized && DISPATCH_HOST_IDS.has(normalized) ? normalized : null;
 }
+var VALID_AGENT_MODE = /* @__PURE__ */ new Set(["team", "agent", "subagent", "auto"]);
+var VALID_CACHE_TTL = /* @__PURE__ */ new Set(["1h", "5m", "off"]);
+var DEFAULTS_ALLOWED_KEYS = /* @__PURE__ */ new Set([
+  "auto_learn",
+  "adversarial",
+  "team",
+  "review_workflow",
+  "skill_policy",
+  "gates",
+  "wiki",
+  "quality",
+  "reporting",
+  "index",
+  "cross_host",
+  "retry",
+  "resume",
+  // R-016
+  "heartbeat_timeout_ms",
+  // R-017
+  "capability_manifest_ttl_s",
+  // R-018
+  "allowed_tools",
+  // R-020
+  "update",
+  // plugin-update-lifecycle AC-6
+  "lean_lead",
+  "lifecycle_gate",
+  // rf-wi-01 (G1)
+  "dispatch"
+  // #93: { block_unmarked_lanes: bool }
+]);
+var RESOLVER_TIER1_KEYS = sealSet([
+  "rigor",
+  "auto_approve",
+  "review",
+  "host",
+  "host_mode",
+  "roles",
+  "host_profiles",
+  "initiative_default",
+  "index",
+  "record_status_runs",
+  "codex_skip_enforcement",
+  "agent_mode",
+  "workspace",
+  "models",
+  "security",
+  "secrets_policy",
+  "mcp",
+  "capability",
+  // S5 (cap-loc-D04) — capability localization policy
+  "statusline",
+  // R-009
+  "adversarial_review_provider",
+  // R-008
+  "loops",
+  "loop_cap",
+  "codex_cap",
+  "defaults",
+  "model_policy"
+  // T5 dynamic-host-model-routing: guild.model_policy.v2 (optional closed key)
+], "RESOLVER_TIER1_KEYS");
+var VALID_CAPABILITY_KEYS = /* @__PURE__ */ new Set([
+  "resolver_mode",
+  "suggestion_budget",
+  "starter_roles",
+  "auto_create_policy"
+]);
 function coerceCapability(raw) {
   const base = DEFAULTS.capability;
   const out = {
@@ -8494,2893 +8390,55 @@ function resolveSettings(opts) {
   }
   return { config: assembled, sources };
 }
-var fs15, path19, yaml, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS, RESOLVER_TIER1_KEYS, VALID_CAPABILITY_KEYS;
-var init_settings_reader = __esm({
-  "src/domains/config/settings-reader.ts"() {
-    fs15 = __toESM(require("fs"));
-    path19 = __toESM(require("path"));
-    init_host_registry_schema();
-    init_host_id_namespace();
-    init_host_profiles_validate();
-    init_security();
-    init_config_defaults();
-    init_model_policy();
-    init_kernel();
-    init_workspace_manifest();
-    init_state();
-    yaml = loadYamlApi();
-    HOST_MODES = ["read_only", "ask", "accept_edits", "auto", "bypass_all"];
-    DEFAULTS2 = DEFAULTS;
-    VALID_TIER_HOST_KEYS = new Set(HOST_IDS);
-    KNOWN_HOST_IDS2 = new Set(HOST_IDS);
-    VALID_LOOPS = /* @__PURE__ */ new Set(["none", "spec", "plan", "implementation", "all"]);
-    VALID_RIGOR = /* @__PURE__ */ new Set(["quick", "standard", "deep"]);
-    VALID_REVIEW = /* @__PURE__ */ new Set(["local", "cross", "off"]);
-    DISPATCH_HOST_IDS = new Set(
-      HOST_IDS.filter((id) => HOST_REGISTRY_ROWS[id].dispatch_selectable === true)
-    );
-    VALID_AGENT_MODE = /* @__PURE__ */ new Set(["team", "agent", "subagent", "auto"]);
-    VALID_CACHE_TTL = /* @__PURE__ */ new Set(["1h", "5m", "off"]);
-    DEFAULTS_ALLOWED_KEYS = /* @__PURE__ */ new Set([
-      "auto_learn",
-      "adversarial",
-      "team",
-      "review_workflow",
-      "skill_policy",
-      "gates",
-      "wiki",
-      "quality",
-      "reporting",
-      "index",
-      "cross_host",
-      "retry",
-      "resume",
-      // R-016
-      "heartbeat_timeout_ms",
-      // R-017
-      "capability_manifest_ttl_s",
-      // R-018
-      "allowed_tools",
-      // R-020
-      "update",
-      // plugin-update-lifecycle AC-6
-      "lean_lead",
-      "lifecycle_gate",
-      // rf-wi-01 (G1)
-      "dispatch"
-      // #93: { block_unmarked_lanes: bool }
-    ]);
-    RESOLVER_TIER1_KEYS = sealSet([
-      "rigor",
-      "auto_approve",
-      "review",
-      "host",
-      "host_mode",
-      "roles",
-      "host_profiles",
-      "initiative_default",
-      "index",
-      "record_status_runs",
-      "codex_skip_enforcement",
-      "agent_mode",
-      "workspace",
-      "models",
-      "security",
-      "secrets_policy",
-      "mcp",
-      "capability",
-      // S5 (cap-loc-D04) — capability localization policy
-      "statusline",
-      // R-009
-      "adversarial_review_provider",
-      // R-008
-      "loops",
-      "loop_cap",
-      "codex_cap",
-      "defaults",
-      "model_policy"
-      // T5 dynamic-host-model-routing: guild.model_policy.v2 (optional closed key)
-    ], "RESOLVER_TIER1_KEYS");
-    VALID_CAPABILITY_KEYS = /* @__PURE__ */ new Set([
-      "resolver_mode",
-      "suggestion_budget",
-      "starter_roles",
-      "auto_create_policy"
-    ]);
-  }
-});
-
-// src/domains/telemetry/receipt-journal.ts
-function makeReceiptInput(input) {
-  return {
-    run_id: input.run_id,
-    operation_id: input.operation_id,
-    correlation_id: input.correlation_id,
-    event_id: input.event_id,
-    causation_id: input.causation_id ?? null,
-    scenario_id: input.scenario_id ?? null,
-    event_name: input.event_name,
-    outcome_type: input.outcome_type,
-    disposition: input.disposition,
-    observation_state: input.observation_state,
-    input_hash: input.input_hash,
-    output_hash: input.output_hash ?? null,
-    terminal: input.terminal,
-    recorded_at: input.recorded_at,
-    observed_at: input.observed_at ?? null,
-    versions: input.versions,
-    affected_event_range: input.affected_event_range ?? null
-  };
-}
-function canonicalJson(value) {
-  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  const obj = value;
-  const keys = Object.keys(obj).sort();
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(",")}}`;
-}
-function sha2562(text) {
-  return `sha256:${crypto3.createHash("sha256").update(text, "utf8").digest("hex")}`;
-}
-function sealReceiptRecord(input) {
-  const body = {
-    ...makeReceiptInput(input),
-    schema_version: "guild.receipt_record.v1",
-    sequence: input.sequence
-  };
-  return { ...body, record_hash: sha2562(canonicalJson(body)) };
-}
-function verifyReceiptRecord(record) {
-  const { record_hash, ...body } = record;
-  return typeof record_hash === "string" && sha2562(canonicalJson(body)) === record_hash;
-}
-function isValidCheckpointShape(value) {
-  if (!value || typeof value !== "object") return false;
-  const c = value;
-  if (c.schema_version !== "guild.receipt_checkpoint.v1") return false;
-  if (typeof c.run_id !== "string" || c.run_id.length === 0) return false;
-  if (typeof c.last_sequence !== "number" || !Number.isInteger(c.last_sequence) || c.last_sequence < 0) return false;
-  if (typeof c.record_count !== "number" || !Number.isInteger(c.record_count) || c.record_count < 0) return false;
-  if (c.last_event_id !== null && (typeof c.last_event_id !== "string" || c.last_event_id.length === 0)) return false;
-  if (typeof c.updated_at !== "string" || c.updated_at.length === 0) return false;
-  if (typeof c.contract_version !== "string" || c.contract_version.length === 0) return false;
-  return true;
-}
-function readCheckpointState(checkpointPath, io = defaultJournalIo) {
-  const raw = io.readAll(checkpointPath);
-  if (raw === null) return { state: "absent", checkpoint: null };
-  if (raw.trim().length === 0) return { state: "malformed", checkpoint: null };
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { state: "malformed", checkpoint: null };
-  }
-  if (!isValidCheckpointShape(parsed)) return { state: "malformed", checkpoint: null };
-  return { state: "present", checkpoint: parsed };
-}
-function checkpointsIdentical(a, b) {
-  return a.schema_version === b.schema_version && a.run_id === b.run_id && a.last_sequence === b.last_sequence && a.last_event_id === b.last_event_id && a.record_count === b.record_count && a.updated_at === b.updated_at && a.contract_version === b.contract_version;
-}
-function highestSequenceRecord(records) {
-  let best = null;
-  for (const r of records) if (!best || r.sequence >= best.sequence) best = r;
-  return best;
-}
-function compareCheckpointToJournal(read, scan, run_id) {
-  const journalLast = highestSequenceRecord(scan.records);
-  if (read.state === "malformed") {
-    return [{ code: "checkpoint_malformed", expected: run_id, actual: null }];
-  }
-  if (read.state === "absent" || read.checkpoint === null) {
-    if (scan.record_count === 0) return [];
-    return [{ code: "checkpoint_missing", expected: scan.last_sequence, actual: null }];
-  }
-  const cp = read.checkpoint;
-  const out = [];
-  if (cp.run_id !== run_id) out.push({ code: "checkpoint_run_mismatch", expected: run_id, actual: cp.run_id });
-  if (cp.contract_version !== RECEIPT_CONTRACT_VERSION) {
-    out.push({ code: "checkpoint_contract_mismatch", expected: RECEIPT_CONTRACT_VERSION, actual: cp.contract_version });
-  }
-  if (cp.last_sequence !== scan.last_sequence) {
-    out.push({ code: "checkpoint_sequence_mismatch", expected: scan.last_sequence, actual: cp.last_sequence });
-  }
-  if (cp.record_count !== scan.record_count) {
-    out.push({ code: "checkpoint_count_mismatch", expected: scan.record_count, actual: cp.record_count });
-  }
-  if (cp.last_event_id !== (journalLast?.event_id ?? null)) {
-    out.push({ code: "checkpoint_event_mismatch", expected: journalLast?.event_id ?? null, actual: cp.last_event_id });
-  }
-  if (journalLast && cp.updated_at !== journalLast.recorded_at) {
-    out.push({ code: "checkpoint_timestamp_mismatch", expected: journalLast.recorded_at, actual: cp.updated_at });
-  }
-  return out;
-}
-function openLockPublication(lockPath) {
-  const frame = { lockPath, outer: ACTIVE_LOCK_PUBLICATION, grant: null, open: true };
-  ACTIVE_LOCK_PUBLICATION = frame;
-  return frame;
-}
-function closeLockPublication(frame) {
-  frame.open = false;
-  ACTIVE_LOCK_PUBLICATION = frame.outer;
-  const grant = frame.grant;
-  frame.grant = null;
-  return grant;
-}
-function publishLockGrant(grant) {
-  const frame = ACTIVE_LOCK_PUBLICATION;
-  if (frame === null || !frame.open || frame.lockPath !== grant.path) return grant;
-  const earlier = frame.grant;
-  if (earlier !== null && earlier.fd !== null && earlier.fd !== grant.fd) closeQuietly(earlier.fd);
-  frame.grant = grant;
-  return grant;
-}
-function writeAllSync(fd, text) {
-  const buf = Buffer.from(text, "utf8");
-  let written = 0;
-  while (written < buf.length) {
-    written += fs16.writeSync(fd, buf, written, buf.length - written);
-  }
-}
-function readAllSync(fd) {
-  const size = fs16.fstatSync(fd).size;
-  if (size === 0) return "";
-  const buf = Buffer.allocUnsafe(size);
-  let read = 0;
-  while (read < size) {
-    const n = fs16.readSync(fd, buf, read, size - read, read);
-    if (n <= 0) break;
-    read += n;
-  }
-  return buf.subarray(0, read).toString("utf8");
-}
-function realpathOrNull(target) {
-  try {
-    return (fs16.realpathSync.native ?? fs16.realpathSync)(target);
-  } catch {
-    return null;
-  }
-}
-function readlinkOrNull(target) {
-  try {
-    return fs16.readlinkSync(target);
-  } catch {
-    return null;
-  }
-}
-function canonicalJournalPath(journalPath) {
-  let current = path20.resolve(journalPath);
-  for (let hop = 0; hop < CANONICAL_PATH_MAX_LINK_HOPS; hop += 1) {
-    const real = realpathOrNull(current);
-    if (real !== null) return real;
-    const link = readlinkOrNull(current);
-    if (link !== null) {
-      const next = path20.resolve(path20.dirname(current), link);
-      if (next === current) return current;
-      current = next;
-      continue;
-    }
-    const parent = path20.dirname(current);
-    if (parent === current) return current;
-    return path20.join(canonicalJournalPath(parent), path20.basename(current));
-  }
-  return current;
-}
-function lstatOrNull2(target) {
-  try {
-    return fs16.lstatSync(target);
-  } catch {
-    return null;
-  }
-}
-function resolveJournalIdentity(journalPath) {
-  const refuse2 = (code, message) => ({
-    ok: false,
-    identity: null,
-    failure: { code, message }
-  });
-  const canonical = canonicalJournalPath(journalPath);
-  if (canonicalJournalPath(canonical) !== canonical) {
-    return refuse2(
-      "journal_identity_unstable",
-      `journal path "${journalPath}" canonicalizes to "${canonical}", which itself resolves further \u2014 the name is moving and cannot be bound to a lock`
-    );
-  }
-  const stat = lstatOrNull2(canonical);
-  if (stat === null) {
-    return { ok: true, identity: { path: canonical, lock: `${canonical}.lock`, device: null, inode: null, links: null }, failure: null };
-  }
-  if (stat.isSymbolicLink()) {
-    return refuse2(
-      "journal_identity_unstable",
-      `a symlink appeared at the canonical journal name "${canonical}" after it was resolved`
-    );
-  }
-  if (!stat.isFile()) {
-    return refuse2(
-      "journal_identity_unstable",
-      `canonical journal name "${canonical}" does not name a regular file`
-    );
-  }
-  if (stat.nlink > 1) {
-    return refuse2(
-      "journal_identity_ambiguous",
-      `journal at "${canonical}" is one physical file with ${stat.nlink} names (hard links) \u2014 a path-keyed lock cannot serialise writers that name it differently, so this operation is refused (remove the extra link, or give each producer its own journal)`
-    );
-  }
-  return {
-    ok: true,
-    identity: { path: canonical, lock: `${canonical}.lock`, device: stat.dev, inode: stat.ino, links: stat.nlink },
-    failure: null
-  };
-}
-function journalIdentityDrift(locked, current) {
-  if (current.path !== locked.path) {
-    return `the journal path now resolves to "${current.path}" while the lock is held on "${locked.path}" \u2014 refusing to write to a destination this writer does not hold`;
-  }
-  if (locked.inode !== null && (current.inode !== locked.inode || current.device !== locked.device)) {
-    return `the journal at "${locked.path}" was replaced under the lock (device/inode ${locked.device}/${locked.inode} \u2192 ${current.device}/${current.inode})`;
-  }
-  return null;
-}
-function journalLockPath(paths) {
-  const resolved = resolveJournalIdentity(paths.journal);
-  if (!resolved.ok) throw new JournalIdentityError(resolved.failure);
-  return resolved.identity.lock;
-}
-function sleepSync(ms) {
-  if (ms <= 0) return;
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-function discardLockGrant(grant) {
-  if (grant && grant.fd !== null) closeQuietly(grant.fd);
-}
-function lockRefusal(code, message) {
-  return { grant: null, failure: { code, message } };
-}
-function asLockGrant(value, lockPath) {
-  if (typeof value !== "object" || value === null) return null;
-  const claim = value;
-  if (claim.path !== lockPath) return null;
-  if (typeof claim.device !== "number" || !Number.isFinite(claim.device)) return null;
-  if (typeof claim.inode !== "number" || !Number.isFinite(claim.inode)) return null;
-  if (claim.fd !== null && (typeof claim.fd !== "number" || !Number.isInteger(claim.fd) || claim.fd < 0)) return null;
-  return {
-    path: claim.path,
-    device: claim.device,
-    inode: claim.inode,
-    fd: typeof claim.fd === "number" ? claim.fd : null
-  };
-}
-function sameLockObject(a, b) {
-  return a === b || a.path === b.path && a.device === b.device && a.inode === b.inode;
-}
-function discardDuplicateGrant(candidate, retained) {
-  if (candidate === null || candidate === retained) return;
-  if (candidate.fd !== null && candidate.fd !== retained.fd) closeQuietly(candidate.fd);
-}
-function acquireJournalLockHeld(lockPath, io, options) {
-  const acquire = io.acquireLock ?? defaultJournalIo.acquireLock;
-  const attempts = Math.max(1, options.lock_max_attempts ?? JOURNAL_LOCK_MAX_ATTEMPTS);
-  const wait = Math.max(0, options.lock_wait_ms ?? JOURNAL_LOCK_WAIT_MS);
-  for (let i = 0; i < attempts; i += 1) {
-    const publication = openLockPublication(lockPath);
-    let got;
-    try {
-      got = acquire(lockPath);
-    } catch (err) {
-      discardLockGrant(closeLockPublication(publication));
-      return lockRefusal(
-        "journal_lock_failed",
-        `journal lock could not be evaluated at ${lockPath}: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-    const published = closeLockPublication(publication);
-    if (got) {
-      const returned = asLockGrant(got, lockPath);
-      if (published !== null) {
-        if (returned !== null && !sameLockObject(returned, published)) {
-          discardDuplicateGrant(returned, published);
-          discardLockGrant(published);
-          return lockRefusal(
-            "journal_lock_failed",
-            `the acquisition of the journal lock at ${lockPath} returned a lock object that is not the one its own primitive created for this call \u2014 refusing to hold an exclusion whose identity the acquisition disputes`
-          );
-        }
-        discardDuplicateGrant(returned, published);
-        return { grant: published, failure: null };
-      }
-      if (returned !== null) return { grant: returned, failure: null };
-      return lockRefusal(
-        "journal_lock_failed",
-        `the journal lock at ${lockPath} was reported as taken by an acquisition that named no lock object \u2014 refusing to mutate under an exclusion this writer cannot identify, and leaving that lock in place rather than deleting an object it cannot recognise as its own`
-      );
-    }
-    discardLockGrant(published);
-    if (i < attempts - 1) sleepSync(wait);
-  }
-  return lockRefusal(
-    "journal_lock_unavailable",
-    `journal lock at ${lockPath} is held by another writer after ${attempts} attempts \u2014 refusing to append without exclusive access (remove the lock only after confirming no writer is live)`
-  );
-}
-function acquireJournalLock(lockPath, io = defaultJournalIo, options = {}) {
-  const held = acquireJournalLockHeld(lockPath, io, options);
-  discardLockGrant(held.grant);
-  return held.failure;
-}
-function releaseJournalLock(lockPath, io = defaultJournalIo) {
-  const release = io.releaseLock ?? defaultJournalIo.releaseLock;
-  try {
-    release(lockPath);
-  } catch {
-  }
-}
-function statOrNull(target) {
-  try {
-    return fs16.statSync(target);
-  } catch {
-    return null;
-  }
-}
-function fstatOrNull(fd) {
-  try {
-    return fs16.fstatSync(fd);
-  } catch {
-    return null;
-  }
-}
-function closeQuietly(fd) {
-  try {
-    fs16.closeSync(fd);
-  } catch {
-  }
-}
-function acquireJournalAuthority(journalPath, io = defaultJournalIo, lockOptions = {}, access = "read", checkpointPath = null) {
-  const resolved = resolveJournalIdentity(journalPath);
-  if (!resolved.ok) return { ok: false, authority: null, identity: null, failure: resolved.failure };
-  const identity = resolved.identity;
-  const acquisition = acquireJournalLockHeld(identity.lock, io, lockOptions);
-  if (acquisition.failure !== null) return { ok: false, authority: null, identity, failure: acquisition.failure };
-  const grant = acquisition.grant;
-  const journalParent = path20.dirname(identity.path);
-  const parentStat = statOrNull(journalParent);
-  const parentDevice = parentStat !== null ? parentStat.dev : null;
-  const parentInode = parentStat !== null ? parentStat.ino : null;
-  const checkpointParentPath = checkpointPath === null ? null : canonicalJournalPath(path20.dirname(checkpointPath));
-  const checkpointCanonical = checkpointParentPath === null || checkpointPath === null ? null : path20.join(checkpointParentPath, path20.basename(checkpointPath));
-  const checkpointParent = checkpointParentPath === null || checkpointParentPath === journalParent ? null : checkpointParentPath;
-  let checkpointParentPin = null;
-  let handle = null;
-  let released = false;
-  const unstable = (message) => ({ code: "journal_identity_unstable", message });
-  const ambiguous = (message) => ({ code: "journal_identity_ambiguous", message });
-  const pin = () => {
-    const present = lstatOrNull2(identity.path);
-    if (present === null) return null;
-    if (present.isSymbolicLink() || !present.isFile()) {
-      return unstable(`canonical journal name "${identity.path}" no longer names a regular file`);
-    }
-    let fd = null;
-    let writable = false;
-    try {
-      fd = fs16.openSync(identity.path, JOURNAL_ACCESS_FLAGS[access]);
-      writable = access !== "read";
-    } catch {
-      fd = null;
-    }
-    if (fd === null) {
-      try {
-        fd = fs16.openSync(identity.path, "r");
-        writable = false;
-      } catch (err) {
-        return unstable(
-          `the journal at "${identity.path}" could not be opened for ${access}: ${err instanceof Error ? err.message : String(err)}`
-        );
-      }
-    }
-    const st = fstatOrNull(fd);
-    if (st === null || st.dev !== present.dev || st.ino !== present.ino) {
-      closeQuietly(fd);
-      return unstable(`the journal at "${identity.path}" was replaced while it was being opened`);
-    }
-    if (st.nlink > 1) {
-      closeQuietly(fd);
-      return ambiguous(
-        `journal at "${identity.path}" is one physical file with ${st.nlink} names (hard links) \u2014 a path-keyed lock cannot serialise writers that name it differently, so this operation is refused`
-      );
-    }
-    handle = { path: identity.path, fd, device: st.dev, inode: st.ino, writable };
-    return null;
-  };
-  const pinCheckpointParent = () => {
-    if (checkpointParent === null || checkpointParentPin !== null) return;
-    let fd = null;
-    try {
-      fd = fs16.openSync(checkpointParent, "r");
-    } catch {
-      fd = null;
-    }
-    const st = fd !== null ? fstatOrNull(fd) : statOrNull(checkpointParent);
-    if (st === null || !st.isDirectory()) {
-      if (fd !== null) closeQuietly(fd);
-      return;
-    }
-    checkpointParentPin = { device: st.dev, inode: st.ino, fd };
-  };
-  const verify = (stage) => {
-    if (handle !== null) {
-      const st = fstatOrNull(handle.fd);
-      if (st === null) {
-        return unstable(`the retained handle on "${identity.path}" can no longer be inspected ${stage}`);
-      }
-      if (st.dev !== handle.device || st.ino !== handle.inode) {
-        return unstable(`the retained handle on "${identity.path}" no longer names the locked file ${stage}`);
-      }
-      if (st.nlink > 1) {
-        return ambiguous(
-          `the journal this writer holds gained a second name (${st.nlink} hard links) ${stage} \u2014 a path-keyed lock cannot serialise writers that name it differently, so this operation is refused (remove the extra link, or give each producer its own journal)`
-        );
-      }
-      if (st.nlink < 1) {
-        return unstable(`the journal this writer holds was unlinked ${stage} \u2014 its canonical name is gone`);
-      }
-    }
-    const named = lstatOrNull2(identity.path);
-    if (handle !== null) {
-      if (named === null) return unstable(`canonical journal name "${identity.path}" disappeared ${stage}`);
-      if (named.isSymbolicLink() || !named.isFile()) {
-        return unstable(`canonical journal name "${identity.path}" no longer names a regular file ${stage}`);
-      }
-      if (named.dev !== handle.device || named.ino !== handle.inode) {
-        return unstable(
-          `canonical journal name "${identity.path}" now names a different physical file ${stage} (device/inode ${handle.device}/${handle.inode} \u2192 ${named.dev}/${named.ino})`
-        );
-      }
-    } else if (named !== null) {
-      if (named.isSymbolicLink() || !named.isFile()) {
-        return unstable(`canonical journal name "${identity.path}" no longer names a regular file ${stage}`);
-      }
-      if (named.nlink > 1) {
-        return ambiguous(
-          `the journal at "${identity.path}" has ${named.nlink} names ${stage} \u2014 a path-keyed lock cannot serialise writers that name it differently, so this operation is refused`
-        );
-      }
-    }
-    if (parentInode !== null && parentDevice !== null) {
-      const parentNow = statOrNull(path20.dirname(identity.path));
-      if (parentNow === null || parentNow.dev !== parentDevice || parentNow.ino !== parentInode) {
-        return unstable(
-          `the directory holding "${identity.path}" and its lock was replaced ${stage} \u2014 this writer's exclusion moved with the old directory and no longer covers this path`
-        );
-      }
-    }
-    if (grant.fd !== null) {
-      const heldLock = fstatOrNull(grant.fd);
-      if (heldLock === null || heldLock.dev !== grant.device || heldLock.ino !== grant.inode) {
-        return unstable(
-          `the lock object this writer acquired at "${identity.lock}" can no longer be inspected ${stage}`
-        );
-      }
-    }
-    const lockNow = lstatOrNull2(identity.lock);
-    if (lockNow === null || !lockNow.isDirectory() || lockNow.dev !== grant.device || lockNow.ino !== grant.inode) {
-      return unstable(
-        `the lock this writer acquired is no longer the lock at "${identity.lock}" ${stage} \u2014 another holder now owns that exclusion, so this operation is refused`
-      );
-    }
-    const current = resolveJournalIdentity(journalPath);
-    if (!current.ok) return current.failure;
-    const drift = journalIdentityDrift(identity, current.identity);
-    if (drift) return unstable(`${drift} (${stage})`);
-    if (checkpointPath !== null) {
-      pinCheckpointParent();
-      const pinned2 = checkpointParentPin;
-      if (checkpointParent !== null && pinned2 !== null) {
-        if (pinned2.fd !== null) {
-          const heldDir = fstatOrNull(pinned2.fd);
-          if (heldDir === null || heldDir.dev !== pinned2.device || heldDir.ino !== pinned2.inode) {
-            return unstable(
-              `the directory holding the checkpoint "${checkpointCanonical}" can no longer be inspected ${stage}`
-            );
-          }
-        }
-        const parentNow = statOrNull(checkpointParent);
-        if (parentNow === null || parentNow.dev !== pinned2.device || parentNow.ino !== pinned2.inode) {
-          return unstable(
-            `the directory holding the checkpoint "${checkpointCanonical}" was replaced ${stage} \u2014 this writer's exclusion does not cover the checkpoint it was about to write`
-          );
-        }
-      }
-      const parentNamedNow = canonicalJournalPath(path20.dirname(checkpointPath));
-      if (parentNamedNow !== checkpointParentPath) {
-        return unstable(
-          `the checkpoint "${checkpointPath}" now resolves into "${parentNamedNow}" rather than "${checkpointParentPath}" ${stage} \u2014 this writer holds the directory it was granted, not that one`
-        );
-      }
-    }
-    return null;
-  };
-  const release = () => {
-    if (released) return;
-    released = true;
-    if (handle !== null) {
-      closeQuietly(handle.fd);
-      handle = null;
-    }
-    const pinnedCheckpointParent = checkpointParentPin;
-    if (pinnedCheckpointParent !== null && pinnedCheckpointParent.fd !== null) {
-      closeQuietly(pinnedCheckpointParent.fd);
-      checkpointParentPin = { ...pinnedCheckpointParent, fd: null };
-    }
-    const lockNow = lstatOrNull2(identity.lock);
-    const stillOurs = lockNow !== null && lockNow.isDirectory() && lockNow.dev === grant.device && lockNow.ino === grant.inode;
-    discardLockGrant(grant);
-    if (stillOurs) {
-      releaseJournalLock(identity.lock, io);
-      return;
-    }
-  };
-  const failClosed = (failure) => {
-    release();
-    return { ok: false, authority: null, identity, failure };
-  };
-  const pinned = pin();
-  if (pinned) return failClosed(pinned);
-  const held = verify("when the lock was taken");
-  if (held) return failClosed(held);
-  const authority = {
-    identity,
-    get handle() {
-      return handle;
-    },
-    bind(target) {
-      const gate = (stage) => {
-        const failure = verify(stage);
-        if (failure) throw new JournalAuthorityDetachedError(failure);
-      };
-      const forPath = (p) => {
-        if (p !== identity.path) return null;
-        if (handle !== null) return { ...handle, guard: gate };
-        return { path: identity.path, fd: UNPINNED_FD, device: -1, inode: -1, writable: false, guard: gate };
-      };
-      const checkpointBinding = {
-        path: checkpointCanonical ?? identity.path,
-        fd: UNPINNED_FD,
-        device: -1,
-        inode: -1,
-        writable: false,
-        guard: gate
-      };
-      return {
-        ...target,
-        readAll: (p) => target.readAll(p, forPath(p)),
-        appendLine: (p, text) => target.appendLine(p, text, forPath(p)),
-        truncate: (p, size) => target.truncate(p, size, forPath(p)),
-        writeCheckpoint: (p, content) => target.writeCheckpoint(p, content, checkpointBinding)
-      };
-    },
-    verify,
-    adopt(stage) {
-      if (handle === null) {
-        const opened = pin();
-        if (opened) return opened;
-      }
-      return verify(stage);
-    },
-    release
-  };
-  return { ok: true, authority, identity, failure: null };
-}
-function analyzeReceiptRecords(records) {
-  const seen = /* @__PURE__ */ new Map();
-  const duplicate_sequences = [];
-  const regressing_sequences = [];
-  let prev = 0;
-  for (const r of records) {
-    seen.set(r.sequence, (seen.get(r.sequence) ?? 0) + 1);
-    if ((seen.get(r.sequence) ?? 0) === 2) duplicate_sequences.push(r.sequence);
-    if (r.sequence <= prev) regressing_sequences.push(r.sequence);
-    prev = Math.max(prev, r.sequence);
-  }
-  const eventCounts = /* @__PURE__ */ new Map();
-  const duplicate_event_ids = [];
-  for (const r of records) {
-    const n = (eventCounts.get(r.event_id) ?? 0) + 1;
-    eventCounts.set(r.event_id, n);
-    if (n === 2) duplicate_event_ids.push(r.event_id);
-  }
-  const bySequence = /* @__PURE__ */ new Map();
-  for (const r of records) if (!bySequence.has(r.event_id)) bySequence.set(r.event_id, r.sequence);
-  const order_violations = [];
-  for (const r of records) {
-    if (!r.causation_id) continue;
-    const causeSeq = bySequence.get(r.causation_id) ?? null;
-    if (causeSeq === null) {
-      order_violations.push({
-        event_id: r.event_id,
-        sequence: r.sequence,
-        reason: "cause_missing",
-        causation_id: r.causation_id,
-        cause_sequence: null
-      });
-    } else if (causeSeq >= r.sequence) {
-      order_violations.push({
-        event_id: r.event_id,
-        sequence: r.sequence,
-        reason: "cause_not_before_effect",
-        causation_id: r.causation_id,
-        cause_sequence: causeSeq
-      });
-    }
-  }
-  const lineageMap = /* @__PURE__ */ new Map();
-  const run_ids = [];
-  for (const r of records) {
-    if (!run_ids.includes(r.run_id)) run_ids.push(r.run_id);
-    let l = lineageMap.get(r.correlation_id);
-    if (!l) {
-      l = { correlation_id: r.correlation_id, operation_ids: [], event_ids: [] };
-      lineageMap.set(r.correlation_id, l);
-    }
-    if (!l.operation_ids.includes(r.operation_id)) l.operation_ids.push(r.operation_id);
-    l.event_ids.push(r.event_id);
-  }
-  const lineages = [...lineageMap.values()];
-  const split_lineages = lineages.filter((l) => l.operation_ids.length > 1).map((l) => l.correlation_id);
-  let structural_integrity = "intact";
-  if (order_violations.length > 0 || duplicate_sequences.length > 0 || regressing_sequences.length > 0) {
-    structural_integrity = "order_violation";
-  } else if (split_lineages.length > 0 || run_ids.length > 1 || duplicate_event_ids.length > 0) {
-    structural_integrity = "lineage_violation";
-  }
-  let observation_state = "checked_clean";
-  if (records.length === 0) observation_state = "not_observed";
-  else if (records.some((r) => r.observation_state === "observation_failed")) observation_state = "observation_failed";
-  else if (records.some((r) => r.observation_state === "not_observed")) observation_state = "not_observed";
-  return {
-    duplicate_sequences,
-    regressing_sequences,
-    duplicate_event_ids,
-    order_violations,
-    lineages,
-    split_lineages,
-    run_ids,
-    structural_integrity,
-    observation_state
-  };
-}
-function isValidReceiptRecordShape(value) {
-  if (!value || typeof value !== "object") return false;
-  const r = value;
-  if (r.schema_version !== "guild.receipt_record.v1") return false;
-  if (typeof r.sequence !== "number" || !Number.isInteger(r.sequence) || r.sequence < 1) return false;
-  for (const f of REQUIRED_STRING_FIELDS) {
-    if (typeof r[f] !== "string" || r[f].length === 0) return false;
-  }
-  if (!RECEIPT_DISPOSITIONS.includes(r.disposition)) return false;
-  if (!OBSERVATION_STATES.includes(r.observation_state)) return false;
-  if (!RECEIPT_EVENT_NAMES.includes(r.event_name)) return false;
-  if (!RECEIPT_OUTCOME_TYPES.includes(r.outcome_type)) return false;
-  const v = r.versions;
-  if (!v || typeof v !== "object") return false;
-  for (const f of ["host_id", "host_version", "runtime_version", "source_version", "contract_version"]) {
-    if (typeof v[f] !== "string" || v[f].length === 0) return false;
-  }
-  return true;
-}
-function scanReceiptJournal(journalPath, io = defaultJournalIo) {
-  const raw = io.readAll(journalPath);
-  const empty = (integrity2) => ({
-    schema_version: "guild.receipt_scan.v1",
-    records: [],
-    rejected: [],
-    integrity: integrity2,
-    observation_state: "not_observed",
-    blocks_clean_close: true,
-    last_sequence: 0,
-    record_count: 0,
-    duplicate_sequences: [],
-    regressing_sequences: [],
-    duplicate_event_ids: [],
-    order_violations: [],
-    lineages: [],
-    split_lineages: [],
-    run_ids: []
-  });
-  if (raw === null) return empty("absent");
-  if (raw.length === 0) return empty("absent");
-  const endsWithNewline = raw.endsWith("\n");
-  const lines = raw.split("\n");
-  if (endsWithNewline) lines.pop();
-  const records = [];
-  const rejected = [];
-  lines.forEach((line, i) => {
-    const lineNumber = i + 1;
-    const isLast = i === lines.length - 1;
-    const isTornTail = isLast && !endsWithNewline;
-    if (line.length === 0) {
-      if (!isTornTail) rejected.push({ line_number: lineNumber, reason: "unparsable" });
-      return;
-    }
-    let parsed;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      rejected.push({ line_number: lineNumber, reason: isTornTail ? "truncated" : "unparsable" });
-      return;
-    }
-    if (!isValidReceiptRecordShape(parsed)) {
-      rejected.push({ line_number: lineNumber, reason: isTornTail ? "truncated" : "schema_invalid" });
-      return;
-    }
-    if (!verifyReceiptRecord(parsed)) {
-      rejected.push({ line_number: lineNumber, reason: isTornTail ? "truncated" : "hash_mismatch" });
-      return;
-    }
-    records.push(parsed);
-  });
-  const analysis = analyzeReceiptRecords(records);
-  let integrity = analysis.structural_integrity;
-  if (rejected.some((r) => r.reason === "hash_mismatch" || r.reason === "unparsable" || r.reason === "schema_invalid")) {
-    integrity = "corrupt";
-  } else if (rejected.some((r) => r.reason === "truncated")) {
-    integrity = "truncated_tail";
-  }
-  const observation_state = analysis.observation_state === "checked_clean" && integrity !== "intact" ? "not_observed" : analysis.observation_state;
-  return {
-    schema_version: "guild.receipt_scan.v1",
-    records,
-    rejected,
-    integrity,
-    observation_state,
-    blocks_clean_close: observation_state !== "checked_clean" || integrity !== "intact",
-    last_sequence: records.reduce((m, r) => Math.max(m, r.sequence), 0),
-    record_count: records.length,
-    duplicate_sequences: analysis.duplicate_sequences,
-    regressing_sequences: analysis.regressing_sequences,
-    duplicate_event_ids: analysis.duplicate_event_ids,
-    order_violations: analysis.order_violations,
-    lineages: analysis.lineages,
-    split_lineages: analysis.split_lineages,
-    run_ids: analysis.run_ids
-  };
-}
-function validateInput(input) {
-  for (const f of REQUIRED_STRING_FIELDS) {
-    const v = input[f];
-    if (typeof v !== "string" || v.length === 0) return `missing or empty field: ${f}`;
-  }
-  if (!RECEIPT_DISPOSITIONS.includes(input.disposition)) return `disposition outside closed vocabulary: ${String(input.disposition)}`;
-  if (!OBSERVATION_STATES.includes(input.observation_state)) return `observation_state outside closed vocabulary: ${String(input.observation_state)}`;
-  if (!RECEIPT_EVENT_NAMES.includes(input.event_name)) return `event_name outside closed vocabulary: ${String(input.event_name)}`;
-  if (!RECEIPT_OUTCOME_TYPES.includes(input.outcome_type)) return `outcome_type outside closed vocabulary: ${String(input.outcome_type)}`;
-  if (!input.versions || typeof input.versions !== "object") return "missing versions";
-  for (const f of ["host_id", "host_version", "runtime_version", "source_version", "contract_version"]) {
-    if (typeof input.versions[f] !== "string" || input.versions[f].length === 0) return `missing or empty versions.${f}`;
-  }
-  return null;
-}
-function failed(input, code, message, disposition = "failed") {
-  return {
-    schema_version: "guild.receipt_outcome.v1",
-    type: "guild.receipt_outcome.v1",
-    disposition,
-    event_id: input.event_id,
-    operation_id: input.operation_id,
-    sequence: null,
-    observation_state: "observation_failed",
-    durable: false,
-    blocks_dependent_completion: true,
-    checkpoint: null,
-    record: null,
-    failure: { code, message }
-  };
-}
-function appendReceipt(paths, input, io = defaultJournalIo, lockOptions = {}, options = {}) {
-  const invalid = validateInput(input);
-  if (invalid) return failed(input, "invalid_record", invalid);
-  const acquired = acquireJournalAuthority(paths.journal, io, lockOptions, "append", paths.checkpoint);
-  if (!acquired.ok) return failed(input, acquired.failure.code, acquired.failure.message);
-  const authority = acquired.authority;
-  try {
-    return appendLocked({ journal: authority.identity.path, checkpoint: paths.checkpoint }, input, io, authority, options);
-  } finally {
-    authority.release();
-  }
-}
-function appendLocked(paths, input, io, authority, options) {
-  const bound = authority.bind(io);
-  const scan = scanReceiptJournal(paths.journal, bound);
-  if (scan.integrity !== "intact" && scan.integrity !== "absent") {
-    return failed(
-      input,
-      "journal_not_reconciled",
-      `journal integrity is "${scan.integrity}" \u2014 reconcile before appending`
-    );
-  }
-  if (scan.records.some((r) => r.event_id === input.event_id)) {
-    return {
-      ...failed(input, "duplicate_event_id", `event_id already present: ${input.event_id}`, "refused"),
-      observation_state: input.observation_state,
-      blocks_dependent_completion: false
-    };
-  }
-  if (options.uniqueOperation && scan.records.some((r) => r.operation_id === input.operation_id)) {
-    return {
-      ...failed(input, "duplicate_operation_id", `operation_id already present: ${input.operation_id}`, "refused"),
-      observation_state: input.observation_state,
-      blocks_dependent_completion: false
-    };
-  }
-  if (input.causation_id && !scan.records.some((r) => r.event_id === input.causation_id)) {
-    return failed(input, "unknown_causation", `causation_id not present in journal: ${input.causation_id}`);
-  }
-  const foreignRun = scan.records.find((r) => r.run_id !== input.run_id);
-  if (foreignRun) {
-    return failed(
-      input,
-      "foreign_run_id",
-      `journal belongs to run "${foreignRun.run_id}" \u2014 refusing to append run "${input.run_id}"`
-    );
-  }
-  const otherOperation = scan.records.find(
-    (r) => r.correlation_id === input.correlation_id && r.operation_id !== input.operation_id
-  );
-  if (otherOperation) {
-    return failed(
-      input,
-      "correlation_lineage_split",
-      `correlation_id "${input.correlation_id}" already resolves to operation "${otherOperation.operation_id}" \u2014 refusing to split it across "${input.operation_id}"`
-    );
-  }
-  const record = sealReceiptRecord({ ...input, sequence: scan.last_sequence + 1 });
-  const beforeAppend = authority.verify("before the append");
-  if (beforeAppend) return failed(input, beforeAppend.code, beforeAppend.message);
-  try {
-    bound.appendLine(paths.journal, `${JSON.stringify(record)}
-`);
-  } catch (err) {
-    if (err instanceof JournalAuthorityDetachedError) {
-      return failed(input, err.failure.code, err.failure.message);
-    }
-    return failed(input, "journal_append_failed", err instanceof Error ? err.message : String(err));
-  }
-  const afterAppend = authority.adopt("after the append");
-  if (afterAppend) return failed(input, afterAppend.code, afterAppend.message);
-  const after = scanReceiptJournal(paths.journal, bound);
-  const landed = after.records.find((r) => r.sequence === record.sequence && r.event_id === record.event_id);
-  if (!landed || landed.record_hash !== record.record_hash) {
-    return failed(
-      input,
-      "journal_append_unverified",
-      `journal does not hold the sealed record for sequence ${record.sequence} after the append`
-    );
-  }
-  if (after.integrity !== "intact" || after.record_count !== scan.record_count + 1) {
-    return failed(
-      input,
-      "journal_append_unverified",
-      `journal reads "${after.integrity}" with ${after.record_count} records after appending sequence ${record.sequence} (expected "intact" with ${scan.record_count + 1})`
-    );
-  }
-  const checkpoint = {
-    schema_version: "guild.receipt_checkpoint.v1",
-    run_id: record.run_id,
-    last_sequence: record.sequence,
-    last_event_id: record.event_id,
-    record_count: scan.record_count + 1,
-    updated_at: record.recorded_at,
-    contract_version: RECEIPT_CONTRACT_VERSION
-  };
-  const beforeCheckpoint = authority.verify("before the checkpoint replacement");
-  if (beforeCheckpoint) return failed(input, beforeCheckpoint.code, beforeCheckpoint.message);
-  try {
-    bound.writeCheckpoint(paths.checkpoint, `${JSON.stringify(checkpoint, null, 2)}
-`);
-  } catch (err) {
-    if (err instanceof JournalAuthorityDetachedError) {
-      return failed(input, err.failure.code, err.failure.message);
-    }
-    return failed(input, "checkpoint_write_failed", err instanceof Error ? err.message : String(err));
-  }
-  const persisted = readCheckpointState(paths.checkpoint, io);
-  if (persisted.state !== "present" || !checkpointsIdentical(persisted.checkpoint, checkpoint)) {
-    return failed(
-      input,
-      "checkpoint_write_unverified",
-      `checkpoint on disk reads "${persisted.state}" and does not match the checkpoint written for sequence ${record.sequence}`
-    );
-  }
-  const beforeClaim = authority.verify("before the durable claim");
-  if (beforeClaim) return failed(input, beforeClaim.code, beforeClaim.message);
-  const blocked = input.observation_state === "not_observed" || input.observation_state === "observation_failed";
-  return {
-    schema_version: "guild.receipt_outcome.v1",
-    type: "guild.receipt_outcome.v1",
-    disposition: input.disposition,
-    event_id: record.event_id,
-    operation_id: record.operation_id,
-    sequence: record.sequence,
-    observation_state: record.observation_state,
-    durable: true,
-    blocks_dependent_completion: blocked,
-    checkpoint,
-    record,
-    failure: null
-  };
-}
-var fs16, path20, crypto3, RECEIPT_CONTRACT_VERSION, RECEIPT_DISPOSITIONS, OBSERVATION_STATES, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES, UNPINNED_FD, JournalAuthorityDetachedError, ACTIVE_LOCK_PUBLICATION, defaultJournalIo, CANONICAL_PATH_MAX_LINK_HOPS, JournalIdentityError, JOURNAL_LOCK_MAX_ATTEMPTS, JOURNAL_LOCK_WAIT_MS, JOURNAL_ACCESS_FLAGS, REQUIRED_STRING_FIELDS;
-var init_receipt_journal = __esm({
-  "src/domains/telemetry/receipt-journal.ts"() {
-    fs16 = __toESM(require("node:fs"));
-    path20 = __toESM(require("node:path"));
-    crypto3 = __toESM(require("node:crypto"));
-    init_state();
-    RECEIPT_CONTRACT_VERSION = "guild.observability.v1";
-    RECEIPT_DISPOSITIONS = Object.freeze([
-      "succeeded",
-      "refused",
-      "unsupported",
-      "failed",
-      "degraded"
-    ]);
-    OBSERVATION_STATES = Object.freeze([
-      "checked_clean",
-      "not_applicable",
-      "not_observed",
-      "observation_failed"
-    ]);
-    RECEIPT_EVENT_NAMES = Object.freeze([
-      "session.start",
-      "prompt.submit",
-      "tool.before",
-      "tool.after",
-      "context.compact",
-      "task.dispatch",
-      "task.collect",
-      "run.resume",
-      "run.stop",
-      "package.render",
-      "package.install",
-      "package.activate",
-      "package.update",
-      "runtime.verify",
-      "receipt.append",
-      "receipt.reconcile",
-      "migration.shadow",
-      "migration.cutover",
-      "migration.rollback"
-    ]);
-    RECEIPT_OUTCOME_TYPES = Object.freeze([
-      "guild.lifecycle_outcome.v1",
-      "guild.normalized_event_outcome.v1",
-      "guild.support_transition_outcome.v1",
-      "guild.capability_outcome.v1",
-      "guild.policy_outcome.v1",
-      "guild.receipt_outcome.v1",
-      "guild.reconciliation_outcome.v1",
-      "guild.boundary_outcome.v1",
-      "guild.migration_outcome.v1",
-      "guild.version_compatibility_outcome.v1"
-    ]);
-    UNPINNED_FD = -1;
-    JournalAuthorityDetachedError = class extends Error {
-      failure;
-      constructor(failure) {
-        super(failure.message);
-        this.name = "JournalAuthorityDetachedError";
-        this.failure = failure;
-      }
-    };
-    ACTIVE_LOCK_PUBLICATION = null;
-    defaultJournalIo = {
-      appendLine(journalPath, text, bound) {
-        bound?.guard?.("immediately before the append syscall");
-        if (bound && bound.writable && bound.fd >= 0) {
-          writeAllSync(bound.fd, text);
-          fs16.fsyncSync(bound.fd);
-          return;
-        }
-        fs16.mkdirSync(path20.dirname(journalPath), { recursive: true });
-        const fd = fs16.openSync(journalPath, "a");
-        try {
-          fs16.writeSync(fd, text, null, "utf8");
-          fs16.fsyncSync(fd);
-        } finally {
-          fs16.closeSync(fd);
-        }
-      },
-      readAll(journalPath, bound) {
-        if (bound && bound.fd >= 0) {
-          try {
-            return readAllSync(bound.fd);
-          } catch {
-            return null;
-          }
-        }
-        try {
-          return fs16.readFileSync(journalPath, "utf8");
-        } catch {
-          return null;
-        }
-      },
-      writeCheckpoint(checkpointPath, content, bound) {
-        bound?.guard?.("immediately before the checkpoint replacement");
-        atomicWrite(checkpointPath, content);
-      },
-      truncate(journalPath, size, bound) {
-        bound?.guard?.("immediately before the truncation syscall");
-        if (bound && bound.writable && bound.fd >= 0) {
-          fs16.ftruncateSync(bound.fd, size);
-          return;
-        }
-        fs16.truncateSync(journalPath, size);
-      },
-      // `mkdir` is the portable atomic test-and-set: it either creates the
-      // directory or fails EEXIST, with no window in between. `open(O_CREAT|O_EXCL)`
-      // has the same guarantee locally but is famously unreliable over NFS, and
-      // Guild journals can live on a shared volume.
-      acquireLock(lockPath) {
-        fs16.mkdirSync(path20.dirname(lockPath), { recursive: true });
-        try {
-          fs16.mkdirSync(lockPath);
-        } catch (err) {
-          if (err.code === "EEXIST") return false;
-          throw err;
-        }
-        let fd = null;
-        try {
-          fd = fs16.openSync(lockPath, "r");
-        } catch {
-          fd = null;
-        }
-        const stat = fd !== null ? fstatOrNull(fd) : lstatOrNull2(lockPath);
-        if (stat === null || !stat.isDirectory()) {
-          if (fd !== null) closeQuietly(fd);
-          throw new Error(
-            `journal lock at ${lockPath} could not be identified immediately after it was created \u2014 refusing to hold an exclusion this writer cannot name`
-          );
-        }
-        return publishLockGrant({ path: lockPath, device: stat.dev, inode: stat.ino, fd });
-      },
-      releaseLock(lockPath) {
-        try {
-          fs16.rmdirSync(lockPath);
-        } catch {
-        }
-      }
-    };
-    CANONICAL_PATH_MAX_LINK_HOPS = 32;
-    JournalIdentityError = class extends Error {
-      code;
-      constructor(failure) {
-        super(failure.message);
-        this.name = "JournalIdentityError";
-        this.code = failure.code;
-      }
-    };
-    JOURNAL_LOCK_MAX_ATTEMPTS = 600;
-    JOURNAL_LOCK_WAIT_MS = 20;
-    JOURNAL_ACCESS_FLAGS = {
-      append: "a+",
-      truncate: "r+",
-      read: "r"
-    };
-    REQUIRED_STRING_FIELDS = [
-      "run_id",
-      "operation_id",
-      "correlation_id",
-      "event_id",
-      "input_hash",
-      "recorded_at"
-    ];
-  }
-});
-
-// src/domains/telemetry/receipt-reconcile.ts
-function payloadHash(record) {
-  return `${record.input_hash}|${record.output_hash ?? "null"}`;
-}
-function toRuns(missing) {
-  const runs = [];
-  for (const n of missing) {
-    const last = runs[runs.length - 1];
-    if (last && n === last.to + 1) last.to = n;
-    else runs.push({ from: n, to: n });
-  }
-  return runs;
-}
-function candidateSortKey(rec) {
-  const anyRec = rec;
-  const seq = typeof anyRec.sequence === "number" && Number.isFinite(anyRec.sequence) ? anyRec.sequence : Number.MAX_SAFE_INTEGER;
-  const eventId = typeof anyRec.event_id === "string" ? anyRec.event_id : "";
-  const recordHash = typeof anyRec.record_hash === "string" ? anyRec.record_hash : "";
-  return [seq, eventId, recordHash];
-}
-function compareCandidates(a, b) {
-  const [as, ae, ah] = candidateSortKey(a);
-  const [bs, be, bh] = candidateSortKey(b);
-  if (as !== bs) return as - bs;
-  if (ae !== be) return ae < be ? -1 : 1;
-  if (ah !== bh) return ah < bh ? -1 : 1;
-  return 0;
-}
-function structuralRejection(rec, ctx) {
-  if (!isValidReceiptRecordShape(rec)) return "schema_invalid";
-  if (!verifyReceiptRecord(rec)) return "hash_mismatch";
-  if (rec.run_id !== ctx.run_id) return "foreign_run";
-  if (!ctx.missing.has(rec.sequence)) return "outside_declared_gap";
-  return null;
-}
-function cleanlinessRejection(rec) {
-  if (rec.observation_state !== "checked_clean" && rec.observation_state !== "not_applicable") {
-    return "unclean_observation";
-  }
-  if (rec.disposition === "failed" || rec.disposition === "degraded") return "unclean_disposition";
-  return null;
-}
-function vetRecoveries(offered, ctx) {
-  const rejected = [];
-  const reject = (rec, reason) => {
-    const anyRec = rec;
-    rejected.push({
-      sequence: typeof anyRec?.sequence === "number" ? anyRec.sequence : 0,
-      event_id: typeof anyRec?.event_id === "string" ? anyRec.event_id : "",
-      reason
-    });
-  };
-  const ordered = [...offered].sort(compareCandidates);
-  let alive = [];
-  for (const rec of ordered) {
-    const reason = structuralRejection(rec, ctx);
-    if (reason) reject(rec, reason);
-    else alive.push(rec);
-  }
-  const journalSequences = new Set(ctx.journal.map((r) => r.sequence));
-  const journalEventIds = new Set(ctx.journal.map((r) => r.event_id));
-  const claimedSequences = new Set(journalSequences);
-  const claimedEventIds = new Set(journalEventIds);
-  let next = [];
-  for (const rec of alive) {
-    if (claimedSequences.has(rec.sequence)) {
-      reject(rec, "duplicate_sequence");
-      continue;
-    }
-    if (claimedEventIds.has(rec.event_id)) {
-      reject(rec, "duplicate_event_id");
-      continue;
-    }
-    claimedSequences.add(rec.sequence);
-    claimedEventIds.add(rec.event_id);
-    next.push(rec);
-  }
-  alive = next;
-  const unclean = [];
-  next = [];
-  for (const rec of alive) {
-    const reason = cleanlinessRejection(rec);
-    if (reason) unclean.push({ rec, reason });
-    else next.push(rec);
-  }
-  alive = next;
-  const frame = /* @__PURE__ */ new Map();
-  for (const r of ctx.journal) if (!frame.has(r.event_id)) frame.set(r.event_id, r.sequence);
-  for (const r of alive) frame.set(r.event_id, r.sequence);
-  const causalRejection = (rec) => {
-    if (!rec.causation_id) return null;
-    const causeSeq = frame.get(rec.causation_id);
-    if (causeSeq === void 0) return "unknown_causation";
-    if (causeSeq >= rec.sequence) return "cause_not_before_effect";
-    return null;
-  };
-  for (; ; ) {
-    let changed = false;
-    next = [];
-    for (const rec of alive) {
-      const reason = causalRejection(rec);
-      if (reason) {
-        reject(rec, reason);
-        frame.delete(rec.event_id);
-        changed = true;
-        continue;
-      }
-      next.push(rec);
-    }
-    alive = next;
-    if (!changed) break;
-  }
-  for (const { rec, reason } of unclean) reject(rec, causalRejection(rec) ?? reason);
-  rejected.sort((a, b) => a.sequence - b.sequence || (a.event_id < b.event_id ? -1 : a.event_id > b.event_id ? 1 : 0) || (a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0));
-  return { accepted: alive, rejected };
-}
-function reconcileReceiptJournal(opts) {
-  const io = opts.io ?? defaultJournalIo;
-  if (opts.repair_checkpoint !== true) return reconcileWithin(opts, io, null, opts.journalPath, null);
-  const acquired = acquireJournalAuthority(
-    opts.journalPath,
-    io,
-    { lock_max_attempts: opts.lock_max_attempts, lock_wait_ms: opts.lock_wait_ms },
-    "read",
-    // The checkpoint this repair may MUTATE, named at acquisition so its own
-    // directory is part of the domain when it is not the journal's (MH-06-R6-B3).
-    opts.checkpointPath
-  );
-  if (!acquired.ok) {
-    return reconcileWithin(
-      opts,
-      io,
-      accessDenial(acquired.failure),
-      acquired.identity?.path ?? opts.journalPath,
-      null
-    );
-  }
-  const authority = acquired.authority;
-  try {
-    return reconcileWithin(opts, io, null, authority.identity.path, authority);
-  } finally {
-    authority.release();
-  }
-}
-function identityDenial(failure) {
-  return {
-    code: failure.code === "journal_identity_ambiguous" ? "repair_identity_ambiguous" : "repair_identity_unstable",
-    message: failure.message
-  };
-}
-function accessDenial(failure) {
-  if (failure.code === "journal_lock_unavailable") return { code: "repair_lock_unavailable", message: failure.message };
-  if (failure.code === "journal_lock_failed") return { code: "repair_lock_failed", message: failure.message };
-  return identityDenial({ code: failure.code, message: failure.message });
-}
-function reconcileWithin(opts, io, denial, journalPath, authority) {
-  const journalIo = authority !== null ? authority.bind(io) : io;
-  const scan = scanReceiptJournal(journalPath, journalIo);
-  const checkpointRead = readCheckpointState(opts.checkpointPath, io);
-  const checkpoint_before = checkpointRead.checkpoint;
-  const observed = new Set(scan.records.map((r) => r.sequence));
-  const expectedMax = Math.max(opts.producerCheckpoint.last_sequence, scan.last_sequence);
-  const missing = [];
-  for (let s = 1; s <= expectedMax; s += 1) if (!observed.has(s)) missing.push(s);
-  const gapRuns = toRuns(missing);
-  const missingSet = new Set(missing);
-  const { accepted: acceptedRecoveries, rejected: rejected_recoveries } = vetRecoveries(opts.recovered ?? [], {
-    run_id: opts.run_id,
-    missing: missingSet,
-    journal: scan.records
-  });
-  const claimed = new Set(acceptedRecoveries.map((r) => r.sequence));
-  const recovered_sequences = acceptedRecoveries.map((r) => r.sequence).sort((a, b) => a - b);
-  const unresolved_sequences = missing.filter((s) => !claimed.has(s));
-  const gaps = gapRuns.map((run) => {
-    let recovered = true;
-    for (let s = run.from; s <= run.to; s += 1) if (!claimed.has(s)) recovered = false;
-    return {
-      from: run.from,
-      to: run.to,
-      recovered,
-      observation_state: recovered ? "checked_clean" : "not_observed"
-    };
-  });
-  const merged = [...scan.records, ...acceptedRecoveries].sort((a, b) => a.sequence - b.sequence);
-  const mergedAnalysis = analyzeReceiptRecords(merged);
-  const byOperation = /* @__PURE__ */ new Map();
-  for (const r of merged) {
-    const list = byOperation.get(r.operation_id);
-    if (list) list.push(r);
-    else byOperation.set(r.operation_id, [r]);
-  }
-  const byEventId = /* @__PURE__ */ new Map();
-  for (const r of merged) {
-    const list = byEventId.get(r.event_id);
-    if (list) list.push(r);
-    else byEventId.set(r.event_id, [r]);
-  }
-  const event_identity_conflicts = [];
-  for (const [event_id, group] of byEventId) {
-    if (group.length < 2) continue;
-    event_identity_conflicts.push({
-      event_id,
-      sequences: group.map((r) => r.sequence),
-      operation_ids: [...new Set(group.map((r) => r.operation_id))]
-    });
-  }
-  const duplicates = [];
-  const conflicts = [];
-  for (const [operation_id, group] of byOperation) {
-    if (group.length < 2) continue;
-    const hashes = group.map(payloadHash);
-    const allEqual = hashes.every((h) => h === hashes[0]);
-    if (allEqual) {
-      duplicates.push({
-        operation_id,
-        event_ids: group.map((r) => r.event_id),
-        authoritative_event_id: group[0].event_id,
-        // lowest sequence is authoritative
-        payload_hash: hashes[0],
-        effects_applied: 1
-      });
-    } else {
-      conflicts.push({
-        operation_id,
-        event_ids: group.map((r) => r.event_id),
-        payload_hashes: hashes,
-        reason: "payload_hash_mismatch"
-      });
-    }
-  }
-  const mergedLast = highest(merged);
-  const checkpoint_after = {
-    schema_version: "guild.receipt_checkpoint.v1",
-    run_id: opts.run_id,
-    last_sequence: mergedLast?.sequence ?? 0,
-    last_event_id: mergedLast?.event_id ?? null,
-    record_count: merged.length,
-    updated_at: mergedLast?.recorded_at ?? opts.reconciled_at,
-    contract_version: RECEIPT_CONTRACT_VERSION
-  };
-  const checkpoint_disagreements = [
-    ...compareCheckpointToJournal(checkpointRead, scan, opts.run_id)
-  ];
-  const journalLast = highest(scan.records);
-  if (checkpointRead.state === "absent" && scan.record_count === 0 && (opts.producerCheckpoint.record_count > 0 || opts.producerCheckpoint.last_sequence > 0)) {
-    checkpoint_disagreements.push({
-      code: "checkpoint_missing",
-      expected: opts.producerCheckpoint.last_sequence,
-      actual: null
-    });
-  }
-  if (opts.producerCheckpoint.last_sequence !== checkpoint_after.last_sequence) {
-    checkpoint_disagreements.push({
-      code: "producer_sequence_mismatch",
-      expected: checkpoint_after.last_sequence,
-      actual: opts.producerCheckpoint.last_sequence
-    });
-  }
-  if (opts.producerCheckpoint.record_count !== checkpoint_after.record_count) {
-    checkpoint_disagreements.push({
-      code: "producer_count_mismatch",
-      expected: checkpoint_after.record_count,
-      actual: opts.producerCheckpoint.record_count
-    });
-  }
-  const foreignRun = mergedAnalysis.run_ids.find((id) => id !== opts.run_id);
-  if (foreignRun !== void 0) {
-    checkpoint_disagreements.push({
-      code: "merged_run_identity_mismatch",
-      expected: opts.run_id,
-      actual: foreignRun
-    });
-  }
-  for (const conflict of event_identity_conflicts) {
-    checkpoint_disagreements.push({
-      code: "merged_event_identity_conflict",
-      expected: conflict.event_id,
-      actual: conflict.sequences.join(",")
-    });
-  }
-  const tailDamaged = scan.integrity === "truncated_tail" || scan.integrity === "corrupt" || scan.integrity === "order_violation" || scan.integrity === "lineage_violation";
-  const invalidRecovery = rejected_recoveries.some((r) => INVALID_RECOVERY_REASONS.has(r.reason));
-  const hardFailure = conflicts.length > 0 || invalidRecovery || event_identity_conflicts.length > 0;
-  const mergedIncoherent = mergedAnalysis.structural_integrity !== "intact";
-  const observationUnclean = mergedAnalysis.observation_state !== "checked_clean";
-  const checkpoint_repair = {
-    requested: opts.repair_checkpoint === true,
-    attempted: false,
-    persisted: false,
-    verified: false,
-    residual_disagreements: [],
-    failure: null
-  };
-  const lostAuthority = checkpoint_repair.requested && !denial && authority !== null ? authority.verify("before the checkpoint repair") : null;
-  if (checkpoint_repair.requested && (denial || lostAuthority)) {
-    const refusal = denial ?? identityDenial(lostAuthority);
-    checkpoint_repair.failure = { code: refusal.code, message: refusal.message };
-  } else if (checkpoint_repair.requested) {
-    const blockers = [];
-    if (hardFailure) blockers.push("conflicting or invalid records");
-    if (unresolved_sequences.length > 0) blockers.push(`unresolved sequences ${unresolved_sequences.join(",")}`);
-    if (tailDamaged) blockers.push(`journal integrity is "${scan.integrity}"`);
-    if (mergedIncoherent) blockers.push(`merged lineage is "${mergedAnalysis.structural_integrity}"`);
-    if (observationUnclean) blockers.push(`merged observation state is "${mergedAnalysis.observation_state}"`);
-    if (foreignRun !== void 0) {
-      blockers.push(`journal belongs to run "${foreignRun}", not "${opts.run_id}"`);
-    }
-    if (acceptedRecoveries.length > 0) {
-      blockers.push(
-        `${acceptedRecoveries.length} recovered record(s) are not durable in the journal \u2014 the checkpoint may only describe durable content`
-      );
-    }
-    if (opts.producerCheckpoint.last_sequence !== checkpoint_after.last_sequence || opts.producerCheckpoint.record_count !== checkpoint_after.record_count) {
-      blockers.push("producer checkpoint does not describe the merged view");
-    }
-    const stillHeldToWrite = blockers.length === 0 && authority !== null ? authority.verify("before the repair write") : null;
-    if (blockers.length > 0) {
-      checkpoint_repair.failure = {
-        code: "repair_not_permitted",
-        message: `checkpoint repair refused: ${blockers.join("; ")}`
-      };
-    } else if (stillHeldToWrite) {
-      checkpoint_repair.failure = identityDenial(stillHeldToWrite);
-    } else {
-      checkpoint_repair.attempted = true;
-      try {
-        journalIo.writeCheckpoint(opts.checkpointPath, `${JSON.stringify(checkpoint_after, null, 2)}
-`);
-        checkpoint_repair.persisted = true;
-      } catch (err) {
-        if (err instanceof JournalAuthorityDetachedError) {
-          checkpoint_repair.attempted = false;
-          checkpoint_repair.failure = identityDenial(err.failure);
-        } else {
-          checkpoint_repair.failure = {
-            code: "repair_write_failed",
-            message: err instanceof Error ? err.message : String(err)
-          };
-        }
-      }
-      if (checkpoint_repair.persisted) {
-        const currentScan = scanReceiptJournal(journalPath, journalIo);
-        const reread = readCheckpointState(opts.checkpointPath, io);
-        const identical = reread.checkpoint !== null && checkpointsIdentical(reread.checkpoint, checkpoint_after);
-        checkpoint_repair.residual_disagreements = compareCheckpointToJournal(reread, currentScan, opts.run_id);
-        const stillHeld = authority !== null ? authority.verify("before the repair is reported verified") : null;
-        checkpoint_repair.verified = identical && checkpoint_repair.residual_disagreements.length === 0 && stillHeld === null;
-        if (!checkpoint_repair.verified) {
-          checkpoint_repair.failure = stillHeld ? identityDenial(stillHeld) : {
-            code: "repair_verify_failed",
-            message: identical ? `checkpoint was written but still disagrees with the journal: ${checkpoint_repair.residual_disagreements.map((d) => d.code).join(", ")}` : "checkpoint on disk does not match the reconciled checkpoint after write"
-          };
-        }
-      }
-    }
-  }
-  const repairAccessDenied = checkpoint_repair.requested && checkpoint_repair.failure !== null && REPAIR_ACCESS_DENIALS.has(checkpoint_repair.failure.code);
-  const repairFailed = (checkpoint_repair.attempted || repairAccessDenied) && !checkpoint_repair.verified;
-  const checkpointUnresolved = checkpoint_disagreements.length > 0 && !checkpoint_repair.verified;
-  let disposition = "succeeded";
-  if (hardFailure || mergedIncoherent || repairFailed) disposition = "failed";
-  else if (gaps.length > 0 || tailDamaged || observationUnclean || checkpointUnresolved) {
-    disposition = "degraded";
-  }
-  const blocks_clean_close = hardFailure || mergedIncoherent || repairFailed || rejected_recoveries.length > 0 || unresolved_sequences.length > 0 || tailDamaged || observationUnclean || checkpointUnresolved;
-  return {
-    schema_version: "guild.reconciliation_outcome.v1",
-    type: "guild.reconciliation_outcome.v1",
-    disposition,
-    run_id: opts.run_id,
-    journal_integrity: scan.integrity,
-    journal_observation_state: scan.observation_state,
-    merged_observation_state: mergedAnalysis.observation_state,
-    merged_integrity: mergedAnalysis.structural_integrity,
-    gaps,
-    recovered_sequences,
-    unresolved_sequences,
-    rejected_recoveries,
-    duplicates,
-    conflicts,
-    event_identity_conflicts,
-    authoritative_effect_count: byOperation.size,
-    reconciled_order: merged.map((r) => ({ sequence: r.sequence, event_id: r.event_id })),
-    checkpoint_before,
-    checkpoint_before_state: checkpointRead.state,
-    checkpoint_after,
-    checkpoint_disagreements,
-    checkpoint_repair,
-    blocks_clean_close,
-    contract_version: RECEIPT_CONTRACT_VERSION,
-    reconciled_at: opts.reconciled_at
-  };
-}
-var INVALID_RECOVERY_REASONS, REPAIR_ACCESS_DENIALS, highest;
-var init_receipt_reconcile = __esm({
-  "src/domains/telemetry/receipt-reconcile.ts"() {
-    init_receipt_journal();
-    INVALID_RECOVERY_REASONS = /* @__PURE__ */ new Set([
-      "schema_invalid",
-      "hash_mismatch",
-      "foreign_run",
-      "outside_declared_gap",
-      "duplicate_sequence",
-      "duplicate_event_id",
-      "unknown_causation",
-      "cause_not_before_effect"
-    ]);
-    REPAIR_ACCESS_DENIALS = /* @__PURE__ */ new Set([
-      "repair_lock_unavailable",
-      "repair_lock_failed",
-      "repair_identity_ambiguous",
-      "repair_identity_unstable"
-    ]);
-    highest = highestSequenceRecord;
-  }
-});
-
-// src/domains/telemetry/debug-bundle.ts
-var DEBUG_BUNDLE_SECTION_KINDS;
-var init_debug_bundle = __esm({
-  "src/domains/telemetry/debug-bundle.ts"() {
-    init_receipt_journal();
-    DEBUG_BUNDLE_SECTION_KINDS = Object.freeze([
-      "capability_snapshot",
-      "normalized_event",
-      "policy_decision",
-      "transport_attempt",
-      "artifact",
-      "conformance"
-    ]);
-  }
-});
-
-// src/domains/telemetry/receipt-journal-conformance-evaluator.ts
-function freezeDeep(value) {
-  const seen = /* @__PURE__ */ new Set();
-  const walk = (node) => {
-    if (node === null || typeof node !== "object") return;
-    if (seen.has(node)) return;
-    seen.add(node);
-    Object.freeze(node);
-    for (const key of Object.keys(node)) {
-      walk(node[key]);
-    }
-  };
-  walk(value);
-  return value;
-}
-function defineScenario(stableId, title, eventName, preconditions, outcomeAssertions, evidenceAssertions) {
-  const expected = MH06_EXPECTED_OUTCOMES[stableId];
-  return {
-    stable_id: stableId,
-    category: MH06_CATEGORY,
-    title,
-    preconditions: [...preconditions],
-    action_event: { name: eventName, input: {} },
-    expected_typed_outcome: {
-      type: expected.type,
-      disposition: expected.disposition,
-      assertions: [...outcomeAssertions]
-    },
-    evidence_requirements: [{ profile: MH06_EVIDENCE_PROFILE, assertions: [...evidenceAssertions] }],
-    implementation_wave_owner: MH06_WAVE_OWNER
-  };
-}
-function makeProbePaths(parent, name) {
-  const dir = path21.join(parent, name);
-  fs17.mkdirSync(dir, { recursive: true });
-  return { dir, journal: path21.join(dir, JOURNAL_LEAF), checkpoint: path21.join(dir, CHECKPOINT_LEAF) };
-}
-function probeInput(identity, runId, over) {
-  const base = makeReceiptInput({
-    run_id: runId,
-    operation_id: "op-1",
-    correlation_id: "corr-op-1",
-    event_id: "evt-1",
-    event_name: "receipt.append",
-    outcome_type: "guild.receipt_outcome.v1",
-    disposition: "succeeded",
-    observation_state: "checked_clean",
-    input_hash: `sha256:${"1".repeat(64)}`,
-    output_hash: `sha256:${"2".repeat(64)}`,
-    terminal: false,
-    recorded_at: PROBE_RECORDED_AT,
-    observed_at: PROBE_RECORDED_AT,
-    versions: {
-      host_id: identity.host_id,
-      host_version: identity.host_version,
-      runtime_version: identity.runtime_version,
-      source_version: MH06_SOURCE_VERSION,
-      contract_version: RECEIPT_CONTRACT_VERSION
-    }
-  });
-  return { ...base, ...over };
-}
-function evidenceBindings(identity, runId, stableId, record) {
-  return {
-    scenario_id: stableId,
-    run_id: runId,
-    operation_id: record.operation_id,
-    correlation_id: record.correlation_id,
-    sequence: record.sequence,
-    source_version: MH06_SOURCE_VERSION,
-    runtime_version: identity.runtime_version,
-    record_hash: record.record_hash
-  };
-}
-function tornAppendIo(realIo, cutAfterBytes) {
-  return {
-    // Name every required method explicitly. Besides making the sabotage seam
-    // honest under transpilers that do not preserve enumerable method
-    // descriptors through object spread, this prevents a missing method from
-    // surfacing later as an unrelated journal-authority failure.
-    readAll: realIo.readAll,
-    writeCheckpoint: realIo.writeCheckpoint,
-    truncate: realIo.truncate,
-    acquireLock: realIo.acquireLock,
-    releaseLock: realIo.releaseLock,
-    appendLine(journalPath, text, bound) {
-      realIo.appendLine(journalPath, text.slice(0, cutAfterBytes), bound);
-      throw new Error("receipt persistence was interrupted before the record was complete");
-    }
-  };
-}
-function layDownSealedJournal(port, paths, records, runId) {
-  fs17.writeFileSync(paths.journal, `${records.map((record) => JSON.stringify(record)).join("\n")}
-`, "utf8");
-  const last = records[records.length - 1];
-  const checkpoint = {};
-  checkpoint["schema_version"] = CHECKPOINT_SCHEMA;
-  checkpoint["run_id"] = runId;
-  checkpoint["last_sequence"] = last.sequence;
-  checkpoint["last_event_id"] = last.event_id;
-  checkpoint["record_count"] = records.length;
-  checkpoint["updated_at"] = last.recorded_at;
-  checkpoint["contract_version"] = RECEIPT_CONTRACT_VERSION;
-  fs17.writeFileSync(paths.checkpoint, `${JSON.stringify(checkpoint, null, 2)}
-`, "utf8");
-  const read = port.readCheckpointState(paths.checkpoint);
-  if (read.state !== "present") {
-    throw new Error(`the laid-down checkpoint reads "${read.state}" through the production reader`);
-  }
-}
-function strictlyIncreasing(values) {
-  for (let index = 1; index < values.length; index += 1) {
-    if (values[index] <= values[index - 1]) return false;
-  }
-  return true;
-}
-function allDistinct(values) {
-  const seen = [];
-  for (const value of values) {
-    if (seen.indexOf(value) !== -1) return false;
-    seen.push(value);
-  }
-  return true;
-}
-function probeAppendOrder(port, workspace, identity, runId) {
-  const paths = makeProbePaths(workspace, PROBE_DIRS["MHRC-RCT-001"]);
-  const appends = [1, 2, 3].map(
-    (n) => port.appendReceipt(
-      paths,
-      probeInput(identity, runId, {
-        scenario_id: "MHRC-RCT-001",
-        operation_id: `op-${n}`,
-        correlation_id: `corr-op-${n}`,
-        event_id: `evt-${n}`,
-        causation_id: n === 1 ? null : `evt-${n - 1}`
-      })
-    )
-  );
-  const lockPath = port.journalLockPath(paths);
-  const lockFailure = port.acquireJournalLock(lockPath, port.defaultJournalIo, {
-    lock_max_attempts: 1,
-    lock_wait_ms: 0
-  });
-  const contention = (() => {
-    try {
-      const attempted = port.appendReceipt(
-        paths,
-        probeInput(identity, runId, {
-          scenario_id: "MHRC-RCT-001",
-          operation_id: "op-4",
-          correlation_id: "corr-op-4",
-          event_id: "evt-4",
-          causation_id: "evt-3"
-        }),
-        port.defaultJournalIo,
-        { lock_max_attempts: 2, lock_wait_ms: 0 }
-      );
-      return { contended: attempted, underContention: port.scanReceiptJournal(paths.journal) };
-    } finally {
-      if (lockFailure === null) port.releaseJournalLock(lockPath, port.defaultJournalIo);
-    }
-  })();
-  const contended = contention.contended;
-  const scan = port.scanReceiptJournal(paths.journal);
-  const firstSequenceOf = {};
-  for (const record of scan.records) {
-    if (firstSequenceOf[record.event_id] === void 0) firstSequenceOf[record.event_id] = record.sequence;
-  }
-  const durable = appends.filter((outcome) => outcome.durable && outcome.record !== null);
-  const sequences = durable.map((outcome) => outcome.sequence);
-  const operations = durable.map((outcome) => outcome.operation_id);
-  const causalOrder = scan.records.map((record) => ({
-    event_id: record.event_id,
-    sequence: record.sequence,
-    causation_id: record.causation_id,
-    cause_sequence: record.causation_id === null ? null : firstSequenceOf[record.causation_id] ?? null
-  }));
-  const last = durable.length === 0 ? null : durable[durable.length - 1];
-  const lastRecord = last === null ? null : last.record;
-  const observed = {
-    ...evidenceBindings(identity, runId, "MHRC-RCT-001", {
-      operation_id: last === null ? "" : last.operation_id,
-      correlation_id: lastRecord === null ? "" : lastRecord.correlation_id,
-      sequence: last === null || last.sequence === null ? 0 : last.sequence,
-      record_hash: lastRecord === null ? "" : lastRecord.record_hash
-    }),
-    lock_acquired_by_competitor: lockFailure === null,
-    durable_sequences: [...sequences],
-    durable_operation_ids: [...operations],
-    causal_order: causalOrder,
-    journal_integrity: scan.integrity,
-    record_count: scan.record_count,
-    last_sequence: scan.last_sequence,
-    duplicate_sequences: [...scan.duplicate_sequences],
-    regressing_sequences: [...scan.regressing_sequences],
-    order_violations: scan.order_violations.length,
-    split_lineages: [...scan.split_lineages],
-    run_ids: [...scan.run_ids],
-    contended_append: {
-      disposition: contended.disposition,
-      durable: contended.durable,
-      sequence: contended.sequence,
-      failure_code: contended.failure === null ? null : contended.failure.code
-    },
-    record_count_after_contention: contention.underContention.record_count
-  };
-  const satisfied = sequences.length >= 3 && sequences[0] === 1 && strictlyIncreasing(sequences) && allDistinct(operations) && scan.duplicate_sequences.length === 0 && scan.regressing_sequences.length === 0 && scan.order_violations.length === 0 && scan.integrity === "intact" && scan.split_lineages.length === 0 && scan.run_ids.length === 1 && lockFailure === null && contended.disposition !== "succeeded" && contended.durable === false && contended.sequence === null && contended.failure !== null && contention.underContention.record_count === scan.record_count && causalOrder.every(
-    (entry) => entry.causation_id === null || entry.cause_sequence !== null && entry.cause_sequence < entry.sequence
-  );
-  return { satisfied, observed };
-}
-function probeInterruptedAppend(port, workspace, identity, runId) {
-  const paths = makeProbePaths(workspace, PROBE_DIRS["MHRC-RCT-002"]);
-  const prior = port.appendReceipt(
-    paths,
-    probeInput(identity, runId, {
-      scenario_id: "MHRC-RCT-002",
-      operation_id: "op-1",
-      correlation_id: "corr-op-1",
-      event_id: "evt-1"
-    })
-  );
-  const interrupted = port.appendReceipt(
-    paths,
-    probeInput(identity, runId, {
-      scenario_id: "MHRC-RCT-002",
-      operation_id: "op-2",
-      correlation_id: "corr-op-2",
-      event_id: "evt-2",
-      causation_id: "evt-1"
-    }),
-    tornAppendIo(port.defaultJournalIo, TORN_APPEND_CUT_BYTES)
-  );
-  const post = port.scanReceiptJournal(paths.journal);
-  const checkpoint = port.readCheckpointState(paths.checkpoint);
-  const subsequent = port.appendReceipt(
-    paths,
-    probeInput(identity, runId, {
-      scenario_id: "MHRC-RCT-002",
-      operation_id: "op-3",
-      correlation_id: "corr-op-3",
-      event_id: "evt-3"
-    })
-  );
-  const priorRecord = prior.record;
-  const observed = {
-    ...evidenceBindings(identity, runId, "MHRC-RCT-002", {
-      operation_id: prior.operation_id,
-      correlation_id: priorRecord === null ? "" : priorRecord.correlation_id,
-      sequence: prior.sequence === null ? 0 : prior.sequence,
-      record_hash: priorRecord === null ? "" : priorRecord.record_hash
-    }),
-    prior: { disposition: prior.disposition, durable: prior.durable, sequence: prior.sequence },
-    interrupted: {
-      disposition: interrupted.disposition,
-      durable: interrupted.durable,
-      sequence: interrupted.sequence,
-      failure_code: interrupted.failure === null ? null : interrupted.failure.code,
-      observation_state: interrupted.observation_state,
-      blocks_dependent_completion: interrupted.blocks_dependent_completion
-    },
-    post_fault: {
-      integrity: post.integrity,
-      record_count: post.record_count,
-      last_sequence: post.last_sequence,
-      rejected: post.rejected.map((entry) => ({ line_number: entry.line_number, reason: entry.reason })),
-      observation_state: post.observation_state,
-      blocks_clean_close: post.blocks_clean_close
-    },
-    checkpoint_after_fault: {
-      state: checkpoint.state,
-      last_sequence: checkpoint.checkpoint === null ? null : checkpoint.checkpoint.last_sequence,
-      record_count: checkpoint.checkpoint === null ? null : checkpoint.checkpoint.record_count,
-      last_event_id: checkpoint.checkpoint === null ? null : checkpoint.checkpoint.last_event_id
-    },
-    subsequent_append: {
-      disposition: subsequent.disposition,
-      durable: subsequent.durable,
-      failure_code: subsequent.failure === null ? null : subsequent.failure.code
-    }
-  };
-  const satisfied = prior.durable === true && interrupted.disposition !== "succeeded" && interrupted.durable === false && interrupted.sequence === null && interrupted.failure !== null && post.record_count === 1 && post.last_sequence === prior.sequence && post.rejected.length >= 1 && post.integrity !== "intact" && post.blocks_clean_close === true && checkpoint.state === "present" && checkpoint.checkpoint !== null && checkpoint.checkpoint.last_sequence === prior.sequence && checkpoint.checkpoint.record_count === 1 && subsequent.disposition !== "succeeded" && subsequent.durable === false;
-  return { satisfied, observed };
-}
-function probeObservationLoss(port, workspace, identity, runId) {
-  const paths = makeProbePaths(workspace, PROBE_DIRS["MHRC-RCT-003"]);
-  const absent = port.scanReceiptJournal(paths.journal);
-  const recorded = port.appendReceipt(
-    paths,
-    probeInput(identity, runId, {
-      scenario_id: "MHRC-RCT-003",
-      operation_id: "op-observation-loss",
-      correlation_id: "corr-op-observation-loss",
-      event_id: "evt-observation-loss",
-      disposition: "failed",
-      observation_state: "observation_failed",
-      affected_event_range: { from: 2, to: 4 },
-      output_hash: null,
-      observed_at: null
-    })
-  );
-  const post = port.scanReceiptJournal(paths.journal);
-  const record = recorded.record;
-  const observed = {
-    ...evidenceBindings(identity, runId, "MHRC-RCT-003", {
-      operation_id: recorded.operation_id,
-      correlation_id: record === null ? "" : record.correlation_id,
-      sequence: recorded.sequence === null ? 0 : recorded.sequence,
-      record_hash: record === null ? "" : record.record_hash
-    }),
-    absent_journal: {
-      integrity: absent.integrity,
-      observation_state: absent.observation_state,
-      blocks_clean_close: absent.blocks_clean_close,
-      record_count: absent.record_count
-    },
-    recorded: {
-      disposition: recorded.disposition,
-      durable: recorded.durable,
-      observation_state: recorded.observation_state,
-      blocks_dependent_completion: recorded.blocks_dependent_completion,
-      affected_event_range: record === null ? null : record.affected_event_range
-    },
-    post: {
-      integrity: post.integrity,
-      observation_state: post.observation_state,
-      blocks_clean_close: post.blocks_clean_close,
-      record_count: post.record_count
-    }
-  };
-  const range = record === null ? null : record.affected_event_range;
-  const satisfied = absent.observation_state === "not_observed" && absent.blocks_clean_close === true && recorded.durable === true && recorded.disposition !== "succeeded" && recorded.observation_state === "observation_failed" && recorded.blocks_dependent_completion === true && range !== null && Number.isInteger(range.from) && Number.isInteger(range.to) && range.from >= 1 && range.from <= range.to && post.observation_state === "observation_failed" && post.blocks_clean_close === true;
-  return { satisfied, observed };
-}
-function probeSequenceGaps(port, workspace, identity, runId) {
-  const paths = makeProbePaths(workspace, PROBE_DIRS["MHRC-RCT-004"]);
-  const seal = (sequence) => port.sealReceiptRecord({
-    ...probeInput(identity, runId, {
-      scenario_id: "MHRC-RCT-004",
-      operation_id: `op-${sequence}`,
-      correlation_id: `corr-op-${sequence}`,
-      event_id: `evt-${sequence}`
-    }),
-    sequence
-  });
-  layDownSealedJournal(port, paths, [seal(1), seal(3), seal(5)], runId);
-  const offered = seal(2);
-  const out = port.reconcileReceiptJournal({
-    journalPath: paths.journal,
-    checkpointPath: paths.checkpoint,
-    run_id: runId,
-    producerCheckpoint: { last_sequence: 5, record_count: 5 },
-    reconciled_at: PROBE_RECONCILED_AT,
-    recovered: [offered]
-  });
-  const placed = out.reconciled_order.find((entry) => entry.sequence === offered.sequence);
-  const offeredIdentity = {
-    sequence: offered.sequence,
-    event_id: offered.event_id,
-    operation_id: offered.operation_id,
-    correlation_id: offered.correlation_id
-  };
-  const recoveredIdentity = placed === void 0 ? null : {
-    sequence: placed.sequence,
-    event_id: placed.event_id,
-    operation_id: placed.event_id === offered.event_id ? offered.operation_id : null,
-    correlation_id: placed.event_id === offered.event_id ? offered.correlation_id : null
-  };
-  const observed = {
-    ...evidenceBindings(identity, runId, "MHRC-RCT-004", {
-      operation_id: offered.operation_id,
-      correlation_id: offered.correlation_id,
-      sequence: offered.sequence,
-      record_hash: offered.record_hash
-    }),
-    disposition: out.disposition,
-    gaps: out.gaps.map((gap) => ({
-      from: gap.from,
-      to: gap.to,
-      recovered: gap.recovered,
-      observation_state: gap.observation_state
-    })),
-    recovered_sequences: [...out.recovered_sequences],
-    unresolved_sequences: [...out.unresolved_sequences],
-    rejected_recoveries: out.rejected_recoveries.map((entry) => ({
-      sequence: entry.sequence,
-      event_id: entry.event_id,
-      reason: entry.reason
-    })),
-    reconciled_order: out.reconciled_order.map((entry) => ({ sequence: entry.sequence, event_id: entry.event_id })),
-    offered_identity: offeredIdentity,
-    recovered_identity: recoveredIdentity,
-    checkpoint_before: {
-      state: out.checkpoint_before_state,
-      last_sequence: out.checkpoint_before === null ? null : out.checkpoint_before.last_sequence,
-      record_count: out.checkpoint_before === null ? null : out.checkpoint_before.record_count,
-      last_event_id: out.checkpoint_before === null ? null : out.checkpoint_before.last_event_id
-    },
-    checkpoint_after: {
-      last_sequence: out.checkpoint_after.last_sequence,
-      record_count: out.checkpoint_after.record_count,
-      last_event_id: out.checkpoint_after.last_event_id
-    },
-    checkpoint_disagreements: out.checkpoint_disagreements.map((entry) => ({
-      code: entry.code,
-      expected: entry.expected,
-      actual: entry.actual
-    })),
-    blocks_clean_close: out.blocks_clean_close,
-    merged_observation_state: out.merged_observation_state,
-    merged_integrity: out.merged_integrity
-  };
-  const inGap = (sequence, recovered) => out.gaps.some((gap) => gap.recovered === recovered && sequence >= gap.from && sequence <= gap.to);
-  const satisfied = out.disposition === "degraded" && out.gaps.length >= 1 && out.gaps.every((gap) => Number.isInteger(gap.from) && Number.isInteger(gap.to) && gap.from <= gap.to) && out.gaps.every((gap) => gap.recovered === true || gap.observation_state === "not_observed") && out.recovered_sequences.length >= 1 && out.unresolved_sequences.length >= 1 && out.recovered_sequences.every((sequence) => out.unresolved_sequences.indexOf(sequence) === -1) && out.recovered_sequences.every((sequence) => inGap(sequence, true)) && out.unresolved_sequences.every((sequence) => inGap(sequence, false)) && out.rejected_recoveries.length === 0 && strictlyIncreasing(out.reconciled_order.map((entry) => entry.sequence)) && out.recovered_sequences.every(
-    (sequence) => out.reconciled_order.some((entry) => entry.sequence === sequence)
-  ) && recoveredIdentity !== null && recoveredIdentity.event_id === offeredIdentity.event_id && recoveredIdentity.sequence === offeredIdentity.sequence && recoveredIdentity.operation_id === offeredIdentity.operation_id && recoveredIdentity.correlation_id === offeredIdentity.correlation_id && out.checkpoint_before_state === "present" && out.checkpoint_before !== null && out.checkpoint_after.record_count > out.checkpoint_before.record_count && out.blocks_clean_close === true;
-  return { satisfied, observed };
-}
-function probeDuplicateDelivery(port, workspace, identity, runId) {
-  const paths = makeProbePaths(workspace, PROBE_DIRS["MHRC-RCT-005"]);
-  const seal = (sequence, eventId, over = {}) => port.sealReceiptRecord({
-    ...probeInput(identity, runId, {
-      scenario_id: "MHRC-RCT-005",
-      operation_id: "op-duplicated",
-      correlation_id: "corr-op-duplicated",
-      event_id: eventId,
-      ...over
-    }),
-    sequence
-  });
-  const first = seal(1, "evt-delivery-a");
-  const second = seal(2, "evt-delivery-b");
-  layDownSealedJournal(port, paths, [first, second], runId);
-  const out = port.reconcileReceiptJournal({
-    journalPath: paths.journal,
-    checkpointPath: paths.checkpoint,
-    run_id: runId,
-    producerCheckpoint: { last_sequence: 2, record_count: 2 },
-    reconciled_at: PROBE_RECONCILED_AT
-  });
-  const mismatchPaths = makeProbePaths(paths.dir, "payload-mismatch");
-  const conflicting = seal(2, "evt-delivery-c", { input_hash: `sha256:${"3".repeat(64)}` });
-  layDownSealedJournal(port, mismatchPaths, [first, conflicting], runId);
-  const mismatch = port.reconcileReceiptJournal({
-    journalPath: mismatchPaths.journal,
-    checkpointPath: mismatchPaths.checkpoint,
-    run_id: runId,
-    producerCheckpoint: { last_sequence: 2, record_count: 2 },
-    reconciled_at: PROBE_RECONCILED_AT
-  });
-  const observed = {
-    ...evidenceBindings(identity, runId, "MHRC-RCT-005", {
-      operation_id: first.operation_id,
-      correlation_id: first.correlation_id,
-      sequence: first.sequence,
-      record_hash: first.record_hash
-    }),
-    disposition: out.disposition,
-    duplicates: out.duplicates.map((group) => ({
-      operation_id: group.operation_id,
-      event_ids: [...group.event_ids],
-      authoritative_event_id: group.authoritative_event_id,
-      payload_hash: group.payload_hash,
-      effects_applied: group.effects_applied
-    })),
-    conflicts: out.conflicts.map((group) => ({
-      operation_id: group.operation_id,
-      payload_hashes: [...group.payload_hashes],
-      reason: group.reason
-    })),
-    event_identity_conflicts: out.event_identity_conflicts.map((entry) => ({
-      event_id: entry.event_id,
-      sequences: [...entry.sequences]
-    })),
-    authoritative_effect_count: out.authoritative_effect_count,
-    blocks_clean_close: out.blocks_clean_close,
-    mismatch_probe: {
-      disposition: mismatch.disposition,
-      duplicates: mismatch.duplicates.length,
-      conflicts: mismatch.conflicts.map((group) => ({
-        operation_id: group.operation_id,
-        payload_hashes: [...group.payload_hashes],
-        reason: group.reason
-      })),
-      blocks_clean_close: mismatch.blocks_clean_close
-    }
-  };
-  const satisfied = out.disposition === "succeeded" && out.duplicates.length === 1 && out.duplicates.every(
-    (group) => group.operation_id.length > 0 && group.payload_hash.length > 0 && group.event_ids.length >= 2 && allDistinct(group.event_ids) && group.event_ids.indexOf(group.authoritative_event_id) !== -1 && group.effects_applied === 1
-  ) && out.authoritative_effect_count === 1 && out.conflicts.length === 0 && out.event_identity_conflicts.length === 0 && out.blocks_clean_close === false && mismatch.disposition !== "succeeded" && mismatch.conflicts.length >= 1 && mismatch.conflicts.every(
-    (group) => group.reason === "payload_hash_mismatch" && group.payload_hashes.length >= 2 && allDistinct(group.payload_hashes)
-  ) && mismatch.blocks_clean_close === true;
-  return { satisfied, observed };
-}
-var fs17, path21, MH06_OWNER_KEY, MH06_SCENARIO_IDS, MH06_CATEGORY, MH06_EVIDENCE_PROFILE, MH06_EXPECTED_OUTCOMES, EVIDENCE_FRESHNESS_VERDICTS, EVIDENCE_IDENTITY_FIELDS, MH06_WAVE_OWNER, MH06_SCENARIOS, MH06_PRODUCTION_JOURNAL, MH06_REFUSAL_CONTROLS, MH06_SOURCE_VERSION, PROBE_RECORDED_AT, PROBE_RECONCILED_AT, TORN_APPEND_CUT_BYTES, PROBE_DIRS, JOURNAL_LEAF, CHECKPOINT_LEAF, CHECKPOINT_SCHEMA, PROBES;
-var init_receipt_journal_conformance_evaluator = __esm({
-  "src/domains/telemetry/receipt-journal-conformance-evaluator.ts"() {
-    fs17 = __toESM(require("node:fs"));
-    path21 = __toESM(require("node:path"));
-    init_receipt_journal();
-    init_receipt_reconcile();
-    MH06_OWNER_KEY = "W1/MH-06";
-    MH06_SCENARIO_IDS = Object.freeze([
-      "MHRC-RCT-001",
-      "MHRC-RCT-002",
-      "MHRC-RCT-003",
-      "MHRC-RCT-004",
-      "MHRC-RCT-005"
-    ]);
-    MH06_CATEGORY = "receipt_integrity";
-    MH06_EVIDENCE_PROFILE = "E-RECEIPT";
-    MH06_EXPECTED_OUTCOMES = Object.freeze({
-      "MHRC-RCT-001": { type: "guild.receipt_outcome.v1", disposition: "succeeded", reason_code: null },
-      "MHRC-RCT-002": { type: "guild.receipt_outcome.v1", disposition: "failed", reason_code: "execution_failed" },
-      "MHRC-RCT-003": {
-        type: "guild.receipt_outcome.v1",
-        disposition: "failed",
-        reason_code: "required_observation_failed"
-      },
-      "MHRC-RCT-004": {
-        type: "guild.reconciliation_outcome.v1",
-        disposition: "degraded",
-        reason_code: "required_observation_missing"
-      },
-      "MHRC-RCT-005": { type: "guild.reconciliation_outcome.v1", disposition: "succeeded", reason_code: null }
-    });
-    EVIDENCE_FRESHNESS_VERDICTS = Object.freeze(["fresh", "stale", "unknown"]);
-    EVIDENCE_IDENTITY_FIELDS = Object.freeze([
-      "source_commit",
-      "package_hash",
-      "runtime_version",
-      "adapter_version",
-      "host_id",
-      "host_version",
-      "platform",
-      "contract_version",
-      "scenario_suite_id",
-      "scenario_suite_version",
-      "release_id"
-    ]);
-    MH06_WAVE_OWNER = Object.freeze({ wave_id: "W1", work_item_id: "MH-06", key: MH06_OWNER_KEY });
-    MH06_SCENARIOS = Object.freeze(freezeDeep([
-      defineScenario(
-        "MHRC-RCT-001",
-        "Receipt journal preserves total logical order",
-        "receipt.append",
-        [
-          "one run emits multiple operations",
-          "each operation has stable operation and correlation ids",
-          "the journal starts from a known checkpoint"
-        ],
-        [
-          "every durable append takes a unique, strictly increasing sequence",
-          "cause precedes effect in the recovered logical order",
-          "a writer without exclusive access claims no sequence at all"
-        ],
-        ["every observation is bound to the durable journal entry it was taken from"]
-      ),
-      defineScenario(
-        "MHRC-RCT-002",
-        "Interrupted append never produces a valid partial receipt",
-        "receipt.append",
-        ["a prior valid journal checkpoint exists", "receipt persistence is interrupted before atomic replacement"],
-        [
-          "an interrupted append reports no durable evidence and no sequence",
-          "the torn bytes are rejected, never parsed into a record",
-          "the checkpoint still describes exactly the prior durable state"
-        ],
-        ["the rejected line and the surviving checkpoint are both cited"]
-      ),
-      defineScenario(
-        "MHRC-RCT-003",
-        "Observation loss is explicit",
-        "receipt.append",
-        ["a required event source becomes unavailable", "the lifecycle decision depends on that observation"],
-        [
-          "an unobserved journal is never read as checked_clean",
-          "the loss is durably recorded and blocks dependent completion",
-          "the affected sequence range is bounded, not alluded to"
-        ],
-        ["the durable observation-failure record and its affected range are cited"]
-      ),
-      defineScenario(
-        "MHRC-RCT-004",
-        "Reconciliation detects and classifies sequence gaps",
-        "receipt.reconcile",
-        [
-          "the journal and producer checkpoint disagree",
-          "the expected sequence range is known",
-          "operation identities are stable"
-        ],
-        [
-          "every gap is bounded and classified recovered or unresolved",
-          "a recovered entry keeps the identity it was offered under",
-          "an unresolved gap blocks a clean close"
-        ],
-        ["the checkpoint pair either side of reconciliation is cited"]
-      ),
-      defineScenario(
-        "MHRC-RCT-005",
-        "Duplicate delivery is idempotent",
-        "receipt.reconcile",
-        ["the same operation receipt is delivered more than once", "operation id and payload hash are identical"],
-        [
-          "one operation id and payload hash stays one logical receipt with one effect",
-          "the dedup cites the operation id and the payload hash it grouped on",
-          "the same id carrying a different payload is a conflict, never a duplicate"
-        ],
-        ["the duplicate group and the payload-mismatch probe are both cited"]
-      )
-    ]));
-    MH06_PRODUCTION_JOURNAL = Object.freeze({
-      get appendReceipt() {
-        return appendReceipt;
-      },
-      get scanReceiptJournal() {
-        return scanReceiptJournal;
-      },
-      get reconcileReceiptJournal() {
-        return reconcileReceiptJournal;
-      },
-      get sealReceiptRecord() {
-        return sealReceiptRecord;
-      },
-      get readCheckpointState() {
-        return readCheckpointState;
-      },
-      get journalLockPath() {
-        return journalLockPath;
-      },
-      get acquireJournalLock() {
-        return acquireJournalLock;
-      },
-      get releaseJournalLock() {
-        return releaseJournalLock;
-      },
-      get defaultJournalIo() {
-        return defaultJournalIo;
-      }
-    });
-    MH06_REFUSAL_CONTROLS = Object.freeze({
-      callerSuppliedIds: "caller_supplied_scenario_ids",
-      callerSuppliedResults: "caller_supplied_results",
-      identityIncomplete: "evidence_identity_incomplete",
-      evidenceBindingMissing: "evidence_binding_missing",
-      journalRootUnusable: "journal_root_unusable"
-    });
-    MH06_SOURCE_VERSION = "guild.mh06.receipt-conformance.v1";
-    PROBE_RECORDED_AT = "2026-01-01T00:00:00.000Z";
-    PROBE_RECONCILED_AT = "2026-01-01T00:00:05.000Z";
-    TORN_APPEND_CUT_BYTES = 40;
-    PROBE_DIRS = Object.freeze({
-      "MHRC-RCT-001": "rct001",
-      "MHRC-RCT-002": "rct002",
-      "MHRC-RCT-003": "rct003",
-      "MHRC-RCT-004": "rct004",
-      "MHRC-RCT-005": "rct005"
-    });
-    JOURNAL_LEAF = "journal-lines";
-    CHECKPOINT_LEAF = "checkpoint-state";
-    CHECKPOINT_SCHEMA = "guild.receipt_checkpoint.v1";
-    PROBES = Object.freeze({
-      "MHRC-RCT-001": probeAppendOrder,
-      "MHRC-RCT-002": probeInterruptedAppend,
-      "MHRC-RCT-003": probeObservationLoss,
-      "MHRC-RCT-004": probeSequenceGaps,
-      "MHRC-RCT-005": probeDuplicateDelivery
-    });
-  }
-});
-
-// src/domains/telemetry/guild-trace-events.ts
-function validateBase(ev) {
-  if (typeof ev !== "object" || ev === null) {
-    return { ok: false, reason: "event must be a non-null object" };
-  }
-  const e = ev;
-  if (typeof e["schema_version"] !== "string" || e["schema_version"] === "") {
-    return { ok: false, reason: "schema_version must be a non-empty string" };
-  }
-  if (!GUILD_TRACE_SCHEMA_VERSIONS.includes(e["schema_version"])) {
-    return { ok: false, reason: `unknown schema_version: ${e["schema_version"]}` };
-  }
-  if (typeof e["ts"] !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(e["ts"])) {
-    return { ok: false, reason: "ts must be an ISO-8601 timestamp string" };
-  }
-  if (typeof e["run_id"] !== "string" || e["run_id"] === "") {
-    return { ok: false, reason: "run_id must be a non-empty string" };
-  }
-  if (typeof e["lane_id"] !== "string") {
-    return { ok: false, reason: "lane_id must be a string (empty string for lead session)" };
-  }
-  return { ok: true };
-}
-function validateDispatchEvent(ev) {
-  const base = validateBase(ev);
-  if (!base.ok) return base;
-  const e = ev;
-  if (e["schema_version"] !== "guild.trace.dispatch.v1") {
-    return { ok: false, reason: `wrong schema_version for dispatch: ${e["schema_version"]}` };
-  }
-  if (typeof e["specialist"] !== "string" || e["specialist"] === "") {
-    return { ok: false, reason: "specialist must be a non-empty string" };
-  }
-  if (typeof e["phase"] !== "string" || e["phase"] === "") {
-    return { ok: false, reason: "phase must be a non-empty string" };
-  }
-  if (typeof e["task_id"] !== "string" || e["task_id"] === "") {
-    return { ok: false, reason: "task_id must be a non-empty string" };
-  }
-  if (!DISPATCH_BACKENDS.includes(e["backend"])) {
-    return { ok: false, reason: `backend must be one of: ${DISPATCH_BACKENDS.join(", ")}` };
-  }
-  if (typeof e["backend_rung"] !== "number" || e["backend_rung"] < 0 || e["backend_rung"] > 4) {
-    return { ok: false, reason: "backend_rung must be a number 0-4" };
-  }
-  if (typeof e["dispatched_at"] !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(e["dispatched_at"])) {
-    return { ok: false, reason: "dispatched_at must be an ISO-8601 timestamp string" };
-  }
-  for (const optKey of ["attribution_specialist", "pane_id", "pane_target", "pane_backend"]) {
-    if (e[optKey] === void 0) continue;
-    if (typeof e[optKey] !== "string" || e[optKey] === "") {
-      return { ok: false, reason: `${optKey}, when present, must be a non-empty string` };
-    }
-  }
-  if (e["pane_backend"] !== void 0) {
-    if (e["backend"] !== "unknown") {
-      return {
-        ok: false,
-        reason: `pane_backend is only for a surface the backend enum cannot name; it must not accompany backend "${e["backend"]}"`
-      };
-    }
-    if (e["backend_rung"] < 1) {
-      return {
-        ok: false,
-        reason: "pane_backend marks a CONFIRMED dispatch, so backend_rung must be >= 1"
-      };
-    }
-  }
-  return { ok: true };
-}
-function validateRecallEvent(ev) {
-  const base = validateBase(ev);
-  if (!base.ok) return base;
-  const e = ev;
-  if (e["schema_version"] !== "guild.trace.recall.v1") {
-    return { ok: false, reason: `wrong schema_version for recall: ${e["schema_version"]}` };
-  }
-  if (typeof e["query"] !== "string" || e["query"] === "") {
-    return { ok: false, reason: "query must be a non-empty string" };
-  }
-  if (!RECALL_BRANCHES.includes(e["branch"])) {
-    return { ok: false, reason: `branch must be one of: ${RECALL_BRANCHES.join(", ")}` };
-  }
-  if (typeof e["chunk_count"] !== "number" || e["chunk_count"] < 0) {
-    return { ok: false, reason: "chunk_count must be a non-negative number" };
-  }
-  if (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0) {
-    return { ok: false, reason: "duration_ms must be a non-negative number" };
-  }
-  if (typeof e["had_quarantine"] !== "boolean") {
-    return { ok: false, reason: "had_quarantine must be a boolean" };
-  }
-  if (typeof e["cwd_redacted"] !== "string") {
-    return { ok: false, reason: "cwd_redacted must be a string" };
-  }
-  return { ok: true };
-}
-function validateRecallDecisionEvent(ev) {
-  const base = validateBase(ev);
-  if (!base.ok) return base;
-  const e = ev;
-  if (e["schema_version"] !== "guild.trace.recall_decision.v1") {
-    return { ok: false, reason: `wrong schema_version for recall_decision: ${e["schema_version"]}` };
-  }
-  if (typeof e["query_hash"] !== "string" || !/^[0-9a-f]{16}$/.test(e["query_hash"])) {
-    return { ok: false, reason: "query_hash must be exactly 16 lowercase hex chars (sha256[:16])" };
-  }
-  if (typeof e["query_preview"] !== "string") {
-    return { ok: false, reason: "query_preview must be a string (may be empty)" };
-  }
-  if (e["query_preview"].length > 60) {
-    return { ok: false, reason: "query_preview must be <= 60 chars (no raw-query leak)" };
-  }
-  if (!RECALL_BRANCHES.includes(e["branch"])) {
-    return { ok: false, reason: `branch must be one of: ${RECALL_BRANCHES.join(", ")}` };
-  }
-  if (typeof e["top_score"] !== "number" || e["top_score"] < 0 || !isFinite(e["top_score"])) {
-    return { ok: false, reason: "top_score must be a finite number >= 0" };
-  }
-  if (typeof e["threshold"] !== "number" || e["threshold"] < 0 || !isFinite(e["threshold"])) {
-    return { ok: false, reason: "threshold must be a finite number >= 0" };
-  }
-  if (typeof e["read_skip_fired"] !== "boolean") {
-    return { ok: false, reason: "read_skip_fired must be a boolean" };
-  }
-  if (typeof e["chunk_count"] !== "number" || e["chunk_count"] < 0) {
-    return { ok: false, reason: "chunk_count must be a non-negative number" };
-  }
-  if (typeof e["scored"] !== "boolean") {
-    return { ok: false, reason: "scored must be a boolean" };
-  }
-  if (!LANE_OUTCOMES.includes(e["lane_outcome"])) {
-    return { ok: false, reason: `lane_outcome must be one of: ${LANE_OUTCOMES.join(", ")}` };
-  }
-  return { ok: true };
-}
-function validateConfigResolutionEvent(ev) {
-  const base = validateBase(ev);
-  if (!base.ok) return base;
-  const e = ev;
-  if (e["schema_version"] !== "guild.trace.config_resolution.v1") {
-    return { ok: false, reason: `wrong schema_version for config_resolution: ${e["schema_version"]}` };
-  }
-  if (typeof e["rigor"] !== "string" || e["rigor"] === "") {
-    return { ok: false, reason: "rigor must be a non-empty string" };
-  }
-  if (typeof e["agent_mode"] !== "string" || e["agent_mode"] === "") {
-    return { ok: false, reason: "agent_mode must be a non-empty string" };
-  }
-  if (typeof e["layers"] !== "object" || e["layers"] === null) {
-    return { ok: false, reason: "layers must be an object" };
-  }
-  const layers = e["layers"];
-  for (const boolKey of ["workspace", "workspace_local", "project", "project_local", "cli"]) {
-    if (typeof layers[boolKey] !== "boolean") {
-      return { ok: false, reason: `layers.${boolKey} must be a boolean` };
-    }
-  }
-  if (layers["rigor"] !== null && typeof layers["rigor"] !== "string") {
-    return { ok: false, reason: "layers.rigor must be a string or null" };
-  }
-  if (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0) {
-    return { ok: false, reason: "duration_ms must be a non-negative number" };
-  }
-  if (typeof e["config_fingerprint"] !== "string" || e["config_fingerprint"] === "") {
-    return { ok: false, reason: "config_fingerprint must be a non-empty string" };
-  }
-  return { ok: true };
-}
-function validateSecurityDecisionEvent(ev) {
-  const base = validateBase(ev);
-  if (!base.ok) return base;
-  const e = ev;
-  if (e["schema_version"] !== "guild.trace.security_decision.v1") {
-    return { ok: false, reason: `wrong schema_version for security_decision: ${e["schema_version"]}` };
-  }
-  if (typeof e["tool_name"] !== "string" || e["tool_name"] === "") {
-    return { ok: false, reason: "tool_name must be a non-empty string" };
-  }
-  if (!SECURITY_OUTCOMES.includes(e["decision"])) {
-    return { ok: false, reason: `decision must be one of: ${SECURITY_OUTCOMES.join(", ")}` };
-  }
-  if (typeof e["bypass_mode"] !== "boolean") {
-    return { ok: false, reason: "bypass_mode must be a boolean" };
-  }
-  if (typeof e["policy_forced"] !== "boolean") {
-    return { ok: false, reason: "policy_forced must be a boolean" };
-  }
-  if (typeof e["autonomy_mode"] !== "string" || e["autonomy_mode"] === "") {
-    return { ok: false, reason: "autonomy_mode must be a non-empty string" };
-  }
-  if (!["env", "file", "none"].includes(e["scope_source"])) {
-    return { ok: false, reason: "scope_source must be 'env', 'file', or 'none'" };
-  }
-  return { ok: true };
-}
-function validateDegradationEvent(ev) {
-  const base = validateBase(ev);
-  if (!base.ok) return base;
-  const e = ev;
-  if (e["schema_version"] !== "guild.trace.degradation.v1") {
-    return { ok: false, reason: `wrong schema_version for degradation: ${e["schema_version"]}` };
-  }
-  if (!DEGRADATION_SURFACES.includes(e["surface"])) {
-    return { ok: false, reason: `surface must be one of: ${DEGRADATION_SURFACES.join(", ")}` };
-  }
-  if (typeof e["reason"] !== "string" || e["reason"] === "") {
-    return { ok: false, reason: "reason must be a non-empty string" };
-  }
-  if (typeof e["attempted"] !== "string" || e["attempted"] === "") {
-    return { ok: false, reason: "attempted must be a non-empty string" };
-  }
-  if (typeof e["fallback"] !== "string" || e["fallback"] === "") {
-    return { ok: false, reason: "fallback must be a non-empty string" };
-  }
-  if (!["warn", "error"].includes(e["severity"])) {
-    return { ok: false, reason: "severity must be 'warn' or 'error'" };
-  }
-  return { ok: true };
-}
-function validateModelInspectionEvent(ev) {
-  const base = validateBase(ev);
-  if (!base.ok) return base;
-  const e = ev;
-  if (e["schema_version"] !== "guild.trace.model_inspection.v1") {
-    return { ok: false, reason: `wrong schema_version for model_inspection: ${e["schema_version"]}` };
-  }
-  for (const key of ["host_family", "host_surface", "identity_trust", "catalog_state", "actual_model", "independence"]) {
-    if (typeof e[key] !== "string" || e[key] === "") {
-      return { ok: false, reason: `${key} must be a non-empty string` };
-    }
-  }
-  if (e["selection_model"] !== null && (typeof e["selection_model"] !== "string" || e["selection_model"] === "")) {
-    return { ok: false, reason: "selection_model must be a non-empty string or null" };
-  }
-  if (typeof e["unknowns_count"] !== "number" || e["unknowns_count"] < 0 || !Number.isInteger(e["unknowns_count"])) {
-    return { ok: false, reason: "unknowns_count must be a non-negative integer" };
-  }
-  return { ok: true };
-}
-function validateAnalysisTraceEvent(ev) {
-  const base = validateBase(ev);
-  if (!base.ok) return base;
-  const e = ev;
-  if (e["schema_version"] !== "guild.trace.analysis.v2") {
-    return { ok: false, reason: `wrong schema_version for analysis trace: ${e["schema_version"]}` };
-  }
-  if (!ANALYSIS_EVENT_CLASSES.includes(e["event_class"])) {
-    return { ok: false, reason: `unknown analysis event_class: ${e["event_class"]}` };
-  }
-  if (!["lead", "agent", "user", "tool", "system"].includes(e["actor_type"])) {
-    return { ok: false, reason: "actor_type must be lead|agent|user|tool|system" };
-  }
-  if (typeof e["actor_id"] !== "string" || e["actor_id"] === "") {
-    return { ok: false, reason: "actor_id must be a non-empty string" };
-  }
-  if (!["ok", "error", "denied", "incomplete", "unknown"].includes(e["status"])) {
-    return { ok: false, reason: "status must be ok|error|denied|incomplete|unknown" };
-  }
-  const allowedKeys = /* @__PURE__ */ new Set([
-    "schema_version",
-    "ts",
-    "run_id",
-    "lane_id",
-    "event_class",
-    "actor_type",
-    "actor_id",
-    "status",
-    "span_id",
-    "parent_span_id",
-    "phase",
-    "task_id",
-    "initiative_id",
-    "run_scope",
-    "prompt_hash",
-    "payload_ref",
-    "redaction",
-    "duration_ms",
-    "tokens",
-    "config_snapshot_ref",
-    "signature"
-  ]);
-  for (const key of Object.keys(e)) {
-    if (!allowedKeys.has(key)) return { ok: false, reason: `unknown analysis field: ${key}` };
-  }
-  if (e["run_scope"] !== void 0 && !["initiative", "independent"].includes(e["run_scope"])) {
-    return { ok: false, reason: "run_scope must be initiative|independent when present" };
-  }
-  if (e["duration_ms"] !== void 0 && (typeof e["duration_ms"] !== "number" || e["duration_ms"] < 0)) {
-    return { ok: false, reason: "duration_ms must be a non-negative number when present" };
-  }
-  for (const key of ["span_id", "parent_span_id", "phase", "task_id", "initiative_id", "prompt_hash", "payload_ref", "config_snapshot_ref", "signature"]) {
-    if (e[key] !== void 0 && (typeof e[key] !== "string" || e[key] === "")) {
-      return { ok: false, reason: `${key} must be a non-empty string when present` };
-    }
-  }
-  if (e["redaction"] !== void 0 && !["none", "redacted", "omitted"].includes(e["redaction"])) {
-    return { ok: false, reason: "redaction must be none|redacted|omitted when present" };
-  }
-  if (e["tokens"] !== void 0) {
-    if (typeof e["tokens"] !== "object" || e["tokens"] === null || Array.isArray(e["tokens"])) {
-      return { ok: false, reason: "tokens must be an object when present" };
-    }
-    for (const [key, value] of Object.entries(e["tokens"])) {
-      if (!["input", "output", "cached", "cost_usd"].includes(key) || typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-        return { ok: false, reason: `tokens.${key} must be a non-negative finite number` };
-      }
-    }
-  }
-  const eventClass = e["event_class"];
-  if (eventClass === "run_started" && e["run_scope"] === void 0) {
-    return { ok: false, reason: "run_started requires run_scope" };
-  }
-  if (eventClass === "run_attachment_resolved" && (e["run_scope"] === void 0 || e["signature"] === void 0)) {
-    return { ok: false, reason: "run_attachment_resolved requires run_scope and signature" };
-  }
-  if (eventClass === "config_snapshot_written" && e["config_snapshot_ref"] === void 0 && e["payload_ref"] === void 0) {
-    return { ok: false, reason: "config_snapshot_written requires config_snapshot_ref or payload_ref" };
-  }
-  const promptClasses = ["prompt_received", "prompt_normalized", "clarifying_question_asked", "agent_prompt_sent"];
-  if (promptClasses.includes(eventClass) && (e["prompt_hash"] === void 0 || e["redaction"] === void 0 || e["span_id"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires prompt_hash, redaction, and span_id` };
-  }
-  if ((eventClass.startsWith("knowledge_lookup_") || eventClass.startsWith("memory_lookup_")) && (e["span_id"] === void 0 || e["prompt_hash"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and prompt_hash` };
-  }
-  if (eventClass.startsWith("tool_call_") && e["span_id"] === void 0) {
-    return { ok: false, reason: `${eventClass} requires span_id` };
-  }
-  if (["tool_call_finished", "tool_call_failed"].includes(eventClass) && e["duration_ms"] === void 0) {
-    return { ok: false, reason: `${eventClass} requires duration_ms` };
-  }
-  if (["agent_dispatched", "agent_prompt_sent", "agent_handoff_written"].includes(eventClass) && (e["task_id"] === void 0 || e["span_id"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires task_id and span_id` };
-  }
-  if (eventClass === "agent_handoff_written" && e["payload_ref"] === void 0) {
-    return { ok: false, reason: "agent_handoff_written requires payload_ref" };
-  }
-  if (eventClass === "agent_response_received" && e["span_id"] === void 0) {
-    return { ok: false, reason: "agent_response_received requires span_id" };
-  }
-  if (eventClass.startsWith("loop_") && (e["span_id"] === void 0 || e["signature"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and signature` };
-  }
-  if (eventClass.startsWith("phase_") && (e["span_id"] === void 0 || e["phase"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and phase` };
-  }
-  if (eventClass.startsWith("gate_") && (e["span_id"] === void 0 || e["signature"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and signature` };
-  }
-  const evidenceClasses = [
-    "instruction_violation_detected",
-    "user_steering_received",
-    "correction_applied",
-    "repeated_failure_detected",
-    "recommendation_created",
-    "recommendation_routed",
-    "bug_report_prompted"
-  ];
-  if (evidenceClasses.includes(eventClass) && (e["span_id"] === void 0 || e["signature"] === void 0)) {
-    return { ok: false, reason: `${eventClass} requires span_id and signature` };
-  }
-  return { ok: true };
-}
-function validateGuildTraceEvent(ev) {
-  if (typeof ev !== "object" || ev === null) {
-    return { ok: false, reason: "event must be a non-null object" };
-  }
-  const sv = ev["schema_version"];
-  switch (sv) {
-    case "guild.trace.analysis.v2":
-      return validateAnalysisTraceEvent(ev);
-    case "guild.trace.model_inspection.v1":
-      return validateModelInspectionEvent(ev);
-    case "guild.trace.dispatch.v1":
-      return validateDispatchEvent(ev);
-    case "guild.trace.recall.v1":
-      return validateRecallEvent(ev);
-    case "guild.trace.recall_decision.v1":
-      return validateRecallDecisionEvent(ev);
-    case "guild.trace.config_resolution.v1":
-      return validateConfigResolutionEvent(ev);
-    case "guild.trace.security_decision.v1":
-      return validateSecurityDecisionEvent(ev);
-    case "guild.trace.degradation.v1":
-      return validateDegradationEvent(ev);
-    default:
-      return { ok: false, reason: `unknown schema_version: ${sv}` };
-  }
-}
-function makeConfigResolutionEvent(fields) {
-  return { schema_version: "guild.trace.config_resolution.v1", ...fields };
-}
-var ANALYSIS_EVENT_CLASSES, GUILD_TRACE_SCHEMA_VERSIONS, DISPATCH_BACKENDS, RECALL_BRANCHES, SECURITY_OUTCOMES, DEGRADATION_SURFACES, LANE_OUTCOMES;
-var init_guild_trace_events = __esm({
-  "src/domains/telemetry/guild-trace-events.ts"() {
-    ANALYSIS_EVENT_CLASSES = Object.freeze([
-      "run_started",
-      "run_closed",
-      "run_attachment_resolved",
-      "config_snapshot_written",
-      "prompt_received",
-      "prompt_normalized",
-      "clarifying_question_asked",
-      "implementation_authorized",
-      "agent_dispatched",
-      "agent_prompt_sent",
-      "agent_response_received",
-      "agent_handoff_written",
-      "knowledge_lookup_started",
-      "knowledge_lookup_result",
-      "memory_lookup_started",
-      "memory_lookup_result",
-      "tool_call_started",
-      "tool_call_finished",
-      "tool_call_denied",
-      "tool_call_failed",
-      "loop_entered",
-      "loop_iteration",
-      "loop_exited",
-      "loop_cap_hit",
-      "phase_entered",
-      "phase_concluded",
-      "gate_started",
-      "gate_concluded",
-      "instruction_violation_detected",
-      "user_steering_received",
-      "correction_applied",
-      "repeated_failure_detected",
-      "recommendation_created",
-      "recommendation_routed",
-      "bug_report_prompted"
-    ]);
-    GUILD_TRACE_SCHEMA_VERSIONS = Object.freeze([
-      "guild.trace.dispatch.v1",
-      "guild.trace.recall.v1",
-      "guild.trace.recall_decision.v1",
-      "guild.trace.config_resolution.v1",
-      "guild.trace.security_decision.v1",
-      "guild.trace.degradation.v1",
-      "guild.trace.model_inspection.v1",
-      "guild.trace.analysis.v2"
-    ]);
-    DISPATCH_BACKENDS = ["agent", "cmux", "tmux", "remote", "unknown"];
-    RECALL_BRANCHES = ["sqlite", "file-bm25", "fs-scan", "kg-query", "structural", "combined", "empty"];
-    SECURITY_OUTCOMES = ["allow", "ask", "deny", "audit", "pass-through"];
-    DEGRADATION_SURFACES = ["dispatch", "recall", "config", "hook", "host-capability", "other"];
-    LANE_OUTCOMES = ["success", "failure", "unknown"];
-  }
-});
-
-// src/domains/telemetry/guild-trace-emit.ts
-function liveLogPath(runDir) {
-  return path22.join(runDir, "logs", "v1.4-events.jsonl");
-}
-function emitTraceEvent(event, runDir) {
-  if (!runDir) return false;
-  const validationResult = validateGuildTraceEvent(event);
-  if (!validationResult.ok) {
-    const schemaVersion = event["schema_version"];
-    const failResult = validationResult;
-    process.stderr.write(
-      `[guild-trace-emit] WARN: dropping invalid trace event (${schemaVersion}): ${failResult.reason}
-`
-    );
-    return false;
-  }
-  try {
-    const live = liveLogPath(runDir);
-    const dir = path22.dirname(live);
-    fs18.mkdirSync(dir, { recursive: true });
-    const line = JSON.stringify(event) + "\n";
-    fs18.appendFileSync(live, line, "utf8");
-    return true;
-  } catch (err) {
-    process.stderr.write(
-      `[guild-trace-emit] WARN: could not write trace event to ${runDir}/logs/v1.4-events.jsonl: ${err instanceof Error ? err.message : String(err)}
-`
-    );
-    return false;
-  }
-}
-var fs18, path22;
-var init_guild_trace_emit = __esm({
-  "src/domains/telemetry/guild-trace-emit.ts"() {
-    fs18 = __toESM(require("node:fs"));
-    path22 = __toESM(require("node:path"));
-    init_guild_trace_events();
-  }
-});
-
-// src/domains/telemetry/task-cell-telemetry.ts
-var TASK_CELL_LIFECYCLE_EVENTS, EVENT_NAMES;
-var init_task_cell_telemetry = __esm({
-  "src/domains/telemetry/task-cell-telemetry.ts"() {
-    init_kernel();
-    init_state();
-    TASK_CELL_LIFECYCLE_EVENTS = Object.freeze([
-      "spawn_started",
-      "spawned",
-      "ready",
-      "assignment_delivered",
-      "assignment_acknowledged",
-      "running",
-      "handoff_submitted",
-      "handoff_validated",
-      "handoff_accepted",
-      "termination_started",
-      "terminated",
-      "failed",
-      "cancelled",
-      "timed_out",
-      "rejected",
-      "orphaned",
-      "reaped"
-    ]);
-    EVENT_NAMES = new Set(TASK_CELL_LIFECYCLE_EVENTS);
-  }
-});
-
-// src/domains/telemetry/run-analysis.ts
-var REQUIRED_COVERAGE, COMPLETENESS_REQUIREMENTS, EVENT_CLASS_CATEGORY;
-var init_run_analysis = __esm({
-  "src/domains/telemetry/run-analysis.ts"() {
-    init_state();
-    init_guild_trace_events();
-    init_state();
-    REQUIRED_COVERAGE = Object.freeze(["prompt", "agent", "tool", "phase", "loop", "gate", "close"]);
-    COMPLETENESS_REQUIREMENTS = Object.freeze(["run identity", "plugin-config-snapshot.json", "trace parseability", "trace validity", ...REQUIRED_COVERAGE]);
-    EVENT_CLASS_CATEGORY = Object.freeze({
-      run_started: null,
-      run_closed: "close",
-      run_attachment_resolved: null,
-      config_snapshot_written: null,
-      prompt_received: "prompt",
-      prompt_normalized: "prompt",
-      clarifying_question_asked: "prompt",
-      implementation_authorized: "gate",
-      agent_dispatched: "agent",
-      agent_prompt_sent: "agent",
-      agent_response_received: "agent",
-      agent_handoff_written: "agent",
-      knowledge_lookup_started: "knowledge",
-      knowledge_lookup_result: "knowledge",
-      memory_lookup_started: "memory",
-      memory_lookup_result: "memory",
-      tool_call_started: "tool",
-      tool_call_finished: "tool",
-      tool_call_denied: "tool",
-      tool_call_failed: "tool",
-      loop_entered: "loop",
-      loop_iteration: "loop",
-      loop_exited: "loop",
-      loop_cap_hit: "loop",
-      phase_entered: "phase",
-      phase_concluded: "phase",
-      gate_started: "gate",
-      gate_concluded: "gate",
-      instruction_violation_detected: "steering",
-      user_steering_received: "steering",
-      correction_applied: "correction",
-      repeated_failure_detected: "correction",
-      recommendation_created: null,
-      recommendation_routed: null,
-      bug_report_prompted: null
-    });
-  }
-});
-
-// src/domains/telemetry/index.ts
-var init_telemetry = __esm({
-  "src/domains/telemetry/index.ts"() {
-    init_receipt_journal();
-    init_receipt_reconcile();
-    init_debug_bundle();
-    init_receipt_journal_conformance_evaluator();
-    init_guild_trace_emit();
-    init_guild_trace_events();
-    init_task_cell_telemetry();
-    init_run_analysis();
-  }
-});
 
 // src/domains/config/settings-resolver.ts
+var _telemetryApi = null;
+function telemetryApi() {
+  if (_telemetryApi !== null) return _telemetryApi;
+  if (__filename.endsWith(".ts")) {
+    const sourceBarrel = path20.join(__dirname, "..", "telemetry");
+    _telemetryApi = require(sourceBarrel);
+    return _telemetryApi;
+  }
+  const sibling = path20.join(__dirname, "telemetry-api.js");
+  if (fs16.existsSync(sibling)) {
+    _telemetryApi = require(sibling);
+    return _telemetryApi;
+  }
+  for (let dir = path20.dirname(__dirname); ; ) {
+    const isPackageRoot = fs16.existsSync(path20.join(dir, "runtime")) || fs16.existsSync(path20.join(dir, ".claude-plugin")) || fs16.existsSync(path20.join(dir, ".codex-plugin")) || fs16.existsSync(path20.join(dir, "guild.inventory.json"));
+    if (isPackageRoot) {
+      const chunk = path20.join(dir, "runtime", "scripts", "telemetry-api.js");
+      if (!fs16.existsSync(chunk)) {
+        throw new Error(
+          `guild: runtime/scripts/telemetry-api.js missing from package root ${dir} \u2014 incomplete package; run \`bun run compile\` (KTD10 fail-closed)`
+        );
+      }
+      _telemetryApi = require(chunk);
+      return _telemetryApi;
+    }
+    const parent = path20.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error(
+    `guild: no package root found above ${__dirname} for telemetry-api.js (KTD10 fail-closed)`
+  );
+}
 function resolveSettings2(opts) {
   const t0 = Date.now();
   const result = resolveSettings(opts);
+  const { cwd, flags = {} } = opts;
+  const _traceRunId = process.env["GUILD_RUN_ID"] ?? "";
+  const _traceRunDir = _traceRunId && cwd ? path20.join(durableGuildDir2(cwd), "runs", _traceRunId) : void 0;
+  const _telemetry = _traceRunDir ? telemetryApi() : null;
   try {
-    const { cwd, flags = {} } = opts;
     const assembled = result.config;
-    const _traceRunId = process.env["GUILD_RUN_ID"] ?? "";
-    const _traceRunDir = _traceRunId && cwd ? path23.join(durableGuildDir2(cwd), "runs", _traceRunId) : void 0;
-    if (_traceRunDir) {
-      const _fingerprint = crypto4.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
+    if (_traceRunDir && _telemetry) {
+      const _fingerprint = crypto3.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
       const sources = result.sources;
-      emitTraceEvent(
-        makeConfigResolutionEvent({
+      _telemetry.emitTraceEvent(
+        _telemetry.makeConfigResolutionEvent({
           ts: (/* @__PURE__ */ new Date()).toISOString(),
           run_id: _traceRunId,
           lane_id: process.env["GUILD_LANE_ID"] ?? "",
@@ -11404,1395 +8462,822 @@ function resolveSettings2(opts) {
   }
   return result;
 }
-var path23, crypto4;
-var init_settings_resolver = __esm({
-  "src/domains/config/settings-resolver.ts"() {
-    path23 = __toESM(require("path"));
-    crypto4 = __toESM(require("crypto"));
-    init_settings_reader();
-    init_settings_reader();
-    init_telemetry();
-    init_telemetry();
-    init_state();
-  }
-});
-
-// src/domains/config/workspace-mode.ts
-var init_workspace_mode = __esm({
-  "src/domains/config/workspace-mode.ts"() {
-    init_settings_resolver();
-  }
-});
-
-// src/domains/config/tier-model.ts
-var init_tier_model = __esm({
-  "src/domains/config/tier-model.ts"() {
-    init_host_id_namespace();
-  }
-});
 
 // src/domains/config/catalog-cache.ts
-var MODEL_CATALOG_CACHE_DIRNAME, MODEL_CATALOG_CACHE_REL_SEGMENTS, MODEL_CATALOG_CACHE_REL, CACHE_KEY_COMPONENTS;
-var init_catalog_cache = __esm({
-  "src/domains/config/catalog-cache.ts"() {
-    init_state();
-    MODEL_CATALOG_CACHE_DIRNAME = "model-catalog";
-    MODEL_CATALOG_CACHE_REL_SEGMENTS = Object.freeze([".guild", "indexes", MODEL_CATALOG_CACHE_DIRNAME]);
-    MODEL_CATALOG_CACHE_REL = MODEL_CATALOG_CACHE_REL_SEGMENTS.join("/");
-    CACHE_KEY_COMPONENTS = Object.freeze([
-      "target_id",
-      "family",
-      "surface",
-      "provider_kind",
-      "auth_mode",
-      "account_fingerprint",
-      "endpoint_fingerprint",
-      "org_fingerprint",
-      "tool_version",
-      "adapter_id",
-      "adapter_version",
-      "run_scope"
-    ]);
-  }
-});
+var MODEL_CATALOG_CACHE_DIRNAME = "model-catalog";
+var MODEL_CATALOG_CACHE_REL_SEGMENTS = Object.freeze([".guild", "indexes", MODEL_CATALOG_CACHE_DIRNAME]);
+var MODEL_CATALOG_CACHE_REL = MODEL_CATALOG_CACHE_REL_SEGMENTS.join("/");
+var CACHE_KEY_COMPONENTS = Object.freeze([
+  "target_id",
+  "family",
+  "surface",
+  "provider_kind",
+  "auth_mode",
+  "account_fingerprint",
+  "endpoint_fingerprint",
+  "org_fingerprint",
+  "tool_version",
+  "adapter_id",
+  "adapter_version",
+  "run_scope"
+]);
 
 // src/domains/config/compatibility-usage.ts
-var COMPATIBILITY_ASSET_KINDS, COMPATIBILITY_READ_REASONS, BENIGN_COMPATIBILITY_READ_REASONS, DEPENDENCE_COMPATIBILITY_READ_REASONS, BENIGN_REASON_SET, READ_REASON_SET, ASSET_KIND_SET, RESOLVER_MODE_SET;
-var init_compatibility_usage = __esm({
-  "src/domains/config/compatibility-usage.ts"() {
-    init_config_defaults();
-    COMPATIBILITY_ASSET_KINDS = Object.freeze([
-      "shipped_template",
-      "shipped_domain_skill"
-    ]);
-    COMPATIBILITY_READ_REASONS = Object.freeze([
-      "no_project_definition",
-      "explicit_legacy_mode",
-      "rollback",
-      "mint_source",
-      "shadow_comparison"
-    ]);
-    BENIGN_COMPATIBILITY_READ_REASONS = Object.freeze(["mint_source", "shadow_comparison"]);
-    DEPENDENCE_COMPATIBILITY_READ_REASONS = Object.freeze(
-      COMPATIBILITY_READ_REASONS.filter(
-        (r) => !BENIGN_COMPATIBILITY_READ_REASONS.includes(r)
-      )
-    );
-    BENIGN_REASON_SET = new Set(BENIGN_COMPATIBILITY_READ_REASONS);
-    READ_REASON_SET = new Set(COMPATIBILITY_READ_REASONS);
-    ASSET_KIND_SET = new Set(COMPATIBILITY_ASSET_KINDS);
-    RESOLVER_MODE_SET = new Set(CAPABILITY_RESOLVER_MODES);
-  }
-});
+var COMPATIBILITY_ASSET_KINDS = Object.freeze([
+  "shipped_template",
+  "shipped_domain_skill"
+]);
+var COMPATIBILITY_READ_REASONS = Object.freeze([
+  "no_project_definition",
+  "explicit_legacy_mode",
+  "rollback",
+  "mint_source",
+  "shadow_comparison"
+]);
+var BENIGN_COMPATIBILITY_READ_REASONS = Object.freeze(["mint_source", "shadow_comparison"]);
+var DEPENDENCE_COMPATIBILITY_READ_REASONS = Object.freeze(
+  COMPATIBILITY_READ_REASONS.filter(
+    (r) => !BENIGN_COMPATIBILITY_READ_REASONS.includes(r)
+  )
+);
+var BENIGN_REASON_SET = new Set(BENIGN_COMPATIBILITY_READ_REASONS);
+var READ_REASON_SET = new Set(COMPATIBILITY_READ_REASONS);
+var ASSET_KIND_SET = new Set(COMPATIBILITY_ASSET_KINDS);
+var RESOLVER_MODE_SET = new Set(CAPABILITY_RESOLVER_MODES);
 
 // src/domains/config/resolver-mode.ts
-var RESOLVER_AUTHORITIES, CAPABILITY_RESOLUTION_INTENTS, MODE_POLICIES, RESOLVER_MODE_POLICIES, MODE_RANK, RESOLVER_MODE_FAILURES, RESOLVER_MODE_FAILURE_SET, MODE_TRANSITION_DIRECTIONS;
-var init_resolver_mode = __esm({
-  "src/domains/config/resolver-mode.ts"() {
-    init_compatibility_usage();
-    RESOLVER_AUTHORITIES = Object.freeze(["legacy", "project-local"]);
-    CAPABILITY_RESOLUTION_INTENTS = Object.freeze([
-      /** A live lane needs this definition to run. */
-      "dispatch",
-      /** Minting a project-local role FROM a shipped template. The migration WORKING. */
-      "mint",
-      /** The A-side of a shadow comparison. Also the migration working. */
-      "shadow_compare",
-      /** Replaying a historical run record against the compatibility surface. */
-      "replay",
-      /** A deliberate return to the legacy path after a failed adoption. */
-      "rollback"
-    ]);
-    MODE_POLICIES = /* @__PURE__ */ new Map([
-      [
-        "legacy",
-        Object.freeze({
-          mode: "legacy",
-          authority: "legacy",
-          project_resolver_runs: false,
-          capability_writes_permitted: false,
-          project_side_effects_permitted: false,
-          compatibility_available: true,
-          compatibility_intents: Object.freeze([
-            "dispatch",
-            "mint",
-            "replay",
-            "rollback"
-          ]),
-          local_creation_permitted: false,
-          profiles_emitted: false
-        })
-      ],
-      [
-        "observe",
-        Object.freeze({
-          mode: "observe",
-          authority: "legacy",
-          project_resolver_runs: true,
-          // THE defining constraint of observe. D03's advance condition is a
-          // before/after tree hash proving zero live writes; a policy that permitted
-          // writes here would make that condition unprovable by construction.
-          capability_writes_permitted: false,
-          project_side_effects_permitted: false,
-          compatibility_available: true,
-          compatibility_intents: Object.freeze([
-            "dispatch",
-            "mint",
-            "replay",
-            "rollback"
-          ]),
-          local_creation_permitted: false,
-          profiles_emitted: true
-        })
-      ],
-      [
-        "shadow",
-        Object.freeze({
-          mode: "shadow",
-          authority: "legacy",
-          project_resolver_runs: true,
-          // Local creation is a HUMAN authority event, so it is permitted; but the
-          // project-local RESOLVER still may not originate a mint or a dispatch. The
-          // two are deliberately separate flags: collapsing them would either block
-          // the approvals the phase exists to collect, or let the shadow side act.
-          capability_writes_permitted: true,
-          project_side_effects_permitted: false,
-          compatibility_available: true,
-          compatibility_intents: Object.freeze([
-            "dispatch",
-            "mint",
-            "shadow_compare",
-            "replay",
-            "rollback"
-          ]),
-          local_creation_permitted: true,
-          profiles_emitted: true
-        })
-      ],
-      [
-        "project-local",
-        Object.freeze({
-          mode: "project-local",
-          authority: "project-local",
-          project_resolver_runs: true,
-          capability_writes_permitted: true,
-          project_side_effects_permitted: true,
-          compatibility_available: true,
-          // NOT `dispatch`. A live dispatch with no project definition must FAIL
-          // TYPED, not quietly read a shipped template — that silent read is the
-          // exact behaviour the mode exists to end.
-          compatibility_intents: Object.freeze(["replay", "rollback", "mint"]),
-          local_creation_permitted: true,
-          profiles_emitted: true
-        })
-      ],
-      [
-        "strict",
-        Object.freeze({
-          mode: "strict",
-          authority: "project-local",
-          project_resolver_runs: true,
-          capability_writes_permitted: true,
-          project_side_effects_permitted: true,
-          // The end state: the surface is gone. No intent reaches it, including
-          // replay — a strict project that still needs to replay history must step
-          // back down the ladder deliberately, which is a recorded mode change.
-          compatibility_available: false,
-          compatibility_intents: Object.freeze([]),
-          local_creation_permitted: true,
-          profiles_emitted: true
-        })
-      ]
-    ]);
-    RESOLVER_MODE_POLICIES = Object.freeze(
-      // Built from the PRIVATE policy map's own keys, NOT from the mutable exported
-      // ladder — same reasoning as MODE_RANK below (CODEX #8).
-      Object.fromEntries([...MODE_POLICIES].map(([m, p]) => [m, p]))
-    );
-    MODE_RANK = new Map(
-      [...MODE_POLICIES.keys()].map((m, i) => [m, i])
-    );
-    RESOLVER_MODE_FAILURES = Object.freeze([
-      /** The request itself was malformed (proxy, accessor, unknown key, bad scalar). */
-      "invalid_request",
-      /** `mode` is not a member of the ladder. NEVER coerced to the default. */
-      "unknown_mode",
-      /** No project-local definition exists, and the mode does not permit a compatibility read. */
-      "no_project_definition",
-      /** The mode has no compatibility surface at all (strict). */
-      "compatibility_unavailable_in_mode",
-      /** The surface exists, but not for this intent (e.g. `dispatch` under project-local). */
-      "intent_not_permitted_in_mode",
-      /** Neither a project definition nor a compatibility asset was supplied. */
-      "no_definition_anywhere",
-      /** The mode forbids the write this request would require. */
-      "write_not_permitted_in_mode",
-      /** A mode transition that skips rungs without an explicit acknowledgement. */
-      "transition_skips_rungs",
-      /** A downward transition without a recorded reason. */
-      "transition_regresses_without_reason",
-      /** Source and target are the same rung. */
-      "transition_is_noop"
-    ]);
-    RESOLVER_MODE_FAILURE_SET = new Set(RESOLVER_MODE_FAILURES);
-    MODE_TRANSITION_DIRECTIONS = Object.freeze(["advance", "regress"]);
-  }
-});
+var RESOLVER_AUTHORITIES = Object.freeze(["legacy", "project-local"]);
+var CAPABILITY_RESOLUTION_INTENTS = Object.freeze([
+  /** A live lane needs this definition to run. */
+  "dispatch",
+  /** Minting a project-local role FROM a shipped template. The migration WORKING. */
+  "mint",
+  /** The A-side of a shadow comparison. Also the migration working. */
+  "shadow_compare",
+  /** Replaying a historical run record against the compatibility surface. */
+  "replay",
+  /** A deliberate return to the legacy path after a failed adoption. */
+  "rollback"
+]);
+var MODE_POLICIES = /* @__PURE__ */ new Map([
+  [
+    "legacy",
+    Object.freeze({
+      mode: "legacy",
+      authority: "legacy",
+      project_resolver_runs: false,
+      capability_writes_permitted: false,
+      project_side_effects_permitted: false,
+      compatibility_available: true,
+      compatibility_intents: Object.freeze([
+        "dispatch",
+        "mint",
+        "replay",
+        "rollback"
+      ]),
+      local_creation_permitted: false,
+      profiles_emitted: false
+    })
+  ],
+  [
+    "observe",
+    Object.freeze({
+      mode: "observe",
+      authority: "legacy",
+      project_resolver_runs: true,
+      // THE defining constraint of observe. D03's advance condition is a
+      // before/after tree hash proving zero live writes; a policy that permitted
+      // writes here would make that condition unprovable by construction.
+      capability_writes_permitted: false,
+      project_side_effects_permitted: false,
+      compatibility_available: true,
+      compatibility_intents: Object.freeze([
+        "dispatch",
+        "mint",
+        "replay",
+        "rollback"
+      ]),
+      local_creation_permitted: false,
+      profiles_emitted: true
+    })
+  ],
+  [
+    "shadow",
+    Object.freeze({
+      mode: "shadow",
+      authority: "legacy",
+      project_resolver_runs: true,
+      // Local creation is a HUMAN authority event, so it is permitted; but the
+      // project-local RESOLVER still may not originate a mint or a dispatch. The
+      // two are deliberately separate flags: collapsing them would either block
+      // the approvals the phase exists to collect, or let the shadow side act.
+      capability_writes_permitted: true,
+      project_side_effects_permitted: false,
+      compatibility_available: true,
+      compatibility_intents: Object.freeze([
+        "dispatch",
+        "mint",
+        "shadow_compare",
+        "replay",
+        "rollback"
+      ]),
+      local_creation_permitted: true,
+      profiles_emitted: true
+    })
+  ],
+  [
+    "project-local",
+    Object.freeze({
+      mode: "project-local",
+      authority: "project-local",
+      project_resolver_runs: true,
+      capability_writes_permitted: true,
+      project_side_effects_permitted: true,
+      compatibility_available: true,
+      // NOT `dispatch`. A live dispatch with no project definition must FAIL
+      // TYPED, not quietly read a shipped template — that silent read is the
+      // exact behaviour the mode exists to end.
+      compatibility_intents: Object.freeze(["replay", "rollback", "mint"]),
+      local_creation_permitted: true,
+      profiles_emitted: true
+    })
+  ],
+  [
+    "strict",
+    Object.freeze({
+      mode: "strict",
+      authority: "project-local",
+      project_resolver_runs: true,
+      capability_writes_permitted: true,
+      project_side_effects_permitted: true,
+      // The end state: the surface is gone. No intent reaches it, including
+      // replay — a strict project that still needs to replay history must step
+      // back down the ladder deliberately, which is a recorded mode change.
+      compatibility_available: false,
+      compatibility_intents: Object.freeze([]),
+      local_creation_permitted: true,
+      profiles_emitted: true
+    })
+  ]
+]);
+var RESOLVER_MODE_POLICIES = Object.freeze(
+  // Built from the PRIVATE policy map's own keys, NOT from the mutable exported
+  // ladder — same reasoning as MODE_RANK below (CODEX #8).
+  Object.fromEntries([...MODE_POLICIES].map(([m, p]) => [m, p]))
+);
+var MODE_RANK = new Map(
+  [...MODE_POLICIES.keys()].map((m, i) => [m, i])
+);
+var RESOLVER_MODE_FAILURES = Object.freeze([
+  /** The request itself was malformed (proxy, accessor, unknown key, bad scalar). */
+  "invalid_request",
+  /** `mode` is not a member of the ladder. NEVER coerced to the default. */
+  "unknown_mode",
+  /** No project-local definition exists, and the mode does not permit a compatibility read. */
+  "no_project_definition",
+  /** The mode has no compatibility surface at all (strict). */
+  "compatibility_unavailable_in_mode",
+  /** The surface exists, but not for this intent (e.g. `dispatch` under project-local). */
+  "intent_not_permitted_in_mode",
+  /** Neither a project definition nor a compatibility asset was supplied. */
+  "no_definition_anywhere",
+  /** The mode forbids the write this request would require. */
+  "write_not_permitted_in_mode",
+  /** A mode transition that skips rungs without an explicit acknowledgement. */
+  "transition_skips_rungs",
+  /** A downward transition without a recorded reason. */
+  "transition_regresses_without_reason",
+  /** Source and target are the same rung. */
+  "transition_is_noop"
+]);
+var RESOLVER_MODE_FAILURE_SET = new Set(RESOLVER_MODE_FAILURES);
+var MODE_TRANSITION_DIRECTIONS = Object.freeze(["advance", "regress"]);
 
 // src/domains/config/compatibility-catalog.ts
-var SHIPPED_TEMPLATE_COUNT, SHIPPED_DOMAIN_SKILL_IDS, SHIPPED_DOMAIN_SKILL_COUNT, SHIPPED_COMPATIBILITY_ASSET_COUNT, COMPATIBILITY_ASSET_ROOTS, COMPATIBILITY_DEPRECATION_STATES, DEPRECATION_STATE_SET;
-var init_compatibility_catalog = __esm({
-  "src/domains/config/compatibility-catalog.ts"() {
-    init_compatibility_usage();
-    init_resolver_mode();
-    SHIPPED_TEMPLATE_COUNT = 15;
-    SHIPPED_DOMAIN_SKILL_IDS = Object.freeze([
-      "architect-adr-writer",
-      "architect-systems-design",
-      "architect-tradeoff-matrix",
-      "backend-api-contract",
-      "backend-data-layer",
-      "backend-migration-writer",
-      "backend-service-integration",
-      "copywriter-email-sequences",
-      "copywriter-long-form",
-      "copywriter-product-microcopy",
-      "copywriter-voice-guide",
-      "devops-ci-cd-pipeline",
-      "devops-incident-runbook",
-      "devops-infrastructure-as-code",
-      "devops-observability-setup",
-      "doc-writer-doc-site",
-      "doc-writer-onboarding-doc",
-      "doc-writer-product-guide",
-      "doc-writer-readme",
-      "frontend-a11y",
-      "frontend-bundler-config",
-      "frontend-react",
-      "frontend-state-management",
-      "marketing-ab-copy-variants",
-      "marketing-campaign-brief",
-      "marketing-launch-plan",
-      "marketing-positioning",
-      "mobile-android-kotlin",
-      "mobile-ios-swift",
-      "mobile-performance-tuning",
-      "mobile-react-native",
-      "qa-flaky-test-hunter",
-      "qa-property-based-tests",
-      "qa-snapshot-tests",
-      "qa-test-strategy",
-      "researcher-comparison-table",
-      "researcher-deep-dive",
-      "researcher-paper-digest",
-      "sales-cold-outreach",
-      "sales-discovery-framework",
-      "sales-follow-up-sequence",
-      "sales-proposal-writer",
-      "security-auth-flow-review",
-      "security-dependency-audit",
-      "security-secrets-scan",
-      "security-threat-modeling",
-      "seo-internal-linking",
-      "seo-keyword-research",
-      "seo-on-page-optimization",
-      "seo-technical-audit",
-      "social-media-content-calendar",
-      "social-media-engagement-templates",
-      "social-media-platform-post",
-      "social-media-thread",
-      "technical-writer-api-docs",
-      "technical-writer-release-notes",
-      "technical-writer-tutorial",
-      "technical-writer-user-manual"
-    ]);
-    SHIPPED_DOMAIN_SKILL_COUNT = SHIPPED_DOMAIN_SKILL_IDS.length;
-    SHIPPED_COMPATIBILITY_ASSET_COUNT = SHIPPED_TEMPLATE_COUNT + SHIPPED_DOMAIN_SKILL_COUNT;
-    COMPATIBILITY_ASSET_ROOTS = Object.freeze({
-      shipped_template: "templates/specialists",
-      shipped_domain_skill: "skills/specialists"
-    });
-    COMPATIBILITY_DEPRECATION_STATES = Object.freeze([
-      "active",
-      "deprecated",
-      "removal_cleared"
-    ]);
-    DEPRECATION_STATE_SET = new Set(COMPATIBILITY_DEPRECATION_STATES);
-  }
+var SHIPPED_TEMPLATE_COUNT = 15;
+var SHIPPED_DOMAIN_SKILL_IDS = Object.freeze([
+  "architect-adr-writer",
+  "architect-systems-design",
+  "architect-tradeoff-matrix",
+  "backend-api-contract",
+  "backend-data-layer",
+  "backend-migration-writer",
+  "backend-service-integration",
+  "copywriter-email-sequences",
+  "copywriter-long-form",
+  "copywriter-product-microcopy",
+  "copywriter-voice-guide",
+  "devops-ci-cd-pipeline",
+  "devops-incident-runbook",
+  "devops-infrastructure-as-code",
+  "devops-observability-setup",
+  "doc-writer-doc-site",
+  "doc-writer-onboarding-doc",
+  "doc-writer-product-guide",
+  "doc-writer-readme",
+  "frontend-a11y",
+  "frontend-bundler-config",
+  "frontend-react",
+  "frontend-state-management",
+  "marketing-ab-copy-variants",
+  "marketing-campaign-brief",
+  "marketing-launch-plan",
+  "marketing-positioning",
+  "mobile-android-kotlin",
+  "mobile-ios-swift",
+  "mobile-performance-tuning",
+  "mobile-react-native",
+  "qa-flaky-test-hunter",
+  "qa-property-based-tests",
+  "qa-snapshot-tests",
+  "qa-test-strategy",
+  "researcher-comparison-table",
+  "researcher-deep-dive",
+  "researcher-paper-digest",
+  "sales-cold-outreach",
+  "sales-discovery-framework",
+  "sales-follow-up-sequence",
+  "sales-proposal-writer",
+  "security-auth-flow-review",
+  "security-dependency-audit",
+  "security-secrets-scan",
+  "security-threat-modeling",
+  "seo-internal-linking",
+  "seo-keyword-research",
+  "seo-on-page-optimization",
+  "seo-technical-audit",
+  "social-media-content-calendar",
+  "social-media-engagement-templates",
+  "social-media-platform-post",
+  "social-media-thread",
+  "technical-writer-api-docs",
+  "technical-writer-release-notes",
+  "technical-writer-tutorial",
+  "technical-writer-user-manual"
+]);
+var SHIPPED_DOMAIN_SKILL_COUNT = SHIPPED_DOMAIN_SKILL_IDS.length;
+var SHIPPED_COMPATIBILITY_ASSET_COUNT = SHIPPED_TEMPLATE_COUNT + SHIPPED_DOMAIN_SKILL_COUNT;
+var COMPATIBILITY_ASSET_ROOTS = Object.freeze({
+  shipped_template: "templates/specialists",
+  shipped_domain_skill: "skills/specialists"
 });
+var COMPATIBILITY_DEPRECATION_STATES = Object.freeze([
+  "active",
+  "deprecated",
+  "removal_cleared"
+]);
+var DEPRECATION_STATE_SET = new Set(COMPATIBILITY_DEPRECATION_STATES);
 
 // src/domains/config/confirmation-arbiter.ts
-var CONFIRMATION_KEY_COMPONENTS;
-var init_confirmation_arbiter = __esm({
-  "src/domains/config/confirmation-arbiter.ts"() {
-    CONFIRMATION_KEY_COMPONENTS = Object.freeze([
-      "run_id",
-      "purpose",
-      "target_id",
-      "policy_hash",
-      "catalog_hash",
-      "fallback_hash"
-    ]);
-  }
-});
-
-// src/domains/config/independence-predicates.ts
-var init_independence_predicates = __esm({
-  "src/domains/config/independence-predicates.ts"() {
-  }
-});
-
-// src/domains/config/independence-record.ts
-var init_independence_record = __esm({
-  "src/domains/config/independence-record.ts"() {
-    init_independence_predicates();
-    init_state();
-  }
-});
+var CONFIRMATION_KEY_COMPONENTS = Object.freeze([
+  "run_id",
+  "purpose",
+  "target_id",
+  "policy_hash",
+  "catalog_hash",
+  "fallback_hash"
+]);
 
 // src/domains/config/model-catalog.ts
-var EVIDENCE_STATES, NO_LISTING_GROUNDING, LISTING_AUTHORITY, LEGAL_EVIDENCE_TRANSITIONS;
-var init_model_catalog = __esm({
-  "src/domains/config/model-catalog.ts"() {
-    init_catalog_cache();
-    init_kernel();
-    EVIDENCE_STATES = Object.freeze(["available", "advertised", "unknown", "unavailable"]);
-    NO_LISTING_GROUNDING = Object.freeze({
-      ceiling: "advertised",
-      available_grounding: null
-    });
-    LISTING_AUTHORITY = Object.freeze({
-      // The ONLY row carrying the /v1/models availability contract (matrix §3 [C2]).
-      "claude-api": Object.freeze({
-        ceiling: "available",
-        available_grounding: Object.freeze({ adapter_id: "claude-api-models", source: "contract_api_list" })
-      }),
-      // Interactive-only picker; honest-unknown row — a picker listing can NEVER ground available.
-      "claude-cli-subscription": NO_LISTING_GROUNDING,
-      "claude-app": NO_LISTING_GROUNDING,
-      "claude-web": NO_LISTING_GROUNDING,
-      // Gateways: gateway-NATIVE evidence only, none evidenced today (§6 gateway rule) —
-      // a listing caps at static-hint/native advertised; only §4 dispatch evidence upgrades.
-      "claude-gateway-bedrock": NO_LISTING_GROUNDING,
-      "claude-gateway-vertex": NO_LISTING_GROUNDING,
-      "claude-gateway-foundry": NO_LISTING_GROUNDING,
-      // Codex auth-list surfaces: entitlement semantics contractually undefined.
-      "codex-app-server": NO_LISTING_GROUNDING,
-      "codex-cli-chatgpt": NO_LISTING_GROUNDING,
-      "codex-cli-api-key": NO_LISTING_GROUNDING,
-      "openai-api": NO_LISTING_GROUNDING
-    });
-    LEGAL_EVIDENCE_TRANSITIONS = sealSet([
-      "unknown->advertised",
-      "unknown->available",
-      "advertised->available",
-      "advertised->unavailable",
-      "available->unavailable",
-      "advertised->unknown",
-      "available->unknown",
-      "unavailable->unknown"
-    ]);
-  }
+var EVIDENCE_STATES = Object.freeze(["available", "advertised", "unknown", "unavailable"]);
+var NO_LISTING_GROUNDING = Object.freeze({
+  ceiling: "advertised",
+  available_grounding: null
 });
+var LISTING_AUTHORITY = Object.freeze({
+  // The ONLY row carrying the /v1/models availability contract (matrix §3 [C2]).
+  "claude-api": Object.freeze({
+    ceiling: "available",
+    available_grounding: Object.freeze({ adapter_id: "claude-api-models", source: "contract_api_list" })
+  }),
+  // Interactive-only picker; honest-unknown row — a picker listing can NEVER ground available.
+  "claude-cli-subscription": NO_LISTING_GROUNDING,
+  "claude-app": NO_LISTING_GROUNDING,
+  "claude-web": NO_LISTING_GROUNDING,
+  // Gateways: gateway-NATIVE evidence only, none evidenced today (§6 gateway rule) —
+  // a listing caps at static-hint/native advertised; only §4 dispatch evidence upgrades.
+  "claude-gateway-bedrock": NO_LISTING_GROUNDING,
+  "claude-gateway-vertex": NO_LISTING_GROUNDING,
+  "claude-gateway-foundry": NO_LISTING_GROUNDING,
+  // Codex auth-list surfaces: entitlement semantics contractually undefined.
+  "codex-app-server": NO_LISTING_GROUNDING,
+  "codex-cli-chatgpt": NO_LISTING_GROUNDING,
+  "codex-cli-api-key": NO_LISTING_GROUNDING,
+  "openai-api": NO_LISTING_GROUNDING
+});
+var LEGAL_EVIDENCE_TRANSITIONS = sealSet([
+  "unknown->advertised",
+  "unknown->available",
+  "advertised->available",
+  "advertised->unavailable",
+  "available->unavailable",
+  "advertised->unknown",
+  "available->unknown",
+  "unavailable->unknown"
+]);
 
 // src/domains/config/model-resolver.ts
-var FALLBACK_FAILURE_TAXONOMY, RESOLUTION_STATUSES;
-var init_model_resolver = __esm({
-  "src/domains/config/model-resolver.ts"() {
-    init_kernel();
-    init_model_catalog();
-    init_model_policy();
-    FALLBACK_FAILURE_TAXONOMY = Object.freeze({
-      model_overloaded: true,
-      model_unavailable: true,
-      server_nonretryable: true,
-      auth_error: false,
-      billing_error: false,
-      rate_limited: false,
-      request_invalid: false,
-      transport_error: false,
-      policy_refusal: false
-    });
-    RESOLUTION_STATUSES = Object.freeze([
-      "served",
-      "fallback_served",
-      "exhausted",
-      "user_declined",
-      "failed_closed",
-      "interrupted"
-    ]);
-  }
+var FALLBACK_FAILURE_TAXONOMY = Object.freeze({
+  model_overloaded: true,
+  model_unavailable: true,
+  server_nonretryable: true,
+  auth_error: false,
+  billing_error: false,
+  rate_limited: false,
+  request_invalid: false,
+  transport_error: false,
+  policy_refusal: false
 });
-
-// src/domains/config/model-inspect.ts
-var init_model_inspect = __esm({
-  "src/domains/config/model-inspect.ts"() {
-    init_model_resolver();
-    init_independence_predicates();
-  }
-});
-
-// src/domains/config/inspection-persist.ts
-var init_inspection_persist = __esm({
-  "src/domains/config/inspection-persist.ts"() {
-    init_model_inspect();
-    init_state();
-  }
-});
+var RESOLUTION_STATUSES = Object.freeze([
+  "served",
+  "fallback_served",
+  "exhausted",
+  "user_declined",
+  "failed_closed",
+  "interrupted"
+]);
 
 // src/domains/config/routing-rollout.ts
-var ROUTING_FLAG_KEYS, ROUTING_FLAG_DEFAULTS, FLAG_GROUPS;
-var init_routing_rollout = __esm({
-  "src/domains/config/routing-rollout.ts"() {
-    init_kernel();
-    init_state();
-    ROUTING_FLAG_KEYS = Object.freeze([
-      "model_routing.identity_v2",
-      "model_routing.binding_enforce",
-      "model_routing.discovery",
-      "model_routing.inspect",
-      "model_routing.shadow",
-      "model_routing.enabled",
-      "teams.proposal_v2"
-    ]);
-    ROUTING_FLAG_DEFAULTS = Object.freeze({
-      "model_routing.identity_v2": "on",
-      "model_routing.binding_enforce": "on",
-      "model_routing.discovery": "on",
-      "model_routing.inspect": "on",
-      "model_routing.shadow": "off",
-      "model_routing.enabled": "off",
-      "teams.proposal_v2": "on"
-    });
-    FLAG_GROUPS = Object.freeze({
-      model_routing: [
-        "identity_v2",
-        "binding_enforce",
-        "discovery",
-        "inspect",
-        "shadow",
-        "enabled"
-      ],
-      teams: ["proposal_v2"]
-    });
-  }
+var ROUTING_FLAG_KEYS = Object.freeze([
+  "model_routing.identity_v2",
+  "model_routing.binding_enforce",
+  "model_routing.discovery",
+  "model_routing.inspect",
+  "model_routing.shadow",
+  "model_routing.enabled",
+  "teams.proposal_v2"
+]);
+var ROUTING_FLAG_DEFAULTS = Object.freeze({
+  "model_routing.identity_v2": "on",
+  "model_routing.binding_enforce": "on",
+  "model_routing.discovery": "on",
+  "model_routing.inspect": "on",
+  "model_routing.shadow": "off",
+  "model_routing.enabled": "off",
+  "teams.proposal_v2": "on"
+});
+var FLAG_GROUPS = Object.freeze({
+  model_routing: [
+    "identity_v2",
+    "binding_enforce",
+    "discovery",
+    "inspect",
+    "shadow",
+    "enabled"
+  ],
+  teams: ["proposal_v2"]
 });
 
 // src/domains/config/models-command.ts
-var MODELS_COMMAND_USAGE;
-var init_models_command = __esm({
-  "src/domains/config/models-command.ts"() {
-    init_session_context();
-    init_security();
-    init_catalog_cache();
-    init_model_inspect();
-    init_session_binding();
-    init_routing_rollout();
-    init_state();
-    init_state();
-    MODELS_COMMAND_USAGE = [
-      "usage: guild models inspect [--cwd <repo-root>] [--run-id <id>] [--json]",
-      "",
-      "  inspect   READ-ONLY view of this run's model routing: identity trust, target",
-      "            evidence, catalog age, policy path, selection, fallbacks, actual",
-      "            model, independence and degradation - with honest unknowns.",
-      "",
-      "  --cwd     repo root that owns .guild/ (default: process cwd)",
-      "  --run-id  inspect this run (default: the intake candidate run, labeled)",
-      "  --json    emit the same view model as JSON instead of text"
-    ].join("\n");
-  }
-});
-
-// src/domains/config/inspection-record.ts
-var init_inspection_record = __esm({
-  "src/domains/config/inspection-record.ts"() {
-    init_model_inspect();
-    init_inspection_persist();
-    init_models_command();
-  }
-});
+var MODELS_COMMAND_USAGE = [
+  "usage: guild models inspect [--cwd <repo-root>] [--run-id <id>] [--json]",
+  "",
+  "  inspect   READ-ONLY view of this run's model routing: identity trust, target",
+  "            evidence, catalog age, policy path, selection, fallbacks, actual",
+  "            model, independence and degradation - with honest unknowns.",
+  "",
+  "  --cwd     repo root that owns .guild/ (default: process cwd)",
+  "  --run-id  inspect this run (default: the intake candidate run, labeled)",
+  "  --json    emit the same view model as JSON instead of text"
+].join("\n");
 
 // src/domains/config/policy-migration.ts
-var LEGACY_FILLABLE_PURPOSES;
-var init_policy_migration = __esm({
-  "src/domains/config/policy-migration.ts"() {
-    init_model_policy();
-    init_state();
-    LEGACY_FILLABLE_PURPOSES = Object.freeze(["general", "implementation"]);
-  }
-});
+var LEGACY_FILLABLE_PURPOSES = Object.freeze(["general", "implementation"]);
 
 // src/domains/config/purpose-provenance.ts
-var AUTHORITATIVE_PURPOSE_SOURCES;
-var init_purpose_provenance = __esm({
-  "src/domains/config/purpose-provenance.ts"() {
-    init_model_policy();
-    AUTHORITATIVE_PURPOSE_SOURCES = Object.freeze([
-      "skill_metadata",
-      "registry_metadata",
-      "lane_lock",
-      "broker_gate"
-    ]);
-  }
-});
-
-// src/domains/config/tier-defaults.ts
-var init_tier_defaults = __esm({
-  "src/domains/config/tier-defaults.ts"() {
-    init_host_registry_schema();
-    init_host_id_namespace();
-  }
-});
-
-// src/domains/config/rank.ts
-var init_rank = __esm({
-  "src/domains/config/rank.ts"() {
-    init_host_id_namespace();
-    init_tier_defaults();
-  }
-});
+var AUTHORITATIVE_PURPOSE_SOURCES = Object.freeze([
+  "skill_metadata",
+  "registry_metadata",
+  "lane_lock",
+  "broker_gate"
+]);
 
 // src/domains/config/role-model-schema.ts
-var ROLES, ROLE_STRENGTHS, ROLE_SET, STRENGTH_SET, HOST_ID_SET3;
-var init_role_model_schema = __esm({
-  "src/domains/config/role-model-schema.ts"() {
-    init_host_registry_schema();
-    ROLES = Object.freeze(["host", "advisory", "adversarial"]);
-    ROLE_STRENGTHS = Object.freeze(["strong", "weak"]);
-    ROLE_SET = new Set(ROLES);
-    STRENGTH_SET = new Set(ROLE_STRENGTHS);
-    HOST_ID_SET3 = new Set(HOST_IDS);
-  }
-});
+var ROLES = Object.freeze(["host", "advisory", "adversarial"]);
+var ROLE_STRENGTHS = Object.freeze(["strong", "weak"]);
+var ROLE_SET = new Set(ROLES);
+var STRENGTH_SET = new Set(ROLE_STRENGTHS);
+var HOST_ID_SET3 = new Set(HOST_IDS);
 
 // src/domains/config/role-resolver.ts
-var ADVISORY_SUBSTRATES;
-var init_role_resolver = __esm({
-  "src/domains/config/role-resolver.ts"() {
-    init_host_registry_schema();
-    init_role_model_schema();
-    ADVISORY_SUBSTRATES = Object.freeze([
-      "claude-code-cli",
-      "codex-cli",
-      "pi-cli",
-      "antigravity-cli",
-      "agents-file",
-      "claude-code-app",
-      "claude-code-web",
-      "codex-app",
-      "claude-ai-connector",
-      // Legacy substrate labels accepted for older records.
-      "claude",
-      "codex",
-      ".agents",
-      "pi",
-      "antigravity"
-    ]);
-  }
-});
-
-// src/domains/config/tiebreak.ts
-var init_tiebreak = __esm({
-  "src/domains/config/tiebreak.ts"() {
-    init_rank();
-  }
-});
-
-// src/domains/config/router.ts
-var init_router = __esm({
-  "src/domains/config/router.ts"() {
-    init_tier_model();
-    init_rank();
-    init_tiebreak();
-  }
-});
+var ADVISORY_SUBSTRATES = Object.freeze([
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  "claude-code-app",
+  "claude-code-web",
+  "codex-app",
+  "claude-ai-connector",
+  // Legacy substrate labels accepted for older records.
+  "claude",
+  "codex",
+  ".agents",
+  "pi",
+  "antigravity"
+]);
 
 // src/domains/config/compose-prompt.ts
-var MODEL_FAMILIES, HOST_FAMILY_TOKENS_PROMPT, HOST_FAMILY_RE, YOU_ARE_HOST_RE, USING_GUILD_BASE_RELS;
-var init_compose_prompt = __esm({
-  "src/domains/config/compose-prompt.ts"() {
-    MODEL_FAMILIES = Object.freeze(["anthropic", "openai", "google"]);
-    HOST_FAMILY_TOKENS_PROMPT = Object.freeze([
-      "claude",
-      "codex",
-      "cursor",
-      "gemini",
-      "copilot",
-      "windsurf",
-      "aider",
-      "antigravity",
-      "cline",
-      "zed"
-    ]);
-    HOST_FAMILY_RE = new RegExp(`\\b(${HOST_FAMILY_TOKENS_PROMPT.join("|")})\\b`, "i");
-    YOU_ARE_HOST_RE = new RegExp(
-      `\\byou(?:'re| are)\\s+(?:an?\\s+)?(${HOST_FAMILY_TOKENS_PROMPT.join("|")})\\b`,
-      "i"
-    );
-    USING_GUILD_BASE_RELS = Object.freeze([
-      "skills/meta/using-guild/SKILL.md",
-      "skills/meta/using-guild/SKILL.src.md"
-    ]);
-  }
-});
-
-// src/domains/config/team-prompt.ts
-var init_team_prompt = __esm({
-  "src/domains/config/team-prompt.ts"() {
-    init_host_id_namespace();
-  }
-});
+var MODEL_FAMILIES = Object.freeze(["anthropic", "openai", "google"]);
+var HOST_FAMILY_TOKENS_PROMPT = Object.freeze([
+  "claude",
+  "codex",
+  "cursor",
+  "gemini",
+  "copilot",
+  "windsurf",
+  "aider",
+  "antigravity",
+  "cline",
+  "zed"
+]);
+var HOST_FAMILY_RE = new RegExp(`\\b(${HOST_FAMILY_TOKENS_PROMPT.join("|")})\\b`, "i");
+var YOU_ARE_HOST_RE = new RegExp(
+  `\\byou(?:'re| are)\\s+(?:an?\\s+)?(${HOST_FAMILY_TOKENS_PROMPT.join("|")})\\b`,
+  "i"
+);
+var USING_GUILD_BASE_RELS = Object.freeze([
+  "skills/meta/using-guild/SKILL.md",
+  "skills/meta/using-guild/SKILL.src.md"
+]);
 
 // src/domains/config/init-scaffold-manifest.ts
-var STANDARD_ROOT_FLOOR, WORKSPACE_EXTRAS, singleProject, workspaceRoot, repairRequired;
-var init_init_scaffold_manifest = __esm({
-  "src/domains/config/init-scaffold-manifest.ts"() {
-    init_kernel();
-    STANDARD_ROOT_FLOOR = deepFreeze([
-      {
-        path: ".guild/guild.yaml",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: true,
-        version: "guild.root.v1",
-        description: "Guild root identity and kind (workspace or project)."
-      },
-      {
-        path: ".guild/agents/registry.yaml",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: false,
-        version: "guild.agents_registry.v1",
-        lazy: true,
-        description: "Project/workspace-shared specialist agent registry."
-      },
-      {
-        path: ".guild/skills/registry.yaml",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: false,
-        version: "guild.skills_registry.v1",
-        lazy: true,
-        description: "Project/workspace-shared skill registry."
-      },
-      {
-        path: ".guild/workflows/registry.yaml",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: false,
-        version: "guild.workflows_registry.v1",
-        lazy: true,
-        description: "Repeatable project/workspace workflow registry."
-      },
-      {
-        path: ".guild/loops/registry.yaml",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: false,
-        version: "guild.loops_registry.v1",
-        lazy: true,
-        description: "Custom loop registry."
-      },
-      {
-        path: ".guild/init/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Holds per-run init records (.guild/init/<slug>.md). The dir is the requirement; the slug file is per-run."
-      },
-      {
-        path: ".guild/wiki/index.md",
-        kind: "file",
-        source: "template",
-        clobber: "never",
-        repair_required: false,
-        version: "guild.wiki_index.v1",
-        lazy: true,
-        description: "Wiki entrypoint; user-authored knowledge accretes here."
-      },
-      {
-        path: ".guild/knowledge/sources/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: 'Ingested source blobs \u2014 GuildStorage.definition("sources", <id>) (KTD47/R59). Replaces the retired raw tree.'
-      },
-      {
-        path: ".guild/config/project.json",
-        kind: "file",
-        source: "generated",
-        clobber: "reconcile-only",
-        repair_required: true,
-        version: "guild.policy_config.v1",
-        description: "Project POLICY config \u2014 the closed key set only (KTD22). Host family, host id, and concrete model names are refused here at write AND at read; they are session state on the run record."
-      },
-      {
-        path: ".guild/settings.json",
-        kind: "file",
-        source: "generated",
-        clobber: "reconcile-only",
-        repair_required: true,
-        version: "guild.settings.v2",
-        description: "Project settings. ONLY config reconcile/sync/repair + scoped write APIs may change it (never init/repair wholesale)."
-      },
-      {
-        path: ".guild/knowledge/graph/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Structured knowledge graph artifacts."
-      },
-      {
-        path: ".guild/knowledge/indexes/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Structured knowledge indexes."
-      },
-      {
-        path: ".guild/knowledge/candidates/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Human-gated knowledge promotion candidates."
-      },
-      {
-        path: ".guild/memory/summaries/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Durable summarized memory promoted from runs."
-      },
-      {
-        path: ".guild/memory/lessons/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Reusable lessons promoted from reflections and run analysis."
-      },
-      {
-        path: ".guild/memory/recall-index.json",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: false,
-        version: "guild.recall_index.v1",
-        lazy: true,
-        description: "Project/workspace recall index placeholder."
-      },
-      {
-        path: ".guild/initiatives/active/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Active initiative records."
-      },
-      {
-        path: ".guild/initiatives/archived/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Archived initiative records."
-      },
-      {
-        path: ".guild/initiatives/registry.yaml",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: false,
-        version: "guild.initiatives_registry.v1",
-        lazy: true,
-        description: "Initiative registry for this Guild root."
-      },
-      {
-        path: ".guild/runs/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Run records and replay evidence."
-      },
-      {
-        path: ".guild/teams/registry.yaml",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: false,
-        version: "guild.teams_registry.v1",
-        lazy: true,
-        description: "Reusable team composition registry."
-      },
-      {
-        path: ".guild/artifacts/reports/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Shared reports not yet promoted to wiki/memory."
-      },
-      {
-        path: ".guild/artifacts/audits/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Shared audit outputs."
-      },
-      {
-        path: ".guild/artifacts/handoffs/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Shared handoff artifacts."
-      },
-      {
-        path: ".guild/artifacts/generated/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Generated artifacts reviewed for sharing."
-      },
-      {
-        path: ".guild/workspace/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Workspace relationship files; inert for standalone projects."
-      },
-      {
-        path: ".guild/hosts/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Host-local capability state. Usually ignored unless explicitly shared."
-      },
-      {
-        path: ".guild/indexes/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Compatibility home for existing Guild index artifacts."
-      },
-      {
-        path: ".guild/indexes/codebase-map.json",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: false,
-        version: "guild.codebase_map.v1",
-        lazy: true,
-        description: "Cheap-scan CodebaseMap produced by init/learn-map."
-      },
-      {
-        path: ".guild/indexes/architecture-map.md",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: false,
-        version: "guild.architecture_map.v1",
-        lazy: true,
-        description: "Brownfield-only architecture-map stub. Seeded for brownfield init; absence is not a broken install."
-      }
-    ]);
-    WORKSPACE_EXTRAS = deepFreeze([
-      {
-        path: ".guild/config/workspace.json",
-        kind: "file",
-        source: "generated",
-        clobber: "reconcile-only",
-        repair_required: true,
-        version: "guild.policy_config.v1",
-        description: "Workspace POLICY config \u2014 the closed key set only (KTD22), inherited by children. Host and model identity are refused here; they are bound per session on the run record."
-      },
-      {
-        path: ".guild/workspace.json",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: true,
-        version: "guild.workspace.v1",
-        description: "Workspace federation manifest. Its presence + is_workspace:true is what makes this root a workspace_root."
-      },
-      {
-        path: ".guild/workspace/workspace.yaml",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: true,
-        version: "guild.workspace_root.v1",
-        description: "Human-readable workspace root descriptor."
-      },
-      {
-        path: ".guild/workspace/children.yaml",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: false,
-        version: "guild.workspace_children.v1",
-        lazy: true,
-        description: "Workspace child project registry."
-      },
-      {
-        path: ".guild/workspace/relationships.yaml",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: false,
-        version: "guild.workspace_relationships.v1",
-        lazy: true,
-        description: "Cross-project relationship and release-coupling registry."
-      },
-      {
-        path: ".guild/workspace-knowledge/",
-        kind: "dir",
-        source: "empty-dir",
-        clobber: "never",
-        repair_required: false,
-        lazy: true,
-        description: "Cross-project coordination knowledge (workspace-only)."
-      },
-      {
-        path: ".guild/indexes/initiatives-registry.yaml",
-        kind: "file",
-        source: "generated",
-        clobber: "never",
-        repair_required: false,
-        version: "guild.initiatives_registry.v1",
-        lazy: true,
-        description: "Workspace initiative registry (scope resolution for initiative_default inheritance)."
-      }
-    ]);
-    singleProject = Object.freeze([...STANDARD_ROOT_FLOOR]);
-    workspaceRoot = Object.freeze([...STANDARD_ROOT_FLOOR, ...WORKSPACE_EXTRAS]);
-    repairRequired = Object.freeze(
-      STANDARD_ROOT_FLOOR.filter((e) => e.repair_required)
-    );
+var STANDARD_ROOT_FLOOR = deepFreeze([
+  {
+    path: ".guild/guild.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: true,
+    version: "guild.root.v1",
+    description: "Guild root identity and kind (workspace or project)."
+  },
+  {
+    path: ".guild/agents/registry.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: false,
+    version: "guild.agents_registry.v1",
+    lazy: true,
+    description: "Project/workspace-shared specialist agent registry."
+  },
+  {
+    path: ".guild/skills/registry.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: false,
+    version: "guild.skills_registry.v1",
+    lazy: true,
+    description: "Project/workspace-shared skill registry."
+  },
+  {
+    path: ".guild/workflows/registry.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: false,
+    version: "guild.workflows_registry.v1",
+    lazy: true,
+    description: "Repeatable project/workspace workflow registry."
+  },
+  {
+    path: ".guild/loops/registry.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: false,
+    version: "guild.loops_registry.v1",
+    lazy: true,
+    description: "Custom loop registry."
+  },
+  {
+    path: ".guild/init/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Holds per-run init records (.guild/init/<slug>.md). The dir is the requirement; the slug file is per-run."
+  },
+  {
+    path: ".guild/wiki/index.md",
+    kind: "file",
+    source: "template",
+    clobber: "never",
+    repair_required: false,
+    version: "guild.wiki_index.v1",
+    lazy: true,
+    description: "Wiki entrypoint; user-authored knowledge accretes here."
+  },
+  {
+    path: ".guild/knowledge/sources/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: 'Ingested source blobs \u2014 GuildStorage.definition("sources", <id>) (KTD47/R59). Replaces the retired raw tree.'
+  },
+  {
+    path: ".guild/config/project.json",
+    kind: "file",
+    source: "generated",
+    clobber: "reconcile-only",
+    repair_required: true,
+    version: "guild.policy_config.v1",
+    description: "Project POLICY config \u2014 the closed key set only (KTD22). Host family, host id, and concrete model names are refused here at write AND at read; they are session state on the run record."
+  },
+  {
+    path: ".guild/settings.json",
+    kind: "file",
+    source: "generated",
+    clobber: "reconcile-only",
+    repair_required: true,
+    version: "guild.settings.v2",
+    description: "Project settings. ONLY config reconcile/sync/repair + scoped write APIs may change it (never init/repair wholesale)."
+  },
+  {
+    path: ".guild/knowledge/graph/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Structured knowledge graph artifacts."
+  },
+  {
+    path: ".guild/knowledge/indexes/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Structured knowledge indexes."
+  },
+  {
+    path: ".guild/knowledge/candidates/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Human-gated knowledge promotion candidates."
+  },
+  {
+    path: ".guild/memory/summaries/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Durable summarized memory promoted from runs."
+  },
+  {
+    path: ".guild/memory/lessons/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Reusable lessons promoted from reflections and run analysis."
+  },
+  {
+    path: ".guild/memory/recall-index.json",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: false,
+    version: "guild.recall_index.v1",
+    lazy: true,
+    description: "Project/workspace recall index placeholder."
+  },
+  {
+    path: ".guild/initiatives/active/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Active initiative records."
+  },
+  {
+    path: ".guild/initiatives/archived/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Archived initiative records."
+  },
+  {
+    path: ".guild/initiatives/registry.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: false,
+    version: "guild.initiatives_registry.v1",
+    lazy: true,
+    description: "Initiative registry for this Guild root."
+  },
+  {
+    path: ".guild/runs/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Run records and replay evidence."
+  },
+  {
+    path: ".guild/teams/registry.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: false,
+    version: "guild.teams_registry.v1",
+    lazy: true,
+    description: "Reusable team composition registry."
+  },
+  {
+    path: ".guild/artifacts/reports/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Shared reports not yet promoted to wiki/memory."
+  },
+  {
+    path: ".guild/artifacts/audits/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Shared audit outputs."
+  },
+  {
+    path: ".guild/artifacts/handoffs/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Shared handoff artifacts."
+  },
+  {
+    path: ".guild/artifacts/generated/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Generated artifacts reviewed for sharing."
+  },
+  {
+    path: ".guild/workspace/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Workspace relationship files; inert for standalone projects."
+  },
+  {
+    path: ".guild/hosts/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Host-local capability state. Usually ignored unless explicitly shared."
+  },
+  {
+    path: ".guild/indexes/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Compatibility home for existing Guild index artifacts."
+  },
+  {
+    path: ".guild/indexes/codebase-map.json",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: false,
+    version: "guild.codebase_map.v1",
+    lazy: true,
+    description: "Cheap-scan CodebaseMap produced by init/learn-map."
+  },
+  {
+    path: ".guild/indexes/architecture-map.md",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: false,
+    version: "guild.architecture_map.v1",
+    lazy: true,
+    description: "Brownfield-only architecture-map stub. Seeded for brownfield init; absence is not a broken install."
   }
-});
-
-// src/domains/config/init-config-copy.ts
-var init_init_config_copy = __esm({
-  "src/domains/config/init-config-copy.ts"() {
+]);
+var WORKSPACE_EXTRAS = deepFreeze([
+  {
+    path: ".guild/config/workspace.json",
+    kind: "file",
+    source: "generated",
+    clobber: "reconcile-only",
+    repair_required: true,
+    version: "guild.policy_config.v1",
+    description: "Workspace POLICY config \u2014 the closed key set only (KTD22), inherited by children. Host and model identity are refused here; they are bound per session on the run record."
+  },
+  {
+    path: ".guild/workspace.json",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: true,
+    version: "guild.workspace.v1",
+    description: "Workspace federation manifest. Its presence + is_workspace:true is what makes this root a workspace_root."
+  },
+  {
+    path: ".guild/workspace/workspace.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: true,
+    version: "guild.workspace_root.v1",
+    description: "Human-readable workspace root descriptor."
+  },
+  {
+    path: ".guild/workspace/children.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: false,
+    version: "guild.workspace_children.v1",
+    lazy: true,
+    description: "Workspace child project registry."
+  },
+  {
+    path: ".guild/workspace/relationships.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: false,
+    version: "guild.workspace_relationships.v1",
+    lazy: true,
+    description: "Cross-project relationship and release-coupling registry."
+  },
+  {
+    path: ".guild/workspace-knowledge/",
+    kind: "dir",
+    source: "empty-dir",
+    clobber: "never",
+    repair_required: false,
+    lazy: true,
+    description: "Cross-project coordination knowledge (workspace-only)."
+  },
+  {
+    path: ".guild/indexes/initiatives-registry.yaml",
+    kind: "file",
+    source: "generated",
+    clobber: "never",
+    repair_required: false,
+    version: "guild.initiatives_registry.v1",
+    lazy: true,
+    description: "Workspace initiative registry (scope resolution for initiative_default inheritance)."
   }
-});
+]);
+var singleProject = Object.freeze([...STANDARD_ROOT_FLOOR]);
+var workspaceRoot = Object.freeze([...STANDARD_ROOT_FLOOR, ...WORKSPACE_EXTRAS]);
+var repairRequired = Object.freeze(
+  STANDARD_ROOT_FLOOR.filter((e) => e.repair_required)
+);
 
 // src/domains/config/host-open-preflight.ts
-var CLI_NATIVE_HOSTS;
-var init_host_open_preflight = __esm({
-  "src/domains/config/host-open-preflight.ts"() {
-    init_kernel();
-    init_init_scaffold_manifest();
-    init_workspace_manifest();
-    init_init_config_copy();
-    init_state();
-    CLI_NATIVE_HOSTS = sealSet([
-      "claude-code-cli",
-      "codex-cli",
-      "pi-cli",
-      "antigravity-cli",
-      "agents-file",
-      // verified-multi-host new-CLI hosts
-      "cursor",
-      "github-copilot",
-      "opencode",
-      "rovo-dev",
-      // verified-multi-host new-IDE hosts (file surface, agents-file bound)
-      "kiro",
-      "qoder",
-      "trae"
-    ], "CLI_NATIVE_HOSTS");
-  }
-});
-
-// src/domains/config/index.ts
-var init_config2 = __esm({
-  "src/domains/config/index.ts"() {
-    init_host_id_namespace();
-    init_adapter_fallback_ladders();
-    init_host_profiles_validate();
-    init_host_registry();
-    init_host_registry_schema();
-    init_host_adapter_contract();
-    init_provider_detect();
-    init_session_context();
-    init_model_discovery_contract();
-    init_config_defaults();
-    init_policy_keys();
-    init_policy_resolver();
-    init_session_binding();
-    init_config_validation();
-    init_settings_resolver();
-    init_workspace_mode();
-    init_tier_model();
-    init_catalog_cache();
-    init_compatibility_catalog();
-    init_compatibility_usage();
-    init_confirmation_arbiter();
-    init_independence_predicates();
-    init_independence_record();
-    init_inspection_persist();
-    init_inspection_record();
-    init_model_catalog();
-    init_model_inspect();
-    init_model_policy();
-    init_model_resolver();
-    init_policy_migration();
-    init_purpose_provenance();
-    init_resolver_mode();
-    init_rank();
-    init_role_model_schema();
-    init_routing_rollout();
-    init_role_resolver();
-    init_router();
-    init_tiebreak();
-    init_tier_defaults();
-    init_compose_prompt();
-    init_team_prompt();
-    init_adapter_fallback_ladders();
-    init_host_adapter_contract();
-    init_host_capabilities_schema();
-    init_host_id_namespace();
-    init_host_open_preflight();
-    init_host_profiles_validate();
-    init_host_registry_schema();
-    init_host_registry();
-    init_init_scaffold_manifest();
-    init_models_command();
-    init_settings_reader();
-  }
-});
-
-// scripts/learn/cost-gate.ts
-var cost_gate_exports = {};
-__export(cost_gate_exports, {
-  AVG_TOKENS_PER_FILE: () => AVG_TOKENS_PER_FILE,
-  CONFIRM_RATIO: () => CONFIRM_RATIO,
-  computeTokensEstimate: () => computeTokensEstimate,
-  gateDecision: () => gateDecision,
-  gateExitCode: () => gateExitCode,
-  runCostGate: () => runCostGate,
-  scanCorpusFiles: () => scanCorpusFiles
-});
-module.exports = __toCommonJS(cost_gate_exports);
-
-// scripts/lib/state/ensure-storage-layout.ts
-var fs2 = __toESM(require("node:fs"));
-var path2 = __toESM(require("node:path"));
-
-// scripts/lib/guild-root.ts
-init_guild_root();
-
-// scripts/lib/state/ensure-storage-layout.ts
-var CURRENT_LAYOUT_VERSION = 2;
-function markerPath(root) {
-  return path2.join(root, ".guild", "storage-layout.json");
-}
-function detect(cwd = process.cwd()) {
-  const root = resolveGuildRoot(cwd);
-  const marker = markerPath(root);
-  if (!fs2.existsSync(path2.join(root, ".guild"))) {
-    return { state: "absent", version: null, root, marker };
-  }
-  let version = null;
-  try {
-    const parsed = JSON.parse(fs2.readFileSync(marker, "utf8"));
-    if (typeof parsed.storage_layout_version === "number") version = parsed.storage_layout_version;
-  } catch {
-    version = null;
-  }
-  if (version === null) return { state: "unmarked", version, root, marker };
-  if (version === CURRENT_LAYOUT_VERSION) return { state: "current", version, root, marker };
-  return { state: version > CURRENT_LAYOUT_VERSION ? "future" : "stale", version, root, marker };
-}
-var upgradeChunk = null;
-function upgradeChain() {
-  if (upgradeChunk === null) {
-    const candidates = [
-      path2.join(__dirname, "upgrade-chain.js"),
-      path2.join(__dirname, "lib", "state", "upgrade-chain"),
-      path2.join(__dirname, "upgrade-chain")
-    ];
-    const spec = candidates.find((c) => fs2.existsSync(c) || fs2.existsSync(`${c}.ts`)) ?? candidates[2];
-    upgradeChunk = require(spec);
-  }
-  return upgradeChunk;
-}
-function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
-  const status = detect(cwd);
-  if (status.state === "current") return status;
-  if (status.state === "future") {
-    throw new Error(
-      `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
-    );
-  }
-  if (status.state === "absent" || opts.detectOnly === true) return status;
-  const chain = upgradeChain();
-  const result = chain.runLayoutUpgrade({
-    root: status.root,
-    fromVersion: status.version,
-    toVersion: CURRENT_LAYOUT_VERSION,
-    dryRun: opts.dryRun === true
-  });
-  const after = detect(cwd);
-  return { ...after, upgrade: result };
-}
-function isProcessEntry() {
-  const entry = process.argv[1];
-  if (typeof entry !== "string" || entry === "") return false;
-  return /(^|[\\/])ensure-storage-layout(\.[cm]?[jt]s)?$/.test(entry);
-}
-if (isProcessEntry()) {
-  const cwdArg = process.argv.find((a) => a.startsWith("--cwd="));
-  const cwd = cwdArg ? cwdArg.slice("--cwd=".length) : process.cwd();
-  try {
-    const status = ensureStorageLayout(cwd, {
-      dryRun: process.argv.includes("--dry-run"),
-      detectOnly: process.argv.includes("--detect-only")
-    });
-    if (process.argv.includes("--print")) {
-      process.stdout.write(JSON.stringify(status) + "\n");
-    } else if (status.upgrade && status.upgrade.state !== "committed") {
-      process.stderr.write(`${status.upgrade.report}
-`);
-    }
-    process.exit(0);
-  } catch (e) {
-    process.stderr.write(`${e.message}
-`);
-    process.exit(1);
-  }
-}
-
-// scripts/learn/lib/paths.ts
-function parseCwd(argv) {
-  const idx = argv.indexOf("--cwd");
-  if (idx !== -1 && argv[idx + 1]) return argv[idx + 1];
-  return process.env["GUILD_CWD"] ?? process.cwd();
-}
-function hasFlag(argv, name) {
-  return argv.includes(`--${name}`);
-}
-
-// scripts/learn/lib/walk.ts
-var fs4 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
-
-// scripts/learn/lib/ignore.ts
-var fs3 = __toESM(require("fs"));
-var path3 = __toESM(require("path"));
-var DEFAULT_IGNORE_PATTERNS = Object.freeze([
-  "node_modules/",
-  ".git/",
-  "vendor/",
-  "venv/",
-  ".venv/",
-  "__pycache__/",
-  // Guild derived-index dir is never itself indexed (derived, rebuildable).
-  // Any external/forked plugin's dotfolder is excluded by the user's
-  // .guildignore, not hardcoded here (keeps the engine free of external refs).
-  ".guild/",
-  "dist/",
-  "build/",
-  "out/",
-  "coverage/",
-  ".next/",
-  ".cache/",
-  ".turbo/",
-  "target/",
-  "obj/",
-  // Generated module-resource mirrors (src/modules/<id>/resources/**) are
-  // byte-for-byte copies of first-party source (scripts/**, hooks/**) produced by
-  // sync:module-resources for host packaging — exactly like dist/. Indexing them
-  // duplicates every mirrored node (~31% of the graph) and makes each source file
-  // look like it has an exact clone. Exclude the generated tree; the canonical
-  // source is indexed from its real path.
-  "src/modules/*/resources/",
-  // Test directories and fixtures are not first-party knowledge — they must be
-  // excluded from the cost-gate corpus AND from knowledge discovery so the two
-  // share one policy (L13-fix BLOCKER 2 / L17 residual). Without `tests/` the
-  // L12 re-run produced 43 nodes sourced from plugin tests/ (boundary, evolve,
-  // shadow, wiki-lint READMEs + workspace/_fixtures.ts). These dir patterns use
-  // trailing-slash (dirOnly) matching — same as fixtures/ — so they prune whole
-  // subtrees, not just files with those names.
-  "tests/",
-  "test/",
-  "__tests__/",
-  "fixtures/",
-  "testdata/",
-  "__fixtures__/",
-  "*.lock",
-  "package-lock.json",
-  "yarn.lock",
-  "pnpm-lock.yaml",
-  "*.png",
-  "*.jpg",
-  "*.jpeg",
-  "*.gif",
-  "*.svg",
-  "*.ico",
-  "*.woff",
-  "*.woff2",
-  "*.ttf",
-  "*.eot",
-  "*.mp3",
-  "*.mp4",
-  "*.pdf",
-  "*.zip",
-  "*.tar",
-  "*.gz",
-  "*.min.js",
-  "*.min.css",
-  "*.map",
-  "*.generated.*",
-  ".idea/",
-  ".vscode/",
-  "LICENSE",
-  ".gitignore",
-  ".editorconfig",
-  ".prettierrc",
-  ".eslintrc*",
-  "*.log"
-]);
-function globToRegExp(pattern) {
-  let p = pattern;
-  const dirOnly = p.endsWith("/");
-  if (dirOnly) p = p.slice(0, -1);
-  const anchored = p.startsWith("/");
-  if (anchored) p = p.slice(1);
-  const hasSlash = p.includes("/");
-  let re = "";
-  for (let i = 0; i < p.length; i++) {
-    const c = p[i];
-    if (c === "*") {
-      if (p[i + 1] === "*") {
-        re += "(?:.*)";
-        i++;
-        if (p[i + 1] === "/") i++;
-      } else {
-        re += "[^/]*";
-      }
-    } else if (c === "?") {
-      re += "[^/]";
-    } else if ("\\^$.|+()[]{}".includes(c)) {
-      re += "\\" + c;
-    } else {
-      re += c;
-    }
-  }
-  let body;
-  if (hasSlash || anchored) {
-    body = "^" + re + (dirOnly ? "(?:/.*)?$" : "(?:/.*)?$");
-  } else {
-    body = "(?:^|/)" + re + (dirOnly ? "(?:/.*)?$" : "(?:/.*)?$");
-  }
-  return { source: body, dirOnly };
-}
-function compile(patterns) {
-  const rules = [];
-  for (const raw of patterns) {
-    const line = raw.replace(/\r$/, "");
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    let body = trimmed;
-    const negated = body.startsWith("!");
-    if (negated) body = body.slice(1);
-    const { source, dirOnly } = globToRegExp(body);
-    rules.push({ re: new RegExp(source), negated, dirOnly });
-  }
-  return rules;
-}
-function createIgnoreFilter(projectRoot) {
-  const patterns = [...DEFAULT_IGNORE_PATTERNS];
-  const rootIgnore = path3.join(projectRoot, ".guildignore");
-  if (fs3.existsSync(rootIgnore)) {
-    patterns.push(...fs3.readFileSync(rootIgnore, "utf-8").split("\n"));
-  }
-  const rules = compile(patterns);
-  return {
-    isIgnored(relativePath) {
-      const rel2 = relativePath.replace(/\\/g, "/").replace(/^\.\//, "");
-      let ignored = false;
-      for (const rule of rules) {
-        if (rule.re.test(rel2)) ignored = !rule.negated;
-      }
-      return ignored;
-    }
-  };
-}
-
-// scripts/learn/lib/walk.ts
-function walkRepo(repoRoot, maxFiles = 2e4) {
-  const filter = createIgnoreFilter(repoRoot);
-  const out = [];
-  const visit = (absDir) => {
-    if (out.length >= maxFiles) return;
-    let entries;
-    try {
-      entries = fs4.readdirSync(absDir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    entries.sort((a, b) => a.name.localeCompare(b.name));
-    for (const e of entries) {
-      const abs = path4.join(absDir, e.name);
-      const rel2 = path4.relative(repoRoot, abs).replace(/\\/g, "/");
-      if (e.isDirectory()) {
-        if (filter.isIgnored(rel2) || filter.isIgnored(rel2 + "/")) continue;
-        visit(abs);
-      } else if (e.isFile()) {
-        if (filter.isIgnored(rel2)) continue;
-        out.push(rel2);
-        if (out.length >= maxFiles) return;
-      }
-    }
-  };
-  visit(repoRoot);
-  out.sort();
-  return { files: out, filter };
-}
-
-// scripts/lib/settings-resolver.ts
-init_config2();
+var CLI_NATIVE_HOSTS = sealSet([
+  "claude-code-cli",
+  "codex-cli",
+  "pi-cli",
+  "antigravity-cli",
+  "agents-file",
+  // verified-multi-host new-CLI hosts
+  "cursor",
+  "github-copilot",
+  "opencode",
+  "rovo-dev",
+  // verified-multi-host new-IDE hosts (file surface, agents-file bound)
+  "kiro",
+  "qoder",
+  "trae"
+], "CLI_NATIVE_HOSTS");
 
 // scripts/learn/lib/schema.ts
-init_kernel();
 var NODE_TYPES = sealSet([
   "file",
   "function",

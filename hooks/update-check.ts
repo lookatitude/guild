@@ -151,7 +151,7 @@ function main(): void {
     caps?.apply === "marketplace_cli" ? "claude" : caps?.apply === "self_update" ? "wrapper" : "agents-file";
 
   const nativeIdentity = readNativeHostIdentity(hostId, pluginRoot);
-  const state = resolveInstallState(pluginRoot, { nativeIdentity });
+  let state = resolveInstallState(pluginRoot, { nativeIdentity });
   if (state.channel === "dev") return; // AC-5: dev installs are silent
 
   const cacheFile = cachePath();
@@ -182,6 +182,23 @@ function main(): void {
   const versionDerivedBeta =
     state.version !== null && /^\d+\.\d+\.\d+-beta\.(?:0|[1-9]\d*)$/.test(state.version);
   const launcherDeclaredBeta = versionDerivedBeta && process.env["GUILD_ACTIVATION_CHANNEL"] === "beta";
+
+  // CHANNEL-UNDETERMINED (C-UPDATE): a candidate-shaped version with no host
+  // identity and no launcher declaration cannot establish a channel. Mint
+  // nothing, claim nothing — version shape never establishes a channel, and a
+  // stable-tag comparison here would assert an installed channel we do not
+  // know. Emit the honest informational loss and keep the cache warm so the
+  // signal returns the moment identity is known. Startup is never blocked.
+  if (state.source === "default" && versionDerivedBeta && !launcherDeclaredBeta) {
+    if (!cacheIsFresh(cache, cadenceHours, new Date())) {
+      spawnDetached(process.execPath, [__filename, "--refresh"]);
+    }
+    process.stdout.write(
+      `[guild-update] channel undetermined: installed version ${state.version} is candidate-shaped but no host registry identity was found — update checks are paused for this install until its channel is known.\n`
+    );
+    return;
+  }
+
   if (state.source === "default" && state.version && (!versionDerivedBeta || launcherDeclaredBeta)) {
     try {
       const receiptPath = path.join(pluginRoot, RECEIPT_BASENAME);
@@ -225,6 +242,14 @@ function main(): void {
     } catch {
       // fail-open — the signal below still works without a receipt
     }
+  }
+
+  // Launcher authority binds this session's channel INDEPENDENTLY of receipt
+  // persistence: an unwritable package root must not leave the pre-mint
+  // "default stable" state announcing a stable update for a declared beta
+  // (codex G-lane F02 rounds 1+2).
+  if (launcherDeclaredBeta && state.source === "default") {
+    state = { ...state, channel: "beta" };
   }
 
   // Background refresh when stale — the signal from a fresh check lands next

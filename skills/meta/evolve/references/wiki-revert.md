@@ -4,6 +4,20 @@
 for one harvest op (R54 / KTD39). Harvest is the only automatic wiki writer, so
 this is the only undo an operator needs for an unattended durable write.
 
+## Promote a staged decision (lead only)
+
+A lane stages `.guild/knowledge/candidates/decisions/<slug>.md`; it never promotes.
+After the operator approves, the lead runs:
+
+```bash
+node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/wiki-promote.js" <slug> --cwd <repo-root> [--run <run-id>]
+```
+
+Harvest lands `decisions/<slug>.md`, links it under `## Decisions` in `index.md`, and
+appends `## [YYYY-MM-DD] promoted decision <slug>` to `log.md`. Exit 1 means harvest
+refused; the JSON names the reason. A blocked promotion resumes with the same
+`--run <run_id> --op <op_id>` it printed. The revert below also drops the index link.
+
 ## What it restores
 
 - the decision page, back to the bytes it had before the op (a page that did not

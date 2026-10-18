@@ -353,3 +353,57 @@ describe("[G9] model-free — no SQLite, no model, no network", () => {
 // deleted as unwired dead code (zero skill/production consumers — computeImpact
 // is exercised in-process above and via clra-conformance.test.ts's G9 block;
 // lib/impact.ts itself is unchanged and still the model-free source of truth).
+
+// ---------------------------------------------------------------------------
+// I14 (legacy G2) — automatic entry derivation from provable `exported` flags
+// ---------------------------------------------------------------------------
+
+describe("I14 — omitted entryPoints derive the public surface from exported flags", () => {
+  function miniGraph(exported: boolean): GraphView {
+    const nodes: GraphNode[] = [
+      { id: "function:src/api.ts:serve", type: "function", name: "serve",
+        source_refs: ["src/api.ts#L1-L3"], confidence: "high", exported } as GraphNode,
+      { id: "function:src/api.ts:inner", type: "function", name: "inner",
+        source_refs: ["src/api.ts#L4-L6"], confidence: "high", exported: false } as GraphNode,
+    ];
+    const edges: GraphEdge[] = [{
+      source: "function:src/api.ts:serve", target: "function:src/api.ts:inner",
+      type: "calls", direction: "out", weight: 1,
+    }];
+    return { nodes, edges };
+  }
+
+  test("omitted opts: an exported fn is an entry — its callee gets a non-null entryDistance", () => {
+    const r = computeImpact(miniGraph(true), { changedSymbols: ["inner"] });
+    const inner = r.nodes.find((n) => n.id === "function:src/api.ts:inner");
+    expect(inner?.entryDistance).toBe(1);
+  });
+
+  test("pre-I14 graph (no flags): omitted opts degrade to the exact legacy heuristic (null distance)", () => {
+    const g = miniGraph(true);
+    for (const n of g.nodes) delete (n as Record<string, unknown>).exported;
+    const r = computeImpact(g, { changedSymbols: ["inner"] });
+    const inner = r.nodes.find((n) => n.id === "function:src/api.ts:inner");
+    expect(inner?.entryDistance).toBeNull();
+  });
+
+  test("supplied entryPoints: [] is AUTHORITATIVE — export derivation adds nothing", () => {
+    const r = computeImpact(miniGraph(true), { changedSymbols: ["inner"], entryPoints: [] });
+    const inner = r.nodes.find((n) => n.id === "function:src/api.ts:inner");
+    expect(inner?.entryDistance).toBeNull();
+  });
+
+  test("equivalence: omitted opts == explicitly supplying the exported set", () => {
+    const auto = computeImpact(miniGraph(true), { changedSymbols: ["inner"] });
+    const explicit = computeImpact(miniGraph(true), {
+      changedSymbols: ["inner"], entryPoints: ["function:src/api.ts:serve"],
+    });
+    expect(JSON.stringify(auto)).toBe(JSON.stringify(explicit));
+  });
+
+  test("a non-exported fn is NOT derived as an entry (no invented surface)", () => {
+    const r = computeImpact(miniGraph(false), { changedSymbols: ["inner"] });
+    const inner = r.nodes.find((n) => n.id === "function:src/api.ts:inner");
+    expect(inner?.entryDistance).toBeNull();
+  });
+});

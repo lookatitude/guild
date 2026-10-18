@@ -3718,13 +3718,6 @@ function immediateMarkedChildren(root) {
   }
   return children;
 }
-function workspaceEntries(root) {
-  const manifest = readWorkspaceManifest(root);
-  if (manifest?.is_workspace && Array.isArray(manifest.sub_guilds)) {
-    return manifest.sub_guilds.filter((sg) => typeof sg.name === "string" && typeof sg.path === "string");
-  }
-  return immediateMarkedChildren(root);
-}
 function isRegisteredChildOfParentWorkspace(root) {
   return findParentWorkspace(root) !== null;
 }
@@ -3741,11 +3734,34 @@ function findParentWorkspace(activeRoot) {
   const parent = path9.dirname(activeRoot);
   if (parent === activeRoot) return null;
   const activeResolved = path9.resolve(activeRoot);
-  for (const entry of workspaceEntries(parent)) {
-    const childRoot = path9.resolve(parent, entry.path);
-    if (childRoot === activeResolved) return { root: parent, entry };
+  const manifest = readWorkspaceManifest(parent);
+  if (manifest?.is_workspace && Array.isArray(manifest.sub_guilds)) {
+    for (const entry of manifest.sub_guilds) {
+      if (typeof entry.name !== "string" || typeof entry.path !== "string") continue;
+      const childRoot = path9.resolve(parent, entry.path);
+      if (childRoot === activeResolved) return { root: parent, entry };
+    }
+    return null;
   }
-  return null;
+  try {
+    if (!fs7.lstatSync(activeResolved).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  const hasGit = fs7.existsSync(path9.join(activeRoot, ".git"));
+  const hasGuild = fs7.existsSync(path9.join(activeRoot, ".guild"));
+  if (!hasGit && !hasGuild) return null;
+  const name = path9.basename(activeResolved);
+  return {
+    root: parent,
+    entry: {
+      name,
+      path: name,
+      kind: hasGuild ? "sub-guild" : "sub-project",
+      has_wiki: fs7.existsSync(path9.join(activeRoot, ".guild", "wiki")),
+      has_indexes: fs7.existsSync(path9.join(activeRoot, ".guild", "indexes"))
+    }
+  };
 }
 function canonicalMemory(activeRoot) {
   return {

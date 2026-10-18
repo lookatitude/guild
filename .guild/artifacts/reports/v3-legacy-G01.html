@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>I01 legacy G1 validation</title>
+<style>
+:root{--bg:#fff;--fg:#1a1d21;--mut:#5c6670;--line:#d9dee3;--pass:#0a7d33;--res:#b04700;--sup:#5a51b3;--code:#f4f6f8}
+:root:not([data-theme="light"]){color-scheme:light dark}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15181b;--fg:#e8eaed;--mut:#9aa4ae;--line:#333a41;--pass:#4cc273;--res:#f09050;--sup:#a79df0;--code:#20252a}}
+:root[data-theme="dark"]{--bg:#15181b;--fg:#e8eaed;--mut:#9aa4ae;--line:#333a41;--pass:#4cc273;--res:#f09050;--sup:#a79df0;--code:#20252a}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,Segoe UI,sans-serif;max-width:1080px;margin:2rem auto;padding:0 16px}
+h1{font-size:1.4rem}h2{font-size:1.1rem;margin-top:2rem}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--code)}
+code,pre{background:var(--code);border-radius:4px;padding:1px 5px;font-size:12.5px;word-break:break-all}
+pre{padding:8px;overflow-x:auto}
+.meta{color:var(--mut);font-size:13px}
+.b{display:inline-block;padding:0 8px;border-radius:10px;font-weight:600;font-size:12px}
+.b.pass{color:var(--pass);border:1px solid var(--pass)}
+.b.res{color:var(--res);border:1px solid var(--res)}
+.b.sup{color:var(--sup);border:1px solid var(--sup)}
+.sum{display:flex;gap:18px;margin:12px 0}
+</style></head><body>
+<h1>I01 — Call precision and richer edge producers</h1>
+<p class="meta">Inherited legacy G1 · owner tooling (team I) · run run-20261017-160817-guild · branch <code>fix/v3c-team-i-inherited-validation</code> · validated at plugin <code>ee6cbbe9 (origin/next)</code> · 2026-10-17</p>
+<div class="sum"><span class="b pass">PASS 2</span><span class="b res">RESIDUAL 6</span><span class="b sup">SUPERSEDED 0</span></div>
+
+<h2>Checks (actually run)</h2>
+<table><tr><th>Command (cwd plugin worktree)</th><th>Exit</th><th>Result</th><th>Evidence</th></tr>
+<tr><td><code>bun test --isolate scripts/learn/resolve-calls.test.ts scripts/learn/clra-conformance.test.ts</code></td><td>0</td><td>64 pass, 0 fail across 2 files; oracle output: TS precision/recall 100/100, Python 100/100, TS method-dispatch 100/100</td><td><code>.guild/runs/run-20261017-160817-guild/evidence/I01/bun-test.log</code></td></tr>
+</table>
+<h2>Subclaim matrix</h2>
+<table><tr><th>#</th><th>Subclaim</th><th>Current producer</th><th>Consumer / live caller</th><th>Golden / test</th><th>Expected</th><th>Actual</th><th>Disposition</th></tr>
+<tr><td>1</td><td>TS/compiler import and alias resolution</td><td><code>scripts/learn/lib/resolve-calls-ts.ts:115 ts.createProgram; :168-170 checker.getSymbolAtLocation + getAliasedSymbol; :47-55 tsconfig paths aliases</code></td><td><code>scripts/learn/resolve-calls.ts:60 refineCalls; import edges via scripts/learn/lib/structural.ts:692 resolveImportSpec</code></td><td><code>resolve-calls.test.ts:54 'imported compute() resolves to ./b, NOT the same-named def in c.ts'; :521 paths-alias resolution; clra-conformance.test.ts:850 oracle TS &gt;=85% (actual 100/100)</code></td><td>imported call resolves to the correct target at high confidence</td><td>as expected; executed oracle 100/100</td><td><span class="b pass">PASS</span><br>Scope: resolver correctness only — compiler-checker resolution with the name-collision negative and an executed precision oracle; the resolve-calls CLI itself is on-demand-only with no skill caller (see Notes), so this PASS does not claim live pipeline wiring.</td></tr>
+<tr><td>2</td><td>Python import/scope resolution</td><td><code>scripts/learn/lib/resolve-calls-py.ts:5-30 (from-import / import-module bindings, import-or-same-file evidence only)</code></td><td><code>scripts/learn/resolve-calls.ts:60 refineCalls</code></td><td><code>resolve-calls.test.ts:81, :237, :253 (alias), :287 (function-local import scoping), :313/:333 (shadowing), :376/:398 (nested defs); clra:850 oracle Python &gt;=80% (actual 100/100)</code></td><td>scoped bindings resolve; shadowing/global-fallback refused</td><td>as expected; executed oracle 100/100</td><td><span class="b pass">PASS</span><br>Scope: resolver correctness only — scoped-binding resolution with shadowing and no-global-fallback negatives, executed; same wiring caveat as row 1.</td></tr>
+<tr><td>3</td><td>Python instance-method calls</td><td><code>none by design — scripts/learn/lib/resolve-calls-py.ts:16-17 'Method calls on instances (obj.method()) … likewise produce no edge'</code></td><td><code>n/a</code></td><td><code>clra-conformance.test.ts:879 measures TS method dispatch only (:884 'Python instance method calls are out of scope'); resolve-calls.test.ts:266 proves absence only</code></td><td>instance-method call edges emitted deterministically</td><td>no producer; only TS dispatch measured</td><td><span class="b res">RESIDUAL</span><br>Deliberate gap; no false edges, but the claimed capability is absent.</td></tr>
+<tr><td>4</td><td>TESTS/tested_by edge producer</td><td><code>none — scripts/learn/lib/schema.ts:87 lists 'tested_by' as vocabulary only</code></td><td><code>none</code></td><td><code>none</code></td><td>deterministic tested_by edges with fixtures</td><td>vocabulary only</td><td><span class="b res">RESIDUAL</span><br>Edge type named in schema, never produced.</td></tr>
+<tr><td>5</td><td>CONFIGURES/configures edge producer</td><td><code>none — schema.ts:87 vocabulary; :266-267 node alias setting-&gt;config only</code></td><td><code>none</code></td><td><code>none</code></td><td>deterministic configures edges with fixtures</td><td>vocabulary only</td><td><span class="b res">RESIDUAL</span><br>Edge type named in schema, never produced.</td></tr>
+<tr><td>6</td><td>FILE_CHANGES_WITH/co-change producer</td><td><code>none — scripts/learn/lib/git.ts exports only isTracked:25, headSha:38, changedFiles:47, isLinkedWorktree:60</code></td><td><code>none</code></td><td><code>none</code></td><td>git-history co-change edges</td><td>no miner, no edge type</td><td><span class="b res">RESIDUAL</span><br>Not in EDGE_TYPES and no producer exists.</td></tr>
+<tr><td>7</td><td>HTTP/gRPC/GraphQL/tRPC cross-service call edges</td><td><code>none — only file-type detection scripts/learn/lib/languages.ts:15 ('.graphql', '.proto') and layer naming lib/layers.ts:15</code></td><td><code>none</code></td><td><code>none</code></td><td>client-call to endpoint edges</td><td>detection vocabulary only</td><td><span class="b res">RESIDUAL</span><br>No matcher producer exists.</td></tr>
+<tr><td>8</td><td>HTTP route-to-handler nodes</td><td><code>none — schema.ts:93 'routes' and :266 alias route-&gt;endpoint are vocabulary only</code></td><td><code>none</code></td><td><code>none</code></td><td>endpoint nodes + routes edges from framework routes</td><td>vocabulary only</td><td><span class="b res">RESIDUAL</span><br>No extraction producer exists.</td></tr>
+</table>
+<h2>Residual follow-on plans (require ratification before programme close)</h2>
+<table><tr><th>Row</th><th>Scope</th><th>Tests</th><th>Owner</th><th>Constraints</th><th>Bounded task</th></tr>
+<tr><td>3</td><td>resolve-calls-py.ts: resolve self.m() to the enclosing class method and x = Cls(); x.m() to Cls.m; add Circle/Shape oracle rows to tests/fixtures/learn/clra-fixture/clra-fixture.expected.json</td><td>Python method-dispatch block in clra-conformance.test.ts with precision/recall floor + no-false-edge negative</td><td>tooling (learn)</td><td>deterministic only, no type-inference dependency; zero false edges remains the bar</td><td>follow-on plan, unratified</td></tr>
+<tr><td>4</td><td>assembleStructuralGraph (scripts/learn/lib/structural.ts): emit test-file-&gt;symbol tested_by edges from test-path heuristic + import/call evidence</td><td>extract-structural.test.ts fixture; anti-vacuity: non-test importer emits no tested_by edge</td><td>tooling (learn)</td><td>additive to EDGE_TYPES; cache version stamp bumped</td><td>follow-on plan, unratified</td></tr>
+<tr><td>5</td><td>structural.ts: config-file (tsconfig/package.json/.env.example) -&gt; consumer configures edges</td><td>extract-structural.test.ts fixture + negative (non-config file emits none)</td><td>tooling (learn)</td><td>deterministic; no file-content execution</td><td>follow-on plan, unratified</td></tr>
+<tr><td>6</td><td>scripts/learn/lib/git.ts: git-log co-change miner + FILE_CHANGES_WITH in EDGE_TYPES (schema.ts:80-98)</td><td>deterministic test over a scripted temp git repo</td><td>tooling (learn)</td><td>bounded history window; worktree-safe (isLinkedWorktree)</td><td>follow-on plan, unratified</td></tr>
+<tr><td>7</td><td>client-call -&gt; endpoint matcher (structural.ts or a new lib module) for HTTP/gRPC/GraphQL/tRPC</td><td>cross-service fixture pair with oracle entries</td><td>tooling (learn)</td><td>zero false cross-service edges; emit only on exact route match</td><td>follow-on plan, unratified</td></tr>
+<tr><td>8</td><td>framework route extraction (express routes / fastapi decorators) into endpoint nodes + routes edges in structural.ts</td><td>fixture with both frameworks + negative for non-route decorators</td><td>tooling (learn)</td><td>deterministic regex/AST only</td><td>follow-on plan, unratified</td></tr></table>
+<h2>Notes</h2><ul><li>Wiring caveat (applies to I01/I02): scripts/learn/resolve-calls.ts:17-21 marks the CLI 'experimental / on-demand-only — no skill invokes it'; no skill or command mentions extract-structural, resolve-calls or impact. KTD64 names extract-structural.ts as learn Stage-2, but no skill chapter calls it. Recorded as an open wiring ambiguity for programme-level disposition (not a Team I write scope).</li><li>The '[G2 oracle]' log lines are call-resolution metrics from clra:850/:879, not an exported-flag oracle.</li></ul>
+<p class="meta">Archive closure, source presence, exports and passing schema fixtures alone never establish operational completion. Every PASS cites a real producer and an executed test at the stated scope; live-caller status and wiring caveats are recorded per row, and a PASS does not extend beyond its row's stated scope. Evidence paths under .guild/runs/ refer to the UMBRELLA workspace run directory (the workspace root two levels above this repo), not to this repository.</p>
+</body></html>

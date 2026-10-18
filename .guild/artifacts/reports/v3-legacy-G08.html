@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>I08 legacy G8 validation</title>
+<style>
+:root{--bg:#fff;--fg:#1a1d21;--mut:#5c6670;--line:#d9dee3;--pass:#0a7d33;--res:#b04700;--sup:#5a51b3;--code:#f4f6f8}
+:root:not([data-theme="light"]){color-scheme:light dark}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#15181b;--fg:#e8eaed;--mut:#9aa4ae;--line:#333a41;--pass:#4cc273;--res:#f09050;--sup:#a79df0;--code:#20252a}}
+:root[data-theme="dark"]{--bg:#15181b;--fg:#e8eaed;--mut:#9aa4ae;--line:#333a41;--pass:#4cc273;--res:#f09050;--sup:#a79df0;--code:#20252a}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,Segoe UI,sans-serif;max-width:1080px;margin:2rem auto;padding:0 16px}
+h1{font-size:1.4rem}h2{font-size:1.1rem;margin-top:2rem}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--code)}
+code,pre{background:var(--code);border-radius:4px;padding:1px 5px;font-size:12.5px;word-break:break-all}
+pre{padding:8px;overflow-x:auto}
+.meta{color:var(--mut);font-size:13px}
+.b{display:inline-block;padding:0 8px;border-radius:10px;font-weight:600;font-size:12px}
+.b.pass{color:var(--pass);border:1px solid var(--pass)}
+.b.res{color:var(--res);border:1px solid var(--res)}
+.b.sup{color:var(--sup);border:1px solid var(--sup)}
+.sum{display:flex;gap:18px;margin:12px 0}
+</style></head><body>
+<h1>I08 — Two-family live install evidence boundary</h1>
+<p class="meta">Inherited legacy G8 · owner architect (team I) · run run-20261017-160817-guild · branch <code>fix/v3c-team-i-inherited-validation</code> · validated at plugin <code>ee6cbbe9 (origin/next)</code> · 2026-10-17</p>
+<div class="sum"><span class="b pass">PASS 1</span><span class="b res">RESIDUAL 3</span><span class="b sup">SUPERSEDED 0</span></div>
+
+<h2>Checks (actually run)</h2>
+<table><tr><th>Command (cwd plugin worktree)</th><th>Exit</th><th>Result</th><th>Evidence</th></tr>
+<tr><td><code>bun test --isolate tests/universal-host/sc7-two-sided-parity.test.ts</code></td><td>0</td><td>30 pass, 0 fail (inventory parity only — zero receipt/inferred references; it does NOT prove live installs)</td><td><code>.guild/runs/run-20261017-160817-guild/evidence/I08/bun-test.log</code></td></tr>
+<tr><td><code>bun test --isolate scripts/lib/host-public-state-gate-matrix.test.ts scripts/lib/host-public-state.test.ts</code></td><td>0</td><td>33 pass, 0 fail across 2 files — the honesty-gate suites cited in rows 1-4, executed</td><td><code>.guild/runs/run-20261017-160817-guild/evidence/I08/bun-test-supplemental.log</code></td></tr>
+</table>
+<h2>Subclaim matrix</h2>
+<table><tr><th>#</th><th>Subclaim</th><th>Current producer</th><th>Consumer / live caller</th><th>Golden / test</th><th>Expected</th><th>Actual</th><th>Disposition</th></tr>
+<tr><td>1</td><td>Claude real-install receipt</td><td><code>evidence/host-smoke/claude-code-cli/operator-local-macos.json (public_state_claimed=native, verification_status_claimed=verified; captured 2026-07-04 at guild_version 2.0.0; checks: 109 SKILL.md discoverable, 21 command files, native_plugin_load verified); writer scripts/host-smoke.ts; store scripts/lib/host-smoke-store.ts:28</code></td><td><code>scripts/build-verify.ts:148-156 receipt scan; scripts/generate-support-matrix.ts; scripts/lib/support-matrix.ts</code></td><td><code>scripts/lib/host-public-state-gate-matrix.test.ts:91 'an honestly-promoted verified host (receipt + matching floor) PASSES'</code></td><td>a live receipt matching the CURRENT tree</td><td>receipt is real but v2-era: its counts (109 skills/21 commands) do not match the current tree (75/24) and its checks are file-presence checks</td><td><span class="b res">RESIDUAL</span><br>The original live AC24 guarantee requires exact real receipts for the current source; the existing receipt is stale.</td></tr>
+<tr><td>2</td><td>second-family real-install receipt</td><td><code>evidence/host-smoke/codex-cli/operator-local-macos.json (verified_wrapped; checks: guild-run dry-run plan resolved, auth probe 'treated as reachable (binary present)'); pi-cli and antigravity-cli same shape</code></td><td><code>same consumers as row 1</code></td><td><code>same gate-matrix test</code></td><td>a real second-family install-and-activate receipt with an executed Guild command</td><td>dry-run plans and binary/version probes only; the release contract records install/activate as refused</td><td><span class="b res">RESIDUAL</span><br>No second-family receipt of a real install exists; mismatched evidence stays refused (honest).</td></tr>
+<tr><td>3</td><td>exact source/package/host tuple</td><td><code>scripts/lib/host-public-state.ts:137-145 SmokeReceiptIdentity (host_id/box_id/host_version/public_state_claimed/verification_status_claimed/checks) — NO source_commit or package digest; guild_version only in undigested freshness (:148-152); staleness is age-only (:270 RECEIPT_MAX_AGE_DAYS=180, :273)</code></td><td><code>selectValidReceipt (:310)</code></td><td><code>scripts/lib/host-public-state.test.ts fixture uses guild_version 2.0.0; no test rejects a version/commit mismatch</code></td><td>receipts bound to exact source/package identity</td><td>version-blind — and worse than an expiry gap: selectValidReceipt (host-public-state.ts:325-333) falls back to the stale pool when no non-stale receipt exists and still returns has_valid_receipt:true (stale:true), so even age-stale receipts keep qualifying</td><td><span class="b res">RESIDUAL</span><br>The identity tuple the inherited claim requires is not recorded, and staleness never disqualifies a receipt.</td></tr>
+<tr><td>4</td><td>fixture vs live distinction</td><td><code>scripts/lib/host-public-state.ts:347 deriveVerificationStatus (inferred/target buckets :53-54; :362 registry_provenance inferred -&gt; inferred)</code></td><td><code>scripts/generate-support-matrix.ts; scripts/build-verify.ts</code></td><td><code>host-public-state-gate-matrix.test.ts:79 honest target passes; :104 anti-fraud fails verified_* without a valid receipt; :227 promote-independent-of-provenance; :288 'the REAL committed matrix PASSES, and dropping a real receipt makes it FAIL (green != false-clean)'</code></td><td>inferred/target/verified honestly separated; fraud refused</td><td>as expected, executed — with the row-3 caveat that stale-version receipts are not detected</td><td><span class="b pass">PASS</span><br>Two-field honesty gate enforced in code with anti-fraud and anti-vacuity tests.</td></tr>
+</table>
+<h2>Residual follow-on plans (require ratification before programme close)</h2>
+<table><tr><th>Row</th><th>Scope</th><th>Tests</th><th>Owner</th><th>Constraints</th><th>Bounded task</th></tr>
+<tr><td>1</td><td>Run build:verify --refresh-receipts on the operator box against the current 3.1.0-beta tree (operator-only action; recorded as awaiting operator since the multi-host ship)</td><td>refreshed receipt counts match the current inventory; gate-matrix still passes</td><td>operator (architect prepares)</td><td>receipts must come from a real box; agents must not fabricate them</td><td>follow-on plan, unratified</td></tr>
+<tr><td>2</td><td>Capture a real codex (or pi/agy) install-and-activate receipt via install.sh on the operator box, including one executed Guild command</td><td>receipt carries install+activate outcomes and an executed command check; release-contract refusals flip only on real evidence</td><td>operator (architect prepares)</td><td>no fabricated evidence; the refusal stays until real evidence lands</td><td>follow-on plan, unratified</td></tr>
+<tr><td>3</td><td>Add source_commit + package identity digest (release-package-identity) to SmokeReceiptIdentity; make a guild_version/commit mismatch disqualifying; change selectValidReceipt's stale-pool fallback (host-public-state.ts:325-333) so staleness disqualifies instead of returning has_valid_receipt:true</td><td>mismatch receipt -&gt; refused; all-stale pool -&gt; has_valid_receipt:false; matching fresh receipt -&gt; valid; gate-matrix updated</td><td>tooling</td><td>backward-compatible with existing receipts (absent fields -&gt; stale after a grace window, never silently valid)</td><td>follow-on plan, unratified</td></tr></table>
+<h2>Notes</h2><ul><li>SC-7 (the listed check) proves two-sided inventory parity only; the live-install guarantee is carried by the receipt store + gate matrix, which is why rows 1-3 are residual despite a green check.</li></ul>
+<p class="meta">Archive closure, source presence, exports and passing schema fixtures alone never establish operational completion. Every PASS cites a real producer and an executed test at the stated scope; live-caller status and wiring caveats are recorded per row, and a PASS does not extend beyond its row's stated scope. Evidence paths under .guild/runs/ refer to the UMBRELLA workspace run directory (the workspace root two levels above this repo), not to this repository.</p>
+</body></html>

@@ -297,7 +297,7 @@ describe("host-native discovery on --update with no receipts", () => {
     // A bare directory is not an install. The first attempt reported it as one.
     fs.mkdirSync(path.join(codexHome, "plugins", "cache", "guild"), { recursive: true });
     const out = runUpdate();
-    expect(out).toMatch(/No host-native Guild install detected/);
+    expect(out).toMatch(/No host-native Guild Stack install detected/);
     expect(out).not.toMatch(/Detected a HOST-NATIVE Codex install/);
   });
 
@@ -463,6 +463,6 @@ describe("host-native discovery on --update with no receipts", () => {
     fs.writeFileSync(path.join(reg, "installed_plugins.json"), JSON.stringify({ version: 2, plugins: {} }));
     const out = runUpdate();
     expect(out).not.toMatch(/Detected a HOST-NATIVE Claude Code install/);
-    expect(out).toMatch(/No host-native Guild install detected/);
+    expect(out).toMatch(/No host-native Guild Stack install detected/);
   });
 });

@@ -43,6 +43,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ensureStorageLayout } from "../../../../scripts/lib/state/ensure-storage-layout";
 import { durableGuildDir } from "../../../domains/state";
+import { protectFields, RECALL_INTEGRITY_DIRECTIVE } from "../../../domains/knowledge/index";
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -631,6 +632,26 @@ function specialistKey(e: TelemetryEvent): string {
 
 // ─── MCP result helpers ──────────────────────────────────────────────────
 
+// ─── D-RECALL (TI-SEC-1) ─────────────────────────────────────────────────
+//
+// Run records are shared team state, so text read from them is untrusted like
+// wiki recall. protectFields keeps identifier tokens (ids, enums, timestamps,
+// model names) raw so filters and rollups still read them, and sends every other
+// string through protectChunks: quarantine marker, or untrusted wrap.
+// noOperator: a run id such as `run-principles` must never earn the unwrapped
+// operator tier from the path allowlist.
+
+const FREE_TEXT_KEYS: ReadonlySet<string> = new Set(["prompt", "summary", "note", "message"]);
+
+function protectRunValue<T>(value: T, where: string): { value: T; directive: string | null } {
+  const out = protectFields(value, where, {
+    callerTool: "guild-telemetry",
+    noOperator: true,
+    freeTextKeys: FREE_TEXT_KEYS,
+  });
+  return { value: out.value, directive: out.wrapped ? RECALL_INTEGRITY_DIRECTIVE : null };
+}
+
 function jsonResult(value: unknown): {
   content: { type: "text"; text: string }[];
 } {
@@ -690,6 +711,11 @@ function summaryHasDispatchFrontmatter(summary: string): boolean {
 
 // ─── MCP server ──────────────────────────────────────────────────────────
 
+function summaryResult(run_id: string, source: "file" | "synthesized", summary: string) {
+  const { value, directive } = protectRunValue({ run_id, summary }, "runs/summary.md");
+  return jsonResult({ run_id: value.run_id, source, summary: value.summary, recall_directive: directive });
+}
+
 export function buildServer(): McpServer {
   const server = new McpServer(
     { name: "guild-telemetry", version: "0.1.0" },
@@ -717,7 +743,8 @@ export function buildServer(): McpServer {
         "Return the stored summary.md for a run if present, otherwise " +
         "synthesize one from logs/v1.4-events.jsonl (falling back to legacy " +
         "events.ndjson) using the same logic as scripts/trace-summarize.ts. " +
-        "Does not write anything.",
+        "Does not write anything. The summary is D-RECALL protected " +
+        "(untrusted-wrapped, or quarantined).",
       inputSchema: {
         run_id: z.string().min(1).describe("The run identifier"),
         cwd: z.string().optional().describe(CWD_PARAM_DESCRIPTION),
@@ -741,7 +768,7 @@ export function buildServer(): McpServer {
         // verbatim would break the parity contract, so fall through to synthesize
         // from the event log instead.
         if (summaryHasDispatchFrontmatter(summary)) {
-          return jsonResult({ run_id, source: "file", summary });
+          return summaryResult(run_id, "file", summary);
         }
       }
       const events = readEvents(runDir);
@@ -749,14 +776,14 @@ export function buildServer(): McpServer {
         // No event log to synthesize from. If a (field-less) summary.md exists,
         // returning it is still better than an error — it is all we have.
         if (fs.existsSync(existing)) {
-          return jsonResult({ run_id, source: "file", summary: fs.readFileSync(existing, "utf8") });
+          return summaryResult(run_id, "file", fs.readFileSync(existing, "utf8"));
         }
         return errorResult(
           `No logs/v1.4-events.jsonl or events.ndjson found for run: ${run_id}`
         );
       }
       const summary = buildSummary(run_id, events);
-      return jsonResult({ run_id, source: "synthesized", summary });
+      return summaryResult(run_id, "synthesized", summary);
     }
   );
 
@@ -768,7 +795,8 @@ export function buildServer(): McpServer {
       description:
         "Filter telemetry events across runs by run_id, event type, " +
         "specialist, or ISO-date `since` cutoff. Returns events annotated " +
-        "with their run_id. Deterministic sort: run_id then ts.",
+        "with their run_id. Deterministic sort: run_id then ts. Free-text " +
+        "fields are D-RECALL protected (untrusted-wrapped, or quarantined).",
       inputSchema: {
         run_id: z.string().optional().describe("Restrict to one run"),
         event: z
@@ -827,7 +855,8 @@ export function buildServer(): McpServer {
       );
 
       const trimmed = typeof limit === "number" ? filtered.slice(0, limit) : filtered;
-      return jsonResult({ events: trimmed, total: filtered.length });
+      const { value: events, directive } = protectRunValue(trimmed, "runs/events");
+      return jsonResult({ events, total: filtered.length, recall_directive: directive });
     }
   );
 
@@ -877,7 +906,8 @@ export function buildServer(): McpServer {
         .sort((a, b) => a.run_id.localeCompare(b.run_id));
 
       const trimmed = typeof limit === "number" ? runs.slice(0, limit) : runs;
-      return jsonResult({ runs: trimmed, total: runs.length });
+      const { value, directive } = protectRunValue(trimmed, "runs/list");
+      return jsonResult({ runs: value, total: runs.length, recall_directive: directive });
     }
   );
 
@@ -938,7 +968,7 @@ export function buildServer(): McpServer {
         }
       }
 
-      return jsonResult({
+      const { value, directive } = protectRunValue({
         run_id: run_id ?? null,
         scope: run_id ? `run:${run_id}` : "all-runs",
         event_count: eventCount,
@@ -952,7 +982,8 @@ export function buildServer(): McpServer {
         by_tier: rollupRows(byTier, "tier"),
         by_model: rollupRows(byModel, "model"),
         by_specialist: rollupRows(bySpecialist, "specialist"),
-      });
+      }, "runs/cost-rollup");
+      return jsonResult({ ...value, recall_directive: directive });
     }
   );
 

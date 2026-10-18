@@ -12,7 +12,7 @@
 # (github.com/lookatitude/guild); website/public/install.sh is a
 # byte-identical served copy (enforced by tests/dot-guild/install-sh-equivalence.test.ts).
 #
-# Installs the Guild plugin into the AI coding hosts found on this machine.
+# Installs the Guild Stack plugin into the AI coding hosts found on this machine.
 # The script never uses sudo, never edits shell profiles, and only runs the
 # host's own plugin commands or prints/renders the universal AGENTS.md package.
 #
@@ -86,7 +86,7 @@ warn() { printf '\033[33m[guild]\033[0m %s\n' "$*" >&2; }
 
 usage() {
   cat <<'HELP'
-Guild installer
+Guild Stack installer
 
   curl -fsSL https://guildstack.dev/install.sh | bash
 
@@ -94,7 +94,7 @@ or, if the domain is unavailable, the same script served from the repo:
 
   curl -fsSL https://raw.githubusercontent.com/lookatitude/guild/main/install.sh | bash
 
-Installs the Guild plugin into the AI coding hosts found on this machine.
+Installs the Guild Stack plugin into the AI coding hosts found on this machine.
 Never uses sudo or edits shell profiles.
 
 Options (pass after `bash -s --`):
@@ -325,7 +325,7 @@ if [ "$UPDATE_MODE" -eq 1 ]; then
       printf '      claude plugin marketplace update guild && claude plugin update %s\n' "$PLUGIN_SPEC" >&2
     fi
     if [ "$_found_native" -eq 0 ]; then
-      printf '  No host-native Guild install detected either.\n' >&2
+      printf '  No host-native Guild Stack install detected either.\n' >&2
       printf '  Receipts are written by installs from this version onward; run a normal install once first.\n' >&2
     fi
     exit 1
@@ -433,7 +433,7 @@ if [ -n "${REFUSED# }" ]; then
   for h in ${REFUSED# }; do
     warn "$h is an app/connector surface, not a CLI package install target."
   done
-  warn "Guild will NOT install a CLI package into an app/connector surface."
+  warn "Guild Stack will NOT install a CLI package into an app/connector surface."
   warn "Use the connector/app bootstrap contract: AGENTS.md instructions, .guild file-bus artifacts,"
   warn "and explicit app/connector approval or egress gates. For local plugin execution install one of:"
   warn "  --host claude-code-cli"
@@ -461,14 +461,14 @@ if [ "$HOST_COUNT" -gt 1 ]; then
   if [ "$ASSUME_YES" -eq 1 ]; then
     say "Consent: --yes supplied — proceeding with the multi-host write."
   elif [ -t 0 ]; then
-    printf '\033[33m[guild]\033[0m Install Guild into these %d hosts?%s [y/N] ' "$HOST_COUNT" "$RESOLVED_HOSTS" >&2
+    printf '\033[33m[guild]\033[0m Install Guild Stack into these %d hosts?%s [y/N] ' "$HOST_COUNT" "$RESOLVED_HOSTS" >&2
     read -r reply || reply=""
     case "$reply" in
       y|Y|yes|YES) say "Consent: confirmed — proceeding with the multi-host write." ;;
       *) warn "Aborted — multi-host write not confirmed."; exit 3 ;;
     esac
   else
-    warn "Refusing to write Guild payload to $HOST_COUNT hosts without consent."
+    warn "Refusing to write Guild Stack payload to $HOST_COUNT hosts without consent."
     warn "Re-run with --yes to confirm the multi-host write, or select a single --host."
     warn "  hosts:$RESOLVED_HOSTS"
     exit 3
@@ -637,7 +637,7 @@ install_claude_code_cli() {
   installed_any=1
   write_receipt claude-code-cli
   say ""
-  say "Guild installed into Claude Code."
+  say "Guild Stack installed into Claude Code."
   say "Package wrapper: CLAUDE.md imports AGENTS.md via @AGENTS.md."
   say "RESTART Claude Code now — plugins load at session start. Then run:"
   say '    /guild:guild "your task"'
@@ -692,12 +692,12 @@ install_codex_cli() {
   [ -z "$CODEX_PLUGIN_ROOT_DIR" ] && CODEX_PLUGIN_ROOT_DIR="$CODEX_MARKETPLACE_PATH/plugins/guild"
   write_receipt codex-cli "$CODEX_PLUGIN_ROOT_DIR"
   say ""
-  say "Guild installed into Codex CLI."
+  say "Guild Stack installed into Codex CLI."
   say "Package bootstrap: AGENTS.md plus .agents/skills/guild."
   say "Codex App local plugin link:"
   say "    codex://plugins/guild?marketplacePath=$CODEX_MARKETPLACE_MANIFEST"
   say "After installing/enabling Guild in Codex App, try /guild:status."
-  say "If the app slash parser rejects /guild before hooks run, invoke the Guild plugin or bundled guild skill explicitly."
+  say "If the app slash parser rejects /guild before hooks run, invoke the Guild Stack plugin or bundled guild skill explicitly."
   say "Use the bundled guild-run wrapper for structured Guild runs:"
   say "    guild-run --host codex --prompt \"your task\""
   say ""
@@ -710,9 +710,9 @@ install_pi_cli() {
   installed_any=1
   write_receipt pi-cli "$PI_PACKAGE_PATH"
   say ""
-  say "Guild package prepared for Pi CLI."
+  say "Guild Stack package prepared for Pi CLI."
   say "Package bootstrap: AGENTS.md plus .agents/skills/guild and pi-manifest.json."
-  say "Unsupported hooks and MCP are surfaced as Guild degradation receipts; memory falls back through .guild filesystem/BM25."
+  say "Unsupported hooks and MCP are surfaced as Guild Stack degradation receipts; memory falls back through .guild filesystem/BM25."
   say "Use the bundled guild-run wrapper for structured Guild runs:"
   say "    guild-run --host pi --prompt \"your task\""
   say ""
@@ -726,9 +726,9 @@ install_antigravity_cli() {
   installed_any=1
   write_receipt antigravity-cli "$ANTIGRAVITY_PACKAGE_PATH"
   say ""
-  say "Guild package prepared for Antigravity CLI."
+  say "Guild Stack package prepared for Antigravity CLI."
   say "Package bootstrap: AGENTS.md plus .agents/skills/guild, plugin.json, and antigravity-manifest.json."
-  say "Unsupported hooks and MCP are surfaced as Guild degradation receipts; memory falls back through .guild filesystem/BM25."
+  say "Unsupported hooks and MCP are surfaced as Guild Stack degradation receipts; memory falls back through .guild filesystem/BM25."
   say "Use the bundled guild-run wrapper for structured Guild runs:"
   say "    guild-run --host antigravity --prompt \"your task\""
   say ""
@@ -766,7 +766,7 @@ install_new_cli() {
   installed_any=1
   write_receipt "$host" "$NEW_CLI_PATH"
   say ""
-  say "Guild package prepared for $host."
+  say "Guild Stack package prepared for $host."
   say "Package bootstrap: AGENTS.md plus .agents/skills/guild and $host-manifest.json (installability: target)."
   say "This host has no native plugin manager — bootstrap through the bundled guild-run wrapper:"
   say "    $NEW_CLI_PATH/bin/guild-run --host $host --prompt \"your task\""
@@ -793,7 +793,7 @@ install_new_ide() {
   installed_any=1
   write_receipt "$host" "$IDE_PATH"
   say ""
-  say "Guild package for $host is the universal AGENTS.md package (adapter_binding: agents-file):"
+  say "Guild Stack package for $host is the universal AGENTS.md package (adapter_binding: agents-file):"
   say "  $IDE_PATH/AGENTS.md"
   say "  $IDE_PATH/.agents/skills/guild"
   say "Copy it into your $host project root (marker: $marker/). $host reads root AGENTS.md."
