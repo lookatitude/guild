@@ -34,7 +34,7 @@ export interface RecommendationRouting {
 
 export interface AnalysisFinding {
   id: string;
-  kind: "instruction_violation" | "repeated_failure" | "tool_gap" | "workflow_churn" | "prompt_inefficiency" | "telemetry_gap";
+  kind: "instruction_violation" | "repeated_failure" | "runaway_repetition" | "tool_gap" | "workflow_churn" | "prompt_inefficiency" | "telemetry_gap";
   severity: "low" | "medium" | "high";
   summary: string;
   evidence_refs: string[];
@@ -453,7 +453,7 @@ const RECOMMENDATION_KINDS = new Set<RecommendationKind>([
 ]);
 const CONFIDENCE_VALUES = new Set(["low", "medium", "high"]);
 const SEVERITY_VALUES = new Set(["low", "medium", "high"]);
-const FINDING_KINDS = new Set<string>(["instruction_violation", "repeated_failure", "tool_gap", "workflow_churn", "prompt_inefficiency", "telemetry_gap"]);
+const FINDING_KINDS = new Set<string>(["instruction_violation", "repeated_failure", "runaway_repetition", "tool_gap", "workflow_churn", "prompt_inefficiency", "telemetry_gap"]);
 const PLUGIN_RECOMMENDATION_KINDS = new Set<RecommendationKind>([
   "bug_report", "feature_request", "telemetry_gap", "workflow_engine_gap", "tooling_gap", "docs_sync_gap",
 ]);
@@ -2120,6 +2120,36 @@ function inputManifestHash(entries: readonly InputManifestEntry[]): string {
   return `sha256:${sha256(canonicalJson(entries))}`;
 }
 
+/**
+ * G04 R4: a decoder loop is ONE agent output that repeats a unit (a token or a
+ * phrase of up to RUNAWAY_MAX_UNIT code points, carrying a letter or digit) at
+ * least RUNAWAY_MIN_REPEATS times back to back over RUNAWAY_MIN_SPAN code
+ * points. The text is the Agent tool_call row's redacted result excerpt.
+ * Every period is scanned from every position (no match consumption), so a
+ * short inner repeat can never hide a longer loop. Returns the unit, or null.
+ * Distinct from repeated_failure, which counts repeated failed ACTIONS.
+ */
+const RUNAWAY_MAX_UNIT = 60;
+const RUNAWAY_MIN_REPEATS = 10;
+const RUNAWAY_MIN_SPAN = 200;
+function runawayRepetitionUnit(text: string): string | null {
+  const cp = Array.from(text);
+  for (let period = 1; period <= RUNAWAY_MAX_UNIT; period++) {
+    let runStart = 0;
+    for (let i = 0; i + period <= cp.length; i++) {
+      if (i + period < cp.length && cp[i] === cp[i + period]) continue;
+      // cp[runStart .. i + period) is periodic with this period.
+      const span = i + period - runStart;
+      if (span >= RUNAWAY_MIN_SPAN && span >= period * RUNAWAY_MIN_REPEATS) {
+        const unit = cp.slice(runStart, runStart + period).join("");
+        if (/[\p{L}\p{N}]/u.test(unit)) return unit;
+      }
+      runStart = i + 1;
+    }
+  }
+  return null;
+}
+
 function detectFindings(analysisId: string, events: LoadedEvent[], groups: readonly ActionGroup[]): AnalysisFinding[] {
   const findings: AnalysisFinding[] = [];
   const failures = new Map<string, ActionGroup[]>();
@@ -2139,7 +2169,19 @@ function detectFindings(analysisId: string, events: LoadedEvent[], groups: reado
     }
     if (groupHas(group, ["user_steering_received"])) steering.push(group);
   }
-  void events;
+  for (const event of events) {
+    const excerpt = event.value["event"] === "tool_call" && event.value["tool"] === "Agent" ? event.value["result_excerpt_redacted"] : null;
+    const unit = typeof excerpt === "string" ? runawayRepetitionUnit(excerpt) : null;
+    if (unit === null) continue;
+    findings.push(finding(
+      analysisId,
+      "runaway_repetition",
+      "high",
+      "An agent output repeated the same text back to back (decoder loop).",
+      [event.ref],
+      `runaway_repetition:Agent:${sha256(unit).slice(0, 12)}`,
+    ));
+  }
   for (const [signature, attempts] of [...failures.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     if (attempts.length >= REPEAT_THRESHOLD) {
       findings.push(finding(analysisId, "repeated_failure", "high", `The same failed action recurred ${attempts.length} times.`, attempts.flatMap((group) => group.refs), signature));

@@ -32,6 +32,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { durableGuildDir } from "../state";
+import { supersededWikiPages } from "./wiki-supersede";
 
 // ── Public types (mirror wiki-recall.ts WikiHit/WikiRecallResult, minus rank) ──
 
@@ -196,10 +197,14 @@ export function fsScan(
     return { source: "fs-scanner", hits: [], scannedDirs: existingDirs };
   }
 
+  // G12 R6: a superseded wiki page is never a hit.
+  const superseded = supersededWikiPages(path.join(guildDir, "wiki"));
+
   const scored: ScoredHit[] = [];
 
   for (const dir of existingDirs) {
     for (const file of walkFiles(dir, extensions)) {
+      if (superseded.has(file)) continue;
       const content = safeReadFile(file);
       if (content === null) continue;
       const lower = content.toLowerCase();
