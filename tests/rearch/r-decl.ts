@@ -29,6 +29,9 @@
  *   `surface_manifest:` sub-tree, de-indent one level, and parse only that clean,
  *   fully-quoted/folded sub-document — so the skills are actually checked.
  *
+ * PARSED VALUES: both halves compare as parsed YAML scalars (frontmatterValue), so
+ *   `"say \"hi\""` and `'say "hi"'` are the same value; only a value change is drift.
+ *
  * SCOPING: only the W7 exemplar set (CONVERTED). A live-surface file WITHOUT a
  *   `surface_manifest:` block is out of scope (W7 is a slice, not the full rework);
  *   a file LISTED here that has lost its block, or whose block drifts, is RED.
@@ -42,7 +45,7 @@
  * Prove: cd tests && npx tsx rearch/r-decl.ts --prove
  */
 import { REPO, RailResult, report, read, proveAssert } from "./_common";
-import { splitFrontmatter, readScalarField } from "../../scripts/lib/frontmatter";
+import { splitFrontmatter, parseFrontmatter, parseYaml } from "../../scripts/lib/frontmatter";
 import { validateSurfaceManifest, SurfaceManifest } from "../../scripts/lib/surface-manifest";
 import { CLAUDE_TIER_FALLBACK } from "../../scripts/lib/capability/tier-defaults";
 import * as yaml from "js-yaml";
@@ -101,6 +104,30 @@ export function extractManifestBlock(content: string): unknown {
   }
 }
 
+/**
+ * A top-level frontmatter field as its PARSED YAML value (undefined when absent).
+ * A YAML-clean frontmatter is parsed whole. A YAML-hostile one (the unquoted skill
+ * `description:` convention) falls back to that one column-0 line: a quoted scalar
+ * must parse to a string (else undefined, so a malformed value never matches); a
+ * plain scalar that does not parse to a string is its literal trimmed text.
+ */
+export function frontmatterValue(content: string, key: string): unknown {
+  const fm = parseFrontmatter(content);
+  if (fm !== null) return fm[key] === null ? undefined : fm[key];
+  const { frontmatter } = splitFrontmatter(content);
+  if (frontmatter === null) return undefined;
+  const prefix = key + ":";
+  for (const ln of frontmatter.split("\n")) {
+    if (!ln.startsWith(prefix)) continue;
+    const raw = ln.slice(prefix.length).trim();
+    if (raw === "") return undefined;
+    const parsed = parseYaml(raw);
+    if (raw[0] === '"' || raw[0] === "'") return typeof parsed === "string" ? parsed : undefined;
+    return typeof parsed === "string" ? parsed : raw;
+  }
+  return undefined;
+}
+
 /** True iff the body's dispatch wiring (anywhere in the prose) names `target`. */
 function bodyNamesDispatchTarget(body: string, target: string): boolean {
   // dispatch targets are referenced in the body as `architect-adr-writer`,
@@ -144,16 +171,16 @@ export function crossCheck(content: string, m: SurfaceManifest, file: string): D
   const push = (reason: string) => out.push({ file, reason });
 
   // name ≡ frontmatter name
-  const fmName = readScalarField(content, "name");
+  const fmName = frontmatterValue(content, "name");
   if (m.name !== fmName) push(`name "${m.name}" ≠ frontmatter name "${fmName}"`);
 
   // description ≡ frontmatter description
-  const fmDesc = readScalarField(content, "description");
+  const fmDesc = frontmatterValue(content, "description");
   if (m.description !== fmDesc) push(`description drifts from frontmatter description`);
 
   // when_to_use ≡ frontmatter when_to_use (only when the manifest declares one)
   if (m.when_to_use !== undefined) {
-    const fmWtu = readScalarField(content, "when_to_use");
+    const fmWtu = frontmatterValue(content, "when_to_use");
     if (m.when_to_use !== fmWtu) push(`when_to_use drifts from frontmatter when_to_use`);
   }
 
@@ -161,14 +188,14 @@ export function crossCheck(content: string, m: SurfaceManifest, file: string): D
   if (m.type !== undefined) {
     if (m.kind === "agent") {
       // agent tier is derived from the `model:` frontmatter
-      const model = readScalarField(content, "model");
-      const expectedTier = model ? MODEL_TO_TIER[model] : undefined;
+      const model = frontmatterValue(content, "model");
+      const expectedTier = typeof model === "string" ? MODEL_TO_TIER[model] : undefined;
       if (m.type !== expectedTier) {
         push(`tier "${m.type}" ≠ tier derived from model "${model}" (${expectedTier ?? "unknown"})`);
       }
     } else {
       // skill type ≡ frontmatter type
-      const fmType = readScalarField(content, "type");
+      const fmType = frontmatterValue(content, "type");
       if (m.type !== fmType) push(`type "${m.type}" ≠ frontmatter type "${fmType}"`);
     }
   }
@@ -370,6 +397,38 @@ function prove(): void {
     proveAssert(
       f.some((x) => x.reason.includes("name")),
       "CONTROL: a manifest name ≠ frontmatter name TRIPS",
+    );
+  }
+
+  // CONTROL 5 — quoting-only difference is CLEAN; an escape that changes the value TRIPS.
+  {
+    const agentWith = (mf: string) =>
+      [
+        "---",
+        "name: demo-agent",
+        'description: "say \\"hi\\" to the cell\'s lead"',
+        "model: opus",
+        "surface_manifest:",
+        "  schema_version: guild.surface_manifest.v1",
+        "  kind: agent",
+        "  name: demo-agent",
+        `  description: ${mf}`,
+        "  type: powerful",
+        "---",
+        "# demo-agent",
+        "",
+      ].join("\n");
+    const same = agentWith(`'say "hi" to the cell''s lead'`);
+    const ms = validateSurfaceManifest(extractManifestBlock(same));
+    proveAssert(
+      ms.ok && crossCheck(same, ms.manifest!, "demo-agent").length === 0,
+      "CONTROL: scalars that differ only in quoting/escaping parse equal (CLEAN)",
+    );
+    const drift = agentWith(`'say \\"hi\\" to the cell''s lead'`);
+    const md = validateSurfaceManifest(extractManifestBlock(drift));
+    proveAssert(
+      md.ok && crossCheck(drift, md.manifest!, "demo-agent").some((x) => x.reason.includes("description")),
+      "CONTROL: a single-quoted literal backslash is a different parsed value (TRIPS)",
     );
   }
 
