@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v3 Plugin-Complete P6 Receipt (B04)</title>
+<style>
+:root { --bg:#ffffff; --fg:#1a1d21; --muted:#5b6470; --line:#e3e7ec; --ok:#0a7d4f; --bad:#b42318; --warn:#9a6700; --accent:#2155cd; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#14171a; --fg:#e8eaed; --muted:#9aa4af; --line:#2a2f35; --ok:#4cc38a; --bad:#ff7b72; --warn:#e3b341; --accent:#7aa2ff; } }
+body { background:var(--bg); color:var(--fg); font:15px/1.55 -apple-system,Segoe UI,sans-serif; margin:0; padding:2rem 16px; }
+main { max-width:960px; margin:0 auto; }
+h1 { font-size:1.4rem; margin:0 0 .3rem; } h2 { font-size:1.05rem; margin:1.8rem 0 .5rem; }
+table { border-collapse:collapse; width:100%; font-size:.9rem; margin:.4rem 0; }
+th,td { text-align:left; padding:.35rem .6rem; border-bottom:1px solid var(--line); vertical-align:top; }
+th { color:var(--muted); font-weight:600; }
+code { font-size:.85em; background:color-mix(in srgb, var(--line) 45%, transparent); padding:.1em .3em; border-radius:4px; overflow-wrap:anywhere; }
+pre { font-size:.8rem; background:color-mix(in srgb, var(--line) 35%, transparent); padding:.7rem; border-radius:6px; overflow-x:auto; }
+.ok { color:var(--ok); font-weight:600; } .bad { color:var(--bad); font-weight:600; } .warn { color:var(--warn); font-weight:600; }
+.box { border:1px solid var(--line); border-left:4px solid var(--accent); padding:.6rem .9rem; border-radius:6px; margin:.8rem 0; }
+.box.bad { border-left-color:var(--bad); } .box.warn { border-left-color:var(--warn); }
+p.meta, small { color:var(--muted); }
+details { margin:.4rem 0; } summary { cursor:pointer; color:var(--accent); }
+</style>
+</head>
+<body>
+<main>
+<h1>v3 plugin-complete P6 receipt — B04</h1>
+<p class="meta">Run <code>run-20261017-160817-guild</code> · team B · eval-engineer · 2026-10-18 · candidate <code>1fc993e7</code> checked out disposably at <code>/private/tmp/guild-b04-candidate</code> · Darwin 27.0.0 arm64, node v26.12.0, bun 1.4.2. Evidence files: <code>.guild/runs/run-20261017-160817-guild/evidence/B04/</code> in the umbrella run record.</p>
+
+<h2 id="verdict">Verdict</h2>
+<div class="box">
+<p><span class="ok">P6 packaged evidence: established</span> for the surfaces it exercises. The committed payload of <code>1fc993e7</code> ran end to end under plain <code>node</code>, with <code>bun</code>/<code>tsx</code>/<code>npx</code> resolving only to failing shims. The real hook bundles produced the run. The compiled <code>run-analysis.js</code> analyzed, compared, inspected and decided. All four required refusal controls refused.</p>
+</div>
+<div class="box bad">
+<p><span class="bad">Plugin-complete (P1–P5): rejected.</span> 16 of the 35 semantic classes have no production emitter (<code>unwired</code>). 2 more are wired but have no packaged proof. Under the C-DETECTORS coverage gate, an <code>unwired</code> row blocks P2/P3/P4/plugin-complete. The packaged analysis shows the same thing: 7 of 12 detectors are <code>unobservable</code> or <code>ambiguous</code> on a real run, and <code>completeness.missing = ["loop"]</code>. These gaps stay gaps. No host observation was used to close them.</p>
+</div>
+<div class="box warn">
+<p><span class="warn">Review gate: see <a href="#review">Independent review</a>.</span> The required <code>security-auditor</code> review RAN on 2026-10-18 and returned <b>PASS</b> (6 non-blocking notes N1&ndash;N6; evidence/B04/security-review.md). D and E remain blocked on the plugin-complete REJECT itself, not on the review.</p>
+</div>
+
+<h2 id="identity">Bound identities (AC4)</h2>
+<table>
+<tr><th>Item</th><th>Value</th><th>How verified</th></tr>
+<tr><td>Candidate commit</td><td><code>1fc993e7a1f8bdd7e5262a5ef82b50751b420191</code></td><td>Disposable worktree, <code>git rev-parse HEAD</code>; tree clean apart from the copied test.</td></tr>
+<tr><td>Native payload identity</td><td><code>sha256:9a6a1af4d68c77641fc8f5023c371db17df05b9bc7e94b4ac9f07ca16599c96c</code></td><td>Recomputed with <code>computeTrackedNativeClaudePayloadDigest</code> and <code>assertNativeClaudePackageIdentityCurrent(…, "3.1.0-beta.1")</code>, before and after all runs. <span class="ok">Match.</span></td></tr>
+<tr><td>Bundle hashes</td><td><code>run-analysis.js 807d9d8e…</code>, <code>telemetry-api.js d4e19219…</code>, <code>lifecycle-api.js 6d24761e…</code>, <code>adapters-api.js 84f37b51…</code>, <code>pre-tool-use.js 079376da…</code>, <code>post-tool-use.js 18d692f5…</code></td><td>Equal to C07 <code>identity.txt</code>.</td></tr>
+<tr><td>Team B source commits</td><td>B01 <code>85c581fa</code> · B01H <code>f610d24c</code> · B02 <code>bec54283</code> · B03 <code>11c9c746</code></td><td>All ancestors of <code>1fc993e7</code>. Analyzer, hook and CLI sources plus the B02 fixtures are byte-identical between <code>11c9c746</code> and <code>1fc993e7</code>. Only <code>run-lifecycle.ts</code> (C06E <code>db37b6f8</code>) and <code>run-analysis-cli.test.ts</code> (C01) moved.</td></tr>
+<tr><td>C07 timing receipt</td><td><code>plugin/.guild/artifacts/reports/v3-final-package-timing.html</code> on <code>feature/v3c-team-c-runtime-delivery</code> @ <code>545466e9</code>, sha256 <code>1e8803be…8e033fea</code></td><td>Read. Its tables match the preserved C07 oracle and node logs. See <a href="#c07">C07 gap</a>.</td></tr>
+<tr><td>B04 test</td><td><code>tests/integration/run-analysis-installed.test.ts</code>, sha256 <code>1b4e4deab029…</code></td><td>Same bytes in the Team B worktree and the candidate.</td></tr>
+</table>
+
+<h2 id="baseline">Baseline notes</h2>
+<ul>
+<li><b>C06E trim.</b> The packaged CLI surface is post-trim (<code>db37b6f8</code> is an ancestor of the candidate). All 9 functions and 3 types that <code>scripts/run-analysis.ts</code> imports are still exported from the telemetry index and resolve at runtime. <code>phaseVisitSpanId</code> is no longer exported. B04 adds no index export. (<code>c06e-trim-fold.txt</code>)</li>
+<li><b>Dependencies.</b> The candidate has no <code>node_modules</code>. I copied git-ignored dependency folders in: lock-matched copies from the Team C worktree for <code>scripts</code>, <code>hooks</code>, both MCP servers and <code>tests</code>; the main checkout for root and <code>hooks/agent-team</code>. Three earlier <code>compile --check</code> attempts failed on environment only and are kept: missing deps, main-branch deps with different locks, and symlinked deps (esbuild writes the symlink real path into module comments). No tracked file was edited.</li>
+<li><b>Sandbox.</b> Each scenario copies <code>runtime/</code>, <code>hooks/dist/</code> and <code>.claude-plugin/</code> into a package folder outside the repo. <code>PATH</code> is only a shim folder (failing <code>tsx</code>/<code>bun</code>/<code>npx</code> that write a sentinel) plus a folder that holds only a <code>node</code> symlink. <code>NODE_PATH</code> is empty and <code>HOME</code> is the sandbox.</li>
+</ul>
+
+<h2 id="checks">Checks</h2>
+<table>
+<tr><th>#</th><th>Where</th><th>Command</th><th>Result</th></tr>
+<tr><td>1</td><td>candidate</td><td><code>rtk proxy bun test --isolate tests/integration/run-analysis-installed.test.ts</code></td><td><span class="ok">exit 0</span> · 13 pass / 0 fail / 0 skip · <code>check-installed-candidate.txt</code>, <code>.junit.xml</code></td></tr>
+<tr><td>2</td><td>candidate</td><td><code>rtk proxy bun scripts/compile.ts --check</code></td><td><span class="ok">exit 0</span> · "104 outputs match a fresh compile; no stray files" · <code>check-compile.txt</code></td></tr>
+<tr><td>3</td><td>Team B worktree @ <code>11c9c746</code></td><td>same as 1</td><td><span class="ok">exit 0</span> · 1 skip, named <code>B04_PAYLOAD_ABSENT: committed payload missing runtime/scripts/run-analysis.js at 11c9c746</code> · <code>check-installed-teamb.txt</code></td></tr>
+<tr><td>+</td><td>disposable @ <code>c6dfe775</code></td><td>B01/B01H/B02/B03 suites (<code>run-analysis.test.ts</code>, <code>trace-analysis-v2.test.ts</code>, <code>analysis-production-events.test.ts</code>, <code>run-analysis-cli.test.ts</code>)</td><td><span class="ok">exit 0</span> · 214 pass. At <code>1fc993e7</code> the same command loads only 2 of the 4 files (2 import errors), see F2 · <code>check-source-fixtures.txt</code></td></tr>
+<tr><td>+</td><td>disposable @ <code>1fc993e7</code></td><td>tamper controls M0–M4</td><td>M0 13 pass · M1 working-tree edit <span class="bad">fails</span> <code>B04_PAYLOAD_STALE</code> · M2 staged edit <span class="bad">fails</span> digest mismatch · M3 old deny hook <span class="bad">fails</span> stale · M4 old deny hook + rewritten ID file: gate passes, 3 named cases <span class="bad">fail</span> (AC4 identity, producers <code>tool_call_denied</code>, analyze denied count). M0–M3 ran test revision <code>c4a7e5db…</code>, M4 ran <code>459a542f…</code>; the gate code is the same in the final revision · <code>negative-control-mutants.txt</code></td></tr>
+</table>
+
+<h2 id="scenarios">Scenarios and controls (AC1, AC2)</h2>
+<table>
+<tr><th>Case</th><th>What runs (all under plain node)</th><th>Observed</th></tr>
+<tr><td>isolation</td><td><code>command -v bun|tsx|npx|node</code> in the sandbox env; sentinel check at the end</td><td>bun/tsx/npx resolve to the shims; node resolves to the node-only folder; sentinel never written</td></tr>
+<tr><td>AC1 producers</td><td><code>hooks/dist/run-trace.js start</code>, then capture-telemetry, run-trace-start, pre/post-tool-use (2 failing Bash, lane wiki write, AskUserQuestion, Agent, typed handoff Write), codex-review round, SubagentStop, run-trace-close</td><td>17 classes emitted. Every typed row passes <code>validateGuildTraceEvent</code> and carries the run id. 2 <code>tool_call_failed</code> rows: same signature, different spans. Denied signature <code>policy:Write:lane_wiki_write</code>.</td></tr>
+<tr><td>AC1 analyze</td><td><code>runtime/scripts/run-analysis.js run analyze &lt;id&gt;</code> twice</td><td><code>cache: recomputed</code>, then <code>hit</code> with <code>written: null</code>. <code>repeated_failure</code> finding; <code>repeated_mistake</code> observed on the real failure signature; <code>tool_coverage</code> failed 2 / denied 1; no <code>tool_gap</code> finding and no <code>create_skill</code> recommendation from the single denial.</td></tr>
+<tr><td>step 4 unknown stays unknown</td><td>same analysis</td><td><code>eligible: false</code>, <code>telemetry_gap</code> finding, <code>completeness.missing = ["loop"]</code>. steering, knowledge_memory, outcome_quality, usage_outlier are <code>unobservable</code> with a reason. instruction aggregate is not <code>satisfied</code>. Token/cost usage is labelled <code>unobserved</code>, not a measured zero.</td></tr>
+<tr><td>AC1 inspect</td><td><code>artifact inspect run &lt;id&gt;</code></td><td><code>state: current</code>, exact <code>source_hash</code>/<code>input_hash</code>; byte snapshot of the project unchanged</td></tr>
+<tr><td>AC1 compare</td><td><code>run compare A B</code>, then <code>artifact inspect comparison</code></td><td>comparison written with <code>diagnostics.dimensions</code>; inspects <code>current</code></td></tr>
+<tr><td>AC1 recommendation</td><td><code>recommendation decide … accept --expected-analysis-id … --expected-input-hash …</code> for both recs, then <code>status … implemented</code></td><td>effects <code>plugin_draft_written</code> + <code>project_proposal_queued</code>, then <code>status_recorded</code>. Only <code>.guild/recommendations/**</code> changed. Draft says "external filing has not occurred".</td></tr>
+<tr><td>AC2 missing bundle</td><td>package without <code>run-analysis.js</code></td><td>non-zero exit, stderr names <code>run-analysis.js</code>, no <code>.guild/analysis</code>, no fallback (sentinel absent)</td></tr>
+<tr><td>AC2 malformed trace</td><td>append <code>{not json</code> and a cross-run row; analyze; corrupt <code>analysis.json</code>; inspect</td><td>analysis <code>eligible: false</code> with <code>trace parseability</code> and <code>trace validity</code> missing; the bad lines are never cited. Inspect: exit 1, <code>state: refused</code>, <code>reason: malformed_artifact</code>, no writes.</td></tr>
+<tr><td>AC2 invalid recommendations</td><td>unknown id · <code>../escape</code> source · status <code>bogus</code> · unauthorized <code>proposed → implemented</code> · stale expected context · corrupt source line</td><td>exit 1 "was not found" · exit 1 "safe path component" · exit 2 "invalid command" · exit 1 "not authorized" · exit 1 <code>expected_context_changed</code> · exit 1 "is not valid JSON". Tree unchanged apart from the planted corrupt line.</td></tr>
+<tr><td>AC2 failed transaction</td><td>live lock file held; then <code>chflags uchg queue.jsonl</code> and decide a project rec; clear flag; decide again</td><td>Held lock: exit 1 "locked by another writer", no writes. Mid-write: the source rewrite lands, the queue rename fails, exit 1 <code>recommendation transaction failed and recovery is pending: … EPERM</code>. Source, queue and activity are byte-identical; only <code>.transaction.json</code> stays. The next decide recovers, succeeds (<code>queued</code>) and removes the journal. Darwin-only control; other platforms fail it loudly (<code>B04_TXN_PLATFORM</code>).</td></tr>
+</table>
+<details><summary>Real command output from one packaged scenario (<code>packaged-scenario-output.txt</code>)</summary>
+<pre>== $ node pkg/runtime/scripts/run-analysis.js run analyze run-…-build
+{ "ok": true, "eligible": false, "cache": "recomputed", "reason": "missing", "written": { json, markdown, recommendations } }   exit=0
+== analysis: eligible=False findings=['telemetry_gap', 'repeated_failure']
+   completeness.missing=['loop']
+   clarification ambiguous (no_declared_clarification_constraint) · instruction_following ambiguous (no_instruction_declaration)
+   knowledge_memory unobservable (no_lookup_evidence) · outcome_quality unobservable (no_typed_outcome_records)
+   prompt_action_latency unobservable (no_correlated_prompt_action) · recommendation_scope ambiguous (unowned_action_failure)
+   redundant_prompt unobservable (missing_context_hash) · repeated_mistake observed · steering unobservable (no_steering_classification)
+   tool_coverage observed · usage_outlier unobservable (requires_comparison_cohort) · workflow_churn observed
+   recommendations=[('plugin','telemetry_gap'), ('project','clarify_prompt_contract')]
+== $ node pkg/runtime/scripts/run-analysis.js artifact inspect run run-…-build
+{ "ok": true, "state": "current", … "eligible": true, "reason": null }   exit=0
+== shim sentinel present: no</pre></details>
+
+<h2 id="producers">Producer matrix at the candidate (35 classes)</h2>
+<p><small>Dispositions: B01 matrix plus B01H wiring. "Packaged" means emitted by the committed hook bundles in the B04 scenario.</small></p>
+<table>
+<tr><th>Disposition</th><th>Classes</th><th>Packaged proof</th></tr>
+<tr><td class="ok">wired (17)</td><td>run_started, run_attachment_resolved, config_snapshot_written, phase_entered, phase_concluded, run_closed, prompt_received, tool_call_started, tool_call_finished, tool_call_failed, tool_call_denied, clarifying_question_asked, agent_dispatched, agent_prompt_sent, agent_handoff_written, agent_response_received, gate_concluded</td><td class="ok">yes, all 17 (B04-AC1 producers)</td></tr>
+<tr><td class="warn">wired, fixture pending (2)</td><td>knowledge_lookup_started, knowledge_lookup_result (<code>recall()</code>, not a hook path)</td><td class="warn">no packaged proof</td></tr>
+<tr><td class="bad">unwired (16)</td><td>prompt_normalized, implementation_authorized, memory_lookup_started, memory_lookup_result, loop_entered, loop_iteration, loop_exited, loop_cap_hit, gate_started, instruction_violation_detected, user_steering_received, correction_applied, repeated_failure_detected, recommendation_created, recommendation_routed, bug_report_prompted</td><td class="bad">none exists; blocks plugin-complete</td></tr>
+<tr><td>host_unavailable / unknown</td><td>none claimed</td><td>—</td></tr>
+</table>
+
+<h2 id="detectors">C-DETECTORS rows (12)</h2>
+<p><small>Golden fixtures: B02 positive/negative/unobservable rows in <code>run-analysis.test.ts</code> with <code>__fixtures__/run-analysis/scenarios.ts</code>. These are hand-authored logs. C-DETECTORS says they test the consumer but cannot prove production emitter coverage. They pass at <code>c6dfe775</code> (same source and generated bytes as the candidate).</small></p>
+<table>
+<tr><th>Detector</th><th>Golden rows</th><th>Packaged real-run state</th><th>Plugin-complete</th></tr>
+<tr><td>repeated_mistake</td><td>pass</td><td class="ok">observed</td><td class="warn">partial: failed-tool source proved on a real run; correction_applied source unwired</td></tr>
+<tr><td>tool_coverage</td><td>pass</td><td class="ok">observed</td><td class="warn">partial: failure/denial counts and the one-denial-is-not-a-gap negative proved on a real run; the gap-candidate positive needs typed missing-capability owner evidence, which has no producer</td></tr>
+<tr><td>workflow_churn</td><td>pass</td><td class="ok">observed</td><td class="warn">partial: loop cap-hit inputs unwired</td></tr>
+<tr><td>recommendation_scope</td><td>pass</td><td>ambiguous (unowned_action_failure)</td><td class="warn">consumer proved; ownership inputs need a contract (B02 followup)</td></tr>
+<tr><td>clarification</td><td>pass</td><td>ambiguous (no declared constraint)</td><td class="bad">blocked: no declaration producer</td></tr>
+<tr><td>instruction_following</td><td>pass</td><td>ambiguous</td><td class="bad">blocked: <code>guild.instruction_evidence.v1</code> has no producer</td></tr>
+<tr><td>steering</td><td>pass</td><td>unobservable</td><td class="bad">blocked: user_steering_received unwired</td></tr>
+<tr><td>redundant_prompt</td><td>pass</td><td>unobservable (missing_context_hash)</td><td class="bad">blocked: prompt-context sidecar has no producer</td></tr>
+<tr><td>prompt_action_latency</td><td>pass</td><td>unobservable</td><td class="bad">blocked: no correlated prompt→action producer</td></tr>
+<tr><td>knowledge_memory</td><td>pass</td><td>unobservable</td><td class="bad">blocked: memory lookups unwired, knowledge fixture pending</td></tr>
+<tr><td>outcome_quality</td><td>pass</td><td>unobservable</td><td class="bad">blocked: typed outcome records have no producer</td></tr>
+<tr><td>usage_outlier</td><td>pass</td><td>unobservable (needs cohort; token usage unobserved)</td><td class="bad">blocked: no token-usage producer on the hook path</td></tr>
+</table>
+
+<h2 id="findings">Findings</h2>
+<table>
+<tr><th>ID</th><th>Finding</th><th>Route</th></tr>
+<tr><td>F1</td><td>Plugin-complete is rejected. 16 unwired classes and 2 unproven ones leave every one of the 12 detector rows blocked or partial (table above). No row is fully proved through real producers.</td><td>Producer owners per the B01 matrix; several are <code>no_owner_escalated</code>.</td></tr>
+<tr><td>F2</td><td>The native ID hashes the whole tracked tree, tests included. C05/C07 say <code>c6dfe775</code> has "zero payload bytes". That is true for generated bytes, but the native ID moves: <code>c6dfe775 → 81c83dfd…</code>, <code>545466e9 → 8172b8f7…</code>. Both still declare <code>9a6a1af4…</code>, so both are ID-stale. Also, at the accepted <code>1fc993e7</code>, the B01 and B02 golden suites do not load (<code>DETECTOR_IDS</code>, <code>ANALYSIS_CLASS_REQUIREMENTS</code> no longer exported). So the fixtures bind to the same source and generated bytes, not to one native ID. (<code>identity-chain.txt</code>, <code>check-source-fixtures.txt</code>)</td><td>Lead/C05: choose one. Accept generated-bytes identity as the binding, or regenerate the ID on a commit that includes <code>c6dfe775</code> (new C05 attempt; C07 and B04 rerun).</td></tr>
+<tr><td>F3</td><td>Gate-token contract mismatch. capture-telemetry accepts <code>loop_gate "G-lane:T1"</code> and writes a mirror row. The analyzer rejects that mirror (<code>validCodexGate</code> wants <code>G-lane:T&lt;n&gt;-&lt;slug&gt;</code>), so the whole run loses <code>trace validity</code>. Seen in <code>packaged-scenario-output-gate-G-lane_T1.txt</code>. The B04 test uses the contract form.</td><td>Telemetry/hook owner</td></tr>
+<tr><td>F4</td><td><code>artifact inspect</code> reports <code>eligible: true</code> while <code>analysis.eligible</code> is <code>false</code> (B03's stated meaning: current + supported diagnostics). A browser must not show it as analysis eligibility.</td><td>Benchmark UI (team D/E)</td></tr>
+<tr><td>F5</td><td>Snapshot identity depends on <code>&lt;plugin&gt;/.claude-plugin/plugin.json</code> next to <code>hooks/dist</code>. Without it, version/ref are <code>unknown</code> and the analyzer drops the snapshot (<code>packaged-scenario-output-no-manifest.txt</code>). Correct fail-closed; a host package without the manifest degrades every run.</td><td>Info; host-package owners</td></tr>
+</table>
+
+<h2 id="c07">C07 evidence gap (recorded, not cured)</h2>
+<div class="box warn">
+<p>The dispatch brief says <code>team-c-C07.md</code> reads "r3: see evidence" and that <code>evidence/C07/</code> has no round-3 verdict. The files show something slightly different. I record both and decide nothing.</p>
+<ul>
+<li>The handoff text is <code>"codex_review": "RAN — r1 + r2: 6 findings, all remediated; r3: SATISFIED"</code>.</li>
+<li><code>evidence/C07/codex-review-r3.txt</code> exists. It is 32 bytes: <code>SATISFIED</code>, a blank line, <code>[exited with code 0]</code>. It has no rationale and no list of the findings it closes. Its mtime (00:25) is the same as r1 and r2.</li>
+<li><code>evidence/C07/checks.txt</code> (00:20) gives different p95 numbers (session_start 8.4/10.0/8.4, pair 117.2/137.9/115.4, after-edit 207.1) from the handoff, report and raw logs (10.4/9.0/11.4; 127.7/145.8/151.4; 203.5/203.8/212.3). The report agrees with the logs.</li>
+</ul>
+<p>Open evidence gap on C07: the round-3 verdict has no substance a reader can check, and one C07 summary file is stale. My review below is separate.</p>
+</div>
+
+<h2 id="review">Independent review</h2>
+<div class="box warn" id="review-result">
+<p><b>Codex adversarial review (G-lane, self-build): RAN, 3 rounds, SATISFIED.</b> r1: 3 findings (named skip off-payload; AC4 silent pass off-commit; <code>tool_coverage</code> overclaim). AC4 now skips by name off the accepted commit. The three over-claimed detector rows are now partial, and a real-run negative was added. The skip on a tree without the payload was kept, as the brief asks; Codex accepted it in r2. r2: 1 finding (stale hashes in this receipt), fixed. r3: no blocking findings, <code>## SATISFIED</code>. Files: <code>codex-review-r1.txt</code> <code>5d34223a256e</code>, <code>codex-review-r2.txt</code> <code>ee920531a0b9</code>, <code>codex-review-r3.txt</code> <code>7005ec3115df</code>.</p>
+<p><b>security-auditor review (task <code>reviewer_role</code>):</b> RAN 2026-10-18, fresh context, read-only &mdash; VERDICT: PASS. Notes N1&ndash;N6 non-blocking (N1: check 3 is a named skip, never acceptance evidence; N4: mid-write rollback control is darwin-only; N5: lazy-chunk missing-bundle path uncovered). Full text: run evidence B04/security-review.md. The codex adversarial review ran 3 rounds &rarr; SATISFIED (B04/codex-review-r1..r3.txt). D/E stay blocked on the plugin-complete REJECT recorded above.</p>
+</div>
+
+<h2 id="evidence">Evidence files</h2>
+<table>
+<tr><th>File</th><th>sha256 (12)</th></tr>
+<tr><td>check-installed-candidate.txt</td><td><code>702112152ea0</code></td></tr>
+<tr><td>check-installed-candidate.junit.xml</td><td><code>c42586bd9dae</code></td></tr>
+<tr><td>check-compile.txt (attempts 1–3 kept beside it)</td><td><code>7b75d6e3d7df</code></td></tr>
+<tr><td>check-installed-teamb.txt</td><td><code>db4bbefc4113</code></td></tr>
+<tr><td>check-source-fixtures.txt</td><td><code>a01f7f2cc749</code></td></tr>
+<tr><td>identity-verification.txt</td><td><code>5a369927c85b</code></td></tr>
+<tr><td>identity-chain.txt</td><td><code>dfb7853cfa2c</code></td></tr>
+<tr><td>codex-review-r1.txt</td><td><code>5d34223a256e</code></td></tr>
+<tr><td>codex-review-r2.txt</td><td><code>ee920531a0b9</code></td></tr>
+<tr><td>negative-control-mutants.txt</td><td><code>2bf071a02e72</code></td></tr>
+<tr><td>packaged-scenario-output.txt</td><td><code>f9a67d1140da</code></td></tr>
+<tr><td>c06e-trim-fold.txt</td><td><code>7ec62a57fdd7</code></td></tr>
+</table>
+</main>
+</body>
+</html>
