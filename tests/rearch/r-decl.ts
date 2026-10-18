@@ -107,11 +107,12 @@ export function extractManifestBlock(content: string): unknown {
 /**
  * A top-level frontmatter field as its PARSED YAML value (undefined when absent).
  * A YAML-clean frontmatter is parsed whole. A YAML-hostile one (the unquoted skill
- * `description:` convention) falls back to that key's own entry: the shortest slice
- * from its column-0 line to a later column-0 line that parses to exactly that one key
- * (so indented and quoted column-0 continuations are kept). Only a single-line plain
- * scalar that YAML rejects is taken as its literal trimmed text; any other
- * unparseable entry is undefined, so it never matches a manifest value.
+ * `description:` convention) is rebuilt entry by entry: each entry is the shortest
+ * run of lines up to a column-0 line that still parses after the entries before it.
+ * A line no run can parse must be a single-line `key: plain text` entry; it is
+ * re-emitted as a JSON (= YAML double-quoted) string. The rebuilt document is then
+ * parsed whole, so quoted keys, anchors and duplicate keys keep YAML semantics.
+ * Anything else is undefined, so it never matches a manifest value.
  */
 export function frontmatterValue(content: string, key: string): unknown {
   const fm = parseFrontmatter(content);
@@ -119,25 +120,38 @@ export function frontmatterValue(content: string, key: string): unknown {
   const { frontmatter } = splitFrontmatter(content);
   if (frontmatter === null) return undefined;
   const lines = frontmatter.split("\n");
-  const start = lines.findIndex((ln) => ln.startsWith(key + ":"));
-  if (start === -1) return undefined;
-  let end = start + 1;
-  while (end < lines.length && (lines[end].trim() === "" || /^[ \t]/.test(lines[end]))) end++;
-  for (let e = end; e <= lines.length; e++) {
-    if (e < lines.length && (lines[e].trim() === "" || /^[ \t]/.test(lines[e]))) continue;
-    const entry = parseYaml(lines.slice(start, e).join("\n"));
-    if (typeof entry === "object" && entry !== null && !Array.isArray(entry)) {
-      const keys = Object.keys(entry);
-      if (keys.length === 1 && keys[0] === key) {
-        const v = (entry as Record<string, unknown>)[key];
-        return v === null ? undefined : v;
-      }
+  const isCont = (l: string) => l.trim() === "" || /^[ \t]/.test(l);
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (isCont(lines[i]) || lines[i].startsWith("#")) {
+      out.push(lines[i++]);
+      continue;
     }
+    let taken = -1;
+    for (let e = i + 1; e <= lines.length && taken === -1; e++) {
+      if (e < lines.length && isCont(lines[e])) continue;
+      if (parseYaml([...out, ...lines.slice(i, e)].join("\n")) !== null) taken = e;
+    }
+    if (taken !== -1) {
+      out.push(...lines.slice(i, taken));
+      i = taken;
+      continue;
+    }
+    const ln = lines[i];
+    const colon = ln.indexOf(":");
+    const k = ln.slice(0, colon);
+    const raw = ln.slice(colon + 1).trim();
+    const next = lines.slice(i + 1).find((l) => l.trim() !== "");
+    if (colon <= 0 || k.trim() !== k || raw === "" || (next !== undefined && /^[ \t]/.test(next))) return undefined;
+    if ("\"'".includes(k[0]) || "\"'[{|>&*!#%@`".includes(raw[0])) return undefined;
+    out.push(`${k}: ${JSON.stringify(raw)}`);
+    i++;
   }
-  while (end > start + 1 && lines[end - 1].trim() === "") end--;
-  const raw = lines[start].slice(key.length + 1).trim();
-  if (end > start + 1 || raw === "" || "\"'[{|>&*!".includes(raw[0])) return undefined;
-  return raw;
+  const doc = parseYaml(out.join("\n"));
+  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) return undefined;
+  const v = (doc as Record<string, unknown>)[key];
+  return v === null ? undefined : v;
 }
 
 /** True iff the body's dispatch wiring (anywhere in the prose) names `target`. */

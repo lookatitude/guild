@@ -86,4 +86,21 @@ describe("C3 — R-DECL prose-≡ uses parsed YAML values", () => {
   test("fallback refuses a multi-line entry YAML rejects", () => {
     expect(frontmatterValue(`---\n${HOSTILE}when_to_use: a: b\n  c\n---\n`, "when_to_use")).toBeUndefined();
   });
+
+  test("fallback: a key line inside an earlier quoted value is not that key", () => {
+    const doc = `---\n${HOSTILE}notes: "note\nwhen_to_use: same\n"\nwhen_to_use: changed\n---\n`;
+    expect(frontmatterValue(doc, "when_to_use")).toBe("changed");
+  });
+
+  test("fallback: a quoted key is the same key", () => {
+    expect(frontmatterValue(`---\n${HOSTILE}"when_to_use": same\n---\n`, "when_to_use")).toBe("same");
+  });
+
+  test("fallback: an alias resolves against an earlier anchor", () => {
+    expect(frontmatterValue(`---\n${HOSTILE}usage: &use same\nwhen_to_use: *use\n---\n`, "when_to_use")).toBe("same");
+  });
+
+  test("fallback: a duplicate key is undefined, never first- or last-wins", () => {
+    expect(frontmatterValue(`---\n${HOSTILE}when_to_use: a\nwhen_to_use: b\n---\n`, "when_to_use")).toBeUndefined();
+  });
 });
