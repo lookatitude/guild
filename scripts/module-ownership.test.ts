@@ -89,8 +89,9 @@ describe("src/modules ownership manifests", () => {
     expect(result).toEqual({ ok: true, missing: [], duplicate: [], errors: [] });
 
     // Anti-vacuity floors: the rail is checking the real current surface, not an
-    // empty fixture or a narrow sample.
-    expect(inventory.commands.length).toBeGreaterThanOrEqual(20);
+    // empty fixture or a narrow sample. (13-command surface per KTD69: the 11
+    // print-only aliases were deleted post-v3.0.0 stable cut — C06.)
+    expect(inventory.commands.length).toBeGreaterThanOrEqual(13);
     // T03 folded 111 SKILL.md files into 17 indexed assemblers + 58 specialist
     // starter playbooks + the dashboard playbook (KTD25/KTD59); the chapters are
     // `references/*.md` and are no longer inventory entries. 76 is the new floor.
