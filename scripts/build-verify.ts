@@ -46,7 +46,7 @@
  * rather than silently inventing a floor.
  *
  * Usage:
- *   npx tsx build-verify.ts [--refresh-receipts] [--generated-at YYYY-MM-DD]
+ *   npx tsx build-verify.ts [--refresh-receipts [--isolated-install]] [--generated-at YYYY-MM-DD]
  *   npm run build:verify            (from plugin/scripts)
  *   npm run build:verify:refresh    (operator box only)
  */
@@ -234,6 +234,8 @@ function refreshReceipts(): number {
   const smokeArgs = ["tsx", join(SCRIPTS_DIR, "host-smoke.ts"), "--all-reachable"];
   const capturedAt = arg("--generated-at");
   if (capturedAt) smokeArgs.push("--captured-at", capturedAt);
+  // Real install + activation into an OS-temp config root (claude + codex only).
+  if (process.argv.includes("--isolated-install")) smokeArgs.push("--isolated-install");
   const res = spawnSync("npx", smokeArgs, { cwd: SCRIPTS_DIR, stdio: "inherit" });
   if (res.error) {
     console.error(`[build:verify] refresh-receipts spawn error: ${res.error.message}`);

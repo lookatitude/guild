@@ -32,6 +32,7 @@
       "lib/host-router",
       "lib/host-smoke-store",
       "lib/host-types",
+      "lib/isolated-host-install",
       "lib/mixed-host-contracts",
       "lib/pane-adapter",
       "lib/provider-detect",

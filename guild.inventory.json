@@ -1794,6 +1794,11 @@
       "kind": "lib"
     },
     {
+      "id": "lib/isolated-host-install",
+      "source_path": "scripts/lib/isolated-host-install.ts",
+      "kind": "lib"
+    },
+    {
       "id": "lib/kb-snapshot",
       "source_path": "scripts/lib/kb-snapshot.ts",
       "kind": "lib"

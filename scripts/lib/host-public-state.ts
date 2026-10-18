@@ -122,6 +122,15 @@ export function verifiedStateForBucket(bucket: HostBucket): PublicState {
 
 export const SMOKE_RECEIPT_SCHEMA = "guild.host_smoke_receipt.v1";
 
+/**
+ * Concerns only an observed install into an isolated config root may mark
+ * `verified`. Their evidence must open with `ISOLATED_INSTALL_EVIDENCE_PREFIX`,
+ * the prefix `scripts/lib/isolated-host-install.ts` writes; anything else is a
+ * forged activation claim.
+ */
+export const ISOLATED_INSTALL_CONCERNS = Object.freeze(["real_install_activation", "native_plugin_load"] as const);
+export const ISOLATED_INSTALL_EVIDENCE_PREFIX = "isolated-install:";
+
 /** One concern check inside a receipt. Part of the digested identity. */
 export interface SmokeCheck {
   concern: string;
@@ -252,6 +261,13 @@ export function validateSmokeReceipt(value: unknown): ReceiptValidation {
           if (typeof cc["concern"] !== "string") errors.push(`identity.checks[${idx}].concern must be a string`);
           if (typeof cc["state"] !== "string") errors.push(`identity.checks[${idx}].state must be a string`);
           if (typeof cc["evidence"] !== "string") errors.push(`identity.checks[${idx}].evidence must be a string`);
+          else if (
+            cc["state"] === "verified" &&
+            (ISOLATED_INSTALL_CONCERNS as readonly unknown[]).includes(cc["concern"]) &&
+            !cc["evidence"].startsWith(ISOLATED_INSTALL_EVIDENCE_PREFIX)
+          ) {
+            errors.push(`identity.checks[${idx}] marks ${String(cc["concern"])} verified without an isolated-install observation`);
+          }
         }
       });
     }

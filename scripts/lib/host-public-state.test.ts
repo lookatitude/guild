@@ -237,6 +237,22 @@ describe("host-public-state — two-field honesty model", () => {
     expect(vs).toBe("target"); // installability target checked BEFORE inferred
     expect(deriveCurrentPublicState("opencode", bucket, vs)).toBe("unsupported");
   });
+
+  it("refuses a verified install/load check that lacks isolated-install provenance", () => {
+    for (const concern of ["real_install_activation", "native_plugin_load"]) {
+      const forged = makeReceipt("codex-cli", "verified_wrapped");
+      forged.identity.checks.push({ concern, state: "verified", evidence: "trust me" });
+      forged.smoke_digest = computeSmokeDigest(forged.identity);
+      const v = validateSmokeReceipt(forged);
+      expect(v.valid).toBe(false);
+      expect(v.errors.join("\n")).toContain(concern);
+
+      const honest = makeReceipt("codex-cli", "verified_wrapped");
+      honest.identity.checks.push({ concern, state: "verified", evidence: "isolated-install: observed" });
+      honest.smoke_digest = computeSmokeDigest(honest.identity);
+      expect(validateSmokeReceipt(honest).valid).toBe(true);
+    }
+  });
 });
 
 describe("display support — presentation-only support label (beta / app / connector; amends R3 for display)", () => {
