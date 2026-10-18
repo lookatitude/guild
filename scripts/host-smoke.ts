@@ -22,6 +22,7 @@
  * Usage:
  *   npx tsx host-smoke.ts --all-reachable [--box-id <label>] [--captured-at YYYY-MM-DD]
  *   npx tsx host-smoke.ts --host pi-cli --project-root <dir>
+ *   npx tsx host-smoke.ts --host claude-code-cli,codex-cli --isolated-install
  *   (add --dry-run to print receipts without writing the committed store)
  *
  * L5b — the NATIVE reference-host path. `claude-code-cli` (target `native`) is NOT a
@@ -33,6 +34,13 @@
  * receipt (honest `target`, a PASS). `codex-cli` (target `verified_wrapped`) runs the
  * ordinary wrapped-CLI smoke, defensively disabling plugin hooks so a malformed Codex
  * plugins.json cannot hang the version probe.
+ *
+ * --isolated-install (operator decision D2): for claude-code-cli and codex-cli, build
+ * the host packages into a fresh OS-temp root, install them through each host's real
+ * install path into a throwaway CLAUDE_CONFIG_DIR / CODEX_HOME, start the host, and
+ * record `real_install_activation` + `native_plugin_load` from what was observed
+ * (scripts/lib/isolated-host-install.ts). A refusal is recorded with its exact code;
+ * the live ~/.claude and ~/.codex are never used.
  */
 
 import { spawnSync } from "node:child_process";
@@ -54,6 +62,7 @@ import {
 import { readGuildSourceVersion, serializeReceipt, writeCommittedReceipt } from "./lib/host-smoke-store";
 import { redact } from "./lib/shared/scrub-redact";
 import { durableGuildDir } from "./lib/state/storage";
+import { runIsolatedInstall, type IsolatedInstallHost } from "./lib/isolated-host-install";
 import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
 
 const GUILD_VERSION = readGuildSourceVersion();
@@ -233,7 +242,7 @@ const INSTALL_ACTIVATION_REFUSED: SmokeCheck = {
   evidence: "not performed: host-smoke runs presence/version/dry-run probes only; a real install + activate mutates the operator's live host config and was not run",
 };
 
-function cliSmoke(host: HostId, boxId: string, capturedAt: string): SmokeOutcome {
+function cliSmoke(host: HostId, boxId: string, capturedAt: string, activation?: SmokeCheck[]): SmokeOutcome {
   const det = HOST_REGISTRY_ROWS[host].detection;
   const bin = det.bin;
   if (!bin) return { host, receipt: null, note: "no detection.bin (not a CLI surface)" };
@@ -255,7 +264,7 @@ function cliSmoke(host: HostId, boxId: string, capturedAt: string): SmokeOutcome
       state: "verified",
       evidence: `bin/guild-run --host ${host} launcher wiring (concern 11)`,
     },
-    INSTALL_ACTIVATION_REFUSED,
+    ...(activation ?? [INSTALL_ACTIVATION_REFUSED]),
   ];
   const bucket = bucketForRow({
     host_id: host,
@@ -283,7 +292,7 @@ function cliSmoke(host: HostId, boxId: string, capturedAt: string): SmokeOutcome
  * (keep-native-cli → native). Any missing marker → NO receipt (honest `target`, a PASS);
  * the harness NEVER fabricates a native claim.
  */
-function nativeSmoke(host: HostId, boxId: string, capturedAt: string): SmokeOutcome {
+function nativeSmoke(host: HostId, boxId: string, capturedAt: string, activation?: SmokeCheck[]): SmokeOutcome {
   const det = HOST_REGISTRY_ROWS[host].detection;
   const bin = det.bin;
   if (!bin) return { host, receipt: null, note: "no detection.bin (not a CLI surface)" };
@@ -350,12 +359,14 @@ function nativeSmoke(host: HostId, boxId: string, capturedAt: string): SmokeOutc
     },
     { concern: "skills_discoverable", state: "verified", evidence: `skills/ discoverable (${skillCount} SKILL.md)` },
     { concern: "commands_present", state: "verified", evidence: `commands/ present (${commandCount} command files)` },
-    {
-      concern: "native_plugin_load",
-      state: "inferred",
-      evidence: "inferred from on-disk manifest + wired hooks + skills + commands; plugin load was not observed through the claude host",
-    },
-    INSTALL_ACTIVATION_REFUSED,
+    ...(activation ?? [
+      {
+        concern: "native_plugin_load",
+        state: "inferred",
+        evidence: "inferred from on-disk manifest + wired hooks + skills + commands; plugin load was not observed through the claude host",
+      },
+      INSTALL_ACTIVATION_REFUSED,
+    ]),
   ];
   const bucket = bucketForRow({
     host_id: host,
@@ -436,6 +447,7 @@ function parseArgs(argv: string[]): {
   ephemeralRoot: string;
   ephemeralRootIsTemp: boolean;
   dryRun: boolean;
+  isolatedInstall: boolean;
 } {
   const get = (flag: string): string | undefined => {
     const i = argv.indexOf(flag);
@@ -457,16 +469,47 @@ function parseArgs(argv: string[]): {
     ephemeralRoot,
     ephemeralRootIsTemp: !ephemeralRootFlag,
     dryRun: argv.includes("--dry-run"),
+    isolatedInstall: argv.includes("--isolated-install"),
   };
 }
 
-function runHost(host: HostId, args: ReturnType<typeof parseArgs>): SmokeOutcome {
+const ISOLATED_INSTALL_HOSTS: readonly HostId[] = ["claude-code-cli", "codex-cli"];
+
+/**
+ * Build the host packages into `<isolatedRoot>/packages` and run the isolated
+ * install for `host`. A failed build is recorded as `package_build_failed`.
+ */
+function isolatedActivation(host: IsolatedInstallHost, isolatedRoot: string, packagesBuilt: { ok: boolean; detail: string }): SmokeCheck[] {
+  if (!packagesBuilt.ok) {
+    const evidence = `isolated-install refused package_build_failed: ${packagesBuilt.detail}`;
+    return [
+      { concern: "real_install_activation", state: "refused", evidence },
+      { concern: "native_plugin_load", state: "refused", evidence },
+    ];
+  }
+  const bin = HOST_REGISTRY_ROWS[host].detection.bin as string;
+  return runIsolatedInstall({ host, bin, packagesRoot: join(isolatedRoot, "packages"), isolatedRoot, expectedVersion: GUILD_VERSION }).checks;
+}
+
+function buildPackagesInto(isolatedRoot: string): { ok: boolean; detail: string } {
+  const r = spawnSync("npx", ["tsx", join(__dirname, "build-host-packages.ts"), "--root", pluginRoot(), "--out", join(isolatedRoot, "packages")], {
+    cwd: __dirname,
+    encoding: "utf8",
+    timeout: 600_000,
+  });
+  if (r.status === 0) return { ok: true, detail: "built" };
+  const lines = `${r.stderr ?? ""}${r.error?.message ?? ""}`.trim().split("\n");
+  const tail = lines.find((l) => /error/i.test(l) && !/^\s+at /.test(l)) ?? lines.slice(-1)[0] ?? "";
+  return { ok: false, detail: scrub(`build-host-packages exited ${String(r.status)}${tail ? `: ${tail.slice(0, 200)}` : ""}`) };
+}
+
+function runHost(host: HostId, args: ReturnType<typeof parseArgs>, activation?: SmokeCheck[]): SmokeOutcome {
   const det = HOST_REGISTRY_ROWS[host].detection;
   if (det.marker) return ideSmoke(host, args.boxId, args.capturedAt, args.projectRoot);
   // claude-code-cli is the keep-native-cli reference host: attest native plugin load,
   // not a guild-run wrapper dry-run (which is for the wrapped-cli bucket).
-  if (host === "claude-code-cli") return nativeSmoke(host, args.boxId, args.capturedAt);
-  if (det.bin) return cliSmoke(host, args.boxId, args.capturedAt);
+  if (host === "claude-code-cli") return nativeSmoke(host, args.boxId, args.capturedAt, activation);
+  if (det.bin) return cliSmoke(host, args.boxId, args.capturedAt, activation);
   return { host, receipt: null, note: "no bin + no marker (app/connector surface) — refuse bucket, no smoke" };
 }
 
@@ -481,8 +524,17 @@ function main(): void {
   const runId = `host-smoke-${args.capturedAt}`;
   let wrote = 0;
   let skipped = 0;
+  // One OS-temp root per run: the built packages plus one config root per host.
+  const isolatedRoot = args.isolatedInstall && targets.some((h) => ISOLATED_INSTALL_HOSTS.includes(h))
+    ? mkdtempSync(join(tmpdir(), "guild-isolated-install-"))
+    : null;
+  const packagesBuilt = isolatedRoot ? buildPackagesInto(isolatedRoot) : { ok: false, detail: "not requested" };
   for (const host of targets) {
-    const outcome = runHost(host, args);
+    const activation = isolatedRoot && ISOLATED_INSTALL_HOSTS.includes(host) && onPath(HOST_REGISTRY_ROWS[host].detection.bin ?? "")
+      ? isolatedActivation(host as IsolatedInstallHost, isolatedRoot, packagesBuilt)
+      : undefined;
+    for (const c of activation ?? []) console.log(`  ${host} ${c.concern}: ${c.state} — ${c.evidence}`);
+    const outcome = runHost(host, args, activation);
     if (!outcome.receipt) {
       skipped++;
       console.log(`· ${host}: SKIP — ${outcome.note}`);
@@ -504,6 +556,7 @@ function main(): void {
     }
   }
   console.log(`\nhost-smoke: ${targets.length} targets · ${wrote} committed · ${skipped} honest skips · captured_at=${args.capturedAt}`);
+  if (isolatedRoot) rmSync(isolatedRoot, { recursive: true, force: true });
   // Best-effort cleanup of the auto-minted tmpdir (never remove an operator-supplied
   // --ephemeral-root — that path is theirs to manage).
   if (args.ephemeralRootIsTemp) {
