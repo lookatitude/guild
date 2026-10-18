@@ -2,23 +2,23 @@
   "schema_version": "guild.mcp_description_pins.v2",
   "generated_by": "scripts/compile.ts",
   "binary": "runtime/guild-mcp.js",
-  "binary_sha256": "3a937e89320a14fe1562fe620552ea5222b88c2d1bfc651060d842f337061cea",
+  "binary_sha256": "684d725ea02bd700a3b31b6c02300617b25a00ee32bed2e36a732b41387919cc",
   "servers": {
     "guild-telemetry": {
       "mcp_id": "trace",
       "tools": {
         "trace_cost_rollup": "c85ab25c8503aa348e61783c243c0d10f65982048dffc2a79ba4f69e12800e5c",
         "trace_list_runs": "e063de9bb48c2c688309477f5b72e98b46ab6ccfcc76f5dac4c9e468688a59ea",
-        "trace_query": "f7dbbb2b44808ab487615f0dd5c34abe5fff5274d138281be3369df1796e2de0",
-        "trace_summary": "1740a2ecab7bae19553a330466868e5f4dbdd9683764de2569f992530585c25e"
+        "trace_query": "cc55ab53f453bf337c9659d6abd9cd382dcead54857ecd9c5530fd5facbabbe7",
+        "trace_summary": "bd0eacbda7d0e49df1790a7c9a3082a3aafca3f51c7293f52daacbbd58fe0daa"
       }
     },
     "guild-memory": {
       "mcp_id": "wiki",
       "tools": {
-        "wiki_get": "8acb911e7acf724abbf2d5f7761c8fe4ada6f775a97c402af21356b31609b93f",
+        "wiki_get": "8fe86dd1fbfe5e6ff5b3a877c0d9bd8db443e5f63291a31b1027d4a275fedce4",
         "wiki_list": "1131bfd599fb489a26336ebe479c09b0cafb3ee81c79b6d2f440192468369969",
-        "wiki_search": "d2ba9f451946fac300227793f5ffc32f7265561158f3bd5ee7539d698c40ae81"
+        "wiki_search": "8cfad5fb953e0affc119ba64f4d568be42b9dab9356dfed9d38c29534d5aca33"
       }
     }
   }

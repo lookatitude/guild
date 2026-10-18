@@ -11491,10 +11491,14 @@ function protectChunks(rawHits, opts = {}) {
   let wrappedCount = 0;
   for (const hit of rawHits) {
     const { source_path, content } = hit;
-    const probe = sanitizeForInjection(content);
+    const render = hit.render ?? content;
+    const pageProbe = sanitizeForInjection(content);
+    const probe = pageProbe.result === "flagged" || hit.render === void 0 ? pageProbe : sanitizeForInjection(render);
     if (probe.result === "flagged") {
       const patterns = probe.matchedPatterns.join(", ");
-      const marker = `[QUARANTINED: recalled chunk from ${neutralizeRecallTags(path29.basename(source_path))} flagged for injection (patterns: ${patterns}) \u2014 excluded]`;
+      const name = path29.basename(source_path);
+      const shownName = sanitizeForInjection(name).result === "flagged" ? "[unsafe name]" : neutralizeRecallTags(name);
+      const marker = `[QUARANTINED: recalled chunk from ${shownName} flagged for injection (patterns: ${patterns}) \u2014 excluded]`;
       chunks.push({
         source_path,
         trust_tier: "untrusted",
@@ -11534,9 +11538,9 @@ function protectChunks(rawHits, opts = {}) {
     const tier = opts.noOperator ? classifyTrustTier(source_path, content, { ignoreOperatorPath: true }) : classifyTrustTier(source_path, content);
     let rendered;
     if (tier === "operator") {
-      rendered = content;
+      rendered = render;
     } else {
-      rendered = `<guild:recall trust_tier="${tier}">${neutralizeRecallTags(content)}</guild:recall>`;
+      rendered = `<guild:recall trust_tier="${tier}">${neutralizeRecallTags(render)}</guild:recall>`;
       wrappedCount++;
     }
     chunks.push({ source_path, trust_tier: tier, quarantined: false, rendered });
@@ -11544,7 +11548,39 @@ function protectChunks(rawHits, opts = {}) {
   const directive = wrappedCount > 0 ? RECALL_INTEGRITY_DIRECTIVE : null;
   return { chunks, directive };
 }
-var fs22, path29, RECALL_INTEGRITY_DIRECTIVE, OPERATOR_PATH_PATTERNS, TAG_CONFUSABLES, INVISIBLE_RE, NAMED_ENTITIES, RECALL_TAG_RE;
+function protectFields(value, sourcePath, opts = {}) {
+  let wrapped = false;
+  const seen = /* @__PURE__ */ new Set();
+  const leaf = (s, freeText = false) => {
+    if (!freeText && IDENTIFIER_RE.test(s)) {
+      const spaced = s.replace(/[_.\-/:#@+()]+/g, " ");
+      const [probe] = protectChunks([{ source_path: sourcePath, content: spaced, render: s }], opts).chunks;
+      return probe.quarantined ? probe.rendered : s;
+    }
+    const [chunk] = protectChunks(
+      [{ source_path: sourcePath, content: opts.tierContent ?? s, render: s }],
+      opts
+    ).chunks;
+    if (!chunk.quarantined && chunk.trust_tier !== "operator") wrapped = true;
+    return chunk.rendered;
+  };
+  const walk = (v, depth, freeText = false) => {
+    if (typeof v === "string") return leaf(v, freeText);
+    if (!v || typeof v !== "object") return v;
+    if (depth >= MAX_FIELD_DEPTH) return "[depth limit]";
+    if (seen.has(v)) return "[yaml alias]";
+    seen.add(v);
+    if (Array.isArray(v)) return v.map((x) => walk(x, depth + 1, freeText));
+    return Object.fromEntries(
+      Object.entries(v).map(([k, x]) => [
+        leaf(k),
+        walk(x, depth + 1, freeText || (opts.freeTextKeys?.has(k) ?? false))
+      ])
+    );
+  };
+  return { value: walk(value, 0), wrapped };
+}
+var fs22, path29, RECALL_INTEGRITY_DIRECTIVE, OPERATOR_PATH_PATTERNS, TAG_CONFUSABLES, INVISIBLE_RE, NAMED_ENTITIES, RECALL_TAG_RE, IDENTIFIER_RE, MAX_FIELD_DEPTH;
 var init_recall_protect = __esm({
   "src/domains/knowledge/recall-protect.ts"() {
     fs22 = __toESM(require("node:fs"));
@@ -11594,6 +11630,8 @@ var init_recall_protect = __esm({
     INVISIBLE_RE = /[­᠎​-‏⁠-⁤﻿]/;
     NAMED_ENTITIES = { lt: "<", sol: "/", colon: ":" };
     RECALL_TAG_RE = /<\s*\/?\s*guild\s*:\s*recall/g;
+    IDENTIFIER_RE = /^[A-Za-z0-9_.\-/:#@+()]{0,64}$/;
+    MAX_FIELD_DEPTH = 32;
   }
 });
 
@@ -50158,6 +50196,7 @@ __export(knowledge_exports, {
   planPlaybookSpan: () => planPlaybookSpan,
   playbooksRoot: () => playbooksRoot,
   protectChunks: () => protectChunks,
+  protectFields: () => protectFields,
   queryGuildMemory: () => queryGuildMemory,
   rankKgNodes: () => rankKgNodes,
   readGlossaryAt: () => readGlossaryAt,

@@ -17495,10 +17495,14 @@ function protectChunks(rawHits, opts = {}) {
   let wrappedCount = 0;
   for (const hit of rawHits) {
     const { source_path, content } = hit;
-    const probe = sanitizeForInjection(content);
+    const render = hit.render ?? content;
+    const pageProbe = sanitizeForInjection(content);
+    const probe = pageProbe.result === "flagged" || hit.render === void 0 ? pageProbe : sanitizeForInjection(render);
     if (probe.result === "flagged") {
       const patterns = probe.matchedPatterns.join(", ");
-      const marker = `[QUARANTINED: recalled chunk from ${neutralizeRecallTags(path27.basename(source_path))} flagged for injection (patterns: ${patterns}) \u2014 excluded]`;
+      const name = path27.basename(source_path);
+      const shownName = sanitizeForInjection(name).result === "flagged" ? "[unsafe name]" : neutralizeRecallTags(name);
+      const marker = `[QUARANTINED: recalled chunk from ${shownName} flagged for injection (patterns: ${patterns}) \u2014 excluded]`;
       chunks.push({
         source_path,
         trust_tier: "untrusted",
@@ -17538,9 +17542,9 @@ function protectChunks(rawHits, opts = {}) {
     const tier = opts.noOperator ? classifyTrustTier(source_path, content, { ignoreOperatorPath: true }) : classifyTrustTier(source_path, content);
     let rendered;
     if (tier === "operator") {
-      rendered = content;
+      rendered = render;
     } else {
-      rendered = `<guild:recall trust_tier="${tier}">${neutralizeRecallTags(content)}</guild:recall>`;
+      rendered = `<guild:recall trust_tier="${tier}">${neutralizeRecallTags(render)}</guild:recall>`;
       wrappedCount++;
     }
     chunks.push({ source_path, trust_tier: tier, quarantined: false, rendered });
@@ -17548,7 +17552,39 @@ function protectChunks(rawHits, opts = {}) {
   const directive = wrappedCount > 0 ? RECALL_INTEGRITY_DIRECTIVE : null;
   return { chunks, directive };
 }
-var fs22, path27, RECALL_INTEGRITY_DIRECTIVE, OPERATOR_PATH_PATTERNS, TAG_CONFUSABLES, INVISIBLE_RE, NAMED_ENTITIES, RECALL_TAG_RE;
+function protectFields(value, sourcePath, opts = {}) {
+  let wrapped = false;
+  const seen = /* @__PURE__ */ new Set();
+  const leaf = (s, freeText = false) => {
+    if (!freeText && IDENTIFIER_RE.test(s)) {
+      const spaced = s.replace(/[_.\-/:#@+()]+/g, " ");
+      const [probe] = protectChunks([{ source_path: sourcePath, content: spaced, render: s }], opts).chunks;
+      return probe.quarantined ? probe.rendered : s;
+    }
+    const [chunk] = protectChunks(
+      [{ source_path: sourcePath, content: opts.tierContent ?? s, render: s }],
+      opts
+    ).chunks;
+    if (!chunk.quarantined && chunk.trust_tier !== "operator") wrapped = true;
+    return chunk.rendered;
+  };
+  const walk = (v, depth, freeText = false) => {
+    if (typeof v === "string") return leaf(v, freeText);
+    if (!v || typeof v !== "object") return v;
+    if (depth >= MAX_FIELD_DEPTH) return "[depth limit]";
+    if (seen.has(v)) return "[yaml alias]";
+    seen.add(v);
+    if (Array.isArray(v)) return v.map((x) => walk(x, depth + 1, freeText));
+    return Object.fromEntries(
+      Object.entries(v).map(([k, x]) => [
+        leaf(k),
+        walk(x, depth + 1, freeText || (opts.freeTextKeys?.has(k) ?? false))
+      ])
+    );
+  };
+  return { value: walk(value, 0), wrapped };
+}
+var fs22, path27, RECALL_INTEGRITY_DIRECTIVE, OPERATOR_PATH_PATTERNS, TAG_CONFUSABLES, INVISIBLE_RE, NAMED_ENTITIES, RECALL_TAG_RE, IDENTIFIER_RE, MAX_FIELD_DEPTH;
 var init_recall_protect = __esm({
   "src/domains/knowledge/recall-protect.ts"() {
     fs22 = __toESM(require("node:fs"));
@@ -17598,6 +17634,8 @@ var init_recall_protect = __esm({
     INVISIBLE_RE = /[­᠎​-‏⁠-⁤﻿]/;
     NAMED_ENTITIES = { lt: "<", sol: "/", colon: ":" };
     RECALL_TAG_RE = /<\s*\/?\s*guild\s*:\s*recall/g;
+    IDENTIFIER_RE = /^[A-Za-z0-9_.\-/:#@+()]{0,64}$/;
+    MAX_FIELD_DEPTH = 32;
   }
 });
 
@@ -45751,7 +45789,8 @@ function loadAllPages(wikiRoot2) {
       type: typeof frontmatter.type === "string" ? frontmatter.type : void 0,
       title: deriveTitle(frontmatter, body, rel2),
       frontmatter,
-      body
+      body,
+      content
     });
   }
   return pages;
@@ -45785,6 +45824,40 @@ function resolveInsideWiki(wikiRoot2, rel2) {
   if (relCheck.startsWith("..") || path52.isAbsolute(relCheck)) return null;
   return full;
 }
+function stringLeaves(value, out = [], seen = /* @__PURE__ */ new Set(), depth = 0) {
+  if (typeof value === "string") out.push(value);
+  else if (value && typeof value === "object") {
+    if (seen.has(value) || depth >= 32) return out;
+    seen.add(value);
+    for (const [k, v] of Object.entries(value)) {
+      if (!Array.isArray(value)) out.push(k);
+      stringLeaves(v, out, seen, depth + 1);
+    }
+  }
+  return out;
+}
+function safePath(relPath, chunk) {
+  if (!chunk.quarantined) return relPath;
+  return protectChunks([{ source_path: "wiki/path", content: relPath }]).chunks[0].quarantined ? null : relPath;
+}
+function protectPage(page, render) {
+  const content = [page.content, page.relPath, ...stringLeaves(page.frontmatter)].join("\n");
+  return protectChunks(
+    [{ source_path: `wiki/${page.relPath}`, content, render }],
+    { callerTool: "guild-memory" }
+  ).chunks[0];
+}
+function protectMeta(page, meta, wrapped) {
+  const out = protectFields(meta, `wiki/${page.relPath}`, {
+    callerTool: "guild-memory",
+    tierContent: page.content
+  });
+  wrapped.push(out.wrapped);
+  return out.value;
+}
+function recallDirective(chunks, metaWrapped = []) {
+  return chunks.some((c) => !c.quarantined && c.trust_tier !== "operator") || metaWrapped.includes(true) ? RECALL_INTEGRITY_DIRECTIVE : null;
+}
 function jsonResult(value) {
   return {
     content: [{ type: "text", text: JSON.stringify(value, null, 2) }]
@@ -45810,7 +45883,7 @@ function buildServer() {
     "wiki_search",
     {
       title: "BM25 search over the Guild wiki",
-      description: "Run a BM25 ranked search over .guild/wiki/ pages, optionally filtered by category (the wiki directory segment, e.g. 'decisions'). Returns page path, category, frontmatter type/frontmatter_category, one-line excerpt, BM25 score, confidence, and source_refs (array).",
+      description: "Run a BM25 ranked search over .guild/wiki/ pages, optionally filtered by category (the wiki directory segment, e.g. 'decisions'). Returns page path, category, frontmatter type/frontmatter_category, one-line excerpt, BM25 score, confidence, and source_refs (array). Excerpts are D-RECALL protected: trust-tier wrapped, or quarantined when the page fails the injection probe.",
       inputSchema: {
         query: external_exports.string().min(1).describe("Free-text query"),
         category: external_exports.string().optional().describe("Restrict to a single wiki category (e.g. 'decisions')"),
@@ -45824,28 +45897,45 @@ function buildServer() {
       const scoped = category ? all.filter((p) => p.category === category) : all;
       const ranked = rankPages(scoped, query, limit ?? 20);
       const qTokens = tokenize(query);
-      const results = ranked.map((r) => ({
-        path: r.page.relPath,
-        category: r.page.category,
-        type: r.page.type ?? null,
-        // Whether `type` conforms to the §10.1.1 closed enum (wiki-frontmatter-
-        // contract.ts) — false for absent/legacy/non-conforming pages, which a
-        // read-only server must still surface (never filter out).
-        type_valid: isWikiPageType(r.page.type),
-        frontmatter_category: r.page.frontmatterCategory ?? null,
-        score: Math.round(r.score * 1e4) / 1e4,
-        excerpt: excerpt(r.page.body, qTokens),
-        confidence: r.page.frontmatter.confidence ?? null,
-        source_refs: Array.isArray(r.page.frontmatter.source_refs) ? r.page.frontmatter.source_refs : []
-      }));
-      return jsonResult({ results, total: ranked.length, wiki_root: wikiRoot2 });
+      const chunks = [];
+      const metaWrapped = [];
+      const results = ranked.map((r) => {
+        const chunk = protectPage(r.page, excerpt(r.page.body, qTokens));
+        chunks.push(chunk);
+        const shownPath = safePath(r.page.relPath, chunk);
+        const meta = protectMeta(r.page, {
+          type: chunk.quarantined ? null : r.page.type ?? null,
+          // Whether `type` conforms to the §10.1.1 closed enum (wiki-frontmatter-
+          // contract.ts) — false for absent/legacy/non-conforming pages, which a
+          // read-only server must still surface (never filter out).
+          type_valid: !chunk.quarantined && isWikiPageType(r.page.type),
+          frontmatter_category: chunk.quarantined ? null : r.page.frontmatterCategory ?? null,
+          score: Math.round(r.score * 1e4) / 1e4,
+          confidence: chunk.quarantined ? null : r.page.frontmatter.confidence ?? null,
+          source_refs: !chunk.quarantined && Array.isArray(r.page.frontmatter.source_refs) ? r.page.frontmatter.source_refs : []
+        }, metaWrapped);
+        return {
+          path: shownPath === null ? null : neutralizeRecallTags(shownPath),
+          category: shownPath === null ? null : neutralizeRecallTags(r.page.category),
+          ...meta,
+          excerpt: chunk.rendered,
+          trust_tier: chunk.trust_tier,
+          quarantined: chunk.quarantined
+        };
+      });
+      return jsonResult({
+        results,
+        total: ranked.length,
+        wiki_root: wikiRoot2,
+        recall_directive: recallDirective(chunks, metaWrapped)
+      });
     }
   );
   server.registerTool(
     "wiki_get",
     {
       title: "Read a wiki page",
-      description: "Return the full content and parsed YAML frontmatter for a wiki page. `path` must be a relative path inside the wiki root.",
+      description: "Return the full content and parsed YAML frontmatter for a wiki page. The body is D-RECALL protected (trust-tier wrapped, or quarantined). `path` must be a relative path inside the wiki root.",
       inputSchema: {
         path: external_exports.string().min(1).describe("Wiki-relative path, e.g. 'decisions/foo.md'"),
         cwd: external_exports.string().optional().describe(CWD_PARAM_DESCRIPTION)
@@ -45858,10 +45948,16 @@ function buildServer() {
       if (!fs46.existsSync(abs)) return errorResult(`Page not found: ${rel2}`);
       const content = fs46.readFileSync(abs, "utf8");
       const { frontmatter, body } = parseFrontmatter3(content);
+      const relPath = path52.relative(wikiRoot2, abs).split(path52.sep).join("/");
+      const chunk = protectPage({ relPath, content, frontmatter }, body);
+      const metaWrapped = [];
       return jsonResult({
-        path: rel2,
-        frontmatter,
-        body
+        path: safePath(neutralizeRecallTags(rel2), chunk),
+        frontmatter: chunk.quarantined ? null : protectMeta({ relPath, content }, frontmatter, metaWrapped),
+        body: chunk.rendered,
+        trust_tier: chunk.trust_tier,
+        quarantined: chunk.quarantined,
+        recall_directive: recallDirective([chunk], metaWrapped)
       });
     }
   );
@@ -45890,18 +45986,34 @@ function buildServer() {
         }
         return true;
       });
-      const pages = filtered.map((p) => ({
-        path: p.relPath,
-        category: p.category,
-        type: p.type ?? null,
-        type_valid: isWikiPageType(p.type),
-        frontmatter_category: p.frontmatterCategory ?? null,
-        title: p.title,
-        confidence: p.frontmatter.confidence ?? null,
-        updated: pageUpdated(p.frontmatter) ?? null
-      }));
-      pages.sort((a, b) => a.path.localeCompare(b.path));
-      return jsonResult({ pages, total: pages.length, wiki_root: wikiRoot2 });
+      const chunks = [];
+      const metaWrapped = [];
+      const pages = filtered.map((p) => {
+        const chunk = protectPage(p, p.title);
+        chunks.push(chunk);
+        const shownPath = safePath(p.relPath, chunk);
+        return {
+          path: shownPath === null ? null : neutralizeRecallTags(shownPath),
+          category: shownPath === null ? null : neutralizeRecallTags(p.category),
+          ...protectMeta(p, {
+            type: chunk.quarantined ? null : p.type ?? null,
+            type_valid: !chunk.quarantined && isWikiPageType(p.type),
+            frontmatter_category: chunk.quarantined ? null : p.frontmatterCategory ?? null,
+            confidence: chunk.quarantined ? null : p.frontmatter.confidence ?? null,
+            updated: chunk.quarantined ? null : pageUpdated(p.frontmatter) ?? null
+          }, metaWrapped),
+          title: chunk.rendered,
+          trust_tier: chunk.trust_tier,
+          quarantined: chunk.quarantined
+        };
+      });
+      pages.sort((a, b) => (a.path ?? "").localeCompare(b.path ?? ""));
+      return jsonResult({
+        pages,
+        total: pages.length,
+        wiki_root: wikiRoot2,
+        recall_directive: recallDirective(chunks, metaWrapped)
+      });
     }
   );
   return server;
@@ -45926,6 +46038,7 @@ var fs47 = __toESM(require("fs"));
 var path53 = __toESM(require("path"));
 var yaml3 = __toESM(require_js_yaml());
 init_state();
+init_knowledge();
 var NO_CWD_FALLBACK2 = process.argv.includes("--no-cwd-fallback");
 var CWD_PARAM_DESCRIPTION2 = NO_CWD_FALLBACK2 ? "REQUIRED here \u2014 absolute path of the consuming project root. This server runs outside the project and has no default; calls without it fail." : "Override consuming-repo root (defaults to the server's working directory).";
 var UnresolvedProjectRootError2 = class extends Error {
@@ -46249,6 +46362,15 @@ function specialistKey(e) {
   if (typeof e.lane_id === "string" && e.lane_id) return e.lane_id;
   return "(none)";
 }
+var FREE_TEXT_KEYS = /* @__PURE__ */ new Set(["prompt", "summary", "note", "message"]);
+function protectRunValue(value, where) {
+  const out = protectFields(value, where, {
+    callerTool: "guild-telemetry",
+    noOperator: true,
+    freeTextKeys: FREE_TEXT_KEYS
+  });
+  return { value: out.value, directive: out.wrapped ? RECALL_INTEGRITY_DIRECTIVE : null };
+}
 function jsonResult2(value) {
   return {
     content: [{ type: "text", text: JSON.stringify(value, null, 2) }]
@@ -46282,6 +46404,10 @@ function summaryHasDispatchFrontmatter(summary) {
   const o = parsed;
   return Object.prototype.hasOwnProperty.call(o, "dispatched_lanes") && Object.prototype.hasOwnProperty.call(o, "dispatch_receipts");
 }
+function summaryResult(run_id, source, summary) {
+  const { value, directive } = protectRunValue({ run_id, summary }, "runs/summary.md");
+  return jsonResult2({ run_id: value.run_id, source, summary: value.summary, recall_directive: directive });
+}
 function buildServer2() {
   const server = new McpServer(
     { name: "guild-telemetry", version: "0.1.0" },
@@ -46293,7 +46419,7 @@ function buildServer2() {
     "trace_summary",
     {
       title: "Summarize a Guild run",
-      description: "Return the stored summary.md for a run if present, otherwise synthesize one from logs/v1.4-events.jsonl (falling back to legacy events.ndjson) using the same logic as scripts/trace-summarize.ts. Does not write anything.",
+      description: "Return the stored summary.md for a run if present, otherwise synthesize one from logs/v1.4-events.jsonl (falling back to legacy events.ndjson) using the same logic as scripts/trace-summarize.ts. Does not write anything. The summary is D-RECALL protected (untrusted-wrapped, or quarantined).",
       inputSchema: {
         run_id: external_exports.string().min(1).describe("The run identifier"),
         cwd: external_exports.string().optional().describe(CWD_PARAM_DESCRIPTION2)
@@ -46309,27 +46435,27 @@ function buildServer2() {
       if (fs47.existsSync(existing)) {
         const summary2 = fs47.readFileSync(existing, "utf8");
         if (summaryHasDispatchFrontmatter(summary2)) {
-          return jsonResult2({ run_id, source: "file", summary: summary2 });
+          return summaryResult(run_id, "file", summary2);
         }
       }
       const events = readEvents(runDir);
       if (events.length === 0) {
         if (fs47.existsSync(existing)) {
-          return jsonResult2({ run_id, source: "file", summary: fs47.readFileSync(existing, "utf8") });
+          return summaryResult(run_id, "file", fs47.readFileSync(existing, "utf8"));
         }
         return errorResult2(
           `No logs/v1.4-events.jsonl or events.ndjson found for run: ${run_id}`
         );
       }
       const summary = buildSummary(run_id, events);
-      return jsonResult2({ run_id, source: "synthesized", summary });
+      return summaryResult(run_id, "synthesized", summary);
     }
   );
   server.registerTool(
     "trace_query",
     {
       title: "Query Guild run events",
-      description: "Filter telemetry events across runs by run_id, event type, specialist, or ISO-date `since` cutoff. Returns events annotated with their run_id. Deterministic sort: run_id then ts.",
+      description: "Filter telemetry events across runs by run_id, event type, specialist, or ISO-date `since` cutoff. Returns events annotated with their run_id. Deterministic sort: run_id then ts. Free-text fields are D-RECALL protected (untrusted-wrapped, or quarantined).",
       inputSchema: {
         run_id: external_exports.string().optional().describe("Restrict to one run"),
         event: external_exports.string().optional().describe("Filter by event type (e.g. 'PostToolUse')"),
@@ -46367,7 +46493,8 @@ function buildServer2() {
         (a, b) => a.run_id.localeCompare(b.run_id) || a.ts.localeCompare(b.ts)
       );
       const trimmed = typeof limit === "number" ? filtered.slice(0, limit) : filtered;
-      return jsonResult2({ events: trimmed, total: filtered.length });
+      const { value: events, directive } = protectRunValue(trimmed, "runs/events");
+      return jsonResult2({ events, total: filtered.length, recall_directive: directive });
     }
   );
   server.registerTool(
@@ -46405,7 +46532,8 @@ function buildServer2() {
         return !Number.isNaN(t) && t >= cutoff;
       }).sort((a, b) => a.run_id.localeCompare(b.run_id));
       const trimmed = typeof limit === "number" ? runs.slice(0, limit) : runs;
-      return jsonResult2({ runs: trimmed, total: runs.length });
+      const { value, directive } = protectRunValue(trimmed, "runs/list");
+      return jsonResult2({ runs: value, total: runs.length, recall_directive: directive });
     }
   );
   server.registerTool(
@@ -46450,7 +46578,7 @@ function buildServer2() {
           bucketAdd(bySpecialist, specialistKey(e), tk);
         }
       }
-      return jsonResult2({
+      const { value, directive } = protectRunValue({
         run_id: run_id ?? null,
         scope: run_id ? `run:${run_id}` : "all-runs",
         event_count: eventCount,
@@ -46464,7 +46592,8 @@ function buildServer2() {
         by_tier: rollupRows(byTier, "tier"),
         by_model: rollupRows(byModel, "model"),
         by_specialist: rollupRows(bySpecialist, "specialist")
-      });
+      }, "runs/cost-rollup");
+      return jsonResult2({ ...value, recall_directive: directive });
     }
   );
   return server;

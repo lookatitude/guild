@@ -11781,10 +11781,14 @@ function protectChunks(rawHits, opts = {}) {
   let wrappedCount = 0;
   for (const hit of rawHits) {
     const { source_path, content } = hit;
-    const probe = sanitizeForInjection(content);
+    const render = hit.render ?? content;
+    const pageProbe = sanitizeForInjection(content);
+    const probe = pageProbe.result === "flagged" || hit.render === void 0 ? pageProbe : sanitizeForInjection(render);
     if (probe.result === "flagged") {
       const patterns = probe.matchedPatterns.join(", ");
-      const marker = `[QUARANTINED: recalled chunk from ${neutralizeRecallTags(path34.basename(source_path))} flagged for injection (patterns: ${patterns}) \u2014 excluded]`;
+      const name = path34.basename(source_path);
+      const shownName = sanitizeForInjection(name).result === "flagged" ? "[unsafe name]" : neutralizeRecallTags(name);
+      const marker = `[QUARANTINED: recalled chunk from ${shownName} flagged for injection (patterns: ${patterns}) \u2014 excluded]`;
       chunks.push({
         source_path,
         trust_tier: "untrusted",
@@ -11824,9 +11828,9 @@ function protectChunks(rawHits, opts = {}) {
     const tier = opts.noOperator ? classifyTrustTier(source_path, content, { ignoreOperatorPath: true }) : classifyTrustTier(source_path, content);
     let rendered;
     if (tier === "operator") {
-      rendered = content;
+      rendered = render;
     } else {
-      rendered = `<guild:recall trust_tier="${tier}">${neutralizeRecallTags(content)}</guild:recall>`;
+      rendered = `<guild:recall trust_tier="${tier}">${neutralizeRecallTags(render)}</guild:recall>`;
       wrappedCount++;
     }
     chunks.push({ source_path, trust_tier: tier, quarantined: false, rendered });
