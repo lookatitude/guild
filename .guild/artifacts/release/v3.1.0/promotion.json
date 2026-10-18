@@ -1,0 +1,7 @@
+{
+  "schema_version": "guild.release_promotion.v1",
+  "version": "3.1.0",
+  "source_commit": "76f6d4042970fdb9cda77b340acc546bfd8bb945",
+  "evidence_sha256": "6685e078cad51b5fb60ee78205d11ec63672f56b5f00536044b6e1047ec193b4",
+  "decision": "conformance_pass"
+}
