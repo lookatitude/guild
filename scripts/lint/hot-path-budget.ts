@@ -15,7 +15,7 @@
  * (it prints and records; it does not gate). The gate is `compile --check`.
  *
  * Usage:
- *   node runtime-free:  npx tsx scripts/lint/hot-path-budget.ts timings [--runs=20]
+ *   node runtime-free:  npx tsx scripts/lint/hot-path-budget.ts timings [--runs=20] [--report-only]
  *                       npx tsx scripts/lint/hot-path-budget.ts require-graph
  */
 
@@ -258,7 +258,7 @@ function verifyAfterEditRung(): number {
   }
 }
 
-function timings(runs: number): number {
+function timings(runs: number, reportOnly = false): number {
   const results: Array<{ id: string; budget: number; p50: number; p95: number; max: number }> = [];
 
   // 1. SessionStart marker read, layout CURRENT.
@@ -320,7 +320,10 @@ function timings(runs: number): number {
     );
   }
   process.stdout.write("  (correctness assertions live in `post-tool-use-green`, the blocking leg)\n");
-  return over === 0 ? 0 : 1;
+  // --report-only: OVER is printed but the exit stays 0. A hosted runner sits
+  // above the 250ms post_tool_use budget at p50, so CI reports and never fails.
+  if (reportOnly && over > 0) process.stdout.write(`  report-only: ${over} over budget, not failing\n`);
+  return over === 0 || reportOnly ? 0 : 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -394,11 +397,11 @@ function main(argv: string[]): number {
   const cmd = argv[0];
   const runsArg = argv.find((a) => a.startsWith("--runs="));
   const runs = runsArg ? Number(runsArg.slice("--runs=".length)) : 20;
-  if (cmd === "timings") return timings(runs);
+  if (cmd === "timings") return timings(runs, argv.includes("--report-only"));
   if (cmd === "post-tool-use-green") return postToolUseHookGreen();
   if (cmd === "verify-after-edit-rung") return verifyAfterEditRung();
   if (cmd === "require-graph") return requireGraph();
-  process.stdout.write("usage: hot-path-budget.ts <timings|post-tool-use-green|verify-after-edit-rung|require-graph> [--runs=N]\n");
+  process.stdout.write("usage: hot-path-budget.ts <timings|post-tool-use-green|verify-after-edit-rung|require-graph> [--runs=N] [--report-only]\n");
   return 2;
 }
 

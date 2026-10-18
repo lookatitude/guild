@@ -14,6 +14,9 @@ import {
   verifyInstallerHostExecutionLog,
 } from "./verify-installer";
 
+// Off CI these two take ~17min against a 180s budget (https://github.com/lookatitude/guild/issues/259).
+const ciOnly = it.skipIf(!process.env.CI);
+
 describe("verify installer dry-runs", () => {
   it("passes for every supported install.sh host without requiring host binaries", () => {
     const result = verifyInstallerDryRuns({ root: PLUGIN_ROOT, pathEnv: "/usr/bin:/bin" });
@@ -25,7 +28,7 @@ describe("verify installer dry-runs", () => {
     );
   });
 
-  it("executes every supported install.sh host against isolated fake host binaries", () => {
+  ciOnly("executes every supported install.sh host against isolated fake host binaries", () => {
     const result = verifyInstallerFixtureExecutions({ root: PLUGIN_ROOT });
     expect(result.errors).toEqual([]);
     expect(result.ok).toBe(true);
@@ -35,7 +38,7 @@ describe("verify installer dry-runs", () => {
     // Runs every host's install.sh for real (~45s); Jest never timed out sync tests, Bun does.
   }, 180_000);
 
-  it("executes the live-isolated installer rail against PATH host binaries without dry-run", () => {
+  ciOnly("executes the live-isolated installer rail against PATH host binaries without dry-run", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "guild-installer-live-test-"));
     try {
       const fakeBin = path.join(tmp, "bin");
