@@ -232,6 +232,18 @@ describe("runIsolatedInstall — claude-code-cli", () => {
     expect(checkState(r, "native_plugin_load").state).toBe("refused");
   });
 
+  it("refuses with an exact code when a live plugin tree cannot be listed", () => {
+    // @control: a permission-denied tree must refuse, never read as an empty tree.
+    const cache = join(realHome, ".claude", "plugins", "cache");
+    mkdirSync(cache, { recursive: true });
+    chmodSync(cache, 0o000);
+    try {
+      expect(run("claude-code-cli", fakeClaude()).code).toBe("live_config_unreadable");
+    } finally {
+      chmodSync(cache, 0o755);
+    }
+  });
+
   it("PLANTED CONTROL: an install path outside the isolated root is refused", () => {
     // @control: an install the host reports outside the root must be refused.
     const r = run("claude-code-cli", fakeClaude({ escapeInstall: true }));

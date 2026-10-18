@@ -128,16 +128,18 @@ export function snapshotLiveConfig(realHome: string): string {
     let names: string[];
     try {
       names = readdirSync(dir).sort();
-    } catch {
-      return [];
+    } catch (err) {
+      if (isAbsence(err)) return [];
+      throw err; // unreadable is not unchanged: the caller refuses
     }
     return names.flatMap((name) => {
       const full = join(dir, name);
       let st: ReturnType<typeof lstatSync>;
       try {
         st = lstatSync(full);
-      } catch {
-        return [`${prefix}${name}:gone`]; // removed between readdir and lstat
+      } catch (err) {
+        if (isAbsence(err)) return [`${prefix}${name}:gone`]; // removed between readdir and lstat
+        throw err;
       }
       const row = `${prefix}${name}:${st.size}:${st.mtimeMs}`;
       return st.isDirectory() ? [row, ...list(full, `${prefix}${name}/`)] : [row];
@@ -327,6 +329,11 @@ function codexFlow(o: IsolatedInstallOptions, hostRoot: string, env: NodeJS.Proc
       `${ISOLATED_INSTALL_EVIDENCE_PREFIX} codex debug prompt-input renders ${count} model-visible guild:* skills from the isolated install root; ` +
       `${CODEX_PROBE_SKILL} resolves to ${file}`,
   };
+}
+
+function isAbsence(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException)?.code;
+  return code === "ENOENT" || code === "ENOTDIR";
 }
 
 function isSymlink(p: string): boolean {
