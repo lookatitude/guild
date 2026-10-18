@@ -37,6 +37,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { splitFrontmatter, readScalarField } from "./frontmatter";
 import { validateSurfaceManifest } from "./surface-manifest";
+import { frontmatterValue } from "../../tests/rearch/r-decl";
 import { CLAUDE_TIER_FALLBACK } from "./capability/tier-defaults";
 import * as yaml from "js-yaml";
 
@@ -125,10 +126,10 @@ describe("W7 declarative-surface conversion — behavioral parity per exemplar",
         expect(v.ok).toBe(true);
         const m = v.manifest!;
         expect(m.kind).toBe(kind);
-        expect(m.name).toBe(readScalarField(cur, "name"));
-        expect(m.description).toBe(readScalarField(cur, "description"));
+        expect(m.name).toBe(frontmatterValue(cur, "name"));
+        expect(m.description).toBe(frontmatterValue(cur, "description"));
         if (m.when_to_use !== undefined) {
-          expect(m.when_to_use).toBe(readScalarField(cur, "when_to_use"));
+          expect(m.when_to_use).toBe(frontmatterValue(cur, "when_to_use"));
         }
       });
 
