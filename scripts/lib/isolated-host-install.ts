@@ -37,6 +37,7 @@ export const ISOLATED_INSTALL_REFUSALS = Object.freeze([
   "host_start_failed",
   "plugin_load_not_observed",
   "live_config_mutated",
+  "live_config_unreadable",
 ] as const);
 export type IsolatedInstallRefusal = (typeof ISOLATED_INSTALL_REFUSALS)[number];
 
@@ -132,7 +133,12 @@ export function snapshotLiveConfig(realHome: string): string {
     }
     return names.flatMap((name) => {
       const full = join(dir, name);
-      const st = lstatSync(full);
+      let st: ReturnType<typeof lstatSync>;
+      try {
+        st = lstatSync(full);
+      } catch {
+        return [`${prefix}${name}:gone`]; // removed between readdir and lstat
+      }
       const row = `${prefix}${name}:${st.size}:${st.mtimeMs}`;
       return st.isDirectory() ? [row, ...list(full, `${prefix}${name}/`)] : [row];
     });
@@ -364,7 +370,16 @@ export function runIsolatedInstall(o: IsolatedInstallOptions): IsolatedInstallRe
   mkdirSync(hostRoot, { recursive: true, mode: 0o700 });
   const hostGuard = checkIsolatedRoot(hostRoot, realHome, o.tmpRoot ?? tmpdir());
   if (!hostGuard.ok) return build({ verdict: hostGuard });
-  const before = snapshotLiveConfig(realHome);
+  const snapshot = (): string | null => {
+    try {
+      return snapshotLiveConfig(realHome);
+    } catch {
+      return null;
+    }
+  };
+  const unreadable: Step = { verdict: { ok: false, code: "live_config_unreadable", detail: "the live HOME install state could not be read" } };
+  const before = snapshot();
+  if (before === null) return build(unreadable);
   let step: Step;
   try {
     const env = isolatedEnv(o.host, hostRoot);
@@ -372,7 +387,9 @@ export function runIsolatedInstall(o: IsolatedInstallOptions): IsolatedInstallRe
   } catch (err) {
     step = { verdict: { ok: false, code: "host_start_failed", detail: (err as Error).message.slice(0, 200) } };
   }
-  if (snapshotLiveConfig(realHome) !== before) {
+  const after = snapshot();
+  if (after === null) return build(unreadable);
+  if (after !== before) {
     return build({ verdict: { ok: false, code: "live_config_mutated", detail: "the live HOME install state changed during the isolated run" } });
   }
   return build(step);

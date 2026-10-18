@@ -511,8 +511,12 @@ function buildPackagesInto(isolatedRoot: string): { ok: boolean; detail: string 
     const modules = join(pluginRoot(), rel, "node_modules");
     if (existsSync(modules) && existsSync(join(source, rel))) symlinkSync(modules, join(source, rel, "node_modules"));
   }
-  const r = spawnSync("npx", ["tsx", join(source, "scripts", "build-host-packages.ts"), "--root", source, "--out", join(isolatedRoot, "packages")], {
+  // tsx straight from node_modules (no npm), with HOME/TMPDIR/XDG in the temp root.
+  const tsx = join(pluginRoot(), "scripts", "node_modules", ".bin", "tsx");
+  const buildEnv = isolatedEnv("codex-cli", join(isolatedRoot, "build"));
+  const r = spawnSync(tsx, [join(source, "scripts", "build-host-packages.ts"), "--root", source, "--out", join(isolatedRoot, "packages")], {
     cwd: join(source, "scripts"),
+    env: buildEnv,
     encoding: "utf8",
     timeout: 600_000,
   });

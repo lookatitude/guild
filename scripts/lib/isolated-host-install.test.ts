@@ -223,6 +223,15 @@ describe("runIsolatedInstall — claude-code-cli", () => {
     expect(existsSync(join(realHome, ".claude", "claude-config"))).toBe(false);
   });
 
+  it("refuses with an exact code when the live install state cannot be read", () => {
+    // @control: an unreadable watch set must refuse, never pass as unchanged.
+    rmSync(join(realHome, ".claude", "settings.json"));
+    mkdirSync(join(realHome, ".claude", "settings.json"));
+    const r = run("claude-code-cli", fakeClaude());
+    expect(r.code).toBe("live_config_unreadable");
+    expect(checkState(r, "native_plugin_load").state).toBe("refused");
+  });
+
   it("PLANTED CONTROL: an install path outside the isolated root is refused", () => {
     // @control: an install the host reports outside the root must be refused.
     const r = run("claude-code-cli", fakeClaude({ escapeInstall: true }));
