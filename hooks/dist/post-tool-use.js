@@ -51910,6 +51910,10 @@ function resolveGuildRoot3(startCwd) {
   }
 }
 
+// scripts/lib/frontmatter.ts
+init_state();
+var readScalarField2 = readScalarField;
+
 // hooks/lib/v1.4/log-jsonl.ts
 init_lifecycle();
 
@@ -52646,12 +52650,6 @@ init_knowledge();
 init_lifecycle();
 init_dispatch();
 init_teams();
-
-// scripts/lib/frontmatter.ts
-init_state();
-var readScalarField2 = readScalarField;
-
-// hooks/lib/compaction-rehydrate.ts
 var COMPACTION_REHYDRATE_SCHEMA = "guild.compaction_rehydrate.v1";
 var RUNG_RECORD_SCHEMA2 = "guild.rung_record.v1";
 function resolveCompactionRung(env) {
@@ -53087,8 +53085,9 @@ function redactedHash(value) {
 }
 var SAFE_TASK_ID = /^[A-Za-z0-9._-]{1,128}$/;
 function handoffTaskId(content) {
-  const m = /"task_id"\s*:\s*"([^"\n]{1,128})"/.exec(content) ?? /^task_id:\s*["']?([^"'\s]{1,128})["']?\s*$/m.exec(content);
-  return m !== null && SAFE_TASK_ID.test(m[1]) ? m[1] : void 0;
+  const fromJson = /"task_id"\s*:\s*"([^"\n]{1,128})"/.exec(content)?.[1];
+  const candidate = fromJson ?? readScalarField2(content, "task_id");
+  return candidate !== void 0 && SAFE_TASK_ID.test(candidate) ? candidate : void 0;
 }
 function handoffRef(runDir3, filePath, guildRoot) {
   try {

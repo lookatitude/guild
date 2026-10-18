@@ -41659,6 +41659,10 @@ function resolveGuildRoot3(startCwd) {
   }
 }
 
+// scripts/lib/frontmatter.ts
+init_state();
+var readScalarField2 = readScalarField;
+
 // hooks/lib/v1.4/log-jsonl.ts
 init_lifecycle();
 
@@ -42856,9 +42860,6 @@ var PROFILE_EMITTING_MODES = Object.freeze([
 ]);
 var EMITTING_MODE_SET = new Set(PROFILE_EMITTING_MODES);
 
-// scripts/lib/frontmatter.ts
-init_state();
-
 // hooks/lib/handoff-v2.ts
 init_kernel();
 var ALLOWED_INJECTION_CLEAN_VALUES2 = sealSet([
@@ -43638,8 +43639,7 @@ var signatureToken = (value) => value.replace(/[^A-Za-z0-9_.-]+/g, "_").slice(0,
 function recordedRunId(recordPath) {
   try {
     if (!fs72.lstatSync(recordPath).isFile()) return void 0;
-    const m = /^run_id:\s*["']?([^"'\s]+)["']?\s*$/m.exec(fs72.readFileSync(recordPath, "utf8"));
-    return m?.[1];
+    return readScalarField2(fs72.readFileSync(recordPath, "utf8"), "run_id");
   } catch {
     return void 0;
   }

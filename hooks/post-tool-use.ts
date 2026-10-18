@@ -27,6 +27,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
+import { readScalarField } from "../scripts/lib/frontmatter";
 import {
   appendEvent,
   buildToolCallFromPair,
@@ -192,10 +193,9 @@ const SAFE_TASK_ID = /^[A-Za-z0-9._-]{1,128}$/;
  * from the file name or prose.
  */
 function handoffTaskId(content: string): string | undefined {
-  const m =
-    /"task_id"\s*:\s*"([^"\n]{1,128})"/.exec(content) ??
-    /^task_id:\s*["']?([^"'\s]{1,128})["']?\s*$/m.exec(content);
-  return m !== null && SAFE_TASK_ID.test(m[1]) ? m[1] : undefined;
+  const fromJson = /"task_id"\s*:\s*"([^"\n]{1,128})"/.exec(content)?.[1];
+  const candidate = fromJson ?? readScalarField(content, "task_id");
+  return candidate !== undefined && SAFE_TASK_ID.test(candidate) ? candidate : undefined;
 }
 
 /** `handoffs/<file>` when the written path is a receipt inside THIS run, else null. */

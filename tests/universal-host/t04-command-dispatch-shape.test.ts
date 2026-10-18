@@ -31,6 +31,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { canonicalYaml } from "../../src/domains/teams";
+import { readScalarField } from "../../scripts/lib/frontmatter";
 import { recordDecision, writeDecision } from "../../src/domains/teams/index";
 import { composeProposal, writeProposal } from "../../src/domains/teams/index";
 
@@ -349,7 +350,7 @@ describe("T04 R3-1 — maintain dispatches exactly one assembler", () => {
   });
 
   it("every sub-verb still appears in the frontmatter hint (no token was dropped)", () => {
-    const hint = readCommand("maintain").match(/argument-hint:\s*"(.*)"/)?.[1] ?? "";
+    const hint = readScalarField(readCommand("maintain"), "argument-hint") ?? "";
     for (const verb of Object.keys(MAINTAIN_ROUTES)) {
       expect(hint).toContain(verb.split(" ")[0]);
     }
@@ -518,7 +519,7 @@ describe("T04 P4 — the goal sub-verb has a real route", () => {
       expect((JSON.parse(fs.readFileSync(allowPath, "utf8")) as { aliases: string[] }).aliases).toContain("goal");
     } else {
       expect(fs.existsSync(allowPath)).toBe(false);
-      const hint = readCommand("plan").match(/argument-hint:\s*"(.*)"/)?.[1] ?? "";
+      const hint = readScalarField(readCommand("plan"), "argument-hint") ?? "";
       expect(hint).toContain("goal");
     }
   });
@@ -842,7 +843,7 @@ function maintainForwards(userInput: string): string {
 
 describe("T04 C02E-D — analyze dispatcher mapping", () => {
   it("analyze dispatcher mapping: the maintain argument-hint names the analyze token", () => {
-    const hint = readCommand("maintain").match(/argument-hint:\s*"(.*)"/)?.[1] ?? "";
+    const hint = readScalarField(readCommand("maintain"), "argument-hint") ?? "";
     expect(hint).toContain("analyze");
   });
 
