@@ -7,6 +7,10 @@
 import { describe, test, expect } from "bun:test";
 import { crossCheck, extractManifestBlock, frontmatterValue } from "../../tests/rearch/r-decl";
 import { validateSurfaceManifest } from "./surface-manifest";
+import * as fs from "fs";
+import * as path from "path";
+
+const ROOT = path.resolve(__dirname, "../..");
 
 /** Agent doc: frontmatter description written `fm`, manifest description written `mf`. */
 function agentDoc(fm: string, mf: string): string {
@@ -102,5 +106,16 @@ describe("C3 — R-DECL prose-≡ uses parsed YAML values", () => {
 
   test("fallback: a duplicate key is undefined, never first- or last-wins", () => {
     expect(frontmatterValue(`---\n${HOSTILE}when_to_use: a\nwhen_to_use: b\n---\n`, "when_to_use")).toBeUndefined();
+  });
+
+  test("fallback: a quoted key on a YAML-hostile line is the same key", () => {
+    const real = fs.readFileSync(path.join(ROOT, "skills/specialists/architect-tradeoff-matrix/SKILL.md"), "utf8");
+    const quoted = real.replace("\ndescription: ", '\n"description": ');
+    expect(quoted).not.toBe(real);
+    expect(frontmatterValue(quoted, "description")).toBe(frontmatterValue(real, "description"));
+    expect(typeof frontmatterValue(real, "description")).toBe("string");
+    const v = validateSurfaceManifest(extractManifestBlock(quoted));
+    expect(v.ok).toBe(true);
+    expect(crossCheck(quoted, v.manifest!, "architect-tradeoff-matrix")).toEqual([]);
   });
 });

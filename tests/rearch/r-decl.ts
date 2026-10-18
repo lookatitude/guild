@@ -109,8 +109,8 @@ export function extractManifestBlock(content: string): unknown {
  * A YAML-clean frontmatter is parsed whole. A YAML-hostile one (the unquoted skill
  * `description:` convention) is rebuilt entry by entry: each entry is the shortest
  * run of lines up to a column-0 line that still parses after the entries before it.
- * A line no run can parse must be a single-line `key: plain text` entry; it is
- * re-emitted as a JSON (= YAML double-quoted) string. The rebuilt document is then
+ * A line no run can parse must be a single-line `key: plain text` entry (plain or
+ * quoted key); key and value are re-emitted as JSON (= YAML double-quoted) strings. The rebuilt document is then
  * parsed whole, so quoted keys, anchors and duplicate keys keep YAML semantics.
  * Anything else is undefined, so it never matches a manifest value.
  */
@@ -139,13 +139,28 @@ export function frontmatterValue(content: string, key: string): unknown {
       continue;
     }
     const ln = lines[i];
-    const colon = ln.indexOf(":");
-    const k = ln.slice(0, colon);
+    // the key ends at the first `:` (plain key) or the first `:` after a closing quote
+    // whose prefix parses to a string (quoted key)
+    let colon = -1;
+    let k: unknown;
+    for (let c = ln.indexOf(":"); c > 0; c = ln.indexOf(":", c + 1)) {
+      const token = ln.slice(0, c);
+      if (!"\"'".includes(token[0])) {
+        [colon, k] = [c, token];
+        break;
+      }
+      const parsed = parseYaml(token);
+      if (typeof parsed === "string") {
+        [colon, k] = [c, parsed];
+        break;
+      }
+    }
     const raw = ln.slice(colon + 1).trim();
     const next = lines.slice(i + 1).find((l) => l.trim() !== "");
-    if (colon <= 0 || k.trim() !== k || raw === "" || (next !== undefined && /^[ \t]/.test(next))) return undefined;
-    if ("\"'".includes(k[0]) || "\"'[{|>&*!#%@`".includes(raw[0])) return undefined;
-    out.push(`${k}: ${JSON.stringify(raw)}`);
+    if (colon <= 0 || typeof k !== "string" || ln.slice(0, colon).trim() !== ln.slice(0, colon)) return undefined;
+    if (raw === "" || (next !== undefined && /^[ \t]/.test(next))) return undefined;
+    if ("\"'[{|>&*!#%@`".includes(raw[0])) return undefined;
+    out.push(`${JSON.stringify(k)}: ${JSON.stringify(raw)}`);
     i++;
   }
   const doc = parseYaml(out.join("\n"));
