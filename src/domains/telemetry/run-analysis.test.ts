@@ -6,7 +6,9 @@ import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-import { analyzeRun, compareRuns, resolveComparisonTarget, routeRecommendation, decideRecommendation, updateRecommendationStatus, writeRunComparison, writeRunAnalysis, withRecommendationLock, loadOrAnalyzeRun, inspectAnalysisArtifact, DETECTOR_IDS, type DetectorId, type RunAnalysis } from ".";
+import { analyzeRun, compareRuns, resolveComparisonTarget, routeRecommendation, decideRecommendation, updateRecommendationStatus, writeRunComparison, writeRunAnalysis, withRecommendationLock, loadOrAnalyzeRun, inspectAnalysisArtifact, type RunAnalysis } from ".";
+// Internal-only names (off the index since the C06E orphan trim): import the module.
+import { DETECTOR_IDS, type DetectorId } from "./run-analysis";
 import {
   ASSESSED_INPUT, BASELINE_RUN, REQ, TS, V1_BASELINE_SCENARIOS, appendRows, capabilityEvidence, coreProjection, declare,
   defaultEvents, failedTool, phaseCursor, prove, staleCursor, seedRun as seedGoldenRun, sha, usageEvents, v2, writeRunFile,

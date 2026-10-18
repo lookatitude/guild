@@ -31,12 +31,41 @@
 import * as fs from "fs";
 import * as path from "path";
 
-// Lazy barrel access (deferred require) — see independence-record.ts for why: keeps
-// the lifecycle barrel (with its require.main-gated CLI modules) out of the eager
-// capability/index graph that hook bundles reach via runstart-preflight.
+// Lazy barrel access from the compiled lifecycle-api chunk — see
+// independence-record.ts for the full rationale (C04/KTD29, KTD10 fail-closed).
 function lifecycleApi(): typeof import("../lifecycle") {
+  if (__filename.endsWith(".ts")) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require(path.join(__dirname, "..", "lifecycle")) as typeof import("../lifecycle");
+  }
+  // Bounded to the owning package (codex C04 r1): sibling chunk first, else the
+  // NEAREST package root must carry it — never a checkout's copy past that root.
+  const sibling = path.join(__dirname, "lifecycle-api.js");
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require("../lifecycle");
+  if (fs.existsSync(sibling)) return require(sibling) as typeof import("../lifecycle");
+  for (let dir = path.dirname(__dirname); ; ) {
+    const isPackageRoot =
+      fs.existsSync(path.join(dir, "runtime")) ||
+      fs.existsSync(path.join(dir, ".claude-plugin")) ||
+      fs.existsSync(path.join(dir, ".codex-plugin")) ||
+      fs.existsSync(path.join(dir, "guild.inventory.json"));
+    if (isPackageRoot) {
+      const chunk = path.join(dir, "runtime", "scripts", "lifecycle-api.js");
+      if (!fs.existsSync(chunk)) {
+        throw new Error(
+          `guild: runtime/scripts/lifecycle-api.js missing from package root ${dir} — incomplete package; run \`bun run compile\` (KTD10 fail-closed)`,
+        );
+      }
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return require(chunk) as typeof import("../lifecycle");
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error(
+    `guild: no package root found above ${__dirname} for lifecycle-api.js (KTD10 fail-closed)`,
+  );
 }
 import { MODEL_INSPECTION_SCHEMA, type ModelInspectionV1 } from "./model-inspect";
 import { durableGuildDir } from "../state";

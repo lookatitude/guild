@@ -57,10 +57,12 @@ describe("render(extract(file)) === file — byte-identical over the live corpus
   const files = listCommandFiles();
 
   it("the corpus is non-empty and includes the tricky-quoting oracles (anti-vacuity)", () => {
-    expect(files.length).toBeGreaterThanOrEqual(20);
+    expect(files.length).toBeGreaterThanOrEqual(13);
     // these specific files exercise escaped quotes / long descriptions / empty
     // argument-hint — the parity proof is vacuous if they are not present.
-    for (const must of ["status.md", "config.md", "fix.md", "initiative.md", "wiki.md", "audit.md"]) {
+    // (13-command surface per KTD69: the 11 print-only aliases, fix/audit among
+    // them, were deleted post-v3.0.0 stable cut — C06.)
+    for (const must of ["status.md", "config.md", "maintain.md", "initiative.md", "wiki.md", "guild.md"]) {
       expect(files).toContain(must);
     }
   });

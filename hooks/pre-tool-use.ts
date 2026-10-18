@@ -42,6 +42,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { resolveGuildRoot } from "./lib/guild-root.js";
+import { readScalarField } from "../scripts/lib/frontmatter";
 
 import {
   appendSidecarPre,
@@ -223,8 +224,7 @@ const signatureToken = (value: string): string =>
 function recordedRunId(recordPath: string): string | undefined {
   try {
     if (!fs.lstatSync(recordPath).isFile()) return undefined;
-    const m = /^run_id:\s*["']?([^"'\s]+)["']?\s*$/m.exec(fs.readFileSync(recordPath, "utf8"));
-    return m?.[1];
+    return readScalarField(fs.readFileSync(recordPath, "utf8"), "run_id");
   } catch {
     return undefined;
   }

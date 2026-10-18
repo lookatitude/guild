@@ -835,7 +835,9 @@ export function appendPhase(
 }
 
 /** Stable span for one phases_log visit: entry and conclusion share it. */
-export function phaseVisitSpanId(runId: string, index: number, phase: string, at: string): string {
+// In-file helper only: no outside-domain consumer, so it stays off the index
+// (coverage bijection, KTD36).
+function phaseVisitSpanId(runId: string, index: number, phase: string, at: string): string {
   return crypto.createHash("sha256").update(`${runId}|phase|${index}|${phase}|${at}`).digest("hex").slice(0, 16);
 }
 
