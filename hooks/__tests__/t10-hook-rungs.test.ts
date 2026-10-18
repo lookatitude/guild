@@ -158,14 +158,14 @@ interface HookRun {
  * to the spawn so the test does not depend on setup ordering.
  */
 // End-to-end wall clock includes a node process spawn, which a loaded CI runner
-// stretches 3x+. GUILD_WALLCLOCK_BUDGET_MULTIPLIER (CI sets it) scales ONLY that
+// stretches 3x+. WALLCLOCK_BUDGET_MULTIPLIER (CI sets it) scales ONLY that
 // leg; the rung's own duration_ms stays at the unscaled 250ms budget. Local: 1.
 function wallClockBudgetMs(budgetMs: number): number {
-  const raw = process.env.GUILD_WALLCLOCK_BUDGET_MULTIPLIER;
+  const raw = process.env.WALLCLOCK_BUDGET_MULTIPLIER;
   if (raw === undefined || raw === "") return budgetMs;
   const factor = Number(raw);
   if (!Number.isFinite(factor) || factor < 1) {
-    throw new Error(`GUILD_WALLCLOCK_BUDGET_MULTIPLIER must be a number >= 1, got ${JSON.stringify(raw)}`);
+    throw new Error(`WALLCLOCK_BUDGET_MULTIPLIER must be a number >= 1, got ${JSON.stringify(raw)}`);
   }
   return budgetMs * factor;
 }
@@ -214,17 +214,17 @@ afterEach(() => {
 
 describe("F1 a green verify.after_edit adds no assistant tokens and completes ≤250ms", () => {
   it("the CI wall-clock multiplier scales 250ms and rejects a value below 1", () => {
-    const saved = process.env.GUILD_WALLCLOCK_BUDGET_MULTIPLIER;
+    const saved = process.env.WALLCLOCK_BUDGET_MULTIPLIER;
     try {
-      delete process.env.GUILD_WALLCLOCK_BUDGET_MULTIPLIER;
+      delete process.env.WALLCLOCK_BUDGET_MULTIPLIER;
       expect(wallClockBudgetMs(250)).toBe(250);
-      process.env.GUILD_WALLCLOCK_BUDGET_MULTIPLIER = "4";
+      process.env.WALLCLOCK_BUDGET_MULTIPLIER = "4";
       expect(wallClockBudgetMs(250)).toBe(1000);
-      process.env.GUILD_WALLCLOCK_BUDGET_MULTIPLIER = "0.5";
+      process.env.WALLCLOCK_BUDGET_MULTIPLIER = "0.5";
       expect(() => wallClockBudgetMs(250)).toThrow(/>= 1/);
     } finally {
-      if (saved === undefined) delete process.env.GUILD_WALLCLOCK_BUDGET_MULTIPLIER;
-      else process.env.GUILD_WALLCLOCK_BUDGET_MULTIPLIER = saved;
+      if (saved === undefined) delete process.env.WALLCLOCK_BUDGET_MULTIPLIER;
+      else process.env.WALLCLOCK_BUDGET_MULTIPLIER = saved;
     }
   });
 

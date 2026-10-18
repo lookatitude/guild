@@ -50,7 +50,6 @@ import * as path from "node:path";
 
 for (const key of Object.keys(process.env)) {
   if (/^(GUILD_SSH_LIVE_TARGET|GUILD_ADAPTER_LIVE|CODEX_BIN)$/.test(key)) continue; // explicit live-suite opt-ins
-  if (key === "GUILD_WALLCLOCK_BUDGET_MULTIPLIER") continue; // CI wall-clock scale (t10 F1), not runtime config
   if (/^(GUILD_|CLAUDE_|CODEX_)/.test(key) || key === "CLAUDECODE") delete process.env[key];
 }
 

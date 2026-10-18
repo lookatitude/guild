@@ -150,7 +150,7 @@ jobs:
         # Scales only spawn-included wall-clock asserts (t10 F1: 250ms -> 1000ms).
         # Hook-internal budgets stay unscaled. Unset locally = 1x.
         env:
-          GUILD_WALLCLOCK_BUDGET_MULTIPLIER: "4"
+          WALLCLOCK_BUDGET_MULTIPLIER: "4"
         run: bun test --isolate --shard=${{ matrix.shard }}/4
 
   node-only-runtime:
