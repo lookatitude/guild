@@ -132,7 +132,7 @@ describe("routeLearn — bare /guild:learn", () => {
     expect(r.forward).toEqual(["--rigor=deep", "--cwd", "/x/y", "--include-lockfiles"]);
   });
 
-  for (const argv of [["--cwd"], ["--cwd="], ["--cwd", "--dry-run"], ["map", "--cwd"]]) {
+  for (const argv of [["--cwd"], ["--cwd="], ["--cwd", "--dry-run"], ["map", "--cwd"], ["--cwd", "", "."], ["--cwd", "", "map"]]) {
     it(`--cwd without a value is refused: ${JSON.stringify(argv)}`, () => {
       expect(() => routeLearn({ argv, target: BROWNFIELD })).toThrow(LearnRouteError);
     });

@@ -24874,23 +24874,25 @@ function isSubVerb(token) {
   return LEARN_SUB_VERBS.includes(token);
 }
 function parseLearnArgs(tokens) {
-  const argv = tokens.filter((t) => t !== "");
+  const argv = [];
   let positional = -1;
   let cwdOverride = null;
   let dryRun = false;
-  for (let i = 0; i < argv.length; i++) {
-    const t = argv[i];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t === "") continue;
     if (t === "--cwd" || t.startsWith("--cwd=")) {
-      const v = t === "--cwd" ? argv[++i] : t.slice("--cwd=".length);
+      const v = t === "--cwd" ? tokens[++i] : t.slice("--cwd=".length);
       if (v === void 0 || v === "" || v.startsWith("-")) {
         throw new LearnRouteError("--cwd needs a path value");
       }
       cwdOverride = v;
+      argv.push(...t === "--cwd" ? [t, v] : [t]);
       continue;
     }
     if (t === "--dry-run") dryRun = true;
-    if (t.startsWith("-")) continue;
-    if (positional === -1) positional = i;
+    if (!t.startsWith("-") && positional === -1) positional = argv.length;
+    argv.push(t);
   }
   return { argv, positional, dry_run: dryRun, cwd_override: cwdOverride };
 }

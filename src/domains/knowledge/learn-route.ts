@@ -155,24 +155,27 @@ export interface ParsedLearnArgs {
  * with no value is refused (LearnRouteError), never read as "here".
  */
 export function parseLearnArgs(tokens: readonly string[]): ParsedLearnArgs {
-  const argv = tokens.filter((t) => t !== "");
+  const argv: string[] = [];
   let positional = -1;
   let cwdOverride: string | null = null;
   let dryRun = false;
-  for (let i = 0; i < argv.length; i++) {
-    const t = argv[i];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t === "") continue;
     if (t === "--cwd" || t.startsWith("--cwd=")) {
-      const v = t === "--cwd" ? argv[++i] : t.slice("--cwd=".length);
+      // Read the raw next token: dropping empties first would let `--cwd "" x` take x.
+      const v = t === "--cwd" ? tokens[++i] : t.slice("--cwd=".length);
       // A missing value must not fall back to the current root.
       if (v === undefined || v === "" || v.startsWith("-")) {
         throw new LearnRouteError("--cwd needs a path value");
       }
       cwdOverride = v;
+      argv.push(...(t === "--cwd" ? [t, v] : [t]));
       continue;
     }
     if (t === "--dry-run") dryRun = true;
-    if (t.startsWith("-")) continue;
-    if (positional === -1) positional = i;
+    if (!t.startsWith("-") && positional === -1) positional = argv.length;
+    argv.push(t);
   }
   return { argv, positional, dry_run: dryRun, cwd_override: cwdOverride };
 }

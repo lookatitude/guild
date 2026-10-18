@@ -114,6 +114,7 @@ describe("compiled learn-route CLI", () => {
 
   it("an inner --cwd with no value -> exit 1, never the current root", () => {
     expect(route(path.join(sandbox, "brownfield"), "--cwd").status).toBe(1);
+    expect(route(path.join(sandbox, "brownfield"), "--cwd", "", ".").status).toBe(1);
   });
 
   it("an outer --cwd with no value -> exit 1", () => {
