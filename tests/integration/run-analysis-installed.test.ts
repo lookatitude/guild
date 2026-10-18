@@ -187,6 +187,24 @@ const PRODUCED_CLASSES = [
   "phase_concluded", "run_closed",
 ];
 
+/** Per-file immutability for the B04-AC2 mid-write fault: darwin chflags, linux sudo -n chattr. */
+function setImmutable(file: string): boolean {
+  if (process.platform === "darwin") return spawnSync("chflags", ["uchg", file]).status === 0;
+  return spawnSync("sudo", ["-n", "chattr", "+i", file]).status === 0;
+}
+function clearImmutable(file: string): void {
+  if (process.platform === "darwin") spawnSync("chflags", ["nouchg", file]);
+  else spawnSync("sudo", ["-n", "chattr", "-i", file]);
+}
+const IMMUTABLE_FLAG_OK = (() => {
+  const probe = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "guild-b04-immutable-probe-")), "probe");
+  fs.writeFileSync(probe, "x");
+  const ok = setImmutable(probe);
+  clearImmutable(probe);
+  fs.rmSync(path.dirname(probe), { recursive: true, force: true });
+  return ok;
+})();
+
 if (GATE.state === "absent") {
   describe(`B04 installed run-analysis — SKIPPED ${GATE.reason}`, () => {
     it.skip(`${GATE.reason} (positives run only on a checkout carrying the committed C05 payload)`, () => {});
@@ -400,7 +418,11 @@ if (GATE.state === "absent") {
       expect(after).toEqual(before);
     });
 
-    it("B04-AC2 [failed transaction]: a held lock refuses; a mid-write failure rolls back and recovers", () => {
+    it.skipIf(!IMMUTABLE_FLAG_OK)(
+      IMMUTABLE_FLAG_OK
+        ? "B04-AC2 [failed transaction]: a held lock refuses; a mid-write failure rolls back and recovers"
+        : "B04-AC2 SKIPPED B04_TXN_PLATFORM: no per-file immutability control on this host (darwin chflags / linux sudo -n chattr)",
+      () => {
       const project = makeProject(sb, "transaction");
       const runId = producePackagedRun(sb, project, "/guild:build");
       expect(cli(sb, project, "run", "analyze", runId).status).toBe(0);
@@ -415,18 +437,18 @@ if (GATE.state === "absent") {
       expect(snapshot(project)).toEqual(lockedBefore);
       fs.rmSync(path.join(store, ".write.lock"));
 
-      if (process.platform !== "darwin") {
-        throw new Error("B04_TXN_PLATFORM: the mid-write rollback control needs the darwin user-immutable flag (chflags uchg)");
-      }
-      // queue.jsonl is immutable, so the source rewrite lands first and the queue rename fails mid-transaction.
+      // queue.jsonl is immutable, so the source rewrite lands first and the
+      // queue rename fails mid-transaction. darwin: chflags uchg; linux:
+      // sudo -n chattr +i (CI runners have passwordless sudo). Hosts with
+      // neither get the loud B04_TXN_PLATFORM skip above.
       const before = snapshot(project);
       const queue = path.join(store, "queue.jsonl");
-      expect(spawnSync("chflags", ["uchg", queue]).status).toBe(0);
+      expect(setImmutable(queue)).toBe(true);
       let failed: Proc;
       try {
         failed = cli(sb, project, "recommendation", "decide", runId, projectRec.id, "accept");
       } finally {
-        spawnSync("chflags", ["nouchg", queue]);
+        clearImmutable(queue);
       }
       expect(failed.status).toBe(1);
       expect(failed.stderr).toMatch(/recommendation transaction failed and recovery is pending: .*EPERM/);
