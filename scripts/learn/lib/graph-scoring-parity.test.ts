@@ -16,6 +16,8 @@
  *                      on at least one sample — proving (A) has teeth.
  *   (C) SINGLE-IMPL:   exactly one source file DEFINES scoreNode /
  *                      buildProximityBonuses / termMatchScore.
+ *
+ * refresh_trigger: {"owner": "tooling-engineer", "when": "An intentional change to KG node scoring (term-match weights, importance multiplier, confidence bonus) in the source file. Update the frozen reference in the same commit and record the decision; never edit it to match an unplanned diff.", "source": "src/domains/knowledge/graph-scoring.ts"}
  */
 
 import { describe, test, expect } from "bun:test";

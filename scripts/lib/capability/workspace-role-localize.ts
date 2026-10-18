@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { tierForModel } from "../../../src/domains/config/index";
 import { parseFrontmatter } from "../frontmatter";
 import { resolveWorkspaceProjectRoot } from "../workspace-project-root";
 import {
@@ -57,12 +58,6 @@ const hashBytes = (bytes: Buffer) => `sha256:${crypto.createHash("sha256").updat
 const token = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value);
 const relativePath = (value: unknown): value is string => typeof value === "string" && value.length > 0 && !path.isAbsolute(value) && !value.split(/[\\/]+/).some((part) => part === "" || part === "." || part === "..");
 const stringList = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-const tierForModel = (model: string | null): "cheap" | "mid" | "powerful" => {
-  const value = (model ?? "").toLowerCase();
-  if (value.includes("opus")) return "powerful";
-  if (value.includes("haiku")) return "cheap";
-  return "mid";
-};
 
 function gitCommitForBytes(root: string, rel: string, bytes: Buffer): string | null {
   try {
@@ -101,7 +96,7 @@ function buildDestination(root: string, projectId: string, rel: string) {
     capability_tags: [...new Set(allSkills)],
     compatible_skill_refs: [...new Set(allSkills)],
     semantic_tool_requirements: [],
-    default_model_tier: tierForModel(typeof fm["model"] === "string" ? fm["model"] : null),
+    default_model_tier: tierForModel(typeof fm["model"] === "string" ? fm["model"] : null) ?? "mid",
     constraints: {
       ...(typeof fm["scope"] === "string" ? { scope: fm["scope"] } : {}),
       ...(typeof fm["work_class"] === "string" ? { work_class: fm["work_class"] } : {}),

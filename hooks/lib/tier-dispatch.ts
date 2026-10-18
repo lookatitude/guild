@@ -48,11 +48,9 @@
  * Bundle-weight note: `pre-tool-use.js` runs on EVERY tool call in every
  * session, so this module reads `.guild/settings.json` with `fs` + `JSON.parse`
  * instead of importing `scripts/lib/settings-resolver.ts` (whose graph would pull
- * the whole config layer into the hook bundle), and restates the Claude tier
- * ladder rather than importing `src/domains/config/tier-defaults.ts`
- * (which pulls the host registry). Exactly as `backend-degradation.ts` restates
- * `probeTmuxAvailable` and `dispatch-attribution.ts` restates
- * `GENERIC_SUBAGENT_TYPE`. Keep the semantics identical.
+ * the whole config layer into the hook bundle). The Claude tier ladder is
+ * imported from the config domain: `pre-tool-use.js` already bundles the host
+ * registry it pulls, so a restated copy saved nothing and could drift.
  */
 
 import * as fs from "node:fs";
@@ -62,6 +60,7 @@ import type { DispatchAttribution } from "./dispatch-attribution.js";
 import { classifyLaneEvidence, type LaneEvidence } from "./backend-degradation.js";
 import { redactField } from "./v1.4/redact-log.js";
 import { durableGuildDir } from "../../src/domains/state";
+import { CLAUDE_TIER_FALLBACK } from "../../src/domains/config/index.js";
 
 /** The env var an operator sets to consciously dispatch a lane without a tier. */
 export const OVERRIDE_ENV = "GUILD_ALLOW_UNTIERED_DISPATCH";
@@ -91,17 +90,11 @@ export type Tier = "cheap" | "mid" | "powerful";
 const TIERS: readonly Tier[] = ["cheap", "mid", "powerful"];
 
 /**
- * The Claude tier ladder, restated from
- * `src/domains/config/tier-defaults.ts CLAUDE_TIER_FALLBACK`
- * (see the bundle-weight note in the module header). Used ONLY as the fallback
- * when the project has no `models.tiers` config AND the host is a Claude host —
- * see `readConfiguredTierModels` for why the fallback is host-gated.
+ * The Claude tier ladder (`src/domains/config/tier-defaults.ts`). Used ONLY as
+ * the fallback when the project has no `models.tiers` config AND the host is a
+ * Claude host — see `readConfiguredTierModels` for why the fallback is host-gated.
  */
-export const CLAUDE_TIER_FALLBACK: Record<Tier, string> = {
-  cheap: "haiku",
-  mid: "sonnet",
-  powerful: "opus",
-};
+export { CLAUDE_TIER_FALLBACK };
 
 /** The effective tier→model map for the active host. `null` = no mapped model. */
 export type TierModelMap = Record<Tier, string | null>;

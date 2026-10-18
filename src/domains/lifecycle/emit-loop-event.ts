@@ -55,7 +55,8 @@ import { resolveGuildRoot } from "../state";
 import { durableGuildDir } from "../state";
 
 const VALID_EVENTS = new Set(["loop_round_start", "loop_round_end", "codex_review_round"]);
-const VALID_LAYERS = new Set(["L1", "L2", "L3", "L4", "security-review"]);
+// "L-arch" is OWNER_ARCHITECT_LAYER (owner-architect-loop.ts).
+const VALID_LAYERS = new Set(["L1", "L2", "L3", "L4", "security-review", "L-arch"]);
 const VALID_TERMINATED = new Set([
   "satisfied",
   "malformed_termination",
