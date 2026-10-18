@@ -134,7 +134,9 @@ import {
   TIER_DISPATCH_EVENT,
 } from "./lib/tier-dispatch.js";
 import { redactField as redactTierField } from "./lib/v1.4/redact-log.js";
-import { genSpanId } from "./lib/trace-v2.js";
+import { genSpanId, writePayloadSidecar } from "./lib/trace-v2.js";
+import { applySecretsPolicy, resolveTelemetryField } from "./lib/security/secrets.js";
+import { authorizeHookWrite } from "./lib/hook-binding.js";
 // G5(d) — per-tool lifecycle bound (v23x-deferred-followups rf-wi-05, origin
 // oir-wi-59). See lib/tool-turn-bound.ts header for the full mechanism.
 import { evaluateToolTurnBound, buildToolTurnAskReason } from "./lib/tool-turn-bound.js";
@@ -202,6 +204,85 @@ function resolveRunId(cwd: string): string | undefined {
   const envRunId = process.env["GUILD_RUN_ID"];
   if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
   return readCurrentRunId(cwd);
+}
+
+// ── G04 R2: agent_prompt_sent at the subagent dispatch ─────────────────────
+
+/**
+ * Record the prompt leg of an allowed `Agent` dispatch. Run identity is the
+ * verified binding only (same as capture-telemetry). The event carries a
+ * prompt digest; the prompt itself lands only in the secrets-redacted payload
+ * sidecar. An untasked dispatch is keyed by its own span id. Never throws.
+ */
+function traceAgentPromptSent(payload: GuildHookEvent, cwd: string): void {
+  try {
+    const root = resolveGuildRoot(cwd);
+    const auth = authorizeHookWrite(root);
+    if (auth.ok === false) return;
+    const runId = auth.run_id;
+    // The destination is the verified run only — never a GUILD_RUN_DIR override,
+    // which could point the write at a run this binding does not authorize.
+    const runDir = path.join(durableGuildDir(root), "runs", runId);
+    const ti = (payload.tool_input ?? {}) as Record<string, unknown>;
+    const prompt = typeof ti["prompt"] === "string" ? ti["prompt"] : "";
+    const actorId = signatureToken(typeof ti["subagent_type"] === "string" ? ti["subagent_type"] : "agent");
+    const ts = new Date().toISOString();
+    const spanId = genSpanId(runId, "agent_prompt_sent", ts, actorId);
+    const parentSpanId = process.env["GUILD_PARENT_SPAN_ID"] || undefined;
+    // Allowlisted fields only: the dispatch `env` (binding refs, credentials)
+    // never enters the sidecar, because value-only redaction loses key context.
+    const body: Record<string, unknown> = { tool: "Agent" };
+    for (const key of ["subagent_type", "description", "prompt", "model"]) {
+      if (typeof ti[key] === "string") body[key] = ti[key];
+    }
+    const secPolicy = readSecurityConfig(cwd).secrets_policy;
+    // fail_mode_telemetry: a failed custom pattern under "closed" writes no
+    // sidecar at all; "open" keeps the built-in-redacted body and warns.
+    const scrub = resolveTelemetryField(applySecretsPolicy(JSON.stringify(body), secPolicy), secPolicy);
+    if (scrub.warn) {
+      process.stderr.write(`warn: [pre-tool-use] agent_prompt_sent scrub degraded (fail_mode_telemetry=${secPolicy.fail_mode_telemetry}).\n`);
+    }
+    const payloadRef = scrub.value === undefined ? undefined : writePayloadSidecar(
+      runDir,
+      spanId,
+      {
+        runId,
+        spanId,
+        eventType: "agent_prompt_sent",
+        ts,
+        actorId,
+        parentSpanId,
+        body,
+      },
+      (v: string) => applySecretsPolicy(v, secPolicy).value,
+    );
+    const taskId =
+      resolveDispatchAttribution(payload.tool_input)?.taskId || process.env["GUILD_TASK_ID"] || spanId;
+    emitTraceEvent(
+      makeAnalysisTraceEvent({
+        ts,
+        run_id: runId,
+        lane_id: resolveLaneAttribution() ?? "",
+        event_class: "agent_prompt_sent",
+        actor_type: "agent",
+        actor_id: actorId,
+        span_id: spanId,
+        parent_span_id: parentSpanId,
+        phase: process.env["GUILD_PHASE"] || undefined,
+        task_id: taskId,
+        prompt_hash: crypto.createHash("sha256").update(prompt).digest("hex").slice(0, 16),
+        payload_ref: payloadRef,
+        redaction: payloadRef ? "redacted" : "omitted",
+        status: "ok",
+        config_snapshot_ref: fs.existsSync(path.join(runDir, "plugin-config-snapshot.json"))
+          ? "plugin-config-snapshot.json"
+          : undefined,
+      }),
+      runDir,
+    );
+  } catch {
+    /* telemetry must never block a dispatch */
+  }
 }
 
 // ── B01H: tool_call_denied at the permission decision ──────────────────────
@@ -1898,9 +1979,11 @@ export async function main(): Promise<void> {
   // security decision. Fail-open: evaluateToolTurnBound never throws, but the
   // whole block is wrapped anyway so a future change to it can never turn an
   // advisory checkpoint into a blocked tool call.
+  let askedTurnBound = false;
   try {
     const bound = evaluateToolTurnBound(runDir);
     if (bound.ask) {
+      askedTurnBound = true;
       process.stdout.write(
         JSON.stringify({
           hookSpecificOutput: {
@@ -1918,6 +2001,9 @@ export async function main(): Promise<void> {
       }\n`,
     );
   }
+
+  // G04 R2: only a dispatch every gate above let through (no deny, no ask).
+  if (toolName === "Agent" && !askedTurnBound) traceAgentPromptSent(payload, cwd);
 }
 
 // Allow tests to import without auto-executing.

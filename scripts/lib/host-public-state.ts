@@ -142,6 +142,12 @@ export interface SmokeReceiptIdentity {
   public_state_claimed: PublicState;
   verification_status_claimed: VerificationStatus;
   checks: SmokeCheck[];
+  /**
+   * The source commit the smoke ran against, grouped by `groupSourceCommit`
+   * (scan-clean). Optional so pre-binding receipts keep their digest; a caller that
+   * binds a commit refuses a receipt without one.
+   */
+  source_commit?: string;
 }
 
 /** The VOLATILE freshness block — NOT digested (ADR §6.2). */
@@ -194,6 +200,15 @@ export function computeSmokeDigest(identity: SmokeReceiptIdentity): string {
   return (hex.match(/.{1,16}/g) as string[]).join("-");
 }
 
+/**
+ * A 40-hex commit grouped into two 20-hex runs. Same reason as the digest grouping:
+ * a bare 40-hex run trips the shared `redact()` high-entropy heuristic.
+ */
+export function groupSourceCommit(commit: string): string {
+  const hex = commit.replace(/-/g, "").toLowerCase();
+  return (hex.match(/.{1,20}/g) ?? []).join("-");
+}
+
 export interface ReceiptValidation {
   valid: boolean;
   errors: string[];
@@ -224,6 +239,9 @@ export function validateSmokeReceipt(value: unknown): ReceiptValidation {
     }
     if (typeof i["verification_status_claimed"] !== "string" || !(VERIFICATION_STATUS as readonly string[]).includes(i["verification_status_claimed"] as string)) {
       errors.push(`identity.verification_status_claimed must be a VerificationStatus; got ${JSON.stringify(i["verification_status_claimed"])}`);
+    }
+    if (i["source_commit"] !== undefined && (typeof i["source_commit"] !== "string" || !/^[0-9a-f]{20}-[0-9a-f]{20}$/.test(i["source_commit"]))) {
+      errors.push("identity.source_commit, when present, must be a grouped 40-hex commit");
     }
     if (!Array.isArray(i["checks"])) errors.push("identity.checks must be an array");
     else {
@@ -289,35 +307,75 @@ export function isValidVerifiedReceipt(receipt: unknown, host: HostId, bucket: H
   return r.identity.public_state_claimed === verifiedStateForBucket(bucket);
 }
 
+/**
+ * The source identity a receipt must attest. `guild_version` is always bound;
+ * `source_commit` is bound exactly when the caller knows it. A committed receipt
+ * cannot name the commit that adds it, so the live matrix binds the version and
+ * sets `require_source_commit` (the receipt must record the clean commit it smoked).
+ */
+export interface ReceiptSourceBinding {
+  guild_version: string;
+  source_commit?: string;
+  require_source_commit?: boolean;
+}
+
+/** Why a receipt does not attest the bound source, or null when it does. */
+export function receiptSourceMismatch(receipt: HostSmokeReceipt, binding: ReceiptSourceBinding): string | null {
+  if (receipt.freshness.guild_version !== binding.guild_version) {
+    return `guild_version ${receipt.freshness.guild_version} !== ${binding.guild_version}`;
+  }
+  if (binding.require_source_commit && receipt.identity.source_commit === undefined) {
+    return "source_commit absent (smoke ran on a dirty tree or predates source binding)";
+  }
+  if (binding.source_commit !== undefined) {
+    const expected = groupSourceCommit(binding.source_commit);
+    if (receipt.identity.source_commit !== expected) {
+      return `source_commit ${receipt.identity.source_commit ?? "(absent)"} !== ${expected}`;
+    }
+  }
+  return null;
+}
+
 /** The outcome of selecting a host's committed receipts for the row. */
 export interface ReceiptSelection {
-  /** A valid-verified receipt was found (freshest non-stale preferred). */
+  /** A valid-verified, source-bound, non-stale receipt was found. */
   has_valid_receipt: boolean;
-  /** The chosen receipt (freshest non-stale, else freshest stale), or null. */
+  /** The freshest such receipt, or null. */
   chosen: HostSmokeReceipt | null;
-  /** The chosen receipt is past the age horizon (still counts as evidence). */
+  /** Source-bound receipts exist but every one is past the age horizon (refused). */
   stale: boolean;
   /** Two non-stale boxes attest DIFFERENT public states → the matrix FAILS (not a silent pick). */
   conflict: string | null;
+  /** One line per verified receipt refused for a source mismatch. */
+  refused: string[];
 }
 
 /**
  * Select among a host's committed box receipts (ADR §6.3): keep only
- * valid-verified receipts; if two NON-STALE ones disagree on public_state_claimed →
- * conflict; otherwise prefer the freshest non-stale, falling back to a stale one
- * (annotated). PURE — receipts are passed in; the fs read is in host-smoke-store.ts.
+ * valid-verified receipts that attest the bound source; drop stale ones; if two
+ * remaining ones disagree on public_state_claimed → conflict; otherwise the
+ * freshest. A mismatched or stale receipt is never selected. PURE — receipts are
+ * passed in; the fs read is in host-smoke-store.ts.
  */
 export function selectValidReceipt(
   host: HostId,
   bucket: HostBucket,
   receipts: HostSmokeReceipt[],
   generatedAt: string,
+  binding: ReceiptSourceBinding,
 ): ReceiptSelection {
-  const valid = receipts.filter((r) => isValidVerifiedReceipt(r, host, bucket));
-  if (valid.length === 0) {
-    return { has_valid_receipt: false, chosen: null, stale: false, conflict: null };
+  const refused: string[] = [];
+  const bound = receipts
+    .filter((r) => isValidVerifiedReceipt(r, host, bucket))
+    .filter((r) => {
+      const why = receiptSourceMismatch(r, binding);
+      if (why) refused.push(`${host}/${r.identity.box_id}: ${why}`);
+      return why === null;
+    });
+  const nonStale = bound.filter((r) => !isReceiptStale(r, generatedAt));
+  if (nonStale.length === 0) {
+    return { has_valid_receipt: false, chosen: null, stale: bound.length > 0, conflict: null, refused };
   }
-  const nonStale = valid.filter((r) => !isReceiptStale(r, generatedAt));
   const distinctNonStale = new Set(nonStale.map((r) => r.identity.public_state_claimed));
   if (distinctNonStale.size > 1) {
     return {
@@ -325,12 +383,12 @@ export function selectValidReceipt(
       chosen: null,
       stale: false,
       conflict: `conflicting non-stale receipts for ${host}: ${[...distinctNonStale].sort().join(" vs ")}`,
+      refused,
     };
   }
-  const pool = nonStale.length > 0 ? nonStale : valid;
   // Freshest by captured_at (lexicographic on YYYY-MM-DD == chronological).
-  const chosen = [...pool].sort((a, b) => (a.freshness.captured_at < b.freshness.captured_at ? 1 : -1))[0];
-  return { has_valid_receipt: true, chosen, stale: nonStale.length === 0, conflict: null };
+  const chosen = [...nonStale].sort((a, b) => (a.freshness.captured_at < b.freshness.captured_at ? 1 : -1))[0];
+  return { has_valid_receipt: true, chosen, stale: false, conflict: null, refused };
 }
 
 // ---------------------------------------------------------------------------

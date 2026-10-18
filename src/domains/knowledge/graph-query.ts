@@ -38,19 +38,19 @@
  *   function:<relpath>:<Class>.<method>     (method — name contains ".")
  *   class:<relpath>:<Class>
  *
- * ── Entry-point rule (documented; the graph carries no `exported` flag) ──
+ * ── Entry-point rule (documented) ──
  *   A `function` node is an entry point iff (a) its simple name is a conventional
  *   program entry name (`main`, `__main__` — the deterministic name heuristic),
  *   OR (b) it is matched by the resolved entry-point set — by node id, simple
- *   name, OR file relpath. I14 (legacy G2): the structural extractor now records
- *   a provable `exported` flag per symbol; with `entryPoints` OMITTED and
- *   `deriveExported: true`, the exported function set is derived automatically
- *   from the graph (supplied entries — even `[]` — stay authoritative; a pre-I14
- *   graph has no flags, so the derivation is empty). The BARE call keeps the
- *   legacy internal-reachability semantics because the frozen CLRA oracle pins
- *   them — flipping that default is a separately ratified follow-on. The REAL
- *   on-disk sources (see resolution below) remain the caller-side complement,
- *   unioned via `resolveEntryPointConfig()`.
+ *   name, OR file relpath. I14 (legacy G2): the structural extractor records a
+ *   provable `exported` flag per symbol; with `entryPoints` OMITTED the exported
+ *   function set is derived automatically BY DEFAULT (`deriveExported: false`
+ *   opts out to internal reachability), unioned with any `configEntryPoints`.
+ *   Supplied entries — even `[]` — stay authoritative. A pre-I14 graph has no
+ *   flags, so the derivation is empty and behavior is exactly the legacy rule.
+ *   The CLRA oracle pins both answers (`publicDeadCode` bare, `deadCode` opt-out).
+ *   The REAL on-disk sources (see resolution below) are the caller-side
+ *   complement, resolved via `resolveEntryPointConfig()`.
  *
  * ── Entry-point RESOLUTION (REAL on-disk surface, model-free) ──
  *   `resolveEntryPointConfig()` unions four model-free, on-disk sources into one
@@ -76,10 +76,10 @@
  * ── Dead-code rule (documented, EXPLICITLY SCOPED) ──
  *   Dead code = FREE (module-level) functions with zero inbound `calls` edges,
  *   minus entry points (heuristic + supplied). This measures INTERNAL
- *   REACHABILITY ONLY: with no `exported` flag in the graph, a result is "unused
- *   within the analysed file set". A function reachable only as exported public
- *   API / a CLI / a route handler has zero inbound `calls` here and would be a
- *   FALSE POSITIVE — supply the exported/public surface via
+ *   REACHABILITY ONLY: a result is "unused within the analysed file set" minus
+ *   the exported surface the graph proves. A function reachable only as a CLI /
+ *   route handler (or exported on a pre-I14 graph) has zero inbound `calls` here
+ *   and would be a FALSE POSITIVE — supply it via `configEntryPoints` or
  *   `DeadCodeOptions.entryPoints` to exclude it. METHODS (`<Class>.<method>`) are
  *   deliberately excluded: method reachability needs type/dispatch analysis
  *   (interface, override, reflection) beyond G3's model-free scope, so flagging a
@@ -183,21 +183,24 @@ export interface DeadCodeResult {
 export interface DeadCodeOptions {
   /**
    * Exported / public surface + real entry points to EXCLUDE from dead code.
-   * Each string matches a function node by exact node id OR by simple name.
-   * Supplied because the structural graph carries no `exported` flag yet; this
-   * is how a caller scopes the "internal reachability" claim to its real public
-   * API / CLI / route handlers (see header). Heuristic entry points
+   * Each string matches a function node by exact node id, simple name, OR
+   * relpath. AUTHORITATIVE: when supplied (even `[]`) it replaces the exported
+   * derivation and `configEntryPoints`. Heuristic entry points
    * (`main`/`__main__`) are always excluded regardless of this set.
    */
   entryPoints?: Iterable<string>;
   /**
-   * I14 (legacy G2): with `entryPoints` OMITTED, `true` derives the public
-   * surface from the structural extractor's provable `exported: true` flags
-   * (empty on a pre-I14 graph → exact legacy behavior). Default `false`
-   * preserves the CLRA-oracle-pinned bare-call semantics; a supplied
-   * `entryPoints` (even `[]`) is authoritative and ignores this flag.
+   * I14 (legacy G2): with `entryPoints` OMITTED, the public surface is derived
+   * from the structural extractor's provable `exported: true` flags (empty on a
+   * pre-I14 graph → exact legacy behavior). Default `true`; `false` opts out to
+   * pure internal reachability. Ignored when `entryPoints` is supplied.
    */
   deriveExported?: boolean;
+  /**
+   * On-disk entry surface (`resolveEntryPointConfig()` output). UNIONED with the
+   * exported derivation when `entryPoints` is omitted — never suppresses it.
+   */
+  configEntryPoints?: Iterable<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,16 +256,16 @@ function exportedEntryMatchers(nodes: GraphNode[]): Set<string> {
 
 /**
  * Supplied entries (incl. `[]`) are authoritative. With entries omitted, the
- * exported derivation runs ONLY under `deriveExported: true`: the bare-call
- * dead-code semantics are pinned by the frozen CLRA oracle
+ * exported derivation runs by default (`deriveExported !== false`) and is
+ * unioned with `configEntryPoints`. Both answers are pinned by the CLRA oracle
  * (tests/fixtures/learn/clra-fixture/clra-fixture.expected.json, enforced by
- * clra-conformance.test.ts), whose ground truth marks EXPORTED zero-inbound
- * functions dead. Flipping the bare default is a separately ratified follow-on
- * that must update that oracle in the same change (recorded in the I14 report).
+ * clra-conformance.test.ts).
  */
 function effectiveMatchers(nodes: GraphNode[], opts: DeadCodeOptions): Set<string> {
   if (opts.entryPoints !== undefined) return normalizeMatchers(opts.entryPoints);
-  return opts.deriveExported === true ? exportedEntryMatchers(nodes) : new Set<string>();
+  const s = opts.deriveExported === false ? new Set<string>() : exportedEntryMatchers(nodes);
+  for (const m of normalizeMatchers(opts.configEntryPoints)) s.add(m);
+  return s;
 }
 
 /**
@@ -503,11 +506,11 @@ export function kgNeighbors(graph: GraphView, query: string, hops = 1): Neighbor
  * Free (module-level) functions that are never called and are not entry points.
  *
  * SCOPE (see header): this is INTERNAL reachability — "unused within the analysed
- * file set". I14: pass `deriveExported: true` (with `entryPoints` omitted) to
- * derive the public surface from the provable `exported` flags so exported API
- * is not flagged dead; `opts.entryPoints` (authoritative, `[]` included) scopes
- * the surface explicitly. The bare call keeps the CLRA-oracle-pinned legacy
- * semantics. See header for the rule + why methods are excluded.
+ * file set" minus the provable exported surface. I14: with `entryPoints`
+ * omitted the bare call derives that surface from the `exported` flags (pass
+ * `deriveExported: false` for pure reachability); `opts.entryPoints`
+ * (authoritative, `[]` included) scopes the surface explicitly. See header for
+ * the rule + why methods are excluded.
  */
 export function kgDeadCode(graph: GraphView, opts: DeadCodeOptions = {}): DeadCodeResult {
   const inbound = new Set<string>();
@@ -515,8 +518,8 @@ export function kgDeadCode(graph: GraphView, opts: DeadCodeOptions = {}): DeadCo
     if (e.type === "calls") inbound.add(e.target);
   }
   // Resolved exported/public surface — matched by node id, simple name, OR
-  // relpath. I14: `deriveExported: true` + omitted entryPoints derives the
-  // surface from the provable `exported` flags (see effectiveMatchers).
+  // relpath. I14: omitted entryPoints derives the surface from the provable
+  // `exported` flags by default (see effectiveMatchers).
   const matchers = effectiveMatchers(graph.nodes, opts);
 
   const dead = graph.nodes
@@ -574,6 +577,7 @@ function manifestEntryPoints(repoRoot: string, read: (p: string) => string): str
   } catch {
     return [];
   }
+  if (!pkg || typeof pkg !== "object" || Array.isArray(pkg)) return [];
   const out: string[] = [];
   if (typeof pkg.main === "string") out.push(pkg.main);
   if (typeof pkg.bin === "string") out.push(pkg.bin);

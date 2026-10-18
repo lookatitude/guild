@@ -18,3 +18,8 @@ export function multiply(a: number, b: number): number {
 export function unusedHelper(x: number): number {
   return x * 2;
 }
+
+// DEAD under BOTH rules: zero callers AND not exported (I14 public-surface case).
+function unusedInternal(label: string): string {
+  return label.trim();
+}

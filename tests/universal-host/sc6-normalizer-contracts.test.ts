@@ -27,7 +27,27 @@ import {
   PHASE1_NORMALIZER_TARGETS,
   CONTRACT_VALIDATORS,
   findContract,
+  type ResultContractEntry,
 } from "../../scripts/lib/result-contracts";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const REPO_ROOT = join(import.meta.dir, "..", "..");
+const LEGACY_ONLY = ["guild.phase_result.v1", "guild.permission_receipt.v1", "guild.host_event.v1", "guild.qa_result.v1"];
+
+/** Wire strings whose declared live caller is missing, a test, or does not invoke the contract by wire string. */
+function contractsWithoutLiveCaller(entries: readonly ResultContractEntry[]): string[] {
+  return entries
+    .filter((c) => {
+      const caller = c.live_caller;
+      if (!caller || /\.test\.ts$/.test(caller.path)) return true;
+      const abs = join(REPO_ROOT, caller.path);
+      if (!existsSync(abs)) return true;
+      const text = readFileSync(abs, "utf8");
+      return !(text.includes(`${caller.call}(`) && text.includes(`"${c.wire_schema_version}"`));
+    })
+    .map((c) => c.wire_schema_version);
+}
 import {
   normalizeResult,
   normalizeWithRepair,
@@ -53,18 +73,42 @@ const VALID_REVIEW_RESULT = {
   blocking_findings: [],
 };
 
-describe("SC-6 registry — normalizer target set (all six contracts shipped in v2)", () => {
-  it("targets EXACTLY the six wire strings (the 4 formerly-deferred now ship)", () => {
-    expect([...PHASE1_NORMALIZER_TARGETS].sort()).toEqual(
-      [
-        "guild.handoff.v2",
-        "review_result.v1",
-        "guild.phase_result.v1",
-        "guild.permission_receipt.v1",
-        "guild.host_event.v1",
-        "guild.qa_result.v1",
-      ].sort()
-    );
+describe("SC-6 registry — normalizer target set (only contracts with a live caller)", () => {
+  it("targets EXACTLY the two wire strings with a live caller", () => {
+    expect([...PHASE1_NORMALIZER_TARGETS].sort()).toEqual(["guild.handoff.v2", "review_result.v1"].sort());
+  });
+
+  it("G09 R6 — every listed target has a live (non-test) caller that invokes it by wire string", () => {
+    expect(contractsWithoutLiveCaller(EXISTING_CONTRACTS.filter((c) => PHASE1_NORMALIZER_TARGETS.has(c.wire_schema_version)))).toEqual([]);
+    // Every target carries a caller; every caller-less entry is legacy-only.
+    for (const c of EXISTING_CONTRACTS) {
+      expect(PHASE1_NORMALIZER_TARGETS.has(c.wire_schema_version)).toBe(c.live_caller !== undefined && c.legacy_only !== true);
+    }
+  });
+
+  it("G09 R6 — planted control: a target whose caller file does not invoke it is flagged", () => {
+    const planted: ResultContractEntry = {
+      wire_schema_version: "guild.qa_result.v1",
+      status: "exists",
+      validator_kind: "strict",
+      source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
+      purpose: "planted",
+      live_caller: { path: "scripts/task-cell-host-conformance.ts", call: "normalizeResult" },
+    };
+    expect(contractsWithoutLiveCaller([planted])).toEqual(["guild.qa_result.v1"]);
+    expect(contractsWithoutLiveCaller([{ ...planted, live_caller: undefined }])).toEqual(["guild.qa_result.v1"]);
+    expect(contractsWithoutLiveCaller([{ ...planted, live_caller: { path: "scripts/does-not-exist.ts", call: "normalizeResult" } }])).toEqual(["guild.qa_result.v1"]);
+  });
+
+  it("G09 R1/R2/R4/R5 — the four producerless contracts are legacy-only and fail closed in the normalizer", () => {
+    for (const wire of LEGACY_ONLY) {
+      expect(findContract(wire)?.legacy_only).toBe(true);
+      expect(PHASE1_NORMALIZER_TARGETS.has(wire)).toBe(false);
+      const r = normalizeResult(FENCE(wire, { schema_version: wire }), wire);
+      expect(r.ok).toBe(false);
+      expect(r.errors.join("\n")).toMatch(/legacy-only/);
+      expect(r.repair_prompt).toBeUndefined();
+    }
   });
 
   it("review_result wire string carries NO guild. prefix (correction #1)", () => {
@@ -73,15 +117,9 @@ describe("SC-6 registry — normalizer target set (all six contracts shipped in 
     expect(PHASE1_NORMALIZER_TARGETS.has("guild.review_result.v1")).toBe(false);
   });
 
-  it("no contracts remain deferred — all four formerly-deferred now ship with validators", () => {
+  it("no contracts remain deferred — the four formerly-deferred keep their validators as legacy-only", () => {
     expect(DEFERRED_CONTRACTS).toEqual([]);
-    for (const wire of [
-      "guild.phase_result.v1",
-      "guild.permission_receipt.v1",
-      "guild.host_event.v1",
-      "guild.qa_result.v1",
-    ]) {
-      expect(PHASE1_NORMALIZER_TARGETS.has(wire)).toBe(true);
+    for (const wire of LEGACY_ONLY) {
       expect(typeof CONTRACT_VALIDATORS[wire]).toBe("function");
     }
   });
@@ -244,17 +282,11 @@ describe("SC-6 L3 normalizeResult — extract + validate + fail-closed (real pat
     expect(r.ok).toBe(false);
   });
 
-  it("a formerly-deferred contract (guild.qa_result.v1) now normalizes when valid", () => {
+  it("a legacy-only contract (guild.qa_result.v1) fails closed even when valid — no live producer", () => {
     const valid = { schema_version: "guild.qa_result.v1", run_id: "run-x", checks: [{ id: "SC-1", status: "pass" }], gaps: [], failures: [], release_ok: true, ts: "2026-06-27T00:00:00Z" };
     const r = normalizeResult(FENCE("guild.qa_result.v1", valid), "guild.qa_result.v1");
-    expect(r.ok).toBe(true);
-  });
-
-  it("a formerly-deferred contract with an invalid payload fails on SCHEMA (not 'deferred')", () => {
-    const r = normalizeResult(FENCE("guild.qa_result.v1", { x: 1 }), "guild.qa_result.v1");
     expect(r.ok).toBe(false);
-    // It is now a real target → the failure is schema validation, never the old "deferred" reason.
-    expect(r.errors.some((e) => e.toLowerCase().includes("deferred"))).toBe(false);
+    expect(r.errors.join("\n")).toMatch(/legacy-only/);
   });
 });
 

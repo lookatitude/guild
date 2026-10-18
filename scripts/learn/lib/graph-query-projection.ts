@@ -82,13 +82,14 @@ export interface ProjectionQueryResult<T> {
 /** Reconstruct nodes from kg_nodes (only the fields the query fns read). */
 function loadNodes(db: SqliteReadDb): GraphNode[] {
   const rows = db
-    .prepare("SELECT id, type, name, source_refs, confidence FROM kg_nodes")
+    .prepare("SELECT id, type, name, source_refs, confidence, data FROM kg_nodes")
     .all() as Array<{
     id: string;
     type: string | null;
     name: string | null;
     source_refs: string | null;
     confidence: string | null;
+    data: string | null;
   }>;
   return rows.map((r) => {
     let refs: string[] = [];
@@ -100,12 +101,23 @@ function loadNodes(db: SqliteReadDb): GraphNode[] {
         /* leave refs empty on malformed JSON */
       }
     }
+    // I14: the provable `exported` flag rides in `data`; dead-code derives from it.
+    let exported: boolean | undefined;
+    if (typeof r.data === "string") {
+      try {
+        const d = JSON.parse(r.data) as { exported?: unknown };
+        if (typeof d?.exported === "boolean") exported = d.exported;
+      } catch {
+        /* no flag on malformed JSON → legacy behavior */
+      }
+    }
     return {
       id: r.id,
       type: r.type ?? "",
       name: r.name ?? "",
       source_refs: refs,
       confidence: (r.confidence ?? "low") as GraphNode["confidence"],
+      ...(exported !== undefined ? { exported } : {}),
     } as GraphNode;
   });
 }

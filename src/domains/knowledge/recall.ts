@@ -65,6 +65,7 @@ import * as crypto from "node:crypto";
 import { DEFAULT_INDEX_BLOCK, resolveMainRepoRoot, type IndexBlock } from "../state";
 import { wikiRecall, isIdentifierAwareQuery } from "./wiki-recall";
 import { fsScan } from "./fs-scanner";
+import { supersededWikiPages } from "./wiki-supersede";
 import { protectChunks, type ProtectedChunk } from "./recall-protect";
 import { tokenizeIdentifierAware } from "../kernel";
 import { bm25Score, tokenize } from "./bm25";
@@ -74,7 +75,7 @@ import type { GraphEdge, GraphNode } from "./knowledge-graph-contract";
 // kgTrace/kgNeighbors/kgDeadCode read the FROZEN knowledge-graph.json with
 // per-node file:line provenance + trust tiering. Same cross-module import shape
 // docs-sync/workflows already uses for scripts/learn/lib/*.
-import { kgDeadCode, kgNeighbors, kgTrace } from "./graph-query";
+import { kgDeadCode, kgNeighbors, kgTrace, resolveEntryPointConfig } from "./graph-query";
 import type { Direction as StructuralDirection, EvidenceNode, GraphView as StructuralGraphView } from "./graph-query";
 import type { KnowledgeLinksDoc } from "./knowledge-links-contract";
 import { ingestImportanceScore, resolveRecallImportance, wikiPageCategory } from "./ingest-importance";
@@ -401,7 +402,10 @@ function fileBm25Branch(
   const wikiBase = path.join(durableGuildDir(cwd), "wiki");
   const scanDir = category ? path.join(wikiBase, category) : wikiBase;
 
-  const files = walkMdFiles(scanDir);
+  // G12 R6: superseded pages never reach scoring, so they neither surface nor
+  // take a limit slot.
+  const superseded = supersededWikiPages(wikiBase);
+  const files = walkMdFiles(scanDir).filter((f) => !superseded.has(f));
   if (files.length === 0) return null;
 
   // G7: identifier-aware tokenizer (camel/snake) on BOTH query and document side,
@@ -721,7 +725,8 @@ function structuralBranch(
   // Route to the committed model-free query.
   let evidence: EvidenceNode[];
   if (intent.kind === "deadcode") {
-    evidence = kgDeadCode(view).nodes;
+    // I14: exported flags (derived by default) + the repo's on-disk entry surface.
+    evidence = kgDeadCode(view, { configEntryPoints: resolveEntryPointConfig({ repoRoot: cwd }) }).nodes;
   } else if (intent.kind === "neighbors") {
     evidence = kgNeighbors(view, intent.target ?? "", 1).nodes;
   } else {

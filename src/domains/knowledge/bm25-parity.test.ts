@@ -16,6 +16,8 @@
  *                      ever drifted from the frozen reference.
  *   (C) SINGLE-IMPL:   exactly one file in the source tree DEFINES bm25Score;
  *                      every other consumer re-exports/imports it.
+ *
+ * refresh_trigger: {"owner": "tooling-engineer", "when": "An intentional change to BM25 scoring or tokenization (k1, b, IDF, token rule) in the source file. Update the frozen reference in the same commit and record the decision; never edit it to match an unplanned diff.", "source": "src/domains/knowledge/bm25.ts"}
  */
 
 import { describe, it, test, expect } from "bun:test";

@@ -15,6 +15,8 @@
  *                      least one key — proving (A) has teeth.
  *   (C) SINGLE-IMPL:   exactly one source file DEFINES the proto-poison key set;
  *                      none of the three consumers re-spells it.
+ *
+ * refresh_trigger: {"owner": "tooling-engineer", "when": "An intentional change to the proto-poison key set in the source file, with a security review. Update the frozen reference in the same commit; never shrink it to match an unplanned diff.", "source": "src/domains/security/safe-object.ts"}
  */
 
 import { describe, it, test, expect } from "bun:test";

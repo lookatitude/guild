@@ -33,6 +33,7 @@
 
 import * as fs from "fs";
 import { sealSet } from "../../src/domains/kernel/index";
+import { tierForModel } from "../../src/domains/config/index";
 import * as path from "path";
 // The ONE shared, js-yaml-backed frontmatter/YAML reader (OD-3): all reading
 // goes through it — this file only DUMPS YAML directly.
@@ -194,14 +195,7 @@ function asStringList(v: unknown): string[] {
 
 // Cost-aware-tiering §1 ladder: opus=powerful, sonnet=mid, haiku=cheap.
 // Explicit `default_tier:` frontmatter always wins over the model mapping.
-export function tierForModel(model: string | null): Tier | null {
-  if (!model) return null;
-  const m = model.toLowerCase();
-  if (m.includes("opus")) return "powerful";
-  if (m.includes("sonnet")) return "mid";
-  if (m.includes("haiku")) return "cheap";
-  return null;
-}
+export { tierForModel };
 
 // ── Enumeration ────────────────────────────────────────────────────────────
 

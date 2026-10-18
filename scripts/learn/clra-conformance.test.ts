@@ -75,7 +75,12 @@ interface Oracle {
   imports: Array<{ importer: string; source: string; symbols: string[] }>;
   inherits: Array<{ child: string; parent: string }>;
   implements: Array<{ class: string; interface: string }>;
+  /** Zero-caller free functions under pure reachability (`deriveExported: false`). */
   deadCode: string[];
+  /** I14: free functions the parser proves exported (export keyword / Python top level). */
+  exported?: string[];
+  /** I14: the BARE kgDeadCode answer — deadCode minus the exported surface. */
+  publicDeadCode?: string[];
   entryPoints: string[];
   clonePairs: Array<[string, string]>;
 }
@@ -121,12 +126,15 @@ interface FixtureIndex {
   hasInterface: (relpath: string, name: string) => boolean;
   /** True iff `Class.method` is a real MEMBER DECLARATION (not a call site). */
   hasMethod: (relpath: string, cls: string, method: string) => boolean;
+  /** Function ids (`function:<rel>:<name>`) the parser marks `exported: true`. */
+  exportedFunctions: Set<string>;
   importsOf: (relpath: string) => ImportInfo[];
   source: (relpath: string) => string;
 }
 
 function buildFixtureIndex(files: string[], root: string = FIXTURE_ROOT): FixtureIndex {
   const fnSet = new Set<string>(); // `${relpath}::${name}`
+  const exportedFns = new Set<string>();
   const clsSet = new Set<string>();
   const ifaceSet = new Set<string>();
   const importMap = new Map<string, ImportInfo[]>();
@@ -146,6 +154,7 @@ function buildFixtureIndex(files: string[], root: string = FIXTURE_ROOT): Fixtur
     const a = analyzeSource(relpath, content);
     if (a) {
       for (const f of a.functions) fnSet.add(`${relpath}::${f.name}`);
+      for (const f of a.functions) if (f.exported) exportedFns.add(`function:${relpath}:${f.name}`);
       for (const c of a.classes) clsSet.add(`${relpath}::${c.name}`);
       importMap.set(relpath, a.imports);
     }
@@ -175,6 +184,7 @@ function buildFixtureIndex(files: string[], root: string = FIXTURE_ROOT): Fixtur
     hasClass: (relpath, name) => clsSet.has(`${relpath}::${name}`),
     hasInterface: (relpath, name) => ifaceSet.has(`${relpath}::${name}`),
     hasMethod: (relpath, cls, method) => methodIds.has(`function:${relpath}:${cls}.${method}`),
+    exportedFunctions: exportedFns,
     importsOf: (relpath) => importMap.get(relpath) ?? [],
     source: (relpath) => srcMap.get(relpath) ?? "",
   };
@@ -351,6 +361,24 @@ function checkOracleConsistency(oracle: Oracle, root: string = FIXTURE_ROOT): st
     }
     if (entrySet.has(dead)) {
       violations.push(`deadCode "${dead}": is also an entry point — contradiction`);
+    }
+  }
+
+  // I14: `exported` is exactly the parser-proven exported function set, and
+  // `publicDeadCode` is exactly deadCode minus it.
+  if (oracle.exported !== undefined) {
+    const labeled = new Set(oracle.exported);
+    for (const id of labeled) {
+      resolveSymbol(id, ["function"]);
+      if (!idx.exportedFunctions.has(id)) violations.push(`exported "${id}": not exported in source`);
+    }
+    for (const id of idx.exportedFunctions) {
+      if (!labeled.has(id)) violations.push(`exported: "${id}" is exported in source but unlabeled`);
+    }
+    const expectedPublic = oracle.deadCode.filter((d) => !labeled.has(d)).sort();
+    const publicDead = [...(oracle.publicDeadCode ?? [])].sort();
+    if (JSON.stringify(publicDead) !== JSON.stringify(expectedPublic)) {
+      violations.push(`publicDeadCode ${JSON.stringify(publicDead)} != deadCode minus exported ${JSON.stringify(expectedPublic)}`);
     }
   }
 
@@ -640,13 +668,16 @@ describe("CLRA fixture — oracle self-consistency", () => {
     const o = loadOracle();
     for (const key of [
       "files", "calls", "imports", "inherits", "implements",
-      "deadCode", "entryPoints", "clonePairs",
+      "deadCode", "exported", "publicDeadCode", "entryPoints", "clonePairs",
     ] as const) {
       expect(Array.isArray((o as unknown as Record<string, unknown>)[key])).toBe(true);
     }
     // The fixture is non-trivial: it must actually exercise each labeled shape.
     expect(o.calls.some((c) => c.cross_file)).toBe(true);
     expect(o.deadCode.length).toBeGreaterThanOrEqual(1);
+    expect(o.publicDeadCode!.length).toBeGreaterThanOrEqual(1);
+    // The flip is observable: some reachability-dead fn is exported (publicDead ⊊ dead).
+    expect(o.publicDeadCode!.length).toBeLessThan(o.deadCode.length);
     expect(o.entryPoints.length).toBeGreaterThanOrEqual(1);
     expect(o.clonePairs.length).toBeGreaterThanOrEqual(1);
     expect(o.inherits.length).toBeGreaterThanOrEqual(1);
@@ -679,6 +710,16 @@ describe("CLRA fixture — oracle self-consistency", () => {
     });
     const violations = checkOracleConsistency(o);
     expect(violations.some((v) => v.includes("not dead"))).toBe(true);
+  });
+
+  test("anti-vacuity (I14): a mislabeled exported entry is caught", () => {
+    const o = loadOracle();
+    o.exported = [...o.exported!, "function:src/b.ts:unusedInternal"];
+    expect(checkOracleConsistency(o).some((v) => v.includes("not exported in source"))).toBe(true);
+    const missing = loadOracle();
+    missing.exported = missing.exported!.filter((id) => id !== "function:src/b.ts:unusedHelper");
+    expect(checkOracleConsistency(missing).some((v) => v.includes("unlabeled"))).toBe(true);
+    expect(checkOracleConsistency(missing).some((v) => v.includes("publicDeadCode"))).toBe(true);
   });
 
   test("anti-vacuity: a mislabeled cross_file flag is caught", () => {
@@ -1084,10 +1125,10 @@ describe("[G3] structural query API matches the oracle", () => {
     return { nodes, edges: edgeSet };
   };
 
-  test("kgDeadCode equals oracle.deadCode (free functions; precision & recall = 1.0)", () => {
+  test("kgDeadCode (deriveExported: false) equals oracle.deadCode (free functions; precision & recall = 1.0)", () => {
     const o = loadOracle();
     const graph = buildFixtureGraph();
-    const dead = new Set(kgDeadCode(graph).nodes.map((n) => n.id));
+    const dead = new Set(kgDeadCode(graph, { deriveExported: false }).nodes.map((n) => n.id));
     const oracleDead = new Set(o.deadCode);
 
     // Every dead-code id is a FREE function (no "." in the name) — methods are
@@ -1103,6 +1144,33 @@ describe("[G3] structural query API matches the oracle", () => {
     expect(precision).toBe(1);
     expect(recall).toBe(1);
     expect(dead).toEqual(oracleDead);
+  });
+
+  test("I14 flip: BARE kgDeadCode equals oracle.publicDeadCode (exported surface derived)", () => {
+    const o = loadOracle();
+    const graph = buildFixtureGraph();
+    expect(new Set(kgDeadCode(graph).nodes.map((n) => n.id))).toEqual(new Set(o.publicDeadCode));
+    // The graph's free-function `exported` flags equal the oracle label set.
+    const flagged = graph.nodes
+      .filter((n) => n.type === "function" && !n.id.split(":").slice(2).join(":").includes("."))
+      .filter((n) => (n as { exported?: unknown }).exported === true)
+      .map((n) => n.id);
+    expect(new Set(flagged)).toEqual(new Set(o.exported));
+  });
+
+  test("I14 flip: a legacy graph (flags stripped) bare call equals oracle.deadCode", () => {
+    const o = loadOracle();
+    const graph = buildFixtureGraph();
+    const stripped: GraphView = {
+      nodes: graph.nodes.map((n) => {
+        const { exported: _x, ...rest } = n as GraphNode & { exported?: unknown };
+        return rest as GraphNode;
+      }),
+      edges: graph.edges,
+    };
+    const dead = new Set(kgDeadCode(stripped).nodes.map((n) => n.id));
+    expect(dead).toEqual(new Set(o.deadCode));
+    expect(dead).not.toEqual(new Set(o.publicDeadCode)); // the two answers differ
   });
 
   test("kgTrace inbound+outbound equal the EXACT oracle-derived node/edge sets (set equality)", () => {
@@ -1175,7 +1243,7 @@ describe("[G3] structural query API matches the oracle", () => {
         { source: "function:src/a.ts:main", target: "function:src/b.ts:unusedHelper", type: "calls" } as unknown as GraphEdge,
       ],
     };
-    const mutatedDead = new Set(kgDeadCode(mutated).nodes.map((n) => n.id));
+    const mutatedDead = new Set(kgDeadCode(mutated, { deriveExported: false }).nodes.map((n) => n.id));
     expect(mutatedDead.has("function:src/b.ts:unusedHelper")).toBe(false);
     expect(mutatedDead).not.toEqual(oracleDead);
   });

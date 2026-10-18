@@ -48,6 +48,12 @@ beforeAll(async () => {
     [{ ts: "2026-10-02T00:00:00Z", event: "PostToolUse", tool: "Bash" }],
     `---\ndispatched_lanes: [(none)]\ndispatch_receipts: [(none)]\n---\n# Summary\n\n${INJECTION}\n`,
   );
+  // run-c: injected text in fields trace_list_runs (ts) and trace_cost_rollup
+  // (model / tier / specialist bucket keys) copy out of the run record.
+  writeRun("run-c", [
+    { ts: INJECTION, event: "PostToolUse", tool: "Bash" },
+    { ts: "2026-10-03T00:00:01Z", event: "tool_call", model: INJECTION, tier: INJECTION, specialist: INJECTION, tokens: { input: 5, output: 3 } },
+  ]);
   client = new Client({ name: "ti-sec-1", version: "0.0.1" }, { capabilities: {} });
   await client.connect(
     new StdioClientTransport({
@@ -94,5 +100,24 @@ describe("TI-SEC-1 guild-telemetry D-RECALL", () => {
     const { text, json } = await call("trace_summary", { run_id: "run-b" });
     expect(text).not.toContain("Ignore all previous instructions");
     expect(json.summary).toStartWith("[QUARANTINED:");
+  });
+
+  it("trace_list_runs never returns injected run-record text raw", async () => {
+    const { text, json } = await call("trace_list_runs", {});
+    expect(text).not.toContain("Ignore all previous instructions");
+    const runC = json.runs.find((r: any) => r.run_id === "run-c");
+    expect(runC.event_count).toBe(2);
+    expect(runC.started_at).toStartWith("[QUARANTINED:");
+    expect(json.runs.find((r: any) => r.run_id === "run-b").started_at).toBe("2026-10-02T00:00:00Z");
+  });
+
+  it("trace_cost_rollup never returns injected bucket keys raw", async () => {
+    const { text, json } = await call("trace_cost_rollup", { run_id: "run-c" });
+    expect(text).not.toContain("Ignore all previous instructions");
+    expect(json.totals).toEqual({ input: 5, output: 3, cached: 0, total: 8, cost_usd: null });
+    expect(json.by_model).toHaveLength(1);
+    expect(json.by_model[0].model).toStartWith("[QUARANTINED:");
+    expect(json.by_tier[0].tier).toStartWith("[QUARANTINED:");
+    expect(json.by_specialist[0].specialist).toStartWith("[QUARANTINED:");
   });
 });

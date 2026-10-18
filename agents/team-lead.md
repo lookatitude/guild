@@ -16,7 +16,7 @@ surface_manifest:
   schema_version: guild.surface_manifest.v1
   kind: agent
   name: team-lead
-  description: 'The per-TaskCell lead (KTD19 tier T1): owns ONE TaskCell, dispatches its specialists, reads their guild.handoff.v2 receipts, and reports upward ONLY as guild.goal_status.v1 (last 5 events plus a rolling summary). Structural isolation — specialists never message the orchestrator or each other, and the orchestrator never sees a specialist transcript.'
+  description: 'The per-TaskCell lead (KTD19 tier T1): owns ONE TaskCell, dispatches its specialists, reads their `guild.handoff.v2` receipts, and reports upward ONLY as `guild.goal_status.v1` (last 5 events plus a rolling summary). Structural isolation — specialists never message the orchestrator or each other, and the orchestrator never sees a specialist transcript. TRIGGER when a lifecycle phase opens a TaskCell that needs more than one specialist, or when a cell''s lanes must be sequenced, re-dispatched, or rolled up. DO NOT TRIGGER for: the T0 session itself (bare /guild is T0, and T0 never becomes a lead); implementing a lane (developer or a domain specialist); critiquing one draft sub-question (advisor); assembling a context bundle (context-manager); reviewing receipts at the phase gate (the review assembler).'
   type: mid
 ---
 
