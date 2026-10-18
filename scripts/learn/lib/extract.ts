@@ -335,6 +335,18 @@ function analyzePython(lines: string[]): StructuralAnalysis {
   return finalize(lines, "python", functions, classes, imports, exports);
 }
 
+/**
+ * I14 (legacy G2 R4-R5): visibility from syntax only. Go: capitalized name.
+ * Elsewhere: an `export` / `public` / unrestricted `pub` modifier before the
+ * name (`pub(crate)` is not public). No marker → false; never invented true.
+ */
+function genericExported(lang: string, match: RegExpMatchArray): boolean {
+  const name = match[1];
+  if (lang === "go") return /^[A-Z]/.test(name);
+  const prefix = match[0].slice(0, match[0].lastIndexOf(name));
+  return /\b(?:export|public)\b/.test(prefix) || /\bpub\b(?!\s*\()/.test(prefix);
+}
+
 function analyzeGeneric(lines: string[], lang: string): StructuralAnalysis {
   // Brace-language fallback (go/rust/java/c/cpp/csharp/php/kotlin/swift…).
   const functions: FunctionInfo[] = [];
@@ -358,17 +370,17 @@ function analyzeGeneric(lines: string[], lang: string): StructuralAnalysis {
     }
     const mClass = line.match(reClass);
     if (mClass) {
-      classes.push({ name: mClass[1], lineRange: [i + 1, blockEnd(lines, i)], exported: true, methods: [] });
+      classes.push({ name: mClass[1], lineRange: [i + 1, blockEnd(lines, i)], exported: genericExported(lang, mClass), methods: [] });
       continue;
     }
     const mGo = line.match(reGoFn);
     if (mGo) {
-      functions.push({ name: mGo[1], lineRange: [i + 1, blockEnd(lines, i)], exported: /^[A-Z]/.test(mGo[1]) });
+      functions.push({ name: mGo[1], lineRange: [i + 1, blockEnd(lines, i)], exported: genericExported(lang, mGo) });
       continue;
     }
     const mFn = line.match(reFn);
     if (mFn && !/\b(if|for|while|switch|return)\b/.test(mFn[1])) {
-      functions.push({ name: mFn[1], lineRange: [i + 1, blockEnd(lines, i)], exported: true });
+      functions.push({ name: mFn[1], lineRange: [i + 1, blockEnd(lines, i)], exported: genericExported(lang, mFn) });
     }
   }
   return finalize(lines, lang, functions, classes, imports, exports);
