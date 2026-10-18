@@ -33,7 +33,7 @@ function telemetryApi(): TelemetryApi {
   if (__filename.endsWith(".ts")) {
     const sourceBarrel = path.join(__dirname, "..", "telemetry");
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    _telemetryApi = require(sourceBarrel) as TelemetryApi;
+    _telemetryApi = require(sourceBarrel) as typeof import("../telemetry");
     return _telemetryApi;
   }
   // Resolution is BOUNDED to the owning package (codex C04 r1): sibling chunk in
@@ -43,7 +43,7 @@ function telemetryApi(): TelemetryApi {
   const sibling = path.join(__dirname, "telemetry-api.js");
   if (fs.existsSync(sibling)) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    _telemetryApi = require(sibling) as TelemetryApi;
+    _telemetryApi = require(sibling) as typeof import("../telemetry");
     return _telemetryApi;
   }
   for (let dir = path.dirname(__dirname); ; ) {
@@ -60,7 +60,7 @@ function telemetryApi(): TelemetryApi {
         );
       }
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      _telemetryApi = require(chunk) as TelemetryApi;
+      _telemetryApi = require(chunk) as typeof import("../telemetry");
       return _telemetryApi;
     }
     const parent = path.dirname(dir);

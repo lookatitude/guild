@@ -628,6 +628,44 @@ function firstArgumentTokens(
   return undefined;
 }
 
+/**
+ * The literal specifier of an `as typeof import("s")` cast attached DIRECTLY to
+ * the call opened at `openIndex`, else undefined. The cast names the module
+ * surface the runtime value is required to satisfy, so a non-literal call
+ * carrying it resolves to that literal instead of failing the closure verdict.
+ */
+function typedImportCastSpecifier(
+  tokens: readonly NeutralToken[],
+  openIndex: number
+): string | undefined {
+  let depth = 0;
+  let close = -1;
+  for (let i = openIndex; i < tokens.length; i += 1) {
+    const delta = bracketDelta(tokens[i]);
+    depth += delta;
+    if (depth === 0 && delta < 0) {
+      close = i;
+      break;
+    }
+  }
+  if (close === -1) return undefined;
+  const [asTok, typeofTok, importTok, open, spec, end] = tokens.slice(close + 1, close + 7);
+  return asTok?.kind === "ident" &&
+    asTok.value === "as" &&
+    typeofTok?.kind === "ident" &&
+    typeofTok.value === "typeof" &&
+    importTok?.kind === "ident" &&
+    importTok.value === "import" &&
+    open?.kind === "punct" &&
+    open.value === "(" &&
+    spec?.kind === "string" &&
+    spec.value.length > 0 &&
+    end?.kind === "punct" &&
+    end.value === ")"
+    ? spec.value
+    : undefined;
+}
+
 function describeTokens(tokens: readonly NeutralToken[]): string {
   const rendered = tokens
     .map((token) => (token.kind === "string" ? `"${token.value}"` : token.value))
@@ -713,11 +751,20 @@ export function extractNeutralImportEdges(source: string): NeutralImportEdge[] {
         // A computed, concatenated, interpolated, or conditional specifier. The
         // destination is decided at RUNTIME, so the scanner cannot prove it
         // stays inside the core, and must not pretend the edge is absent.
-        push({
-          kind: "unresolved",
-          form,
-          detail: `non-literal specifier: ${describeTokens(argument)}`,
-        });
+        // ONE sanctioned exception (C04 lazy chunks): a call cast in place to
+        // `as typeof import("s")` declares its module surface with a literal
+        // specifier, so the edge resolves to that literal; anything else stays
+        // fail-closed.
+        const cast = typedImportCastSpecifier(tokens, openIndex);
+        if (cast !== undefined) {
+          add(cast, form);
+        } else {
+          push({
+            kind: "unresolved",
+            form,
+            detail: `non-literal specifier: ${describeTokens(argument)}`,
+          });
+        }
       }
       continue;
     }

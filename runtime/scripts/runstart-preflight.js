@@ -3281,6 +3281,21 @@ function firstArgumentTokens(tokens, openIndex2) {
   }
   return void 0;
 }
+function typedImportCastSpecifier(tokens, openIndex2) {
+  let depth = 0;
+  let close = -1;
+  for (let i = openIndex2; i < tokens.length; i += 1) {
+    const delta = bracketDelta(tokens[i]);
+    depth += delta;
+    if (depth === 0 && delta < 0) {
+      close = i;
+      break;
+    }
+  }
+  if (close === -1) return void 0;
+  const [asTok, typeofTok, importTok, open, spec, end] = tokens.slice(close + 1, close + 7);
+  return asTok?.kind === "ident" && asTok.value === "as" && typeofTok?.kind === "ident" && typeofTok.value === "typeof" && importTok?.kind === "ident" && importTok.value === "import" && open?.kind === "punct" && open.value === "(" && spec?.kind === "string" && spec.value.length > 0 && end?.kind === "punct" && end.value === ")" ? spec.value : void 0;
+}
 function describeTokens(tokens) {
   const rendered = tokens.map((token) => token.kind === "string" ? `"${token.value}"` : token.value).join(" ");
   return rendered.length > 80 ? `${rendered.slice(0, 77)}...` : rendered;
@@ -3325,11 +3340,16 @@ function extractNeutralImportEdges(source) {
       } else if (argument.length === 1 && argument[0].kind === "string") {
         add(argument[0].value, form);
       } else {
-        push({
-          kind: "unresolved",
-          form,
-          detail: `non-literal specifier: ${describeTokens(argument)}`
-        });
+        const cast = typedImportCastSpecifier(tokens, openIndex2);
+        if (cast !== void 0) {
+          add(cast, form);
+        } else {
+          push({
+            kind: "unresolved",
+            form,
+            detail: `non-literal specifier: ${describeTokens(argument)}`
+          });
+        }
       }
       continue;
     }

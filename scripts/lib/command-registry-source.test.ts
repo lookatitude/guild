@@ -79,10 +79,10 @@ describe("authored command-registry source — covers exactly the committed corp
       .commands.map((c) => c.id)
       .sort();
     expect(sourceIds).toEqual(committedStems());
-    // anti-vacuity floor: the corpus is the full 20-command surface, incl. the
-    // tricky-quoting oracles (escaped quotes / long desc / empty argument-hint).
-    expect(sourceIds.length).toBeGreaterThanOrEqual(20);
-    for (const must of ["status", "config", "fix", "initiative", "wiki", "audit"]) {
+    // anti-vacuity floor: the corpus is the 13-command surface (KTD69; the 11
+    // print-only aliases were deleted post-v3.0.0 stable cut — C06).
+    expect(sourceIds.length).toBeGreaterThanOrEqual(13);
+    for (const must of ["status", "config", "maintain", "initiative", "wiki", "guild"]) {
       expect(sourceIds).toContain(must);
     }
   });
