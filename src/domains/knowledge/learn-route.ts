@@ -13,11 +13,11 @@
 
 import type { DetectionResult } from "../state";
 
-export const LEARN_SUB_VERBS = ["map", "graph", "knowledge", "onboard", "diff", "explain", "harvest"] as const;
+export const LEARN_SUB_VERBS = Object.freeze(["map", "graph", "knowledge", "onboard", "diff", "explain", "harvest"] as const);
 export type LearnSubVerb = (typeof LEARN_SUB_VERBS)[number];
 
 /** Each sub-verb loads exactly one chapter of the learn assembler. */
-export const LEARN_CHAPTERS: Readonly<Record<LearnSubVerb, string>> = {
+export const LEARN_CHAPTERS: Readonly<Record<LearnSubVerb, string>> = Object.freeze({
   map: "references/learn-map.md",
   graph: "references/learn-graph.md",
   knowledge: "references/learn-knowledge.md",
@@ -25,9 +25,9 @@ export const LEARN_CHAPTERS: Readonly<Record<LearnSubVerb, string>> = {
   diff: "references/learn-diff.md",
   explain: "references/learn-explain.md",
   harvest: "references/learn-harvest.md",
-};
+});
 
-export const LEARN_ROUTES = [
+export const LEARN_ROUTES = Object.freeze([
   "full_learn",
   "cheap_map_only",
   "workspace_full_learn",
@@ -35,7 +35,7 @@ export const LEARN_ROUTES = [
   "confirm_target",
   "chapter",
   "usage",
-] as const;
+] as const);
 export type LearnRoute = (typeof LEARN_ROUTES)[number];
 
 export type LearnTargetKind =
@@ -98,12 +98,12 @@ export const LEARN_USAGE = `usage: /guild:learn [${LEARN_SUB_VERBS.join("|")}] [
 /** `new_or_sparse_project` holds at most this many tracked files. */
 export const SPARSE_TRACKED_FILE_LIMIT = 5;
 
-const KNOWLEDGE_TIER: Readonly<Record<Exclude<LearnRoute, "chapter" | "usage" | "confirm_target">, LearnKnowledgeTier>> = {
+const KNOWLEDGE_TIER: Readonly<Record<Exclude<LearnRoute, "chapter" | "usage" | "confirm_target">, LearnKnowledgeTier>> = Object.freeze({
   full_learn: "after_oq1_gate",
   cheap_map_only: "not_run",
   workspace_full_learn: "deferred",
   workspace_plan_only: "not_run",
-};
+});
 
 /** The skill's five-way detection table, in its precedence order. */
 export function classifyLearnTarget(facts: LearnTargetFacts): LearnTargetKind {

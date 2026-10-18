@@ -50214,8 +50214,8 @@ function routeLearn(input) {
 var LEARN_SUB_VERBS, LEARN_CHAPTERS, LEARN_ROUTES, LearnRouteError, LEARN_USAGE, SPARSE_TRACKED_FILE_LIMIT, KNOWLEDGE_TIER;
 var init_learn_route = __esm({
   "src/domains/knowledge/learn-route.ts"() {
-    LEARN_SUB_VERBS = ["map", "graph", "knowledge", "onboard", "diff", "explain", "harvest"];
-    LEARN_CHAPTERS = {
+    LEARN_SUB_VERBS = Object.freeze(["map", "graph", "knowledge", "onboard", "diff", "explain", "harvest"]);
+    LEARN_CHAPTERS = Object.freeze({
       map: "references/learn-map.md",
       graph: "references/learn-graph.md",
       knowledge: "references/learn-knowledge.md",
@@ -50223,8 +50223,8 @@ var init_learn_route = __esm({
       diff: "references/learn-diff.md",
       explain: "references/learn-explain.md",
       harvest: "references/learn-harvest.md"
-    };
-    LEARN_ROUTES = [
+    });
+    LEARN_ROUTES = Object.freeze([
       "full_learn",
       "cheap_map_only",
       "workspace_full_learn",
@@ -50232,7 +50232,7 @@ var init_learn_route = __esm({
       "confirm_target",
       "chapter",
       "usage"
-    ];
+    ]);
     LearnRouteError = class extends Error {
       constructor(message) {
         super(message);
@@ -50241,12 +50241,12 @@ var init_learn_route = __esm({
     };
     LEARN_USAGE = `usage: /guild:learn [${LEARN_SUB_VERBS.join("|")}] [target] [--rigor=quick|standard|deep]`;
     SPARSE_TRACKED_FILE_LIMIT = 5;
-    KNOWLEDGE_TIER = {
+    KNOWLEDGE_TIER = Object.freeze({
       full_learn: "after_oq1_gate",
       cheap_map_only: "not_run",
       workspace_full_learn: "deferred",
       workspace_plan_only: "not_run"
-    };
+    });
   }
 });
 
@@ -50355,11 +50355,6 @@ __export(knowledge_exports, {
   KNOWLEDGE_RECALL_SCHEMA_VERSION: () => KNOWLEDGE_RECALL_SCHEMA_VERSION,
   LANE_BUNDLE_SCHEMA: () => LANE_BUNDLE_SCHEMA,
   LANE_BUNDLE_TOKEN_CAP: () => LANE_BUNDLE_TOKEN_CAP,
-  LEARN_CHAPTERS: () => LEARN_CHAPTERS,
-  LEARN_ROUTES: () => LEARN_ROUTES,
-  LEARN_SUB_VERBS: () => LEARN_SUB_VERBS,
-  LEARN_USAGE: () => LEARN_USAGE,
-  LearnRouteError: () => LearnRouteError,
   MAX_CONCLUSIONS: () => MAX_CONCLUSIONS,
   MAX_QUESTIONS: () => MAX_QUESTIONS,
   MODULE_PUBLIC_API_VERSION: () => MODULE_PUBLIC_API_VERSION3,
@@ -50399,7 +50394,6 @@ __export(knowledge_exports, {
   buildResearchPacket: () => buildResearchPacket,
   buildWikiIndex: () => buildWikiIndex,
   buildWorkingSetCard: () => buildWorkingSetCard,
-  classifyLearnTarget: () => classifyLearnTarget,
   classifyStructuralIntent: () => classifyStructuralIntent,
   classifyTrustTier: () => classifyTrustTier,
   compositeScore: () => compositeScore,
@@ -50432,7 +50426,6 @@ __export(knowledge_exports, {
   kgNeighbors: () => kgNeighbors,
   kgTrace: () => kgTrace,
   knowledgeLinksPath: () => knowledgeLinksPath,
-  learnRouteFor: () => learnRouteFor,
   lintKnowledgeNodes: () => lintKnowledgeNodes,
   loadWorkingSet: () => loadWorkingSet,
   locateAnchorOffset: () => locateAnchorOffset,

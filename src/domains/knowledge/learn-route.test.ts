@@ -20,7 +20,7 @@ import {
   type LearnTargetKind,
   type LearnRouteResult,
   type LearnRouteInput,
-} from ".";
+} from "./learn-route";
 
 type Router = (input: LearnRouteInput) => LearnRouteResult;
 
