@@ -1050,7 +1050,7 @@ describe("T04 C02E-I — analyze integrated route", () => {
         const positive = runTaught(parsed.script, parsed.argv);
         // Parser accepted the documented shape: operational outcome, never usage.
         expect({ mapping: m.id, accepted: positive.code === 0 || positive.code === 1 }).toEqual({ mapping: m.id, accepted: true });
-        expect(positive.stderr).not.toMatch(/^usage:/m);
+        expect(positive.stderr.split("\n").some((l) => l.startsWith("usage:"))).toBe(false);
         const negative = runTaught(parsed.script, [...parsed.argv, "--nope"]);
         expect({ mapping: m.id, code: negative.code }).toEqual({ mapping: m.id, code: 2 });
       } finally {
