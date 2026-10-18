@@ -97,9 +97,19 @@ export function runLearnRouteCli(argv: string[] = process.argv.slice(2)): number
   const own = sep === -1 ? argv : argv.slice(0, sep);
   const tokens = sep === -1 ? [] : argv.slice(sep + 1);
   const cwdIdx = own.indexOf("--cwd");
-  const base = cwdIdx !== -1 && own[cwdIdx + 1] ? own[cwdIdx + 1] : process.cwd();
+  if (cwdIdx !== -1 && !own[cwdIdx + 1]) {
+    process.stderr.write("[learn-route] ERROR: --cwd needs a path value\n");
+    return 1;
+  }
+  const base = cwdIdx !== -1 ? own[cwdIdx + 1] : process.cwd();
 
-  const parsed = parseLearnArgs(tokens);
+  let parsed: ReturnType<typeof parseLearnArgs>;
+  try {
+    parsed = parseLearnArgs(tokens);
+  } catch (e) {
+    process.stderr.write(`[learn-route] ERROR: ${(e as Error).message}\n`);
+    return 1;
+  }
   const root = path.resolve(base, parsed.cwd_override ?? ".");
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
     process.stderr.write(`[learn-route] ERROR: root "${root}" is not a directory\n`);

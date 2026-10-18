@@ -639,9 +639,10 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // exactly the 13 dispatchers remain. ANTI-VACUITY: SC-W2-5/SC-W3-6 were observed
   // RED against the prior pins naming commands/** before this value was ratified.
   // Re-ratified 2026-10-19 (v3co C1): learn.md dispatch runs the compiled learn-route.js
-  // router first and follows its route; the command registry entry was re-extracted.
+  // router first and follows its route; `harvest` joins the sub-verb list; the command
+  // registry entry was re-extracted.
   // ANTI-VACUITY: check-surface-pins, SC-W2-5 and SC-W3-6 were RED against the prior pin.
-  commands: "576d68ea9937d7e49ba08ee0d45b7a2398868374",
+  commands: "62ee1c835b34eb671b16d00d3d22f7b7ddc4b2da",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
   // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,

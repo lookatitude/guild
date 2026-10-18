@@ -40832,12 +40832,12 @@ function parseLearnArgs(tokens) {
   let dryRun = false;
   for (let i = 0; i < argv.length; i++) {
     const t = argv[i];
-    if (t === "--cwd") {
-      if (i + 1 < argv.length) cwdOverride = argv[++i];
-      continue;
-    }
-    if (t.startsWith("--cwd=")) {
-      cwdOverride = t.slice("--cwd=".length);
+    if (t === "--cwd" || t.startsWith("--cwd=")) {
+      const v = t === "--cwd" ? argv[++i] : t.slice("--cwd=".length);
+      if (v === void 0 || v === "" || v.startsWith("-")) {
+        throw new LearnRouteError("--cwd needs a path value");
+      }
+      cwdOverride = v;
       continue;
     }
     if (t === "--dry-run") dryRun = true;
@@ -40901,14 +40901,15 @@ function routeLearn(input) {
 var LEARN_SUB_VERBS, LEARN_CHAPTERS, LEARN_ROUTES, LearnRouteError, LEARN_USAGE, SPARSE_TRACKED_FILE_LIMIT, KNOWLEDGE_TIER;
 var init_learn_route = __esm({
   "src/domains/knowledge/learn-route.ts"() {
-    LEARN_SUB_VERBS = ["map", "graph", "knowledge", "onboard", "diff", "explain"];
+    LEARN_SUB_VERBS = ["map", "graph", "knowledge", "onboard", "diff", "explain", "harvest"];
     LEARN_CHAPTERS = {
       map: "references/learn-map.md",
       graph: "references/learn-graph.md",
       knowledge: "references/learn-knowledge.md",
       onboard: "references/learn-onboard.md",
       diff: "references/learn-diff.md",
-      explain: "references/learn-explain.md"
+      explain: "references/learn-explain.md",
+      harvest: "references/learn-harvest.md"
     };
     LEARN_ROUTES = [
       "full_learn",

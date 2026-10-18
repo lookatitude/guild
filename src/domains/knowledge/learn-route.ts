@@ -13,7 +13,7 @@
 
 import type { DetectionResult } from "../state";
 
-export const LEARN_SUB_VERBS = ["map", "graph", "knowledge", "onboard", "diff", "explain"] as const;
+export const LEARN_SUB_VERBS = ["map", "graph", "knowledge", "onboard", "diff", "explain", "harvest"] as const;
 export type LearnSubVerb = (typeof LEARN_SUB_VERBS)[number];
 
 /** Each sub-verb loads exactly one chapter of the learn assembler. */
@@ -24,6 +24,7 @@ export const LEARN_CHAPTERS: Readonly<Record<LearnSubVerb, string>> = {
   onboard: "references/learn-onboard.md",
   diff: "references/learn-diff.md",
   explain: "references/learn-explain.md",
+  harvest: "references/learn-harvest.md",
 };
 
 export const LEARN_ROUTES = [
@@ -149,7 +150,10 @@ export interface ParsedLearnArgs {
   cwd_override: string | null;
 }
 
-/** Flags never pick the route; only the first positional token does. */
+/**
+ * Flags never pick the route; only the first positional token does. A `--cwd`
+ * with no value is refused (LearnRouteError), never read as "here".
+ */
 export function parseLearnArgs(tokens: readonly string[]): ParsedLearnArgs {
   const argv = tokens.filter((t) => t !== "");
   let positional = -1;
@@ -157,12 +161,13 @@ export function parseLearnArgs(tokens: readonly string[]): ParsedLearnArgs {
   let dryRun = false;
   for (let i = 0; i < argv.length; i++) {
     const t = argv[i];
-    if (t === "--cwd") {
-      if (i + 1 < argv.length) cwdOverride = argv[++i];
-      continue;
-    }
-    if (t.startsWith("--cwd=")) {
-      cwdOverride = t.slice("--cwd=".length);
+    if (t === "--cwd" || t.startsWith("--cwd=")) {
+      const v = t === "--cwd" ? argv[++i] : t.slice("--cwd=".length);
+      // A missing value must not fall back to the current root.
+      if (v === undefined || v === "" || v.startsWith("-")) {
+        throw new LearnRouteError("--cwd needs a path value");
+      }
+      cwdOverride = v;
       continue;
     }
     if (t === "--dry-run") dryRun = true;

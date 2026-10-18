@@ -35,7 +35,8 @@ The mapping is the one the skill already documented: brownfield
 K1–K6 after the OQ1 gate; `new_or_sparse_project` runs the cheap map only; a
 workspace runs its fan-out flow with K1–K6 deferred, or plan-only under
 `learn_fanout: plan-only` / `--dry-run`; `mixed_or_uncertain` asks one
-question; each of the six sub-verbs loads its chapter; any other token prints
+question; each of the seven sub-verbs (the skill's chapter table, `harvest`
+included) loads its chapter; a `--cwd` with no value is refused; any other token prints
 usage. A root with neither `.git/` nor `.guild/` and more than five files fits
 no documented shape and routes to `confirm_target`.
 

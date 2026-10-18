@@ -24880,12 +24880,12 @@ function parseLearnArgs(tokens) {
   let dryRun = false;
   for (let i = 0; i < argv.length; i++) {
     const t = argv[i];
-    if (t === "--cwd") {
-      if (i + 1 < argv.length) cwdOverride = argv[++i];
-      continue;
-    }
-    if (t.startsWith("--cwd=")) {
-      cwdOverride = t.slice("--cwd=".length);
+    if (t === "--cwd" || t.startsWith("--cwd=")) {
+      const v = t === "--cwd" ? argv[++i] : t.slice("--cwd=".length);
+      if (v === void 0 || v === "" || v.startsWith("-")) {
+        throw new LearnRouteError("--cwd needs a path value");
+      }
+      cwdOverride = v;
       continue;
     }
     if (t === "--dry-run") dryRun = true;
@@ -24949,14 +24949,15 @@ function routeLearn(input) {
 var LEARN_SUB_VERBS, LEARN_CHAPTERS, LearnRouteError, LEARN_USAGE, SPARSE_TRACKED_FILE_LIMIT, KNOWLEDGE_TIER;
 var init_learn_route = __esm({
   "src/domains/knowledge/learn-route.ts"() {
-    LEARN_SUB_VERBS = ["map", "graph", "knowledge", "onboard", "diff", "explain"];
+    LEARN_SUB_VERBS = ["map", "graph", "knowledge", "onboard", "diff", "explain", "harvest"];
     LEARN_CHAPTERS = {
       map: "references/learn-map.md",
       graph: "references/learn-graph.md",
       knowledge: "references/learn-knowledge.md",
       onboard: "references/learn-onboard.md",
       diff: "references/learn-diff.md",
-      explain: "references/learn-explain.md"
+      explain: "references/learn-explain.md",
+      harvest: "references/learn-harvest.md"
     };
     LearnRouteError = class extends Error {
       constructor(message) {
@@ -41505,8 +41506,19 @@ function runLearnRouteCli(argv = process.argv.slice(2)) {
   const own = sep18 === -1 ? argv : argv.slice(0, sep18);
   const tokens = sep18 === -1 ? [] : argv.slice(sep18 + 1);
   const cwdIdx = own.indexOf("--cwd");
-  const base = cwdIdx !== -1 && own[cwdIdx + 1] ? own[cwdIdx + 1] : process.cwd();
-  const parsed = parseLearnArgs(tokens);
+  if (cwdIdx !== -1 && !own[cwdIdx + 1]) {
+    process.stderr.write("[learn-route] ERROR: --cwd needs a path value\n");
+    return 1;
+  }
+  const base = cwdIdx !== -1 ? own[cwdIdx + 1] : process.cwd();
+  let parsed;
+  try {
+    parsed = parseLearnArgs(tokens);
+  } catch (e) {
+    process.stderr.write(`[learn-route] ERROR: ${e.message}
+`);
+    return 1;
+  }
   const root = path76.resolve(base, parsed.cwd_override ?? ".");
   if (!fs63.existsSync(root) || !fs63.statSync(root).isDirectory()) {
     process.stderr.write(`[learn-route] ERROR: root "${root}" is not a directory

@@ -132,17 +132,23 @@ describe("routeLearn — bare /guild:learn", () => {
     expect(r.forward).toEqual(["--rigor=deep", "--cwd", "/x/y", "--include-lockfiles"]);
   });
 
+  for (const argv of [["--cwd"], ["--cwd="], ["--cwd", "--dry-run"], ["map", "--cwd"]]) {
+    it(`--cwd without a value is refused: ${JSON.stringify(argv)}`, () => {
+      expect(() => routeLearn({ argv, target: BROWNFIELD })).toThrow(LearnRouteError);
+    });
+  }
+
   it("bare without target facts is refused, never guessed", () => {
     expect(() => routeLearn({ argv: [], target: null })).toThrow(LearnRouteError);
   });
 });
 
 describe("routeLearn — sub-verbs and unknown tokens", () => {
-  it("the sub-verb set is exactly the command's six", () => {
-    expect([...LEARN_SUB_VERBS]).toEqual(["map", "graph", "knowledge", "onboard", "diff", "explain"]);
+  it("the sub-verb set is exactly the skill's seven chapters", () => {
+    expect([...LEARN_SUB_VERBS]).toEqual(["map", "graph", "knowledge", "onboard", "diff", "explain", "harvest"]);
   });
 
-  for (const verb of ["map", "graph", "knowledge", "onboard", "diff", "explain"] as const) {
+  for (const verb of LEARN_SUB_VERBS) {
     it(`${verb} -> chapter references/learn-${verb}.md, target facts not needed`, () => {
       const r = routeLearn({ argv: [verb, "src/a.ts", "--rigor=quick"], target: null });
       expect(r.route).toBe("chapter");
@@ -165,14 +171,14 @@ describe("routeLearn — sub-verbs and unknown tokens", () => {
     expect(r.cwd_override).toBe("map");
   });
 
-  for (const token of ["harvest", "Map", "learn", "foo"]) {
+  for (const token of ["Map", "learn", "foo", "harvest-all"]) {
     it(`unknown token "${token}" -> usage, never a pipeline`, () => {
       const r = routeLearn({ argv: [token], target: BROWNFIELD });
       expect(r.route).toBe("usage");
       expect(r.token).toBe(token);
       expect(r.chapter).toBeNull();
       expect(r.knowledge_tier).toBeNull();
-      expect(r.usage).toContain("map|graph|knowledge|onboard|diff|explain");
+      expect(r.usage).toContain("map|graph|knowledge|onboard|diff|explain|harvest");
     });
   }
 });

@@ -118,8 +118,8 @@
     {
       "id": "learn",
       "name": "learn",
-      "description": "Understand-everything — no sub-verb runs the smart full learn-all (detect target, run the pipeline, update indexes, emit knowledge candidates). Sub-verbs map | graph | knowledge | onboard | diff | explain scope it. Dispatches to guild:learn.",
-      "argument_hint": "[map|graph|knowledge|onboard|diff|explain] [target] [--rigor=quick|standard|deep]",
+      "description": "Understand-everything — no sub-verb runs the smart full learn-all (detect target, run the pipeline, update indexes, emit knowledge candidates). Sub-verbs map | graph | knowledge | onboard | diff | explain | harvest scope it. Dispatches to guild:learn.",
+      "argument_hint": "[map|graph|knowledge|onboard|diff|explain|harvest] [target] [--rigor=quick|standard|deep]",
       "allowed_tools": [
         "Read",
         "Write",
@@ -131,7 +131,7 @@
         "Skill",
         "AskUserQuestion"
       ],
-      "body": "\n# /guild:learn — knowledge pipeline\n\nOne implementation, two triggers (D3): the same `learn-*` chapters run here and\nunder `/guild:init --learn`. An unknown sub-verb prints usage and stops — no\nskill invoked, no file written.\n\n## Run recording\n\n```bash\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js\" start --command=/guild:learn --cwd \"$(pwd)\"\n```\n\n## Sub-verbs\n\n| Token | Scope |\n|---|---|\n| (none) | smart full learn-all — detect, confirm, run the pipeline |\n| `map` | CodebaseMap + architecture overview (cheap scan) |\n| `graph` | deep semantic KnowledgeGraph (slow) |\n| `knowledge` | deep multi-modal knowledge tier |\n| `onboard` | guided architecture tour |\n| `diff` | change analysis + blast radius |\n| `explain` | file / module / concept deep-dive |\n\n## Dispatch\n\n```bash\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/learn-route.js\" --cwd \"$(pwd)\" -- $ARGUMENTS\n```\n\nThe route JSON decides, never prose. `route: usage` → print its `usage` and stop;\nany other route → `Skill: guild:learn` with `args: $ARGUMENTS` and the route JSON.\nEvery `.guild/` write is the assembler's.\n"
+      "body": "\n# /guild:learn — knowledge pipeline\n\nOne implementation, two triggers (D3): the same `learn-*` chapters run here and\nunder `/guild:init --learn`. Unknown sub-verb: print usage, invoke no skill.\n\n## Run recording\n\n```bash\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/hooks/dist/run-trace.js\" start --command=/guild:learn --cwd \"$(pwd)\"\n```\n\n## Sub-verbs\n\n| Token | Scope |\n|---|---|\n| (none) | smart full learn-all — detect, confirm, run the pipeline |\n| `map` | CodebaseMap + architecture overview (cheap scan) |\n| `graph` | deep semantic KnowledgeGraph (slow) |\n| `knowledge` | deep multi-modal knowledge tier |\n| `onboard` | guided architecture tour |\n| `diff` | change analysis + blast radius |\n| `explain` | file / module / concept deep-dive |\n| `harvest` | phase/run artifact extraction |\n\n## Dispatch\n\n```bash\nnode \"${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/learn-route.js\" --cwd \"$(pwd)\" -- $ARGUMENTS\n```\n\nThe route JSON decides, never prose. `route: usage` → print its `usage` and stop;\nany other route → `Skill: guild:learn` with `args: $ARGUMENTS` and the route JSON.\nEvery `.guild/` write is the assembler's.\n"
     },
     {
       "id": "maintain",

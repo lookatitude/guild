@@ -38529,7 +38529,7 @@ var init_knowledge_graph_contract = __esm({
 var LEARN_SUB_VERBS, LEARN_USAGE;
 var init_learn_route = __esm({
   "src/domains/knowledge/learn-route.ts"() {
-    LEARN_SUB_VERBS = ["map", "graph", "knowledge", "onboard", "diff", "explain"];
+    LEARN_SUB_VERBS = ["map", "graph", "knowledge", "onboard", "diff", "explain", "harvest"];
     LEARN_USAGE = `usage: /guild:learn [${LEARN_SUB_VERBS.join("|")}] [target] [--rigor=quick|standard|deep]`;
   }
 });

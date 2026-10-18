@@ -59,7 +59,7 @@
     {
       "id": "learn",
       "source_path": "commands/learn.md",
-      "description": "Understand-everything — no sub-verb runs the smart full learn-all (detect target, run the pipeline, update indexes, emit knowledge candidates). Sub-verbs map | graph | knowledge | onboard | diff | explain scope it. Dispatches to guild:learn."
+      "description": "Understand-everything — no sub-verb runs the smart full learn-all (detect target, run the pipeline, update indexes, emit knowledge candidates). Sub-verbs map | graph | knowledge | onboard | diff | explain | harvest scope it. Dispatches to guild:learn."
     },
     {
       "id": "maintain",

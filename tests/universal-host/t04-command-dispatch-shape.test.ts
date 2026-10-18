@@ -773,6 +773,14 @@ describe("T04 R2-4 — every sub-verb row spawns argv its compiled parser accept
     { command: "status", cli: "resume-lanes.js", tokens: ["resume", "--restart"] },
     { command: "status", cli: "dashboard-launch.js", tokens: ["dashboard", "--dry-run"] },
     { command: "status", cli: "dashboard-launch.js", tokens: ["dashboard", "--stop"] },
+    // v3co C1: learn routes through the compiled learn-route parser before dispatch.
+    { command: "learn", cli: "learn-route.js", tokens: [] },
+    { command: "learn", cli: "learn-route.js", tokens: ["--dry-run"] },
+    ...["map", "graph", "knowledge", "onboard", "diff", "explain", "harvest"].map((verb) => ({
+      command: "learn",
+      cli: "learn-route.js",
+      tokens: [verb, "src/a.ts"],
+    })),
   ];
 
   it.each(ROWS)("$command / $cli $tokens", (row: Row) => {
@@ -802,14 +810,26 @@ describe("T04 R2-4 — every sub-verb row spawns argv its compiled parser accept
     }
   });
 
-  it("maintain / learn / wiki spawn no CLI whose parser could refuse a row", () => {
+  it("maintain / wiki spawn no CLI whose parser could refuse a row", () => {
     // Their sub-verbs dispatch skills, not CLIs; the only spawn is run-trace start.
-    for (const id of ["maintain", "learn", "wiki"]) {
+    for (const id of ["maintain", "wiki"]) {
       for (const line of bashLines(id)) {
         if (line.trimStart().startsWith("#")) continue;
         expect({ id, line }).toEqual({ id, line: expect.stringMatching(/run-trace\.js|^$/) });
       }
     }
+  });
+
+  it("learn spawns only run-trace and the learn-route parser the rows above exercise", () => {
+    for (const line of bashLines("learn")) {
+      if (line.trimStart().startsWith("#")) continue;
+      expect({ line }).toEqual({ line: expect.stringMatching(/run-trace\.js|learn-route\.js|^$/) });
+    }
+  });
+
+  it("ANTI-VACUITY: an unknown learn token really is refused (usage) by learn-route", () => {
+    const run = runCompiledCli("learn-route.js", spawnedArgv("learn", "learn-route.js", ["bogus"], freshRoot()));
+    expect(run.stdout + run.stderr).toMatch(REFUSAL);
   });
 });
 
