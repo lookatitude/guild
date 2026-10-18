@@ -36494,7 +36494,8 @@ var init_result_contracts = __esm({
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/hooks/lib/handoff-v2.ts",
-        purpose: "Specialist lane result (dispatch envelope)."
+        purpose: "Specialist lane result (dispatch envelope).",
+        live_caller: { path: "scripts/task-cell-host-conformance.ts", call: "normalizeResult" }
       },
       {
         wire_schema_version: "review_result.v1",
@@ -36503,35 +36504,40 @@ var init_result_contracts = __esm({
         validator_kind: "lenient",
         source_path: "plugin/scripts/verify-gate-pass.ts",
         // correction #2.
-        purpose: "Advisory/adversarial review result (gate-pass binding)."
+        purpose: "Advisory/adversarial review result (gate-pass binding).",
+        live_caller: { path: "scripts/verify-gate-pass.ts", call: "parseReviewResult" }
       },
       {
         wire_schema_version: "guild.phase_result.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Phase close summary and gate predicate."
+        purpose: "Phase close summary and gate predicate.",
+        legacy_only: true
       },
       {
         wire_schema_version: "guild.permission_receipt.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Requested/selected host mode and gate policy."
+        purpose: "Requested/selected host mode and gate policy.",
+        legacy_only: true
       },
       {
         wire_schema_version: "guild.host_event.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Normalized hook/tool/session event."
+        purpose: "Normalized hook/tool/session event.",
+        legacy_only: true
       },
       {
         wire_schema_version: "guild.qa_result.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Test matrix execution, gaps, failures, release predicate."
+        purpose: "Test matrix execution, gaps, failures, release predicate.",
+        legacy_only: true
       }
     ]);
     DEFERRED_CONTRACTS = Object.freeze([]);
@@ -36539,7 +36545,10 @@ var init_result_contracts = __esm({
       ...EXISTING_CONTRACTS,
       ...DEFERRED_CONTRACTS
     ]);
-    PHASE1_NORMALIZER_TARGETS = sealSet(EXISTING_CONTRACTS.map((c) => c.wire_schema_version), "PHASE1_NORMALIZER_TARGETS");
+    PHASE1_NORMALIZER_TARGETS = sealSet(
+      EXISTING_CONTRACTS.filter((c) => c.live_caller !== void 0 && c.legacy_only !== true).map((c) => c.wire_schema_version),
+      "PHASE1_NORMALIZER_TARGETS"
+    );
   }
 });
 

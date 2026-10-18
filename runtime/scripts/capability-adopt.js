@@ -34100,7 +34100,8 @@ var init_result_contracts = __esm({
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/hooks/lib/handoff-v2.ts",
-        purpose: "Specialist lane result (dispatch envelope)."
+        purpose: "Specialist lane result (dispatch envelope).",
+        live_caller: { path: "scripts/task-cell-host-conformance.ts", call: "normalizeResult" }
       },
       {
         wire_schema_version: "review_result.v1",
@@ -34109,35 +34110,40 @@ var init_result_contracts = __esm({
         validator_kind: "lenient",
         source_path: "plugin/scripts/verify-gate-pass.ts",
         // correction #2.
-        purpose: "Advisory/adversarial review result (gate-pass binding)."
+        purpose: "Advisory/adversarial review result (gate-pass binding).",
+        live_caller: { path: "scripts/verify-gate-pass.ts", call: "parseReviewResult" }
       },
       {
         wire_schema_version: "guild.phase_result.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Phase close summary and gate predicate."
+        purpose: "Phase close summary and gate predicate.",
+        legacy_only: true
       },
       {
         wire_schema_version: "guild.permission_receipt.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Requested/selected host mode and gate policy."
+        purpose: "Requested/selected host mode and gate policy.",
+        legacy_only: true
       },
       {
         wire_schema_version: "guild.host_event.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Normalized hook/tool/session event."
+        purpose: "Normalized hook/tool/session event.",
+        legacy_only: true
       },
       {
         wire_schema_version: "guild.qa_result.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Test matrix execution, gaps, failures, release predicate."
+        purpose: "Test matrix execution, gaps, failures, release predicate.",
+        legacy_only: true
       }
     ]);
     DEFERRED_CONTRACTS = Object.freeze([]);
@@ -34145,7 +34151,10 @@ var init_result_contracts = __esm({
       ...EXISTING_CONTRACTS,
       ...DEFERRED_CONTRACTS
     ]);
-    PHASE1_NORMALIZER_TARGETS = sealSet(EXISTING_CONTRACTS.map((c) => c.wire_schema_version), "PHASE1_NORMALIZER_TARGETS");
+    PHASE1_NORMALIZER_TARGETS = sealSet(
+      EXISTING_CONTRACTS.filter((c) => c.live_caller !== void 0 && c.legacy_only !== true).map((c) => c.wire_schema_version),
+      "PHASE1_NORMALIZER_TARGETS"
+    );
   }
 });
 
@@ -48875,12 +48884,82 @@ function writeTransitionIntent(projectRoot, operation, priorWindow, priorGates, 
   if (!written.written) throw new Error(`migration transition intent refused [${written.code}]: ${written.detail}`);
   return intent;
 }
+function listGuildFiles(root) {
+  const out = /* @__PURE__ */ new Set();
+  const stack = [".guild"];
+  while (stack.length > 0) {
+    const rel2 = stack.pop();
+    let entries;
+    try {
+      entries = fs68.readdirSync(path84.join(root, rel2), { withFileTypes: true });
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw error;
+    }
+    for (const entry of entries) {
+      const child = `${rel2}/${entry.name}`;
+      if (entry.isDirectory()) stack.push(child);
+      else out.add(child);
+    }
+  }
+  return out;
+}
+function readTargetBytes(root, relativePath) {
+  try {
+    return fs68.readFileSync(path84.join(root, relativePath));
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
 function applyMigrationTransition(projectRoot, intent) {
   verifyTransitionSemantics(projectRoot, intent);
+  const root = fs68.realpathSync(projectRoot);
+  const restartRel = intent.restart_record ? `${MIGRATION_RESTART_HISTORY_RELPATH}/${intent.restart_record.restart_hash}.json` : null;
+  const targets = [MIGRATION_WINDOW_RELPATH, FEATURE_GATE_RELPATH, ...restartRel ? [restartRel] : []];
+  const snapshot = new Map(targets.map((rel2) => [rel2, readTargetBytes(root, rel2)]));
+  const before = listGuildFiles(root);
   writeMigrationWindow(projectRoot, intent.next_window);
   writeFeatureGateRegistry(projectRoot, intent.next_gates);
   if (intent.restart_record) writeMigrationRestartRecord(projectRoot, intent.restart_record);
+  const landedAs = (rel2, expected, validate) => {
+    const bytes = readTargetBytes(root, rel2);
+    if (bytes === null) return false;
+    try {
+      return canonical2(validate(JSON.parse(bytes.toString("utf8")))) === canonical2(expected);
+    } catch {
+      return false;
+    }
+  };
+  const mismatched = [
+    ...landedAs(MIGRATION_WINDOW_RELPATH, intent.next_window, validateMigrationWindow) ? [] : [MIGRATION_WINDOW_RELPATH],
+    ...landedAs(FEATURE_GATE_RELPATH, intent.next_gates, validateFeatureGateRegistry) ? [] : [FEATURE_GATE_RELPATH],
+    ...restartRel && !landedAs(restartRel, intent.restart_record, validateMigrationRestartRecord) ? [restartRel] : []
+  ];
+  const owned = /* @__PURE__ */ new Set([...targets, MIGRATION_TRANSITION_RELPATH]);
+  const foreign = [...listGuildFiles(root)].filter((rel2) => !before.has(rel2) && !owned.has(rel2)).sort();
+  if (mismatched.length > 0) {
+    for (const [rel2, bytes] of snapshot) {
+      const target = path84.join(root, rel2);
+      if (bytes === null) {
+        fs68.rmSync(target, { force: true });
+        continue;
+      }
+      const written = writeContainedFile(root, target, bytes, { policy: "physical" });
+      if (!written.written) throw new Error(`migration transition rollback of ${rel2} refused [${written.code}]: ${written.detail}; intent retained for recovery`);
+    }
+    const unrestored = [...snapshot].filter(([rel2, bytes]) => {
+      const now = readTargetBytes(root, rel2);
+      return bytes === null ? now !== null : now === null || !now.equals(bytes);
+    }).map(([rel2]) => rel2);
+    if (unrestored.length > 0) {
+      throw new Error(`migration transition postimage mismatch (${mismatched.join(", ")}); rollback did not restore ${unrestored.join(", ")}; intent retained for recovery`);
+    }
+    fs68.unlinkSync(transitionPath(projectRoot));
+    throw new Error(`migration transition postimage mismatch (${mismatched.join(", ")}); rolled back to the snapshot; foreign .guild writes kept: ${foreign.length > 0 ? foreign.join(", ") : "(none)"}`);
+  }
   fs68.unlinkSync(transitionPath(projectRoot));
+  return Object.freeze({ targets: Object.freeze(targets), foreign_guild_writes: Object.freeze(foreign) });
 }
 function recoverMigrationTransition(projectRoot) {
   let raw;
@@ -49130,8 +49209,8 @@ function restartMigrationWindow(options) {
   };
   const historyPath = restartRef.path;
   const intent = writeTransitionIntent(options.projectRoot, "restart", current, gates, next, nextGates, restart);
-  applyMigrationTransition(options.projectRoot, intent);
-  return Object.freeze({ status: "restarted", window: next, history_path: historyPath, restart_hash: restart.restart_hash });
+  const accounting = applyMigrationTransition(options.projectRoot, intent);
+  return Object.freeze({ status: "restarted", window: next, history_path: historyPath, restart_hash: restart.restart_hash, foreign_guild_writes: accounting.foreign_guild_writes });
 }
 function lastKnownBoundary(window) {
   if (window.releases.length > 0) return window.releases[window.releases.length - 1];
@@ -49228,12 +49307,14 @@ function advanceMigrationWindow(options) {
   if (!nextWindow) return { status: "refused", blockers: ["next migration phase is invalid"] };
   const nextGate = { ...gates, resolver_mode: options.to, revision: gates.revision + 1, updated_at: enteredAt, updated_by: options.actor, history: [...gates.history, { from: current.mode, to: options.to, reason: "D03 migration-window advance", recorded_at: enteredAt, actor: options.actor }] };
   const intent = writeTransitionIntent(options.projectRoot, "advance", current, gates, nextWindow, nextGate);
+  let accounting;
   try {
-    applyMigrationTransition(options.projectRoot, intent);
+    accounting = applyMigrationTransition(options.projectRoot, intent);
   } catch (error) {
-    return { status: "failed", blockers: [`transition intent retained for deterministic recovery: ${error.message}`] };
+    const message = error.message;
+    return { status: "failed", blockers: [/rolled back to the snapshot/.test(message) ? message : `transition intent retained for deterministic recovery: ${message}`] };
   }
-  return { status: "advanced", from: current.mode, to: options.to, revision: nextGate.revision };
+  return { status: "advanced", from: current.mode, to: options.to, revision: nextGate.revision, foreign_guild_writes: accounting.foreign_guild_writes };
 }
 function legacyRemovalEligibility(options) {
   const parse3 = (value) => {

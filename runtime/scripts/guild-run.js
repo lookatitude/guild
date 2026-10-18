@@ -19685,7 +19685,8 @@ var init_result_contracts = __esm({
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/hooks/lib/handoff-v2.ts",
-        purpose: "Specialist lane result (dispatch envelope)."
+        purpose: "Specialist lane result (dispatch envelope).",
+        live_caller: { path: "scripts/task-cell-host-conformance.ts", call: "normalizeResult" }
       },
       {
         wire_schema_version: "review_result.v1",
@@ -19694,35 +19695,40 @@ var init_result_contracts = __esm({
         validator_kind: "lenient",
         source_path: "plugin/scripts/verify-gate-pass.ts",
         // correction #2.
-        purpose: "Advisory/adversarial review result (gate-pass binding)."
+        purpose: "Advisory/adversarial review result (gate-pass binding).",
+        live_caller: { path: "scripts/verify-gate-pass.ts", call: "parseReviewResult" }
       },
       {
         wire_schema_version: "guild.phase_result.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Phase close summary and gate predicate."
+        purpose: "Phase close summary and gate predicate.",
+        legacy_only: true
       },
       {
         wire_schema_version: "guild.permission_receipt.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Requested/selected host mode and gate policy."
+        purpose: "Requested/selected host mode and gate policy.",
+        legacy_only: true
       },
       {
         wire_schema_version: "guild.host_event.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Normalized hook/tool/session event."
+        purpose: "Normalized hook/tool/session event.",
+        legacy_only: true
       },
       {
         wire_schema_version: "guild.qa_result.v1",
         status: "exists",
         validator_kind: "strict",
         source_path: "plugin/src/domains/distribution/result-contracts-v2.ts",
-        purpose: "Test matrix execution, gaps, failures, release predicate."
+        purpose: "Test matrix execution, gaps, failures, release predicate.",
+        legacy_only: true
       }
     ]);
     DEFERRED_CONTRACTS = Object.freeze([]);
@@ -19730,7 +19736,10 @@ var init_result_contracts = __esm({
       ...EXISTING_CONTRACTS,
       ...DEFERRED_CONTRACTS
     ]);
-    PHASE1_NORMALIZER_TARGETS = sealSet(EXISTING_CONTRACTS.map((c) => c.wire_schema_version), "PHASE1_NORMALIZER_TARGETS");
+    PHASE1_NORMALIZER_TARGETS = sealSet(
+      EXISTING_CONTRACTS.filter((c) => c.live_caller !== void 0 && c.legacy_only !== true).map((c) => c.wire_schema_version),
+      "PHASE1_NORMALIZER_TARGETS"
+    );
     CONTRACT_VALIDATORS = {
       "guild.handoff.v2": validateHandoffV2,
       // parseReviewResult returns { result, reasons }; adapt to the { valid, errors } shape.
@@ -19739,7 +19748,7 @@ var init_result_contracts = __esm({
         const { result: result8, reasons } = parseReviewResult(raw);
         return { valid: result8 !== null, errors: reasons };
       },
-      // The four formerly-deferred contracts — now shipped (result-contracts-v2.ts).
+      // The four legacy-only contracts (result-contracts-v2.ts) — bound, never targets.
       "guild.phase_result.v1": validatePhaseResultV1,
       "guild.permission_receipt.v1": validatePermissionReceiptV1,
       "guild.host_event.v1": validateHostEventV1,
@@ -42735,7 +42744,7 @@ var PROSE_ALIASES = {
 };
 function normalizeResult(raw, wire) {
   if (!PHASE1_NORMALIZER_TARGETS.has(wire)) {
-    const hint = PROSE_ALIASES[wire] ? ` \u2014 did you mean "${PROSE_ALIASES[wire]}"? (the real wire string carries no "guild." prefix)` : findContract(wire) ? " \u2014 this contract is DEFERRED (no producer/validator yet); not a Phase-1 normalizer target" : " \u2014 unknown contract";
+    const hint = PROSE_ALIASES[wire] ? ` \u2014 did you mean "${PROSE_ALIASES[wire]}"? (the real wire string carries no "guild." prefix)` : findContract(wire)?.legacy_only ? " \u2014 this contract is legacy-only (no live producer or caller); not a Phase-1 normalizer target" : findContract(wire) ? " \u2014 this contract is DEFERRED (no producer/validator yet); not a Phase-1 normalizer target" : " \u2014 unknown contract";
     return {
       ok: false,
       wire_schema_version: wire,
