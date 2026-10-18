@@ -31,10 +31,10 @@ node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/c
 
 ## Dispatch
 
-```
-Skill: guild:learn
-args: $ARGUMENTS
+```bash
+node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/learn-route.js" --cwd "$(pwd)" -- $ARGUMENTS
 ```
 
-The first token selects the chapter; the rest forwards as `args`. Indexes,
-candidates and every `.guild/` write are the assembler's. Unknown token: print usage.
+The route JSON decides, never prose. `route: usage` → print its `usage` and stop;
+any other route → `Skill: guild:learn` with `args: $ARGUMENTS` and the route JSON.
+Every `.guild/` write is the assembler's.

@@ -1134,6 +1134,11 @@
       "kind": "cli"
     },
     {
+      "id": "learn/learn-route",
+      "source_path": "scripts/learn/learn-route.ts",
+      "kind": "cli"
+    },
+    {
       "id": "learn/lib/bundle-validate",
       "source_path": "scripts/learn/lib/bundle-validate.ts",
       "kind": "cli"

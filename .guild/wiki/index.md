@@ -2,6 +2,7 @@
 
 ## decisions
 
+- [learn-bare-route-router](decisions/learn-bare-route-router.md) - 2026-10-19 - Bare `/guild:learn` routes through the pure `routeLearn` knowledge-domain function (compiled `learn-route.js`); the skill prose describes routes, never decides them.
 - [supersession-dispatch-trace-v1](decisions/supersession-dispatch-trace-v1.md) - 2026-10-18 - `agent_dispatched` retired; dispatch visibility binds to `guild.trace.dispatch.v1`.
 - [supersession-host-event-v1](decisions/supersession-host-event-v1.md) - 2026-10-18 - `guild.host_event.v1` retired; live path is `guild.normalized_host_event.v1`.
 - [supersession-install-channel-model](decisions/supersession-install-channel-model.md) - 2026-10-18 - the v2 committed-dist marketplace flip is superseded by the authored-root + on-demand projection model.

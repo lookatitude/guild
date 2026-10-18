@@ -37818,6 +37818,15 @@ var init_knowledge_graph_contract = __esm({
   }
 });
 
+// src/domains/knowledge/learn-route.ts
+var LEARN_SUB_VERBS, LEARN_USAGE;
+var init_learn_route = __esm({
+  "src/domains/knowledge/learn-route.ts"() {
+    LEARN_SUB_VERBS = ["map", "graph", "knowledge", "onboard", "diff", "explain"];
+    LEARN_USAGE = `usage: /guild:learn [${LEARN_SUB_VERBS.join("|")}] [target] [--rigor=quick|standard|deep]`;
+  }
+});
+
 // src/domains/knowledge/wiki-lint-knowledge.ts
 function lintKnowledgeNodes(nodes) {
   const findings = [];
@@ -37927,6 +37936,7 @@ var init_knowledge = __esm({
     init_wiki_recall();
     init_knowledge_graph_contract();
     init_graph_query();
+    init_learn_route();
     init_wiki_lint_knowledge();
   }
 });

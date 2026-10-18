@@ -44,4 +44,5 @@ export const MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1" as const;
 
 export * from "./knowledge-graph-contract";
 export * from "./graph-query";
+export * from "./learn-route";
 export * from "./wiki-lint-knowledge";
