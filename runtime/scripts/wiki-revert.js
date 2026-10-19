@@ -50107,6 +50107,149 @@ var init_knowledge_graph_contract = __esm({
   }
 });
 
+// src/domains/knowledge/learn-route.ts
+function classifyLearnTarget(facts) {
+  if (facts.detection.kind === "workspace") {
+    const kinds = new Set(facts.detection.sub_guilds.map((c) => c.kind));
+    return kinds.size > 1 ? "mixed_or_uncertain" : "workspace";
+  }
+  if (facts.guild_dir !== "populated" && facts.tracked_files <= SPARSE_TRACKED_FILE_LIMIT) {
+    return "new_or_sparse_project";
+  }
+  if (facts.guild_dir === "populated" && facts.wiki_populated) return "existing_guild_project";
+  if (facts.has_git || facts.guild_dir !== "absent") return "regular_project";
+  return "mixed_or_uncertain";
+}
+function learnRouteFor(kind, opts) {
+  switch (kind) {
+    case "regular_project":
+    case "existing_guild_project":
+      return "full_learn";
+    case "new_or_sparse_project":
+      return "cheap_map_only";
+    case "workspace":
+      return opts.dryRun || opts.learnFanout === "plan-only" ? "workspace_plan_only" : "workspace_full_learn";
+    case "mixed_or_uncertain":
+      return "confirm_target";
+  }
+}
+function isSubVerb(token) {
+  return LEARN_SUB_VERBS.includes(token);
+}
+function parseLearnArgs(tokens) {
+  const argv = [];
+  let positional = -1;
+  let cwdOverride = null;
+  let dryRun = false;
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t === "") continue;
+    if (t === "--cwd" || t.startsWith("--cwd=")) {
+      const v = t === "--cwd" ? tokens[++i] : t.slice("--cwd=".length);
+      if (v === void 0 || v === "" || v.startsWith("-")) {
+        throw new LearnRouteError("--cwd needs a path value");
+      }
+      cwdOverride = v;
+      argv.push(...t === "--cwd" ? [t, v] : [t]);
+      continue;
+    }
+    if (t === "--dry-run") dryRun = true;
+    if (!t.startsWith("-") && positional === -1) positional = argv.length;
+    argv.push(t);
+  }
+  return { argv, positional, dry_run: dryRun, cwd_override: cwdOverride };
+}
+function routeLearn(input) {
+  const { argv, positional, dry_run: dryRun, cwd_override: cwdOverride } = parseLearnArgs(input.argv);
+  const base = {
+    schema: "guild.learn_route.v1",
+    dry_run: dryRun,
+    cwd_override: cwdOverride
+  };
+  if (positional !== -1) {
+    const token = argv[positional];
+    const forward = argv.filter((_, i) => i !== positional);
+    if (!isSubVerb(token)) {
+      return {
+        ...base,
+        route: "usage",
+        target_kind: null,
+        chapter: null,
+        chapter_file: null,
+        knowledge_tier: null,
+        forward,
+        token,
+        usage: LEARN_USAGE
+      };
+    }
+    return {
+      ...base,
+      route: "chapter",
+      target_kind: null,
+      chapter: token,
+      chapter_file: LEARN_CHAPTERS[token],
+      knowledge_tier: null,
+      forward,
+      token: null,
+      usage: null
+    };
+  }
+  if (input.target === null) {
+    throw new LearnRouteError("bare /guild:learn needs workspace-detect target facts; refusing to guess the route");
+  }
+  const kind = classifyLearnTarget(input.target);
+  const route2 = learnRouteFor(kind, { learnFanout: input.learnFanout ?? "auto", dryRun });
+  return {
+    ...base,
+    route: route2,
+    target_kind: kind,
+    chapter: null,
+    chapter_file: null,
+    knowledge_tier: route2 === "confirm_target" ? null : KNOWLEDGE_TIER[route2],
+    forward: [...argv],
+    token: null,
+    usage: null
+  };
+}
+var LEARN_SUB_VERBS, LEARN_CHAPTERS, LEARN_ROUTES, LearnRouteError, LEARN_USAGE, SPARSE_TRACKED_FILE_LIMIT, KNOWLEDGE_TIER;
+var init_learn_route = __esm({
+  "src/domains/knowledge/learn-route.ts"() {
+    LEARN_SUB_VERBS = Object.freeze(["map", "graph", "knowledge", "onboard", "diff", "explain", "harvest"]);
+    LEARN_CHAPTERS = Object.freeze({
+      map: "references/learn-map.md",
+      graph: "references/learn-graph.md",
+      knowledge: "references/learn-knowledge.md",
+      onboard: "references/learn-onboard.md",
+      diff: "references/learn-diff.md",
+      explain: "references/learn-explain.md",
+      harvest: "references/learn-harvest.md"
+    });
+    LEARN_ROUTES = Object.freeze([
+      "full_learn",
+      "cheap_map_only",
+      "workspace_full_learn",
+      "workspace_plan_only",
+      "confirm_target",
+      "chapter",
+      "usage"
+    ]);
+    LearnRouteError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.name = "LearnRouteError";
+      }
+    };
+    LEARN_USAGE = `usage: /guild:learn [${LEARN_SUB_VERBS.join("|")}] [target] [--rigor=quick|standard|deep]`;
+    SPARSE_TRACKED_FILE_LIMIT = 5;
+    KNOWLEDGE_TIER = Object.freeze({
+      full_learn: "after_oq1_gate",
+      cheap_map_only: "not_run",
+      workspace_full_learn: "deferred",
+      workspace_plan_only: "not_run"
+    });
+  }
+});
+
 // src/domains/knowledge/wiki-lint-knowledge.ts
 function lintKnowledgeNodes(nodes) {
   const findings = [];
@@ -50226,6 +50369,7 @@ __export(knowledge_exports, {
   RESUMABLE_STATUSES: () => RESUMABLE_STATUSES,
   RedirectLedgerError: () => RedirectLedgerError,
   SCRUBBED_WRITER_BRAND: () => SCRUBBED_WRITER_BRAND,
+  SPARSE_TRACKED_FILE_LIMIT: () => SPARSE_TRACKED_FILE_LIMIT,
   SPECIALIST_BUNDLE_MARKER: () => SPECIALIST_BUNDLE_MARKER,
   SPECIALIST_BUNDLE_TOKEN_CAP: () => SPECIALIST_BUNDLE_TOKEN_CAP,
   TERMINAL_STATUSES: () => TERMINAL_STATUSES2,
@@ -50292,6 +50436,7 @@ __export(knowledge_exports, {
   nodeRelPath: () => nodeRelPath,
   normalizeFtsQuery: () => normalizeFtsQuery,
   parseGlossary: () => parseGlossary,
+  parseLearnArgs: () => parseLearnArgs,
   parseRecallImportance: () => parseRecallImportance,
   planPlaybookSpan: () => planPlaybookSpan,
   playbooksRoot: () => playbooksRoot,
@@ -50330,6 +50475,7 @@ __export(knowledge_exports, {
   resolveSeeds: () => resolveSeeds,
   resumableOps: () => resumableOps,
   revertHarvest: () => revertHarvest,
+  routeLearn: () => routeLearn,
   routeRedirect: () => routeRedirect,
   runFsScannerCli: () => runFsScannerCli,
   runProtectChunksCli: () => runProtectChunksCli,
@@ -50384,6 +50530,7 @@ var init_knowledge = __esm({
     init_wiki_recall();
     init_knowledge_graph_contract();
     init_graph_query();
+    init_learn_route();
     init_wiki_lint_knowledge();
     MODULE_PUBLIC_API_VERSION3 = "guild.module.public-api.v1";
   }

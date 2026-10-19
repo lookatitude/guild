@@ -177,6 +177,7 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   { id: "knowledge-links-builder", entry: "scripts/knowledge-links-builder.ts" },
   { id: "knowledge-links-traverse", entry: "scripts/knowledge-links-traverse.ts" },
   { id: "knowledge-orchestrator", entry: "scripts/learn/knowledge-orchestrator.ts" },
+  { id: "learn-route", entry: "scripts/learn/learn-route.ts" },
   { id: "learn-scan", entry: "scripts/learn/scan.ts" },
   { id: "learn-staleness", entry: "scripts/learn/staleness.ts" },
   { id: "lint-context-bundle", entry: "scripts/lint-context-bundle.ts" },

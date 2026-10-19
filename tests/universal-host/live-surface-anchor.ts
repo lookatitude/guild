@@ -638,7 +638,11 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // commands/aliases.allowlist.json after the v3.0.0 stable cut shipped them —
   // exactly the 13 dispatchers remain. ANTI-VACUITY: SC-W2-5/SC-W3-6 were observed
   // RED against the prior pins naming commands/** before this value was ratified.
-  commands: "41692cc4045cf206c6de68682458b13254e1ca70",
+  // Re-ratified 2026-10-19 (v3co C1): learn.md dispatch runs the compiled learn-route.js
+  // router first and follows its route; `harvest` joins the sub-verb list; the command
+  // registry entry was re-extracted.
+  // ANTI-VACUITY: check-surface-pins, SC-W2-5 and SC-W3-6 were RED against the prior pin.
+  commands: "62ee1c835b34eb671b16d00d3d22f7b7ddc4b2da",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
   // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
@@ -713,7 +717,10 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-10-17 (v3-completion Team C): C03 added the analyze row to
   // skills/meta/evolve/SKILL.md and the new references/run-analysis.md chapter.
   // ANTI-VACUITY: SC-W3-6(B) was observed RED against the prior pin first.
-  skills: "1fc706b7891bf21f4e1c276f2fb8ca2626fb1c58",
+  // Re-ratified 2026-10-19 (v3co C1): the learn assembler gains a §Route table that
+  // follows learn-route.js; detection prose names the router. Only learn/SKILL.md changed.
+  // ANTI-VACUITY: SC-W3-6(B) and check-surface-pins were RED against the prior pin.
+  skills: "2bb76c42983c50dc2c5f5782efe51c92ddba5d55",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

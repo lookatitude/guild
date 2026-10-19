@@ -1,15 +1,14 @@
 ---
 name: learn
-description: "Understand-everything — no sub-verb runs the smart full learn-all (detect target, run the pipeline, update indexes, emit knowledge candidates). Sub-verbs map | graph | knowledge | onboard | diff | explain scope it. Dispatches to guild:learn."
-argument-hint: "[map|graph|knowledge|onboard|diff|explain] [target] [--rigor=quick|standard|deep]"
+description: "Understand-everything — no sub-verb runs the smart full learn-all (detect target, run the pipeline, update indexes, emit knowledge candidates). Sub-verbs map | graph | knowledge | onboard | diff | explain | harvest scope it. Dispatches to guild:learn."
+argument-hint: "[map|graph|knowledge|onboard|diff|explain|harvest] [target] [--rigor=quick|standard|deep]"
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, Agent, Skill, AskUserQuestion
 ---
 
 # /guild:learn — knowledge pipeline
 
 One implementation, two triggers (D3): the same `learn-*` chapters run here and
-under `/guild:init --learn`. An unknown sub-verb prints usage and stops — no
-skill invoked, no file written.
+under `/guild:init --learn`. Unknown sub-verb: print usage, invoke no skill.
 
 ## Run recording
 
@@ -28,13 +27,14 @@ node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/c
 | `onboard` | guided architecture tour |
 | `diff` | change analysis + blast radius |
 | `explain` | file / module / concept deep-dive |
+| `harvest` | phase/run artifact extraction |
 
 ## Dispatch
 
-```
-Skill: guild:learn
-args: $ARGUMENTS
+```bash
+node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/learn-route.js" --cwd "$(pwd)" -- $ARGUMENTS
 ```
 
-The first token selects the chapter; the rest forwards as `args`. Indexes,
-candidates and every `.guild/` write are the assembler's. Unknown token: print usage.
+The route JSON decides, never prose. `route: usage` → print its `usage` and stop;
+any other route → `Skill: guild:learn` with `args: $ARGUMENTS` and the route JSON.
+Every `.guild/` write is the assembler's.

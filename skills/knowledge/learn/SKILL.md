@@ -21,6 +21,29 @@ one `references/learn-<verb>.md` chapter and runs that, instead of the full
 pipeline below. There is no separate `guild:learn-<verb>` skill to hand off to —
 the fold (KTD25/KTD59) made every one of them a chapter of this file.
 
+# Route (deterministic — run this first)
+
+The route is code, not judgement. `commands/learn.md` runs the knowledge
+domain's `routeLearn` before dispatch; when invoked any other way, run it
+yourself:
+
+```bash
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/learn-route.js --cwd <root> -- <args>
+```
+
+Follow the printed `route` (`guild.learn_route.v1`); the prose below describes
+each route and never overrides it:
+
+| `route` | `target_kind` | Run |
+|---|---|---|
+| `full_learn` | `regular_project`, `existing_guild_project` | §"Workflow — Regular-project full learn" (K1–K6 at step 10 after the OQ1 gate) |
+| `cheap_map_only` | `new_or_sparse_project` | `references/learn-map.md` only, candidates still emitted |
+| `workspace_full_learn` | `workspace` | §"Workflow — Workspace full learn" (K1–K6 deferred at the root) |
+| `workspace_plan_only` | `workspace` + `learn_fanout: plan-only` or `--dry-run` | the fan-out plan only |
+| `confirm_target` | `mixed_or_uncertain` | ask one targeted question |
+| `chapter` | — | the one `chapter_file` |
+| `usage` | — | print `usage`, invoke nothing |
+
 # Sub-verb routing (chapter pointers)
 
 | Sub-verb | Load | Then |
@@ -70,8 +93,9 @@ mixed_or_uncertain      children found but ambiguous (some have .git/, some have
                         .guild/, workspace/detect.ts reports "uncertain")
 ```
 
-Detection script: `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-detect.js --cwd <root>` (depth-1
-fixed, no knob). For `mixed_or_uncertain` surface one targeted question before
+`learn-route.js` (§"Route") reads `workspace-detect` (depth-1 fixed, no knob)
+plus `.git/`, `.guild/`, wiki, and tracked-file facts and prints the class as
+`target_kind`. For `mixed_or_uncertain` surface one targeted question before
 proceeding; never silent-proceed on uncertainty. Mirror the bare `/guild:guild`
 §5.1 confirm contract: show detection → ask proceed / pick / explain.
 
