@@ -23305,6 +23305,19 @@ function deepMerge(base, overlay) {
   }
   return { ...result2 };
 }
+function stampLayer(sources, obj, layer, prefix = "") {
+  for (const [k, v] of Object.entries(obj)) {
+    if (PROTO_POISON_KEYS.has(k) || v === void 0) continue;
+    const full = prefix ? `${prefix}.${k}` : k;
+    sources[full] = layer;
+    if (isPlainObject7(v)) {
+      stampLayer(sources, v, layer, full);
+    } else {
+      const below = `${full}.`;
+      for (const s of Object.keys(sources)) if (s.startsWith(below)) delete sources[s];
+    }
+  }
+}
 function collectKeyPaths(obj, prefix = "") {
   const paths = /* @__PURE__ */ new Set();
   for (const [k, v] of Object.entries(obj)) {
@@ -23643,9 +23656,7 @@ function resolveSettings(opts) {
   const { cwd, flags = {} } = opts;
   const ws = discoverWorkspace(cwd);
   const sources = {};
-  for (const key of Object.keys(DEFAULTS2)) {
-    sources[key] = "builtin";
-  }
+  stampLayer(sources, DEFAULTS2, "builtin");
   sources["workspace.mode"] = "builtin";
   let wsSettings = {};
   let wsLocalSettings = {};
@@ -23664,9 +23675,8 @@ function resolveSettings(opts) {
       }
     }
     wsSettings = wsInheritable;
-    for (const key of Object.keys(wsSettings)) {
-      if (key !== "workspace") sources[key] = "workspace";
-    }
+    const { workspace: _wsMode, ...wsStamp } = wsSettings;
+    stampLayer(sources, wsStamp, "workspace");
     try {
       const rawWsLocal = parseLocalFile(wsGuildDir);
       const wsLocalInheritable = {};
@@ -23681,41 +23691,21 @@ function resolveSettings(opts) {
         }
       }
       wsLocalSettings = wsLocalInheritable;
-      for (const key of Object.keys(wsLocalSettings)) {
-        if (key !== "workspace") sources[key] = "workspace-local";
-      }
+      const { workspace: _wsLocalMode, ...wsLocalStamp } = wsLocalSettings;
+      stampLayer(sources, wsLocalStamp, "workspace-local");
     } catch {
     }
   }
   const projectGuildDir = durableGuildDir(cwd);
   const projectSettings = parseSettingsFile(path37.join(projectGuildDir, "settings.json"));
-  for (const key of Object.keys(projectSettings)) {
-    if (key === "workspace") {
-      sources["workspace.mode"] = "project";
-    } else {
-      sources[key] = "project";
-    }
-  }
+  stampLayer(sources, projectSettings, "project");
   let projectLocalSettings = {};
   try {
     projectLocalSettings = parseLocalFile(projectGuildDir);
-    for (const key of Object.keys(projectLocalSettings)) {
-      if (key === "workspace") {
-        sources["workspace.mode"] = "project-local";
-      } else {
-        sources[key] = "project-local";
-      }
-    }
+    stampLayer(sources, projectLocalSettings, "project-local");
   } catch {
   }
-  for (const key of Object.keys(flags)) {
-    if (flags[key] !== void 0) {
-      if (key === "workspace") {
-        sources["workspace.mode"] = "cli";
-      }
-      sources[key] = "cli";
-    }
-  }
+  stampLayer(sources, flags, "cli");
   const assembled = assembleLayers(
     [wsSettings, wsLocalSettings, projectSettings, projectLocalSettings],
     flags
