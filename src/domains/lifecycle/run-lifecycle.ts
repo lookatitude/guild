@@ -1611,6 +1611,10 @@ export function writeResolvedSettingsSnapshot(
   const landed = fs.readFile(outPath);
   if (landed !== null) {
     fs.writeFile(resolvedSettingsDigestPath(cwd, runId), resolvedSettingsDigestRecord(landed));
+  } else if (presentOnDisk(outPath)) {
+    // A snapshot that landed but cannot be read back would stay unbound and
+    // later read as a legacy run. Refuse to start the run instead.
+    throw new ResolvedSettingsIntegrityError(runId);
   }
   return outPath;
 }

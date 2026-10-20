@@ -90,6 +90,16 @@ describe("#146 — run start records a whole-file digest", () => {
   });
 });
 
+describe("#146 — the writer never leaves a snapshot unbound (codex r2)", () => {
+  it("a snapshot that landed but cannot be read back throws, so preflight fails", () => {
+    const failingRead: ProvenanceFsSeam = { ...seam(), readFile: () => null };
+    expect(() =>
+      writeResolvedSettingsSnapshot("run-h2-noread", snapshot(), { cwd: ROOT, fs: failingRead }),
+    ).toThrow(ResolvedSettingsIntegrityError);
+    expect(fs.existsSync(sidecarPath("run-h2-noread"))).toBe(false);
+  });
+});
+
 describe("#146 — readers verify the digest and fail closed", () => {
   it("returns the snapshot when the digest verifies", () => {
     writeResolvedSettingsSnapshot("run-h2-ok", snapshot(), { cwd: ROOT, fs: seam() });

@@ -47531,6 +47531,8 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
   const landed = fs94.readFile(outPath);
   if (landed !== null) {
     fs94.writeFile(resolvedSettingsDigestPath(cwd, runId), resolvedSettingsDigestRecord(landed));
+  } else if (presentOnDisk(outPath)) {
+    throw new ResolvedSettingsIntegrityError(runId);
   }
   return outPath;
 }

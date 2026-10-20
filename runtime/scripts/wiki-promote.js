@@ -42476,6 +42476,8 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
   const landed = fs80.readFile(outPath);
   if (landed !== null) {
     fs80.writeFile(resolvedSettingsDigestPath(cwd, runId), resolvedSettingsDigestRecord(landed));
+  } else if (presentOnDisk(outPath)) {
+    throw new ResolvedSettingsIntegrityError(runId);
   }
   return outPath;
 }

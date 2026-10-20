@@ -40870,6 +40870,8 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
   const landed = fs63.readFile(outPath);
   if (landed !== null) {
     fs63.writeFile(resolvedSettingsDigestPath(cwd, runId), resolvedSettingsDigestRecord(landed));
+  } else if (presentOnDisk(outPath)) {
+    throw new ResolvedSettingsIntegrityError(runId);
   }
   return outPath;
 }
