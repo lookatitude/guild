@@ -5,13 +5,13 @@
  * On-disk FINAL-state tests for the PostToolUse scrub-in-place interceptor
  * wired into post-tool-use.ts.
  *
- * CONTRACT (D-SECRETS / HK-06 wiki + review surfaces):
- *   When Write|Edit fires to .guild/wiki/** or .guild/runs/<id>/review/**,
- *   post-tool-use reads the on-disk file (already written by the tool),
- *   scrubs it via scrubbedWrite, and:
- *     ok=true  → file at the canonical path has secrets redacted (in-place rewrite)
- *     ok=false → original file quarantined to path+".quarantined",
- *                secret_scrub_blocked event emitted; PostToolUse exits 0 (non-blocking)
+ * CONTRACT (D-SECRETS / HK-06, amended by #108 / D2):
+ *   Prose (Markdown under .guild/wiki/**, runs/<id>/review/**, runs/<id>/handoffs/**)
+ *   is never rewritten in place. A credential shape (or an invalid operator
+ *   pattern) on disk after Write|Edit restores the prior bytes PreToolUse
+ *   snapshotted and emits secret_scrub_blocked; nothing is quarantined.
+ *   provenance.json keeps scrub-in-place: ok=false → quarantine ladder.
+ *   PostToolUse exits 0 (non-blocking).
  *
  * Tests prove the on-disk EFFECT, not just "scrubber called".
  */
@@ -68,7 +68,8 @@ function spawnHook(
   const payload = {
     hook_event_name: "PostToolUse",
     tool_name: toolName,
-    tool_input: { file_path: filePath, content: "" },
+    // The tool's input is the bytes it wrote (what is on disk now).
+    tool_input: { file_path: filePath, content: fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : "" },
     tool_response: { success: true },
     session_id: RUN.replace("run-", ""),
     cwd: tmp,
@@ -88,6 +89,35 @@ function spawnHook(
   return { exitCode: result.status ?? 1, stderr: result.stderr ?? "" };
 }
 
+const PRE_SCRIPT = path.resolve(__dirname, "../dist/pre-tool-use.js");
+
+/**
+ * Run the real PreToolUse hook with an Edit it cannot predict (old_string absent),
+ * so it allows and snapshots the current bytes, exactly as a live session would
+ * before the tool writes.
+ */
+function snapshotViaPre(tmp: string, filePath: string, runEnv: Record<string, string> = {}): void {
+  const r = spawnSync(process.execPath, [PRE_SCRIPT], {
+    input: JSON.stringify({
+      hook_event_name: "PreToolUse",
+      tool_name: "Edit",
+      tool_input: { file_path: filePath, old_string: "\u0000absent\u0000", new_string: "x" },
+      session_id: RUN.replace("run-", ""),
+      cwd: tmp,
+    }),
+    encoding: "utf8",
+    env: {
+      ...hermeticEnv(),
+      GUILD_CWD: tmp,
+      GUILD_RUN_ID: RUN,
+      GUILD_RUN_BINDING_REF: `rb-test-${RUN}`,
+      ...runEnv,
+    },
+    timeout: 30000,
+  });
+  expect(r.stdout ?? "").not.toContain('"deny"');
+}
+
 function securityEvents(runDir: string): Array<Record<string, unknown>> {
   const f = path.join(runDir, "logs", "security-events.jsonl");
   if (!fs.existsSync(f)) return [];
@@ -101,7 +131,7 @@ function securityEvents(runDir: string): Array<Record<string, unknown>> {
 
 // ── Test suite ───────────────────────────────────────────────────────────────
 
-describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
+describe("post-tool-use.ts — HK-06 durable-surface scrub (prose: refuse, never rewrite)", () => {
   let tmp: string;
   let runDir: string;
 
@@ -125,29 +155,35 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
       expect(exitCode).toBe(0);
     });
 
-    it("on-disk wiki file does NOT contain the raw secret after the hook (ok path)", () => {
+    it("a secret on disk after the write is undone by restoring the prior bytes", () => {
       const wikiPath = path.join(tmp, ".guild", "wiki", "some-page.md");
       fs.mkdirSync(path.dirname(wikiPath), { recursive: true });
+      const prior = "# Page\nprior body\n";
+      fs.writeFileSync(wikiPath, prior, "utf8");
+      snapshotViaPre(tmp, wikiPath);
       fs.writeFileSync(wikiPath, `# Page\nToken: ${FAKE_SECRET}\n`, "utf8");
 
       spawnHook(tmp, "Write", wikiPath);
 
       const onDisk = fs.readFileSync(wikiPath, "utf8");
       expect(onDisk).not.toContain(FAKE_SECRET);
+      expect(onDisk).toBe(prior);
     });
 
-    it("on-disk wiki file contains a redaction sentinel after scrub", () => {
-      const wikiPath = path.join(tmp, ".guild", "wiki", "some-page.md");
+    it("clean wiki prose is never rewritten: long identifiers, paths and key: value lines survive byte-identical", () => {
+      const wikiPath = path.join(tmp, ".guild", "wiki", "clean.md");
       fs.mkdirSync(path.dirname(wikiPath), { recursive: true });
-      fs.writeFileSync(wikiPath, `# Page\napi_key: ${FAKE_SECRET}\n`, "utf8");
+      const content = "# Page\nSee app/Http/Middleware/EnforceSessionMaxDuration.php and ApiPerformanceMonitor.\ntoken: rotate monthly\n~/.claude/settings.json\n";
+      fs.writeFileSync(wikiPath, content, "utf8");
 
       spawnHook(tmp, "Write", wikiPath);
 
       const onDisk = fs.readFileSync(wikiPath, "utf8");
-      expect(onDisk).toMatch(/\[REDACTED(?:_TOKEN)?\]/);
+      expect(onDisk).toBe(content);
+      expect(onDisk).not.toMatch(/REDACTED/);
     });
 
-    it("preserves multiple legitimate .guild paths on the real wiki write path while still redacting secrets", () => {
+    it("preserves multiple legitimate .guild paths on the real wiki write path while still removing the secret", () => {
       const wikiPath = path.join(tmp, ".guild", "wiki", "path-preservation.md");
       const expectedPaths = [
         ".guild/wiki/decisions/workspace-knowledge-flow.md",
@@ -160,11 +196,11 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
         "",
         ...expectedPaths.map((ref) => `- ${ref}`),
         "",
-        `api_key: ${FAKE_SECRET}`,
-        "",
       ].join("\n");
       fs.mkdirSync(path.dirname(wikiPath), { recursive: true });
       fs.writeFileSync(wikiPath, content, "utf8");
+      snapshotViaPre(tmp, wikiPath);
+      fs.writeFileSync(wikiPath, `${content}api_key: ${FAKE_SECRET}\n`, "utf8");
 
       const { exitCode } = spawnHook(tmp, "Write", wikiPath);
       expect(exitCode).toBe(0);
@@ -172,10 +208,10 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
       const onDisk = fs.readFileSync(wikiPath, "utf8");
       for (const ref of expectedPaths) expect(onDisk).toContain(ref);
       expect(onDisk).not.toContain(FAKE_SECRET);
-      expect(onDisk).toMatch(/\[REDACTED(?:_TOKEN)?\]/);
+      expect(onDisk).toBe(content);
     });
 
-    it("quarantines the wiki file on forced ok=false (invalid regex)", () => {
+    it("forced ok=false (invalid regex) fails closed on wiki prose by restoring the prior bytes, never quarantining", () => {
       writeSettings(tmp, {
         secrets_policy: {
           redaction_patterns: [INVALID_REGEX],
@@ -184,13 +220,15 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
       });
       const wikiPath = path.join(tmp, ".guild", "wiki", "quarantine-me.md");
       fs.mkdirSync(path.dirname(wikiPath), { recursive: true });
+      const prior = "# Page\nPrior.\n";
+      fs.writeFileSync(wikiPath, prior, "utf8");
+      snapshotViaPre(tmp, wikiPath);
       fs.writeFileSync(wikiPath, `# Page\nSome content.\n`, "utf8");
 
       spawnHook(tmp, "Write", wikiPath);
 
-      // Original path is gone; quarantined path exists
-      expect(fs.existsSync(wikiPath)).toBe(false);
-      expect(fs.existsSync(wikiPath + ".quarantined")).toBe(true);
+      expect(fs.readFileSync(wikiPath, "utf8")).toBe(prior);
+      expect(fs.existsSync(wikiPath + ".quarantined")).toBe(false);
     });
 
     it("emits secret_scrub_blocked event on forced ok=false for wiki", () => {
@@ -218,19 +256,19 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
   // ── Review surface ──────────────────────────────────────────────────────────
 
   describe("review surface (.guild/runs/<id>/review/**)", () => {
-    it("on-disk review file does NOT contain the raw secret after the hook (ok path)", () => {
+    it("on-disk review file does NOT contain the raw secret after the hook (prior restored)", () => {
       const reviewDir = path.join(runDir, "review");
       fs.mkdirSync(reviewDir, { recursive: true });
       const reviewPath = path.join(reviewDir, "review.md");
+      snapshotViaPre(tmp, reviewPath); // prior: absent
       fs.writeFileSync(reviewPath, `# Review\nToken: ${FAKE_SECRET}\n`, "utf8");
 
       spawnHook(tmp, "Write", reviewPath);
 
-      const onDisk = fs.readFileSync(reviewPath, "utf8");
-      expect(onDisk).not.toContain(FAKE_SECRET);
+      expect(fs.existsSync(reviewPath)).toBe(false);
     });
 
-    it("quarantines the review file on forced ok=false", () => {
+    it("forced ok=false on review prose restores the prior state, never quarantines", () => {
       writeSettings(tmp, {
         secrets_policy: {
           redaction_patterns: [INVALID_REGEX],
@@ -240,12 +278,14 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
       const reviewDir = path.join(runDir, "review");
       fs.mkdirSync(reviewDir, { recursive: true });
       const reviewPath = path.join(reviewDir, "review.md");
+      fs.writeFileSync(reviewPath, "# Review\nPrior.\n", "utf8");
+      snapshotViaPre(tmp, reviewPath);
       fs.writeFileSync(reviewPath, "# Review\nContent.\n", "utf8");
 
       spawnHook(tmp, "Write", reviewPath);
 
-      expect(fs.existsSync(reviewPath)).toBe(false);
-      expect(fs.existsSync(reviewPath + ".quarantined")).toBe(true);
+      expect(fs.readFileSync(reviewPath, "utf8")).toBe("# Review\nPrior.\n");
+      expect(fs.existsSync(reviewPath + ".quarantined")).toBe(false);
     });
   });
 
@@ -255,10 +295,12 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
   // is the ONLY deterministic secrets pass on that path.
 
   describe("handoff surface (.guild/runs/<id>/handoffs/**)", () => {
-    it("on-disk handoff receipt does NOT contain the raw secret after the hook (ok path)", () => {
+    it("on-disk handoff receipt does NOT contain the raw secret after the hook (prior restored)", () => {
       const handoffDir = path.join(runDir, "handoffs");
       fs.mkdirSync(handoffDir, { recursive: true });
       const handoffPath = path.join(handoffDir, "backend-T1.md");
+      fs.writeFileSync(handoffPath, "summary: prior\n", "utf8");
+      snapshotViaPre(tmp, handoffPath);
       fs.writeFileSync(
         handoffPath,
         `schema_version: guild.handoff.v2\nsummary: done\nevidence: Token ${FAKE_SECRET}\n`,
@@ -270,9 +312,10 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
 
       const onDisk = fs.readFileSync(handoffPath, "utf8");
       expect(onDisk).not.toContain(FAKE_SECRET);
+      expect(onDisk).toBe("summary: prior\n");
     });
 
-    it("quarantines the handoff receipt on forced ok=false (fail-closed durable surface)", () => {
+    it("forced ok=false on a handoff receipt fails closed by restoring the prior bytes (no quarantine)", () => {
       writeSettings(tmp, {
         secrets_policy: {
           redaction_patterns: [INVALID_REGEX],
@@ -282,12 +325,14 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
       const handoffDir = path.join(runDir, "handoffs");
       fs.mkdirSync(handoffDir, { recursive: true });
       const handoffPath = path.join(handoffDir, "backend-T2.md");
+      fs.writeFileSync(handoffPath, "summary: prior\n", "utf8");
+      snapshotViaPre(tmp, handoffPath);
       fs.writeFileSync(handoffPath, "summary: content\n", "utf8");
 
       spawnHook(tmp, "Write", handoffPath);
 
-      expect(fs.existsSync(handoffPath)).toBe(false);
-      expect(fs.existsSync(handoffPath + ".quarantined")).toBe(true);
+      expect(fs.readFileSync(handoffPath, "utf8")).toBe("summary: prior\n");
+      expect(fs.existsSync(handoffPath + ".quarantined")).toBe(false);
       const events = securityEvents(runDir);
       expect(
         events.some(
@@ -327,31 +372,30 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
     });
   });
 
-  // ── MAJOR 1: quarantine-rename-failure ladder (wiki) ───────────────────────
+  // ── MAJOR 1: quarantine-rename-failure ladder (provenance; prose never quarantines) ─
   // When the quarantine rename fails, the hook MUST still remove the raw content
   // from the canonical path. PostToolUse always exits 0 for normal scrub failures,
   // but exits non-zero only on the truly catastrophic case (rename AND unlink/overwrite
   // both fail). Here we test the recoverable ladder (rename fails → overwrite/unlink ok).
 
   describe("quarantine-rename-failure ladder", () => {
-    it("canonical path does NOT contain raw secret when rename-to-quarantine fails (wiki)", () => {
+    it("canonical path does NOT contain raw secret when rename-to-quarantine fails (provenance)", () => {
       writeSettings(tmp, {
         secrets_policy: {
           redaction_patterns: [INVALID_REGEX],
           fail_mode_durable: "closed",
         },
       });
-      const wikiPath = path.join(tmp, ".guild", "wiki", "force-rename-fail.md");
-      fs.mkdirSync(path.dirname(wikiPath), { recursive: true });
-      fs.writeFileSync(wikiPath, `Token: ${FAKE_SECRET}\n`, "utf8");
-      // Pre-create quarantine path as a directory → fs.renameSync will fail (EISDIR)
-      fs.mkdirSync(wikiPath + ".quarantined", { recursive: true });
+      const provPath = path.join(runDir, "provenance.json");
+      fs.writeFileSync(provPath, JSON.stringify({ note: `Token: ${FAKE_SECRET}` }), "utf8");
+      // Pre-create quarantine path as a non-empty directory → fs.renameSync fails
+      fs.mkdirSync(path.join(provPath + ".quarantined", "occupied"), { recursive: true });
 
-      spawnHook(tmp, "Write", wikiPath);
+      spawnHook(tmp, "Write", provPath);
 
       // Canonical MUST NOT hold the raw secret regardless of rename result
-      if (fs.existsSync(wikiPath)) {
-        expect(fs.readFileSync(wikiPath, "utf8")).not.toContain(FAKE_SECRET);
+      if (fs.existsSync(provPath)) {
+        expect(fs.readFileSync(provPath, "utf8")).not.toContain(FAKE_SECRET);
       }
     });
   });
@@ -371,12 +415,27 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
       try {
         const wikiPath = path.join(freshTmp, ".guild", "wiki", "no-run-id-page.md");
         fs.mkdirSync(path.dirname(wikiPath), { recursive: true });
+        const prior = "# Page\nPrior.\n";
+        fs.writeFileSync(wikiPath, prior, "utf8");
+        const preResult = spawnSync(process.execPath, [PRE_SCRIPT], {
+          input: JSON.stringify({
+            hook_event_name: "PreToolUse",
+            tool_name: "Edit",
+            tool_input: { file_path: wikiPath, old_string: "\u0000absent\u0000", new_string: "x" },
+            session_id: "no-run-session",
+            cwd: freshTmp,
+          }),
+          encoding: "utf8",
+          env: { ...hermeticEnv(), GUILD_CWD: freshTmp, GUILD_RUN_ID: "", GUILD_RUN_DIR: "" },
+          timeout: 30000,
+        });
+        expect(preResult.stdout ?? "").not.toContain('"deny"');
         fs.writeFileSync(wikiPath, `# Page\nToken: ${FAKE_SECRET}\n`, "utf8");
 
         const payload = {
           hook_event_name: "PostToolUse",
           tool_name: "Write",
-          tool_input: { file_path: wikiPath, content: "" },
+          tool_input: { file_path: wikiPath, content: `# Page\nToken: ${FAKE_SECRET}\n` },
           tool_response: { success: true },
           session_id: "no-run-session",
           cwd: freshTmp,
@@ -398,9 +457,10 @@ describe("post-tool-use.ts — HK-06 wiki + review scrub-in-place", () => {
         // Must exit 0 — telemetry path is skipped (no run-id) but scrub still ran
         expect(result.status).toBe(0);
 
-        // Wiki file MUST be scrubbed despite no active run-id
+        // The secret MUST be undone despite no active run-id
         const onDisk = fs.readFileSync(wikiPath, "utf8");
         expect(onDisk).not.toContain(FAKE_SECRET);
+        expect(onDisk).toBe(prior);
       } finally {
         fs.rmSync(freshTmp, { recursive: true, force: true });
       }
