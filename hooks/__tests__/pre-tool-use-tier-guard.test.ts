@@ -132,6 +132,9 @@ const ADOPTION_PROMPT =
   "`.guild/agents/devops.md` — read it FIRST and adopt it fully (persona, boundaries).";
 
 const LANE_ENV: Record<string, string> = {
+  // #144: a current producer stamps the env marker; without it the lane
+  // grades carrier_only (pinned in h2-dispatch-integrity.test.ts).
+  GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1",
   GUILD_RUN_ID: RUN,
   GUILD_SPECIALIST: "devops",
   GUILD_TASK_ID: "wi-1",
@@ -165,6 +168,9 @@ function composedLane(
  */
 function composedLaneNoRunEnv(opts: { model?: string } = {}): object {
   const env: Record<string, string> = {
+    // #144: a current producer stamps the env marker; without it the lane
+    // grades carrier_only (pinned in h2-dispatch-integrity.test.ts).
+    GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1",
     GUILD_SPECIALIST: "devops",
     GUILD_TASK_ID: "wi-1",
     GUILD_AGENT_DEFINITION: ".guild/agents/devops.md",

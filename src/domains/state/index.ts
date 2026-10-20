@@ -13,6 +13,7 @@ export * from "./dependency-graph-schema";
 export * from "./frontmatter";
 export * from "./guild-discovery";
 export * from "./guild-root";
+export * from "./snapshot-digest";
 export * from "./index-cache";
 export * from "./storage-artifact-registry";
 export * from "./storage-fs";

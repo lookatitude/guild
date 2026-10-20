@@ -57,7 +57,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import type { DispatchAttribution } from "./dispatch-attribution.js";
-import { classifyLaneEvidence, type LaneEvidence } from "./backend-degradation.js";
+import {
+  classifyLaneEvidence,
+  isEnvBorneEvidence,
+  type LaneEvidence,
+} from "./backend-degradation.js";
 import { redactField } from "./v1.4/redact-log.js";
 import { durableGuildDir } from "../../src/domains/state";
 import { CLAUDE_TIER_FALLBACK } from "../../src/domains/config/index.js";
@@ -460,7 +464,7 @@ export interface TierDispatchResult {
  *
  * Then:
  *
- *   model absent, structured evidence       → deny            (or allow_override)
+ *   model absent, env-borne evidence        → deny            (or allow_override)
  *   model absent, prompt-only evidence       → allow_recorded
  *   model present, valid tier, model matches → pass  scored_compliant
  *   model present, no valid tier carrier     → pass  model_present
@@ -516,7 +520,7 @@ export function resolveTierDispatch(facts: TierDispatchFacts): TierDispatchResul
     // dispatch would claim the override opened a door that was never shut —
     // `backend-degradation.ts`, round 4).
     const decision: TierDispatchDecision =
-      evidence !== "structured"
+      !isEnvBorneEvidence(evidence)
         ? "allow_recorded"
         : facts.overrideEngaged
           ? "allow_override"

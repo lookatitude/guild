@@ -227,6 +227,38 @@ describe("W4 — frozen snapshot.dispatch is authoritative on the launcher path"
     expect(stderr).toMatch(/frozen dispatch authority has an invalid backend/i);
   });
 
+  it("#146: fails closed when the frozen snapshot no longer matches its run-start digest", () => {
+    const { teamPath } = seedRepo(tmpDir);
+    writeFrozenDispatch(tmpDir, "tmux");
+    // A digest of different bytes = the snapshot was edited after run start.
+    fs.writeFileSync(
+      path.join(tmpDir, ".guild", "runs", RUN_ID, "resolved-settings.sha256"),
+      `sha256:${"0".repeat(64)}\n`,
+      "utf8",
+    );
+    const { exitCode, stdout, stderr } = runLauncher(
+      ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=team", "--dry-run"],
+      { CMUX_WORKSPACE_ID: "ws-must-not-win" },
+    );
+    expect(exitCode).not.toBe(0);
+    expect(stdout).not.toMatch(/would execute the following tmux commands/);
+    expect(stderr).toMatch(/frozen dispatch authority does not match its run-start digest/i);
+  });
+
+  it("#146: a deleted snapshot with its digest sidecar left behind fails closed", () => {
+    const { teamPath } = seedRepo(tmpDir);
+    const runDir = path.join(tmpDir, ".guild", "runs", RUN_ID);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, "resolved-settings.sha256"), `sha256:${"0".repeat(64)}\n`, "utf8");
+    fs.rmSync(path.join(runDir, "resolved-settings.json"), { force: true });
+    const { exitCode, stderr } = runLauncher(
+      ["--team", teamPath, "--cwd", tmpDir, "--agent-mode=team", "--dry-run"],
+      { CMUX_WORKSPACE_ID: "ws-must-not-win" },
+    );
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toMatch(/frozen dispatch authority does not match its run-start digest/i);
+  });
+
   it("the legacy no---agent-mode path honors a frozen cmux backend too", () => {
     const { teamPath } = seedRepo(tmpDir);
     writeFrozenDispatch(tmpDir, "cmux");

@@ -720,7 +720,11 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-10-19 (v3co C1): the learn assembler gains a §Route table that
   // follows learn-route.js; detection prose names the router. Only learn/SKILL.md changed.
   // ANTI-VACUITY: SC-W3-6(B) and check-surface-pins were RED against the prior pin.
-  skills: "2bb76c42983c50dc2c5f5782efe51c92ddba5d55",
+  // Re-ratified 2026-10-20 (H2 #144 #146): execute-plan/dispatch.md states the
+  // carrier_only grade, the strict-mode deny, and the snapshot digest check. Only
+  // that chapter changed; it has no skill-registry entry (round-trip unchanged).
+  // ANTI-VACUITY: SC-W2-5, SC-W3-6(B) and check-surface-pins were RED against the prior pin.
+  skills: "2d66180384fb3c914bc9cc0c17cabb18e205e32f",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

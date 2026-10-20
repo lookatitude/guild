@@ -34,9 +34,10 @@
  *   (b) initiative_default does NOT inherit (OD-1). A child always resolves
  *       its own initiative_default or null (built-in).
  *
- * Per-key source map: every resolved key is tagged with the Source layer it
- * came from ('builtin'|'workspace'|'workspace-local'|'project'|'project-local'|
- * 'rigor'|'cli').
+ * Per-key source map: every resolved key AND every dotted leaf (e.g.
+ * `defaults.lifecycle_gate.enabled`) is tagged with the Source layer it came from
+ * ('builtin'|'workspace'|'workspace-local'|'project'|'project-local'|'rigor'|'cli').
+ * A block key carries the highest layer that contributed any leaf beneath it.
  *
  * Security: deepMerge rejects __proto__, prototype, and constructor keys at
  * every nesting level to prevent prototype pollution.
@@ -329,8 +330,9 @@ export interface ResolveResult {
   /** The fully-merged config with all layers applied. */
   config: ResolvedConfig;
   /**
-   * Per-key source map. Top-level keys of ResolvedConfig are tracked here.
-   * Nested keys (e.g. workspace.mode) use dotted notation in the map.
+   * Per-key source map. Every top-level key, intermediate block, and dotted leaf
+   * (e.g. `defaults.team.size`) is tracked. A leaf names the layer its VALUE came
+   * from; a block names the highest layer that contributed beneath it.
    */
   sources: Record<string, Source>;
 }
@@ -477,18 +479,16 @@ const VALID_CAPABILITY_KEYS = new Set([
  *
  * Mirrors coerceCapabilityBlock in config-cli.ts: an out-of-range budget CLAMPS to
  * the ceiling (an operator who wrote 9 wanted "as many as possible", and 4 is that);
- * an unknown enum member falls back to the shipped default; `starter_roles` are
- * trimmed, blank-stripped and DEDUPED in first-seen order so the resolved config is
- * stable across runs.
+ * an unknown enum member is DROPPED so the lower layer (or the shipped default) shows
+ * through; `starter_roles` are trimmed, blank-stripped and DEDUPED in first-seen order
+ * so the resolved config is stable across runs.
+ *
+ * SPARSE like every other layer block: only fields this layer validly sets are
+ * returned, so deepMerge keeps a lower layer's sibling and per-leaf provenance (#145)
+ * never labels an unset field with this layer.
  */
-function coerceCapability(raw: unknown): CapabilityBlock {
-  const base = SHARED_DEFAULTS.capability;
-  const out: CapabilityBlock = {
-    resolver_mode: base.resolver_mode as CapabilityResolverMode,
-    suggestion_budget: base.suggestion_budget,
-    starter_roles: [...base.starter_roles],
-    auto_create_policy: base.auto_create_policy as CapabilityAutoCreatePolicy,
-  };
+function coerceCapability(raw: unknown): Partial<CapabilityBlock> {
+  const out: Partial<CapabilityBlock> = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
   const r = raw as Record<string, unknown>;
 
@@ -566,6 +566,31 @@ export function deepMerge(
   }
   // Re-box into a regular object so downstream spread/Object.keys work normally
   return { ...result };
+}
+
+/**
+ * Stamp `layer` on every dotted path a sparse layer sets (blocks and leaves).
+ * A non-object value replaces the whole subtree in deepMerge, so finer stamps an
+ * earlier layer left beneath it are dropped. An empty object merges nothing, so
+ * it keeps the stamps beneath it.
+ */
+function stampLayer(
+  sources: Record<string, Source>,
+  obj: Record<string, unknown>,
+  layer: Source,
+  prefix = ""
+): void {
+  for (const [k, v] of Object.entries(obj)) {
+    if (PROTO_POISON_KEYS.has(k) || v === undefined) continue;
+    const full = prefix ? `${prefix}.${k}` : k;
+    sources[full] = layer;
+    if (isPlainObject(v)) {
+      stampLayer(sources, v as Record<string, unknown>, layer, full);
+    } else {
+      const below = `${full}.`;
+      for (const s of Object.keys(sources)) if (s.startsWith(below)) delete sources[s];
+    }
+  }
 }
 
 function collectKeyPaths(obj: Record<string, unknown>, prefix = ""): Set<string> {
@@ -860,7 +885,7 @@ function parseSettingsFile_fromParsed(parsed: Record<string, unknown>): Partial<
     for (const k of Object.keys(rawCapability)) {
       if (VALID_CAPABILITY_KEYS.has(k)) known[k] = rawCapability[k];
     }
-    out.capability = coerceCapability(known);
+    out.capability = coerceCapability(known) as CapabilityBlock;
   }
   // R-009: statusline
   if (typeof parsed["statusline"] === "boolean") out.statusline = parsed["statusline"];
@@ -1144,12 +1169,10 @@ export function resolveSettings(opts: ResolveOptions): ResolveResult {
   const ws = discoverWorkspace(cwd);
 
   // ------------------------------------------------------------------
-  // Step 2 — Initialise sources map with builtin for all top-level keys
+  // Step 2 — Initialise sources map with builtin for every key and dotted leaf
   // ------------------------------------------------------------------
   const sources: Record<string, Source> = {};
-  for (const key of Object.keys(DEFAULTS) as Array<keyof ResolvedConfig>) {
-    sources[key as string] = "builtin";
-  }
+  stampLayer(sources, DEFAULTS as unknown as Record<string, unknown>, "builtin");
   sources["workspace.mode"] = "builtin";
 
   // ------------------------------------------------------------------
@@ -1186,9 +1209,8 @@ export function resolveSettings(opts: ResolveOptions): ResolveResult {
     wsSettings = wsInheritable;
 
     // Update sources for workspace-inherited keys
-    for (const key of Object.keys(wsSettings)) {
-      if (key !== "workspace") sources[key] = "workspace";
-    }
+    const { workspace: _wsMode, ...wsStamp } = wsSettings as Record<string, unknown>;
+    stampLayer(sources, wsStamp, "workspace");
 
     // Layer C: workspace settings.local.json
     try {
@@ -1207,9 +1229,8 @@ export function resolveSettings(opts: ResolveOptions): ResolveResult {
       }
       wsLocalSettings = wsLocalInheritable;
       // Update sources for workspace-local keys
-      for (const key of Object.keys(wsLocalSettings)) {
-        if (key !== "workspace") sources[key] = "workspace-local";
-      }
+      const { workspace: _wsLocalMode, ...wsLocalStamp } = wsLocalSettings as Record<string, unknown>;
+      stampLayer(sources, wsLocalStamp, "workspace-local");
     } catch {
       // local key validation error — silently ignore at library level
     }
@@ -1218,38 +1239,19 @@ export function resolveSettings(opts: ResolveOptions): ResolveResult {
   // Layer D: project settings.json
   const projectGuildDir = durableGuildDir(cwd);
   const projectSettings = parseSettingsFile(path.join(projectGuildDir, "settings.json"));
-  for (const key of Object.keys(projectSettings)) {
-    if (key === "workspace") {
-      sources["workspace.mode"] = "project";
-    } else {
-      sources[key] = "project";
-    }
-  }
+  stampLayer(sources, projectSettings as Record<string, unknown>, "project");
 
   // Layer E: project settings.local.json
   let projectLocalSettings: Partial<ResolvedConfig> = {};
   try {
     projectLocalSettings = parseLocalFile(projectGuildDir);
-    for (const key of Object.keys(projectLocalSettings)) {
-      if (key === "workspace") {
-        sources["workspace.mode"] = "project-local";
-      } else {
-        sources[key] = "project-local";
-      }
-    }
+    stampLayer(sources, projectLocalSettings as Record<string, unknown>, "project-local");
   } catch {
     // local key validation error — silently ignore at library level
   }
 
   // Layer F: CLI flags — mark sources
-  for (const key of Object.keys(flags) as Array<keyof typeof flags>) {
-    if (flags[key] !== undefined) {
-      if (key === "workspace") {
-        sources["workspace.mode"] = "cli";
-      }
-      sources[key as string] = "cli";
-    }
-  }
+  stampLayer(sources, flags as Record<string, unknown>, "cli");
 
   // ------------------------------------------------------------------
   // Step 4 — Assemble the final config via deep-merge (F1 fix)
@@ -1384,6 +1386,7 @@ export function resolveSettings(opts: ResolveOptions): ResolveResult {
       ...assembled.defaults,
       index: { ...assembled.defaults.index, enabled: false },
     };
+    sources["defaults.index.enabled"] = sources.index;
   }
 
   return { config: assembled, sources };

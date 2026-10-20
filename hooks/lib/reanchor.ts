@@ -43,6 +43,7 @@ import * as yaml from "js-yaml";
 
 import {
   readResolvedSettingsSnapshot,
+  ResolvedSettingsIntegrityError,
   validateRunId,
 } from "../../scripts/lib/run-lifecycle.js";
 import { durableGuildDir } from "../../src/domains/state";
@@ -486,15 +487,19 @@ function resolveReanchorFacts(guildRoot: string): ReanchorFields | null {
   // Fall back to run.yaml's settings_ref backend. Both are workspace-controlled,
   // so the value is constrained to the closed agent_mode enum before rendering.
   let agentMode: string | null = null;
+  // #146: an edited snapshot is not authority, and neither is the run.yaml
+  // summary of it — render "unknown" rather than either value.
+  let snapshotTampered = false;
   try {
     const snapshot = readResolvedSettingsSnapshot(safeRunId, { cwd: guildRoot });
     if (snapshot && snapshot.effective && typeof snapshot.effective.agent_mode === "string") {
       agentMode = snapshot.effective.agent_mode;
     }
-  } catch {
+  } catch (err) {
     /* snapshot unreadable — degrade to run.yaml settings_ref below */
+    snapshotTampered = err instanceof ResolvedSettingsIntegrityError;
   }
-  if (!agentMode) agentMode = facts.settingsRefBackend;
+  if (!agentMode && !snapshotTampered) agentMode = facts.settingsRefBackend;
 
   // Sanitize every remaining interpolated scalar against its allowlist/enum.
   const safeMode = safeAgentMode(agentMode);

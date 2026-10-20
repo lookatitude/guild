@@ -208,12 +208,8 @@ describe("config-cmd.ts — #93 key on the show/set surfaces", () => {
     return d;
   };
 
-  // NOTE ON WHICH SURFACE IS ASSERTED HERE: `show --sources` annotates TOP-LEVEL
-  // keys, so it renders the whole `defaults` block as one JSON line — a nested key
-  // has no line of its own there (the same is true of the PR #87 lifecycle-guard
-  // keys, which is why that lane's test asserted on the top-level `host_mode`
-  // instead). `config ui sources` is the per-key provenance surface, and it is
-  // where a nested key's own inheritance layer is actually reported.
+  // `show --sources` prints the `defaults` block line AND (since #145) one line per
+  // dotted leaf with that leaf's own layer; `config ui sources` reads the same map.
 
   it("ui sources prints the key with a [project] provenance when set", () => {
     const dir = repo();
@@ -242,6 +238,8 @@ describe("config-cmd.ts — #93 key on the show/set surfaces", () => {
       (line as string).slice((line as string).indexOf("{"), (line as string).lastIndexOf("}") + 1),
     );
     expect(json.dispatch).toEqual({ block_unmarked_lanes: true });
+    const leaf = out.split("\n").find((l) => l.startsWith(`${KEY} = `));
+    expect(leaf).toBe(`${KEY} = true  [project]`);
   });
 
   // U-CFG (KTD22): `config set` writes the 14 POLICY keys and refuses everything
