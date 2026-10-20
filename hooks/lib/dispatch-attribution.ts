@@ -108,19 +108,13 @@ const DEFINITION_MARKER_RE = /^GUILD_AGENT_DEFINITION=(\S+)$/;
  * deliberately (below) because it preserves some corrupted-lane VISIBILITY while
  * carrying no identity and never blocking.
  *
- * KNOWN GAP, NOT CLOSED HERE (rf-wi-06 adversarial review, round 1 finding 3 /
- * round 2). The producer marker is documented as a TWO-HALF contract (env +
- * prompt line 1), but only the prompt half is read by this resolver: strip
- * `GUILD_DISPATCH_PRODUCER` from an otherwise-correct dispatch and nothing here
- * denies it. Nor does anything else catch it today — `classifyLaneEvidence`
- * still grades that dispatch `structured` from its OTHER env carriers
- * (`GUILD_SPECIALIST` / `GUILD_TASK_ID` / `GUILD_AGENT_DEFINITION`), and the
- * strict `blockUnmarked` rung in `backend-degradation.ts` only ever applies to
- * `prompt_only` evidence, so it never sees this shape. Enforcing the env half is
- * therefore a NEW requirement, not something an existing rung already covers.
- * It is deliberately out of scope for issue #91: making the token REQUIRED is a
- * new blocking policy that would deny every pre-#85 dispatch and any host adapter
- * that carries the other carriers but not the token. Tracked as a followup.
+ * ENV HALF (#144). This resolver still reads only the prompt half for
+ * identity. The env half is enforced in `classifyLaneEvidence`
+ * (`backend-degradation.ts`): env lane carriers WITHOUT a valid
+ * `GUILD_DISPATCH_PRODUCER` grade `carrier_only`, not `structured`. That stays
+ * blockable wherever `structured` is, and strict mode (`block_unmarked_lanes`)
+ * denies it in every agent_mode. Pre-#85 dispatches migrate by running with
+ * strict mode off (the default) or once with `GUILD_ALLOW_BACKEND_DEGRADE=1`.
  */
 const PRODUCER_MARKER_HEAD = "GUILD_DISPATCH_PRODUCER=";
 const PRODUCER_MARKER_VALUE_RE = /^guild\.dispatch\.v\d+$/;

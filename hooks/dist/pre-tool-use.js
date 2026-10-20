@@ -4637,6 +4637,27 @@ var init_guild_discovery = __esm({
   }
 });
 
+// src/domains/state/snapshot-digest.ts
+function resolvedSettingsDigest(raw) {
+  return DIGEST_PREFIX + crypto4.createHash("sha256").update(raw, "utf8").digest("hex");
+}
+function verifyResolvedSettingsDigest(raw, sidecar) {
+  if (sidecar === null) return "legacy";
+  const recorded = sidecar.trim();
+  if (!recorded.startsWith(DIGEST_PREFIX)) return "mismatch";
+  if (!HEX64.test(recorded.slice(DIGEST_PREFIX.length))) return "mismatch";
+  return recorded === resolvedSettingsDigest(raw) ? "verified" : "mismatch";
+}
+var crypto4, RESOLVED_SETTINGS_DIGEST_FILE, DIGEST_PREFIX, HEX64;
+var init_snapshot_digest = __esm({
+  "src/domains/state/snapshot-digest.ts"() {
+    crypto4 = __toESM(require("node:crypto"));
+    RESOLVED_SETTINGS_DIGEST_FILE = "resolved-settings.sha256";
+    DIGEST_PREFIX = "sha256:";
+    HEX64 = /^[0-9a-f]{64}$/;
+  }
+});
+
 // src/domains/state/index-migrate.ts
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
@@ -5657,7 +5678,7 @@ function writeFile(ctx, abs, text) {
   fs12.writeFileSync(abs, text, "utf8");
 }
 function sha256(text) {
-  return crypto4.createHash("sha256").update(text).digest("hex");
+  return crypto5.createHash("sha256").update(text).digest("hex");
 }
 function filesUnder(dir, out = []) {
   for (const name of readdirSafe(dir)) {
@@ -5992,10 +6013,10 @@ function terminalRunStatus(runYaml) {
   const status = value.trim().toLowerCase();
   return TERMINAL_STATUSES.includes(status) ? status : null;
 }
-var crypto4, fs12, path15, KNOWLEDGE_PREFIX, DERIVED_PATTERNS, v1Content, settingsPolicySplit, PINNED_KEYS, TIMESTAMP_RE, BLOCK_SCALAR, MAP_ENTRY, ktd22Strip, CACHE_TARGETS, cachesOut, TERMINAL_STATUSES, closedRunReceipts, currentRunIdRetire, LEGACY_VERSION_TREE, skillVersionsDelete, AUTHORED_REGISTRIES, DERIVED_REGISTRIES, registryYamlRetire, glossaryCreate, UPGRADE_STEPS, UPGRADE_STEP_IDS;
+var crypto5, fs12, path15, KNOWLEDGE_PREFIX, DERIVED_PATTERNS, v1Content, settingsPolicySplit, PINNED_KEYS, TIMESTAMP_RE, BLOCK_SCALAR, MAP_ENTRY, ktd22Strip, CACHE_TARGETS, cachesOut, TERMINAL_STATUSES, closedRunReceipts, currentRunIdRetire, LEGACY_VERSION_TREE, skillVersionsDelete, AUTHORED_REGISTRIES, DERIVED_REGISTRIES, registryYamlRetire, glossaryCreate, UPGRADE_STEPS, UPGRADE_STEP_IDS;
 var init_upgrade_steps = __esm({
   "src/domains/state/upgrade-steps.ts"() {
-    crypto4 = __toESM(require("node:crypto"));
+    crypto5 = __toESM(require("node:crypto"));
     fs12 = __toESM(require("node:fs"));
     path15 = __toESM(require("node:path"));
     init_upgrade_glossary();
@@ -6824,6 +6845,7 @@ var init_state = __esm({
     init_frontmatter();
     init_guild_discovery();
     init_guild_root();
+    init_snapshot_digest();
     init_index_cache();
     init_storage_artifact_registry();
     init_storage_fs();
@@ -13626,7 +13648,7 @@ function openMigrationJournal(root) {
   return handle;
 }
 function computeRecordHash(input) {
-  return `sha256:${crypto5.createHash("sha256").update(neutralCanonicalJson(input)).digest("hex")}`;
+  return `sha256:${crypto6.createHash("sha256").update(neutralCanonicalJson(input)).digest("hex")}`;
 }
 function readMigrationJournal(handle) {
   authenticateJournalHandle(handle);
@@ -13979,10 +14001,10 @@ function evaluateHostCutoverConformance(request) {
     packet
   };
 }
-var crypto5, fs17, os2, path21, MH08_OWNER_KEY, MH08_SCENARIO_IDS, MH08_DECISION_SCHEMA, MH08_DIVERGENCE_REASON_CODE, MH08_MODES, MH08_SCOPE_FIELDS, AUTHENTICATED_JOURNAL_HANDLES, MH08_PROVENANCE_ALLOWLIST, MH08_DEFAULT_SCOPE, MH08_COMPARISON_MAX_TEXT_LENGTH, MH08_COMPARISON_MAX_DEPTH, MH08_EVIDENCE_INCOMPLETE_REASON_CODE, MH08_RESULT_MISMATCH_REASON_CODE;
+var crypto6, fs17, os2, path21, MH08_OWNER_KEY, MH08_SCENARIO_IDS, MH08_DECISION_SCHEMA, MH08_DIVERGENCE_REASON_CODE, MH08_MODES, MH08_SCOPE_FIELDS, AUTHENTICATED_JOURNAL_HANDLES, MH08_PROVENANCE_ALLOWLIST, MH08_DEFAULT_SCOPE, MH08_COMPARISON_MAX_TEXT_LENGTH, MH08_COMPARISON_MAX_DEPTH, MH08_EVIDENCE_INCOMPLETE_REASON_CODE, MH08_RESULT_MISMATCH_REASON_CODE;
 var init_host_cutover_controller = __esm({
   "src/domains/lifecycle/host-cutover-controller.ts"() {
-    crypto5 = __toESM(require("node:crypto"));
+    crypto6 = __toESM(require("node:crypto"));
     fs17 = __toESM(require("node:fs"));
     os2 = __toESM(require("node:os"));
     path21 = __toESM(require("node:path"));
@@ -16319,7 +16341,7 @@ function scrubbedWrite(outPath, content, opts) {
     }
     const result2 = { written: true, blocked: false };
     if (opts.surface === "bus") {
-      result2.sha256 = crypto6.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+      result2.sha256 = crypto7.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
     }
     return result2;
   }
@@ -16353,7 +16375,7 @@ function scrubbedWrite(outPath, content, opts) {
     }
     const result2 = { written: true, blocked: false };
     if (opts.surface === "bus") {
-      result2.sha256 = crypto6.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+      result2.sha256 = crypto7.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
     }
     return result2;
   }
@@ -16377,12 +16399,12 @@ function scrubbedWrite(outPath, content, opts) {
   writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
   return { written: false, blocked: true };
 }
-var fs21, path25, crypto6;
+var fs21, path25, crypto7;
 var init_scrubbed_write = __esm({
   "src/domains/security/scrubbed-write.ts"() {
     fs21 = __toESM(require("node:fs"));
     path25 = __toESM(require("node:path"));
-    crypto6 = __toESM(require("node:crypto"));
+    crypto7 = __toESM(require("node:crypto"));
     init_secrets();
     init_config();
     init_events();
@@ -16688,7 +16710,7 @@ var init_stable_lock = __esm({
 // src/domains/lifecycle/trace-v2.ts
 function genSpanId(runId, eventType, ts, actorId) {
   const material = `${runId}|${eventType}|${ts}|${actorId || "main"}`;
-  return crypto7.createHash("sha256").update(material).digest("hex").slice(0, 16);
+  return crypto8.createHash("sha256").update(material).digest("hex").slice(0, 16);
 }
 function pruneUndefined(obj) {
   const out = {};
@@ -16741,12 +16763,12 @@ function writePayloadSidecar(runDir2, evtId, input, redact2) {
     return void 0;
   }
 }
-var fs23, path28, crypto7, TRACE_PAYLOAD_SCHEMA, SIDECAR_MAX_BYTES;
+var fs23, path28, crypto8, TRACE_PAYLOAD_SCHEMA, SIDECAR_MAX_BYTES;
 var init_trace_v2 = __esm({
   "src/domains/lifecycle/trace-v2.ts"() {
     fs23 = __toESM(require("fs"));
     path28 = __toESM(require("path"));
-    crypto7 = __toESM(require("crypto"));
+    crypto8 = __toESM(require("crypto"));
     TRACE_PAYLOAD_SCHEMA = "guild.trace_payload.v1";
     SIDECAR_MAX_BYTES = 16 * 1024;
   }
@@ -19942,13 +19964,13 @@ function blockFromVerified(id) {
   };
 }
 function makeFingerprint(raw, salt) {
-  return "fp-" + crypto8.createHash("sha256").update(`${salt}
+  return "fp-" + crypto9.createHash("sha256").update(`${salt}
 ${raw}`, "utf8").digest("hex");
 }
 function loadOrCreateFingerprintSalt(root) {
   const p = path34.join(durableGuildDir(root), "indexes", "model-catalog", ".fp-salt");
   if (fsReal.existsSync(p)) return fsReal.readFileSync(p, "utf8").trim();
-  const salt = crypto8.randomBytes(32).toString("hex");
+  const salt = crypto9.randomBytes(32).toString("hex");
   fsReal.mkdirSync(path34.dirname(p), { recursive: true });
   fsReal.writeFileSync(p, salt + "\n", { encoding: "utf8", mode: 384 });
   return salt;
@@ -20000,10 +20022,10 @@ function restoreSessionContext(root, runId, fs76) {
   }
   return ctx;
 }
-var crypto8, fsReal, path34, UNKNOWN_TARGET;
+var crypto9, fsReal, path34, UNKNOWN_TARGET;
 var init_session_context = __esm({
   "src/domains/config/session-context.ts"() {
-    crypto8 = __toESM(require("crypto"));
+    crypto9 = __toESM(require("crypto"));
     fsReal = __toESM(require("fs"));
     path34 = __toESM(require("path"));
     init_provider_detect();
@@ -20874,7 +20896,9 @@ var init_config_defaults = __esm({
          *
          * `block_unmarked_lanes` engages STRICT mode: a Guild lane dispatch carrying
          * NO structured producer marker (`prompt_only` evidence — the hand-rolled
-         * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded.
+         * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded. It
+         * also denies, in every agent_mode, a lane whose env carries lane carriers
+         * but no `GUILD_DISPATCH_PRODUCER` marker (`carrier_only`, #144).
          *
          * DEFAULT IS `false` ON PURPOSE, and that is load-bearing rather than
          * timidity. `classifyLaneEvidence` grades a fully-substituted lane brief that
@@ -23202,7 +23226,7 @@ function resolveSettings2(opts) {
   try {
     const assembled = result2.config;
     if (_traceRunDir && _telemetry) {
-      const _fingerprint = crypto9.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
+      const _fingerprint = crypto10.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
       const sources = result2.sources;
       _telemetry.emitTraceEvent(
         _telemetry.makeConfigResolutionEvent({
@@ -23229,12 +23253,12 @@ function resolveSettings2(opts) {
   }
   return result2;
 }
-var fs32, path39, crypto9, _telemetryApi;
+var fs32, path39, crypto10, _telemetryApi;
 var init_settings_resolver = __esm({
   "src/domains/config/settings-resolver.ts"() {
     fs32 = __toESM(require("fs"));
     path39 = __toESM(require("path"));
-    crypto9 = __toESM(require("crypto"));
+    crypto10 = __toESM(require("crypto"));
     init_settings_reader();
     init_settings_reader();
     init_state();
@@ -23325,7 +23349,7 @@ function canonicalYamlFlat(map) {
 `).join("");
 }
 function sha256Hex2(text) {
-  return crypto10.createHash("sha256").update(text, "utf8").digest("hex");
+  return crypto11.createHash("sha256").update(text, "utf8").digest("hex");
 }
 function runScopeFor(input) {
   if (orgIsUnknown(input.org_fingerprint ?? void 0)) return input.run_id;
@@ -23523,10 +23547,10 @@ function purgeRunLocalEntries(store, runId) {
   }
   return purged;
 }
-var crypto10, fs33, path40, MODEL_CATALOG_SCHEMA_VERSION, DEFAULT_CATALOG_TTL_SECONDS, UNCACHED_DISCOVERY_BUDGET_MS, CACHED_INSPECTION_BUDGET_MS, MODEL_CATALOG_CACHE_DIRNAME, MODEL_CATALOG_CACHE_REL_SEGMENTS, MODEL_CATALOG_CACHE_REL, YAML_KEYWORD, YAML_NUMBER, YAML_SEXAGESIMAL, CACHE_KEY_COMPONENTS, UnknownOrgQuarantineViolation, CATALOG_CACHE_KEY_BRAND, MINTED_KEYS, NON_IDENTITY_KEYS, MemoryStore, tmpSequence, SAFE_KEY, FileStore, defaultSleep;
+var crypto11, fs33, path40, MODEL_CATALOG_SCHEMA_VERSION, DEFAULT_CATALOG_TTL_SECONDS, UNCACHED_DISCOVERY_BUDGET_MS, CACHED_INSPECTION_BUDGET_MS, MODEL_CATALOG_CACHE_DIRNAME, MODEL_CATALOG_CACHE_REL_SEGMENTS, MODEL_CATALOG_CACHE_REL, YAML_KEYWORD, YAML_NUMBER, YAML_SEXAGESIMAL, CACHE_KEY_COMPONENTS, UnknownOrgQuarantineViolation, CATALOG_CACHE_KEY_BRAND, MINTED_KEYS, NON_IDENTITY_KEYS, MemoryStore, tmpSequence, SAFE_KEY, FileStore, defaultSleep;
 var init_catalog_cache = __esm({
   "src/domains/config/catalog-cache.ts"() {
-    crypto10 = __toESM(require("crypto"));
+    crypto11 = __toESM(require("crypto"));
     fs33 = __toESM(require("fs"));
     path40 = __toESM(require("path"));
     init_state();
@@ -24687,7 +24711,7 @@ function buildCompatibilityCatalog(opts) {
         kind,
         id,
         path: rel2,
-        content_hash: crypto11.createHash("sha256").update(bytes).digest("hex"),
+        content_hash: crypto12.createHash("sha256").update(bytes).digest("hex"),
         deprecation,
         deprecated_by: deprecatedBy
       })
@@ -24994,10 +25018,10 @@ function requiredAssetIdsForG5(catalog, opts) {
   ids.sort();
   return { status: "ok", ids: Object.freeze(ids) };
 }
-var crypto11, fs34, path41, import_util3, COMPATIBILITY_CATALOG_SCHEMA, SHIPPED_TEMPLATE_COUNT, SHIPPED_DOMAIN_SKILL_IDS, SHIPPED_DOMAIN_SKILL_COUNT, SHIPPED_COMPATIBILITY_ASSET_COUNT, COMPATIBILITY_ASSET_ROOTS, COMPATIBILITY_DEPRECATION_STATES, DEPRECATION_STATE_SET, MAX_SCALAR_LEN3, MAX_ID_LEN2, CONTROL_CHARS4, CANONICAL_ID2, SHA256_HEX2, BUILD_KEYS, ENTRY_KEYS, SUGGESTABLE_KEYS, EMISSION_KEYS;
+var crypto12, fs34, path41, import_util3, COMPATIBILITY_CATALOG_SCHEMA, SHIPPED_TEMPLATE_COUNT, SHIPPED_DOMAIN_SKILL_IDS, SHIPPED_DOMAIN_SKILL_COUNT, SHIPPED_COMPATIBILITY_ASSET_COUNT, COMPATIBILITY_ASSET_ROOTS, COMPATIBILITY_DEPRECATION_STATES, DEPRECATION_STATE_SET, MAX_SCALAR_LEN3, MAX_ID_LEN2, CONTROL_CHARS4, CANONICAL_ID2, SHA256_HEX2, BUILD_KEYS, ENTRY_KEYS, SUGGESTABLE_KEYS, EMISSION_KEYS;
 var init_compatibility_catalog = __esm({
   "src/domains/config/compatibility-catalog.ts"() {
-    crypto11 = __toESM(require("crypto"));
+    crypto12 = __toESM(require("crypto"));
     fs34 = __toESM(require("fs"));
     path41 = __toESM(require("path"));
     import_util3 = require("util");
@@ -26881,7 +26905,7 @@ function shortHash(h) {
   return typeof h === "string" && h.length >= 12 ? h.slice(0, 12) : "unknown";
 }
 function fingerprint(value) {
-  return crypto12.createHash("sha256").update(value, "utf8").digest("hex").slice(0, 12);
+  return crypto13.createHash("sha256").update(value, "utf8").digest("hex").slice(0, 12);
 }
 function reject(rejections, field, category, value) {
   rejections.push({ field, category });
@@ -27247,10 +27271,10 @@ function runModelsCommand(argv, deps = {}) {
   }
   return 0;
 }
-var crypto12, fs39, path46, MODELS_COMMAND_USAGE, DISPLAY_TOKEN_RE, REVERSIBLE_IDENTITY_RE, CONTROL_CHAR_RE, FREE_TEXT_MAX;
+var crypto13, fs39, path46, MODELS_COMMAND_USAGE, DISPLAY_TOKEN_RE, REVERSIBLE_IDENTITY_RE, CONTROL_CHAR_RE, FREE_TEXT_MAX;
 var init_models_command = __esm({
   "src/domains/config/models-command.ts"() {
-    crypto12 = __toESM(require("crypto"));
+    crypto13 = __toESM(require("crypto"));
     fs39 = __toESM(require("fs"));
     path46 = __toESM(require("path"));
     init_session_context();
@@ -28189,7 +28213,7 @@ function composePrompt(base, extensions, host_family, model_family) {
     }
   }
   const text = parts.map((p) => p.text.trimEnd()).join("\n\n");
-  const hash = crypto13.createHash("sha256").update(`${host_family}\0${model_family}\0${text}`).digest("hex");
+  const hash = crypto14.createHash("sha256").update(`${host_family}\0${model_family}\0${text}`).digest("hex");
   return { text, dialect_id, overlay_ids: parts.map((p) => p.id), hash, skipped };
 }
 function loadPromptExtensions(guildDir, model_family) {
@@ -28255,10 +28279,10 @@ function composeSessionPrompt(input) {
     input.model_family
   );
 }
-var crypto13, fs41, path48, DIALECT_TOKEN_BUDGET, MODEL_NAME_RE, MODEL_FAMILIES, HOST_FAMILY_TOKENS_PROMPT, HOST_FAMILY_RE, YOU_ARE_HOST_RE, PromptRejectedError, PROMPTS_DIRNAME, USING_GUILD_OVERLAY, DIALECTS_DIRNAME, USING_GUILD_BASE_RELS, PLUGIN_DIALECTS_REL;
+var crypto14, fs41, path48, DIALECT_TOKEN_BUDGET, MODEL_NAME_RE, MODEL_FAMILIES, HOST_FAMILY_TOKENS_PROMPT, HOST_FAMILY_RE, YOU_ARE_HOST_RE, PromptRejectedError, PROMPTS_DIRNAME, USING_GUILD_OVERLAY, DIALECTS_DIRNAME, USING_GUILD_BASE_RELS, PLUGIN_DIALECTS_REL;
 var init_compose_prompt = __esm({
   "src/domains/config/compose-prompt.ts"() {
-    crypto13 = __toESM(require("node:crypto"));
+    crypto14 = __toESM(require("node:crypto"));
     fs41 = __toESM(require("node:fs"));
     path48 = __toESM(require("node:path"));
     DIALECT_TOKEN_BUDGET = 200;
@@ -29780,7 +29804,7 @@ function canonicalJson(value) {
   return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(",")}}`;
 }
 function sha2563(text) {
-  return `sha256:${crypto14.createHash("sha256").update(text, "utf8").digest("hex")}`;
+  return `sha256:${crypto15.createHash("sha256").update(text, "utf8").digest("hex")}`;
 }
 function sealReceiptRecord(input) {
   const body = {
@@ -30671,12 +30695,12 @@ function appendLocked(paths, input, io, authority, options) {
     failure: null
   };
 }
-var fs43, path51, crypto14, RECEIPT_CONTRACT_VERSION, RECEIPT_DISPOSITIONS, OBSERVATION_STATES, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES, UNPINNED_FD, JournalAuthorityDetachedError, ACTIVE_LOCK_PUBLICATION, defaultJournalIo, CANONICAL_PATH_MAX_LINK_HOPS, JournalIdentityError, JOURNAL_LOCK_MAX_ATTEMPTS, JOURNAL_LOCK_WAIT_MS, JOURNAL_ACCESS_FLAGS, REQUIRED_STRING_FIELDS;
+var fs43, path51, crypto15, RECEIPT_CONTRACT_VERSION, RECEIPT_DISPOSITIONS, OBSERVATION_STATES, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES, UNPINNED_FD, JournalAuthorityDetachedError, ACTIVE_LOCK_PUBLICATION, defaultJournalIo, CANONICAL_PATH_MAX_LINK_HOPS, JournalIdentityError, JOURNAL_LOCK_MAX_ATTEMPTS, JOURNAL_LOCK_WAIT_MS, JOURNAL_ACCESS_FLAGS, REQUIRED_STRING_FIELDS;
 var init_receipt_journal = __esm({
   "src/domains/telemetry/receipt-journal.ts"() {
     fs43 = __toESM(require("node:fs"));
     path51 = __toESM(require("node:path"));
-    crypto14 = __toESM(require("node:crypto"));
+    crypto15 = __toESM(require("node:crypto"));
     init_state();
     RECEIPT_CONTRACT_VERSION = "guild.observability.v1";
     RECEIPT_DISPOSITIONS = Object.freeze([
@@ -33589,7 +33613,7 @@ var init_per_host_packaging = __esm({
 
 // src/domains/distribution/release-distribution-contract.ts
 function sha2564(value) {
-  return crypto15.createHash("sha256").update(value).digest("hex");
+  return crypto16.createHash("sha256").update(value).digest("hex");
 }
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
@@ -33631,10 +33655,10 @@ function verifyReleaseClaim(claim, archive) {
   if (claim.host_support.supported !== false) errors.push("unsupported host cannot be promoted");
   return errors;
 }
-var crypto15, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
+var crypto16, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
 var init_release_distribution_contract = __esm({
   "src/domains/distribution/release-distribution-contract.ts"() {
-    crypto15 = __toESM(require("node:crypto"));
+    crypto16 = __toESM(require("node:crypto"));
     RELEASE_CLAIM_SCHEMA = "guild.release_claim.v1";
     OPERATION_KINDS = Object.freeze(["render", "install", "activate", "update", "uninstall", "verify"]);
     ACCEPTED_CONFORMANCE_ARTIFACTS = Object.freeze([
@@ -36660,7 +36684,7 @@ function indexOne(root, rel2) {
     title: titleOf(rel2, body),
     tokens: tokenize(`${titleOf(rel2, body)}
 ${body}`),
-    hash: crypto16.createHash("sha256").update(body, "utf8").digest("hex").slice(0, 16),
+    hash: crypto17.createHash("sha256").update(body, "utf8").digest("hex").slice(0, 16),
     mtime
   };
 }
@@ -36731,10 +36755,10 @@ function searchWiki(query, opts = {}) {
   if (kept.length === 0) return failOpen("reranker returned no known documents; served BM25");
   return { hits: kept, backend: "hybrid", built_index: built };
 }
-var crypto16, fs52, path62, WIKI_INDEX_SCHEMA, DEFAULT_MAX_HITS, DEFAULT_MIN_SCORE;
+var crypto17, fs52, path62, WIKI_INDEX_SCHEMA, DEFAULT_MAX_HITS, DEFAULT_MIN_SCORE;
 var init_wiki_index = __esm({
   "src/domains/knowledge/wiki-index.ts"() {
-    crypto16 = __toESM(require("node:crypto"));
+    crypto17 = __toESM(require("node:crypto"));
     fs52 = __toESM(require("node:fs"));
     path62 = __toESM(require("node:path"));
     init_bm25();
@@ -36819,7 +36843,7 @@ function readGitHead(root) {
 }
 function hashOpenQuestions(ids) {
   const sorted = [...ids].filter((s) => typeof s === "string").sort();
-  return crypto17.createHash("sha256").update(sorted.join("\n"), "utf8").digest("hex").slice(0, 32);
+  return crypto18.createHash("sha256").update(sorted.join("\n"), "utf8").digest("hex").slice(0, 32);
 }
 function storageFor3(opts) {
   return opts.storage ?? createGuildStorage(opts.cwd ?? process.cwd());
@@ -36893,10 +36917,10 @@ function buildWorkingSetCard(input) {
   }
   return card;
 }
-var crypto17, fs53, path63, WORKING_SET_SCHEMA, WORKING_SET_TOKEN_CAP;
+var crypto18, fs53, path63, WORKING_SET_SCHEMA, WORKING_SET_TOKEN_CAP;
 var init_working_set = __esm({
   "src/domains/knowledge/working-set.ts"() {
-    crypto17 = __toESM(require("node:crypto"));
+    crypto18 = __toESM(require("node:crypto"));
     fs53 = __toESM(require("node:fs"));
     path63 = __toESM(require("node:path"));
     init_state();
@@ -36907,12 +36931,12 @@ var init_working_set = __esm({
 
 // src/domains/knowledge/lane-bundle.ts
 function bundleId(cellId, fingerprint2) {
-  return crypto18.createHash("sha256").update(`${cellId}
+  return crypto19.createHash("sha256").update(`${cellId}
 ${fingerprint2}`, "utf8").digest("hex").slice(0, 16);
 }
 function fingerprintOf(ws) {
   const f = ws.fingerprint;
-  return crypto18.createHash("sha256").update(`${f.wiki_mtime}
+  return crypto19.createHash("sha256").update(`${f.wiki_mtime}
 ${f.git_head}
 ${f.open_questions_hash}`, "utf8").digest("hex").slice(0, 16);
 }
@@ -36941,10 +36965,10 @@ function buildLaneBundle(input) {
   }
   return bundle;
 }
-var crypto18, LANE_BUNDLE_SCHEMA, LANE_BUNDLE_TOKEN_CAP;
+var crypto19, LANE_BUNDLE_SCHEMA, LANE_BUNDLE_TOKEN_CAP;
 var init_lane_bundle = __esm({
   "src/domains/knowledge/lane-bundle.ts"() {
-    crypto18 = __toESM(require("node:crypto"));
+    crypto19 = __toESM(require("node:crypto"));
     init_glossary();
     init_working_set();
     LANE_BUNDLE_SCHEMA = "guild.lane_bundle.v1";
@@ -37775,7 +37799,7 @@ function resolveRecallBeforeRead(cwd) {
   return true;
 }
 function hashQuery(query) {
-  return crypto19.createHash("sha256").update(query).digest("hex").slice(0, 16);
+  return crypto20.createHash("sha256").update(query).digest("hex").slice(0, 16);
 }
 function rankWikiDocs(docs, wikiBase, limit, composite) {
   const scoring = docs.filter((d) => d.score > 0);
@@ -38108,7 +38132,7 @@ function recall(query, opts) {
   const _traceBranch = allChunks.length === 0 ? "empty" : source === "combined" ? "combined" : source === "structural" ? "structural" : source;
   try {
     const _analysisTs = (/* @__PURE__ */ new Date()).toISOString();
-    const _spanId = crypto19.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
+    const _spanId = crypto20.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
     emitTraceEvent(
       makeAnalysisTraceEvent({
         ts: new Date(_traceStart).toISOString(),
@@ -38274,12 +38298,12 @@ function runRecallCli() {
   }
   process.stdout.write(JSON.stringify(result2) + "\n");
 }
-var fs59, path69, crypto19, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
+var fs59, path69, crypto20, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
 var init_recall = __esm({
   "src/domains/knowledge/recall.ts"() {
     fs59 = __toESM(require("node:fs"));
     path69 = __toESM(require("node:path"));
-    crypto19 = __toESM(require("node:crypto"));
+    crypto20 = __toESM(require("node:crypto"));
     init_state();
     init_wiki_recall();
     init_fs_scanner();
@@ -40458,6 +40482,7 @@ var init_run_lifecycle = __esm({
     init_telemetry();
     init_state();
     init_state();
+    init_state();
     HOST_FAMILY_TO_KIND = Object.freeze({
       claude: "claude",
       codex: "codex"
@@ -42080,15 +42105,15 @@ function resolveScopeDecision(args) {
 }
 
 // hooks/pre-tool-use.ts
-var crypto21 = __toESM(require("node:crypto"));
+var crypto22 = __toESM(require("node:crypto"));
 
 // hooks/lib/security/mcp-hash-pin.ts
-var crypto20 = __toESM(require("node:crypto"));
+var crypto21 = __toESM(require("node:crypto"));
 function isMcpTool(toolName) {
   return typeof toolName === "string" && toolName.startsWith("mcp__");
 }
 function hashDescription(description) {
-  return crypto20.createHash("sha256").update(description, "utf8").digest("hex");
+  return crypto21.createHash("sha256").update(description, "utf8").digest("hex");
 }
 function verifyMcpDescription(toolName, liveDescription, pins) {
   const pinned = pins[toolName];
@@ -42281,6 +42306,9 @@ function hasHandoffProtocolBlock(prompt, runId) {
   const receiptPathRe = new RegExp(`\\.guild/runs/${escapeRe(runId)}/handoffs/`);
   return receiptPathRe.test(prompt);
 }
+function isEnvBorneEvidence(evidence) {
+  return evidence === "structured" || evidence === "carrier_only";
+}
 var PRODUCER_MARKER_ENV = "GUILD_DISPATCH_PRODUCER";
 var PRODUCER_MARKER_VALUE_RE2 = /^guild\.dispatch\.v\d+$/;
 var STRUCTURED_CARRIER_KEYS = [
@@ -42307,7 +42335,8 @@ function hasProducerMarker(toolInput) {
   return typeof v === "string" && PRODUCER_MARKER_VALUE_RE2.test(v.trim());
 }
 function classifyLaneEvidence(toolInput, attr, prompt, runId) {
-  if (hasStructuredCarrier(toolInput)) return "structured";
+  if (hasProducerMarker(toolInput)) return "structured";
+  if (hasStructuredCarrier(toolInput)) return "carrier_only";
   if (hasHandoffProtocolBlock(prompt, runId)) return "prompt_only";
   if (attr.isSpecialistLane || attr.hasLaneSignature) return "prompt_only";
   return "none";
@@ -42322,27 +42351,49 @@ function isLeadProcess(env) {
     return typeof v === "string" && v.trim().length > 0;
   });
 }
-function readSnapshotAgentMode(guildRoot, runId) {
-  const file = path80.join(durableGuildDir(guildRoot), "runs", runId, "resolved-settings.json");
+function readRunSettingsSnapshot(guildRoot, runId) {
+  const dir = path80.join(durableGuildDir(guildRoot), "runs", runId);
+  const none = (integrity2) => ({
+    integrity: integrity2,
+    agentMode: null,
+    blockUnmarkedLanes: null
+  });
+  let sidecar;
+  try {
+    sidecar = fs67.readFileSync(path80.join(dir, RESOLVED_SETTINGS_DIGEST_FILE), "utf8");
+  } catch (err) {
+    sidecar = err?.code === "ENOENT" ? null : "";
+  }
   let raw;
   try {
-    raw = fs67.readFileSync(file, "utf8");
-  } catch {
-    return null;
+    raw = fs67.readFileSync(path80.join(dir, "resolved-settings.json"), "utf8");
+  } catch (err) {
+    const missing = err?.code === "ENOENT";
+    return none(sidecar === null && missing ? "absent" : sidecar === null ? "unreadable" : "mismatch");
   }
+  const integrity = verifyResolvedSettingsDigest(raw, sidecar);
+  if (integrity === "mismatch") return none("mismatch");
   let doc;
   try {
     doc = JSON.parse(raw);
   } catch {
-    return null;
+    return none("unreadable");
   }
-  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return null;
+  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return none("unreadable");
   const effective = doc["effective"];
   if (effective === null || typeof effective !== "object" || Array.isArray(effective)) {
-    return null;
+    return { ...none(integrity) };
   }
-  const mode = effective["agent_mode"];
-  return typeof mode === "string" && mode.length > 0 ? mode : null;
+  const e = effective;
+  const mode = e["agent_mode"];
+  const strict = e["block_unmarked_lanes"];
+  return {
+    integrity,
+    agentMode: typeof mode === "string" && mode.length > 0 ? mode : null,
+    // A non-boolean is IGNORED, never coerced: the string "false" is truthy, and
+    // reading it as "on" would engage a BLOCKING gate nobody asked for.
+    blockUnmarkedLanes: typeof strict === "boolean" ? strict : null
+  };
 }
 var DEFAULT_BACKEND_GUARD_GRACE_MS = 3 * 60 * 60 * 1e3;
 function backendGuardGraceMs(env = process.env) {
@@ -42362,7 +42413,10 @@ function dispatchAssertsRunId(toolInput, runId) {
 }
 function newestRunSignalMs(guildRoot, runId) {
   const dir = path80.join(durableGuildDir(guildRoot), "runs", runId);
-  const candidates = [path80.join(dir, "resolved-settings.json")];
+  const candidates = [
+    path80.join(dir, "resolved-settings.json"),
+    path80.join(dir, RESOLVED_SETTINGS_DIGEST_FILE)
+  ];
   for (const sub of ["handoffs", "in-progress"]) {
     try {
       for (const name of fs67.readdirSync(path80.join(dir, sub))) {
@@ -42416,27 +42470,10 @@ function parseBlockUnmarkedEnv(env) {
   if (v === "0" || v === "false" || v === "no") return false;
   return null;
 }
-function readSnapshotBlockUnmarkedLanes(guildRoot, runId) {
-  const file = path80.join(durableGuildDir(guildRoot), "runs", runId, "resolved-settings.json");
-  let doc;
-  try {
-    doc = JSON.parse(fs67.readFileSync(file, "utf8"));
-  } catch {
-    return null;
-  }
-  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return null;
-  const effective = doc["effective"];
-  if (effective === null || typeof effective !== "object" || Array.isArray(effective)) {
-    return null;
-  }
-  const v = effective["block_unmarked_lanes"];
-  return typeof v === "boolean" ? v : null;
-}
-function resolveBlockUnmarkedLanes(guildRoot, runId, env = process.env) {
+function resolveBlockUnmarkedFromSnapshot(snapshot, env = process.env) {
   const fromEnv = parseBlockUnmarkedEnv(env);
   if (fromEnv !== null) return fromEnv;
-  const fromSnapshot = readSnapshotBlockUnmarkedLanes(guildRoot, runId);
-  if (fromSnapshot !== null) return fromSnapshot;
+  if (snapshot.blockUnmarkedLanes !== null) return snapshot.blockUnmarkedLanes;
   return DEFAULT_BLOCK_UNMARKED_LANES;
 }
 var SAFE_SUBAGENT_TYPE_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
@@ -42460,22 +42497,33 @@ function resolveBackendDegradation(facts) {
   if (!facts.isLead) return base;
   if (!facts.runFresh) return base;
   if (evidence === "none") return base;
-  const hasSubstrate = facts.substrate !== "none";
-  if (facts.agentMode === TEAM_AGENT_MODE && !hasSubstrate) {
-    return { ...base, decision: "allow_recorded", reason: "team_substrate_unavailable" };
+  const decide = (blockable) => !blockable ? "allow_recorded" : facts.overrideEngaged ? "allow_override" : "deny";
+  if (facts.snapshotTampered === true) {
+    return {
+      ...base,
+      decision: decide(isEnvBorneEvidence(evidence)),
+      reason: "snapshot_integrity_failed"
+    };
   }
+  const hasSubstrate = facts.substrate !== "none";
+  const blockUnmarked = facts.blockUnmarked === true;
   if (hasSubstrate) {
     const reason = facts.agentMode === TEAM_AGENT_MODE ? "team_substrate_available" : facts.agentMode === AUTO_AGENT_MODE ? "auto_resolves_to_team" : null;
     if (reason !== null) {
-      const blockUnmarked = facts.blockUnmarked === true;
-      const blockable = evidence === "structured" || blockUnmarked && evidence === "prompt_only" && !hasProducerMarker(facts.toolInput);
+      const blockable = isEnvBorneEvidence(evidence) || blockUnmarked && evidence === "prompt_only" && !hasProducerMarker(facts.toolInput);
       return {
         ...base,
-        decision: !blockable ? "allow_recorded" : facts.overrideEngaged ? "allow_override" : "deny",
+        decision: decide(blockable),
         reason,
         effectiveBackend: "team"
       };
     }
+  }
+  if (blockUnmarked && evidence === "carrier_only") {
+    return { ...base, decision: decide(true), reason: "producer_marker_missing" };
+  }
+  if (facts.agentMode === TEAM_AGENT_MODE && !hasSubstrate) {
+    return { ...base, decision: "allow_recorded", reason: "team_substrate_unavailable" };
   }
   return base;
 }
@@ -42486,10 +42534,19 @@ function remedyForSubstrate(substrate) {
   }
   return `Dispatch through the launcher instead: ${LAUNCHER_HINT} (it owns the D5 ladder, the CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS gate, and the tmux strategy).`;
 }
+function integrityClause(reason, role, subagentType) {
+  if (reason === "producer_marker_missing") {
+    return `Guild dispatch integrity (#144): the "${role}" lane (subagent_type="${subagentType}") carries Guild lane env carriers but NO valid ${PRODUCER_MARKER_ENV} marker in its env, and strict mode (${BLOCK_UNMARKED_CONFIG_KEY} / ${BLOCK_UNMARKED_ENV}) requires it. Every Guild producer (composeInProcessDispatch, buildPrompt, paneCommand, the guild:execute-plan subagent rung) stamps ${PRODUCER_MARKER_ENV}=guild.dispatch.v1; a lane without it was hand-built or had the token stripped. Re-dispatch through the producer path. A pre-#85 dispatch can run with strict mode off, or once with ${OVERRIDE_ENV}=1 (a ${BACKEND_DEGRADATION_EVENT} receipt is written either way).`;
+  }
+  return `Guild dispatch integrity (#146): this run's resolved-settings.json does not match the digest recorded at run start (resolved-settings.sha256), so the guard cannot trust its agent_mode or strict-mode setting. The "${role}" lane (subagent_type="${subagentType}") is treated as unverified. Start a new run so preflight writes a fresh snapshot, or accept the risk once with ${OVERRIDE_ENV}=1 (a ${BACKEND_DEGRADATION_EVENT} receipt is written either way).`;
+}
 function backendClause(reason) {
   return reason === "auto_resolves_to_team" ? `this run's agent_mode is "auto" and a team substrate IS available, which the D5 ladder resolves to the TEAM backend` : `this run's resolved agent_mode is "team" and a team substrate IS available`;
 }
 function buildDenyMessage(reason, role, subagentType, substrate, evidence = "structured") {
+  if (reason === "producer_marker_missing" || reason === "snapshot_integrity_failed") {
+    return `${integrityClause(reason, role, subagentType)} Blocking this dispatch.`;
+  }
   const unmarkedClause = evidence === "prompt_only" ? `This lane carries NO structured producer marker (${PRODUCER_MARKER_ENV}) \u2014 it was not composed by a Guild dispatch producer, which is the drift signature strict mode (${BLOCK_UNMARKED_CONFIG_KEY} / ${BLOCK_UNMARKED_ENV}) blocks. Dispatch it through the producer path so it carries the marker, or ` : "";
   return `Guild backend integrity (#56): ${backendClause(reason)}, but the "${role}" lane is being dispatched through the in-session Agent tool (subagent_type="${subagentType}") instead of a visible pane/surface. That is a silent BACKEND DEGRADATION: no pane, no named specialist, and lane execution semantics change out from under the approved plan. guild:execute-plan's contract is refuse-don't-fallback (skills/meta/execute-plan/dispatch.md \xA7"Backend choice"). ${unmarkedClause}${remedyForSubstrate(substrate)} If the team backend genuinely cannot be honored, downgrade CONSCIOUSLY: re-run with ${OVERRIDE_ENV}=1 \u2014 the fallback is then allowed and a ${BACKEND_DEGRADATION_EVENT} receipt is written to the run record either way. Blocking this dispatch.`;
 }
@@ -42497,6 +42554,10 @@ function buildAllowMessage(reason, role, subagentType, substrate, evidence, deci
   const head = `Guild backend integrity (#56): the "${role}" lane was dispatched through the in-session Agent tool (subagent_type="${subagentType}"). `;
   const tail = `Recording a ${BACKEND_DEGRADATION_EVENT} receipt at .guild/runs/<run-id>/${RECEIPT_RELATIVE_PATH} so the downgrade is auditable post-hoc.`;
   const promptOnlyClause = `The lane was identified from PROMPT TEXT alone (the handoff-protocol block, or the #58 adoption marker / role anchor / dispatch prose) \u2014 the dispatch env carries no GUILD_SPECIALIST / GUILD_TASK_ID / GUILD_AGENT_DEFINITION carrier. Quoted text is indistinguishable from a real brief, so this is recorded, not blocked.`;
+  if (reason === "producer_marker_missing" || reason === "snapshot_integrity_failed") {
+    const verdict = decision === "allow_override" ? `OVERRIDDEN: allowed because ${OVERRIDE_ENV} is set.` : `The lane was identified from PROMPT TEXT alone, so it is recorded, not blocked.`;
+    return `${integrityClause(reason, role, subagentType)} ${verdict} ${tail}`;
+  }
   if (reason === "team_substrate_unavailable") {
     return head + `agent_mode="team" but NO team substrate (tmux/cmux) is available, so the resolved backend cannot be honored \u2014 agent-team-launcher.ts downgrades this case itself, so it is not blocked here. ` + (evidence === "prompt_only" ? `${promptOnlyClause} ` : "") + tail;
   }
@@ -42702,7 +42763,7 @@ function resolveTierDispatch(facts) {
     base.expectedModel = expectedModel;
   }
   if (rawModel === void 0) {
-    const decision = evidence !== "structured" ? "allow_recorded" : facts.overrideEngaged ? "allow_override" : "deny";
+    const decision = !isEnvBorneEvidence(evidence) ? "allow_recorded" : facts.overrideEngaged ? "allow_override" : "deny";
     return { ...base, decision, reason: "missing_model" };
   }
   const dispatchedTier = tierOfModel(facts.tierModels, rawModel);
@@ -43951,7 +44012,7 @@ function traceAgentPromptSent(payload, cwd) {
         parent_span_id: parentSpanId,
         phase: process.env["GUILD_PHASE"] || void 0,
         task_id: taskId,
-        prompt_hash: crypto21.createHash("sha256").update(prompt).digest("hex").slice(0, 16),
+        prompt_hash: crypto22.createHash("sha256").update(prompt).digest("hex").slice(0, 16),
         payload_ref: payloadRef2,
         redaction: payloadRef2 ? "redacted" : "omitted",
         status: "ok",
@@ -44214,7 +44275,7 @@ function readShippedMcpPins() {
   }
   try {
     const bin = fs75.readFileSync(path90.join(pluginRoot, doc.binary), "utf8");
-    const actual = crypto21.createHash("sha256").update(bin, "utf8").digest("hex");
+    const actual = crypto22.createHash("sha256").update(bin, "utf8").digest("hex");
     if (actual !== doc.binary_sha256) {
       shippedMcpPinsCache = { pins: null, failure: "binary_hash_mismatch" };
       return shippedMcpPinsCache;
@@ -44613,13 +44674,19 @@ function evaluateBackendDegradation(payload, cwd) {
   const ti = payload.tool_input;
   const prompt = typeof ti?.["prompt"] === "string" ? ti["prompt"] : "";
   if (!isLeadProcess(process.env)) return null;
-  if (!isGuildLaneDispatch(payload.tool_input, attr, prompt, runId)) return null;
+  const evidence = classifyLaneEvidence(payload.tool_input, attr, prompt, runId);
+  if (evidence === "none") return null;
   const guildRoot = resolveGuildRoot3(cwd);
-  const agentMode = readSnapshotAgentMode(guildRoot, runId);
-  if (agentMode !== TEAM_AGENT_MODE && agentMode !== AUTO_AGENT_MODE) return null;
+  const snapshot = readRunSettingsSnapshot(guildRoot, runId);
+  const snapshotTampered = snapshot.integrity === "mismatch";
+  const agentMode = snapshot.agentMode;
+  const blockUnmarked = resolveBlockUnmarkedFromSnapshot(snapshot, process.env);
+  const teamRow = agentMode === TEAM_AGENT_MODE || agentMode === AUTO_AGENT_MODE;
+  const strictRow = blockUnmarked && evidence === "carrier_only";
+  if (!teamRow && !snapshotTampered && !strictRow) return null;
   const runFresh = isRunFresh(guildRoot, runId, runIdSource);
   if (!runFresh) return null;
-  const substrate = resolveTeamSubstrate(agentMode, process.env);
+  const substrate = teamRow && !snapshotTampered ? resolveTeamSubstrate(agentMode, process.env) : "none";
   const result2 = resolveBackendDegradation({
     toolInput: payload.tool_input,
     attr,
@@ -44630,13 +44697,8 @@ function evaluateBackendDegradation(payload, cwd) {
     overrideEngaged: isOverrideEngaged(process.env),
     isLead: true,
     runFresh,
-    // #93: the RESOLVED `defaults.dispatch.block_unmarked_lanes`, read from the
-    // same U6 snapshot file `readSnapshotAgentMode` above consulted — a SECOND
-    // readFileSync of that file, not a free ride on the first. It is paid only
-    // here, past every cheap-first short-circuit above, so it costs nothing on
-    // the overwhelming majority of tool calls that never reach this line.
-    // GUILD_BLOCK_UNMARKED_LANES is retained as the per-session override.
-    blockUnmarked: resolveBlockUnmarkedLanes(guildRoot, runId, process.env)
+    blockUnmarked,
+    snapshotTampered
   });
   if (result2.decision === "pass" || result2.reason === void 0) return null;
   const role = result2.specialist ?? "<unattributed>";
@@ -44663,7 +44725,7 @@ function evaluateBackendDegradation(payload, cwd) {
         reason: result2.reason,
         specialist: result2.specialist ?? "",
         subagentType: result2.subagentType,
-        agentMode,
+        agentMode: snapshotTampered ? "<untrusted>" : agentMode ?? "<absent>",
         effectiveBackend: result2.effectiveBackend,
         substrate,
         evidence: result2.evidence,
