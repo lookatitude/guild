@@ -732,7 +732,7 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // agent-pane gate (not_agent_pane, input-ready, pickup). Registry re-extracted.
   // ANTI-VACUITY: check-surface-pins was RED against the prior pin first.
   // Re-ratified 2026-10-20 (v3.2 merge): H1 + H2 execute-plan edits combined on next.
-  skills: "__PIN__",
+  skills: "b418036e05c9e4cb5ea13306549d8a1b476b1a1e",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */
