@@ -121,6 +121,15 @@ describe("lane-receipt — deterministic receipt-wait (#138)", () => {
     expect(result.waited_ms).toBe(3_000);
   });
 
+  it("F7: a same-second earlier receipt is still stale at millisecond precision", () => {
+    const file = path.join(runDir, "handoffs", "developer-A-version.md");
+    writeReceipt("developer-A-version.md", receipt("A-version"));
+    const second = 1_800_000_000_000;
+    fs.utimesSync(file, new Date(second + 100), new Date(second + 100));
+    expect(inspectLaneReceipt(runDir, "developer", "A-version", second + 900).state).toBe("pending");
+    expect(inspectLaneReceipt(runDir, "developer", "A-version", second + 50).state).toBe("done");
+  });
+
   it("CONTROL: the same stale receipt with no dispatch floor reads as this attempt's failure", () => {
     writeReceipt("developer-A-version.md", receipt("A-version", "blocked"));
     expect(inspectLaneReceipt(runDir, "developer", "A-version").state).toBe("failed");
