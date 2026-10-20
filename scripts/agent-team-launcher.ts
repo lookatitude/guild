@@ -54,6 +54,7 @@ import * as path from "path";
 import {
   hostCapabilityCacheDir,
   hostCapabilityCacheFile,
+  presentOnDisk,
   RESOLVED_SETTINGS_DIGEST_FILE,
   verifyResolvedSettingsDigest,
 } from "../src/domains/state";
@@ -1946,13 +1947,21 @@ function readFrozenDispatchResolution(
 ): FrozenDispatchResolution | null {
   if (runId === null || runId.length === 0) return null;
   const snapshotPath = path.join(durableGuildDir(cwd), "runs", runId, "resolved-settings.json");
-  if (!fs.existsSync(snapshotPath)) return null;
+  // #146: a run with no sidecar predates #146. A sidecar with no snapshot is a
+  // deleted authority record, not a legacy run.
+  const sidecarPath = path.join(path.dirname(snapshotPath), RESOLVED_SETTINGS_DIGEST_FILE);
+  const bound = presentOnDisk(sidecarPath);
+  if (!presentOnDisk(snapshotPath)) {
+    if (bound) {
+      throw new Error(`frozen dispatch authority does not match its run-start digest: ${snapshotPath}`);
+    }
+    return null;
+  }
   let parsed: unknown;
   try {
     const raw = fs.readFileSync(snapshotPath, "utf8");
-    // #146: hash the same bytes we parse; a run with no sidecar predates #146.
-    const sidecarPath = path.join(path.dirname(snapshotPath), RESOLVED_SETTINGS_DIGEST_FILE);
-    const sidecar = fs.existsSync(sidecarPath) ? fs.readFileSync(sidecarPath, "utf8") : null;
+    // Hash the same bytes we parse; an unreadable sidecar throws (fail closed).
+    const sidecar = bound ? fs.readFileSync(sidecarPath, "utf8") : null;
     if (verifyResolvedSettingsDigest(raw, sidecar) === "mismatch") {
       throw new Error(`frozen dispatch authority does not match its run-start digest: ${snapshotPath}`);
     }

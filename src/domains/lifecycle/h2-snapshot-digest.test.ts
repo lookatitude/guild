@@ -122,6 +122,38 @@ describe("#146 — readers verify the digest and fail closed", () => {
   });
 });
 
+describe("#146 — read errors fail closed (codex r1)", () => {
+  // A directory in place of a file gives a portable EISDIR read failure.
+  const swapForDir = (p: string): void => {
+    fs.rmSync(p);
+    fs.mkdirSync(p);
+  };
+  it("an unreadable sidecar with an edited snapshot throws (never reads as legacy)", () => {
+    writeResolvedSettingsSnapshot("run-h2-eside", snapshot(), { cwd: ROOT, fs: seam() });
+    const raw = fs.readFileSync(snapPath("run-h2-eside"), "utf8");
+    fs.writeFileSync(snapPath("run-h2-eside"), raw.replace('"team"', '"agent"'), "utf8");
+    swapForDir(sidecarPath("run-h2-eside"));
+    expect(() => readResolvedSettingsSnapshot("run-h2-eside", { cwd: ROOT, fs: seam() })).toThrow(
+      ResolvedSettingsIntegrityError,
+    );
+  });
+  it("a bound snapshot that is deleted or unreadable throws (never reads as absent)", () => {
+    writeResolvedSettingsSnapshot("run-h2-gone", snapshot(), { cwd: ROOT, fs: seam() });
+    fs.rmSync(snapPath("run-h2-gone"));
+    expect(() => readResolvedSettingsSnapshot("run-h2-gone", { cwd: ROOT, fs: seam() })).toThrow(
+      ResolvedSettingsIntegrityError,
+    );
+    writeResolvedSettingsSnapshot("run-h2-esnap", snapshot(), { cwd: ROOT, fs: seam() });
+    swapForDir(snapPath("run-h2-esnap"));
+    expect(() => readResolvedSettingsSnapshot("run-h2-esnap", { cwd: ROOT, fs: seam() })).toThrow(
+      ResolvedSettingsIntegrityError,
+    );
+  });
+  it("control: no snapshot and no sidecar is still just null", () => {
+    expect(readResolvedSettingsSnapshot("run-h2-never", { cwd: ROOT, fs: seam() })).toBeNull();
+  });
+});
+
 describe("#146 — verifyResolvedSettingsDigest", () => {
   const raw = '{"a":1}\n';
   it("verified when the sidecar names the bytes' digest", () => {

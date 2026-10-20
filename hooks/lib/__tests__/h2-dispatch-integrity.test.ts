@@ -232,6 +232,31 @@ describe("#146 — readRunSettingsSnapshot: one digest-verified parse", () => {
     DIRS.push(dir);
     expect(readRunSettingsSnapshot(dir, RUN_ID).integrity).toBe("absent");
   });
+  // Codex r1: read errors must not downgrade a bound snapshot to "no proof".
+  // A directory in place of a file gives a portable EISDIR read failure.
+  const swapForDir = (root: string, name: string): void => {
+    const p = path.join(root, ".guild", "runs", RUN_ID, name);
+    fs.rmSync(p);
+    fs.mkdirSync(p);
+  };
+  it("unreadable sidecar: mismatch, never legacy", () => {
+    const root = mkRoot({ agent_mode: "agent" }, "match");
+    swapForDir(root, "resolved-settings.sha256");
+    expect(readRunSettingsSnapshot(root, RUN_ID).integrity).toBe("mismatch");
+  });
+  it("bound snapshot unreadable or deleted: mismatch, never absent", () => {
+    const unreadable = mkRoot({ agent_mode: "team" }, "match");
+    swapForDir(unreadable, "resolved-settings.json");
+    expect(readRunSettingsSnapshot(unreadable, RUN_ID).integrity).toBe("mismatch");
+    const deleted = mkRoot({ agent_mode: "team" }, "match");
+    fs.rmSync(path.join(deleted, ".guild", "runs", RUN_ID, "resolved-settings.json"));
+    expect(readRunSettingsSnapshot(deleted, RUN_ID).integrity).toBe("mismatch");
+  });
+  it("control: an unbound (legacy) unreadable snapshot keeps the fail-open posture", () => {
+    const root = mkRoot({ agent_mode: "team" }, "none");
+    swapForDir(root, "resolved-settings.json");
+    expect(readRunSettingsSnapshot(root, RUN_ID).integrity).toBe("unreadable");
+  });
   it("strict resolution reads the parsed snapshot; env still overrides both ways", () => {
     const snap = { integrity: "verified" as const, agentMode: "team", blockUnmarkedLanes: true };
     expect(resolveBlockUnmarkedFromSnapshot(snap, {})).toBe(true);

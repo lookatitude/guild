@@ -61,6 +61,7 @@ import { scrubbedWrite, type ScrubbedWriteResult, type ScrubSurface } from "../s
 import { emitTraceEvent, makeAnalysisTraceEvent, type GuildTraceAnalysisV2 } from "../telemetry";
 import { durableGuildDir } from "../state";
 import {
+  presentOnDisk,
   RESOLVED_SETTINGS_DIGEST_FILE,
   resolvedSettingsDigestRecord,
   verifyResolvedSettingsDigest,
@@ -1780,9 +1781,17 @@ export function readResolvedSettingsSnapshot(
     return null;
   }
 
+  // #146: the seam maps every read error to null. Only a file that is really
+  // gone (ENOENT) may read as "no snapshot" / "no sidecar"; an unreadable one is
+  // an unverifiable binding and fails closed.
+  const sidecarPath = resolvedSettingsDigestPath(cwd, runId);
+  const sidecarRead = fs.readFile(sidecarPath);
+  const sidecar = sidecarRead ?? (presentOnDisk(sidecarPath) ? "" : null);
   const raw = fs.readFile(filePath);
-  if (raw === null) return null;
-  const sidecar = fs.readFile(resolvedSettingsDigestPath(cwd, runId));
+  if (raw === null) {
+    if (sidecar !== null || presentOnDisk(filePath)) throw new ResolvedSettingsIntegrityError(runId);
+    return null;
+  }
   if (verifyResolvedSettingsDigest(raw, sidecar) === "mismatch") {
     throw new ResolvedSettingsIntegrityError(runId);
   }

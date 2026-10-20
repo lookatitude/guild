@@ -19,11 +19,12 @@
  * rewrites both files (or deletes the sidecar) is not detected. It catches an
  * edit to the snapshot alone, which is the drift #146 names.
  *
- * Pure `node:crypto` + string work: imported by `pre-tool-use.js`, the hottest
+ * Only `node:crypto` / `node:fs`: imported by `pre-tool-use.js`, the hottest
  * hook bundle, so it must stay dependency-free.
  */
 
 import * as crypto from "node:crypto";
+import * as fs from "node:fs";
 
 /** Sidecar file name, a sibling of `resolved-settings.json` in the run dir. */
 export const RESOLVED_SETTINGS_DIGEST_FILE = "resolved-settings.sha256";
@@ -57,4 +58,18 @@ export function verifyResolvedSettingsDigest(
   if (!recorded.startsWith(DIGEST_PREFIX)) return "mismatch";
   if (!HEX64.test(recorded.slice(DIGEST_PREFIX.length))) return "mismatch";
   return recorded === resolvedSettingsDigest(raw) ? "verified" : "mismatch";
+}
+
+/**
+ * True unless `lstat` says ENOENT. A file that exists but cannot be read (EACCES,
+ * EISDIR, ...) counts as present, so an unreadable binding is never mistaken for
+ * a legacy run with no binding.
+ */
+export function presentOnDisk(absPath: string): boolean {
+  try {
+    fs.lstatSync(absPath);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException)?.code !== "ENOENT";
+  }
 }

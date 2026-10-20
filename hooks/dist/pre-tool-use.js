@@ -42373,17 +42373,18 @@ function readRunSettingsSnapshot(guildRoot, runId) {
     agentMode: null,
     blockUnmarkedLanes: null
   });
-  let raw;
-  try {
-    raw = fs67.readFileSync(path80.join(dir, "resolved-settings.json"), "utf8");
-  } catch {
-    return none("absent");
-  }
   let sidecar;
   try {
     sidecar = fs67.readFileSync(path80.join(dir, RESOLVED_SETTINGS_DIGEST_FILE), "utf8");
   } catch (err) {
     sidecar = err?.code === "ENOENT" ? null : "";
+  }
+  let raw;
+  try {
+    raw = fs67.readFileSync(path80.join(dir, "resolved-settings.json"), "utf8");
+  } catch (err) {
+    const missing = err?.code === "ENOENT";
+    return none(sidecar === null && missing ? "absent" : sidecar === null ? "unreadable" : "mismatch");
   }
   const integrity = verifyResolvedSettingsDigest(raw, sidecar);
   if (integrity === "mismatch") return none("mismatch");

@@ -363,12 +363,13 @@ export function isLeadProcess(env: NodeJS.ProcessEnv): boolean {
  * #146 — the run's resolved-settings snapshot, read ONCE.
  *
  * `integrity`:
- *   - "absent"     — no snapshot file (no proof; the guard does nothing);
- *   - "unreadable" — the file exists but is not a JSON object;
+ *   - "absent"     — no snapshot file and no sidecar (no proof; the guard does nothing);
+ *   - "unreadable" — no sidecar, and the file cannot be read or is not a JSON object;
  *   - "legacy"     — no digest sidecar: a run started before #146. Values are
  *                    read exactly as before (migration path);
  *   - "verified"   — the sidecar digest matches the bytes parsed;
- *   - "mismatch"   — the sidecar is malformed or names other bytes. NO value is
+ *   - "mismatch"   — the sidecar is unreadable, malformed, or names other bytes,
+ *                    or a bound snapshot is gone/unreadable. NO value is
  *                    returned: the caller fails closed (`snapshotTampered`).
  *
  * The digest and both fields come from ONE `readFileSync`, so the values the
@@ -387,12 +388,6 @@ export function readRunSettingsSnapshot(guildRoot: string, runId: string): RunSe
     agentMode: null,
     blockUnmarkedLanes: null,
   });
-  let raw: string;
-  try {
-    raw = fs.readFileSync(path.join(dir, "resolved-settings.json"), "utf8");
-  } catch {
-    return none("absent");
-  }
   let sidecar: string | null;
   try {
     sidecar = fs.readFileSync(path.join(dir, RESOLVED_SETTINGS_DIGEST_FILE), "utf8");
@@ -400,6 +395,15 @@ export function readRunSettingsSnapshot(guildRoot: string, runId: string): RunSe
     // Only a genuinely missing sidecar is "legacy"; any other read failure is
     // an unverifiable binding and must not downgrade to "no binding".
     sidecar = (err as NodeJS.ErrnoException)?.code === "ENOENT" ? null : "";
+  }
+  let raw: string;
+  try {
+    raw = fs.readFileSync(path.join(dir, "resolved-settings.json"), "utf8");
+  } catch (err) {
+    // A bound snapshot that is gone or unreadable is tampering, not "no proof".
+    // Unbound (legacy) runs keep the old fail-open posture.
+    const missing = (err as NodeJS.ErrnoException)?.code === "ENOENT";
+    return none(sidecar === null && missing ? "absent" : sidecar === null ? "unreadable" : "mismatch");
   }
   const integrity = verifyResolvedSettingsDigest(raw, sidecar);
   if (integrity === "mismatch") return none("mismatch");
