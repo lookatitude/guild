@@ -175,7 +175,7 @@ node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/cl
   --dispatched-at <epoch-ms> [--timeout-ms <ms>]
 ```
 
-`--dispatched-at` is this attempt's dispatch time in epoch milliseconds (capture `node -p Date.now()` just before the spawn; never a whole-second value). A receipt written before it belongs to an earlier attempt and is ignored, so a retry never collects the previous attempt's result.
+`--dispatched-at` is this attempt's dispatch time in epoch milliseconds (capture `node -p 'Date.now()'` just before the spawn; never a whole-second value). A receipt written before it belongs to an earlier attempt and is ignored, so a retry never collects the previous attempt's result.
 
 It prints one `guild.lane_receipt_wait.v1` line with status `done` (exit 0), or `failed` / `missing` (exit 1; `missing` = no valid receipt before the timeout, default 30 min). It writes that status into the run-state lane checkpoint, so a lane dispatched outside the launcher still reaches the Stop backstop and `guild:verify-done`. Treat `failed` / `missing` as a failed attempt (`## Lane retry + dead-lettering`), then stop the resident teammate.
 
