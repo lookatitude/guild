@@ -891,6 +891,68 @@ describe("agent-team-launcher.ts", () => {
       }
     });
 
+    it("#237: two team entries sharing a role launch under distinct lane ids", () => {
+      const teamDir = path.join(tmpDir, ".guild", "team");
+      fs.mkdirSync(teamDir, { recursive: true });
+      const teamPath = path.join(teamDir, "test-slug.yaml");
+      fs.writeFileSync(
+        teamPath,
+        [
+          "spec: .guild/spec/test-slug.md",
+          "backend: agent-team",
+          "user_approved_agent_team: true",
+          "specialists:",
+          "  - name: developer",
+          '    scope: "Lane A: src/version.js"',
+          "    depends-on: []",
+          "  - name: developer",
+          '    scope: "Lane B: src/cli.js"',
+          "    depends-on: []",
+          "",
+        ].join("\n"),
+      );
+      const planDir = path.join(tmpDir, ".guild", "plan");
+      fs.mkdirSync(planDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(planDir, "test-slug.md"),
+        [
+          "## Lane: version module",
+          "- task-id: A-version",
+          "- owner: developer",
+          "",
+          "## Lane: cli flag",
+          "- task-id: B-cli",
+          "- owner: developer",
+          "- depends-on: [A-version]",
+          "",
+        ].join("\n"),
+      );
+      const ctxDir = path.join(tmpDir, ".guild", "context", INHERITED_RUN_ID);
+      fs.mkdirSync(ctxDir, { recursive: true });
+      for (const bundle of ["developer-A-version", "developer-B-cli"]) {
+        fs.writeFileSync(path.join(ctxDir, `${bundle}.md`), `# ${bundle}\n`);
+      }
+      const result = runScript(
+        ["--team", teamPath, "--session-name", "guild-test-237", "--cwd", tmpDir],
+        { PATH: `${makeLaunchableTmuxBin(tmpDir)}:${process.env["PATH"] ?? ""}` },
+      );
+      expect(result.stderr).not.toContain("unique logical task id");
+      expect(result.exitCode).toBe(0);
+      const cellsRoot = path.join(tmpDir, ".guild", "runs", INHERITED_RUN_ID, "task-cells");
+      const assignments = ["A-version", "B-cli"].map((lt) => {
+        const instances = path.join(cellsRoot, lt, "attempts", "1", "instances");
+        const ids = fs.readdirSync(instances);
+        expect(ids).toHaveLength(1);
+        return JSON.parse(fs.readFileSync(path.join(instances, ids[0], "assignment.json"), "utf8"));
+      });
+      expect(assignments.map((a) => a.worker_role)).toEqual(["developer", "developer"]);
+      expect(assignments[0].instance_id).not.toBe(assignments[1].instance_id);
+      // Each entry keeps its own authored lane: plan order pairs entry i with task i.
+      const manifest = fs.readFileSync(findSessionJson(tmpDir)!, "utf8");
+      expect(manifest).toContain("A-version");
+      expect(manifest).toContain("B-cli");
+    });
+
     it("prints tmux commands to stdout in dry-run mode", () => {
       const { teamPath } = setupConsumerRepo(tmpDir, "test-slug", "team-agent-team.yaml");
       const { stdout } = runScript([

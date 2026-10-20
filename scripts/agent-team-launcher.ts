@@ -3209,9 +3209,11 @@ async function main(): Promise<void> {
   // routing computation but MUST NOT materialize that channel or any evidence.
   {
     if (!args.dryRun) {
-      for (const spec of team.specialists) {
-        const taskIds = preRoutingOwnerMap.get(spec.name);
-        const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [spec.name];
+      // #237: one task_run per launch lane, so same-role entries never write a
+      // task twice or fall back to one shared role-named task.
+      for (const lane of globalLaunchLanes) {
+        const spec = lane;
+        const effectiveTaskIds = [lane.taskId];
         const cr = spec.capabilityRequirements;
         for (const taskId of effectiveTaskIds) {
           writeTaskRun(cwd, runId, taskId, {
