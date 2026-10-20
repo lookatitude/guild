@@ -13698,6 +13698,12 @@ var init_guild_discovery = __esm({
   }
 });
 
+// src/domains/state/snapshot-digest.ts
+var init_snapshot_digest = __esm({
+  "src/domains/state/snapshot-digest.ts"() {
+  }
+});
+
 // src/domains/state/index-migrate.ts
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
@@ -15885,6 +15891,7 @@ var init_state = __esm({
     init_frontmatter();
     init_guild_discovery();
     init_guild_root();
+    init_snapshot_digest();
     init_index_cache();
     init_storage_artifact_registry();
     init_storage_fs();
@@ -39806,6 +39813,7 @@ var init_run_lifecycle = __esm({
     init_run_binding();
     init_security();
     init_telemetry();
+    init_state();
     init_state();
     init_state();
     HOST_FAMILY_TO_KIND = Object.freeze({

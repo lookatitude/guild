@@ -51,7 +51,12 @@ import { spawnSync } from "child_process";
 import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import { hostCapabilityCacheDir, hostCapabilityCacheFile } from "../src/domains/state";
+import {
+  hostCapabilityCacheDir,
+  hostCapabilityCacheFile,
+  RESOLVED_SETTINGS_DIGEST_FILE,
+  verifyResolvedSettingsDigest,
+} from "../src/domains/state";
 // RE-4: the tmux spawn logic now lives behind the TeamBackend seam. The
 // launcher is the CLI front-end (arg parse + D5 ladder + collision UX +
 // manifest + attach) and delegates compose/probe/spawn to TmuxTeamBackend.
@@ -1944,8 +1949,16 @@ function readFrozenDispatchResolution(
   if (!fs.existsSync(snapshotPath)) return null;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(fs.readFileSync(snapshotPath, "utf8"));
-  } catch {
+    const raw = fs.readFileSync(snapshotPath, "utf8");
+    // #146: hash the same bytes we parse; a run with no sidecar predates #146.
+    const sidecarPath = path.join(path.dirname(snapshotPath), RESOLVED_SETTINGS_DIGEST_FILE);
+    const sidecar = fs.existsSync(sidecarPath) ? fs.readFileSync(sidecarPath, "utf8") : null;
+    if (verifyResolvedSettingsDigest(raw, sidecar) === "mismatch") {
+      throw new Error(`frozen dispatch authority does not match its run-start digest: ${snapshotPath}`);
+    }
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("frozen dispatch authority")) throw err;
     throw new Error(`frozen dispatch authority is unreadable: ${snapshotPath}`);
   }
   if (parsed === null || typeof parsed !== "object") {

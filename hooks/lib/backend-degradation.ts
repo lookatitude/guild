@@ -69,7 +69,12 @@ import type { DispatchAttribution } from "./dispatch-attribution.js";
 // bytes, an 8x regression on the hottest hook Guild ships, which is why
 // `readSnapshotBlockUnmarkedLanes` below reads the frozen run snapshot instead.
 import { DEFAULTS as CONFIG_DEFAULTS } from "../../scripts/lib/shared/config-defaults.js";
-import { durableGuildDir } from "../../src/domains/state";
+import {
+  durableGuildDir,
+  RESOLVED_SETTINGS_DIGEST_FILE,
+  verifyResolvedSettingsDigest,
+  type SnapshotDigestVerdict,
+} from "../../src/domains/state";
 
 /** The env var an operator sets to consciously accept a backend downgrade. */
 export const OVERRIDE_ENV = "GUILD_ALLOW_BACKEND_DEGRADE";
@@ -191,11 +196,19 @@ export function hasHandoffProtocolBlock(prompt: string, runId: string): boolean 
  * How strong the evidence is that this `Agent` dispatch is a Guild specialist
  * LANE. The STRENGTH decides whether the detector may BLOCK:
  *
- *   - "structured" — the dispatch carries a producer-set carrier in its OWN
- *     `env` MAP (`GUILD_SPECIALIST` / `GUILD_TASK_ID` / `GUILD_AGENT_DEFINITION`,
- *     set by `composeInProcessDispatch`). An env map is composed by whoever
- *     issues the dispatch; it is structurally out of reach of any text a prompt
- *     merely QUOTES. Blockable.
+ *   - "structured" — the dispatch's OWN `env` MAP carries a valid producer
+ *     marker (`GUILD_DISPATCH_PRODUCER=guild.dispatch.v<N>`, set by
+ *     `composeInProcessDispatch` / `paneCommand` / the D5 skill rung). An env map
+ *     is composed by whoever issues the dispatch; it is structurally out of
+ *     reach of any text a prompt merely QUOTES. Blockable.
+ *
+ *   - "carrier_only" (#144) — the env map carries a lane carrier
+ *     (`GUILD_SPECIALIST` / `GUILD_TASK_ID` / `GUILD_AGENT_DEFINITION`) but NOT a
+ *     valid producer marker: the marker token was stripped, or the dispatch
+ *     predates #85. Still env-borne, so it stays blockable everywhere
+ *     "structured" is (no default weakens). Strict mode
+ *     (`block_unmarked_lanes`) additionally denies it in every agent_mode —
+ *     that is what makes the env marker a REQUIRED corroborating signal.
  *
  *   - "prompt_only" — every remaining signal, ALL of which are read out of the
  *     prompt body: the handoff-protocol block, and #58's prompt-derived
@@ -211,7 +224,15 @@ export function hasHandoffProtocolBlock(prompt: string, runId: string): boolean 
  *   - "none" — a learn-lane generic fan-out, an Explore sweep, any non-Guild
  *     `Agent` call. Untouched.
  */
-export type LaneEvidence = "structured" | "prompt_only" | "none";
+export type LaneEvidence = "structured" | "carrier_only" | "prompt_only" | "none";
+
+/**
+ * Evidence read from the dispatch's own env map — out of reach of quoted prose,
+ * so a guard may block on it. The one predicate every blocking rung uses.
+ */
+export function isEnvBorneEvidence(evidence: LaneEvidence): boolean {
+  return evidence === "structured" || evidence === "carrier_only";
+}
 
 /**
  * The universal structured producer marker key (rf-wi-03 / G3). Set on EVERY
@@ -290,7 +311,10 @@ export function classifyLaneEvidence(
   prompt: string,
   runId: string,
 ): LaneEvidence {
-  if (hasStructuredCarrier(toolInput)) return "structured";
+  // #144: the env marker is the required corroborating signal. Carriers without
+  // it are still env-borne, but they are not producer-proven.
+  if (hasProducerMarker(toolInput)) return "structured";
+  if (hasStructuredCarrier(toolInput)) return "carrier_only";
   if (hasHandoffProtocolBlock(prompt, runId)) return "prompt_only";
   // #58's remaining signals are all parsed out of the prompt — observable, but
   // never blockable on their own.
@@ -336,6 +360,73 @@ export function isLeadProcess(env: NodeJS.ProcessEnv): boolean {
 // ── Resolved-settings snapshot (read, never re-resolve) ──────────────────────
 
 /**
+ * #146 — the run's resolved-settings snapshot, read ONCE.
+ *
+ * `integrity`:
+ *   - "absent"     — no snapshot file (no proof; the guard does nothing);
+ *   - "unreadable" — the file exists but is not a JSON object;
+ *   - "legacy"     — no digest sidecar: a run started before #146. Values are
+ *                    read exactly as before (migration path);
+ *   - "verified"   — the sidecar digest matches the bytes parsed;
+ *   - "mismatch"   — the sidecar is malformed or names other bytes. NO value is
+ *                    returned: the caller fails closed (`snapshotTampered`).
+ *
+ * The digest and both fields come from ONE `readFileSync`, so the values the
+ * guard uses are the bytes that were verified.
+ */
+export interface RunSettingsSnapshot {
+  integrity: "absent" | "unreadable" | SnapshotDigestVerdict;
+  agentMode: string | null;
+  blockUnmarkedLanes: boolean | null;
+}
+
+export function readRunSettingsSnapshot(guildRoot: string, runId: string): RunSettingsSnapshot {
+  const dir = path.join(durableGuildDir(guildRoot), "runs", runId);
+  const none = (integrity: RunSettingsSnapshot["integrity"]): RunSettingsSnapshot => ({
+    integrity,
+    agentMode: null,
+    blockUnmarkedLanes: null,
+  });
+  let raw: string;
+  try {
+    raw = fs.readFileSync(path.join(dir, "resolved-settings.json"), "utf8");
+  } catch {
+    return none("absent");
+  }
+  let sidecar: string | null;
+  try {
+    sidecar = fs.readFileSync(path.join(dir, RESOLVED_SETTINGS_DIGEST_FILE), "utf8");
+  } catch (err) {
+    // Only a genuinely missing sidecar is "legacy"; any other read failure is
+    // an unverifiable binding and must not downgrade to "no binding".
+    sidecar = (err as NodeJS.ErrnoException)?.code === "ENOENT" ? null : "";
+  }
+  const integrity = verifyResolvedSettingsDigest(raw, sidecar);
+  if (integrity === "mismatch") return none("mismatch");
+  let doc: unknown;
+  try {
+    doc = JSON.parse(raw);
+  } catch {
+    return none("unreadable");
+  }
+  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return none("unreadable");
+  const effective = (doc as Record<string, unknown>)["effective"];
+  if (effective === null || typeof effective !== "object" || Array.isArray(effective)) {
+    return { ...none(integrity) };
+  }
+  const e = effective as Record<string, unknown>;
+  const mode = e["agent_mode"];
+  const strict = e["block_unmarked_lanes"];
+  return {
+    integrity,
+    agentMode: typeof mode === "string" && mode.length > 0 ? mode : null,
+    // A non-boolean is IGNORED, never coerced: the string "false" is truthy, and
+    // reading it as "on" would engage a BLOCKING gate nobody asked for.
+    blockUnmarkedLanes: typeof strict === "boolean" ? strict : null,
+  };
+}
+
+/**
  * Read `effective.agent_mode` from the run's U6 resolved-settings snapshot.
  * Returns null when the snapshot is absent, unreadable, malformed, or carries no
  * string agent_mode — i.e. the guard has no PROOF of what the run resolved to
@@ -347,26 +438,7 @@ export function isLeadProcess(env: NodeJS.ProcessEnv): boolean {
  * caller (`isSafeRunId`) — this function does not re-derive path safety.
  */
 export function readSnapshotAgentMode(guildRoot: string, runId: string): string | null {
-  const file = path.join(durableGuildDir(guildRoot), "runs", runId, "resolved-settings.json");
-  let raw: string;
-  try {
-    raw = fs.readFileSync(file, "utf8");
-  } catch {
-    return null;
-  }
-  let doc: unknown;
-  try {
-    doc = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return null;
-  const effective = (doc as Record<string, unknown>)["effective"];
-  if (effective === null || typeof effective !== "object" || Array.isArray(effective)) {
-    return null;
-  }
-  const mode = (effective as Record<string, unknown>)["agent_mode"];
-  return typeof mode === "string" && mode.length > 0 ? mode : null;
+  return readRunSettingsSnapshot(guildRoot, runId).agentMode;
 }
 
 // ── Run freshness ────────────────────────────────────────────────────────────
@@ -671,22 +743,7 @@ export function readSnapshotBlockUnmarkedLanes(
   guildRoot: string,
   runId: string,
 ): boolean | null {
-  const file = path.join(durableGuildDir(guildRoot), "runs", runId, "resolved-settings.json");
-  let doc: unknown;
-  try {
-    doc = JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return null;
-  }
-  if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return null;
-  const effective = (doc as Record<string, unknown>)["effective"];
-  if (effective === null || typeof effective !== "object" || Array.isArray(effective)) {
-    return null;
-  }
-  const v = (effective as Record<string, unknown>)["block_unmarked_lanes"];
-  // A non-boolean is IGNORED, never coerced: the string "false" is truthy, and
-  // reading it as "on" would engage a BLOCKING gate nobody asked for.
-  return typeof v === "boolean" ? v : null;
+  return readRunSettingsSnapshot(guildRoot, runId).blockUnmarkedLanes;
 }
 
 /**
@@ -703,10 +760,17 @@ export function resolveBlockUnmarkedLanes(
   runId: string,
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
+  return resolveBlockUnmarkedFromSnapshot(readRunSettingsSnapshot(guildRoot, runId), env);
+}
+
+/** The same precedence over an already-read snapshot (#146: one parse per hook). */
+export function resolveBlockUnmarkedFromSnapshot(
+  snapshot: RunSettingsSnapshot,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
   const fromEnv = parseBlockUnmarkedEnv(env);
   if (fromEnv !== null) return fromEnv;
-  const fromSnapshot = readSnapshotBlockUnmarkedLanes(guildRoot, runId);
-  if (fromSnapshot !== null) return fromSnapshot;
+  if (snapshot.blockUnmarkedLanes !== null) return snapshot.blockUnmarkedLanes;
   return DEFAULT_BLOCK_UNMARKED_LANES;
 }
 
@@ -769,7 +833,19 @@ export type BackendDegradationReason =
    * would contradict the shipping ladder. Recorded, not blocked — which is still
    * the fix for the silence: the downgrade now leaves a durable receipt.
    */
-  | "team_substrate_unavailable";
+  | "team_substrate_unavailable"
+  /**
+   * #144 — strict mode (`block_unmarked_lanes`) is engaged and the lane carries
+   * env lane carriers but NO valid `GUILD_DISPATCH_PRODUCER` marker. Denied in
+   * every agent_mode: a genuine producer always stamps the marker.
+   */
+  | "producer_marker_missing"
+  /**
+   * #146 — the run's `resolved-settings.json` no longer matches the digest
+   * recorded at run start. The guard cannot trust `agent_mode`, so it fails
+   * closed on every env-evidenced lane.
+   */
+  | "snapshot_integrity_failed";
 
 export interface BackendDegradationFacts {
   /** The raw `Agent` tool_input — the structured-carrier source. */
@@ -801,6 +877,11 @@ export interface BackendDegradationFacts {
    * operator turns strict mode on. Absent on hand-built facts ⇒ treated false.
    */
   blockUnmarked?: boolean;
+  /**
+   * #146 — the snapshot's digest did not verify. Absent ⇒ false. When true,
+   * `agentMode` / `blockUnmarked` must not have been read from the snapshot.
+   */
+  snapshotTampered?: boolean;
 }
 
 export interface BackendDegradationResult {
@@ -871,11 +952,22 @@ export function resolveBackendDegradation(
   if (!facts.runFresh) return base;
   if (evidence === "none") return base;
 
-  const hasSubstrate = facts.substrate !== "none";
+  const decide = (blockable: boolean): BackendDegradationDecision =>
+    !blockable ? "allow_recorded" : facts.overrideEngaged ? "allow_override" : "deny";
 
-  if (facts.agentMode === TEAM_AGENT_MODE && !hasSubstrate) {
-    return { ...base, decision: "allow_recorded", reason: "team_substrate_unavailable" };
+  // #146 — an edited snapshot is not authority for agent_mode, so every
+  // env-evidenced lane fails closed. Prompt-only text stays recorded: it is
+  // still indistinguishable from a quoted brief.
+  if (facts.snapshotTampered === true) {
+    return {
+      ...base,
+      decision: decide(isEnvBorneEvidence(evidence)),
+      reason: "snapshot_integrity_failed",
+    };
   }
+
+  const hasSubstrate = facts.substrate !== "none";
+  const blockUnmarked = facts.blockUnmarked === true;
 
   if (hasSubstrate) {
     const reason: BackendDegradationReason | null =
@@ -897,21 +989,30 @@ export function resolveBackendDegradation(
       // false positive is the conscious cost of strict mode, and the override
       // (`GUILD_ALLOW_BACKEND_DEGRADE`) is its documented escape — so the
       // override still only applies to a case that WOULD have been denied.
-      const blockUnmarked = facts.blockUnmarked === true;
+      //
+      // #144 — carrier_only is env-borne, so it blocks here exactly as
+      // "structured" always did; the reason stays the backend row.
       const blockable =
-        evidence === "structured" ||
+        isEnvBorneEvidence(evidence) ||
         (blockUnmarked && evidence === "prompt_only" && !hasProducerMarker(facts.toolInput));
       return {
         ...base,
-        decision: !blockable
-          ? "allow_recorded"
-          : facts.overrideEngaged
-            ? "allow_override"
-            : "deny",
+        decision: decide(blockable),
         reason,
         effectiveBackend: "team",
       };
     }
+  }
+
+  // #144 — strict mode makes the env marker REQUIRED in every other row (team
+  // with no substrate, auto without one, agent, subagent, no snapshot mode).
+  // Only env-borne carriers qualify, so no quoted brief can trip it.
+  if (blockUnmarked && evidence === "carrier_only") {
+    return { ...base, decision: decide(true), reason: "producer_marker_missing" };
+  }
+
+  if (facts.agentMode === TEAM_AGENT_MODE && !hasSubstrate) {
+    return { ...base, decision: "allow_recorded", reason: "team_substrate_unavailable" };
   }
 
   return base;
@@ -949,6 +1050,37 @@ export function remedyForSubstrate(substrate: SubstrateKind): string {
   );
 }
 
+/**
+ * #144 / #146 — the two rows that are not about the backend at all. Shared by
+ * the deny and allow messages so both describe the same invariant.
+ */
+function integrityClause(
+  reason: "producer_marker_missing" | "snapshot_integrity_failed",
+  role: string,
+  subagentType: string,
+): string {
+  if (reason === "producer_marker_missing") {
+    return (
+      `Guild dispatch integrity (#144): the "${role}" lane (subagent_type="${subagentType}") ` +
+      `carries Guild lane env carriers but NO valid ${PRODUCER_MARKER_ENV} marker in its ` +
+      `env, and strict mode (${BLOCK_UNMARKED_CONFIG_KEY} / ${BLOCK_UNMARKED_ENV}) requires ` +
+      `it. Every Guild producer (composeInProcessDispatch, buildPrompt, paneCommand, the ` +
+      `guild:execute-plan subagent rung) stamps ${PRODUCER_MARKER_ENV}=guild.dispatch.v1; a ` +
+      `lane without it was hand-built or had the token stripped. Re-dispatch through the ` +
+      `producer path. A pre-#85 dispatch can run with strict mode off, or once with ` +
+      `${OVERRIDE_ENV}=1 (a ${BACKEND_DEGRADATION_EVENT} receipt is written either way).`
+    );
+  }
+  return (
+    `Guild dispatch integrity (#146): this run's resolved-settings.json does not match ` +
+    `the digest recorded at run start (resolved-settings.sha256), so the guard cannot ` +
+    `trust its agent_mode or strict-mode setting. The "${role}" lane ` +
+    `(subagent_type="${subagentType}") is treated as unverified. Start a new run so ` +
+    `preflight writes a fresh snapshot, or accept the risk once with ${OVERRIDE_ENV}=1 ` +
+    `(a ${BACKEND_DEGRADATION_EVENT} receipt is written either way).`
+  );
+}
+
 /** How the resolved backend came to be "team" — for the operator-facing message. */
 function backendClause(reason: BackendDegradationReason): string {
   return reason === "auto_resolves_to_team"
@@ -974,6 +1106,9 @@ export function buildDenyMessage(
   substrate: SubstrateKind,
   evidence: LaneEvidence = "structured",
 ): string {
+  if (reason === "producer_marker_missing" || reason === "snapshot_integrity_failed") {
+    return `${integrityClause(reason, role, subagentType)} Blocking this dispatch.`;
+  }
   // G3 — a prompt-only DENY only happens under strict mode (`blockUnmarked`):
   // the lane carries no structured producer marker, so it was not composed by a
   // Guild producer (drift). Name that explicitly so the operator understands why
@@ -1033,6 +1168,13 @@ export function buildAllowMessage(
     `Quoted text is indistinguishable from a real brief, so this is recorded, not ` +
     `blocked.`;
 
+  if (reason === "producer_marker_missing" || reason === "snapshot_integrity_failed") {
+    const verdict =
+      decision === "allow_override"
+        ? `OVERRIDDEN: allowed because ${OVERRIDE_ENV} is set.`
+        : `The lane was identified from PROMPT TEXT alone, so it is recorded, not blocked.`;
+    return `${integrityClause(reason, role, subagentType)} ${verdict} ${tail}`;
+  }
   if (reason === "team_substrate_unavailable") {
     return (
       head +

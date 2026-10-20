@@ -60,6 +60,11 @@ import type { ResolvedSettingsSnapshot } from "./runstart-preflight";
 import { scrubbedWrite, type ScrubbedWriteResult, type ScrubSurface } from "../security";
 import { emitTraceEvent, makeAnalysisTraceEvent, type GuildTraceAnalysisV2 } from "../telemetry";
 import { durableGuildDir } from "../state";
+import {
+  RESOLVED_SETTINGS_DIGEST_FILE,
+  resolvedSettingsDigestRecord,
+  verifyResolvedSettingsDigest,
+} from "../state";
 import { createGuildStorage } from "../state";
 
 // ── Injected seams (B1 §4) ───────────────────────────────────────────────────
@@ -359,6 +364,9 @@ function logsDir(root: string, runId: string): string {
 }
 function resolvedSettingsPath(root: string, runId: string): string {
   return path.join(runDir(root, runId), "resolved-settings.json");
+}
+function resolvedSettingsDigestPath(root: string, runId: string): string {
+  return path.join(runDir(root, runId), RESOLVED_SETTINGS_DIGEST_FILE);
 }
 function pluginConfigSnapshotPath(root: string, runId: string): string {
   return path.join(runDir(root, runId), "plugin-config-snapshot.json");
@@ -1596,7 +1604,28 @@ export function writeResolvedSettingsSnapshot(
   } else {
     fs.writeFile(outPath, serialized);
   }
+  // #146: bind the WHOLE file. Hash the bytes that landed (the scrubber may have
+  // rewritten them), so readers verify exactly what they will parse. A blocked
+  // write left no snapshot, so there is nothing to bind.
+  const landed = fs.readFile(outPath);
+  if (landed !== null) {
+    fs.writeFile(resolvedSettingsDigestPath(cwd, runId), resolvedSettingsDigestRecord(landed));
+  }
   return outPath;
+}
+
+/**
+ * #146: thrown when a run's `resolved-settings.json` no longer matches the
+ * digest recorded at run start. The snapshot is not authority for anything.
+ */
+export class ResolvedSettingsIntegrityError extends Error {
+  constructor(readonly runId: string) {
+    super(
+      `[run-lifecycle] resolved-settings.json for run ${runId} does not match the ` +
+        `digest recorded at run start (${RESOLVED_SETTINGS_DIGEST_FILE}); refusing to use it`,
+    );
+    this.name = "ResolvedSettingsIntegrityError";
+  }
 }
 
 function hashOptionalFile(env: RunLifecycleEnv, file: string): string | null {
@@ -1725,6 +1754,10 @@ export function writePluginConfigSnapshot(
  * does not exist or is not valid JSON (default-safe — mid-run consumers degrade
  * gracefully rather than crashing on missing provenance).
  *
+ * #146: THROWS `ResolvedSettingsIntegrityError` when the run-start digest
+ * sidecar exists and does not match the bytes read. A run with no sidecar
+ * (started before #146) reads as before.
+ *
  * AC-10 consumer contract: phase skills call this when CONTINUING a run so
  * mid-run config edits don't silently change behavior. The snapshot was locked
  * in at startRun; this read-back restores it.
@@ -1749,6 +1782,10 @@ export function readResolvedSettingsSnapshot(
 
   const raw = fs.readFile(filePath);
   if (raw === null) return null;
+  const sidecar = fs.readFile(resolvedSettingsDigestPath(cwd, runId));
+  if (verifyResolvedSettingsDigest(raw, sidecar) === "mismatch") {
+    throw new ResolvedSettingsIntegrityError(runId);
+  }
   try {
     return JSON.parse(raw) as ResolvedSettingsSnapshot;
   } catch {

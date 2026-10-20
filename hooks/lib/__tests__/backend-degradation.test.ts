@@ -73,6 +73,9 @@ const COMPOSED_LANE = {
   subagent_type: "general-purpose",
   prompt: ADOPTION_PROMPT,
   env: {
+    // #144: a current producer stamps the env marker; without it the lane
+    // grades carrier_only (pinned in h2-dispatch-integrity.test.ts).
+    GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1",
     GUILD_RUN_ID: "run-x",
     GUILD_SPECIALIST: "devops",
     GUILD_TASK_ID: "wi-1",
@@ -211,7 +214,7 @@ describe("#56 — lane evidence tiers", () => {
     );
   });
 
-  it("GUILD_AGENT_DEFINITION ALONE is a structured carrier", () => {
+  it("GUILD_AGENT_DEFINITION ALONE is an env carrier (carrier_only: no producer marker)", () => {
     // hasLaneSignature omits it, so this shape used to grade "none" and pass.
     const input = {
       subagent_type: "general-purpose",
@@ -219,7 +222,7 @@ describe("#56 — lane evidence tiers", () => {
       env: { GUILD_AGENT_DEFINITION: ".guild/agents/devops.md" },
     };
     expect(hasStructuredCarrier(input)).toBe(true);
-    expect(classifyLaneEvidence(input, attrOf(input), input.prompt, RUN_ID)).toBe("structured");
+    expect(classifyLaneEvidence(input, attrOf(input), input.prompt, RUN_ID)).toBe("carrier_only");
   });
 
   it.each([

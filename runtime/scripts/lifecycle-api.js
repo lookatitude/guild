@@ -14065,6 +14065,30 @@ var init_guild_discovery = __esm({
   }
 });
 
+// src/domains/state/snapshot-digest.ts
+function resolvedSettingsDigest(raw) {
+  return DIGEST_PREFIX + crypto5.createHash("sha256").update(raw, "utf8").digest("hex");
+}
+function resolvedSettingsDigestRecord(raw) {
+  return resolvedSettingsDigest(raw) + "\n";
+}
+function verifyResolvedSettingsDigest(raw, sidecar) {
+  if (sidecar === null) return "legacy";
+  const recorded = sidecar.trim();
+  if (!recorded.startsWith(DIGEST_PREFIX)) return "mismatch";
+  if (!HEX64.test(recorded.slice(DIGEST_PREFIX.length))) return "mismatch";
+  return recorded === resolvedSettingsDigest(raw) ? "verified" : "mismatch";
+}
+var crypto5, RESOLVED_SETTINGS_DIGEST_FILE, DIGEST_PREFIX, HEX64;
+var init_snapshot_digest = __esm({
+  "src/domains/state/snapshot-digest.ts"() {
+    crypto5 = __toESM(require("node:crypto"));
+    RESOLVED_SETTINGS_DIGEST_FILE = "resolved-settings.sha256";
+    DIGEST_PREFIX = "sha256:";
+    HEX64 = /^[0-9a-f]{64}$/;
+  }
+});
+
 // src/domains/state/index-migrate.ts
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
@@ -15085,7 +15109,7 @@ function writeFile(ctx, abs, text) {
   fs15.writeFileSync(abs, text, "utf8");
 }
 function sha256(text) {
-  return crypto5.createHash("sha256").update(text).digest("hex");
+  return crypto6.createHash("sha256").update(text).digest("hex");
 }
 function filesUnder(dir, out = []) {
   for (const name of readdirSafe(dir)) {
@@ -15420,10 +15444,10 @@ function terminalRunStatus(runYaml) {
   const status = value.trim().toLowerCase();
   return TERMINAL_STATUSES2.includes(status) ? status : null;
 }
-var crypto5, fs15, path19, KNOWLEDGE_PREFIX, DERIVED_PATTERNS, v1Content, settingsPolicySplit, PINNED_KEYS, TIMESTAMP_RE, BLOCK_SCALAR, MAP_ENTRY, ktd22Strip, CACHE_TARGETS, cachesOut, TERMINAL_STATUSES2, closedRunReceipts, currentRunIdRetire, LEGACY_VERSION_TREE, skillVersionsDelete, AUTHORED_REGISTRIES, DERIVED_REGISTRIES, registryYamlRetire, glossaryCreate, UPGRADE_STEPS, UPGRADE_STEP_IDS;
+var crypto6, fs15, path19, KNOWLEDGE_PREFIX, DERIVED_PATTERNS, v1Content, settingsPolicySplit, PINNED_KEYS, TIMESTAMP_RE, BLOCK_SCALAR, MAP_ENTRY, ktd22Strip, CACHE_TARGETS, cachesOut, TERMINAL_STATUSES2, closedRunReceipts, currentRunIdRetire, LEGACY_VERSION_TREE, skillVersionsDelete, AUTHORED_REGISTRIES, DERIVED_REGISTRIES, registryYamlRetire, glossaryCreate, UPGRADE_STEPS, UPGRADE_STEP_IDS;
 var init_upgrade_steps = __esm({
   "src/domains/state/upgrade-steps.ts"() {
-    crypto5 = __toESM(require("node:crypto"));
+    crypto6 = __toESM(require("node:crypto"));
     fs15 = __toESM(require("node:fs"));
     path19 = __toESM(require("node:path"));
     init_upgrade_glossary();
@@ -16252,6 +16276,7 @@ var init_state = __esm({
     init_frontmatter();
     init_guild_discovery();
     init_guild_root();
+    init_snapshot_digest();
     init_index_cache();
     init_storage_artifact_registry();
     init_storage_fs();
@@ -16549,7 +16574,7 @@ function scrubbedWrite(outPath, content, opts) {
     }
     const result2 = { written: true, blocked: false };
     if (opts.surface === "bus") {
-      result2.sha256 = crypto6.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+      result2.sha256 = crypto7.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
     }
     return result2;
   }
@@ -16583,7 +16608,7 @@ function scrubbedWrite(outPath, content, opts) {
     }
     const result2 = { written: true, blocked: false };
     if (opts.surface === "bus") {
-      result2.sha256 = crypto6.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+      result2.sha256 = crypto7.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
     }
     return result2;
   }
@@ -16607,12 +16632,12 @@ function scrubbedWrite(outPath, content, opts) {
   writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
   return { written: false, blocked: true };
 }
-var fs20, path25, crypto6;
+var fs20, path25, crypto7;
 var init_scrubbed_write = __esm({
   "src/domains/security/scrubbed-write.ts"() {
     fs20 = __toESM(require("node:fs"));
     path25 = __toESM(require("node:path"));
-    crypto6 = __toESM(require("node:crypto"));
+    crypto7 = __toESM(require("node:crypto"));
     init_secrets();
     init_config();
     init_events();
@@ -17088,7 +17113,7 @@ var init_stable_lock = __esm({
 // src/domains/lifecycle/trace-v2.ts
 function genSpanId(runId, eventType, ts, actorId) {
   const material = `${runId}|${eventType}|${ts}|${actorId || "main"}`;
-  return crypto7.createHash("sha256").update(material).digest("hex").slice(0, 16);
+  return crypto8.createHash("sha256").update(material).digest("hex").slice(0, 16);
 }
 function num(v) {
   return typeof v === "number" && Number.isFinite(v) ? v : void 0;
@@ -17184,12 +17209,12 @@ function writePayloadSidecar(runDir3, evtId, input, redact2) {
     return void 0;
   }
 }
-var fs21, path27, crypto7, TRACE_EVENT_SCHEMA, TRACE_PAYLOAD_SCHEMA, SIDECAR_MAX_BYTES, LLM_CALL_EVENTS;
+var fs21, path27, crypto8, TRACE_EVENT_SCHEMA, TRACE_PAYLOAD_SCHEMA, SIDECAR_MAX_BYTES, LLM_CALL_EVENTS;
 var init_trace_v2 = __esm({
   "src/domains/lifecycle/trace-v2.ts"() {
     fs21 = __toESM(require("fs"));
     path27 = __toESM(require("path"));
-    crypto7 = __toESM(require("crypto"));
+    crypto8 = __toESM(require("crypto"));
     TRACE_EVENT_SCHEMA = "guild.trace_event.v2";
     TRACE_PAYLOAD_SCHEMA = "guild.trace_payload.v1";
     SIDECAR_MAX_BYTES = 16 * 1024;
@@ -20682,13 +20707,13 @@ function blockFromVerified(id) {
   };
 }
 function makeFingerprint(raw, salt) {
-  return "fp-" + crypto8.createHash("sha256").update(`${salt}
+  return "fp-" + crypto9.createHash("sha256").update(`${salt}
 ${raw}`, "utf8").digest("hex");
 }
 function loadOrCreateFingerprintSalt(root) {
   const p = path33.join(durableGuildDir(root), "indexes", "model-catalog", ".fp-salt");
   if (fsReal.existsSync(p)) return fsReal.readFileSync(p, "utf8").trim();
-  const salt = crypto8.randomBytes(32).toString("hex");
+  const salt = crypto9.randomBytes(32).toString("hex");
   fsReal.mkdirSync(path33.dirname(p), { recursive: true });
   fsReal.writeFileSync(p, salt + "\n", { encoding: "utf8", mode: 384 });
   return salt;
@@ -20740,10 +20765,10 @@ function restoreSessionContext(root, runId, fs78) {
   }
   return ctx;
 }
-var crypto8, fsReal, path33, UNKNOWN_TARGET;
+var crypto9, fsReal, path33, UNKNOWN_TARGET;
 var init_session_context = __esm({
   "src/domains/config/session-context.ts"() {
-    crypto8 = __toESM(require("crypto"));
+    crypto9 = __toESM(require("crypto"));
     fsReal = __toESM(require("fs"));
     path33 = __toESM(require("path"));
     init_provider_detect();
@@ -23957,7 +23982,7 @@ function resolveSettings2(opts) {
   try {
     const assembled = result2.config;
     if (_traceRunDir && _telemetry) {
-      const _fingerprint = crypto9.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
+      const _fingerprint = crypto10.createHash("sha256").update(JSON.stringify(assembled)).digest("hex").slice(0, 16);
       const sources = result2.sources;
       _telemetry.emitTraceEvent(
         _telemetry.makeConfigResolutionEvent({
@@ -23984,12 +24009,12 @@ function resolveSettings2(opts) {
   }
   return result2;
 }
-var fs30, path38, crypto9, _telemetryApi;
+var fs30, path38, crypto10, _telemetryApi;
 var init_settings_resolver = __esm({
   "src/domains/config/settings-resolver.ts"() {
     fs30 = __toESM(require("fs"));
     path38 = __toESM(require("path"));
-    crypto9 = __toESM(require("crypto"));
+    crypto10 = __toESM(require("crypto"));
     init_settings_reader();
     init_settings_reader();
     init_state();
@@ -24080,7 +24105,7 @@ function canonicalYamlFlat(map) {
 `).join("");
 }
 function sha256Hex2(text) {
-  return crypto10.createHash("sha256").update(text, "utf8").digest("hex");
+  return crypto11.createHash("sha256").update(text, "utf8").digest("hex");
 }
 function runScopeFor(input) {
   if (orgIsUnknown(input.org_fingerprint ?? void 0)) return input.run_id;
@@ -24278,10 +24303,10 @@ function purgeRunLocalEntries(store, runId) {
   }
   return purged;
 }
-var crypto10, fs31, path39, MODEL_CATALOG_SCHEMA_VERSION, DEFAULT_CATALOG_TTL_SECONDS, UNCACHED_DISCOVERY_BUDGET_MS, CACHED_INSPECTION_BUDGET_MS, MODEL_CATALOG_CACHE_DIRNAME, MODEL_CATALOG_CACHE_REL_SEGMENTS, MODEL_CATALOG_CACHE_REL, YAML_KEYWORD, YAML_NUMBER, YAML_SEXAGESIMAL, CACHE_KEY_COMPONENTS, UnknownOrgQuarantineViolation, CATALOG_CACHE_KEY_BRAND, MINTED_KEYS, NON_IDENTITY_KEYS, MemoryStore, tmpSequence, SAFE_KEY, FileStore, defaultSleep;
+var crypto11, fs31, path39, MODEL_CATALOG_SCHEMA_VERSION, DEFAULT_CATALOG_TTL_SECONDS, UNCACHED_DISCOVERY_BUDGET_MS, CACHED_INSPECTION_BUDGET_MS, MODEL_CATALOG_CACHE_DIRNAME, MODEL_CATALOG_CACHE_REL_SEGMENTS, MODEL_CATALOG_CACHE_REL, YAML_KEYWORD, YAML_NUMBER, YAML_SEXAGESIMAL, CACHE_KEY_COMPONENTS, UnknownOrgQuarantineViolation, CATALOG_CACHE_KEY_BRAND, MINTED_KEYS, NON_IDENTITY_KEYS, MemoryStore, tmpSequence, SAFE_KEY, FileStore, defaultSleep;
 var init_catalog_cache = __esm({
   "src/domains/config/catalog-cache.ts"() {
-    crypto10 = __toESM(require("crypto"));
+    crypto11 = __toESM(require("crypto"));
     fs31 = __toESM(require("fs"));
     path39 = __toESM(require("path"));
     init_state();
@@ -25442,7 +25467,7 @@ function buildCompatibilityCatalog(opts) {
         kind,
         id,
         path: rel2,
-        content_hash: crypto11.createHash("sha256").update(bytes).digest("hex"),
+        content_hash: crypto12.createHash("sha256").update(bytes).digest("hex"),
         deprecation,
         deprecated_by: deprecatedBy
       })
@@ -25749,10 +25774,10 @@ function requiredAssetIdsForG5(catalog, opts) {
   ids.sort();
   return { status: "ok", ids: Object.freeze(ids) };
 }
-var crypto11, fs32, path40, import_util3, COMPATIBILITY_CATALOG_SCHEMA, SHIPPED_TEMPLATE_COUNT, SHIPPED_DOMAIN_SKILL_IDS, SHIPPED_DOMAIN_SKILL_COUNT, SHIPPED_COMPATIBILITY_ASSET_COUNT, COMPATIBILITY_ASSET_ROOTS, COMPATIBILITY_DEPRECATION_STATES, DEPRECATION_STATE_SET, MAX_SCALAR_LEN3, MAX_ID_LEN2, CONTROL_CHARS4, CANONICAL_ID2, SHA256_HEX2, BUILD_KEYS, ENTRY_KEYS, SUGGESTABLE_KEYS, EMISSION_KEYS;
+var crypto12, fs32, path40, import_util3, COMPATIBILITY_CATALOG_SCHEMA, SHIPPED_TEMPLATE_COUNT, SHIPPED_DOMAIN_SKILL_IDS, SHIPPED_DOMAIN_SKILL_COUNT, SHIPPED_COMPATIBILITY_ASSET_COUNT, COMPATIBILITY_ASSET_ROOTS, COMPATIBILITY_DEPRECATION_STATES, DEPRECATION_STATE_SET, MAX_SCALAR_LEN3, MAX_ID_LEN2, CONTROL_CHARS4, CANONICAL_ID2, SHA256_HEX2, BUILD_KEYS, ENTRY_KEYS, SUGGESTABLE_KEYS, EMISSION_KEYS;
 var init_compatibility_catalog = __esm({
   "src/domains/config/compatibility-catalog.ts"() {
-    crypto11 = __toESM(require("crypto"));
+    crypto12 = __toESM(require("crypto"));
     fs32 = __toESM(require("fs"));
     path40 = __toESM(require("path"));
     import_util3 = require("util");
@@ -27636,7 +27661,7 @@ function shortHash(h) {
   return typeof h === "string" && h.length >= 12 ? h.slice(0, 12) : "unknown";
 }
 function fingerprint(value) {
-  return crypto12.createHash("sha256").update(value, "utf8").digest("hex").slice(0, 12);
+  return crypto13.createHash("sha256").update(value, "utf8").digest("hex").slice(0, 12);
 }
 function reject(rejections, field, category, value) {
   rejections.push({ field, category });
@@ -28002,10 +28027,10 @@ function runModelsCommand(argv, deps = {}) {
   }
   return 0;
 }
-var crypto12, fs37, path45, MODELS_COMMAND_USAGE, DISPLAY_TOKEN_RE, REVERSIBLE_IDENTITY_RE, CONTROL_CHAR_RE, FREE_TEXT_MAX;
+var crypto13, fs37, path45, MODELS_COMMAND_USAGE, DISPLAY_TOKEN_RE, REVERSIBLE_IDENTITY_RE, CONTROL_CHAR_RE, FREE_TEXT_MAX;
 var init_models_command = __esm({
   "src/domains/config/models-command.ts"() {
-    crypto12 = __toESM(require("crypto"));
+    crypto13 = __toESM(require("crypto"));
     fs37 = __toESM(require("fs"));
     path45 = __toESM(require("path"));
     init_session_context();
@@ -28944,7 +28969,7 @@ function composePrompt(base, extensions, host_family, model_family) {
     }
   }
   const text = parts.map((p) => p.text.trimEnd()).join("\n\n");
-  const hash = crypto13.createHash("sha256").update(`${host_family}\0${model_family}\0${text}`).digest("hex");
+  const hash = crypto14.createHash("sha256").update(`${host_family}\0${model_family}\0${text}`).digest("hex");
   return { text, dialect_id, overlay_ids: parts.map((p) => p.id), hash, skipped };
 }
 function loadPromptExtensions(guildDir, model_family) {
@@ -29010,10 +29035,10 @@ function composeSessionPrompt(input) {
     input.model_family
   );
 }
-var crypto13, fs39, path47, DIALECT_TOKEN_BUDGET, MODEL_NAME_RE, MODEL_FAMILIES, HOST_FAMILY_TOKENS_PROMPT, HOST_FAMILY_RE, YOU_ARE_HOST_RE, PromptRejectedError, PROMPTS_DIRNAME, USING_GUILD_OVERLAY, DIALECTS_DIRNAME, USING_GUILD_BASE_RELS, PLUGIN_DIALECTS_REL;
+var crypto14, fs39, path47, DIALECT_TOKEN_BUDGET, MODEL_NAME_RE, MODEL_FAMILIES, HOST_FAMILY_TOKENS_PROMPT, HOST_FAMILY_RE, YOU_ARE_HOST_RE, PromptRejectedError, PROMPTS_DIRNAME, USING_GUILD_OVERLAY, DIALECTS_DIRNAME, USING_GUILD_BASE_RELS, PLUGIN_DIALECTS_REL;
 var init_compose_prompt = __esm({
   "src/domains/config/compose-prompt.ts"() {
-    crypto13 = __toESM(require("node:crypto"));
+    crypto14 = __toESM(require("node:crypto"));
     fs39 = __toESM(require("node:fs"));
     path47 = __toESM(require("node:path"));
     DIALECT_TOKEN_BUDGET = 200;
@@ -30535,7 +30560,7 @@ function canonicalJson(value) {
   return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(",")}}`;
 }
 function sha2563(text) {
-  return `sha256:${crypto14.createHash("sha256").update(text, "utf8").digest("hex")}`;
+  return `sha256:${crypto15.createHash("sha256").update(text, "utf8").digest("hex")}`;
 }
 function sealReceiptRecord(input) {
   const body = {
@@ -31426,12 +31451,12 @@ function appendLocked(paths, input, io, authority, options) {
     failure: null
   };
 }
-var fs41, path50, crypto14, RECEIPT_CONTRACT_VERSION, RECEIPT_DISPOSITIONS, OBSERVATION_STATES, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES, UNPINNED_FD, JournalAuthorityDetachedError, ACTIVE_LOCK_PUBLICATION, defaultJournalIo, CANONICAL_PATH_MAX_LINK_HOPS, JournalIdentityError, JOURNAL_LOCK_MAX_ATTEMPTS, JOURNAL_LOCK_WAIT_MS, JOURNAL_ACCESS_FLAGS, REQUIRED_STRING_FIELDS;
+var fs41, path50, crypto15, RECEIPT_CONTRACT_VERSION, RECEIPT_DISPOSITIONS, OBSERVATION_STATES, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES, UNPINNED_FD, JournalAuthorityDetachedError, ACTIVE_LOCK_PUBLICATION, defaultJournalIo, CANONICAL_PATH_MAX_LINK_HOPS, JournalIdentityError, JOURNAL_LOCK_MAX_ATTEMPTS, JOURNAL_LOCK_WAIT_MS, JOURNAL_ACCESS_FLAGS, REQUIRED_STRING_FIELDS;
 var init_receipt_journal = __esm({
   "src/domains/telemetry/receipt-journal.ts"() {
     fs41 = __toESM(require("node:fs"));
     path50 = __toESM(require("node:path"));
-    crypto14 = __toESM(require("node:crypto"));
+    crypto15 = __toESM(require("node:crypto"));
     init_state();
     RECEIPT_CONTRACT_VERSION = "guild.observability.v1";
     RECEIPT_DISPOSITIONS = Object.freeze([
@@ -34342,7 +34367,7 @@ var init_per_host_packaging = __esm({
 
 // src/domains/distribution/release-distribution-contract.ts
 function sha2564(value) {
-  return crypto15.createHash("sha256").update(value).digest("hex");
+  return crypto16.createHash("sha256").update(value).digest("hex");
 }
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
@@ -34384,10 +34409,10 @@ function verifyReleaseClaim(claim, archive) {
   if (claim.host_support.supported !== false) errors.push("unsupported host cannot be promoted");
   return errors;
 }
-var crypto15, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
+var crypto16, RELEASE_CLAIM_SCHEMA, OPERATION_KINDS, ACCEPTED_CONFORMANCE_ARTIFACTS;
 var init_release_distribution_contract = __esm({
   "src/domains/distribution/release-distribution-contract.ts"() {
-    crypto15 = __toESM(require("node:crypto"));
+    crypto16 = __toESM(require("node:crypto"));
     RELEASE_CLAIM_SCHEMA = "guild.release_claim.v1";
     OPERATION_KINDS = Object.freeze(["render", "install", "activate", "update", "uninstall", "verify"]);
     ACCEPTED_CONFORMANCE_ARTIFACTS = Object.freeze([
@@ -37484,7 +37509,7 @@ function writeHarvestJournal(journal, opts = {}) {
   return p;
 }
 function newOpId(seed = "") {
-  return crypto16.createHash("sha256").update(`${seed}
+  return crypto17.createHash("sha256").update(`${seed}
 ${Date.now()}
 ${Math.random()}`, "utf8").digest("hex").slice(0, 16);
 }
@@ -37523,12 +37548,12 @@ function resumableOps(runId, opts = {}) {
   return readHarvestJournal(runId, opts).ops.filter((o) => RESUMABLE_STATUSES.has(o.status));
 }
 function sha2565(text) {
-  return crypto16.createHash("sha256").update(text, "utf8").digest("hex");
+  return crypto17.createHash("sha256").update(text, "utf8").digest("hex");
 }
-var crypto16, fs49, path60, HARVEST_JOURNAL_SCHEMA, TERMINAL_STATUSES3, RESUMABLE_STATUSES;
+var crypto17, fs49, path60, HARVEST_JOURNAL_SCHEMA, TERMINAL_STATUSES3, RESUMABLE_STATUSES;
 var init_harvest_journal = __esm({
   "src/domains/knowledge/harvest-journal.ts"() {
-    crypto16 = __toESM(require("node:crypto"));
+    crypto17 = __toESM(require("node:crypto"));
     fs49 = __toESM(require("node:fs"));
     path60 = __toESM(require("node:path"));
     init_state();
@@ -37603,7 +37628,7 @@ function indexOne(root, rel2) {
     title: titleOf(rel2, body),
     tokens: tokenize(`${titleOf(rel2, body)}
 ${body}`),
-    hash: crypto17.createHash("sha256").update(body, "utf8").digest("hex").slice(0, 16),
+    hash: crypto18.createHash("sha256").update(body, "utf8").digest("hex").slice(0, 16),
     mtime
   };
 }
@@ -37693,10 +37718,10 @@ function searchWiki(query, opts = {}) {
   if (kept.length === 0) return failOpen("reranker returned no known documents; served BM25");
   return { hits: kept, backend: "hybrid", built_index: built };
 }
-var crypto17, fs50, path61, WIKI_INDEX_SCHEMA, DEFAULT_MAX_HITS, DEFAULT_MIN_SCORE;
+var crypto18, fs50, path61, WIKI_INDEX_SCHEMA, DEFAULT_MAX_HITS, DEFAULT_MIN_SCORE;
 var init_wiki_index = __esm({
   "src/domains/knowledge/wiki-index.ts"() {
-    crypto17 = __toESM(require("node:crypto"));
+    crypto18 = __toESM(require("node:crypto"));
     fs50 = __toESM(require("node:fs"));
     path61 = __toESM(require("node:path"));
     init_bm25();
@@ -38828,7 +38853,7 @@ function readGitHead(root) {
 }
 function hashOpenQuestions(ids) {
   const sorted = [...ids].filter((s) => typeof s === "string").sort();
-  return crypto18.createHash("sha256").update(sorted.join("\n"), "utf8").digest("hex").slice(0, 32);
+  return crypto19.createHash("sha256").update(sorted.join("\n"), "utf8").digest("hex").slice(0, 32);
 }
 function storageFor3(opts) {
   return opts.storage ?? createGuildStorage(opts.cwd ?? process.cwd());
@@ -38902,10 +38927,10 @@ function buildWorkingSetCard(input) {
   }
   return card;
 }
-var crypto18, fs53, path64, WORKING_SET_SCHEMA, WORKING_SET_TOKEN_CAP;
+var crypto19, fs53, path64, WORKING_SET_SCHEMA, WORKING_SET_TOKEN_CAP;
 var init_working_set = __esm({
   "src/domains/knowledge/working-set.ts"() {
-    crypto18 = __toESM(require("node:crypto"));
+    crypto19 = __toESM(require("node:crypto"));
     fs53 = __toESM(require("node:fs"));
     path64 = __toESM(require("node:path"));
     init_state();
@@ -38916,12 +38941,12 @@ var init_working_set = __esm({
 
 // src/domains/knowledge/lane-bundle.ts
 function bundleId(cellId, fingerprint2) {
-  return crypto19.createHash("sha256").update(`${cellId}
+  return crypto20.createHash("sha256").update(`${cellId}
 ${fingerprint2}`, "utf8").digest("hex").slice(0, 16);
 }
 function fingerprintOf(ws) {
   const f = ws.fingerprint;
-  return crypto19.createHash("sha256").update(`${f.wiki_mtime}
+  return crypto20.createHash("sha256").update(`${f.wiki_mtime}
 ${f.git_head}
 ${f.open_questions_hash}`, "utf8").digest("hex").slice(0, 16);
 }
@@ -39006,10 +39031,10 @@ function assertNoSpecialistBundle(payload, where = "parent context") {
     );
   }
 }
-var crypto19, LANE_BUNDLE_SCHEMA, LANE_BUNDLE_TOKEN_CAP, SPECIALIST_BUNDLE_TOKEN_CAP, SPECIALIST_BUNDLE_MARKER;
+var crypto20, LANE_BUNDLE_SCHEMA, LANE_BUNDLE_TOKEN_CAP, SPECIALIST_BUNDLE_TOKEN_CAP, SPECIALIST_BUNDLE_MARKER;
 var init_lane_bundle = __esm({
   "src/domains/knowledge/lane-bundle.ts"() {
-    crypto19 = __toESM(require("node:crypto"));
+    crypto20 = __toESM(require("node:crypto"));
     init_glossary();
     init_working_set();
     LANE_BUNDLE_SCHEMA = "guild.lane_bundle.v1";
@@ -40101,7 +40126,7 @@ function resolveRecallBeforeRead(cwd) {
   return true;
 }
 function hashQuery(query) {
-  return crypto20.createHash("sha256").update(query).digest("hex").slice(0, 16);
+  return crypto21.createHash("sha256").update(query).digest("hex").slice(0, 16);
 }
 function rankWikiDocs(docs, wikiBase, limit, composite) {
   const scoring = docs.filter((d) => d.score > 0);
@@ -40434,7 +40459,7 @@ function recall(query, opts) {
   const _traceBranch = allChunks.length === 0 ? "empty" : source === "combined" ? "combined" : source === "structural" ? "structural" : source;
   try {
     const _analysisTs = (/* @__PURE__ */ new Date()).toISOString();
-    const _spanId = crypto20.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
+    const _spanId = crypto21.createHash("sha256").update(`${runId ?? ""}|recall|${_analysisTs}|${_laneId}`).digest("hex").slice(0, 16);
     emitTraceEvent(
       makeAnalysisTraceEvent({
         ts: new Date(_traceStart).toISOString(),
@@ -40600,12 +40625,12 @@ function runRecallCli() {
   }
   process.stdout.write(JSON.stringify(result2) + "\n");
 }
-var fs62, path73, crypto20, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
+var fs62, path73, crypto21, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
 var init_recall = __esm({
   "src/domains/knowledge/recall.ts"() {
     fs62 = __toESM(require("node:fs"));
     path73 = __toESM(require("node:path"));
-    crypto20 = __toESM(require("node:crypto"));
+    crypto21 = __toESM(require("node:crypto"));
     init_state();
     init_wiki_recall();
     init_fs_scanner();
@@ -43287,7 +43312,7 @@ var init_evolve_targets = __esm({
 
 // src/domains/evolve/evolve-delta.ts
 function sha2566(text) {
-  return crypto21.createHash("sha256").update(text, "utf8").digest("hex");
+  return crypto22.createHash("sha256").update(text, "utf8").digest("hex");
 }
 function headingText(line) {
   return line.replace(/^[ \t]*#{1,6}[ \t]*/, "").replace(/[ \t]*#*[ \t]*$/, "").replace(/^[*_~`]+/, "").replace(/[*_~`:]+$/, "").trim();
@@ -43440,10 +43465,10 @@ function planEvolveDelta(delta, currentText) {
     delta
   };
 }
-var crypto21, EVOLVE_DELTA_OPS, STACKED_TITLE_RE, DATED_UPDATE_RE, CURATOR_SPAN_RE;
+var crypto22, EVOLVE_DELTA_OPS, STACKED_TITLE_RE, DATED_UPDATE_RE, CURATOR_SPAN_RE;
 var init_evolve_delta = __esm({
   "src/domains/evolve/evolve-delta.ts"() {
-    crypto21 = __toESM(require("node:crypto"));
+    crypto22 = __toESM(require("node:crypto"));
     init_knowledge();
     init_kernel();
     init_evolve_targets();
@@ -44933,7 +44958,7 @@ function mintRunBinding(opts) {
   const record = {
     schema_version: "guild.run_binding.v1",
     run_id: opts.run_id,
-    binding_ref: `rb-${crypto22.randomBytes(16).toString("hex")}`,
+    binding_ref: `rb-${crypto23.randomBytes(16).toString("hex")}`,
     state: "open"
   };
   fs78.mkdirp(path83.dirname(p));
@@ -45047,10 +45072,10 @@ function readHookBindingEnvelope(env) {
   if (!run_id || !binding_ref) return null;
   return { run_id, binding_ref };
 }
-var crypto22, fsReal2, path83, BindingRejectedError, PENDING_SUBSTANTIVE_OPERATION_SCHEMA, HOOK_BINDING_ENV_RUN_ID, HOOK_BINDING_ENV_BINDING_REF;
+var crypto23, fsReal2, path83, BindingRejectedError, PENDING_SUBSTANTIVE_OPERATION_SCHEMA, HOOK_BINDING_ENV_RUN_ID, HOOK_BINDING_ENV_BINDING_REF;
 var init_run_binding = __esm({
   "src/domains/lifecycle/run-binding.ts"() {
-    crypto22 = __toESM(require("crypto"));
+    crypto23 = __toESM(require("crypto"));
     fsReal2 = __toESM(require("fs"));
     path83 = __toESM(require("path"));
     init_kernel();
@@ -45084,7 +45109,7 @@ function capabilityRunStartIdentityHash(runId, startedAt, snapshotHash) {
     started_at: startedAt,
     capability_start_snapshot_sha256: snapshotHash
   });
-  return `sha256:${crypto23.createHash("sha256").update(body).digest("hex")}`;
+  return `sha256:${crypto24.createHash("sha256").update(body).digest("hex")}`;
 }
 function runDir2(root, runId) {
   return path84.join(durableGuildDir(root), "runs", runId);
@@ -45100,6 +45125,9 @@ function logsDir(root, runId) {
 }
 function resolvedSettingsPath(root, runId) {
   return path84.join(runDir2(root, runId), "resolved-settings.json");
+}
+function resolvedSettingsDigestPath(root, runId) {
+  return path84.join(runDir2(root, runId), RESOLVED_SETTINGS_DIGEST_FILE);
 }
 function pluginConfigSnapshotPath(root, runId) {
   return path84.join(runDir2(root, runId), "plugin-config-snapshot.json");
@@ -45152,10 +45180,10 @@ function deriveRunSlug(opts) {
     const slug = runSlug(candidate);
     if (slug) return slug;
   }
-  return crypto23.randomUUID();
+  return crypto24.randomUUID();
 }
 function makeCanonicalRunId(nowIso, slugSource) {
-  const slug = runSlug(slugSource) || crypto23.randomUUID();
+  const slug = runSlug(slugSource) || crypto24.randomUUID();
   return assertCanonicalRunId(`run-${utcCompact(nowIso)}-${slug}`);
 }
 function makeRunId(opts, nowIso) {
@@ -45409,7 +45437,7 @@ function appendPhase(env, root, runId, phase) {
   return true;
 }
 function phaseVisitSpanId(runId, index, phase, at) {
-  return crypto23.createHash("sha256").update(`${runId}|phase|${index}|${phase}|${at}`).digest("hex").slice(0, 16);
+  return crypto24.createHash("sha256").update(`${runId}|phase|${index}|${phase}|${at}`).digest("hex").slice(0, 16);
 }
 function readPhaseVisits(raw) {
   try {
@@ -45468,7 +45496,7 @@ function createRunLifecycle(env) {
       const nowIso = env.now();
       const preferredRunId = makeRunId(opts, nowIso);
       const root = opts.root;
-      const runId = env.fs.exists(runDir2(root, preferredRunId)) ? makeCanonicalRunId(nowIso, `${deriveRunSlug(opts)}-${crypto23.randomUUID()}`) : preferredRunId;
+      const runId = env.fs.exists(runDir2(root, preferredRunId)) ? makeCanonicalRunId(nowIso, `${deriveRunSlug(opts)}-${crypto24.randomUUID()}`) : preferredRunId;
       const runClass = opts.run_class ?? "full";
       const capabilityBaseline = runClass === "full" ? env.captureCapabilityBaseline?.(root, runId) ?? null : null;
       if (runClass === "full" && env.captureCapabilityBaseline && (!capabilityBaseline || capabilityBaseline.bound_run_id !== runId)) {
@@ -45516,7 +45544,7 @@ function createRunLifecycle(env) {
             ...capabilityBaseline
           }, null, 2)}
 `;
-          capabilityBaselineHash = crypto23.createHash("sha256").update(snapshotBytes).digest("hex");
+          capabilityBaselineHash = crypto24.createHash("sha256").update(snapshotBytes).digest("hex");
           env.fs.writeFile(capabilityRunStartSnapshotPath(root, runId), snapshotBytes);
         }
         let resolvedSettingsWritten = false;
@@ -45641,7 +45669,7 @@ function createRunLifecycle(env) {
         const now = env.now();
         const finalCheckpoint = runClass === "lightweight" ? null : opts.final_learning_checkpoint ?? null;
         const terminalTraceEvent = {
-          event_id: `evt-${crypto23.randomUUID()}`,
+          event_id: `evt-${crypto24.randomUUID()}`,
           event_name: "run_closed",
           at: now,
           log_ref: logRefFor(runId)
@@ -45843,11 +45871,15 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
   } else {
     fs78.writeFile(outPath, serialized);
   }
+  const landed = fs78.readFile(outPath);
+  if (landed !== null) {
+    fs78.writeFile(resolvedSettingsDigestPath(cwd, runId), resolvedSettingsDigestRecord(landed));
+  }
   return outPath;
 }
 function hashOptionalFile(env, file) {
   const raw = env.fs.readFile(file);
-  return raw === null ? null : crypto23.createHash("sha256").update(raw).digest("hex");
+  return raw === null ? null : crypto24.createHash("sha256").update(raw).digest("hex");
 }
 function derivePluginIdentity(start, env) {
   const pluginManifestPath = path84.join(start.root, ".claude-plugin", "plugin.json");
@@ -45860,7 +45892,7 @@ function derivePluginIdentity(start, env) {
     } catch {
     }
   }
-  const manifestHash = pluginManifest === null ? null : crypto23.createHash("sha256").update(pluginManifest).digest("hex");
+  const manifestHash = pluginManifest === null ? null : crypto24.createHash("sha256").update(pluginManifest).digest("hex");
   const commandSurfaceHash = hashOptionalFile(env, path84.join(start.root, "command-src", "command-registry.json"));
   return {
     version: start.plugin_identity?.version ?? manifestVersion ?? "unknown",
@@ -45949,6 +45981,10 @@ function readResolvedSettingsSnapshot(runId, opts) {
   }
   const raw = fs78.readFile(filePath);
   if (raw === null) return null;
+  const sidecar = fs78.readFile(resolvedSettingsDigestPath(cwd, runId));
+  if (verifyResolvedSettingsDigest(raw, sidecar) === "mismatch") {
+    throw new ResolvedSettingsIntegrityError(runId);
+  }
   try {
     return JSON.parse(raw);
   } catch {
@@ -46020,7 +46056,7 @@ function appendGateOutcome(fs78, root, runId, gate, record, trace = {}) {
     ts,
     event_class: "gate_concluded",
     status: record.outcome === "pass" ? "ok" : record.outcome === "fail" ? "error" : "unknown",
-    span_id: crypto23.createHash("sha256").update(`${runId}|gate|${gate}|${ts}`).digest("hex").slice(0, 16),
+    span_id: crypto24.createHash("sha256").update(`${runId}|gate|${gate}|${ts}`).digest("hex").slice(0, 16),
     signature: `gate:${gate}`
   });
   return true;
@@ -46044,10 +46080,10 @@ function readRunStartedAt2(runDir3, readFile = (p) => {
   if (v === void 0 || v === null) return null;
   return String(v).trim() || null;
 }
-var crypto23, fsNode, path84, CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, CANONICAL_RUN_ID_RE, HOST_FAMILY_TO_KIND, CANONICAL_PHASES, WORKSPACE_KNOWLEDGE_DEFAULTS, GATE_TOKEN;
+var crypto24, fsNode, path84, CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, CANONICAL_RUN_ID_RE, HOST_FAMILY_TO_KIND, CANONICAL_PHASES, ResolvedSettingsIntegrityError, WORKSPACE_KNOWLEDGE_DEFAULTS, GATE_TOKEN;
 var init_run_lifecycle = __esm({
   "src/domains/lifecycle/run-lifecycle.ts"() {
-    crypto23 = __toESM(require("crypto"));
+    crypto24 = __toESM(require("crypto"));
     init_config2();
     init_config2();
     init_config2();
@@ -46062,6 +46098,7 @@ var init_run_lifecycle = __esm({
     init_telemetry();
     init_state();
     init_state();
+    init_state();
     CAPABILITY_RUN_START_SNAPSHOT_SCHEMA = "guild.capability_run_start_snapshot.v1";
     CANONICAL_RUN_ID_RE = /^run-(\d{8})-(\d{6})-([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$/;
     HOST_FAMILY_TO_KIND = Object.freeze({
@@ -46069,6 +46106,16 @@ var init_run_lifecycle = __esm({
       codex: "codex"
     });
     CANONICAL_PHASES = Object.freeze(["init", "ideate", "plan", "build", "qa", "ops"]);
+    ResolvedSettingsIntegrityError = class extends Error {
+      constructor(runId) {
+        super(
+          `[run-lifecycle] resolved-settings.json for run ${runId} does not match the digest recorded at run start (${RESOLVED_SETTINGS_DIGEST_FILE}); refusing to use it`
+        );
+        this.runId = runId;
+        this.name = "ResolvedSettingsIntegrityError";
+      }
+      runId;
+    };
     WORKSPACE_KNOWLEDGE_DEFAULTS = {
       root_wiki: false,
       workspace_knowledge: true,
@@ -47779,7 +47826,7 @@ function requestPath(storage, kind, runId, id, ext = ".json") {
   return runRecord(storage, runId, "queue", kind, `${id}${ext}`);
 }
 function sha2567(bytes) {
-  return crypto24.createHash("sha256").update(bytes, "utf8").digest("hex");
+  return crypto25.createHash("sha256").update(bytes, "utf8").digest("hex");
 }
 function assertIds(kind, runId, id) {
   if (!T0_QUEUE_KINDS.includes(kind)) throw new T0QueueError(`unknown queue '${String(kind)}'`);
@@ -47794,7 +47841,7 @@ function assertGuildRoot(root) {
 }
 function enqueueT0Request(input) {
   const root = assertGuildRoot(input.root);
-  const request_id = `${Date.now().toString(36)}-${crypto24.randomBytes(8).toString("hex")}`;
+  const request_id = `${Date.now().toString(36)}-${crypto25.randomBytes(8).toString("hex")}`;
   assertIds(input.kind, input.runId, request_id);
   const storage = input.storage ?? createGuildStorage(root);
   const req = {
@@ -47937,10 +47984,10 @@ function drainT0Request(receipt2, opts) {
   );
   return outcome;
 }
-var crypto24, fs75, path89, T0_REQUEST_SCHEMA, T0_QUEUE_KINDS, SAFE_ID2, T0QueueError;
+var crypto25, fs75, path89, T0_REQUEST_SCHEMA, T0_QUEUE_KINDS, SAFE_ID2, T0QueueError;
 var init_t0_queue = __esm({
   "src/domains/lifecycle/t0-queue.ts"() {
-    crypto24 = __toESM(require("node:crypto"));
+    crypto25 = __toESM(require("node:crypto"));
     fs75 = __toESM(require("node:fs"));
     path89 = __toESM(require("node:path"));
     init_state();
@@ -50167,6 +50214,7 @@ __export(index_exports, {
   RUN_RECORD_FINDING_CODES: () => RUN_RECORD_FINDING_CODES,
   RUN_RECORD_VALIDATION_SCHEMA: () => RUN_RECORD_VALIDATION_SCHEMA,
   RUN_STATE_SCHEMA_VERSION: () => RUN_STATE_SCHEMA_VERSION,
+  ResolvedSettingsIntegrityError: () => ResolvedSettingsIntegrityError,
   SPEC_REQUIREMENT_PRIORITIES: () => SPEC_REQUIREMENT_PRIORITIES,
   SUPPORTED_DOCUMENT_SCHEMA_VERSIONS: () => SUPPORTED_DOCUMENT_SCHEMA_VERSIONS,
   THRESHOLD: () => THRESHOLD,
@@ -50709,6 +50757,7 @@ init_index();
   RUN_RECORD_FINDING_CODES,
   RUN_RECORD_VALIDATION_SCHEMA,
   RUN_STATE_SCHEMA_VERSION,
+  ResolvedSettingsIntegrityError,
   SPEC_REQUIREMENT_PRIORITIES,
   SUPPORTED_DOCUMENT_SCHEMA_VERSIONS,
   THRESHOLD,

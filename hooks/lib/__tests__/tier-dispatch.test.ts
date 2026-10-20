@@ -52,6 +52,9 @@ function structuredInput(over: Record<string, unknown> = {}): unknown {
     subagent_type: "general-purpose",
     prompt: "GUILD_AGENT_DEFINITION=.guild/agents/devops.md\n…",
     env: {
+      // #144: a current producer stamps the env marker; without it the lane
+      // grades carrier_only (pinned in h2-dispatch-integrity.test.ts).
+      GUILD_DISPATCH_PRODUCER: "guild.dispatch.v1",
       GUILD_RUN_ID: "test-run",
       GUILD_SPECIALIST: "devops",
       GUILD_TASK_ID: "wi-1",
