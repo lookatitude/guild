@@ -39794,10 +39794,25 @@ var init_execution_transport_ports = __esm({
 });
 
 // src/domains/dispatch/execution-transport-adapters.ts
-var GENERATED_PRE_GUARD_EXPORTS, DEFINITION_REF_KEYS, PINNED_SKILL_KEYS;
+var TMUX_AGENT_PANE_PROFILES, GENERATED_PRE_GUARD_EXPORTS, DEFINITION_REF_KEYS, PINNED_SKILL_KEYS;
 var init_execution_transport_adapters = __esm({
   "src/domains/dispatch/execution-transport-adapters.ts"() {
+    init_kernel();
     init_execution_transport_ports();
+    TMUX_AGENT_PANE_PROFILES = deepFreeze([
+      {
+        host_kind: "claude",
+        commands: ["claude"],
+        ready: [/\? for shortcuts/, /^[\s│]*[>❯](\s|$)/m],
+        busy: [/esc to interrupt/i]
+      },
+      {
+        host_kind: "codex",
+        commands: ["codex"],
+        ready: [/^[\s│▌]*[›❯>](\s|$)/m],
+        busy: [/esc to interrupt/i]
+      }
+    ]);
     GENERATED_PRE_GUARD_EXPORTS = Object.freeze([
       "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
       "GUILD_DISPATCH_PRODUCER",

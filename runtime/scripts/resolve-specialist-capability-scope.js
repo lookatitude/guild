@@ -36649,9 +36649,10 @@ function createHostExecutionRuntime(opts) {
     }
   };
 }
-var import_node_util, NOOP_SINK, BaseExecutionTransport, GENERATED_PRE_GUARD_EXPORTS, DEFINITION_REF_KEYS, PINNED_SKILL_KEYS, DEFINITION_LAYERS, DEFINITION_KINDS, IDENTITY_TOKEN_RE, CONTENT_HASH_RE, SOURCE_COMMIT_RE, IDENTITY_HASH_RE, DEFINITION_CONTROL_RE, TeamDispatchExecutionTransport;
+var import_node_util, NOOP_SINK, BaseExecutionTransport, TMUX_AGENT_PANE_PROFILES, GENERATED_PRE_GUARD_EXPORTS, DEFINITION_REF_KEYS, PINNED_SKILL_KEYS, DEFINITION_LAYERS, DEFINITION_KINDS, IDENTITY_TOKEN_RE, CONTENT_HASH_RE, SOURCE_COMMIT_RE, IDENTITY_HASH_RE, DEFINITION_CONTROL_RE, TeamDispatchExecutionTransport;
 var init_execution_transport_adapters = __esm({
   "src/domains/dispatch/execution-transport-adapters.ts"() {
+    init_kernel();
     import_node_util = require("node:util");
     init_execution_transport_ports();
     NOOP_SINK = { record: () => void 0 };
@@ -36767,6 +36768,20 @@ var init_execution_transport_adapters = __esm({
         return this.unsupportedOp("probe");
       }
     };
+    TMUX_AGENT_PANE_PROFILES = deepFreeze([
+      {
+        host_kind: "claude",
+        commands: ["claude"],
+        ready: [/\? for shortcuts/, /^[\s│]*[>❯](\s|$)/m],
+        busy: [/esc to interrupt/i]
+      },
+      {
+        host_kind: "codex",
+        commands: ["codex"],
+        ready: [/^[\s│▌]*[›❯>](\s|$)/m],
+        busy: [/esc to interrupt/i]
+      }
+    ]);
     GENERATED_PRE_GUARD_EXPORTS = Object.freeze([
       "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
       "GUILD_DISPATCH_PRODUCER",
