@@ -22,6 +22,7 @@
  * every method returns a closed `ExecutionOutcome` and never throws.
  */
 
+import { deepFreeze } from "../kernel";
 import { types as nodeTypes } from "node:util";
 import {
   EXECUTION_TRANSPORT_CONTRACT_VERSION,
@@ -588,7 +589,7 @@ export interface TmuxAgentPaneProfile {
   readonly busy: readonly RegExp[];
 }
 
-export const TMUX_AGENT_PANE_PROFILES: readonly TmuxAgentPaneProfile[] = [
+export const TMUX_AGENT_PANE_PROFILES: readonly TmuxAgentPaneProfile[] = deepFreeze([
   {
     host_kind: "claude",
     commands: ["claude"],
@@ -601,7 +602,7 @@ export const TMUX_AGENT_PANE_PROFILES: readonly TmuxAgentPaneProfile[] = [
     ready: [/^[\s│▌]*[›❯>](\s|$)/m],
     busy: [/esc to interrupt/i],
   },
-];
+]);
 
 const anyMatch = (patterns: readonly RegExp[], screen: string): boolean =>
   patterns.some((pattern) => pattern.test(screen));
