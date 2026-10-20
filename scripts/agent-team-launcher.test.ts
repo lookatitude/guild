@@ -22,6 +22,7 @@ import * as fs from "fs";
 import * as os from "os";
 import { buildTaskCell, writeTaskCell, type TaskCellDispatchInput } from "../src/domains/dispatch/index";
 import { taskCellPaths } from "../src/domains/dispatch";
+import { readTaskRunCapReqs } from "./write-task-run";
 // T3 F3: descriptor writers fail closed without the run's minted binding.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const launcherTestBinding = require("../src/domains/lifecycle") as
@@ -889,6 +890,98 @@ describe("agent-team-launcher.ts", () => {
         const assignment = JSON.parse(fs.readFileSync(assignmentPath(logicalTaskId), "utf8"));
         expect(Date.parse(receipt.recorded_at)).toBeLessThan(Date.parse(assignment.written_at));
       }
+    });
+
+    it("#237: two team entries sharing a role launch under distinct lane ids", () => {
+      const teamDir = path.join(tmpDir, ".guild", "team");
+      fs.mkdirSync(teamDir, { recursive: true });
+      const teamPath = path.join(teamDir, "test-slug.yaml");
+      fs.writeFileSync(
+        teamPath,
+        [
+          "spec: .guild/spec/test-slug.md",
+          "backend: agent-team",
+          "user_approved_agent_team: true",
+          "specialists:",
+          "  - name: developer",
+          '    scope: "Lane A: src/version.js"',
+          "    depends-on: []",
+          "    tier: cheap",
+          "  - name: developer",
+          '    scope: "Lane B: src/cli.js"',
+          "    depends-on: []",
+          "    tier: powerful",
+          "    needs_network: true",
+          "",
+        ].join("\n"),
+      );
+      const planDir = path.join(tmpDir, ".guild", "plan");
+      fs.mkdirSync(planDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(planDir, "test-slug.md"),
+        [
+          "## Lane: version module",
+          "- task-id: A-version",
+          "- owner: developer",
+          "",
+          "## Lane: cli flag",
+          "- task-id: B-cli",
+          "- owner: developer",
+          "- depends-on: [A-version]",
+          "",
+        ].join("\n"),
+      );
+      const ctxDir = path.join(tmpDir, ".guild", "context", INHERITED_RUN_ID);
+      fs.mkdirSync(ctxDir, { recursive: true });
+      for (const bundle of ["developer-A-version", "developer-B-cli"]) {
+        fs.writeFileSync(path.join(ctxDir, `${bundle}.md`), `# ${bundle}\n`);
+      }
+      fs.writeFileSync(
+        path.join(tmpDir, ".guild", "settings.json"),
+        JSON.stringify({ model_routing: { shadow: "on" } }, null, 2) + "\n",
+        "utf8",
+      );
+      const binDir = makeLaunchableTmuxBin(tmpDir);
+      const tmuxLog = path.join(tmpDir, "tmux-args.log");
+      const fakeTmux = path.join(binDir, "tmux");
+      fs.writeFileSync(
+        fakeTmux,
+        fs.readFileSync(fakeTmux, "utf8").replace("#!/bin/sh\n", `#!/bin/sh\nprintf '%s\\n' "$*" >> '${tmuxLog}'\n`),
+        { mode: 0o755 },
+      );
+      const result = runScript(
+        ["--team", teamPath, "--session-name", "guild-test-237", "--cwd", tmpDir],
+        { PATH: `${binDir}:${process.env["PATH"] ?? ""}` },
+      );
+      expect(result.stderr).not.toContain("unique logical task id");
+      if (result.exitCode !== 0) console.error(result.stderr);
+      expect(result.exitCode).toBe(0);
+      const cellsRoot = path.join(tmpDir, ".guild", "runs", INHERITED_RUN_ID, "task-cells");
+      const assignments = ["A-version", "B-cli"].map((lt) => {
+        const instances = path.join(cellsRoot, lt, "attempts", "1", "instances");
+        const ids = fs.readdirSync(instances);
+        expect(ids).toHaveLength(1);
+        return JSON.parse(fs.readFileSync(path.join(instances, ids[0], "assignment.json"), "utf8"));
+      });
+      expect(assignments.map((a) => a.worker_role)).toEqual(["developer", "developer"]);
+      expect(assignments[0].instance_id).not.toBe(assignments[1].instance_id);
+      // Each entry keeps its own authored lane: plan order pairs entry i with task i.
+      const manifest = fs.readFileSync(findSessionJson(tmpDir)!, "utf8");
+      expect(manifest).toContain("A-version");
+      expect(manifest).toContain("B-cli");
+      // Each entry keeps its OWN capability requirements in its task_run.
+      expect(readTaskRunCapReqs(tmpDir, INHERITED_RUN_ID, "B-cli")?.needs_network).toBe(true);
+      expect(readTaskRunCapReqs(tmpDir, INHERITED_RUN_ID, "A-version")?.needs_network).not.toBe(true);
+      // ...and its OWN runtime task id: the second pane is not stamped with the first lane's id.
+      const tmuxArgs = fs.readFileSync(tmuxLog, "utf8");
+      // ...and model planning uses each entry's own tier, not its sibling's.
+      const shadow = (id: string) =>
+        fs.readFileSync(path.join(tmpDir, ".guild", "runs", INHERITED_RUN_ID, "shadow", `${id}.att1.shadow-comparison.json`), "utf8");
+      expect(shadow("A-version")).toContain("tier_map:cheap");
+      expect(shadow("A-version")).not.toContain("tier_map:powerful");
+      expect(shadow("B-cli")).toContain("tier_map:powerful");
+      expect(tmuxArgs).toContain("GUILD_TASK_ID=A-version");
+      expect(tmuxArgs).toContain("GUILD_TASK_ID=B-cli");
     });
 
     it("prints tmux commands to stdout in dry-run mode", () => {

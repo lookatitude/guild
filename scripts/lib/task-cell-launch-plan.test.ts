@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import {
+  assignLaneTasks,
   buildStationTaskCellResult,
   expandTaskCellLaunchLanes,
   reconcileStationTaskCellResult,
@@ -35,6 +36,44 @@ function mintBindingFor(cwd: string, runId: string): void {
 }
 
 describe("task-cell production launch plan", () => {
+  it("#237: pairs same-role entries 1:1 with their plan tasks, in plan order", () => {
+    const a: Specialist = { name: "developer", scope: "Lane A", dependsOn: [] };
+    const b: Specialist = { name: "developer", scope: "Lane B", dependsOn: [] };
+    const lanes = expandTaskCellLaunchLanes("run-1", [a, b], new Map([["developer", ["A1", "B1"]]]));
+    expect(lanes.map((l) => [l.scope, l.taskId])).toEqual([["Lane A", "A1"], ["Lane B", "B1"]]);
+  });
+
+  it("#237: assignLaneTasks keys each pair by the entry object, so readback never borrows a sibling's task", () => {
+    const a: Specialist = { name: "developer", scope: "Lane A", dependsOn: [] };
+    const b: Specialist = { name: "developer", scope: "Lane B", dependsOn: [], capabilityRequirements: { needs_network: true } };
+    const pairs = assignLaneTasks([a, b], new Map([["developer", ["A1", "B1"]]]));
+    expect(pairs[0][0]).toBe(a);
+    expect(pairs[1][0]).toBe(b);
+    expect(pairs.map(([, t]) => t)).toEqual(["A1", "B1"]);
+  });
+
+  it("#237: keeps authored team order across interleaved same-role entries", () => {
+    const a: Specialist = { name: "developer", scope: "Lane A", dependsOn: [] };
+    const q: Specialist = { name: "qa", scope: "Lane Q", dependsOn: [] };
+    const b: Specialist = { name: "developer", scope: "Lane B", dependsOn: [] };
+    const lanes = expandTaskCellLaunchLanes(
+      "run-1",
+      [a, q, b],
+      new Map([["developer", ["A1", "B1"]], ["qa", ["Q1"]]]),
+    );
+    expect(lanes.map((l) => l.taskId)).toEqual(["A1", "Q1", "B1"]);
+  });
+
+  it("#237: refuses same-role entries whose plan task count does not match, never drops or reshuffles", () => {
+    const a: Specialist = { name: "developer", scope: "Lane A", dependsOn: [] };
+    const b: Specialist = { name: "developer", scope: "Lane B", dependsOn: [] };
+    for (const tasks of [["A1"], ["A1", "A2", "B1"]]) {
+      expect(() => expandTaskCellLaunchLanes("run-1", [a, b], new Map([["developer", tasks]]))).toThrow(
+        /2 team entries but \d plan tasks/,
+      );
+    }
+  });
+
   it("expands one specialist owning two tasks into two fresh transport lanes", () => {
     const lanes = expandTaskCellLaunchLanes(
       "run-1",

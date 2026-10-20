@@ -36649,9 +36649,10 @@ function createHostExecutionRuntime(opts) {
     }
   };
 }
-var import_node_util, NOOP_SINK, BaseExecutionTransport, GENERATED_PRE_GUARD_EXPORTS, DEFINITION_REF_KEYS, PINNED_SKILL_KEYS, DEFINITION_LAYERS, DEFINITION_KINDS, IDENTITY_TOKEN_RE, CONTENT_HASH_RE, SOURCE_COMMIT_RE, IDENTITY_HASH_RE, DEFINITION_CONTROL_RE, TeamDispatchExecutionTransport;
+var import_node_util, NOOP_SINK, BaseExecutionTransport, TMUX_AGENT_PANE_PROFILES, GENERATED_PRE_GUARD_EXPORTS, DEFINITION_REF_KEYS, PINNED_SKILL_KEYS, DEFINITION_LAYERS, DEFINITION_KINDS, IDENTITY_TOKEN_RE, CONTENT_HASH_RE, SOURCE_COMMIT_RE, IDENTITY_HASH_RE, DEFINITION_CONTROL_RE, TeamDispatchExecutionTransport;
 var init_execution_transport_adapters = __esm({
   "src/domains/dispatch/execution-transport-adapters.ts"() {
+    init_kernel();
     import_node_util = require("node:util");
     init_execution_transport_ports();
     NOOP_SINK = { record: () => void 0 };
@@ -36767,6 +36768,20 @@ var init_execution_transport_adapters = __esm({
         return this.unsupportedOp("probe");
       }
     };
+    TMUX_AGENT_PANE_PROFILES = deepFreeze([
+      {
+        host_kind: "claude",
+        commands: ["claude"],
+        ready: [/\? for shortcuts/, /^[\s│]*[>❯](\s|$)/m],
+        busy: [/esc to interrupt/i]
+      },
+      {
+        host_kind: "codex",
+        commands: ["codex"],
+        ready: [/^[\s│▌]*[›❯>](\s|$)/m],
+        busy: [/esc to interrupt/i]
+      }
+    ]);
     GENERATED_PRE_GUARD_EXPORTS = Object.freeze([
       "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
       "GUILD_DISPATCH_PRODUCER",
@@ -50940,42 +50955,67 @@ init_storage();
 function safeSegment(value) {
   return value.replace(/[^A-Za-z0-9_.-]/g, "_");
 }
+function assignLaneTasks(specialists, ownerMap) {
+  const byRole = /* @__PURE__ */ new Map();
+  for (const specialist of specialists) {
+    const group = byRole.get(specialist.name) ?? [];
+    group.push(specialist);
+    byRole.set(specialist.name, group);
+  }
+  const tasksByEntry = /* @__PURE__ */ new Map();
+  for (const [role, group] of byRole) {
+    const owned = ownerMap.get(role) ?? [];
+    if (group.length === 1) {
+      tasksByEntry.set(group[0], owned.length > 0 ? [...owned] : [role]);
+    } else if (owned.length === 0) {
+      group.forEach((entry, index) => tasksByEntry.set(entry, [entry.participant_id ?? `${role}-${index + 1}`]));
+    } else if (owned.length === group.length) {
+      group.forEach((entry, index) => tasksByEntry.set(entry, [owned[index]]));
+    } else {
+      throw new Error(
+        `task-cell launch plan: role ${role} has ${group.length} team entries but ${owned.length} plan tasks; same-role entries need exactly one plan task each`
+      );
+    }
+  }
+  const assigned = [];
+  for (const entry of specialists) {
+    for (const taskId of tasksByEntry.get(entry) ?? []) assigned.push([entry, taskId]);
+  }
+  return assigned;
+}
 function expandTaskCellLaunchLanes(runId, specialists, ownerMap) {
   const lanes = [];
   const taskIds = /* @__PURE__ */ new Set();
   const dispatchKeys = /* @__PURE__ */ new Set();
   const instanceIds = /* @__PURE__ */ new Set();
-  for (const specialist of specialists) {
-    const owned = ownerMap.get(specialist.name);
-    const effective = owned && owned.length > 0 ? owned : [specialist.name];
-    for (const rawTaskId of effective) {
-      const taskId = safeSegment(rawTaskId);
-      if (!taskId || taskIds.has(taskId)) {
-        throw new Error(`task-cell launch plan requires one unique logical task id; duplicate/empty: ${rawTaskId}`);
-      }
-      taskIds.add(taskId);
-      const role = safeSegment(specialist.name);
-      const dispatchKey = `${role}--${taskId}--a1`;
-      const nonce = (0, import_node_crypto8.createHash)("sha256").update(`${runId}\0${specialist.name}\0${rawTaskId}\0attempt:1`).digest("hex").slice(0, 12);
-      const instanceId = `${taskId}.a1.i-${nonce}`;
-      if (dispatchKeys.has(dispatchKey) || instanceIds.has(instanceId)) {
-        throw new Error(`task-cell launch identity collision for ${specialist.name}/${rawTaskId}`);
-      }
-      dispatchKeys.add(dispatchKey);
-      instanceIds.add(instanceId);
-      lanes.push({
-        ...specialist,
-        taskId,
-        dispatch_key: dispatchKey,
-        task_cell_instance_id: instanceId,
-        task_cell_assignment_path: taskCellPaths({
-          run_id: runId,
-          logical_task_id: taskId,
-          attempt: 1,
-          instance_id: instanceId
-        }).assignment_path
-      });
+  const assigned = assignLaneTasks(specialists, ownerMap);
+  for (const [specialist, rawTaskId] of assigned) {
+    const taskId = safeSegment(rawTaskId);
+    if (!taskId || taskIds.has(taskId)) {
+      throw new Error(`task-cell launch plan requires one unique logical task id; duplicate/empty: ${rawTaskId}`);
     }
+    taskIds.add(taskId);
+    const role = safeSegment(specialist.name);
+    const dispatchKey = `${role}--${taskId}--a1`;
+    const nonce = (0, import_node_crypto8.createHash)("sha256").update(`${runId}\0${specialist.name}\0${rawTaskId}\0attempt:1`).digest("hex").slice(0, 12);
+    const instanceId = `${taskId}.a1.i-${nonce}`;
+    if (dispatchKeys.has(dispatchKey) || instanceIds.has(instanceId)) {
+      throw new Error(`task-cell launch identity collision for ${specialist.name}/${rawTaskId}`);
+    }
+    dispatchKeys.add(dispatchKey);
+    instanceIds.add(instanceId);
+    lanes.push({
+      ...specialist,
+      taskId,
+      dispatch_key: dispatchKey,
+      task_cell_instance_id: instanceId,
+      task_cell_assignment_path: taskCellPaths({
+        run_id: runId,
+        logical_task_id: taskId,
+        attempt: 1,
+        instance_id: instanceId
+      }).assignment_path
+    });
   }
   return lanes;
 }
@@ -58190,9 +58230,9 @@ async function main7() {
   const modelProvenanceByTask = /* @__PURE__ */ new Map();
   {
     if (!args.dryRun) {
-      for (const spec of team.specialists) {
-        const taskIds = preRoutingOwnerMap.get(spec.name);
-        const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [spec.name];
+      for (const lane of globalLaunchLanes) {
+        const spec = lane;
+        const effectiveTaskIds = [lane.taskId];
         const cr = spec.capabilityRequirements;
         for (const taskId of effectiveTaskIds) {
           writeTaskRun(cwd, runId, taskId, {
@@ -58213,6 +58253,10 @@ async function main7() {
     if (launchBindingRef === null) {
       throw new Error(`binding_rejected: TaskCell dispatch ${runId} has no minted run binding`);
     }
+    const entryTaskIds = /* @__PURE__ */ new Map();
+    for (const [entry, taskId] of assignLaneTasks(team.specialists, preRoutingOwnerMap)) {
+      entryTaskIds.set(entry, [...entryTaskIds.get(entry) ?? [], taskId]);
+    }
     {
       const planLaneModel = makeLaneModelPlanner(
         cwd,
@@ -58222,9 +58266,7 @@ async function main7() {
         args.dryRun
       );
       for (const specialist of team.specialists) {
-        const taskIds = preRoutingOwnerMap.get(specialist.name);
-        const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [specialist.name];
-        for (const rawTaskId of effectiveTaskIds) {
+        for (const rawTaskId of entryTaskIds.get(specialist) ?? []) {
           const taskId = safeSegment2(rawTaskId);
           const { outcome, laneTier } = planLaneModel(specialist, taskId);
           modelProvenanceByTask.set(
@@ -58260,7 +58302,7 @@ async function main7() {
       }
     }
     for (const spec of team.specialists) {
-      const taskIds = preRoutingOwnerMap.get(spec.name);
+      const taskIds = entryTaskIds.get(spec);
       const repTaskId = taskIds && taskIds.length > 0 ? taskIds[0] : spec.name;
       if (!args.dryRun) {
         const fromDisk = readTaskRunCapReqs(cwd, runId, repTaskId);

@@ -724,7 +724,15 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // carrier_only grade, the strict-mode deny, and the snapshot digest check. Only
   // that chapter changed; it has no skill-registry entry (round-trip unchanged).
   // ANTI-VACUITY: SC-W2-5, SC-W3-6(B) and check-surface-pins were RED against the prior pin.
-  skills: "2d66180384fb3c914bc9cc0c17cabb18e205e32f",
+  // Re-ratified 2026-10-20 (v3.2 H1 #138/#179): execute-plan SKILL.md + dispatch.md
+  // collect lanes via lane-receipt-wait (never idle = success) and inject via the
+  // idle-gated pane-send. Registry re-extracted. ANTI-VACUITY: SC-W2-5, SC-W3-6(B) and
+  // check-surface-pins were RED (registry_stale execute-plan, tree_pin_stale skills).
+  // Re-ratified 2026-10-20 (v3.2 H1 F9): execute-plan SKILL.md states the pane-send
+  // agent-pane gate (not_agent_pane, input-ready, pickup). Registry re-extracted.
+  // ANTI-VACUITY: check-surface-pins was RED against the prior pin first.
+  // Re-ratified 2026-10-20 (v3.2 merge): H1 + H2 execute-plan edits combined on next.
+  skills: "b418036e05c9e4cb5ea13306549d8a1b476b1a1e",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

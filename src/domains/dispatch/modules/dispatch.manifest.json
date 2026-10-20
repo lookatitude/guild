@@ -22,6 +22,7 @@
   "owns": {
     "scripts": [
       "agent-team-launcher",
+      "pane-send",
       "resolve-specialist-capability-scope",
       "task-cell-audit",
       "task-cell-scale-audit",
