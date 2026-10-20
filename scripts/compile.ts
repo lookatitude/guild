@@ -182,6 +182,8 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   { id: "learn-staleness", entry: "scripts/learn/staleness.ts" },
   { id: "lint-context-bundle", entry: "scripts/lint-context-bundle.ts" },
   { id: "mark-lane-dead", entry: "scripts/mark-lane-dead.ts" },
+  { id: "lane-receipt-wait", entry: "scripts/lane-receipt-wait.ts" },
+  { id: "pane-send", entry: "scripts/pane-send.ts" },
   { id: "pane-dispatch-trace", entry: "scripts/lib/host/pane-dispatch-trace.ts" },
   { id: "recall", entry: "scripts/lib/recall.ts" },
   { id: "registry-rollup", entry: "scripts/registry-rollup.ts" },

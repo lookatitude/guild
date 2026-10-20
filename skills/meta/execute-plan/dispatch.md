@@ -167,6 +167,15 @@ Every lane is dispatched as an **ephemeral one-agent-per-task** agent (ADR §6) 
 
 The agent's **final action** in this lifecycle is writing its receipt file — see `## Handoff protocol` below for the single-channel protocol that every brief carries.
 
+**Request a one-shot agent, then wait on the receipt in code (#138).** On the in-session `Agent()` rung, spawn each lane as a one-shot subagent: pass no `team_name` and no `name`, so the host returns the lane's report instead of a resident teammate. Some hosts still land the call on a resident teammate (`in_process_teammate`) whose only signal is an idle notification. An idle notification is never a result. On every rung, collect the lane with the receipt-wait CLI, never with a hand-written poll:
+
+```bash
+node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/lane-receipt-wait.js \
+  --cwd "$PWD" --run-id <run-id> --specialist <specialist> --task-id <task-id> [--timeout-ms <ms>]
+```
+
+It prints one `guild.lane_receipt_wait.v1` line with status `done` (exit 0), or `failed` / `missing` (exit 1; `missing` = no valid receipt before the timeout, default 30 min). It writes that status into the run-state lane checkpoint, so a lane dispatched outside the launcher still reaches the Stop backstop and `guild:verify-done`. Treat `failed` / `missing` as a failed attempt (`## Lane retry + dead-lettering`), then stop the resident teammate.
+
 ## Brief shape by tier (G-12 / SC-7)
 
 The lane's **resolved tier decides the SHAPE of the task brief**, not just the model.

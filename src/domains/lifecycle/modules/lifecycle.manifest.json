@@ -54,6 +54,7 @@
     "scripts": [
       "check-lane-liveness",
       "emit-loop-event",
+      "lane-receipt-wait",
       "mark-lane-dead",
       "resume-lanes",
       "retry-lane",
@@ -61,6 +62,7 @@
       "work-loop",
       "write-run-manifest",
       "write-task-run",
+      "lib/lane-receipt",
       "lib/run-binding",
       "lib/run-lifecycle",
       "lib/run-manifest-wiring",
