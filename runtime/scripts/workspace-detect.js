@@ -6465,18 +6465,6 @@ var KNOWN_GUILD_HOST_KINDS = Object.freeze([
 ]);
 var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
 
-// src/domains/security/share-set.ts
-var path14 = __toESM(require("path"));
-var SHARED_SCRUBBED_NAMES = sealSet([
-  "verify.md",
-  "review.md",
-  "provenance.json",
-  "summary.md",
-  "run.yaml",
-  "run-state.json"
-], "SHARED_SCRUBBED_NAMES");
-var CANONICAL_RUN_LOG = path14.join("logs", "v1.4-events.jsonl");
-
 // src/domains/security/secret-patterns.ts
 var SECRET_PATTERNS = Object.freeze([
   // NOTE: labels deliberately drop the `=` so the redaction replacement
@@ -6524,6 +6512,53 @@ var SECRET_PATTERNS = Object.freeze([
   // High-entropy string heuristic: 40+ hex chars (SHA-like)
   Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
 ]);
+
+// src/domains/security/share-set.ts
+var path14 = __toESM(require("path"));
+var SHARED_SCRUBBED_NAMES = sealSet([
+  "verify.md",
+  "review.md",
+  "provenance.json",
+  "summary.md",
+  "run.yaml",
+  "run-state.json"
+], "SHARED_SCRUBBED_NAMES");
+var CANONICAL_RUN_LOG = path14.join("logs", "v1.4-events.jsonl");
+
+// src/domains/security/prose-scrub.ts
+var PROSE_SECRET_LABELS = /* @__PURE__ */ new Set([
+  "password-assignment",
+  "api_key-assignment",
+  "secret-assignment",
+  "AWS access key",
+  "GCP API key",
+  "GitHub personal access token",
+  "GitHub server token",
+  "PEM private key block",
+  "bearer-token",
+  "provider-api-key",
+  "Slack token",
+  "GitHub token",
+  "GitLab personal access token",
+  "npm token",
+  "HuggingFace token"
+]);
+var TOKEN_SHAPE_EXTRAS = [
+  ["\\bgithub_pat_", "GitHub fine-grained token"],
+  ["\\beyJ", "JWT"]
+];
+var PROSE_CREDENTIAL_PATTERNS = deepFreeze([
+  // The canonical password form is case-sensitive; prose also catches `PASSWORD=`.
+  ...SECRET_PATTERNS.filter(([, label]) => PROSE_SECRET_LABELS.has(label)).map(
+    ([re, label]) => re.flags.includes("i") ? [re, label] : Object.freeze([new RegExp(re.source, re.flags + "i"), label])
+  ),
+  ...TOKEN_SHAPE_EXTRAS.flatMap(
+    ([prefix, label]) => TOKEN_SHAPE_PATTERNS.filter((re) => re.source.startsWith(prefix)).map(
+      (re) => Object.freeze([re, label])
+    )
+  )
+]);
+var PROSE_WRITE_TOOLS = sealSet(["Write", "Edit", "MultiEdit"]);
 
 // src/domains/config/config-defaults.ts
 var DEFAULT_ESCALATION_MARKERS = Object.freeze([

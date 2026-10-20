@@ -42,6 +42,7 @@ import * as crypto from "node:crypto";
 import { applySecretsPolicy } from "./secrets.js";
 import { readSecurityConfig } from "./config.js";
 import { buildSecurityEvent, appendSecurityEvent } from "./events.js";
+import { describeProseRefusal, evaluateProseContent, isProseScrubTarget } from "./prose-scrub.js";
 
 // Re-export applySecretsPolicy for use in the approval_request inline scrub
 // (to avoid circular dependency — writeScrubApprovalRequest is called from
@@ -86,6 +87,8 @@ export interface ScrubbedWriteResult {
    * sha256(stored) === sha256(scrubbed) — content-addressed integrity.
    */
   sha256?: string;
+  /** Prose surfaces only: why the write was refused, naming each span (never the value). */
+  refusal?: string;
 }
 
 // ── Internal helpers ───────────────────────────────────────────────────────
@@ -196,6 +199,11 @@ export function scrubbedWrite(
     };
   }
 
+  // ── 1b. Prose surfaces (#108 / D2): refuse, never rewrite ─────────────────
+  if (isProseScrubTarget(opts.surface, outPath)) {
+    return proseWrite(outPath, content, policy, opts);
+  }
+
   // ── 2. Apply scrubber ─────────────────────────────────────────────────────
   // noTruncate: scrubbedWrite scrubs whole DURABLE-SURFACE FILES (handoff / wiki /
   // review / provenance) — redact secrets but never clip the document at the 4 KiB
@@ -297,4 +305,51 @@ export function scrubbedWrite(
   writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
 
   return { written: false, blocked: true };
+}
+
+/**
+ * Prose branch of scrubbedWrite: clean content lands byte-identical; a credential
+ * span or an invalid operator pattern refuses the write. A refused write leaves any
+ * prior file untouched and emits `secret_scrub_blocked` naming the span.
+ */
+function proseWrite(
+  outPath: string,
+  content: string,
+  policy: Parameters<typeof evaluateProseContent>[1],
+  opts: { surface: ScrubSurface; runDir: string; runId: string; laneId?: string },
+): ScrubbedWriteResult {
+  const verdict = evaluateProseContent(content, policy);
+  if (verdict.ok) {
+    try {
+      fs.mkdirSync(path.dirname(outPath), { recursive: true });
+      fs.writeFileSync(outPath, content, "utf8");
+    } catch (err) {
+      process.stderr.write(
+        `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ` +
+          `${err instanceof Error ? err.message : String(err)}\n`,
+      );
+      return { written: false, blocked: false };
+    }
+    return { written: true, blocked: false };
+  }
+  const refusal = describeProseRefusal(verdict, path.basename(outPath));
+  process.stderr.write(`[scrubbed-write] BLOCKED: ${refusal}\n`);
+  try {
+    appendSecurityEvent(
+      opts.runDir,
+      buildSecurityEvent({
+        run_id: opts.runId,
+        lane_id: opts.laneId,
+        event_type: "secret_scrub_blocked",
+        decision: "blocked",
+        tool: "scrubbedWrite",
+        detail: refusal,
+        permission_mode: "blocked",
+      }),
+    );
+  } catch {
+    // best-effort
+  }
+  writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
+  return { written: false, blocked: true, refusal };
 }

@@ -6745,33 +6745,6 @@ var init_events = __esm({
   }
 });
 
-// src/domains/security/scrubbed-write.ts
-var init_scrubbed_write = __esm({
-  "src/domains/security/scrubbed-write.ts"() {
-    init_secrets();
-    init_config();
-    init_events();
-  }
-});
-
-// src/domains/security/share-set.ts
-var path14, SHARED_SCRUBBED_NAMES, CANONICAL_RUN_LOG;
-var init_share_set = __esm({
-  "src/domains/security/share-set.ts"() {
-    path14 = __toESM(require("path"));
-    init_kernel();
-    SHARED_SCRUBBED_NAMES = sealSet([
-      "verify.md",
-      "review.md",
-      "provenance.json",
-      "summary.md",
-      "run.yaml",
-      "run-state.json"
-    ], "SHARED_SCRUBBED_NAMES");
-    CANONICAL_RUN_LOG = path14.join("logs", "v1.4-events.jsonl");
-  }
-});
-
 // src/domains/security/secret-patterns.ts
 var SECRET_PATTERNS;
 var init_secret_patterns = __esm({
@@ -6825,6 +6798,78 @@ var init_secret_patterns = __esm({
   }
 });
 
+// src/domains/security/share-set.ts
+var path14, SHARED_SCRUBBED_NAMES, CANONICAL_RUN_LOG;
+var init_share_set = __esm({
+  "src/domains/security/share-set.ts"() {
+    path14 = __toESM(require("path"));
+    init_kernel();
+    SHARED_SCRUBBED_NAMES = sealSet([
+      "verify.md",
+      "review.md",
+      "provenance.json",
+      "summary.md",
+      "run.yaml",
+      "run-state.json"
+    ], "SHARED_SCRUBBED_NAMES");
+    CANONICAL_RUN_LOG = path14.join("logs", "v1.4-events.jsonl");
+  }
+});
+
+// src/domains/security/prose-scrub.ts
+var PROSE_SECRET_LABELS, TOKEN_SHAPE_EXTRAS, PROSE_CREDENTIAL_PATTERNS, PROSE_WRITE_TOOLS;
+var init_prose_scrub = __esm({
+  "src/domains/security/prose-scrub.ts"() {
+    init_kernel();
+    init_secret_patterns();
+    init_redact_log();
+    init_share_set();
+    PROSE_SECRET_LABELS = /* @__PURE__ */ new Set([
+      "password-assignment",
+      "api_key-assignment",
+      "secret-assignment",
+      "AWS access key",
+      "GCP API key",
+      "GitHub personal access token",
+      "GitHub server token",
+      "PEM private key block",
+      "bearer-token",
+      "provider-api-key",
+      "Slack token",
+      "GitHub token",
+      "GitLab personal access token",
+      "npm token",
+      "HuggingFace token"
+    ]);
+    TOKEN_SHAPE_EXTRAS = [
+      ["\\bgithub_pat_", "GitHub fine-grained token"],
+      ["\\beyJ", "JWT"]
+    ];
+    PROSE_CREDENTIAL_PATTERNS = deepFreeze([
+      // The canonical password form is case-sensitive; prose also catches `PASSWORD=`.
+      ...SECRET_PATTERNS.filter(([, label]) => PROSE_SECRET_LABELS.has(label)).map(
+        ([re, label]) => re.flags.includes("i") ? [re, label] : Object.freeze([new RegExp(re.source, re.flags + "i"), label])
+      ),
+      ...TOKEN_SHAPE_EXTRAS.flatMap(
+        ([prefix, label]) => TOKEN_SHAPE_PATTERNS.filter((re) => re.source.startsWith(prefix)).map(
+          (re) => Object.freeze([re, label])
+        )
+      )
+    ]);
+    PROSE_WRITE_TOOLS = sealSet(["Write", "Edit", "MultiEdit"]);
+  }
+});
+
+// src/domains/security/scrubbed-write.ts
+var init_scrubbed_write = __esm({
+  "src/domains/security/scrubbed-write.ts"() {
+    init_secrets();
+    init_config();
+    init_events();
+    init_prose_scrub();
+  }
+});
+
 // src/domains/security/scrub-redact.ts
 var init_scrub_redact = __esm({
   "src/domains/security/scrub-redact.ts"() {
@@ -6852,6 +6897,7 @@ var init_security = __esm({
     init_safe_object();
     init_injection_guard();
     init_scrubbed_write();
+    init_prose_scrub();
     init_redact_log();
     init_share_set();
     init_scrub_redact();
