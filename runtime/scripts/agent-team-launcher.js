@@ -50782,11 +50782,7 @@ init_storage();
 function safeSegment(value) {
   return value.replace(/[^A-Za-z0-9_.-]/g, "_");
 }
-function expandTaskCellLaunchLanes(runId, specialists, ownerMap) {
-  const lanes = [];
-  const taskIds = /* @__PURE__ */ new Set();
-  const dispatchKeys = /* @__PURE__ */ new Set();
-  const instanceIds = /* @__PURE__ */ new Set();
+function assignLaneTasks(specialists, ownerMap) {
   const byRole = /* @__PURE__ */ new Map();
   for (const specialist of specialists) {
     const group = byRole.get(specialist.name) ?? [];
@@ -50796,14 +50792,27 @@ function expandTaskCellLaunchLanes(runId, specialists, ownerMap) {
   const assigned = [];
   for (const [role, group] of byRole) {
     const owned = ownerMap.get(role) ?? [];
-    if (owned.length > 0) {
-      owned.forEach((taskId, index) => assigned.push([group[index % group.length], taskId]));
-    } else if (group.length === 1) {
-      assigned.push([group[0], role]);
-    } else {
+    if (group.length === 1) {
+      const effective = owned.length > 0 ? owned : [role];
+      for (const taskId of effective) assigned.push([group[0], taskId]);
+    } else if (owned.length === 0) {
       group.forEach((entry, index) => assigned.push([entry, entry.participant_id ?? `${role}-${index + 1}`]));
+    } else if (owned.length === group.length) {
+      group.forEach((entry, index) => assigned.push([entry, owned[index]]));
+    } else {
+      throw new Error(
+        `task-cell launch plan: role ${role} has ${group.length} team entries but ${owned.length} plan tasks; same-role entries need exactly one plan task each`
+      );
     }
   }
+  return assigned;
+}
+function expandTaskCellLaunchLanes(runId, specialists, ownerMap) {
+  const lanes = [];
+  const taskIds = /* @__PURE__ */ new Set();
+  const dispatchKeys = /* @__PURE__ */ new Set();
+  const instanceIds = /* @__PURE__ */ new Set();
+  const assigned = assignLaneTasks(specialists, ownerMap);
   for (const [specialist, rawTaskId] of assigned) {
     const taskId = safeSegment(rawTaskId);
     if (!taskId || taskIds.has(taskId)) {
@@ -58101,8 +58110,12 @@ async function main7() {
         }
       }
     }
+    const entryTaskIds = /* @__PURE__ */ new Map();
+    for (const [entry, taskId] of assignLaneTasks(team.specialists, preRoutingOwnerMap)) {
+      entryTaskIds.set(entry, [...entryTaskIds.get(entry) ?? [], taskId]);
+    }
     for (const spec of team.specialists) {
-      const taskIds = preRoutingOwnerMap.get(spec.name);
+      const taskIds = entryTaskIds.get(spec);
       const repTaskId = taskIds && taskIds.length > 0 ? taskIds[0] : spec.name;
       if (!args.dryRun) {
         const fromDisk = readTaskRunCapReqs(cwd, runId, repTaskId);

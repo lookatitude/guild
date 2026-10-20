@@ -32,6 +32,42 @@ function safeSegment(value: string): string {
 }
 
 /**
+ * #237 — pair each authored team entry with its plan task ids, in team order.
+ * A role listed once owns all its plan tasks. A role listed k > 1 times needs
+ * exactly k plan tasks, paired 1:1 in plan order; any other count is refused,
+ * never guessed. With no plan tasks, each same-role entry gets its own id.
+ */
+export function assignLaneTasks(
+  specialists: readonly Specialist[],
+  ownerMap: ReadonlyMap<string, readonly string[]>,
+): Array<[Specialist, string]> {
+  const byRole = new Map<string, Specialist[]>();
+  for (const specialist of specialists) {
+    const group = byRole.get(specialist.name) ?? [];
+    group.push(specialist);
+    byRole.set(specialist.name, group);
+  }
+  const assigned: Array<[Specialist, string]> = [];
+  for (const [role, group] of byRole) {
+    const owned = ownerMap.get(role) ?? [];
+    if (group.length === 1) {
+      const effective = owned.length > 0 ? owned : [role];
+      for (const taskId of effective) assigned.push([group[0], taskId]);
+    } else if (owned.length === 0) {
+      group.forEach((entry, index) => assigned.push([entry, entry.participant_id ?? `${role}-${index + 1}`]));
+    } else if (owned.length === group.length) {
+      group.forEach((entry, index) => assigned.push([entry, owned[index]]));
+    } else {
+      throw new Error(
+        `task-cell launch plan: role ${role} has ${group.length} team entries but ${owned.length} plan tasks; ` +
+          "same-role entries need exactly one plan task each",
+      );
+    }
+  }
+  return assigned;
+}
+
+/**
  * Expand the authored per-role team into the production per-task launch plan.
  * The semantic role stays in `name`; only the transport handle is task-unique.
  */
@@ -44,28 +80,7 @@ export function expandTaskCellLaunchLanes(
   const taskIds = new Set<string>();
   const dispatchKeys = new Set<string>();
   const instanceIds = new Set<string>();
-
-  // #237: a role may appear more than once in the team (one entry per lane).
-  // Same-role entries share the role's plan tasks: entry i takes every k-th
-  // task from index i, so k entries over k tasks pair 1:1 in plan order. With
-  // no plan tasks, each same-role entry gets its own lane id.
-  const byRole = new Map<string, Specialist[]>();
-  for (const specialist of specialists) {
-    const group = byRole.get(specialist.name) ?? [];
-    group.push(specialist);
-    byRole.set(specialist.name, group);
-  }
-  const assigned: Array<[Specialist, string]> = [];
-  for (const [role, group] of byRole) {
-    const owned = ownerMap.get(role) ?? [];
-    if (owned.length > 0) {
-      owned.forEach((taskId, index) => assigned.push([group[index % group.length], taskId]));
-    } else if (group.length === 1) {
-      assigned.push([group[0], role]);
-    } else {
-      group.forEach((entry, index) => assigned.push([entry, entry.participant_id ?? `${role}-${index + 1}`]));
-    }
-  }
+  const assigned = assignLaneTasks(specialists, ownerMap);
 
   for (const [specialist, rawTaskId] of assigned) {
     const taskId = safeSegment(rawTaskId);

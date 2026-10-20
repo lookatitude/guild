@@ -23,10 +23,10 @@ function fakeTmux(screens: string[]): { run: ExecutionRunFn; verbs: string[] } {
 
 describe("pane-send CLI (#179)", () => {
   it("exits 0 only after an idle gate and a confirmed delivery", () => {
-    const tmux = fakeTmux(["⠋ busy", "> ", "> "]);
+    const tmux = fakeTmux(["⠋ busy", "> ", "> ", "> "]);
     const code = main(["--target", "guild:lane.1", "--message", "go", "--settle-ms", "0"], tmux.run);
     expect(code).toBe(0);
-    expect(tmux.verbs.indexOf("send-keys")).toBe(3);
+    expect(tmux.verbs.indexOf("send-keys")).toBe(4);
   });
 
   it("exits 1 and sends nothing while the pane stays busy", () => {

@@ -75,6 +75,7 @@ import {
 } from "./lib/core/contracts/team-backend";
 import {
   buildStationTaskCellResult,
+  assignLaneTasks,
   expandTaskCellLaunchLanes,
   type TaskCellLaunchLane,
 } from "./lib/task-cell-launch-plan";
@@ -3305,9 +3306,15 @@ async function main(): Promise<void> {
     //   - fall back to spec.capabilityRequirements (the in-memory value we JUST wrote)
     //   - emit a stderr warning + a NDJSON degradation record to v1.4-events.jsonl
     // This converts "silent fail-open" to "observable benign fallback".
+    // #237: each team entry reads back its OWN first lane task, so same-role
+    // entries keep their own capability requirements and GUILD_TASK_ID.
+    const entryTaskIds = new Map<Specialist, string[]>();
+    for (const [entry, taskId] of assignLaneTasks(team.specialists, preRoutingOwnerMap)) {
+      entryTaskIds.set(entry, [...(entryTaskIds.get(entry) ?? []), taskId]);
+    }
     for (const spec of team.specialists) {
-      const taskIds = preRoutingOwnerMap.get(spec.name);
-      // All task-ids for this specialist share the same specialist-level CR.
+      const taskIds = entryTaskIds.get(spec);
+      // All task-ids for this entry share the same entry-level CR.
       // Use the first one as the representative file.
       const repTaskId = (taskIds && taskIds.length > 0) ? taskIds[0] : spec.name;
       if (!args.dryRun) {

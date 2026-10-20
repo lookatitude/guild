@@ -40392,10 +40392,17 @@ function deliverObservation(sink, outcome, gate) {
     gate.delivering = false;
   }
 }
+function echoCount(screen, probe) {
+  if (probe.length === 0) return 0;
+  const flat = screen.replace(/\s+/g, "");
+  let count = 0;
+  for (let at = flat.indexOf(probe); at !== -1; at = flat.indexOf(probe, at + probe.length)) count += 1;
+  return count;
+}
 function blockingSleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
-var NOOP_SINK, SYSTEM_CLOCK, BaseExecutionTransport, DEFAULT_TMUX_POLL_LIMIT, DEFAULT_TMUX_SETTLE_MS, DEFAULT_TMUX_SEND_POLL_LIMIT, TmuxExecutionTransport, GENERATED_PRE_GUARD_EXPORTS, DEFINITION_REF_KEYS, PINNED_SKILL_KEYS;
+var NOOP_SINK, SYSTEM_CLOCK, BaseExecutionTransport, DEFAULT_TMUX_POLL_LIMIT, DEFAULT_TMUX_SETTLE_MS, DEFAULT_TMUX_SEND_POLL_LIMIT, TMUX_IDLE_CAPTURES, TMUX_ECHO_PROBE_CHARS, TmuxExecutionTransport, GENERATED_PRE_GUARD_EXPORTS, DEFINITION_REF_KEYS, PINNED_SKILL_KEYS;
 var init_execution_transport_adapters = __esm({
   "src/domains/dispatch/execution-transport-adapters.ts"() {
     init_execution_transport_ports();
@@ -40516,6 +40523,8 @@ var init_execution_transport_adapters = __esm({
     DEFAULT_TMUX_POLL_LIMIT = 8;
     DEFAULT_TMUX_SETTLE_MS = 500;
     DEFAULT_TMUX_SEND_POLL_LIMIT = 40;
+    TMUX_IDLE_CAPTURES = 3;
+    TMUX_ECHO_PROBE_CHARS = 32;
     TmuxExecutionTransport = class extends BaseExecutionTransport {
       transport_id = "tmux";
       supported = /* @__PURE__ */ new Set([
@@ -40547,7 +40556,7 @@ var init_execution_transport_adapters = __esm({
       capturePane(handle) {
         let result2;
         try {
-          result2 = this.run("tmux", ["capture-pane", "-p", "-t", handle.handle_id]);
+          result2 = this.run("tmux", ["capture-pane", "-p", "-J", "-S", "-200", "-t", handle.handle_id]);
         } catch (err) {
           return { failure: failedExecutionOutcome(this.transport_id, "send", err, "send_failed") };
         }
@@ -40654,26 +40663,29 @@ var init_execution_transport_adapters = __esm({
       }
       /**
        * #179 — keys typed into a pane that is mid-turn are lost, so `send` is
-       * gated and confirmed. Idle means two equal pane captures one `settleMs`
+       * gated and confirmed. Idle means three equal pane captures `settleMs`
        * apart; a pane that never settles gets no keys and a `deadline_exceeded`
-       * failure. After the keys land, the pane must change from the idle screen,
-       * or the send fails `send_failed` with `delivered: false`.
+       * failure. Delivered means the payload's first line echoes in the pane one
+       * more time than on the idle screen; otherwise `send_failed` with
+       * `delivered: false`. Long briefs go in a file; send a short nudge.
        */
       send(handle, payload) {
         let read = this.capturePane(handle);
         if ("failure" in read) return this.observed(read.failure);
         let idleScreen = null;
         let polls = 1;
+        let stable = 1;
         while (polls < this.sendPollLimit) {
           this.sleep(this.settleMs);
           const next = this.capturePane(handle);
           polls += 1;
           if ("failure" in next) return this.observed(next.failure);
-          if (next.screen === read.screen) {
+          stable = next.screen === read.screen ? stable + 1 : 1;
+          read = next;
+          if (stable >= TMUX_IDLE_CAPTURES) {
             idleScreen = next.screen;
             break;
           }
-          read = next;
         }
         if (idleScreen === null) {
           return this.observed(
@@ -40719,11 +40731,13 @@ var init_execution_transport_adapters = __esm({
             })
           );
         }
+        const probe = (payload.split("\n")[0] ?? "").replace(/\s+/g, "").slice(0, TMUX_ECHO_PROBE_CHARS);
+        const echoesBefore = echoCount(idleScreen, probe);
         for (let checks = 1; checks <= this.sendPollLimit; checks += 1) {
           this.sleep(this.settleMs);
           const after = this.capturePane(handle);
           if ("failure" in after) return this.observed(after.failure);
-          if (after.screen !== idleScreen) {
+          if (echoCount(after.screen, probe) > echoesBefore) {
             return this.observed(
               executionOutcome({
                 operation: "send",
@@ -40746,7 +40760,7 @@ var init_execution_transport_adapters = __esm({
             transport_id: this.transport_id,
             status: "failed",
             reason_code: "send_failed",
-            detail: "keys sent but the pane did not change; delivery not confirmed",
+            detail: "keys sent but the message never echoed in the pane; delivery not confirmed",
             facts: { session: handle.handle_id, delivered: false }
           })
         );

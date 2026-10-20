@@ -22,6 +22,7 @@ import * as fs from "fs";
 import * as os from "os";
 import { buildTaskCell, writeTaskCell, type TaskCellDispatchInput } from "../src/domains/dispatch/index";
 import { taskCellPaths } from "../src/domains/dispatch";
+import { readTaskRunCapReqs } from "./write-task-run";
 // T3 F3: descriptor writers fail closed without the run's minted binding.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const launcherTestBinding = require("../src/domains/lifecycle") as
@@ -908,6 +909,7 @@ describe("agent-team-launcher.ts", () => {
           "  - name: developer",
           '    scope: "Lane B: src/cli.js"',
           "    depends-on: []",
+          "    needs_network: true",
           "",
         ].join("\n"),
       );
@@ -932,9 +934,17 @@ describe("agent-team-launcher.ts", () => {
       for (const bundle of ["developer-A-version", "developer-B-cli"]) {
         fs.writeFileSync(path.join(ctxDir, `${bundle}.md`), `# ${bundle}\n`);
       }
+      const binDir = makeLaunchableTmuxBin(tmpDir);
+      const tmuxLog = path.join(tmpDir, "tmux-args.log");
+      const fakeTmux = path.join(binDir, "tmux");
+      fs.writeFileSync(
+        fakeTmux,
+        fs.readFileSync(fakeTmux, "utf8").replace("#!/bin/sh\n", `#!/bin/sh\nprintf '%s\\n' "$*" >> '${tmuxLog}'\n`),
+        { mode: 0o755 },
+      );
       const result = runScript(
         ["--team", teamPath, "--session-name", "guild-test-237", "--cwd", tmpDir],
-        { PATH: `${makeLaunchableTmuxBin(tmpDir)}:${process.env["PATH"] ?? ""}` },
+        { PATH: `${binDir}:${process.env["PATH"] ?? ""}` },
       );
       expect(result.stderr).not.toContain("unique logical task id");
       if (result.exitCode !== 0) console.error(result.stderr);
@@ -952,6 +962,13 @@ describe("agent-team-launcher.ts", () => {
       const manifest = fs.readFileSync(findSessionJson(tmpDir)!, "utf8");
       expect(manifest).toContain("A-version");
       expect(manifest).toContain("B-cli");
+      // Each entry keeps its OWN capability requirements in its task_run.
+      expect(readTaskRunCapReqs(tmpDir, INHERITED_RUN_ID, "B-cli")?.needs_network).toBe(true);
+      expect(readTaskRunCapReqs(tmpDir, INHERITED_RUN_ID, "A-version")?.needs_network).not.toBe(true);
+      // ...and its OWN runtime task id: the second pane is not stamped with the first lane's id.
+      const tmuxArgs = fs.readFileSync(tmuxLog, "utf8");
+      expect(tmuxArgs).toContain("GUILD_TASK_ID=A-version");
+      expect(tmuxArgs).toContain("GUILD_TASK_ID=B-cli");
     });
 
     it("prints tmux commands to stdout in dry-run mode", () => {

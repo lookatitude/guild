@@ -573,6 +573,19 @@ export interface TmuxExecutionTransportOpts {
 const DEFAULT_TMUX_POLL_LIMIT = 8;
 const DEFAULT_TMUX_SETTLE_MS = 500;
 const DEFAULT_TMUX_SEND_POLL_LIMIT = 40;
+/** Equal consecutive captures that count as idle. */
+const TMUX_IDLE_CAPTURES = 3;
+/** How much of the payload's first line must echo in the pane. */
+const TMUX_ECHO_PROBE_CHARS = 32;
+
+/** Count `probe` in `screen`, whitespace-blind so pane wrapping cannot hide it. */
+function echoCount(screen: string, probe: string): number {
+  if (probe.length === 0) return 0;
+  const flat = screen.replace(/\s+/g, "");
+  let count = 0;
+  for (let at = flat.indexOf(probe); at !== -1; at = flat.indexOf(probe, at + probe.length)) count += 1;
+  return count;
+}
 
 function blockingSleep(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -623,7 +636,7 @@ export class TmuxExecutionTransport extends BaseExecutionTransport {
   private capturePane(handle: ExecutionHandle): { screen: string } | { failure: ExecutionOutcome<undefined> } {
     let result;
     try {
-      result = this.run("tmux", ["capture-pane", "-p", "-t", handle.handle_id]);
+      result = this.run("tmux", ["capture-pane", "-p", "-J", "-S", "-200", "-t", handle.handle_id]);
     } catch (err) {
       return { failure: failedExecutionOutcome<undefined>(this.transport_id, "send", err, "send_failed") };
     }
@@ -733,26 +746,29 @@ export class TmuxExecutionTransport extends BaseExecutionTransport {
 
   /**
    * #179 — keys typed into a pane that is mid-turn are lost, so `send` is
-   * gated and confirmed. Idle means two equal pane captures one `settleMs`
+   * gated and confirmed. Idle means three equal pane captures `settleMs`
    * apart; a pane that never settles gets no keys and a `deadline_exceeded`
-   * failure. After the keys land, the pane must change from the idle screen,
-   * or the send fails `send_failed` with `delivered: false`.
+   * failure. Delivered means the payload's first line echoes in the pane one
+   * more time than on the idle screen; otherwise `send_failed` with
+   * `delivered: false`. Long briefs go in a file; send a short nudge.
    */
   override send(handle: ExecutionHandle, payload: string): ExecutionOutcome<undefined> {
     let read = this.capturePane(handle);
     if ("failure" in read) return this.observed(read.failure);
     let idleScreen: string | null = null;
     let polls = 1;
+    let stable = 1;
     while (polls < this.sendPollLimit) {
       this.sleep(this.settleMs);
       const next = this.capturePane(handle);
       polls += 1;
       if ("failure" in next) return this.observed(next.failure);
-      if (next.screen === read.screen) {
+      stable = next.screen === read.screen ? stable + 1 : 1;
+      read = next;
+      if (stable >= TMUX_IDLE_CAPTURES) {
         idleScreen = next.screen;
         break;
       }
-      read = next;
     }
     if (idleScreen === null) {
       return this.observed(
@@ -800,11 +816,13 @@ export class TmuxExecutionTransport extends BaseExecutionTransport {
       );
     }
 
+    const probe = (payload.split("\n")[0] ?? "").replace(/\s+/g, "").slice(0, TMUX_ECHO_PROBE_CHARS);
+    const echoesBefore = echoCount(idleScreen, probe);
     for (let checks = 1; checks <= this.sendPollLimit; checks += 1) {
       this.sleep(this.settleMs);
       const after = this.capturePane(handle);
       if ("failure" in after) return this.observed(after.failure);
-      if (after.screen !== idleScreen) {
+      if (echoCount(after.screen, probe) > echoesBefore) {
         return this.observed(
           executionOutcome<undefined>({
             operation: "send",
@@ -827,7 +845,7 @@ export class TmuxExecutionTransport extends BaseExecutionTransport {
         transport_id: this.transport_id,
         status: "failed",
         reason_code: "send_failed",
-        detail: "keys sent but the pane did not change; delivery not confirmed",
+        detail: "keys sent but the message never echoed in the pane; delivery not confirmed",
         facts: { session: handle.handle_id, delivered: false },
       })
     );
