@@ -3246,6 +3246,12 @@ async function main(): Promise<void> {
     if (launchBindingRef === null) {
       throw new Error(`binding_rejected: TaskCell dispatch ${runId} has no minted run binding`);
     }
+    // #237: one entry-to-task assignment feeds model planning and readback, so
+    // same-role entries keep their own tasks, tiers, and capability requirements.
+    const entryTaskIds = new Map<Specialist, string[]>();
+    for (const [entry, taskId] of assignLaneTasks(team.specialists, preRoutingOwnerMap)) {
+      entryTaskIds.set(entry, [...(entryTaskIds.get(entry) ?? []), taskId]);
+    }
     {
       const planLaneModel = makeLaneModelPlanner(
         cwd,
@@ -3255,9 +3261,7 @@ async function main(): Promise<void> {
         args.dryRun,
       );
       for (const specialist of team.specialists) {
-        const taskIds = preRoutingOwnerMap.get(specialist.name);
-        const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [specialist.name];
-        for (const rawTaskId of effectiveTaskIds) {
+        for (const rawTaskId of entryTaskIds.get(specialist) ?? []) {
           const taskId = safeSegment(rawTaskId);
           const { outcome, laneTier } = planLaneModel(specialist, taskId);
           modelProvenanceByTask.set(
@@ -3306,12 +3310,6 @@ async function main(): Promise<void> {
     //   - fall back to spec.capabilityRequirements (the in-memory value we JUST wrote)
     //   - emit a stderr warning + a NDJSON degradation record to v1.4-events.jsonl
     // This converts "silent fail-open" to "observable benign fallback".
-    // #237: each team entry reads back its OWN first lane task, so same-role
-    // entries keep their own capability requirements and GUILD_TASK_ID.
-    const entryTaskIds = new Map<Specialist, string[]>();
-    for (const [entry, taskId] of assignLaneTasks(team.specialists, preRoutingOwnerMap)) {
-      entryTaskIds.set(entry, [...(entryTaskIds.get(entry) ?? []), taskId]);
-    }
     for (const spec of team.specialists) {
       const taskIds = entryTaskIds.get(spec);
       // All task-ids for this entry share the same entry-level CR.

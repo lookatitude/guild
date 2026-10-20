@@ -52,6 +52,18 @@ describe("task-cell production launch plan", () => {
     expect(pairs.map(([, t]) => t)).toEqual(["A1", "B1"]);
   });
 
+  it("#237: keeps authored team order across interleaved same-role entries", () => {
+    const a: Specialist = { name: "developer", scope: "Lane A", dependsOn: [] };
+    const q: Specialist = { name: "qa", scope: "Lane Q", dependsOn: [] };
+    const b: Specialist = { name: "developer", scope: "Lane B", dependsOn: [] };
+    const lanes = expandTaskCellLaunchLanes(
+      "run-1",
+      [a, q, b],
+      new Map([["developer", ["A1", "B1"]], ["qa", ["Q1"]]]),
+    );
+    expect(lanes.map((l) => l.taskId)).toEqual(["A1", "Q1", "B1"]);
+  });
+
   it("#237: refuses same-role entries whose plan task count does not match, never drops or reshuffles", () => {
     const a: Specialist = { name: "developer", scope: "Lane A", dependsOn: [] };
     const b: Specialist = { name: "developer", scope: "Lane B", dependsOn: [] };

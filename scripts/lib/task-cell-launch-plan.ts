@@ -47,22 +47,26 @@ export function assignLaneTasks(
     group.push(specialist);
     byRole.set(specialist.name, group);
   }
-  const assigned: Array<[Specialist, string]> = [];
+  const tasksByEntry = new Map<Specialist, string[]>();
   for (const [role, group] of byRole) {
     const owned = ownerMap.get(role) ?? [];
     if (group.length === 1) {
-      const effective = owned.length > 0 ? owned : [role];
-      for (const taskId of effective) assigned.push([group[0], taskId]);
+      tasksByEntry.set(group[0], owned.length > 0 ? [...owned] : [role]);
     } else if (owned.length === 0) {
-      group.forEach((entry, index) => assigned.push([entry, entry.participant_id ?? `${role}-${index + 1}`]));
+      group.forEach((entry, index) => tasksByEntry.set(entry, [entry.participant_id ?? `${role}-${index + 1}`]));
     } else if (owned.length === group.length) {
-      group.forEach((entry, index) => assigned.push([entry, owned[index]]));
+      group.forEach((entry, index) => tasksByEntry.set(entry, [owned[index]]));
     } else {
       throw new Error(
         `task-cell launch plan: role ${role} has ${group.length} team entries but ${owned.length} plan tasks; ` +
           "same-role entries need exactly one plan task each",
       );
     }
+  }
+  // Emit in authored team order, never grouped by role.
+  const assigned: Array<[Specialist, string]> = [];
+  for (const entry of specialists) {
+    for (const taskId of tasksByEntry.get(entry) ?? []) assigned.push([entry, taskId]);
   }
   return assigned;
 }

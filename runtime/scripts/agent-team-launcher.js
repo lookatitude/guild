@@ -50789,21 +50789,24 @@ function assignLaneTasks(specialists, ownerMap) {
     group.push(specialist);
     byRole.set(specialist.name, group);
   }
-  const assigned = [];
+  const tasksByEntry = /* @__PURE__ */ new Map();
   for (const [role, group] of byRole) {
     const owned = ownerMap.get(role) ?? [];
     if (group.length === 1) {
-      const effective = owned.length > 0 ? owned : [role];
-      for (const taskId of effective) assigned.push([group[0], taskId]);
+      tasksByEntry.set(group[0], owned.length > 0 ? [...owned] : [role]);
     } else if (owned.length === 0) {
-      group.forEach((entry, index) => assigned.push([entry, entry.participant_id ?? `${role}-${index + 1}`]));
+      group.forEach((entry, index) => tasksByEntry.set(entry, [entry.participant_id ?? `${role}-${index + 1}`]));
     } else if (owned.length === group.length) {
-      group.forEach((entry, index) => assigned.push([entry, owned[index]]));
+      group.forEach((entry, index) => tasksByEntry.set(entry, [owned[index]]));
     } else {
       throw new Error(
         `task-cell launch plan: role ${role} has ${group.length} team entries but ${owned.length} plan tasks; same-role entries need exactly one plan task each`
       );
     }
+  }
+  const assigned = [];
+  for (const entry of specialists) {
+    for (const taskId of tasksByEntry.get(entry) ?? []) assigned.push([entry, taskId]);
   }
   return assigned;
 }
@@ -58064,6 +58067,10 @@ async function main7() {
     if (launchBindingRef === null) {
       throw new Error(`binding_rejected: TaskCell dispatch ${runId} has no minted run binding`);
     }
+    const entryTaskIds = /* @__PURE__ */ new Map();
+    for (const [entry, taskId] of assignLaneTasks(team.specialists, preRoutingOwnerMap)) {
+      entryTaskIds.set(entry, [...entryTaskIds.get(entry) ?? [], taskId]);
+    }
     {
       const planLaneModel = makeLaneModelPlanner(
         cwd,
@@ -58073,9 +58080,7 @@ async function main7() {
         args.dryRun
       );
       for (const specialist of team.specialists) {
-        const taskIds = preRoutingOwnerMap.get(specialist.name);
-        const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [specialist.name];
-        for (const rawTaskId of effectiveTaskIds) {
+        for (const rawTaskId of entryTaskIds.get(specialist) ?? []) {
           const taskId = safeSegment2(rawTaskId);
           const { outcome, laneTier } = planLaneModel(specialist, taskId);
           modelProvenanceByTask.set(
@@ -58109,10 +58114,6 @@ async function main7() {
           );
         }
       }
-    }
-    const entryTaskIds = /* @__PURE__ */ new Map();
-    for (const [entry, taskId] of assignLaneTasks(team.specialists, preRoutingOwnerMap)) {
-      entryTaskIds.set(entry, [...entryTaskIds.get(entry) ?? [], taskId]);
     }
     for (const spec of team.specialists) {
       const taskIds = entryTaskIds.get(spec);

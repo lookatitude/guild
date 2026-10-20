@@ -906,9 +906,11 @@ describe("agent-team-launcher.ts", () => {
           "  - name: developer",
           '    scope: "Lane A: src/version.js"',
           "    depends-on: []",
+          "    tier: cheap",
           "  - name: developer",
           '    scope: "Lane B: src/cli.js"',
           "    depends-on: []",
+          "    tier: powerful",
           "    needs_network: true",
           "",
         ].join("\n"),
@@ -934,6 +936,11 @@ describe("agent-team-launcher.ts", () => {
       for (const bundle of ["developer-A-version", "developer-B-cli"]) {
         fs.writeFileSync(path.join(ctxDir, `${bundle}.md`), `# ${bundle}\n`);
       }
+      fs.writeFileSync(
+        path.join(tmpDir, ".guild", "settings.json"),
+        JSON.stringify({ model_routing: { shadow: "on" } }, null, 2) + "\n",
+        "utf8",
+      );
       const binDir = makeLaunchableTmuxBin(tmpDir);
       const tmuxLog = path.join(tmpDir, "tmux-args.log");
       const fakeTmux = path.join(binDir, "tmux");
@@ -967,6 +974,12 @@ describe("agent-team-launcher.ts", () => {
       expect(readTaskRunCapReqs(tmpDir, INHERITED_RUN_ID, "A-version")?.needs_network).not.toBe(true);
       // ...and its OWN runtime task id: the second pane is not stamped with the first lane's id.
       const tmuxArgs = fs.readFileSync(tmuxLog, "utf8");
+      // ...and model planning uses each entry's own tier, not its sibling's.
+      const shadow = (id: string) =>
+        fs.readFileSync(path.join(tmpDir, ".guild", "runs", INHERITED_RUN_ID, "shadow", `${id}.att1.shadow-comparison.json`), "utf8");
+      expect(shadow("A-version")).toContain("tier_map:cheap");
+      expect(shadow("A-version")).not.toContain("tier_map:powerful");
+      expect(shadow("B-cli")).toContain("tier_map:powerful");
       expect(tmuxArgs).toContain("GUILD_TASK_ID=A-version");
       expect(tmuxArgs).toContain("GUILD_TASK_ID=B-cli");
     });
