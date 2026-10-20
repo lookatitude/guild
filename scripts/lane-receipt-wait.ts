@@ -3,7 +3,10 @@
  * lane-receipt-wait — the lead's deterministic receipt-wait for one lane (#138).
  *
  *   lane-receipt-wait --cwd <repo> --run-id <run> --specialist <role> --task-id <id>
- *                     [--timeout-ms <ms>] [--poll-ms <ms>] [--no-record]
+ *                     --dispatched-at <epoch-ms> [--timeout-ms <ms>] [--poll-ms <ms>] [--no-record]
+ *
+ * `--dispatched-at` is this attempt's dispatch time: a receipt written before
+ * it belongs to an earlier attempt and is ignored.
  *
  * Prints one guild.lane_receipt_wait.v1 JSON line. Exit 0 = done; exit 1 =
  * failed or missing (timed out); exit 2 = usage error. The outcome is written
@@ -19,7 +22,7 @@ export const DEFAULT_LANE_RECEIPT_TIMEOUT_MS = 30 * 60 * 1000;
 
 const USAGE =
   "usage: lane-receipt-wait --cwd <repo> --run-id <run> --specialist <role> --task-id <id> " +
-  "[--timeout-ms <ms>] [--poll-ms <ms>] [--no-record]";
+  "--dispatched-at <epoch-ms> [--timeout-ms <ms>] [--poll-ms <ms>] [--no-record]";
 
 interface Args {
   cwd: string;
@@ -27,6 +30,7 @@ interface Args {
   specialist: string;
   taskId: string;
   timeoutMs: number;
+  dispatchedAtMs: number;
   pollMs: number | undefined;
   record: boolean;
 }
@@ -40,7 +44,7 @@ function parseArgs(argv: string[]): Args {
       record = false;
       continue;
     }
-    if (!["--cwd", "--run-id", "--specialist", "--task-id", "--timeout-ms", "--poll-ms"].includes(flag)) {
+    if (!["--cwd", "--run-id", "--specialist", "--task-id", "--dispatched-at", "--timeout-ms", "--poll-ms"].includes(flag)) {
       throw new Error(`unknown argument ${flag}`);
     }
     const value = argv[++i];
@@ -65,6 +69,7 @@ function parseArgs(argv: string[]): Args {
     specialist: need("--specialist"),
     taskId: need("--task-id"),
     timeoutMs: num("--timeout-ms") ?? DEFAULT_LANE_RECEIPT_TIMEOUT_MS,
+    dispatchedAtMs: (need("--dispatched-at"), num("--dispatched-at")!),
     pollMs: num("--poll-ms"),
     record,
   };
@@ -86,6 +91,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
       specialist: args.specialist,
       taskId: args.taskId,
       timeoutMs: args.timeoutMs,
+      dispatchedAtMs: args.dispatchedAtMs,
       pollMs: args.pollMs,
       record: args.record,
     });

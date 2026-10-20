@@ -41375,13 +41375,16 @@ function laneReceiptRef(specialist, taskId) {
   assertSafeId("task id", taskId);
   return path74.join("handoffs", `${specialist}-${taskId}.md`);
 }
-function inspectLaneReceipt(runDir2, specialist, taskId) {
+function inspectLaneReceipt(runDir2, specialist, taskId, notBeforeMs) {
   const ref = laneReceiptRef(specialist, taskId);
   let text;
   try {
     const st = fs62.lstatSync(path74.join(runDir2, ref));
     if (!st.isFile()) {
       return { state: "failed", receipt_ref: null, reason: "receipt path is not a regular file" };
+    }
+    if (notBeforeMs !== void 0 && st.mtimeMs < notBeforeMs) {
+      return { state: "pending", receipt_ref: null, reason: "only a receipt from an earlier attempt" };
     }
     text = fs62.readFileSync(path74.join(runDir2, ref), "utf8");
   } catch {
@@ -41420,15 +41423,18 @@ async function waitForLaneReceipt(opts) {
   if (!Number.isFinite(opts.timeoutMs) || opts.timeoutMs < 0) {
     throw new Error("lane-receipt: timeoutMs must be a non-negative number");
   }
+  if (!Number.isFinite(opts.dispatchedAtMs) || opts.dispatchedAtMs < 0) {
+    throw new Error("lane-receipt: dispatchedAtMs must be a non-negative epoch ms");
+  }
   laneReceiptRef(opts.specialist, opts.taskId);
   const now = opts.now ?? Date.now;
   const sleep = opts.sleep ?? defaultSleep2;
   const pollMs = Math.max(1, opts.pollMs ?? 2e3);
   const started = now();
-  let seen = inspectLaneReceipt(opts.runDir, opts.specialist, opts.taskId);
+  let seen = inspectLaneReceipt(opts.runDir, opts.specialist, opts.taskId, opts.dispatchedAtMs);
   while (seen.state === "pending" && now() - started < opts.timeoutMs) {
     await sleep(Math.min(pollMs, Math.max(1, opts.timeoutMs - (now() - started))));
-    seen = inspectLaneReceipt(opts.runDir, opts.specialist, opts.taskId);
+    seen = inspectLaneReceipt(opts.runDir, opts.specialist, opts.taskId, opts.dispatchedAtMs);
   }
   const status = seen.state === "pending" ? "missing" : seen.state;
   const reason = status === "missing" ? `no valid receipt within ${opts.timeoutMs}ms (${seen.reason})` : seen.reason;
@@ -41449,7 +41455,7 @@ async function waitForLaneReceipt(opts) {
 
 // scripts/lane-receipt-wait.ts
 var DEFAULT_LANE_RECEIPT_TIMEOUT_MS = 30 * 60 * 1e3;
-var USAGE2 = "usage: lane-receipt-wait --cwd <repo> --run-id <run> --specialist <role> --task-id <id> [--timeout-ms <ms>] [--poll-ms <ms>] [--no-record]";
+var USAGE2 = "usage: lane-receipt-wait --cwd <repo> --run-id <run> --specialist <role> --task-id <id> --dispatched-at <epoch-ms> [--timeout-ms <ms>] [--poll-ms <ms>] [--no-record]";
 function parseArgs11(argv) {
   const values = /* @__PURE__ */ new Map();
   let record = true;
@@ -41459,7 +41465,7 @@ function parseArgs11(argv) {
       record = false;
       continue;
     }
-    if (!["--cwd", "--run-id", "--specialist", "--task-id", "--timeout-ms", "--poll-ms"].includes(flag)) {
+    if (!["--cwd", "--run-id", "--specialist", "--task-id", "--dispatched-at", "--timeout-ms", "--poll-ms"].includes(flag)) {
       throw new Error(`unknown argument ${flag}`);
     }
     const value = argv[++i];
@@ -41484,6 +41490,7 @@ function parseArgs11(argv) {
     specialist: need("--specialist"),
     taskId: need("--task-id"),
     timeoutMs: num("--timeout-ms") ?? DEFAULT_LANE_RECEIPT_TIMEOUT_MS,
+    dispatchedAtMs: (need("--dispatched-at"), num("--dispatched-at")),
     pollMs: num("--poll-ms"),
     record
   };
@@ -41506,6 +41513,7 @@ ${USAGE2}
       specialist: args.specialist,
       taskId: args.taskId,
       timeoutMs: args.timeoutMs,
+      dispatchedAtMs: args.dispatchedAtMs,
       pollMs: args.pollMs,
       record: args.record
     });

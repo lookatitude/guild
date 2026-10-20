@@ -19,7 +19,7 @@ describe("lane-receipt-wait CLI (#138)", () => {
   it("exits 1 with status missing on timeout and records the lane failed", async () => {
     const code = await main([
       "--cwd", root, "--run-id", RUN_ID, "--specialist", "developer", "--task-id", "A",
-      "--timeout-ms", "0",
+      "--dispatched-at", "0", "--timeout-ms", "0",
     ]);
     expect(code).toBe(1);
     const state = loadRunState(path.join(root, ".guild", "runs", RUN_ID));
@@ -28,8 +28,9 @@ describe("lane-receipt-wait CLI (#138)", () => {
 
   it("exits 2 on a usage error or an unsafe run id", async () => {
     expect(await main(["--cwd", root, "--run-id", RUN_ID])).toBe(2);
+    expect(await main(["--cwd", root, "--run-id", RUN_ID, "--specialist", "developer", "--task-id", "A"])).toBe(2);
     expect(
-      await main(["--cwd", root, "--run-id", "../x", "--specialist", "developer", "--task-id", "A"]),
+      await main(["--cwd", root, "--run-id", "../x", "--specialist", "developer", "--task-id", "A", "--dispatched-at", "0"]),
     ).toBe(2);
   });
 });

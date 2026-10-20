@@ -55,11 +55,16 @@ export function laneReceiptRef(specialist: string, taskId: string): string {
   return path.join("handoffs", `${specialist}-${taskId}.md`);
 }
 
-/** One non-blocking look at the receipt. Never throws on file state. */
+/**
+ * One non-blocking look at the receipt. Never throws on file state. A receipt
+ * last written before `notBeforeMs` (this attempt's dispatch time) belongs to
+ * an earlier attempt and reads as `pending`, never as this attempt's result.
+ */
 export function inspectLaneReceipt(
   runDir: string,
   specialist: string,
   taskId: string,
+  notBeforeMs?: number,
 ): LaneReceiptInspection {
   const ref = laneReceiptRef(specialist, taskId);
   let text: string;
@@ -67,6 +72,9 @@ export function inspectLaneReceipt(
     const st = fs.lstatSync(path.join(runDir, ref));
     if (!st.isFile()) {
       return { state: "failed", receipt_ref: null, reason: "receipt path is not a regular file" };
+    }
+    if (notBeforeMs !== undefined && st.mtimeMs < notBeforeMs) {
+      return { state: "pending", receipt_ref: null, reason: "only a receipt from an earlier attempt" };
     }
     text = fs.readFileSync(path.join(runDir, ref), "utf8");
   } catch {
@@ -117,6 +125,8 @@ export interface WaitForLaneReceiptOptions {
   specialist: string;
   taskId: string;
   timeoutMs: number;
+  /** This attempt's dispatch time (epoch ms); older receipts are ignored. */
+  dispatchedAtMs: number;
   pollMs?: number;
   /** Write the outcome into run-state (default true). */
   record?: boolean;
@@ -134,15 +144,18 @@ export async function waitForLaneReceipt(opts: WaitForLaneReceiptOptions): Promi
   if (!Number.isFinite(opts.timeoutMs) || opts.timeoutMs < 0) {
     throw new Error("lane-receipt: timeoutMs must be a non-negative number");
   }
+  if (!Number.isFinite(opts.dispatchedAtMs) || opts.dispatchedAtMs < 0) {
+    throw new Error("lane-receipt: dispatchedAtMs must be a non-negative epoch ms");
+  }
   laneReceiptRef(opts.specialist, opts.taskId);
   const now = opts.now ?? Date.now;
   const sleep = opts.sleep ?? defaultSleep;
   const pollMs = Math.max(1, opts.pollMs ?? 2000);
   const started = now();
-  let seen = inspectLaneReceipt(opts.runDir, opts.specialist, opts.taskId);
+  let seen = inspectLaneReceipt(opts.runDir, opts.specialist, opts.taskId, opts.dispatchedAtMs);
   while (seen.state === "pending" && now() - started < opts.timeoutMs) {
     await sleep(Math.min(pollMs, Math.max(1, opts.timeoutMs - (now() - started))));
-    seen = inspectLaneReceipt(opts.runDir, opts.specialist, opts.taskId);
+    seen = inspectLaneReceipt(opts.runDir, opts.specialist, opts.taskId, opts.dispatchedAtMs);
   }
   const status: LaneReceiptStatus = seen.state === "pending" ? "missing" : seen.state;
   const reason =

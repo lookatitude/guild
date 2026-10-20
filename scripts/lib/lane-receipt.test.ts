@@ -64,7 +64,7 @@ describe("lane-receipt — deterministic receipt-wait (#138)", () => {
   it("times out to an explicit `missing` status and records the lane failed, never done", async () => {
     const clock = fakeClock();
     const result = await waitForLaneReceipt({
-      runDir, runId: RUN_ID, specialist: "developer", taskId: "A-version",
+      runDir, runId: RUN_ID, specialist: "developer", taskId: "A-version", dispatchedAtMs: 0,
       timeoutMs: 10_000, pollMs: 1_000, ...clock,
     });
     expect(result.status).toBe("missing");
@@ -80,7 +80,7 @@ describe("lane-receipt — deterministic receipt-wait (#138)", () => {
       if (t === 4_000) writeReceipt("developer-A-version.md", receipt("A-version"));
     });
     const result = await waitForLaneReceipt({
-      runDir, runId: RUN_ID, specialist: "developer", taskId: "A-version",
+      runDir, runId: RUN_ID, specialist: "developer", taskId: "A-version", dispatchedAtMs: 0,
       timeoutMs: 60_000, pollMs: 1_000, ...clock,
     });
     expect(result.status).toBe("done");
@@ -95,11 +95,35 @@ describe("lane-receipt — deterministic receipt-wait (#138)", () => {
     writeReceipt("developer-C-docs.md", receipt("C-docs", "escalate"));
     for (const taskId of ["B-cli", "C-docs"]) {
       const result = await waitForLaneReceipt({
-        runDir, runId: RUN_ID, specialist: "developer", taskId, timeoutMs: 0, ...fakeClock(),
+        runDir, runId: RUN_ID, specialist: "developer", taskId, dispatchedAtMs: 0, timeoutMs: 0, ...fakeClock(),
       });
       expect(result.status).toBe("failed");
       expect(lane(taskId)?.status).toBe("failed");
     }
+  });
+
+  it("ignores an earlier attempt's receipt and waits for this attempt's (F6)", async () => {
+    const file = path.join(runDir, "handoffs", "developer-A-version.md");
+    writeReceipt("developer-A-version.md", receipt("A-version", "blocked"));
+    fs.utimesSync(file, new Date(1_000_000), new Date(1_000_000));
+    const dispatchedAtMs = 2_000_000_000;
+    const clock = fakeClock((t) => {
+      if (t === 3_000) {
+        writeReceipt("developer-A-version.md", receipt("A-version"));
+        fs.utimesSync(file, new Date(dispatchedAtMs + 5), new Date(dispatchedAtMs + 5));
+      }
+    });
+    const result = await waitForLaneReceipt({
+      runDir, runId: RUN_ID, specialist: "developer", taskId: "A-version", dispatchedAtMs,
+      timeoutMs: 60_000, pollMs: 1_000, ...clock,
+    });
+    expect(result.status).toBe("done");
+    expect(result.waited_ms).toBe(3_000);
+  });
+
+  it("CONTROL: the same stale receipt with no dispatch floor reads as this attempt's failure", () => {
+    writeReceipt("developer-A-version.md", receipt("A-version", "blocked"));
+    expect(inspectLaneReceipt(runDir, "developer", "A-version").state).toBe("failed");
   });
 
   it("refuses a receipt whose envelope names another task", () => {
@@ -111,7 +135,7 @@ describe("lane-receipt — deterministic receipt-wait (#138)", () => {
 
   it("refuses unsafe ids before touching the file system", async () => {
     await expect(
-      waitForLaneReceipt({ runDir, runId: RUN_ID, specialist: "../x", taskId: "A", timeoutMs: 0 }),
+      waitForLaneReceipt({ runDir, runId: RUN_ID, specialist: "../x", taskId: "A", dispatchedAtMs: 0, timeoutMs: 0 }),
     ).rejects.toThrow(/unsafe specialist/);
     expect(() => inspectLaneReceipt(runDir, "developer", "..")).toThrow(/unsafe task id/);
   });
@@ -147,7 +171,7 @@ describe("lane-receipt — fallback lanes reach the Stop backstop (#237)", () =>
     for (const taskId of ["A-version", "B-cli"]) {
       fs.writeFileSync(path.join(runDir, "handoffs", `developer-${taskId}.md`), receipt(taskId));
       const result = await waitForLaneReceipt({
-        runDir, runId: RUN_ID, specialist: "developer", taskId, timeoutMs: 0, ...fakeClock(),
+        runDir, runId: RUN_ID, specialist: "developer", taskId, dispatchedAtMs: 0, timeoutMs: 0, ...fakeClock(),
       });
       expect(result.status).toBe("done");
     }
