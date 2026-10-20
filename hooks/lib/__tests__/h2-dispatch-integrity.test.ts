@@ -30,6 +30,7 @@ import {
   buildDenyMessage,
   classifyLaneEvidence,
   PRODUCER_MARKER_ENV,
+  isRunFresh,
   readRunSettingsSnapshot,
   resolveBackendDegradation,
   resolveBlockUnmarkedFromSnapshot,
@@ -251,6 +252,12 @@ describe("#146 — readRunSettingsSnapshot: one digest-verified parse", () => {
     const deleted = mkRoot({ agent_mode: "team" }, "match");
     fs.rmSync(path.join(deleted, ".guild", "runs", RUN_ID, "resolved-settings.json"));
     expect(readRunSettingsSnapshot(deleted, RUN_ID).integrity).toBe("mismatch");
+  });
+  it("codex r3: a deleted bound snapshot still leaves a sentinel run fresh, so the guard fails closed", () => {
+    const root = mkRoot({ agent_mode: "team" }, "match");
+    fs.rmSync(path.join(root, ".guild", "runs", RUN_ID, "resolved-settings.json"));
+    expect(readRunSettingsSnapshot(root, RUN_ID).integrity).toBe("mismatch");
+    expect(isRunFresh(root, RUN_ID, "sentinel")).toBe(true);
   });
   it("control: an unbound (legacy) unreadable snapshot keeps the fail-open posture", () => {
     const root = mkRoot({ agent_mode: "team" }, "none");

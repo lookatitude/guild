@@ -42428,7 +42428,10 @@ function dispatchAssertsRunId(toolInput, runId) {
 }
 function newestRunSignalMs(guildRoot, runId) {
   const dir = path80.join(durableGuildDir(guildRoot), "runs", runId);
-  const candidates = [path80.join(dir, "resolved-settings.json")];
+  const candidates = [
+    path80.join(dir, "resolved-settings.json"),
+    path80.join(dir, RESOLVED_SETTINGS_DIGEST_FILE)
+  ];
   for (const sub of ["handoffs", "in-progress"]) {
     try {
       for (const name of fs67.readdirSync(path80.join(dir, sub))) {

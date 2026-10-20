@@ -530,7 +530,12 @@ export function dispatchAssertsRunId(toolInput: unknown, runId: string): boolean
  */
 export function newestRunSignalMs(guildRoot: string, runId: string): number {
   const dir = path.join(durableGuildDir(guildRoot), "runs", runId);
-  const candidates = [path.join(dir, "resolved-settings.json")];
+  // #146: the digest sidecar is written at run start with the snapshot, so
+  // deleting the snapshot cannot also erase the run's freshness.
+  const candidates = [
+    path.join(dir, "resolved-settings.json"),
+    path.join(dir, RESOLVED_SETTINGS_DIGEST_FILE),
+  ];
   // `handoffs/*` — written by the run's own lanes on completion.
   // `in-progress/*` — the per-lane heartbeat. It IS written by a hook
   // (`post-tool-use.ts` → `writeHeartbeatFromEnv`), but only from a process that
