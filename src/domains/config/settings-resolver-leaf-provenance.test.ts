@@ -146,3 +146,31 @@ describe("#145 — local layers stamp their leaves", () => {
     expect(sources["defaults.team.size"]).toBe("workspace");
   });
 });
+
+describe("#145 — derived and coerced leaves keep honest provenance", () => {
+  it("index:off forcing defaults.index.enabled labels it with index's layer", () => {
+    const child = mkWorkspaceChild({ child: { index: "off" } });
+    const { config, sources } = resolveSettings({ cwd: child });
+    expect(config.defaults.index.enabled).toBe(false);
+    expect(sources["defaults.index.enabled"]).toBe("project");
+  });
+
+  it("a project capability block stamps only the fields it sets; workspace siblings survive", () => {
+    const child = mkWorkspaceChild({
+      ws: { capability: { suggestion_budget: 1 } },
+      child: { capability: { resolver_mode: "shadow" } },
+    });
+    const { config, sources } = resolveSettings({ cwd: child });
+    expect(config.capability.suggestion_budget).toBe(1);
+    expect(sources["capability.suggestion_budget"]).toBe("workspace");
+    expect(sources["capability.resolver_mode"]).toBe("project");
+    expect(sources["capability.auto_create_policy"]).toBe("builtin");
+  });
+
+  it("an empty project capability block labels no leaf [project]", () => {
+    const child = mkWorkspaceChild({ child: { capability: {} } });
+    const { sources } = resolveSettings({ cwd: child });
+    expect(sources["capability.resolver_mode"]).toBe("builtin");
+    expect(sources["capability.starter_roles"]).toBe("builtin");
+  });
+});

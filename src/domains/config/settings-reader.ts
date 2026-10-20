@@ -479,18 +479,16 @@ const VALID_CAPABILITY_KEYS = new Set([
  *
  * Mirrors coerceCapabilityBlock in config-cli.ts: an out-of-range budget CLAMPS to
  * the ceiling (an operator who wrote 9 wanted "as many as possible", and 4 is that);
- * an unknown enum member falls back to the shipped default; `starter_roles` are
- * trimmed, blank-stripped and DEDUPED in first-seen order so the resolved config is
- * stable across runs.
+ * an unknown enum member is DROPPED so the lower layer (or the shipped default) shows
+ * through; `starter_roles` are trimmed, blank-stripped and DEDUPED in first-seen order
+ * so the resolved config is stable across runs.
+ *
+ * SPARSE like every other layer block: only fields this layer validly sets are
+ * returned, so deepMerge keeps a lower layer's sibling and per-leaf provenance (#145)
+ * never labels an unset field with this layer.
  */
-function coerceCapability(raw: unknown): CapabilityBlock {
-  const base = SHARED_DEFAULTS.capability;
-  const out: CapabilityBlock = {
-    resolver_mode: base.resolver_mode as CapabilityResolverMode,
-    suggestion_budget: base.suggestion_budget,
-    starter_roles: [...base.starter_roles],
-    auto_create_policy: base.auto_create_policy as CapabilityAutoCreatePolicy,
-  };
+function coerceCapability(raw: unknown): Partial<CapabilityBlock> {
+  const out: Partial<CapabilityBlock> = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
   const r = raw as Record<string, unknown>;
 
@@ -887,7 +885,7 @@ function parseSettingsFile_fromParsed(parsed: Record<string, unknown>): Partial<
     for (const k of Object.keys(rawCapability)) {
       if (VALID_CAPABILITY_KEYS.has(k)) known[k] = rawCapability[k];
     }
-    out.capability = coerceCapability(known);
+    out.capability = coerceCapability(known) as CapabilityBlock;
   }
   // R-009: statusline
   if (typeof parsed["statusline"] === "boolean") out.statusline = parsed["statusline"];
@@ -1388,6 +1386,7 @@ export function resolveSettings(opts: ResolveOptions): ResolveResult {
       ...assembled.defaults,
       index: { ...assembled.defaults.index, enabled: false },
     };
+    sources["defaults.index.enabled"] = sources.index;
   }
 
   return { config: assembled, sources };
