@@ -40392,17 +40392,10 @@ function deliverObservation(sink, outcome, gate) {
     gate.delivering = false;
   }
 }
-function echoCount(screen, probe) {
-  if (probe.length === 0) return 0;
-  const flat = screen.replace(/\s+/g, "");
-  let count = 0;
-  for (let at = flat.indexOf(probe); at !== -1; at = flat.indexOf(probe, at + probe.length)) count += 1;
-  return count;
-}
 function blockingSleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
-var NOOP_SINK, SYSTEM_CLOCK, BaseExecutionTransport, DEFAULT_TMUX_POLL_LIMIT, DEFAULT_TMUX_SETTLE_MS, DEFAULT_TMUX_SEND_POLL_LIMIT, TMUX_IDLE_CAPTURES, TMUX_ECHO_PROBE_CHARS, TmuxExecutionTransport, GENERATED_PRE_GUARD_EXPORTS, DEFINITION_REF_KEYS, PINNED_SKILL_KEYS;
+var NOOP_SINK, SYSTEM_CLOCK, BaseExecutionTransport, DEFAULT_TMUX_POLL_LIMIT, DEFAULT_TMUX_SETTLE_MS, DEFAULT_TMUX_SEND_POLL_LIMIT, TMUX_IDLE_CAPTURES, TMUX_AGENT_PANE_PROFILES, anyMatch, TmuxExecutionTransport, GENERATED_PRE_GUARD_EXPORTS, DEFINITION_REF_KEYS, PINNED_SKILL_KEYS;
 var init_execution_transport_adapters = __esm({
   "src/domains/dispatch/execution-transport-adapters.ts"() {
     init_execution_transport_ports();
@@ -40524,7 +40517,21 @@ var init_execution_transport_adapters = __esm({
     DEFAULT_TMUX_SETTLE_MS = 500;
     DEFAULT_TMUX_SEND_POLL_LIMIT = 40;
     TMUX_IDLE_CAPTURES = 3;
-    TMUX_ECHO_PROBE_CHARS = 32;
+    TMUX_AGENT_PANE_PROFILES = [
+      {
+        host_kind: "claude",
+        commands: ["claude"],
+        ready: [/\? for shortcuts/, /^[\s│]*[>❯](\s|$)/m],
+        busy: [/esc to interrupt/i]
+      },
+      {
+        host_kind: "codex",
+        commands: ["codex"],
+        ready: [/^[\s│▌]*[›❯>](\s|$)/m],
+        busy: [/esc to interrupt/i]
+      }
+    ];
+    anyMatch = (patterns, screen) => patterns.some((pattern) => pattern.test(screen));
     TmuxExecutionTransport = class extends BaseExecutionTransport {
       transport_id = "tmux";
       supported = /* @__PURE__ */ new Set([
@@ -40556,7 +40563,7 @@ var init_execution_transport_adapters = __esm({
       capturePane(handle) {
         let result2;
         try {
-          result2 = this.run("tmux", ["capture-pane", "-p", "-J", "-S", "-200", "-t", handle.handle_id]);
+          result2 = this.run("tmux", ["capture-pane", "-p", "-t", handle.handle_id]);
         } catch (err) {
           return { failure: failedExecutionOutcome(this.transport_id, "send", err, "send_failed") };
         }
@@ -40661,29 +40668,87 @@ var init_execution_transport_adapters = __esm({
           })
         );
       }
+      /** The pane's foreground command, or the typed `send` failure that stopped the read. */
+      paneCommand(handle) {
+        let result2;
+        try {
+          result2 = this.run("tmux", ["display-message", "-p", "-t", handle.handle_id, "#{pane_current_command}"]);
+        } catch (err) {
+          return { failure: failedExecutionOutcome(this.transport_id, "send", err, "send_failed") };
+        }
+        if (result2.status === null) {
+          return {
+            failure: executionOutcome({
+              operation: "send",
+              transport_id: this.transport_id,
+              status: "failed",
+              reason_code: "transport_unavailable",
+              detail: "tmux is not installed or did not run",
+              facts: { delivered: false }
+            })
+          };
+        }
+        if (result2.status !== 0) {
+          return {
+            failure: executionOutcome({
+              operation: "send",
+              transport_id: this.transport_id,
+              status: "failed",
+              reason_code: "send_failed",
+              detail: result2.stderr,
+              facts: { exit_status: result2.status, delivered: false }
+            })
+          };
+        }
+        return { command: result2.stdout.trim() };
+      }
+      /** The agent profile for this pane, or a `not_agent_pane` refusal. Never guesses. */
+      agentProfile(handle) {
+        const read = this.paneCommand(handle);
+        if ("failure" in read) return read;
+        const profile = TMUX_AGENT_PANE_PROFILES.find(
+          (p) => p.commands.includes(read.command) && (handle.host_kind === null || handle.host_kind === p.host_kind)
+        );
+        if (profile) return { profile };
+        return {
+          failure: executionOutcome({
+            operation: "send",
+            transport_id: this.transport_id,
+            status: "failed",
+            reason_code: "invalid_request",
+            detail: `pane runs ${JSON.stringify(read.command)}, not a known agent CLI${handle.host_kind ? ` for host ${handle.host_kind}` : ""}; no keys sent`,
+            facts: { session: handle.handle_id, delivered: false, reason: "not_agent_pane", pane_command: read.command }
+          })
+        };
+      }
       /**
        * #179 — keys typed into a pane that is mid-turn are lost, so `send` is
-       * gated and confirmed. Idle means three equal pane captures `settleMs`
-       * apart; a pane that never settles gets no keys and a `deadline_exceeded`
-       * failure. Delivered means the payload's first line echoes in the pane one
-       * more time than on the idle screen; otherwise `send_failed` with
-       * `delivered: false`. Long briefs go in a file; send a short nudge.
+       * gated and confirmed. The pane must run a known agent CLI
+       * (`TMUX_AGENT_PANE_PROFILES`), else `not_agent_pane` and no keys. Idle
+       * means the input-ready marker is visible, no busy marker is, and the
+       * screen holds for three captures; a pane that never gets there is held
+       * (`deadline_exceeded`). Delivered means the pane then leaves the
+       * input-ready state (a busy marker appears or the ready marker clears);
+       * a text echo alone is not delivery. Long briefs go in a file; send a nudge.
        */
       send(handle, payload) {
-        let read = this.capturePane(handle);
-        if ("failure" in read) return this.observed(read.failure);
+        const agent = this.agentProfile(handle);
+        if ("failure" in agent) return this.observed(agent.failure);
+        const { profile } = agent;
+        const isIdle = (screen) => anyMatch(profile.ready, screen) && !anyMatch(profile.busy, screen);
         let idleScreen = null;
-        let polls = 1;
-        let stable = 1;
+        let previous = null;
+        let stable = 0;
+        let polls = 0;
         while (polls < this.sendPollLimit) {
-          this.sleep(this.settleMs);
-          const next = this.capturePane(handle);
+          if (polls > 0) this.sleep(this.settleMs);
+          const read = this.capturePane(handle);
           polls += 1;
-          if ("failure" in next) return this.observed(next.failure);
-          stable = next.screen === read.screen ? stable + 1 : 1;
-          read = next;
+          if ("failure" in read) return this.observed(read.failure);
+          stable = isIdle(read.screen) ? read.screen === previous ? stable + 1 : 1 : 0;
+          previous = read.screen;
           if (stable >= TMUX_IDLE_CAPTURES) {
-            idleScreen = next.screen;
+            idleScreen = read.screen;
             break;
           }
         }
@@ -40694,11 +40759,13 @@ var init_execution_transport_adapters = __esm({
               transport_id: this.transport_id,
               status: "failed",
               reason_code: "deadline_exceeded",
-              detail: `pane stayed busy for ${polls} captures; message held, not sent`,
+              detail: `pane never showed a stable input-ready state in ${polls} captures; message held, not sent`,
               facts: { session: handle.handle_id, delivered: false, idle: false, polls }
             })
           );
         }
+        const recheck = this.agentProfile(handle);
+        if ("failure" in recheck) return this.observed(recheck.failure);
         let result2;
         try {
           result2 = this.run("tmux", ["send-keys", "-t", handle.handle_id, payload, "Enter"]);
@@ -40731,13 +40798,11 @@ var init_execution_transport_adapters = __esm({
             })
           );
         }
-        const probe = (payload.split("\n")[0] ?? "").replace(/\s+/g, "").slice(0, TMUX_ECHO_PROBE_CHARS);
-        const echoesBefore = echoCount(idleScreen, probe);
         for (let checks = 1; checks <= this.sendPollLimit; checks += 1) {
           this.sleep(this.settleMs);
           const after = this.capturePane(handle);
           if ("failure" in after) return this.observed(after.failure);
-          if (echoCount(after.screen, probe) > echoesBefore) {
+          if (!isIdle(after.screen)) {
             return this.observed(
               executionOutcome({
                 operation: "send",
@@ -40745,6 +40810,7 @@ var init_execution_transport_adapters = __esm({
                 status: "succeeded",
                 facts: {
                   session: handle.handle_id,
+                  host_kind: profile.host_kind,
                   payload_bytes: payload.length,
                   delivered: true,
                   idle_polls: polls,
@@ -40760,7 +40826,7 @@ var init_execution_transport_adapters = __esm({
             transport_id: this.transport_id,
             status: "failed",
             reason_code: "send_failed",
-            detail: "keys sent but the message never echoed in the pane; delivery not confirmed",
+            detail: "keys sent but the pane stayed input-ready; the agent did not pick the message up",
             facts: { session: handle.handle_id, delivered: false }
           })
         );
@@ -41949,7 +42015,7 @@ __export(pane_send_exports, {
 module.exports = __toCommonJS(pane_send_exports);
 var import_node_child_process3 = require("node:child_process");
 init_dispatch();
-var USAGE2 = "usage: pane-send --target <tmux-target> --message <text> [--settle-ms <ms>] [--poll-limit <n>]";
+var USAGE2 = "usage: pane-send --target <tmux-target> --message <text> [--host <claude|codex>] [--settle-ms <ms>] [--poll-limit <n>]";
 var run = (cmd, args) => {
   const r = (0, import_node_child_process3.spawnSync)(cmd, args, { encoding: "utf8" });
   return { status: r.error ? null : r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
@@ -41959,7 +42025,7 @@ function main6(argv = process.argv.slice(2), runFn = run) {
   try {
     for (let i = 0; i < argv.length; i++) {
       const flag = argv[i];
-      if (!["--target", "--message", "--settle-ms", "--poll-limit"].includes(flag)) {
+      if (!["--target", "--message", "--host", "--settle-ms", "--poll-limit"].includes(flag)) {
         throw new Error(`unknown argument ${flag}`);
       }
       const value = argv[++i];
@@ -41988,7 +42054,7 @@ ${USAGE2}
     sendPollLimit: num("--poll-limit")
   });
   const outcome = transport.send(
-    { transport_id: "tmux", handle_id: values.get("--target"), host_id: null, host_kind: null, invocation: null },
+    { transport_id: "tmux", handle_id: values.get("--target"), host_id: null, host_kind: values.get("--host") ?? null, invocation: null },
     values.get("--message")
   );
   process.stdout.write(`${JSON.stringify(outcome)}

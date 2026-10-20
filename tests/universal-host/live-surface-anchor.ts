@@ -724,7 +724,10 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // collect lanes via lane-receipt-wait (never idle = success) and inject via the
   // idle-gated pane-send. Registry re-extracted. ANTI-VACUITY: SC-W2-5, SC-W3-6(B) and
   // check-surface-pins were RED (registry_stale execute-plan, tree_pin_stale skills).
-  skills: "d9de330eadc8f76aa35e789231e90596741ed576",
+  // Re-ratified 2026-10-20 (v3.2 H1 F9): execute-plan SKILL.md states the pane-send
+  // agent-pane gate (not_agent_pane, input-ready, pickup). Registry re-extracted.
+  // ANTI-VACUITY: check-surface-pins was RED against the prior pin first.
+  skills: "f3073744abacfd67ac3d5186dac5c8cdd5aab129",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

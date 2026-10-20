@@ -620,15 +620,23 @@ describe("TmuxExecutionTransport — the tmux seam", () => {
   });
 
   /**
-   * #179 — a pane runner: each `capture-pane` returns the next screen; after
-   * `send-keys` lands, captures return `afterSend`.
+   * #179 — a pane runner: `display-message` returns the foreground command;
+   * each `capture-pane` returns the next screen; after `send-keys` lands,
+   * captures return `afterSend`.
    */
-  function paneRun(screens: string[], afterSend: string | null, sendResult: ExecutionRunResult = OK) {
+  const READY = "│ >                │\n  ? for shortcuts";
+  const BUSY = "⠋ Working… (3s · esc to interrupt)\n│ >                │";
+  function paneRun(
+    screens: string[],
+    afterSend: string | null,
+    { command = "claude", sendResult = OK }: { command?: string; sendResult?: ExecutionRunResult } = {},
+  ) {
     const calls: Array<{ cmd: string; args: string[] }> = [];
     const pending = [...screens];
     let sent = false;
     const run: ExecutionRunFn = (cmd, args) => {
       calls.push({ cmd, args });
+      if (args[0] === "display-message") return { status: 0, stdout: `${command}\n`, stderr: "" };
       if (args[0] === "send-keys") {
         sent = sendResult.status === 0;
         return sendResult;
@@ -644,70 +652,73 @@ describe("TmuxExecutionTransport — the tmux seam", () => {
   }
   const verbs = (calls: Array<{ args: string[] }>) => calls.map((c) => c.args[0]);
 
-  it("#179: holds a message while the pane is mid-turn, sends once idle, and confirms delivery", () => {
-    const { calls, transport } = paneRun(
-      ["⠋ working 1", "⠙ working 2", "⠹ working 3", "> ", "> ", "> "],
-      "> status?\n⠋ working",
-    );
+  it("#179: holds a message while the agent is busy, sends once input-ready, and confirms pickup", () => {
+    const { calls, transport } = paneRun([BUSY, BUSY, READY, READY, READY], BUSY);
     const ok = transport.send(HANDLE, "status?");
     assertClosedOutcome(ok);
     expect(ok.status).toBe("succeeded");
     expect(ok.facts["delivered"]).toBe(true);
-    // send-keys only after three equal captures (idle), then a capture shows the echo.
     expect(verbs(calls)).toEqual([
-      "capture-pane", "capture-pane", "capture-pane", "capture-pane", "capture-pane", "capture-pane",
-      "send-keys", "capture-pane",
+      "display-message",
+      "capture-pane", "capture-pane", "capture-pane", "capture-pane", "capture-pane",
+      "display-message", "send-keys", "capture-pane",
     ]);
   });
 
-  it("#179: a pane that never goes idle gets NO keys and a typed failure, never a silent loss", () => {
-    const busy = Array.from({ length: 20 }, (_, i) => `⠋ working ${i}`);
-    const { calls, transport } = paneRun(busy, null);
+  it("#179: a quiet pane running a non-agent command gets NO keys (not_agent_pane)", () => {
+    const { calls, transport } = paneRun([""], null, { command: "sleep" });
     const result = transport.send(HANDLE, "status?");
     assertClosedOutcome(result);
+    expect(result.status).toBe("failed");
+    expect(result.facts["reason"]).toBe("not_agent_pane");
+    expect(result.facts["delivered"]).toBe(false);
+    expect(verbs(calls)).toEqual(["display-message"]);
+  });
+
+  it("#179: an agent pane whose host disagrees with the handle is refused, never guessed", () => {
+    const { calls, transport } = paneRun([READY], null, { command: "claude" });
+    const result = transport.send({ ...HANDLE, host_kind: "codex" }, "status?");
+    expect(result.facts["reason"]).toBe("not_agent_pane");
+    expect(verbs(calls)).not.toContain("send-keys");
+  });
+
+  it("#179: a quiet busy agent (busy marker, static screen) gets NO keys", () => {
+    const { calls, transport } = paneRun([BUSY], null);
+    const result = transport.send(HANDLE, "status?");
     expect(result.status).toBe("failed");
     expect(result.reason_code).toBe("deadline_exceeded");
     expect(result.facts["delivered"]).toBe(false);
     expect(verbs(calls)).not.toContain("send-keys");
   });
 
-  it("#179: a short static pause is not idle; the pane must hold still for three captures", () => {
-    const { calls, transport } = paneRun(["⠋ tool", "⠋ tool", "⠙ tool", "> ", "> ", "> "], "> status?");
+  it("#179: a static screen with no input-ready marker is not idle", () => {
+    const { calls, transport } = paneRun(["compiling…"], null);
+    expect(transport.send(HANDLE, "status?").reason_code).toBe("deadline_exceeded");
+    expect(verbs(calls)).not.toContain("send-keys");
+  });
+
+  it("#179: two ready captures are not enough; the pane must hold for three", () => {
+    const { calls, transport } = paneRun([READY, READY, BUSY, READY, READY, READY], BUSY);
     expect(transport.send(HANDLE, "status?").status).toBe("succeeded");
-    expect(verbs(calls).indexOf("send-keys")).toBe(6);
+    expect(verbs(calls).indexOf("send-keys")).toBe(8);
   });
 
-  it("#179: unrelated pane output after the keys is NOT delivery evidence", () => {
-    const { transport } = paneRun(["$ tool", "$ tool", "$ tool"], "$ tool\nunrelated output");
+  it("#179: a text echo while the pane stays input-ready is NOT pickup", () => {
+    const { transport } = paneRun([READY, READY, READY], "│ > status?        │\n  ? for shortcuts");
     const result = transport.send(HANDLE, "status?");
     expect(result.status).toBe("failed");
     expect(result.reason_code).toBe("send_failed");
     expect(result.facts["delivered"]).toBe(false);
-  });
-
-  it("#179: an older copy of the same message on screen does not confirm a new send", () => {
-    const { transport } = paneRun(["> status?", "> status?", "> status?"], null);
-    expect(transport.send(HANDLE, "status?").facts["delivered"]).toBe(false);
-  });
-
-  it("#179: keys that leave the idle pane unchanged are reported undelivered", () => {
-    const { calls, transport } = paneRun(["> ", "> ", "> "], null);
-    const result = transport.send(HANDLE, "status?");
-    assertClosedOutcome(result);
-    expect(result.status).toBe("failed");
-    expect(result.reason_code).toBe("send_failed");
-    expect(result.facts["delivered"]).toBe(false);
-    expect(verbs(calls)).toContain("send-keys");
   });
 
   it("reports a send-keys failure typed", () => {
-    const { transport } = paneRun(["> ", "> ", "> "], null, NONZERO);
+    const { transport } = paneRun([READY, READY, READY], null, { sendResult: NONZERO });
     const failure = transport.send(HANDLE, "status?");
     expect(failure.status).toBe("failed");
     expect(failure.reason_code).toBe("send_failed");
   });
 
-  it("reports a missing tmux on the idle probe as transport_unavailable", () => {
+  it("reports a missing tmux on the pane probe as transport_unavailable", () => {
     const { transport } = tmux([ABSENT]);
     const failure = transport.send(HANDLE, "status?");
     expect(failure.status).toBe("failed");
