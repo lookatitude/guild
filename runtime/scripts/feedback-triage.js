@@ -5661,7 +5661,7 @@ var TOKEN_SHAPE_EXTRAS = [
   ["\\bgithub_pat_", "GitHub fine-grained token"],
   ["\\beyJ", "JWT"]
 ];
-var PROSE_CREDENTIAL_PATTERNS = Object.freeze([
+var PROSE_CREDENTIAL_PATTERNS = deepFreeze([
   // The canonical password form is case-sensitive; prose also catches `PASSWORD=`.
   ...SECRET_PATTERNS.filter(([, label]) => PROSE_SECRET_LABELS.has(label)).map(
     ([re, label]) => re.flags.includes("i") ? [re, label] : Object.freeze([new RegExp(re.source, re.flags + "i"), label])
@@ -5672,6 +5672,7 @@ var PROSE_CREDENTIAL_PATTERNS = Object.freeze([
     )
   )
 ]);
+var PROSE_WRITE_TOOLS = sealSet(["Write", "Edit", "MultiEdit"]);
 
 // scripts/docs-hygiene/scan.ts
 var args = process.argv.slice(2);

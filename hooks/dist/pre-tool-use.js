@@ -16563,7 +16563,7 @@ var init_prose_scrub = __esm({
       ["\\bgithub_pat_", "GitHub fine-grained token"],
       ["\\beyJ", "JWT"]
     ];
-    PROSE_CREDENTIAL_PATTERNS = Object.freeze([
+    PROSE_CREDENTIAL_PATTERNS = deepFreeze([
       // The canonical password form is case-sensitive; prose also catches `PASSWORD=`.
       ...SECRET_PATTERNS.filter(([, label]) => PROSE_SECRET_LABELS.has(label)).map(
         ([re, label]) => re.flags.includes("i") ? [re, label] : Object.freeze([new RegExp(re.source, re.flags + "i"), label])
@@ -16574,7 +16574,7 @@ var init_prose_scrub = __esm({
         )
       )
     ]);
-    PROSE_WRITE_TOOLS = /* @__PURE__ */ new Set(["Write", "Edit", "MultiEdit"]);
+    PROSE_WRITE_TOOLS = sealSet(["Write", "Edit", "MultiEdit"]);
     SNAPSHOT_KIND = "prose-prior-snapshot";
     PROSE_SNAPSHOT_SEGMENT = "prose-snapshots";
   }

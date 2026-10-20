@@ -16361,7 +16361,7 @@ function describeProseRefusal(verdict, fileLabel) {
   const failText = verdict.failures.length > 0 ? `${parts.length > 0 ? ";" : ":"} secrets_policy has an invalid pattern (${verdict.failures.join("; ")}), so durable prose fails closed` : "";
   return `prose write to ${fileLabel} refused${spanText}${failText}. Prose is never rewritten in place; remove the span and retry.`;
 }
-var PROSE_SURFACES, PROSE_EXTENSION, PROSE_SECRET_LABELS, TOKEN_SHAPE_EXTRAS, PROSE_CREDENTIAL_PATTERNS;
+var PROSE_SURFACES, PROSE_EXTENSION, PROSE_SECRET_LABELS, TOKEN_SHAPE_EXTRAS, PROSE_CREDENTIAL_PATTERNS, PROSE_WRITE_TOOLS;
 var init_prose_scrub = __esm({
   "src/domains/security/prose-scrub.ts"() {
     init_kernel();
@@ -16391,7 +16391,7 @@ var init_prose_scrub = __esm({
       ["\\bgithub_pat_", "GitHub fine-grained token"],
       ["\\beyJ", "JWT"]
     ];
-    PROSE_CREDENTIAL_PATTERNS = Object.freeze([
+    PROSE_CREDENTIAL_PATTERNS = deepFreeze([
       // The canonical password form is case-sensitive; prose also catches `PASSWORD=`.
       ...SECRET_PATTERNS.filter(([, label]) => PROSE_SECRET_LABELS.has(label)).map(
         ([re, label]) => re.flags.includes("i") ? [re, label] : Object.freeze([new RegExp(re.source, re.flags + "i"), label])
@@ -16402,6 +16402,7 @@ var init_prose_scrub = __esm({
         )
       )
     ]);
+    PROSE_WRITE_TOOLS = sealSet(["Write", "Edit", "MultiEdit"]);
   }
 });
 
