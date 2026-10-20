@@ -108,13 +108,14 @@ import {
   buildAllowMessage,
   buildBackendDegradationEvent,
   buildDenyMessage,
+  classifyLaneEvidence,
   dispatchAssertsRunId,
-  resolveBlockUnmarkedLanes,
   isGuildLaneDispatch,
+  resolveBlockUnmarkedFromSnapshot,
   isLeadProcess,
   isOverrideEngaged,
   isRunFresh,
-  readSnapshotAgentMode,
+  readRunSettingsSnapshot,
   resolveBackendDegradation,
   resolveTeamSubstrate,
   type RunIdSource,
@@ -152,6 +153,18 @@ import { evaluateCompatibilitySkillUse } from "./lib/compatibility-skill-guard.j
 import { runDirOverride } from "./lib/run-dir-override.js";
 import { laneWikiWriteTarget } from "./lib/security/lane-wiki-guard.js";
 import { createGuildStorage } from "../src/domains/state";
+import {
+  describeProseRefusal,
+  evaluateProseContent,
+  hookToolUseId,
+  proposedWriteContent,
+  proseFileLabel,
+  proseSnapshotKey,
+  proseTargetSurface,
+  PROSE_SNAPSHOT_SEGMENT,
+  PROSE_WRITE_TOOLS,
+  recordProseSnapshot,
+} from "../src/domains/security";
 import { durableGuildDir } from "../src/domains/state";
 import { ensureStorageLayout } from "../scripts/lib/state/ensure-storage-layout.js";
 import {
@@ -1039,6 +1052,72 @@ function runLaneWikiWriteGate(payload: GuildHookEvent, cwd: string): boolean {
 }
 
 /**
+ * #108 / D2 PreToolUse half of the prose policy. A Write/Edit/MultiEdit to wiki, review or
+ * handoff Markdown whose resulting bytes carry a credential shape is denied, naming
+ * the span. Otherwise the prior bytes are snapshotted to session scratch so
+ * PostToolUse can restore them if a credential still reaches disk. Never throws.
+ */
+function runProseCredentialGate(payload: GuildHookEvent, cwd: string): boolean {
+  const tool = payload.tool_name ?? "";
+  if (!PROSE_WRITE_TOOLS.has(tool)) return false;
+  const ti = payload.tool_input as Record<string, unknown> | null | undefined;
+  const rawFilePath = ti && typeof ti === "object" ? ti["file_path"] : undefined;
+  if (typeof rawFilePath !== "string" || rawFilePath.length === 0) return false;
+  const guildRoot = resolveGuildRoot(cwd);
+  // A relative path is relative to the tool's cwd, not the Guild root.
+  const absPath = path.resolve(typeof payload.cwd === "string" && payload.cwd.length > 0 ? payload.cwd : cwd, rawFilePath);
+  if (proseTargetSurface(absPath, guildRoot) === null) return false;
+
+  let current: string | null = null;
+  try {
+    current = fs.readFileSync(absPath, "utf8");
+  } catch {
+    current = null;
+  }
+  const proposed = proposedWriteContent(tool, ti, current);
+  if (proposed !== null) {
+    const verdict = evaluateProseContent(proposed, readSecurityConfig(guildRoot).secrets_policy);
+    if (!verdict.ok) {
+      const reason = describeProseRefusal(verdict, proseFileLabel(absPath, guildRoot));
+      const runId = resolveRunId(cwd);
+      if (runId !== undefined && isSafeRunId(runId)) {
+        try {
+          appendSecurityEvent(
+            runDirOverride() ?? resolveRunDir(cwd, runId),
+            buildSecurityEvent({
+              run_id: runId,
+              event_type: "secret_scrub_blocked",
+              decision: "deny",
+              tool,
+              detail: reason,
+            }),
+          );
+        } catch {
+          /* observability only */
+        }
+      }
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `Guild security (secret_scrub_blocked): ${reason}`,
+          },
+        }),
+      );
+      traceToolDenial(payload, cwd, "prose_credential", "permission_denied");
+      return true;
+    }
+  }
+  recordProseSnapshot(
+    createGuildStorage(guildRoot).temporary(undefined, PROSE_SNAPSHOT_SEGMENT),
+    proseSnapshotKey(payload.session_id ?? "", hookToolUseId(payload as Record<string, unknown>), absPath),
+    current,
+  );
+  return false;
+}
+
+/**
  * Run capability-scope enforcement + MCP description hash-pin. Returns true iff
  * it emitted a PreToolUse permission decision (the caller then owns nothing
  * further and must return). Returns false to let the rest of the hook proceed.
@@ -1464,16 +1543,29 @@ function evaluateBackendDegradation(
   // Cheap-first short-circuits — these only avoid work. `resolveBackendDegradation`
   // re-checks every condition and remains the single authority on the matrix.
   if (!isLeadProcess(process.env)) return null;
-  if (!isGuildLaneDispatch(payload.tool_input, attr, prompt, runId)) return null;
+  const evidence = classifyLaneEvidence(payload.tool_input, attr, prompt, runId);
+  if (evidence === "none") return null;
 
+  // #146: ONE digest-verified read of the snapshot feeds agent_mode AND the
+  // resolved `defaults.dispatch.block_unmarked_lanes` (#93), so both values come
+  // from the same verified bytes. GUILD_BLOCK_UNMARKED_LANES stays the
+  // per-session override.
   const guildRoot = resolveGuildRoot(cwd);
-  const agentMode = readSnapshotAgentMode(guildRoot, runId);
-  if (agentMode !== TEAM_AGENT_MODE && agentMode !== AUTO_AGENT_MODE) return null;
+  const snapshot = readRunSettingsSnapshot(guildRoot, runId);
+  const snapshotTampered = snapshot.integrity === "mismatch";
+  const agentMode = snapshot.agentMode;
+  const blockUnmarked = resolveBlockUnmarkedFromSnapshot(snapshot, process.env);
+  const teamRow = agentMode === TEAM_AGENT_MODE || agentMode === AUTO_AGENT_MODE;
+  // #144: strict mode requires the env marker in every agent_mode.
+  const strictRow = blockUnmarked && evidence === "carrier_only";
+  if (!teamRow && !snapshotTampered && !strictRow) return null;
   const runFresh = isRunFresh(guildRoot, runId, runIdSource);
   if (!runFresh) return null;
 
-  // Only now pay for the subprocess probe.
-  const substrate = resolveTeamSubstrate(agentMode, process.env);
+  // Only now pay for the subprocess probe, and only where a substrate matters.
+  const substrate = teamRow && !snapshotTampered
+    ? resolveTeamSubstrate(agentMode, process.env)
+    : "none";
   const result = resolveBackendDegradation({
     toolInput: payload.tool_input,
     attr,
@@ -1484,13 +1576,8 @@ function evaluateBackendDegradation(
     overrideEngaged: isOverrideEngaged(process.env),
     isLead: true,
     runFresh,
-    // #93: the RESOLVED `defaults.dispatch.block_unmarked_lanes`, read from the
-    // same U6 snapshot file `readSnapshotAgentMode` above consulted — a SECOND
-    // readFileSync of that file, not a free ride on the first. It is paid only
-    // here, past every cheap-first short-circuit above, so it costs nothing on
-    // the overwhelming majority of tool calls that never reach this line.
-    // GUILD_BLOCK_UNMARKED_LANES is retained as the per-session override.
-    blockUnmarked: resolveBlockUnmarkedLanes(guildRoot, runId, process.env),
+    blockUnmarked,
+    snapshotTampered,
   });
   if (result.decision === "pass" || result.reason === undefined) return null;
 
@@ -1528,7 +1615,7 @@ function evaluateBackendDegradation(
         reason: result.reason,
         specialist: result.specialist ?? "",
         subagentType: result.subagentType,
-        agentMode,
+        agentMode: snapshotTampered ? "<untrusted>" : (agentMode ?? "<absent>"),
         effectiveBackend: result.effectiveBackend,
         substrate,
         evidence: result.evidence,
@@ -1880,6 +1967,10 @@ export async function main(): Promise<void> {
   // KTD35 — a lane worker's wiki write is a hard deny, before any gate that
   // could answer an approvable `ask` for the same write.
   if (runLaneWikiWriteGate(payload, cwd)) return;
+
+  // #108 / D2 — a prose write carrying a credential shape is a hard deny naming
+  // the span; prose is never rewritten in place downstream.
+  if (runProseCredentialGate(payload, cwd)) return;
 
   // v2 security ADR — capability-scope enforcement + MCP description hash-pin.
   // Runs BEFORE the boundary guard so a security gate owns stdout for this

@@ -733,18 +733,18 @@ var require_snippet = __commonJS({
       if (typeof options.linesBefore !== "number") options.linesBefore = 3;
       if (typeof options.linesAfter !== "number") options.linesAfter = 2;
       const re = /\r?\n|\r|\0/g;
-      const lineStarts = [0];
+      const lineStarts2 = [0];
       const lineEnds = [];
       let match;
       let foundLineNo = -1;
       while (match = re.exec(mark.buffer)) {
         lineEnds.push(match.index);
-        lineStarts.push(match.index + match[0].length);
+        lineStarts2.push(match.index + match[0].length);
         if (mark.position <= match.index && foundLineNo < 0) {
-          foundLineNo = lineStarts.length - 2;
+          foundLineNo = lineStarts2.length - 2;
         }
       }
-      if (foundLineNo < 0) foundLineNo = lineStarts.length - 1;
+      if (foundLineNo < 0) foundLineNo = lineStarts2.length - 1;
       let result2 = "";
       const lineNoLength = Math.min(mark.line + options.linesAfter, lineEnds.length).toString().length;
       const maxLineLength = options.maxLength - (options.indent + lineNoLength + 3);
@@ -752,23 +752,23 @@ var require_snippet = __commonJS({
         if (foundLineNo - i < 0) break;
         const line2 = getLine(
           mark.buffer,
-          lineStarts[foundLineNo - i],
+          lineStarts2[foundLineNo - i],
           lineEnds[foundLineNo - i],
-          mark.position - (lineStarts[foundLineNo] - lineStarts[foundLineNo - i]),
+          mark.position - (lineStarts2[foundLineNo] - lineStarts2[foundLineNo - i]),
           maxLineLength
         );
         result2 = common.repeat(" ", options.indent) + padStart((mark.line - i + 1).toString(), lineNoLength) + " | " + line2.str + "\n" + result2;
       }
-      const line = getLine(mark.buffer, lineStarts[foundLineNo], lineEnds[foundLineNo], mark.position, maxLineLength);
+      const line = getLine(mark.buffer, lineStarts2[foundLineNo], lineEnds[foundLineNo], mark.position, maxLineLength);
       result2 += common.repeat(" ", options.indent) + padStart((mark.line + 1).toString(), lineNoLength) + " | " + line.str + "\n";
       result2 += common.repeat("-", options.indent + lineNoLength + 3 + line.pos) + "^\n";
       for (let i = 1; i <= options.linesAfter; i++) {
         if (foundLineNo + i >= lineEnds.length) break;
         const line2 = getLine(
           mark.buffer,
-          lineStarts[foundLineNo + i],
+          lineStarts2[foundLineNo + i],
           lineEnds[foundLineNo + i],
-          mark.position - (lineStarts[foundLineNo] - lineStarts[foundLineNo + i]),
+          mark.position - (lineStarts2[foundLineNo] - lineStarts2[foundLineNo + i]),
           maxLineLength
         );
         result2 += common.repeat(" ", options.indent) + padStart((mark.line + i + 1).toString(), lineNoLength) + " | " + line2.str + "\n";
@@ -4556,6 +4556,12 @@ var init_guild_discovery = __esm({
   }
 });
 
+// src/domains/state/snapshot-digest.ts
+var init_snapshot_digest = __esm({
+  "src/domains/state/snapshot-digest.ts"() {
+  }
+});
+
 // src/domains/state/index-migrate.ts
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
@@ -6743,6 +6749,7 @@ var init_state = __esm({
     init_frontmatter();
     init_guild_discovery();
     init_guild_root();
+    init_snapshot_digest();
     init_index_cache();
     init_storage_artifact_registry();
     init_storage_fs();
@@ -16113,156 +16120,6 @@ var init_events = __esm({
   }
 });
 
-// src/domains/security/scrubbed-write.ts
-function guildRootFromRunDir(runDir2) {
-  return path24.resolve(runDir2, "../../..");
-}
-function writeScrubApprovalRequest(runDir2, runId, surface, outPath, laneId2) {
-  try {
-    const approvalDir = path24.join(runDir2, "agent-bus", "approvals");
-    fs20.mkdirSync(approvalDir, { recursive: true });
-    const ts = (/* @__PURE__ */ new Date()).toISOString();
-    const safeTs = ts.replace(/[:.]/g, "-");
-    const fileName = `${safeTs}-scrub-blocked.json`;
-    const record = {
-      schema_version: "guild.approval_request.v1",
-      ts,
-      run_id: runId,
-      tool: "scrubbedWrite",
-      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path24.basename(outPath)}`,
-      permission_mode: "blocked",
-      surface
-    };
-    if (laneId2) record["lane_id"] = laneId2;
-    const rawContent = JSON.stringify(record, null, 2) + "\n";
-    let content = rawContent;
-    try {
-      const secConfig = readSecurityConfig(guildRootFromRunDir(runDir2));
-      const scrubResult = applySecretsPolicy(rawContent, secConfig.secrets_policy, { noTruncate: true });
-      content = scrubResult.value;
-    } catch {
-    }
-    fs20.writeFileSync(path24.join(approvalDir, fileName), content, "utf8");
-  } catch {
-  }
-}
-function scrubbedWrite(outPath, content, opts) {
-  const guildRoot = guildRootFromRunDir(opts.runDir);
-  let policy;
-  try {
-    const secConfig = readSecurityConfig(guildRoot);
-    policy = secConfig.secrets_policy;
-  } catch {
-    policy = {
-      env_allowlist: [],
-      redaction_patterns: [],
-      fail_mode_durable: "closed",
-      fail_mode_telemetry: "open"
-    };
-  }
-  const scrubResult = applySecretsPolicy(content, policy, { noTruncate: true });
-  const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
-  if (scrubResult.ok) {
-    try {
-      fs20.mkdirSync(path24.dirname(outPath), { recursive: true });
-      fs20.writeFileSync(outPath, scrubResult.value, "utf8");
-    } catch (err) {
-      process.stderr.write(
-        `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ${err instanceof Error ? err.message : String(err)}
-`
-      );
-      return { written: false, blocked: false };
-    }
-    const result2 = { written: true, blocked: false };
-    if (opts.surface === "bus") {
-      result2.sha256 = crypto6.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
-    }
-    return result2;
-  }
-  if (failMode === "open") {
-    process.stderr.write(
-      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path24.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
-`
-    );
-    try {
-      fs20.mkdirSync(path24.dirname(outPath), { recursive: true });
-      fs20.writeFileSync(outPath, scrubResult.value, "utf8");
-    } catch (err) {
-      process.stderr.write(
-        `[scrubbed-write] ERROR: fail-open write failed: ${err instanceof Error ? err.message : String(err)}
-`
-      );
-      return { written: false, blocked: false };
-    }
-    try {
-      const evt = buildSecurityEvent({
-        run_id: opts.runId,
-        lane_id: opts.laneId,
-        event_type: "secret_scrub_blocked",
-        decision: "degraded",
-        tool: "scrubbedWrite",
-        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path24.basename(outPath)}. Built-in-redacted content written.`,
-        permission_mode: "degraded"
-      });
-      appendSecurityEvent(opts.runDir, evt);
-    } catch {
-    }
-    const result2 = { written: true, blocked: false };
-    if (opts.surface === "bus") {
-      result2.sha256 = crypto6.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
-    }
-    return result2;
-  }
-  process.stderr.write(
-    `[scrubbed-write] BLOCKED: secret scrub failed for durable surface "${opts.surface}" at ${outPath} \u2014 file NOT written. Failures: ${scrubResult.failures.join("; ")}
-`
-  );
-  try {
-    const evt = buildSecurityEvent({
-      run_id: opts.runId,
-      lane_id: opts.laneId,
-      event_type: "secret_scrub_blocked",
-      decision: "blocked",
-      tool: "scrubbedWrite",
-      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path24.basename(outPath)} \u2014 write blocked (fail-closed).`,
-      permission_mode: "blocked"
-    });
-    appendSecurityEvent(opts.runDir, evt);
-  } catch {
-  }
-  writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
-  return { written: false, blocked: true };
-}
-var fs20, path24, crypto6;
-var init_scrubbed_write = __esm({
-  "src/domains/security/scrubbed-write.ts"() {
-    fs20 = __toESM(require("node:fs"));
-    path24 = __toESM(require("node:path"));
-    crypto6 = __toESM(require("node:crypto"));
-    init_secrets();
-    init_config();
-    init_events();
-  }
-});
-
-// src/domains/security/share-set.ts
-var path25, SHARED_SCRUBBED_NAMES, CANONICAL_RUN_LOG;
-var init_share_set = __esm({
-  "src/domains/security/share-set.ts"() {
-    path25 = __toESM(require("path"));
-    init_kernel();
-    SHARED_SCRUBBED_NAMES = sealSet([
-      "verify.md",
-      "review.md",
-      "provenance.json",
-      "summary.md",
-      "run.yaml",
-      "run-state.json"
-    ], "SHARED_SCRUBBED_NAMES");
-    CANONICAL_RUN_LOG = path25.join("logs", "v1.4-events.jsonl");
-  }
-});
-
 // src/domains/security/secret-patterns.ts
 var SECRET_PATTERNS;
 var init_secret_patterns = __esm({
@@ -16313,6 +16170,294 @@ var init_secret_patterns = __esm({
       // High-entropy string heuristic: 40+ hex chars (SHA-like)
       Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
     ]);
+  }
+});
+
+// src/domains/security/share-set.ts
+var path24, SHARED_SCRUBBED_NAMES, CANONICAL_RUN_LOG;
+var init_share_set = __esm({
+  "src/domains/security/share-set.ts"() {
+    path24 = __toESM(require("path"));
+    init_kernel();
+    SHARED_SCRUBBED_NAMES = sealSet([
+      "verify.md",
+      "review.md",
+      "provenance.json",
+      "summary.md",
+      "run.yaml",
+      "run-state.json"
+    ], "SHARED_SCRUBBED_NAMES");
+    CANONICAL_RUN_LOG = path24.join("logs", "v1.4-events.jsonl");
+  }
+});
+
+// src/domains/security/prose-scrub.ts
+function isProseScrubTarget(surface, absPath) {
+  return surface !== null && PROSE_SURFACES.has(surface) && PROSE_EXTENSION.test(absPath);
+}
+function lineStarts(content) {
+  const starts = [0];
+  for (let i = 0; i < content.length; i++) if (content[i] === "\n") starts.push(i + 1);
+  return starts;
+}
+function locate(starts, offset) {
+  let lo = 0;
+  let hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = lo + hi + 1 >> 1;
+    if (starts[mid] <= offset) lo = mid;
+    else hi = mid - 1;
+  }
+  return { line: lo + 1, column: offset - starts[lo] + 1 };
+}
+function collect(content, source, flags, category, hits, starts) {
+  const re = new RegExp(source, flags.includes("g") ? flags : flags + "g");
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    if (m[0].length === 0) {
+      re.lastIndex++;
+      continue;
+    }
+    if (!hits.has(m.index)) hits.set(m.index, { ...locate(starts, m.index), length: m[0].length, category });
+  }
+}
+function evaluateProseContent(content, policy) {
+  const starts = lineStarts(content);
+  const hits = /* @__PURE__ */ new Map();
+  for (const [re, label] of PROSE_CREDENTIAL_PATTERNS) collect(content, re.source, re.flags, label, hits, starts);
+  const failures = [];
+  policy.redaction_patterns.forEach((pat, i) => {
+    try {
+      new RegExp(pat, "g");
+    } catch {
+      failures.push(`redaction_patterns[${i}] is not a valid regular expression`);
+      return;
+    }
+    collect(content, pat, "g", `secrets_policy.redaction_patterns[${i}]`, hits, starts);
+  });
+  const spans = [...hits.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s);
+  return { ok: spans.length === 0 && failures.length === 0, spans, failures };
+}
+function describeProseRefusal(verdict, fileLabel) {
+  const parts = verdict.spans.map((s) => `line ${s.line}, column ${s.column} (${s.category}, ${s.length} chars)`);
+  const spanText = parts.length > 0 ? `: credential shape at ${parts.join("; ")}` : "";
+  const failText = verdict.failures.length > 0 ? `${parts.length > 0 ? ";" : ":"} secrets_policy has an invalid pattern (${verdict.failures.join("; ")}), so durable prose fails closed` : "";
+  return `prose write to ${fileLabel} refused${spanText}${failText}. Prose is never rewritten in place; remove the span and retry.`;
+}
+var PROSE_SURFACES, PROSE_EXTENSION, PROSE_SECRET_LABELS, TOKEN_SHAPE_EXTRAS, PROSE_CREDENTIAL_PATTERNS, PROSE_WRITE_TOOLS;
+var init_prose_scrub = __esm({
+  "src/domains/security/prose-scrub.ts"() {
+    init_kernel();
+    init_secret_patterns();
+    init_redact_log();
+    init_share_set();
+    PROSE_SURFACES = /* @__PURE__ */ new Set(["wiki", "review", "handoff"]);
+    PROSE_EXTENSION = /\.(?:md|markdown)$/i;
+    PROSE_SECRET_LABELS = /* @__PURE__ */ new Set([
+      "password-assignment",
+      "api_key-assignment",
+      "secret-assignment",
+      "AWS access key",
+      "GCP API key",
+      "GitHub personal access token",
+      "GitHub server token",
+      "PEM private key block",
+      "bearer-token",
+      "provider-api-key",
+      "Slack token",
+      "GitHub token",
+      "GitLab personal access token",
+      "npm token",
+      "HuggingFace token"
+    ]);
+    TOKEN_SHAPE_EXTRAS = [
+      ["\\bgithub_pat_", "GitHub fine-grained token"],
+      ["\\beyJ", "JWT"]
+    ];
+    PROSE_CREDENTIAL_PATTERNS = deepFreeze([
+      // The canonical password form is case-sensitive; prose also catches `PASSWORD=`.
+      ...SECRET_PATTERNS.filter(([, label]) => PROSE_SECRET_LABELS.has(label)).map(
+        ([re, label]) => re.flags.includes("i") ? [re, label] : Object.freeze([new RegExp(re.source, re.flags + "i"), label])
+      ),
+      ...TOKEN_SHAPE_EXTRAS.flatMap(
+        ([prefix, label]) => TOKEN_SHAPE_PATTERNS.filter((re) => re.source.startsWith(prefix)).map(
+          (re) => Object.freeze([re, label])
+        )
+      )
+    ]);
+    PROSE_WRITE_TOOLS = sealSet(["Write", "Edit", "MultiEdit"]);
+  }
+});
+
+// src/domains/security/scrubbed-write.ts
+function guildRootFromRunDir(runDir2) {
+  return path25.resolve(runDir2, "../../..");
+}
+function writeScrubApprovalRequest(runDir2, runId, surface, outPath, laneId2) {
+  try {
+    const approvalDir = path25.join(runDir2, "agent-bus", "approvals");
+    fs20.mkdirSync(approvalDir, { recursive: true });
+    const ts = (/* @__PURE__ */ new Date()).toISOString();
+    const safeTs = ts.replace(/[:.]/g, "-");
+    const fileName = `${safeTs}-scrub-blocked.json`;
+    const record = {
+      schema_version: "guild.approval_request.v1",
+      ts,
+      run_id: runId,
+      tool: "scrubbedWrite",
+      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path25.basename(outPath)}`,
+      permission_mode: "blocked",
+      surface
+    };
+    if (laneId2) record["lane_id"] = laneId2;
+    const rawContent = JSON.stringify(record, null, 2) + "\n";
+    let content = rawContent;
+    try {
+      const secConfig = readSecurityConfig(guildRootFromRunDir(runDir2));
+      const scrubResult = applySecretsPolicy(rawContent, secConfig.secrets_policy, { noTruncate: true });
+      content = scrubResult.value;
+    } catch {
+    }
+    fs20.writeFileSync(path25.join(approvalDir, fileName), content, "utf8");
+  } catch {
+  }
+}
+function scrubbedWrite(outPath, content, opts) {
+  const guildRoot = guildRootFromRunDir(opts.runDir);
+  let policy;
+  try {
+    const secConfig = readSecurityConfig(guildRoot);
+    policy = secConfig.secrets_policy;
+  } catch {
+    policy = {
+      env_allowlist: [],
+      redaction_patterns: [],
+      fail_mode_durable: "closed",
+      fail_mode_telemetry: "open"
+    };
+  }
+  if (isProseScrubTarget(opts.surface, outPath)) {
+    return proseWrite(outPath, content, policy, opts);
+  }
+  const scrubResult = applySecretsPolicy(content, policy, { noTruncate: true });
+  const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
+  if (scrubResult.ok) {
+    try {
+      fs20.mkdirSync(path25.dirname(outPath), { recursive: true });
+      fs20.writeFileSync(outPath, scrubResult.value, "utf8");
+    } catch (err) {
+      process.stderr.write(
+        `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ${err instanceof Error ? err.message : String(err)}
+`
+      );
+      return { written: false, blocked: false };
+    }
+    const result2 = { written: true, blocked: false };
+    if (opts.surface === "bus") {
+      result2.sha256 = crypto6.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+    }
+    return result2;
+  }
+  if (failMode === "open") {
+    process.stderr.write(
+      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path25.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
+`
+    );
+    try {
+      fs20.mkdirSync(path25.dirname(outPath), { recursive: true });
+      fs20.writeFileSync(outPath, scrubResult.value, "utf8");
+    } catch (err) {
+      process.stderr.write(
+        `[scrubbed-write] ERROR: fail-open write failed: ${err instanceof Error ? err.message : String(err)}
+`
+      );
+      return { written: false, blocked: false };
+    }
+    try {
+      const evt = buildSecurityEvent({
+        run_id: opts.runId,
+        lane_id: opts.laneId,
+        event_type: "secret_scrub_blocked",
+        decision: "degraded",
+        tool: "scrubbedWrite",
+        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path25.basename(outPath)}. Built-in-redacted content written.`,
+        permission_mode: "degraded"
+      });
+      appendSecurityEvent(opts.runDir, evt);
+    } catch {
+    }
+    const result2 = { written: true, blocked: false };
+    if (opts.surface === "bus") {
+      result2.sha256 = crypto6.createHash("sha256").update(scrubResult.value, "utf8").digest("hex");
+    }
+    return result2;
+  }
+  process.stderr.write(
+    `[scrubbed-write] BLOCKED: secret scrub failed for durable surface "${opts.surface}" at ${outPath} \u2014 file NOT written. Failures: ${scrubResult.failures.join("; ")}
+`
+  );
+  try {
+    const evt = buildSecurityEvent({
+      run_id: opts.runId,
+      lane_id: opts.laneId,
+      event_type: "secret_scrub_blocked",
+      decision: "blocked",
+      tool: "scrubbedWrite",
+      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path25.basename(outPath)} \u2014 write blocked (fail-closed).`,
+      permission_mode: "blocked"
+    });
+    appendSecurityEvent(opts.runDir, evt);
+  } catch {
+  }
+  writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
+  return { written: false, blocked: true };
+}
+function proseWrite(outPath, content, policy, opts) {
+  const verdict = evaluateProseContent(content, policy);
+  if (verdict.ok) {
+    try {
+      fs20.mkdirSync(path25.dirname(outPath), { recursive: true });
+      fs20.writeFileSync(outPath, content, "utf8");
+    } catch (err) {
+      process.stderr.write(
+        `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ${err instanceof Error ? err.message : String(err)}
+`
+      );
+      return { written: false, blocked: false };
+    }
+    return { written: true, blocked: false };
+  }
+  const refusal2 = describeProseRefusal(verdict, path25.basename(outPath));
+  process.stderr.write(`[scrubbed-write] BLOCKED: ${refusal2}
+`);
+  try {
+    appendSecurityEvent(
+      opts.runDir,
+      buildSecurityEvent({
+        run_id: opts.runId,
+        lane_id: opts.laneId,
+        event_type: "secret_scrub_blocked",
+        decision: "blocked",
+        tool: "scrubbedWrite",
+        detail: refusal2,
+        permission_mode: "blocked"
+      })
+    );
+  } catch {
+  }
+  writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
+  return { written: false, blocked: true, refusal: refusal2 };
+}
+var fs20, path25, crypto6;
+var init_scrubbed_write = __esm({
+  "src/domains/security/scrubbed-write.ts"() {
+    fs20 = __toESM(require("node:fs"));
+    path25 = __toESM(require("node:path"));
+    crypto6 = __toESM(require("node:crypto"));
+    init_secrets();
+    init_config();
+    init_events();
+    init_prose_scrub();
   }
 });
 
@@ -16382,6 +16527,7 @@ var init_security = __esm({
     init_safe_object();
     init_injection_guard();
     init_scrubbed_write();
+    init_prose_scrub();
     init_redact_log();
     init_share_set();
     init_scrub_redact();
@@ -20552,7 +20698,9 @@ var init_config_defaults = __esm({
          *
          * `block_unmarked_lanes` engages STRICT mode: a Guild lane dispatch carrying
          * NO structured producer marker (`prompt_only` evidence — the hand-rolled
-         * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded.
+         * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded. It
+         * also denies, in every agent_mode, a lane whose env carries lane carriers
+         * but no `GUILD_DISPATCH_PRODUCER` marker (`carrier_only`, #144).
          *
          * DEFAULT IS `false` ON PURPOSE, and that is load-bearing rather than
          * timidity. `classifyLaneEvidence` grades a fully-substituted lane brief that
@@ -22186,13 +22334,7 @@ function normalizeDispatchHostId(value) {
   return normalized && DISPATCH_HOST_IDS.has(normalized) ? normalized : null;
 }
 function coerceCapability(raw) {
-  const base = DEFAULTS.capability;
-  const out = {
-    resolver_mode: base.resolver_mode,
-    suggestion_budget: base.suggestion_budget,
-    starter_roles: [...base.starter_roles],
-    auto_create_policy: base.auto_create_policy
-  };
+  const out = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
   const r = raw;
   if (CAPABILITY_RESOLVER_MODES.includes(r["resolver_mode"])) {
@@ -22242,6 +22384,19 @@ function deepMerge(base, overlay) {
     }
   }
   return { ...result2 };
+}
+function stampLayer(sources, obj, layer, prefix = "") {
+  for (const [k, v] of Object.entries(obj)) {
+    if (PROTO_POISON_KEYS.has(k) || v === void 0) continue;
+    const full = prefix ? `${prefix}.${k}` : k;
+    sources[full] = layer;
+    if (isPlainObject7(v)) {
+      stampLayer(sources, v, layer, full);
+    } else {
+      const below = `${full}.`;
+      for (const s of Object.keys(sources)) if (s.startsWith(below)) delete sources[s];
+    }
+  }
 }
 function collectKeyPaths(obj, prefix = "") {
   const paths = /* @__PURE__ */ new Set();
@@ -22581,9 +22736,7 @@ function resolveSettings(opts) {
   const { cwd, flags = {} } = opts;
   const ws = discoverWorkspace(cwd);
   const sources = {};
-  for (const key of Object.keys(DEFAULTS2)) {
-    sources[key] = "builtin";
-  }
+  stampLayer(sources, DEFAULTS2, "builtin");
   sources["workspace.mode"] = "builtin";
   let wsSettings = {};
   let wsLocalSettings = {};
@@ -22602,9 +22755,8 @@ function resolveSettings(opts) {
       }
     }
     wsSettings = wsInheritable;
-    for (const key of Object.keys(wsSettings)) {
-      if (key !== "workspace") sources[key] = "workspace";
-    }
+    const { workspace: _wsMode, ...wsStamp } = wsSettings;
+    stampLayer(sources, wsStamp, "workspace");
     try {
       const rawWsLocal = parseLocalFile(wsGuildDir);
       const wsLocalInheritable = {};
@@ -22619,41 +22771,21 @@ function resolveSettings(opts) {
         }
       }
       wsLocalSettings = wsLocalInheritable;
-      for (const key of Object.keys(wsLocalSettings)) {
-        if (key !== "workspace") sources[key] = "workspace-local";
-      }
+      const { workspace: _wsLocalMode, ...wsLocalStamp } = wsLocalSettings;
+      stampLayer(sources, wsLocalStamp, "workspace-local");
     } catch {
     }
   }
   const projectGuildDir = durableGuildDir(cwd);
   const projectSettings = parseSettingsFile(path35.join(projectGuildDir, "settings.json"));
-  for (const key of Object.keys(projectSettings)) {
-    if (key === "workspace") {
-      sources["workspace.mode"] = "project";
-    } else {
-      sources[key] = "project";
-    }
-  }
+  stampLayer(sources, projectSettings, "project");
   let projectLocalSettings = {};
   try {
     projectLocalSettings = parseLocalFile(projectGuildDir);
-    for (const key of Object.keys(projectLocalSettings)) {
-      if (key === "workspace") {
-        sources["workspace.mode"] = "project-local";
-      } else {
-        sources[key] = "project-local";
-      }
-    }
+    stampLayer(sources, projectLocalSettings, "project-local");
   } catch {
   }
-  for (const key of Object.keys(flags)) {
-    if (flags[key] !== void 0) {
-      if (key === "workspace") {
-        sources["workspace.mode"] = "cli";
-      }
-      sources[key] = "cli";
-    }
-  }
+  stampLayer(sources, flags, "cli");
   const assembled = assembleLayers(
     [wsSettings, wsLocalSettings, projectSettings, projectLocalSettings],
     flags
@@ -22753,6 +22885,7 @@ function resolveSettings(opts) {
       ...assembled.defaults,
       index: { ...assembled.defaults.index, enabled: false }
     };
+    sources["defaults.index.enabled"] = sources.index;
   }
   return { config: assembled, sources };
 }
@@ -39803,6 +39936,7 @@ var init_run_lifecycle = __esm({
     init_run_binding();
     init_security();
     init_telemetry();
+    init_state();
     init_state();
     init_state();
     HOST_FAMILY_TO_KIND = Object.freeze({

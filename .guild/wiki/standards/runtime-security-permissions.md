@@ -5,7 +5,7 @@ confidence: high
 importance: critical
 source_refs: ["plugin/.guild/architecture-research-2026-05-10/architecture/07-runtime-security-permissions.md"]
 created_at: 2026-05-16
-updated_at: 2026-05-16
+updated_at: 2026-10-20
 expires_at: null
 supersedes: null
 sensitivity: internal
@@ -108,6 +108,7 @@ Policy:
 
 - Do not store raw secrets in traces, handoffs, wiki, or eval fixtures.
 - Redact tokens, keys, passwords, private certs, and sensitive env values.
+- Prose (Markdown under `.guild/wiki/**` and run review/handoff receipts) is never rewritten in place. A write that carries a credential shape is refused, naming the line, column and category of each span. The length-entropy, home-dir and bare key-value redactors never apply to prose; log and JSONL surfaces keep them.
 - Security specialist can report existence and path, not raw value.
 - Secret rotation is a human-approved operational action.
 

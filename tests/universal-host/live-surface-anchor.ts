@@ -720,6 +720,10 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-10-19 (v3co C1): the learn assembler gains a §Route table that
   // follows learn-route.js; detection prose names the router. Only learn/SKILL.md changed.
   // ANTI-VACUITY: SC-W3-6(B) and check-surface-pins were RED against the prior pin.
+  // Re-ratified 2026-10-20 (H2 #144 #146): execute-plan/dispatch.md states the
+  // carrier_only grade, the strict-mode deny, and the snapshot digest check. Only
+  // that chapter changed; it has no skill-registry entry (round-trip unchanged).
+  // ANTI-VACUITY: SC-W2-5, SC-W3-6(B) and check-surface-pins were RED against the prior pin.
   // Re-ratified 2026-10-20 (v3.2 H1 #138/#179): execute-plan SKILL.md + dispatch.md
   // collect lanes via lane-receipt-wait (never idle = success) and inject via the
   // idle-gated pane-send. Registry re-extracted. ANTI-VACUITY: SC-W2-5, SC-W3-6(B) and
@@ -727,7 +731,8 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-10-20 (v3.2 H1 F9): execute-plan SKILL.md states the pane-send
   // agent-pane gate (not_agent_pane, input-ready, pickup). Registry re-extracted.
   // ANTI-VACUITY: check-surface-pins was RED against the prior pin first.
-  skills: "f3073744abacfd67ac3d5186dac5c8cdd5aab129",
+  // Re-ratified 2026-10-20 (v3.2 merge): H1 + H2 execute-plan edits combined on next.
+  skills: "__PIN__",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

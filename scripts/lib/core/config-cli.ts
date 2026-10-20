@@ -713,7 +713,9 @@ export const HELP: Record<string, string> = {
     "bool (default false) — STRICT mode for the #56 backend-degradation guard " +
     "(hooks/lib/backend-degradation.ts). When true, a Guild lane dispatch carrying NO " +
     "structured producer marker (prompt_only evidence) is BLOCKED under a resolved team " +
-    "backend instead of merely recorded. Default false keeps the no-false-positive-on-a-" +
+    "backend instead of merely recorded, and a lane whose env carries lane carriers but no " +
+    "GUILD_DISPATCH_PRODUCER marker (carrier_only, #144) is BLOCKED in every agent_mode. " +
+    "Default false keeps the no-false-positive-on-a-" +
     "quoted-brief invariant: a lane brief merely QUOTED in a prompt grades prompt_only too. " +
     "The GUILD_BLOCK_UNMARKED_LANES env var overrides this per session, in BOTH directions.",
   _precedence:

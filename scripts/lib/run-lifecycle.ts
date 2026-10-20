@@ -18,6 +18,7 @@ export {
   writeResolvedSettingsSnapshot,
   writePluginConfigSnapshot,
   readResolvedSettingsSnapshot,
+  ResolvedSettingsIntegrityError,
   readWorkspaceKnowledgeConfig,
   readRecordStatusRuns,
   appendGateOutcome,

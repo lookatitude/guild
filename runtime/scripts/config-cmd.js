@@ -4912,6 +4912,12 @@ var init_guild_discovery = __esm({
   }
 });
 
+// src/domains/state/snapshot-digest.ts
+var init_snapshot_digest = __esm({
+  "src/domains/state/snapshot-digest.ts"() {
+  }
+});
+
 // src/domains/state/index-migrate.ts
 function openDatabase(dbPath) {
   const { DatabaseSync } = require("node:sqlite");
@@ -6937,6 +6943,7 @@ var init_state = __esm({
     init_frontmatter();
     init_guild_discovery();
     init_guild_root();
+    init_snapshot_digest();
     init_index_cache();
     init_storage_artifact_registry();
     init_storage_fs();
@@ -7319,33 +7326,6 @@ var init_events = __esm({
   }
 });
 
-// src/domains/security/scrubbed-write.ts
-var init_scrubbed_write = __esm({
-  "src/domains/security/scrubbed-write.ts"() {
-    init_secrets();
-    init_config();
-    init_events();
-  }
-});
-
-// src/domains/security/share-set.ts
-var path17, SHARED_SCRUBBED_NAMES, CANONICAL_RUN_LOG;
-var init_share_set = __esm({
-  "src/domains/security/share-set.ts"() {
-    path17 = __toESM(require("path"));
-    init_kernel();
-    SHARED_SCRUBBED_NAMES = sealSet([
-      "verify.md",
-      "review.md",
-      "provenance.json",
-      "summary.md",
-      "run.yaml",
-      "run-state.json"
-    ], "SHARED_SCRUBBED_NAMES");
-    CANONICAL_RUN_LOG = path17.join("logs", "v1.4-events.jsonl");
-  }
-});
-
 // src/domains/security/secret-patterns.ts
 var SECRET_PATTERNS;
 var init_secret_patterns = __esm({
@@ -7399,6 +7379,78 @@ var init_secret_patterns = __esm({
   }
 });
 
+// src/domains/security/share-set.ts
+var path17, SHARED_SCRUBBED_NAMES, CANONICAL_RUN_LOG;
+var init_share_set = __esm({
+  "src/domains/security/share-set.ts"() {
+    path17 = __toESM(require("path"));
+    init_kernel();
+    SHARED_SCRUBBED_NAMES = sealSet([
+      "verify.md",
+      "review.md",
+      "provenance.json",
+      "summary.md",
+      "run.yaml",
+      "run-state.json"
+    ], "SHARED_SCRUBBED_NAMES");
+    CANONICAL_RUN_LOG = path17.join("logs", "v1.4-events.jsonl");
+  }
+});
+
+// src/domains/security/prose-scrub.ts
+var PROSE_SECRET_LABELS, TOKEN_SHAPE_EXTRAS, PROSE_CREDENTIAL_PATTERNS, PROSE_WRITE_TOOLS;
+var init_prose_scrub = __esm({
+  "src/domains/security/prose-scrub.ts"() {
+    init_kernel();
+    init_secret_patterns();
+    init_redact_log();
+    init_share_set();
+    PROSE_SECRET_LABELS = /* @__PURE__ */ new Set([
+      "password-assignment",
+      "api_key-assignment",
+      "secret-assignment",
+      "AWS access key",
+      "GCP API key",
+      "GitHub personal access token",
+      "GitHub server token",
+      "PEM private key block",
+      "bearer-token",
+      "provider-api-key",
+      "Slack token",
+      "GitHub token",
+      "GitLab personal access token",
+      "npm token",
+      "HuggingFace token"
+    ]);
+    TOKEN_SHAPE_EXTRAS = [
+      ["\\bgithub_pat_", "GitHub fine-grained token"],
+      ["\\beyJ", "JWT"]
+    ];
+    PROSE_CREDENTIAL_PATTERNS = deepFreeze([
+      // The canonical password form is case-sensitive; prose also catches `PASSWORD=`.
+      ...SECRET_PATTERNS.filter(([, label]) => PROSE_SECRET_LABELS.has(label)).map(
+        ([re, label]) => re.flags.includes("i") ? [re, label] : Object.freeze([new RegExp(re.source, re.flags + "i"), label])
+      ),
+      ...TOKEN_SHAPE_EXTRAS.flatMap(
+        ([prefix, label]) => TOKEN_SHAPE_PATTERNS.filter((re) => re.source.startsWith(prefix)).map(
+          (re) => Object.freeze([re, label])
+        )
+      )
+    ]);
+    PROSE_WRITE_TOOLS = sealSet(["Write", "Edit", "MultiEdit"]);
+  }
+});
+
+// src/domains/security/scrubbed-write.ts
+var init_scrubbed_write = __esm({
+  "src/domains/security/scrubbed-write.ts"() {
+    init_secrets();
+    init_config();
+    init_events();
+    init_prose_scrub();
+  }
+});
+
 // src/domains/security/scrub-redact.ts
 var init_scrub_redact = __esm({
   "src/domains/security/scrub-redact.ts"() {
@@ -7426,6 +7478,7 @@ var init_security = __esm({
     init_safe_object();
     init_injection_guard();
     init_scrubbed_write();
+    init_prose_scrub();
     init_redact_log();
     init_share_set();
     init_scrub_redact();
@@ -7699,7 +7752,9 @@ var init_config_defaults = __esm({
          *
          * `block_unmarked_lanes` engages STRICT mode: a Guild lane dispatch carrying
          * NO structured producer marker (`prompt_only` evidence — the hand-rolled
-         * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded.
+         * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded. It
+         * also denies, in every agent_mode, a lane whose env carries lane carriers
+         * but no `GUILD_DISPATCH_PRODUCER` marker (`carrier_only`, #144).
          *
          * DEFAULT IS `false` ON PURPOSE, and that is load-bearing rather than
          * timidity. `classifyLaneEvidence` grades a fully-substituted lane brief that
@@ -8876,13 +8931,7 @@ function normalizeDispatchHostId(value) {
   return normalized && DISPATCH_HOST_IDS.has(normalized) ? normalized : null;
 }
 function coerceCapability(raw) {
-  const base = DEFAULTS.capability;
-  const out = {
-    resolver_mode: base.resolver_mode,
-    suggestion_budget: base.suggestion_budget,
-    starter_roles: [...base.starter_roles],
-    auto_create_policy: base.auto_create_policy
-  };
+  const out = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
   const r = raw;
   if (CAPABILITY_RESOLVER_MODES.includes(r["resolver_mode"])) {
@@ -8932,6 +8981,19 @@ function deepMerge(base, overlay) {
     }
   }
   return { ...result };
+}
+function stampLayer(sources, obj, layer, prefix = "") {
+  for (const [k, v] of Object.entries(obj)) {
+    if (PROTO_POISON_KEYS.has(k) || v === void 0) continue;
+    const full = prefix ? `${prefix}.${k}` : k;
+    sources[full] = layer;
+    if (isPlainObject4(v)) {
+      stampLayer(sources, v, layer, full);
+    } else {
+      const below = `${full}.`;
+      for (const s of Object.keys(sources)) if (s.startsWith(below)) delete sources[s];
+    }
+  }
 }
 function collectKeyPaths(obj, prefix = "") {
   const paths = /* @__PURE__ */ new Set();
@@ -9271,9 +9333,7 @@ function resolveSettings(opts) {
   const { cwd, flags = {} } = opts;
   const ws = discoverWorkspace(cwd);
   const sources = {};
-  for (const key of Object.keys(DEFAULTS2)) {
-    sources[key] = "builtin";
-  }
+  stampLayer(sources, DEFAULTS2, "builtin");
   sources["workspace.mode"] = "builtin";
   let wsSettings = {};
   let wsLocalSettings = {};
@@ -9292,9 +9352,8 @@ function resolveSettings(opts) {
       }
     }
     wsSettings = wsInheritable;
-    for (const key of Object.keys(wsSettings)) {
-      if (key !== "workspace") sources[key] = "workspace";
-    }
+    const { workspace: _wsMode, ...wsStamp } = wsSettings;
+    stampLayer(sources, wsStamp, "workspace");
     try {
       const rawWsLocal = parseLocalFile(wsGuildDir);
       const wsLocalInheritable = {};
@@ -9309,41 +9368,21 @@ function resolveSettings(opts) {
         }
       }
       wsLocalSettings = wsLocalInheritable;
-      for (const key of Object.keys(wsLocalSettings)) {
-        if (key !== "workspace") sources[key] = "workspace-local";
-      }
+      const { workspace: _wsLocalMode, ...wsLocalStamp } = wsLocalSettings;
+      stampLayer(sources, wsLocalStamp, "workspace-local");
     } catch {
     }
   }
   const projectGuildDir = durableGuildDir(cwd);
   const projectSettings = parseSettingsFile(path20.join(projectGuildDir, "settings.json"));
-  for (const key of Object.keys(projectSettings)) {
-    if (key === "workspace") {
-      sources["workspace.mode"] = "project";
-    } else {
-      sources[key] = "project";
-    }
-  }
+  stampLayer(sources, projectSettings, "project");
   let projectLocalSettings = {};
   try {
     projectLocalSettings = parseLocalFile(projectGuildDir);
-    for (const key of Object.keys(projectLocalSettings)) {
-      if (key === "workspace") {
-        sources["workspace.mode"] = "project-local";
-      } else {
-        sources[key] = "project-local";
-      }
-    }
+    stampLayer(sources, projectLocalSettings, "project-local");
   } catch {
   }
-  for (const key of Object.keys(flags)) {
-    if (flags[key] !== void 0) {
-      if (key === "workspace") {
-        sources["workspace.mode"] = "cli";
-      }
-      sources[key] = "cli";
-    }
-  }
+  stampLayer(sources, flags, "cli");
   const assembled = assembleLayers(
     [wsSettings, wsLocalSettings, projectSettings, projectLocalSettings],
     flags
@@ -9443,6 +9482,7 @@ function resolveSettings(opts) {
       ...assembled.defaults,
       index: { ...assembled.defaults.index, enabled: false }
     };
+    sources["defaults.index.enabled"] = sources.index;
   }
   return { config: assembled, sources };
 }
@@ -12033,7 +12073,7 @@ var init_config_cli = __esm({
       "defaults.lifecycle_gate.enabled": "bool (default true) \u2014 master toggle for the lifecycle-gate ad-hoc-activity advisory (hooks/lib/lifecycle-gate.ts).",
       "defaults.lifecycle_gate.adhoc_activity_threshold": "int >= 1 (default 20) \u2014 ad-hoc (non-skill) activity count before the lifecycle-gate advisory fires. A non-positive/non-integer override is ignored (guard degrades to default).",
       // ── Issue #93: defaults.dispatch.block_unmarked_lanes
-      "defaults.dispatch.block_unmarked_lanes": "bool (default false) \u2014 STRICT mode for the #56 backend-degradation guard (hooks/lib/backend-degradation.ts). When true, a Guild lane dispatch carrying NO structured producer marker (prompt_only evidence) is BLOCKED under a resolved team backend instead of merely recorded. Default false keeps the no-false-positive-on-a-quoted-brief invariant: a lane brief merely QUOTED in a prompt grades prompt_only too. The GUILD_BLOCK_UNMARKED_LANES env var overrides this per session, in BOTH directions.",
+      "defaults.dispatch.block_unmarked_lanes": "bool (default false) \u2014 STRICT mode for the #56 backend-degradation guard (hooks/lib/backend-degradation.ts). When true, a Guild lane dispatch carrying NO structured producer marker (prompt_only evidence) is BLOCKED under a resolved team backend instead of merely recorded, and a lane whose env carries lane carriers but no GUILD_DISPATCH_PRODUCER marker (carrier_only, #144) is BLOCKED in every agent_mode. Default false keeps the no-false-positive-on-a-quoted-brief invariant: a lane brief merely QUOTED in a prompt grades prompt_only too. The GUILD_BLOCK_UNMARKED_LANES env var overrides this per session, in BOTH directions.",
       _precedence: "CLI flag > --rigor profile > settings.json > built-in default. For model tier: --model-tier=cheap|mid|powerful > per-lane plan override > models.tiers/thresholds > built-in.",
       _docs: "Canonical schema: architecture/command-surface.md \xA74.4. Regenerate with: /guild config init"
     };
@@ -14451,14 +14491,23 @@ function cmdShowSources(cwd) {
   }
   const { config, sources } = result;
   const configObj = config;
-  const allKeys = /* @__PURE__ */ new Set([...Object.keys(configObj), ...Object.keys(sources)]);
+  const allKeys = new Set(Object.keys(configObj));
+  for (const key of Object.keys(sources)) {
+    if (key.startsWith("workspace.")) continue;
+    if (!key.includes(".")) {
+      allKeys.add(key);
+      continue;
+    }
+    const v = getByPathLocal(configObj, key);
+    if (v !== void 0 && !(isPlainObject7(v) && Object.keys(v).length > 0)) allKeys.add(key);
+  }
   allKeys.delete("_rigorExpanded");
   const sorted = [...allKeys].sort();
   const lines = [];
   for (const key of sorted) {
     if (key.startsWith("_")) continue;
     const source = sources[key] ?? "builtin";
-    const rawVal = configObj[key];
+    const rawVal = key.includes(".") ? getByPathLocal(configObj, key) : configObj[key];
     let valDisplay;
     if (rawVal === null) {
       valDisplay = "null";
@@ -14488,7 +14537,7 @@ function appendPermissionSourceLines(lines, config, sources) {
   const { auto_approve, bypass_permissions_policy, host_mode } = permissionInputs(config);
   const table = resolvePermissionPolicy({ auto_approve, bypass_permissions_policy, host_mode });
   const gatesSrc = sources["auto_approve"] ?? "builtin";
-  const bypassSrc = sources["security"] ?? "builtin";
+  const bypassSrc = nearestSource("security.bypass_permissions_policy", sources);
   const hostModeSrc = sources["host_mode"] ?? "builtin";
   lines.push("");
   lines.push("\u2500\u2500 phase-permission decisions (host_mode \xD7 guild_gates \xD7 bypass) \u2500\u2500");

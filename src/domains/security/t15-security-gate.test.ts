@@ -138,13 +138,21 @@ describe("F2 · the harvest writer is security-gated on its real path (KTD37)", 
     expect(kinds()).toContain("harvest_promoted:allow");
   });
 
-  it("F2 · the page reaches disk only through the branded scrubbedWrite, which redacts a secret", () => {
+  it("F2 · the page reaches disk only through the branded scrubbedWrite, which refuses a secret (#108 D2)", () => {
     const token = `ghp_${"a1B2c3D4e5".repeat(3)}abcdef`;
     const r = harvest({ body: `Rotate the leaked token ${token} before the next deploy.` });
-    expect(r.promoted).toBe(true);
-    const onDisk = fs.readFileSync(page(), "utf8");
-    expect(onDisk).not.toContain(token);
-    expect(onDisk).toContain("Rotate the leaked token");
+    expect(r.promoted).toBe(false);
+    expect(r.op.refuse_reason).toBe("secrets");
+    expect(fs.existsSync(page())).toBe(false);
+    const blocked = security().find((e) => e.event_type === "secret_scrub_blocked" && e.decision === "blocked");
+    expect(blocked?.detail).toContain("GitHub personal access token");
+    expect(JSON.stringify(security())).not.toContain(token);
+    // CONTROL: clean prose with long identifiers lands byte-for-byte (never rewritten).
+    const ok = harvest({ slug: "clean-prose", body: "PollExternalWebhookJournalJobTest guards app/Http/Middleware/EnforceSessionMaxDuration.php." });
+    expect(ok.promoted).toBe(true);
+    expect(fs.readFileSync(page("clean-prose"), "utf8")).toContain(
+      "PollExternalWebhookJournalJobTest guards app/Http/Middleware/EnforceSessionMaxDuration.php.",
+    );
     // CONTROL: an unbranded writer — a bypass of the choke point — is refused.
     const bypass: WikiWriter = (p, c) => {
       fs.writeFileSync(p, c);

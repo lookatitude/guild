@@ -1321,7 +1321,7 @@
         },
         {
           "test": "src/domains/security/t15-security-gate.test.ts",
-          "title": "F2 · the page reaches disk only through the branded scrubbedWrite, which redacts a secret"
+          "title": "F2 · the page reaches disk only through the branded scrubbedWrite, which refuses a secret (#108 D2)"
         },
         {
           "test": "src/domains/security/t15-security-gate.test.ts",

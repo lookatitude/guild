@@ -51,7 +51,13 @@ import { spawnSync } from "child_process";
 import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import { hostCapabilityCacheDir, hostCapabilityCacheFile } from "../src/domains/state";
+import {
+  hostCapabilityCacheDir,
+  hostCapabilityCacheFile,
+  presentOnDisk,
+  RESOLVED_SETTINGS_DIGEST_FILE,
+  verifyResolvedSettingsDigest,
+} from "../src/domains/state";
 // RE-4: the tmux spawn logic now lives behind the TeamBackend seam. The
 // launcher is the CLI front-end (arg parse + D5 ladder + collision UX +
 // manifest + attach) and delegates compose/probe/spawn to TmuxTeamBackend.
@@ -1942,11 +1948,27 @@ function readFrozenDispatchResolution(
 ): FrozenDispatchResolution | null {
   if (runId === null || runId.length === 0) return null;
   const snapshotPath = path.join(durableGuildDir(cwd), "runs", runId, "resolved-settings.json");
-  if (!fs.existsSync(snapshotPath)) return null;
+  // #146: a run with no sidecar predates #146. A sidecar with no snapshot is a
+  // deleted authority record, not a legacy run.
+  const sidecarPath = path.join(path.dirname(snapshotPath), RESOLVED_SETTINGS_DIGEST_FILE);
+  const bound = presentOnDisk(sidecarPath);
+  if (!presentOnDisk(snapshotPath)) {
+    if (bound) {
+      throw new Error(`frozen dispatch authority does not match its run-start digest: ${snapshotPath}`);
+    }
+    return null;
+  }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(fs.readFileSync(snapshotPath, "utf8"));
-  } catch {
+    const raw = fs.readFileSync(snapshotPath, "utf8");
+    // Hash the same bytes we parse; an unreadable sidecar throws (fail closed).
+    const sidecar = bound ? fs.readFileSync(sidecarPath, "utf8") : null;
+    if (verifyResolvedSettingsDigest(raw, sidecar) === "mismatch") {
+      throw new Error(`frozen dispatch authority does not match its run-start digest: ${snapshotPath}`);
+    }
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("frozen dispatch authority")) throw err;
     throw new Error(`frozen dispatch authority is unreadable: ${snapshotPath}`);
   }
   if (parsed === null || typeof parsed !== "object") {

@@ -190,9 +190,9 @@ export function getByPath(config: Record<string, unknown>, dottedKey: string): u
 }
 
 /**
- * The inheritance layer that scopes `dottedKey`: the key itself, else the nearest
- * dotted-prefix ancestor the resolver tracked (settings-resolver records at
- * top-level-key granularity), else "builtin".
+ * The inheritance layer that scopes `dottedKey`: the key itself (settings-resolver
+ * stamps every dotted leaf), else the nearest dotted-prefix ancestor (keys outside the
+ * resolved tree, e.g. an unset map entry), else "builtin".
  */
 export function sourceForKey(
   dottedKey: string,

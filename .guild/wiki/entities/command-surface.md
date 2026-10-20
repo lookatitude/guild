@@ -424,10 +424,16 @@ built-in defaults
   < CLI flags
 ```
 
-A **per-key source map** tags every resolved key with its layer:
+A **per-leaf source map** tags every resolved key and every dotted leaf
+(e.g. `defaults.lifecycle_gate.enabled`) with its layer:
 `builtin | workspace | workspace-local | project | project-local | rigor | cli`.
+A leaf names the layer its value came from: workspace-only is `workspace`, set in
+both is `project`, a local override is `project-local`, an untouched sibling stays
+`builtin`. A block key names the highest layer that contributed beneath it.
 
-`config show --sources` renders this map. `config set <key> <val> --scope
+`config show --sources` renders this map (block lines plus one line per leaf);
+`config ui sources`, the `ui set` reload line, and the run snapshot's
+`source_chain` read the same leaf map. `config set <key> <val> --scope
 workspace|project|local` writes to the correct layer.
 
 **Non-inheritable keys:** `workspace.mode` (root-detection-only, never
