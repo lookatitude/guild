@@ -16581,6 +16581,7 @@ function describeProseRefusal(verdict, fileLabel) {
 var PROSE_SURFACES, PROSE_EXTENSION, PROSE_SECRET_LABELS, TOKEN_SHAPE_EXTRAS, PROSE_CREDENTIAL_PATTERNS;
 var init_prose_scrub = __esm({
   "src/domains/security/prose-scrub.ts"() {
+    init_kernel();
     init_secret_patterns();
     init_redact_log();
     init_share_set();

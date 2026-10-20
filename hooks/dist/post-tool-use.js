@@ -18118,21 +18118,32 @@ function classifyGuildScrubSurface(absPath, guildRoot) {
 function isProseScrubTarget(surface, absPath) {
   return surface !== null && PROSE_SURFACES.has(surface) && PROSE_EXTENSION.test(absPath);
 }
-function physicalPath(p, depth = 0) {
-  if (depth > 40) return p;
+function danglingLinkTarget(p) {
   try {
-    return fs27.realpathSync(p);
+    if (!fs27.lstatSync(p).isSymbolicLink()) return null;
   } catch {
+    return null;
   }
   try {
-    if (fs27.lstatSync(p).isSymbolicLink()) {
-      return physicalPath(path33.resolve(path33.dirname(p), fs27.readlinkSync(p)), depth + 1);
+    fs27.statSync(p);
+    return null;
+  } catch {
+    return path33.resolve(path33.dirname(p), fs27.readlinkSync(p));
+  }
+}
+function physicalPath(p) {
+  const abs = path33.resolve(p);
+  let cur = path33.parse(abs).root;
+  let hops = 0;
+  for (const seg of abs.slice(cur.length).split(path33.sep)) {
+    if (seg.length === 0) continue;
+    cur = path33.join(cur, seg);
+    for (let next = danglingLinkTarget(cur); next !== null && hops < 40; next = danglingLinkTarget(cur)) {
+      cur = next;
+      hops++;
     }
-  } catch {
   }
-  const parent = path33.dirname(p);
-  if (parent === p) return p;
-  return path33.join(physicalPath(parent, depth + 1), path33.basename(p));
+  return canonicalizeRealPath(cur);
 }
 function proseTargetSurface(absPath, guildRoot) {
   const lexical = classifyGuildScrubSurface(absPath, guildRoot);
@@ -18269,6 +18280,7 @@ var init_prose_scrub = __esm({
     crypto6 = __toESM(require("node:crypto"));
     fs27 = __toESM(require("node:fs"));
     path33 = __toESM(require("node:path"));
+    init_kernel();
     init_secret_patterns();
     init_redact_log();
     init_share_set();

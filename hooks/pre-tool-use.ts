@@ -157,6 +157,7 @@ import {
   evaluateProseContent,
   hookToolUseId,
   proposedWriteContent,
+  proseFileLabel,
   proseSnapshotKey,
   proseTargetSurface,
   PROSE_SNAPSHOT_SEGMENT,
@@ -1076,7 +1077,7 @@ function runProseCredentialGate(payload: GuildHookEvent, cwd: string): boolean {
   if (proposed !== null) {
     const verdict = evaluateProseContent(proposed, readSecurityConfig(guildRoot).secrets_policy);
     if (!verdict.ok) {
-      const reason = describeProseRefusal(verdict, path.relative(guildRoot, absPath));
+      const reason = describeProseRefusal(verdict, proseFileLabel(absPath, guildRoot));
       const runId = resolveRunId(cwd);
       if (runId !== undefined && isSafeRunId(runId)) {
         try {

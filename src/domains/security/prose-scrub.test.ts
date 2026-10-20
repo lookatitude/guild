@@ -197,6 +197,10 @@ describe("proseTargetSurface", () => {
     const dangling = path.join(root, "dangling.md");
     fs.symlinkSync(path.join(root, ".guild", "wiki", "later", "new.md"), dangling);
     expect(proseTargetSurface(dangling, root)).toBe("wiki");
+    // A dangling DIRECTORY link in front of the page is followed too.
+    const dirAlias = path.join(root, "alias");
+    fs.symlinkSync(path.join(root, ".guild", "wiki", "missing"), dirAlias);
+    expect(proseTargetSurface(path.join(dirAlias, "page.md"), root)).toBe("wiki");
     expect(proseTargetSurface(path.join(root, "plain.md"), root)).toBeNull();
     expect(proseTargetSurface(path.join(root, ".guild", "wiki", "i.json"), root)).toBeNull();
   });

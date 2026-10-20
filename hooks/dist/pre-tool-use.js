@@ -3876,6 +3876,25 @@ function isWithin(child, parent) {
   const rel2 = path6.relative(parent, child);
   return rel2 === "" || !escapes(rel2);
 }
+function canonicalizeRealPath(p) {
+  const abs = path6.resolve(p);
+  let existing = abs;
+  const tail = [];
+  for (; ; ) {
+    const st = lstatOrNull(existing);
+    if (st !== null) {
+      try {
+        const real = fs5.realpathSync(existing);
+        return tail.length ? path6.join(real, ...tail) : real;
+      } catch {
+      }
+    }
+    tail.unshift(path6.basename(existing));
+    const parent = path6.dirname(existing);
+    if (parent === existing) return abs;
+    existing = parent;
+  }
+}
 function checkContained(root, target, options = {}) {
   const policy = options.policy ?? "resolve";
   let realRoot2;
@@ -16358,21 +16377,32 @@ function classifyGuildScrubSurface(absPath, guildRoot) {
 function isProseScrubTarget(surface, absPath) {
   return surface !== null && PROSE_SURFACES.has(surface) && PROSE_EXTENSION.test(absPath);
 }
-function physicalPath(p, depth = 0) {
-  if (depth > 40) return p;
+function danglingLinkTarget(p) {
   try {
-    return fs21.realpathSync(p);
+    if (!fs21.lstatSync(p).isSymbolicLink()) return null;
   } catch {
+    return null;
   }
   try {
-    if (fs21.lstatSync(p).isSymbolicLink()) {
-      return physicalPath(path26.resolve(path26.dirname(p), fs21.readlinkSync(p)), depth + 1);
+    fs21.statSync(p);
+    return null;
+  } catch {
+    return path26.resolve(path26.dirname(p), fs21.readlinkSync(p));
+  }
+}
+function physicalPath(p) {
+  const abs = path26.resolve(p);
+  let cur = path26.parse(abs).root;
+  let hops = 0;
+  for (const seg of abs.slice(cur.length).split(path26.sep)) {
+    if (seg.length === 0) continue;
+    cur = path26.join(cur, seg);
+    for (let next = danglingLinkTarget(cur); next !== null && hops < 40; next = danglingLinkTarget(cur)) {
+      cur = next;
+      hops++;
     }
-  } catch {
   }
-  const parent = path26.dirname(p);
-  if (parent === p) return p;
-  return path26.join(physicalPath(parent, depth + 1), path26.basename(p));
+  return canonicalizeRealPath(cur);
 }
 function proseTargetSurface(absPath, guildRoot) {
   const lexical = classifyGuildScrubSurface(absPath, guildRoot);
@@ -16423,6 +16453,9 @@ function evaluateProseContent(content, policy) {
   });
   const spans = [...hits.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s);
   return { ok: spans.length === 0 && failures.length === 0, spans, failures };
+}
+function proseFileLabel(absPath, guildRoot) {
+  return path26.relative(guildRoot, absPath);
 }
 function describeProseRefusal(verdict, fileLabel) {
   const parts = verdict.spans.map((s) => `line ${s.line}, column ${s.column} (${s.category}, ${s.length} chars)`);
@@ -16481,6 +16514,7 @@ var init_prose_scrub = __esm({
     crypto6 = __toESM(require("node:crypto"));
     fs21 = __toESM(require("node:fs"));
     path26 = __toESM(require("node:path"));
+    init_kernel();
     init_secret_patterns();
     init_redact_log();
     init_share_set();
@@ -44667,7 +44701,7 @@ function runProseCredentialGate(payload, cwd) {
   if (proposed !== null) {
     const verdict = evaluateProseContent(proposed, readSecurityConfig(guildRoot).secrets_policy);
     if (!verdict.ok) {
-      const reason = describeProseRefusal(verdict, path91.relative(guildRoot, absPath));
+      const reason = describeProseRefusal(verdict, proseFileLabel(absPath, guildRoot));
       const runId = resolveRunId(cwd);
       if (runId !== void 0 && isSafeRunId(runId)) {
         try {

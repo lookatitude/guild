@@ -16,6 +16,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { canonicalizeRealPath } from "../kernel";
 import type { SecretsPolicy } from "./config";
 import { SECRET_PATTERNS } from "./secret-patterns";
 import { TOKEN_SHAPE_PATTERNS } from "./redact-log";
@@ -54,27 +55,39 @@ export function isProseScrubTarget(surface: ScrubSurface | null, absPath: string
   return surface !== null && PROSE_SURFACES.has(surface) && PROSE_EXTENSION.test(absPath);
 }
 
+/** A dangling symlink's target, or null when the path is not a dangling link. */
+function danglingLinkTarget(p: string): string | null {
+  try {
+    if (!fs.lstatSync(p).isSymbolicLink()) return null;
+  } catch {
+    return null;
+  }
+  try {
+    fs.statSync(p);
+    return null; // resolves: canonicalizeRealPath sees through it
+  } catch {
+    return path.resolve(path.dirname(p), fs.readlinkSync(p));
+  }
+}
+
 /**
- * Where a write to this path physically lands: realpath when it exists, the target
- * of a dangling symlink (followed), else the resolved parent joined with the name.
+ * Where a write to this path physically lands: walk the path forward, following any
+ * dangling symlink (leaf or ancestor; a write through it lands at its target), then
+ * hand the result to the kernel's canonicalizeRealPath.
  */
-function physicalPath(p: string, depth = 0): string {
-  if (depth > 40) return p;
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    /* missing or dangling */
-  }
-  try {
-    if (fs.lstatSync(p).isSymbolicLink()) {
-      return physicalPath(path.resolve(path.dirname(p), fs.readlinkSync(p)), depth + 1);
+function physicalPath(p: string): string {
+  const abs = path.resolve(p);
+  let cur = path.parse(abs).root;
+  let hops = 0;
+  for (const seg of abs.slice(cur.length).split(path.sep)) {
+    if (seg.length === 0) continue;
+    cur = path.join(cur, seg);
+    for (let next = danglingLinkTarget(cur); next !== null && hops < 40; next = danglingLinkTarget(cur)) {
+      cur = next;
+      hops++;
     }
-  } catch {
-    /* does not exist */
   }
-  const parent = path.dirname(p);
-  if (parent === p) return p;
-  return path.join(physicalPath(parent, depth + 1), path.basename(p));
+  return canonicalizeRealPath(cur);
 }
 
 /**
@@ -210,6 +223,11 @@ export function evaluateProseContent(content: string, policy: SecretsPolicy): Pr
   });
   const spans = [...hits.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s);
   return { ok: spans.length === 0 && failures.length === 0, spans, failures };
+}
+
+/** Display label for a refused file: its path relative to the Guild root. */
+export function proseFileLabel(absPath: string, guildRoot: string): string {
+  return path.relative(guildRoot, absPath);
 }
 
 /** One-line refusal naming every span by position and category. Carries no secret. */
