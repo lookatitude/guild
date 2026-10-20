@@ -937,6 +937,7 @@ describe("agent-team-launcher.ts", () => {
         { PATH: `${makeLaunchableTmuxBin(tmpDir)}:${process.env["PATH"] ?? ""}` },
       );
       expect(result.stderr).not.toContain("unique logical task id");
+      if (result.exitCode !== 0) console.error(result.stderr);
       expect(result.exitCode).toBe(0);
       const cellsRoot = path.join(tmpDir, ".guild", "runs", INHERITED_RUN_ID, "task-cells");
       const assignments = ["A-version", "B-cli"].map((lt) => {
