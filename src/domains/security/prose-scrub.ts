@@ -16,7 +16,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { canonicalizeRealPath } from "../kernel";
+import { canonicalizeRealPath, deepFreeze, sealSet } from "../kernel";
 import type { SecretsPolicy } from "./config";
 import { SECRET_PATTERNS } from "./secret-patterns";
 import { TOKEN_SHAPE_PATTERNS } from "./redact-log";
@@ -136,7 +136,7 @@ const TOKEN_SHAPE_EXTRAS: ReadonlyArray<readonly [string, string]> = [
  * home-dir group, bare `authorization:` / `*_token:` / `key: value` forms, and the
  * PII identifiers (not credentials; they stay on the share scrubber).
  */
-export const PROSE_CREDENTIAL_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = Object.freeze([
+export const PROSE_CREDENTIAL_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = deepFreeze([
   // The canonical password form is case-sensitive; prose also catches `PASSWORD=`.
   ...SECRET_PATTERNS.filter(([, label]) => PROSE_SECRET_LABELS.has(label)).map(([re, label]) =>
     re.flags.includes("i") ? ([re, label] as const) : Object.freeze([new RegExp(re.source, re.flags + "i"), label] as const),
@@ -243,7 +243,7 @@ export function describeProseRefusal(verdict: ProseVerdict, fileLabel: string): 
 // ── Proposed content (PreToolUse) ──────────────────────────────────────────
 
 /** Tools whose writes the prose policy gates. */
-export const PROSE_WRITE_TOOLS: ReadonlySet<string> = new Set(["Write", "Edit", "MultiEdit"]);
+export const PROSE_WRITE_TOOLS: ReadonlySet<string> = sealSet(["Write", "Edit", "MultiEdit"]);
 
 function applyEdit(current: string, edit: unknown): string | null {
   if (edit === null || typeof edit !== "object") return null;
