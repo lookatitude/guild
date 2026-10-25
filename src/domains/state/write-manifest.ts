@@ -12,9 +12,9 @@
  * root_wiki (D-OQ2, #272):
  *   true when the root has a scannable top-level code file (extensions:
  *   .ts .tsx .js .jsx .py .rb .go .rs .java .kt .swift .cs .cpp .c .h) OR an
- *   existing .guild/wiki/ (a knowledge-only coordination root). A boolean
- *   root_wiki already in workspace.json is an explicit value and is kept on
- *   re-run. Pure federation roots get root_wiki=false.
+ *   existing .guild/wiki/ (a knowledge-only coordination root). A stored
+ *   root_wiki=true (manual override) is kept on re-run; a stored false or a
+ *   missing value is recomputed. Pure federation roots get root_wiki=false.
  *
  * Usage:
  *   npx tsx scripts/workspace/write-manifest.ts --cwd <root> [--mode auto|on|off]
@@ -68,13 +68,13 @@ function hasTopLevelCode(root: string): boolean {
   return false;
 }
 
-/** A boolean root_wiki already in workspace.json is an explicit value a re-run keeps (#272). */
-function priorRootWiki(manifestPath: string): boolean | undefined {
+/** A stored root_wiki=true is a manual override a re-run keeps (#272). */
+function priorRootWikiTrue(manifestPath: string): boolean {
   try {
     const prior = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as { root_wiki?: unknown } | null;
-    return typeof prior?.root_wiki === "boolean" ? prior.root_wiki : undefined;
+    return prior?.root_wiki === true;
   } catch {
-    return undefined;
+    return false;
   }
 }
 
@@ -125,7 +125,7 @@ export function writeManifest(
   const guildDir = durableGuildDir(root);
   const manifestPath = path.join(guildDir, "workspace.json");
   const rootWiki =
-    priorRootWiki(manifestPath) ?? (hasRootWikiDir(guildDir) || hasTopLevelCode(root));
+    priorRootWikiTrue(manifestPath) || hasRootWikiDir(guildDir) || hasTopLevelCode(root);
 
   const manifest: WorkspaceManifest = {
     schema_version: "guild.workspace.v1",

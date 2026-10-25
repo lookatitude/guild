@@ -8261,12 +8261,12 @@ function hasTopLevelCode(root) {
   }
   return false;
 }
-function priorRootWiki(manifestPath) {
+function priorRootWikiTrue(manifestPath) {
   try {
     const prior = JSON.parse(fs21.readFileSync(manifestPath, "utf8"));
-    return typeof prior?.root_wiki === "boolean" ? prior.root_wiki : void 0;
+    return prior?.root_wiki === true;
   } catch {
-    return void 0;
+    return false;
   }
 }
 function hasRootWikiDir(guildDir) {
@@ -8280,7 +8280,7 @@ function writeManifest(root, modeOverride, readMode) {
   const detection = detect(root, modeOverride, readMode);
   const guildDir = durableGuildDir(root);
   const manifestPath = path25.join(guildDir, "workspace.json");
-  const rootWiki = priorRootWiki(manifestPath) ?? (hasRootWikiDir(guildDir) || hasTopLevelCode(root));
+  const rootWiki = priorRootWikiTrue(manifestPath) || hasRootWikiDir(guildDir) || hasTopLevelCode(root);
   const manifest = {
     schema_version: "guild.workspace.v1",
     is_workspace: detection.kind === "workspace",
