@@ -393,11 +393,12 @@ export function buildOne(t: Target, outAbs: string): void {
 // CLI main-block guard (#274)
 // ---------------------------------------------------------------------------
 
-const MAIN_BLOCK = /require\.main\s*===?\s*module/g;
+const MAIN_BLOCK = /require\.main\s*===?\s*module|module\s*===?\s*require\.main/g;
 
 /**
- * 1-based lines of every `require.main === module` test in `src` whose `if (...)`
- * condition does not also test the argv basename against `/^<base>\.`. A test
+ * 1-based lines of every `require.main === module` test (either operand order) in
+ * `src` whose `if (...)` condition does not also AND-test the argv basename
+ * against `/^<base>\.`. A test
  * outside an `if` condition counts as unguarded: the check fails closed.
  */
 export function unguardedMainBlocks(src: string, base: string): number[] {
@@ -410,7 +411,11 @@ export function unguardedMainBlocks(src: string, base: string): number[] {
     // Accept the regex-literal form `/^name\.` and the string form
     // `new RegExp("[\\\\/]name\\.")`, whose doubled escapes collapse to `/]name\.`.
     const cond = conditionAround(src, at).replace(/\\\\/g, "\\");
-    const guarded = cond.includes("process.argv[1]") && (cond.includes(`/^${name}`) || cond.includes(`/]${name}`));
+    // `||` lets either side alone run the block, so it never counts as a gate.
+    const guarded =
+      !cond.includes("||") &&
+      cond.includes("process.argv[1]") &&
+      (cond.includes(`/^${name}`) || cond.includes(`/]${name}`));
     if (!guarded) out.push(src.slice(0, at).split("\n").length);
   }
   return out;

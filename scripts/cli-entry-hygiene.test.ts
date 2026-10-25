@@ -73,6 +73,11 @@ describe("#274 — a bundled library main block runs only from its own entry", (
     expect(
       unguardedMainBlocks('if (require.main === module && /^other\\.[cm]?[jt]s$/.test(process.argv[1] ?? "")) {}\n', "lib"),
     ).toEqual([1]);
+    // Reversed operands still count; an OR-ed basename test is no gate.
+    expect(unguardedMainBlocks("if (module === require.main) { main(); }\n", "lib")).toEqual([1]);
+    expect(
+      unguardedMainBlocks('if (require.main === module || /^lib\\.[cm]?[jt]s$/.test(process.argv[1] ?? "")) {}\n', "lib"),
+    ).toEqual([1]);
     // A TypeScript-only gate is not an entry-basename gate.
     expect(unguardedMainBlocks('if (require.main === module && /\\.[cm]?ts$/.test(process.argv[1] ?? "")) {}\n', "lib")).toEqual([1]);
   });
