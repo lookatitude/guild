@@ -738,8 +738,9 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-10-25 (#271): init and create-specialist describe the layout-2 shape
   // the migrator writes (config/project.json, indexes as cache, no registry.yaml). No
   // skill-src registry entry covers either skill. init step 4a runs the layout writer with --recheck
-  // (codex G-lane r2). ANTI-VACUITY: check-surface-pins was RED.
-  skills: "cb0d425174a41c390ecca1507e20291cc3f8eea3",
+  // (codex G-lane r2), and states the I2 root_wiki rule (.guild/wiki/ or top-level code;
+  // an existing true is kept). ANTI-VACUITY: check-surface-pins was RED.
+  skills: "374e4d3588c34bb1de99401ab681d5a6dc6cade6",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

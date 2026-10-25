@@ -43,8 +43,10 @@ On a **workspace** root (detected per the step below): `.guild/workspace.json`
 schema-copied here; canonical body defined in the workspace-aware-init-and-federation ADR). It is
 written by the Lane-B script, not hand-built: `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-write-manifest.js --cwd <workspace-root>`. A workspace builds
 its **own** `.guild/wiki/**` **only if** `root_wiki` is true (D-OQ2 — the
-workspace root itself has scannable top-level code); a pure federation root
-(e.g. just `docs/` + sub-repos) gets `root_wiki: false` and **no** root wiki.
+workspace root already has `.guild/wiki/` or scannable top-level code; a
+`root_wiki: true` already in the manifest is kept on re-run); a pure federation
+root (e.g. just `docs/` + sub-repos, no root wiki) gets `root_wiki: false` and
+**no** root wiki.
 No sub-guild's pages are ever copied up (federation, not duplication).
 
 On a **regular** repo (the default), nothing above is written and the path below
@@ -85,8 +87,9 @@ an explicit refresh; the full `learn-*` pipeline also runs at Init under
 4. **Workspace path (federation, not duplication):** write the federation
    manifest with `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-write-manifest.js --cwd
    <workspace-root>` → `.guild/workspace.json` (`guild.workspace.v1`, by
-   pointer). The writer sets `root_wiki` per D-OQ2 (true iff the root itself has
-   scannable top-level code) and enumerates each detected sub-guild. Build a
+   pointer). The writer sets `root_wiki` per D-OQ2 (true when the root has
+   `.guild/wiki/` or scannable top-level code; an existing `true` is kept on
+   re-run) and enumerates each detected sub-guild. Build a
    root wiki **only when** `root_wiki` is true; **never** copy a sub-guild's
    pages up. For each detected **sub-project with no `.guild/` yet**,
    **interactively OFFER** `/guild:init` on it (D-OQ3) — register it in the
@@ -181,7 +184,7 @@ hard set). Writes confined to `.guild/` (DH-3 boundary).
 - Workspace root (≥1 child with nested `.git/` or `.guild/`, e.g. just `docs/` +
   sub-repos) → classified `workspace`, `.guild/workspace.json`
   (`guild.workspace.v1`) written via `write-manifest.ts`, `root_wiki: false`
-  (no top-level code), no sub-guild pages copied up; verdict surfaced.
+  (no `.guild/wiki/`, no top-level code), no sub-guild pages copied up; verdict surfaced.
 - Workspace with a detected sub-project that has **no `.guild/`** → it is
   registered in the manifest and `/guild:init` on it is **offered**
   interactively (never auto-run, never forced).
