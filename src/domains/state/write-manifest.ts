@@ -9,10 +9,12 @@
  *   (temp file → rename). Never touches any other file under .guild/. Never copies
  *   sub-guild wiki pages up into the workspace .guild/ (SC-3 / no-duplication).
  *
- * root_wiki (D-OQ2):
- *   true iff the workspace root itself has at least one scannable top-level code file
- *   (extensions: .ts .tsx .js .jsx .py .rb .go .rs .java .kt .swift .cs .cpp .c .h).
- *   Pure federation roots (only sub-repos + docs/) get root_wiki=false.
+ * root_wiki (D-OQ2, #272):
+ *   true when the root has a scannable top-level code file (extensions:
+ *   .ts .tsx .js .jsx .py .rb .go .rs .java .kt .swift .cs .cpp .c .h) OR an
+ *   existing .guild/wiki/ (a knowledge-only coordination root). A prior
+ *   root_wiki=true in workspace.json is kept on re-run (an explicit value);
+ *   a prior false is recomputed. Pure federation roots get root_wiki=false.
  *
  * Usage:
  *   npx tsx scripts/workspace/write-manifest.ts --cwd <root> [--mode auto|on|off]
@@ -66,6 +68,24 @@ function hasTopLevelCode(root: string): boolean {
   return false;
 }
 
+/** A prior root_wiki=true in workspace.json is an explicit value a re-run keeps (#272). */
+function priorRootWikiTrue(manifestPath: string): boolean {
+  try {
+    const prior = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as { root_wiki?: unknown };
+    return prior.root_wiki === true;
+  } catch {
+    return false;
+  }
+}
+
+function hasRootWikiDir(guildDir: string): boolean {
+  try {
+    return fs.statSync(path.join(guildDir, "wiki")).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 // ── Manifest schema (guild.workspace.v1) ─────────────────────────────────────
 
 interface WorkspaceManifest {
@@ -102,7 +122,10 @@ export function writeManifest(
   readMode: WorkspaceModeReader,
 ): string {
   const detection = detect(root, modeOverride, readMode);
-  const rootWiki = hasTopLevelCode(root);
+  const guildDir = durableGuildDir(root);
+  const manifestPath = path.join(guildDir, "workspace.json");
+  const rootWiki =
+    priorRootWikiTrue(manifestPath) || hasRootWikiDir(guildDir) || hasTopLevelCode(root);
 
   const manifest: WorkspaceManifest = {
     schema_version: "guild.workspace.v1",
@@ -122,10 +145,7 @@ export function writeManifest(
   };
 
   // Ensure .guild/ dir exists (does not touch any sub-dir or wiki)
-  const guildDir = durableGuildDir(root);
   fs.mkdirSync(guildDir, { recursive: true });
-
-  const manifestPath = path.join(guildDir, "workspace.json");
 
   // Atomic write: same-directory temp file → rename (never a partial
   // workspace.json; never os.tmpdir(), which can throw EXDEV on rename).

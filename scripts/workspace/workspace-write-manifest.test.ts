@@ -151,6 +151,40 @@ describe("workspace/write-manifest.ts — idempotent manifest writer", () => {
     expect(m.root_wiki).toBe(true);
   });
 
+  // #272: a knowledge-only coordination root owns a wiki but no top-level code.
+  test("root_wiki = true when the root has .guild/wiki/ and no top-level code (#272)", () => {
+    const root = mkRoot();
+    seedChild(root, "plugin", { git: true });
+    fs.mkdirSync(path.join(root, ".guild", "wiki"), { recursive: true });
+    fs.writeFileSync(path.join(root, ".guild", "wiki", "index.md"), "# root wiki\n");
+    const { status } = run(["--cwd", root]);
+    expect(status).toBe(0);
+    const m = readManifest(root) as { root_wiki: boolean };
+    expect(m.root_wiki).toBe(true);
+  });
+
+  test("root_wiki: an explicit true survives a re-run on a root with no code and no wiki (#272)", () => {
+    const root = mkRoot();
+    seedChild(root, "plugin", { git: true });
+    run(["--cwd", root]);
+    const manifestPath = path.join(root, ".guild", "workspace.json");
+    const edited = { ...(readManifest(root) as Record<string, unknown>), root_wiki: true };
+    fs.writeFileSync(manifestPath, JSON.stringify(edited, null, 2) + "\n");
+    const { status } = run(["--cwd", root]);
+    expect(status).toBe(0);
+    expect((readManifest(root) as { root_wiki: boolean }).root_wiki).toBe(true);
+  });
+
+  test("root_wiki: a prior false is recomputed, so a root that gained a wiki reports true (#272)", () => {
+    const root = mkRoot();
+    seedChild(root, "plugin", { git: true });
+    run(["--cwd", root]);
+    expect((readManifest(root) as { root_wiki: boolean }).root_wiki).toBe(false);
+    fs.mkdirSync(path.join(root, ".guild", "wiki"), { recursive: true });
+    run(["--cwd", root]);
+    expect((readManifest(root) as { root_wiki: boolean }).root_wiki).toBe(true);
+  });
+
   // ── Idempotency ──────────────────────────────────────────────────────────────
 
   test("idempotent: re-running refreshes manifest without clobbering unrelated .guild/ state", () => {
