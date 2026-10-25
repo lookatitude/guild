@@ -740,7 +740,9 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // skill-src registry entry covers either skill. init step 4a runs the layout writer with --recheck
   // (codex G-lane r2), and states the I2 root_wiki rule (.guild/wiki/ or top-level code;
   // an existing true is kept). ANTI-VACUITY: check-surface-pins was RED.
-  skills: "374e4d3588c34bb1de99401ab681d5a6dc6cade6",
+  // Re-ratified 2026-10-25 (v3.2 text): create-skill and team-compose drop --write-registry
+  // (layout 2 retires registry.yaml). ANTI-VACUITY: check-surface-pins was RED.
+  skills: "978a1f5a7cb1c6ef803ce4bd0d911f9335cbb722",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

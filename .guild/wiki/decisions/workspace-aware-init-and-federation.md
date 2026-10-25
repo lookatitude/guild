@@ -120,7 +120,7 @@ re-spell. This is the single source of truth for the schema:
     "rule": "immediate child has .git/ OR .guild/",
     "mode": "auto"              // settings.json workspace.mode: auto | on | off
   },
-  "root_wiki": false,           // D-OQ2 hybrid: true iff workspace root itself has scannable top-level code
+  "root_wiki": false,           // D-OQ2: true when the root has .guild/wiki/ or scannable top-level code
   "sub_guilds": [
     {
       "name": "plugin",
@@ -158,12 +158,12 @@ sub-guild's own `.guild/` only drops it from the manifest on the next refresh.
   child that is itself a workspace is registered as a **leaf** sub-guild; its
   own federation is reached via its own `workspace.json`, never flattened into
   or recursed by the parent.
-- **D-OQ2 — Hybrid root only if code present.** The workspace root is the
-  federation root **and** may also be its own sub-guild: build a root wiki
-  (`root_wiki: true`) **only if** the workspace root itself has scannable
-  top-level code. This repo's root has none (just `docs/` + sub-repos) →
-  `root_wiki: false`, federation-only. A code-bearing umbrella gets its own
-  wiki **in addition to** federating to its children.
+- **D-OQ2 — Root wiki when the root owns knowledge or code.** The workspace root
+  is the federation root **and** may also be its own sub-guild: it has a root wiki
+  (`root_wiki: true`) when it already has `.guild/wiki/` (a knowledge-only
+  coordination root) or scannable top-level code. A stored `root_wiki: true` is
+  kept on re-run; a stored `false` is recomputed. A root with neither stays
+  `root_wiki: false`, federation-only. Amended for v3.2 (#272).
 - **D-OQ3 — Offer, never auto, to init missing sub-guilds.** A detected
   sub-project with `.git/` but no `.guild/` yet is **registered**
   (`kind: "sub-project"`) and the operator is **interactively offered** a
