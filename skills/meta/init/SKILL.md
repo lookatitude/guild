@@ -98,9 +98,10 @@ an explicit refresh; the full `learn-*` pipeline also runs at Init under
    manifest, before the step-5 scan):
    `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/config-cmd.js reconcile sync --cwd <root>`,
    then the layout writer
-   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/ensure-storage-layout.js --cwd=<root>`.
-   The writer splits policy into the scoped `config/*.json` files and stamps
-   the marker; it prints a report only when it did not apply. Surface it.
+   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/migrate-guild.js --root=<root> --mode=migrate --recheck`.
+   `--recheck` runs the chain even when run start already stamped the marker,
+   so the policy reconcile just wrote is split into the scoped `config/*.json`
+   files. Surface its report; a non-zero exit means it did not apply.
 5. Brownfield (**cheap scan tier = Init-DONE**): invoke
    `guild:learn-map`'s stage-1 scan → `codebase-map.json`, build the
    wiki, and write the confidence-tagged `architecture-map.md` **stub**. Do
