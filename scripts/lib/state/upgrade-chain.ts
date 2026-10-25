@@ -40,6 +40,8 @@ export interface RunLayoutUpgradeOptions {
   fromVersion: number | null;
   toVersion: number;
   dryRun?: boolean;
+  /** Evaluate every step; ignore any saved journal (`--recheck` / `--mode=verify`). */
+  fresh?: boolean;
 }
 
 /**
@@ -79,6 +81,7 @@ export function runLayoutUpgrade(opts: RunLayoutUpgradeOptions): UpgradeChainRep
     fromVersion: opts.fromVersion,
     toVersion: opts.toVersion,
     dryRun: opts.dryRun === true,
+    fresh: opts.fresh === true,
     v1: v1Converter,
     policy: { canonicalPolicyKey, isPolicyKey, findHostIdentity },
   });
