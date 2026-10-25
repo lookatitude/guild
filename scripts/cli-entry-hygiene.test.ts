@@ -85,6 +85,17 @@ describe("#274 — a bundled library main block runs only from its own entry", (
     ).toEqual([1]);
     // A regex that also accepts other basenames is no gate.
     expect(unguardedMainBlocks('if (require.main === module && /lib/.test(process.argv[1] ?? "")) {}\n', "lib")).toEqual([1]);
+    // Spaced and element-access spellings are still main blocks.
+    expect(unguardedMainBlocks("if (require . main === module) { main(); }\n", "lib")).toEqual([1]);
+    expect(unguardedMainBlocks('if (require["main"] === module) { main(); }\n', "lib")).toEqual([1]);
+    // A guard that also accepts a shipped bundle's name fires inside that bundle (#274).
+    expect(
+      unguardedMainBlocks(
+        'if (require.main === module && /^(lib|trace-summarize)\\.[cm]?[jt]s$/.test(process.argv[1] ?? "")) {}\n',
+        "lib",
+        ["trace-summarize.js"],
+      ),
+    ).toEqual([1]);
     // A TypeScript-only gate is not an entry-basename gate.
     expect(unguardedMainBlocks('if (require.main === module && /\\.[cm]?ts$/.test(process.argv[1] ?? "")) {}\n', "lib")).toEqual([1]);
   });

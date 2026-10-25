@@ -409,8 +409,9 @@ interface MainBlock {
  * conjunct whose regex accepts `<base>.ts` and rejects any other basename.
  * Anything else (`||`, `!`, a ternary, an assignment) fails closed.
  */
-function mainBlocks(src: string, base: string): MainBlock[] {
-  if (!src.includes("require.main")) return [];
+function mainBlocks(src: string, base: string, forbidden: readonly string[] = []): MainBlock[] {
+  // Broad on purpose: `require . main` and `require["main"]` must still be parsed.
+  if (!/\brequire\b/.test(src) || !/\bmain\b/.test(src)) return [];
   const sf = ts.createSourceFile("x.ts", src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const out: MainBlock[] = [];
   const unwrap = (n: import("typescript").Expression): import("typescript").Expression =>
@@ -421,8 +422,13 @@ function mainBlocks(src: string, base: string): MainBlock[] {
       ? [...conjuncts(e.left), ...conjuncts(e.right)]
       : [e];
   };
+  const isRequire = (n: import("typescript").Node): boolean => ts.isIdentifier(n) && n.text === "require";
   const isRequireMain = (n: import("typescript").Node): boolean =>
-    ts.isPropertyAccessExpression(n) && n.name.text === "main" && ts.isIdentifier(n.expression) && n.expression.text === "require";
+    (ts.isPropertyAccessExpression(n) && n.name.text === "main" && isRequire(unwrap(n.expression))) ||
+    (ts.isElementAccessExpression(n) &&
+      ts.isStringLiteralLike(n.argumentExpression) &&
+      n.argumentExpression.text === "main" &&
+      isRequire(unwrap(n.expression)));
   const isModule = (n: import("typescript").Node): boolean => ts.isIdentifier(n) && n.text === "module";
   const isMainCompare = (n: import("typescript").Node): boolean => {
     if (!ts.isBinaryExpression(n)) return false;
@@ -434,7 +440,9 @@ function mainBlocks(src: string, base: string): MainBlock[] {
   };
   const acceptsOnlyBase = (re: RegExp): boolean => {
     const own = [`${base}.ts`, `/p/${base}.ts`, `${base}.js`, `/p/${base}.js`].some((x) => re.test(x));
-    const other = ["other.js", "/p/other.js", `/p/x${base}.js`, `/p/${base}x.js`, `x${base}.ts`].some((x) => re.test(x));
+    const other = ["other.js", "/p/other.js", `/p/x${base}.js`, `/p/${base}x.js`, `x${base}.ts`, ...forbidden]
+      .flatMap((x) => [x, `/p/${x}`])
+      .some((x) => re.test(x));
     return own && !other;
   };
   const isBasenameTest = (n: import("typescript").Expression): boolean => {
@@ -478,9 +486,18 @@ function mainBlocks(src: string, base: string): MainBlock[] {
   return out;
 }
 
-/** 1-based lines of the main blocks in `src` that are not basename-guarded (see mainBlocks). */
-export function unguardedMainBlocks(src: string, base: string): number[] {
-  return mainBlocks(src, base).filter((b) => !b.guarded).map((b) => b.line);
+/**
+ * 1-based lines of the main blocks in `src` that are not basename-guarded (see
+ * mainBlocks). `forbidden` names basenames the guard must reject; the compile
+ * passes every shipped bundle name, so a guard that also matches one fails.
+ */
+export function unguardedMainBlocks(src: string, base: string, forbidden: readonly string[] = []): number[] {
+  return mainBlocks(src, base, forbidden).filter((b) => !b.guarded).map((b) => b.line);
+}
+
+/** Every output basename the compile ships (`trace-summarize.js`, …). */
+function shippedBasenames(): string[] {
+  return [...new Set(targets().map((x) => path.basename(x.out)))];
 }
 
 /**
@@ -492,15 +509,17 @@ export function mainGuardViolations(t: Target, absWorkingDir: string, inputs: st
   const entryAbs = path.join(ROOT, t.entry);
   const outBase = path.basename(t.out).replace(/\.[cm]?js$/, "");
   const bad: string[] = [];
+  const shipped = shippedBasenames();
   for (const input of inputs) {
     const abs = path.resolve(absWorkingDir, input);
     if (abs.split(path.sep).includes("node_modules") || !/\.[cm]?[jt]s$/.test(abs)) continue;
     const src = fs.readFileSync(abs, "utf8");
     const base = path.basename(abs).replace(/\.[cm]?[jt]s$/, "");
     const rel = path.relative(ROOT, abs);
+    const forbidden = shipped.filter((x) => x !== `${base}.js`);
     if (abs !== entryAbs) {
-      for (const line of unguardedMainBlocks(src, base)) bad.push(`${rel}:${line}`);
-    } else if (base !== outBase && mainBlocks(src, base).some((b) => b.guarded)) {
+      for (const line of unguardedMainBlocks(src, base, forbidden)) bad.push(`${rel}:${line}`);
+    } else if (base !== outBase && mainBlocks(src, base, forbidden).some((b) => b.guarded)) {
       bad.push(`${rel}: entry guarded on "${base}" but ships as ${t.out}`);
     }
   }
