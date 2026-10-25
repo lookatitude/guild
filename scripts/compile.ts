@@ -31,6 +31,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 
+import { LIBRARY, RUNTIME_USAGE } from "./runtime-usage";
+
 const ROOT = path.resolve(__dirname, "..");
 
 // ---------------------------------------------------------------------------
@@ -58,6 +60,8 @@ export interface Target {
    * whose committed copy was built from elsewhere overrides it.
    */
   absWorkingDir?: string;
+  /** `--help` text a runtime script prints from its banner (#269). */
+  usage?: string;
   group: "hooks" | "agent-team" | "mcp" | "scripts" | "conformance";
 }
 
@@ -252,7 +256,9 @@ export function targets(): Target[] {
     group: "mcp",
   });
   for (const s of RUNTIME_SCRIPT_IDS) {
-    t.push({ id: `scripts/${s.id}`, entry: s.entry, out: `runtime/scripts/${s.id}.js`, yamlFrom: "scripts", group: "scripts" });
+    const usage = RUNTIME_USAGE[s.id];
+    if (!usage) throw new Error(`runtime script "${s.id}" has no --help entry in scripts/runtime-usage.ts (#269)`);
+    t.push({ id: `scripts/${s.id}`, entry: s.entry, out: `runtime/scripts/${s.id}.js`, yamlFrom: "scripts", usage, group: "scripts" });
   }
   // The activated-host conformance worker. It was built by its own esbuild target
   // in scripts/package.json with byte-identical options, which left it OUTSIDE
@@ -335,7 +341,27 @@ export function buildOptionsForTarget(t: Target, outAbs: string): import("esbuil
     alias: aliasForTarget(t),
     nodePaths: (t.nodePaths ?? []).map((p) => path.join(ROOT, p)),
     logLevel: "silent",
+    ...(t.usage ? { banner: { js: helpBanner(t) } } : {}),
   };
+}
+
+/**
+ * Runs before every bundled module, so `--help` / `-h` can have no side effect
+ * (#269). Only when the bundle is the main module: a library bundle required by
+ * another CLI must not read that CLI's argv. Tokens after `--` are not flags.
+ * TRAP: a literal `-h` / `--help` VALUE (`--message -h`) also prints usage.
+ */
+export function helpBanner(t: Target): string {
+  const id = path.basename(t.out, ".js");
+  const text =
+    t.usage === LIBRARY
+      ? `usage: none. runtime/scripts/${id}.js is a library bundle other runtime scripts require; it is not a CLI.\n`
+      : `usage: node runtime/scripts/${id}.js ${t.usage}\n`;
+  return (
+    `if (require.main === module) { const a = process.argv.slice(2), e = a.indexOf("--"); ` +
+    `if ((e < 0 ? a : a.slice(0, e)).some((x) => x === "--help" || x === "-h")) { ` +
+    `require("fs").writeSync(1, ${JSON.stringify(text)}); process.exit(0); } }`
+  );
 }
 
 /**
@@ -345,11 +371,88 @@ export function buildOptionsForTarget(t: Target, outAbs: string): import("esbuil
  * from --check in the first place).
  */
 export function buildOne(t: Target, outAbs: string): void {
-  const r = esbuild.buildSync(buildOptionsForTarget(t, outAbs));
+  const options = buildOptionsForTarget(t, outAbs);
+  const r = esbuild.buildSync({ ...options, metafile: true });
   if (r.errors.length) {
     throw new Error(`esbuild failed for ${t.id}:\n${r.errors.map((e) => e.text).join("\n")}`);
   }
+  const bad = mainGuardViolations(t, options.absWorkingDir as string, Object.keys(r.metafile?.inputs ?? {}));
+  if (bad.length) {
+    throw new Error(
+      `${t.id}: unguarded CLI main block in a bundled module (#274). esbuild inlines it, where ` +
+        "`require.main === module` is true, so it runs on the bundle's argv. Gate it on the " +
+        "entry basename, e.g. `require.main === module && /^<name>\\.[cm]?[jt]s$/.test(" +
+        '(process.argv[1] ?? "").split(/[\\\\/]/).pop() ?? "")`:\n' +
+        bad.map((b) => `  ${b}`).join("\n"),
+    );
+  }
   normalizeShebang(outAbs);
+}
+
+// ---------------------------------------------------------------------------
+// CLI main-block guard (#274)
+// ---------------------------------------------------------------------------
+
+const MAIN_BLOCK = /require\.main\s*===?\s*module/g;
+
+/**
+ * 1-based lines of every `require.main === module` test in `src` whose `if (...)`
+ * condition does not also test the argv basename against `/^<base>\.`. A test
+ * outside an `if` condition counts as unguarded: the check fails closed.
+ */
+export function unguardedMainBlocks(src: string, base: string): number[] {
+  const name = `${base.replace(/\./g, "\\.")}\\.`;
+  const out: number[] = [];
+  for (const m of src.matchAll(MAIN_BLOCK)) {
+    const at = m.index ?? 0;
+    const lead = src.slice(src.lastIndexOf("\n", at) + 1, at).trimStart();
+    if (lead.includes("//") || lead.startsWith("*") || lead.startsWith("/*")) continue;
+    // Accept the regex-literal form `/^name\.` and the string form
+    // `new RegExp("[\\\\/]name\\.")`, whose doubled escapes collapse to `/]name\.`.
+    const cond = conditionAround(src, at).replace(/\\\\/g, "\\");
+    const guarded = cond.includes("process.argv[1]") && (cond.includes(`/^${name}`) || cond.includes(`/]${name}`));
+    if (!guarded) out.push(src.slice(0, at).split("\n").length);
+  }
+  return out;
+}
+
+/** The text of the `if (...)` condition enclosing `at`, or "" when there is none. */
+function conditionAround(src: string, at: number): string {
+  const head = src.slice(Math.max(0, at - 200), at);
+  const ifs = [...head.matchAll(/\bif\s*\(/g)];
+  const last = ifs[ifs.length - 1];
+  if (!last) return "";
+  const open = at - head.length + (last.index ?? 0) + last[0].length - 1;
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "(") depth++;
+    else if (src[i] === ")" && --depth === 0) return i > at ? src.slice(open, i + 1) : "";
+  }
+  return "";
+}
+
+/**
+ * Violations for one target, from esbuild's metafile inputs. A non-entry module's
+ * main block must be basename-guarded. A guarded entry must be guarded on the name
+ * it ships as, or its own CLI never runs from `runtime/scripts/<id>.js`.
+ */
+export function mainGuardViolations(t: Target, absWorkingDir: string, inputs: string[]): string[] {
+  const entryAbs = path.join(ROOT, t.entry);
+  const outBase = path.basename(t.out).replace(/\.[cm]?js$/, "");
+  const bad: string[] = [];
+  for (const input of inputs) {
+    const abs = path.resolve(absWorkingDir, input);
+    if (abs.split(path.sep).includes("node_modules") || !/\.[cm]?[jt]s$/.test(abs)) continue;
+    const src = fs.readFileSync(abs, "utf8");
+    const base = path.basename(abs).replace(/\.[cm]?[jt]s$/, "");
+    const rel = path.relative(ROOT, abs);
+    if (abs !== entryAbs) {
+      for (const line of unguardedMainBlocks(src, base)) bad.push(`${rel}:${line}`);
+    } else if (base !== outBase && unguardedMainBlocks(src, base).length < [...src.matchAll(MAIN_BLOCK)].length) {
+      bad.push(`${rel}: entry guarded on "${base}" but ships as ${t.out}`);
+    }
+  }
+  return bad;
 }
 
 /**

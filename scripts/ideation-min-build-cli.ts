@@ -37,8 +37,14 @@ function parseArgs(argv: string[]): Record<string, string> {
   const flags: Record<string, string> = {};
   for (let i = 0; i < argv.length; i++) {
     if (argv[i].startsWith("--")) {
-      const key = argv[i].slice(2);
-      const val = i + 1 < argv.length && !argv[i + 1].startsWith("--") ? argv[++i] : "true";
+      const eq = argv[i].indexOf("=");
+      const key = eq < 0 ? argv[i].slice(2) : argv[i].slice(2, eq);
+      // Every flag takes a value; a bare one used to bind the string "true" (#270).
+      const val = eq >= 0 ? argv[i].slice(eq + 1) : i + 1 < argv.length && !argv[i + 1].startsWith("--") ? argv[++i] : "";
+      if (!val) {
+        process.stderr.write(`[ideation-min-build-cli] ERROR: --${key} needs a value\n`);
+        process.exit(2);
+      }
       flags[key] = val;
     }
   }
