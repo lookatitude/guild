@@ -398,7 +398,7 @@ export function emitRunClosed(
     final_learning_checkpoint?: string | null;
     artifacts?: Record<string, string>;
   } = {},
-): void {
+): "closed" | "binding_rejected" | "failed" {
   try {
     // T3 §5 / T3b — resolve AND VERIFY the required binding; fail closed (no
     // write) on absent/not-minted/malformed/closed/mismatched. Precedence
@@ -408,7 +408,7 @@ export function emitRunClosed(
     const auth = authorizeHookWrite(root, { runId, bindingRef: opts.binding_ref });
     if (auth.ok === false) {
       process.stderr.write(formatBindingRejected("run-trace", auth));
-      return;
+      return "binding_rejected";
     }
     const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost as ResolveHost, captureCapabilityBaseline, recordCapabilityBaselineCapture));
     lifecycle.closeRun(runId, {
@@ -429,7 +429,7 @@ export function emitRunClosed(
       process.stderr.write(
         `[run-trace] WARN: provenance.json missing terminal_trace_event pointer for ${runId}\n`,
       );
-      return;
+      return "failed";
     }
     appendTraceLine(liveLogPath(root, runId), {
       schema_version: "guild.trace_event.v1",
@@ -438,10 +438,12 @@ export function emitRunClosed(
       run_id: runId,
       at: typeof pointer.at === "string" ? pointer.at : new Date().toISOString(),
     });
+    return "closed";
   } catch (err) {
     process.stderr.write(
       `[run-trace] WARN: emitRunClosed failed: ${err instanceof Error ? err.message : String(err)}\n`,
     );
+    return "failed";
   }
 }
 
