@@ -1056,6 +1056,35 @@ describe("#275 a re-run never replays a committed journal", () => {
     expect(stepStatus(plan, "caches-out")).toBe("completed");
   });
 
+  it("a dry run and a recheck re-evaluate every step, never a blocked journal's settled ones", () => {
+    const f = mkFixture("blocked-then-recheck");
+    write(path.join(f.guildDir, "wiki", "index.md"), "# index\n");
+    write(path.join(f.guildDir, "settings.json"), '{"recall":{"backend":"bm25"}}\n');
+    // A dirty settings.json blocks the durable split; registry-yaml-retire settles `skipped`.
+    expect(run(f, { dirty: [".guild/settings.json"] }).state).toBe("blocked_dirty_durable");
+
+    // A derived registry appears after the blocked run.
+    write(path.join(f.guildDir, "agents", "registry.yaml"), "agents: []\n");
+
+    const plan = run(f, { dryRun: true });
+    expect(stepStatus(plan, "registry-yaml-retire")).toBe("completed");
+
+    const recheck = runUpgrade({
+      cwd: f.root,
+      storage: f.storage,
+      fromVersion: null,
+      toVersion: CURRENT_LAYOUT_VERSION,
+      dirtyProbe: () => [],
+      policy: POLICY,
+      fresh: true,
+      now: () => "2026-01-01T00:00:00.000Z",
+      nowMs: () => 1767225600000,
+    });
+    expect(recheck.state).toBe("committed");
+    expect(stepStatus(recheck, "registry-yaml-retire")).toBe("completed");
+    expect(fs.existsSync(path.join(f.guildDir, "agents", "registry.yaml"))).toBe(false);
+  });
+
   it("a missing policy classifier is a named failure, never a silent skip", () => {
     const f = mkFixture("no-classifier");
     write(path.join(f.guildDir, "settings.json"), '{"recall":{"backend":"bm25"}}\n');

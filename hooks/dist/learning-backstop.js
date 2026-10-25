@@ -42133,7 +42133,8 @@ function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
     root: status.root,
     fromVersion: status.version,
     toVersion: CURRENT_LAYOUT_VERSION,
-    dryRun: opts.dryRun === true
+    dryRun: opts.dryRun === true,
+    fresh: opts.recheck === true
   });
   const after = detect2(cwd);
   return { ...after, upgrade: result2 };

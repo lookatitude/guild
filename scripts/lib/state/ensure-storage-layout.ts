@@ -159,6 +159,7 @@ export function ensureStorageLayout(cwd: string = process.cwd(), opts: EnsureOpt
     fromVersion: status.version,
     toVersion: CURRENT_LAYOUT_VERSION,
     dryRun: opts.dryRun === true,
+    fresh: opts.recheck === true,
   });
 
   const after = detect(cwd);

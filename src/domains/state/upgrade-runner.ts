@@ -101,6 +101,8 @@ export interface UpgradeOptions {
   fromVersion: number | null;
   /** Compute the plan, write NOTHING (not even the journal). */
   dryRun?: boolean;
+  /** Ignore any saved journal and evaluate every step (`--recheck`). */
+  fresh?: boolean;
   storage?: GuildStorage;
   dirtyProbe?: DirtyProbe;
   now?: () => string;
@@ -244,8 +246,9 @@ export function runUpgrade(opts: UpgradeOptions): UpgradeResult {
 
   // Resume only an IN-FLIGHT journal for this target. A committed one describes a
   // finished upgrade: replaying its settled steps would skip work that later writes
-  // re-created (#275) and print the old run's step results as this run's.
-  const prior = loadJournal(journalFile);
+  // re-created (#275) and print the old run's step results as this run's. A plan
+  // (dry run) and a recheck evaluate every step against the tree as it is now.
+  const prior = dryRun || opts.fresh === true ? null : loadJournal(journalFile);
   let journal =
     prior !== null && prior.state !== "committed" && prior.to_version === opts.toVersion
       ? prior

@@ -7637,7 +7637,7 @@ function runUpgrade(opts) {
     validation_errors: [],
     ...extra
   });
-  const prior = loadJournal(journalFile);
+  const prior = dryRun || opts.fresh === true ? null : loadJournal(journalFile);
   let journal = prior !== null && prior.state !== "committed" && prior.to_version === opts.toVersion ? prior : newJournal({ rootId: guildRootId(root), root, fromVersion: opts.fromVersion, toVersion: opts.toVersion, now: now() });
   const lock = dryRun ? null : acquireLock(lockFile, nowMs());
   if (!dryRun && !lock) {
@@ -52857,7 +52857,8 @@ function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
     root: status.root,
     fromVersion: status.version,
     toVersion: CURRENT_LAYOUT_VERSION,
-    dryRun: opts.dryRun === true
+    dryRun: opts.dryRun === true,
+    fresh: opts.recheck === true
   });
   const after = detect2(cwd);
   return { ...after, upgrade: result2 };

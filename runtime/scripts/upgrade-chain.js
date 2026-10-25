@@ -5495,7 +5495,7 @@ function runUpgrade(opts) {
     validation_errors: [],
     ...extra
   });
-  const prior = loadJournal(journalFile);
+  const prior = dryRun || opts.fresh === true ? null : loadJournal(journalFile);
   let journal = prior !== null && prior.state !== "committed" && prior.to_version === opts.toVersion ? prior : newJournal({ rootId: guildRootId(root), root, fromVersion: opts.fromVersion, toVersion: opts.toVersion, now: now() });
   const lock = dryRun ? null : acquireLock(lockFile, nowMs());
   if (!dryRun && !lock) {
@@ -10135,6 +10135,7 @@ function runLayoutUpgrade(opts) {
     fromVersion: opts.fromVersion,
     toVersion: opts.toVersion,
     dryRun: opts.dryRun === true,
+    fresh: opts.fresh === true,
     v1: v1Converter,
     policy: { canonicalPolicyKey, isPolicyKey, findHostIdentity }
   });
