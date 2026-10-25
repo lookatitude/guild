@@ -175,14 +175,18 @@ describe("workspace/write-manifest.ts — idempotent manifest writer", () => {
     expect((readManifest(root) as { root_wiki: boolean }).root_wiki).toBe(true);
   });
 
-  test("root_wiki: a prior false is recomputed, so a root that gained a wiki reports true (#272)", () => {
+  test("root_wiki: an explicit false survives a re-run on a root that has .guild/wiki/ (#272)", () => {
     const root = mkRoot();
     seedChild(root, "plugin", { git: true });
-    run(["--cwd", root]);
-    expect((readManifest(root) as { root_wiki: boolean }).root_wiki).toBe(false);
     fs.mkdirSync(path.join(root, ".guild", "wiki"), { recursive: true });
     run(["--cwd", root]);
     expect((readManifest(root) as { root_wiki: boolean }).root_wiki).toBe(true);
+    const manifestPath = path.join(root, ".guild", "workspace.json");
+    const edited = { ...(readManifest(root) as Record<string, unknown>), root_wiki: false };
+    fs.writeFileSync(manifestPath, JSON.stringify(edited, null, 2) + "\n");
+    const { status } = run(["--cwd", root]);
+    expect(status).toBe(0);
+    expect((readManifest(root) as { root_wiki: boolean }).root_wiki).toBe(false);
   });
 
   // ── Idempotency ──────────────────────────────────────────────────────────────

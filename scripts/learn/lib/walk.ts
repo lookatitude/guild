@@ -17,7 +17,7 @@ export interface WalkResult {
  * .guild/workspace.json (#273). Each one owns its own index, so the root walk
  * skips it. No manifest, is_workspace:false, or no sub_guilds yields none.
  */
-function registeredSubGuildPaths(repoRoot: string): Set<string> {
+export function registeredSubGuildPaths(repoRoot: string): Set<string> {
   const out = new Set<string>();
   let manifest: { is_workspace?: unknown; sub_guilds?: unknown } | null;
   try {

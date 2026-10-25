@@ -79,3 +79,21 @@ test("a manifest entry that is not a depth-1 name excludes nothing", () => {
   );
   expect(scannedPaths(root)).toEqual(["app/src/a.ts", "tools/t.ts"]);
 });
+
+test("corpus parity: knowledge discovery skips the same registered sub_guilds as walkRepo", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { discoverFilePaths } = require("./knowledge-orchestrator") as typeof import("./knowledge-orchestrator");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { walkRepo } = require("./lib/walk") as typeof import("./lib/walk");
+  const root = mkRoot();
+  fs.mkdirSync(path.join(root, "app", ".git"), { recursive: true });
+  put(root, "app/src/a.ts");
+  put(root, "app/README.md", "# app\n");
+  put(root, "tools/t.ts");
+  put(root, "tools/NOTES.md", "# notes\n");
+  registerWorkspace(root);
+  const discovered = discoverFilePaths(root);
+  expect(discovered.codeRelPaths).toEqual(["tools/t.ts"]);
+  expect(discovered.docRelPaths).toEqual(["tools/NOTES.md"]);
+  expect(walkRepo(root).files).toEqual(["tools/NOTES.md", "tools/t.ts"]);
+});
