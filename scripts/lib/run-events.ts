@@ -175,7 +175,9 @@ export function loadRunEvents(runDir: string): LoadRunEventsResult {
 
 // ── CLI (diagnostics only; never called from lib consumers) ──────────────────
 
-if (require.main === module) {
+// Gate on the entry basename: esbuild inlines this module into other bundles,
+// where `require.main === module` is true for every inlined module (#274).
+if (require.main === module && /^run-events\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   ensureStorageLayout(process.cwd(), { detectOnly: true });
   const runDir = process.argv[2];
   if (!runDir) {
