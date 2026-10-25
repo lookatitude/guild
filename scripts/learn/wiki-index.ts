@@ -412,7 +412,9 @@ export async function indexWiki(
 // CLI entry point (for direct invocation: npx tsx wiki-index.ts <wikiDir>)
 // ---------------------------------------------------------------------------
 
-if (require.main === module) {
+// Gate on the entry basename: esbuild inlines this module into other bundles,
+// where `require.main === module` is true for every inlined module (#274).
+if (require.main === module && /^wiki-index\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
   const wikiDir = argv[0];

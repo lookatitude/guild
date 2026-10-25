@@ -330,7 +330,9 @@ export function analyzeDiagrams(
 // CLI entrypoint
 // ---------------------------------------------------------------------------
 
-if (require.main === module) {
+// Gate on the entry basename: esbuild inlines this module into other bundles,
+// where `require.main === module` is true for every inlined module (#274).
+if (require.main === module && /^diagram-analyze\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   const argv = process.argv.slice(2);
   const repoRoot = argv[0];
   if (!repoRoot) {

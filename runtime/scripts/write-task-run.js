@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+if (require.main === module) { const a = process.argv.slice(2), e = a.indexOf("--"); if ((e < 0 ? a : a.slice(0, e)).some((x) => x === "--help" || x === "-h")) { require("fs").writeSync(1, "usage: node runtime/scripts/write-task-run.js --cwd <root> --run-id <id> --task-id <id> [task fields...]\n"); process.exit(0); } }
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -41406,7 +41407,7 @@ __export(write_task_run_exports, {
 module.exports = __toCommonJS(write_task_run_exports);
 init_lifecycle();
 init_lifecycle();
-if (require.main === module && /\.[cm]?ts$/.test(process.argv[1] ?? "")) {
+if (require.main === module && /^write-task-run\.[cm]?ts$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   runWriteTaskRunCli();
 }
 // Annotate the CommonJS export names for ESM import in node:

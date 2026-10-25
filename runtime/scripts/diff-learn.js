@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+if (require.main === module) { const a = process.argv.slice(2), e = a.indexOf("--"); if ((e < 0 ? a : a.slice(0, e)).some((x) => x === "--help" || x === "-h")) { require("fs").writeSync(1, "usage: node runtime/scripts/diff-learn.js [--cwd <path>] --base <sha> [--head <sha>] [--run-id <id>] [--print]\n"); process.exit(0); } }
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -3200,15 +3201,15 @@ var SCHEMA = {
   knowledgeLinks: "guild.knowledge_links.v1"
 };
 function parseCwd(argv) {
-  const idx = argv.indexOf("--cwd");
-  if (idx !== -1 && argv[idx + 1]) return argv[idx + 1];
-  return process.env["GUILD_CWD"] ?? process.cwd();
+  return parseFlag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
 }
 function parseFlag(argv, name) {
   const eq = `--${name}=`;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === `--${name}` && argv[i + 1]) return argv[i + 1];
-    if (argv[i].startsWith(eq)) return argv[i].slice(eq.length);
+    const v = argv[i] === `--${name}` ? argv[i + 1] : argv[i].startsWith(eq) ? argv[i].slice(eq.length) : void 0;
+    if (v === void 0 && argv[i] !== `--${name}`) continue;
+    if (!v || v.startsWith("--")) throw new Error(`--${name} needs a value (--${name} <v> or --${name}=<v>)`);
+    return v;
   }
   return void 0;
 }

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+if (require.main === module) { const a = process.argv.slice(2), e = a.indexOf("--"); if ((e < 0 ? a : a.slice(0, e)).some((x) => x === "--help" || x === "-h")) { require("fs").writeSync(1, "usage: node runtime/scripts/ideation-min-build-cli.js [--cwd <root>] [--name <n>] [--description <d>] [--language <l>] [--now <iso>]\n"); process.exit(0); } }
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -5381,8 +5382,14 @@ function parseArgs3(argv) {
   const flags = {};
   for (let i = 0; i < argv.length; i++) {
     if (argv[i].startsWith("--")) {
-      const key = argv[i].slice(2);
-      const val = i + 1 < argv.length && !argv[i + 1].startsWith("--") ? argv[++i] : "true";
+      const eq = argv[i].indexOf("=");
+      const key = eq < 0 ? argv[i].slice(2) : argv[i].slice(2, eq);
+      const val = eq >= 0 ? argv[i].slice(eq + 1) : i + 1 < argv.length && !argv[i + 1].startsWith("--") ? argv[++i] : "";
+      if (!val) {
+        process.stderr.write(`[ideation-min-build-cli] ERROR: --${key} needs a value
+`);
+        process.exit(2);
+      }
       flags[key] = val;
     }
   }

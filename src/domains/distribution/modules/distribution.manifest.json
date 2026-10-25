@@ -53,6 +53,7 @@
       "lint/skill-link-integrity",
       "registry-rollup",
       "release-changelog",
+      "runtime-usage",
       "sign-release-attestation",
       "verify-host-packages",
       "verify-installer"

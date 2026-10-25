@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+if (require.main === module) { const a = process.argv.slice(2), e = a.indexOf("--"); if ((e < 0 ? a : a.slice(0, e)).some((x) => x === "--help" || x === "-h")) { require("fs").writeSync(1, "usage: node runtime/scripts/stamp-recall-importance.js --cwd <repo> [--dry-run] [--force] [--no-config-gate]\n"); process.exit(0); } }
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -24576,15 +24577,21 @@ function importanceAtIngestEnabled(cwd) {
 function main() {
   ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
-  const get = (flag) => {
-    const hit = argv.find((a) => a === flag || a.startsWith(`${flag}=`));
-    if (!hit) return void 0;
-    return hit.includes("=") ? hit.slice(hit.indexOf("=") + 1) : "true";
-  };
-  const cwd = get("--cwd") ?? process.env["PWD"] ?? process.cwd();
-  const dryRun = !!get("--dry-run");
-  const force = !!get("--force");
-  const configGate = !get("--no-config-gate");
+  let cwdArg;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a !== "--cwd" && !a.startsWith("--cwd=")) continue;
+    const v = a === "--cwd" ? argv[++i] : a.slice("--cwd=".length);
+    if (!v || v.startsWith("--")) {
+      process.stderr.write("[stamp-recall-importance] ERROR: --cwd needs a path (--cwd <path> or --cwd=<path>)\n");
+      process.exit(2);
+    }
+    cwdArg = v;
+  }
+  const cwd = cwdArg ?? process.env["PWD"] ?? process.cwd();
+  const dryRun = argv.includes("--dry-run");
+  const force = argv.includes("--force");
+  const configGate = !argv.includes("--no-config-gate");
   const gated = configGate && !importanceAtIngestEnabled(cwd);
   if (gated) {
     process.stdout.write(JSON.stringify({ scanned: 0, stamped: 0, skipped: 0, dryRun, gated: true }) + "\n");
