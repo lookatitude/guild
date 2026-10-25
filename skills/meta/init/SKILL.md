@@ -51,12 +51,10 @@ On a **regular** repo (the default), nothing above is written and the path below
 is byte-for-byte unchanged:
 
 `.guild/init/<slug>.md` (the Init record), `.guild/wiki/**`, `.guild/knowledge/sources/**`,
-the layout-2 config pair — `.guild/config/project.json` (the closed POLICY key
-set, KTD22) plus the reconcile-owned `.guild/settings.json` — written **if
-absent**, never clobbered, via
-`node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/config-cmd.js reconcile sync --cwd <root>`
-(inspect with `/guild:config show|validate`; on a workspace root the layout
-upgrade writes `.guild/config/workspace.json` too),
+the layout-2 config — `.guild/config/project.json` (the closed POLICY key
+set, KTD22), `.guild/config/workspace.json` on a workspace root, and the
+reconcile-owned `.guild/settings.json` — plus the `storage-layout.json` marker,
+all written by step 4a (never clobbered; inspect with `/guild:config show|validate`),
 and — brownfield, **cheap scan tier only** — the CodebaseMap `codebase-map.json`
 plus a **confidence-tagged** `wiki/concepts/architecture-map.md` **stub**. The
 CodebaseMap is a **derived cache** under `.guild/indexes/`: never commit it; the
@@ -96,6 +94,13 @@ an explicit refresh; the full `learn-*` pipeline also runs at Init under
    stop-and-ask posture). Re-running Init refreshes the manifest idempotently
    (no clobber of unrelated state). Run the root-wiki branch in step 5 **only
    when** `root_wiki` is true; a pure federation root stops at the manifest.
+4a. **Write the layout-2 config and stamp the layout** (every root, after the step-4
+   manifest, before the step-5 scan):
+   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/config-cmd.js reconcile sync --cwd <root>`,
+   then the layout writer
+   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/ensure-storage-layout.js --cwd=<root>`.
+   The writer splits policy into the scoped `config/*.json` files and stamps
+   the marker; it prints a report only when it did not apply. Surface it.
 5. Brownfield (**cheap scan tier = Init-DONE**): invoke
    `guild:learn-map`'s stage-1 scan → `codebase-map.json`, build the
    wiki, and write the confidence-tagged `architecture-map.md` **stub**. Do

@@ -1210,7 +1210,21 @@ const registryYamlRetire: UpgradeStep = {
       const text = readIfFile(abs);
       if (text === null) continue;
       const target = path.join(ctx.guildDir, "artifacts", "legacy", relPath.replace("/", "-"));
-      if (lstatSafe(target)) continue;
+      if (lstatSafe(target)) {
+        // An earlier run already preserved it. Only a byte-identical copy lets the
+        // source go; a different one is the operator's call, never a silent skip.
+        if (readIfFile(target) !== text) {
+          return {
+            status: "blocked_confirm",
+            detail: `.guild/${relPath} differs from its preserved copy ${rel(ctx, target)}`,
+            paths: [rel(ctx, abs), rel(ctx, target)],
+            question: `registry-yaml-retire found .guild/${relPath} and a different preserved copy at ${rel(ctx, target)}. Keep which one?`,
+          };
+        }
+        if (!ctx.dryRun) fs.rmSync(abs, { force: true });
+        changed.push(`${rel(ctx, abs)} (already preserved at ${rel(ctx, target)})`);
+        continue;
+      }
       writeFile(ctx, target, text);
       if (!ctx.dryRun) fs.rmSync(abs, { force: true });
       changed.push(`${rel(ctx, abs)} → ${rel(ctx, target)}`);

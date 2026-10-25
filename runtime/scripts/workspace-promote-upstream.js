@@ -4847,7 +4847,19 @@ var registryYamlRetire = {
       const text = readIfFile(abs);
       if (text === null) continue;
       const target = path10.join(ctx.guildDir, "artifacts", "legacy", relPath.replace("/", "-"));
-      if (lstatSafe(target)) continue;
+      if (lstatSafe(target)) {
+        if (readIfFile(target) !== text) {
+          return {
+            status: "blocked_confirm",
+            detail: `.guild/${relPath} differs from its preserved copy ${rel(ctx, target)}`,
+            paths: [rel(ctx, abs), rel(ctx, target)],
+            question: `registry-yaml-retire found .guild/${relPath} and a different preserved copy at ${rel(ctx, target)}. Keep which one?`
+          };
+        }
+        if (!ctx.dryRun) fs7.rmSync(abs, { force: true });
+        changed.push(`${rel(ctx, abs)} (already preserved at ${rel(ctx, target)})`);
+        continue;
+      }
       writeFile(ctx, target, text);
       if (!ctx.dryRun) fs7.rmSync(abs, { force: true });
       changed.push(`${rel(ctx, abs)} \u2192 ${rel(ctx, target)}`);

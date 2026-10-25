@@ -1085,6 +1085,24 @@ describe("#275 a re-run never replays a committed journal", () => {
     expect(fs.existsSync(path.join(f.guildDir, "agents", "registry.yaml"))).toBe(false);
   });
 
+  it("an authored registry whose legacy copy already exists is never silently left behind", () => {
+    const same = mkFixture("legacy-same");
+    write(path.join(same.guildDir, "workflows", "registry.yaml"), "a: 1\n");
+    write(path.join(same.guildDir, "artifacts", "legacy", "workflows-registry.yaml"), "a: 1\n");
+    const r1 = run(same);
+    expect(r1.state).toBe("committed");
+    expect(stepStatus(r1, "registry-yaml-retire")).toBe("completed");
+    expect(fs.existsSync(path.join(same.guildDir, "workflows", "registry.yaml"))).toBe(false);
+
+    const differ = mkFixture("legacy-differ");
+    write(path.join(differ.guildDir, "workflows", "registry.yaml"), "a: 2\n");
+    write(path.join(differ.guildDir, "artifacts", "legacy", "workflows-registry.yaml"), "a: 1\n");
+    const r2 = run(differ);
+    expect(r2.state).toBe("blocked_confirm");
+    expect(r2.question).toContain("workflows/registry.yaml");
+    expect(fs.existsSync(path.join(differ.guildDir, "workflows", "registry.yaml"))).toBe(true);
+  });
+
   it("a missing policy classifier is a named failure, never a silent skip", () => {
     const f = mkFixture("no-classifier");
     write(path.join(f.guildDir, "settings.json"), '{"recall":{"backend":"bm25"}}\n');
