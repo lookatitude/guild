@@ -5339,9 +5339,26 @@ function hasTopLevelCode(root) {
   }
   return false;
 }
+function priorRootWikiTrue(manifestPath) {
+  try {
+    const prior = JSON.parse(fs11.readFileSync(manifestPath, "utf8"));
+    return prior?.root_wiki === true;
+  } catch {
+    return false;
+  }
+}
+function hasRootWikiDir(guildDir) {
+  try {
+    return fs11.statSync(path14.join(guildDir, "wiki")).isDirectory();
+  } catch {
+    return false;
+  }
+}
 function writeManifest(root, modeOverride, readMode2) {
   const detection = detect(root, modeOverride, readMode2);
-  const rootWiki = hasTopLevelCode(root);
+  const guildDir = durableGuildDir(root);
+  const manifestPath = path14.join(guildDir, "workspace.json");
+  const rootWiki = priorRootWikiTrue(manifestPath) || hasRootWikiDir(guildDir) || hasTopLevelCode(root);
   const manifest = {
     schema_version: "guild.workspace.v1",
     is_workspace: detection.kind === "workspace",
@@ -5355,9 +5372,7 @@ function writeManifest(root, modeOverride, readMode2) {
       example: "wiki_search({ query: '<q>', cwd: 'plugin' })"
     }
   };
-  const guildDir = durableGuildDir(root);
   fs11.mkdirSync(guildDir, { recursive: true });
-  const manifestPath = path14.join(guildDir, "workspace.json");
   atomicWrite(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   return manifestPath;
 }

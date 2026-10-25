@@ -214494,8 +214494,24 @@ function createIgnoreFilter(projectRoot) {
 }
 
 // scripts/learn/lib/walk.ts
+function registeredSubGuildPaths(repoRoot) {
+  const out = /* @__PURE__ */ new Set();
+  let manifest;
+  try {
+    manifest = JSON.parse(fs7.readFileSync(path8.join(durableGuildDir(repoRoot), "workspace.json"), "utf8"));
+  } catch {
+    return out;
+  }
+  if (manifest === null || typeof manifest !== "object" || manifest.is_workspace !== true || !Array.isArray(manifest.sub_guilds)) return out;
+  for (const sg of manifest.sub_guilds) {
+    const p = sg?.path;
+    if (typeof p === "string" && p !== "" && p !== "." && p !== ".." && !/[\\/]/.test(p)) out.add(p);
+  }
+  return out;
+}
 function walkRepo(repoRoot, maxFiles = 2e4) {
   const filter = createIgnoreFilter(repoRoot);
+  const subGuilds = registeredSubGuildPaths(repoRoot);
   const out = [];
   const visit = (absDir) => {
     if (out.length >= maxFiles) return;
@@ -214510,6 +214526,7 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
       const abs = path8.join(absDir, e.name);
       const rel2 = path8.relative(repoRoot, abs).replace(/\\/g, "/");
       if (e.isDirectory()) {
+        if (subGuilds.has(rel2)) continue;
         if (filter.isIgnored(rel2) || filter.isIgnored(rel2 + "/")) continue;
         visit(abs);
       } else if (e.isFile()) {

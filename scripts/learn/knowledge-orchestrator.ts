@@ -71,6 +71,7 @@ import {
 
 import { detectLanguage, isCodeLanguage } from "./lib/languages";
 import { createIgnoreFilter } from "./lib/ignore";
+import { registeredSubGuildPaths } from "./lib/walk";
 import { headSha } from "./lib/git";
 
 import {
@@ -1317,6 +1318,8 @@ export function discoverFilePaths(repoRoot: string): KnowledgeFilePaths {
   // cost estimate. Reusing the shared filter makes the discovered corpus ==
   // the cost-gated corpus by construction (no second policy to drift).
   const filter = createIgnoreFilter(repoRoot);
+  // #273: registered sub_guilds are skipped exactly as walkRepo skips them.
+  const subGuilds = registeredSubGuildPaths(repoRoot);
 
   const walk = (dir: string, relBase: string) => {
     let entries: fs.Dirent[];
@@ -1331,6 +1334,7 @@ export function discoverFilePaths(repoRoot: string): KnowledgeFilePaths {
       const rel = relBase ? `${relBase}/${e.name}` : e.name;
       if (e.isDirectory()) {
         // Shared DIRECTORY exclusion (cost-gate parity).
+        if (subGuilds.has(rel)) continue;
         if (filter.isIgnored(rel) || filter.isIgnored(rel + "/")) continue;
         walk(path.join(dir, e.name), rel);
         continue;
