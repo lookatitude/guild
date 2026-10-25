@@ -42805,8 +42805,6 @@ __export(run_trace_close_exports, {
   recoverPrematureClose: () => recoverPrematureClose
 });
 module.exports = __toCommonJS(run_trace_close_exports);
-var fs69 = __toESM(require("fs"));
-var path83 = __toESM(require("path"));
 
 // hooks/lib/guild-root.ts
 var fs16 = __toESM(require("node:fs"));
@@ -43806,7 +43804,7 @@ function emitRunClosed(root, runId, resolveHost, opts = {}) {
     const auth = authorizeHookWrite(root, { runId, bindingRef: opts.binding_ref });
     if (auth.ok === false) {
       process.stderr.write(formatBindingRejected("run-trace", auth));
-      return;
+      return "binding_rejected";
     }
     const lifecycle = createRunLifecycle(createRealEnv(root, resolveHost, captureCapabilityBaseline, recordCapabilityBaselineCapture));
     lifecycle.closeRun(runId, {
@@ -43824,7 +43822,7 @@ function emitRunClosed(root, runId, resolveHost, opts = {}) {
         `[run-trace] WARN: provenance.json missing terminal_trace_event pointer for ${runId}
 `
       );
-      return;
+      return "failed";
     }
     appendTraceLine(liveLogPath3(root, runId), {
       schema_version: "guild.trace_event.v1",
@@ -43833,11 +43831,13 @@ function emitRunClosed(root, runId, resolveHost, opts = {}) {
       run_id: runId,
       at: typeof pointer.at === "string" ? pointer.at : (/* @__PURE__ */ new Date()).toISOString()
     });
+    return "closed";
   } catch (err) {
     process.stderr.write(
       `[run-trace] WARN: emitRunClosed failed: ${err instanceof Error ? err.message : String(err)}
 `
     );
+    return "failed";
   }
 }
 function newestPostCloseActivityMs(root, runId) {
@@ -43860,28 +43860,15 @@ function newestPostCloseActivityMs(root, runId) {
   return newest;
 }
 
-// hooks/lib/guild-hook-event.ts
-async function readHookStdin() {
-  return new Promise((resolve40) => {
-    const chunks = [];
-    process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve40(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve40(""));
-  });
-}
-function emitClaudeHookEvent(raw) {
-  const parsed = JSON.parse(raw.trim());
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return parsed;
-  }
-  return { ...parsed, host: "claude" };
-}
+// hooks/lib/run-close.ts
+var fs69 = __toESM(require("fs"));
+var path83 = __toESM(require("path"));
 
 // scripts/lib/frontmatter.ts
 init_state();
 var readScalarField2 = readScalarField;
 
-// hooks/run-trace-close.ts
+// hooks/lib/run-close.ts
 init_state();
 var REOPEN_TOLERANCE_MS = 2e3;
 var SAFE_TASK_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/;
@@ -44059,6 +44046,102 @@ function findTerminalCheckpoint(runDir4, runId) {
   });
   return sorted[0] ?? null;
 }
+function closeGuildRun(root, runId, opts) {
+  const tag = opts.tag;
+  const resolveHost = opts.resolveHost ?? defaultResolveHost;
+  const runDir4 = path83.join(durableGuildDir(root), "runs", runId);
+  if (!fs69.existsSync(path83.join(runDir4, "run.yaml"))) return "not_started";
+  const activeWork = findActiveWork(runDir4);
+  if (activeWork !== null) {
+    try {
+      const auth = authorizeHookWrite(root, { runId, bindingRef: opts.bindingRef });
+      const recovered = auth.ok === false ? null : recoverPrematureClose(runDir4, activeWork);
+      if (recovered !== null) {
+        process.stderr.write(`[${tag}] ${runId}: ${recovered}.
+`);
+      }
+    } catch (err) {
+      process.stderr.write(
+        `[${tag}] WARN: premature-close recovery failed for ${runId}: ${err instanceof Error ? err.message : String(err)} \u2014 close still refused.
+`
+      );
+    }
+    process.stderr.write(
+      `[${tag}] refusing to close ${runId}: ${activeWork} \u2014 workers are still active; the close is deferred until they terminate.
+`
+    );
+    return "deferred";
+  }
+  let reclosing = false;
+  const provenanceFile = path83.join(runDir4, "provenance.json");
+  if (fs69.existsSync(provenanceFile)) {
+    let terminal = true;
+    let closedAtMs = 0;
+    try {
+      const prov = JSON.parse(fs69.readFileSync(provenanceFile, "utf8"));
+      terminal = prov.status === "closed" || prov.status === "failed";
+      closedAtMs = typeof prov.closed_at === "string" ? Date.parse(prov.closed_at) : 0;
+    } catch {
+    }
+    if (terminal) {
+      const latestActivityMs = newestPostCloseActivityMs(root, runId);
+      const noNewActivity = latestActivityMs === 0 || !Number.isFinite(closedAtMs) || latestActivityMs <= closedAtMs + REOPEN_TOLERANCE_MS;
+      if (noNewActivity) return "already_closed";
+      process.stderr.write(
+        `[${tag}] run ${runId} received tool activity after its prior close (closed_at=${new Date(closedAtMs).toISOString()}) \u2014 re-closing with the latest state.
+`
+      );
+      const envelope = readHookBindingEnvelope(process.env);
+      const recloseRef = opts.bindingRef ?? (envelope && envelope.run_id === runId ? envelope.binding_ref : void 0);
+      if (recloseRef === void 0) {
+        process.stderr.write(
+          `[${tag}] WARN: binding_rejected \u2014 cannot re-close ${runId}: the GUILD_RUN_BINDING_REF envelope does not name this run. No write performed.
+`
+        );
+        return "binding_rejected";
+      }
+      try {
+        reopenRunBinding({ root, run_id: runId }, recloseRef);
+      } catch (err) {
+        process.stderr.write(
+          `[${tag}] WARN: ${err instanceof Error ? err.message : String(err)} \u2014 re-close refused (fail closed).
+`
+        );
+        return "binding_rejected";
+      }
+      reclosing = true;
+    }
+  }
+  const finalLearningCheckpoint = findTerminalCheckpoint(runDir4, runId);
+  const touchedTasks = collectCorroboratedTouchedTasks(runDir4, runId);
+  const emitted = emitRunClosed(root, runId, resolveHost, {
+    status: "closed",
+    ...opts.bindingRef !== void 0 ? { binding_ref: opts.bindingRef } : {},
+    touched: { tasks: touchedTasks },
+    ...finalLearningCheckpoint !== null ? { final_learning_checkpoint: finalLearningCheckpoint } : {}
+  });
+  if (emitted !== "closed") return emitted;
+  return reclosing ? "reclosed" : "closed";
+}
+
+// hooks/lib/guild-hook-event.ts
+async function readHookStdin() {
+  return new Promise((resolve40) => {
+    const chunks = [];
+    process.stdin.on("data", (c) => chunks.push(c));
+    process.stdin.on("end", () => resolve40(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve40(""));
+  });
+}
+function emitClaudeHookEvent(raw) {
+  const parsed = JSON.parse(raw.trim());
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return parsed;
+  }
+  return { ...parsed, host: "claude" };
+}
+
+// hooks/run-trace-close.ts
 async function main7() {
   const raw = await readHookStdin();
   let payload = {};
@@ -44075,75 +44158,7 @@ async function main7() {
   }
   const runId = resolveRunIdForTrace(root, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] });
   if (!runId) process.exit(0);
-  const runDir4 = path83.join(durableGuildDir(root), "runs", runId);
-  if (!fs69.existsSync(path83.join(runDir4, "run.yaml"))) process.exit(0);
-  const activeWork = findActiveWork(runDir4);
-  if (activeWork !== null) {
-    try {
-      const recovered = recoverPrematureClose(runDir4, activeWork);
-      if (recovered !== null) {
-        process.stderr.write(`[run-trace-close] ${runId}: ${recovered}.
-`);
-      }
-    } catch (err) {
-      process.stderr.write(
-        `[run-trace-close] WARN: premature-close recovery failed for ${runId}: ${err instanceof Error ? err.message : String(err)} \u2014 close still refused.
-`
-      );
-    }
-    process.stderr.write(
-      `[run-trace-close] refusing to close ${runId}: ${activeWork} \u2014 workers are still active; the close is deferred until they terminate.
-`
-    );
-    process.exit(0);
-  }
-  const provenanceFile = path83.join(runDir4, "provenance.json");
-  if (fs69.existsSync(provenanceFile)) {
-    let terminal = true;
-    let closedAtMs = 0;
-    try {
-      const prov = JSON.parse(fs69.readFileSync(provenanceFile, "utf8"));
-      terminal = prov.status === "closed" || prov.status === "failed";
-      closedAtMs = typeof prov.closed_at === "string" ? Date.parse(prov.closed_at) : 0;
-    } catch {
-    }
-    if (terminal) {
-      const latestActivityMs = newestPostCloseActivityMs(root, runId);
-      const noNewActivity = latestActivityMs === 0 || !Number.isFinite(closedAtMs) || latestActivityMs <= closedAtMs + REOPEN_TOLERANCE_MS;
-      if (noNewActivity) {
-        process.exit(0);
-      }
-      process.stderr.write(
-        `[run-trace-close] run ${runId} received tool activity after its prior close (closed_at=${new Date(closedAtMs).toISOString()}) \u2014 re-closing with the latest state.
-`
-      );
-      const envelope = readHookBindingEnvelope(process.env);
-      const recloseRef = envelope && envelope.run_id === runId ? envelope.binding_ref : void 0;
-      if (recloseRef === void 0) {
-        process.stderr.write(
-          `[run-trace-close] WARN: binding_rejected \u2014 cannot re-close ${runId}: the GUILD_RUN_BINDING_REF envelope does not name this run. No write performed.
-`
-        );
-        process.exit(0);
-      }
-      try {
-        reopenRunBinding({ root, run_id: runId }, recloseRef);
-      } catch (err) {
-        process.stderr.write(
-          `[run-trace-close] WARN: ${err instanceof Error ? err.message : String(err)} \u2014 re-close refused (fail closed).
-`
-        );
-        process.exit(0);
-      }
-    }
-  }
-  const finalLearningCheckpoint = findTerminalCheckpoint(runDir4, runId);
-  const touchedTasks = collectCorroboratedTouchedTasks(runDir4, runId);
-  emitRunClosed(root, runId, defaultResolveHost, {
-    status: "closed",
-    touched: { tasks: touchedTasks },
-    ...finalLearningCheckpoint !== null ? { final_learning_checkpoint: finalLearningCheckpoint } : {}
-  });
+  closeGuildRun(root, runId, { tag: "run-trace-close" });
   process.exit(0);
 }
 if (require.main === module) {
