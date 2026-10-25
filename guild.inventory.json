@@ -2249,6 +2249,11 @@
       "kind": "cli"
     },
     {
+      "id": "runtime-usage",
+      "source_path": "scripts/runtime-usage.ts",
+      "kind": "cli"
+    },
+    {
       "id": "score-tier",
       "source_path": "scripts/score-tier.ts",
       "kind": "cli"

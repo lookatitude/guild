@@ -160,6 +160,8 @@ function main(): void {
 }
 
 // Guard: only run as CLI when executed directly (not when imported by tests).
-if (require.main === module) {
+// Gate on the entry basename: esbuild inlines this module into other bundles,
+// where `require.main === module` is true for every inlined module (#274).
+if (require.main === module && /^kg-query\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
   main();
 }
