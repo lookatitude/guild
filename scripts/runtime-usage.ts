@@ -81,9 +81,9 @@ export const RUNTIME_USAGE: Readonly<Record<string, string>> = deepFreeze({
   "lint-context-bundle": "--bundle <file>",
   "mark-lane-dead": "<runDir> <laneId> --attempts <n> [--last-error <s>] [--run-id <id>] [--cwd <root>]",
   "lane-receipt-wait":
-    "--cwd <repo> --run-id <run> --specialist <role> --task-id <id> [--timeout-ms <n>] [--poll-ms <n>] [--no-record]",
+    "--cwd <repo> --run-id <run> --specialist <role> --task-id <id> --dispatched-at <iso> [--timeout-ms <n>] [--poll-ms <n>] [--no-record]",
   "pane-send": "--target <tmux-target> --message <text> [--host <claude|codex>] [--settle-ms <ms>] [--poll-limit <n>]",
-  "pane-dispatch-trace": "--cwd <root> --run-id <id> --target <pane> --backend <b> [--phase <p>] [--lane <id>]",
+  "pane-dispatch-trace": "--cwd <root> --run-id <id> --target <pane> --backend <b> --lane <id> [--lane <id>...] [--phase <p>]",
   "recall": "--query <text> [--cwd <root>] [--category <c>] [--limit <n>] [--run-id <id>]",
   "registry-rollup": "[--guild-dir <.guild>] [--write] [--json]",
   "resolve-specialist-capability-scope":
