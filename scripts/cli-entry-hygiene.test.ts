@@ -40,8 +40,11 @@ function snapshot(dir: string): Map<string, string> {
   return out;
 }
 
+/** The real `node` a consumer runs: under `bun test`, process.execPath is Bun. */
+const NODE = spawnSync("/bin/sh", ["-c", "command -v node"], { encoding: "utf8" }).stdout.trim();
+
 function runBundle(id: string, args: string[], cwd: string, home: string) {
-  return spawnSync(process.execPath, [path.join(RUNTIME, `${id}.js`), ...args], {
+  return spawnSync(NODE, [path.join(RUNTIME, `${id}.js`), ...args], {
     cwd,
     env: { PATH: process.env.PATH ?? "", HOME: home, TMPDIR: os.tmpdir() },
     encoding: "utf8",
@@ -51,6 +54,10 @@ function runBundle(id: string, args: string[], cwd: string, home: string) {
 }
 
 describe("#274 — a bundled library main block runs only from its own entry", () => {
+  it("runs the bundles under Node, not Bun", () => {
+    expect(path.basename(NODE)).toBe("node");
+  });
+
   it("flags an unguarded block and accepts both guard spellings", () => {
     // @control: anti-vacuity-control — planted unguarded blocks must be flagged, so the
     // target sweep below cannot pass on a detector that flags nothing.
@@ -95,6 +102,11 @@ describe("#274 — a bundled library main block runs only from its own entry", (
         "lib",
         ["trace-summarize.js"],
       ),
+    ).toEqual([1]);
+    // Any other use of require.main, or a test whose argument is not argv, fails closed.
+    expect(unguardedMainBlocks("if (!(require.main !== module)) main();\n", "lib")).toEqual([1]);
+    expect(
+      unguardedMainBlocks('if (require.main === module && /^lib\\.js$/.test(process.argv[1] && "lib.js")) {}\n', "lib"),
     ).toEqual([1]);
     // A TypeScript-only gate is not an entry-basename gate.
     expect(unguardedMainBlocks('if (require.main === module && /\\.[cm]?ts$/.test(process.argv[1] ?? "")) {}\n', "lib")).toEqual([1]);

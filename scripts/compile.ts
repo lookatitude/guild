@@ -396,6 +396,13 @@ export function buildOne(t: Target, outAbs: string): void {
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ts = require(path.join(ROOT, "scripts", "node_modules", "typescript")) as typeof import("typescript");
 
+/** The argv spellings a basename gate may test (whitespace removed). */
+const ARGV_BASENAME_SHAPES: ReadonlySet<string> = new Set([
+  "process.argv[1]",
+  'process.argv[1]??""',
+  '(process.argv[1]??"").split(/[\\\\/]/).pop()??""',
+]);
+
 interface MainBlock {
   line: number;
   guarded: boolean;
@@ -447,7 +454,7 @@ function mainBlocks(src: string, base: string, forbidden: readonly string[] = []
   };
   const isBasenameTest = (n: import("typescript").Expression): boolean => {
     if (!ts.isCallExpression(n) || !ts.isPropertyAccessExpression(n.expression) || n.expression.name.text !== "test") return false;
-    if (!n.arguments.some((a) => a.getText(sf).includes("process.argv[1]"))) return false;
+    if (n.arguments.length !== 1 || !ARGV_BASENAME_SHAPES.has(n.arguments[0].getText(sf).replace(/\s+/g, ""))) return false;
     const target = unwrap(n.expression.expression);
     let re: RegExp | undefined;
     try {
@@ -469,13 +476,18 @@ function mainBlocks(src: string, base: string, forbidden: readonly string[] = []
     return re !== undefined && acceptsOnlyBase(re);
   };
   const visit = (n: import("typescript").Node): void => {
-    if (isMainCompare(n)) {
+    // Every `require.main` reference counts, so `!==`, `!(...)` or an alias fails
+    // closed; only `require.main === module` inside a guarded `if` can pass.
+    if (isRequireMain(n)) {
+      let cmp: import("typescript").Node = n;
+      while (cmp.parent && ts.isParenthesizedExpression(cmp.parent)) cmp = cmp.parent;
+      const compare = cmp.parent && isMainCompare(cmp.parent) ? cmp.parent : undefined;
       let guarded = false;
-      let p: import("typescript").Node = n;
+      let p: import("typescript").Node = compare ?? n;
       while (p.parent && (ts.isParenthesizedExpression(p.parent) || (ts.isBinaryExpression(p.parent) && p.parent.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken))) {
         p = p.parent;
       }
-      if (p.parent && ts.isIfStatement(p.parent) && p.parent.expression === p) {
+      if (compare && p.parent && ts.isIfStatement(p.parent) && p.parent.expression === p) {
         guarded = conjuncts(p as import("typescript").Expression).some(isBasenameTest);
       }
       out.push({ line: sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1, guarded });
