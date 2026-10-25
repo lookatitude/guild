@@ -393,47 +393,94 @@ export function buildOne(t: Target, outAbs: string): void {
 // CLI main-block guard (#274)
 // ---------------------------------------------------------------------------
 
-const MAIN_BLOCK = /require\.main\s*===?\s*module|module\s*===?\s*require\.main/g;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ts = require(path.join(ROOT, "scripts", "node_modules", "typescript")) as typeof import("typescript");
+
+interface MainBlock {
+  line: number;
+  guarded: boolean;
+}
 
 /**
- * 1-based lines of every `require.main === module` test (either operand order) in
- * `src` whose `if (...)` condition does not also AND-test the argv basename
- * against `/^<base>\.`. A test
- * outside an `if` condition counts as unguarded: the check fails closed.
+ * Every `require.main === module` comparison in `src` (either operand order, `==`
+ * too), parsed as TypeScript so comments and strings never count. A block is
+ * guarded only when the comparison is a top-level `&&` conjunct of an `if`
+ * condition that also has an un-negated `<regex>.test(<…process.argv[1]…>)`
+ * conjunct whose regex accepts `<base>.ts` and rejects any other basename.
+ * Anything else (`||`, `!`, a ternary, an assignment) fails closed.
  */
-export function unguardedMainBlocks(src: string, base: string): number[] {
-  const name = `${base.replace(/\./g, "\\.")}\\.`;
-  const out: number[] = [];
-  for (const m of src.matchAll(MAIN_BLOCK)) {
-    const at = m.index ?? 0;
-    const lead = src.slice(src.lastIndexOf("\n", at) + 1, at).trimStart();
-    if (lead.includes("//") || lead.startsWith("*") || lead.startsWith("/*")) continue;
-    // Accept the regex-literal form `/^name\.` and the string form
-    // `new RegExp("[\\\\/]name\\.")`, whose doubled escapes collapse to `/]name\.`.
-    const cond = conditionAround(src, at).replace(/\\\\/g, "\\");
-    // `||` lets either side alone run the block, so it never counts as a gate.
-    const guarded =
-      !cond.includes("||") &&
-      cond.includes("process.argv[1]") &&
-      (cond.includes(`/^${name}`) || cond.includes(`/]${name}`));
-    if (!guarded) out.push(src.slice(0, at).split("\n").length);
-  }
+function mainBlocks(src: string, base: string): MainBlock[] {
+  if (!src.includes("require.main")) return [];
+  const sf = ts.createSourceFile("x.ts", src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const out: MainBlock[] = [];
+  const unwrap = (n: import("typescript").Expression): import("typescript").Expression =>
+    ts.isParenthesizedExpression(n) ? unwrap(n.expression) : n;
+  const conjuncts = (n: import("typescript").Expression): import("typescript").Expression[] => {
+    const e = unwrap(n);
+    return ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
+      ? [...conjuncts(e.left), ...conjuncts(e.right)]
+      : [e];
+  };
+  const isRequireMain = (n: import("typescript").Node): boolean =>
+    ts.isPropertyAccessExpression(n) && n.name.text === "main" && ts.isIdentifier(n.expression) && n.expression.text === "require";
+  const isModule = (n: import("typescript").Node): boolean => ts.isIdentifier(n) && n.text === "module";
+  const isMainCompare = (n: import("typescript").Node): boolean => {
+    if (!ts.isBinaryExpression(n)) return false;
+    const k = n.operatorToken.kind;
+    if (k !== ts.SyntaxKind.EqualsEqualsEqualsToken && k !== ts.SyntaxKind.EqualsEqualsToken) return false;
+    const l = unwrap(n.left);
+    const r = unwrap(n.right);
+    return (isRequireMain(l) && isModule(r)) || (isModule(l) && isRequireMain(r));
+  };
+  const acceptsOnlyBase = (re: RegExp): boolean => {
+    const own = [`${base}.ts`, `/p/${base}.ts`, `${base}.js`, `/p/${base}.js`].some((x) => re.test(x));
+    const other = ["other.js", "/p/other.js", `/p/x${base}.js`, `/p/${base}x.js`, `x${base}.ts`].some((x) => re.test(x));
+    return own && !other;
+  };
+  const isBasenameTest = (n: import("typescript").Expression): boolean => {
+    if (!ts.isCallExpression(n) || !ts.isPropertyAccessExpression(n.expression) || n.expression.name.text !== "test") return false;
+    if (!n.arguments.some((a) => a.getText(sf).includes("process.argv[1]"))) return false;
+    const target = unwrap(n.expression.expression);
+    let re: RegExp | undefined;
+    try {
+      if (ts.isRegularExpressionLiteral(target)) {
+        const t = target.text;
+        re = new RegExp(t.slice(1, t.lastIndexOf("/")), t.slice(t.lastIndexOf("/") + 1));
+      } else if (
+        ts.isNewExpression(target) &&
+        ts.isIdentifier(target.expression) &&
+        target.expression.text === "RegExp" &&
+        target.arguments?.length === 1 &&
+        ts.isStringLiteralLike(target.arguments[0])
+      ) {
+        re = new RegExp(target.arguments[0].text);
+      }
+    } catch {
+      return false;
+    }
+    return re !== undefined && acceptsOnlyBase(re);
+  };
+  const visit = (n: import("typescript").Node): void => {
+    if (isMainCompare(n)) {
+      let guarded = false;
+      let p: import("typescript").Node = n;
+      while (p.parent && (ts.isParenthesizedExpression(p.parent) || (ts.isBinaryExpression(p.parent) && p.parent.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken))) {
+        p = p.parent;
+      }
+      if (p.parent && ts.isIfStatement(p.parent) && p.parent.expression === p) {
+        guarded = conjuncts(p as import("typescript").Expression).some(isBasenameTest);
+      }
+      out.push({ line: sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1, guarded });
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
   return out;
 }
 
-/** The text of the `if (...)` condition enclosing `at`, or "" when there is none. */
-function conditionAround(src: string, at: number): string {
-  const head = src.slice(Math.max(0, at - 200), at);
-  const ifs = [...head.matchAll(/\bif\s*\(/g)];
-  const last = ifs[ifs.length - 1];
-  if (!last) return "";
-  const open = at - head.length + (last.index ?? 0) + last[0].length - 1;
-  let depth = 0;
-  for (let i = open; i < src.length; i++) {
-    if (src[i] === "(") depth++;
-    else if (src[i] === ")" && --depth === 0) return i > at ? src.slice(open, i + 1) : "";
-  }
-  return "";
+/** 1-based lines of the main blocks in `src` that are not basename-guarded (see mainBlocks). */
+export function unguardedMainBlocks(src: string, base: string): number[] {
+  return mainBlocks(src, base).filter((b) => !b.guarded).map((b) => b.line);
 }
 
 /**
@@ -453,7 +500,7 @@ export function mainGuardViolations(t: Target, absWorkingDir: string, inputs: st
     const rel = path.relative(ROOT, abs);
     if (abs !== entryAbs) {
       for (const line of unguardedMainBlocks(src, base)) bad.push(`${rel}:${line}`);
-    } else if (base !== outBase && unguardedMainBlocks(src, base).length < [...src.matchAll(MAIN_BLOCK)].length) {
+    } else if (base !== outBase && mainBlocks(src, base).some((b) => b.guarded)) {
       bad.push(`${rel}: entry guarded on "${base}" but ships as ${t.out}`);
     }
   }
