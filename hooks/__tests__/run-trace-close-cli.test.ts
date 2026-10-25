@@ -167,6 +167,25 @@ describe("run-trace close CLI (#277)", () => {
     expect(fs.existsSync(path.join(runDir, "provenance.json"))).toBe(false);
   });
 
+  it("active work + stale terminal provenance: a missing or wrong nonce rewrites nothing", () => {
+    fs.writeFileSync(
+      path.join(runDir, "run-state.json"),
+      JSON.stringify({ schema_version: "guild.run_state.v1", run_id: RUN_ID, lanes: { T1: { status: "in_progress" } } }),
+    );
+    const stale = JSON.stringify({ status: "closed", closed_at: "2026-01-01T00:00:01Z" }, null, 2) + "\n";
+    fs.writeFileSync(path.join(runDir, "provenance.json"), stale);
+    for (const args of [[], ["--binding-ref", "not-the-nonce"]]) {
+      const r = runClose(["--run-id", RUN_ID, "--cwd", root, ...args]);
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr).toMatch(/refusing to close/);
+      expect(fs.readFileSync(path.join(runDir, "provenance.json"), "utf8")).toBe(stale);
+    }
+    // POSITIVE CONTROL: the right nonce performs the recovery.
+    const ok = runClose(["--run-id", RUN_ID, "--cwd", root, "--binding-ref", bindingRef]);
+    expect(ok.exitCode).toBe(1);
+    expect(JSON.parse(fs.readFileSync(path.join(runDir, "provenance.json"), "utf8")).status).toBe("resumable");
+  });
+
   it("the Stop hook and the CLI share one close implementation (no fork)", () => {
     const hook = fs.readFileSync(HOOK_SOURCE, "utf8");
     const cli = fs.readFileSync(CLI_SOURCE, "utf8");

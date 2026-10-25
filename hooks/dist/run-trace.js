@@ -44751,7 +44751,8 @@ function closeGuildRun(root, runId, opts) {
   const activeWork = findActiveWork(runDir4);
   if (activeWork !== null) {
     try {
-      const recovered = recoverPrematureClose(runDir4, activeWork);
+      const auth = authorizeHookWrite(root, { runId, bindingRef: opts.bindingRef });
+      const recovered = auth.ok === false ? null : recoverPrematureClose(runDir4, activeWork);
       if (recovered !== null) {
         process.stderr.write(`[${tag}] ${runId}: ${recovered}.
 `);

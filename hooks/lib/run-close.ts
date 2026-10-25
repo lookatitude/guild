@@ -30,6 +30,7 @@ import {
   reopenRunBinding,
 } from "../../scripts/lib/run-binding.js";
 import { readScalarField } from "../../scripts/lib/frontmatter.js";
+import { authorizeHookWrite } from "./hook-binding.js";
 import { durableGuildDir } from "../../src/domains/state";
 
 /**
@@ -379,9 +380,11 @@ export function closeGuildRun(root: string, runId: string, opts: CloseGuildRunOp
     // Blocker 2 — BEFORE refusing, reconcile the premature-close upgrade race:
     // a stale terminal provenance record contradicting this run's open
     // run.yaml is atomically rewritten to "resumable" so durable state is
-    // consistent-open instead of "terminal AND active" forever.
+    // consistent-open instead of "terminal AND active" forever. The rewrite is
+    // a write, so it needs the caller-presented nonce like every other leg.
     try {
-      const recovered = recoverPrematureClose(runDir, activeWork);
+      const auth = authorizeHookWrite(root, { runId, bindingRef: opts.bindingRef });
+      const recovered = auth.ok === false ? null : recoverPrematureClose(runDir, activeWork);
       if (recovered !== null) {
         process.stderr.write(`[${tag}] ${runId}: ${recovered}.\n`);
       }
