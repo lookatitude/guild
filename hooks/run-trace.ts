@@ -65,6 +65,7 @@
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
 import { ensureStorageLayout } from "../scripts/lib/state/ensure-storage-layout.js";
+import { upgradeLayoutAtRunStart } from "./lib/ensure-layout.js";
 import { ensureRunsGitignored } from "./lib/runs-gitignore.js";
 import {
   defaultResolveHost,
@@ -121,14 +122,20 @@ async function main(): Promise<void> {
   const sub = argv[0];
   const cwd = flag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
   const root = resolveGuildRoot(cwd);
-  // KTD23: detect only (SessionStart runs the upgrade); a future layout is not
-  // ours to write, so refuse before any record lands.
+  // KTD23: a future layout is not ours to write, so refuse before any record lands.
   try {
     ensureStorageLayout(root, { detectOnly: true });
   } catch (e) {
     process.stderr.write(`[run-trace] ${(e as Error).message}\n`);
     process.exitCode = 1;
     return;
+  }
+  // #276: run start upgrades THIS root, not only the folder SessionStart ran in,
+  // and says so when it does not. A lightweight start (the status alias) stays
+  // write-free.
+  if (sub === "start" && flag(argv, "run-class") !== "lightweight") {
+    const note = upgradeLayoutAtRunStart(root);
+    if (note !== null) process.stderr.write(`[run-trace] ${note}\n`);
   }
 
   // ── start — uniform record path (A2 rollout seam) ──────────────────────────

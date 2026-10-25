@@ -642,7 +642,10 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // router first and follows its route; `harvest` joins the sub-verb list; the command
   // registry entry was re-extracted.
   // ANTI-VACUITY: check-surface-pins, SC-W2-5 and SC-W3-6 were RED against the prior pin.
-  commands: "62ee1c835b34eb671b16d00d3d22f7b7ddc4b2da",
+  // Re-ratified 2026-10-25 (#275): config.md lists `migrate --mode=verify` and `--recheck`;
+  // the command registry entry was re-extracted. ANTI-VACUITY: check-surface-pins was RED
+  // against the prior pin.
+  commands: "c6e23a196895eadf0fdd8260f7a730782414607c",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
   // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
@@ -732,7 +735,12 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // agent-pane gate (not_agent_pane, input-ready, pickup). Registry re-extracted.
   // ANTI-VACUITY: check-surface-pins was RED against the prior pin first.
   // Re-ratified 2026-10-20 (v3.2 merge): H1 + H2 execute-plan edits combined on next.
-  skills: "b418036e05c9e4cb5ea13306549d8a1b476b1a1e",
+  // Re-ratified 2026-10-25 (#271): init and create-specialist describe the layout-2 shape
+  // the migrator writes (config/project.json, indexes as cache, no registry.yaml). No
+  // skill-src registry entry covers either skill. init step 4a runs the layout writer with --recheck
+  // (codex G-lane r2), and states the I2 root_wiki rule (.guild/wiki/ or top-level code;
+  // an existing true is kept). ANTI-VACUITY: check-surface-pins was RED.
+  skills: "374e4d3588c34bb1de99401ab681d5a6dc6cade6",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

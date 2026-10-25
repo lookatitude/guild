@@ -102,7 +102,7 @@ function upgradeChain() {
 }
 function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
   const status = detect(cwd);
-  if (status.state === "current") return status;
+  if (status.state === "current" && opts.recheck !== true) return status;
   if (status.state === "future") {
     throw new Error(
       `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
@@ -114,7 +114,8 @@ function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
     root: status.root,
     fromVersion: status.version,
     toVersion: CURRENT_LAYOUT_VERSION,
-    dryRun: opts.dryRun === true
+    dryRun: opts.dryRun === true,
+    fresh: opts.recheck === true
   });
   const after = detect(cwd);
   return { ...after, upgrade: result };

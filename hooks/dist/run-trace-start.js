@@ -6066,7 +6066,7 @@ var init_upgrade_steps = __esm({
           return { status: "skipped", detail: ".guild/settings.json is not parseable JSON \u2014 preserved, not split", paths: [] };
         }
         if (!ctx.policy) {
-          return { status: "skipped", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
+          return { status: "failed", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
         }
         const cfg = ctx.policy;
         const flat = flatten(parsed);
@@ -6141,7 +6141,7 @@ var init_upgrade_steps = __esm({
       affects: [".guild/initiatives", ".guild/team", ".guild/teams"],
       apply(ctx) {
         if (!ctx.policy) {
-          return { status: "skipped", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
+          return { status: "failed", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
         }
         const cfg = ctx.policy;
         const roots = ["initiatives", "team", "teams"].map((d) => path15.join(ctx.guildDir, d));
@@ -6392,7 +6392,19 @@ var init_upgrade_steps = __esm({
           const text = readIfFile(abs);
           if (text === null) continue;
           const target = path15.join(ctx.guildDir, "artifacts", "legacy", relPath.replace("/", "-"));
-          if (lstatSafe(target)) continue;
+          if (lstatSafe(target)) {
+            if (readIfFile(target) !== text) {
+              return {
+                status: "blocked_confirm",
+                detail: `.guild/${relPath} differs from its preserved copy ${rel(ctx, target)}`,
+                paths: [rel(ctx, abs), rel(ctx, target)],
+                question: `registry-yaml-retire found .guild/${relPath} and a different preserved copy at ${rel(ctx, target)}. Keep which one?`
+              };
+            }
+            if (!ctx.dryRun) fs12.rmSync(abs, { force: true });
+            changed.push(`${rel(ctx, abs)} (already preserved at ${rel(ctx, target)})`);
+            continue;
+          }
           writeFile(ctx, target, text);
           if (!ctx.dryRun) fs12.rmSync(abs, { force: true });
           changed.push(`${rel(ctx, abs)} \u2192 ${rel(ctx, target)}`);
@@ -23608,7 +23620,7 @@ var init_catalog_cache = __esm({
         }
       }
     };
-    defaultSleep = (ms) => new Promise((resolve39) => setTimeout(resolve39, ms));
+    defaultSleep = (ms) => new Promise((resolve40) => setTimeout(resolve40, ms));
   }
 });
 
@@ -36702,7 +36714,7 @@ function supersededWikiPages(wikiDir2) {
     const slug = path60.basename(abs, ".md");
     bySlug.set(slug, [...bySlug.get(slug) ?? [], abs]);
   }
-  const resolve39 = (ref) => {
+  const resolve40 = (ref) => {
     let r = ref.replace(/\\/g, "/");
     if (r.startsWith("decision:")) r = r.slice("decision:".length);
     if (r.startsWith("./")) r = r.slice(2);
@@ -36726,7 +36738,7 @@ function supersededWikiPages(wikiDir2) {
       superseded.add(abs);
     }
     for (const ref of refsOf(fm["supersedes"])) {
-      const target = resolve39(ref);
+      const target = resolve40(ref);
       if (target && target !== abs) superseded.add(target);
     }
   }
@@ -42126,7 +42138,7 @@ function upgradeChain() {
 }
 function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
   const status = detect2(cwd);
-  if (status.state === "current") return status;
+  if (status.state === "current" && opts.recheck !== true) return status;
   if (status.state === "future") {
     throw new Error(
       `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
@@ -42138,7 +42150,8 @@ function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
     root: status.root,
     fromVersion: status.version,
     toVersion: CURRENT_LAYOUT_VERSION,
-    dryRun: opts.dryRun === true
+    dryRun: opts.dryRun === true,
+    fresh: opts.recheck === true
   });
   const after = detect2(cwd);
   return { ...after, upgrade: result2 };
@@ -42665,11 +42678,11 @@ function emitRunStarted(root, runId, opts = {}) {
 
 // hooks/lib/guild-hook-event.ts
 async function readHookStdin() {
-  return new Promise((resolve39) => {
+  return new Promise((resolve40) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve39(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve39(""));
+    process.stdin.on("end", () => resolve40(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve40(""));
   });
 }
 function emitClaudeHookEvent(raw) {

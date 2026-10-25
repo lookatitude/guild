@@ -11,13 +11,16 @@
  *   --mode=dry-run   (default) plan the chain, write NOTHING, print the report
  *   --mode=migrate   run or RESUME the chain — the retry entry after a block
  *   --mode=skip      report the layout state only; load no step
+ *   --mode=verify    re-check a root already stamped current: plan the chain, write
+ *                    NOTHING, exit 1 when a step would still change the tree
+ *   --recheck        with --mode=migrate: run the chain on a root stamped current
  *   --workspace      the ONE explicit child fan-out (the updater never scans disk)
  *   --accept-grades  unchanged: the human gate for the v1 wiki importance backfill
  *
  * Nothing here upgrades a root the operator did not name. Nothing here commits.
  *
  * Usage:
- *   npx tsx plugin/scripts/dot-guild/migrate-guild.ts [--root=<path>] [--mode=migrate|dry-run|skip] [--workspace]
+ *   npx tsx plugin/scripts/dot-guild/migrate-guild.ts [--root=<path>] [--mode=migrate|dry-run|skip|verify] [--recheck] [--workspace]
  *   npx tsx plugin/scripts/dot-guild/migrate-guild.ts --accept-grades [--root=<path>]
  *
  * Exit codes: 0 when every named root reached `committed` or was already current;
@@ -30,7 +33,7 @@ import * as path from "path";
 import { acceptGrades, realFs } from "./convert";
 import { CURRENT_LAYOUT_VERSION, detect, ensureStorageLayout } from "../lib/state/ensure-storage-layout";
 
-type Mode = "migrate" | "dry-run" | "skip";
+type Mode = "migrate" | "dry-run" | "skip" | "verify";
 
 /**
  * Immediate children of `root` that are Guild roots. Depth 1, on a root the
@@ -57,14 +60,50 @@ function childGuildRoots(root: string): string[] {
   return out;
 }
 
-function upgradeOne(root: string, mode: Mode, prefix: string): number {
+/** Steps a dry run says would still do work. `skipped` is the only no-change answer. */
+function pendingSteps(report: string): string[] {
+  return report
+    .split("\n")
+    .filter((l) => /^\s+\[(completed|blocked_dirty|blocked_confirm|failed)\]/.test(l))
+    .map((l) => l.trim());
+}
+
+function verifyOne(root: string, prefix: string): number {
+  let status;
+  try {
+    status = ensureStorageLayout(root, { dryRun: true, recheck: true });
+  } catch (e) {
+    process.stderr.write(`${prefix}${(e as Error).message}\n`);
+    return 1;
+  }
+  const up = status.upgrade;
+  if (!up) {
+    process.stdout.write(`${prefix}layout ${status.version ?? "unmarked"} (${status.state}); nothing to verify.\n`);
+    return status.state === "absent" ? 0 : 1;
+  }
+  const pending = pendingSteps(up.report);
+  if (pending.length === 0) {
+    process.stdout.write(`${prefix}layout ${CURRENT_LAYOUT_VERSION} verified — every step reports nothing to do.\n`);
+    return status.state === "current" ? 0 : 1;
+  }
+  const stamp = status.state === "current" ? `stamped layout ${CURRENT_LAYOUT_VERSION}` : `layout ${status.state}`;
+  process.stdout.write(`${prefix}${stamp}, but these steps would still change the tree:\n`);
+  for (const p of pending) process.stdout.write(`${prefix}  ${p}\n`);
+  process.stdout.write(`${prefix}nothing was written. Apply with: --mode=migrate --recheck\n`);
+  return 1;
+}
+
+function upgradeOne(root: string, mode: Mode, prefix: string, recheck: boolean): number {
   const before = detect(root);
   if (before.state === "absent") {
     process.stdout.write(`${prefix}no .guild/ at ${root} — nothing to migrate.\n`);
     return 0;
   }
-  if (before.state === "current") {
-    process.stdout.write(`${prefix}layout ${before.version} — already current (${CURRENT_LAYOUT_VERSION}).\n`);
+  if (mode === "verify") return verifyOne(root, prefix);
+  if (before.state === "current" && !(recheck && mode === "migrate")) {
+    process.stdout.write(
+      `${prefix}layout ${before.version} — already current (${CURRENT_LAYOUT_VERSION}). Re-check with: --mode=verify\n`,
+    );
     return 0;
   }
   if (mode === "skip") {
@@ -74,7 +113,7 @@ function upgradeOne(root: string, mode: Mode, prefix: string): number {
 
   let status;
   try {
-    status = ensureStorageLayout(root, { dryRun: mode === "dry-run" });
+    status = ensureStorageLayout(root, { dryRun: mode === "dry-run", recheck });
   } catch (e) {
     // The `future` refusal lands here: a root ahead of this build is never
     // down-migrated, and saying so is the whole point of the exit code.
@@ -123,11 +162,12 @@ function main(): void {
   }
 
   const rawMode = modeArg ? modeArg.split("=").slice(1).join("=") : "dry-run";
-  if (rawMode !== "migrate" && rawMode !== "dry-run" && rawMode !== "skip") {
-    process.stderr.write(`[migrate-guild] invalid --mode=${rawMode} (migrate|dry-run|skip)\n`);
+  if (rawMode !== "migrate" && rawMode !== "dry-run" && rawMode !== "skip" && rawMode !== "verify") {
+    process.stderr.write(`[migrate-guild] invalid --mode=${rawMode} (migrate|dry-run|skip|verify)\n`);
     process.exit(1);
   }
   const mode = rawMode as Mode;
+  const recheck = args.includes("--recheck");
 
   const roots = workspace ? [root, ...childGuildRoots(root)] : [root];
   let exit = 0;
@@ -135,7 +175,7 @@ function main(): void {
     const prefix = roots.length > 1 ? `[${target}] ` : "";
     // A child failure must not abort its siblings.
     try {
-      exit = upgradeOne(target, mode, prefix) === 0 ? exit : 1;
+      exit = upgradeOne(target, mode, prefix, recheck) === 0 ? exit : 1;
     } catch (e) {
       process.stderr.write(`${prefix}ERROR: ${(e as Error).message}\n`);
       exit = 1;

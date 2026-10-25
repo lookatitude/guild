@@ -4739,7 +4739,7 @@ var settingsPolicySplit = {
       return { status: "skipped", detail: ".guild/settings.json is not parseable JSON \u2014 preserved, not split", paths: [] };
     }
     if (!ctx.policy) {
-      return { status: "skipped", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
+      return { status: "failed", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
     }
     const cfg = ctx.policy;
     const flat = flatten(parsed);
@@ -5096,7 +5096,7 @@ var ktd22Strip = {
   affects: [".guild/initiatives", ".guild/team", ".guild/teams"],
   apply(ctx) {
     if (!ctx.policy) {
-      return { status: "skipped", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
+      return { status: "failed", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
     }
     const cfg = ctx.policy;
     const roots = ["initiatives", "team", "teams"].map((d) => path14.join(ctx.guildDir, d));
@@ -5360,7 +5360,19 @@ var registryYamlRetire = {
       const text = readIfFile(abs);
       if (text === null) continue;
       const target = path14.join(ctx.guildDir, "artifacts", "legacy", relPath.replace("/", "-"));
-      if (lstatSafe(target)) continue;
+      if (lstatSafe(target)) {
+        if (readIfFile(target) !== text) {
+          return {
+            status: "blocked_confirm",
+            detail: `.guild/${relPath} differs from its preserved copy ${rel(ctx, target)}`,
+            paths: [rel(ctx, abs), rel(ctx, target)],
+            question: `registry-yaml-retire found .guild/${relPath} and a different preserved copy at ${rel(ctx, target)}. Keep which one?`
+          };
+        }
+        if (!ctx.dryRun) fs11.rmSync(abs, { force: true });
+        changed.push(`${rel(ctx, abs)} (already preserved at ${rel(ctx, target)})`);
+        continue;
+      }
       writeFile(ctx, target, text);
       if (!ctx.dryRun) fs11.rmSync(abs, { force: true });
       changed.push(`${rel(ctx, abs)} \u2192 ${rel(ctx, target)}`);
@@ -5496,16 +5508,8 @@ function runUpgrade(opts) {
     validation_errors: [],
     ...extra
   });
-  let journal = loadJournal(journalFile) ?? newJournal({ rootId: guildRootId(root), root, fromVersion: opts.fromVersion, toVersion: opts.toVersion, now: now() });
-  if (journal.to_version !== opts.toVersion) {
-    journal = newJournal({
-      rootId: guildRootId(root),
-      root,
-      fromVersion: opts.fromVersion,
-      toVersion: opts.toVersion,
-      now: now()
-    });
-  }
+  const prior = dryRun || opts.fresh === true ? null : loadJournal(journalFile);
+  let journal = prior !== null && prior.state !== "committed" && prior.to_version === opts.toVersion ? prior : newJournal({ rootId: guildRootId(root), root, fromVersion: opts.fromVersion, toVersion: opts.toVersion, now: now() });
   const lock = dryRun ? null : acquireLock(lockFile, nowMs());
   if (!dryRun && !lock) {
     return base("running", journal);
@@ -10144,6 +10148,7 @@ function runLayoutUpgrade(opts) {
     fromVersion: opts.fromVersion,
     toVersion: opts.toVersion,
     dryRun: opts.dryRun === true,
+    fresh: opts.fresh === true,
     v1: v1Converter,
     policy: { canonicalPolicyKey, isPolicyKey, findHostIdentity }
   });

@@ -4294,7 +4294,7 @@ var settingsPolicySplit = {
       return { status: "skipped", detail: ".guild/settings.json is not parseable JSON \u2014 preserved, not split", paths: [] };
     }
     if (!ctx.policy) {
-      return { status: "skipped", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
+      return { status: "failed", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
     }
     const cfg = ctx.policy;
     const flat = flatten(parsed);
@@ -4651,7 +4651,7 @@ var ktd22Strip = {
   affects: [".guild/initiatives", ".guild/team", ".guild/teams"],
   apply(ctx) {
     if (!ctx.policy) {
-      return { status: "skipped", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
+      return { status: "failed", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
     }
     const cfg = ctx.policy;
     const roots = ["initiatives", "team", "teams"].map((d) => path12.join(ctx.guildDir, d));
@@ -4915,7 +4915,19 @@ var registryYamlRetire = {
       const text = readIfFile(abs);
       if (text === null) continue;
       const target = path12.join(ctx.guildDir, "artifacts", "legacy", relPath.replace("/", "-"));
-      if (lstatSafe(target)) continue;
+      if (lstatSafe(target)) {
+        if (readIfFile(target) !== text) {
+          return {
+            status: "blocked_confirm",
+            detail: `.guild/${relPath} differs from its preserved copy ${rel(ctx, target)}`,
+            paths: [rel(ctx, abs), rel(ctx, target)],
+            question: `registry-yaml-retire found .guild/${relPath} and a different preserved copy at ${rel(ctx, target)}. Keep which one?`
+          };
+        }
+        if (!ctx.dryRun) fs9.rmSync(abs, { force: true });
+        changed.push(`${rel(ctx, abs)} (already preserved at ${rel(ctx, target)})`);
+        continue;
+      }
       writeFile(ctx, target, text);
       if (!ctx.dryRun) fs9.rmSync(abs, { force: true });
       changed.push(`${rel(ctx, abs)} \u2192 ${rel(ctx, target)}`);
@@ -5373,7 +5385,7 @@ function upgradeChain() {
 }
 function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
   const status = detect3(cwd);
-  if (status.state === "current") return status;
+  if (status.state === "current" && opts.recheck !== true) return status;
   if (status.state === "future") {
     throw new Error(
       `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
@@ -5385,7 +5397,8 @@ function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
     root: status.root,
     fromVersion: status.version,
     toVersion: CURRENT_LAYOUT_VERSION,
-    dryRun: opts.dryRun === true
+    dryRun: opts.dryRun === true,
+    fresh: opts.recheck === true
   });
   const after = detect3(cwd);
   return { ...after, upgrade: result };
@@ -5437,16 +5450,52 @@ function childGuildRoots(root) {
   }
   return out;
 }
-function upgradeOne(root, mode, prefix) {
+function pendingSteps(report) {
+  return report.split("\n").filter((l) => /^\s+\[(completed|blocked_dirty|blocked_confirm|failed)\]/.test(l)).map((l) => l.trim());
+}
+function verifyOne(root, prefix) {
+  let status;
+  try {
+    status = ensureStorageLayout(root, { dryRun: true, recheck: true });
+  } catch (e) {
+    process.stderr.write(`${prefix}${e.message}
+`);
+    return 1;
+  }
+  const up = status.upgrade;
+  if (!up) {
+    process.stdout.write(`${prefix}layout ${status.version ?? "unmarked"} (${status.state}); nothing to verify.
+`);
+    return status.state === "absent" ? 0 : 1;
+  }
+  const pending = pendingSteps(up.report);
+  if (pending.length === 0) {
+    process.stdout.write(`${prefix}layout ${CURRENT_LAYOUT_VERSION} verified \u2014 every step reports nothing to do.
+`);
+    return status.state === "current" ? 0 : 1;
+  }
+  const stamp = status.state === "current" ? `stamped layout ${CURRENT_LAYOUT_VERSION}` : `layout ${status.state}`;
+  process.stdout.write(`${prefix}${stamp}, but these steps would still change the tree:
+`);
+  for (const p of pending) process.stdout.write(`${prefix}  ${p}
+`);
+  process.stdout.write(`${prefix}nothing was written. Apply with: --mode=migrate --recheck
+`);
+  return 1;
+}
+function upgradeOne(root, mode, prefix, recheck) {
   const before = detect3(root);
   if (before.state === "absent") {
     process.stdout.write(`${prefix}no .guild/ at ${root} \u2014 nothing to migrate.
 `);
     return 0;
   }
-  if (before.state === "current") {
-    process.stdout.write(`${prefix}layout ${before.version} \u2014 already current (${CURRENT_LAYOUT_VERSION}).
-`);
+  if (mode === "verify") return verifyOne(root, prefix);
+  if (before.state === "current" && !(recheck && mode === "migrate")) {
+    process.stdout.write(
+      `${prefix}layout ${before.version} \u2014 already current (${CURRENT_LAYOUT_VERSION}). Re-check with: --mode=verify
+`
+    );
     return 0;
   }
   if (mode === "skip") {
@@ -5456,7 +5505,7 @@ function upgradeOne(root, mode, prefix) {
   }
   let status;
   try {
-    status = ensureStorageLayout(root, { dryRun: mode === "dry-run" });
+    status = ensureStorageLayout(root, { dryRun: mode === "dry-run", recheck });
   } catch (e) {
     process.stderr.write(`${prefix}${e.message}
 `);
@@ -5500,18 +5549,19 @@ function main() {
     process.exit(0);
   }
   const rawMode = modeArg ? modeArg.split("=").slice(1).join("=") : "dry-run";
-  if (rawMode !== "migrate" && rawMode !== "dry-run" && rawMode !== "skip") {
-    process.stderr.write(`[migrate-guild] invalid --mode=${rawMode} (migrate|dry-run|skip)
+  if (rawMode !== "migrate" && rawMode !== "dry-run" && rawMode !== "skip" && rawMode !== "verify") {
+    process.stderr.write(`[migrate-guild] invalid --mode=${rawMode} (migrate|dry-run|skip|verify)
 `);
     process.exit(1);
   }
   const mode = rawMode;
+  const recheck = args.includes("--recheck");
   const roots = workspace ? [root, ...childGuildRoots(root)] : [root];
   let exit = 0;
   for (const target of roots) {
     const prefix = roots.length > 1 ? `[${target}] ` : "";
     try {
-      exit = upgradeOne(target, mode, prefix) === 0 ? exit : 1;
+      exit = upgradeOne(target, mode, prefix, recheck) === 0 ? exit : 1;
     } catch (e) {
       process.stderr.write(`${prefix}ERROR: ${e.message}
 `);
