@@ -128,6 +128,8 @@ export interface EnsureOptions {
   dryRun?: boolean;
   /** Skip the chain entirely and only report (`--mode=skip`). */
   detectOnly?: boolean;
+  /** Run the chain on a root already stamped current (`--mode=verify` / `--recheck`). */
+  recheck?: boolean;
 }
 
 /**
@@ -137,10 +139,11 @@ export interface EnsureOptions {
  *   future             → fail closed (KTD23: never down-migrate)
  *   absent             → no `.guild/` here; nothing to upgrade
  *   unmarked / stale   → run (or resume) the upgrade chain for THIS cwd
+ *   current + recheck  → run the chain again; a stamp can predate later v1 writes
  */
 export function ensureStorageLayout(cwd: string = process.cwd(), opts: EnsureOptions = {}): LayoutStatus {
   const status = detect(cwd);
-  if (status.state === "current") return status;
+  if (status.state === "current" && opts.recheck !== true) return status;
   if (status.state === "future") {
     throw new Error(
       `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. ` +

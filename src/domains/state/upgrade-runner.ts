@@ -242,19 +242,14 @@ export function runUpgrade(opts: UpgradeOptions): UpgradeResult {
     ...extra,
   });
 
+  // Resume only an IN-FLIGHT journal for this target. A committed one describes a
+  // finished upgrade: replaying its settled steps would skip work that later writes
+  // re-created (#275) and print the old run's step results as this run's.
+  const prior = loadJournal(journalFile);
   let journal =
-    loadJournal(journalFile) ??
-    newJournal({ rootId: guildRootId(root), root, fromVersion: opts.fromVersion, toVersion: opts.toVersion, now: now() });
-  // A journal left over from a DIFFERENT target version is not this upgrade's.
-  if (journal.to_version !== opts.toVersion) {
-    journal = newJournal({
-      rootId: guildRootId(root),
-      root,
-      fromVersion: opts.fromVersion,
-      toVersion: opts.toVersion,
-      now: now(),
-    });
-  }
+    prior !== null && prior.state !== "committed" && prior.to_version === opts.toVersion
+      ? prior
+      : newJournal({ rootId: guildRootId(root), root, fromVersion: opts.fromVersion, toVersion: opts.toVersion, now: now() });
 
   // The lock is a WRITE. A dry run inspects without taking it, so `--mode=dry-run`
   // can never block a concurrent real upgrade.

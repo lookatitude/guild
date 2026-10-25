@@ -1024,3 +1024,93 @@ describe("rework-r3 · the comment self-check fails the step rather than losing 
     expect(after).toBe(["agents: []   # the lane roster", "id: demo", ""].join("\n"));
   });
 });
+
+// ── #275 ─────────────────────────────────────────────────────────────────────
+
+describe("#275 a re-run never replays a committed journal", () => {
+  it("v1 paths written after an early stamp are upgraded on the re-run, not reported absent", () => {
+    const f = mkFixture("restamp");
+    write(path.join(f.guildDir, "wiki", "index.md"), "# index\n");
+    expect(run(f).state).toBe("committed");
+
+    // Later writes recreate v1 paths under a stamped layout; the operator drops the marker.
+    write(path.join(f.guildDir, "settings.json"), '{"recall":{"backend":"bm25"}}\n');
+    write(path.join(f.guildDir, "indexes", "codebase-map.json"), "{}\n");
+    fs.rmSync(path.join(f.guildDir, "storage-layout.json"));
+
+    const second = run(f);
+    expect(second.validation_errors).toEqual([]);
+    expect(second.state).toBe("committed");
+    expect(stepStatus(second, "settings-policy-split")).toBe("completed");
+    expect(stepStatus(second, "caches-out")).toBe("completed");
+    expect(fs.existsSync(path.join(f.guildDir, "indexes"))).toBe(false);
+  });
+
+  it("a dry run over a committed journal plans the real work", () => {
+    const f = mkFixture("replan");
+    write(path.join(f.guildDir, "wiki", "index.md"), "# index\n");
+    expect(run(f).state).toBe("committed");
+    write(path.join(f.guildDir, "indexes", "codebase-map.json"), "{}\n");
+
+    const plan = run(f, { dryRun: true });
+    expect(stepStatus(plan, "caches-out")).toBe("completed");
+  });
+
+  it("a missing policy classifier is a named failure, never a silent skip", () => {
+    const f = mkFixture("no-classifier");
+    write(path.join(f.guildDir, "settings.json"), '{"recall":{"backend":"bm25"}}\n');
+    const result = runUpgrade({
+      cwd: f.root,
+      storage: f.storage,
+      fromVersion: null,
+      toVersion: CURRENT_LAYOUT_VERSION,
+      dirtyProbe: () => [],
+      now: () => "2026-01-01T00:00:00.000Z",
+      nowMs: () => 1767225600000,
+    });
+    expect(result.state).toBe("failed");
+    expect(result.marker_written).toBe(false);
+    expect(formatUpgradeReport(result)).toContain("no policy classifier injected");
+  });
+});
+
+describe("#275 migrate-guild re-verifies a layout already stamped current (shipped bundle)", () => {
+  const CLI = path.resolve(__dirname, "..", "..", "..", "runtime", "scripts", "migrate-guild.js");
+
+  function stampedRoot(name: string): string {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), `guild-275-${name}-`));
+    const root = path.join(base, "repo");
+    write(path.join(root, ".guild", "wiki", "index.md"), "# index\n");
+    write(path.join(root, ".guild", "storage-layout.json"), '{"storage_layout_version":2}\n');
+    return root;
+  }
+
+  function verify(root: string): { status: number; out: string } {
+    try {
+      const out = execFileSync(process.execPath, [CLI, `--root=${root}`, "--mode=verify"], { encoding: "utf8" });
+      return { status: 0, out };
+    } catch (e) {
+      const err = e as { status: number; stdout: string };
+      return { status: err.status, out: err.stdout };
+    }
+  }
+
+  it("names the drift on a stamped root that still carries v1 paths, and writes nothing", () => {
+    const root = stampedRoot("drift");
+    write(path.join(root, ".guild", "indexes", "codebase-map.json"), "{}\n");
+
+    const r = verify(root);
+    expect(r.status).toBe(1);
+    expect(r.out).toContain("caches-out");
+    expect(r.out).toContain("--mode=migrate --recheck");
+    expect(fs.existsSync(path.join(root, ".guild", "indexes", "codebase-map.json"))).toBe(true);
+  });
+
+  it("passes a stamped root that matches layout 2", () => {
+    const root = stampedRoot("clean");
+    write(path.join(root, ".guild", "wiki", "glossary.md"), "# glossary\n");
+    const r = verify(root);
+    expect(r.out).toContain("verified");
+    expect(r.status).toBe(0);
+  });
+});

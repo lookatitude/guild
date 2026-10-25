@@ -51,12 +51,17 @@ On a **regular** repo (the default), nothing above is written and the path below
 is byte-for-byte unchanged:
 
 `.guild/init/<slug>.md` (the Init record), `.guild/wiki/**`, `.guild/knowledge/sources/**`,
-`.guild/settings.json` (the project config surface — scaffolded
-fully-documented **if absent**, idempotent, via
-`node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/read-guild-config.js --scaffold > .guild/settings.json`;
-never clobbered; regenerate/inspect with `/guild:config init|show|validate`),
-and — brownfield, **cheap scan tier only** — `.guild/indexes/codebase-map.json`
-plus a **confidence-tagged** `wiki/concepts/architecture-map.md` **stub**.
+the layout-2 config pair — `.guild/config/project.json` (the closed POLICY key
+set, KTD22) plus the reconcile-owned `.guild/settings.json` — written **if
+absent**, never clobbered, via
+`node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/config-cmd.js reconcile sync --cwd <root>`
+(inspect with `/guild:config show|validate`; on a workspace root the layout
+upgrade writes `.guild/config/workspace.json` too),
+and — brownfield, **cheap scan tier only** — the CodebaseMap `codebase-map.json`
+plus a **confidence-tagged** `wiki/concepts/architecture-map.md` **stub**. The
+CodebaseMap is a **derived cache** under `.guild/indexes/`: never commit it; the
+layout upgrade's `caches-out` step removes it and learn rebuilds it. No
+`registry.yaml` is written: agents and skills register by file existence.
 That pair **is Init-DONE**. The deep semantic `knowledge-graph.json` +
 `onboarding-tour.md` are **NOT** produced at Init by default — they are lazy
 and gated by `--learn` / `defaults.auto_learn`, built by `guild:learn-graph`

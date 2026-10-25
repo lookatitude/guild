@@ -6009,7 +6009,7 @@ var init_upgrade_steps = __esm({
           return { status: "skipped", detail: ".guild/settings.json is not parseable JSON \u2014 preserved, not split", paths: [] };
         }
         if (!ctx.policy) {
-          return { status: "skipped", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
+          return { status: "failed", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
         }
         const cfg = ctx.policy;
         const flat = flatten(parsed);
@@ -6084,7 +6084,7 @@ var init_upgrade_steps = __esm({
       affects: [".guild/initiatives", ".guild/team", ".guild/teams"],
       apply(ctx) {
         if (!ctx.policy) {
-          return { status: "skipped", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
+          return { status: "failed", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
         }
         const cfg = ctx.policy;
         const roots = ["initiatives", "team", "teams"].map((d) => path15.join(ctx.guildDir, d));
@@ -23579,7 +23579,7 @@ var init_catalog_cache = __esm({
         }
       }
     };
-    defaultSleep = (ms) => new Promise((resolve42) => setTimeout(resolve42, ms));
+    defaultSleep = (ms) => new Promise((resolve43) => setTimeout(resolve43, ms));
   }
 });
 
@@ -36759,7 +36759,7 @@ function supersededWikiPages(wikiDir2) {
     const slug = path62.basename(abs, ".md");
     bySlug.set(slug, [...bySlug.get(slug) ?? [], abs]);
   }
-  const resolve42 = (ref) => {
+  const resolve43 = (ref) => {
     let r = ref.replace(/\\/g, "/");
     if (r.startsWith("decision:")) r = r.slice("decision:".length);
     if (r.startsWith("./")) r = r.slice(2);
@@ -36783,7 +36783,7 @@ function supersededWikiPages(wikiDir2) {
       superseded.add(abs);
     }
     for (const ref of refsOf(fm["supersedes"])) {
-      const target = resolve42(ref);
+      const target = resolve43(ref);
       if (target && target !== abs) superseded.add(target);
     }
   }
@@ -41975,7 +41975,7 @@ function upgradeChain() {
 }
 function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
   const status = detect2(cwd);
-  if (status.state === "current") return status;
+  if (status.state === "current" && opts.recheck !== true) return status;
   if (status.state === "future") {
     throw new Error(
       `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
@@ -42379,11 +42379,11 @@ function resolveLaneAttribution(env = process.env) {
 // hooks/pre-compact.ts
 init_state();
 async function readStdin() {
-  return new Promise((resolve42) => {
+  return new Promise((resolve43) => {
     const chunks = [];
     process.stdin.on("data", (c) => chunks.push(c));
-    process.stdin.on("end", () => resolve42(Buffer.concat(chunks).toString("utf8")));
-    process.stdin.on("error", () => resolve42(""));
+    process.stdin.on("end", () => resolve43(Buffer.concat(chunks).toString("utf8")));
+    process.stdin.on("error", () => resolve43(""));
   });
 }
 function payloadExcerpt(payload) {
