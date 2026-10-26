@@ -51,7 +51,13 @@ import { spawnSync } from "child_process";
 import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import { hostCapabilityCacheDir, hostCapabilityCacheFile } from "../src/domains/state";
+import {
+  hostCapabilityCacheDir,
+  hostCapabilityCacheFile,
+  presentOnDisk,
+  RESOLVED_SETTINGS_DIGEST_FILE,
+  verifyResolvedSettingsDigest,
+} from "../src/domains/state";
 // RE-4: the tmux spawn logic now lives behind the TeamBackend seam. The
 // launcher is the CLI front-end (arg parse + D5 ladder + collision UX +
 // manifest + attach) and delegates compose/probe/spawn to TmuxTeamBackend.
@@ -75,6 +81,7 @@ import {
 } from "./lib/core/contracts/team-backend";
 import {
   buildStationTaskCellResult,
+  assignLaneTasks,
   expandTaskCellLaunchLanes,
   type TaskCellLaunchLane,
 } from "./lib/task-cell-launch-plan";
@@ -1941,11 +1948,27 @@ function readFrozenDispatchResolution(
 ): FrozenDispatchResolution | null {
   if (runId === null || runId.length === 0) return null;
   const snapshotPath = path.join(durableGuildDir(cwd), "runs", runId, "resolved-settings.json");
-  if (!fs.existsSync(snapshotPath)) return null;
+  // #146: a run with no sidecar predates #146. A sidecar with no snapshot is a
+  // deleted authority record, not a legacy run.
+  const sidecarPath = path.join(path.dirname(snapshotPath), RESOLVED_SETTINGS_DIGEST_FILE);
+  const bound = presentOnDisk(sidecarPath);
+  if (!presentOnDisk(snapshotPath)) {
+    if (bound) {
+      throw new Error(`frozen dispatch authority does not match its run-start digest: ${snapshotPath}`);
+    }
+    return null;
+  }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(fs.readFileSync(snapshotPath, "utf8"));
-  } catch {
+    const raw = fs.readFileSync(snapshotPath, "utf8");
+    // Hash the same bytes we parse; an unreadable sidecar throws (fail closed).
+    const sidecar = bound ? fs.readFileSync(sidecarPath, "utf8") : null;
+    if (verifyResolvedSettingsDigest(raw, sidecar) === "mismatch") {
+      throw new Error(`frozen dispatch authority does not match its run-start digest: ${snapshotPath}`);
+    }
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("frozen dispatch authority")) throw err;
     throw new Error(`frozen dispatch authority is unreadable: ${snapshotPath}`);
   }
   if (parsed === null || typeof parsed !== "object") {
@@ -3209,9 +3232,11 @@ async function main(): Promise<void> {
   // routing computation but MUST NOT materialize that channel or any evidence.
   {
     if (!args.dryRun) {
-      for (const spec of team.specialists) {
-        const taskIds = preRoutingOwnerMap.get(spec.name);
-        const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [spec.name];
+      // #237: one task_run per launch lane, so same-role entries never write a
+      // task twice or fall back to one shared role-named task.
+      for (const lane of globalLaunchLanes) {
+        const spec = lane;
+        const effectiveTaskIds = [lane.taskId];
         const cr = spec.capabilityRequirements;
         for (const taskId of effectiveTaskIds) {
           writeTaskRun(cwd, runId, taskId, {
@@ -3243,6 +3268,12 @@ async function main(): Promise<void> {
     if (launchBindingRef === null) {
       throw new Error(`binding_rejected: TaskCell dispatch ${runId} has no minted run binding`);
     }
+    // #237: one entry-to-task assignment feeds model planning and readback, so
+    // same-role entries keep their own tasks, tiers, and capability requirements.
+    const entryTaskIds = new Map<Specialist, string[]>();
+    for (const [entry, taskId] of assignLaneTasks(team.specialists, preRoutingOwnerMap)) {
+      entryTaskIds.set(entry, [...(entryTaskIds.get(entry) ?? []), taskId]);
+    }
     {
       const planLaneModel = makeLaneModelPlanner(
         cwd,
@@ -3252,9 +3283,7 @@ async function main(): Promise<void> {
         args.dryRun,
       );
       for (const specialist of team.specialists) {
-        const taskIds = preRoutingOwnerMap.get(specialist.name);
-        const effectiveTaskIds = taskIds && taskIds.length > 0 ? taskIds : [specialist.name];
-        for (const rawTaskId of effectiveTaskIds) {
+        for (const rawTaskId of entryTaskIds.get(specialist) ?? []) {
           const taskId = safeSegment(rawTaskId);
           const { outcome, laneTier } = planLaneModel(specialist, taskId);
           modelProvenanceByTask.set(
@@ -3304,8 +3333,8 @@ async function main(): Promise<void> {
     //   - emit a stderr warning + a NDJSON degradation record to v1.4-events.jsonl
     // This converts "silent fail-open" to "observable benign fallback".
     for (const spec of team.specialists) {
-      const taskIds = preRoutingOwnerMap.get(spec.name);
-      // All task-ids for this specialist share the same specialist-level CR.
+      const taskIds = entryTaskIds.get(spec);
+      // All task-ids for this entry share the same entry-level CR.
       // Use the first one as the representative file.
       const repTaskId = (taskIds && taskIds.length > 0) ? taskIds[0] : spec.name;
       if (!args.dryRun) {

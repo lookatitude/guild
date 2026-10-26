@@ -193,6 +193,57 @@ describe("run-tracing-evaluation — plugin-owned analysis", () => {
     expect(first.recommendations.every((item) => item.routing.requires_user_approval)).toBe(true);
   });
 
+  describe("G04 R4 — runaway repetition (decoder loop)", () => {
+    const agentRow = (excerpt: string, status = "ok") => ({
+      ts: "2026-08-12T01:00:02.000Z", event: "tool_call", run_id: RUN_A, lane_id: "lane-a", tool: "Agent",
+      command_redacted: "dispatch backend", status, latency_ms: 10, result_excerpt_redacted: excerpt, tokens_in: 12, tokens_out: 3,
+    });
+    const plant = (rows: Record<string, unknown>[]) => {
+      const dir = seedRun(root, RUN_A);
+      fs.appendFileSync(path.join(dir, "logs", "v1.4-events.jsonl"), rows.map((row) => JSON.stringify(row)).join("\n") + "\n");
+      return analyzeRun(root, RUN_A);
+    };
+
+    it("emits runaway_repetition when one agent output loops on a phrase, distinct from repeated_failure", () => {
+      const loop = "Summary of the change. " + "I will now verify the result. ".repeat(40) + "Done.";
+      const analysis = plant([agentRow(loop)]);
+      const found = analysis.findings.filter((item) => item.kind === "runaway_repetition");
+      expect(found).toHaveLength(1);
+      expect(found[0].severity).toBe("high");
+      expect(found[0].evidence_refs).toHaveLength(1);
+      expect(found[0].signature.startsWith("runaway_repetition:Agent:")).toBe(true);
+      expect(found[0].signature.slice("runaway_repetition:Agent:".length)).toMatch(/^[0-9a-f]{12}$/);
+      expect(analysis.findings.some((item) => item.kind === "repeated_failure")).toBe(false);
+      expect(analysis).toEqual(analyzeRun(root, RUN_A));
+    });
+
+    it("a short inner repeat does not hide a longer loop", () => {
+      const analysis = plant([agentRow("aaaaaaaaaabcccccccccc ".repeat(10))]);
+      expect(analysis.findings.some((item) => item.kind === "runaway_repetition")).toBe(true);
+    });
+
+    it("catches a single-token loop with no spaces", () => {
+      const analysis = plant([agentRow("result: " + "的".repeat(300))]);
+      expect(analysis.findings.some((item) => item.kind === "runaway_repetition")).toBe(true);
+    });
+
+    it("negative: ordinary prose, a long rule line and a short legit repeat raise no finding", () => {
+      const prose = "The backend lane added the cache and its tests. Each test seeds a run, calls recall, and checks the order. ".repeat(3);
+      const rule = "=".repeat(400);
+      const shortRepeat = "ok ok ok ok ok";
+      // 9 back-to-back copies of a 30-char phrase: one short of the repeat floor.
+      const nineCopies = "I will now verify the result. ".repeat(9);
+      const analysis = plant([agentRow(prose), agentRow(`${rule}\nTable done`), agentRow(shortRepeat), agentRow(nineCopies)]);
+      expect(analysis.findings.some((item) => item.kind === "runaway_repetition")).toBe(false);
+    });
+
+    it("negative: repeated failures are repeated_failure, not runaway_repetition", () => {
+      const analysis = plant([agentRow("same failure", "err"), agentRow("same failure", "err")]);
+      expect(analysis.findings.some((item) => item.kind === "repeated_failure")).toBe(true);
+      expect(analysis.findings.some((item) => item.kind === "runaway_repetition")).toBe(false);
+    });
+  });
+
   it("detects repeated user steering as prompt inefficiency without claiming satisfaction", () => {
     const dir = seedRun(root, RUN_A);
     const events = [1, 2].map((index) => ({
@@ -406,6 +457,20 @@ describe("run-tracing-evaluation — plugin-owned analysis", () => {
     }) + "\n");
 
     expect(analyzeRun(root, RUN_A).eligible).toBe(true);
+  });
+
+  it("accepts an owner-architect L-arch loop row and still refuses an unknown loop layer", () => {
+    const relayer = (layer: string) => {
+      const dir = seedRun(root, RUN_A);
+      const log = path.join(dir, "logs", "v1.4-events.jsonl");
+      const rows = fs.readFileSync(log, "utf8").split("\n").filter(Boolean)
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .map((event) => event["event"] === "loop_round_start" ? { ...event, loop_layer: layer } : event);
+      fs.writeFileSync(log, rows.map((event) => JSON.stringify(event)).join("\n") + "\n");
+      return analyzeRun(root, RUN_A);
+    };
+    expect(relayer("L-arch").completeness.missing).not.toContain("trace validity");
+    expect(relayer("L-bogus").completeness.missing).toContain("trace validity");
   });
 
   it("counts valid-JSON non-object trace rows as invalid instead of silently dropping them", () => {

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+if (require.main === module) { const a = process.argv.slice(2), e = a.indexOf("--"); if ((e < 0 ? a : a.slice(0, e)).some((x) => x === "--help" || x === "-h")) { require("fs").writeSync(1, "usage: node runtime/scripts/build-tour.js [--cwd <path>] [--in <path>] [--print]\n"); process.exit(0); } }
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -96,7 +97,7 @@ function upgradeChain() {
 }
 function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
   const status = detect(cwd);
-  if (status.state === "current") return status;
+  if (status.state === "current" && opts.recheck !== true) return status;
   if (status.state === "future") {
     throw new Error(
       `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
@@ -108,7 +109,8 @@ function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
     root: status.root,
     fromVersion: status.version,
     toVersion: CURRENT_LAYOUT_VERSION,
-    dryRun: opts.dryRun === true
+    dryRun: opts.dryRun === true,
+    fresh: opts.recheck === true
   });
   const after = detect(cwd);
   return { ...after, upgrade: result };
@@ -142,15 +144,15 @@ if (isProcessEntry()) {
 
 // scripts/learn/lib/paths.ts
 function parseCwd(argv) {
-  const idx = argv.indexOf("--cwd");
-  if (idx !== -1 && argv[idx + 1]) return argv[idx + 1];
-  return process.env["GUILD_CWD"] ?? process.cwd();
+  return parseFlag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
 }
 function parseFlag(argv, name) {
   const eq = `--${name}=`;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === `--${name}` && argv[i + 1]) return argv[i + 1];
-    if (argv[i].startsWith(eq)) return argv[i].slice(eq.length);
+    const v = argv[i] === `--${name}` ? argv[i + 1] : argv[i].startsWith(eq) ? argv[i].slice(eq.length) : void 0;
+    if (v === void 0 && argv[i] !== `--${name}`) continue;
+    if (!v || v.startsWith("--")) throw new Error(`--${name} needs a value (--${name} <v> or --${name}=<v>)`);
+    return v;
   }
   return void 0;
 }

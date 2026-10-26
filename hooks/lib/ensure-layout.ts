@@ -193,3 +193,78 @@ export function ensureStorageLayout(cwd: string, hookName = "hook"): LayoutGate 
 export function resetLayoutBootstrapMemo(): void {
   memo.clear();
 }
+
+/**
+ * The compiled layout CLI, found from the plugin-root env var OR from this bundle's
+ * own location (`hooks/dist/`, `hooks/agent-team/dist/`, or `hooks/` under tsx).
+ * Run start may not depend on the host exporting a plugin root: a dispatcher that
+ * spawns `hooks/dist/run-trace.js` by path upgrades the same way with or without it.
+ */
+function resolveLayoutCli(): { cli: string | null; looked: string[] } {
+  const bases: string[] = [];
+  const envRoot = process.env["CLAUDE_PLUGIN_ROOT"] ?? process.env["GUILD_PLUGIN_ROOT"];
+  if (envRoot !== undefined && envRoot.length > 0) bases.push(envRoot);
+  for (const up of [["..", ".."], [".."], ["..", "..", ".."]]) bases.push(path.resolve(__dirname, ...up));
+  const looked = bases.map((b) => path.join(b, "runtime", "scripts", "ensure-storage-layout.js"));
+  return { cli: looked.find((c) => fs.existsSync(c)) ?? null, looked };
+}
+
+/** How long run start waits for a concurrent upgrade of the SAME root to finish. */
+const RUN_START_LOCK_WAIT_MS = 20_000;
+
+function sleepMs(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Run start's layout upgrade (#276). Same chain as SessionStart, for the root the
+ * run starts in, so the outcome does not depend on which folder the session opened.
+ *
+ * Returns one line (or the chain's report block) for the caller to print, or null
+ * when the root was already current or has no `.guild/`. A blocked, failed or
+ * unreachable upgrade always returns text: the root keeps reading v1 and the
+ * operator has to know why.
+ */
+export function upgradeLayoutAtRunStart(cwd: string): string | null {
+  const pre = detect(cwd);
+  if (pre.state === "absent" || pre.state === "current" || pre.state === "future") return null;
+
+  const { cli, looked } = resolveLayoutCli();
+  if (cli === null) {
+    return `layout upgrade not applied at ${pre.root} (${pre.state}): compiled layout CLI not found (looked in ${looked.join(", ")}). Run: /guild:config migrate --mode=migrate`;
+  }
+
+  const deadline = Date.now() + RUN_START_LOCK_WAIT_MS;
+  for (;;) {
+    let r: ReturnType<typeof spawnSync<string>>;
+    try {
+      r = spawnSync(process.execPath, [cli, `--cwd=${cwd}`, "--print"], { encoding: "utf8", timeout: 60_000 });
+    } catch (e) {
+      return `layout upgrade not applied at ${pre.root}: ${(e as Error).message}`;
+    }
+    if (r.error || r.status !== 0) {
+      const why = r.error ? r.error.message : (r.stderr || `exit ${String(r.status)}`).trim();
+      return `layout upgrade not applied at ${pre.root}: ${why}`;
+    }
+    let status: LayoutStatus;
+    try {
+      status = JSON.parse(r.stdout.trim().split("\n").pop() ?? "") as LayoutStatus;
+    } catch {
+      return `layout upgrade not applied at ${pre.root}: unreadable layout CLI output`;
+    }
+    const up = status.upgrade;
+    if (status.state === "current") {
+      return up?.state === "committed"
+        ? `layout upgraded to ${String(status.version)} at ${status.root}. Review the .guild/ diff and commit it (Guild never commits).`
+        : null;
+    }
+    // Another process holds this root's upgrade lock: wait for it, then re-read.
+    if (up?.state === "running" && Date.now() < deadline) {
+      sleepMs(250);
+      continue;
+    }
+    const state = up?.state ?? status.state;
+    const why = up?.state === "running" ? "another upgrade of this root is still running" : up?.report ?? "no upgrade ran";
+    return `layout upgrade not applied at ${status.root} (${state}): ${why}\n  retry: /guild:config migrate --mode=migrate`;
+  }
+}

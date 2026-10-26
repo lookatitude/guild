@@ -387,6 +387,49 @@ describe("guild-telemetry MCP server", () => {
       }
     });
 
+    it("G04 R3: sums measured cost_usd; non-numeric/absent/negative cost is unmeasured, never 0", async () => {
+      const client = await makeClientV14();
+      try {
+        const res = await client.callTool({
+          name: "trace_cost_rollup",
+          arguments: { run_id: "run-cost-usd" },
+        });
+        const payload = parseJson(res);
+        // measured: 0.12 (sonnet/backend) + 0.3 (opus/architect). The "0.5"
+        // string, the absent, the null and the -1 costs are unmeasured.
+        expect(payload.totals.cost_usd).toBeCloseTo(0.42, 10);
+        expect(payload.cost_measured_event_count).toBe(2);
+        expect(payload.cost_unmeasured_event_count).toBe(4);
+        const model = (m: string) => payload.by_model.find((r: any) => r.model === m);
+        expect(model("opus").cost_usd).toBeCloseTo(0.3, 10);
+        expect(model("sonnet").cost_usd).toBeCloseTo(0.12, 10);
+        // a bucket with no measured cost reports null, not 0
+        expect(model("haiku").cost_usd).toBeNull();
+        expect(model("haiku").input).toBe(15);
+        const spec = (s: string) => payload.by_specialist.find((r: any) => r.specialist === s);
+        expect(spec("writer").cost_usd).toBeNull();
+        expect(payload.by_tier.find((r: any) => r.tier === "cheap").cost_usd).toBeNull();
+      } finally {
+        await client.close();
+      }
+    });
+
+    it("G04 R3: a run with no measured cost reports cost_usd null, not 0", async () => {
+      const client = await makeClientV14();
+      try {
+        const res = await client.callTool({
+          name: "trace_cost_rollup",
+          arguments: { run_id: "run-cost" },
+        });
+        const payload = parseJson(res);
+        expect(payload.totals.cost_usd).toBeNull();
+        expect(payload.cost_measured_event_count).toBe(0);
+        expect(payload.by_model.every((r: any) => r.cost_usd === null)).toBe(true);
+      } finally {
+        await client.close();
+      }
+    });
+
     it("errors when an explicit run_id does not exist (edge)", async () => {
       const client = await makeClientV14();
       try {

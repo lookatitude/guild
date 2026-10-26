@@ -1131,3 +1131,27 @@ describe("reanchor — pre-compact.js emits PLAIN-TEXT compact-summary instructi
     expect(out.trim()).toBe("");
   });
 });
+
+describe("reanchor — #146 snapshot integrity", () => {
+  let root: string;
+  beforeEach(() => {
+    delete process.env["GUILD_RUN_ID"];
+    root = tmpRoot();
+  });
+  afterEach(() => cleanup(root));
+
+  it("an edited snapshot is not authority: agent_mode renders unknown, no run.yaml fallback", () => {
+    makeRun(root, { agentMode: "team" });
+    const dir = path.join(root, ".guild", "runs", "run-fix-1");
+    // A digest of DIFFERENT bytes = the snapshot was edited after run start.
+    fs.writeFileSync(path.join(dir, "resolved-settings.sha256"), `sha256:${"0".repeat(64)}\n`);
+    const header = buildReanchorHeader(root) as string;
+    expect(header).toContain("agent_mode=unknown");
+    expect(header).not.toContain("agent_mode=team");
+  });
+
+  it("control: with no sidecar (legacy run) the snapshot is still read", () => {
+    makeRun(root, { agentMode: "team" });
+    expect(buildReanchorHeader(root) as string).toContain("agent_mode=team");
+  });
+});

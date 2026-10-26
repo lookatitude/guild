@@ -29,6 +29,9 @@
  *   `surface_manifest:` sub-tree, de-indent one level, and parse only that clean,
  *   fully-quoted/folded sub-document — so the skills are actually checked.
  *
+ * PARSED VALUES: both halves compare as parsed YAML scalars (frontmatterValue), so
+ *   `"say \"hi\""` and `'say "hi"'` are the same value; only a value change is drift.
+ *
  * SCOPING: only the W7 exemplar set (CONVERTED). A live-surface file WITHOUT a
  *   `surface_manifest:` block is out of scope (W7 is a slice, not the full rework);
  *   a file LISTED here that has lost its block, or whose block drifts, is RED.
@@ -42,9 +45,11 @@
  * Prove: cd tests && npx tsx rearch/r-decl.ts --prove
  */
 import { REPO, RailResult, report, read, proveAssert } from "./_common";
-import { splitFrontmatter, readScalarField } from "../../scripts/lib/frontmatter";
+import { splitFrontmatter, parseFrontmatter, parseYaml } from "../../scripts/lib/frontmatter";
 import { validateSurfaceManifest, SurfaceManifest } from "../../scripts/lib/surface-manifest";
+import { CLAUDE_TIER_FALLBACK } from "../../scripts/lib/capability/tier-defaults";
 import * as yaml from "js-yaml";
+import * as fs from "fs";
 import * as path from "path";
 
 /**
@@ -61,14 +66,14 @@ export const EXEMPLARS: string[] = [
   "skills/specialists/backend-service-integration/SKILL.md",
   "agents/advisor.md",
   "agents/developer.md",
+  "agents/team-lead.md",
+  "agents/context-manager.md",
 ];
 
-/** Canonical `model:` → tier map (capability/tier-defaults.ts CLAUDE_TIER_FALLBACK, inverted). */
-const MODEL_TO_TIER: Record<string, string> = {
-  haiku: "cheap",
-  sonnet: "mid",
-  opus: "powerful",
-};
+/** Canonical `model:` → tier map: CLAUDE_TIER_FALLBACK inverted (exact alias match). */
+const MODEL_TO_TIER: Record<string, string> = Object.fromEntries(
+  Object.entries(CLAUDE_TIER_FALLBACK).map(([tier, model]) => [model, tier]),
+);
 
 /**
  * Extract the `surface_manifest:` sub-block as a standalone object. We do NOT
@@ -97,6 +102,71 @@ export function extractManifestBlock(content: string): unknown {
   } catch {
     return null;
   }
+}
+
+/**
+ * A top-level frontmatter field as its PARSED YAML value (undefined when absent).
+ * A YAML-clean frontmatter is parsed whole. A YAML-hostile one (the unquoted skill
+ * `description:` convention) is rebuilt entry by entry: each entry is the shortest
+ * run of lines up to a column-0 line that still parses after the entries before it.
+ * A line no run can parse must be a single-line `key: plain text` entry (plain or
+ * quoted key); key and value are re-emitted as JSON (= YAML double-quoted) strings. The rebuilt document is then
+ * parsed whole, so quoted keys, anchors and duplicate keys keep YAML semantics.
+ * Anything else is undefined, so it never matches a manifest value.
+ */
+export function frontmatterValue(content: string, key: string): unknown {
+  const fm = parseFrontmatter(content);
+  if (fm !== null) return fm[key] === null ? undefined : fm[key];
+  const { frontmatter } = splitFrontmatter(content);
+  if (frontmatter === null) return undefined;
+  const lines = frontmatter.split("\n");
+  const isCont = (l: string) => l.trim() === "" || /^[ \t]/.test(l);
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (isCont(lines[i]) || lines[i].startsWith("#")) {
+      out.push(lines[i++]);
+      continue;
+    }
+    let taken = -1;
+    for (let e = i + 1; e <= lines.length && taken === -1; e++) {
+      if (e < lines.length && isCont(lines[e])) continue;
+      if (parseYaml([...out, ...lines.slice(i, e)].join("\n")) !== null) taken = e;
+    }
+    if (taken !== -1) {
+      out.push(...lines.slice(i, taken));
+      i = taken;
+      continue;
+    }
+    const ln = lines[i];
+    // the key ends at the first `:` (plain key) or the first `:` after a closing quote
+    // whose prefix parses to a string (quoted key)
+    let colon = -1;
+    let k: unknown;
+    for (let c = ln.indexOf(":"); c > 0; c = ln.indexOf(":", c + 1)) {
+      const token = ln.slice(0, c);
+      if (!"\"'".includes(token[0])) {
+        [colon, k] = [c, token];
+        break;
+      }
+      const parsed = parseYaml(token);
+      if (typeof parsed === "string") {
+        [colon, k] = [c, parsed];
+        break;
+      }
+    }
+    const raw = ln.slice(colon + 1).trim();
+    const next = lines.slice(i + 1).find((l) => l.trim() !== "");
+    if (colon <= 0 || typeof k !== "string" || ln.slice(0, colon).trim() !== ln.slice(0, colon)) return undefined;
+    if (raw === "" || (next !== undefined && /^[ \t]/.test(next))) return undefined;
+    if ("\"'[{|>&*!#%@`".includes(raw[0])) return undefined;
+    out.push(`${JSON.stringify(k)}: ${JSON.stringify(raw)}`);
+    i++;
+  }
+  const doc = parseYaml(out.join("\n"));
+  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) return undefined;
+  const v = (doc as Record<string, unknown>)[key];
+  return v === null ? undefined : v;
 }
 
 /** True iff the body's dispatch wiring (anywhere in the prose) names `target`. */
@@ -142,16 +212,16 @@ export function crossCheck(content: string, m: SurfaceManifest, file: string): D
   const push = (reason: string) => out.push({ file, reason });
 
   // name ≡ frontmatter name
-  const fmName = readScalarField(content, "name");
+  const fmName = frontmatterValue(content, "name");
   if (m.name !== fmName) push(`name "${m.name}" ≠ frontmatter name "${fmName}"`);
 
   // description ≡ frontmatter description
-  const fmDesc = readScalarField(content, "description");
+  const fmDesc = frontmatterValue(content, "description");
   if (m.description !== fmDesc) push(`description drifts from frontmatter description`);
 
   // when_to_use ≡ frontmatter when_to_use (only when the manifest declares one)
   if (m.when_to_use !== undefined) {
-    const fmWtu = readScalarField(content, "when_to_use");
+    const fmWtu = frontmatterValue(content, "when_to_use");
     if (m.when_to_use !== fmWtu) push(`when_to_use drifts from frontmatter when_to_use`);
   }
 
@@ -159,14 +229,14 @@ export function crossCheck(content: string, m: SurfaceManifest, file: string): D
   if (m.type !== undefined) {
     if (m.kind === "agent") {
       // agent tier is derived from the `model:` frontmatter
-      const model = readScalarField(content, "model");
-      const expectedTier = model ? MODEL_TO_TIER[model] : undefined;
+      const model = frontmatterValue(content, "model");
+      const expectedTier = typeof model === "string" ? MODEL_TO_TIER[model] : undefined;
       if (m.type !== expectedTier) {
         push(`tier "${m.type}" ≠ tier derived from model "${model}" (${expectedTier ?? "unknown"})`);
       }
     } else {
       // skill type ≡ frontmatter type
-      const fmType = readScalarField(content, "type");
+      const fmType = frontmatterValue(content, "type");
       if (m.type !== fmType) push(`type "${m.type}" ≠ frontmatter type "${fmType}"`);
     }
   }
@@ -191,7 +261,7 @@ export function crossCheck(content: string, m: SurfaceManifest, file: string): D
   return out;
 }
 
-export function run(): RailResult {
+export function run(root: string = REPO): RailResult {
   const out: RailResult = {
     rail: "R-DECL",
     pass: true,
@@ -201,8 +271,18 @@ export function run(): RailResult {
       `${EXEMPLARS.length} W7 exemplars checked: schema-valid AND prose-≡ (name/description/when_to_use/type-tier/gates/dispatch)`,
     ],
   };
+  // G05 R2: a machinery agent that carries a manifest is never outside the rail.
+  let agentFiles: string[] = [];
+  try { agentFiles = fs.readdirSync(path.join(root, "agents")).filter((n) => n.endsWith(".md")); } catch { /* no agents dir */ }
+  for (const name of agentFiles) {
+    const rel = `agents/${name}`;
+    if (!EXEMPLARS.includes(rel) && extractManifestBlock(read(path.join(root, rel))) !== null) {
+      out.pass = false;
+      out.violations.push(`[${rel}] carries a surface_manifest: block but is not an R-DECL exemplar`);
+    }
+  }
   for (const f of EXEMPLARS) {
-    const content = read(path.join(REPO, f));
+    const content = read(path.join(root, f));
     if (content === "") {
       out.pass = false;
       out.violations.push(`[${f}] file unreadable`);
@@ -358,6 +438,38 @@ function prove(): void {
     proveAssert(
       f.some((x) => x.reason.includes("name")),
       "CONTROL: a manifest name ≠ frontmatter name TRIPS",
+    );
+  }
+
+  // CONTROL 5 — quoting-only difference is CLEAN; an escape that changes the value TRIPS.
+  {
+    const agentWith = (mf: string) =>
+      [
+        "---",
+        "name: demo-agent",
+        'description: "say \\"hi\\" to the cell\'s lead"',
+        "model: opus",
+        "surface_manifest:",
+        "  schema_version: guild.surface_manifest.v1",
+        "  kind: agent",
+        "  name: demo-agent",
+        `  description: ${mf}`,
+        "  type: powerful",
+        "---",
+        "# demo-agent",
+        "",
+      ].join("\n");
+    const same = agentWith(`'say "hi" to the cell''s lead'`);
+    const ms = validateSurfaceManifest(extractManifestBlock(same));
+    proveAssert(
+      ms.ok && crossCheck(same, ms.manifest!, "demo-agent").length === 0,
+      "CONTROL: scalars that differ only in quoting/escaping parse equal (CLEAN)",
+    );
+    const drift = agentWith(`'say \\"hi\\" to the cell''s lead'`);
+    const md = validateSurfaceManifest(extractManifestBlock(drift));
+    proveAssert(
+      md.ok && crossCheck(drift, md.manifest!, "demo-agent").some((x) => x.reason.includes("description")),
+      "CONTROL: a single-quoted literal backslash is a different parsed value (TRIPS)",
     );
   }
 

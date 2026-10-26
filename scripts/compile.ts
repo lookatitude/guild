@@ -31,6 +31,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 
+import { LIBRARY, RUNTIME_USAGE } from "./runtime-usage";
+
 const ROOT = path.resolve(__dirname, "..");
 
 // ---------------------------------------------------------------------------
@@ -58,6 +60,8 @@ export interface Target {
    * whose committed copy was built from elsewhere overrides it.
    */
   absWorkingDir?: string;
+  /** `--help` text a runtime script prints from its banner (#269). */
+  usage?: string;
   group: "hooks" | "agent-team" | "mcp" | "scripts" | "conformance";
 }
 
@@ -177,10 +181,13 @@ const RUNTIME_SCRIPT_IDS: Array<{ id: string; entry: string }> = [
   { id: "knowledge-links-builder", entry: "scripts/knowledge-links-builder.ts" },
   { id: "knowledge-links-traverse", entry: "scripts/knowledge-links-traverse.ts" },
   { id: "knowledge-orchestrator", entry: "scripts/learn/knowledge-orchestrator.ts" },
+  { id: "learn-route", entry: "scripts/learn/learn-route.ts" },
   { id: "learn-scan", entry: "scripts/learn/scan.ts" },
   { id: "learn-staleness", entry: "scripts/learn/staleness.ts" },
   { id: "lint-context-bundle", entry: "scripts/lint-context-bundle.ts" },
   { id: "mark-lane-dead", entry: "scripts/mark-lane-dead.ts" },
+  { id: "lane-receipt-wait", entry: "scripts/lane-receipt-wait.ts" },
+  { id: "pane-send", entry: "scripts/pane-send.ts" },
   { id: "pane-dispatch-trace", entry: "scripts/lib/host/pane-dispatch-trace.ts" },
   { id: "recall", entry: "scripts/lib/recall.ts" },
   { id: "registry-rollup", entry: "scripts/registry-rollup.ts" },
@@ -249,7 +256,9 @@ export function targets(): Target[] {
     group: "mcp",
   });
   for (const s of RUNTIME_SCRIPT_IDS) {
-    t.push({ id: `scripts/${s.id}`, entry: s.entry, out: `runtime/scripts/${s.id}.js`, yamlFrom: "scripts", group: "scripts" });
+    const usage = RUNTIME_USAGE[s.id];
+    if (!usage) throw new Error(`runtime script "${s.id}" has no --help entry in scripts/runtime-usage.ts (#269)`);
+    t.push({ id: `scripts/${s.id}`, entry: s.entry, out: `runtime/scripts/${s.id}.js`, yamlFrom: "scripts", usage, group: "scripts" });
   }
   // The activated-host conformance worker. It was built by its own esbuild target
   // in scripts/package.json with byte-identical options, which left it OUTSIDE
@@ -332,7 +341,27 @@ export function buildOptionsForTarget(t: Target, outAbs: string): import("esbuil
     alias: aliasForTarget(t),
     nodePaths: (t.nodePaths ?? []).map((p) => path.join(ROOT, p)),
     logLevel: "silent",
+    ...(t.usage ? { banner: { js: helpBanner(t) } } : {}),
   };
+}
+
+/**
+ * Runs before every bundled module, so `--help` / `-h` can have no side effect
+ * (#269). Only when the bundle is the main module: a library bundle required by
+ * another CLI must not read that CLI's argv. Tokens after `--` are not flags.
+ * TRAP: a literal `-h` / `--help` VALUE (`--message -h`) also prints usage.
+ */
+export function helpBanner(t: Target): string {
+  const id = path.basename(t.out, ".js");
+  const text =
+    t.usage === LIBRARY
+      ? `usage: none. runtime/scripts/${id}.js is a library bundle other runtime scripts require; it is not a CLI.\n`
+      : `usage: node runtime/scripts/${id}.js ${t.usage}\n`;
+  return (
+    `if (require.main === module) { const a = process.argv.slice(2), e = a.indexOf("--"); ` +
+    `if ((e < 0 ? a : a.slice(0, e)).some((x) => x === "--help" || x === "-h")) { ` +
+    `require("fs").writeSync(1, ${JSON.stringify(text)}); process.exit(0); } }`
+  );
 }
 
 /**
@@ -342,11 +371,171 @@ export function buildOptionsForTarget(t: Target, outAbs: string): import("esbuil
  * from --check in the first place).
  */
 export function buildOne(t: Target, outAbs: string): void {
-  const r = esbuild.buildSync(buildOptionsForTarget(t, outAbs));
+  const options = buildOptionsForTarget(t, outAbs);
+  const r = esbuild.buildSync({ ...options, metafile: true });
   if (r.errors.length) {
     throw new Error(`esbuild failed for ${t.id}:\n${r.errors.map((e) => e.text).join("\n")}`);
   }
+  const bad = mainGuardViolations(t, options.absWorkingDir as string, Object.keys(r.metafile?.inputs ?? {}));
+  if (bad.length) {
+    throw new Error(
+      `${t.id}: unguarded CLI main block in a bundled module (#274). esbuild inlines it, where ` +
+        "`require.main === module` is true, so it runs on the bundle's argv. Gate it on the " +
+        "entry basename, e.g. `require.main === module && /^<name>\\.[cm]?[jt]s$/.test(" +
+        '(process.argv[1] ?? "").split(/[\\\\/]/).pop() ?? "")`:\n' +
+        bad.map((b) => `  ${b}`).join("\n"),
+    );
+  }
   normalizeShebang(outAbs);
+}
+
+// ---------------------------------------------------------------------------
+// CLI main-block guard (#274)
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ts = require(path.join(ROOT, "scripts", "node_modules", "typescript")) as typeof import("typescript");
+
+/** The argv spellings a basename gate may test (whitespace removed). */
+const ARGV_BASENAME_SHAPES: ReadonlySet<string> = new Set([
+  "process.argv[1]",
+  'process.argv[1]??""',
+  '(process.argv[1]??"").split(/[\\\\/]/).pop()??""',
+]);
+
+interface MainBlock {
+  line: number;
+  guarded: boolean;
+}
+
+/**
+ * Every `require.main === module` comparison in `src` (either operand order, `==`
+ * too), parsed as TypeScript so comments and strings never count. A block is
+ * guarded only when the comparison is a top-level `&&` conjunct of an `if`
+ * condition that also has an un-negated `<regex>.test(<…process.argv[1]…>)`
+ * conjunct whose regex accepts `<base>.ts` and rejects any other basename.
+ * Anything else (`||`, `!`, a ternary, an assignment) fails closed.
+ */
+function mainBlocks(src: string, base: string, forbidden: readonly string[] = []): MainBlock[] {
+  // Broad on purpose: `require . main` and `require["main"]` must still be parsed.
+  if (!/\brequire\b/.test(src) || !/\bmain\b/.test(src)) return [];
+  const sf = ts.createSourceFile("x.ts", src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const out: MainBlock[] = [];
+  const unwrap = (n: import("typescript").Expression): import("typescript").Expression =>
+    ts.isParenthesizedExpression(n) ? unwrap(n.expression) : n;
+  const conjuncts = (n: import("typescript").Expression): import("typescript").Expression[] => {
+    const e = unwrap(n);
+    return ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
+      ? [...conjuncts(e.left), ...conjuncts(e.right)]
+      : [e];
+  };
+  const isRequire = (n: import("typescript").Node): boolean => ts.isIdentifier(n) && n.text === "require";
+  const isRequireMain = (n: import("typescript").Node): boolean =>
+    (ts.isPropertyAccessExpression(n) && n.name.text === "main" && isRequire(unwrap(n.expression))) ||
+    (ts.isElementAccessExpression(n) &&
+      ts.isStringLiteralLike(n.argumentExpression) &&
+      n.argumentExpression.text === "main" &&
+      isRequire(unwrap(n.expression)));
+  const isModule = (n: import("typescript").Node): boolean => ts.isIdentifier(n) && n.text === "module";
+  const isMainCompare = (n: import("typescript").Node): boolean => {
+    if (!ts.isBinaryExpression(n)) return false;
+    const k = n.operatorToken.kind;
+    if (k !== ts.SyntaxKind.EqualsEqualsEqualsToken && k !== ts.SyntaxKind.EqualsEqualsToken) return false;
+    const l = unwrap(n.left);
+    const r = unwrap(n.right);
+    return (isRequireMain(l) && isModule(r)) || (isModule(l) && isRequireMain(r));
+  };
+  const acceptsOnlyBase = (re: RegExp): boolean => {
+    const own = [`${base}.ts`, `/p/${base}.ts`, `${base}.js`, `/p/${base}.js`].some((x) => re.test(x));
+    const other = ["other.js", "/p/other.js", `/p/x${base}.js`, `/p/${base}x.js`, `x${base}.ts`, ...forbidden]
+      .flatMap((x) => [x, `/p/${x}`])
+      .some((x) => re.test(x));
+    return own && !other;
+  };
+  const isBasenameTest = (n: import("typescript").Expression): boolean => {
+    if (!ts.isCallExpression(n) || !ts.isPropertyAccessExpression(n.expression) || n.expression.name.text !== "test") return false;
+    if (n.arguments.length !== 1 || !ARGV_BASENAME_SHAPES.has(n.arguments[0].getText(sf).replace(/\s+/g, ""))) return false;
+    const target = unwrap(n.expression.expression);
+    let re: RegExp | undefined;
+    try {
+      if (ts.isRegularExpressionLiteral(target)) {
+        const t = target.text;
+        re = new RegExp(t.slice(1, t.lastIndexOf("/")), t.slice(t.lastIndexOf("/") + 1));
+      } else if (
+        ts.isNewExpression(target) &&
+        ts.isIdentifier(target.expression) &&
+        target.expression.text === "RegExp" &&
+        target.arguments?.length === 1 &&
+        ts.isStringLiteralLike(target.arguments[0])
+      ) {
+        re = new RegExp(target.arguments[0].text);
+      }
+    } catch {
+      return false;
+    }
+    return re !== undefined && acceptsOnlyBase(re);
+  };
+  const visit = (n: import("typescript").Node): void => {
+    // Every `require.main` reference counts, so `!==`, `!(...)` or an alias fails
+    // closed; only `require.main === module` inside a guarded `if` can pass.
+    if (isRequireMain(n)) {
+      let cmp: import("typescript").Node = n;
+      while (cmp.parent && ts.isParenthesizedExpression(cmp.parent)) cmp = cmp.parent;
+      const compare = cmp.parent && isMainCompare(cmp.parent) ? cmp.parent : undefined;
+      let guarded = false;
+      let p: import("typescript").Node = compare ?? n;
+      while (p.parent && (ts.isParenthesizedExpression(p.parent) || (ts.isBinaryExpression(p.parent) && p.parent.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken))) {
+        p = p.parent;
+      }
+      if (compare && p.parent && ts.isIfStatement(p.parent) && p.parent.expression === p) {
+        guarded = conjuncts(p as import("typescript").Expression).some(isBasenameTest);
+      }
+      out.push({ line: sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1, guarded });
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+/**
+ * 1-based lines of the main blocks in `src` that are not basename-guarded (see
+ * mainBlocks). `forbidden` names basenames the guard must reject; the compile
+ * passes every shipped bundle name, so a guard that also matches one fails.
+ */
+export function unguardedMainBlocks(src: string, base: string, forbidden: readonly string[] = []): number[] {
+  return mainBlocks(src, base, forbidden).filter((b) => !b.guarded).map((b) => b.line);
+}
+
+/** Every output basename the compile ships (`trace-summarize.js`, …). */
+function shippedBasenames(): string[] {
+  return [...new Set(targets().map((x) => path.basename(x.out)))];
+}
+
+/**
+ * Violations for one target, from esbuild's metafile inputs. A non-entry module's
+ * main block must be basename-guarded. A guarded entry must be guarded on the name
+ * it ships as, or its own CLI never runs from `runtime/scripts/<id>.js`.
+ */
+export function mainGuardViolations(t: Target, absWorkingDir: string, inputs: string[]): string[] {
+  const entryAbs = path.join(ROOT, t.entry);
+  const outBase = path.basename(t.out).replace(/\.[cm]?js$/, "");
+  const bad: string[] = [];
+  const shipped = shippedBasenames();
+  for (const input of inputs) {
+    const abs = path.resolve(absWorkingDir, input);
+    if (abs.split(path.sep).includes("node_modules") || !/\.[cm]?[jt]s$/.test(abs)) continue;
+    const src = fs.readFileSync(abs, "utf8");
+    const base = path.basename(abs).replace(/\.[cm]?[jt]s$/, "");
+    const rel = path.relative(ROOT, abs);
+    const forbidden = shipped.filter((x) => x !== `${base}.js`);
+    if (abs !== entryAbs) {
+      for (const line of unguardedMainBlocks(src, base, forbidden)) bad.push(`${rel}:${line}`);
+    } else if (base !== outBase && mainBlocks(src, base, forbidden).some((b) => b.guarded)) {
+      bad.push(`${rel}: entry guarded on "${base}" but ships as ${t.out}`);
+    }
+  }
+  return bad;
 }
 
 /**

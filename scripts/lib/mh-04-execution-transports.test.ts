@@ -619,17 +619,110 @@ describe("TmuxExecutionTransport — the tmux seam", () => {
     expect(runner.calls).toHaveLength(0);
   });
 
-  it("sends a payload through send-keys, and reports a send failure typed", () => {
-    const { transport, runner } = tmux([OK]);
+  /**
+   * #179 — a pane runner: `display-message` returns the foreground command;
+   * each `capture-pane` returns the next screen; after `send-keys` lands,
+   * captures return `afterSend`.
+   */
+  const READY = "│ >                │\n  ? for shortcuts";
+  const BUSY = "⠋ Working… (3s · esc to interrupt)\n│ >                │";
+  function paneRun(
+    screens: string[],
+    afterSend: string | null,
+    { command = "claude", sendResult = OK }: { command?: string; sendResult?: ExecutionRunResult } = {},
+  ) {
+    const calls: Array<{ cmd: string; args: string[] }> = [];
+    const pending = [...screens];
+    let sent = false;
+    const run: ExecutionRunFn = (cmd, args) => {
+      calls.push({ cmd, args });
+      if (args[0] === "display-message") return { status: 0, stdout: `${command}\n`, stderr: "" };
+      if (args[0] === "send-keys") {
+        sent = sendResult.status === 0;
+        return sendResult;
+      }
+      if (args[0] === "capture-pane") {
+        const screen = sent && afterSend !== null ? afterSend : (pending.length > 1 ? pending.shift()! : pending[0]);
+        return { status: 0, stdout: screen, stderr: "" };
+      }
+      return OK;
+    };
+    const transport = new TmuxExecutionTransport({ run, clock: steppingClock(5), sleep: () => undefined, sendPollLimit: 6 });
+    return { calls, transport };
+  }
+  const verbs = (calls: Array<{ args: string[] }>) => calls.map((c) => c.args[0]);
+
+  it("#179: holds a message while the agent is busy, sends once input-ready, and confirms pickup", () => {
+    const { calls, transport } = paneRun([BUSY, BUSY, READY, READY, READY], BUSY);
     const ok = transport.send(HANDLE, "status?");
     assertClosedOutcome(ok);
     expect(ok.status).toBe("succeeded");
-    expect(runner.calls[0].args[0]).toBe("send-keys");
+    expect(ok.facts["delivered"]).toBe(true);
+    expect(verbs(calls)).toEqual([
+      "display-message",
+      "capture-pane", "capture-pane", "capture-pane", "capture-pane", "capture-pane",
+      "display-message", "send-keys", "capture-pane",
+    ]);
+  });
 
-    const { transport: bad } = tmux([NONZERO]);
-    const failure = bad.send(HANDLE, "status?");
+  it("#179: a quiet pane running a non-agent command gets NO keys (not_agent_pane)", () => {
+    const { calls, transport } = paneRun([""], null, { command: "sleep" });
+    const result = transport.send(HANDLE, "status?");
+    assertClosedOutcome(result);
+    expect(result.status).toBe("failed");
+    expect(result.facts["reason"]).toBe("not_agent_pane");
+    expect(result.facts["delivered"]).toBe(false);
+    expect(verbs(calls)).toEqual(["display-message"]);
+  });
+
+  it("#179: an agent pane whose host disagrees with the handle is refused, never guessed", () => {
+    const { calls, transport } = paneRun([READY], null, { command: "claude" });
+    const result = transport.send({ ...HANDLE, host_kind: "codex" }, "status?");
+    expect(result.facts["reason"]).toBe("not_agent_pane");
+    expect(verbs(calls)).not.toContain("send-keys");
+  });
+
+  it("#179: a quiet busy agent (busy marker, static screen) gets NO keys", () => {
+    const { calls, transport } = paneRun([BUSY], null);
+    const result = transport.send(HANDLE, "status?");
+    expect(result.status).toBe("failed");
+    expect(result.reason_code).toBe("deadline_exceeded");
+    expect(result.facts["delivered"]).toBe(false);
+    expect(verbs(calls)).not.toContain("send-keys");
+  });
+
+  it("#179: a static screen with no input-ready marker is not idle", () => {
+    const { calls, transport } = paneRun(["compiling…"], null);
+    expect(transport.send(HANDLE, "status?").reason_code).toBe("deadline_exceeded");
+    expect(verbs(calls)).not.toContain("send-keys");
+  });
+
+  it("#179: two ready captures are not enough; the pane must hold for three", () => {
+    const { calls, transport } = paneRun([READY, READY, BUSY, READY, READY, READY], BUSY);
+    expect(transport.send(HANDLE, "status?").status).toBe("succeeded");
+    expect(verbs(calls).indexOf("send-keys")).toBe(8);
+  });
+
+  it("#179: a text echo while the pane stays input-ready is NOT pickup", () => {
+    const { transport } = paneRun([READY, READY, READY], "│ > status?        │\n  ? for shortcuts");
+    const result = transport.send(HANDLE, "status?");
+    expect(result.status).toBe("failed");
+    expect(result.reason_code).toBe("send_failed");
+    expect(result.facts["delivered"]).toBe(false);
+  });
+
+  it("reports a send-keys failure typed", () => {
+    const { transport } = paneRun([READY, READY, READY], null, { sendResult: NONZERO });
+    const failure = transport.send(HANDLE, "status?");
     expect(failure.status).toBe("failed");
     expect(failure.reason_code).toBe("send_failed");
+  });
+
+  it("reports a missing tmux on the pane probe as transport_unavailable", () => {
+    const { transport } = tmux([ABSENT]);
+    const failure = transport.send(HANDLE, "status?");
+    expect(failure.status).toBe("failed");
+    expect(failure.reason_code).toBe("transport_unavailable");
   });
 
   it("waits until the session is gone → succeeded", () => {

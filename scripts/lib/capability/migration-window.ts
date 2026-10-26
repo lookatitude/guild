@@ -388,12 +388,85 @@ function writeTransitionIntent(projectRoot: string, operation: "start" | "advanc
   return intent;
 }
 
-function applyMigrationTransition(projectRoot: string, intent: MigrationTransitionIntentV1): void {
+/** Every regular file under `.guild/`, relative to the root. Symlinks are listed, never followed. */
+function listGuildFiles(root: string): Set<string> {
+  const out = new Set<string>();
+  const stack = [".guild"];
+  while (stack.length > 0) {
+    const rel = stack.pop() as string;
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(path.join(root, rel), { withFileTypes: true }); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
+    for (const entry of entries) {
+      const child = `${rel}/${entry.name}`;
+      if (entry.isDirectory()) stack.push(child); else out.add(child);
+    }
+  }
+  return out;
+}
+
+function readTargetBytes(root: string, relativePath: string): Buffer | null {
+  try { return fs.readFileSync(path.join(root, relativePath)); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
+}
+
+export interface MigrationTransitionAccounting {
+  /** The transaction's own targets. */
+  readonly targets: readonly string[];
+  /** Files something else (e.g. a hook) created under `.guild/` during apply; kept, never deleted. */
+  readonly foreign_guild_writes: readonly string[];
+}
+
+/**
+ * Snapshot every target, write, then compare the landed image to the intended
+ * postimage. On mismatch every target is restored from the snapshot and the
+ * intent is removed; files created by others during apply are kept and named.
+ */
+function applyMigrationTransition(projectRoot: string, intent: MigrationTransitionIntentV1): MigrationTransitionAccounting {
   verifyTransitionSemantics(projectRoot, intent);
+  const root = fs.realpathSync(projectRoot);
+  const restartRel = intent.restart_record ? `${MIGRATION_RESTART_HISTORY_RELPATH}/${intent.restart_record.restart_hash}.json` : null;
+  const targets = [MIGRATION_WINDOW_RELPATH, FEATURE_GATE_RELPATH, ...(restartRel ? [restartRel] : [])];
+  const snapshot = new Map(targets.map((rel) => [rel, readTargetBytes(root, rel)] as const));
+  const before = listGuildFiles(root);
+
   writeMigrationWindow(projectRoot, intent.next_window);
   writeFeatureGateRegistry(projectRoot, intent.next_gates);
   if (intent.restart_record) writeMigrationRestartRecord(projectRoot, intent.restart_record);
+
+  const landedAs = (rel: string, expected: unknown, validate: (value: unknown) => unknown): boolean => {
+    const bytes = readTargetBytes(root, rel);
+    if (bytes === null) return false;
+    try { return canonical(validate(JSON.parse(bytes.toString("utf8")))) === canonical(expected); } catch { return false; }
+  };
+  const mismatched = [
+    ...(landedAs(MIGRATION_WINDOW_RELPATH, intent.next_window, validateMigrationWindow) ? [] : [MIGRATION_WINDOW_RELPATH]),
+    ...(landedAs(FEATURE_GATE_RELPATH, intent.next_gates, validateFeatureGateRegistry) ? [] : [FEATURE_GATE_RELPATH]),
+    ...(restartRel && !landedAs(restartRel, intent.restart_record, validateMigrationRestartRecord) ? [restartRel] : []),
+  ];
+  const owned = new Set([...targets, MIGRATION_TRANSITION_RELPATH]);
+  const foreign = [...listGuildFiles(root)].filter((rel) => !before.has(rel) && !owned.has(rel)).sort();
+
+  if (mismatched.length > 0) {
+    for (const [rel, bytes] of snapshot) {
+      const target = path.join(root, rel);
+      if (bytes === null) { fs.rmSync(target, { force: true }); continue; }
+      const written = writeContainedFile(root, target, bytes, { policy: "physical" });
+      if (!written.written) throw new Error(`migration transition rollback of ${rel} refused [${written.code}]: ${written.detail}; intent retained for recovery`);
+    }
+    // The intent is the only recovery evidence: keep it unless every target is byte-equal to its snapshot.
+    const unrestored = [...snapshot].filter(([rel, bytes]) => {
+      const now = readTargetBytes(root, rel);
+      return bytes === null ? now !== null : now === null || !now.equals(bytes);
+    }).map(([rel]) => rel);
+    if (unrestored.length > 0) {
+      throw new Error(`migration transition postimage mismatch (${mismatched.join(", ")}); rollback did not restore ${unrestored.join(", ")}; intent retained for recovery`);
+    }
+    fs.unlinkSync(transitionPath(projectRoot));
+    throw new Error(`migration transition postimage mismatch (${mismatched.join(", ")}); rolled back to the snapshot; foreign .guild writes kept: ${foreign.length > 0 ? foreign.join(", ") : "(none)"}`);
+  }
   fs.unlinkSync(transitionPath(projectRoot));
+  return Object.freeze({ targets: Object.freeze(targets), foreign_guild_writes: Object.freeze(foreign) });
 }
 
 export function recoverMigrationTransition(projectRoot: string): boolean {
@@ -644,8 +717,8 @@ export function restartMigrationWindow(options: { projectRoot: string; boundaryP
   };
   const historyPath = restartRef.path;
   const intent = writeTransitionIntent(options.projectRoot, "restart", current, gates, next, nextGates, restart);
-  applyMigrationTransition(options.projectRoot, intent);
-  return Object.freeze({ status: "restarted" as const, window: next, history_path: historyPath, restart_hash: restart.restart_hash });
+  const accounting = applyMigrationTransition(options.projectRoot, intent);
+  return Object.freeze({ status: "restarted" as const, window: next, history_path: historyPath, restart_hash: restart.restart_hash, foreign_guild_writes: accounting.foreign_guild_writes });
 }
 
 function lastKnownBoundary(window: MigrationWindowV1): MigrationBoundaryV1 | null {
@@ -736,9 +809,13 @@ export function advanceMigrationWindow(options: { projectRoot: string; to: Capab
   if (!nextWindow) return { status: "refused" as const, blockers: ["next migration phase is invalid"] };
   const nextGate: CapabilityFeatureGateRegistryV1 = { ...gates, resolver_mode: options.to, revision: gates.revision + 1, updated_at: enteredAt, updated_by: options.actor, history: [...gates.history, { from: current.mode, to: options.to, reason: "D03 migration-window advance", recorded_at: enteredAt, actor: options.actor }] };
   const intent = writeTransitionIntent(options.projectRoot, "advance", current, gates, nextWindow, nextGate);
-  try { applyMigrationTransition(options.projectRoot, intent); }
-  catch (error) { return { status: "failed" as const, blockers: [`transition intent retained for deterministic recovery: ${(error as Error).message}`] }; }
-  return { status: "advanced" as const, from: current.mode, to: options.to, revision: nextGate.revision };
+  let accounting: MigrationTransitionAccounting;
+  try { accounting = applyMigrationTransition(options.projectRoot, intent); }
+  catch (error) {
+    const message = (error as Error).message;
+    return { status: "failed" as const, blockers: [/rolled back to the snapshot/.test(message) ? message : `transition intent retained for deterministic recovery: ${message}`] };
+  }
+  return { status: "advanced" as const, from: current.mode, to: options.to, revision: nextGate.revision, foreign_guild_writes: accounting.foreign_guild_writes };
 }
 
 export function legacyRemovalEligibility(options: { projectLocalDefault: string; currentVersion: string; g5Passed: boolean }) {

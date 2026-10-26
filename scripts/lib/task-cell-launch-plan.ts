@@ -32,6 +32,46 @@ function safeSegment(value: string): string {
 }
 
 /**
+ * #237 — pair each authored team entry with its plan task ids, in team order.
+ * A role listed once owns all its plan tasks. A role listed k > 1 times needs
+ * exactly k plan tasks, paired 1:1 in plan order; any other count is refused,
+ * never guessed. With no plan tasks, each same-role entry gets its own id.
+ */
+export function assignLaneTasks(
+  specialists: readonly Specialist[],
+  ownerMap: ReadonlyMap<string, readonly string[]>,
+): Array<[Specialist, string]> {
+  const byRole = new Map<string, Specialist[]>();
+  for (const specialist of specialists) {
+    const group = byRole.get(specialist.name) ?? [];
+    group.push(specialist);
+    byRole.set(specialist.name, group);
+  }
+  const tasksByEntry = new Map<Specialist, string[]>();
+  for (const [role, group] of byRole) {
+    const owned = ownerMap.get(role) ?? [];
+    if (group.length === 1) {
+      tasksByEntry.set(group[0], owned.length > 0 ? [...owned] : [role]);
+    } else if (owned.length === 0) {
+      group.forEach((entry, index) => tasksByEntry.set(entry, [entry.participant_id ?? `${role}-${index + 1}`]));
+    } else if (owned.length === group.length) {
+      group.forEach((entry, index) => tasksByEntry.set(entry, [owned[index]]));
+    } else {
+      throw new Error(
+        `task-cell launch plan: role ${role} has ${group.length} team entries but ${owned.length} plan tasks; ` +
+          "same-role entries need exactly one plan task each",
+      );
+    }
+  }
+  // Emit in authored team order, never grouped by role.
+  const assigned: Array<[Specialist, string]> = [];
+  for (const entry of specialists) {
+    for (const taskId of tasksByEntry.get(entry) ?? []) assigned.push([entry, taskId]);
+  }
+  return assigned;
+}
+
+/**
  * Expand the authored per-role team into the production per-task launch plan.
  * The semantic role stays in `name`; only the transport handle is task-unique.
  */
@@ -44,41 +84,38 @@ export function expandTaskCellLaunchLanes(
   const taskIds = new Set<string>();
   const dispatchKeys = new Set<string>();
   const instanceIds = new Set<string>();
+  const assigned = assignLaneTasks(specialists, ownerMap);
 
-  for (const specialist of specialists) {
-    const owned = ownerMap.get(specialist.name);
-    const effective = owned && owned.length > 0 ? owned : [specialist.name];
-    for (const rawTaskId of effective) {
-      const taskId = safeSegment(rawTaskId);
-      if (!taskId || taskIds.has(taskId)) {
-        throw new Error(`task-cell launch plan requires one unique logical task id; duplicate/empty: ${rawTaskId}`);
-      }
-      taskIds.add(taskId);
-      const role = safeSegment(specialist.name);
-      const dispatchKey = `${role}--${taskId}--a1`;
-      const nonce = createHash("sha256")
-        .update(`${runId}\0${specialist.name}\0${rawTaskId}\0attempt:1`)
-        .digest("hex")
-        .slice(0, 12);
-      const instanceId = `${taskId}.a1.i-${nonce}`;
-      if (dispatchKeys.has(dispatchKey) || instanceIds.has(instanceId)) {
-        throw new Error(`task-cell launch identity collision for ${specialist.name}/${rawTaskId}`);
-      }
-      dispatchKeys.add(dispatchKey);
-      instanceIds.add(instanceId);
-      lanes.push({
-        ...specialist,
-        taskId,
-        dispatch_key: dispatchKey,
-        task_cell_instance_id: instanceId,
-        task_cell_assignment_path: taskCellPaths({
-          run_id: runId,
-          logical_task_id: taskId,
-          attempt: 1,
-          instance_id: instanceId,
-        }).assignment_path,
-      });
+  for (const [specialist, rawTaskId] of assigned) {
+    const taskId = safeSegment(rawTaskId);
+    if (!taskId || taskIds.has(taskId)) {
+      throw new Error(`task-cell launch plan requires one unique logical task id; duplicate/empty: ${rawTaskId}`);
     }
+    taskIds.add(taskId);
+    const role = safeSegment(specialist.name);
+    const dispatchKey = `${role}--${taskId}--a1`;
+    const nonce = createHash("sha256")
+      .update(`${runId}\0${specialist.name}\0${rawTaskId}\0attempt:1`)
+      .digest("hex")
+      .slice(0, 12);
+    const instanceId = `${taskId}.a1.i-${nonce}`;
+    if (dispatchKeys.has(dispatchKey) || instanceIds.has(instanceId)) {
+      throw new Error(`task-cell launch identity collision for ${specialist.name}/${rawTaskId}`);
+    }
+    dispatchKeys.add(dispatchKey);
+    instanceIds.add(instanceId);
+    lanes.push({
+      ...specialist,
+      taskId,
+      dispatch_key: dispatchKey,
+      task_cell_instance_id: instanceId,
+      task_cell_assignment_path: taskCellPaths({
+        run_id: runId,
+        logical_task_id: taskId,
+        attempt: 1,
+        instance_id: instanceId,
+      }).assignment_path,
+    });
   }
   return lanes;
 }

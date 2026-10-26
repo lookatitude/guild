@@ -108,13 +108,14 @@ import {
   buildAllowMessage,
   buildBackendDegradationEvent,
   buildDenyMessage,
+  classifyLaneEvidence,
   dispatchAssertsRunId,
-  resolveBlockUnmarkedLanes,
   isGuildLaneDispatch,
+  resolveBlockUnmarkedFromSnapshot,
   isLeadProcess,
   isOverrideEngaged,
   isRunFresh,
-  readSnapshotAgentMode,
+  readRunSettingsSnapshot,
   resolveBackendDegradation,
   resolveTeamSubstrate,
   type RunIdSource,
@@ -134,7 +135,9 @@ import {
   TIER_DISPATCH_EVENT,
 } from "./lib/tier-dispatch.js";
 import { redactField as redactTierField } from "./lib/v1.4/redact-log.js";
-import { genSpanId } from "./lib/trace-v2.js";
+import { genSpanId, writePayloadSidecar } from "./lib/trace-v2.js";
+import { applySecretsPolicy, resolveTelemetryField } from "./lib/security/secrets.js";
+import { authorizeHookWrite } from "./lib/hook-binding.js";
 // G5(d) — per-tool lifecycle bound (v23x-deferred-followups rf-wi-05, origin
 // oir-wi-59). See lib/tool-turn-bound.ts header for the full mechanism.
 import { evaluateToolTurnBound, buildToolTurnAskReason } from "./lib/tool-turn-bound.js";
@@ -150,6 +153,18 @@ import { evaluateCompatibilitySkillUse } from "./lib/compatibility-skill-guard.j
 import { runDirOverride } from "./lib/run-dir-override.js";
 import { laneWikiWriteTarget } from "./lib/security/lane-wiki-guard.js";
 import { createGuildStorage } from "../src/domains/state";
+import {
+  describeProseRefusal,
+  evaluateProseContent,
+  hookToolUseId,
+  proposedWriteContent,
+  proseFileLabel,
+  proseSnapshotKey,
+  proseTargetSurface,
+  PROSE_SNAPSHOT_SEGMENT,
+  PROSE_WRITE_TOOLS,
+  recordProseSnapshot,
+} from "../src/domains/security";
 import { durableGuildDir } from "../src/domains/state";
 import { ensureStorageLayout } from "../scripts/lib/state/ensure-storage-layout.js";
 import {
@@ -202,6 +217,85 @@ function resolveRunId(cwd: string): string | undefined {
   const envRunId = process.env["GUILD_RUN_ID"];
   if (typeof envRunId === "string" && envRunId.length > 0) return envRunId;
   return readCurrentRunId(cwd);
+}
+
+// ── G04 R2: agent_prompt_sent at the subagent dispatch ─────────────────────
+
+/**
+ * Record the prompt leg of an allowed `Agent` dispatch. Run identity is the
+ * verified binding only (same as capture-telemetry). The event carries a
+ * prompt digest; the prompt itself lands only in the secrets-redacted payload
+ * sidecar. An untasked dispatch is keyed by its own span id. Never throws.
+ */
+function traceAgentPromptSent(payload: GuildHookEvent, cwd: string): void {
+  try {
+    const root = resolveGuildRoot(cwd);
+    const auth = authorizeHookWrite(root);
+    if (auth.ok === false) return;
+    const runId = auth.run_id;
+    // The destination is the verified run only — never a GUILD_RUN_DIR override,
+    // which could point the write at a run this binding does not authorize.
+    const runDir = path.join(durableGuildDir(root), "runs", runId);
+    const ti = (payload.tool_input ?? {}) as Record<string, unknown>;
+    const prompt = typeof ti["prompt"] === "string" ? ti["prompt"] : "";
+    const actorId = signatureToken(typeof ti["subagent_type"] === "string" ? ti["subagent_type"] : "agent");
+    const ts = new Date().toISOString();
+    const spanId = genSpanId(runId, "agent_prompt_sent", ts, actorId);
+    const parentSpanId = process.env["GUILD_PARENT_SPAN_ID"] || undefined;
+    // Allowlisted fields only: the dispatch `env` (binding refs, credentials)
+    // never enters the sidecar, because value-only redaction loses key context.
+    const body: Record<string, unknown> = { tool: "Agent" };
+    for (const key of ["subagent_type", "description", "prompt", "model"]) {
+      if (typeof ti[key] === "string") body[key] = ti[key];
+    }
+    const secPolicy = readSecurityConfig(cwd).secrets_policy;
+    // fail_mode_telemetry: a failed custom pattern under "closed" writes no
+    // sidecar at all; "open" keeps the built-in-redacted body and warns.
+    const scrub = resolveTelemetryField(applySecretsPolicy(JSON.stringify(body), secPolicy), secPolicy);
+    if (scrub.warn) {
+      process.stderr.write(`warn: [pre-tool-use] agent_prompt_sent scrub degraded (fail_mode_telemetry=${secPolicy.fail_mode_telemetry}).\n`);
+    }
+    const payloadRef = scrub.value === undefined ? undefined : writePayloadSidecar(
+      runDir,
+      spanId,
+      {
+        runId,
+        spanId,
+        eventType: "agent_prompt_sent",
+        ts,
+        actorId,
+        parentSpanId,
+        body,
+      },
+      (v: string) => applySecretsPolicy(v, secPolicy).value,
+    );
+    const taskId =
+      resolveDispatchAttribution(payload.tool_input)?.taskId || process.env["GUILD_TASK_ID"] || spanId;
+    emitTraceEvent(
+      makeAnalysisTraceEvent({
+        ts,
+        run_id: runId,
+        lane_id: resolveLaneAttribution() ?? "",
+        event_class: "agent_prompt_sent",
+        actor_type: "agent",
+        actor_id: actorId,
+        span_id: spanId,
+        parent_span_id: parentSpanId,
+        phase: process.env["GUILD_PHASE"] || undefined,
+        task_id: taskId,
+        prompt_hash: crypto.createHash("sha256").update(prompt).digest("hex").slice(0, 16),
+        payload_ref: payloadRef,
+        redaction: payloadRef ? "redacted" : "omitted",
+        status: "ok",
+        config_snapshot_ref: fs.existsSync(path.join(runDir, "plugin-config-snapshot.json"))
+          ? "plugin-config-snapshot.json"
+          : undefined,
+      }),
+      runDir,
+    );
+  } catch {
+    /* telemetry must never block a dispatch */
+  }
 }
 
 // ── B01H: tool_call_denied at the permission decision ──────────────────────
@@ -958,6 +1052,72 @@ function runLaneWikiWriteGate(payload: GuildHookEvent, cwd: string): boolean {
 }
 
 /**
+ * #108 / D2 PreToolUse half of the prose policy. A Write/Edit/MultiEdit to wiki, review or
+ * handoff Markdown whose resulting bytes carry a credential shape is denied, naming
+ * the span. Otherwise the prior bytes are snapshotted to session scratch so
+ * PostToolUse can restore them if a credential still reaches disk. Never throws.
+ */
+function runProseCredentialGate(payload: GuildHookEvent, cwd: string): boolean {
+  const tool = payload.tool_name ?? "";
+  if (!PROSE_WRITE_TOOLS.has(tool)) return false;
+  const ti = payload.tool_input as Record<string, unknown> | null | undefined;
+  const rawFilePath = ti && typeof ti === "object" ? ti["file_path"] : undefined;
+  if (typeof rawFilePath !== "string" || rawFilePath.length === 0) return false;
+  const guildRoot = resolveGuildRoot(cwd);
+  // A relative path is relative to the tool's cwd, not the Guild root.
+  const absPath = path.resolve(typeof payload.cwd === "string" && payload.cwd.length > 0 ? payload.cwd : cwd, rawFilePath);
+  if (proseTargetSurface(absPath, guildRoot) === null) return false;
+
+  let current: string | null = null;
+  try {
+    current = fs.readFileSync(absPath, "utf8");
+  } catch {
+    current = null;
+  }
+  const proposed = proposedWriteContent(tool, ti, current);
+  if (proposed !== null) {
+    const verdict = evaluateProseContent(proposed, readSecurityConfig(guildRoot).secrets_policy);
+    if (!verdict.ok) {
+      const reason = describeProseRefusal(verdict, proseFileLabel(absPath, guildRoot));
+      const runId = resolveRunId(cwd);
+      if (runId !== undefined && isSafeRunId(runId)) {
+        try {
+          appendSecurityEvent(
+            runDirOverride() ?? resolveRunDir(cwd, runId),
+            buildSecurityEvent({
+              run_id: runId,
+              event_type: "secret_scrub_blocked",
+              decision: "deny",
+              tool,
+              detail: reason,
+            }),
+          );
+        } catch {
+          /* observability only */
+        }
+      }
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `Guild security (secret_scrub_blocked): ${reason}`,
+          },
+        }),
+      );
+      traceToolDenial(payload, cwd, "prose_credential", "permission_denied");
+      return true;
+    }
+  }
+  recordProseSnapshot(
+    createGuildStorage(guildRoot).temporary(undefined, PROSE_SNAPSHOT_SEGMENT),
+    proseSnapshotKey(payload.session_id ?? "", hookToolUseId(payload as Record<string, unknown>), absPath),
+    current,
+  );
+  return false;
+}
+
+/**
  * Run capability-scope enforcement + MCP description hash-pin. Returns true iff
  * it emitted a PreToolUse permission decision (the caller then owns nothing
  * further and must return). Returns false to let the rest of the hook proceed.
@@ -1383,16 +1543,29 @@ function evaluateBackendDegradation(
   // Cheap-first short-circuits — these only avoid work. `resolveBackendDegradation`
   // re-checks every condition and remains the single authority on the matrix.
   if (!isLeadProcess(process.env)) return null;
-  if (!isGuildLaneDispatch(payload.tool_input, attr, prompt, runId)) return null;
+  const evidence = classifyLaneEvidence(payload.tool_input, attr, prompt, runId);
+  if (evidence === "none") return null;
 
+  // #146: ONE digest-verified read of the snapshot feeds agent_mode AND the
+  // resolved `defaults.dispatch.block_unmarked_lanes` (#93), so both values come
+  // from the same verified bytes. GUILD_BLOCK_UNMARKED_LANES stays the
+  // per-session override.
   const guildRoot = resolveGuildRoot(cwd);
-  const agentMode = readSnapshotAgentMode(guildRoot, runId);
-  if (agentMode !== TEAM_AGENT_MODE && agentMode !== AUTO_AGENT_MODE) return null;
+  const snapshot = readRunSettingsSnapshot(guildRoot, runId);
+  const snapshotTampered = snapshot.integrity === "mismatch";
+  const agentMode = snapshot.agentMode;
+  const blockUnmarked = resolveBlockUnmarkedFromSnapshot(snapshot, process.env);
+  const teamRow = agentMode === TEAM_AGENT_MODE || agentMode === AUTO_AGENT_MODE;
+  // #144: strict mode requires the env marker in every agent_mode.
+  const strictRow = blockUnmarked && evidence === "carrier_only";
+  if (!teamRow && !snapshotTampered && !strictRow) return null;
   const runFresh = isRunFresh(guildRoot, runId, runIdSource);
   if (!runFresh) return null;
 
-  // Only now pay for the subprocess probe.
-  const substrate = resolveTeamSubstrate(agentMode, process.env);
+  // Only now pay for the subprocess probe, and only where a substrate matters.
+  const substrate = teamRow && !snapshotTampered
+    ? resolveTeamSubstrate(agentMode, process.env)
+    : "none";
   const result = resolveBackendDegradation({
     toolInput: payload.tool_input,
     attr,
@@ -1403,13 +1576,8 @@ function evaluateBackendDegradation(
     overrideEngaged: isOverrideEngaged(process.env),
     isLead: true,
     runFresh,
-    // #93: the RESOLVED `defaults.dispatch.block_unmarked_lanes`, read from the
-    // same U6 snapshot file `readSnapshotAgentMode` above consulted — a SECOND
-    // readFileSync of that file, not a free ride on the first. It is paid only
-    // here, past every cheap-first short-circuit above, so it costs nothing on
-    // the overwhelming majority of tool calls that never reach this line.
-    // GUILD_BLOCK_UNMARKED_LANES is retained as the per-session override.
-    blockUnmarked: resolveBlockUnmarkedLanes(guildRoot, runId, process.env),
+    blockUnmarked,
+    snapshotTampered,
   });
   if (result.decision === "pass" || result.reason === undefined) return null;
 
@@ -1447,7 +1615,7 @@ function evaluateBackendDegradation(
         reason: result.reason,
         specialist: result.specialist ?? "",
         subagentType: result.subagentType,
-        agentMode,
+        agentMode: snapshotTampered ? "<untrusted>" : (agentMode ?? "<absent>"),
         effectiveBackend: result.effectiveBackend,
         substrate,
         evidence: result.evidence,
@@ -1800,6 +1968,10 @@ export async function main(): Promise<void> {
   // could answer an approvable `ask` for the same write.
   if (runLaneWikiWriteGate(payload, cwd)) return;
 
+  // #108 / D2 — a prose write carrying a credential shape is a hard deny naming
+  // the span; prose is never rewritten in place downstream.
+  if (runProseCredentialGate(payload, cwd)) return;
+
   // v2 security ADR — capability-scope enforcement + MCP description hash-pin.
   // Runs BEFORE the boundary guard so a security gate owns stdout for this
   // event. If it emits a permission decision, skip everything else and return.
@@ -1898,9 +2070,11 @@ export async function main(): Promise<void> {
   // security decision. Fail-open: evaluateToolTurnBound never throws, but the
   // whole block is wrapped anyway so a future change to it can never turn an
   // advisory checkpoint into a blocked tool call.
+  let askedTurnBound = false;
   try {
     const bound = evaluateToolTurnBound(runDir);
     if (bound.ask) {
+      askedTurnBound = true;
       process.stdout.write(
         JSON.stringify({
           hookSpecificOutput: {
@@ -1918,6 +2092,9 @@ export async function main(): Promise<void> {
       }\n`,
     );
   }
+
+  // G04 R2: only a dispatch every gate above let through (no deny, no ask).
+  if (toolName === "Agent" && !askedTurnBound) traceAgentPromptSent(payload, cwd);
 }
 
 // Allow tests to import without auto-executing.

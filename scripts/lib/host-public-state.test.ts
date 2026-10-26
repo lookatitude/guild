@@ -27,15 +27,17 @@ import {
   selectValidReceipt,
   validateSmokeReceipt,
   computeSmokeDigest,
+  groupSourceCommit,
   type DisplaySupport,
   type GateableRow,
   type HostSmokeReceipt,
 } from "./host-public-state";
-import { loadCommittedReceipts } from "./host-smoke-store";
+import { loadCommittedReceipts, readGuildSourceVersion } from "./host-smoke-store";
 import { generateSupportMatrix, validateSupportMatrix } from "./support-matrix";
 import { HOST_IDS, HOST_REGISTRY_ROWS, type HostId } from "./host-registry-schema";
 
 const GENERATED_AT = "2026-07-04T00:00:00Z";
+const CURRENT_VERSION = readGuildSourceVersion();
 
 function makeReceipt(host: HostId, publicState: string, boxId = "box-t"): HostSmokeReceipt {
   const identity = {
@@ -45,12 +47,13 @@ function makeReceipt(host: HostId, publicState: string, boxId = "box-t"): HostSm
     public_state_claimed: publicState as HostSmokeReceipt["identity"]["public_state_claimed"],
     verification_status_claimed: "verified" as const,
     checks: [{ concern: "binary_present", state: "verified", evidence: "test" }],
+    source_commit: "0123456789abcdef0123-456789abcdef01234567",
   };
   return {
     schema_version: "guild.host_smoke_receipt.v1",
     identity,
     smoke_digest: computeSmokeDigest(identity),
-    freshness: { captured_at: "2026-07-04", guild_version: "2.0.0" },
+    freshness: { captured_at: "2026-07-04", guild_version: CURRENT_VERSION },
   };
 }
 
@@ -78,8 +81,9 @@ describe("host-public-state — two-field honesty model", () => {
   it("promotes exactly the hosts with a valid committed receipt (evidence-derived, not claimed)", () => {
     const promoted = matrix.rows.filter((r) => r.has_valid_receipt).map((r) => r.host_id).sort();
     // L5b added the native reference host (claude-code-cli → native) + codex-cli
-    // (verified_wrapped) alongside L5's pi/antigravity wrapped-CLI receipts.
-    expect(promoted).toEqual(["antigravity-cli", "claude-code-cli", "codex-cli", "pi-cli"]);
+    // (verified_wrapped) alongside L5's pi/antigravity wrapped-CLI receipts; v3.2.0
+    // added cursor, opencode and rovo-dev wrapped-CLI receipts.
+    expect(promoted).toEqual(["antigravity-cli", "claude-code-cli", "codex-cli", "cursor", "opencode", "pi-cli", "rovo-dev"]);
     // The native host promotes to `native`; the wrapped hosts to `verified_wrapped` —
     // each to its OWN bucket's verified state, with the floor committed atomically.
     const expectedState: Record<string, string> = {
@@ -87,6 +91,9 @@ describe("host-public-state — two-field honesty model", () => {
       "codex-cli": "verified_wrapped",
       "pi-cli": "verified_wrapped",
       "antigravity-cli": "verified_wrapped",
+      cursor: "verified_wrapped",
+      opencode: "verified_wrapped",
+      "rovo-dev": "verified_wrapped",
     };
     for (const id of promoted) {
       const row = rowById.get(id as HostId)!;
@@ -97,7 +104,7 @@ describe("host-public-state — two-field honesty model", () => {
   });
 
   it("keeps an honest unverified target UNSUPPORTED (not a failure)", () => {
-    for (const id of ["cursor", "opencode", "rovo-dev", "github-copilot", "agents-file", "kiro"] as HostId[]) {
+    for (const id of ["github-copilot", "agents-file", "kiro"] as HostId[]) {
       const row = rowById.get(id)!;
       expect(row.current_public_state).toBe("unsupported");
       expect(row.verification_status).toBe("target");
@@ -161,9 +168,70 @@ describe("host-public-state — two-field honesty model", () => {
       makeReceipt("pi-cli", "verified_wrapped", "box-a"),
       // A second box claiming a different (still bucket-valid for a different bucket) value is
       // filtered out by bucket mismatch, so craft two same-bucket-but-different by forcing native.
-    ], GENERATED_AT);
+    ], GENERATED_AT, { guild_version: CURRENT_VERSION });
     expect(sel.has_valid_receipt).toBe(true); // single valid receipt → no conflict
     expect(sel.conflict).toBeNull();
+  });
+
+  it("G08 R3 — a guild_version-mismatched receipt is refused, never selected via fallback", () => {
+    const old = makeReceipt("pi-cli", "verified_wrapped");
+    old.freshness.guild_version = "2.0.0";
+    const sel = selectValidReceipt("pi-cli", "wrapped-cli", [old], GENERATED_AT, { guild_version: "3.2.0-beta.1" });
+    expect(sel.has_valid_receipt).toBe(false);
+    expect(sel.chosen).toBeNull();
+    expect(sel.refused.join("\n")).toMatch(/guild_version 2\.0\.0 !== 3\.2\.0-beta\.1/);
+    // DISCRIMINATING: the same receipt bound to its own version is selected.
+    expect(selectValidReceipt("pi-cli", "wrapped-cli", [old], GENERATED_AT, { guild_version: "2.0.0" }).has_valid_receipt).toBe(true);
+  });
+
+  it("G08 R3 — a commit-mismatched (or commit-less) receipt is refused when the caller binds a commit", () => {
+    const commitA = "a".repeat(40);
+    const commitB = "b".repeat(40);
+    const withCommit = (commit: string | undefined): HostSmokeReceipt => {
+      const r = makeReceipt("pi-cli", "verified_wrapped");
+      const identity = { ...r.identity, ...(commit ? { source_commit: groupSourceCommit(commit) } : {}) };
+      return { ...r, identity, smoke_digest: computeSmokeDigest(identity) };
+    };
+    const binding = { guild_version: CURRENT_VERSION, source_commit: commitB };
+    const mismatched = selectValidReceipt("pi-cli", "wrapped-cli", [withCommit(commitA)], GENERATED_AT, binding);
+    expect(mismatched.has_valid_receipt).toBe(false);
+    expect(mismatched.refused.join("\n")).toMatch(/source_commit/);
+    expect(selectValidReceipt("pi-cli", "wrapped-cli", [withCommit(undefined)], GENERATED_AT, binding).has_valid_receipt).toBe(false);
+    // A mismatched receipt alongside a matching one never wins: the matching one is chosen.
+    const mixed = selectValidReceipt("pi-cli", "wrapped-cli", [withCommit(commitA), withCommit(commitB)], GENERATED_AT, binding);
+    expect(mixed.has_valid_receipt).toBe(true);
+    expect(mixed.chosen!.identity.source_commit).toBe(groupSourceCommit(commitB));
+  });
+
+  it("G08 R3 — the live matrix refuses a receipt that records no source commit", () => {
+    const r = makeReceipt("cursor", "verified_wrapped");
+    const { source_commit: _commit, ...identity } = r.identity;
+    const commitless = { ...r, identity, smoke_digest: computeSmokeDigest(identity) };
+    const cursor = (receipts: HostSmokeReceipt[]) => generateSupportMatrix(GENERATED_AT, { cursor: receipts }).rows.find((row) => row.host_id === "cursor")!;
+    expect(cursor([commitless]).has_valid_receipt).toBe(false);
+    // DISCRIMINATING: the same receipt with its commit recorded promotes.
+    expect(cursor([r]).has_valid_receipt).toBe(true);
+  });
+
+  it("G08 R3 — an all-stale pool is refused (staleness disqualifies, no stale fallback)", () => {
+    const stale = makeReceipt("pi-cli", "verified_wrapped");
+    stale.freshness.captured_at = "2025-01-01";
+    const sel = selectValidReceipt("pi-cli", "wrapped-cli", [stale], "2026-07-04T00:00:00Z", { guild_version: CURRENT_VERSION });
+    expect(sel.has_valid_receipt).toBe(false);
+    expect(sel.chosen).toBeNull();
+    expect(sel.stale).toBe(true);
+    // DISCRIMINATING: inside the horizon it is selected.
+    expect(selectValidReceipt("pi-cli", "wrapped-cli", [stale], "2025-02-01T00:00:00Z", { guild_version: CURRENT_VERSION }).has_valid_receipt).toBe(true);
+  });
+
+  it("G08 R3 — the live matrix binds the manifest version: a committed receipt re-stamped to another version stops promoting", () => {
+    const committed = loadCommittedReceipts();
+    const restamped = Object.fromEntries(
+      Object.entries(committed).map(([h, rs]) => [h, rs.map((r) => ({ ...r, freshness: { ...r.freshness, guild_version: "0.0.1" } }))]),
+    );
+    const res = validateSupportMatrix(generateSupportMatrix(GENERATED_AT, restamped));
+    expect(res.valid).toBe(false);
+    expect(res.errors.join("\n")).toMatch(/claude-code-cli/);
   });
 
   it("derive functions cover the honest no-receipt path per bucket", () => {
@@ -172,6 +240,22 @@ describe("host-public-state — two-field honesty model", () => {
     const vs = deriveVerificationStatus(row, bucket, false);
     expect(vs).toBe("target"); // installability target checked BEFORE inferred
     expect(deriveCurrentPublicState("opencode", bucket, vs)).toBe("unsupported");
+  });
+
+  it("refuses a verified install/load check that lacks isolated-install provenance", () => {
+    for (const concern of ["real_install_activation", "native_plugin_load"]) {
+      const forged = makeReceipt("codex-cli", "verified_wrapped");
+      forged.identity.checks.push({ concern, state: "verified", evidence: "trust me" });
+      forged.smoke_digest = computeSmokeDigest(forged.identity);
+      const v = validateSmokeReceipt(forged);
+      expect(v.valid).toBe(false);
+      expect(v.errors.join("\n")).toContain(concern);
+
+      const honest = makeReceipt("codex-cli", "verified_wrapped");
+      honest.identity.checks.push({ concern, state: "verified", evidence: "isolated-install: observed" });
+      honest.smoke_digest = computeSmokeDigest(honest.identity);
+      expect(validateSmokeReceipt(honest).valid).toBe(true);
+    }
   });
 });
 
@@ -229,14 +313,15 @@ describe("display support — presentation-only support label (beta / app / conn
   });
 
   it("the generated matrix stamps display_support and the gate stays green", () => {
-    // Load the committed receipts so the 4 verified hosts satisfy their committed
+    // Load the committed receipts so the verified hosts satisfy their committed
     // floors (an empty-receipt matrix would honestly trip the floor-regression check).
     const matrix = generateSupportMatrix(GENERATED_AT, loadCommittedReceipts());
     const byHost = new Map(matrix.rows.map((r) => [r.host_id, r]));
     // Verified hosts read Supported; installable targets read beta; app surfaces read app;
     // the connector reads connector. Every host presents as supported in some form.
     expect(byHost.get("claude-code-cli")!.display_support).toBe("supported");
-    expect(byHost.get("cursor")!.display_support).toBe("supported_beta");
+    expect(byHost.get("cursor")!.display_support).toBe("supported");
+    expect(byHost.get("github-copilot")!.display_support).toBe("supported_beta");
     expect(byHost.get("agents-file")!.display_support).toBe("supported_beta");
     expect(byHost.get("claude-code-app")!.display_support).toBe("supported_app");
     expect(byHost.get("codex-app")!.display_support).toBe("supported_app");

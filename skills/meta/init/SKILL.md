@@ -43,20 +43,25 @@ On a **workspace** root (detected per the step below): `.guild/workspace.json`
 schema-copied here; canonical body defined in the workspace-aware-init-and-federation ADR). It is
 written by the Lane-B script, not hand-built: `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-write-manifest.js --cwd <workspace-root>`. A workspace builds
 its **own** `.guild/wiki/**` **only if** `root_wiki` is true (D-OQ2 — the
-workspace root itself has scannable top-level code); a pure federation root
-(e.g. just `docs/` + sub-repos) gets `root_wiki: false` and **no** root wiki.
+workspace root already has `.guild/wiki/` or scannable top-level code; a
+`root_wiki: true` already in the manifest is kept on re-run); a pure federation
+root (e.g. just `docs/` + sub-repos, no root wiki) gets `root_wiki: false` and
+**no** root wiki.
 No sub-guild's pages are ever copied up (federation, not duplication).
 
 On a **regular** repo (the default), nothing above is written and the path below
 is byte-for-byte unchanged:
 
 `.guild/init/<slug>.md` (the Init record), `.guild/wiki/**`, `.guild/knowledge/sources/**`,
-`.guild/settings.json` (the project config surface — scaffolded
-fully-documented **if absent**, idempotent, via
-`node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/read-guild-config.js --scaffold > .guild/settings.json`;
-never clobbered; regenerate/inspect with `/guild:config init|show|validate`),
-and — brownfield, **cheap scan tier only** — `.guild/indexes/codebase-map.json`
-plus a **confidence-tagged** `wiki/concepts/architecture-map.md` **stub**.
+the layout-2 config — `.guild/config/project.json` (the closed POLICY key
+set, KTD22), `.guild/config/workspace.json` on a workspace root, and the
+reconcile-owned `.guild/settings.json` — plus the `storage-layout.json` marker,
+all written by step 4a (never clobbered; inspect with `/guild:config show|validate`),
+and — brownfield, **cheap scan tier only** — the CodebaseMap `codebase-map.json`
+plus a **confidence-tagged** `wiki/concepts/architecture-map.md` **stub**. The
+CodebaseMap is a **derived cache** under `.guild/indexes/`: never commit it; the
+layout upgrade's `caches-out` step removes it and learn rebuilds it. No
+`registry.yaml` is written: agents and skills register by file existence.
 That pair **is Init-DONE**. The deep semantic `knowledge-graph.json` +
 `onboarding-tour.md` are **NOT** produced at Init by default — they are lazy
 and gated by `--learn` / `defaults.auto_learn`, built by `guild:learn-graph`
@@ -82,8 +87,9 @@ an explicit refresh; the full `learn-*` pipeline also runs at Init under
 4. **Workspace path (federation, not duplication):** write the federation
    manifest with `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/workspace-write-manifest.js --cwd
    <workspace-root>` → `.guild/workspace.json` (`guild.workspace.v1`, by
-   pointer). The writer sets `root_wiki` per D-OQ2 (true iff the root itself has
-   scannable top-level code) and enumerates each detected sub-guild. Build a
+   pointer). The writer sets `root_wiki` per D-OQ2 (true when the root has
+   `.guild/wiki/` or scannable top-level code; an existing `true` is kept on
+   re-run) and enumerates each detected sub-guild. Build a
    root wiki **only when** `root_wiki` is true; **never** copy a sub-guild's
    pages up. For each detected **sub-project with no `.guild/` yet**,
    **interactively OFFER** `/guild:init` on it (D-OQ3) — register it in the
@@ -91,6 +97,14 @@ an explicit refresh; the full `learn-*` pipeline also runs at Init under
    stop-and-ask posture). Re-running Init refreshes the manifest idempotently
    (no clobber of unrelated state). Run the root-wiki branch in step 5 **only
    when** `root_wiki` is true; a pure federation root stops at the manifest.
+4a. **Write the layout-2 config and stamp the layout** (every root, after the step-4
+   manifest, before the step-5 scan):
+   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/config-cmd.js reconcile sync --cwd <root>`,
+   then the layout writer
+   `node ${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/claude-code}}/runtime/scripts/migrate-guild.js --root=<root> --mode=migrate --recheck`.
+   `--recheck` runs the chain even when run start already stamped the marker,
+   so the policy reconcile just wrote is split into the scoped `config/*.json`
+   files. Surface its report; a non-zero exit means it did not apply.
 5. Brownfield (**cheap scan tier = Init-DONE**): invoke
    `guild:learn-map`'s stage-1 scan → `codebase-map.json`, build the
    wiki, and write the confidence-tagged `architecture-map.md` **stub**. Do
@@ -170,7 +184,7 @@ hard set). Writes confined to `.guild/` (DH-3 boundary).
 - Workspace root (≥1 child with nested `.git/` or `.guild/`, e.g. just `docs/` +
   sub-repos) → classified `workspace`, `.guild/workspace.json`
   (`guild.workspace.v1`) written via `write-manifest.ts`, `root_wiki: false`
-  (no top-level code), no sub-guild pages copied up; verdict surfaced.
+  (no `.guild/wiki/`, no top-level code), no sub-guild pages copied up; verdict surfaced.
 - Workspace with a detected sub-project that has **no `.guild/`** → it is
   registered in the manifest and `/guild:init` on it is **offered**
   interactively (never auto-run, never forced).

@@ -559,6 +559,8 @@ interface TokenTotals {
   input: number;
   output: number;
   cached: number;
+  /** Sum of MEASURED cost_usd; null while no event in the group carried one. */
+  cost_usd: number | null;
 }
 
 function num(v: unknown): number {
@@ -581,17 +583,28 @@ function eventTokens(e: TelemetryEvent): TokenTotals {
   }
   input += num(e.tokens_in);
   output += num(e.tokens_out);
-  return { input, output, cached };
+  return { input, output, cached, cost_usd: eventCost(e) };
+}
+
+/**
+ * G04 R3: measured cost is a finite, non-negative `tokens.cost_usd` number.
+ * Anything else (absent, null, a string, negative) is UNMEASURED — excluded
+ * from the sum, never coerced to 0.
+ */
+function eventCost(e: TelemetryEvent): number | null {
+  const v = e.tokens && typeof e.tokens === "object" ? (e.tokens as Record<string, unknown>)["cost_usd"] : undefined;
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
 }
 
 function hasTokens(t: TokenTotals): boolean {
-  return t.input > 0 || t.output > 0 || t.cached > 0;
+  return t.input > 0 || t.output > 0 || t.cached > 0 || t.cost_usd !== null;
 }
 
 function addTokens(into: TokenTotals, t: TokenTotals): void {
   into.input += t.input;
   into.output += t.output;
   into.cached += t.cached;
+  if (t.cost_usd !== null) into.cost_usd = (into.cost_usd ?? 0) + t.cost_usd;
 }
 
 function bucketAdd(
@@ -599,7 +612,7 @@ function bucketAdd(
   key: string,
   t: TokenTotals
 ): void {
-  const cur = m.get(key) ?? { input: 0, output: 0, cached: 0 };
+  const cur = m.get(key) ?? { input: 0, output: 0, cached: 0, cost_usd: null };
   addTokens(cur, t);
   m.set(key, cur);
 }
@@ -608,7 +621,7 @@ function bucketAdd(
 function rollupRows(
   m: Map<string, TokenTotals>,
   keyName: string
-): Record<string, string | number>[] {
+): Record<string, string | number | null>[] {
   return Array.from(m.entries())
     .map(([key, t]) => ({
       [keyName]: key,
@@ -616,6 +629,7 @@ function rollupRows(
       output: t.output,
       cached: t.cached,
       total: t.input + t.output,
+      cost_usd: t.cost_usd,
     }))
     .sort(
       (a, b) =>
@@ -918,7 +932,8 @@ export function buildServer(): McpServer {
       title: "Roll up token cost across Guild runs",
       description:
         "Aggregate guild.trace_event.v2 token usage (input/output/cached) " +
-        "across recorded events, broken down by tier, model, and specialist. " +
+        "and measured cost_usd across recorded events, broken down by tier, " +
+        "model, and specialist. Unmeasured cost is excluded (null), never 0. " +
         "Merges the v2 `tokens` object and the v1.4 tool_call tokens_in/out " +
         "scalars. Reads logs/v1.4-events.jsonl (falls back to events.ndjson). " +
         "Read-only; deterministic sort (total desc, then key).",
@@ -939,12 +954,13 @@ export function buildServer(): McpServer {
       const runIds = run_id ? [run_id] : listRunIds(base);
       const cutoff = since ? new Date(since).getTime() : null;
 
-      const totals: TokenTotals = { input: 0, output: 0, cached: 0 };
+      const totals: TokenTotals = { input: 0, output: 0, cached: 0, cost_usd: null };
       const byTier = new Map<string, TokenTotals>();
       const byModel = new Map<string, TokenTotals>();
       const bySpecialist = new Map<string, TokenTotals>();
       let eventCount = 0;
       let llmEventCount = 0;
+      let costMeasured = 0;
 
       for (const rid of runIds) {
         const runDir = path.join(runsDir(base), rid);
@@ -961,6 +977,7 @@ export function buildServer(): McpServer {
           const tk = eventTokens(e);
           if (!hasTokens(tk)) continue;
           llmEventCount++;
+          if (tk.cost_usd !== null) costMeasured++;
           addTokens(totals, tk);
           bucketAdd(byTier, typeof e.tier === "string" && e.tier ? e.tier : "(none)", tk);
           bucketAdd(byModel, typeof e.model === "string" && e.model ? e.model : "(none)", tk);
@@ -973,11 +990,14 @@ export function buildServer(): McpServer {
         scope: run_id ? `run:${run_id}` : "all-runs",
         event_count: eventCount,
         llm_event_count: llmEventCount,
+        cost_measured_event_count: costMeasured,
+        cost_unmeasured_event_count: llmEventCount - costMeasured,
         totals: {
           input: totals.input,
           output: totals.output,
           cached: totals.cached,
           total: totals.input + totals.output,
+          cost_usd: totals.cost_usd,
         },
         by_tier: rollupRows(byTier, "tier"),
         by_model: rollupRows(byModel, "model"),

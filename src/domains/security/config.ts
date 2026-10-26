@@ -100,9 +100,10 @@ export interface SecurityConfig {
 }
 
 /**
- * Documented defaults. MUST mirror `scripts/read-guild-config.ts` DEFAULTS
- * (DEFAULTS.security / .secrets_policy / .mcp). Kept as a factory so callers
- * can never mutate a shared object.
+ * Documented defaults. MUST equal the canonical DEFAULTS in
+ * `src/domains/config/config-defaults.ts` (.security / .secrets_policy / .mcp /
+ * .defaults.allowed_tools); `hooks/__tests__/security-config.test.ts` parity-gates
+ * it. Kept as a factory so callers can never mutate a shared object.
  */
 export function securityDefaults(): SecurityConfig {
   return {

@@ -108,15 +108,23 @@ function importanceAtIngestEnabled(cwd: string): boolean {
 function main(): void {
   ensureStorageLayout(process.cwd(), { detectOnly: true });
   const argv = process.argv.slice(2);
-  const get = (flag: string): string | undefined => {
-    const hit = argv.find((a) => a === flag || a.startsWith(`${flag}=`));
-    if (!hit) return undefined;
-    return hit.includes("=") ? hit.slice(hit.indexOf("=") + 1) : "true";
-  };
-  const cwd = get("--cwd") ?? process.env["PWD"] ?? process.cwd();
-  const dryRun = !!get("--dry-run");
-  const force = !!get("--force");
-  const configGate = !get("--no-config-gate"); // default: respect models.importanceAtIngest
+  // `--cwd <path>` and `--cwd=<path>` both bind; a bare `--cwd` used to bind the
+  // string "true" and stamp nothing with exit 0 (#270).
+  let cwdArg: string | undefined;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a !== "--cwd" && !a.startsWith("--cwd=")) continue;
+    const v = a === "--cwd" ? argv[++i] : a.slice("--cwd=".length);
+    if (!v || v.startsWith("--")) {
+      process.stderr.write("[stamp-recall-importance] ERROR: --cwd needs a path (--cwd <path> or --cwd=<path>)\n");
+      process.exit(2);
+    }
+    cwdArg = v;
+  }
+  const cwd = cwdArg ?? process.env["PWD"] ?? process.cwd();
+  const dryRun = argv.includes("--dry-run");
+  const force = argv.includes("--force");
+  const configGate = !argv.includes("--no-config-gate"); // default: respect models.importanceAtIngest
 
   const gated = configGate && !importanceAtIngestEnabled(cwd);
   if (gated) {

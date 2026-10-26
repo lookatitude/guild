@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+if (require.main === module) { const a = process.argv.slice(2), e = a.indexOf("--"); if ((e < 0 ? a : a.slice(0, e)).some((x) => x === "--help" || x === "-h")) { require("fs").writeSync(1, "usage: node runtime/scripts/analyze-structural.js [--cwd <path>] [--print]\n"); process.exit(0); } }
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -97,7 +98,7 @@ function upgradeChain() {
 }
 function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
   const status = detect(cwd);
-  if (status.state === "current") return status;
+  if (status.state === "current" && opts.recheck !== true) return status;
   if (status.state === "future") {
     throw new Error(
       `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
@@ -109,7 +110,8 @@ function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
     root: status.root,
     fromVersion: status.version,
     toVersion: CURRENT_LAYOUT_VERSION,
-    dryRun: opts.dryRun === true
+    dryRun: opts.dryRun === true,
+    fresh: opts.recheck === true
   });
   const after = detect(cwd);
   return { ...after, upgrade: result };
@@ -149,9 +151,17 @@ var SCHEMA = {
   knowledgeLinks: "guild.knowledge_links.v1"
 };
 function parseCwd(argv) {
-  const idx = argv.indexOf("--cwd");
-  if (idx !== -1 && argv[idx + 1]) return argv[idx + 1];
-  return process.env["GUILD_CWD"] ?? process.cwd();
+  return parseFlag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
+}
+function parseFlag(argv, name) {
+  const eq = `--${name}=`;
+  for (let i = 0; i < argv.length; i++) {
+    const v = argv[i] === `--${name}` ? argv[i + 1] : argv[i].startsWith(eq) ? argv[i].slice(eq.length) : void 0;
+    if (v === void 0 && argv[i] !== `--${name}`) continue;
+    if (!v || v.startsWith("--")) throw new Error(`--${name} needs a value (--${name} <v> or --${name}=<v>)`);
+    return v;
+  }
+  return void 0;
 }
 function hasFlag(argv, name) {
   return argv.includes(`--${name}`);
@@ -360,8 +370,24 @@ function createIgnoreFilter(projectRoot) {
 }
 
 // scripts/learn/lib/walk.ts
+function registeredSubGuildPaths(repoRoot) {
+  const out = /* @__PURE__ */ new Set();
+  let manifest;
+  try {
+    manifest = JSON.parse(fs5.readFileSync(path5.join(durableGuildDir(repoRoot), "workspace.json"), "utf8"));
+  } catch {
+    return out;
+  }
+  if (manifest === null || typeof manifest !== "object" || manifest.is_workspace !== true || !Array.isArray(manifest.sub_guilds)) return out;
+  for (const sg of manifest.sub_guilds) {
+    const p = sg?.path;
+    if (typeof p === "string" && p !== "" && p !== "." && p !== ".." && !/[\\/]/.test(p)) out.add(p);
+  }
+  return out;
+}
 function walkRepo(repoRoot, maxFiles = 2e4) {
   const filter = createIgnoreFilter(repoRoot);
+  const subGuilds = registeredSubGuildPaths(repoRoot);
   const out = [];
   const visit = (absDir) => {
     if (out.length >= maxFiles) return;
@@ -376,6 +402,7 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
       const abs = path5.join(absDir, e.name);
       const rel = path5.relative(repoRoot, abs).replace(/\\/g, "/");
       if (e.isDirectory()) {
+        if (subGuilds.has(rel)) continue;
         if (filter.isIgnored(rel) || filter.isIgnored(rel + "/")) continue;
         visit(abs);
       } else if (e.isFile()) {
@@ -728,6 +755,12 @@ function analyzePython(lines) {
   }
   return finalize(lines, "python", functions, classes, imports, exports2);
 }
+function genericExported(lang, match) {
+  const name = match[1];
+  if (lang === "go") return /^[A-Z]/.test(name);
+  const prefix = match[0].slice(0, match[0].lastIndexOf(name));
+  return /\b(?:export|public)\b/.test(prefix) || /\bpub\b(?!\s*\()/.test(prefix);
+}
 function analyzeGeneric(lines, lang) {
   const functions = [];
   const classes = [];
@@ -746,17 +779,17 @@ function analyzeGeneric(lines, lang) {
     }
     const mClass = line.match(reClass);
     if (mClass) {
-      classes.push({ name: mClass[1], lineRange: [i + 1, blockEnd(lines, i)], exported: true, methods: [] });
+      classes.push({ name: mClass[1], lineRange: [i + 1, blockEnd(lines, i)], exported: genericExported(lang, mClass), methods: [] });
       continue;
     }
     const mGo = line.match(reGoFn);
     if (mGo) {
-      functions.push({ name: mGo[1], lineRange: [i + 1, blockEnd(lines, i)], exported: /^[A-Z]/.test(mGo[1]) });
+      functions.push({ name: mGo[1], lineRange: [i + 1, blockEnd(lines, i)], exported: genericExported(lang, mGo) });
       continue;
     }
     const mFn = line.match(reFn);
     if (mFn && !/\b(if|for|while|switch|return)\b/.test(mFn[1])) {
-      functions.push({ name: mFn[1], lineRange: [i + 1, blockEnd(lines, i)], exported: true });
+      functions.push({ name: mFn[1], lineRange: [i + 1, blockEnd(lines, i)], exported: genericExported(lang, mFn) });
     }
   }
   return finalize(lines, lang, functions, classes, imports, exports2);

@@ -2,12 +2,12 @@
   "schema_version": "guild.mcp_description_pins.v2",
   "generated_by": "scripts/compile.ts",
   "binary": "runtime/guild-mcp.js",
-  "binary_sha256": "684d725ea02bd700a3b31b6c02300617b25a00ee32bed2e36a732b41387919cc",
+  "binary_sha256": "47696d632cbc2d6841ce83bf7028f138ef0b2b2344aa96680b5f5dcf98b4ca78",
   "servers": {
     "guild-telemetry": {
       "mcp_id": "trace",
       "tools": {
-        "trace_cost_rollup": "c85ab25c8503aa348e61783c243c0d10f65982048dffc2a79ba4f69e12800e5c",
+        "trace_cost_rollup": "3bd9a804a86d0e22da15f7f40f79b7fa4de4073ab478a12c99d94165a7b825a0",
         "trace_list_runs": "e063de9bb48c2c688309477f5b72e98b46ab6ccfcc76f5dac4c9e468688a59ea",
         "trace_query": "cc55ab53f453bf337c9659d6abd9cd382dcead54857ecd9c5530fd5facbabbe7",
         "trace_summary": "bd0eacbda7d0e49df1790a7c9a3082a3aafca3f51c7293f52daacbbd58fe0daa"

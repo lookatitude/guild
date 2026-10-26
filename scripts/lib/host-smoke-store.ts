@@ -33,6 +33,15 @@ export function defaultEvidenceRoot(): string {
   return join(__dirname, "..", "..", EVIDENCE_HOST_SMOKE_REL);
 }
 
+/** The source version receipts are bound to: the authored `.claude-plugin/plugin.json` version. */
+export function readGuildSourceVersion(pluginRoot: string = join(__dirname, "..", "..")): string {
+  const version = (JSON.parse(readFileSync(join(pluginRoot, ".claude-plugin", "plugin.json"), "utf8")) as { version?: unknown }).version;
+  if (typeof version !== "string" || version.length === 0) {
+    throw new Error("readGuildSourceVersion: .claude-plugin/plugin.json has no string version");
+  }
+  return version;
+}
+
 /**
  * Load every committed receipt, keyed by host id. Absent tree / absent host dir →
  * empty. Only files that parse + structurally validate are returned; a malformed
@@ -123,10 +132,10 @@ export function writeCommittedReceipt(
     } catch {
       committed = null;
     }
-    const committedDigest =
-      committed && typeof committed === "object" ? (committed as Record<string, unknown>)["smoke_digest"] : undefined;
-    // No-churn: identity-equal (digest match) AND not stale → leave byte-for-byte alone.
-    if (committedDigest === withDigest.smoke_digest && !opts.stale) {
+    const c = committed && typeof committed === "object" ? (committed as Record<string, unknown>) : {};
+    const committedVersion = (c["freshness"] as Record<string, unknown> | undefined)?.["guild_version"];
+    // No-churn: identity-equal (digest match), same source version AND not stale → leave byte-for-byte alone.
+    if (c["smoke_digest"] === withDigest.smoke_digest && committedVersion === receipt.freshness.guild_version && !opts.stale) {
       return { path, wrote: false, reason: "unchanged non-stale receipt — left byte-for-byte alone (no churn)" };
     }
   }

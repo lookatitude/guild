@@ -2,6 +2,10 @@
 
 ## decisions
 
+- [learn-bare-route-router](decisions/learn-bare-route-router.md) - 2026-10-19 - Bare `/guild:learn` routes through the pure `routeLearn` knowledge-domain function (compiled `learn-route.js`); the skill prose describes routes, never decides them.
+- [supersession-dispatch-trace-v1](decisions/supersession-dispatch-trace-v1.md) - 2026-10-18 - `agent_dispatched` retired; dispatch visibility binds to `guild.trace.dispatch.v1`.
+- [supersession-host-event-v1](decisions/supersession-host-event-v1.md) - 2026-10-18 - `guild.host_event.v1` retired; live path is `guild.normalized_host_event.v1`.
+- [supersession-install-channel-model](decisions/supersession-install-channel-model.md) - 2026-10-18 - the v2 committed-dist marketplace flip is superseded by the authored-root + on-demand projection model.
 - [defer-release-app-for-short-path](decisions/defer-release-app-for-short-path.md) - 2026-08-30 - Keep the one-PR `next -> main` release path now: CI derives and publishes the stable tag from the reviewed merge using the built-in repository token; defer App-backed metadata convergence.
 - [stacked-prs-for-dependent-lanes](decisions/stacked-prs-for-dependent-lanes.md) - 2026-08-05 - Dependent lanes stack their PR on the base lane's branch (#90 on #85, #89 on #86) and the lead summary is the merge-train contract (exact merge order + stacked/skill-surface flags); after each merge, rebase the next PR and regenerate generated files (hooks/dist, module resources) instead of hand-resolving conflicts. Source: v23x-deferred-followups merge train (2026-07-25).
 - [skill-surface-lane-serialization](decisions/skill-surface-lane-serialization.md) - 2026-08-05 - At most ONE lane touching `skills/**` or `commands/**` may be live at a time (whole-tree RATIFIED_TREES pins collide across concurrent worktrees); skill-surface PRs merge consecutively, and a later surface PR re-ratifies its pins from the merged tree if anything lands between. Standing pattern, not initiative-specific. Source: v23x-deferred-followups (rf-wi-06 serialized, #86→#89).

@@ -47,7 +47,25 @@ import { normalizeTokens, resolveTraceV2Fields, type TraceTokens } from "./lib/t
 import { resolveDispatchAttribution } from "./lib/dispatch-attribution.js";
 import { resolveLaneAttribution } from "./lib/lane-attribution.js";
 // HK-06: durable-surface (wiki/review/handoffs/provenance) PostToolUse scrub-in-place (D-SECRETS).
-import { scrubbedWrite, type ScrubSurface } from "./lib/security/scrubbed-write.js";
+import {
+  scrubbedWrite,
+  writeScrubApprovalRequest,
+  type ScrubSurface,
+} from "./lib/security/scrubbed-write.js";
+import {
+  classifyGuildScrubSurface,
+  describeProseRefusal,
+  evaluateProseContent,
+  hookToolUseId,
+  priorFromToolResponse,
+  proposedWriteContent,
+  proseSnapshotKey,
+  proseTargetSurface,
+  PROSE_SNAPSHOT_SEGMENT,
+  PROSE_WRITE_TOOLS,
+  restoreProseSnapshot,
+  takeProseSnapshot,
+} from "../src/domains/security";
 import { buildSecurityEvent, appendSecurityEvent } from "./lib/security/events.js";
 import { readSecurityConfig, type SecretsPolicy } from "./lib/security/config.js";
 import { applySecretsPolicy, resolveTelemetryField } from "./lib/security/secrets.js";
@@ -216,28 +234,87 @@ function handoffRef(runDir: string, filePath: string, guildRoot: string): string
 // ── HK-06: durable-surface PostToolUse scrub-in-place helpers ────────────────
 
 /**
- * Classify an absolute path as a scrub-target surface.
- *   "wiki"       → .guild/wiki/**
- *   "review"     → .guild/runs/<id>/review/**
- *   "handoff"    → .guild/runs/<id>/handoffs/**   (D-SECRETS coverage fix:
- *                  model-written handoff receipts via the Write tool — the
- *                  subagent/in-process backends — previously bypassed the
- *                  in-place scrub; only the team-backend hook path
- *                  (task-completed.ts) covered handoffs)
- *   "provenance" → .guild/runs/<id>/provenance.json
- *   null         → not a target (no scrub)
+ * #108 / D2 PostToolUse half of the prose policy. Clean prose is left byte-identical.
+ * A credential span (or an invalid operator pattern) that reached disk past
+ * PreToolUse is undone by restoring the prior bytes (the host's `originalFile`, else
+ * the PreToolUse snapshot). With no clean prior the file is left as written and the
+ * refusal is reported: deleting an authored page is worse than flagging it. Never throws.
  */
-function classifyGuildScrubSurface(absPath: string, guildRoot: string): ScrubSurface | null {
-  const rel = path.relative(guildRoot, absPath);
-  const parts = rel.split(path.sep);
-  if (parts[0] === ".guild" && parts[1] === "wiki") return "wiki";
-  // .guild/runs/<runId>/<leaf>  (parts: [".guild", "runs", "<id>", <leaf>, ...])
-  if (parts[0] === ".guild" && parts[1] === "runs" && parts.length >= 4) {
-    if (parts[3] === "review") return "review";
-    if (parts[3] === "handoffs") return "handoff";
-    if (parts[3] === "provenance.json" && parts.length === 4) return "provenance";
+function runProseGuard(
+  payload: GuildHookEvent,
+  guildRoot: string,
+  absPath: string,
+  surface: ScrubSurface,
+  runDir: string,
+  runId: string,
+  laneId: string | undefined,
+): void {
+  const snapshotDir = createGuildStorage(guildRoot).temporary(undefined, PROSE_SNAPSHOT_SEGMENT);
+  const snapshot = takeProseSnapshot(
+    snapshotDir,
+    proseSnapshotKey(payload.session_id ?? "", hookToolUseId(payload as Record<string, unknown>), absPath),
+  );
+  let diskContent: string;
+  try {
+    diskContent = fs.readFileSync(absPath, "utf8");
+  } catch {
+    return;
   }
-  return null;
+  const policy = readSecurityConfig(guildRoot).secrets_policy;
+  const verdict = evaluateProseContent(diskContent, policy);
+  if (verdict.ok) return;
+
+  // The host's own per-call original wins over the snapshot; a prior that itself
+  // carries a credential is never "restored".
+  const fromHost = priorFromToolResponse(payload.tool_response);
+  const prior = fromHost.found ? fromHost : snapshot;
+  const priorClean = prior.found && (prior.prior === null || evaluateProseContent(prior.prior, policy).spans.length === 0);
+  // Restore only bytes this call produced; a later write's result is its own call's to undo.
+  const expected = prior.found
+    ? proposedWriteContent(payload.tool_name ?? "", payload.tool_input, prior.prior)
+    : null;
+  const ownResult = expected === null || expected === diskContent;
+  const label = path.relative(guildRoot, absPath);
+  let restored = false;
+  if (priorClean && ownResult) {
+    try {
+      restoreProseSnapshot(absPath, prior.prior);
+      restored = true;
+    } catch {
+      restored = false;
+    }
+  }
+  const outcome = restored
+    ? "prior content restored"
+    : !prior.found
+      ? "prior content not restored (prior bytes unknown); remove the span by hand"
+      : !priorClean
+        ? "prior content not restored (it also carries a credential); remove the span by hand"
+        : !ownResult
+          ? "prior content not restored (another write changed the file since this call); remove the span by hand"
+          : "prior content NOT restored (restore failed); remove the span by hand";
+  const message = `${describeProseRefusal(verdict, label)} ${outcome}.`;
+  process.stderr.write(`warn: [post-tool-use] HK-06 ${message}\n`);
+  try {
+    appendSecurityEvent(
+      runDir,
+      buildSecurityEvent({
+        run_id: runId,
+        lane_id: laneId,
+        event_type: "secret_scrub_blocked",
+        decision: "blocked",
+        tool: "post-tool-use/hk06-prose",
+        detail: message,
+        permission_mode: "blocked",
+      }),
+    );
+  } catch {
+    /* observability only */
+  }
+  if (!restored) writeScrubApprovalRequest(runDir, runId, surface, absPath, laneId);
+  process.stdout.write(
+    JSON.stringify({ decision: "block", reason: `Guild security (secret_scrub_blocked): ${message}` }) + "\n",
+  );
 }
 
 /**
@@ -269,8 +346,8 @@ function runGuildArtifactScrub(
     typeof runDir === "string" && runDir.length > 0
       ? runDir
       : path.join(durableGuildDir(guildRoot), "runs", effectiveRunId);
-  const toolName = payload.tool_name;
-  if (toolName !== "Write" && toolName !== "Edit") return;
+  const toolName = payload.tool_name ?? "";
+  if (!PROSE_WRITE_TOOLS.has(toolName)) return;
 
   const ti = payload.tool_input as Record<string, unknown> | null | undefined;
   if (!ti || typeof ti !== "object") return;
@@ -280,6 +357,19 @@ function runGuildArtifactScrub(
   const absPath = path.isAbsolute(rawFilePath)
     ? rawFilePath
     : path.resolve(guildRoot, rawFilePath);
+
+  // #108 / D2: prose is never rewritten in place. A relative path is relative to
+  // the tool's cwd, not the Guild root.
+  const proseAbs = path.resolve(
+    typeof payload.cwd === "string" && payload.cwd.length > 0 ? payload.cwd : guildRoot,
+    rawFilePath,
+  );
+  const proseSurface = proseTargetSurface(proseAbs, guildRoot);
+  if (proseSurface !== null) {
+    runProseGuard(payload, guildRoot, proseAbs, proseSurface, effectiveRunDir, effectiveRunId, laneId);
+    return;
+  }
+  if (toolName !== "Write" && toolName !== "Edit") return;
 
   const surface = classifyGuildScrubSurface(absPath, guildRoot);
   if (surface === null) return;

@@ -44,8 +44,10 @@ import * as path from "node:path";
 import {
   DEFAULT_INDEX_BLOCK,
   ensureWikiFtsIndex,
+  resolveMainRepoRoot,
   type IndexBlock,
 } from "../state";
+import { supersededWikiPages } from "./wiki-supersede";
 // D-RECALL (Wave-3): shared choke-point — all 3 recall paths (SQLite / MCP / fsScan)
 // run through protectChunks.  wiki-recall.ts owns the SQLite path; the other two
 // paths use protect-chunks.ts CLI.  classifyTrustTier, TrustTier, and
@@ -206,6 +208,11 @@ export function wikiRecall(
 
   const { dbPath } = ensureResult;
 
+  // G12 R6: the index stores paths relative to the main repo root; superseded
+  // pages are over-fetched and dropped so `limit` counts live pages.
+  const repoRoot = resolveMainRepoRoot(cwd);
+  const superseded = supersededWikiPages(path.join(durableGuildDir(repoRoot), "wiki"));
+
   let db: SqliteDb | undefined;
   try {
     db = openDatabase(dbPath);
@@ -223,7 +230,9 @@ export function wikiRecall(
            ORDER  BY rank   -- bm25() is negative; ASC = most relevant first
            LIMIT  ?`,
         )
-        .all(safeQuery, limit);
+        .all(safeQuery, limit + superseded.size)
+        .filter((r) => !superseded.has(path.join(repoRoot, typeof r["path"] === "string" ? r["path"] : "")))
+        .slice(0, limit);
     } catch {
       // FTS5 unavailable or MATCH syntax error — fall through to guild-memory.
       db.close();

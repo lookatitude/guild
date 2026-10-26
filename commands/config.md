@@ -1,7 +1,7 @@
 ---
 name: config
 description: "Project config surface — resolve, render, validate and edit .guild/ policy config, pin per-run roles, detect providers, re-pin MCP hashes, and reconcile against the typed schema. Sub-verbs `models` (READ-ONLY session-binding evidence) and `migrate` (v1->v2 layout inspect / dry-run / retry) route to their own CLIs, not to config-cmd."
-argument-hint: "<init|set|role|show|validate|providers|ui|update-mcp-hashes|reconcile> [options] | models inspect [--run-id <id>] [--json] [--cwd <path>] | migrate [--root=<path>] [--mode=migrate|dry-run|skip] [--workspace] [--accept-grades]"
+argument-hint: "<init|set|role|show|validate|providers|ui|update-mcp-hashes|reconcile> [options] | models inspect [--run-id <id>] [--json] [--cwd <path>] | migrate [--root=<path>] [--mode=migrate|dry-run|skip|verify] [--recheck] [--workspace] [--accept-grades]"
 allowed-tools: Read, Write, Bash
 ---
 
@@ -25,7 +25,7 @@ node "${GUILD_PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-$HOME/.local/share/guild/dist/c
 | Sub-verb | Grammar |
 |---|---|
 | `models` | READ-ONLY routing evidence — `models inspect [--run-id <id>] [--json] [--cwd <path>]` |
-| `migrate` | `migrate [--root=<path>] [--mode=migrate|dry-run|skip] [--workspace] [--accept-grades]` |
+| `migrate` | `migrate [--root=<path>] [--mode=migrate|dry-run|skip|verify] [--recheck] [--workspace] [--accept-grades]` |
 
 A danger key needs `--confirm`; `show --sources` annotates inheritance and
 `show --render` fails closed on a secret leak. No sub-verb prints the accepted list.

@@ -22,6 +22,7 @@
  * every method returns a closed `ExecutionOutcome` and never throws.
  */
 
+import { deepFreeze } from "../kernel";
 import { types as nodeTypes } from "node:util";
 import {
   EXECUTION_TRANSPORT_CONTRACT_VERSION,
@@ -562,9 +563,53 @@ export interface TmuxExecutionTransportOpts {
   readonly clock?: ExecutionClock;
   readonly sink?: ExecutionObservationSink;
   readonly pollLimit?: number;
+  /** Pause between pane captures in `send` (default: a real blocking sleep). */
+  readonly sleep?: (ms: number) => void;
+  /** Interval between pane captures in `send`, in ms. */
+  readonly settleMs?: number;
+  /** Capture budget for each of the idle gate and the delivery check in `send`. */
+  readonly sendPollLimit?: number;
 }
 
 const DEFAULT_TMUX_POLL_LIMIT = 8;
+const DEFAULT_TMUX_SETTLE_MS = 500;
+const DEFAULT_TMUX_SEND_POLL_LIMIT = 40;
+/** Equal consecutive idle captures needed before keys are sent. */
+const TMUX_IDLE_CAPTURES = 3;
+
+/**
+ * #179 — the agent CLIs whose panes `send` may type into, per host. A pane
+ * is idle only when its foreground command is listed, an input-ready marker
+ * is visible, and no busy marker is. Any other command is refused.
+ */
+export interface TmuxAgentPaneProfile {
+  readonly host_kind: string;
+  readonly commands: readonly string[];
+  readonly ready: readonly RegExp[];
+  readonly busy: readonly RegExp[];
+}
+
+export const TMUX_AGENT_PANE_PROFILES: readonly TmuxAgentPaneProfile[] = deepFreeze([
+  {
+    host_kind: "claude",
+    commands: ["claude"],
+    ready: [/\? for shortcuts/, /^[\s│]*[>❯](\s|$)/m],
+    busy: [/esc to interrupt/i],
+  },
+  {
+    host_kind: "codex",
+    commands: ["codex"],
+    ready: [/^[\s│▌]*[›❯>](\s|$)/m],
+    busy: [/esc to interrupt/i],
+  },
+]);
+
+const anyMatch = (patterns: readonly RegExp[], screen: string): boolean =>
+  patterns.some((pattern) => pattern.test(screen));
+
+function blockingSleep(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
 
 /**
  * The tmux seam — the only substrate here that owns a real, addressable session,
@@ -591,6 +636,9 @@ export class TmuxExecutionTransport extends BaseExecutionTransport {
   private readonly run: ExecutionRunFn;
   private readonly clock: ExecutionClock;
   private readonly pollLimit: number;
+  private readonly sleep: (ms: number) => void;
+  private readonly settleMs: number;
+  private readonly sendPollLimit: number;
   /** Sessions the caller has interrupted — a later `wait` reports `cancelled`. */
   private readonly interrupted = new Set<string>();
 
@@ -599,6 +647,44 @@ export class TmuxExecutionTransport extends BaseExecutionTransport {
     this.run = opts.run;
     this.clock = opts.clock ?? SYSTEM_CLOCK;
     this.pollLimit = opts.pollLimit ?? DEFAULT_TMUX_POLL_LIMIT;
+    this.sleep = opts.sleep ?? blockingSleep;
+    this.settleMs = opts.settleMs ?? DEFAULT_TMUX_SETTLE_MS;
+    this.sendPollLimit = Math.max(2, opts.sendPollLimit ?? DEFAULT_TMUX_SEND_POLL_LIMIT);
+  }
+
+  /** One pane screen, or the typed `send` failure that stopped the read. */
+  private capturePane(handle: ExecutionHandle): { screen: string } | { failure: ExecutionOutcome<undefined> } {
+    let result;
+    try {
+      result = this.run("tmux", ["capture-pane", "-p", "-t", handle.handle_id]);
+    } catch (err) {
+      return { failure: failedExecutionOutcome<undefined>(this.transport_id, "send", err, "send_failed") };
+    }
+    if (result.status === null) {
+      return {
+        failure: executionOutcome<undefined>({
+          operation: "send",
+          transport_id: this.transport_id,
+          status: "failed",
+          reason_code: "transport_unavailable",
+          detail: "tmux is not installed or did not run",
+          facts: { delivered: false },
+        }),
+      };
+    }
+    if (result.status !== 0) {
+      return {
+        failure: executionOutcome<undefined>({
+          operation: "send",
+          transport_id: this.transport_id,
+          status: "failed",
+          reason_code: "send_failed",
+          detail: result.stderr,
+          facts: { exit_status: result.status, delivered: false },
+        }),
+      };
+    }
+    return { screen: result.stdout };
   }
 
   /** null → tmux itself is unavailable; true/false → session alive / gone. */
@@ -678,7 +764,113 @@ export class TmuxExecutionTransport extends BaseExecutionTransport {
     );
   }
 
+  /** The pane's foreground command, or the typed `send` failure that stopped the read. */
+  private paneCommand(handle: ExecutionHandle): { command: string } | { failure: ExecutionOutcome<undefined> } {
+    let result;
+    try {
+      result = this.run("tmux", ["display-message", "-p", "-t", handle.handle_id, "#{pane_current_command}"]);
+    } catch (err) {
+      return { failure: failedExecutionOutcome<undefined>(this.transport_id, "send", err, "send_failed") };
+    }
+    if (result.status === null) {
+      return {
+        failure: executionOutcome<undefined>({
+          operation: "send",
+          transport_id: this.transport_id,
+          status: "failed",
+          reason_code: "transport_unavailable",
+          detail: "tmux is not installed or did not run",
+          facts: { delivered: false },
+        }),
+      };
+    }
+    if (result.status !== 0) {
+      return {
+        failure: executionOutcome<undefined>({
+          operation: "send",
+          transport_id: this.transport_id,
+          status: "failed",
+          reason_code: "send_failed",
+          detail: result.stderr,
+          facts: { exit_status: result.status, delivered: false },
+        }),
+      };
+    }
+    return { command: result.stdout.trim() };
+  }
+
+  /** The agent profile for this pane, or a `not_agent_pane` refusal. Never guesses. */
+  private agentProfile(
+    handle: ExecutionHandle
+  ): { profile: TmuxAgentPaneProfile } | { failure: ExecutionOutcome<undefined> } {
+    const read = this.paneCommand(handle);
+    if ("failure" in read) return read;
+    const profile = TMUX_AGENT_PANE_PROFILES.find(
+      (p) => p.commands.includes(read.command) && (handle.host_kind === null || handle.host_kind === p.host_kind)
+    );
+    if (profile) return { profile };
+    return {
+      failure: executionOutcome<undefined>({
+        operation: "send",
+        transport_id: this.transport_id,
+        status: "failed",
+        reason_code: "invalid_request",
+        detail: `pane runs ${JSON.stringify(read.command)}, not a known agent CLI${
+          handle.host_kind ? ` for host ${handle.host_kind}` : ""
+        }; no keys sent`,
+        facts: { session: handle.handle_id, delivered: false, reason: "not_agent_pane", pane_command: read.command },
+      }),
+    };
+  }
+
+  /**
+   * #179 — keys typed into a pane that is mid-turn are lost, so `send` is
+   * gated and confirmed. The pane must run a known agent CLI
+   * (`TMUX_AGENT_PANE_PROFILES`), else `not_agent_pane` and no keys. Idle
+   * means the input-ready marker is visible, no busy marker is, and the
+   * screen holds for three captures; a pane that never gets there is held
+   * (`deadline_exceeded`). Delivered means the pane then leaves the
+   * input-ready state (a busy marker appears or the ready marker clears);
+   * a text echo alone is not delivery. Long briefs go in a file; send a nudge.
+   */
   override send(handle: ExecutionHandle, payload: string): ExecutionOutcome<undefined> {
+    const agent = this.agentProfile(handle);
+    if ("failure" in agent) return this.observed(agent.failure);
+    const { profile } = agent;
+    const isIdle = (screen: string) => anyMatch(profile.ready, screen) && !anyMatch(profile.busy, screen);
+
+    let idleScreen: string | null = null;
+    let previous: string | null = null;
+    let stable = 0;
+    let polls = 0;
+    while (polls < this.sendPollLimit) {
+      if (polls > 0) this.sleep(this.settleMs);
+      const read = this.capturePane(handle);
+      polls += 1;
+      if ("failure" in read) return this.observed(read.failure);
+      stable = isIdle(read.screen) ? (read.screen === previous ? stable + 1 : 1) : 0;
+      previous = read.screen;
+      if (stable >= TMUX_IDLE_CAPTURES) {
+        idleScreen = read.screen;
+        break;
+      }
+    }
+    if (idleScreen === null) {
+      return this.observed(
+        executionOutcome<undefined>({
+          operation: "send",
+          transport_id: this.transport_id,
+          status: "failed",
+          reason_code: "deadline_exceeded",
+          detail: `pane never showed a stable input-ready state in ${polls} captures; message held, not sent`,
+          facts: { session: handle.handle_id, delivered: false, idle: false, polls },
+        })
+      );
+    }
+    // The foreground command may have changed while the screen settled.
+    const recheck = this.agentProfile(handle);
+    if ("failure" in recheck) return this.observed(recheck.failure);
+
     let result;
     try {
       result = this.run("tmux", ["send-keys", "-t", handle.handle_id, payload, "Enter"]);
@@ -695,6 +887,7 @@ export class TmuxExecutionTransport extends BaseExecutionTransport {
           status: "failed",
           reason_code: "transport_unavailable",
           detail: "tmux is not installed or did not run",
+          facts: { delivered: false },
         })
       );
     }
@@ -706,16 +899,41 @@ export class TmuxExecutionTransport extends BaseExecutionTransport {
           status: "failed",
           reason_code: "send_failed",
           detail: result.stderr,
-          facts: { exit_status: result.status },
+          facts: { exit_status: result.status, delivered: false },
         })
       );
+    }
+
+    for (let checks = 1; checks <= this.sendPollLimit; checks += 1) {
+      this.sleep(this.settleMs);
+      const after = this.capturePane(handle);
+      if ("failure" in after) return this.observed(after.failure);
+      if (!isIdle(after.screen)) {
+        return this.observed(
+          executionOutcome<undefined>({
+            operation: "send",
+            transport_id: this.transport_id,
+            status: "succeeded",
+            facts: {
+              session: handle.handle_id,
+              host_kind: profile.host_kind,
+              payload_bytes: payload.length,
+              delivered: true,
+              idle_polls: polls,
+              confirm_polls: checks,
+            },
+          })
+        );
+      }
     }
     return this.observed(
       executionOutcome<undefined>({
         operation: "send",
         transport_id: this.transport_id,
-        status: "succeeded",
-        facts: { session: handle.handle_id, payload_bytes: payload.length },
+        status: "failed",
+        reason_code: "send_failed",
+        detail: "keys sent but the pane stayed input-ready; the agent did not pick the message up",
+        facts: { session: handle.handle_id, delivered: false },
       })
     );
   }

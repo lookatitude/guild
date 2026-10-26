@@ -638,7 +638,14 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // commands/aliases.allowlist.json after the v3.0.0 stable cut shipped them —
   // exactly the 13 dispatchers remain. ANTI-VACUITY: SC-W2-5/SC-W3-6 were observed
   // RED against the prior pins naming commands/** before this value was ratified.
-  commands: "41692cc4045cf206c6de68682458b13254e1ca70",
+  // Re-ratified 2026-10-19 (v3co C1): learn.md dispatch runs the compiled learn-route.js
+  // router first and follows its route; `harvest` joins the sub-verb list; the command
+  // registry entry was re-extracted.
+  // ANTI-VACUITY: check-surface-pins, SC-W2-5 and SC-W3-6 were RED against the prior pin.
+  // Re-ratified 2026-10-25 (#275): config.md lists `migrate --mode=verify` and `--recheck`;
+  // the command registry entry was re-extracted. ANTI-VACUITY: check-surface-pins was RED
+  // against the prior pin.
+  commands: "c6e23a196895eadf0fdd8260f7a730782414607c",
   // Re-ratified 2026-09-14 (T01 pattern lock): using-guild absorbed the principles
   // body, the glossary one-liner and "bare /guild is T0" (KTD25); no other skill changed.
   // Re-ratified 2026-09-14 (T03 skills fold): 17 indexed assemblers + references/ chapters,
@@ -713,7 +720,29 @@ export const RATIFIED_TREES: Readonly<Record<string, string>> = Object.freeze({
   // Re-ratified 2026-10-17 (v3-completion Team C): C03 added the analyze row to
   // skills/meta/evolve/SKILL.md and the new references/run-analysis.md chapter.
   // ANTI-VACUITY: SC-W3-6(B) was observed RED against the prior pin first.
-  skills: "1fc706b7891bf21f4e1c276f2fb8ca2626fb1c58",
+  // Re-ratified 2026-10-19 (v3co C1): the learn assembler gains a §Route table that
+  // follows learn-route.js; detection prose names the router. Only learn/SKILL.md changed.
+  // ANTI-VACUITY: SC-W3-6(B) and check-surface-pins were RED against the prior pin.
+  // Re-ratified 2026-10-20 (H2 #144 #146): execute-plan/dispatch.md states the
+  // carrier_only grade, the strict-mode deny, and the snapshot digest check. Only
+  // that chapter changed; it has no skill-registry entry (round-trip unchanged).
+  // ANTI-VACUITY: SC-W2-5, SC-W3-6(B) and check-surface-pins were RED against the prior pin.
+  // Re-ratified 2026-10-20 (v3.2 H1 #138/#179): execute-plan SKILL.md + dispatch.md
+  // collect lanes via lane-receipt-wait (never idle = success) and inject via the
+  // idle-gated pane-send. Registry re-extracted. ANTI-VACUITY: SC-W2-5, SC-W3-6(B) and
+  // check-surface-pins were RED (registry_stale execute-plan, tree_pin_stale skills).
+  // Re-ratified 2026-10-20 (v3.2 H1 F9): execute-plan SKILL.md states the pane-send
+  // agent-pane gate (not_agent_pane, input-ready, pickup). Registry re-extracted.
+  // ANTI-VACUITY: check-surface-pins was RED against the prior pin first.
+  // Re-ratified 2026-10-20 (v3.2 merge): H1 + H2 execute-plan edits combined on next.
+  // Re-ratified 2026-10-25 (#271): init and create-specialist describe the layout-2 shape
+  // the migrator writes (config/project.json, indexes as cache, no registry.yaml). No
+  // skill-src registry entry covers either skill. init step 4a runs the layout writer with --recheck
+  // (codex G-lane r2), and states the I2 root_wiki rule (.guild/wiki/ or top-level code;
+  // an existing true is kept). ANTI-VACUITY: check-surface-pins was RED.
+  // Re-ratified 2026-10-25 (v3.2 text): create-skill and team-compose drop the explicit --write-registry
+  // step (discovery reads the definition files directly). ANTI-VACUITY: check-surface-pins was RED.
+  skills: "e7dd27567b0e113ad554942afa09a137f0d8f04a",
 });
 
 /** Version-stripped content hashes for the two release-tolerant manifests. */

@@ -1,3 +1,4 @@
+if (require.main === module) { const a = process.argv.slice(2), e = a.indexOf("--"); if ((e < 0 ? a : a.slice(0, e)).some((x) => x === "--help" || x === "-h")) { require("fs").writeSync(1, "usage: none. runtime/scripts/upgrade-chain.js is a library bundle other runtime scripts require; it is not a CLI.\n"); process.exit(0); } }
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -4738,7 +4739,7 @@ var settingsPolicySplit = {
       return { status: "skipped", detail: ".guild/settings.json is not parseable JSON \u2014 preserved, not split", paths: [] };
     }
     if (!ctx.policy) {
-      return { status: "skipped", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
+      return { status: "failed", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
     }
     const cfg = ctx.policy;
     const flat = flatten(parsed);
@@ -5095,7 +5096,7 @@ var ktd22Strip = {
   affects: [".guild/initiatives", ".guild/team", ".guild/teams"],
   apply(ctx) {
     if (!ctx.policy) {
-      return { status: "skipped", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
+      return { status: "failed", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
     }
     const cfg = ctx.policy;
     const roots = ["initiatives", "team", "teams"].map((d) => path14.join(ctx.guildDir, d));
@@ -5359,7 +5360,19 @@ var registryYamlRetire = {
       const text = readIfFile(abs);
       if (text === null) continue;
       const target = path14.join(ctx.guildDir, "artifacts", "legacy", relPath.replace("/", "-"));
-      if (lstatSafe(target)) continue;
+      if (lstatSafe(target)) {
+        if (readIfFile(target) !== text) {
+          return {
+            status: "blocked_confirm",
+            detail: `.guild/${relPath} differs from its preserved copy ${rel(ctx, target)}`,
+            paths: [rel(ctx, abs), rel(ctx, target)],
+            question: `registry-yaml-retire found .guild/${relPath} and a different preserved copy at ${rel(ctx, target)}. Keep which one?`
+          };
+        }
+        if (!ctx.dryRun) fs11.rmSync(abs, { force: true });
+        changed.push(`${rel(ctx, abs)} (already preserved at ${rel(ctx, target)})`);
+        continue;
+      }
       writeFile(ctx, target, text);
       if (!ctx.dryRun) fs11.rmSync(abs, { force: true });
       changed.push(`${rel(ctx, abs)} \u2192 ${rel(ctx, target)}`);
@@ -5495,16 +5508,8 @@ function runUpgrade(opts) {
     validation_errors: [],
     ...extra
   });
-  let journal = loadJournal(journalFile) ?? newJournal({ rootId: guildRootId(root), root, fromVersion: opts.fromVersion, toVersion: opts.toVersion, now: now() });
-  if (journal.to_version !== opts.toVersion) {
-    journal = newJournal({
-      rootId: guildRootId(root),
-      root,
-      fromVersion: opts.fromVersion,
-      toVersion: opts.toVersion,
-      now: now()
-    });
-  }
+  const prior = dryRun || opts.fresh === true ? null : loadJournal(journalFile);
+  let journal = prior !== null && prior.state !== "committed" && prior.to_version === opts.toVersion ? prior : newJournal({ rootId: guildRootId(root), root, fromVersion: opts.fromVersion, toVersion: opts.toVersion, now: now() });
   const lock = dryRun ? null : acquireLock(lockFile, nowMs());
   if (!dryRun && !lock) {
     return base("running", journal);
@@ -6995,18 +7000,6 @@ var KNOWN_GUILD_HOST_KINDS = Object.freeze([
 ]);
 var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
 
-// src/domains/security/share-set.ts
-var path18 = __toESM(require("path"));
-var SHARED_SCRUBBED_NAMES = sealSet([
-  "verify.md",
-  "review.md",
-  "provenance.json",
-  "summary.md",
-  "run.yaml",
-  "run-state.json"
-], "SHARED_SCRUBBED_NAMES");
-var CANONICAL_RUN_LOG = path18.join("logs", "v1.4-events.jsonl");
-
 // src/domains/security/secret-patterns.ts
 var SECRET_PATTERNS = Object.freeze([
   // NOTE: labels deliberately drop the `=` so the redaction replacement
@@ -7054,6 +7047,53 @@ var SECRET_PATTERNS = Object.freeze([
   // High-entropy string heuristic: 40+ hex chars (SHA-like)
   Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
 ]);
+
+// src/domains/security/share-set.ts
+var path18 = __toESM(require("path"));
+var SHARED_SCRUBBED_NAMES = sealSet([
+  "verify.md",
+  "review.md",
+  "provenance.json",
+  "summary.md",
+  "run.yaml",
+  "run-state.json"
+], "SHARED_SCRUBBED_NAMES");
+var CANONICAL_RUN_LOG = path18.join("logs", "v1.4-events.jsonl");
+
+// src/domains/security/prose-scrub.ts
+var PROSE_SECRET_LABELS = /* @__PURE__ */ new Set([
+  "password-assignment",
+  "api_key-assignment",
+  "secret-assignment",
+  "AWS access key",
+  "GCP API key",
+  "GitHub personal access token",
+  "GitHub server token",
+  "PEM private key block",
+  "bearer-token",
+  "provider-api-key",
+  "Slack token",
+  "GitHub token",
+  "GitLab personal access token",
+  "npm token",
+  "HuggingFace token"
+]);
+var TOKEN_SHAPE_EXTRAS = [
+  ["\\bgithub_pat_", "GitHub fine-grained token"],
+  ["\\beyJ", "JWT"]
+];
+var PROSE_CREDENTIAL_PATTERNS = deepFreeze([
+  // The canonical password form is case-sensitive; prose also catches `PASSWORD=`.
+  ...SECRET_PATTERNS.filter(([, label]) => PROSE_SECRET_LABELS.has(label)).map(
+    ([re, label]) => re.flags.includes("i") ? [re, label] : Object.freeze([new RegExp(re.source, re.flags + "i"), label])
+  ),
+  ...TOKEN_SHAPE_EXTRAS.flatMap(
+    ([prefix, label]) => TOKEN_SHAPE_PATTERNS.filter((re) => re.source.startsWith(prefix)).map(
+      (re) => Object.freeze([re, label])
+    )
+  )
+]);
+var PROSE_WRITE_TOOLS = sealSet(["Write", "Edit", "MultiEdit"]);
 
 // src/domains/config/config-defaults.ts
 var DEFAULT_ESCALATION_MARKERS = Object.freeze([
@@ -7271,7 +7311,9 @@ var DEFAULTS = deepFreeze({
      *
      * `block_unmarked_lanes` engages STRICT mode: a Guild lane dispatch carrying
      * NO structured producer marker (`prompt_only` evidence — the hand-rolled
-     * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded.
+     * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded. It
+     * also denies, in every agent_mode, a lane whose env carries lane carriers
+     * but no `GUILD_DISPATCH_PRODUCER` marker (`carrier_only`, #144).
      *
      * DEFAULT IS `false` ON PURPOSE, and that is load-bearing rather than
      * timidity. `classifyLaneEvidence` grades a fully-substituted lane brief that
@@ -10106,6 +10148,7 @@ function runLayoutUpgrade(opts) {
     fromVersion: opts.fromVersion,
     toVersion: opts.toVersion,
     dryRun: opts.dryRun === true,
+    fresh: opts.fresh === true,
     v1: v1Converter,
     policy: { canonicalPolicyKey, isPolicyKey, findHostIdentity }
   });

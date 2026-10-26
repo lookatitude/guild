@@ -44,6 +44,13 @@
  *       npx tsx hooks/run-trace.ts status [--cwd <root>]
  *     Prints the run-id, or nothing when record_status_runs:false.
  *
+ *   close — close a run without a Stop-hook payload (#277):
+ *       npx tsx hooks/run-trace.ts close --run-id <id> [--binding-ref <nonce>] [--cwd <root>]
+ *     Runs lib/run-close.ts closeGuildRun, the same path as the Stop hook.
+ *     Prints the run-id on a close; exit 0. An already-closed run is a no-op
+ *     (message on stderr, exit 0). An unknown run, active workers, or a
+ *     missing/wrong binding nonce fail with a message and exit 1.
+ *
  *   skipped — SC-G skipped-files sink (Lane A1):
  *       npx tsx hooks/run-trace.ts skipped --run-id <id> [--cwd <root>] < entries.json
  *     stdin is a JSON array of {path, reason, rule, can_manually_include,
@@ -51,13 +58,14 @@
  *
  * Flag parsing: --foo=bar and --foo bar are both supported for all flags.
  *
- * Exit: 0 on success / no-op; 1 only on a usage error.
+ * Exit: 0 on success / no-op; 1 on a usage error or a refused close.
  *
  * Runner: bundled to dist/run-trace.js via esbuild (hooks/package.json).
  */
 
 import { resolveGuildRoot } from "./lib/guild-root.js";
 import { ensureStorageLayout } from "../scripts/lib/state/ensure-storage-layout.js";
+import { upgradeLayoutAtRunStart } from "./lib/ensure-layout.js";
 import { ensureRunsGitignored } from "./lib/runs-gitignore.js";
 import {
   defaultResolveHost,
@@ -69,6 +77,8 @@ import {
   writeSkippedFiles,
   type SkippedFileEntry,
 } from "./lib/run-trace.js";
+import { closeGuildRun } from "./lib/run-close.js";
+import { validateRunId } from "../scripts/lib/run-lifecycle.js";
 
 /**
  * Parse --name=value OR --name value. Returns undefined when absent.
@@ -97,10 +107,11 @@ async function readStdin(): Promise<string> {
 }
 
 const USAGE =
-  "usage: run-trace.ts <start|status|phase|skipped> [--cwd <root>] [--run-id <id>]\n" +
+  "usage: run-trace.ts <start|status|phase|close|skipped> [--cwd <root>] [--run-id <id>]\n" +
   "  start   --command=/guild:plan [--phase=<p>] [--run-class=full|lightweight] [--cwd <root>]\n" +
   "  status  [--cwd <root>]   (alias: start --run-class=lightweight + OQ6 gate)\n" +
   "  phase   --phase=<init|ideate|plan|build|qa|ops> [--run-id <id>] [--binding-ref <nonce>] [--cwd <root>]\n" +
+  "  close   --run-id <id>    [--binding-ref <nonce>] [--cwd <root>]\n" +
   "  skipped --run-id <id>    [--binding-ref <nonce>] [--cwd <root>] < entries.json\n" +
   "  (rework F1: a writer addressing a run explicitly must present the run's\n" +
   "   binding nonce — --binding-ref or the GUILD_RUN_BINDING_REF env envelope;\n" +
@@ -111,14 +122,20 @@ async function main(): Promise<void> {
   const sub = argv[0];
   const cwd = flag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
   const root = resolveGuildRoot(cwd);
-  // KTD23: detect only (SessionStart runs the upgrade); a future layout is not
-  // ours to write, so refuse before any record lands.
+  // KTD23: a future layout is not ours to write, so refuse before any record lands.
   try {
     ensureStorageLayout(root, { detectOnly: true });
   } catch (e) {
     process.stderr.write(`[run-trace] ${(e as Error).message}\n`);
     process.exitCode = 1;
     return;
+  }
+  // #276: run start upgrades THIS root, not only the folder SessionStart ran in,
+  // and says so when it does not. A lightweight start (the status alias) stays
+  // write-free.
+  if (sub === "start" && flag(argv, "run-class") !== "lightweight") {
+    const note = upgradeLayoutAtRunStart(root);
+    if (note !== null) process.stderr.write(`[run-trace] ${note}\n`);
   }
 
   // ── start — uniform record path (A2 rollout seam) ──────────────────────────
@@ -203,6 +220,39 @@ async function main(): Promise<void> {
     const runId = recordStatusLightweight(root, defaultResolveHost, { cwd });
     if (runId) process.stdout.write(runId + "\n");
     process.exit(0);
+  }
+
+  // ── close — #277: the Stop-hook close path without a hook payload ──────────
+  if (sub === "close") {
+    const runId = flag(argv, "run-id") ?? process.env["GUILD_RUN_ID"];
+    if (!runId) {
+      process.stderr.write("[run-trace] usage: close --run-id <id> [--binding-ref <nonce>] [--cwd <root>]\n");
+      process.exit(1);
+    }
+    if (!validateRunId(runId)) {
+      process.stderr.write(`[run-trace] close: invalid run id ${JSON.stringify(runId)}.\n`);
+      process.exit(1);
+    }
+    const bindingRef = flag(argv, "binding-ref");
+    const outcome = closeGuildRun(root, runId, {
+      tag: "run-trace",
+      ...(bindingRef ? { bindingRef } : {}),
+    });
+    if (outcome === "closed" || outcome === "reclosed") {
+      process.stdout.write(runId + "\n");
+      process.exit(0);
+    }
+    if (outcome === "already_closed") {
+      process.stderr.write(`[run-trace] close: run ${runId} is already closed; nothing to do.\n`);
+      process.exit(0);
+    }
+    if (outcome === "not_started") {
+      process.stderr.write(`[run-trace] close: no run "${runId}" under ${root} (no run.yaml); nothing closed.\n`);
+    } else if (outcome === "failed") {
+      process.stderr.write(`[run-trace] close: closing ${runId} failed; see the warning above.\n`);
+    }
+    // deferred / binding_rejected: closeGuildRun already said why.
+    process.exit(1);
   }
 
   // ── skipped — SC-G sink ─────────────────────────────────────────────────────

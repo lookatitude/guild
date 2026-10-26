@@ -1624,7 +1624,19 @@ function cmdShowSources(cwd: string): number {
   const { config, sources } = result;
   const configObj = config as unknown as Record<string, unknown>;
 
-  const allKeys = new Set<string>([...Object.keys(configObj), ...Object.keys(sources)]);
+  // Top-level keys plus every dotted LEAF the resolver stamped (#145): a block line
+  // names the highest contributing layer, each leaf line names its own value's layer.
+  // Intermediate blocks are skipped; workspace.mode prints once, below.
+  const allKeys = new Set<string>(Object.keys(configObj));
+  for (const key of Object.keys(sources)) {
+    if (key.startsWith("workspace.")) continue;
+    if (!key.includes(".")) {
+      allKeys.add(key);
+      continue;
+    }
+    const v = getByPathLocal(configObj, key);
+    if (v !== undefined && !(isPlainObject(v) && Object.keys(v).length > 0)) allKeys.add(key);
+  }
   allKeys.delete("_rigorExpanded");
 
   const sorted = [...allKeys].sort();
@@ -1632,7 +1644,7 @@ function cmdShowSources(cwd: string): number {
   for (const key of sorted) {
     if (key.startsWith("_")) continue;
     const source: Source = (sources[key] as Source) ?? "builtin";
-    const rawVal = configObj[key];
+    const rawVal = key.includes(".") ? getByPathLocal(configObj, key) : configObj[key];
     let valDisplay: string;
     if (rawVal === null) {
       valDisplay = "null";
@@ -1690,8 +1702,7 @@ function permissionInputs(config: ReturnType<typeof resolveSettings>["config"]):
  * Append a "phase-permission decisions" section: one line per (phase × gate-type) cell,
  * each annotating host_mode / guild_gates / bypass with the inheritance layer that drove
  * it. `auto_approve` drives guild_gates; `security.bypass_permissions_policy` drives
- * bypass; host_mode is the builtin host default. settings-resolver tracks sources at the
- * top-level-key granularity, so the security-block layer annotates bypass.
+ * bypass; host_mode is the builtin host default. bypass reads its own leaf's layer.
  */
 function appendPermissionSourceLines(
   lines: string[],
@@ -1705,7 +1716,7 @@ function appendPermissionSourceLines(
   const table = resolvePermissionPolicy({ auto_approve, bypass_permissions_policy, host_mode });
 
   const gatesSrc: Source = (sources["auto_approve"] as Source) ?? "builtin";
-  const bypassSrc: Source = (sources["security"] as Source) ?? "builtin";
+  const bypassSrc = nearestSource("security.bypass_permissions_policy", sources) as Source;
   const hostModeSrc: Source = (sources["host_mode"] as Source) ?? "builtin";
 
   lines.push("");

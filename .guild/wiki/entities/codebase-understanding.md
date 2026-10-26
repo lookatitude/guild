@@ -205,7 +205,7 @@ auto|on|off` overrides the rule) classifies the root `regular` or `workspace`.
 - On a **workspace** the engine **registers the detected sub-guilds and writes
   the federation manifest** (`.guild/workspace.json`, `guild.workspace.v1`)
   instead of deep-scanning the union of sub-repos as one blob. A root wiki is
-  built **only if** the workspace root itself has scannable top-level code
+  built when the workspace root has `.guild/wiki/` or scannable top-level code
   (`root_wiki: true`); a pure federation root stops at the manifest. Deep
   per-sub-repo learn is **delegated/offered, never auto-run**.
 

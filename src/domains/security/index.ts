@@ -12,6 +12,8 @@ export const MODULE_PUBLIC_API_VERSION = "guild.module.public-api.v1" as const;
 export * from "./safe-object";
 export * from "./injection-guard";
 export * from "./scrubbed-write";
+// #108 / D2: prose surfaces refuse credential spans instead of rewriting in place.
+export * from "./prose-scrub";
 export * from "./redact-log";
 export * from "./share-set";
 // T6b: the canonical redaction applier + its pattern SoT are published so

@@ -25,16 +25,20 @@ export const SCHEMA = {
 
 /** Parse a leading/anywhere `--cwd <path>` flag, else $GUILD_CWD, else process.cwd(). */
 export function parseCwd(argv: string[]): string {
-  const idx = argv.indexOf("--cwd");
-  if (idx !== -1 && argv[idx + 1]) return argv[idx + 1];
-  return process.env["GUILD_CWD"] ?? process.cwd();
+  return parseFlag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
 }
 
+/**
+ * `--<name> <v>` or `--<name>=<v>`. A present flag with no value throws: it used
+ * to fall through to the default and run against the wrong repo (#270).
+ */
 export function parseFlag(argv: string[], name: string): string | undefined {
   const eq = `--${name}=`;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === `--${name}` && argv[i + 1]) return argv[i + 1];
-    if (argv[i].startsWith(eq)) return argv[i].slice(eq.length);
+    const v = argv[i] === `--${name}` ? argv[i + 1] : argv[i].startsWith(eq) ? argv[i].slice(eq.length) : undefined;
+    if (v === undefined && argv[i] !== `--${name}`) continue;
+    if (!v || v.startsWith("--")) throw new Error(`--${name} needs a value (--${name} <v> or --${name}=<v>)`);
+    return v;
   }
   return undefined;
 }

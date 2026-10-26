@@ -640,27 +640,34 @@ describe("the journal carries what LANDED, not what was handed to the writer (co
   // fixture file itself never carries a scannable secret.
   const SECRET = `ghp_${"a".repeat(36)}`;
 
-  it("a planted secret reaches neither the page nor the journal, and revert still succeeds", () => {
-    const result = harvestDecision({
+  it("a planted secret reaches neither the page nor the journal (prose refuses, #108 D2); a clean page journals what landed and reverts", () => {
+    const refused = harvestDecision({
       ...HARVEST,
       runDir,
       storage,
       body: `${HARVEST.body}\n\nUse the token ${SECRET} for the retry probe.`,
     });
+    expect(refused.promoted).toBe(false);
+    expect(refused.op.refuse_reason).toBe("secrets");
+    expect(fs.existsSync(refused.wiki_path ?? path.join(runDir, "nope"))).toBe(false);
+    // The journal is durable state; the refused buffer must never reach it.
+    const refusedInverse = readInverse(RUN_ID, refused.op.op_id, { storage });
+    expect(JSON.stringify(refusedInverse ?? {})).not.toContain(SECRET);
+
+    // CONTROL: clean prose lands byte-for-byte and the journal records exactly it.
+    const result = harvestDecision({
+      ...HARVEST,
+      runDir,
+      storage,
+      op_id: undefined,
+      body: `${HARVEST.body}\n\nPollExternalWebhookJournalJobTest covers the retry probe.`,
+    });
     expect(result.promoted).toBe(true);
-
     const page = fs.readFileSync(result.wiki_path!, "utf8");
-    expect(page).not.toContain(SECRET);
-    expect(page).toContain("[REDACTED_TOKEN]");
-
-    // The journal is durable state. Recording the PRE-scrub input there kept the
-    // secret on disk in the one place nobody scrubs.
+    expect(page).toContain("PollExternalWebhookJournalJobTest covers the retry probe.");
     const inverse = readInverse(RUN_ID, result.op.op_id, { storage })!;
-    expect(JSON.stringify(inverse)).not.toContain(SECRET);
     expect(inverse.files.find((f) => f.path === result.wiki_path)!.after).toBe(page);
 
-    // And the equality check revert runs still matches, because both sides are
-    // now the scrubbed bytes.
     const reverted = revertHarvest(RUN_ID, result.op.op_id, { storage });
     expect(reverted.ok).toBe(true);
     expect(reverted.blocked_confirm).toBeUndefined();
@@ -668,15 +675,29 @@ describe("the journal carries what LANDED, not what was handed to the writer (co
   });
 
   it("a playbook span records the bytes on disk, so its revert is byte-for-byte", () => {
+    // A secret in the replacement is refused before the playbook moves (#108 D2).
+    const guarded = playbook("guarded.md", "# G\n\n## Retries\n\nkeep\n");
+    const refused = harvestDecision({
+      ...HARVEST,
+      runDir,
+      storage,
+      op_id: undefined,
+      slug: "guarded-span",
+      playbook: { path: guarded, span: "Retries", replacement: `Use ${SECRET} to authenticate the consumer.` },
+    });
+    expect(fs.readFileSync(guarded, "utf8")).toBe("# G\n\n## Retries\n\nkeep\n");
+    expect(JSON.stringify(readInverse(RUN_ID, refused.op.op_id, { storage }) ?? {})).not.toContain(SECRET);
+
     const before = "# Backend\n\n## Retries\n\noriginal guidance\n\n## Naming\n\nkeep\n";
     const pb = playbook("backend.md", before);
     const result = harvestDecision({
       ...HARVEST,
       runDir,
       storage,
-      playbook: { path: pb, span: "Retries", replacement: `Use ${SECRET} to authenticate the consumer.` },
+      playbook: { path: pb, span: "Retries", replacement: "Use ApiPerformanceMonitor to authenticate the consumer." },
     });
     expect(result.promoted).toBe(true);
+    expect(fs.readFileSync(pb, "utf8")).toContain("Use ApiPerformanceMonitor to authenticate the consumer.");
 
     const inverse = readInverse(RUN_ID, result.op.op_id, { storage })!;
     const entry = inverse.files.find((f) => f.path === pb)!;

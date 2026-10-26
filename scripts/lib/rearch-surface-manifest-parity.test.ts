@@ -37,6 +37,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { splitFrontmatter, readScalarField } from "./frontmatter";
 import { validateSurfaceManifest } from "./surface-manifest";
+import { frontmatterValue } from "../../tests/rearch/r-decl";
+import { CLAUDE_TIER_FALLBACK } from "./capability/tier-defaults";
 import * as yaml from "js-yaml";
 
 const PLUGIN_ROOT = path.resolve(__dirname, "../..");
@@ -53,6 +55,9 @@ const EXEMPLARS: Exemplar[] = [
   { rel: "skills/specialists/architect-tradeoff-matrix/SKILL.md", kind: "skill" },
   { rel: "skills/specialists/backend-service-integration/SKILL.md", kind: "skill" },
   { rel: "agents/advisor.md", kind: "agent" },
+  { rel: "agents/developer.md", kind: "agent" },
+  { rel: "agents/team-lead.md", kind: "agent" },
+  { rel: "agents/context-manager.md", kind: "agent" },
 ];
 
 /** The pre-conversion baseline = the file at git HEAD (before this additive edit). */
@@ -121,10 +126,10 @@ describe("W7 declarative-surface conversion — behavioral parity per exemplar",
         expect(v.ok).toBe(true);
         const m = v.manifest!;
         expect(m.kind).toBe(kind);
-        expect(m.name).toBe(readScalarField(cur, "name"));
-        expect(m.description).toBe(readScalarField(cur, "description"));
+        expect(m.name).toBe(frontmatterValue(cur, "name"));
+        expect(m.description).toBe(frontmatterValue(cur, "description"));
         if (m.when_to_use !== undefined) {
-          expect(m.when_to_use).toBe(readScalarField(cur, "when_to_use"));
+          expect(m.when_to_use).toBe(frontmatterValue(cur, "when_to_use"));
         }
       });
 
@@ -153,7 +158,9 @@ describe("W7 declarative-surface conversion — behavioral parity per exemplar",
           const v = validateSurfaceManifest(extractManifestBlock(cur));
           const m = v.manifest!;
           const model = readScalarField(cur, "model");
-          const map: Record<string, string> = { haiku: "cheap", sonnet: "mid", opus: "powerful" };
+          const map: Record<string, string> = Object.fromEntries(
+            Object.entries(CLAUDE_TIER_FALLBACK).map(([tier, alias]) => [alias, tier]),
+          );
           expect(m.type).toBe(model ? map[model] : undefined);
         });
       }

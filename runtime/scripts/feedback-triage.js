@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+if (require.main === module) { const a = process.argv.slice(2), e = a.indexOf("--"); if ((e < 0 ? a : a.slice(0, e)).some((x) => x === "--help" || x === "-h")) { require("fs").writeSync(1, "usage: node runtime/scripts/feedback-triage.js triage --run-id <id> --findings <findings.json> [--cwd <dir>]\n       file --run-id <id> --finding <finding-id> (--approve <operator> | --deny [reason]) [--cwd <dir>] [--dry-run]\n"); process.exit(0); } }
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -3160,7 +3161,7 @@ function upgradeChain() {
 }
 function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
   const status = detect(cwd);
-  if (status.state === "current") return status;
+  if (status.state === "current" && opts.recheck !== true) return status;
   if (status.state === "future") {
     throw new Error(
       `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
@@ -3172,7 +3173,8 @@ function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
     root: status.root,
     fromVersion: status.version,
     toVersion: CURRENT_LAYOUT_VERSION,
-    dryRun: opts.dryRun === true
+    dryRun: opts.dryRun === true,
+    fresh: opts.recheck === true
   });
   const after = detect(cwd);
   return { ...after, upgrade: result };
@@ -4532,7 +4534,7 @@ var settingsPolicySplit = {
       return { status: "skipped", detail: ".guild/settings.json is not parseable JSON \u2014 preserved, not split", paths: [] };
     }
     if (!ctx.policy) {
-      return { status: "skipped", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
+      return { status: "failed", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
     }
     const cfg = ctx.policy;
     const flat = flatten(parsed);
@@ -4889,7 +4891,7 @@ var ktd22Strip = {
   affects: [".guild/initiatives", ".guild/team", ".guild/teams"],
   apply(ctx) {
     if (!ctx.policy) {
-      return { status: "skipped", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
+      return { status: "failed", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
     }
     const cfg = ctx.policy;
     const roots = ["initiatives", "team", "teams"].map((d) => path13.join(ctx.guildDir, d));
@@ -5153,7 +5155,19 @@ var registryYamlRetire = {
       const text = readIfFile(abs);
       if (text === null) continue;
       const target = path13.join(ctx.guildDir, "artifacts", "legacy", relPath2.replace("/", "-"));
-      if (lstatSafe(target)) continue;
+      if (lstatSafe(target)) {
+        if (readIfFile(target) !== text) {
+          return {
+            status: "blocked_confirm",
+            detail: `.guild/${relPath2} differs from its preserved copy ${rel(ctx, target)}`,
+            paths: [rel(ctx, abs), rel(ctx, target)],
+            question: `registry-yaml-retire found .guild/${relPath2} and a different preserved copy at ${rel(ctx, target)}. Keep which one?`
+          };
+        }
+        if (!ctx.dryRun) fs9.rmSync(abs, { force: true });
+        changed.push(`${rel(ctx, abs)} (already preserved at ${rel(ctx, target)})`);
+        continue;
+      }
       writeFile(ctx, target, text);
       if (!ctx.dryRun) fs9.rmSync(abs, { force: true });
       changed.push(`${rel(ctx, abs)} \u2192 ${rel(ctx, target)}`);
@@ -5579,18 +5593,6 @@ var KNOWN_GUILD_HOST_KINDS = Object.freeze([
 ]);
 var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
 
-// src/domains/security/share-set.ts
-var path16 = __toESM(require("path"));
-var SHARED_SCRUBBED_NAMES = sealSet([
-  "verify.md",
-  "review.md",
-  "provenance.json",
-  "summary.md",
-  "run.yaml",
-  "run-state.json"
-], "SHARED_SCRUBBED_NAMES");
-var CANONICAL_RUN_LOG = path16.join("logs", "v1.4-events.jsonl");
-
 // src/domains/security/secret-patterns.ts
 var SECRET_PATTERNS = Object.freeze([
   // NOTE: labels deliberately drop the `=` so the redaction replacement
@@ -5638,6 +5640,53 @@ var SECRET_PATTERNS = Object.freeze([
   // High-entropy string heuristic: 40+ hex chars (SHA-like)
   Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
 ]);
+
+// src/domains/security/share-set.ts
+var path16 = __toESM(require("path"));
+var SHARED_SCRUBBED_NAMES = sealSet([
+  "verify.md",
+  "review.md",
+  "provenance.json",
+  "summary.md",
+  "run.yaml",
+  "run-state.json"
+], "SHARED_SCRUBBED_NAMES");
+var CANONICAL_RUN_LOG = path16.join("logs", "v1.4-events.jsonl");
+
+// src/domains/security/prose-scrub.ts
+var PROSE_SECRET_LABELS = /* @__PURE__ */ new Set([
+  "password-assignment",
+  "api_key-assignment",
+  "secret-assignment",
+  "AWS access key",
+  "GCP API key",
+  "GitHub personal access token",
+  "GitHub server token",
+  "PEM private key block",
+  "bearer-token",
+  "provider-api-key",
+  "Slack token",
+  "GitHub token",
+  "GitLab personal access token",
+  "npm token",
+  "HuggingFace token"
+]);
+var TOKEN_SHAPE_EXTRAS = [
+  ["\\bgithub_pat_", "GitHub fine-grained token"],
+  ["\\beyJ", "JWT"]
+];
+var PROSE_CREDENTIAL_PATTERNS = deepFreeze([
+  // The canonical password form is case-sensitive; prose also catches `PASSWORD=`.
+  ...SECRET_PATTERNS.filter(([, label]) => PROSE_SECRET_LABELS.has(label)).map(
+    ([re, label]) => re.flags.includes("i") ? [re, label] : Object.freeze([new RegExp(re.source, re.flags + "i"), label])
+  ),
+  ...TOKEN_SHAPE_EXTRAS.flatMap(
+    ([prefix, label]) => TOKEN_SHAPE_PATTERNS.filter((re) => re.source.startsWith(prefix)).map(
+      (re) => Object.freeze([re, label])
+    )
+  )
+]);
+var PROSE_WRITE_TOOLS = sealSet(["Write", "Edit", "MultiEdit"]);
 
 // scripts/docs-hygiene/scan.ts
 var args = process.argv.slice(2);

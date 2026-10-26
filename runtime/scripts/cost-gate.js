@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+if (require.main === module) { const a = process.argv.slice(2), e = a.indexOf("--"); if ((e < 0 ? a : a.slice(0, e)).some((x) => x === "--help" || x === "-h")) { require("fs").writeSync(1, "usage: node runtime/scripts/cost-gate.js [--cwd <path>] [--json]\n"); process.exit(0); } }
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -3118,6 +3119,9 @@ function resolveGuildRoot(startDir) {
 
 // scripts/lib/state/ensure-storage-layout.ts
 var CURRENT_LAYOUT_VERSION = 2;
+function durableGuildDir(root) {
+  return path2.join(root, ".guild");
+}
 function markerPath(root) {
   return path2.join(root, ".guild", "storage-layout.json");
 }
@@ -3153,7 +3157,7 @@ function upgradeChain() {
 }
 function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
   const status = detect(cwd);
-  if (status.state === "current") return status;
+  if (status.state === "current" && opts.recheck !== true) return status;
   if (status.state === "future") {
     throw new Error(
       `guild: .guild/ is layout ${status.version}, this build understands ${CURRENT_LAYOUT_VERSION}. Upgrade Guild; a newer layout is never down-migrated (${status.marker}).`
@@ -3165,7 +3169,8 @@ function ensureStorageLayout(cwd = process.cwd(), opts = {}) {
     root: status.root,
     fromVersion: status.version,
     toVersion: CURRENT_LAYOUT_VERSION,
-    dryRun: opts.dryRun === true
+    dryRun: opts.dryRun === true,
+    fresh: opts.recheck === true
   });
   const after = detect(cwd);
   return { ...after, upgrade: result };
@@ -3199,9 +3204,17 @@ if (isProcessEntry()) {
 
 // scripts/learn/lib/paths.ts
 function parseCwd(argv) {
-  const idx = argv.indexOf("--cwd");
-  if (idx !== -1 && argv[idx + 1]) return argv[idx + 1];
-  return process.env["GUILD_CWD"] ?? process.cwd();
+  return parseFlag(argv, "cwd") ?? process.env["GUILD_CWD"] ?? process.cwd();
+}
+function parseFlag(argv, name) {
+  const eq = `--${name}=`;
+  for (let i = 0; i < argv.length; i++) {
+    const v = argv[i] === `--${name}` ? argv[i + 1] : argv[i].startsWith(eq) ? argv[i].slice(eq.length) : void 0;
+    if (v === void 0 && argv[i] !== `--${name}`) continue;
+    if (!v || v.startsWith("--")) throw new Error(`--${name} needs a value (--${name} <v> or --${name}=<v>)`);
+    return v;
+  }
+  return void 0;
 }
 function hasFlag(argv, name) {
   return argv.includes(`--${name}`);
@@ -3355,8 +3368,24 @@ function createIgnoreFilter(projectRoot) {
 }
 
 // scripts/learn/lib/walk.ts
+function registeredSubGuildPaths(repoRoot) {
+  const out = /* @__PURE__ */ new Set();
+  let manifest;
+  try {
+    manifest = JSON.parse(fs4.readFileSync(path4.join(durableGuildDir(repoRoot), "workspace.json"), "utf8"));
+  } catch {
+    return out;
+  }
+  if (manifest === null || typeof manifest !== "object" || manifest.is_workspace !== true || !Array.isArray(manifest.sub_guilds)) return out;
+  for (const sg of manifest.sub_guilds) {
+    const p = sg?.path;
+    if (typeof p === "string" && p !== "" && p !== "." && p !== ".." && !/[\\/]/.test(p)) out.add(p);
+  }
+  return out;
+}
 function walkRepo(repoRoot, maxFiles = 2e4) {
   const filter = createIgnoreFilter(repoRoot);
+  const subGuilds = registeredSubGuildPaths(repoRoot);
   const out = [];
   const visit = (absDir) => {
     if (out.length >= maxFiles) return;
@@ -3371,6 +3400,7 @@ function walkRepo(repoRoot, maxFiles = 2e4) {
       const abs = path4.join(absDir, e.name);
       const rel2 = path4.relative(repoRoot, abs).replace(/\\/g, "/");
       if (e.isDirectory()) {
+        if (subGuilds.has(rel2)) continue;
         if (filter.isIgnored(rel2) || filter.isIgnored(rel2 + "/")) continue;
         visit(abs);
       } else if (e.isFile()) {
@@ -5577,7 +5607,7 @@ var settingsPolicySplit = {
       return { status: "skipped", detail: ".guild/settings.json is not parseable JSON \u2014 preserved, not split", paths: [] };
     }
     if (!ctx.policy) {
-      return { status: "skipped", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
+      return { status: "failed", detail: "no policy classifier injected; settings.json left unsplit", paths: [] };
     }
     const cfg = ctx.policy;
     const flat = flatten(parsed);
@@ -5934,7 +5964,7 @@ var ktd22Strip = {
   affects: [".guild/initiatives", ".guild/team", ".guild/teams"],
   apply(ctx) {
     if (!ctx.policy) {
-      return { status: "skipped", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
+      return { status: "failed", detail: "no policy classifier injected; host/model pins left in place", paths: [] };
     }
     const cfg = ctx.policy;
     const roots = ["initiatives", "team", "teams"].map((d) => path14.join(ctx.guildDir, d));
@@ -6198,7 +6228,19 @@ var registryYamlRetire = {
       const text = readIfFile(abs);
       if (text === null) continue;
       const target = path14.join(ctx.guildDir, "artifacts", "legacy", relPath.replace("/", "-"));
-      if (lstatSafe(target)) continue;
+      if (lstatSafe(target)) {
+        if (readIfFile(target) !== text) {
+          return {
+            status: "blocked_confirm",
+            detail: `.guild/${relPath} differs from its preserved copy ${rel(ctx, target)}`,
+            paths: [rel(ctx, abs), rel(ctx, target)],
+            question: `registry-yaml-retire found .guild/${relPath} and a different preserved copy at ${rel(ctx, target)}. Keep which one?`
+          };
+        }
+        if (!ctx.dryRun) fs11.rmSync(abs, { force: true });
+        changed.push(`${rel(ctx, abs)} (already preserved at ${rel(ctx, target)})`);
+        continue;
+      }
       writeFile(ctx, target, text);
       if (!ctx.dryRun) fs11.rmSync(abs, { force: true });
       changed.push(`${rel(ctx, abs)} \u2192 ${rel(ctx, target)}`);
@@ -6648,18 +6690,6 @@ var KNOWN_GUILD_HOST_KINDS = Object.freeze([
 ]);
 var KNOWN_GUILD_HOST_ID_SET = new Set(KNOWN_GUILD_HOST_KINDS);
 
-// src/domains/security/share-set.ts
-var path17 = __toESM(require("path"));
-var SHARED_SCRUBBED_NAMES = sealSet([
-  "verify.md",
-  "review.md",
-  "provenance.json",
-  "summary.md",
-  "run.yaml",
-  "run-state.json"
-], "SHARED_SCRUBBED_NAMES");
-var CANONICAL_RUN_LOG = path17.join("logs", "v1.4-events.jsonl");
-
 // src/domains/security/secret-patterns.ts
 var SECRET_PATTERNS = Object.freeze([
   // NOTE: labels deliberately drop the `=` so the redaction replacement
@@ -6707,6 +6737,53 @@ var SECRET_PATTERNS = Object.freeze([
   // High-entropy string heuristic: 40+ hex chars (SHA-like)
   Object.freeze([Object.freeze(/\b[0-9a-f]{40,}\b/), "high-entropy hex string (potential secret)"])
 ]);
+
+// src/domains/security/share-set.ts
+var path17 = __toESM(require("path"));
+var SHARED_SCRUBBED_NAMES = sealSet([
+  "verify.md",
+  "review.md",
+  "provenance.json",
+  "summary.md",
+  "run.yaml",
+  "run-state.json"
+], "SHARED_SCRUBBED_NAMES");
+var CANONICAL_RUN_LOG = path17.join("logs", "v1.4-events.jsonl");
+
+// src/domains/security/prose-scrub.ts
+var PROSE_SECRET_LABELS = /* @__PURE__ */ new Set([
+  "password-assignment",
+  "api_key-assignment",
+  "secret-assignment",
+  "AWS access key",
+  "GCP API key",
+  "GitHub personal access token",
+  "GitHub server token",
+  "PEM private key block",
+  "bearer-token",
+  "provider-api-key",
+  "Slack token",
+  "GitHub token",
+  "GitLab personal access token",
+  "npm token",
+  "HuggingFace token"
+]);
+var TOKEN_SHAPE_EXTRAS = [
+  ["\\bgithub_pat_", "GitHub fine-grained token"],
+  ["\\beyJ", "JWT"]
+];
+var PROSE_CREDENTIAL_PATTERNS = deepFreeze([
+  // The canonical password form is case-sensitive; prose also catches `PASSWORD=`.
+  ...SECRET_PATTERNS.filter(([, label]) => PROSE_SECRET_LABELS.has(label)).map(
+    ([re, label]) => re.flags.includes("i") ? [re, label] : Object.freeze([new RegExp(re.source, re.flags + "i"), label])
+  ),
+  ...TOKEN_SHAPE_EXTRAS.flatMap(
+    ([prefix, label]) => TOKEN_SHAPE_PATTERNS.filter((re) => re.source.startsWith(prefix)).map(
+      (re) => Object.freeze([re, label])
+    )
+  )
+]);
+var PROSE_WRITE_TOOLS = sealSet(["Write", "Edit", "MultiEdit"]);
 
 // src/domains/config/config-defaults.ts
 var DEFAULT_ESCALATION_MARKERS = Object.freeze([
@@ -6935,7 +7012,9 @@ var DEFAULTS = deepFreeze({
      *
      * `block_unmarked_lanes` engages STRICT mode: a Guild lane dispatch carrying
      * NO structured producer marker (`prompt_only` evidence — the hand-rolled
-     * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded.
+     * `Agent()` drift shape) becomes BLOCKABLE instead of merely recorded. It
+     * also denies, in every agent_mode, a lane whose env carries lane carriers
+     * but no `GUILD_DISPATCH_PRODUCER` marker (`carrier_only`, #144).
      *
      * DEFAULT IS `false` ON PURPOSE, and that is load-bearing rather than
      * timidity. `classifyLaneEvidence` grades a fully-substituted lane brief that
@@ -7820,13 +7899,7 @@ var VALID_CAPABILITY_KEYS = /* @__PURE__ */ new Set([
   "auto_create_policy"
 ]);
 function coerceCapability(raw) {
-  const base = DEFAULTS.capability;
-  const out = {
-    resolver_mode: base.resolver_mode,
-    suggestion_budget: base.suggestion_budget,
-    starter_roles: [...base.starter_roles],
-    auto_create_policy: base.auto_create_policy
-  };
+  const out = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
   const r = raw;
   if (CAPABILITY_RESOLVER_MODES.includes(r["resolver_mode"])) {
@@ -7876,6 +7949,19 @@ function deepMerge(base, overlay) {
     }
   }
   return { ...result };
+}
+function stampLayer(sources, obj, layer, prefix = "") {
+  for (const [k, v] of Object.entries(obj)) {
+    if (PROTO_POISON_KEYS.has(k) || v === void 0) continue;
+    const full = prefix ? `${prefix}.${k}` : k;
+    sources[full] = layer;
+    if (isPlainObject4(v)) {
+      stampLayer(sources, v, layer, full);
+    } else {
+      const below = `${full}.`;
+      for (const s of Object.keys(sources)) if (s.startsWith(below)) delete sources[s];
+    }
+  }
 }
 function collectKeyPaths(obj, prefix = "") {
   const paths = /* @__PURE__ */ new Set();
@@ -8215,9 +8301,7 @@ function resolveSettings(opts) {
   const { cwd, flags = {} } = opts;
   const ws = discoverWorkspace(cwd);
   const sources = {};
-  for (const key of Object.keys(DEFAULTS2)) {
-    sources[key] = "builtin";
-  }
+  stampLayer(sources, DEFAULTS2, "builtin");
   sources["workspace.mode"] = "builtin";
   let wsSettings = {};
   let wsLocalSettings = {};
@@ -8236,9 +8320,8 @@ function resolveSettings(opts) {
       }
     }
     wsSettings = wsInheritable;
-    for (const key of Object.keys(wsSettings)) {
-      if (key !== "workspace") sources[key] = "workspace";
-    }
+    const { workspace: _wsMode, ...wsStamp } = wsSettings;
+    stampLayer(sources, wsStamp, "workspace");
     try {
       const rawWsLocal = parseLocalFile(wsGuildDir);
       const wsLocalInheritable = {};
@@ -8253,41 +8336,21 @@ function resolveSettings(opts) {
         }
       }
       wsLocalSettings = wsLocalInheritable;
-      for (const key of Object.keys(wsLocalSettings)) {
-        if (key !== "workspace") sources[key] = "workspace-local";
-      }
+      const { workspace: _wsLocalMode, ...wsLocalStamp } = wsLocalSettings;
+      stampLayer(sources, wsLocalStamp, "workspace-local");
     } catch {
     }
   }
   const projectGuildDir = durableGuildDir2(cwd);
   const projectSettings = parseSettingsFile(path19.join(projectGuildDir, "settings.json"));
-  for (const key of Object.keys(projectSettings)) {
-    if (key === "workspace") {
-      sources["workspace.mode"] = "project";
-    } else {
-      sources[key] = "project";
-    }
-  }
+  stampLayer(sources, projectSettings, "project");
   let projectLocalSettings = {};
   try {
     projectLocalSettings = parseLocalFile(projectGuildDir);
-    for (const key of Object.keys(projectLocalSettings)) {
-      if (key === "workspace") {
-        sources["workspace.mode"] = "project-local";
-      } else {
-        sources[key] = "project-local";
-      }
-    }
+    stampLayer(sources, projectLocalSettings, "project-local");
   } catch {
   }
-  for (const key of Object.keys(flags)) {
-    if (flags[key] !== void 0) {
-      if (key === "workspace") {
-        sources["workspace.mode"] = "cli";
-      }
-      sources[key] = "cli";
-    }
-  }
+  stampLayer(sources, flags, "cli");
   const assembled = assembleLayers(
     [wsSettings, wsLocalSettings, projectSettings, projectLocalSettings],
     flags
@@ -8387,6 +8450,7 @@ function resolveSettings(opts) {
       ...assembled.defaults,
       index: { ...assembled.defaults.index, enabled: false }
     };
+    sources["defaults.index.enabled"] = sources.index;
   }
   return { config: assembled, sources };
 }
