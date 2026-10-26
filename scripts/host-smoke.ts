@@ -98,6 +98,9 @@ const WRAPPER_KEY: Partial<Record<HostId, string>> = {
   "codex-cli": "codex",
   "pi-cli": "pi",
   "antigravity-cli": "antigravity",
+  cursor: "cursor",
+  opencode: "opencode",
+  "rovo-dev": "rovo-dev",
   "agents-file": "agents-file",
 };
 
@@ -206,7 +209,7 @@ function probeAuth(host: HostId): { ok: boolean; evidence: string } {
   }
 }
 
-/** Try a wrapper dry-run plan for the hosts in WRAPPER_KEY (claude/codex/pi/antigravity). */
+/** Try a wrapper dry-run plan for the hosts in WRAPPER_KEY. */
 function bootstrapPlanCheck(host: HostId): SmokeCheck {
   const key = WRAPPER_KEY[host];
   if (!key || key === "agents-file") {

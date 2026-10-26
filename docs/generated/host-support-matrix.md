@@ -1,6 +1,6 @@
 # Generated Host Support Matrix
 
-Generated: 2026-08-06T03:29:10.399Z
+Generated: 2026-10-25T23:47:17.233Z
 
 This file is generated from host-adapter outputs and review-progress schema validation. Do not hand-edit support cells.
 
@@ -19,10 +19,10 @@ This file is generated from host-adapter outputs and review-progress schema vali
 | claude-code-web | Supported (app) | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
 | codex-app | Supported (app) | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
 | claude-ai-connector | Supported (connector) | app | none | unsupported | unsupported | enqueue_only | — | enqueue_only |
-| cursor | Supported (beta) | cli | target | unsupported | verified_wrapped | target | — | degraded |
+| cursor | Supported | cli | target | verified_wrapped | verified_wrapped | verified | verified_wrapped | degraded |
 | github-copilot | Supported (beta) | cli | target | unsupported | verified_wrapped | target | — | degraded |
-| opencode | Supported (beta) | cli | target | unsupported | verified_wrapped | target | — | degraded |
-| rovo-dev | Supported (beta) | cli | target | unsupported | verified_wrapped | target | — | degraded |
+| opencode | Supported | cli | target | verified_wrapped | verified_wrapped | verified | verified_wrapped | degraded |
+| rovo-dev | Supported | cli | target | verified_wrapped | verified_wrapped | verified | verified_wrapped | degraded |
 | kiro | Supported (beta) | file | target | unsupported | verified_bridged | target | — | degraded |
 | qoder | Supported (beta) | file | target | unsupported | verified_bridged | target | — | degraded |
 | trae | Supported (beta) | file | target | unsupported | verified_bridged | target | — | degraded |

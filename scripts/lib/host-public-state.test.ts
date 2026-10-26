@@ -81,8 +81,9 @@ describe("host-public-state — two-field honesty model", () => {
   it("promotes exactly the hosts with a valid committed receipt (evidence-derived, not claimed)", () => {
     const promoted = matrix.rows.filter((r) => r.has_valid_receipt).map((r) => r.host_id).sort();
     // L5b added the native reference host (claude-code-cli → native) + codex-cli
-    // (verified_wrapped) alongside L5's pi/antigravity wrapped-CLI receipts.
-    expect(promoted).toEqual(["antigravity-cli", "claude-code-cli", "codex-cli", "pi-cli"]);
+    // (verified_wrapped) alongside L5's pi/antigravity wrapped-CLI receipts; v3.2.0
+    // added cursor, opencode and rovo-dev wrapped-CLI receipts.
+    expect(promoted).toEqual(["antigravity-cli", "claude-code-cli", "codex-cli", "cursor", "opencode", "pi-cli", "rovo-dev"]);
     // The native host promotes to `native`; the wrapped hosts to `verified_wrapped` —
     // each to its OWN bucket's verified state, with the floor committed atomically.
     const expectedState: Record<string, string> = {
@@ -90,6 +91,9 @@ describe("host-public-state — two-field honesty model", () => {
       "codex-cli": "verified_wrapped",
       "pi-cli": "verified_wrapped",
       "antigravity-cli": "verified_wrapped",
+      cursor: "verified_wrapped",
+      opencode: "verified_wrapped",
+      "rovo-dev": "verified_wrapped",
     };
     for (const id of promoted) {
       const row = rowById.get(id as HostId)!;
@@ -100,7 +104,7 @@ describe("host-public-state — two-field honesty model", () => {
   });
 
   it("keeps an honest unverified target UNSUPPORTED (not a failure)", () => {
-    for (const id of ["cursor", "opencode", "rovo-dev", "github-copilot", "agents-file", "kiro"] as HostId[]) {
+    for (const id of ["github-copilot", "agents-file", "kiro"] as HostId[]) {
       const row = rowById.get(id)!;
       expect(row.current_public_state).toBe("unsupported");
       expect(row.verification_status).toBe("target");
@@ -309,14 +313,15 @@ describe("display support — presentation-only support label (beta / app / conn
   });
 
   it("the generated matrix stamps display_support and the gate stays green", () => {
-    // Load the committed receipts so the 4 verified hosts satisfy their committed
+    // Load the committed receipts so the verified hosts satisfy their committed
     // floors (an empty-receipt matrix would honestly trip the floor-regression check).
     const matrix = generateSupportMatrix(GENERATED_AT, loadCommittedReceipts());
     const byHost = new Map(matrix.rows.map((r) => [r.host_id, r]));
     // Verified hosts read Supported; installable targets read beta; app surfaces read app;
     // the connector reads connector. Every host presents as supported in some form.
     expect(byHost.get("claude-code-cli")!.display_support).toBe("supported");
-    expect(byHost.get("cursor")!.display_support).toBe("supported_beta");
+    expect(byHost.get("cursor")!.display_support).toBe("supported");
+    expect(byHost.get("github-copilot")!.display_support).toBe("supported_beta");
     expect(byHost.get("agents-file")!.display_support).toBe("supported_beta");
     expect(byHost.get("claude-code-app")!.display_support).toBe("supported_app");
     expect(byHost.get("codex-app")!.display_support).toBe("supported_app");
