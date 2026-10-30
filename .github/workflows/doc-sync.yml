@@ -1,27 +1,10 @@
-# doc-sync.yml — rollout-coupling + architecture-spine advisories
-# (workspace-consolidation Lane D and manifest-derived docs drift in CI)
-#
-# Enforces (advisory) Rule 2 of docs/knowledge/decisions/workspace-knowledge-flow.md:
-# when the plugin's USER-FACING SURFACE changes (commands/** or a skill whose SKILL.md
-# frontmatter carries `user_facing: true`), the root reference docs (docs/knowledge/ in
-# the umbrella repo) must update in the same rollout — the website generates final user
-# documentation FROM them.
-#
-# CROSS-REPO LIMITATION (by design — honest). This workflow runs in the PLUGIN repo,
-# which does NOT contain docs/knowledge/ (that lives in the umbrella repo
-# lookatitude/guild-workspace). So CI can DETECT the surface change but cannot VERIFY the
-# paired root-doc update landed. It therefore runs ADVISORY / NON-BLOCKING, matching
-# Rule 2's warn-by-default posture (the same self-containment stance as
-# dot-guild-policy.yml). The author resolves it by landing the docs/knowledge/ update in
-# the umbrella rollout and/or adding `docs-sync: n/a <reason>` to a commit. Full blocking
-# enforcement needs cross-repo PR correlation (future) or a monorepo. The check itself +
-# 42 unit/integration tests live at scripts/workspace/check-doc-sync.ts.
-# This workflow also carries the non-blocking architecture-spine advisory. Its source
-# inputs live here, but the checked docs/v2 page is likewise umbrella-only, so a
-# plugin-repo CI checkout honestly reports SKIP; a full workspace checkout runs the
-# real manifest/inventory-to-document comparison.
-#
-# Owner: tooling-engineer.
+# doc-sync.yml — Stage A of the docs sync pipeline (workspace docs/maintainer-guide.md).
+# PR job: advisory reminder when the user-facing surface changes (never blocks).
+# Push job (next/main): sends `plugin-changed` to lookatitude/guild-workspace, whose
+# reference-sync regenerates docs/reference/ from this repo's manifests.
+# Trap: the dispatch needs the GUILD_SYNC_TOKEN secret. Without it the push job
+# reports "blocked" in its summary and the workspace's daily schedule picks the
+# change up instead; it does not fail plugin CI. Escape: `docs-sync: n/a <reason>`.
 
 name: doc-sync (rollout-coupling advisory)
 
@@ -30,15 +13,48 @@ on:
     # Only fire when the user-facing surface might be touched (keeps it quiet otherwise).
     paths:
       - "commands/**"
+      - "command-src/**"
       - "skills/**"
-      - "src/modules/**"
+      - "templates/specialists/**"
+      - "src/domains/**"
+      - "src/surfaces/graphs/**"
+      - "docs/generated/host-support-matrix.md"
+      - "guild.inventory.json"
+  push:
+    branches: [next, main]
+    paths:
+      - "commands/**"
+      - "command-src/**"
+      - "skills/**"
+      - "templates/specialists/**"
+      - "src/domains/**"
+      - "src/surfaces/graphs/**"
+      - "docs/generated/host-support-matrix.md"
       - "guild.inventory.json"
 
 permissions:
   contents: read
 
 jobs:
+  signal-workspace:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch plugin-changed to guild-workspace
+        env:
+          TOKEN: ${{ secrets.GUILD_SYNC_TOKEN }}
+        run: |
+          if [ -z "${TOKEN:-}" ]; then
+            echo "::warning::status: blocked. GUILD_SYNC_TOKEN not set; workspace reference-sync runs on its daily schedule"
+            echo "status: **blocked** (no GUILD_SYNC_TOKEN). Manual: \`gh workflow run reference-sync -R lookatitude/guild-workspace\`" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          GH_TOKEN="$TOKEN" gh api repos/lookatitude/guild-workspace/dispatches -f event_type=plugin-changed \
+            -F "client_payload[next_ref]=next" -F "client_payload[source_sha]=$GITHUB_SHA"
+          echo "status: dispatched plugin-changed for $GITHUB_REF_NAME @ $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+
   doc-sync:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     # Advisory: this job must NEVER block a PR. continue-on-error guarantees that even an
     # infrastructure failure (npm registry outage, checkout hiccup) cannot turn the PR red.
@@ -70,7 +86,7 @@ jobs:
           # narrows the log range to two-dot for escape-token detection (Codex-CI MAJOR-1).
           RANGE="${BASE_SHA}...${HEAD_SHA}"
           echo "doc-sync PR range: $RANGE"
-          # Plugin repo is the only checkout here; docs/knowledge/ lives in the umbrella
+          # Plugin repo is the only checkout here; the reference lives in the umbrella
           # repo, so --root-repo=. finds no root-doc update by design. NO --strict → exit 0
           # on a flagged advisory. Capture the exit code so a genuine git failure (exit 2)
           # is surfaced as a ::warning:: rather than masquerading as a CLEAN result.
@@ -95,31 +111,5 @@ jobs:
               echo "> ⚠️ doc-sync could not evaluate (git error). Advisory not computed."
               echo ""
             fi
-            echo "_If this PR changes the user-facing surface, ensure the matching root \`docs/knowledge/\` update lands in the umbrella repo (\`lookatitude/guild-workspace\`) in the **same rollout** — the website generates final user docs from it. If the change is genuinely doc-irrelevant, add \`docs-sync: n/a <reason>\` to a commit. This check is **advisory** (non-blocking); canon: \`docs/knowledge/decisions/workspace-knowledge-flow.md\` Rule 2._"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Architecture-spine drift advisory (manifest-derived tables vs umbrella docs/v2)
-        run: |
-          set -uo pipefail
-          # The plugin-only CI checkout has no umbrella docs/v2 tree, so the honest
-          # expected result is SKIP. This is the same cross-repo limitation documented
-          # above; --if-present relaxes only the missing-document case.
-          set +e
-          OUT="$(cd scripts && npx tsx check-docs-architecture.ts --if-present 2>&1)"
-          CODE=$?
-          set -e
-          echo "$OUT"
-          if [ "$CODE" -ne 0 ]; then
-            echo "::warning::architecture-spine drift check reported exit $CODE — advisory only"
-          fi
-          # Render OUT as 4-space-indented lines, matching the injection-safe advisory
-          # rendering above rather than placing tool output in a backtick fence.
-          {
-            echo "## architecture-spine — drift advisory"
-            echo ""
-            printf '%s\n' "$OUT" | sed 's/^/    /'
-            echo ""
-            echo "_Expected in this plugin-only CI checkout: **SKIP**, because the umbrella \`docs/v2/\` tree is not present._"
-            echo ""
-            echo "_Run the real check from a full workspace checkout with \`cd plugin/scripts && npm run check:docs-architecture\`; add \`--print\` to emit the corrected rows to paste into the document._"
+            echo "_After merge to \`next\`/\`main\`, the workspace \`reference-sync\` regenerates \`docs/reference/\` from this repo's manifests and opens a reference PR; the website then gets a docs-sync PR. If the change is genuinely doc-irrelevant, add \`docs-sync: n/a <reason>\` to a commit. Advisory only; guide: workspace \`docs/maintainer-guide.md\`._"
           } >> "$GITHUB_STEP_SUMMARY"
