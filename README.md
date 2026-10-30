@@ -34,10 +34,10 @@ the only automatic writer; everything else waits for a gate.
 - **13 dispatching command files** — bare `/guild [brief]`, the phase verbs
   `/guild:init|ideate|plan|build|qa|ops`, `/guild:learn`, the nouns
   `/guild:wiki|initiative`, `/guild:status`, `/guild:config`, and
-  `/guild:maintain`. Sub-verbs are arguments, never files. The dropped v2.6
-  command files (`adopt`, `audit`, `dashboard`, `evolve`, `fix`, `goal`,
-  `migrate`, `models`, `resume`, `rollback`, `stats`) are print-only aliases that
-  name the new spelling. The `:` plugin namespace **stays** (Claude Code requires
+  `/guild:maintain`. Sub-verbs are arguments, never files. The old standalone verbs
+  (`adopt`, `audit`, `dashboard`, `evolve`, `fix`, `goal`, `migrate`, `models`,
+  `resume`, `rollback`, `stats`) are sub-verbs of `init`, `maintain`, `status`,
+  `plan`, and `config`, not separate commands. The `:` plugin namespace **stays** (Claude Code requires
   it); every command is `/guild:<verb>` (v1→v2:
   `https://guildstack.dev/docs/migration-v1-to-v2`).
 - **One runtime shape** — bare `/guild` is the T0 orchestrator session: with no
@@ -346,8 +346,7 @@ currently requires each file's frontmatter to include `final_status: satisfied` 
 ## Commands
 
 Every command is `/guild:<verb>` (the `:` plugin namespace is required by Claude
-Code). There are 13 dispatching command files plus 11 print-only aliases; sub-verbs
-are positional arguments.
+Code). There are 13 command files; sub-verbs are positional arguments.
 
 | Command | Purpose |
 |---|---|

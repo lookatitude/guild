@@ -7,7 +7,6 @@
     "build:inventory": "npx tsx build-inventory.ts",
     "check:inventory": "npx tsx build-inventory.ts --check",
     "build:hosts": "npx tsx build-host-packages.ts",
-    "check:docs-architecture": "npx tsx check-docs-architecture.ts",
     "check:modules": "npx tsx check-domain-ownership.ts",
     "check:path-containment": "npx tsx check-path-containment.ts",
     "sync:claude-install": "npx tsx build-host-packages.ts --sync-claude-install",
