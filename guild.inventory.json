@@ -5,7 +5,7 @@
   "manifest": {
     "name": "guild",
     "version": "3.3.0-beta.1",
-    "description": "A team-of-specialists plugin for AI coding hosts: 15 domain specialist type templates across engineering, content, and commercial groups (minted into your project on demand) plus 3 machinery agents, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
+    "description": "A team-of-specialists plugin for AI coding hosts: 15 domain specialist type templates across engineering, content, and commercial groups (minted into your project on demand) plus 4 machinery agents, the v2 single-verb lifecycle (init · ideate · plan · build · qa · ops), a categorized wiki with decision capture, and a self-evolution loop with shadow-mode gating.",
     "homepage": "https://guildstack.dev",
     "repository": "https://github.com/lookatitude/guild",
     "author": {
@@ -811,11 +811,6 @@
     {
       "id": "check-channel-integrity",
       "source_path": "scripts/check-channel-integrity.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "check-docs-architecture",
-      "source_path": "scripts/check-docs-architecture.ts",
       "kind": "cli"
     },
     {
@@ -2391,11 +2386,6 @@
     {
       "id": "workspace-role-localize",
       "source_path": "scripts/workspace-role-localize.ts",
-      "kind": "cli"
-    },
-    {
-      "id": "workspace/check-command-coverage",
-      "source_path": "scripts/workspace/check-command-coverage.ts",
       "kind": "cli"
     },
     {
