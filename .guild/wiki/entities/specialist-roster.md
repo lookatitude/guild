@@ -210,7 +210,7 @@ evidence = data citation (search volume, A/B result, benchmark).
 
 ## Tiered-worker roster (cost-aware-tiering-and-lean-context ADR §7)
 
-A thin **tiered-worker** layer — the 3 machinery agents — **augments** the 15
+A thin **tiered-worker** layer — the 4 machinery agents (`advisor`, `context-manager`, `developer`, `team-lead`) — **augments** the 15
 domain type templates and the dev-team agents (it does not replace either).
 Each role carries a **default tier**. Per the ADR's reconciliation rule, where an equivalent already ships, the
 existing specialist is **retiered** rather than duplicated; only genuinely-new
