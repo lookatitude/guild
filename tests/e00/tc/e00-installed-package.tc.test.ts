@@ -117,9 +117,18 @@ function startAsync(t: Tc, o: StartOpts = {}, controller = script(t.pkg, "task-c
   return ownChild(spawn(runner, [controller, ...withRoot(startArgs(t, o), t.root)], { cwd: t.root, env: { ...t.env, ...extraEnv }, stdio: "ignore" }), t.root);
 }
 
+/**
+ * The team_lead decision is offered from decide's own precondition (the instance's handoff validation exists) while
+ * no team_lead decision is recorded for it, or when status shows awaiting=team_lead. It does not depend on when the
+ * controller exposes its live wait.
+ */
 function decideAwaiting(t: Tc, s: Record<string, any>, before?: (inst: Record<string, any>) => void): void {
   for (const inst of s.instances ?? []) {
-    if (inst.awaiting !== "team_lead") continue;
+    if (fs.existsSync(path.join(t.runDir, "controller", "decisions", inst.instance_id, "team_lead.json"))) continue;
+    const cellDir = path.join(t.runDir, "task-cells", inst.logical_task_id);
+    const validated = fs.existsSync(cellDir) && (fs.readdirSync(cellDir, { recursive: true }) as string[])
+      .some((e) => e.endsWith(path.join("instances", inst.instance_id, "handoff-validation.json")));
+    if (inst.awaiting !== "team_lead" && !validated) continue;
     before?.(inst);
     cli(t, ["decide", "--run", t.runId, "--instance", inst.instance_id, "--lead-binding-id", TC_LEAD, "--decision", "accepted"]);
   }
@@ -329,10 +338,27 @@ describe.skipIf(!enabled)("TC · start refusals (EAT01-I, CD5, CD8, CD22)", () =
 
   it("two concurrent starts: exactly one claim, the other refuses controller_already_claimed", async () => {
     const t = tc([{ id: "T1", role: "backend" }]);
-    startAsync(t);
-    const b = spawnSync(NODE, [script(PKG, "task-cell-controller"), ...withRoot(startArgs(t), t.root)], { cwd: t.root, env: t.env, encoding: "utf8", timeout: 60000 });
-    await waitFor(() => path.join(t.runDir, "controller", "controller.json"));
-    expect(`${b.stdout}${b.stderr}`).toContain("controller_already_claimed");
+    // Either start may win the exclusive claim (no spawn order is a rendezvous): the claim's pid names the
+    // winner, and the loser is the other process, which must exit nonzero with the refusal.
+    const runs = [0, 1].map(() => {
+      const child = ownChild(spawn(NODE, [script(PKG, "task-cell-controller"), ...withRoot(startArgs(t), t.root)], { cwd: t.root, env: t.env, stdio: ["ignore", "pipe", "pipe"] }), t.root);
+      const run = { child, out: "", code: null as number | null };
+      child.stdout!.on("data", (d) => { run.out += d; });
+      child.stderr!.on("data", (d) => { run.out += d; });
+      child.on("exit", (c) => { run.code = c; });
+      return run;
+    });
+    const claimPath = await waitFor(() => path.join(t.runDir, "controller", "controller.json"));
+    const until = Date.now() + 120_000;
+    while (Date.now() < until && runs.every((r) => r.code === null)) await sleep(50);
+    const claimPid = JSON.parse(fs.readFileSync(claimPath, "utf8")).pid;
+    const winner = runs.find((r) => r.child.pid === claimPid);
+    const loser = runs.find((r) => r.child.pid !== claimPid);
+    expect(winner).toBeDefined();
+    expect(loser!.code).not.toBeNull();
+    expect(loser!.code).not.toBe(0);
+    expect(loser!.out).toContain("controller_already_claimed");
+    expect(winner!.out).not.toContain("controller_already_claimed");
     expect(fs.readdirSync(path.join(t.runDir, "controller")).filter((f) => f === "controller.json").length).toBe(1);
   }, T);
 });
@@ -437,6 +463,11 @@ describe.skipIf(!enabled)("TC · cooperative accepted path (EAT01-C, EAT02, EAT0
   it("a worker that never claims the ack is force-terminated timed_out with no acceptance", async () => {
     const t = tc([{ id: "T1", role: "backend" }], { mode: "no-ack" });
     const s = await drive(t, startAsync(t));
+    // Non-vacuous: the worker received the assignment and wrote its receipt, and the timeout is the ack timeout
+    // (a worker that died before delivery also ends timed_out, for another reason).
+    expect(JSON.parse(fs.readFileSync(path.join(t.root, ".tc-hook-result.json"), "utf8"))).toMatchObject({ mode: "no-ack", hook_ran: false, ack_started: false, steps: { receipt: 1 } });
+    expect(admitted(t, "T1")).toBe(true);
+    expect(JSON.parse(fs.readFileSync(findFile(path.join(t.runDir, "task-cells", "T1"), "terminal.json")!, "utf8"))).toMatchObject({ terminal_state: "timed_out", reason: "assignment acknowledgement timed out" });
     expect(inst(s, "T1")).toMatchObject({ attempt_terminal_state: "timed_out", mechanical_acceptance: "none", qualified_release: false });
   }, T);
 });
@@ -491,22 +522,30 @@ describe.skipIf(!enabled)("TC · broker reviewer_cell authority (F4, CD12)", () 
     expect(inst(s, "T1")).toMatchObject({ awaiting: "reviewer_cell", mechanical_acceptance: "none" });
   }, T);
 
-  const forgeries: Array<[string, (f: Record<string, Buffer>) => void]> = [
-    ["candidate bytes are edited after the genuine invocation pinned them", (f) => { f["candidate.json"] = Buffer.concat([f["candidate.json"], Buffer.from(" ")]); }],
-    ["the invocation names another participant", (f) => { const i = JSON.parse(f["invocation.json"].toString()); i.reviewer_participant_id = "someone-else"; f["invocation.json"] = Buffer.from(JSON.stringify(i)); }],
+  /** Re-pin the invocation's adapter_exit join to the edited record, so only the named property differs. */
+  const repinAdapterExit = (f: Record<string, Buffer>) => {
+    const i = JSON.parse(f["invocation.json"].toString());
+    i.adapter_exit = { ...i.adapter_exit, sha256: sha256(f["adapter-exit.json"]) };
+    f["invocation.json"] = Buffer.from(JSON.stringify(i));
+  };
+  const forgeries: Array<[string, (f: Record<string, Buffer>) => void, string]> = [
+    ["candidate bytes are edited after the genuine invocation pinned them", (f) => { f["candidate.json"] = Buffer.concat([f["candidate.json"], Buffer.from(" ")]); }, "invocation_hash_mismatch:candidate"],
+    ["the invocation names another participant", (f) => { const i = JSON.parse(f["invocation.json"].toString()); i.reviewer_participant_id = "someone-else"; f["invocation.json"] = Buffer.from(JSON.stringify(i)); }, "invocation_request_mismatch"],
     ["invocation and adapter exit claim a same-family reviewer", (f) => {
       for (const n of ["invocation.json", "adapter-exit.json"]) { const x = JSON.parse(f[n].toString()); x.reviewer_family = x.author_family; f[n] = Buffer.from(JSON.stringify(x)); }
-    }],
+      repinAdapterExit(f);
+    }, "same_family_review"],
     ["invocation and adapter exit report a nonzero exit", (f) => {
       for (const n of ["invocation.json", "adapter-exit.json"]) { const x = JSON.parse(f[n].toString()); x.exit = 1; f[n] = Buffer.from(JSON.stringify(x)); }
-    }],
+      repinAdapterExit(f);
+    }, "broker_exit_nonzero"],
   ];
-  for (const [label, mutate] of forgeries) {
+  for (const [label, mutate, reason] of forgeries) {
     it(`refuses reviewer_cell when ${label}`, async () => {
       const { s } = await reviewedRun(mutate);
       expect(inst(s, "T1").mechanical_acceptance).toBe("none");
       expect(inst(s, "T1").qualified_release).toBe(false);
-      expect(JSON.stringify(s)).toMatch(/review_refused|broker_exit_nonzero/);
+      expect(inst(s, "T1").awaiting).toBe(`reviewer_cell:${reason}`);
     }, 900_000);
   }
 });

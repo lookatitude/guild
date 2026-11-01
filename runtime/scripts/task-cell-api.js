@@ -42754,13 +42754,44 @@ function writeTaskAssignmentV2(cwd, assignment, binding) {
   assertDispatchBinding(cwd, valid.run_id, binding);
   const out = writePathUnderCwd(cwd, valid.assignment_path);
   const publicPath = path81.resolve(cwd, valid.assignment_path);
-  if (fs68.existsSync(out)) {
-    throw new Error(
-      `assignment overwrite refused at ${valid.assignment_path} \u2014 assignments are immutable per (task_run_id, attempt, instance_id) (D6)`
-    );
-  }
-  fs68.writeFileSync(out, JSON.stringify(valid, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
+  const refused = () => new Error(
+    `assignment overwrite refused at ${valid.assignment_path} \u2014 assignments are immutable per (task_run_id, attempt, instance_id) (D6)`
+  );
+  if (fs68.existsSync(out)) throw refused();
+  publishExclusive(out, JSON.stringify(valid, null, 2) + "\n", refused);
   return publicPath;
+}
+function syncDirectory(dir) {
+  const fd = fs68.openSync(dir, "r");
+  try {
+    fs68.fsyncSync(fd);
+  } finally {
+    fs68.closeSync(fd);
+  }
+}
+function publishExclusive(out, bytes, refused) {
+  const temp = `${out}.${(0, import_crypto2.randomBytes)(8).toString("hex")}.tmp`;
+  const fd = fs68.openSync(temp, "wx");
+  try {
+    try {
+      fs68.writeFileSync(fd, bytes, "utf8");
+      fs68.fsyncSync(fd);
+    } finally {
+      fs68.closeSync(fd);
+    }
+    try {
+      fs68.linkSync(temp, out);
+    } catch (e) {
+      if (e.code === "EEXIST") throw refused();
+      throw e;
+    }
+    syncDirectory(path81.dirname(out));
+  } finally {
+    try {
+      fs68.unlinkSync(temp);
+    } catch {
+    }
+  }
 }
 function writeTaskAttemptV1(cwd, attempt, binding) {
   const valid = validateTaskAttemptV1(attempt);
@@ -42914,9 +42945,10 @@ function readAssignmentAck(cwd, ids) {
     return null;
   }
 }
-var fs68, path81, ASSIGNMENT_ACK_SCHEMA;
+var import_crypto2, fs68, path81, ASSIGNMENT_ACK_SCHEMA;
 var init_task_assignment_v2 = __esm({
   "src/domains/dispatch/task-assignment-v2.ts"() {
+    import_crypto2 = require("crypto");
     fs68 = __toESM(require("fs"));
     path81 = __toESM(require("path"));
     init_kernel();
@@ -46352,8 +46384,8 @@ function readControllerStatus(input) {
     });
   }
   const mechanicallyAccepted = instances.filter((i) => i.mechanical_acceptance === "accepted").length;
-  const qualificationState = anyQualified ? "qualified" : anyOtherContext ? "qualified_other_context" : mechanicallyAccepted > 0 && !claim ? "mechanics_only" : anyIncomplete && claim?.package_root ? "finalization_incomplete" : mechanicallyAccepted > 0 ? "mechanics_only" : claim ? "unavailable" : "unknown";
-  const qualificationReason = anyQualified ? null : qualificationState === "mechanics_only" ? "acceptance records carry no verified CD17 evidence" : qualificationState === "unknown" ? "no readable controller claim" : qualificationState === "unavailable" ? claim?.package_root ? "no qualified acceptance yet" : "no verified installed package (source run)" : qualificationState;
+  const qualificationState = anyQualified ? "qualified" : anyOtherContext ? "qualified_other_context" : claim && claim.package_root === null ? "mechanics_only" : mechanicallyAccepted > 0 && !claim ? "mechanics_only" : anyIncomplete && claim?.package_root ? "finalization_incomplete" : mechanicallyAccepted > 0 ? "mechanics_only" : claim ? "unavailable" : "unknown";
+  const qualificationReason = anyQualified ? null : qualificationState === "mechanics_only" && claim?.package_root === null ? "source run: no verified installed package (CD16)" : qualificationState === "mechanics_only" ? "acceptance records carry no verified CD17 evidence" : qualificationState === "unknown" ? "no readable controller claim" : qualificationState === "unavailable" ? claim?.package_root ? "no qualified acceptance yet" : "no verified installed package (source run)" : qualificationState;
   let readiness = {
     state: "unknown",
     current_package_identity: null,
@@ -47435,18 +47467,21 @@ var init_task_cell_controller = __esm({
         const ids = idsOf(assignment);
         const paths = taskCellPaths(ids);
         if (!ackClaim) return outcome("handoff_validated", iid, null, "ack_claim");
+        this.noteHandle(iid, { awaiting: "team_lead" });
         const lead = await this.poll(() => {
           const d = readTeamLeadDecision(this.cwd, assignment, this.claim, validation, this.principal.operatorUid());
           return d.ok || d.reason !== "awaiting_team_lead" ? d : null;
         }, 1e3, spec.review_timeout_ms ?? 36e5);
         if (!lead) return this.awaiting(iid, "team_lead", outcome);
         if (!lead.ok) return this.awaiting(iid, `team_lead:${lead.reason}`, outcome);
+        this.noteHandle(iid, { awaiting: null });
         if (lead.decision.decision === "rejected") return this.reject(instance, lane, validation, "team_lead", lead.decision.at, lead.decision.reason ?? "team_lead rejected", outcome);
         let review = null;
         if (lane.reviewer_participant_id !== null) {
           if (!this.proposal) return this.awaiting(iid, "reviewer_cell:proposal_absent", outcome);
           if (lane.reviewer_participant_id === this.claim.lead_binding_id) return this.awaiting(iid, "reviewer_cell:reviewer_is_lead", outcome);
           const requestRel = this.writeReviewRequest(spec, assignment, lane.reviewer_participant_id);
+          this.noteHandle(iid, { awaiting: "reviewer_cell" });
           review = await this.poll(() => {
             const r = deriveReviewerCellAuthority({
               cwd: this.cwd,
@@ -47460,6 +47495,7 @@ var init_task_cell_controller = __esm({
           }, 5e3, spec.review_timeout_ms ?? 36e5);
           if (!review) return this.awaiting(iid, "reviewer_cell", outcome);
           if (review.decision === "review_refused") return this.awaiting(iid, `reviewer_cell:${review.reason}`, outcome);
+          this.noteHandle(iid, { awaiting: null });
           if (review.decision === "rejected") return this.reject(instance, lane, validation, "reviewer_cell", review.evidence?.finished_at ?? this.now(), review.reason ?? "review not satisfied", outcome);
         }
         const observed = [

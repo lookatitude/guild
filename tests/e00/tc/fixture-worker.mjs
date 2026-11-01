@@ -5,7 +5,9 @@
  * shim that execs this file first on PATH, so the controller's unchanged
  * `command claude` pane launch reaches it with no production test mode.
  *
- * It does only what a cooperative worker may do (file_ownership.worker): write
+ * It first waits (bounded; mode.assignmentWaitMs, default 180 s) for a complete
+ * assignment, which the controller publishes only after readiness; then it does
+ * only what a cooperative worker may do (file_ownership.worker): write
  * declared scope artifacts and the lane receipt, run the PACKAGED TaskCompleted
  * hook (<pkg>/hooks/agent-team/dist/task-completed.js, <pkg> derived from
  * mode.ackCli = <pkg>/runtime/scripts/task-cell-ack.js) as a synthetic fixture
@@ -28,13 +30,34 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 const assignmentPath = process.env.GUILD_TASK_ASSIGNMENT ?? "";
-if (!path.isAbsolute(assignmentPath) || !fs.existsSync(assignmentPath)) process.exit(3);
 const marker = `${path.sep}.guild${path.sep}`;
+if (!path.isAbsolute(assignmentPath) || !assignmentPath.includes(marker)) process.exit(3);
 const root = assignmentPath.slice(0, assignmentPath.indexOf(marker));
 const modeFile = path.join(root, ".tc-worker-mode.json");
 const mode = fs.existsSync(modeFile) ? JSON.parse(fs.readFileSync(modeFile, "utf8")) : {};
-const bytes = fs.readFileSync(assignmentPath);
-const a = JSON.parse(bytes.toString("utf8"));
+// The controller writes the assignment only after it has observed this process as
+// ready. As the launch prompt instructs, wait until a complete guild.task_assignment.v2
+// parses; an empty or partial file (a non-atomic writer, kept as a regression input) is
+// never read as the assignment. Give up (exit 3) after the bound.
+const readAssignment = () => {
+  try {
+    const b = fs.readFileSync(assignmentPath);
+    const v = JSON.parse(b.toString("utf8"));
+    return v !== null && typeof v === "object" && v.schema_version === "guild.task_assignment.v2" ? { b, v } : null;
+  } catch {
+    return null;
+  }
+};
+const waitMs = Number.isInteger(mode.assignmentWaitMs) && mode.assignmentWaitMs > 0 ? mode.assignmentWaitMs : 180_000;
+const waitUntil = Date.now() + waitMs;
+let got = readAssignment();
+while (got === null && Date.now() < waitUntil) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+  got = readAssignment();
+}
+if (got === null) process.exit(3);
+const bytes = got.b;
+const a = got.v;
 
 // F3 (round 2): secret-safe self-check of the pane environment. The mode file
 // carries only the nonce LENGTH and SHA-256; the worker hashes every byte window

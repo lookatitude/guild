@@ -34752,13 +34752,44 @@ function writeTaskAssignmentV2(cwd, assignment, binding) {
   assertDispatchBinding(cwd, valid.run_id, binding);
   const out = writePathUnderCwd(cwd, valid.assignment_path);
   const publicPath = path59.resolve(cwd, valid.assignment_path);
-  if (fs50.existsSync(out)) {
-    throw new Error(
-      `assignment overwrite refused at ${valid.assignment_path} \u2014 assignments are immutable per (task_run_id, attempt, instance_id) (D6)`
-    );
-  }
-  fs50.writeFileSync(out, JSON.stringify(valid, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
+  const refused = () => new Error(
+    `assignment overwrite refused at ${valid.assignment_path} \u2014 assignments are immutable per (task_run_id, attempt, instance_id) (D6)`
+  );
+  if (fs50.existsSync(out)) throw refused();
+  publishExclusive(out, JSON.stringify(valid, null, 2) + "\n", refused);
   return publicPath;
+}
+function syncDirectory(dir) {
+  const fd = fs50.openSync(dir, "r");
+  try {
+    fs50.fsyncSync(fd);
+  } finally {
+    fs50.closeSync(fd);
+  }
+}
+function publishExclusive(out, bytes, refused) {
+  const temp = `${out}.${(0, import_crypto2.randomBytes)(8).toString("hex")}.tmp`;
+  const fd = fs50.openSync(temp, "wx");
+  try {
+    try {
+      fs50.writeFileSync(fd, bytes, "utf8");
+      fs50.fsyncSync(fd);
+    } finally {
+      fs50.closeSync(fd);
+    }
+    try {
+      fs50.linkSync(temp, out);
+    } catch (e) {
+      if (e.code === "EEXIST") throw refused();
+      throw e;
+    }
+    syncDirectory(path59.dirname(out));
+  } finally {
+    try {
+      fs50.unlinkSync(temp);
+    } catch {
+    }
+  }
 }
 function writeTaskAttemptV1(cwd, attempt, binding) {
   const valid = validateTaskAttemptV1(attempt);
@@ -35020,9 +35051,10 @@ function readAssignmentAck(cwd, ids) {
     return null;
   }
 }
-var fs50, path59, ASSIGNMENT_ACK_SCHEMA;
+var import_crypto2, fs50, path59, ASSIGNMENT_ACK_SCHEMA;
 var init_task_assignment_v2 = __esm({
   "src/domains/dispatch/task-assignment-v2.ts"() {
+    import_crypto2 = require("crypto");
     fs50 = __toESM(require("fs"));
     path59 = __toESM(require("path"));
     init_kernel();
@@ -49039,7 +49071,7 @@ var import_node_crypto14 = require("node:crypto");
 
 // scripts/agent-team-launcher.ts
 var import_child_process6 = require("child_process");
-var import_crypto3 = require("crypto");
+var import_crypto4 = require("crypto");
 var fs88 = __toESM(require("fs"));
 var path103 = __toESM(require("path"));
 init_state();
@@ -52642,7 +52674,7 @@ var HISTORICAL_SOURCE_SET = new Set(HISTORICAL_EVIDENCE_SOURCES);
 var MAX_PROFILE_BYTES = 256 * 1024;
 
 // scripts/lib/capability/profile-emit.ts
-var import_crypto2 = require("crypto");
+var import_crypto3 = require("crypto");
 init_kernel();
 
 // scripts/lib/capability/candidate-surface.ts
@@ -52748,7 +52780,7 @@ var HASHED_REGISTRIES = Object.freeze([
   ".guild/agents/registry.yaml",
   ".guild/skills/registry.yaml"
 ]);
-var EMPTY_TREE_HASH = (0, import_crypto2.createHash)("sha256").update("").digest("hex");
+var EMPTY_TREE_HASH = (0, import_crypto3.createHash)("sha256").update("").digest("hex");
 var FEEDSTOCK_INPUTS = Object.freeze([
   Object.freeze({ name: "codebase_map", rel: ".guild/indexes/codebase-map.json" }),
   Object.freeze({ name: "knowledge_graph", rel: ".guild/indexes/knowledge-graph.json" }),
@@ -57295,7 +57327,7 @@ function makeLaneModelPlanner(cwd, runId, orchestratorHostKind, bindingRef, prev
   };
 }
 function sha256Prefixed2(content) {
-  return `sha256:${(0, import_crypto3.createHash)("sha256").update(content).digest("hex")}`;
+  return `sha256:${(0, import_crypto4.createHash)("sha256").update(content).digest("hex")}`;
 }
 function readRegularFile2(file) {
   try {
@@ -59518,7 +59550,7 @@ ${lines}
   }
   const explicitRealRun = !args.dryRun;
   const ownedLanes = explicitRealRun ? ownedTmuxLanes(cwd, runId, team.specialists) : [];
-  const launchId = `tmux:${targetName}:${process.pid}:${(0, import_crypto3.randomUUID)()}`;
+  const launchId = `tmux:${targetName}:${process.pid}:${(0, import_crypto4.randomUUID)()}`;
   const refuseAdmission2 = (reason) => {
     process.stderr.write(
       `[agent-team-launcher] ${reason}

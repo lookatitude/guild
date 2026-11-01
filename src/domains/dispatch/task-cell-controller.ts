@@ -1909,11 +1909,14 @@ export function readControllerStatus(input: {
   const mechanicallyAccepted = instances.filter((i) => i.mechanical_acceptance === "accepted").length;
   const qualificationState = anyQualified ? "qualified"
     : anyOtherContext ? "qualified_other_context"
+      // CD16: a claimed source run has no installed package, so P6 never lets it accept; it is mechanics only.
+      : claim && claim.package_root === null ? "mechanics_only"
       : mechanicallyAccepted > 0 && !claim ? "mechanics_only"
         : anyIncomplete && claim?.package_root ? "finalization_incomplete"
           : mechanicallyAccepted > 0 ? "mechanics_only"
             : claim ? "unavailable" : "unknown";
   const qualificationReason = anyQualified ? null
+    : qualificationState === "mechanics_only" && claim?.package_root === null ? "source run: no verified installed package (CD16)"
     : qualificationState === "mechanics_only" ? "acceptance records carry no verified CD17 evidence"
       : qualificationState === "unknown" ? "no readable controller claim"
         : qualificationState === "unavailable" ? (claim?.package_root ? "no qualified acceptance yet" : "no verified installed package (source run)")
@@ -3017,13 +3020,15 @@ export class TaskCellController {
     const ids = idsOf(assignment);
     const paths = taskCellPaths(ids);
     if (!ackClaim) return outcome("handoff_validated", iid, null, "ack_claim");
-    // team_lead
+    // team_lead. Status names the live wait; a timeout or refusal overwrites it, a decision clears it.
+    this.noteHandle(iid, { awaiting: "team_lead" });
     const lead = await this.poll(() => {
       const d = readTeamLeadDecision(this.cwd, assignment, this.claim, validation, this.principal.operatorUid());
       return d.ok || d.reason !== "awaiting_team_lead" ? d : null;
     }, 1_000, spec.review_timeout_ms ?? 3_600_000);
     if (!lead) return this.awaiting(iid, "team_lead", outcome);
     if (!lead.ok) return this.awaiting(iid, `team_lead:${lead.reason}`, outcome);
+    this.noteHandle(iid, { awaiting: null });
     if (lead.decision.decision === "rejected") return this.reject(instance, lane, validation, "team_lead", lead.decision.at, lead.decision.reason ?? "team_lead rejected", outcome);
     // reviewer_cell from the approved broker slot (CD12)
     let review: ReviewerAuthority | null = null;
@@ -3031,6 +3036,7 @@ export class TaskCellController {
       if (!this.proposal) return this.awaiting(iid, "reviewer_cell:proposal_absent", outcome);
       if (lane.reviewer_participant_id === this.claim.lead_binding_id) return this.awaiting(iid, "reviewer_cell:reviewer_is_lead", outcome);
       const requestRel = this.writeReviewRequest(spec, assignment, lane.reviewer_participant_id);
+      this.noteHandle(iid, { awaiting: "reviewer_cell" });
       review = await this.poll(() => {
         const r = deriveReviewerCellAuthority({
           cwd: this.cwd, requestPath: requestRel, proposal: this.proposal!, reviewedHostFamily: spec.host.host_family,
@@ -3040,6 +3046,7 @@ export class TaskCellController {
       }, 5_000, spec.review_timeout_ms ?? 3_600_000);
       if (!review) return this.awaiting(iid, "reviewer_cell", outcome);
       if (review.decision === "review_refused") return this.awaiting(iid, `reviewer_cell:${review.reason}`, outcome);
+      this.noteHandle(iid, { awaiting: null });
       if (review.decision === "rejected") return this.reject(instance, lane, validation, "reviewer_cell", review.evidence?.finished_at ?? this.now(), review.reason ?? "review not satisfied", outcome);
     }
     const observed: AuthorityDecision[] = [

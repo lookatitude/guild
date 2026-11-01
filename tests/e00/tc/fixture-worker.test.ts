@@ -108,6 +108,45 @@ describe("TC fixture worker contract", () => {
     expect(fs.lstatSync(f.binding).isFIFO()).toBe(true);
   });
 
+  it("waits for an assignment the controller publishes after readiness, through a non-atomic exclusive write, then proceeds", async () => {
+    const f = setup("normal");
+    const bytes = fs.readFileSync(f.assignmentPath);
+    fs.rmSync(f.assignmentPath);
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !k.startsWith("GUILD_")) env[k] = v;
+    const child = ownChild(spawn("node", [WORKER], { cwd: f.root, env: { ...env, GUILD_RUN_ID: RUN, GUILD_TASK_ASSIGNMENT: f.assignmentPath }, stdio: "ignore" }), f.root);
+    let exit: number | null = null;
+    child.on("exit", (c) => { exit = c; });
+    await new Promise((r) => setTimeout(r, 1000));
+    expect({ exit, env_check: fs.existsSync(path.join(f.root, ".tc-worker-env.json")) }).toEqual({ exit: null, env_check: false });
+    // Regression input: a non-atomic exclusive write (create, then bytes). The C6 production writer is atomic.
+    const fd = fs.openSync(f.assignmentPath, "wx");
+    await new Promise((r) => setTimeout(r, 500));
+    expect({ exit, env_check: fs.existsSync(path.join(f.root, ".tc-worker-env.json")) }).toEqual({ exit: null, env_check: false });
+    fs.writeSync(fd, bytes);
+    fs.closeSync(fd);
+    const until = Date.now() + 30_000;
+    while (Date.now() < until && !(fs.existsSync(path.join(f.root, ".tc-hook-result.json")) && hookResult(f.root).ack_completed === true)) await new Promise((r) => setTimeout(r, 50));
+    expect(exit).toBeNull();
+    expect(hookResult(f.root)).toMatchObject({ hook_exit: 0, notice_present_after_hook: true, ack_completed: true, ack_exit: 0, steps: { receipt: 1, hook: 2, ack_cli: 3 } });
+    expect(fs.readFileSync(f.ackLog, "utf8").trim()).toBe(`${path.join(f.root, "src")} --assignment ${f.assignmentPath}`);
+  });
+
+  it("exits 3 without writing anything when no assignment appears within its bound", () => {
+    const f = setup("normal");
+    const mode = JSON.parse(fs.readFileSync(path.join(f.root, ".tc-worker-mode.json"), "utf8"));
+    fs.writeFileSync(path.join(f.root, ".tc-worker-mode.json"), JSON.stringify({ ...mode, assignmentWaitMs: 1500 }));
+    fs.rmSync(f.assignmentPath);
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !k.startsWith("GUILD_")) env[k] = v;
+    const started = Date.now();
+    const r = spawnSync("node", [WORKER], { cwd: f.root, env: { ...env, GUILD_RUN_ID: RUN, GUILD_TASK_ASSIGNMENT: f.assignmentPath }, timeout: 30_000 });
+    expect(r.status).toBe(3);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1500);
+    expect(["env", "hook"].map((k) => fs.existsSync(path.join(f.root, k === "env" ? ".tc-worker-env.json" : ".tc-hook-result.json")))).toEqual([false, false]);
+    expect(fs.existsSync(f.ackLog)).toBe(false);
+  });
+
   // The env-detection cases run in no-ack mode (neither hook nor ack), so binding.json stays a FIFO throughout.
   it("reports a clean environment as booleans only", async () => {
     const f = setup("no-ack");
