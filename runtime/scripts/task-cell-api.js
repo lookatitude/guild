@@ -42436,6 +42436,10 @@ function publishTaskCellFile(input) {
   if (!event || event.sha256 === null) return null;
   return { kind: input.kind, path: input.relativePath, sha256: event.sha256, seq: event.seq };
 }
+function isInsideDir(dir, rel2) {
+  const r = path79.relative(path79.normalize(dir), path79.normalize(rel2));
+  return r !== "" && !r.startsWith("..") && !path79.isAbsolute(r);
+}
 function canonicalJoinPath(cwd, ids, kind) {
   const paths = taskCellPaths(ids);
   switch (kind) {
@@ -42484,11 +42488,12 @@ function verifyPrereleaseBusJoins(cwd, ids, kinds) {
     }
     const digest = sha2567(bytes);
     const wanted = topic(kind, ids);
-    const latest = latestEventForPath(events, rel2);
-    const matching = events.filter(
-      (e) => e.event === "artifact.published" && e.path === rel2 && e.sha256 === digest && e.topic === wanted
-    );
-    const event = matching.length > 0 && latest !== null ? matching[matching.length - 1] : null;
+    const current = (e) => e?.event === "artifact.published" && e.sha256 === digest;
+    const onPath = events.filter((e) => e.path === rel2);
+    const pathLatest = onPath.at(-1);
+    const own2 = onPath.filter((e) => e.topic === wanted).at(-1);
+    const instanceScoped = isInsideDir(taskCellPaths(ids).instance_dir, rel2);
+    const event = current(pathLatest) && current(own2) && (!instanceScoped || pathLatest === own2) ? own2 : null;
     const header = casGet(dir, digest);
     const casOk = header !== null && header.sha256 === digest && header.path === rel2 && header.run_id === ids.run_id && casVerify(dir, digest, bytes);
     if (!event || !casOk) {
@@ -42503,11 +42508,6 @@ function parseJson(file) {
   } catch {
     return null;
   }
-}
-function latestEventForPath(events, relPath) {
-  const matching = events.filter((event) => event.path === relPath);
-  const latest = matching.length === 0 ? null : matching[matching.length - 1];
-  return latest?.event === "artifact.retracted" ? null : latest;
 }
 function expectedContextPath(assignment) {
   const rel2 = assignment.context_bundle_id;
@@ -45871,7 +45871,15 @@ function verifyBrokerReview(input) {
     return refused("review_request_malformed");
   }
   if (!request || typeof request.evidence_dir !== "string" || typeof request.packet_id !== "string") return refused("review_request_malformed");
+  const runId = input.proposal.run_id;
+  if (!isSafeSegment(runId) || !isSafeSegment(request.packet_id) || request.evidence_dir !== runRel(runId, "review", request.packet_id)) {
+    return refused("review_evidence_dir_noncanonical");
+  }
+  const dirContained = checkContained(input.cwd, request.evidence_dir, { policy: "physical" });
+  if (isRefused(dirContained)) return refused("review_evidence_dir_uncontained");
   const dirAbs = path87.resolve(input.cwd, request.evidence_dir);
+  const dirStat = fs74.lstatSync(dirAbs, { throwIfNoEntry: false });
+  if (dirStat !== void 0 && (dirStat.isSymbolicLink() || !dirStat.isDirectory())) return refused("review_evidence_dir_uncontained");
   const rel2 = (name) => path87.relative(input.cwd, path87.join(dirAbs, name));
   const names = ["candidate.json", "packet.txt", "adapter-exit.json", "result.json", "invocation.json"];
   for (const name of names) {
@@ -45886,7 +45894,9 @@ function verifyBrokerReview(input) {
     if (!exists) return { decision: "awaiting", reason: name === "invocation.json" ? "review_invocation_absent" : `review_evidence_absent:${name}` };
     if (!ownedByUid(abs, input.operatorUid)) return refused(`review_file_untrusted:${name}`);
   }
-  const bytes = Object.fromEntries(names.map((n) => [n, fs74.readFileSync(path87.join(dirAbs, n))]));
+  const read = Object.fromEntries(names.map((n) => [n, containedBytes(input.cwd, rel2(n))]));
+  if (Object.values(read).some((b) => b === null)) return refused("review_evidence_dir_uncontained");
+  const bytes = read;
   const parse3 = (n) => {
     try {
       const v = JSON.parse(bytes[n].toString("utf8"));
@@ -46014,7 +46024,7 @@ function readRootFile(root, rel2, operatorUid) {
   const relNorm = path87.relative(root, abs);
   if (relNorm.startsWith("..") || path87.isAbsolute(relNorm)) return null;
   if (!ownedByUid(abs, operatorUid)) return null;
-  const bytes = regularBytes(abs);
+  const bytes = containedBytes(root, relNorm);
   return bytes === null ? null : { bytes, ref: { path: relNorm, sha256: sha2567(bytes) } };
 }
 function verifySourceBasisReview(input) {

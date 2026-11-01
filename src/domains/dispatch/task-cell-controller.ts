@@ -1128,7 +1128,16 @@ function verifyBrokerReview(input: {
     return refused("review_request_malformed");
   }
   if (!request || typeof request.evidence_dir !== "string" || typeof request.packet_id !== "string") return refused("review_request_malformed");
+  // Evidence lives only in this request's own review directory, reached through real directories inside the root.
+  const runId = input.proposal.run_id;
+  if (!isSafeSegment(runId) || !isSafeSegment(request.packet_id) || request.evidence_dir !== runRel(runId, "review", request.packet_id)) {
+    return refused("review_evidence_dir_noncanonical");
+  }
+  const dirContained = checkContained(input.cwd, request.evidence_dir, { policy: "physical" });
+  if (isRefused(dirContained)) return refused("review_evidence_dir_uncontained");
   const dirAbs = path.resolve(input.cwd, request.evidence_dir);
+  const dirStat = fs.lstatSync(dirAbs, { throwIfNoEntry: false });
+  if (dirStat !== undefined && (dirStat.isSymbolicLink() || !dirStat.isDirectory())) return refused("review_evidence_dir_uncontained");
   const rel = (name: string) => path.relative(input.cwd, path.join(dirAbs, name));
   const names = ["candidate.json", "packet.txt", "adapter-exit.json", "result.json", "invocation.json"] as const;
   // (a) every file regular, non-symlink and operator-owned. Missing → awaiting.
@@ -1144,7 +1153,9 @@ function verifyBrokerReview(input: {
     if (!exists) return { decision: "awaiting", reason: name === "invocation.json" ? "review_invocation_absent" : `review_evidence_absent:${name}` };
     if (!ownedByUid(abs, input.operatorUid)) return refused(`review_file_untrusted:${name}`);
   }
-  const bytes = Object.fromEntries(names.map((n) => [n, fs.readFileSync(path.join(dirAbs, n))])) as Record<(typeof names)[number], Buffer>;
+  const read = Object.fromEntries(names.map((n) => [n, containedBytes(input.cwd, rel(n))]));
+  if (Object.values(read).some((b) => b === null)) return refused("review_evidence_dir_uncontained");
+  const bytes = read as Record<(typeof names)[number], Buffer>;
   const parse = (n: (typeof names)[number]): Record<string, unknown> | null => {
     try {
       const v = JSON.parse(bytes[n].toString("utf8"));
@@ -1350,7 +1361,8 @@ function readRootFile(root: string, rel: string, operatorUid: number): { bytes: 
   const relNorm = path.relative(root, abs);
   if (relNorm.startsWith("..") || path.isAbsolute(relNorm)) return null;
   if (!ownedByUid(abs, operatorUid)) return null;
-  const bytes = regularBytes(abs);
+  // Same boundary as the evidence directory: no symlinked ancestor may leave the basis root.
+  const bytes = containedBytes(root, relNorm);
   return bytes === null ? null : { bytes, ref: { path: relNorm, sha256: sha256(bytes) } };
 }
 

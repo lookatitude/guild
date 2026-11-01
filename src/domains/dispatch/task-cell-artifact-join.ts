@@ -138,6 +138,11 @@ export interface PrereleaseBusJoin {
   reason: null | "prerelease_bus_join_missing" | "prerelease_bus_join_path_unresolved";
 }
 
+function isInsideDir(dir: string, rel: string): boolean {
+  const r = path.relative(path.normalize(dir), path.normalize(rel));
+  return r !== "" && !r.startsWith("..") && !path.isAbsolute(r);
+}
+
 function canonicalJoinPath(cwd: string, ids: TaskCellCoordinates, kind: TaskCellArtifactKind): string | null {
   const paths = taskCellPaths(ids);
   switch (kind) {
@@ -165,10 +170,12 @@ function canonicalJoinPath(cwd: string, ids: TaskCellCoordinates, kind: TaskCell
 /**
  * CD17 check 12: verify the pre-release bus/CAS joins for one instance over
  * EXISTING canonical kinds only (no new kind; topic() stays private). A kind
- * holds when the bus log has an artifact.published event with the canonical
- * path, the file's current sha256 and the canonical per-instance topic (the
- * latest event on that path not a retraction), and the CAS header carries the
- * same sha256, path and run_id. Anything else is prerelease_bus_join_missing.
+ * holds when the latest event on the canonical path and the latest event on
+ * the canonical per-instance topic are both artifact.published with the file's
+ * current sha256, for a path inside the instance directory those are the same
+ * event, and the CAS header carries the same sha256, path and run_id. Shared
+ * paths (team_plan, context) admit other publishers of the same bytes. Anything
+ * else is prerelease_bus_join_missing.
  */
 export function verifyPrereleaseBusJoins(
   cwd: string,
@@ -190,11 +197,14 @@ export function verifyPrereleaseBusJoins(
     }
     const digest = sha256(bytes);
     const wanted = topic(kind, ids);
-    const latest = latestEventForPath(events, rel);
-    const matching = events.filter(
-      (e) => e.event === "artifact.published" && e.path === rel && e.sha256 === digest && e.topic === wanted,
-    );
-    const event = matching.length > 0 && latest !== null ? matching[matching.length - 1] : null;
+    const current = (e: BusEventV1 | undefined): e is BusEventV1 => e?.event === "artifact.published" && e.sha256 === digest;
+    const onPath = events.filter((e) => e.path === rel);
+    const pathLatest = onPath.at(-1);
+    const own = onPath.filter((e) => e.topic === wanted).at(-1);
+    // P1: the path's latest event publishes the current bytes. P2: so does this instance's latest on its topic.
+    // P3: a path inside this instance's directory has no other publisher, so its latest event must be its own.
+    const instanceScoped = isInsideDir(taskCellPaths(ids).instance_dir, rel);
+    const event = current(pathLatest) && current(own) && (!instanceScoped || pathLatest === own) ? own : null;
     const header = casGet(dir, digest);
     const casOk = header !== null && header.sha256 === digest && header.path === rel && header.run_id === ids.run_id &&
       casVerify(dir, digest, bytes);

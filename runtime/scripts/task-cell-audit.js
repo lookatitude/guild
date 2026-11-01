@@ -41762,6 +41762,10 @@ function topic(kind, ids) {
   const prefix = kind === "context" ? "context" : kind === "handoff" ? "handoff" : kind === "validation" || kind === "acceptance" ? "approval" : kind === "heartbeat" ? "heartbeat" : "status";
   return `${prefix}/task-cell/${ids.logical_task_id}/${ids.attempt}/${ids.instance_id}/${kind}`;
 }
+function isInsideDir(dir, rel2) {
+  const r = path77.relative(path77.normalize(dir), path77.normalize(rel2));
+  return r !== "" && !r.startsWith("..") && !path77.isAbsolute(r);
+}
 function canonicalJoinPath(cwd, ids, kind) {
   const paths = taskCellPaths(ids);
   switch (kind) {
@@ -41810,11 +41814,12 @@ function verifyPrereleaseBusJoins(cwd, ids, kinds) {
     }
     const digest = sha2567(bytes);
     const wanted = topic(kind, ids);
-    const latest = latestEventForPath(events, rel2);
-    const matching = events.filter(
-      (e) => e.event === "artifact.published" && e.path === rel2 && e.sha256 === digest && e.topic === wanted
-    );
-    const event = matching.length > 0 && latest !== null ? matching[matching.length - 1] : null;
+    const current = (e) => e?.event === "artifact.published" && e.sha256 === digest;
+    const onPath = events.filter((e) => e.path === rel2);
+    const pathLatest = onPath.at(-1);
+    const own2 = onPath.filter((e) => e.topic === wanted).at(-1);
+    const instanceScoped = isInsideDir(taskCellPaths(ids).instance_dir, rel2);
+    const event = current(pathLatest) && current(own2) && (!instanceScoped || pathLatest === own2) ? own2 : null;
     const header = casGet(dir, digest);
     const casOk = header !== null && header.sha256 === digest && header.path === rel2 && header.run_id === ids.run_id && casVerify(dir, digest, bytes);
     if (!event || !casOk) {
@@ -42594,6 +42599,15 @@ function regularBytes2(abs) {
     return null;
   }
 }
+function containedBytes(cwd, rel2) {
+  const contained = checkContained(cwd, rel2, { policy: "physical", requireRegularFileLeaf: true });
+  if (isRefused(contained)) return null;
+  try {
+    return fs68.readFileSync(contained.realPath);
+  } catch {
+    return null;
+  }
+}
 function ownedByUid(abs, uid) {
   try {
     const stat = fs68.lstatSync(abs);
@@ -42604,6 +42618,9 @@ function ownedByUid(abs, uid) {
 }
 function currentUid() {
   return typeof process.getuid === "function" ? process.getuid() : -1;
+}
+function isSafeSegment(value) {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$/.test(value);
 }
 function runRel(runId, ...segments) {
   return path79.join(".guild", "runs", runId, ...segments);
@@ -42653,7 +42670,15 @@ function verifyBrokerReview(input) {
     return refused("review_request_malformed");
   }
   if (!request || typeof request.evidence_dir !== "string" || typeof request.packet_id !== "string") return refused("review_request_malformed");
+  const runId = input.proposal.run_id;
+  if (!isSafeSegment(runId) || !isSafeSegment(request.packet_id) || request.evidence_dir !== runRel(runId, "review", request.packet_id)) {
+    return refused("review_evidence_dir_noncanonical");
+  }
+  const dirContained = checkContained(input.cwd, request.evidence_dir, { policy: "physical" });
+  if (isRefused(dirContained)) return refused("review_evidence_dir_uncontained");
   const dirAbs = path79.resolve(input.cwd, request.evidence_dir);
+  const dirStat = fs68.lstatSync(dirAbs, { throwIfNoEntry: false });
+  if (dirStat !== void 0 && (dirStat.isSymbolicLink() || !dirStat.isDirectory())) return refused("review_evidence_dir_uncontained");
   const rel2 = (name) => path79.relative(input.cwd, path79.join(dirAbs, name));
   const names = ["candidate.json", "packet.txt", "adapter-exit.json", "result.json", "invocation.json"];
   for (const name of names) {
@@ -42668,7 +42693,9 @@ function verifyBrokerReview(input) {
     if (!exists) return { decision: "awaiting", reason: name === "invocation.json" ? "review_invocation_absent" : `review_evidence_absent:${name}` };
     if (!ownedByUid(abs, input.operatorUid)) return refused(`review_file_untrusted:${name}`);
   }
-  const bytes = Object.fromEntries(names.map((n) => [n, fs68.readFileSync(path79.join(dirAbs, n))]));
+  const read = Object.fromEntries(names.map((n) => [n, containedBytes(input.cwd, rel2(n))]));
+  if (Object.values(read).some((b) => b === null)) return refused("review_evidence_dir_uncontained");
+  const bytes = read;
   const parse3 = (n) => {
     try {
       const v = JSON.parse(bytes[n].toString("utf8"));
@@ -42775,7 +42802,7 @@ function readRootFile(root, rel2, operatorUid) {
   const relNorm = path79.relative(root, abs);
   if (relNorm.startsWith("..") || path79.isAbsolute(relNorm)) return null;
   if (!ownedByUid(abs, operatorUid)) return null;
-  const bytes = regularBytes2(abs);
+  const bytes = containedBytes(root, relNorm);
   return bytes === null ? null : { bytes, ref: { path: relNorm, sha256: sha2567(bytes) } };
 }
 function verifySourceBasisReview(input) {

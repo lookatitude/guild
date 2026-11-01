@@ -221,7 +221,14 @@ function relocatedBasis(t: Tc, mutate: (files: Record<string, Buffer>) => void, 
   for (const k of Object.keys(BASIS_FILE)) files[k] = fs.readFileSync(file(inv[k]));
   mutate(files);
   const base = path.join(".guild", "runs", t.runId, "review", "relocated-basis");
-  const evidence = path.join(base, "evidence");
+  // Evidence goes where the verifier binds it, .guild/runs/<proposal.run_id>/review/<request.packet_id>/,
+  // derived from the copied proposal and request (no basis fact is re-authored).
+  const yaml = require("js-yaml") as { load: (text: string) => unknown };
+  const proposalRunId = (yaml.load(fs.readFileSync(at(descriptor.proposal_path), "utf8")) as { run_id?: unknown }).run_id;
+  const packetId = JSON.parse(files.request.toString("utf8")).packet_id;
+  if (typeof proposalRunId !== "string" || typeof packetId !== "string") throw new Error("genuine basis proposal.run_id or request.packet_id is not a string");
+  const evidence = path.join(".guild", "runs", proposalRunId, "review", packetId);
+  fs.mkdirSync(path.join(t.root, base), { recursive: true });
   fs.mkdirSync(path.join(t.root, evidence), { recursive: true });
   const put = (rel: string, bytes: Buffer) => { fs.writeFileSync(path.join(t.root, rel), bytes); return rel; };
   const proposalRel = put(path.join(base, "proposal.json"), fs.readFileSync(at(descriptor.proposal_path)));
@@ -792,7 +799,8 @@ describe.skipIf(!enabled)("TC · C-R1 F1 reviewed source basis is joined before 
     const relocated = relocatedBasis(t, () => undefined, true);
     const s = await drive(t, startAsync(t, { basis: relocated }));
     expect(inst(s, "T1").qualified_release).toBe(true);
-    fs.appendFileSync(path.join(path.dirname(relocated), "evidence", "candidate.json"), " ");
+    const relocatedRequest = JSON.parse(fs.readFileSync(path.join(t.root, JSON.parse(fs.readFileSync(relocated, "utf8")).request_path), "utf8"));
+    fs.appendFileSync(path.join(t.root, relocatedRequest.evidence_dir, "candidate.json"), " ");
     expect(inst(status(t), "T1").qualified_release).toBe(false);
   }, T);
 });

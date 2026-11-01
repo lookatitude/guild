@@ -1685,9 +1685,10 @@ export function reapTmuxOrphanByCarrier(
   return { kind: "orphan", detail: `${out.identity_check}: ${out.error ?? "not confirmed"}` };
 }
 
-function reportTmuxSettlement(s: TmuxSettlement): void {
+/** "no-pane" only for typed pre-action proof (substrate_spawned false); launched or unknown stays "launch". */
+function reportTmuxSettlement(s: TmuxSettlement, stage: "no-pane" | "launch" = "launch"): void {
   process.stderr.write(
-    `[agent-team-launcher] tmux launch failure lifecycle: ${s.failed} failed, ${s.orphaned} orphaned` +
+    `[agent-team-launcher] tmux ${stage} failure lifecycle: ${s.failed} failed, ${s.orphaned} orphaned` +
       `${s.errors.length ? `; errors: ${s.errors.join("; ")}` : ""}\n`,
   );
 }
@@ -1773,7 +1774,7 @@ function settleFailedTmuxLaunch(input: {
 }): void {
   if (input.owned.length === 0) return;
   if (input.preAction) {
-    reportTmuxSettlement(settleOwnedTmuxLanes(input.cwd, input.runId, input.owned, () => "seal_failed", input.reason));
+    reportTmuxSettlement(settleOwnedTmuxLanes(input.cwd, input.runId, input.owned, () => "seal_failed", input.reason), "no-pane");
     return;
   }
   const { carriers } = carriersFromCapture(input.owned, input.launchId, input.capture);

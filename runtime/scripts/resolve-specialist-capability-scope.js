@@ -37186,7 +37186,7 @@ var init_execution_transport_adapters = __esm({
               "spawn",
               err,
               "spawn_failed",
-              { dispatch_kind: this.dispatch_kind }
+              { dispatch_kind: this.dispatch_kind, substrate_spawned: false }
             )
           );
         }
@@ -44041,14 +44041,14 @@ var init_initiative_workitems = __esm({
 });
 
 // src/domains/lifecycle/classify-intake.ts
-function normalize3(prompt) {
+function normalize4(prompt) {
   return prompt.toLowerCase().replace(/\s+/g, " ").trim();
 }
 function classifyIntake(prompt) {
   if (typeof prompt !== "string" || prompt.trim() === "") {
     return { intake: "other", score: 0, signals: [] };
   }
-  const text = normalize3(prompt);
+  const text = normalize4(prompt);
   const signals = [];
   let score = 0;
   let hasStrongIdea = false;
@@ -57663,9 +57663,9 @@ function reapTmuxOrphanByCarrier(cwd, ids, teardown = terminateBoundPane) {
   if (out.degraded) return { kind: "degraded", detail: out.error ?? "tmux unavailable" };
   return { kind: "orphan", detail: `${out.identity_check}: ${out.error ?? "not confirmed"}` };
 }
-function reportTmuxSettlement(s) {
+function reportTmuxSettlement(s, stage = "launch") {
   process.stderr.write(
-    `[agent-team-launcher] tmux launch failure lifecycle: ${s.failed} failed, ${s.orphaned} orphaned${s.errors.length ? `; errors: ${s.errors.join("; ")}` : ""}
+    `[agent-team-launcher] tmux ${stage} failure lifecycle: ${s.failed} failed, ${s.orphaned} orphaned${s.errors.length ? `; errors: ${s.errors.join("; ")}` : ""}
 `
   );
 }
@@ -57719,7 +57719,7 @@ function recordTmuxLaunchCarriers(input) {
 function settleFailedTmuxLaunch(input) {
   if (input.owned.length === 0) return;
   if (input.preAction) {
-    reportTmuxSettlement(settleOwnedTmuxLanes(input.cwd, input.runId, input.owned, () => "seal_failed", input.reason));
+    reportTmuxSettlement(settleOwnedTmuxLanes(input.cwd, input.runId, input.owned, () => "seal_failed", input.reason), "no-pane");
     return;
   }
   const { carriers } = carriersFromCapture(input.owned, input.launchId, input.capture);
