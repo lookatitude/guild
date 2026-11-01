@@ -207,14 +207,26 @@ describe("G-13 Part B — launcher (production caller) threads the scored tier e
     fs.writeFileSync(path.join(contextDir, "doc-check-T2-check.md"), "# docs context\n");
     const fakeBin = path.join(repo, "fakebin");
     fs.mkdirSync(fakeBin, { recursive: true });
+    const titlesPath = path.join(repo, "tmux-pane-titles");
     fs.writeFileSync(
       path.join(fakeBin, "tmux"),
       [
         "#!/bin/sh",
+        // The pre/post-create credential probe: tmux's exact answer for an unset variable.
+        'if [ "$#" -eq 3 ] && [ "$1" = show-environment ] && [ "$2" = -g ] && [ "$3" = GUILD_RUN_BINDING_REF ]; then',
+        '  echo "unknown variable: GUILD_RUN_BINDING_REF" >&2; exit 1',
+        "fi",
         'case "$1" in',
         '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
         "  has-session) exit 1;;",
         "  list-windows) exit 0;;",
+        // The creating command prints its identity (CREATE_IDENTITY_FORMAT).
+        "  new-session|new-window) printf '$1 @1 77 1793000000\\n'; exit 0;;",
+        // Titles the launcher sets (`select-pane -T <title>`), reported back by
+        // list-panes from the creating server in creation order; each pane process
+        // is the live launcher ($PPID), so `ps` observes a real pid and start.
+        `  select-pane) p=""; for a in "$@"; do [ "$p" = "-T" ] && echo "$a" >> ${JSON.stringify(titlesPath)}; p="$a"; done; exit 0;;`,
+        `  list-panes) i=0; while IFS= read -r t; do printf '77 1793000000 @1 %%%d %s %s\\n' "$i" "$PPID" "$t"; i=$((i+1)); done < ${JSON.stringify(titlesPath)}; exit 0;;`,
         "  *) exit 0;;",
         "esac",
         "",
