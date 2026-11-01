@@ -5,8 +5,10 @@
  * shim that execs this file first on PATH, so the controller's unchanged
  * `command claude` pane launch reaches it with no production test mode.
  *
- * It first waits (bounded; mode.assignmentWaitMs, default 180 s) for a complete
- * assignment, which the controller publishes only after readiness; then it does
+ * It first waits (bounded; mode.assignmentWaitMs, default 180 s) for an assignment
+ * with the complete required structure, which the controller publishes only after
+ * readiness; an incomplete or wrong-typed record keeps it polling and expiry exits 3
+ * before any side effect. Then it does
  * only what a cooperative worker may do (file_ownership.worker): write
  * declared scope artifacts and the lane receipt, run the PACKAGED TaskCompleted
  * hook (<pkg>/hooks/agent-team/dist/task-completed.js, <pkg> derived from
@@ -39,11 +41,82 @@ const mode = fs.existsSync(modeFile) ? JSON.parse(fs.readFileSync(modeFile, "utf
 // ready. As the launch prompt instructs, wait until a complete guild.task_assignment.v2
 // parses; an empty or partial file (a non-atomic writer, kept as a regression input) is
 // never read as the assignment. Give up (exit 3) after the bound.
+//
+// "Complete" is the required structure, checked before any observation or write: a
+// parseable but incomplete or wrong-typed record is not the assignment and polling goes
+// on. Node cannot load dispatch/index.ts (extensionless imports) and KTD27 forbids
+// importing past it, so this restates validateTaskAssignmentV2 and, for the done_when
+// the worker consumes, the E00 floor plus the artifact_exists decode and scope check of
+// validateExecutableDoneWhen. fixture-worker.test.ts holds each variant to the canonical
+// validators.
+const SAFE_SEGMENT = /^[A-Za-z0-9_.-]+$/;
+const REQUIRED_STRINGS = [
+  "run_id", "cell_id", "goal_id", "phase_id", "step_id", "team_id", "logical_task_id", "task_run_id",
+  "attempt_id", "instance_id", "worker_role", "specialist_type_id", "specialist_type_version",
+  "specialist_type_hash", "specialist_profile_id", "specialist_profile_hash", "context_bundle_id",
+  "context_bundle_hash", "host_id", "adapter_id", "host_capabilities_hash", "objective", "output_schema",
+  "autonomy_policy", "written_at", "assignment_path", "handoff_path", "heartbeat_path", "cancel_channel",
+];
+const ORACLE_KINDS = ["verify.after_edit", "named_check", "command", "artifact_exists", "acceptance_record"];
+const isObj = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
+const isStr = (x) => typeof x === "string" && x.length > 0;
+const isStrArr = (x) => Array.isArray(x) && x.every((s) => typeof s === "string");
+const numOrNull = (x) => x === null || typeof x === "number";
+const safeRelative = (p) => typeof p === "string" && p.length > 0 && !p.includes("\0") && !p.includes("\\") &&
+  !path.posix.isAbsolute(p) && path.posix.normalize(p) === p && p !== "." && p !== ".." && !p.startsWith("../");
+const canonicalJson = (x) => Array.isArray(x) ? `[${x.map(canonicalJson).join(",")}]`
+  : x !== null && typeof x === "object" ? `{${Object.keys(x).sort().map((k) => `${JSON.stringify(k)}:${canonicalJson(x[k])}`).join(",")}}`
+  : JSON.stringify(x);
+const artifactTargetOk = (target, scopePaths) => {
+  if (!isStr(target)) return false;
+  let t;
+  try { t = JSON.parse(target); } catch { return false; }
+  if (canonicalJson(t) !== target || !isObj(t)) return false;
+  const keys = Object.keys(t);
+  if (keys.length !== 2 || !Object.hasOwn(t, "path") || !Object.hasOwn(t, "sha256")) return false;
+  if (!safeRelative(t.path) || !(t.sha256 === null || (typeof t.sha256 === "string" && /^[0-9a-f]{64}$/.test(t.sha256)))) return false;
+  return scopePaths.some((s) => safeRelative(s) && (t.path === s || t.path.startsWith(`${s}/`)));
+};
+const validAssignment = (v) => {
+  if (!isObj(v) || v.schema_version !== "guild.task_assignment.v2") return false;
+  if (!REQUIRED_STRINGS.every((k) => isStr(v[k]))) return false;
+  if (![v.non_goals, v.acceptance_tests, v.scope_paths].every(isStrArr)) return false;
+  if (!Array.isArray(v.dependencies) || !v.dependencies.every((d) => isObj(d) && isStr(d.logical_task_id) &&
+    (d.accepted_artifact_ref === null || typeof d.accepted_artifact_ref === "string"))) return false;
+  const p = v.projection;
+  if (!isObj(p) || !isStrArr(p.tools) || !isStrArr(p.permissions) || !Array.isArray(p.recorded_losses) ||
+    !p.recorded_losses.every((l) => isObj(l) && isStr(l.capability) && isStr(l.mapping) && isStr(l.loss))) return false;
+  const b = v.budgets;
+  if (!isObj(b) || !numOrNull(b.tokens) || !numOrNull(b.wall_clock_ms) || !numOrNull(b.cost_usd)) return false;
+  if (!(v.deadline === null || typeof v.deadline === "string")) return false;
+  // D4 lineage (attemptLineage) and the lead-binding XOR (leadBinding).
+  const prev = v.previous_attempt_id ?? null;
+  const reason = v.retry_reason ?? null;
+  if (!Number.isInteger(v.attempt) || v.attempt < 1) return false;
+  if (v.attempt === 1 ? Boolean(prev || reason) : !(prev && reason)) return false;
+  if (Boolean(v.team_lead_instance_id ?? null) === Boolean(v.lead_binding_id ?? null)) return false;
+  // D6 canonical channels; the locator must be this record's own path.
+  if (![v.run_id, v.logical_task_id, v.instance_id].every((s) => SAFE_SEGMENT.test(s) && s !== "." && s !== "..")) return false;
+  const dir = path.join(".guild", "runs", v.run_id, "task-cells", v.logical_task_id, "attempts", String(v.attempt), "instances", v.instance_id);
+  if (v.assignment_path !== path.join(dir, "assignment.json") || v.handoff_path !== path.join(dir, "handoff.json") ||
+    v.heartbeat_path !== path.join(dir, "heartbeat.json") || v.cancel_channel !== path.join(dir, "cancel")) return false;
+  if (path.join(root, v.assignment_path) !== path.resolve(assignmentPath)) return false;
+  // done_when (validateDoneWhen floor; artifact_exists targets as the worker writes them).
+  if (!Array.isArray(v.done_when) || v.done_when.length === 0) return false;
+  const seen = new Set();
+  for (const item of v.done_when) {
+    if (!isObj(item) || !isStr(item.id) || seen.has(item.id) || !ORACLE_KINDS.includes(item.oracle)) return false;
+    seen.add(item.id);
+    if (!(item.target === undefined || item.target === null || typeof item.target === "string")) return false;
+    if (item.oracle === "artifact_exists" && !artifactTargetOk(item.target, v.scope_paths)) return false;
+  }
+  return true;
+};
 const readAssignment = () => {
   try {
     const b = fs.readFileSync(assignmentPath);
     const v = JSON.parse(b.toString("utf8"));
-    return v !== null && typeof v === "object" && v.schema_version === "guild.task_assignment.v2" ? { b, v } : null;
+    return validAssignment(v) ? { b, v } : null;
   } catch {
     return null;
   }

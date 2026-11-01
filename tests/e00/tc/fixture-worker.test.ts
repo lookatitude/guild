@@ -19,7 +19,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
-import { buildTaskCell, writeTaskCell } from "../../../src/domains/dispatch";
+import { buildTaskCell, validateExecutableDoneWhen, validateTaskAssignmentV2, writeTaskCell } from "../../../src/domains/dispatch";
 import { mintRunBinding } from "../../../src/domains/lifecycle";
 import { ensureStorageLayout } from "../../../hooks/lib/ensure-layout";
 import { PLUGIN, ownChild, ownedTempDir, sha256, teardownOwned } from "../support/e00-harness";
@@ -89,6 +89,64 @@ async function runWorker(f: ReturnType<typeof setup>, cwd: string, extraEnv: Rec
 const envCheck = (root: string) => JSON.parse(fs.readFileSync(path.join(root, ".tc-worker-env.json"), "utf8"));
 const hookResult = (root: string) => JSON.parse(fs.readFileSync(path.join(root, ".tc-hook-result.json"), "utf8"));
 
+/** The canonical admission view of an assignment: the v2 validator plus the E00 done_when check. */
+function canonicallyValid(v: unknown): boolean {
+  const a = validateTaskAssignmentV2(v);
+  if (a === null) return false;
+  return validateExecutableDoneWhen((a as unknown as Record<string, unknown>)["done_when"], { scope_paths: a.scope_paths, dependencies: a.dependencies }).ok;
+}
+
+/** Every worker side effect, as booleans: env check, hook result, receipt, declared or out-of-scope artifact, notice, ack. */
+function sideEffects(f: ReturnType<typeof setup>) {
+  return {
+    env: fs.existsSync(path.join(f.root, ".tc-worker-env.json")),
+    hook: fs.existsSync(path.join(f.root, ".tc-hook-result.json")),
+    receipt: fs.existsSync(path.join(f.runDir, "handoffs", "backend-T1.md")),
+    artifact: fs.existsSync(path.join(f.root, "src", "out", "T1.txt")) || fs.existsSync(path.join(f.root, "elsewhere")),
+    notice: fs.existsSync(f.notice),
+    ack: fs.existsSync(f.ackLog),
+  };
+}
+const NO_SIDE_EFFECTS = { env: false, hook: false, receipt: false, artifact: false, notice: false, ack: false };
+
+function workerEnv(f: ReturnType<typeof setup>): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !k.startsWith("GUILD_")) env[k] = v;
+  return { ...env, GUILD_RUN_ID: RUN, GUILD_TASK_ASSIGNMENT: f.assignmentPath };
+}
+
+function setWaitBound(f: ReturnType<typeof setup>, ms: number): void {
+  const modeFile = path.join(f.root, ".tc-worker-mode.json");
+  fs.writeFileSync(modeFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(modeFile, "utf8")), assignmentWaitMs: ms }));
+}
+
+/** Start the worker against whatever sits at the assignment path; resolve its exit code, or "running" after `limitMs`. */
+function workerExit(f: ReturnType<typeof setup>, limitMs: number): Promise<number | "running"> {
+  const child = ownChild(spawn("node", [WORKER], { cwd: f.root, env: workerEnv(f), stdio: "ignore" }), f.root);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => { child.kill("SIGKILL"); resolve("running"); }, limitMs);
+    child.on("exit", (code) => { clearTimeout(timer); resolve(code ?? -1); });
+  });
+}
+
+/** Wrong-typed or incomplete records, each a minimal change to the genuine assignment. */
+const INVALID_VARIANTS: Array<[string, (a: Record<string, unknown>) => void]> = [
+  ["run_id is a number", (a) => { a["run_id"] = 7; }],
+  ["worker_role is empty", (a) => { a["worker_role"] = ""; }],
+  ["acceptance_tests is a string", (a) => { a["acceptance_tests"] = "tc"; }],
+  ["scope_paths is missing", (a) => { delete a["scope_paths"]; }],
+  ["dependencies entry has a numeric id", (a) => { a["dependencies"] = [{ logical_task_id: 3, accepted_artifact_ref: null }]; }],
+  ["projection.tools is a string", (a) => { a["projection"] = { tools: "read", permissions: [], recorded_losses: [] }; }],
+  ["budgets is null", (a) => { a["budgets"] = null; }],
+  ["deadline is a number", (a) => { a["deadline"] = 5; }],
+  ["attempt is a string", (a) => { a["attempt"] = "1"; }],
+  ["lead binding carries both ids", (a) => { a["team_lead_instance_id"] = "lead-x"; }],
+  ["assignment_path is not canonical", (a) => { a["assignment_path"] = `.guild/runs/${RUN}/assignment.json`; }],
+  ["done_when is missing", (a) => { delete a["done_when"]; }],
+  ["done_when target is not JSON", (a) => { a["done_when"] = [{ id: "a", oracle: "artifact_exists", target: "src/out/T1.txt" }]; }],
+  ["done_when artifact lies outside scope_paths", (a) => { a["done_when"] = [{ id: "a", oracle: "artifact_exists", target: JSON.stringify({ path: "elsewhere/T1.txt", sha256: null }) }]; }],
+];
+
 describe("TC fixture worker contract", () => {
   it("writes artifact and receipt, runs the compiled hook (notice), then acks from <root>/src with the absolute locator, without opening binding.json", async () => {
     const f = setup("normal");
@@ -145,6 +203,58 @@ describe("TC fixture worker contract", () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(1500);
     expect(["env", "hook"].map((k) => fs.existsSync(path.join(f.root, k === "env" ? ".tc-worker-env.json" : ".tc-hook-result.json")))).toEqual([false, false]);
     expect(fs.existsSync(f.ackLog)).toBe(false);
+  });
+
+  it("keeps polling a parseable schema-tagged incomplete record and exits 3 at its bound with no side effects", async () => {
+    const f = setup("normal");
+    setWaitBound(f, 1500);
+    const incomplete = { schema_version: "guild.task_assignment.v2" };
+    expect(canonicallyValid(incomplete)).toBe(false);
+    fs.rmSync(f.assignmentPath);
+    fs.writeFileSync(f.assignmentPath, JSON.stringify(incomplete) + "\n");
+    const started = Date.now();
+    expect(await workerExit(f, 20_000)).toBe(3);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1500);
+    expect(sideEffects(f)).toEqual(NO_SIDE_EFFECTS);
+    expect(fs.lstatSync(f.binding).isFIFO()).toBe(true);
+  });
+
+  it("treats each wrong-typed or incomplete variant of the genuine assignment as no assignment (exit 3, no side effects)", async () => {
+    const genuine = JSON.parse(fs.readFileSync(setup("normal").assignmentPath, "utf8"));
+    expect(canonicallyValid(genuine)).toBe(true);
+    const cases = INVALID_VARIANTS.map(([name, mutate]) => {
+      const f = setup("normal");
+      setWaitBound(f, 1500);
+      const a = JSON.parse(fs.readFileSync(f.assignmentPath, "utf8"));
+      mutate(a);
+      fs.rmSync(f.assignmentPath);
+      fs.writeFileSync(f.assignmentPath, JSON.stringify(a, null, 2) + "\n");
+      return { name, f, canonical: canonicallyValid(a) };
+    });
+    const exits = await Promise.all(cases.map((c) => workerExit(c.f, 20_000)));
+    const got = cases.map((c, i) => ({ name: c.name, canonical: c.canonical, exit: exits[i], effects: sideEffects(c.f) }));
+    expect(got).toEqual(cases.map((c) => ({ name: c.name, canonical: false, exit: 3, effects: NO_SIDE_EFFECTS })));
+  });
+
+  it("keeps waiting past an incomplete record and proceeds once it is atomically replaced by the valid assignment", async () => {
+    const f = setup("normal");
+    const bytes = fs.readFileSync(f.assignmentPath);
+    fs.rmSync(f.assignmentPath);
+    fs.writeFileSync(f.assignmentPath, JSON.stringify({ schema_version: "guild.task_assignment.v2" }) + "\n");
+    const child = ownChild(spawn("node", [WORKER], { cwd: f.root, env: workerEnv(f), stdio: "ignore" }), f.root);
+    let exit: number | null = null;
+    child.on("exit", (c) => { exit = c; });
+    await new Promise((r) => setTimeout(r, 1000));
+    expect({ exit, effects: sideEffects(f) }).toEqual({ exit: null, effects: NO_SIDE_EFFECTS });
+    const temp = `${f.assignmentPath}.replace.tmp`;
+    fs.writeFileSync(temp, bytes);
+    fs.renameSync(temp, f.assignmentPath);
+    const until = Date.now() + 30_000;
+    while (Date.now() < until && !(fs.existsSync(path.join(f.root, ".tc-hook-result.json")) && hookResult(f.root).ack_completed === true)) await new Promise((r) => setTimeout(r, 50));
+    expect(exit).toBeNull();
+    expect(hookResult(f.root)).toMatchObject({ hook_exit: 0, notice_present_after_hook: true, ack_completed: true, ack_exit: 0, steps: { receipt: 1, hook: 2, ack_cli: 3 } });
+    expect(fs.readFileSync(f.ackLog, "utf8").trim()).toBe(`${path.join(f.root, "src")} --assignment ${f.assignmentPath}`);
+    expect(fs.existsSync(path.join(f.root, "src", "out", "T1.txt"))).toBe(true);
   });
 
   // The env-detection cases run in no-ack mode (neither hook nor ack), so binding.json stays a FIFO throughout.
