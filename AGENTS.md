@@ -7,6 +7,9 @@ demand by team composition), and 76 skills — 17 of them indexed — across a
 brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision
 capture, and a self-evolution loop with shadow-mode gating.
 
+In maintainer/source shorthand, bare `/guild` corresponds to Claude Code's
+full native `/guild:guild` entry.
+
 The runtime shape (bare `/guild` = T0, three tiers, five class graphs, one review
 gate, one promotion law, two context sizes) is the Layout laws list below; README
 carries the user-facing summary.
@@ -75,11 +78,14 @@ For full architecture and design documentation see **https://guildstack.dev/docs
   `bun test --isolate`; there is no Jest and no layout-laws baseline.
 - `templates/{skills,agents,products}/` — authoring + product scaffolds
   (`templates/specialists/` is the 15 specialist type templates, described above).
-- `docs/` — RETIRED as a docs set: holds only a static redirect page to
-  `https://guildstack.dev/docs` plus the logo asset. The public docs are generated
-  from the umbrella's `docs/v2/` + the website; reference knowledge lives in
-  `.guild/wiki/`. Apart from `README.md`, `CONTRIBUTING.md`, and `CHANGELOG.md`,
-  no documentation lives in this repo.
+- `docs/` — the former authored docs set is retired; redirect/assets and
+  generated support references remain. The workspace's `docs/reference/`
+  contains the generated capability projection and source-pinned human guide
+  supplements under `guides/`; it replaces retired `docs/v2/` as the current
+  reference location. Website `src/content/docs/` is hand-authored MDX, updated
+  by writers through reviewed sync PRs, not generated from the wiki or guides.
+  Follow the workspace [maintainer guide](https://github.com/lookatitude/guild-workspace/blob/next/docs/maintainer-guide.md)
+  for the single plugin-to-site cycle. Reference knowledge remains in `.guild/wiki/`.
 
 Generated project-local Guild artifacts do **not** live in the plugin install
 tree. Any agent, skill, tool, memory page, graph, initiative, run record, or
@@ -103,7 +109,7 @@ never user-typed. This is the one-place wiring reference — each command's
 | `/guild:build` | `guild:execute-plan` — per lane its `context-assemble` chapter, dispatch, then `guild:review` (deep: + its `loop-implement` chapter) | handoff receipts, `assumptions.md`, `review.md` |
 | `/guild:qa` | `guild:quality` | `.guild/runs/<run-id>/quality/<run-id>.md` |
 | `/guild:ops` | `guild:operations` | `.guild/runs/<run-id>/ops/<run-id>.md` |
-| `/guild:learn` | `guild:learn` — its `learn-map` / `learn-graph` / `learn-knowledge` / `learn-onboard` / `learn-diff` / `learn-explain` chapters; explicit Stage-2 is `extract-structural.ts` | deep knowledge-graph + onboarding / diff / explain artifacts (lazy, gated) |
+| `/guild:learn` | `guild:learn` — its `learn-map` / `learn-graph` / `learn-knowledge` / `learn-onboard` / `learn-diff` / `learn-explain` chapters; normal Stage-2 uses `analyze-structural.ts`; `extract-structural.ts` is experimental / on-demand-only, not invoked by any skill | deep knowledge-graph + onboarding / diff / explain artifacts (lazy, gated) |
 
 ## Dev team (`.guild/agents/`)
 
@@ -178,8 +184,11 @@ All project-created Guild state lives in the active root's `.guild/`:
 Files here are latest-only: evolve replaces the wrong span and keeps a compact
 history (inverse span + `before_hash`) on platform state, so there is no
 `skill-versions/` tree. Ingested blobs are `knowledge/sources/`, never `raw/`.
-Caches (SQLite index, codebase map, model catalog) and scratch live off the
-repo. Opening Guild on a root with an older layout upgrades it lazily on the first
+The storage contract classifies rebuildable caches as external and scratch as
+temporary. Retained source exceptions include `.guild/index.sqlite` in
+`src/domains/state/index-cache.ts` compatibility helpers and Init's cheap
+CodebaseMap under `.guild/indexes/`; do not commit derived indexes or describe
+these source paths as freshly observed writes. Opening Guild on an older layout upgrades it lazily on the first
 write-capable entry, and SessionStart on a Guild root always loads the Guild
 bootstrap.
 
@@ -204,8 +213,9 @@ for replay and learning.
 
 Recall is `recall.backend: bm25 | hybrid` (default `bm25`). Embeddings are cache
 only, and a missing embedding model fails open to BM25. The wiki read path uses a
-lazy SQLite read-through cache on platform state (`index: "auto"`, default);
-disable with `index: "off"`.
+lazy SQLite read-through cache (`index: "auto"`, default; disable with
+`index: "off"`). Its declared external-cache classification and retained
+`.guild/index.sqlite` compatibility path are distinct, as qualified above.
 
 ## Branch + PR discipline (mandatory) — the next/main channel model
 
@@ -244,8 +254,12 @@ Release workflow (operator-driven, when `next` is ready):
 2. Produce the hash-bound evidence for that exact SHA and merge an
    evidence-only PR into `next` (only
    `.guild/artifacts/release/vMAJOR.MINOR.PATCH/{promotion,conformance}.json`).
-   Confirm green CI, reconciled `docs/v2`, and a curated PR body suitable as
-   release notes. Exact v2.7.0 has a separately named, GitHub-OIDC-attested
+   Confirm green CI, current-reference obligations reconciled through the
+   workspace maintainer pipeline, and a curated PR body suitable as release
+   notes. The legacy D8 work-item acceptance in
+   `src/domains/lifecycle/initiative-workitems.ts` still names `docs/v2`;
+   retain and satisfy applicable source-defined gates with explicit evidence,
+   not by treating this prose change as a parser or runtime change. Exact v2.7.0 has a separately named, GitHub-OIDC-attested
    provenance-only basis that explicitly does not establish conformance
    authority; it is mechanically unavailable to later versions.
 3. Open the release PR from the repository's exact `next` branch to `main`.
@@ -353,7 +367,7 @@ Where a line here and the source plan disagree, the source plan wins.
 - **KTD10.** No Bun on the user PATH. Runtime fail-closed if compile outputs are missing.
 - **KTD11.** Test runner is bun test. Spawn path is compiled Node, not npx tsx.
 - **KTD12.** Capability coverage replaces file-count identity. Every command token and skill body maps to remaining command, remaining assembler, named chapter/playbook, hook policy, or domain function.
-- **KTD13.** Specialist recipes are not host skills. Starter feedstock is src/surfaces/playbooks/specialists/, copy-on-mint (KTD20); templates stay at src/surfaces/templates/specialists/. Neither is in plugin.json skills.
+- **KTD13.** Specialist recipes are not host skills. Starter feedstock is skills/specialists/, copy-on-mint (KTD20); templates stay at templates/specialists/. Neither is in plugin.json skills. Root authoring paths reflect KTD2's T16 amendment; the copy-on-mint rule is unchanged.
 - **KTD14.** Dropped command filenames are print-only aliases on next, deleted after one stable cut.
 - **KTD15.** .guild/ is durable truth only (plus KTD16 projection). Caches, sqlite, catalogs, temp, eager empty dirs leave. Production path.join(cwd, ".guild" only inside state storage + storage-v2. Init floor: guild.yaml + scoped config.
 - **KTD16.** Plugin↔benchmark artifact paths stay stable this cut (run JSONL, .guild/analysis/**, .guild/recommendations/**). Full runtime-out waits for a benchmark-aligned cut.
@@ -404,8 +418,8 @@ Where a line here and the source plan disagree, the source plan wins.
 - **KTD61.** Budget is enforced. advisorRounds + optional token/usd caps. Exhaustion blocks the cell. D-PROBE and inner verify do not decrement.
 - **KTD62.** Team compose is per-phase (shipped files stay). Per-goal is a roster slice of already-minted profiles, not a second mint.
 - **KTD63.** Hook/adapter/learn_script/domain_ts evolve through the human gate. Auto-path never writes them.
-- **KTD64.** Explicit learn Stage-2 is extract-structural.ts. refreshTouched still must not run Stage-2.
-- **KTD65.** Umbrella docs/ and docs/v2/ and website/ are a sibling workspace plan. This initiative’s D8 is plugin-local (README, AGENTS.md, using-guild, command help). Record docs/v2: n/a.
+- **KTD64.** Frozen-plan wording (historical intent): "Explicit learn Stage-2 is extract-structural.ts." The normal shipped learn-graph Stage-2 route uses analyze-structural.ts; extract-structural.ts remains experimental / on-demand-only and is not invoked by any skill. refreshTouched still must not run Stage-2.
+- **KTD65.** Historical reshape decision: that initiative's D8 scope was plugin-local (README, AGENTS.md, using-guild, command help), with the then-current docs/v2: n/a record. It is not a standing exemption or current reference target. Current documentation ownership is workspace docs/reference/ and the maintainer pipeline above; legacy D8 acceptance wording remains source-governed until separately changed.
 - **KTD66.** Plugin produces inventory + KTD16 traces (including next_need / harvest / evolve-candidate). status dashboard launcher stays. UI product is the benchmark plan. No source import.
 - **KTD67.** Recall backend bm25 | hybrid. Embeddings are cache only. Missing model fails open to BM25.
 - **KTD68.** Critic is the advisor machinery agent. Product qa is still the one review gate. No new model family.
