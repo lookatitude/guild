@@ -84,6 +84,23 @@ const REF: ProjectDefinitionRefV1 = {
 /** A RunFn that never touches a real tmux — every invocation succeeds. */
 const fakeRun: RunFn = () => ({ status: 0, stdout: "", stderr: "" });
 
+/** tmux protocol answers for a real session launch: credential verifiably absent, create prints its identity. */
+const protocolRun: RunFn = (_cmd, args) => {
+  if (args.length === 3 && args[0] === "show-environment" && args[1] === "-g" && args[2] === "GUILD_RUN_BINDING_REF") {
+    return { status: 1, stdout: "", stderr: "unknown variable: GUILD_RUN_BINDING_REF\n" };
+  }
+  if (args[0] === "new-session" || args[0] === "new-window") return { status: 0, stdout: "$1 @1 77 1793000000\n", stderr: "" };
+  return { status: 0, stdout: "", stderr: "" };
+};
+
+function protocolTmuxBackend(): TmuxTeamBackend {
+  return new TmuxTeamBackend({
+    run: protocolRun,
+    env: { GUILD_PLUGIN_ROOT: TEST_PLUGIN_ROOT } as NodeJS.ProcessEnv,
+    pluginOwnerRoot: TEST_PLUGIN_ROOT,
+  });
+}
+
 function specialist(withRef: boolean): Specialist {
   return {
     name: "tooling-engineer",
@@ -486,7 +503,7 @@ describe("Fix A — declaring tmux port verifies forwarding and passes", () => {
   });
 
   it("REAL (non-dry) session launch also succeeds — the session path exposes the same proof", () => {
-    const backend = tmuxBackend();
+    const backend = protocolTmuxBackend();
     const port = new TeamDispatchExecutionTransport({
       transport_id: "tmux",
       backend,

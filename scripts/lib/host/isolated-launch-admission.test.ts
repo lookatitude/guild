@@ -50,6 +50,12 @@ function recordingRun(): { run: RunFn; calls: string[][] } {
   const run: RunFn = (_cmd, args) => {
     calls.push(args);
     if (args[0] === "new-pane") return { status: 0, stdout: JSON.stringify({ surface_id: "surface:1" }), stderr: "" };
+    // The pre-create credential probe: tmux's exact answer for an unset variable.
+    if (args.length === 3 && args[0] === "show-environment" && args[1] === "-g" && args[2] === "GUILD_RUN_BINDING_REF") {
+      return { status: 1, stdout: "", stderr: "unknown variable: GUILD_RUN_BINDING_REF\n" };
+    }
+    // The creating command prints its identity (CREATE_IDENTITY_FORMAT).
+    if (args[0] === "new-session" || args[0] === "new-window") return { status: 0, stdout: "$1 @1 77 1793000000\n", stderr: "" };
     return { status: 0, stdout: "", stderr: "" };
   };
   return { run, calls };

@@ -588,6 +588,7 @@ describe("TmuxTeamBackend child env and credential boundary (fake run / fake tmu
       { status: 0, stdout: `${KEY}=held\n`, stderr: "" },
       { status: 0, stdout: `-${KEY}\n`, stderr: "Permission denied\n" },
       { status: 0, stdout: "", stderr: "" },
+      { status: 0, stdout: "PATH=/usr/bin:/bin\nLANG=C\n", stderr: "" }, // other variables only: never absence
     ]) {
       const f = fakeRun({ pre, post: absent });
       const out = new TmuxTeamBackend({ run: f.run, pluginOwnerRoot: PLUGIN }).spawn(plan);
@@ -598,6 +599,23 @@ describe("TmuxTeamBackend child env and credential boundary (fake run / fake tmu
       const f = fakeRun({ pre, post: absent });
       expect(new TmuxTeamBackend({ run: f.run, pluginOwnerRoot: PLUGIN }).spawn(plan).ok).toBe(true);
     }
+  });
+
+  it("a thrown or other-variable credential probe is unverifiable: refused before any create, the reason names it, nothing echoed", () => {
+    const canary = "probe-throw-canary-41c2";
+    const f = fakeRun({ pre: absent, post: absent });
+    const throwing: RunFn = (cmd, args, o) => {
+      if (args[0] === "show-environment") throw new Error(canary);
+      return f.run(cmd, args, o);
+    };
+    const thrown = new TmuxTeamBackend({ run: throwing, pluginOwnerRoot: PLUGIN }).spawn(plan);
+    expect({ ok: thrown.ok, stderr: thrown.stderr, created: f.created() })
+      .toEqual({ ok: false, stderr: "refused before create: credential_env_unverifiable: show-environment threw", created: false });
+    expect(JSON.stringify(thrown).includes(canary)).toBe(false);
+    const other = fakeRun({ pre: { status: 0, stdout: "PATH=/usr/bin:/bin\nLANG=C\n", stderr: "" }, post: absent });
+    const benign = new TmuxTeamBackend({ run: other.run, pluginOwnerRoot: PLUGIN }).spawn(plan);
+    expect({ ok: benign.ok, created: other.created() }).toEqual({ ok: false, created: false });
+    expect(benign.stderr).toMatch(/^refused before create: credential_env_unverifiable: show-environment printed a noncanonical answer \(status 0, stdout \d+ bytes, stderr 0 bytes\)$/);
   });
 
   it("an uncertain post-create answer is never success: the captured target gets the identity-bound cleanup and the capture is kept", () => {
