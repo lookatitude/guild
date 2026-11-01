@@ -679,8 +679,8 @@ interface DocRule {
   locked: RegExp[];
   /** no D8 doc may match any `retired` pattern */
   retired?: RegExp[];
-  /** Exact source-qualified compatibility mentions excluded from this rule's retired scan. */
-  sourceQualifications?: RegExp[];
+  /** Exact source-qualified compatibility mentions excluded only in the named files. */
+  sourceQualifications?: Partial<Record<string, RegExp[]>>;
 }
 
 /** Whitespace-normalized, so a sentence wrapped across lines still matches. */
@@ -698,7 +698,7 @@ function docProblems(texts: Texts, rules: DocRule[]): string[] {
     }
     for (const re of rule.retired ?? []) {
       for (const [f, t] of Object.entries(texts)) {
-        const unqualified = (rule.sourceQualifications ?? []).reduce(
+        const unqualified = (rule.sourceQualifications?.[f] ?? []).reduce(
           (text, qualification) => text.replace(new RegExp(qualification.source, "g"), ""),
           t,
         );
@@ -843,7 +843,10 @@ const F9_RULES: DocRule[] = [
       /SQLite read-through wiki cache\*\* — lazy-build/,
       /\b(?:all (?:rebuildable )?caches|every (?:rebuildable )?cache|caches(?: \([^)]*\))?(?: and scratch)?) (?:always )?(?:live|lives|are|is|stay|stays)(?: stored)? (?:entirely |exclusively )?(?:off[- ](?:the )?repo|outside (?:the )?(?:repo(?:sitory)?|durable state|`?\.guild\/`?)|external)/i,
     ],
-    sourceQualifications: INDEX_CACHE_SOURCE_MENTIONS,
+    sourceQualifications: {
+      "README.md": INDEX_CACHE_SOURCE_MENTIONS,
+      "AGENTS.md": INDEX_CACHE_SOURCE_MENTIONS,
+    },
   },
   {
     id: "cache-source-qualification",
@@ -979,6 +982,27 @@ describe("T17 plugin-local docs and producer boundary", () => {
   test("F9 · CONTROL: source-qualified compatibility paths preserve the external-cache distinction", () => {
     expect(cacheRules.map((rule) => rule.id)).toEqual(["bm25", "cache-source-qualification"]);
     expect(docProblems(qualifiedCacheDocs, cacheRules)).toEqual([]);
+  });
+
+  test("F9 · CONTROL: source qualifications do not exempt other D8 docs from the retired path guard", () => {
+    const bm25 = cacheRules.find((rule) => rule.id === "bm25")!;
+    expect(Object.keys(bm25.sourceQualifications ?? {}).sort()).toEqual(["AGENTS.md", "README.md"]);
+    const otherDocs = D8_DOCS.filter((f) => !["README.md", "AGENTS.md"].includes(f));
+    expect(otherDocs).toContain("commands/wiki.md");
+    const qualifiedMentions = [
+      "Retained `index-cache` compatibility helpers still derive `.guild/index.sqlite`",
+      "Retained source exceptions include `.guild/index.sqlite` in `src/domains/state/index-cache.ts` compatibility helpers",
+      "Retained source paths include `.guild/index.sqlite` in compatibility helpers",
+      "Its declared external-cache classification and retained `.guild/index.sqlite` compatibility path are distinct, as qualified above",
+    ];
+    for (const f of otherDocs) {
+      const valid = { ...qualifiedCacheDocs, [f]: `${qualifiedCacheDocs[f] ?? ""} A cache-only rerank fails open to BM25.` };
+      expect(docProblems(valid, cacheRules)).toEqual([]);
+      for (const mention of qualifiedMentions) {
+        const planted = { ...valid, [f]: `${valid[f]} ${mention}` };
+        expect(docProblems(planted, cacheRules)).toContain(`bm25: ${f} still says ${bm25.retired![0]}`);
+      }
+    }
   });
 
   test("F9 · CONTROL: qualified prose cannot hide an unqualified cache claim in any D8 doc", () => {

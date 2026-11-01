@@ -7,6 +7,9 @@ demand by team composition), and 76 skills — 17 of them indexed — across a
 brainstorm-plan-execute-review-verify-reflect spine, a categorized wiki with decision
 capture, and a self-evolution loop with shadow-mode gating.
 
+In maintainer/source shorthand, bare `/guild` corresponds to Claude Code's
+full native `/guild:guild` entry.
+
 The runtime shape (bare `/guild` = T0, three tiers, five class graphs, one review
 gate, one promotion law, two context sizes) is the Layout laws list below; README
 carries the user-facing summary.
@@ -106,7 +109,7 @@ never user-typed. This is the one-place wiring reference — each command's
 | `/guild:build` | `guild:execute-plan` — per lane its `context-assemble` chapter, dispatch, then `guild:review` (deep: + its `loop-implement` chapter) | handoff receipts, `assumptions.md`, `review.md` |
 | `/guild:qa` | `guild:quality` | `.guild/runs/<run-id>/quality/<run-id>.md` |
 | `/guild:ops` | `guild:operations` | `.guild/runs/<run-id>/ops/<run-id>.md` |
-| `/guild:learn` | `guild:learn` — its `learn-map` / `learn-graph` / `learn-knowledge` / `learn-onboard` / `learn-diff` / `learn-explain` chapters; explicit Stage-2 is `extract-structural.ts` | deep knowledge-graph + onboarding / diff / explain artifacts (lazy, gated) |
+| `/guild:learn` | `guild:learn` — its `learn-map` / `learn-graph` / `learn-knowledge` / `learn-onboard` / `learn-diff` / `learn-explain` chapters; normal Stage-2 uses `analyze-structural.ts`; `extract-structural.ts` is experimental / on-demand-only, not invoked by any skill | deep knowledge-graph + onboarding / diff / explain artifacts (lazy, gated) |
 
 ## Dev team (`.guild/agents/`)
 
@@ -415,7 +418,7 @@ Where a line here and the source plan disagree, the source plan wins.
 - **KTD61.** Budget is enforced. advisorRounds + optional token/usd caps. Exhaustion blocks the cell. D-PROBE and inner verify do not decrement.
 - **KTD62.** Team compose is per-phase (shipped files stay). Per-goal is a roster slice of already-minted profiles, not a second mint.
 - **KTD63.** Hook/adapter/learn_script/domain_ts evolve through the human gate. Auto-path never writes them.
-- **KTD64.** Explicit learn Stage-2 is extract-structural.ts. refreshTouched still must not run Stage-2.
+- **KTD64.** Frozen-plan wording (historical intent): "Explicit learn Stage-2 is extract-structural.ts." The normal shipped learn-graph Stage-2 route uses analyze-structural.ts; extract-structural.ts remains experimental / on-demand-only and is not invoked by any skill. refreshTouched still must not run Stage-2.
 - **KTD65.** Historical reshape decision: that initiative's D8 scope was plugin-local (README, AGENTS.md, using-guild, command help), with the then-current docs/v2: n/a record. It is not a standing exemption or current reference target. Current documentation ownership is workspace docs/reference/ and the maintainer pipeline above; legacy D8 acceptance wording remains source-governed until separately changed.
 - **KTD66.** Plugin produces inventory + KTD16 traces (including next_need / harvest / evolve-candidate). status dashboard launcher stays. UI product is the benchmark plan. No source import.
 - **KTD67.** Recall backend bm25 | hybrid. Embeddings are cache only. Missing model fails open to BM25.
