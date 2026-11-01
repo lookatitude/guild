@@ -53356,6 +53356,9 @@ var MANAGED_CLAUDE_PROFILE = Object.freeze({
 // src/adapters/managed-node-process.ts
 init_lifecycle();
 
+// scripts/task-cell-controller.ts
+init_state();
+
 // scripts/lib/capability/definition-ref-for-dispatch.ts
 var crypto22 = __toESM(require("node:crypto"));
 var fs81 = __toESM(require("node:fs"));
@@ -56019,10 +56022,17 @@ async function driveStation(controller, lanes) {
 function controlledNonterminal(outcomes) {
   return outcomes.filter((o) => o.instance_id !== null && (!TERMINAL_LANE_STATES.has(o.state) || o.orphaned === true));
 }
-function readJsonArg(file, label) {
+function readArgText(file, label) {
   if (!file) throw Object.assign(new Error(`--${label} is required`), { usage: true });
   if (!path98.isAbsolute(file)) throw Object.assign(new Error(`--${label} must be an absolute path`), { usage: true });
-  return JSON.parse(fs83.readFileSync(file, "utf8"));
+  return fs83.readFileSync(file, "utf8");
+}
+function readJsonArg(file, label) {
+  return JSON.parse(readArgText(file, label));
+}
+function readProposalArg(file) {
+  const value = parseYaml(readArgText(file, "proposal"));
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 function readBasisDescriptor(file) {
   const d = readJsonArg(file, "reviewed-basis");
@@ -56072,7 +56082,8 @@ async function runController(sub, args) {
     case "start": {
       const lanesInput = readJsonArg(args["lanes"], "lanes");
       const teamPlan = readJsonArg(args["team-plan"], "team-plan");
-      const proposal = readJsonArg(args["proposal"], "proposal");
+      const proposal = readProposalArg(args["proposal"]);
+      if (proposal === null) return { code: 2, body: { ok: false, reason: "proposal_unparseable" } };
       const policy = args["worker-trust-policy"];
       if (policy !== "cooperative_local" && policy !== "isolated_worker") return { code: 1, body: { ok: false, reason: "worker_trust_policy_required" } };
       const packageRoot = args["package-root"] ?? null;

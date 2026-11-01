@@ -4,7 +4,7 @@
  *
  * Usage (every subcommand takes an absolute --root; the cwd is never used):
  *   task-cell-controller start          --root <abs> --run <id> --phase <station> --worker-trust-policy <cooperative_local|isolated_worker>
- *                                       --lanes <abs LaneSpec[] JSON> --team-plan <abs guild.team_plan.v1> --proposal <abs guild.team_proposal.v2>
+ *                                       --lanes <abs LaneSpec[] JSON> --team-plan <abs guild.team_plan.v1> --proposal <abs guild.team_proposal.v2 YAML (writeProposal) or JSON>
  *                                       [--package-root <abs> --reviewed-basis <abs guild.source_basis_descriptor.v1>]
  *   task-cell-controller status         --root <abs> --run <id> --consumer-policy <cooperative_local|isolated_worker>
  *                                       [--consumer-context same_run|release:<context.json>] [--view-version <v>]
@@ -38,6 +38,7 @@ import {
   type TaskCellController,
 } from "../src/domains/dispatch";
 import { familyForHostId, rungKeyForSession, rungPlanForFamily } from "../src/adapters";
+import { parseYaml } from "../src/domains/state";
 import { resolveAdoptedDefinition } from "./lib/capability/definition-ref-for-dispatch";
 import { durableGuildDir } from "./lib/state/storage";
 import {
@@ -169,10 +170,24 @@ export function controlledNonterminal(outcomes: readonly LaneOutcome[]): LaneOut
   return outcomes.filter((o) => o.instance_id !== null && (!TERMINAL_LANE_STATES.has(o.state) || o.orphaned === true));
 }
 
-function readJsonArg(file: string | undefined, label: string): unknown {
+function readArgText(file: string | undefined, label: string): string {
   if (!file) throw Object.assign(new Error(`--${label} is required`), { usage: true });
   if (!path.isAbsolute(file)) throw Object.assign(new Error(`--${label} must be an absolute path`), { usage: true });
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  return fs.readFileSync(file, "utf8");
+}
+
+function readJsonArg(file: string | undefined, label: string): unknown {
+  return JSON.parse(readArgText(file, label));
+}
+
+/**
+ * --proposal is the canonical writeProposal YAML; the controller reads the basis
+ * proposal with the same parseYaml (JSON_SCHEMA), so JSON text parses too. Null
+ * when the bytes are not one YAML/JSON mapping; schema stays with dispatchGate.
+ */
+function readProposalArg(file: string | undefined): Record<string, unknown> | null {
+  const value = parseYaml(readArgText(file, "proposal"));
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
 /** guild.source_basis_descriptor.v1 → ReviewedBasisInput (paths stay relative to the basis root). */
@@ -223,7 +238,8 @@ export async function runController(sub: Subcommand, args: Args): Promise<{ code
       // Validate inputs first so a usage error or input refusal writes nothing.
       const lanesInput = readJsonArg(args["lanes"], "lanes");
       const teamPlan = readJsonArg(args["team-plan"], "team-plan");
-      const proposal = readJsonArg(args["proposal"], "proposal");
+      const proposal = readProposalArg(args["proposal"]);
+      if (proposal === null) return { code: 2, body: { ok: false, reason: "proposal_unparseable" } };
       const policy = args["worker-trust-policy"];
       if (policy !== "cooperative_local" && policy !== "isolated_worker") return { code: 1, body: { ok: false, reason: "worker_trust_policy_required" } };
       const packageRoot = args["package-root"] ?? null;
