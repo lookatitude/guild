@@ -27,15 +27,15 @@ constitute a new stable release or fresh host verification.
   `.guild/agents/` by team composition — plus the 4 machinery agents the plugin
   registers directly (advisor, context-manager, developer, team-lead; one
   `agents/*.md` each).
-- **76 logical skills**, with 17 assemblers indexed by the Claude manifest —
-  the indexed entries are (using-guild, init, brainstorm, plan, team-compose,
+- **76 logical skills**, of which 17 are indexed by the Claude manifest —
+  the indexed assemblers are (using-guild, init, brainstorm, plan, team-compose,
   execute-plan, quality, operations, learn, wiki, initiative, review, diagnose,
   evolve, create-skill, create-specialist, reflect). Everything else still ships
   but stays off the index: L3 chapters live in their parent assembler's
   `references/`, the 58 specialist starter recipes live under
   `skills/specialists/`, and the dashboard launcher lives under
   `skills/playbooks/dashboard/`.
-- **13 command entrypoints** — `/guild:guild [brief]`, the six phase verbs
+- **13 dispatching command files** — `/guild:guild [brief]`, the six phase verbs
   `init`, `ideate`, `plan`, `build`, `qa`, `ops`, and `learn`, `wiki`,
   `initiative`, `status`, `config`, `maintain`. Sub-verbs are positional
   arguments. The old standalone verbs (`adopt`, `audit`, `dashboard`, `evolve`,
@@ -56,9 +56,9 @@ constitute a new stable release or fresh host verification.
   parent sees only the lane bundle of at most 1,200 tokens of citations, of which
   matching `.guild/wiki/glossary.md` terms take at most 200. The full glossary is
   never always-on.
-- **One promotion law** — harvest promotes decision-shaped verdicts to this
-  cwd's wiki and span-replaces project playbooks through `scrubbedWrite`, and
-  never commits. `wiki.autopromote` defaults on; `false` makes the root
+- **One promotion law** — Harvest is the only automatic wiki writer. It
+  promotes decision-shaped verdicts to this cwd's wiki and span-replaces project
+  playbooks through `scrubbedWrite`, and never commits. `wiki.autopromote` defaults on; `false` makes the root
   candidates-only. Specialists never write the wiki. The per-phase checkpoint is
   a domain function that only classifies. Wiki `labels.concern` uses the shipped
   enum: architecture · security · performance · reliability · data · api · ux ·
@@ -99,8 +99,9 @@ constitute a new stable release or fresh host verification.
   explicit degradations or refusals; not every fallback can safely continue.
 - **Policy and model tiering** — cheap / mid / powerful tiers, advisor rounds,
   token/spend budgets, and a default concurrency limit of four workers (not a
-  team-size cap). Durable writes accept the closed set of **15 policy keys**;
-  host identity and concrete models bind per run. Legacy settings readers expose
+  team-size cap). The durable config holds policy keys only: writes accept the
+  closed set of **15 policy keys**. Host identity and concrete models bind per
+  session on the run record. Legacy settings readers expose
   additional keys, which are not all writable through `config set`. Dynamic
   M2 model routing defaults off; a requested model is not proof of the served
   model. `/guild:config models inspect` verifies session/catalog sources, but its
@@ -115,15 +116,20 @@ constitute a new stable release or fresh host verification.
   this source path is not evidence of a freshly observed cache write.
 - **Learning and evolution** — cheap mapping, deeper structural/semantic
   graphs, onboarding, diff analysis, and artifact harvest. Plain init stays
-  cheap; deep learning is opt-in. Reflection proposes improvements; shadow
-  evaluation gates evolution. Span edits retain inverse history for rollback.
+  cheap; deep learning is opt-in. The Stage-2 boundary keeps `refreshTouched`
+  limited to the working-set card, incremental BM25, and touched knowledge links;
+  it never triggers the deep graph. `scripts/learn/extract-structural.ts` is an
+  experimental on-demand extractor; the normal learn skill's Stage-2 path uses
+  `analyze-structural.ts`. Reflection proposes improvements; shadow evaluation
+  gates evolution. Span edits retain inverse history for rollback.
   Automatic curation is limited to project skills/playbooks; machinery changes
   become candidates for a human to commit. Upstream issue filing asks first.
 - **Security and observability** — capability scopes, secret scrubbing and
   credential-bearing prose refusals, run traces, receipt reconciliation, cost
   rollup, and run comparison/recommendations. Missing observations remain
   degraded or unknown. Host permission modes do not waive Guild's hard gates.
-  `/guild:status dashboard` launches the separate benchmark UI.
+  The plugin ships no UI pages; `/guild:status dashboard` launches the separate
+  benchmark UI.
 
 ## Getting Started
 
@@ -182,31 +188,81 @@ Switch back to stable by re-adding the marketplace without the `@next` pin (or
 `--channel stable`). Beta may contain unreleased behavior; release notes only
 cover what has reached `main`.
 
-### Staying up to date
+### Applying updates per host
 
-The installer records host, channel, ref, and commit in machine-level install
-receipts. Update receipted installs with:
+Installer-created installs record `guild.install_receipt.v1` (host, channel,
+ref, commit) under `~/.guild/receipts/` and in the package. Updates retain
+the recorded stable (`main`) or beta (`next`) channel unless overridden.
+These mechanisms do not extend the host-support evidence described above.
+
+**Claude Code (`claude-code-cli`)** uses its marketplace manager:
+
+```bash
+claude plugin marketplace update guild && claude plugin update guild@guild
+```
+
+Restart Claude Code to load the updated package.
+
+**Wrapper-package hosts — `pi-cli`, `antigravity-cli`, `cursor`,
+`github-copilot`, `opencode`, `rovo-dev`** use their installed launcher:
+
+```bash
+guild-run update
+```
+
+This reads the package receipt, re-renders that host at its recorded ref, and
+stages a replacement tree before swapping it into place. A missing receipt or
+development checkout causes refusal; reinstall through the installer to create
+a receipt for a managed package. Start a fresh host session after updating.
+
+**Codex CLI (`codex-cli`)** uses the installer update path:
 
 ```bash
 curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update
 ```
 
-Claude marketplace installs can use:
+Receipted installs re-render and re-register the marketplace through Codex's
+plugin manager. Codex owns its installed plugin cache; `guild-run update`
+refuses to swap it. A host-native install has no machine receipt. When
+`--update` finds no machine receipts, it detects native Claude/Codex installs
+and prints guidance instead of adopting them. For a Codex **git marketplace**:
 
 ```bash
-claude plugin marketplace update guild
-claude plugin update guild@guild
+codex plugin marketplace upgrade && codex plugin add guild@guild
 ```
 
-Wrapper-package hosts can use `guild-run update` with their install receipt.
-Codex owns its plugin cache; Guild does not swap it. Native installs without a
-machine receipt receive host-specific update guidance. File-surface installs
-need the refreshed instruction tree copied into the consuming project.
-App/connector targets are not CLI package installations.
+For a **local-directory marketplace**, Codex cannot refresh the rendered source.
+Re-render and re-register with a normal install, choosing the intended channel:
+
+```bash
+curl -fsSL https://guildstack.dev/install.sh | bash -s -- --host codex-cli --channel stable
+```
+
+Use `--channel beta` instead to retain a beta installation; if the registered
+source type is unknown, inspect it before choosing either path.
+
+**File-surface hosts — `agents-file`, `kiro`, `qoder`, `trae`** are
+snapshot copies using the universal AGENTS-file adapter:
+
+```bash
+curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update
+```
+
+Then re-copy the refreshed `dist/agents` instruction tree, including
+`AGENTS.md` and `.agents/skills/guild`, into the consuming project.
+The installer command updates every host in the machine receipts together;
+each retains its recorded channel when no override is requested.
+
+The app/connector targets (`claude-code-app`, `claude-code-web`,
+`codex-app`, `claude-ai-connector`) have no install and therefore no update
+command of their own. Codex App can use the shared Codex CLI registration;
+that does not establish independent app-install or lifecycle support.
 
 SessionStart reads cached update information; background refresh follows the
 configured cadence. `defaults.update.mode` is a legacy settings option
 (`notify`, `auto`, or `off`), not one of the 15 writable policy keys.
+Only Claude's marketplace path implements automatic apply; other hosts
+degrade to notify-only in `auto` mode and require the command above.
 
 For local development, see [CONTRIBUTING.md](CONTRIBUTING.md). Develop against
 the generated Claude package and restart the host after installation or package
@@ -215,18 +271,20 @@ they were inspected, not executed by this documentation refresh.
 
 ### First run
 
-In Claude Code, run `/guild:guild` with a brief, or with no arguments. With no
-arguments, `/guild:guild` runs intake, classifies the work, and proposes the
-next step for you to confirm:
+In Claude Code, run `/guild:guild` with a brief, or with no arguments. A verb is
+optional. With no arguments, `/guild:guild` runs intake, classifies the work,
+and proposes the next step for you to confirm:
 
 ```text
 /guild:guild "Build a Stripe subscription flow, add tests, update the docs, draft a launch email."
 /guild:guild
 ```
 
-On Claude Code, restart after installation and look for the SessionStart
-bootstrap card. Other hosts expose commands and bootstrap through their own
-adapters; the slash examples here use Claude Code's spelling.
+On Claude Code SessionStart in a Guild root, the bootstrap always loads the
+Guild gateway or fails closed if required components cannot be loaded. Restart
+after installation and look for the bootstrap card. Other hosts expose commands
+and bootstrap through their own adapters; the slash examples here use Claude
+Code's spelling.
 
 For a small example, ask `/guild:guild "Explain this repository and propose one small
 improvement."` Guild proposes a class and phase, then asks at the applicable
@@ -336,6 +394,10 @@ live on the docs site: **https://guildstack.dev/docs**.
 
 ## Runtime state
 
+When a root has an older layout, the first write-capable entry upgrades it
+through the layout gate. Dirty durable state or required confirmation can block
+the upgrade; Guild reports the blocker and leaves affected content in place.
+
 All project-created Guild state lives under the active root's `.guild/` (never
 committed by Guild itself):
 
@@ -364,9 +426,11 @@ committed by Guild itself):
 └── evolve/               # shadow-mode eval runs and reports
 ```
 
-Project skill/playbook files are latest-only. Evolve replaces the selected span
-and keeps compact inverse history on platform state; there is no
-`skill-versions/` tree. The storage contract places rebuildable caches and
+For project skill/playbook bodies, the storage rule is: Files here are latest-only.
+Evolve replaces the selected span and keeps a compact history (inverse spans and
+before/after hashes) on platform state for rollback. Run records retain their
+per-run evidence; there is no `skill-versions/` tree for these bodies. The storage
+contract places rebuildable caches and
 scratch outside durable state. Retained source paths include
 `.guild/index.sqlite` in compatibility helpers and a cheap Init CodebaseMap
 under `.guild/indexes/`; derived indexes must not be committed. Workspace

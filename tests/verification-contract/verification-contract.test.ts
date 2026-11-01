@@ -679,6 +679,8 @@ interface DocRule {
   locked: RegExp[];
   /** no D8 doc may match any `retired` pattern */
   retired?: RegExp[];
+  /** Exact source-qualified compatibility mentions excluded from this rule's retired scan. */
+  sourceQualifications?: RegExp[];
 }
 
 /** Whitespace-normalized, so a sentence wrapped across lines still matches. */
@@ -695,7 +697,13 @@ function docProblems(texts: Texts, rules: DocRule[]): string[] {
       for (const re of rule.locked) if (!re.test(texts[f] ?? "")) out.push(`${rule.id}: ${f} lacks ${re}`);
     }
     for (const re of rule.retired ?? []) {
-      for (const [f, t] of Object.entries(texts)) if (re.test(t)) out.push(`${rule.id}: ${f} still says ${re}`);
+      for (const [f, t] of Object.entries(texts)) {
+        const unqualified = (rule.sourceQualifications ?? []).reduce(
+          (text, qualification) => text.replace(new RegExp(qualification.source, "g"), ""),
+          t,
+        );
+        if (re.test(unqualified)) out.push(`${rule.id}: ${f} still says ${re}`);
+      }
     }
   }
   return out;
@@ -716,7 +724,7 @@ const R28_RULES: DocRule[] = [
     locked: [
       /\*\*13 dispatching command files\*\*/,
       /17 are indexed/,
-      /bare `\/guild` is the T0 orchestrator session/,
+      /`\/guild:guild` is the T0 orchestrator session/,
       /`research`, `debug`, and `--class=` bind the class/,
       /five class graphs \(product · research · debug · ops · init\)/,
       /three tiers \(T0 → a Team Lead per TaskCell → specialists\)/,
@@ -796,6 +804,15 @@ const R28_RULES: DocRule[] = [
   },
 ];
 
+const INDEX_CACHE_SOURCE = /Retained (?:`index-cache` compatibility helpers still derive `\.guild\/index\.sqlite`|source exceptions include `\.guild\/index\.sqlite` in `src\/domains\/state\/index-cache\.ts` compatibility helpers)/;
+const INDEX_CACHE_CLASSIFICATION = /storage (?:architecture|contract) classifies (?:the SQLite index|rebuildable caches) as (?:an )?external/;
+const INDEX_CACHE_WRITE_CAVEAT = /(?:this source path is not evidence of a freshly observed cache write|do not commit derived indexes or describe these source paths as freshly observed writes)/;
+const INDEX_CACHE_SOURCE_MENTIONS = [
+  INDEX_CACHE_SOURCE,
+  /Retained source paths include `\.guild\/index\.sqlite` in compatibility helpers/,
+  /Its declared external-cache classification and retained `\.guild\/index\.sqlite` compatibility path are distinct, as qualified above/,
+];
+
 /** F9: each colliding sentence reads the locked way, and its retired form is gone everywhere. */
 const F9_RULES: DocRule[] = [
   {
@@ -821,7 +838,17 @@ const F9_RULES: DocRule[] = [
     id: "bm25",
     files: ["README.md", "AGENTS.md", "commands/wiki.md"],
     locked: [/fails open to BM25/],
-    retired: [/\.guild\/index\.sqlite/, /SQLite read-through wiki cache\*\* — lazy-build/],
+    retired: [
+      /\.guild\/index\.sqlite/,
+      /SQLite read-through wiki cache\*\* — lazy-build/,
+      /\b(?:all (?:rebuildable )?caches|every (?:rebuildable )?cache|caches(?: \([^)]*\))?(?: and scratch)?) (?:always )?(?:live|lives|are|is|stay|stays)(?: stored)? (?:entirely |exclusively )?(?:off[- ](?:the )?repo|outside (?:the )?(?:repo(?:sitory)?|durable state|`?\.guild\/`?)|external)/i,
+    ],
+    sourceQualifications: INDEX_CACHE_SOURCE_MENTIONS,
+  },
+  {
+    id: "cache-source-qualification",
+    files: ["README.md", "AGENTS.md"],
+    locked: [INDEX_CACHE_CLASSIFICATION, INDEX_CACHE_SOURCE, INDEX_CACHE_WRITE_CAVEAT],
   },
   {
     id: "skill-versions",
@@ -930,6 +957,60 @@ describe("T17 plugin-local docs and producer boundary", () => {
     // The concern line is the shipped enum, not a hand-copied list: a renamed value fails.
     const drifted = { ...live, "README.md": live["README.md"].replace(" · ux · ", " · design · ") };
     expect(docProblems(drifted, F9_RULES)).toContain(`concern-enum: README.md lacks ${CONCERN_LINE}`);
+  });
+
+  test("R28 · CONTROL: the native README entry requires /guild:guild", () => {
+    const entry = R28_RULES[0].locked.find((re) => re.source.includes("guild:guild"));
+    expect(entry).toBeDefined();
+    const rule: DocRule = { id: "native-readme-entry", files: ["README.md"], locked: [entry!] };
+    const native = "`/guild:guild` is the T0 orchestrator session";
+    expect(docProblems({ "README.md": native }, [rule])).toEqual([]);
+    expect(docProblems({ "README.md": native.replace("/guild:guild", "/guild") }, [rule]))
+      .toContain(`native-readme-entry: README.md lacks ${entry}`);
+  });
+
+  const cacheRules = F9_RULES.filter((rule) => ["bm25", "cache-source-qualification"].includes(rule.id));
+  const qualifiedCacheDocs: Texts = {
+    "README.md": "A missing embedding model fails open to BM25. The storage architecture classifies the SQLite index as an external, rebuildable cache. Retained `index-cache` compatibility helpers still derive `.guild/index.sqlite`; this source path is not evidence of a freshly observed cache write. Retained source paths include `.guild/index.sqlite` in compatibility helpers.",
+    "AGENTS.md": "A missing embedding model fails open to BM25. The storage contract classifies rebuildable caches as external and scratch as temporary. Retained source exceptions include `.guild/index.sqlite` in `src/domains/state/index-cache.ts` compatibility helpers; do not commit derived indexes or describe these source paths as freshly observed writes. Its declared external-cache classification and retained `.guild/index.sqlite` compatibility path are distinct, as qualified above.",
+    "commands/wiki.md": "A cache-only rerank fails open to BM25.",
+  };
+
+  test("F9 · CONTROL: source-qualified compatibility paths preserve the external-cache distinction", () => {
+    expect(cacheRules.map((rule) => rule.id)).toEqual(["bm25", "cache-source-qualification"]);
+    expect(docProblems(qualifiedCacheDocs, cacheRules)).toEqual([]);
+  });
+
+  test("F9 · CONTROL: qualified prose cannot hide an unqualified cache claim in any D8 doc", () => {
+    const retiredClaims = [
+      "Resolves run state or the optional `.guild/index.sqlite` cache.",
+      "The SQLite cache lives at `.guild/index.sqlite`.",
+      "All rebuildable caches are off-repo.",
+      "Every cache lives outside the repository.",
+      "Caches (SQLite index, codebase map, model catalog) and scratch live off the repo.",
+      "SQLite read-through wiki cache** — lazy-build",
+    ];
+    for (const f of D8_DOCS) {
+      for (const claim of retiredClaims) {
+        const planted = { ...qualifiedCacheDocs, [f]: `${qualifiedCacheDocs[f] ?? ""} ${claim}` };
+        expect(docProblems(planted, cacheRules).some((p) => p.startsWith(`bm25: ${f} still says`))).toBe(true);
+      }
+    }
+  });
+
+  test("F9 · CONTROL: deleting or replacing each required cache qualification is detected", () => {
+    const qualification = cacheRules.find((rule) => rule.id === "cache-source-qualification")!;
+    for (const f of qualification.files) {
+      for (const re of qualification.locked) {
+        expect(re.test(qualifiedCacheDocs[f])).toBe(true);
+        const missing = `cache-source-qualification: ${f} lacks ${re}`;
+        expect(docProblems(withoutMatch(qualifiedCacheDocs, f, re), cacheRules)).toContain(missing);
+        const replaced = { ...qualifiedCacheDocs, [f]: qualifiedCacheDocs[f].replace(re, "The SQLite cache lives at `.guild/index.sqlite`.") };
+        const problems = docProblems(replaced, cacheRules);
+        expect(problems).toContain(missing);
+        expect(problems.some((p) => p.startsWith(`bm25: ${f} still says`))).toBe(true);
+      }
+    }
   });
 
   test("R76 · plugin source imports no website/ or benchmark/ tree", () => {
