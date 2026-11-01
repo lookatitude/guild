@@ -753,8 +753,11 @@ export const RATIFIED_MANIFESTS: Readonly<Record<string, string>> = Object.freez
   // C06 alias retirement drops the 11 ./commands/<alias>.md registrations — exactly
   // the 13 dispatchers remain. ANTI-VACUITY: SC-W3-6(A)/SC-W2-5 were observed RED
   // against the prior pin (version-stripped hash aa360e26...) before ratification.
-  ".claude-plugin/plugin.json": "aa360e26c51dab8ed86421730318b6d9324316ada37e5fc246a00e0efa01aa5c",
-  ".claude-plugin/marketplace.json": "ad288b80dee07f85a94eee8b9c3e92b18705a94f98e104277a92b4d2e770e2af",
+  // Re-ratified 2026-10-30 (guild#291): description text only, "3 machinery agents" ->
+  // "4" (inventory lists 4). ANTI-VACUITY: SC-W3-6(A)/SC-W2-5 observed RED on guild#291
+  // CI against the prior pins (aa360e26... / ad288b80...).
+  ".claude-plugin/plugin.json": "43c19d03c36ccbb0a5804f95760e8bcb30388349bc5cc30eab32b5a6da207a6c",
+  ".claude-plugin/marketplace.json": "327e293ca7c99b17682d72ac9cb8b8858ed2f92adb6aff46d00e4e9fa7b93c10",
 });
 
 /**
