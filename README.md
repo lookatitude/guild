@@ -1,19 +1,17 @@
 <p align="center">
-  <img src="docs/assets/guild-logo.svg" alt="Guild logo" width="128">
+  <img src="docs/assets/guildstack-logo-transparent.png" alt="Guild Stack logo" width="128">
 </p>
 
 # Guild
 
 A Guild Stack plugin for AI coding hosts that gives you self-evolving teams of specialist agents.
 
-Guild turns a single coding session into a disciplined guild: `/guild "<task>"`
-runs intake, binds a workflow class, composes a team, writes per-specialist plans,
-assembles tight context bundles, dispatches specialists, reviews, verifies, and
-reflects. Every significant question becomes a structured decision. Every skill
-edit replaces a named span and keeps a compact history for rollback. Harvest is
-the only automatic writer; everything else waits for a gate.
+Start with `/guild:guild "<task>"` in Claude Code. Guild proposes a workflow, composes a specialist
+team, plans the work, assembles context, dispatches lanes, reviews, verifies,
+and reflects. Project knowledge and run evidence stay under your active
+root's `.guild/`; Guild never commits them for you.
 
-## What v2 ships
+## What v3.2.0 ships
 
 - **15 specialist templates + 4 machinery agents** — 15 domain type templates
   across three groups (engineering: architect, researcher, backend, frontend,
@@ -23,24 +21,20 @@ the only automatic writer; everything else waits for a gate.
   `.guild/agents/` by team composition — plus the 4 machinery agents the plugin
   registers directly (advisor, context-manager, developer, team-lead; one
   `agents/*.md` each).
-- **76 skills**, of which 17 are indexed — the host's catalog is exactly 17
-  assembler skills (using-guild, init, brainstorm, plan, team-compose,
+- **76 logical skills**, with 17 assemblers indexed by the Claude manifest —
+  the indexed entries are (using-guild, init, brainstorm, plan, team-compose,
   execute-plan, quality, operations, learn, wiki, initiative, review, diagnose,
   evolve, create-skill, create-specialist, reflect). Everything else still ships
   but stays off the index: L3 chapters live in their parent assembler's
   `references/`, the 58 specialist starter recipes live under
   `skills/specialists/`, and the dashboard launcher lives under
   `skills/playbooks/dashboard/`.
-- **13 dispatching command files** — bare `/guild [brief]`, the phase verbs
-  `/guild:init|ideate|plan|build|qa|ops`, `/guild:learn`, the nouns
-  `/guild:wiki|initiative`, `/guild:status`, `/guild:config`, and
-  `/guild:maintain`. Sub-verbs are arguments, never files. The dropped v2.6
-  command files (`adopt`, `audit`, `dashboard`, `evolve`, `fix`, `goal`,
-  `migrate`, `models`, `resume`, `rollback`, `stats`) are print-only aliases that
-  name the new spelling. The `:` plugin namespace **stays** (Claude Code requires
-  it); every command is `/guild:<verb>` (v1→v2:
-  `https://guildstack.dev/docs/migration-v1-to-v2`).
-- **One runtime shape** — bare `/guild` is the T0 orchestrator session: with no
+- **13 command entrypoints** — `/guild:guild [brief]`, the six phase verbs
+  `init`, `ideate`, `plan`, `build`, `qa`, `ops`, and `learn`, `wiki`,
+  `initiative`, `status`, `config`, `maintain`. Sub-verbs are positional
+  arguments. The old standalone alias files are removed; use the spellings in
+  [Commands](#commands). Claude Code keeps the `/guild:` namespace.
+- **One runtime shape** — `/guild:guild` is the T0 orchestrator session: with no
   verb it runs intake and binds one of five class graphs (product · research ·
   debug · ops · init); `research`, `debug`, and `--class=` bind the class
   directly. Work runs in three tiers (T0 → a Team Lead per TaskCell →
@@ -60,57 +54,68 @@ the only automatic writer; everything else waits for a gate.
   a domain function that only classifies. Wiki `labels.concern` uses the shipped
   enum: architecture · security · performance · reliability · data · api · ux ·
   build · ops.
-- **16 supported hosts, one adapter contract** — Guild runs across 16 canonical
-  hosts (Claude Code CLI/Desktop/Web, Codex CLI/app, Pi, Antigravity, Cursor,
-  GitHub Copilot, opencode, Rovo Dev, Kiro/Qoder/Trae via AGENTS-file, and the
-  Claude.ai connector) through a single host-adapter contract. Support is
-  described with an **honest two-field model** — the presentation *Support* label
-  (`Supported` / `Supported (beta)` / `Supported (app)` / `Supported (connector)`)
-  is kept separate from the receipt-derived *Public State*; no host is ever
-  claimed beyond its verified evidence. Missing capabilities **degrade** to a
-  lesser substrate — the phase still runs and the degradation is written to disk.
-  See the Guild docs site → `https://guildstack.dev/hosts`.
+- **Host adapters with bounded evidence** — the registry lists 16 targets;
+  this is not a count of fully verified installations. The committed matrix
+  has seven receipt-promoted CLI rows: Claude Code is `native`; Codex, Pi,
+  Antigravity, Cursor, opencode, and Rovo Dev are `verified_wrapped`.
+  Wrapper receipts do not establish native install activation or full lifecycle
+  conformance. GitHub Copilot and the AGENTS-file/Kiro/Qoder/Trae targets retain
+  `unsupported` Public State. Claude Code app/web, Codex app, and Claude.ai
+  connector rows also retain `unsupported`, with manual or enqueue-only paths;
+  app labels do not inherit CLI proof. See the
+  [generated matrix](docs/generated/host-support-matrix.md) for each operation.
+  The v3.2.0 signed [conformance record](.guild/artifacts/release/v3.2.0/conformance.json)
+  names one tuple: Claude Code CLI **2.1.310**, **darwin-arm64**, release-source
+  commit `7e26078b45f574e6ff20c9b217934a35d64becb1`. Its 31 evaluated scenarios
+  include expected refusals, failures, and degradations. This README refresh
+  inspected that record; it did not rerun the suite or reverify its signatures.
 - **10 hook events wired** — `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
   `PostToolUse`, `PreCompact`, `SubagentStop`, `Stop`, `TaskCreated`,
   `TaskCompleted`, `TeammateIdle`.
-- **Tooling scripts** — evolution, rollback, telemetry summary, audit-log
-  summary, Codex review-trail validation, and the opt-in tmux agent-team
-  launcher live under `scripts/`.
-- **2 optional MCP servers** — `guild-memory` (BM25 over the wiki once it
-  crosses ~200 pages) and `guild-telemetry` (structured trace query), two ids of
+- **Operator tooling** — compiled Node CLIs cover evolution, rollback, run
+  analysis, telemetry, validation, migration, capability adoption, and packaging.
+  `scripts/` is the authoring source; installed execution uses
+  `runtime/scripts/*.js`. Users do not need Bun; development tests use
+  `bun test --isolate`.
+- **2 optional MCP servers** — `guild-memory` (wiki search) and
+  `guild-telemetry` (structured trace query), two ids of
   one compiled `runtime/guild-mcp.js` built from `src/runtime/mcp/`. Both
   stdio-only, no network. Guild runs without them.
-- **Three execution backends** (D5 `agent_mode` ladder) — tmux visible panes
-  (in-session or detached); `InProcessTeamBackend` (implemented: orchestrator
-  consumes a declarative `dispatchPlan`, each specialist runs as an independent
-  Agent-tool call, no tmux required); remote cross-host SSH dispatch; `SUBAGENT`
-  last resort for CI / fresh installs. See the Guild docs site → `https://guildstack.dev/docs/architecture`.
-- **Cost-aware model tiering** — cheap / mid / powerful, auto-scored per lane
-  from deterministic signals, with advisor escalation for uncertainty.
-  Zero-config stable. See the Guild docs site → `https://guildstack.dev/docs/configuration` (`models.*`).
+- **Dispatch backends** — cmux panes, tmux panes, in-process Agent dispatch
+  plans, and remote SSH dispatch, with a subagent fallback. With `agent_mode` set to
+  `auto` or `team`, a cmux session selects cmux before tmux; explicit `agent` and
+  `subagent` preferences retain precedence. cmux selection/preflight fixtures
+  ship, but live end-to-end proof is still pending. Missing capabilities produce
+  explicit degradations or refusals; not every fallback can safely continue.
+- **Policy and model tiering** — cheap / mid / powerful tiers, advisor rounds,
+  token/spend budgets, and a default concurrency limit of four workers (not a
+  team-size cap). Durable writes accept the closed set of **15 policy keys**;
+  host identity and concrete models bind per run. Legacy settings readers expose
+  additional keys, which are not all writable through `config set`. Dynamic
+  M2 model routing defaults off; a requested model is not proof of the served
+  model. Use `/guild:config models inspect` for recorded binding evidence.
 - **Recall** — `recall.backend: bm25 | hybrid` (default `bm25`). Embeddings are
   cache only; a missing embedding model fails open to BM25. A lazy SQLite
   read-through cache sits on platform state, off the repo (`index: "auto"`,
   default; disable with `index: "off"`).
-- **Policy-only config, session-bound hosts** — durable config holds policy keys
-  only. The host family and the models bind per session on the run record; an
-  unknown host never defaults to Claude.
-- **O-3 short-output advisor** — fires when a lane's output token count falls
-  below calibrated p10 floors (`models.shortOutputThreshold`). Calibrate with
-  the `calibrate-o3-cli` tool in the separate `guild-benchmark` repo.
-  See the Guild docs site → `https://guildstack.dev/docs/configuration`.
-- **Security + observability** — `security.bypass_permissions_policy`
-  (capability-scope enforcement), 3-stage secrets redaction
-  (`secrets_policy.*`), and structured trace cost rollup via the
-  `guild-telemetry` MCP (`trace_cost_rollup`).
-  See the Guild docs site → `https://guildstack.dev/docs/configuration`.
+- **Learning and evolution** — cheap mapping, deeper structural/semantic
+  graphs, onboarding, diff analysis, and artifact harvest. Plain init stays
+  cheap; deep learning is opt-in. Reflection proposes improvements; shadow
+  evaluation gates evolution. Span edits retain inverse history for rollback.
+  Automatic curation is limited to project skills/playbooks; machinery changes
+  become candidates for a human to commit. Upstream issue filing asks first.
+- **Security and observability** — capability scopes, secret scrubbing and
+  credential-bearing prose refusals, run traces, receipt reconciliation, cost
+  rollup, and run comparison/recommendations. Missing observations remain
+  degraded or unknown. Host permission modes do not waive Guild's hard gates.
+  `/guild:status dashboard` launches the separate benchmark UI.
 
 ## Getting Started
 
 ### Install
 
 The quickest path is the installer script (`install.sh` at this repo's root —
-detects your AI coding hosts, runs the marketplace commands below, never uses
+detects your AI coding hosts, selects the host's install path, never uses
 `sudo`, never edits shell profiles):
 
 ```bash
@@ -154,7 +159,7 @@ claude plugin marketplace add lookatitude/guild@next
 claude plugin marketplace update guild
 claude plugin install guild@guild
 
-# install.sh (any supported host) — same selector:
+# install.sh — beta selector for an installable target:
 curl -fsSL https://guildstack.dev/install.sh | bash -s -- --channel beta
 ```
 
@@ -164,226 +169,143 @@ cover what has reached `main`.
 
 ### Staying up to date
 
-Guild detects updates per channel and never phones home during session start:
-a SessionStart hook reads a machine-level cache (refreshed in the background at
-most once per `defaults.update.cadence_hours`, default 24) and prints a one-line
-signal with the exact update command when your channel has moved — new release
-tag on stable, new `next` commit on beta. `defaults.update.mode` controls it:
-`notify` (default), `auto` (stages the update headlessly; applies next
-session), or `off`. Dev checkouts are never touched.
-
-Applying updates per host — the full 16-host registry:
+The installer records host, channel, ref, and commit in machine-level install
+receipts. Update receipted installs with:
 
 ```bash
-# claude-code-cli (marketplace-managed):
-claude plugin marketplace update guild && claude plugin update guild@guild
-
-# Wrapper-package hosts — pi-cli, antigravity-cli, cursor, github-copilot,
-# opencode, rovo-dev (installer-managed; needs the receipt):
-guild-run update
-
-# codex-cli — Codex OWNS its installed plugin cache, so Guild never swaps it
-# (guild-run update refuses and names this instead). Receipted installs
-# re-render; host-native installs are detected and told the precise codex
-# command for their registered source type:
-curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update
-
-# File-surface hosts — agents-file, kiro, qoder, trae (snapshot copies):
-curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update
-# …then re-copy the refreshed dist/agents tree into the project.
-
-# Everything with an install receipt, in one go (any host mix):
 curl -fsSL https://guildstack.dev/install.sh | bash -s -- --update
 ```
 
-The four app/connector surfaces (`claude-code-app`, `claude-code-web`,
-`codex-app`, `claude-ai-connector`) take no install and therefore no update
-command; `codex-app` follows whatever its shared Codex CLI registration does.
-
-Each install writes a `guild.install_receipt.v1` (host, channel, ref, commit)
-under `~/.guild/receipts/` — that receipt is what `--update` and `guild-run
-update` re-render from, keeping every host on the channel it was installed
-from. A **host-native** install (e.g. a hand-run `codex plugin add`) writes no
-machine receipt: `--update` will detect it and name that host's real command.
-The session-start update check mints a package-local receipt for
-IDENTIFICATION — its channel field is an assumed default, marked as such, and
-nothing ever clones from it.
-
-Installing manually into Codex CLI uses Codex's plugin manager:
+Claude marketplace installs can use:
 
 ```bash
-npx tsx scripts/build-host-packages.ts --root . --out dist --generated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-codex plugin marketplace remove guild || true
-codex plugin marketplace add ./dist/codex-marketplace
-codex plugin add guild@guild
-```
-
-Restart Claude Code after installation so commands, skills, agents, hooks, and
-MCP servers are loaded into the next session.
-
-Local development:
-
-```bash
-git clone https://github.com/lookatitude/guild.git
-cd guild
-(cd scripts && npm ci && npm run sync:claude-install)
-claude plugin marketplace add ./dist/claude-code
 claude plugin marketplace update guild
-claude plugin install guild@guild --scope project
+claude plugin update guild@guild
 ```
 
-Use the generated Claude package for development sessions. A dependency-populated
-checkout contains ignored executable files and is intentionally not accepted as an
-exact runtime package. Re-run `npm run sync:claude-install` after changing plugin
-source so the generated package and its complete identity stay aligned.
+Wrapper-package hosts can use `guild-run update` with their install receipt.
+Codex owns its plugin cache; Guild does not swap it. Native installs without a
+machine receipt receive host-specific update guidance. File-surface installs
+need the refreshed instruction tree copied into the consuming project.
+App/connector targets are not CLI package installations.
 
-Restart Claude Code before running `/guild` from the project. Claude Code loads
-plugin commands, agents, skills, hooks, and optional MCP entries at session
-startup; a newly installed or edited plugin is not fully visible until the next
-session.
+SessionStart reads cached update information; background refresh follows the
+configured cadence. `defaults.update.mode` is a legacy settings option
+(`notify`, `auto`, or `off`), not one of the 15 writable policy keys.
+
+For local development, see [CONTRIBUTING.md](CONTRIBUTING.md). Develop against
+the generated Claude package and restart the host after installation or package
+changes. The examples here describe the released installer and command surface;
+they were inspected, not executed by this documentation refresh.
 
 ### First run
 
-Run `/guild` with a brief, or with no arguments. A verb is optional: bare
-`/guild` runs intake, classifies the work, and proposes the next step for you to
-confirm:
+In Claude Code, run `/guild:guild` with a brief, or with no arguments. With no
+arguments, `/guild:guild` runs intake, classifies the work, and proposes the
+next step for you to confirm:
 
 ```text
-/guild "Build a Stripe subscription flow, add tests, update the docs, draft a launch email."
-/guild
+/guild:guild "Build a Stripe subscription flow, add tests, update the docs, draft a launch email."
+/guild:guild
 ```
 
-The first visible sign that the plugin loaded is the SessionStart bootstrap card:
-it lists the Guild version, slash commands, optional MCP servers, and doc entry
-points. In a Guild root the bootstrap always loads; if the root's `.guild/` layout
-is older, the first write-capable entry upgrades it. The lifecycle starts when
-you invoke `/guild`.
+On Claude Code, restart after installation and look for the SessionStart
+bootstrap card. Other hosts expose commands and bootstrap through their own
+adapters; the slash examples here use Claude Code's spelling.
 
-The first `/guild` run writes durable state under `.guild/`: spec, team, plan,
-context bundles, run handoffs, review, verification, telemetry, and reflections.
-You confirm after brainstorm, team-compose, and plan; the later phases run from
-the approved plan with minimal interruption.
+For a small example, ask `/guild:guild "Explain this repository and propose one small
+improvement."` Guild proposes a class and phase, then asks at the applicable
+gates. `--auto-approve[=spec,plan,build,qa,all]`, or the resolved `auto_approve`
+setting in `.guild/settings.json`, can approve eligible soft gates, including
+build. `auto_approve` is a legacy setting, not one of the 15 writable policy
+keys. Team roster approval is always explicit; hard gates, such as destructive
+actions, credentials, and QA BLOCK overrides, remain human-gated.
+Approved work dispatches in lanes,
+returns handoff evidence, and passes review/verification before closeout.
+Initiatives are opt-in, so a one-off run need not create one.
 
-To verify hooks and audit logs are firing after restart:
+Inspect the active run with `/guild:status`. Status may record a lightweight run
+when `.guild/` exists; `record_status_runs: false` disables that legacy setting.
+Use `/guild:maintain audit` for a static audit or `/guild:maintain fix <symptom>`
+for diagnosis. Inspect the bound run's trace and receipt evidence; a visible
+bootstrap card alone does not prove that every hook or dispatch operation ran.
 
-1. Start a fresh Claude Code session in a project where Guild is installed.
-2. Confirm the bootstrap card appears.
-3. Run a small `/guild "..."` task, or use any workflow that dispatches tools.
-4. Check for `.guild/runs/<run-id>/events.ndjson`.
-5. For v1.4 audit logging, check `.guild/runs/<run-id>/logs/v1.4-events.jsonl`
-   for `hook_event` and, after tool use, `tool_call` rows.
-
-Older Claude Code hosts may skip newer hook events such as `PreToolUse` and
-`PreCompact`; the handlers are designed to fall through without breaking the
-session. If the bootstrap card appears but no `.guild/runs/` files are written,
-run `/guild:maintain audit` and inspect `hooks/hooks.json` in the installed plugin.
-If a Guild run failed or telemetry looks inconsistent, run `/guild:maintain fix`
-with the run id or a short symptom; it reads recent `.guild/runs` evidence,
-writes a diagnosis/fix plan, and asks before applying any edits.
-
-### Environment variables
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | unset | Set to `1` to allow Guild's experimental tmux agent-team backend. Subagents via `Agent` remain the default. |
-| `GUILD_LOOP_CAP` | unset | Display/override signal for the per-lane adversarial-loop cap. The **authoritative** cap is the `loop_cap` key in `.guild/settings.json` (default 16, clamped to `[1, 256]`); CLI `--loop-cap` overrides per run. |
-| `GUILD_ENABLE_DEVTEAM_REFLECT` | unset/off | Developer-team reflection gate for `hooks/maybe-reflect.ts`. Set to `1` only when working on Guild's own dev-team reflection workflow. |
-
-The agent-team backend is experimental. Enable it only when teammates need to
-coordinate directly:
-
-```bash
-export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
-```
-
-Benchmark live runs live in the separate `guild-benchmark` repo, which owns its
-own safety gate for spawning the real `claude` CLI (dry-run first). See that
-repo for setup, and `/guild:status dashboard` to launch the benchmark UI against
-the live project. The plugin only produces the data that UI reads (inventory and
-run traces); it ships no UI pages of its own.
-
-### Optional MCP servers
-
-`guild-memory` and `guild-telemetry` ship as stdio MCP servers under
-`mcp-servers/` but are **optional** — Guild works end-to-end without them.
-Both ship pre-bundled in `runtime/guild-mcp.js`, so they cold-start under plain
-`node` with no `npm install` step on first use.
-
-Use `guild-memory` when the wiki crosses ~200 pages (ripgrep gets slow);
-use `guild-telemetry` for structured trace queries over `.guild/runs/`.
-
-## Quickstart
-
-```text
-/guild "Build a Stripe subscription flow, add tests, update the docs, draft a launch email."
-```
-
-The session will:
-
-1. Brainstorm the spec and ask blocking questions.
-2. Propose a team — gaps become auto-create / skip / substitute / from-scratch prompts.
-3. Write per-specialist lanes with `depends-on:`.
-4. Assemble one context bundle per specialist under `.guild/context/<run-id>/`.
-5. Dispatch through the Agent tool (or, with approval, an agent-team tmux session).
-6. Review (spec match → quality), verify (tests / scope / success criteria).
-7. Reflect on skill gaps; queue evolution proposals.
-
-You confirm after brainstorm, team-compose, and plan. Post-plan runs with
-minimal interruption.
-
-If you register a new specialist with `guild:create-specialist`, restart or
-reload the plugin before expecting `/guild:plan` (team is composed as a plan sub-step) or future `/guild` runs to
-route to it. Claude Code snapshots plugin agent and skill manifests at session
-startup.
-
-Codex adversarial review is a Guild development discipline, not a default
-consumer `/guild` loop. Review trails live under
-`.guild/runs/<run-id>/codex-review/*.md` and can be checked with
-`npx tsx scripts/verify-codex-review-trail.ts <codex-review-dir>`. The validator
-currently requires each file's frontmatter to include `final_status: satisfied` or
-`final_status: skipped-codex-unavailable`.
+The optional MCP entries are `guild-memory` (wiki search) and `guild-telemetry`
+(trace queries/cost rollup). They select `wiki` and `trace` in the single bundled
+`runtime/guild-mcp.js`, sourced from `src/runtime/mcp/`. Both use Node and stdio;
+their declarations permit no network access. Filesystem/BM25 paths remain
+available when MCP is absent, with host-specific limitations recorded.
 
 ## Commands
 
-Every command is `/guild:<verb>` (the `:` plugin namespace is required by Claude
-Code). There are 13 dispatching command files plus 11 print-only aliases; sub-verbs
-are positional arguments.
+Claude Code exposes `/guild:guild` (the `commands/guild.md` entry) and
+`/guild:<verb>` for the other entrypoints. The manifest registers exactly 13 command files and no retired
+alias files. Other hosts render descriptors or instruction/prompt fallbacks;
+they do not all expose native slash commands.
 
 | Command | Purpose |
 |---|---|
-| `/guild [brief] [research\|debug] [--class=…]` | T0 orchestrator session. No verb runs intake and proposes the class and phase for you to confirm; `research`, `debug`, and `--class=` bind the class |
+| `/guild:guild [brief] [research\|debug] [--class=…]` | T0 orchestrator session. No verb runs intake and proposes the class and phase for you to confirm; `research`, `debug`, and `--class=` bind the class |
 | `/guild:init [--learn] \| adopt …` | Initialize Guild in a repo (wiki + brownfield cheap-scan map; `--learn` runs the full learn pipeline); `adopt` localizes shipped capability |
 | `/guild:ideate` | Socratic spec — brainstorm the task into `.guild/spec/<slug>.md` |
 | `/guild:plan \| goal …` | Compose the per-phase team + write per-specialist lane plans; `goal` emits `guild.goal.v1` goals from the spec |
 | `/guild:build` | Assemble per-specialist context, dispatch the lanes, review handoffs |
 | `/guild:qa` | The one review gate over the run |
 | `/guild:ops` | Operations phase — release, monitoring, incident, rollback, maintenance runbooks |
-| `/guild:learn [map\|graph\|knowledge\|onboard\|diff\|explain]` | Understand-everything engine; explicit Stage-2 runs `extract-structural.ts` |
-| `/guild:status [resume\|stats\|dashboard]` | Read-only run state; `resume` continues a run, `stats` reports usage, `dashboard` launches the benchmark UI |
+| `/guild:learn [map\|graph\|knowledge\|onboard\|diff\|explain\|harvest]` | No sub-verb detects and confirms the full pipeline; sub-verbs scope mapping, graphs, knowledge, tours, change analysis, explanation, or harvest |
+| `/guild:status [resume\|stats\|dashboard]` | Inspect run state (may record a lightweight status run); `resume` advances it, `stats` reads usage, `dashboard` launches the benchmark UI |
 | `/guild:wiki <ingest <path>\|query "..."\|lint>` | Project knowledge over `.guild/knowledge/sources/` and `.guild/wiki/` |
-| `/guild:initiative <new\|status\|list\|resume\|update\|archive\|restore\|close>` | Durable multi-run work (opt-in; a one-off `/guild` never creates one) |
-| `/guild:config <init\|reconcile\|show\|set\|role\|ui\|validate\|providers\|models\|migrate>` | Policy config; `config set` rejects host family, host id, and concrete model names |
-| `/guild:maintain <evolve\|rollback\|audit\|fix\|gc\|wiki revert>` | Self-heal and RSI; `rollback` walks a skill back through its compact history |
+| `/guild:initiative <new\|status\|list\|resume\|update\|archive\|restore\|close>` | Durable multi-run work (opt-in; a one-off `/guild:guild` never creates one) |
+| `/guild:config <init\|reconcile\|show\|set\|role\|ui\|validate\|providers\|update-mcp-hashes\|models\|migrate>` | Policy config; `init` maps to `reconcile sync`; `models inspect` reads session evidence; `migrate` handles layout conversion |
+| `/guild:maintain <evolve\|rollback\|audit\|fix\|gc\|wiki revert\|analyze>` | Evolution, rollback, audit/diagnosis, wiki reversal, and run analysis; `gc` currently reports no chapter and stops |
+
+The `/guild:guild` entry also accepts `--rigor=quick|standard|deep`,
+`--auto-approve[=spec,plan,build,qa,all]`, and `--review=local|cross|off`.
+
+Retired spellings move under these entries: `adopt` → `init adopt`;
+`goal` → `plan goal`; `models` / `migrate` → `config models` /
+`config migrate`; `resume` / `stats` / `dashboard` → `status …`;
+`evolve` / `rollback` / `audit` / `fix` → `maintain …`.
+These are replacement spellings, not compatibility command files.
+
+Illustrative Claude Code inputs (replace `<run-id>` with an existing run):
+
+```text
+/guild:init
+/guild:init --learn
+/guild:config models inspect --json
+/guild:config migrate --mode=dry-run
+/guild:wiki query "architecture"
+/guild:maintain analyze inspect run <run-id>
+```
+
+Migration accepts `--mode=migrate|dry-run|skip|verify` (default `dry-run`).
+`--recheck` is a flag for `--mode=migrate`; `--accept-grades` is the
+wiki-only grade action. Review the dry-run before choosing a write mode.
 
 ## Documentation
 
-**Documentation: https://guildstack.dev/docs**
+Full guides live at **https://guildstack.dev/docs/**. These are navigation
+routes; published prose may lag the pinned release and is not support evidence.
 
-The canonical docs live at the **Guild docs site** (`https://guildstack.dev`).
-
-- `https://guildstack.dev/docs/getting-started` — install, first run, and basic configuration.
-- `https://guildstack.dev/docs/architecture` — shipped plugin architecture, directory layout, the v2 single-verb lifecycle phases, hook inventory, backend options.
-- `https://guildstack.dev/docs/specialist-roster` — the 15 domain specialist templates + the 4 machinery agents (advisor, context-manager, developer, team-lead), their triggers, DO NOT TRIGGER boundaries, and owned skills.
-- `https://guildstack.dev/docs/context-assembly` — three-layer context contract, role mapping, ambient-context caveat.
-- `https://guildstack.dev/docs/wiki-pattern` — categorized project memory, sources vs synthesized, decision capture, scale transition.
-- `https://guildstack.dev/docs/self-evolution` — the triggers, the evolve pipeline, promotion gate, compact history + rollback.
-- `https://guildstack.dev/docs/configuration` — the policy config reference: `agent_mode`, model tiering, SQLite index, security / secrets policy, O-3 calibration, cross-host dispatch.
+- [Architecture](https://guildstack.dev/docs/architecture) — implementation and host boundaries.
+- [Teams and specialists](https://guildstack.dev/docs/teams-and-specialists/) — roster, team composition, dispatch, and context.
+- [Knowledge](https://guildstack.dev/docs/knowledge/) — mapping, recall, and the wiki.
+- [Skills](https://guildstack.dev/docs/skills/) — assemblers, chapters, and evolution.
 
 ## Architecture at a glance
 
+The implementation has 12 domains, with public APIs in
+`src/domains/<id>/index.ts`; adapters and the MCP runtime are projections.
+Commands, skills, agents, templates, hooks, and scripts are authored once at the
+root. `src/surfaces/` holds class graphs and prompt dialects. Host packages are
+generated from that live surface; there is no resource-mirror sync step. Typed
+lifecycle records and bound HTML projections carry evidence without making an
+unbound document authoritative.
+
 Four layers: the orchestrator session, the installed plugin (skills, machinery
 agents, specialist templates, commands, hooks, scripts, MCPs), the composed
-specialist team in worktree isolation, and project-local state under `.guild/`
+specialist team in scoped work lanes, and project-local state under `.guild/`
 (including the minted specialist instances).
 
 Diagrams and the full walkthroughs — lifecycle, skill taxonomy, project memory,
@@ -420,9 +342,10 @@ committed by Guild itself):
 └── evolve/               # shadow-mode eval runs and reports
 ```
 
-Files here are latest-only. Evolve replaces the wrong span and keeps a compact
-history on platform state, so there is no `skill-versions/` tree. Caches and
-scratch live off the repo.
+Project skill/playbook files are latest-only. Evolve replaces the selected span
+and keeps compact inverse history on platform state; there is no
+`skill-versions/` tree. Caches and scratch live off the repo. Workspace
+federation reads child project state in place instead of copying it.
 
 ## Principles
 
