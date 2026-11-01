@@ -3139,14 +3139,14 @@ var require_dumper = __commonJS({
       let hasFoldableLine = false;
       const shouldTrackWidth = lineWidth !== -1;
       let previousLineBreak = -1;
-      let plain = isPlainSafeFirst(codePointAt(string, 0)) && isPlainSafeLast(codePointAt(string, string.length - 1));
+      let plain2 = isPlainSafeFirst(codePointAt(string, 0)) && isPlainSafeLast(codePointAt(string, string.length - 1));
       if (singleLineOnly || forceQuotes) {
         for (i = 0; i < string.length; char >= 65536 ? i += 2 : i++) {
           char = codePointAt(string, i);
           if (!isPrintable(char)) {
             return STYLE_DOUBLE;
           }
-          plain = plain && isPlainSafe2(char, prevChar, inblock);
+          plain2 = plain2 && isPlainSafe2(char, prevChar, inblock);
           prevChar = char;
         }
       } else {
@@ -3162,13 +3162,13 @@ var require_dumper = __commonJS({
           } else if (!isPrintable(char)) {
             return STYLE_DOUBLE;
           }
-          plain = plain && isPlainSafe2(char, prevChar, inblock);
+          plain2 = plain2 && isPlainSafe2(char, prevChar, inblock);
           prevChar = char;
         }
         hasFoldableLine = hasFoldableLine || shouldTrackWidth && (i - previousLineBreak - 1 > lineWidth && string[previousLineBreak + 1] !== " ");
       }
       if (!hasLineBreak && !hasFoldableLine) {
-        if (plain && !forceQuotes && !testAmbiguousType(string)) {
+        if (plain2 && !forceQuotes && !testAmbiguousType(string)) {
           return STYLE_PLAIN;
         }
         return quotingType === QUOTING_TYPE_DOUBLE ? STYLE_DOUBLE : STYLE_SINGLE;
@@ -6317,16 +6317,16 @@ var init_upgrade_steps = __esm({
         const policy = {};
         let dropped = 0;
         for (const [key, value] of Object.entries(flat)) {
-          const canonical = cfg.canonicalPolicyKey(key);
-          if (!cfg.isPolicyKey(canonical)) {
+          const canonical2 = cfg.canonicalPolicyKey(key);
+          if (!cfg.isPolicyKey(canonical2)) {
             dropped += 1;
             continue;
           }
-          if (cfg.findHostIdentity(canonical, value) !== null) {
+          if (cfg.findHostIdentity(canonical2, value) !== null) {
             dropped += 1;
             continue;
           }
-          setByPath(policy, canonical, value);
+          setByPath(policy, canonical2, value);
         }
         const targets = [];
         if (ctx.storage.project) targets.push(ctx.storage.project.config());
@@ -7077,6 +7077,205 @@ var init_write_manifest = __esm({
   }
 });
 
+// src/domains/state/stack-scope.ts
+function stackId(value) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value))
+    throw new StackError("invalid_id", "Invalid source or entity identity");
+  return value;
+}
+function stackContained(root, relative25, missing = false) {
+  if (!relative25 || path20.isAbsolute(relative25) || /[\\%\x00-\x1f]/.test(relative25) || relative25.split("/").some((x) => !x || x === "." || x === ".."))
+    throw new StackError("path_refused", "Invalid relative record path", 403);
+  const target = path20.join(root, ...relative25.split("/"));
+  let current = root;
+  for (const part of relative25.split("/")) {
+    current = path20.join(current, part);
+    try {
+      const st = fs16.lstatSync(current);
+      if (st.isSymbolicLink())
+        throw new StackError(
+          "path_refused",
+          "Linked record path is not permitted",
+          403
+        );
+    } catch (error) {
+      if (error.code === "ENOENT" && missing) break;
+      throw error;
+    }
+  }
+  const ancestor = (() => {
+    let p = target;
+    while (!fs16.existsSync(p)) p = path20.dirname(p);
+    return fs16.realpathSync(p);
+  })();
+  const rel2 = path20.relative(fs16.realpathSync(root), ancestor);
+  if (rel2.startsWith("..") || path20.isAbsolute(rel2))
+    throw new StackError("path_refused", "Record escaped owning root", 403);
+  return target;
+}
+function stackRead(root, relative25, optional = false) {
+  try {
+    const p = stackContained(root, relative25);
+    const st = fs16.statSync(p);
+    if (!st.isFile() || st.size > 1024 * 1024)
+      throw new StackError(
+        "record_too_large",
+        "Record is not a bounded regular file",
+        413
+      );
+    return fs16.readFileSync(p, "utf8");
+  } catch (e) {
+    if (optional && e.code === "ENOENT") return null;
+    throw e;
+  }
+}
+var fs16, path20, import_node_crypto2, StackError, stackHash, StackScope;
+var init_stack_scope = __esm({
+  "src/domains/state/stack-scope.ts"() {
+    fs16 = __toESM(require("node:fs"));
+    path20 = __toESM(require("node:path"));
+    import_node_crypto2 = require("node:crypto");
+    init_frontmatter();
+    init_storage_roots();
+    StackError = class extends Error {
+      constructor(code, message, status = 400) {
+        super(message);
+        this.code = code;
+        this.status = status;
+      }
+      code;
+      status;
+    };
+    stackHash = (bytes) => "sha256:" + (0, import_node_crypto2.createHash)("sha256").update(bytes).digest("hex");
+    StackScope = class {
+      root;
+      constructor(root) {
+        if (!path20.isAbsolute(root))
+          throw new StackError(
+            "invalid_root",
+            "An absolute Guild root is required"
+          );
+        this.root = fs16.realpathSync(root);
+      }
+      source(root) {
+        const manifest = stackRead(root, ".guild/guild.yaml");
+        const doc = parseYaml(manifest);
+        if (!doc || doc.schema_version !== "guild.root.v1" || !["workspace", "project"].includes(doc.kind))
+          throw new StackError(
+            "invalid_root",
+            "Missing or malformed Guild root manifest",
+            422
+          );
+        const marker = stackRead(root, ".guild/storage-layout.json", true);
+        let version = 1;
+        if (marker) {
+          let parsed;
+          try {
+            parsed = JSON.parse(marker);
+          } catch {
+            throw new StackError(
+              "invalid_layout",
+              "Malformed storage layout marker",
+              422
+            );
+          }
+          version = parsed.storage_layout_version;
+          if (!Number.isInteger(version) || version < 1 || version > 2)
+            throw new StackError(
+              "unsupported_layout",
+              "Unsupported storage layout version",
+              422
+            );
+        }
+        const workspace = doc.kind === "workspace" ? stackRead(root, ".guild/workspace.json") : null;
+        return {
+          source_id: "source:" + guildRootId(root),
+          root_id: guildRootId(root),
+          kind: doc.kind,
+          realpath: root,
+          layout_version: version,
+          revision: stackHash(
+            manifest + "\n" + (marker ?? "") + "\n" + (workspace ?? "")
+          ),
+          health: "healthy",
+          read_only_reason: version < 2 ? "Layout activation is required before management writes" : null
+        };
+      }
+      discover() {
+        const root = this.source(this.root);
+        const children = [];
+        if (root.kind === "workspace") {
+          let doc;
+          try {
+            doc = JSON.parse(stackRead(this.root, ".guild/workspace.json"));
+          } catch {
+            throw new StackError(
+              "invalid_workspace",
+              "Malformed workspace descriptor",
+              422
+            );
+          }
+          if (doc.schema_version !== "guild.workspace.v1" || doc.is_workspace !== true || !Array.isArray(doc.sub_guilds))
+            throw new StackError(
+              "invalid_workspace",
+              "Workspace descriptor is unsupported",
+              422
+            );
+          const used = /* @__PURE__ */ new Set([this.root]);
+          for (const child of doc.sub_guilds) {
+            if (!child || typeof child.name !== "string" || typeof child.path !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(child.path))
+              throw new StackError(
+                "invalid_workspace",
+                "Workspace children must be immediate registered projects",
+                422
+              );
+            const candidate = path20.join(this.root, child.path);
+            try {
+              const st = fs16.lstatSync(candidate);
+              if (st.isSymbolicLink() || !st.isDirectory())
+                throw new StackError(
+                  "path_refused",
+                  "Workspace child is not a physical project directory",
+                  403
+                );
+              const physical = fs16.realpathSync(candidate);
+              if (path20.dirname(physical) !== this.root || used.has(physical))
+                throw new StackError(
+                  "invalid_workspace",
+                  "Duplicate or escaping workspace child",
+                  422
+                );
+              used.add(physical);
+              const source = this.source(physical);
+              if (source.kind !== "project")
+                throw new StackError(
+                  "invalid_workspace",
+                  "Nested workspaces are not supported",
+                  422
+                );
+              children.push(source);
+            } catch (error) {
+              if (error instanceof StackError && ["invalid_workspace", "path_refused"].includes(error.code))
+                throw error;
+              children.push({
+                source_id: "source:" + guildRootId(candidate),
+                root_id: guildRootId(candidate),
+                kind: "project",
+                realpath: candidate,
+                layout_version: 1,
+                revision: stackHash("unavailable:" + child.path),
+                health: "unavailable",
+                read_only_reason: "Registered project is unavailable or has an invalid layout"
+              });
+            }
+          }
+        }
+        return { root, children };
+      }
+    };
+  }
+});
+
 // src/domains/state/index.ts
 var init_state = __esm({
   "src/domains/state/index.ts"() {
@@ -7105,6 +7304,7 @@ var init_state = __esm({
     init_promote_upstream();
     init_write_manifest();
     init_plugin_install_guard();
+    init_stack_scope();
   }
 });
 
@@ -7144,7 +7344,7 @@ function ingestImportanceScore(category) {
   }
 }
 function wikiPageCategory(absPath, wikiBase) {
-  const segs = path20.relative(wikiBase, absPath).split(path20.sep);
+  const segs = path21.relative(wikiBase, absPath).split(path21.sep);
   return segs.length > 1 ? segs[0] : ROOT_CATALOG_CATEGORY[segs[0].toLowerCase()];
 }
 function parseRecallImportance(content) {
@@ -7193,8 +7393,8 @@ ${RECALL_IMPORTANCE_KEY}: ${score2}
     fmLines[at] = `${prefix} ${score2}`;
     return { content: rebuild(fmLines.join("\n"), body), changed: true };
   }
-  const sep21 = frontmatter.endsWith("\n") ? "" : "\n";
-  const newFm = `${frontmatter}${sep21}${RECALL_IMPORTANCE_KEY}: ${score2}`;
+  const sep24 = frontmatter.endsWith("\n") ? "" : "\n";
+  const newFm = `${frontmatter}${sep24}${RECALL_IMPORTANCE_KEY}: ${score2}`;
   return { content: rebuild(newFm, body), changed: true };
 }
 function rebuild(frontmatter, body) {
@@ -7203,10 +7403,10 @@ ${frontmatter}
 ---
 ${body}`;
 }
-var path20, RECALL_IMPORTANCE_KEY, RECALL_IMPORTANCE_PINNED_KEY, ROOT_CATALOG_CATEGORY;
+var path21, RECALL_IMPORTANCE_KEY, RECALL_IMPORTANCE_PINNED_KEY, ROOT_CATALOG_CATEGORY;
 var init_ingest_importance = __esm({
   "src/domains/knowledge/ingest-importance.ts"() {
-    path20 = __toESM(require("node:path"));
+    path21 = __toESM(require("node:path"));
     init_state();
     RECALL_IMPORTANCE_KEY = "recall_importance";
     RECALL_IMPORTANCE_PINNED_KEY = "recall_importance_pinned";
@@ -7317,8 +7517,8 @@ function readGlossaryAt(storage, scope) {
   if (!paths) return { ...EMPTY, terms: [] };
   const file = paths.knowledge("glossary.md");
   try {
-    if (!fs16.existsSync(file)) return { ...EMPTY, terms: [] };
-    const g = parseGlossary(fs16.readFileSync(file, "utf8"));
+    if (!fs17.existsSync(file)) return { ...EMPTY, terms: [] };
+    const g = parseGlossary(fs17.readFileSync(file, "utf8"));
     return { ...g, terms: g.terms.map((t) => ({ ...t, origin: scope })) };
   } catch {
     return { ...EMPTY, terms: [] };
@@ -7367,10 +7567,10 @@ function renderTermsChapter(matched) {
 ${lines.join("\n")}
 `;
 }
-var fs16, GLOSSARY_SCHEMA, GLOSSARY_TERM_TOKEN_CAP, EMPTY;
+var fs17, GLOSSARY_SCHEMA, GLOSSARY_TERM_TOKEN_CAP, EMPTY;
 var init_glossary = __esm({
   "src/domains/knowledge/glossary.ts"() {
-    fs16 = __toESM(require("node:fs"));
+    fs17 = __toESM(require("node:fs"));
     init_state();
     GLOSSARY_SCHEMA = "guild.glossary.v1";
     GLOSSARY_TERM_TOKEN_CAP = 200;
@@ -7430,7 +7630,7 @@ function redactHomeDirPaths(input) {
 function redactKeyValueSecrets(input) {
   return input.replace(
     KV_SECRET_PATTERN,
-    (_match, key, sep21) => `${key}${sep21}${KV_REDACTED}`
+    (_match, key, sep24) => `${key}${sep24}${KV_REDACTED}`
   );
 }
 function allWordsWordish(words) {
@@ -7733,10 +7933,10 @@ function parseSecurityConfig(parsed) {
   return out;
 }
 function readSecurityConfig(cwd) {
-  const settingsPath = path21.join(durableGuildDir(resolveGuildRoot(cwd)), "settings.json");
+  const settingsPath = path22.join(durableGuildDir(resolveGuildRoot(cwd)), "settings.json");
   let raw;
   try {
-    raw = fs17.readFileSync(settingsPath, "utf8");
+    raw = fs18.readFileSync(settingsPath, "utf8");
   } catch {
     return securityDefaults();
   }
@@ -7748,11 +7948,11 @@ function readSecurityConfig(cwd) {
   }
   return parseSecurityConfig(parsed);
 }
-var fs17, path21;
+var fs18, path22;
 var init_config = __esm({
   "src/domains/security/config.ts"() {
-    fs17 = __toESM(require("node:fs"));
-    path21 = __toESM(require("node:path"));
+    fs18 = __toESM(require("node:fs"));
+    path22 = __toESM(require("node:path"));
     init_state();
     init_state();
   }
@@ -7799,9 +7999,9 @@ function buildSecurityEvent(input) {
 }
 function appendSecurityEvent(runDir3, record) {
   try {
-    const logsDir2 = path22.join(runDir3, "logs");
-    fs18.mkdirSync(logsDir2, { recursive: true });
-    fs18.appendFileSync(path22.join(logsDir2, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
+    const logsDir2 = path23.join(runDir3, "logs");
+    fs19.mkdirSync(logsDir2, { recursive: true });
+    fs19.appendFileSync(path23.join(logsDir2, "security-events.jsonl"), JSON.stringify(record) + "\n", "utf8");
     return true;
   } catch (err) {
     process.stderr.write(
@@ -7813,13 +8013,13 @@ function appendSecurityEvent(runDir3, record) {
 }
 function resolveRunDir(cwd, runId, explicitRunDir) {
   if (typeof explicitRunDir === "string" && explicitRunDir.length > 0) return explicitRunDir;
-  return path22.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", runId);
+  return path23.join(durableGuildDir(resolveGuildRoot(cwd)), "runs", runId);
 }
-var fs18, path22, SECURITY_EVENT_TYPES, SECURITY_EVENT_SCHEMA_VERSION, KNOWN_GUILD_HOST_KINDS, KNOWN_GUILD_HOST_ID_SET, LEGACY_HOST_ALIASES;
+var fs19, path23, SECURITY_EVENT_TYPES, SECURITY_EVENT_SCHEMA_VERSION, KNOWN_GUILD_HOST_KINDS, KNOWN_GUILD_HOST_ID_SET, LEGACY_HOST_ALIASES;
 var init_events = __esm({
   "src/domains/security/events.ts"() {
-    fs18 = __toESM(require("node:fs"));
-    path22 = __toESM(require("node:path"));
+    fs19 = __toESM(require("node:fs"));
+    path23 = __toESM(require("node:path"));
     init_state();
     init_redact_log();
     init_state();
@@ -7926,10 +8126,10 @@ var init_secret_patterns = __esm({
 });
 
 // src/domains/security/share-set.ts
-var path23, SHARED_SCRUBBED_NAMES, CANONICAL_RUN_LOG;
+var path24, SHARED_SCRUBBED_NAMES, CANONICAL_RUN_LOG;
 var init_share_set = __esm({
   "src/domains/security/share-set.ts"() {
-    path23 = __toESM(require("path"));
+    path24 = __toESM(require("path"));
     init_kernel();
     SHARED_SCRUBBED_NAMES = sealSet([
       "verify.md",
@@ -7939,7 +8139,7 @@ var init_share_set = __esm({
       "run.yaml",
       "run-state.json"
     ], "SHARED_SCRUBBED_NAMES");
-    CANONICAL_RUN_LOG = path23.join("logs", "v1.4-events.jsonl");
+    CANONICAL_RUN_LOG = path24.join("logs", "v1.4-events.jsonl");
   }
 });
 
@@ -8043,12 +8243,12 @@ var init_prose_scrub = __esm({
 
 // src/domains/security/scrubbed-write.ts
 function guildRootFromRunDir(runDir3) {
-  return path24.resolve(runDir3, "../../..");
+  return path25.resolve(runDir3, "../../..");
 }
 function writeScrubApprovalRequest(runDir3, runId, surface, outPath, laneId2) {
   try {
-    const approvalDir = path24.join(runDir3, "agent-bus", "approvals");
-    fs19.mkdirSync(approvalDir, { recursive: true });
+    const approvalDir = path25.join(runDir3, "agent-bus", "approvals");
+    fs20.mkdirSync(approvalDir, { recursive: true });
     const ts = (/* @__PURE__ */ new Date()).toISOString();
     const safeTs = ts.replace(/[:.]/g, "-");
     const fileName = `${safeTs}-scrub-blocked.json`;
@@ -8057,7 +8257,7 @@ function writeScrubApprovalRequest(runDir3, runId, surface, outPath, laneId2) {
       ts,
       run_id: runId,
       tool: "scrubbedWrite",
-      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path24.basename(outPath)}`,
+      reason: `Secret scrub failed for durable surface "${surface}" \u2014 write blocked. Human review required. Path: ${path25.basename(outPath)}`,
       permission_mode: "blocked",
       surface
     };
@@ -8070,7 +8270,7 @@ function writeScrubApprovalRequest(runDir3, runId, surface, outPath, laneId2) {
       content = scrubResult.value;
     } catch {
     }
-    fs19.writeFileSync(path24.join(approvalDir, fileName), content, "utf8");
+    fs20.writeFileSync(path25.join(approvalDir, fileName), content, "utf8");
   } catch {
   }
 }
@@ -8095,8 +8295,8 @@ function scrubbedWrite(outPath, content, opts) {
   const failMode = opts.surface === "telemetry" ? policy.fail_mode_telemetry : policy.fail_mode_durable;
   if (scrubResult.ok) {
     try {
-      fs19.mkdirSync(path24.dirname(outPath), { recursive: true });
-      fs19.writeFileSync(outPath, scrubResult.value, "utf8");
+      fs20.mkdirSync(path25.dirname(outPath), { recursive: true });
+      fs20.writeFileSync(outPath, scrubResult.value, "utf8");
     } catch (err) {
       process.stderr.write(
         `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ${err instanceof Error ? err.message : String(err)}
@@ -8112,12 +8312,12 @@ function scrubbedWrite(outPath, content, opts) {
   }
   if (failMode === "open") {
     process.stderr.write(
-      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path24.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
+      `[scrubbed-write] WARN: secret scrub custom-pattern failure for surface "${opts.surface}" at ${path25.basename(outPath)} \u2014 writing built-in-redacted content (fail-open). Failures: ${scrubResult.failures.join("; ")}
 `
     );
     try {
-      fs19.mkdirSync(path24.dirname(outPath), { recursive: true });
-      fs19.writeFileSync(outPath, scrubResult.value, "utf8");
+      fs20.mkdirSync(path25.dirname(outPath), { recursive: true });
+      fs20.writeFileSync(outPath, scrubResult.value, "utf8");
     } catch (err) {
       process.stderr.write(
         `[scrubbed-write] ERROR: fail-open write failed: ${err instanceof Error ? err.message : String(err)}
@@ -8132,7 +8332,7 @@ function scrubbedWrite(outPath, content, opts) {
         event_type: "secret_scrub_blocked",
         decision: "degraded",
         tool: "scrubbedWrite",
-        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path24.basename(outPath)}. Built-in-redacted content written.`,
+        detail: `Secret scrub custom-pattern failure (fail-open) for surface "${opts.surface}" at ${path25.basename(outPath)}. Built-in-redacted content written.`,
         permission_mode: "degraded"
       });
       appendSecurityEvent(opts.runDir, evt);
@@ -8155,7 +8355,7 @@ function scrubbedWrite(outPath, content, opts) {
       event_type: "secret_scrub_blocked",
       decision: "blocked",
       tool: "scrubbedWrite",
-      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path24.basename(outPath)} \u2014 write blocked (fail-closed).`,
+      detail: `Secret scrub failed for durable surface "${opts.surface}" at ${path25.basename(outPath)} \u2014 write blocked (fail-closed).`,
       permission_mode: "blocked"
     });
     appendSecurityEvent(opts.runDir, evt);
@@ -8168,8 +8368,8 @@ function proseWrite(outPath, content, policy, opts) {
   const verdict = evaluateProseContent(content, policy);
   if (verdict.ok) {
     try {
-      fs19.mkdirSync(path24.dirname(outPath), { recursive: true });
-      fs19.writeFileSync(outPath, content, "utf8");
+      fs20.mkdirSync(path25.dirname(outPath), { recursive: true });
+      fs20.writeFileSync(outPath, content, "utf8");
     } catch (err) {
       process.stderr.write(
         `[scrubbed-write] ERROR: write failed for surface "${opts.surface}" at ${outPath}: ${err instanceof Error ? err.message : String(err)}
@@ -8179,7 +8379,7 @@ function proseWrite(outPath, content, policy, opts) {
     }
     return { written: true, blocked: false };
   }
-  const refusal2 = describeProseRefusal(verdict, path24.basename(outPath));
+  const refusal2 = describeProseRefusal(verdict, path25.basename(outPath));
   process.stderr.write(`[scrubbed-write] BLOCKED: ${refusal2}
 `);
   try {
@@ -8200,11 +8400,11 @@ function proseWrite(outPath, content, policy, opts) {
   writeScrubApprovalRequest(opts.runDir, opts.runId, opts.surface, outPath, opts.laneId);
   return { written: false, blocked: true, refusal: refusal2 };
 }
-var fs19, path24, crypto6;
+var fs20, path25, crypto6;
 var init_scrubbed_write = __esm({
   "src/domains/security/scrubbed-write.ts"() {
-    fs19 = __toESM(require("node:fs"));
-    path24 = __toESM(require("node:path"));
+    fs20 = __toESM(require("node:fs"));
+    path25 = __toESM(require("node:path"));
     crypto6 = __toESM(require("node:crypto"));
     init_secrets();
     init_config();
@@ -8380,9 +8580,9 @@ function headingsIn(text) {
   return out;
 }
 function isPermissionSentence(sentence) {
-  const plain = sentence.replace(/[_*~`]+/g, " ");
-  if (PERMISSION_STATE_RE.test(plain)) return true;
-  return PERMISSION_NOUN_RE.test(plain) && MODALITY_RE.test(plain);
+  const plain2 = sentence.replace(/[_*~`]+/g, " ");
+  if (PERMISSION_STATE_RE.test(plain2)) return true;
+  return PERMISSION_NOUN_RE.test(plain2) && MODALITY_RE.test(plain2);
 }
 function classifyPermissionContent(input) {
   const span = input.span ?? "";
@@ -8621,16 +8821,16 @@ function writeAllSync(fd, text) {
   const buf = Buffer.from(text, "utf8");
   let written = 0;
   while (written < buf.length) {
-    written += fs20.writeSync(fd, buf, written, buf.length - written);
+    written += fs21.writeSync(fd, buf, written, buf.length - written);
   }
 }
 function readAllSync(fd) {
-  const size = fs20.fstatSync(fd).size;
+  const size = fs21.fstatSync(fd).size;
   if (size === 0) return "";
   const buf = Buffer.allocUnsafe(size);
   let read = 0;
   while (read < size) {
-    const n = fs20.readSync(fd, buf, read, size - read, read);
+    const n = fs21.readSync(fd, buf, read, size - read, read);
     if (n <= 0) break;
     read += n;
   }
@@ -8638,39 +8838,39 @@ function readAllSync(fd) {
 }
 function realpathOrNull(target) {
   try {
-    return (fs20.realpathSync.native ?? fs20.realpathSync)(target);
+    return (fs21.realpathSync.native ?? fs21.realpathSync)(target);
   } catch {
     return null;
   }
 }
 function readlinkOrNull(target) {
   try {
-    return fs20.readlinkSync(target);
+    return fs21.readlinkSync(target);
   } catch {
     return null;
   }
 }
 function canonicalJournalPath(journalPath2) {
-  let current = path25.resolve(journalPath2);
+  let current = path26.resolve(journalPath2);
   for (let hop = 0; hop < CANONICAL_PATH_MAX_LINK_HOPS; hop += 1) {
     const real = realpathOrNull(current);
     if (real !== null) return real;
     const link = readlinkOrNull(current);
     if (link !== null) {
-      const next = path25.resolve(path25.dirname(current), link);
+      const next = path26.resolve(path26.dirname(current), link);
       if (next === current) return current;
       current = next;
       continue;
     }
-    const parent = path25.dirname(current);
+    const parent = path26.dirname(current);
     if (parent === current) return current;
-    return path25.join(canonicalJournalPath(parent), path25.basename(current));
+    return path26.join(canonicalJournalPath(parent), path26.basename(current));
   }
   return current;
 }
 function lstatOrNull2(target) {
   try {
-    return fs20.lstatSync(target);
+    return fs21.lstatSync(target);
   } catch {
     return null;
   }
@@ -8681,38 +8881,38 @@ function resolveJournalIdentity(journalPath2) {
     identity: null,
     failure: { code, message }
   });
-  const canonical = canonicalJournalPath(journalPath2);
-  if (canonicalJournalPath(canonical) !== canonical) {
+  const canonical2 = canonicalJournalPath(journalPath2);
+  if (canonicalJournalPath(canonical2) !== canonical2) {
     return refuse7(
       "journal_identity_unstable",
-      `journal path "${journalPath2}" canonicalizes to "${canonical}", which itself resolves further \u2014 the name is moving and cannot be bound to a lock`
+      `journal path "${journalPath2}" canonicalizes to "${canonical2}", which itself resolves further \u2014 the name is moving and cannot be bound to a lock`
     );
   }
-  const stat = lstatOrNull2(canonical);
+  const stat = lstatOrNull2(canonical2);
   if (stat === null) {
-    return { ok: true, identity: { path: canonical, lock: `${canonical}.lock`, device: null, inode: null, links: null }, failure: null };
+    return { ok: true, identity: { path: canonical2, lock: `${canonical2}.lock`, device: null, inode: null, links: null }, failure: null };
   }
   if (stat.isSymbolicLink()) {
     return refuse7(
       "journal_identity_unstable",
-      `a symlink appeared at the canonical journal name "${canonical}" after it was resolved`
+      `a symlink appeared at the canonical journal name "${canonical2}" after it was resolved`
     );
   }
   if (!stat.isFile()) {
     return refuse7(
       "journal_identity_unstable",
-      `canonical journal name "${canonical}" does not name a regular file`
+      `canonical journal name "${canonical2}" does not name a regular file`
     );
   }
   if (stat.nlink > 1) {
     return refuse7(
       "journal_identity_ambiguous",
-      `journal at "${canonical}" is one physical file with ${stat.nlink} names (hard links) \u2014 a path-keyed lock cannot serialise writers that name it differently, so this operation is refused (remove the extra link, or give each producer its own journal)`
+      `journal at "${canonical2}" is one physical file with ${stat.nlink} names (hard links) \u2014 a path-keyed lock cannot serialise writers that name it differently, so this operation is refused (remove the extra link, or give each producer its own journal)`
     );
   }
   return {
     ok: true,
-    identity: { path: canonical, lock: `${canonical}.lock`, device: stat.dev, inode: stat.ino, links: stat.nlink },
+    identity: { path: canonical2, lock: `${canonical2}.lock`, device: stat.dev, inode: stat.ino, links: stat.nlink },
     failure: null
   };
 }
@@ -8820,21 +9020,21 @@ function releaseJournalLock(lockPath2, io = defaultJournalIo) {
 }
 function statOrNull(target) {
   try {
-    return fs20.statSync(target);
+    return fs21.statSync(target);
   } catch {
     return null;
   }
 }
 function fstatOrNull(fd) {
   try {
-    return fs20.fstatSync(fd);
+    return fs21.fstatSync(fd);
   } catch {
     return null;
   }
 }
 function closeQuietly(fd) {
   try {
-    fs20.closeSync(fd);
+    fs21.closeSync(fd);
   } catch {
   }
 }
@@ -8845,12 +9045,12 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
   const acquisition = acquireJournalLockHeld(identity.lock, io, lockOptions);
   if (acquisition.failure !== null) return { ok: false, authority: null, identity, failure: acquisition.failure };
   const grant = acquisition.grant;
-  const journalParent = path25.dirname(identity.path);
+  const journalParent = path26.dirname(identity.path);
   const parentStat = statOrNull(journalParent);
   const parentDevice = parentStat !== null ? parentStat.dev : null;
   const parentInode = parentStat !== null ? parentStat.ino : null;
-  const checkpointParentPath = checkpointPath === null ? null : canonicalJournalPath(path25.dirname(checkpointPath));
-  const checkpointCanonical = checkpointParentPath === null || checkpointPath === null ? null : path25.join(checkpointParentPath, path25.basename(checkpointPath));
+  const checkpointParentPath = checkpointPath === null ? null : canonicalJournalPath(path26.dirname(checkpointPath));
+  const checkpointCanonical = checkpointParentPath === null || checkpointPath === null ? null : path26.join(checkpointParentPath, path26.basename(checkpointPath));
   const checkpointParent = checkpointParentPath === null || checkpointParentPath === journalParent ? null : checkpointParentPath;
   let checkpointParentPin = null;
   let handle = null;
@@ -8866,14 +9066,14 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
     let fd = null;
     let writable = false;
     try {
-      fd = fs20.openSync(identity.path, JOURNAL_ACCESS_FLAGS[access]);
+      fd = fs21.openSync(identity.path, JOURNAL_ACCESS_FLAGS[access]);
       writable = access !== "read";
     } catch {
       fd = null;
     }
     if (fd === null) {
       try {
-        fd = fs20.openSync(identity.path, "r");
+        fd = fs21.openSync(identity.path, "r");
         writable = false;
       } catch (err) {
         return unstable(
@@ -8899,7 +9099,7 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
     if (checkpointParent === null || checkpointParentPin !== null) return;
     let fd = null;
     try {
-      fd = fs20.openSync(checkpointParent, "r");
+      fd = fs21.openSync(checkpointParent, "r");
     } catch {
       fd = null;
     }
@@ -8950,7 +9150,7 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
       }
     }
     if (parentInode !== null && parentDevice !== null) {
-      const parentNow = statOrNull(path25.dirname(identity.path));
+      const parentNow = statOrNull(path26.dirname(identity.path));
       if (parentNow === null || parentNow.dev !== parentDevice || parentNow.ino !== parentInode) {
         return unstable(
           `the directory holding "${identity.path}" and its lock was replaced ${stage} \u2014 this writer's exclusion moved with the old directory and no longer covers this path`
@@ -8994,7 +9194,7 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
           );
         }
       }
-      const parentNamedNow = canonicalJournalPath(path25.dirname(checkpointPath));
+      const parentNamedNow = canonicalJournalPath(path26.dirname(checkpointPath));
       if (parentNamedNow !== checkpointParentPath) {
         return unstable(
           `the checkpoint "${checkpointPath}" now resolves into "${parentNamedNow}" rather than "${checkpointParentPath}" ${stage} \u2014 this writer holds the directory it was granted, not that one`
@@ -9412,11 +9612,11 @@ function appendLocked(paths, input, io, authority, options) {
     failure: null
   };
 }
-var fs20, path25, crypto7, RECEIPT_CONTRACT_VERSION, RECEIPT_DISPOSITIONS, OBSERVATION_STATES, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES, UNPINNED_FD, JournalAuthorityDetachedError, ACTIVE_LOCK_PUBLICATION, defaultJournalIo, CANONICAL_PATH_MAX_LINK_HOPS, JournalIdentityError, JOURNAL_LOCK_MAX_ATTEMPTS, JOURNAL_LOCK_WAIT_MS, JOURNAL_ACCESS_FLAGS, REQUIRED_STRING_FIELDS;
+var fs21, path26, crypto7, RECEIPT_CONTRACT_VERSION, RECEIPT_DISPOSITIONS, OBSERVATION_STATES, RECEIPT_EVENT_NAMES, RECEIPT_OUTCOME_TYPES, UNPINNED_FD, JournalAuthorityDetachedError, ACTIVE_LOCK_PUBLICATION, defaultJournalIo, CANONICAL_PATH_MAX_LINK_HOPS, JournalIdentityError, JOURNAL_LOCK_MAX_ATTEMPTS, JOURNAL_LOCK_WAIT_MS, JOURNAL_ACCESS_FLAGS, REQUIRED_STRING_FIELDS;
 var init_receipt_journal = __esm({
   "src/domains/telemetry/receipt-journal.ts"() {
-    fs20 = __toESM(require("node:fs"));
-    path25 = __toESM(require("node:path"));
+    fs21 = __toESM(require("node:fs"));
+    path26 = __toESM(require("node:path"));
     crypto7 = __toESM(require("node:crypto"));
     init_state();
     RECEIPT_CONTRACT_VERSION = "guild.observability.v1";
@@ -9481,16 +9681,16 @@ var init_receipt_journal = __esm({
         bound?.guard?.("immediately before the append syscall");
         if (bound && bound.writable && bound.fd >= 0) {
           writeAllSync(bound.fd, text);
-          fs20.fsyncSync(bound.fd);
+          fs21.fsyncSync(bound.fd);
           return;
         }
-        fs20.mkdirSync(path25.dirname(journalPath2), { recursive: true });
-        const fd = fs20.openSync(journalPath2, "a");
+        fs21.mkdirSync(path26.dirname(journalPath2), { recursive: true });
+        const fd = fs21.openSync(journalPath2, "a");
         try {
-          fs20.writeSync(fd, text, null, "utf8");
-          fs20.fsyncSync(fd);
+          fs21.writeSync(fd, text, null, "utf8");
+          fs21.fsyncSync(fd);
         } finally {
-          fs20.closeSync(fd);
+          fs21.closeSync(fd);
         }
       },
       readAll(journalPath2, bound) {
@@ -9502,7 +9702,7 @@ var init_receipt_journal = __esm({
           }
         }
         try {
-          return fs20.readFileSync(journalPath2, "utf8");
+          return fs21.readFileSync(journalPath2, "utf8");
         } catch {
           return null;
         }
@@ -9514,26 +9714,26 @@ var init_receipt_journal = __esm({
       truncate(journalPath2, size, bound) {
         bound?.guard?.("immediately before the truncation syscall");
         if (bound && bound.writable && bound.fd >= 0) {
-          fs20.ftruncateSync(bound.fd, size);
+          fs21.ftruncateSync(bound.fd, size);
           return;
         }
-        fs20.truncateSync(journalPath2, size);
+        fs21.truncateSync(journalPath2, size);
       },
       // `mkdir` is the portable atomic test-and-set: it either creates the
       // directory or fails EEXIST, with no window in between. `open(O_CREAT|O_EXCL)`
       // has the same guarantee locally but is famously unreliable over NFS, and
       // Guild journals can live on a shared volume.
       acquireLock(lockPath2) {
-        fs20.mkdirSync(path25.dirname(lockPath2), { recursive: true });
+        fs21.mkdirSync(path26.dirname(lockPath2), { recursive: true });
         try {
-          fs20.mkdirSync(lockPath2);
+          fs21.mkdirSync(lockPath2);
         } catch (err) {
           if (err.code === "EEXIST") return false;
           throw err;
         }
         let fd = null;
         try {
-          fd = fs20.openSync(lockPath2, "r");
+          fd = fs21.openSync(lockPath2, "r");
         } catch {
           fd = null;
         }
@@ -9548,7 +9748,7 @@ var init_receipt_journal = __esm({
       },
       releaseLock(lockPath2) {
         try {
-          fs20.rmdirSync(lockPath2);
+          fs21.rmdirSync(lockPath2);
         } catch {
         }
       }
@@ -10065,9 +10265,9 @@ function defineScenario(stableId, title, eventName, preconditions, outcomeAssert
   };
 }
 function makeProbePaths(parent, name) {
-  const dir = path26.join(parent, name);
-  fs21.mkdirSync(dir, { recursive: true });
-  return { dir, journal: path26.join(dir, JOURNAL_LEAF), checkpoint: path26.join(dir, CHECKPOINT_LEAF) };
+  const dir = path27.join(parent, name);
+  fs22.mkdirSync(dir, { recursive: true });
+  return { dir, journal: path27.join(dir, JOURNAL_LEAF), checkpoint: path27.join(dir, CHECKPOINT_LEAF) };
 }
 function probeInput(identity, runId, over) {
   const base = makeReceiptInput({
@@ -10124,7 +10324,7 @@ function tornAppendIo(realIo, cutAfterBytes) {
   };
 }
 function layDownSealedJournal(port, paths, records, runId) {
-  fs21.writeFileSync(paths.journal, `${records.map((record) => JSON.stringify(record)).join("\n")}
+  fs22.writeFileSync(paths.journal, `${records.map((record) => JSON.stringify(record)).join("\n")}
 `, "utf8");
   const last = records[records.length - 1];
   const checkpoint = {};
@@ -10135,7 +10335,7 @@ function layDownSealedJournal(port, paths, records, runId) {
   checkpoint["record_count"] = records.length;
   checkpoint["updated_at"] = last.recorded_at;
   checkpoint["contract_version"] = RECEIPT_CONTRACT_VERSION;
-  fs21.writeFileSync(paths.checkpoint, `${JSON.stringify(checkpoint, null, 2)}
+  fs22.writeFileSync(paths.checkpoint, `${JSON.stringify(checkpoint, null, 2)}
 `, "utf8");
   const read = port.readCheckpointState(paths.checkpoint);
   if (read.state !== "present") {
@@ -10559,14 +10759,14 @@ function identityIsComplete(identity) {
 }
 function isExistingDirectory(target) {
   try {
-    return fs21.statSync(target).isDirectory();
+    return fs22.statSync(target).isDirectory();
   } catch {
     return false;
   }
 }
 function removeQuietly(target) {
   try {
-    fs21.rmSync(target, { recursive: true, force: true });
+    fs22.rmSync(target, { recursive: true, force: true });
   } catch {
   }
 }
@@ -10610,7 +10810,7 @@ function evaluateReceiptJournalConformance(request) {
     }
   }
   const root = request.journal_root;
-  const usableRoot = typeof root === "string" && root.length > 0 && path26.isAbsolute(root) && isExistingDirectory(root);
+  const usableRoot = typeof root === "string" && root.length > 0 && path27.isAbsolute(root) && isExistingDirectory(root);
   if (!usableRoot) {
     return refuseEvaluation(MH06_REFUSAL_CONTROLS.journalRootUnusable, "scenario_evidence_incomplete", [
       "conformance evaluation writes journals, so it requires an absolute, existing, disposable root",
@@ -10619,7 +10819,7 @@ function evaluateReceiptJournalConformance(request) {
   }
   const port = request.journal === void 0 ? MH06_PRODUCTION_JOURNAL : request.journal;
   const identity = request.evidence_identity;
-  const workspace = fs21.mkdtempSync(path26.join(root, PROBE_WORKSPACE_PREFIX));
+  const workspace = fs22.mkdtempSync(path27.join(root, PROBE_WORKSPACE_PREFIX));
   const verdicts = {};
   try {
     for (const stableId of MH06_SCENARIO_IDS) {
@@ -10678,11 +10878,11 @@ function evaluateReceiptJournalConformance(request) {
     packet: freezeDeep(packet)
   };
 }
-var fs21, path26, OUTCOME_ENVELOPE_SCHEMA, OUTCOME_CONTRACT_VERSION, MH06_SUITE_ID, MH06_SUITE_VERSION, MH06_OWNER_KEY, MH06_PACKET_SCHEMA, MH06_SCENARIO_IDS, MH06_CATEGORY, MH06_EVIDENCE_PROFILE, MH06_EXPECTED_OUTCOMES, SCENARIO_RESULT_MISMATCH, EVIDENCE_FRESHNESS_VERDICTS, EVIDENCE_IDENTITY_FIELDS, MH06_WAVE_OWNER, MH06_SCENARIOS, MH06_PRODUCTION_JOURNAL, MH06_REFUSAL_CONTROLS, MH06_SOURCE_VERSION, PROBE_RECORDED_AT, PROBE_RECONCILED_AT, PROBE_WORKSPACE_PREFIX, TORN_APPEND_CUT_BYTES, PROBE_DIRS, JOURNAL_LEAF, CHECKPOINT_LEAF, CHECKPOINT_SCHEMA, PROBES;
+var fs22, path27, OUTCOME_ENVELOPE_SCHEMA, OUTCOME_CONTRACT_VERSION, MH06_SUITE_ID, MH06_SUITE_VERSION, MH06_OWNER_KEY, MH06_PACKET_SCHEMA, MH06_SCENARIO_IDS, MH06_CATEGORY, MH06_EVIDENCE_PROFILE, MH06_EXPECTED_OUTCOMES, SCENARIO_RESULT_MISMATCH, EVIDENCE_FRESHNESS_VERDICTS, EVIDENCE_IDENTITY_FIELDS, MH06_WAVE_OWNER, MH06_SCENARIOS, MH06_PRODUCTION_JOURNAL, MH06_REFUSAL_CONTROLS, MH06_SOURCE_VERSION, PROBE_RECORDED_AT, PROBE_RECONCILED_AT, PROBE_WORKSPACE_PREFIX, TORN_APPEND_CUT_BYTES, PROBE_DIRS, JOURNAL_LEAF, CHECKPOINT_LEAF, CHECKPOINT_SCHEMA, PROBES;
 var init_receipt_journal_conformance_evaluator = __esm({
   "src/domains/telemetry/receipt-journal-conformance-evaluator.ts"() {
-    fs21 = __toESM(require("node:fs"));
-    path26 = __toESM(require("node:path"));
+    fs22 = __toESM(require("node:fs"));
+    path27 = __toESM(require("node:path"));
     init_receipt_journal();
     init_receipt_reconcile();
     OUTCOME_ENVELOPE_SCHEMA = "guild.runtime.contracts.v1";
@@ -11355,7 +11555,7 @@ var init_guild_trace_events = __esm({
 
 // src/domains/telemetry/guild-trace-emit.ts
 function liveLogPath(runDir3) {
-  return path27.join(runDir3, "logs", "v1.4-events.jsonl");
+  return path28.join(runDir3, "logs", "v1.4-events.jsonl");
 }
 function emitTraceEvent(event, runDir3) {
   if (!runDir3) return false;
@@ -11371,10 +11571,10 @@ function emitTraceEvent(event, runDir3) {
   }
   try {
     const live = liveLogPath(runDir3);
-    const dir = path27.dirname(live);
-    fs22.mkdirSync(dir, { recursive: true });
+    const dir = path28.dirname(live);
+    fs23.mkdirSync(dir, { recursive: true });
     const line = JSON.stringify(event) + "\n";
-    fs22.appendFileSync(live, line, "utf8");
+    fs23.appendFileSync(live, line, "utf8");
     return true;
   } catch (err) {
     process.stderr.write(
@@ -11384,11 +11584,11 @@ function emitTraceEvent(event, runDir3) {
     return false;
   }
 }
-var fs22, path27;
+var fs23, path28;
 var init_guild_trace_emit = __esm({
   "src/domains/telemetry/guild-trace-emit.ts"() {
-    fs22 = __toESM(require("node:fs"));
-    path27 = __toESM(require("node:path"));
+    fs23 = __toESM(require("node:fs"));
+    path28 = __toESM(require("node:path"));
     init_guild_trace_events();
   }
 });
@@ -11429,7 +11629,7 @@ function asRecord(value) {
 function validEvidenceRef(value) {
   if (!value.startsWith(".guild/") || value.includes("\\") || /[\0\r\n]/.test(value)) return false;
   const filePart = value.split("#", 1)[0];
-  const normalized = path28.posix.normalize(filePart);
+  const normalized = path29.posix.normalize(filePart);
   return normalized === filePart && !normalized.split("/").includes("..");
 }
 function evidenceRunId(value) {
@@ -11445,10 +11645,10 @@ function integerAtLeast(value, minimum) {
 function hasOnlyKeys(value, allowed) {
   return Object.keys(value).every((key) => allowed.has(key));
 }
-var path28, SAFE_ID, REQUIRED_COVERAGE, COMPLETENESS_REQUIREMENTS, DETECTOR_IDS, USAGE_METRICS, EVENT_CLASS_CATEGORY, HASH_REF, SIDECAR_MAX_BYTES, PROJECT_CAPABILITY_KINDS, PLUGIN_CAPABILITY_KINDS, SIDECAR_CARRIERS, SIDECAR_CARRIER_CLASSES, arrayOf, keysOf, hashRef, runEvidenceRef, SIDECAR_VALIDATORS;
+var path29, SAFE_ID, REQUIRED_COVERAGE, COMPLETENESS_REQUIREMENTS, DETECTOR_IDS, USAGE_METRICS, EVENT_CLASS_CATEGORY, HASH_REF, SIDECAR_MAX_BYTES, PROJECT_CAPABILITY_KINDS, PLUGIN_CAPABILITY_KINDS, SIDECAR_CARRIERS, SIDECAR_CARRIER_CLASSES, arrayOf, keysOf, hashRef, runEvidenceRef, SIDECAR_VALIDATORS;
 var init_run_analysis = __esm({
   "src/domains/telemetry/run-analysis.ts"() {
-    path28 = __toESM(require("node:path"));
+    path29 = __toESM(require("node:path"));
     init_state();
     init_guild_trace_events();
     init_state();
@@ -11601,8 +11801,8 @@ function classifyTrustTier(relPath, content, opts = {}) {
 }
 function emitRecallQuarantineEvent(runDir3, runId, sourcePath, patterns, tool) {
   try {
-    const logsDir2 = path29.join(runDir3, "logs");
-    fs23.mkdirSync(logsDir2, { recursive: true });
+    const logsDir2 = path30.join(runDir3, "logs");
+    fs24.mkdirSync(logsDir2, { recursive: true });
     const host = (process.env["GUILD_HOST_ID"] ?? "").trim() || (process.env["GUILD_HOST"] ?? "").trim().toLowerCase() || "claude";
     const record = {
       schema_version: "guild.security_event.v1",
@@ -11611,11 +11811,11 @@ function emitRecallQuarantineEvent(runDir3, runId, sourcePath, patterns, tool) {
       event_type: "recall_quarantine",
       decision: "blocked",
       tool,
-      detail: `Recalled chunk from ${path29.basename(sourcePath)} quarantined \u2014 injection probe flagged (patterns: ${patterns.join(", ")})`,
+      detail: `Recalled chunk from ${path30.basename(sourcePath)} quarantined \u2014 injection probe flagged (patterns: ${patterns.join(", ")})`,
       host
     };
-    fs23.appendFileSync(
-      path29.join(logsDir2, "security-events.jsonl"),
+    fs24.appendFileSync(
+      path30.join(logsDir2, "security-events.jsonl"),
       JSON.stringify(record) + "\n",
       "utf8"
     );
@@ -11682,7 +11882,7 @@ function protectChunks(rawHits, opts = {}) {
     const probe = pageProbe.result === "flagged" || hit.render === void 0 ? pageProbe : sanitizeForInjection(render);
     if (probe.result === "flagged") {
       const patterns = probe.matchedPatterns.join(", ");
-      const name = path29.basename(source_path);
+      const name = path30.basename(source_path);
       const shownName = sanitizeForInjection(name).result === "flagged" ? "[unsafe name]" : neutralizeRecallTags(name);
       const marker = `[QUARANTINED: recalled chunk from ${shownName} flagged for injection (patterns: ${patterns}) \u2014 excluded]`;
       chunks.push({
@@ -11766,11 +11966,11 @@ function protectFields(value, sourcePath, opts = {}) {
   };
   return { value: walk(value, 0), wrapped };
 }
-var fs23, path29, RECALL_INTEGRITY_DIRECTIVE, OPERATOR_PATH_PATTERNS, TAG_CONFUSABLES, INVISIBLE_RE, NAMED_ENTITIES, RECALL_TAG_RE, IDENTIFIER_RE, MAX_FIELD_DEPTH;
+var fs24, path30, RECALL_INTEGRITY_DIRECTIVE, OPERATOR_PATH_PATTERNS, TAG_CONFUSABLES, INVISIBLE_RE, NAMED_ENTITIES, RECALL_TAG_RE, IDENTIFIER_RE, MAX_FIELD_DEPTH;
 var init_recall_protect = __esm({
   "src/domains/knowledge/recall-protect.ts"() {
-    fs23 = __toESM(require("node:fs"));
-    path29 = __toESM(require("node:path"));
+    fs24 = __toESM(require("node:fs"));
+    path30 = __toESM(require("node:path"));
     init_security();
     init_state();
     init_telemetry();
@@ -11835,8 +12035,8 @@ function readHarvestJournal(runId, opts = {}) {
   const storage = storageFor(opts);
   const p = harvestJournalPath(storage, runId);
   try {
-    if (fs24.existsSync(p)) {
-      const parsed = JSON.parse(fs24.readFileSync(p, "utf8"));
+    if (fs25.existsSync(p)) {
+      const parsed = JSON.parse(fs25.readFileSync(p, "utf8"));
       if (parsed && parsed.schema_version === HARVEST_JOURNAL_SCHEMA && Array.isArray(parsed.ops)) {
         return parsed;
       }
@@ -11851,7 +12051,7 @@ function writeDurable(absPath, body) {
 function writeHarvestJournal(journal, opts = {}) {
   const storage = storageFor(opts);
   const p = harvestJournalPath(storage, journal.run_id);
-  storage.ensureDir(path30.dirname(p));
+  storage.ensureDir(path31.dirname(p));
   writeDurable(p, JSON.stringify(journal, null, 2) + "\n");
   return p;
 }
@@ -11874,7 +12074,7 @@ function findOp(runId, opId, opts = {}) {
 function recordInverse(runId, inverse, opts = {}) {
   const storage = storageFor(opts);
   const p = harvestHistoryPath(storage, runId, inverse.op_id);
-  storage.ensureDir(path30.dirname(p));
+  storage.ensureDir(path31.dirname(p));
   writeDurable(p, JSON.stringify(inverse, null, 2) + "\n");
   return p;
 }
@@ -11882,8 +12082,8 @@ function readInverse(runId, opId, opts = {}) {
   const storage = storageFor(opts);
   const p = harvestHistoryPath(storage, runId, opId);
   try {
-    if (!fs24.existsSync(p)) return null;
-    return JSON.parse(fs24.readFileSync(p, "utf8"));
+    if (!fs25.existsSync(p)) return null;
+    return JSON.parse(fs25.readFileSync(p, "utf8"));
   } catch {
     return null;
   }
@@ -11897,12 +12097,12 @@ function resumableOps(runId, opts = {}) {
 function sha2563(text) {
   return crypto8.createHash("sha256").update(text, "utf8").digest("hex");
 }
-var crypto8, fs24, path30, HARVEST_JOURNAL_SCHEMA, TERMINAL_STATUSES2, RESUMABLE_STATUSES;
+var crypto8, fs25, path31, HARVEST_JOURNAL_SCHEMA, TERMINAL_STATUSES2, RESUMABLE_STATUSES;
 var init_harvest_journal = __esm({
   "src/domains/knowledge/harvest-journal.ts"() {
     crypto8 = __toESM(require("node:crypto"));
-    fs24 = __toESM(require("node:fs"));
-    path30 = __toESM(require("node:path"));
+    fs25 = __toESM(require("node:fs"));
+    path31 = __toESM(require("node:path"));
     init_state();
     init_kernel();
     HARVEST_JOURNAL_SCHEMA = "guild.harvest_journal.v1";
@@ -11939,7 +12139,7 @@ function listMarkdown(root) {
   const walk = (dir, prefix) => {
     let entries;
     try {
-      entries = fs25.readdirSync(dir, { withFileTypes: true });
+      entries = fs26.readdirSync(dir, { withFileTypes: true });
     } catch {
       return;
     }
@@ -11947,7 +12147,7 @@ function listMarkdown(root) {
       const rel2 = prefix === "" ? e.name : `${prefix}/${e.name}`;
       if (e.isDirectory()) {
         if (e.name === "_archive" || e.name === "node_modules") continue;
-        walk(path31.join(dir, e.name), rel2);
+        walk(path32.join(dir, e.name), rel2);
       } else if (e.name.endsWith(".md")) {
         out.push(rel2);
       }
@@ -11958,15 +12158,15 @@ function listMarkdown(root) {
 }
 function titleOf(rel2, body) {
   const h = /^#\s+(.+)$/m.exec(body);
-  return h ? h[1].trim() : path31.basename(rel2, ".md");
+  return h ? h[1].trim() : path32.basename(rel2, ".md");
 }
 function indexOne(root, rel2) {
-  const abs = path31.join(root, rel2);
+  const abs = path32.join(root, rel2);
   let body;
   let mtime = 0;
   try {
-    body = fs25.readFileSync(abs, "utf8");
-    mtime = Math.floor(fs25.statSync(abs).mtimeMs);
+    body = fs26.readFileSync(abs, "utf8");
+    mtime = Math.floor(fs26.statSync(abs).mtimeMs);
   } catch {
     return null;
   }
@@ -11982,8 +12182,8 @@ ${body}`),
 function readWikiIndex(storage) {
   const p = wikiIndexPath(storage);
   try {
-    if (!fs25.existsSync(p)) return null;
-    const parsed = JSON.parse(fs25.readFileSync(p, "utf8"));
+    if (!fs26.existsSync(p)) return null;
+    const parsed = JSON.parse(fs26.readFileSync(p, "utf8"));
     return parsed && parsed.schema_version === WIKI_INDEX_SCHEMA ? parsed : null;
   } catch {
     return null;
@@ -11991,15 +12191,15 @@ function readWikiIndex(storage) {
 }
 function writeWikiIndex(storage, index) {
   const p = wikiIndexPath(storage);
-  storage.ensureDir(path31.dirname(p));
-  fs25.writeFileSync(p, JSON.stringify(index), "utf8");
+  storage.ensureDir(path32.dirname(p));
+  fs26.writeFileSync(p, JSON.stringify(index), "utf8");
   return p;
 }
 function buildWikiIndex(opts = {}) {
   const storage = storageFor2(opts);
   const root = wikiRoot(storage);
   const docs = [];
-  if (root && fs25.existsSync(root)) {
+  if (root && fs26.existsSync(root)) {
     for (const rel2 of listMarkdown(root)) {
       const d = indexOne(root, rel2);
       if (d) docs.push(d);
@@ -12065,12 +12265,12 @@ function searchWiki(query, opts = {}) {
   if (kept.length === 0) return failOpen("reranker returned no known documents; served BM25");
   return { hits: kept, backend: "hybrid", built_index: built };
 }
-var crypto9, fs25, path31, WIKI_INDEX_SCHEMA, DEFAULT_MAX_HITS, DEFAULT_MIN_SCORE;
+var crypto9, fs26, path32, WIKI_INDEX_SCHEMA, DEFAULT_MAX_HITS, DEFAULT_MIN_SCORE;
 var init_wiki_index = __esm({
   "src/domains/knowledge/wiki-index.ts"() {
     crypto9 = __toESM(require("node:crypto"));
-    fs25 = __toESM(require("node:fs"));
-    path31 = __toESM(require("node:path"));
+    fs26 = __toESM(require("node:fs"));
+    path32 = __toESM(require("node:path"));
     init_bm25();
     init_state();
     WIKI_INDEX_SCHEMA = "guild.wiki_index.v1";
@@ -12092,7 +12292,7 @@ function write(absPath, content, ctx) {
 }
 function readOr(p, fallback) {
   try {
-    return fs26.readFileSync(p, "utf8");
+    return fs27.readFileSync(p, "utf8");
   } catch {
     return fallback;
   }
@@ -12123,7 +12323,7 @@ ${line}
 `;
 }
 function appendLog(wikiRoot2, entry, ctx) {
-  const logPath = path32.join(wikiRoot2, "log.md");
+  const logPath = path33.join(wikiRoot2, "log.md");
   try {
     ctx.assertTarget(logPath);
   } catch (err) {
@@ -12140,7 +12340,7 @@ function oneLine(title) {
   return title.replace(/[\r\n]+/g, " ").replace(/[[\]]/g, "").trim();
 }
 function recordDecisionPromotion(wikiRoot2, page, ctx) {
-  const indexPath = path32.join(wikiRoot2, "index.md");
+  const indexPath = path33.join(wikiRoot2, "index.md");
   try {
     ctx.assertTarget(indexPath);
   } catch (err) {
@@ -12159,8 +12359,8 @@ function recordDecisionPromotion(wikiRoot2, page, ctx) {
   return appendLog(wikiRoot2, `## [${page.date}] promoted decision ${page.slug}`, ctx);
 }
 function recordDecisionRevert(wikiRoot2, page, ctx) {
-  const indexPath = path32.join(wikiRoot2, "index.md");
-  if (fs26.existsSync(indexPath)) {
+  const indexPath = path33.join(wikiRoot2, "index.md");
+  if (fs27.existsSync(indexPath)) {
     try {
       ctx.assertTarget(indexPath);
     } catch (err) {
@@ -12176,11 +12376,11 @@ function recordDecisionRevert(wikiRoot2, page, ctx) {
   }
   return appendLog(wikiRoot2, `## [${page.date}] reverted decision ${page.slug}`, ctx);
 }
-var fs26, path32, DECISIONS_HEADING;
+var fs27, path33, DECISIONS_HEADING;
 var init_decision_catalog = __esm({
   "src/domains/knowledge/decision-catalog.ts"() {
-    fs26 = __toESM(require("node:fs"));
-    path32 = __toESM(require("node:path"));
+    fs27 = __toESM(require("node:fs"));
+    path33 = __toESM(require("node:path"));
     init_security();
     init_recall_protect();
     DECISIONS_HEADING = "## Decisions";
@@ -12252,8 +12452,8 @@ function hex8(value) {
   return out;
 }
 function neutralFingerprint(value) {
-  const canonical = neutralCanonicalJson(value);
-  return `nfp1:${hex8(fnv1a32(canonical, 2166136261))}${hex8(fnv1a32(canonical, 16777619))}`;
+  const canonical2 = neutralCanonicalJson(value);
+  return `nfp1:${hex8(fnv1a32(canonical2, 2166136261))}${hex8(fnv1a32(canonical2, 16777619))}`;
 }
 function rotr32(value, bits) {
   return (value >>> bits | value << 32 - bits) >>> 0;
@@ -13892,19 +14092,19 @@ function neutralReceiptReference(authority, entry) {
   return `${NEUTRAL_RECEIPT_REF_SCHEMA}:${authority.receipt_journal_id}#${entry.sequence}@${entry.entry_commitment}`;
 }
 function neutralJournalGenesis(authority) {
-  const canonical = {
+  const canonical2 = {
     schema: NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
     anchor: "journal_genesis",
     journal: authority.receipt_journal_id,
     first_sequence: authority.receipt_sequence_range?.first ?? null
   };
   for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
-    canonical[field] = authority.identity[field] ?? null;
+    canonical2[field] = authority.identity[field] ?? null;
   }
-  return `nec1:${neutralFingerprint(canonical).slice("nfp1:".length)}`;
+  return `nec1:${neutralFingerprint(canonical2).slice("nfp1:".length)}`;
 }
 function neutralJournalEntryCommitment(authority, previous, entry) {
-  const canonical = {
+  const canonical2 = {
     schema: NEUTRAL_CONFORMANCE_AUTHORITY_SCHEMA,
     anchor: "journal_entry",
     journal: authority.receipt_journal_id,
@@ -13916,12 +14116,12 @@ function neutralJournalEntryCommitment(authority, previous, entry) {
     reason_code: entry.reason_code ?? null
   };
   for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
-    canonical[field] = authority.identity[field] ?? null;
+    canonical2[field] = authority.identity[field] ?? null;
   }
-  return `nec1:${neutralFingerprint(canonical).slice("nfp1:".length)}`;
+  return `nec1:${neutralFingerprint(canonical2).slice("nfp1:".length)}`;
 }
 function neutralAttestationDigest(authority, attestation) {
-  const canonical = {
+  const canonical2 = {
     schema: NEUTRAL_ATTESTATION_REF_SCHEMA,
     attestor: attestation.attestor_id,
     journal: authority.receipt_journal_id,
@@ -13931,9 +14131,9 @@ function neutralAttestationDigest(authority, attestation) {
     last_sequence: authority.receipt_sequence_range?.last ?? null
   };
   for (const field of NEUTRAL_EVIDENCE_IDENTITY_FIELDS) {
-    canonical[field] = authority.identity[field] ?? null;
+    canonical2[field] = authority.identity[field] ?? null;
   }
-  return `nad1:${neutralCanonicalDigest(canonical)}`;
+  return `nad1:${neutralCanonicalDigest(canonical2)}`;
 }
 function neutralAttestationReference(authority, attestation) {
   return `${NEUTRAL_ATTESTATION_REF_SCHEMA}:${attestation.attestor_id}@${neutralAttestationDigest(authority, attestation)}`;
@@ -17766,7 +17966,7 @@ var init_neutral_conformance_assembly = __esm({
           for (const candidate of nonText) {
             if (!refusesRawWith(implementation, candidate, CONTROL_REQUEST_NOT_TEXT)) return false;
           }
-          const canonical = controlRequestText(controlPackets(), CONTROL_CLAIM);
+          const canonical2 = controlRequestText(controlPackets(), CONTROL_CLAIM);
           const malformed = [
             "",
             "{",
@@ -17778,7 +17978,7 @@ var init_neutral_conformance_assembly = __esm({
             `{"packets":[],"claim":{}}`,
             // The canonical text with insignificant padding — same decode, different
             // bytes.
-            ` ${canonical}`,
+            ` ${canonical2}`,
             // An undeclared top-level member is a channel this contract does not have.
             neutralCanonicalJson({ packets: controlPackets(), claim: CONTROL_CLAIM, mode: "lenient" }),
             // The packet set must be a JSON array, not an object holding packets.
@@ -17807,16 +18007,16 @@ var init_neutral_conformance_assembly = __esm({
 
 // src/domains/lifecycle/module-boundary-conformance-evaluator.ts
 function mh07RequiredConsumerRoots(pluginRoot) {
-  const workspace = path33.dirname(path33.resolve(pluginRoot));
+  const workspace = path34.dirname(path34.resolve(pluginRoot));
   const roots = {};
-  for (const name of MH07_REQUIRED_CONSUMERS) roots[name] = path33.join(workspace, name);
+  for (const name of MH07_REQUIRED_CONSUMERS) roots[name] = path34.join(workspace, name);
   return roots;
 }
 function walkTypeScript(dir, excluded, excludedSuffixes = []) {
-  if (!fs27.existsSync(dir)) return [];
+  if (!fs28.existsSync(dir)) return [];
   const found = [];
-  for (const entry of fs27.readdirSync(dir, { withFileTypes: true })) {
-    const full = path33.join(dir, entry.name);
+  for (const entry of fs28.readdirSync(dir, { withFileTypes: true })) {
+    const full = path34.join(dir, entry.name);
     if (entry.isDirectory()) {
       if (excluded.indexOf(entry.name) !== -1) continue;
       found.push(...walkTypeScript(full, excluded, excludedSuffixes));
@@ -17829,7 +18029,7 @@ function walkTypeScript(dir, excluded, excludedSuffixes = []) {
 }
 function mh07IsDomainsShape(root) {
   return walkTypeScript(
-    path33.join(root, "src", "domains"),
+    path34.join(root, "src", "domains"),
     MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
     MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
   ).length > 0;
@@ -17842,7 +18042,7 @@ function mh07UnitOfRelPath(rel2) {
 }
 function mh07UnclassifiedSources(root) {
   return walkTypeScript(
-    path33.join(root, "src"),
+    path34.join(root, "src"),
     MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
     MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
   ).map((file) => relativeTo(root, file)).filter((rel2) => mh07UnitOfRelPath(rel2) === null);
@@ -17859,7 +18059,7 @@ function classifyDomainDestination(root, importer, specifier, fromUnit, closure)
   }
   const resolved = resolveRelative(importer, specifier);
   const rel2 = relativeTo(root, resolved);
-  if (rel2.indexOf("..") === 0 || path33.isAbsolute(rel2)) {
+  if (rel2.indexOf("..") === 0 || path34.isAbsolute(rel2)) {
     return { destination_class: "unclassified", imported: rel2, to_module: null };
   }
   if (MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes.some((suffix) => rel2.endsWith(suffix)) || rel2.split("/").some((segment) => MH07_DOMAIN_GRAPH_SCOPE.excluded_directories.indexOf(segment) !== -1)) {
@@ -17876,7 +18076,7 @@ function classifyDomainDestination(root, importer, specifier, fromUnit, closure)
   let isClosureMember = closure.has(rel2);
   if (!isClosureMember && rel2.endsWith(".json")) {
     try {
-      const entry = fs27.lstatSync(resolved);
+      const entry = fs28.lstatSync(resolved);
       isClosureMember = entry.isFile() && !entry.isSymbolicLink();
     } catch {
       isClosureMember = false;
@@ -17904,7 +18104,7 @@ function mh07ScanDomainDependencyGraph(root, extract) {
   const closure = /* @__PURE__ */ new Set();
   for (const unit of Object.keys(MH07_DOMAIN_TREE_ROLES)) {
     const files = walkTypeScript(
-      path33.join(root, unit),
+      path34.join(root, unit),
       MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
       MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
     );
@@ -17916,7 +18116,7 @@ function mh07ScanDomainDependencyGraph(root, extract) {
     for (const file of files) {
       const rel2 = relativeTo(root, file);
       nodes.push(rel2);
-      const extracted = extract(fs27.readFileSync(file, "utf8"));
+      const extracted = extract(fs28.readFileSync(file, "utf8"));
       for (const edge of extracted) {
         if (edge.kind === "unresolved") {
           const detail = edge.detail ?? "";
@@ -17951,20 +18151,20 @@ function mh07ScanDomainDependencyGraph(root, extract) {
   });
 }
 function toPosix(value) {
-  return value.split(path33.sep).join("/");
+  return value.split(path34.sep).join("/");
 }
 function relativeTo(root, target) {
-  return toPosix(path33.relative(root, target));
+  return toPosix(path34.relative(root, target));
 }
 function resolveRelative(importer, specifier) {
-  const base = path33.resolve(path33.dirname(importer), specifier);
-  const candidates = [base, `${base}.ts`, path33.join(base, "index.ts")];
+  const base = path34.resolve(path34.dirname(importer), specifier);
+  const candidates = [base, `${base}.ts`, path34.join(base, "index.ts")];
   if (base.endsWith(".js")) candidates.push(`${base.slice(0, -3)}.ts`);
-  return candidates.find((candidate) => fs27.existsSync(candidate) && fs27.statSync(candidate).isFile()) ?? base;
+  return candidates.find((candidate) => fs28.existsSync(candidate) && fs28.statSync(candidate).isFile()) ?? base;
 }
 function moduleIdOfPath(root, target, moduleIds) {
-  const rel2 = relativeTo(path33.join(root, "src", "modules"), target);
-  if (rel2.indexOf("..") === 0 || path33.isAbsolute(rel2)) return null;
+  const rel2 = relativeTo(path34.join(root, "src", "modules"), target);
+  if (rel2.indexOf("..") === 0 || path34.isAbsolute(rel2)) return null;
   const head = rel2.split("/")[0];
   return moduleIds.indexOf(head) === -1 ? null : head;
 }
@@ -17983,7 +18183,7 @@ function classifyDestination(root, importer, specifier, fromModule, moduleIds) {
   }
   const resolved = resolveRelative(importer, specifier);
   const rel2 = relativeTo(root, resolved);
-  if (rel2.indexOf("..") === 0 || path33.isAbsolute(rel2)) {
+  if (rel2.indexOf("..") === 0 || path34.isAbsolute(rel2)) {
     return { destination_class: "unclassified", imported: rel2, to_module: null };
   }
   const head = rel2.split("/")[0];
@@ -17997,8 +18197,8 @@ function classifyDestination(root, importer, specifier, fromModule, moduleIds) {
   if (toModule === fromModule) {
     return { destination_class: "intra_module", imported: rel2, to_module: toModule };
   }
-  const publicIndex = path33.join(root, "src", "modules", toModule, "index.ts");
-  const isPublic = path33.resolve(resolved) === path33.resolve(publicIndex);
+  const publicIndex = path34.join(root, "src", "modules", toModule, "index.ts");
+  const isPublic = path34.resolve(resolved) === path34.resolve(publicIndex);
   return {
     destination_class: isPublic ? "module_public_index" : "module_private",
     imported: rel2,
@@ -18009,8 +18209,8 @@ function mh07ScanDependencyGraph(root, extract = extractNeutralImportEdges, modu
   if (mh07IsDomainsShape(root)) {
     return mh07ScanDomainDependencyGraph(root, extract);
   }
-  const modulesDir = path33.join(root, "src", "modules");
-  const moduleIds = moduleIdsOverride ?? (fs27.existsSync(modulesDir) ? fs27.readdirSync(modulesDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort() : []);
+  const modulesDir = path34.join(root, "src", "modules");
+  const moduleIds = moduleIdsOverride ?? (fs28.existsSync(modulesDir) ? fs28.readdirSync(modulesDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort() : []);
   const files = walkTypeScript(modulesDir, MH07_GRAPH_SCOPE.excluded_directories);
   const nodes = [];
   const edges = [];
@@ -18021,7 +18221,7 @@ function mh07ScanDependencyGraph(root, extract = extractNeutralImportEdges, modu
     nodes.push(rel2);
     const fromModule = moduleIdOfPath(root, file, moduleIds);
     if (fromModule === null) continue;
-    const extracted = extract(fs27.readFileSync(file, "utf8"));
+    const extracted = extract(fs28.readFileSync(file, "utf8"));
     for (const edge of extracted) {
       if (edge.kind === "unresolved") {
         const detail = edge.detail ?? "";
@@ -18095,13 +18295,13 @@ function branchesOnHostId(source, tokenize3) {
 }
 function consumerSourceReaches(consumerRoot, pluginRoot, extract) {
   const found = [];
-  const pluginSource = path33.resolve(path33.join(pluginRoot, "src"));
+  const pluginSource = path34.resolve(path34.join(pluginRoot, "src"));
   for (const file of walkTypeScript(consumerRoot, MH07_CONSUMER_SCAN_EXCLUDED_DIRECTORIES)) {
-    for (const edge of extract(fs27.readFileSync(file, "utf8"))) {
+    for (const edge of extract(fs28.readFileSync(file, "utf8"))) {
       if (edge.kind !== "resolved" || edge.specifier === void 0) continue;
       if (edge.specifier.indexOf(".") !== 0) continue;
-      const resolved = path33.resolve(resolveRelative(file, edge.specifier));
-      if (resolved === pluginSource || resolved.indexOf(`${pluginSource}${path33.sep}`) === 0) {
+      const resolved = path34.resolve(resolveRelative(file, edge.specifier));
+      if (resolved === pluginSource || resolved.indexOf(`${pluginSource}${path34.sep}`) === 0) {
         found.push({
           consumer_file: relativeTo(consumerRoot, file),
           specifier: edge.specifier,
@@ -18233,7 +18433,7 @@ function evaluateNeutralModuleBoundaries(request) {
   const consumerNames = Object.keys(consumerRoots).sort();
   for (const name of consumerNames) {
     const consumerRoot = consumerRoots[name];
-    if (typeof consumerRoot !== "string" || !fs27.existsSync(consumerRoot)) {
+    if (typeof consumerRoot !== "string" || !fs28.existsSync(consumerRoot)) {
       return refuse4(
         MH07_REFUSAL_CONTROLS.evidenceBindingMissing,
         "scenario_evidence_incomplete",
@@ -18270,7 +18470,7 @@ function evaluateNeutralModuleBoundaries(request) {
   for (const name of MH07_REQUIRED_CONSUMERS) {
     const suppliedRoot = consumerRoots[name];
     const requiredRoot = requiredConsumerRoots[name];
-    const bound = typeof suppliedRoot === "string" && path33.resolve(suppliedRoot) === path33.resolve(requiredRoot);
+    const bound = typeof suppliedRoot === "string" && path34.resolve(suppliedRoot) === path34.resolve(requiredRoot);
     if (!bound) {
       return refuse4(
         MH07_REFUSAL_CONTROLS.evidenceBindingMissing,
@@ -18291,7 +18491,7 @@ function evaluateNeutralModuleBoundaries(request) {
     let position = null;
     let positionError = null;
     try {
-      position = fs27.lstatSync(suppliedRoot);
+      position = fs28.lstatSync(suppliedRoot);
     } catch (error) {
       positionError = String(error?.message ?? error);
     }
@@ -18337,10 +18537,10 @@ function evaluateNeutralModuleBoundaries(request) {
   const serviceModules = modulesWithRole("service");
   const nonAdapterModules = classifiedUnits.filter((unit) => roleOf(unit) !== "host_adapter");
   const sourcesOf = (unit) => (domainsShape ? walkTypeScript(
-    path33.join(root, unit),
+    path34.join(root, unit),
     MH07_DOMAIN_GRAPH_SCOPE.excluded_directories,
     MH07_DOMAIN_GRAPH_SCOPE.excluded_file_suffixes
-  ) : walkTypeScript(path33.join(root, "src", "modules", unit), MH07_GRAPH_SCOPE.excluded_directories)).map((file) => ({ path: relativeTo(root, file), source: fs27.readFileSync(file, "utf8") }));
+  ) : walkTypeScript(path34.join(root, "src", "modules", unit), MH07_GRAPH_SCOPE.excluded_directories)).map((file) => ({ path: relativeTo(root, file), source: fs28.readFileSync(file, "utf8") }));
   const declaredSymbolFindings = (moduleIdsToScan, symbols) => {
     const findings = [];
     for (const moduleId of moduleIdsToScan) {
@@ -18371,12 +18571,12 @@ function evaluateNeutralModuleBoundaries(request) {
   const coreFiles = [];
   const missingCoreMembers = [];
   for (const member of NEUTRAL_CORE_MEMBERS) {
-    const memberPath = coreHostModule === null ? null : domainsShape ? path33.join(root, coreHostModule, member) : path33.join(root, "src", "modules", coreHostModule, "workflows", member);
-    if (memberPath === null || !fs27.existsSync(memberPath)) {
+    const memberPath = coreHostModule === null ? null : domainsShape ? path34.join(root, coreHostModule, member) : path34.join(root, "src", "modules", coreHostModule, "workflows", member);
+    if (memberPath === null || !fs28.existsSync(memberPath)) {
       missingCoreMembers.push(member);
       continue;
     }
-    coreFiles.push({ path: member, source: fs27.readFileSync(memberPath, "utf8") });
+    coreFiles.push({ path: member, source: fs28.readFileSync(memberPath, "utf8") });
   }
   const coreVerdict = missingCoreMembers.length > 0 ? null : port.evaluateNeutralCoreBoundary(coreFiles);
   const unclassifiedEdges = graph.edges.filter(
@@ -18420,9 +18620,9 @@ function evaluateNeutralModuleBoundaries(request) {
     )
   );
   const contractConsumersWithoutVersion = contractConsumerServices.filter((unit) => {
-    const indexPath = domainsShape ? path33.join(root, unit, "index.ts") : path33.join(root, "src", "modules", unit, "index.ts");
-    if (!fs27.existsSync(indexPath)) return true;
-    return fs27.readFileSync(indexPath, "utf8").indexOf(MODULE_PUBLIC_API_DECLARATION) === -1;
+    const indexPath = domainsShape ? path34.join(root, unit, "index.ts") : path34.join(root, "src", "modules", unit, "index.ts");
+    if (!fs28.existsSync(indexPath)) return true;
+    return fs28.readFileSync(indexPath, "utf8").indexOf(MODULE_PUBLIC_API_DECLARATION) === -1;
   });
   const consumerReaches = [];
   for (const name of consumerNames) {
@@ -18561,11 +18761,11 @@ function evaluateNeutralModuleBoundaries(request) {
     packet: neutralFreeze(packetRecord)
   };
 }
-var fs27, path33, MH07_OWNER_KEY, MH07_SCENARIO_IDS, MH07_PACKET_SCHEMA, MH07_EVIDENCE_PROFILE_ID, MH07_EVALUATOR_VERSION, MH07_SCANNER_VERSION, MH07_GRAPH_SCOPE, MH07_ROLES, MH07_DESTINATION_CLASSES, MH07_EDGE_FORMS, MH07_LIFECYCLE_DECISION_SYMBOLS, MH07_NATIVE_EVENT_BINDING_SYMBOLS, MH07_NODE_BUILTINS, MH07_HOST_FACING_ROOTS, MODULE_PUBLIC_API_DECLARATION, MH07_HOST_FACING_CONTRACT_ROLES, MH07_MODULE_ROLES, MH07_DOMAIN_TREE_ROLES, MH07_DOMAIN_GRAPH_SCOPE, MH07_MODULE_FOLD_INDEX, MH07_WAVE_OWNER, MH07_SCENARIOS, MH07_EXPECTED_OUTCOME, MH07_PRODUCTION_SCANNER, MH07_REFUSAL_CONTROLS, MH07_REQUIRED_CONSUMERS, MH07_CONSUMER_SCAN_EXCLUDED_DIRECTORIES, DECLARATION_HEADS;
+var fs28, path34, MH07_OWNER_KEY, MH07_SCENARIO_IDS, MH07_PACKET_SCHEMA, MH07_EVIDENCE_PROFILE_ID, MH07_EVALUATOR_VERSION, MH07_SCANNER_VERSION, MH07_GRAPH_SCOPE, MH07_ROLES, MH07_DESTINATION_CLASSES, MH07_EDGE_FORMS, MH07_LIFECYCLE_DECISION_SYMBOLS, MH07_NATIVE_EVENT_BINDING_SYMBOLS, MH07_NODE_BUILTINS, MH07_HOST_FACING_ROOTS, MODULE_PUBLIC_API_DECLARATION, MH07_HOST_FACING_CONTRACT_ROLES, MH07_MODULE_ROLES, MH07_DOMAIN_TREE_ROLES, MH07_DOMAIN_GRAPH_SCOPE, MH07_MODULE_FOLD_INDEX, MH07_WAVE_OWNER, MH07_SCENARIOS, MH07_EXPECTED_OUTCOME, MH07_PRODUCTION_SCANNER, MH07_REFUSAL_CONTROLS, MH07_REQUIRED_CONSUMERS, MH07_CONSUMER_SCAN_EXCLUDED_DIRECTORIES, DECLARATION_HEADS;
 var init_module_boundary_conformance_evaluator = __esm({
   "src/domains/lifecycle/module-boundary-conformance-evaluator.ts"() {
-    fs27 = __toESM(require("node:fs"));
-    path33 = __toESM(require("node:path"));
+    fs28 = __toESM(require("node:fs"));
+    path34 = __toESM(require("node:path"));
     init_kernel();
     init_neutral_conformance_assembly();
     init_neutral_conformance_core();
@@ -18960,10 +19160,10 @@ function assertBoundedComparisonComplexity(text, label) {
 function parseCanonicalComparisonText(text, label) {
   assertBoundedComparisonComplexity(text, label);
   let parsed;
-  let canonical;
+  let canonical2;
   try {
     parsed = JSON.parse(text);
-    canonical = neutralCanonicalJson(parsed);
+    canonical2 = neutralCanonicalJson(parsed);
   } catch (error) {
     if (error instanceof RangeError) {
       throw new Error(
@@ -18972,7 +19172,7 @@ function parseCanonicalComparisonText(text, label) {
     }
     throw new Error(`compareMigrationOutcomes: ${label} is not valid JSON (malformed comparison text refused)`);
   }
-  if (canonical !== text) {
+  if (canonical2 !== text) {
     throw new Error(
       `compareMigrationOutcomes: ${label} is not canonical JSON text (must exact-round-trip through the neutral canonical encoder)`
     );
@@ -19007,55 +19207,55 @@ function compareMigrationOutcomes(legacyText, candidateText) {
   });
 }
 function journalPath(root) {
-  return path34.join(root, "journal.ndjson");
+  return path35.join(root, "journal.ndjson");
 }
 function assertNoSymlinkComponents(base, resolved) {
-  const rel2 = path34.relative(base, resolved);
+  const rel2 = path35.relative(base, resolved);
   if (rel2.length === 0) return;
   let current = base;
-  for (const segment of rel2.split(path34.sep)) {
+  for (const segment of rel2.split(path35.sep)) {
     if (segment.length === 0) continue;
-    current = path34.join(current, segment);
-    const stat = fs28.lstatSync(current);
+    current = path35.join(current, segment);
+    const stat = fs29.lstatSync(current);
     if (stat.isSymbolicLink()) {
       throw new Error(`journal root path contains a symlink component: ${current}`);
     }
   }
 }
 function nearestProjectRoot(startDir) {
-  const resolvedStart = path34.resolve(startDir);
+  const resolvedStart = path35.resolve(startDir);
   let current = resolvedStart;
   let nearestGuildDir = null;
   for (; ; ) {
-    if (fs28.existsSync(path34.join(current, ".git"))) return current;
+    if (fs29.existsSync(path35.join(current, ".git"))) return current;
     if (nearestGuildDir === null) {
-      const guildDir = path34.join(current, ".guild");
+      const guildDir = path35.join(current, ".guild");
       try {
-        if (fs28.existsSync(guildDir) && fs28.statSync(guildDir).isDirectory()) nearestGuildDir = current;
+        if (fs29.existsSync(guildDir) && fs29.statSync(guildDir).isDirectory()) nearestGuildDir = current;
       } catch {
       }
     }
-    const parent = path34.dirname(current);
+    const parent = path35.dirname(current);
     if (parent === current) return nearestGuildDir ?? resolvedStart;
     current = parent;
   }
 }
 function trustedDurableBases() {
   const bases = /* @__PURE__ */ new Set();
-  bases.add(path34.resolve(nearestProjectRoot(process.cwd()), ".guild", "runs"));
+  bases.add(path35.resolve(nearestProjectRoot(process.cwd()), ".guild", "runs"));
   const guildCwd = process.env["GUILD_CWD"];
   if (typeof guildCwd === "string" && guildCwd.length > 0) {
-    bases.add(path34.resolve(nearestProjectRoot(guildCwd), ".guild", "runs"));
+    bases.add(path35.resolve(nearestProjectRoot(guildCwd), ".guild", "runs"));
   }
   return [...bases];
 }
 function matchTrustedBase(resolved) {
-  const tmpBase = path34.resolve(os2.tmpdir());
-  if (resolved === tmpBase || resolved.indexOf(tmpBase + path34.sep) === 0) {
+  const tmpBase = path35.resolve(os2.tmpdir());
+  if (resolved === tmpBase || resolved.indexOf(tmpBase + path35.sep) === 0) {
     return tmpBase;
   }
   for (const durableBase of trustedDurableBases()) {
-    if (resolved === durableBase || resolved.indexOf(durableBase + path34.sep) === 0) {
+    if (resolved === durableBase || resolved.indexOf(durableBase + path35.sep) === 0) {
       return durableBase;
     }
   }
@@ -19065,10 +19265,10 @@ function openMigrationJournal(root) {
   if (typeof root !== "string" || root.length === 0) {
     throw new Error("openMigrationJournal: journal root must be a non-empty string");
   }
-  const resolved = path34.resolve(root);
+  const resolved = path35.resolve(root);
   let stat;
   try {
-    stat = fs28.lstatSync(resolved);
+    stat = fs29.lstatSync(resolved);
   } catch {
     throw new Error(
       `openMigrationJournal: journal root does not exist or escapes the controller-owned containment boundary (traversal refused): ${resolved}`
@@ -19097,7 +19297,7 @@ function computeRecordHash(input) {
 function readMigrationJournal(handle) {
   authenticateJournalHandle(handle);
   const root = handle.root;
-  const entries = fs28.existsSync(root) ? fs28.readdirSync(root) : [];
+  const entries = fs29.existsSync(root) ? fs29.readdirSync(root) : [];
   const partialWrites = entries.filter((name) => /^journal\.ndjson\.\d+\.tmp$/.test(name));
   if (partialWrites.length > 0) {
     throw new Error(
@@ -19107,7 +19307,7 @@ function readMigrationJournal(handle) {
   const file = journalPath(root);
   let fileStat;
   try {
-    fileStat = fs28.lstatSync(file);
+    fileStat = fs29.lstatSync(file);
   } catch {
     return neutralFreeze([]);
   }
@@ -19117,13 +19317,13 @@ function readMigrationJournal(handle) {
   if (!fileStat.isFile()) {
     throw new Error(`readMigrationJournal: journal.ndjson is not a regular file: ${file}`);
   }
-  const noFollow = typeof fs28.constants.O_NOFOLLOW === "number" ? fs28.constants.O_NOFOLLOW : 0;
-  const fd = fs28.openSync(file, fs28.constants.O_RDONLY | noFollow);
+  const noFollow = typeof fs29.constants.O_NOFOLLOW === "number" ? fs29.constants.O_NOFOLLOW : 0;
+  const fd = fs29.openSync(file, fs29.constants.O_RDONLY | noFollow);
   let content;
   try {
-    content = fs28.readFileSync(fd, "utf8");
+    content = fs29.readFileSync(fd, "utf8");
   } finally {
-    fs28.closeSync(fd);
+    fs29.closeSync(fd);
   }
   const lines = content.split("\n").filter((line) => line.length > 0);
   const records = lines.map((line) => JSON.parse(line));
@@ -19167,7 +19367,7 @@ function appendMigrationDecision(handle, input) {
   const lockPath2 = `${file}.lock`;
   let lockFd;
   try {
-    lockFd = fs28.openSync(lockPath2, "wx");
+    lockFd = fs29.openSync(lockPath2, "wx");
   } catch {
     throw new Error(
       `appendMigrationDecision: concurrent journal write in progress on this root, refusing (fail-closed): ${handle.root}`
@@ -19207,14 +19407,14 @@ function appendMigrationDecision(handle, input) {
       record_hash: hash
     });
     const tmp = `${file}.${sequence}.tmp`;
-    const priorContent = fs28.existsSync(file) ? fs28.readFileSync(file, "utf8") : "";
-    fs28.writeFileSync(tmp, `${priorContent}${JSON.stringify(record)}
+    const priorContent = fs29.existsSync(file) ? fs29.readFileSync(file, "utf8") : "";
+    fs29.writeFileSync(tmp, `${priorContent}${JSON.stringify(record)}
 `);
-    fs28.renameSync(tmp, file);
+    fs29.renameSync(tmp, file);
     return record;
   } finally {
-    fs28.closeSync(lockFd);
-    fs28.rmSync(lockPath2, { force: true });
+    fs29.closeSync(lockFd);
+    fs29.rmSync(lockPath2, { force: true });
   }
 }
 function sameScope(a, b) {
@@ -19445,13 +19645,13 @@ function evaluateHostCutoverConformance(request) {
     packet
   };
 }
-var crypto10, fs28, os2, path34, MH08_OWNER_KEY, MH08_SCENARIO_IDS, MH08_DECISION_SCHEMA, MH08_DIVERGENCE_REASON_CODE, MH08_MODES, MH08_SCOPE_FIELDS, AUTHENTICATED_JOURNAL_HANDLES, MH08_PROVENANCE_ALLOWLIST, MH08_DEFAULT_SCOPE, MH08_COMPARISON_MAX_TEXT_LENGTH, MH08_COMPARISON_MAX_DEPTH, MH08_EVIDENCE_INCOMPLETE_REASON_CODE, MH08_RESULT_MISMATCH_REASON_CODE;
+var crypto10, fs29, os2, path35, MH08_OWNER_KEY, MH08_SCENARIO_IDS, MH08_DECISION_SCHEMA, MH08_DIVERGENCE_REASON_CODE, MH08_MODES, MH08_SCOPE_FIELDS, AUTHENTICATED_JOURNAL_HANDLES, MH08_PROVENANCE_ALLOWLIST, MH08_DEFAULT_SCOPE, MH08_COMPARISON_MAX_TEXT_LENGTH, MH08_COMPARISON_MAX_DEPTH, MH08_EVIDENCE_INCOMPLETE_REASON_CODE, MH08_RESULT_MISMATCH_REASON_CODE;
 var init_host_cutover_controller = __esm({
   "src/domains/lifecycle/host-cutover-controller.ts"() {
     crypto10 = __toESM(require("node:crypto"));
-    fs28 = __toESM(require("node:fs"));
+    fs29 = __toESM(require("node:fs"));
     os2 = __toESM(require("node:os"));
-    path34 = __toESM(require("node:path"));
+    path35 = __toESM(require("node:path"));
     init_neutral_conformance_assembly();
     init_neutral_conformance_core();
     init_neutral_runtime_contracts();
@@ -19525,12 +19725,12 @@ function safeArrayLength(value) {
 function isObjectLike(value) {
   return typeof value === "object" && value !== null && !safeIsArray(value);
 }
-function issue(path92, code, message) {
-  return { path: path92, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
+function issue(path97, code, message) {
+  return { path: path97, code, message: `${DOCUMENTS_ERROR_NAMESPACE}: ${message}` };
 }
-function pushIssue(issues, path92, code, message) {
+function pushIssue(issues, path97, code, message) {
   if (issues.length >= MAX_ISSUES) return;
-  issues.push(issue(path92, code, message));
+  issues.push(issue(path97, code, message));
 }
 function sortIssues(issues) {
   return [...issues].sort(
@@ -19541,15 +19741,15 @@ function canonicalDocumentJson(value) {
   const errors = [];
   const active = /* @__PURE__ */ new Set();
   let nodes = 0;
-  const walk = (node, path92, depth) => {
+  const walk = (node, path97, depth) => {
     if (errors.length >= MAX_ISSUES) return null;
     if (depth > MAX_CANONICAL_DEPTH) {
-      pushIssue(errors, path92, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
+      pushIssue(errors, path97, "depth_exceeded", `value nests deeper than ${MAX_CANONICAL_DEPTH}`);
       return null;
     }
     nodes += 1;
     if (nodes > MAX_CANONICAL_NODES) {
-      pushIssue(errors, path92, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
+      pushIssue(errors, path97, "size_exceeded", `value exceeds ${MAX_CANONICAL_NODES} nodes`);
       return null;
     }
     if (node === null) return "null";
@@ -19558,7 +19758,7 @@ function canonicalDocumentJson(value) {
     if (kind === "string") {
       const text = node;
       if (text.length > MAX_STRING_LENGTH) {
-        pushIssue(errors, path92, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
+        pushIssue(errors, path97, "string_too_long", `string exceeds ${MAX_STRING_LENGTH} characters`);
         return null;
       }
       return JSON.stringify(text);
@@ -19566,17 +19766,17 @@ function canonicalDocumentJson(value) {
     if (kind === "number") {
       const num2 = node;
       if (!Number.isFinite(num2)) {
-        pushIssue(errors, path92, "non_finite_number", "numbers must be finite");
+        pushIssue(errors, path97, "non_finite_number", "numbers must be finite");
         return null;
       }
       return Object.is(num2, -0) ? "0" : String(num2);
     }
     if (kind !== "object") {
-      pushIssue(errors, path92, "unsupported_type", `${kind} has no canonical JSON form`);
+      pushIssue(errors, path97, "unsupported_type", `${kind} has no canonical JSON form`);
       return null;
     }
     if (active.has(node)) {
-      pushIssue(errors, path92, "cycle_detected", "value contains a cycle");
+      pushIssue(errors, path97, "cycle_detected", "value contains a cycle");
       return null;
     }
     active.add(node);
@@ -19584,26 +19784,26 @@ function canonicalDocumentJson(value) {
       if (safeIsArray(node)) {
         const length = safeArrayLength(node);
         if (length.ok === false) {
-          pushIssue(errors, path92, "array_length_unreadable", length.reason);
+          pushIssue(errors, path97, "array_length_unreadable", length.reason);
           return null;
         }
         if (length.length > MAX_ARRAY_ITEMS) {
-          pushIssue(errors, path92, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
+          pushIssue(errors, path97, "array_too_long", `array exceeds ${MAX_ARRAY_ITEMS} items`);
           return null;
         }
         const parts2 = [];
         for (let index = 0; index < length.length; index += 1) {
           const key = String(index);
           if (!safeHasOwn(node, key)) {
-            pushIssue(errors, `${path92}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
+            pushIssue(errors, `${path97}[${index}]`, "sparse_array_hole", "array holes have no canonical JSON form");
             return null;
           }
           const read = safeGet(node, key);
           if (read.ok === false) {
-            pushIssue(errors, `${path92}[${index}]`, "property_read_threw", read.reason);
+            pushIssue(errors, `${path97}[${index}]`, "property_read_threw", read.reason);
             return null;
           }
-          const encoded = walk(read.value, `${path92}[${index}]`, depth + 1);
+          const encoded = walk(read.value, `${path97}[${index}]`, depth + 1);
           if (encoded === null) return null;
           parts2.push(encoded);
         }
@@ -19611,11 +19811,11 @@ function canonicalDocumentJson(value) {
       }
       const keys = safeOwnKeys(node);
       if (keys.ok === false) {
-        pushIssue(errors, path92, "own_keys_threw", keys.reason);
+        pushIssue(errors, path97, "own_keys_threw", keys.reason);
         return null;
       }
       if (keys.keys.length > MAX_OBJECT_KEYS) {
-        pushIssue(errors, path92, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
+        pushIssue(errors, path97, "object_too_wide", `object exceeds ${MAX_OBJECT_KEYS} keys`);
         return null;
       }
       const sorted = [...keys.keys].sort();
@@ -19623,14 +19823,14 @@ function canonicalDocumentJson(value) {
       for (const key of sorted) {
         const read = safeGet(node, key);
         if (read.ok === false) {
-          pushIssue(errors, `${path92}.${key}`, "property_read_threw", read.reason);
+          pushIssue(errors, `${path97}.${key}`, "property_read_threw", read.reason);
           return null;
         }
         if (read.value === void 0) {
-          pushIssue(errors, `${path92}.${key}`, "undefined_value", "undefined has no canonical JSON form");
+          pushIssue(errors, `${path97}.${key}`, "undefined_value", "undefined has no canonical JSON form");
           return null;
         }
-        const encoded = walk(read.value, `${path92}.${key}`, depth + 1);
+        const encoded = walk(read.value, `${path97}.${key}`, depth + 1);
         if (encoded === null) return null;
         parts.push(`${JSON.stringify(key)}:${encoded}`);
       }
@@ -19639,28 +19839,28 @@ function canonicalDocumentJson(value) {
       active.delete(node);
     }
   };
-  let json;
+  let json2;
   try {
-    json = walk(value, "$", 0);
+    json2 = walk(value, "$", 0);
   } catch {
     pushIssue(errors, "$", "internal_guard", "canonical JSON walk was interrupted");
-    json = null;
+    json2 = null;
   }
-  if (json === null) {
+  if (json2 === null) {
     if (errors.length === 0) {
       pushIssue(errors, "$", "internal_guard", "canonical JSON walk produced no output");
     }
     return { ok: false, errors: sortIssues(errors) };
   }
-  return { ok: true, json };
+  return { ok: true, json: json2 };
 }
 function sha256Of(text) {
-  return `sha256:${(0, import_node_crypto2.createHash)("sha256").update(text, "utf8").digest("hex")}`;
+  return `sha256:${(0, import_node_crypto3.createHash)("sha256").update(text, "utf8").digest("hex")}`;
 }
 function hashCanonicalValue(value) {
-  const canonical = canonicalDocumentJson(value);
-  if (canonical.ok === false) return { ok: false, errors: canonical.errors };
-  return { ok: true, hash: sha256Of(canonical.json) };
+  const canonical2 = canonicalDocumentJson(value);
+  if (canonical2.ok === false) return { ok: false, errors: canonical2.errors };
+  return { ok: true, hash: sha256Of(canonical2.json) };
 }
 function deepFreeze2(value) {
   if (typeof value !== "object" || value === null) return value;
@@ -19671,10 +19871,10 @@ function deepFreeze2(value) {
   }
   return value;
 }
-var import_node_crypto2, DOCUMENTS_ERROR_NAMESPACE, MAX_CANONICAL_DEPTH, MAX_CANONICAL_NODES, MAX_ARRAY_ITEMS, MAX_OBJECT_KEYS, MAX_STRING_LENGTH, MAX_ISSUES, DOCUMENT_HASH_PATTERN;
+var import_node_crypto3, DOCUMENTS_ERROR_NAMESPACE, MAX_CANONICAL_DEPTH, MAX_CANONICAL_NODES, MAX_ARRAY_ITEMS, MAX_OBJECT_KEYS, MAX_STRING_LENGTH, MAX_ISSUES, DOCUMENT_HASH_PATTERN;
 var init_document_safe = __esm({
   "src/domains/lifecycle/document-safe.ts"() {
-    import_node_crypto2 = require("node:crypto");
+    import_node_crypto3 = require("node:crypto");
     DOCUMENTS_ERROR_NAMESPACE = "guild.documents";
     MAX_CANONICAL_DEPTH = 32;
     MAX_CANONICAL_NODES = 2e4;
@@ -19687,38 +19887,38 @@ var init_document_safe = __esm({
 });
 
 // src/domains/lifecycle/document-records.ts
-function readShape(issues, value, path92, allowed) {
+function readShape(issues, value, path97, allowed) {
   if (value === null || typeof value !== "object") {
-    pushIssue(issues, path92, "not_an_object", `${path92} must be an object`);
+    pushIssue(issues, path97, "not_an_object", `${path97} must be an object`);
     return false;
   }
   if (safeIsArray(value)) {
-    pushIssue(issues, path92, "not_an_object", `${path92} must be an object, not an array`);
+    pushIssue(issues, path97, "not_an_object", `${path97} must be an object, not an array`);
     return false;
   }
   const keys = safeOwnKeys(value);
   if (keys.ok === false) {
-    pushIssue(issues, path92, "own_keys_threw", `${path92}: ${keys.reason}`);
+    pushIssue(issues, path97, "own_keys_threw", `${path97}: ${keys.reason}`);
     return false;
   }
   const allowedSet = new Set(allowed);
   let ok = true;
   for (const key of [...keys.keys].sort()) {
     if (!allowedSet.has(key)) {
-      pushIssue(issues, `${path92}.${key}`, "unexpected_key", `${path92}.${key} is not part of the closed schema`);
+      pushIssue(issues, `${path97}.${key}`, "unexpected_key", `${path97}.${key} is not part of the closed schema`);
       ok = false;
     }
   }
   for (const key of allowed) {
     if (!safeHasOwn(value, key)) {
-      pushIssue(issues, `${path92}.${key}`, "missing_field", `${path92}.${key} is required`);
+      pushIssue(issues, `${path97}.${key}`, "missing_field", `${path97}.${key} is required`);
       ok = false;
     }
   }
   return ok;
 }
-function readString(issues, parent, path92, key, options = {}) {
-  const fieldPath = `${path92}.${key}`;
+function readString(issues, parent, path97, key, options = {}) {
+  const fieldPath = `${path97}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -19753,8 +19953,8 @@ function readString(issues, parent, path92, key, options = {}) {
   }
   return value;
 }
-function readArray(issues, parent, path92, key, options = {}) {
-  const fieldPath = `${path92}.${key}`;
+function readArray(issues, parent, path97, key, options = {}) {
+  const fieldPath = `${path97}.${key}`;
   const read = safeGet(parent, key);
   if (read.ok === false) {
     pushIssue(issues, fieldPath, "property_read_threw", `${fieldPath}: property read threw`);
@@ -19797,10 +19997,10 @@ function readArray(issues, parent, path92, key, options = {}) {
   }
   return ok ? items : null;
 }
-function readStringArray(issues, parent, path92, key, options = {}) {
-  const items = readArray(issues, parent, path92, key, options);
+function readStringArray(issues, parent, path97, key, options = {}) {
+  const items = readArray(issues, parent, path97, key, options);
   if (items === null) return null;
-  const fieldPath = `${path92}.${key}`;
+  const fieldPath = `${path97}.${key}`;
   const out = [];
   let ok = true;
   for (let index = 0; index < items.length; index += 1) {
@@ -19826,10 +20026,10 @@ function readStringArray(issues, parent, path92, key, options = {}) {
   }
   return ok ? out : null;
 }
-function readItemArray(issues, parent, path92, key, options, readItem) {
-  const items = readArray(issues, parent, path92, key, options);
+function readItemArray(issues, parent, path97, key, options, readItem) {
+  const items = readArray(issues, parent, path97, key, options);
   if (items === null) return null;
-  const fieldPath = `${path92}.${key}`;
+  const fieldPath = `${path97}.${key}`;
   const out = [];
   const firstIndexById = /* @__PURE__ */ new Map();
   let ok = true;
@@ -19856,13 +20056,13 @@ function readItemArray(issues, parent, path92, key, options, readItem) {
   }
   return ok ? out : null;
 }
-function readProvenance(issues, parent, path92) {
+function readProvenance(issues, parent, path97) {
   const read = safeGet(parent, "provenance");
   if (read.ok === false) {
-    pushIssue(issues, `${path92}.provenance`, "property_read_threw", `${path92}.provenance: property read threw`);
+    pushIssue(issues, `${path97}.provenance`, "property_read_threw", `${path97}.provenance: property read threw`);
     return null;
   }
-  const provenancePath2 = `${path92}.provenance`;
+  const provenancePath2 = `${path97}.provenance`;
   if (!readShape(issues, read.value, provenancePath2, PROVENANCE_KEYS)) return null;
   const source = read.value;
   const authorId = readString(issues, source, provenancePath2, "author_id", {
@@ -19903,10 +20103,10 @@ function readProvenance(issues, parent, path92) {
     source: provenanceSource
   };
 }
-function readPlanBody(issues, body, path92) {
-  if (!readShape(issues, body, path92, ["objectives", "steps"])) return null;
-  const objectives = readStringArray(issues, body, path92, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
-  const steps = readItemArray(issues, body, path92, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
+function readPlanBody(issues, body, path97) {
+  if (!readShape(issues, body, path97, ["objectives", "steps"])) return null;
+  const objectives = readStringArray(issues, body, path97, "objectives", { min: 1, max: 64, itemMaxLength: 500 });
+  const steps = readItemArray(issues, body, path97, "steps", { min: 1, max: 256 }, (itemIssues, item, itemPath) => {
     if (!readShape(itemIssues, item, itemPath, ["id", "title", "status"])) return null;
     const id = readString(itemIssues, item, itemPath, "id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
     const title = readString(itemIssues, item, itemPath, "title", { maxLength: 500 });
@@ -19917,12 +20117,12 @@ function readPlanBody(issues, body, path92) {
   if (objectives === null || steps === null) return null;
   return { objectives, steps };
 }
-function readSpecBody(issues, body, path92) {
-  if (!readShape(issues, body, path92, ["requirements"])) return null;
+function readSpecBody(issues, body, path97) {
+  if (!readShape(issues, body, path97, ["requirements"])) return null;
   const requirements = readItemArray(
     issues,
     body,
-    path92,
+    path97,
     "requirements",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -19939,22 +20139,22 @@ function readSpecBody(issues, body, path92) {
   if (requirements === null) return null;
   return { requirements };
 }
-function readHandoffBody(issues, body, path92) {
-  if (!readShape(issues, body, path92, ["task_id", "status", "artifacts", "issues"])) return null;
-  const taskId = readString(issues, body, path92, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
-  const status = readString(issues, body, path92, "status", { enumOf: HANDOFF_STATUSES });
-  const artifacts = readStringArray(issues, body, path92, "artifacts", { max: 256, itemMaxLength: 1e3 });
-  const handoffIssues = readStringArray(issues, body, path92, "issues", { max: 256, itemMaxLength: 1e3 });
+function readHandoffBody(issues, body, path97) {
+  if (!readShape(issues, body, path97, ["task_id", "status", "artifacts", "issues"])) return null;
+  const taskId = readString(issues, body, path97, "task_id", { pattern: DOCUMENT_ITEM_ID_PATTERN });
+  const status = readString(issues, body, path97, "status", { enumOf: HANDOFF_STATUSES });
+  const artifacts = readStringArray(issues, body, path97, "artifacts", { max: 256, itemMaxLength: 1e3 });
+  const handoffIssues = readStringArray(issues, body, path97, "issues", { max: 256, itemMaxLength: 1e3 });
   if (taskId === null || status === null || artifacts === null || handoffIssues === null) return null;
   return { task_id: taskId, status, artifacts, issues: handoffIssues };
 }
-function readReviewBody(issues, body, path92) {
-  if (!readShape(issues, body, path92, ["verdict", "findings"])) return null;
-  const verdict = readString(issues, body, path92, "verdict", { enumOf: REVIEW_VERDICTS });
+function readReviewBody(issues, body, path97) {
+  if (!readShape(issues, body, path97, ["verdict", "findings"])) return null;
+  const verdict = readString(issues, body, path97, "verdict", { enumOf: REVIEW_VERDICTS });
   const findings = readItemArray(
     issues,
     body,
-    path92,
+    path97,
     "findings",
     { max: 256 },
     (itemIssues, item, itemPath) => {
@@ -19969,13 +20169,13 @@ function readReviewBody(issues, body, path92) {
   if (verdict === null || findings === null) return null;
   return { verdict, findings };
 }
-function readVerifyBody(issues, body, path92) {
-  if (!readShape(issues, body, path92, ["outcome", "checks"])) return null;
-  const outcome = readString(issues, body, path92, "outcome", { enumOf: VERIFY_OUTCOMES });
+function readVerifyBody(issues, body, path97) {
+  if (!readShape(issues, body, path97, ["outcome", "checks"])) return null;
+  const outcome = readString(issues, body, path97, "outcome", { enumOf: VERIFY_OUTCOMES });
   const checks = readItemArray(
     issues,
     body,
-    path92,
+    path97,
     "checks",
     { min: 1, max: 256 },
     (itemIssues, item, itemPath) => {
@@ -20510,10 +20710,10 @@ function requiredRecord(errors, parent, key) {
   }
   return value;
 }
-function requiredString(errors, parent, path92, key) {
+function requiredString(errors, parent, path97, key) {
   const value = parent[key];
   if (typeof value !== "string" || value.length === 0) {
-    pushIssue(errors, `${path92}.${key}`, "missing_field", `${key} must be a non-empty string`);
+    pushIssue(errors, `${path97}.${key}`, "missing_field", `${key} must be a non-empty string`);
     return null;
   }
   return value;
@@ -20526,23 +20726,23 @@ function requiredArray(errors, parent, key) {
   }
   return value;
 }
-function validateStringArray(errors, values, path92) {
+function validateStringArray(errors, values, path97) {
   if (values === null) return;
   values.forEach((value, index) => {
     if (typeof value !== "string" || value.length === 0) {
-      pushIssue(errors, `${path92}[${index}]`, "wrong_type", `${path92} entries must be non-empty strings`);
+      pushIssue(errors, `${path97}[${index}]`, "wrong_type", `${path97} entries must be non-empty strings`);
     }
   });
 }
-function canonicalReceiptInstant(errors, value, path92) {
+function canonicalReceiptInstant(errors, value, path97) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) {
-    pushIssue(errors, path92, "invalid_timestamp", `${path92} must be an ISO-8601 timestamp`);
+    pushIssue(errors, path97, "invalid_timestamp", `${path97} must be an ISO-8601 timestamp`);
     return null;
   }
   const parsed = Date.parse(value);
   const expectedCanonical = value.includes(".") ? value : value.replace(/Z$/, ".000Z");
   if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== expectedCanonical) {
-    pushIssue(errors, path92, "invalid_timestamp", `${path92} must name a real UTC calendar instant`);
+    pushIssue(errors, path97, "invalid_timestamp", `${path97} must name a real UTC calendar instant`);
     return null;
   }
   return expectedCanonical;
@@ -20841,7 +21041,7 @@ function receiptWrapperText(content) {
   return scanReceiptFences(content).wrapper;
 }
 function topLevelFencedBlocks(content, info) {
-  return scanReceiptFences(content).blocks.filter((b) => b.info === info).map(({ body, plain }) => ({ body, plain }));
+  return scanReceiptFences(content).blocks.filter((b) => b.info === info).map(({ body, plain: plain2 }) => ({ body, plain: plain2 }));
 }
 function missingReceiptSections(input) {
   if (typeof input !== "string") return [...CANONICAL_RECEIPT_SECTIONS];
@@ -20933,7 +21133,7 @@ var init_document_receipts = __esm({
 function readJsonObject(p) {
   let raw;
   try {
-    raw = fs29.readFileSync(p, "utf8");
+    raw = fs30.readFileSync(p, "utf8");
   } catch {
     return null;
   }
@@ -20947,7 +21147,7 @@ function readJsonObject(p) {
   return null;
 }
 function readRunStateLanes(runDir3) {
-  const obj = readJsonObject(path35.join(runDir3, "run-state.json"));
+  const obj = readJsonObject(path36.join(runDir3, "run-state.json"));
   if (obj === null) return null;
   const lanes = obj["lanes"];
   if (typeof lanes !== "object" || lanes === null || Array.isArray(lanes)) {
@@ -20957,17 +21157,17 @@ function readRunStateLanes(runDir3) {
 }
 function readHeartbeatAges(runDir3, now = Date.now()) {
   const ages = /* @__PURE__ */ new Map();
-  const dir = path35.join(runDir3, "in-progress");
+  const dir = path36.join(runDir3, "in-progress");
   let names;
   try {
-    names = fs29.readdirSync(dir);
+    names = fs30.readdirSync(dir);
   } catch {
     return ages;
   }
   for (const name of names) {
     if (!name.endsWith(".json")) continue;
     const stem = name.slice(0, -".json".length);
-    const filePath = path35.join(dir, name);
+    const filePath = path36.join(dir, name);
     const obj = readJsonObject(filePath);
     const ts = obj !== null && typeof obj["timestamp"] === "string" ? Date.parse(obj["timestamp"]) : NaN;
     if (!Number.isNaN(ts)) {
@@ -20975,7 +21175,7 @@ function readHeartbeatAges(runDir3, now = Date.now()) {
       continue;
     }
     try {
-      const stat = fs29.statSync(filePath);
+      const stat = fs30.statSync(filePath);
       ages.set(stem, Math.max(0, now - stat.mtimeMs));
     } catch {
     }
@@ -20983,10 +21183,10 @@ function readHeartbeatAges(runDir3, now = Date.now()) {
   return ages;
 }
 function readReceiptEvidence(runDir3) {
-  const dir = path35.join(runDir3, "handoffs");
+  const dir = path36.join(runDir3, "handoffs");
   let names;
   try {
-    names = fs29.readdirSync(dir);
+    names = fs30.readdirSync(dir);
   } catch {
     return [];
   }
@@ -20994,11 +21194,11 @@ function readReceiptEvidence(runDir3) {
   for (const name of names.sort()) {
     if (!name.endsWith(".md")) continue;
     const stem = name.slice(0, -".md".length);
-    const filePath = path35.join(dir, name);
+    const filePath = path36.join(dir, name);
     let text = null;
     try {
-      if (fs29.statSync(filePath).size <= MAX_RECEIPT_BYTES) {
-        text = fs29.readFileSync(filePath, "utf8");
+      if (fs30.statSync(filePath).size <= MAX_RECEIPT_BYTES) {
+        text = fs30.readFileSync(filePath, "utf8");
       }
     } catch {
       text = null;
@@ -21144,11 +21344,11 @@ ${USAGE}
   process.stdout.write(JSON.stringify(report, null, 2) + "\n");
   return 0;
 }
-var fs29, path35, DEFAULT_HEARTBEAT_TIMEOUT_MS, TERMINAL_STATUSES3, MAX_RECEIPT_BYTES, NO_RECEIPT, USAGE;
+var fs30, path36, DEFAULT_HEARTBEAT_TIMEOUT_MS, TERMINAL_STATUSES3, MAX_RECEIPT_BYTES, NO_RECEIPT, USAGE;
 var init_check_lane_liveness = __esm({
   "src/domains/lifecycle/check-lane-liveness.ts"() {
-    fs29 = __toESM(require("node:fs"));
-    path35 = __toESM(require("node:path"));
+    fs30 = __toESM(require("node:fs"));
+    path36 = __toESM(require("node:path"));
     init_document_receipts();
     DEFAULT_HEARTBEAT_TIMEOUT_MS = 10 * 60 * 1e3;
     TERMINAL_STATUSES3 = /* @__PURE__ */ new Set(["done", "skipped", "dead", "failed"]);
@@ -21257,11 +21457,11 @@ function exclusionSentinelPath(runDir3) {
   return (0, import_node_path.join)(runDir3, "logs", ".lock.exclusion");
 }
 function initStableLockfile(runDir3) {
-  const path92 = stableLockPath(runDir3);
-  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path92), { recursive: true });
-  if ((0, import_node_fs.existsSync)(path92)) return;
+  const path97 = stableLockPath(runDir3);
+  (0, import_node_fs.mkdirSync)((0, import_node_path.dirname)(path97), { recursive: true });
+  if ((0, import_node_fs.existsSync)(path97)) return;
   try {
-    const fd = (0, import_node_fs.openSync)(path92, "wx");
+    const fd = (0, import_node_fs.openSync)(path97, "wx");
     (0, import_node_fs.closeSync)(fd);
   } catch (err) {
     if (err?.code !== "EEXIST") throw err;
@@ -21423,7 +21623,7 @@ function pruneUndefined(obj) {
   return out;
 }
 function payloadSidecarPath(runDir3, evtId) {
-  return path36.join(runDir3, "logs", "payloads", `${evtId}.json`);
+  return path37.join(runDir3, "logs", "payloads", `${evtId}.json`);
 }
 function payloadRef(evtId) {
   return `logs/payloads/${evtId}.json`;
@@ -21459,18 +21659,18 @@ function writePayloadSidecar(runDir3, evtId, input, redact2) {
       serialized = JSON.stringify(record);
     }
     const file = payloadSidecarPath(runDir3, evtId);
-    fs30.mkdirSync(path36.dirname(file), { recursive: true });
-    fs30.writeFileSync(file, serialized + "\n", "utf8");
+    fs31.mkdirSync(path37.dirname(file), { recursive: true });
+    fs31.writeFileSync(file, serialized + "\n", "utf8");
     return payloadRef(evtId);
   } catch {
     return void 0;
   }
 }
-var fs30, path36, crypto11, TRACE_EVENT_SCHEMA, TRACE_PAYLOAD_SCHEMA, SIDECAR_MAX_BYTES2, LLM_CALL_EVENTS;
+var fs31, path37, crypto11, TRACE_EVENT_SCHEMA, TRACE_PAYLOAD_SCHEMA, SIDECAR_MAX_BYTES2, LLM_CALL_EVENTS;
 var init_trace_v2 = __esm({
   "src/domains/lifecycle/trace-v2.ts"() {
-    fs30 = __toESM(require("fs"));
-    path36 = __toESM(require("path"));
+    fs31 = __toESM(require("fs"));
+    path37 = __toESM(require("path"));
     crypto11 = __toESM(require("crypto"));
     TRACE_EVENT_SCHEMA = "guild.trace_event.v2";
     TRACE_PAYLOAD_SCHEMA = "guild.trace_payload.v1";
@@ -21514,14 +21714,14 @@ function summaryPath(runDir3) {
 function appendEvent(runDir3, event, opts = {}) {
   validateEventIds(event);
   const cap = opts.fieldCap;
-  const redacted = redactEventFields(event, cap);
-  const withV2 = opts.traceV2 !== void 0 ? { ...redacted, ...pruneUndefined(opts.traceV2) } : redacted;
+  const redacted2 = redactEventFields(event, cap);
+  const withV2 = opts.traceV2 !== void 0 ? { ...redacted2, ...pruneUndefined(opts.traceV2) } : redacted2;
   const line = JSON.stringify(withV2) + "\n";
   if (opts.forceFallback || process.platform === "win32") {
     const laneId2 = opts.laneId ?? "global";
-    const path92 = laneFallbackPath(runDir3, laneId2);
-    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path92), { recursive: true });
-    const fd = (0, import_node_fs2.openSync)(path92, "a");
+    const path97 = laneFallbackPath(runDir3, laneId2);
+    (0, import_node_fs2.mkdirSync)((0, import_node_path2.dirname)(path97), { recursive: true });
+    const fd = (0, import_node_fs2.openSync)(path97, "a");
     try {
       (0, import_node_fs2.writeSync)(fd, line);
     } finally {
@@ -21619,9 +21819,9 @@ function listArchives(runDir3) {
   entries.sort((a, b) => a.n - b.n);
   return entries.map((e) => e.path);
 }
-async function readArchive(path92) {
+async function readArchive(path97) {
   const chunks = [];
-  const src = (0, import_node_fs2.createReadStream)(path92);
+  const src = (0, import_node_fs2.createReadStream)(path97);
   const gunzip = (0, import_node_zlib.createGunzip)();
   src.pipe(gunzip);
   for await (const chunk of gunzip) {
@@ -21702,13 +21902,13 @@ function appendParsedLines(text, source, out, opts) {
   }
 }
 function lockfileInode(runDir3) {
-  const path92 = lockPath(runDir3);
-  if (!(0, import_node_fs2.existsSync)(path92)) return null;
-  return (0, import_node_fs2.statSync)(path92).ino;
+  const path97 = lockPath(runDir3);
+  if (!(0, import_node_fs2.existsSync)(path97)) return null;
+  return (0, import_node_fs2.statSync)(path97).ino;
 }
 function lockfileSize(runDir3) {
-  const path92 = lockPath(runDir3);
-  return (0, import_node_fs2.statSync)(path92).size;
+  const path97 = lockPath(runDir3);
+  return (0, import_node_fs2.statSync)(path97).size;
 }
 var import_node_fs2, import_node_path2, import_node_zlib, ROTATION_THRESHOLD_BYTES;
 var init_event_log_writer = __esm({
@@ -21766,14 +21966,14 @@ function sidecarKeyMatches(entry, key) {
 }
 function appendSidecarPre(runDir3, entry, opts = {}) {
   validateSidecarEntry(entry);
-  const path92 = sidecarPath(runDir3);
-  (0, import_node_fs3.mkdirSync)((0, import_node_path3.dirname)(path92), { recursive: true });
-  const redacted = redactEventFields(entry, opts.fieldCap);
-  const line = JSON.stringify(redacted) + "\n";
+  const path97 = sidecarPath(runDir3);
+  (0, import_node_fs3.mkdirSync)((0, import_node_path3.dirname)(path97), { recursive: true });
+  const redacted2 = redactEventFields(entry, opts.fieldCap);
+  const line = JSON.stringify(redacted2) + "\n";
   const maxBytes = opts.maxBytes ?? SIDECAR_MAX_BYTES3;
   const appendCapped = () => {
-    const existing = (0, import_node_fs3.existsSync)(path92) ? (0, import_node_fs3.readFileSync)(path92, "utf8") : "";
-    (0, import_node_fs3.writeFileSync)(path92, capSidecarText(existing, line, maxBytes));
+    const existing = (0, import_node_fs3.existsSync)(path97) ? (0, import_node_fs3.readFileSync)(path97, "utf8") : "";
+    (0, import_node_fs3.writeFileSync)(path97, capSidecarText(existing, line, maxBytes));
   };
   if (process.platform === "win32") {
     appendCapped();
@@ -21784,8 +21984,8 @@ function appendSidecarPre(runDir3, entry, opts = {}) {
   });
 }
 function consumeSidecarPre(runDir3, matchOrCallId) {
-  const path92 = sidecarPath(runDir3);
-  if (!(0, import_node_fs3.existsSync)(path92)) return null;
+  const path97 = sidecarPath(runDir3);
+  if (!(0, import_node_fs3.existsSync)(path97)) return null;
   const apply = (text) => {
     const lines = text.split("\n");
     const parsedLines = [];
@@ -21826,15 +22026,15 @@ function consumeSidecarPre(runDir3, matchOrCallId) {
     return { match, rest };
   };
   if (process.platform === "win32") {
-    const text = (0, import_node_fs3.readFileSync)(path92, "utf8");
+    const text = (0, import_node_fs3.readFileSync)(path97, "utf8");
     const { match, rest } = apply(text);
-    (0, import_node_fs3.writeFileSync)(path92, rest);
+    (0, import_node_fs3.writeFileSync)(path97, rest);
     return match;
   }
   return withStableLock(runDir3, () => {
-    const text = (0, import_node_fs3.readFileSync)(path92, "utf8");
+    const text = (0, import_node_fs3.readFileSync)(path97, "utf8");
     const { match, rest } = apply(text);
-    (0, import_node_fs3.writeFileSync)(path92, rest);
+    (0, import_node_fs3.writeFileSync)(path97, rest);
     return match;
   });
 }
@@ -21891,8 +22091,8 @@ function sweepOrphanedSidecar(runDir3, nowMs = Date.now(), maxAgeMs = 5 * 60 * 1
   return sweepOrphanedSidecarFull(runDir3, nowMs, maxAgeMs).orphans;
 }
 function sweepOrphanedSidecarFull(runDir3, nowMs = Date.now(), maxAgeMs = 5 * 60 * 1e3) {
-  const path92 = sidecarPath(runDir3);
-  if (!(0, import_node_fs3.existsSync)(path92)) return { orphans: [], events: [] };
+  const path97 = sidecarPath(runDir3);
+  if (!(0, import_node_fs3.existsSync)(path97)) return { orphans: [], events: [] };
   const apply = (text) => {
     const lines = text.split("\n");
     const orphans2 = [];
@@ -21916,15 +22116,15 @@ function sweepOrphanedSidecarFull(runDir3, nowMs = Date.now(), maxAgeMs = 5 * 60
   };
   let orphans;
   if (process.platform === "win32") {
-    const text = (0, import_node_fs3.readFileSync)(path92, "utf8");
+    const text = (0, import_node_fs3.readFileSync)(path97, "utf8");
     const out = apply(text);
-    (0, import_node_fs3.writeFileSync)(path92, out.rest);
+    (0, import_node_fs3.writeFileSync)(path97, out.rest);
     orphans = out.orphans;
   } else {
     orphans = withStableLock(runDir3, () => {
-      const text = (0, import_node_fs3.readFileSync)(path92, "utf8");
+      const text = (0, import_node_fs3.readFileSync)(path97, "utf8");
       const out = apply(text);
-      (0, import_node_fs3.writeFileSync)(path92, out.rest);
+      (0, import_node_fs3.writeFileSync)(path97, out.rest);
       return out.orphans;
     });
   }
@@ -21974,9 +22174,9 @@ function parseArgs3(argv) {
   return result2;
 }
 function readSentinel(cwd) {
-  const sentinelPath2 = path37.join(durableGuildDir(cwd), "runs", "current-run-id");
+  const sentinelPath2 = path38.join(durableGuildDir(cwd), "runs", "current-run-id");
   try {
-    const value = fs31.readFileSync(sentinelPath2, "utf8").trim();
+    const value = fs32.readFileSync(sentinelPath2, "utf8").trim();
     return value.length > 0 ? value : void 0;
   } catch {
     return void 0;
@@ -22067,7 +22267,7 @@ function runEmitLoopEventCli() {
     };
   }
   try {
-    appendEvent(path37.join(durableGuildDir(cwd), "runs", runId), event);
+    appendEvent(path38.join(durableGuildDir(cwd), "runs", runId), event);
   } catch (err) {
     process.stderr.write(
       `[emit-loop-event] ERROR: could not write event: ${err instanceof Error ? err.message : String(err)}
@@ -22075,11 +22275,11 @@ function runEmitLoopEventCli() {
     );
   }
 }
-var fs31, path37, VALID_EVENTS, VALID_LAYERS, VALID_TERMINATED;
+var fs32, path38, VALID_EVENTS, VALID_LAYERS, VALID_TERMINATED;
 var init_emit_loop_event = __esm({
   "src/domains/lifecycle/emit-loop-event.ts"() {
-    fs31 = __toESM(require("fs"));
-    path37 = __toESM(require("path"));
+    fs32 = __toESM(require("fs"));
+    path38 = __toESM(require("path"));
     init_event_log();
     init_state();
     init_state();
@@ -22100,12 +22300,12 @@ var init_emit_loop_event = __esm({
 
 // src/domains/lifecycle/run-state.ts
 function runStatePath(runDir3) {
-  return path38.join(runDir3, "run-state.json");
+  return path39.join(runDir3, "run-state.json");
 }
 function loadRunState(runDir3) {
   let raw;
   try {
-    raw = fs32.readFileSync(runStatePath(runDir3), "utf8");
+    raw = fs33.readFileSync(runStatePath(runDir3), "utf8");
   } catch {
     return null;
   }
@@ -22121,15 +22321,15 @@ function loadRunState(runDir3) {
   return parsed;
 }
 function writeRunStateAtomic(runDir3, state) {
-  fs32.mkdirSync(runDir3, { recursive: true });
+  fs33.mkdirSync(runDir3, { recursive: true });
   const finalPath = runStatePath(runDir3);
   const tmpPath = `${finalPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  fs32.writeFileSync(tmpPath, JSON.stringify(state, null, 2) + "\n", "utf8");
+  fs33.writeFileSync(tmpPath, JSON.stringify(state, null, 2) + "\n", "utf8");
   try {
-    fs32.renameSync(tmpPath, finalPath);
+    fs33.renameSync(tmpPath, finalPath);
   } catch (err) {
     try {
-      fs32.unlinkSync(tmpPath);
+      fs33.unlinkSync(tmpPath);
     } catch {
     }
     throw err;
@@ -22190,12 +22390,12 @@ function markLaneInProgress(runDir3, init2, laneId2, opts = {}) {
   });
 }
 function laneResumeCheckpointPath(runDir3, laneId2) {
-  return path38.join(runDir3, "lanes", laneId2, "resume.json");
+  return path39.join(runDir3, "lanes", laneId2, "resume.json");
 }
 function readResumeEnabled(cwd) {
-  const settingsPath = path38.join(durableGuildDir(resolveGuildRoot(cwd)), "settings.json");
+  const settingsPath = path39.join(durableGuildDir(resolveGuildRoot(cwd)), "settings.json");
   try {
-    const raw = fs32.readFileSync(settingsPath, "utf8");
+    const raw = fs33.readFileSync(settingsPath, "utf8");
     const parsed = JSON.parse(raw);
     const defs = parsed["defaults"];
     if (typeof defs === "object" && defs !== null && !Array.isArray(defs)) {
@@ -22211,7 +22411,7 @@ function readResumeEnabled(cwd) {
 }
 function loadLaneResumeCheckpoint(runDir3, laneId2) {
   try {
-    const raw = fs32.readFileSync(laneResumeCheckpointPath(runDir3, laneId2), "utf8");
+    const raw = fs33.readFileSync(laneResumeCheckpointPath(runDir3, laneId2), "utf8");
     const parsed = JSON.parse(raw);
     if (parsed?.schema_version !== LANE_RESUME_SCHEMA_VERSION) return null;
     return parsed;
@@ -22235,16 +22435,16 @@ function markLaneDead(runDir3, init2, laneId2, signal, cwd) {
       ...typeof signal.lastError === "string" ? { last_error: signal.lastError } : {}
     };
     const checkpointPath = laneResumeCheckpointPath(runDir3, laneId2);
-    fs32.mkdirSync(path38.dirname(checkpointPath), { recursive: true });
-    fs32.writeFileSync(checkpointPath, JSON.stringify(checkpoint, null, 2) + "\n", "utf8");
+    fs33.mkdirSync(path39.dirname(checkpointPath), { recursive: true });
+    fs33.writeFileSync(checkpointPath, JSON.stringify(checkpoint, null, 2) + "\n", "utf8");
   }
   return state;
 }
-var fs32, path38, RUN_STATE_SCHEMA_VERSION, LANE_RESUME_SCHEMA_VERSION;
+var fs33, path39, RUN_STATE_SCHEMA_VERSION, LANE_RESUME_SCHEMA_VERSION;
 var init_run_state = __esm({
   "src/domains/lifecycle/run-state.ts"() {
-    fs32 = __toESM(require("node:fs"));
-    path38 = __toESM(require("node:path"));
+    fs33 = __toESM(require("node:fs"));
+    path39 = __toESM(require("node:path"));
     init_stable_lock();
     init_state();
     init_state();
@@ -22319,11 +22519,11 @@ function parseMarkLaneDeadArgs(argv) {
   };
 }
 function repoRootFromRunDir(runDir3) {
-  return path39.resolve(runDir3, "..", "..", "..");
+  return path40.resolve(runDir3, "..", "..", "..");
 }
 function markLaneDeadFromArgs(args) {
   const cwd = args.cwd ?? repoRootFromRunDir(args.runDir);
-  const runId = args.runId ?? path39.basename(args.runDir);
+  const runId = args.runId ?? path40.basename(args.runDir);
   const init2 = {
     runId,
     planSlug: args.planSlug,
@@ -22360,10 +22560,10 @@ function runMarkLaneDeadCli() {
   }
   process.exit(code);
 }
-var path39;
+var path40;
 var init_mark_lane_dead = __esm({
   "src/domains/lifecycle/mark-lane-dead.ts"() {
-    path39 = __toESM(require("path"));
+    path40 = __toESM(require("path"));
     init_run_state();
     if (require.main === module && new RegExp("[\\\\/]mark-lane-dead\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
       runMarkLaneDeadCli();
@@ -22376,7 +22576,7 @@ function readPlanOwnerTaskIds(guildRoot, slug) {
   const map = /* @__PURE__ */ new Map();
   let raw;
   try {
-    raw = fs33.readFileSync(path40.join(durableGuildDir(guildRoot), "plan", `${slug}.md`), "utf8");
+    raw = fs34.readFileSync(path41.join(durableGuildDir(guildRoot), "plan", `${slug}.md`), "utf8");
   } catch {
     return map;
   }
@@ -22426,11 +22626,11 @@ function readPlanTaskIdSet(guildRoot, slug) {
   }
   return ids;
 }
-var fs33, path40;
+var fs34, path41;
 var init_team_file = __esm({
   "src/domains/teams/team-file.ts"() {
-    fs33 = __toESM(require("fs"));
-    path40 = __toESM(require("path"));
+    fs34 = __toESM(require("fs"));
+    path41 = __toESM(require("path"));
     init_lifecycle();
     init_state();
     init_state();
@@ -24794,9 +24994,9 @@ function defaultProbeEnv(cwd) {
       return true;
     }, false),
     readStoredCodexAuth: () => safe(() => {
-      const home = process.env["CODEX_HOME"] || path41.join(os3.homedir(), ".codex");
-      const authFile = path41.join(home, "auth.json");
-      const st = fs34.statSync(authFile);
+      const home = process.env["CODEX_HOME"] || path42.join(os3.homedir(), ".codex");
+      const authFile = path42.join(home, "auth.json");
+      const st = fs35.statSync(authFile);
       return st.isFile() && st.size > 0;
     }, false),
     readEnv: (name) => process.env[name],
@@ -24815,21 +25015,21 @@ function defaultProbeEnv(cwd) {
 }
 function readCapabilityManifests(cwd) {
   const hostsDir = hostCapabilityCacheDir(cwd);
-  if (!fs34.existsSync(hostsDir)) return [];
+  if (!fs35.existsSync(hostsDir)) return [];
   const out = /* @__PURE__ */ new Set();
   const walk = (dir) => {
     let entries;
     try {
-      entries = fs34.readdirSync(dir, { withFileTypes: true });
+      entries = fs35.readdirSync(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const e of entries) {
-      const full = path41.join(dir, e.name);
+      const full = path42.join(dir, e.name);
       if (e.isDirectory()) walk(full);
       else if (e.isFile() && e.name === "capability.json") {
         try {
-          const m = JSON.parse(fs34.readFileSync(full, "utf8"));
+          const m = JSON.parse(fs35.readFileSync(full, "utf8"));
           for (const key of ["provider", "id", "family"]) {
             if (typeof m[key] === "string") out.add(m[key]);
           }
@@ -24857,13 +25057,13 @@ function shellSafe(bin) {
   }
   return bin;
 }
-var import_child_process, fs34, os3, path41, PROVIDER_REGISTRY, KNOWN_FAMILIES;
+var import_child_process, fs35, os3, path42, PROVIDER_REGISTRY, KNOWN_FAMILIES;
 var init_provider_detect = __esm({
   "src/domains/config/provider-detect.ts"() {
     import_child_process = require("child_process");
-    fs34 = __toESM(require("fs"));
+    fs35 = __toESM(require("fs"));
     os3 = __toESM(require("os"));
-    path41 = __toESM(require("path"));
+    path42 = __toESM(require("path"));
     init_host_registry();
     init_state();
     PROVIDER_REGISTRY = [
@@ -24968,10 +25168,10 @@ function makeFingerprint(raw, salt) {
 ${raw}`, "utf8").digest("hex");
 }
 function loadOrCreateFingerprintSalt(root) {
-  const p = path42.join(durableGuildDir(root), "indexes", "model-catalog", ".fp-salt");
+  const p = path43.join(durableGuildDir(root), "indexes", "model-catalog", ".fp-salt");
   if (fsReal.existsSync(p)) return fsReal.readFileSync(p, "utf8").trim();
   const salt = crypto12.randomBytes(32).toString("hex");
-  fsReal.mkdirSync(path42.dirname(p), { recursive: true });
+  fsReal.mkdirSync(path43.dirname(p), { recursive: true });
   fsReal.writeFileSync(p, salt + "\n", { encoding: "utf8", mode: 384 });
   return salt;
 }
@@ -24984,10 +25184,10 @@ function realFs() {
   };
 }
 function sessionContextPath(root, runId) {
-  return path42.join(durableGuildDir(root), "runs", runId, "session-context.json");
+  return path43.join(durableGuildDir(root), "runs", runId, "session-context.json");
 }
-function writeSessionContext(root, ctx, fs79) {
-  const f = fs79 ?? realFs();
+function writeSessionContext(root, ctx, fs84) {
+  const f = fs84 ?? realFs();
   const p = sessionContextPath(root, ctx.run_id);
   const serialized = JSON.stringify(ctx, null, 2) + "\n";
   const existing = f.readFile(p);
@@ -24997,11 +25197,11 @@ function writeSessionContext(root, ctx, fs79) {
       `session-context: refusing to overwrite the frozen record for ${ctx.run_id} \u2014 session_context is written once at run start and never mutated`
     );
   }
-  f.mkdirp(path42.dirname(p));
+  f.mkdirp(path43.dirname(p));
   f.writeFile(p, serialized);
 }
-function loadSessionContext(root, runId, fs79) {
-  const f = fs79 ?? realFs();
+function loadSessionContext(root, runId, fs84) {
+  const f = fs84 ?? realFs();
   const raw = f.readFile(sessionContextPath(root, runId));
   if (raw === null) return null;
   try {
@@ -25013,8 +25213,8 @@ function loadSessionContext(root, runId, fs79) {
     return null;
   }
 }
-function restoreSessionContext(root, runId, fs79) {
-  const ctx = loadSessionContext(root, runId, fs79);
+function restoreSessionContext(root, runId, fs84) {
+  const ctx = loadSessionContext(root, runId, fs84);
   if (ctx === null) {
     throw new Error(
       `session-context: no frozen record for ${runId} \u2014 resume restores the run's own snapshot; it never re-detects into an existing run`
@@ -25022,12 +25222,12 @@ function restoreSessionContext(root, runId, fs79) {
   }
   return ctx;
 }
-var crypto12, fsReal, path42, UNKNOWN_TARGET;
+var crypto12, fsReal, path43, UNKNOWN_TARGET;
 var init_session_context = __esm({
   "src/domains/config/session-context.ts"() {
     crypto12 = __toESM(require("crypto"));
     fsReal = __toESM(require("fs"));
-    path42 = __toESM(require("path"));
+    path43 = __toESM(require("path"));
     init_provider_detect();
     init_state();
     UNKNOWN_TARGET = {
@@ -25364,12 +25564,12 @@ function parseValue(c, ctx) {
       const value = parseValue(c, ctx);
       assignKey(table, keyPath, value, ctx, { insideClosed: true });
       skipInlineWs(c);
-      const sep21 = c.next();
-      if (sep21 === ",") {
+      const sep24 = c.next();
+      if (sep24 === ",") {
         skipInlineWs(c);
         continue;
       }
-      if (sep21 === "}") return table;
+      if (sep24 === "}") return table;
       c.fail("expected ',' or '}' in inline table");
     }
   }
@@ -25499,17 +25699,17 @@ function parseNativeToml(raw) {
   }
 }
 function claudeConfigRoots(opts) {
-  const join77 = opts.joiner ?? ((...parts) => parts.join("/"));
+  const join82 = opts.joiner ?? ((...parts) => parts.join("/"));
   const roots = [];
   const override = opts.claudeConfigDir?.trim();
   if (override) roots.push(override);
-  roots.push(join77(opts.homedir, ".claude"), join77(opts.homedir, ".config", "claude"));
+  roots.push(join82(opts.homedir, ".claude"), join82(opts.homedir, ".config", "claude"));
   return roots;
 }
 function codexConfigHome(opts) {
-  const join77 = opts.joiner ?? ((...parts) => parts.join("/"));
+  const join82 = opts.joiner ?? ((...parts) => parts.join("/"));
   const override = opts.codexHome?.trim();
-  return override ? override : join77(opts.homedir, ".codex");
+  return override ? override : join82(opts.homedir, ".codex");
 }
 function classifyEntry(alias, entry) {
   let present2 = 0;
@@ -26011,8 +26211,8 @@ function assertPolicyWrite(key, value, opts = {}) {
   const where = opts.where ?? "config set";
   const hit = findHostIdentity(key, value, opts.knownHostIds ?? []);
   if (hit) throw new PolicyRejectedError(hit.kind, key, identityMessage(hit, where));
-  const canonical = canonicalPolicyKey(key);
-  const spec = BY_KEY.get(canonical);
+  const canonical2 = canonicalPolicyKey(key);
+  const spec = BY_KEY.get(canonical2);
   if (!spec) {
     throw new PolicyRejectedError(
       "not-policy",
@@ -26022,7 +26222,7 @@ function assertPolicyWrite(key, value, opts = {}) {
   }
   const valueErr = validatePolicyValue(spec, value);
   if (valueErr) throw new PolicyRejectedError("not-policy", key, `${where}: ${valueErr}`);
-  return canonical;
+  return canonical2;
 }
 function validatePolicyValue(spec, value) {
   if (value === null) {
@@ -26254,15 +26454,15 @@ var init_policy_keys = __esm({
 
 // src/domains/config/policy-resolver.ts
 function hasDanglingLink(file) {
-  let p = path43.resolve(file);
+  let p = path44.resolve(file);
   for (; ; ) {
     let isLink = false;
     try {
-      isLink = fs35.lstatSync(p).isSymbolicLink();
+      isLink = fs36.lstatSync(p).isSymbolicLink();
     } catch {
     }
-    if (isLink && !fs35.existsSync(p)) return true;
-    const parent = path43.dirname(p);
+    if (isLink && !fs36.existsSync(p)) return true;
+    const parent = path44.dirname(p);
     if (parent === p) return false;
     p = parent;
   }
@@ -26270,7 +26470,7 @@ function hasDanglingLink(file) {
 function readJsonFile(file) {
   let raw;
   try {
-    raw = fs35.readFileSync(file, "utf8");
+    raw = fs36.readFileSync(file, "utf8");
   } catch (e) {
     if (e.code === "ENOENT" && !hasDanglingLink(file)) return null;
     throw new PolicyRejectedError("not-policy", file, `policy config: ${file} is unreadable (${e.message}).`);
@@ -26305,13 +26505,13 @@ function readLayer(file, layer, knownHostIds) {
   const out = /* @__PURE__ */ new Map();
   const aliases = [];
   for (const spec of POLICY_KEYS) {
-    const canonical = getByPath2(parsed, spec.key);
-    if (canonical !== void 0) {
-      const err = validatePolicyValue(spec, canonical);
+    const canonical2 = getByPath2(parsed, spec.key);
+    if (canonical2 !== void 0) {
+      const err = validatePolicyValue(spec, canonical2);
       if (err) {
         throw new PolicyRejectedError("not-policy", spec.key, `policy config (${layer}, ${file}): ${err}`);
       }
-      out.set(spec.key, canonical);
+      out.set(spec.key, canonical2);
     }
     for (const legacy of aliasesFor(spec.key)) {
       const v = getByPath2(parsed, legacy);
@@ -26349,8 +26549,8 @@ function readLayer(file, layer, knownHostIds) {
   }
   return { values: out, aliases };
 }
-function aliasesFor(canonical) {
-  return ALIASES_BY_CANONICAL.get(canonical) ?? [];
+function aliasesFor(canonical2) {
+  return ALIASES_BY_CANONICAL.get(canonical2) ?? [];
 }
 function leafPaths(obj, prefix = "", out = []) {
   if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
@@ -26423,11 +26623,11 @@ function resolvePolicy(opts) {
   }
   for (const [key, value] of Object.entries(opts.flags ?? {})) {
     if (value === void 0) continue;
-    const canonical = canonicalPolicyKey(key);
-    const spec = policyKeySpec(canonical);
+    const canonical2 = canonicalPolicyKey(key);
+    const spec = policyKeySpec(canonical2);
     if (!spec) continue;
     const err = validatePolicyValue(spec, value);
-    if (err) throw new PolicyRejectedError("not-policy", canonical, `policy config (cli): ${err}`);
+    if (err) throw new PolicyRejectedError("not-policy", canonical2, `policy config (cli): ${err}`);
     setByPath2(policy, spec.key, value);
     sources[spec.key] = "cli";
   }
@@ -26437,22 +26637,22 @@ function policyValue(resolved, dotted) {
   return getByPath2(resolved.policy, canonicalPolicyKey(dotted));
 }
 function writePolicyOverlay(overlayFile, key, value, knownHostIds = []) {
-  const canonical = assertPolicyWrite(key, value, { where: "policy overlay", knownHostIds });
+  const canonical2 = assertPolicyWrite(key, value, { where: "policy overlay", knownHostIds });
   let existing = {};
   const parsed = readJsonFile(overlayFile);
   if (parsed !== null) existing = parsed;
-  setByPath2(existing, canonical, value);
-  fs35.mkdirSync(path43.dirname(overlayFile), { recursive: true });
+  setByPath2(existing, canonical2, value);
+  fs36.mkdirSync(path44.dirname(overlayFile), { recursive: true });
   const tmp = `${overlayFile}.tmp`;
-  fs35.writeFileSync(tmp, `${JSON.stringify(existing, null, 2)}
+  fs36.writeFileSync(tmp, `${JSON.stringify(existing, null, 2)}
 `, "utf8");
-  fs35.renameSync(tmp, overlayFile);
+  fs36.renameSync(tmp, overlayFile);
 }
-var fs35, path43, POLICY_FILES, POLICY_OVERLAY_FILE, ALIASES_BY_CANONICAL;
+var fs36, path44, POLICY_FILES, POLICY_OVERLAY_FILE, ALIASES_BY_CANONICAL;
 var init_policy_resolver = __esm({
   "src/domains/config/policy-resolver.ts"() {
-    fs35 = __toESM(require("node:fs"));
-    path43 = __toESM(require("node:path"));
+    fs36 = __toESM(require("node:fs"));
+    path44 = __toESM(require("node:path"));
     init_policy_keys();
     init_state();
     POLICY_FILES = Object.freeze({
@@ -26506,11 +26706,11 @@ function isUnknownHost(d) {
   return d.host_family === UNKNOWN_HOST_FAMILY;
 }
 function sessionBindingPath(runDir3) {
-  return path44.join(runDir3, SESSION_BINDING_FILE);
+  return path45.join(runDir3, SESSION_BINDING_FILE);
 }
 function readSessionBinding(runDir3) {
   try {
-    const parsed = JSON.parse(fs36.readFileSync(sessionBindingPath(runDir3), "utf8"));
+    const parsed = JSON.parse(fs37.readFileSync(sessionBindingPath(runDir3), "utf8"));
     return parsed?.schema_version === "guild.session_binding.v1" ? parsed : null;
   } catch {
     return null;
@@ -26548,7 +26748,7 @@ function bindSession(opts) {
     prompt_compose: opts.promptCompose,
     evidence: opts.detected.evidence
   };
-  fs36.mkdirSync(opts.runDir, { recursive: true });
+  fs37.mkdirSync(opts.runDir, { recursive: true });
   const created = createExclusive(sessionBindingPath(opts.runDir), binding);
   if (created) return { ok: true, binding, created: true };
   const winner = readSessionBinding(opts.runDir);
@@ -26567,7 +26767,7 @@ function bindSession(opts) {
 }
 function createExclusive(file, binding) {
   try {
-    fs36.writeFileSync(file, `${JSON.stringify(binding, null, 2)}
+    fs37.writeFileSync(file, `${JSON.stringify(binding, null, 2)}
 `, { encoding: "utf8", flag: "wx" });
     return true;
   } catch (e) {
@@ -26580,7 +26780,7 @@ function bindSessionForRun(opts) {
   const promptCompose = opts.promptCompose ?? { dialect_id: "dialect:none", overlay_ids: [], hash: "" };
   const seam = opts.fs;
   if (seam === void 0) {
-    return bindSession({ runDir: opts.runDir, runId: opts.runId, detected, promptCompose, models: opts.models });
+    return bindSession({ runDir: opts.runDir, runId: opts.runId, detected, promptCompose, models: opts.models, now: opts.now });
   }
   const file = sessionBindingPath(opts.runDir);
   if (seam.exists(file)) {
@@ -26602,7 +26802,7 @@ function bindSessionForRun(opts) {
     run_id: opts.runId,
     host_family: detected.host_family,
     surface: detected.surface,
-    detected_at: (/* @__PURE__ */ new Date()).toISOString(),
+    detected_at: (opts.now ?? (() => /* @__PURE__ */ new Date()))().toISOString(),
     models: isUnknownHost(detected) ? {} : opts.models ?? {},
     model_family: detected.model_family,
     prompt_compose: promptCompose,
@@ -26612,11 +26812,11 @@ function bindSessionForRun(opts) {
 `);
   return { ok: true, binding, created: true };
 }
-var fs36, path44, SESSION_BINDING_FILE, UNKNOWN_HOST_FAMILY, UNKNOWN_MODEL_FAMILY, HOST_TO_MODEL_FAMILY, ENV_SIGNALS, KNOWN_FAMILIES2;
+var fs37, path45, SESSION_BINDING_FILE, UNKNOWN_HOST_FAMILY, UNKNOWN_MODEL_FAMILY, HOST_TO_MODEL_FAMILY, ENV_SIGNALS, KNOWN_FAMILIES2;
 var init_session_binding = __esm({
   "src/domains/config/session-binding.ts"() {
-    fs36 = __toESM(require("node:fs"));
-    path44 = __toESM(require("node:path"));
+    fs37 = __toESM(require("node:fs"));
+    path45 = __toESM(require("node:path"));
     SESSION_BINDING_FILE = "session-binding.json";
     UNKNOWN_HOST_FAMILY = "unknown";
     UNKNOWN_MODEL_FAMILY = "unknown";
@@ -26660,21 +26860,21 @@ function validateModels(models) {
         continue;
       }
       if (!object(rawHosts)) continue;
-      const canonical = /* @__PURE__ */ new Map();
+      const canonical2 = /* @__PURE__ */ new Map();
       for (const [host, value] of Object.entries(rawHosts)) {
         const hostId = normalizeHostId(host);
         if (!hostId) {
           rejects.push(`unknown models.tiers.${tier} host key "${host}" (closed key set)`);
           continue;
         }
-        const prior = canonical.get(hostId);
+        const prior = canonical2.get(hostId);
         if (prior && prior !== host) {
           rejects.push(
             `duplicate models.tiers.${tier} host keys "${prior}" and "${host}" both normalize to "${hostId}"`
           );
           continue;
         }
-        canonical.set(hostId, host);
+        canonical2.set(hostId, host);
         if (value === null || typeof value === "string") continue;
         if (!object(value)) {
           rejects.push(
@@ -27460,8 +27660,8 @@ var init_model_policy = __esm({
 function parseWorkspaceManifest(manifestPath) {
   let raw;
   try {
-    if (!fs37.existsSync(manifestPath)) return { status: "absent" };
-    raw = fs37.readFileSync(manifestPath, "utf8");
+    if (!fs38.existsSync(manifestPath)) return { status: "absent" };
+    raw = fs38.readFileSync(manifestPath, "utf8");
   } catch (e) {
     return { status: "parse_error", error: e instanceof Error ? e.message : String(e) };
   }
@@ -27477,10 +27677,10 @@ function parseWorkspaceManifest(manifestPath) {
   return { status: "not_workspace" };
 }
 function discoverWorkspace(startDir) {
-  let current = path45.dirname(startDir);
-  const fsRoot = path45.parse(current).root;
+  let current = path46.dirname(startDir);
+  const fsRoot = path46.parse(current).root;
   while (current !== fsRoot) {
-    const manifestPath = path45.join(durableGuildDir(current), "workspace.json");
+    const manifestPath = path46.join(durableGuildDir(current), "workspace.json");
     const parsed = parseWorkspaceManifest(manifestPath);
     if (parsed.status === "workspace") {
       return { rootDir: current, manifest: parsed.manifest };
@@ -27488,17 +27688,17 @@ function discoverWorkspace(startDir) {
     if (parsed.status === "not_workspace") {
       return null;
     }
-    const parent = path45.dirname(current);
+    const parent = path46.dirname(current);
     if (parent === current) break;
     current = parent;
   }
   return null;
 }
-var fs37, path45;
+var fs38, path46;
 var init_workspace_manifest = __esm({
   "src/domains/config/workspace-manifest.ts"() {
-    fs37 = __toESM(require("fs"));
-    path45 = __toESM(require("path"));
+    fs38 = __toESM(require("fs"));
+    path46 = __toESM(require("path"));
     init_state();
   }
 });
@@ -27638,21 +27838,21 @@ function rigorProfile(rigor) {
   }
 }
 function parseSettingsFile(filePath) {
-  if (!fs38.existsSync(filePath)) return {};
+  if (!fs39.existsSync(filePath)) return {};
   let parsed;
   try {
-    parsed = JSON.parse(fs38.readFileSync(filePath, "utf8"));
+    parsed = JSON.parse(fs39.readFileSync(filePath, "utf8"));
   } catch {
     return {};
   }
   return parseSettingsFile_fromParsed(parsed);
 }
 function parseLocalFile(guildDir) {
-  const localPath = path46.join(guildDir, "settings.local.json");
-  if (!fs38.existsSync(localPath)) return {};
+  const localPath = path47.join(guildDir, "settings.local.json");
+  if (!fs39.existsSync(localPath)) return {};
   let localParsed;
   try {
-    localParsed = JSON.parse(fs38.readFileSync(localPath, "utf8"));
+    localParsed = JSON.parse(fs39.readFileSync(localPath, "utf8"));
   } catch {
     return {};
   }
@@ -27852,21 +28052,21 @@ function isValidInitiativeId(id) {
   return true;
 }
 function isContainedIn(candidatePath2, baseDir) {
-  const resolved = path46.resolve(candidatePath2);
-  const resolvedBase = path46.resolve(baseDir);
-  return resolved.startsWith(resolvedBase + path46.sep);
+  const resolved = path47.resolve(candidatePath2);
+  const resolvedBase = path47.resolve(baseDir);
+  return resolved.startsWith(resolvedBase + path47.sep);
 }
 function initiativeIsWorkspaceScoped(workspaceRoot2, id) {
   try {
     if (!isValidInitiativeId(id)) return false;
-    const registryPath = path46.join(
+    const registryPath = path47.join(
       durableGuildDir(workspaceRoot2),
       "indexes",
       "initiatives-registry.yaml"
     );
-    if (fs38.existsSync(registryPath)) {
+    if (fs39.existsSync(registryPath)) {
       try {
-        const raw = fs38.readFileSync(registryPath, "utf8");
+        const raw = fs39.readFileSync(registryPath, "utf8");
         const parsed = yaml.load(raw);
         if (isPlainObject7(parsed)) {
           const list = parsed["initiatives"];
@@ -27884,33 +28084,33 @@ function initiativeIsWorkspaceScoped(workspaceRoot2, id) {
         return false;
       }
     }
-    const initiativesBase = path46.join(durableGuildDir(workspaceRoot2), "initiatives");
-    const activePath = path46.join(
+    const initiativesBase = path47.join(durableGuildDir(workspaceRoot2), "initiatives");
+    const activePath = path47.join(
       initiativesBase,
       "active",
       id,
       "initiative.yaml"
     );
-    const archivedPath = path46.join(
+    const archivedPath = path47.join(
       initiativesBase,
       "archived",
       id,
       "initiative.yaml"
     );
-    const activeBase = path46.join(initiativesBase, "active");
-    const archivedBase = path46.join(initiativesBase, "archived");
+    const activeBase = path47.join(initiativesBase, "active");
+    const archivedBase = path47.join(initiativesBase, "archived");
     if (!isContainedIn(activePath, activeBase) && !isContainedIn(archivedPath, archivedBase)) {
       return false;
     }
     let yamlPath = null;
-    if (isContainedIn(activePath, activeBase) && fs38.existsSync(activePath)) {
+    if (isContainedIn(activePath, activeBase) && fs39.existsSync(activePath)) {
       yamlPath = activePath;
-    } else if (isContainedIn(archivedPath, archivedBase) && fs38.existsSync(archivedPath)) {
+    } else if (isContainedIn(archivedPath, archivedBase) && fs39.existsSync(archivedPath)) {
       yamlPath = archivedPath;
     }
     if (yamlPath !== null) {
       try {
-        const raw = fs38.readFileSync(yamlPath, "utf8");
+        const raw = fs39.readFileSync(yamlPath, "utf8");
         const parsed = yaml.load(raw);
         if (isPlainObject7(parsed)) {
           const doc = parsed["initiative"];
@@ -27940,7 +28140,7 @@ function resolveSettings(opts) {
   let wsLocalSettings = {};
   if (ws !== null) {
     const wsGuildDir = durableGuildDir(ws.rootDir);
-    const rawWsSettings = parseSettingsFile(path46.join(wsGuildDir, "settings.json"));
+    const rawWsSettings = parseSettingsFile(path47.join(wsGuildDir, "settings.json"));
     const wsInheritable = {};
     for (const [k, v] of Object.entries(rawWsSettings)) {
       const key = k;
@@ -27975,7 +28175,7 @@ function resolveSettings(opts) {
     }
   }
   const projectGuildDir = durableGuildDir(cwd);
-  const projectSettings = parseSettingsFile(path46.join(projectGuildDir, "settings.json"));
+  const projectSettings = parseSettingsFile(path47.join(projectGuildDir, "settings.json"));
   stampLayer(sources, projectSettings, "project");
   let projectLocalSettings = {};
   try {
@@ -28087,11 +28287,11 @@ function resolveSettings(opts) {
   }
   return { config: assembled, sources };
 }
-var fs38, path46, yaml, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS, RESOLVER_TIER1_KEYS, VALID_CAPABILITY_KEYS;
+var fs39, path47, yaml, HOST_MODES, DEFAULTS2, VALID_TIER_HOST_KEYS, KNOWN_HOST_IDS2, VALID_LOOPS, VALID_RIGOR, VALID_REVIEW, DISPATCH_HOST_IDS, VALID_AGENT_MODE, VALID_CACHE_TTL, DEFAULTS_ALLOWED_KEYS, RESOLVER_TIER1_KEYS, VALID_CAPABILITY_KEYS;
 var init_settings_reader = __esm({
   "src/domains/config/settings-reader.ts"() {
-    fs38 = __toESM(require("fs"));
-    path46 = __toESM(require("path"));
+    fs39 = __toESM(require("fs"));
+    path47 = __toESM(require("path"));
     init_host_registry_schema();
     init_host_id_namespace();
     init_host_profiles_validate();
@@ -28187,20 +28387,20 @@ var init_settings_reader = __esm({
 function telemetryApi() {
   if (_telemetryApi !== null) return _telemetryApi;
   if (__filename.endsWith(".ts")) {
-    const sourceBarrel = path47.join(__dirname, "..", "telemetry");
+    const sourceBarrel = path48.join(__dirname, "..", "telemetry");
     _telemetryApi = require(sourceBarrel);
     return _telemetryApi;
   }
-  const sibling = path47.join(__dirname, "telemetry-api.js");
-  if (fs39.existsSync(sibling)) {
+  const sibling = path48.join(__dirname, "telemetry-api.js");
+  if (fs40.existsSync(sibling)) {
     _telemetryApi = require(sibling);
     return _telemetryApi;
   }
-  for (let dir = path47.dirname(__dirname); ; ) {
-    const isPackageRoot = fs39.existsSync(path47.join(dir, "runtime")) || fs39.existsSync(path47.join(dir, ".claude-plugin")) || fs39.existsSync(path47.join(dir, ".codex-plugin")) || fs39.existsSync(path47.join(dir, "guild.inventory.json"));
+  for (let dir = path48.dirname(__dirname); ; ) {
+    const isPackageRoot = fs40.existsSync(path48.join(dir, "runtime")) || fs40.existsSync(path48.join(dir, ".claude-plugin")) || fs40.existsSync(path48.join(dir, ".codex-plugin")) || fs40.existsSync(path48.join(dir, "guild.inventory.json"));
     if (isPackageRoot) {
-      const chunk = path47.join(dir, "runtime", "scripts", "telemetry-api.js");
-      if (!fs39.existsSync(chunk)) {
+      const chunk = path48.join(dir, "runtime", "scripts", "telemetry-api.js");
+      if (!fs40.existsSync(chunk)) {
         throw new Error(
           `guild: runtime/scripts/telemetry-api.js missing from package root ${dir} \u2014 incomplete package; run \`bun run compile\` (KTD10 fail-closed)`
         );
@@ -28208,7 +28408,7 @@ function telemetryApi() {
       _telemetryApi = require(chunk);
       return _telemetryApi;
     }
-    const parent = path47.dirname(dir);
+    const parent = path48.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -28221,7 +28421,7 @@ function resolveSettings2(opts) {
   const result2 = resolveSettings(opts);
   const { cwd, flags = {} } = opts;
   const _traceRunId = process.env["GUILD_RUN_ID"] ?? "";
-  const _traceRunDir = _traceRunId && cwd ? path47.join(durableGuildDir(cwd), "runs", _traceRunId) : void 0;
+  const _traceRunDir = _traceRunId && cwd ? path48.join(durableGuildDir(cwd), "runs", _traceRunId) : void 0;
   const _telemetry = _traceRunDir ? telemetryApi() : null;
   try {
     const assembled = result2.config;
@@ -28253,11 +28453,11 @@ function resolveSettings2(opts) {
   }
   return result2;
 }
-var fs39, path47, crypto13, _telemetryApi;
+var fs40, path48, crypto13, _telemetryApi;
 var init_settings_resolver = __esm({
   "src/domains/config/settings-resolver.ts"() {
-    fs39 = __toESM(require("fs"));
-    path47 = __toESM(require("path"));
+    fs40 = __toESM(require("fs"));
+    path48 = __toESM(require("path"));
     crypto13 = __toESM(require("crypto"));
     init_settings_reader();
     init_settings_reader();
@@ -28308,8 +28508,8 @@ function resolveTierModel(tiers, tier, host) {
   if (typeof entry === "string") return normalizeTierValue(entry);
   if (typeof entry !== "object" || Array.isArray(entry)) return { model: null };
   const hostMap = entry;
-  const canonical = normalizeHostId(host);
-  if (canonical && canonical in hostMap) return normalizeTierValue(hostMap[canonical]);
+  const canonical2 = normalizeHostId(host);
+  if (canonical2 && canonical2 in hostMap) return normalizeTierValue(hostMap[canonical2]);
   return normalizeTierValue(hostMap[host]);
 }
 var init_tier_model = __esm({
@@ -28323,10 +28523,10 @@ function modelCatalogCacheDir(workspaceRoot2) {
   return modelCatalogCacheHome(workspaceRoot2);
 }
 function legacyModelCatalogCacheDir(workspaceRoot2) {
-  return path48.join(workspaceRoot2, ...MODEL_CATALOG_CACHE_REL_SEGMENTS);
+  return path49.join(workspaceRoot2, ...MODEL_CATALOG_CACHE_REL_SEGMENTS);
 }
 function isModelCatalogCachePath(rel2) {
-  const norm = rel2.split(path48.sep).join("/");
+  const norm = rel2.split(path49.sep).join("/");
   return norm === MODEL_CATALOG_CACHE_REL || norm.startsWith(`${MODEL_CATALOG_CACHE_REL}/`);
 }
 function needsQuote(value) {
@@ -28547,12 +28747,12 @@ function purgeRunLocalEntries(store, runId) {
   }
   return purged;
 }
-var crypto14, fs40, path48, MODEL_CATALOG_SCHEMA_VERSION, DEFAULT_CATALOG_TTL_SECONDS, UNCACHED_DISCOVERY_BUDGET_MS, CACHED_INSPECTION_BUDGET_MS, MODEL_CATALOG_CACHE_DIRNAME, MODEL_CATALOG_CACHE_REL_SEGMENTS, MODEL_CATALOG_CACHE_REL, YAML_KEYWORD, YAML_NUMBER, YAML_SEXAGESIMAL, CACHE_KEY_COMPONENTS, UnknownOrgQuarantineViolation, CATALOG_CACHE_KEY_BRAND, MINTED_KEYS, NON_IDENTITY_KEYS, MemoryStore, tmpSequence, SAFE_KEY, FileStore, defaultSleep;
+var crypto14, fs41, path49, MODEL_CATALOG_SCHEMA_VERSION, DEFAULT_CATALOG_TTL_SECONDS, UNCACHED_DISCOVERY_BUDGET_MS, CACHED_INSPECTION_BUDGET_MS, MODEL_CATALOG_CACHE_DIRNAME, MODEL_CATALOG_CACHE_REL_SEGMENTS, MODEL_CATALOG_CACHE_REL, YAML_KEYWORD, YAML_NUMBER, YAML_SEXAGESIMAL, CACHE_KEY_COMPONENTS, UnknownOrgQuarantineViolation, CATALOG_CACHE_KEY_BRAND, MINTED_KEYS, NON_IDENTITY_KEYS, MemoryStore, tmpSequence, SAFE_KEY, FileStore, defaultSleep;
 var init_catalog_cache = __esm({
   "src/domains/config/catalog-cache.ts"() {
     crypto14 = __toESM(require("crypto"));
-    fs40 = __toESM(require("fs"));
-    path48 = __toESM(require("path"));
+    fs41 = __toESM(require("fs"));
+    path49 = __toESM(require("path"));
     init_state();
     MODEL_CATALOG_SCHEMA_VERSION = "guild.model_catalog.v1";
     DEFAULT_CATALOG_TTL_SECONDS = 600;
@@ -28629,7 +28829,7 @@ var init_catalog_cache = __esm({
         this.rootDir = rootDir;
         this.lockStealAgeMs = opts.lockStealAgeMs ?? 3e4;
         this.now = opts.now ?? Date.now;
-        fs40.mkdirSync(rootDir, { recursive: true });
+        fs41.mkdirSync(rootDir, { recursive: true });
       }
       rootDir;
       kind = "file";
@@ -28639,7 +28839,7 @@ var init_catalog_cache = __esm({
       held = /* @__PURE__ */ new Set();
       entryPath(key) {
         if (!SAFE_KEY.test(key)) throw new Error(`catalog-cache: unsafe cache key ${JSON.stringify(key)}`);
-        return path48.join(this.rootDir, `${key}.json`);
+        return path49.join(this.rootDir, `${key}.json`);
       }
       lockPath(key) {
         return `${this.entryPath(key)}.lock`;
@@ -28648,21 +28848,21 @@ var init_catalog_cache = __esm({
         if (this.held.has(key)) return false;
         const lock = this.lockPath(key);
         try {
-          fs40.mkdirSync(lock);
+          fs41.mkdirSync(lock);
           this.held.add(key);
           return true;
         } catch {
           try {
-            const age = this.now() - fs40.statSync(lock).mtimeMs;
+            const age = this.now() - fs41.statSync(lock).mtimeMs;
             if (age > this.lockStealAgeMs) {
-              fs40.rmdirSync(lock);
-              fs40.mkdirSync(lock);
+              fs41.rmdirSync(lock);
+              fs41.mkdirSync(lock);
               this.held.add(key);
               return true;
             }
           } catch {
             try {
-              fs40.mkdirSync(lock);
+              fs41.mkdirSync(lock);
               this.held.add(key);
               return true;
             } catch {
@@ -28676,13 +28876,13 @@ var init_catalog_cache = __esm({
         if (!this.held.has(key)) return;
         this.held.delete(key);
         try {
-          fs40.rmdirSync(this.lockPath(key));
+          fs41.rmdirSync(this.lockPath(key));
         } catch {
         }
       }
       read(key) {
         try {
-          const raw = fs40.readFileSync(this.entryPath(key), "utf8");
+          const raw = fs41.readFileSync(this.entryPath(key), "utf8");
           const parsed = JSON.parse(raw);
           if (typeof parsed?.generation !== "number") return null;
           return parsed;
@@ -28702,10 +28902,10 @@ var init_catalog_cache = __esm({
             return { published: false, reason: "stale_writer" };
           }
           tmpSequence += 1;
-          const tmp = path48.join(this.rootDir, `.tmp-${process.pid}-${tmpSequence}-${key}`);
-          fs40.writeFileSync(tmp, `${JSON.stringify(snapshot, null, 2)}
+          const tmp = path49.join(this.rootDir, `.tmp-${process.pid}-${tmpSequence}-${key}`);
+          fs41.writeFileSync(tmp, `${JSON.stringify(snapshot, null, 2)}
 `, "utf8");
-          fs40.renameSync(tmp, this.entryPath(key));
+          fs41.renameSync(tmp, this.entryPath(key));
           return { published: true };
         } finally {
           if (!alreadyHeld) this.unlock(key);
@@ -28713,19 +28913,19 @@ var init_catalog_cache = __esm({
       }
       remove(key) {
         try {
-          fs40.rmSync(this.entryPath(key), { force: true });
+          fs41.rmSync(this.entryPath(key), { force: true });
         } catch {
         }
       }
       listKeys() {
         try {
-          return fs40.readdirSync(this.rootDir).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -".json".length));
+          return fs41.readdirSync(this.rootDir).filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -".json".length));
         } catch {
           return [];
         }
       }
     };
-    defaultSleep = (ms) => new Promise((resolve44) => setTimeout(resolve44, ms));
+    defaultSleep = (ms) => new Promise((resolve45) => setTimeout(resolve45, ms));
   }
 });
 
@@ -29627,9 +29827,9 @@ function readArray3(value) {
   return out;
 }
 function toCanonicalRelPath(absPath, root) {
-  const rel2 = path49.relative(root, absPath);
-  if (rel2.length === 0 || rel2.startsWith("..") || path49.isAbsolute(rel2)) return null;
-  const posix2 = rel2.split(path49.sep).join("/");
+  const rel2 = path50.relative(root, absPath);
+  if (rel2.length === 0 || rel2.startsWith("..") || path50.isAbsolute(rel2)) return null;
+  const posix2 = rel2.split(path50.sep).join("/");
   if (posix2.length > MAX_SCALAR_LEN3 || CONTROL_CHARS4.test(posix2)) return null;
   for (const seg of posix2.split("/")) {
     if (seg.length === 0 || seg === "." || seg === "..") return null;
@@ -29681,7 +29881,7 @@ function buildCompatibilityCatalog(opts) {
     return emptyCatalog(`deprecation "${deprecation}" requires a deprecatedBy decision record`);
   }
   const deprecatedBy = deprecatedByRaw;
-  const root = path49.resolve(pluginRoot);
+  const root = path50.resolve(pluginRoot);
   const problems = [];
   const entries = [];
   const push = (kind, id, abs) => {
@@ -29692,7 +29892,7 @@ function buildCompatibilityCatalog(opts) {
     }
     let bytes;
     try {
-      const st = fs41.lstatSync(abs);
+      const st = fs42.lstatSync(abs);
       if (st.isSymbolicLink()) {
         problems.push(`${kind} "${id}": symlink, refusing to catalog`);
         return;
@@ -29701,7 +29901,7 @@ function buildCompatibilityCatalog(opts) {
         problems.push(`${kind} "${id}": not a regular file`);
         return;
       }
-      bytes = fs41.readFileSync(abs);
+      bytes = fs42.readFileSync(abs);
     } catch (err) {
       problems.push(`${kind} "${id}": unreadable (${err.message})`);
       return;
@@ -29717,9 +29917,9 @@ function buildCompatibilityCatalog(opts) {
       })
     );
   };
-  const templateDir = path49.join(root, COMPATIBILITY_ASSET_ROOTS.shipped_template);
+  const templateDir = path50.join(root, COMPATIBILITY_ASSET_ROOTS.shipped_template);
   try {
-    for (const e of fs41.readdirSync(templateDir, { withFileTypes: true }).sort(
+    for (const e of fs42.readdirSync(templateDir, { withFileTypes: true }).sort(
       (a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0
     )) {
       if (!e.isFile() || !e.name.endsWith(".md")) continue;
@@ -29728,14 +29928,14 @@ function buildCompatibilityCatalog(opts) {
         problems.push(`shipped_template "${e.name}": file stem is not a canonical id`);
         continue;
       }
-      push("shipped_template", id, path49.join(templateDir, e.name));
+      push("shipped_template", id, path50.join(templateDir, e.name));
     }
   } catch (err) {
     problems.push(`templates/specialists unreadable (${err.message})`);
   }
-  const skillDir = path49.join(root, COMPATIBILITY_ASSET_ROOTS.shipped_domain_skill);
+  const skillDir = path50.join(root, COMPATIBILITY_ASSET_ROOTS.shipped_domain_skill);
   try {
-    for (const e of fs41.readdirSync(skillDir, { withFileTypes: true }).sort(
+    for (const e of fs42.readdirSync(skillDir, { withFileTypes: true }).sort(
       (a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0
     )) {
       if (!e.isDirectory()) continue;
@@ -29743,7 +29943,7 @@ function buildCompatibilityCatalog(opts) {
         problems.push(`shipped_domain_skill "${e.name}": directory name is not a canonical id`);
         continue;
       }
-      push("shipped_domain_skill", e.name, path49.join(skillDir, e.name, "SKILL.md"));
+      push("shipped_domain_skill", e.name, path50.join(skillDir, e.name, "SKILL.md"));
     }
   } catch (err) {
     problems.push(`skills/specialists unreadable (${err.message})`);
@@ -30018,12 +30218,12 @@ function requiredAssetIdsForG5(catalog, opts) {
   ids.sort();
   return { status: "ok", ids: Object.freeze(ids) };
 }
-var crypto15, fs41, path49, import_util3, COMPATIBILITY_CATALOG_SCHEMA, SHIPPED_TEMPLATE_COUNT, SHIPPED_DOMAIN_SKILL_IDS, SHIPPED_DOMAIN_SKILL_COUNT, SHIPPED_COMPATIBILITY_ASSET_COUNT, COMPATIBILITY_ASSET_ROOTS, COMPATIBILITY_DEPRECATION_STATES, DEPRECATION_STATE_SET, MAX_SCALAR_LEN3, MAX_ID_LEN2, CONTROL_CHARS4, CANONICAL_ID2, SHA256_HEX2, BUILD_KEYS, ENTRY_KEYS, SUGGESTABLE_KEYS, EMISSION_KEYS;
+var crypto15, fs42, path50, import_util3, COMPATIBILITY_CATALOG_SCHEMA, SHIPPED_TEMPLATE_COUNT, SHIPPED_DOMAIN_SKILL_IDS, SHIPPED_DOMAIN_SKILL_COUNT, SHIPPED_COMPATIBILITY_ASSET_COUNT, COMPATIBILITY_ASSET_ROOTS, COMPATIBILITY_DEPRECATION_STATES, DEPRECATION_STATE_SET, MAX_SCALAR_LEN3, MAX_ID_LEN2, CONTROL_CHARS4, CANONICAL_ID2, SHA256_HEX2, BUILD_KEYS, ENTRY_KEYS, SUGGESTABLE_KEYS, EMISSION_KEYS;
 var init_compatibility_catalog = __esm({
   "src/domains/config/compatibility-catalog.ts"() {
     crypto15 = __toESM(require("crypto"));
-    fs41 = __toESM(require("fs"));
-    path49 = __toESM(require("path"));
+    fs42 = __toESM(require("fs"));
+    path50 = __toESM(require("path"));
     import_util3 = require("util");
     init_compatibility_usage();
     init_resolver_mode();
@@ -30283,22 +30483,22 @@ var init_independence_predicates = __esm({
 // src/domains/config/independence-record.ts
 function lifecycleApi() {
   if (__filename.endsWith(".ts")) {
-    return require(path50.join(__dirname, "..", "lifecycle"));
+    return require(path51.join(__dirname, "..", "lifecycle"));
   }
-  const sibling = path50.join(__dirname, "lifecycle-api.js");
-  if (fs42.existsSync(sibling)) return require(sibling);
-  for (let dir = path50.dirname(__dirname); ; ) {
-    const isPackageRoot = fs42.existsSync(path50.join(dir, "runtime")) || fs42.existsSync(path50.join(dir, ".claude-plugin")) || fs42.existsSync(path50.join(dir, ".codex-plugin")) || fs42.existsSync(path50.join(dir, "guild.inventory.json"));
+  const sibling = path51.join(__dirname, "lifecycle-api.js");
+  if (fs43.existsSync(sibling)) return require(sibling);
+  for (let dir = path51.dirname(__dirname); ; ) {
+    const isPackageRoot = fs43.existsSync(path51.join(dir, "runtime")) || fs43.existsSync(path51.join(dir, ".claude-plugin")) || fs43.existsSync(path51.join(dir, ".codex-plugin")) || fs43.existsSync(path51.join(dir, "guild.inventory.json"));
     if (isPackageRoot) {
-      const chunk = path50.join(dir, "runtime", "scripts", "lifecycle-api.js");
-      if (!fs42.existsSync(chunk)) {
+      const chunk = path51.join(dir, "runtime", "scripts", "lifecycle-api.js");
+      if (!fs43.existsSync(chunk)) {
         throw new Error(
           `guild: runtime/scripts/lifecycle-api.js missing from package root ${dir} \u2014 incomplete package; run \`bun run compile\` (KTD10 fail-closed)`
         );
       }
       return require(chunk);
     }
-    const parent = path50.dirname(dir);
+    const parent = path51.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -30307,13 +30507,13 @@ function lifecycleApi() {
   );
 }
 function independenceDirForRunDir(runDir3) {
-  return path50.join(runDir3, INDEPENDENCE_DIR);
+  return path51.join(runDir3, INDEPENDENCE_DIR);
 }
 function loadWrittenAdjudications(runDir3) {
   const dir = independenceDirForRunDir(runDir3);
   let names;
   try {
-    names = fs42.readdirSync(dir).filter((n) => n.endsWith(".json")).sort();
+    names = fs43.readdirSync(dir).filter((n) => n.endsWith(".json")).sort();
   } catch {
     return [];
   }
@@ -30321,7 +30521,7 @@ function loadWrittenAdjudications(runDir3) {
   for (const name of names) {
     let parsed;
     try {
-      parsed = JSON.parse(fs42.readFileSync(path50.join(dir, name), "utf8"));
+      parsed = JSON.parse(fs43.readFileSync(path51.join(dir, name), "utf8"));
     } catch {
       continue;
     }
@@ -30402,23 +30602,23 @@ function persistIndependenceAdjudication(input) {
     run_id: binding.run_id,
     binding_ref: binding.binding_ref
   });
-  const dir = path50.join(durableGuildDir(root), "runs", verified2.run_id, INDEPENDENCE_DIR);
-  fs42.mkdirSync(dir, { recursive: true });
-  const target = path50.join(dir, `${label}.json`);
+  const dir = path51.join(durableGuildDir(root), "runs", verified2.run_id, INDEPENDENCE_DIR);
+  fs43.mkdirSync(dir, { recursive: true });
+  const target = path51.join(dir, `${label}.json`);
   const tmp = `${target}.tmp-${process.pid}`;
-  fs42.writeFileSync(tmp, JSON.stringify(block, null, 2) + "\n", "utf8");
-  fs42.renameSync(tmp, target);
+  fs43.writeFileSync(tmp, JSON.stringify(block, null, 2) + "\n", "utf8");
+  fs43.renameSync(tmp, target);
   return {
     absPath: target,
-    ref: path50.join(INDEPENDENCE_DIR, `${label}.json`),
+    ref: path51.join(INDEPENDENCE_DIR, `${label}.json`),
     independence: validated.independence
   };
 }
-var fs42, path50, INDEPENDENCE_DIR, SAFE_LABEL;
+var fs43, path51, INDEPENDENCE_DIR, SAFE_LABEL;
 var init_independence_record = __esm({
   "src/domains/config/independence-record.ts"() {
-    fs42 = __toESM(require("fs"));
-    path50 = __toESM(require("path"));
+    fs43 = __toESM(require("fs"));
+    path51 = __toESM(require("path"));
     init_independence_predicates();
     init_state();
     INDEPENDENCE_DIR = "independence";
@@ -31195,7 +31395,7 @@ function resolve24(inputs) {
   return receipt2;
 }
 function persistResolutionReceipt(runDir3, receipt2) {
-  const runId = path51.basename(runDir3);
+  const runId = path52.basename(runDir3);
   if (!receipt2.run_id || receipt2.run_id !== runId) {
     throw new Error(
       `run_binding_mismatch: receipt.run_id "${String(receipt2.run_id)}" does not match the bound run dir "${runId}" \u2014 refusing to write`
@@ -31204,19 +31404,19 @@ function persistResolutionReceipt(runDir3, receipt2) {
   if (!receipt2.dispatch_id || receipt2.dispatch_id === "unbound") {
     throw new Error("run_binding_mismatch: receipt has no dispatch_id \u2014 refusing to write");
   }
-  const dir = path51.join(runDir3, "resolution");
-  fs43.mkdirSync(dir, { recursive: true });
-  const target = path51.join(dir, `${receipt2.dispatch_id}.receipt.yaml`);
+  const dir = path52.join(runDir3, "resolution");
+  fs44.mkdirSync(dir, { recursive: true });
+  const target = path52.join(dir, `${receipt2.dispatch_id}.receipt.yaml`);
   const tmp = `${target}.tmp-${process.pid}`;
-  fs43.writeFileSync(tmp, canonicalYaml(receipt2), "utf8");
-  fs43.renameSync(tmp, target);
+  fs44.writeFileSync(tmp, canonicalYaml(receipt2), "utf8");
+  fs44.renameSync(tmp, target);
   return target;
 }
-var fs43, path51, FALLBACK_FAILURE_TAXONOMY, RESOLUTION_STATUSES, liveCatalog, SUBSTITUTION_CLASSES;
+var fs44, path52, FALLBACK_FAILURE_TAXONOMY, RESOLUTION_STATUSES, liveCatalog, SUBSTITUTION_CLASSES;
 var init_model_resolver = __esm({
   "src/domains/config/model-resolver.ts"() {
-    fs43 = __toESM(require("fs"));
-    path51 = __toESM(require("path"));
+    fs44 = __toESM(require("fs"));
+    path52 = __toESM(require("path"));
     init_kernel();
     init_model_catalog();
     init_model_policy();
@@ -31490,22 +31690,22 @@ var init_model_inspect = __esm({
 // src/domains/config/inspection-persist.ts
 function lifecycleApi2() {
   if (__filename.endsWith(".ts")) {
-    return require(path52.join(__dirname, "..", "lifecycle"));
+    return require(path53.join(__dirname, "..", "lifecycle"));
   }
-  const sibling = path52.join(__dirname, "lifecycle-api.js");
-  if (fs44.existsSync(sibling)) return require(sibling);
-  for (let dir = path52.dirname(__dirname); ; ) {
-    const isPackageRoot = fs44.existsSync(path52.join(dir, "runtime")) || fs44.existsSync(path52.join(dir, ".claude-plugin")) || fs44.existsSync(path52.join(dir, ".codex-plugin")) || fs44.existsSync(path52.join(dir, "guild.inventory.json"));
+  const sibling = path53.join(__dirname, "lifecycle-api.js");
+  if (fs45.existsSync(sibling)) return require(sibling);
+  for (let dir = path53.dirname(__dirname); ; ) {
+    const isPackageRoot = fs45.existsSync(path53.join(dir, "runtime")) || fs45.existsSync(path53.join(dir, ".claude-plugin")) || fs45.existsSync(path53.join(dir, ".codex-plugin")) || fs45.existsSync(path53.join(dir, "guild.inventory.json"));
     if (isPackageRoot) {
-      const chunk = path52.join(dir, "runtime", "scripts", "lifecycle-api.js");
-      if (!fs44.existsSync(chunk)) {
+      const chunk = path53.join(dir, "runtime", "scripts", "lifecycle-api.js");
+      if (!fs45.existsSync(chunk)) {
         throw new Error(
           `guild: runtime/scripts/lifecycle-api.js missing from package root ${dir} \u2014 incomplete package; run \`bun run compile\` (KTD10 fail-closed)`
         );
       }
       return require(chunk);
     }
-    const parent = path52.dirname(dir);
+    const parent = path53.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -31533,19 +31733,19 @@ function persistInspectionReport(input) {
     run_id: binding.run_id,
     binding_ref: binding.binding_ref
   });
-  const dir = path52.join(durableGuildDir(root), "runs", verified2.run_id, "inspection");
-  fs44.mkdirSync(dir, { recursive: true });
-  const target = path52.join(dir, `${label}.json`);
+  const dir = path53.join(durableGuildDir(root), "runs", verified2.run_id, "inspection");
+  fs45.mkdirSync(dir, { recursive: true });
+  const target = path53.join(dir, `${label}.json`);
   const tmp = `${target}.tmp-${process.pid}`;
-  fs44.writeFileSync(tmp, JSON.stringify(report, null, 2) + "\n", "utf8");
-  fs44.renameSync(tmp, target);
-  return { absPath: target, ref: path52.join("inspection", `${label}.json`) };
+  fs45.writeFileSync(tmp, JSON.stringify(report, null, 2) + "\n", "utf8");
+  fs45.renameSync(tmp, target);
+  return { absPath: target, ref: path53.join("inspection", `${label}.json`) };
 }
-var fs44, path52, SAFE_LABEL2;
+var fs45, path53, SAFE_LABEL2;
 var init_inspection_persist = __esm({
   "src/domains/config/inspection-persist.ts"() {
-    fs44 = __toESM(require("fs"));
-    path52 = __toESM(require("path"));
+    fs45 = __toESM(require("fs"));
+    path53 = __toESM(require("path"));
     init_model_inspect();
     init_state();
     SAFE_LABEL2 = /^[A-Za-z0-9_.-]+$/;
@@ -31555,22 +31755,22 @@ var init_inspection_persist = __esm({
 // src/domains/config/routing-rollout.ts
 function lifecycleApi3() {
   if (__filename.endsWith(".ts")) {
-    return require(path53.join(__dirname, "..", "lifecycle"));
+    return require(path54.join(__dirname, "..", "lifecycle"));
   }
-  const sibling = path53.join(__dirname, "lifecycle-api.js");
-  if (fs45.existsSync(sibling)) return require(sibling);
-  for (let dir = path53.dirname(__dirname); ; ) {
-    const isPackageRoot = fs45.existsSync(path53.join(dir, "runtime")) || fs45.existsSync(path53.join(dir, ".claude-plugin")) || fs45.existsSync(path53.join(dir, ".codex-plugin")) || fs45.existsSync(path53.join(dir, "guild.inventory.json"));
+  const sibling = path54.join(__dirname, "lifecycle-api.js");
+  if (fs46.existsSync(sibling)) return require(sibling);
+  for (let dir = path54.dirname(__dirname); ; ) {
+    const isPackageRoot = fs46.existsSync(path54.join(dir, "runtime")) || fs46.existsSync(path54.join(dir, ".claude-plugin")) || fs46.existsSync(path54.join(dir, ".codex-plugin")) || fs46.existsSync(path54.join(dir, "guild.inventory.json"));
     if (isPackageRoot) {
-      const chunk = path53.join(dir, "runtime", "scripts", "lifecycle-api.js");
-      if (!fs45.existsSync(chunk)) {
+      const chunk = path54.join(dir, "runtime", "scripts", "lifecycle-api.js");
+      if (!fs46.existsSync(chunk)) {
         throw new Error(
           `guild: runtime/scripts/lifecycle-api.js missing from package root ${dir} \u2014 incomplete package; run \`bun run compile\` (KTD10 fail-closed)`
         );
       }
       return require(chunk);
     }
-    const parent = path53.dirname(dir);
+    const parent = path54.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -31614,12 +31814,12 @@ function readRoutingFlags(settings) {
   return { flags, rejects };
 }
 function resolveInRunDir(runDir3, ref) {
-  const abs = path53.resolve(runDir3, ref);
-  return abs === runDir3 || abs.startsWith(runDir3 + path53.sep) ? abs : null;
+  const abs = path54.resolve(runDir3, ref);
+  return abs === runDir3 || abs.startsWith(runDir3 + path54.sep) ? abs : null;
 }
 function loadJson(absPath) {
   try {
-    const parsed = JSON.parse(fs45.readFileSync(absPath, "utf8"));
+    const parsed = JSON.parse(fs46.readFileSync(absPath, "utf8"));
     return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed : null;
   } catch {
     return null;
@@ -31631,7 +31831,7 @@ function loadVerifiedM0Reports(evidence) {
   }
   const binding = lifecycleApi3().readRunBindingRecord({ root: evidence.root, run_id: evidence.run_id });
   if (binding.status !== "ok") return [];
-  const runDir3 = path53.resolve(durableGuildDir(evidence.root), "runs", evidence.run_id);
+  const runDir3 = path54.resolve(durableGuildDir(evidence.root), "runs", evidence.run_id);
   const refs = Array.isArray(evidence.m0?.inspection_report_refs) ? evidence.m0.inspection_report_refs : [];
   const out = [];
   for (const ref of refs) {
@@ -31664,7 +31864,7 @@ function gateM2(flags, evidence) {
       reason: `run binding ${binding.status} for ${evidence.run_id}: evidence in an unbound run tree proves nothing \u2014 v2 routing stays off`
     };
   }
-  const runDir3 = path53.resolve(durableGuildDir(evidence.root), "runs", evidence.run_id);
+  const runDir3 = path54.resolve(durableGuildDir(evidence.root), "runs", evidence.run_id);
   const m0Refs = Array.isArray(evidence.m0?.inspection_report_refs) ? evidence.m0.inspection_report_refs : [];
   const m0Valid = loadVerifiedM0Reports(evidence).length;
   if (m0Valid === 0) {
@@ -31703,11 +31903,11 @@ function gateM2(flags, evidence) {
 function rollbackV2Routing(flags) {
   return { ...flags, "model_routing.shadow": "off", "model_routing.enabled": "off" };
 }
-var fs45, path53, ROUTING_FLAG_KEYS, ROUTING_FLAG_DEFAULTS, FLAG_GROUPS;
+var fs46, path54, ROUTING_FLAG_KEYS, ROUTING_FLAG_DEFAULTS, FLAG_GROUPS;
 var init_routing_rollout = __esm({
   "src/domains/config/routing-rollout.ts"() {
-    fs45 = __toESM(require("fs"));
-    path53 = __toESM(require("path"));
+    fs46 = __toESM(require("fs"));
+    path54 = __toESM(require("path"));
     init_kernel();
     init_state();
     ROUTING_FLAG_KEYS = Object.freeze([
@@ -31761,12 +31961,12 @@ function parseModelsArgs(argv) {
   }
   let cwd = process.cwd();
   let runId = null;
-  let json = false;
+  let json2 = false;
   for (let i = 1; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--json") json = true;
-    else if (a === "--cwd" && argv[i + 1] !== void 0) cwd = path54.resolve(argv[++i]);
-    else if (a.startsWith("--cwd=")) cwd = path54.resolve(a.slice("--cwd=".length));
+    if (a === "--json") json2 = true;
+    else if (a === "--cwd" && argv[i + 1] !== void 0) cwd = path55.resolve(argv[++i]);
+    else if (a.startsWith("--cwd=")) cwd = path55.resolve(a.slice("--cwd=".length));
     else if (a === "--run-id" && argv[i + 1] !== void 0) runId = argv[++i];
     else if (a.startsWith("--run-id=")) runId = a.slice("--run-id=".length);
     else return { error: "unknown argument: " + a };
@@ -31774,23 +31974,23 @@ function parseModelsArgs(argv) {
   if (runId !== null && !/^[A-Za-z0-9._-]+$/.test(runId)) {
     return { error: "unsafe --run-id value: " + runId };
   }
-  return { verb: "inspect", cwd, runId, json };
+  return { verb: "inspect", cwd, runId, json: json2 };
 }
 function readJson2(p) {
   try {
-    if (!fs46.existsSync(p)) return null;
-    return JSON.parse(fs46.readFileSync(p, "utf8"));
+    if (!fs47.existsSync(p)) return null;
+    return JSON.parse(fs47.readFileSync(p, "utf8"));
   } catch {
     return null;
   }
 }
 function loadPersistedInspections(root, runId) {
-  const dir = path54.join(durableGuildDir(root), "runs", runId, "inspection");
-  if (!fs46.existsSync(dir)) return [];
+  const dir = path55.join(durableGuildDir(root), "runs", runId, "inspection");
+  if (!fs47.existsSync(dir)) return [];
   const out = [];
-  for (const name of fs46.readdirSync(dir).sort()) {
+  for (const name of fs47.readdirSync(dir).sort()) {
     if (!name.endsWith(".json")) continue;
-    const p = path54.join(dir, name);
+    const p = path55.join(dir, name);
     const parsed = readJson2(p);
     const label = name.replace(/\.json$/, "");
     if (parsed === null || typeof parsed !== "object") {
@@ -31864,7 +32064,7 @@ function loadVerifiedCatalogSnapshot(root, runId, sessionContext) {
       note: "catalog cache identity could not be constructed: " + err.message
     };
   }
-  const entry = readJson2(path54.join(modelCatalogCacheDir(root), key.hash + ".json"));
+  const entry = readJson2(path55.join(modelCatalogCacheDir(root), key.hash + ".json"));
   if (entry === null) {
     return { snapshot: null, note: "no catalog cache entry for this run's target identity" };
   }
@@ -31892,7 +32092,7 @@ function loadVerifiedSources(root, runId) {
   return { session_context, catalog_snapshot: snapshot, notes };
 }
 function loadRoutingFlags(root) {
-  const p = path54.join(durableGuildDir(root), "settings.json");
+  const p = path55.join(durableGuildDir(root), "settings.json");
   const settings = readJson2(p);
   if (settings === null) {
     const { flags: flags2, rejects: rejects2 } = readRoutingFlags(null);
@@ -32171,7 +32371,7 @@ function runModelsCommand(argv, deps = {}) {
     d.stderr(parsed.error + "\n" + MODELS_COMMAND_USAGE + "\n");
     return 1;
   }
-  const { cwd, runId: explicitRunId, json } = parsed;
+  const { cwd, runId: explicitRunId, json: json2 } = parsed;
   let runId = explicitRunId;
   let runIdSource = "--run-id (explicit)";
   if (runId === null) {
@@ -32254,7 +32454,7 @@ function runModelsCommand(argv, deps = {}) {
     display_rejections,
     session_binding: readBindingView(cwd, runId)
   };
-  const rendered = json ? JSON.stringify(view, null, 2) + "\n" : renderInspectView(view);
+  const rendered = json2 ? JSON.stringify(view, null, 2) + "\n" : renderInspectView(view);
   const emit = safeEmit(rendered);
   d.stdout(emit.out);
   if (display_rejections.length > 0) {
@@ -32271,12 +32471,12 @@ function runModelsCommand(argv, deps = {}) {
   }
   return 0;
 }
-var crypto16, fs46, path54, MODELS_COMMAND_USAGE, DISPLAY_TOKEN_RE, REVERSIBLE_IDENTITY_RE, CONTROL_CHAR_RE, FREE_TEXT_MAX;
+var crypto16, fs47, path55, MODELS_COMMAND_USAGE, DISPLAY_TOKEN_RE, REVERSIBLE_IDENTITY_RE, CONTROL_CHAR_RE, FREE_TEXT_MAX;
 var init_models_command = __esm({
   "src/domains/config/models-command.ts"() {
     crypto16 = __toESM(require("crypto"));
-    fs46 = __toESM(require("fs"));
-    path54 = __toESM(require("path"));
+    fs47 = __toESM(require("fs"));
+    path55 = __toESM(require("path"));
     init_session_context();
     init_security();
     init_catalog_cache();
@@ -32444,11 +32644,11 @@ function resolveWithLegacy(input) {
   return { source: "baseline_default", route: baselineRoute, conflicts, guidance };
 }
 function migrationPreview(input) {
-  const settingsPath = path55.join(durableGuildDir(input.root), "settings.json");
+  const settingsPath = path56.join(durableGuildDir(input.root), "settings.json");
   let parsed = {};
-  if (fs47.existsSync(settingsPath)) {
+  if (fs48.existsSync(settingsPath)) {
     try {
-      const raw = JSON.parse(fs47.readFileSync(settingsPath, "utf8"));
+      const raw = JSON.parse(fs48.readFileSync(settingsPath, "utf8"));
       if (raw && typeof raw === "object" && !Array.isArray(raw)) {
         parsed = raw;
       }
@@ -32493,11 +32693,11 @@ function migrationPreview(input) {
     writes_performed: false
   };
 }
-var fs47, path55, LEGACY_FILLABLE_PURPOSES;
+var fs48, path56, LEGACY_FILLABLE_PURPOSES;
 var init_policy_migration = __esm({
   "src/domains/config/policy-migration.ts"() {
-    fs47 = __toESM(require("fs"));
-    path55 = __toESM(require("path"));
+    fs48 = __toESM(require("fs"));
+    path56 = __toESM(require("path"));
     init_model_policy();
     init_state();
     LEGACY_FILLABLE_PURPOSES = Object.freeze(["general", "implementation"]);
@@ -33217,17 +33417,17 @@ function composePrompt(base, extensions, host_family, model_family) {
   return { text, dialect_id, overlay_ids: parts.map((p) => p.id), hash, skipped };
 }
 function loadPromptExtensions(guildDir, model_family) {
-  const dir = path56.join(guildDir, PROMPTS_DIRNAME);
+  const dir = path57.join(guildDir, PROMPTS_DIRNAME);
   const overlays = [];
   let dialect = null;
-  const overlayFile = path56.join(dir, USING_GUILD_OVERLAY);
+  const overlayFile = path57.join(dir, USING_GUILD_OVERLAY);
   const overlayText = readIfFile2(overlayFile);
   if (overlayText !== null) {
     assertNoModelName(overlayFile, overlayText);
     overlays.push({ id: `overlay:${USING_GUILD_OVERLAY}`, text: overlayText });
   }
   if (MODEL_FAMILIES.includes(model_family)) {
-    const dialectFile = path56.join(dir, DIALECTS_DIRNAME, `${model_family}.md`);
+    const dialectFile = path57.join(dir, DIALECTS_DIRNAME, `${model_family}.md`);
     const dialectText = readIfFile2(dialectFile);
     if (dialectText !== null) {
       assertNoModelName(dialectFile, dialectText);
@@ -33238,7 +33438,7 @@ function loadPromptExtensions(guildDir, model_family) {
 }
 function readIfFile2(file) {
   try {
-    return fs48.statSync(file).isFile() ? fs48.readFileSync(file, "utf8") : null;
+    return fs49.statSync(file).isFile() ? fs49.readFileSync(file, "utf8") : null;
   } catch {
     return null;
   }
@@ -33257,7 +33457,7 @@ function composeSessionPrompt(input) {
   let base = "";
   if (input.pluginRoot) {
     for (const rel2 of USING_GUILD_BASE_RELS) {
-      const text = readIfFile2(path56.join(input.pluginRoot, rel2));
+      const text = readIfFile2(path57.join(input.pluginRoot, rel2));
       if (text !== null) {
         base = text;
         break;
@@ -33268,7 +33468,7 @@ function composeSessionPrompt(input) {
   let dialect = project?.dialect ?? null;
   if (dialect === null && input.pluginRoot && MODEL_FAMILIES.includes(input.model_family)) {
     const shipped = readIfFile2(
-      path56.join(input.pluginRoot, PLUGIN_DIALECTS_REL, `${input.model_family}.md`)
+      path57.join(input.pluginRoot, PLUGIN_DIALECTS_REL, `${input.model_family}.md`)
     );
     if (shipped !== null) dialect = { id: `dialect:${input.model_family}`, text: shipped };
   }
@@ -33279,12 +33479,12 @@ function composeSessionPrompt(input) {
     input.model_family
   );
 }
-var crypto17, fs48, path56, DIALECT_TOKEN_BUDGET, MODEL_NAME_RE, MODEL_FAMILIES, HOST_FAMILY_TOKENS_PROMPT, HOST_FAMILY_RE, YOU_ARE_HOST_RE, PromptRejectedError, PROMPTS_DIRNAME, USING_GUILD_OVERLAY, DIALECTS_DIRNAME, USING_GUILD_BASE_RELS, PLUGIN_DIALECTS_REL;
+var crypto17, fs49, path57, DIALECT_TOKEN_BUDGET, MODEL_NAME_RE, MODEL_FAMILIES, HOST_FAMILY_TOKENS_PROMPT, HOST_FAMILY_RE, YOU_ARE_HOST_RE, PromptRejectedError, PROMPTS_DIRNAME, USING_GUILD_OVERLAY, DIALECTS_DIRNAME, USING_GUILD_BASE_RELS, PLUGIN_DIALECTS_REL;
 var init_compose_prompt = __esm({
   "src/domains/config/compose-prompt.ts"() {
     crypto17 = __toESM(require("node:crypto"));
-    fs48 = __toESM(require("node:fs"));
-    path56 = __toESM(require("node:path"));
+    fs49 = __toESM(require("node:fs"));
+    path57 = __toESM(require("node:path"));
     DIALECT_TOKEN_BUDGET = 200;
     MODEL_NAME_RE = /\b(opus|sonnet|haiku|fable|gpt-?[0-9][^\s]*|o[1-9](?:-(?:mini|pro|preview))?|gemini-[0-9][^\s]*|claude-[a-z0-9][^\s]*|llama-?[0-9][^\s]*|mistral|grok-?[0-9][^\s]*|deepseek|qwen)\b/i;
     MODEL_FAMILIES = Object.freeze(["anthropic", "openai", "google"]);
@@ -33759,7 +33959,7 @@ function detectGuildState(cwd) {
   const guildDir = durableGuildDir(cwd);
   const guildDirPresent = safeIsDir(guildDir);
   evidence.push({ kind: "guild_dir", path: guildDir, present: guildDirPresent });
-  const cwdManifestPath = path57.join(guildDir, "workspace.json");
+  const cwdManifestPath = path58.join(guildDir, "workspace.json");
   const cwdParsed = parseWorkspaceManifest(cwdManifestPath);
   if (cwdParsed.status === "parse_error") {
     evidence.push({
@@ -33805,7 +34005,7 @@ function detectGuildState(cwd) {
   evidence.push({ kind: "workspace_json", path: cwdManifestPath, present: false });
   const ancestor = discoverWorkspace(cwd);
   if (ancestor) {
-    const ancestorManifestPath = path57.join(durableGuildDir(ancestor.rootDir), "workspace.json");
+    const ancestorManifestPath = path58.join(durableGuildDir(ancestor.rootDir), "workspace.json");
     evidence.push({
       kind: "ancestor_workspace",
       path: ancestorManifestPath,
@@ -33824,7 +34024,7 @@ function detectGuildState(cwd) {
 }
 function safeStat(p) {
   try {
-    return fs49.statSync(p);
+    return fs50.statSync(p);
   } catch {
     return null;
   }
@@ -33840,7 +34040,7 @@ function safeExistsForEntry(absPath, kind) {
 }
 function resolveEntryPath(root, entry) {
   const segments = entry.path.replace(/\/+$/, "").split("/");
-  return path57.join(root, ...segments);
+  return path58.join(root, ...segments);
 }
 function verifyFloor(cwd, mode, workspaceRoot2, evidence) {
   const checkedRequired = requiredEntriesFor(mode);
@@ -33910,14 +34110,14 @@ function detectChildGitRepos(root) {
     if (depth > CHILD_SCAN_MAX_DEPTH) return;
     let entries;
     try {
-      entries = fs49.readdirSync(dir, { withFileTypes: true });
+      entries = fs50.readdirSync(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const ent of entries) {
       if (!ent.isDirectory() || CHILD_SCAN_SKIP_DIRS.has(ent.name)) continue;
-      const childDir = path57.join(dir, ent.name);
-      if (safeStat(path57.join(childDir, ".git")) !== null) {
+      const childDir = path58.join(dir, ent.name);
+      if (safeStat(path58.join(childDir, ".git")) !== null) {
         out.push(childDir);
       } else {
         walk(childDir, depth + 1);
@@ -33930,7 +34130,7 @@ function detectChildGitRepos(root) {
 function rootIsEmpty(root) {
   let entries;
   try {
-    entries = fs49.readdirSync(root);
+    entries = fs50.readdirSync(root);
   } catch {
     return false;
   }
@@ -34030,12 +34230,12 @@ function hostOpenPreflight(cwd, host) {
       };
   }
 }
-var fs49, path57, GUILD_STATE_SCHEMA_VERSION, CHILD_SCAN_SKIP_DIRS, CHILD_SCAN_MAX_DEPTH, EMPTY_ROOT_IGNORED, HOST_OPEN_PREFLIGHT_SCHEMA_VERSION, CLI_NATIVE_HOSTS;
+var fs50, path58, GUILD_STATE_SCHEMA_VERSION, CHILD_SCAN_SKIP_DIRS, CHILD_SCAN_MAX_DEPTH, EMPTY_ROOT_IGNORED, HOST_OPEN_PREFLIGHT_SCHEMA_VERSION, CLI_NATIVE_HOSTS;
 var init_host_open_preflight = __esm({
   "src/domains/config/host-open-preflight.ts"() {
-    fs49 = __toESM(require("fs"));
+    fs50 = __toESM(require("fs"));
     init_kernel();
-    path57 = __toESM(require("path"));
+    path58 = __toESM(require("path"));
     init_init_scaffold_manifest();
     init_workspace_manifest();
     init_init_config_copy();
@@ -34538,25 +34738,25 @@ function taskCellPaths(ids, opts = {}) {
     throw new Error(`attempt must be an integer >= 1, got ${JSON.stringify(ids.attempt)}`);
   }
   const guildDir = opts.guildDir ?? ".guild";
-  const run_dir = path58.join(guildDir, "runs", ids.run_id);
-  const cell_dir = path58.join(run_dir, "task-cells", ids.logical_task_id);
-  const attempt_dir = path58.join(cell_dir, "attempts", String(ids.attempt));
-  const instance_dir = path58.join(attempt_dir, "instances", ids.instance_id);
+  const run_dir = path59.join(guildDir, "runs", ids.run_id);
+  const cell_dir = path59.join(run_dir, "task-cells", ids.logical_task_id);
+  const attempt_dir = path59.join(cell_dir, "attempts", String(ids.attempt));
+  const instance_dir = path59.join(attempt_dir, "instances", ids.instance_id);
   const paths = {
     run_dir,
     cell_dir,
     attempt_dir,
     instance_dir,
-    instance_path: path58.join(instance_dir, "instance.json"),
-    attempt_path: path58.join(attempt_dir, "attempt.json"),
-    assignment_path: path58.join(instance_dir, "assignment.json"),
-    handoff_path: path58.join(instance_dir, "handoff.json"),
-    receipt_path: path58.join(instance_dir, "handoff-receipt.md"),
-    heartbeat_path: path58.join(instance_dir, "heartbeat.json"),
-    cancel_channel: path58.join(instance_dir, "cancel"),
-    validation_path: path58.join(instance_dir, "handoff-validation.json"),
-    acceptance_path: path58.join(instance_dir, "handoff-acceptance.json"),
-    terminal_path: path58.join(instance_dir, "terminal.json")
+    instance_path: path59.join(instance_dir, "instance.json"),
+    attempt_path: path59.join(attempt_dir, "attempt.json"),
+    assignment_path: path59.join(instance_dir, "assignment.json"),
+    handoff_path: path59.join(instance_dir, "handoff.json"),
+    receipt_path: path59.join(instance_dir, "handoff-receipt.md"),
+    heartbeat_path: path59.join(instance_dir, "heartbeat.json"),
+    cancel_channel: path59.join(instance_dir, "cancel"),
+    validation_path: path59.join(instance_dir, "handoff-validation.json"),
+    acceptance_path: path59.join(instance_dir, "handoff-acceptance.json"),
+    terminal_path: path59.join(instance_dir, "terminal.json")
   };
   for (const [key, value] of Object.entries(paths)) {
     if (key === "run_dir") continue;
@@ -34565,8 +34765,8 @@ function taskCellPaths(ids, opts = {}) {
   return paths;
 }
 function assertWithinRunTree(runDir3, p, label = "path") {
-  const rel2 = path58.relative(path58.resolve(runDir3), path58.resolve(p));
-  if (rel2 === "" || rel2.startsWith("..") || path58.isAbsolute(rel2)) {
+  const rel2 = path59.relative(path59.resolve(runDir3), path59.resolve(p));
+  if (rel2 === "" || rel2.startsWith("..") || path59.isAbsolute(rel2)) {
     throw new Error(`${label} escapes the run tree ${runDir3}: ${p}`);
   }
 }
@@ -34669,10 +34869,10 @@ function validateTaskAssignmentV2(obj) {
   }
   return { ...o, ...lineage, ...lead };
 }
-var path58, TASK_CELL_STATES, TERMINAL_STATES, TERMINAL_SET, LEGAL_TRANSITIONS, TASK_ASSIGNMENT_V2_SCHEMA, SAFE_SEGMENT, isStr, isStrArr, ACCEPTANCE_AUTHORITIES;
+var path59, TASK_CELL_STATES, TERMINAL_STATES, TERMINAL_SET, LEGAL_TRANSITIONS, TASK_ASSIGNMENT_V2_SCHEMA, SAFE_SEGMENT, isStr, isStrArr, ACCEPTANCE_AUTHORITIES;
 var init_task_cell_backend = __esm({
   "src/domains/dispatch/task-cell-backend.ts"() {
-    path58 = __toESM(require("path"));
+    path59 = __toESM(require("path"));
     TASK_CELL_STATES = Object.freeze([
       "declared",
       "instantiated",
@@ -34764,13 +34964,24 @@ var init_artifact_bus = __esm({
   }
 });
 
+// src/domains/dispatch/task-cell-cleanup-check.ts
+var init_task_cell_cleanup_check = __esm({
+  "src/domains/dispatch/task-cell-cleanup-check.ts"() {
+    init_artifact_bus();
+    init_state();
+    init_telemetry();
+  }
+});
+
 // src/domains/dispatch/task-cell-artifact-join.ts
 var init_task_cell_artifact_join = __esm({
   "src/domains/dispatch/task-cell-artifact-join.ts"() {
     init_artifact_bus();
     init_task_cell_contract();
+    init_task_cell_cleanup_check();
     init_teams();
     init_state();
+    init_lifecycle();
   }
 });
 
@@ -34827,14 +35038,16 @@ var init_task_cell_acceptance = __esm({
     init_task_cell_contract();
     init_task_cell_artifact_join();
     init_state();
+    init_artifact_bus();
   }
 });
 
 // src/domains/dispatch/progress-ledger.ts
-var PROGRESS_LEDGER_SCHEMA, DONE_WHEN_ORACLE_KINDS, LEDGER_ITEM_STATES, CELL_LAST_FAILURES, PROGRESS_LEDGER_CONTRACT;
+var PROGRESS_LEDGER_SCHEMA, DONE_WHEN_ORACLE_KINDS, LEDGER_ITEM_STATES, CELL_LAST_FAILURES, PROGRESS_LEDGER_CONTRACT, EXECUTABLE_ORACLE_KINDS;
 var init_progress_ledger = __esm({
   "src/domains/dispatch/progress-ledger.ts"() {
     init_kernel();
+    init_lifecycle();
     init_task_cell_contract();
     PROGRESS_LEDGER_SCHEMA = "guild.progress_ledger.v1";
     DONE_WHEN_ORACLE_KINDS = frozenList([
@@ -34868,6 +35081,7 @@ var init_progress_ledger = __esm({
       item_states: LEDGER_ITEM_STATES,
       last_failures: CELL_LAST_FAILURES
     });
+    EXECUTABLE_ORACLE_KINDS = frozenList(["command", "artifact_exists", "acceptance_record"]);
   }
 });
 
@@ -34952,68 +35166,6 @@ var init_advisor_budget = __esm({
   }
 });
 
-// src/domains/dispatch/task-cell-runtime.ts
-var IN_SESSION_PORT;
-var init_task_cell_runtime = __esm({
-  "src/domains/dispatch/task-cell-runtime.ts"() {
-    init_artifact_bus();
-    init_teams();
-    init_telemetry();
-    init_task_cell_contract();
-    init_task_assignment_v2();
-    init_task_cell_acceptance();
-    init_task_cell_artifact_join();
-    init_progress_ledger();
-    init_instance_cap();
-    init_isolation_guard();
-    init_adapter_rungs();
-    init_advisor_budget();
-    init_state();
-    IN_SESSION_PORT = Object.freeze({
-      mode: "degraded",
-      losses: Object.freeze([
-        "no_isolation: lead_only binds the parent session; no worker process, no transport"
-      ]),
-      isAvailable: () => true,
-      spawn: () => ({ ok: true, reason: null }),
-      ready: () => ({ ok: true, reason: null }),
-      notifyAssignment: () => ({ ok: true, reason: null }),
-      terminate: () => ({ ok: true, reason: null })
-    });
-  }
-});
-
-// src/domains/dispatch/task-cell-scale-audit.ts
-var init_task_cell_scale_audit = __esm({
-  "src/domains/dispatch/task-cell-scale-audit.ts"() {
-    init_task_cell_contract();
-  }
-});
-
-// src/domains/dispatch/task-cell-telemetry-reconcile.ts
-var init_task_cell_telemetry_reconcile = __esm({
-  "src/domains/dispatch/task-cell-telemetry-reconcile.ts"() {
-    init_telemetry();
-    init_task_cell_contract();
-    init_task_assignment_v2();
-    init_state();
-  }
-});
-
-// src/domains/dispatch/task-cell-host-conformance.ts
-var init_task_cell_host_conformance = __esm({
-  "src/domains/dispatch/task-cell-host-conformance.ts"() {
-    init_artifact_bus();
-    init_lifecycle();
-    init_telemetry();
-    init_task_cell_artifact_join();
-    init_task_cell_contract();
-    init_task_assignment_v2();
-    init_progress_ledger();
-    init_task_cell_runtime();
-  }
-});
-
 // src/domains/dispatch/execution-transport-ports.ts
 var EXECUTION_OPERATIONS, EXECUTION_OUTCOME_STATUSES, EXECUTION_REASON_CODES, EXECUTION_TRANSPORT_IDS, EXECUTION_STATUS_TO_NEUTRAL_DISPOSITION, EXECUTION_REASON_TO_NEUTRAL_REASON, TEAM_DISPATCH_SCOPES, EXECUTION_DISPATCH_MODES;
 var init_execution_transport_ports = __esm({
@@ -35088,6 +35240,69 @@ var init_execution_transport_ports = __esm({
   }
 });
 
+// src/domains/dispatch/task-cell-runtime.ts
+var IN_SESSION_PORT;
+var init_task_cell_runtime = __esm({
+  "src/domains/dispatch/task-cell-runtime.ts"() {
+    init_artifact_bus();
+    init_teams();
+    init_telemetry();
+    init_task_cell_contract();
+    init_task_assignment_v2();
+    init_task_cell_acceptance();
+    init_task_cell_artifact_join();
+    init_progress_ledger();
+    init_instance_cap();
+    init_isolation_guard();
+    init_adapter_rungs();
+    init_advisor_budget();
+    init_execution_transport_ports();
+    init_state();
+    IN_SESSION_PORT = Object.freeze({
+      mode: "degraded",
+      losses: Object.freeze([
+        "no_isolation: lead_only binds the parent session; no worker process, no transport"
+      ]),
+      isAvailable: () => true,
+      spawn: () => ({ ok: true, reason: null }),
+      ready: () => ({ ok: true, reason: null }),
+      notifyAssignment: () => ({ ok: true, reason: null }),
+      terminate: () => ({ ok: true, reason: null })
+    });
+  }
+});
+
+// src/domains/dispatch/task-cell-scale-audit.ts
+var init_task_cell_scale_audit = __esm({
+  "src/domains/dispatch/task-cell-scale-audit.ts"() {
+    init_task_cell_contract();
+  }
+});
+
+// src/domains/dispatch/task-cell-telemetry-reconcile.ts
+var init_task_cell_telemetry_reconcile = __esm({
+  "src/domains/dispatch/task-cell-telemetry-reconcile.ts"() {
+    init_telemetry();
+    init_task_cell_contract();
+    init_task_assignment_v2();
+    init_state();
+  }
+});
+
+// src/domains/dispatch/task-cell-host-conformance.ts
+var init_task_cell_host_conformance = __esm({
+  "src/domains/dispatch/task-cell-host-conformance.ts"() {
+    init_artifact_bus();
+    init_lifecycle();
+    init_telemetry();
+    init_task_cell_artifact_join();
+    init_task_cell_contract();
+    init_task_assignment_v2();
+    init_progress_ledger();
+    init_task_cell_runtime();
+  }
+});
+
 // src/domains/dispatch/execution-transport-adapters.ts
 var TMUX_AGENT_PANE_PROFILES, GENERATED_PRE_GUARD_EXPORTS, DEFINITION_REF_KEYS, PINNED_SKILL_KEYS;
 var init_execution_transport_adapters = __esm({
@@ -35156,6 +35371,23 @@ var init_assignment_binding = __esm({
       source: "guild.session_binding.v1",
       blocks: ["no_binding", "unknown_host", "no_model_for_tier"],
       never: "config, initiative inventory, or a host default"
+    });
+  }
+});
+
+// src/domains/dispatch/principal-provider.ts
+var WORKER_TRUST_POLICIES, COOPERATIVE_LOCAL_PROVIDER;
+var init_principal_provider = __esm({
+  "src/domains/dispatch/principal-provider.ts"() {
+    WORKER_TRUST_POLICIES = Object.freeze(["cooperative_local", "isolated_worker"]);
+    COOPERATIVE_LOCAL_PROVIDER = Object.freeze({
+      id: "cooperative_local",
+      worker_trust_policy: "cooperative_local",
+      mode: "cooperative_same_uid",
+      operatorUid: () => typeof process.getuid === "function" ? process.getuid() : -1,
+      workerUid: () => typeof process.getuid === "function" ? process.getuid() : -1,
+      // cooperative_local never satisfies isolated_worker; nothing upgrades it.
+      satisfies: (required) => required === "cooperative_local"
     });
   }
 });
@@ -35411,16 +35643,16 @@ var init_result_contracts = __esm({
 });
 
 // src/domains/distribution/build-inventory.ts
-var path59, PLUGIN_ROOT;
+var path60, PLUGIN_ROOT;
 var init_build_inventory = __esm({
   "src/domains/distribution/build-inventory.ts"() {
-    path59 = __toESM(require("node:path"));
+    path60 = __toESM(require("node:path"));
     init_inventory_schema();
     init_state();
     init_parity_contract();
     init_result_contracts();
     init_kernel();
-    PLUGIN_ROOT = findPluginRoot(__dirname) ?? path59.resolve(__dirname, "../../..");
+    PLUGIN_ROOT = findPluginRoot(__dirname) ?? path60.resolve(__dirname, "../../..");
   }
 });
 
@@ -36491,29 +36723,29 @@ function evaluateTransportedReleaseConformance(evidence, authority) {
   }
   const required = ownField(evidence, "required_scenario_ids");
   const results = ownField(evidence, "results");
-  const canonical = NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS;
-  if (!Array.isArray(required) || required.length !== canonical.length) {
+  const canonical2 = NEUTRAL_REQUIRED_SUITE_SCENARIO_IDS;
+  if (!Array.isArray(required) || required.length !== canonical2.length) {
     return transportedRefusal(
       "coverage",
       "the evidence does not cover the full frozen suite: the required tuple is not the 31-id canonical tuple"
     );
   }
-  for (let index = 0; index < canonical.length; index += 1) {
-    if (required[index] !== canonical[index]) {
+  for (let index = 0; index < canonical2.length; index += 1) {
+    if (required[index] !== canonical2[index]) {
       return transportedRefusal(
         "coverage",
         "the evidence does not cover the full frozen suite: the required tuple is not the 31-id canonical tuple"
       );
     }
   }
-  if (!Array.isArray(results) || results.length !== canonical.length) {
+  if (!Array.isArray(results) || results.length !== canonical2.length) {
     return transportedRefusal(
       "coverage",
       "the evidence does not carry exactly one result per required scenario"
     );
   }
-  for (let index = 0; index < canonical.length; index += 1) {
-    if (ownField(results[index], "stable_id") !== canonical[index]) {
+  for (let index = 0; index < canonical2.length; index += 1) {
+    if (ownField(results[index], "stable_id") !== canonical2[index]) {
       return transportedRefusal(
         "coverage",
         "the evidence results are not ordered against the canonical required tuple"
@@ -36533,7 +36765,7 @@ function evaluateTransportedReleaseConformance(evidence, authority) {
     const ownerIds = NEUTRAL_OWNER_SCENARIO_IDS[ownerKey];
     const ownerResults = [];
     for (const stableId of ownerIds) {
-      const at = canonical.indexOf(stableId);
+      const at = canonical2.indexOf(stableId);
       ownerResults.push(copyTransportedResult(results[at]));
     }
     packets.push({
@@ -36595,10 +36827,10 @@ function buildBatteryModuleWorkspace(base) {
     2
   )}
 `;
-  const coreDir = path60.resolve(__dirname, "../lifecycle");
+  const coreDir = path61.resolve(__dirname, "../lifecycle");
   const coreWorkflows = {};
   for (const member of NEUTRAL_CORE_MEMBERS) {
-    coreWorkflows[member] = fs50.readFileSync(path60.join(coreDir, member), "utf8");
+    coreWorkflows[member] = fs51.readFileSync(path61.join(coreDir, member), "utf8");
   }
   coreWorkflows["lifecycle-ports.ts"] = [
     'export const LIFECYCLE_PORT_VERSION = "guild.lifecycle.ports.v1" as const;',
@@ -36708,27 +36940,27 @@ function buildBatteryModuleWorkspace(base) {
     ""
   ].join("\n");
   for (const [rel2, content] of Object.entries(files)) {
-    const target = path60.join(base, rel2);
-    fs50.mkdirSync(path60.dirname(target), { recursive: true });
-    fs50.writeFileSync(target, content);
+    const target = path61.join(base, rel2);
+    fs51.mkdirSync(path61.dirname(target), { recursive: true });
+    fs51.writeFileSync(target, content);
   }
 }
 function batteryWorkspace() {
   if (batteryWorkspaceSingleton !== null) return batteryWorkspaceSingleton;
-  const base = fs50.mkdtempSync(path60.join(os4.tmpdir(), "a21x-integration-battery-"));
-  const journalRoot = path60.join(base, "journal-root");
-  const migrationJournalRoot = path60.join(base, "migration-journal-root");
-  fs50.mkdirSync(journalRoot, { recursive: true });
-  fs50.mkdirSync(migrationJournalRoot, { recursive: true });
-  const moduleBase = path60.join(base, "module-workspace");
+  const base = fs51.mkdtempSync(path61.join(os4.tmpdir(), "a21x-integration-battery-"));
+  const journalRoot = path61.join(base, "journal-root");
+  const migrationJournalRoot = path61.join(base, "migration-journal-root");
+  fs51.mkdirSync(journalRoot, { recursive: true });
+  fs51.mkdirSync(migrationJournalRoot, { recursive: true });
+  const moduleBase = path61.join(base, "module-workspace");
   buildBatteryModuleWorkspace(moduleBase);
   batteryWorkspaceSingleton = {
     journalRoot,
     migrationJournalRoot,
-    pluginRoot: path60.join(moduleBase, "plugin"),
+    pluginRoot: path61.join(moduleBase, "plugin"),
     consumerRoots: {
-      website: path60.join(moduleBase, "website"),
-      benchmark: path60.join(moduleBase, "benchmark")
+      website: path61.join(moduleBase, "website"),
+      benchmark: path61.join(moduleBase, "benchmark")
     }
   };
   return batteryWorkspaceSingleton;
@@ -36900,12 +37132,12 @@ function refusesWithControl(implementation, request, control) {
   if (!isRecord2(result2.outcome) || result2.outcome.disposition !== "refused") return false;
   return ownField(result2.outcome.facts, "refusal_control") === control;
 }
-var fs50, os4, path60, RELEASE_INTEGRATION_REQUEST_MEMBERS, RELEASE_INTEGRATION_OWNER_BOUNDARIES, CONTROL_NOT_TEXT, CONTROL_CALLER_PACKETS, CONTROL_CALLER_REQUIRED_SET2, CONTROL_CALLER_OUTCOMES, CONTROL_OWNER_FAILED, CONTROL_CLAIM_INCOMPLETE, CONTROL_ASSEMBLY_REFUSED, RELEASE_INTEGRATION_REFUSAL_CONTROLS, RELEASE_INTEGRATION_OWNER_INPUT_MEMBERS, FORBIDDEN_OWNER_INPUT_KEYS, MH02_SNAPSHOT_HASH, MH02_SUPPORTED_CAPABILITY, MH02_ABSENT_CAPABILITY, MH02_DENIED_OPERATION, MH02_ALLOWED_OPERATION, MH02_CONDITION_GATE, MH02_OPEN_GATE, MH02_OBSERVATION, MH02_POLICY, MH02_GATES, MH02_HOST_PROBES, MH02_PROBES, hostAdapterConformanceOwner, batteryWorkspaceSingleton, BATTERY_MODULE_PUBLIC_API, BATTERY_IDENTITY, BATTERY_CLAIMANT, BATTERY_RUN_ID, BATTERY_CLAIM, batteryRecomputedPacketsSingleton, RELEASE_INTEGRATION_CONTROL_BATTERY, RELEASE_INTEGRATION_CONTROLS;
+var fs51, os4, path61, RELEASE_INTEGRATION_REQUEST_MEMBERS, RELEASE_INTEGRATION_OWNER_BOUNDARIES, CONTROL_NOT_TEXT, CONTROL_CALLER_PACKETS, CONTROL_CALLER_REQUIRED_SET2, CONTROL_CALLER_OUTCOMES, CONTROL_OWNER_FAILED, CONTROL_CLAIM_INCOMPLETE, CONTROL_ASSEMBLY_REFUSED, RELEASE_INTEGRATION_REFUSAL_CONTROLS, RELEASE_INTEGRATION_OWNER_INPUT_MEMBERS, FORBIDDEN_OWNER_INPUT_KEYS, MH02_SNAPSHOT_HASH, MH02_SUPPORTED_CAPABILITY, MH02_ABSENT_CAPABILITY, MH02_DENIED_OPERATION, MH02_ALLOWED_OPERATION, MH02_CONDITION_GATE, MH02_OPEN_GATE, MH02_OBSERVATION, MH02_POLICY, MH02_GATES, MH02_HOST_PROBES, MH02_PROBES, hostAdapterConformanceOwner, batteryWorkspaceSingleton, BATTERY_MODULE_PUBLIC_API, BATTERY_IDENTITY, BATTERY_CLAIMANT, BATTERY_RUN_ID, BATTERY_CLAIM, batteryRecomputedPacketsSingleton, RELEASE_INTEGRATION_CONTROL_BATTERY, RELEASE_INTEGRATION_CONTROLS;
 var init_release_conformance_integration = __esm({
   "src/domains/distribution/release-conformance-integration.ts"() {
-    fs50 = __toESM(require("node:fs"));
+    fs51 = __toESM(require("node:fs"));
     os4 = __toESM(require("node:os"));
-    path60 = __toESM(require("node:path"));
+    path61 = __toESM(require("node:path"));
     init_lifecycle();
     init_config2();
     init_telemetry();
@@ -37109,7 +37341,7 @@ var init_release_conformance_integration = __esm({
           ]);
           if (!refusesWithControl(implementation, trapProxy, CONTROL_NOT_TEXT)) return false;
           if (trapCount !== 0) return false;
-          const canonical = batteryRequestText();
+          const canonical2 = batteryRequestText();
           const nonText = [
             { claim: BATTERY_CLAIM, owner_inputs: batteryOwnerInputs() },
             [BATTERY_CLAIM],
@@ -37127,7 +37359,7 @@ var init_release_conformance_integration = __esm({
             "not json",
             "[]",
             '"a JSON string is not a request"',
-            ` ${canonical}`,
+            ` ${canonical2}`,
             neutralCanonicalJson({ claim: BATTERY_CLAIM, owner_inputs: batteryOwnerInputs(), mode: "lenient" }),
             neutralCanonicalJson({ claim: BATTERY_CLAIM })
           ];
@@ -37334,6 +37566,19 @@ var init_release_conformance_integration = __esm({
   }
 });
 
+// src/domains/distribution/review-gate-pass.ts
+var init_review_gate_pass = __esm({
+  "src/domains/distribution/review-gate-pass.ts"() {
+    init_review_result();
+  }
+});
+
+// src/domains/distribution/review-invocation.ts
+var init_review_invocation = __esm({
+  "src/domains/distribution/review-invocation.ts"() {
+  }
+});
+
 // src/domains/distribution/surface-manifest.ts
 var SURFACE_KINDS;
 var init_surface_manifest = __esm({
@@ -37523,7 +37768,7 @@ function evaluateCommandCoverage(commandTokens, knowledgeText) {
   return { covered, uncovered };
 }
 function collectCommandTokens(commandsDir) {
-  const entries = fs51.readdirSync(commandsDir, { withFileTypes: true });
+  const entries = fs52.readdirSync(commandsDir, { withFileTypes: true });
   return entries.filter((e) => e.isFile() && e.name.endsWith(".md")).map((e) => e.name.slice(0, -".md".length)).sort();
 }
 function decodeEntities(s) {
@@ -37646,8 +37891,8 @@ function skipTemplate(html, start) {
 function gatherKnowledgeText(knowledgeDir2) {
   const parts = [];
   const walk = (dir) => {
-    for (const e of fs51.readdirSync(dir, { withFileTypes: true })) {
-      const abs = path61.join(dir, e.name);
+    for (const e of fs52.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path62.join(dir, e.name);
       if (e.isDirectory()) {
         walk(abs);
         continue;
@@ -37655,7 +37900,7 @@ function gatherKnowledgeText(knowledgeDir2) {
       if (!e.isFile()) continue;
       const lower = e.name.toLowerCase();
       if (!KNOWLEDGE_EXTENSIONS.some((ext) => lower.endsWith(ext))) continue;
-      const raw = fs51.readFileSync(abs, "utf8");
+      const raw = fs52.readFileSync(abs, "utf8");
       parts.push(lower.endsWith(".md") ? raw : htmlToText(raw));
     }
   };
@@ -37684,12 +37929,12 @@ function main(argv) {
     );
     return 2;
   }
-  if (!fs51.existsSync(commandsDir) || !fs51.statSync(commandsDir).isDirectory()) {
+  if (!fs52.existsSync(commandsDir) || !fs52.statSync(commandsDir).isDirectory()) {
     process.stderr.write(`[command-coverage] ERROR: commands dir not found: ${commandsDir}
 `);
     return 2;
   }
-  if (!fs51.existsSync(knowledgeDir2) || !fs51.statSync(knowledgeDir2).isDirectory()) {
+  if (!fs52.existsSync(knowledgeDir2) || !fs52.statSync(knowledgeDir2).isDirectory()) {
     process.stderr.write(`[command-coverage] ERROR: knowledge dir not found: ${knowledgeDir2}
 `);
     return 2;
@@ -37716,11 +37961,11 @@ function main(argv) {
   );
   return warn2 ? 0 : 1;
 }
-var fs51, path61, TOKEN_START, TOKEN_END, KNOWLEDGE_EXTENSIONS, NAMED_ENTITIES2, HTML_SPACE;
+var fs52, path62, TOKEN_START, TOKEN_END, KNOWLEDGE_EXTENSIONS, NAMED_ENTITIES2, HTML_SPACE;
 var init_check_command_coverage = __esm({
   "src/domains/distribution/check-command-coverage.ts"() {
-    fs51 = __toESM(require("fs"));
-    path61 = __toESM(require("path"));
+    fs52 = __toESM(require("fs"));
+    path62 = __toESM(require("path"));
     TOKEN_START = "(?<![A-Za-z0-9-])";
     TOKEN_END = "(?![A-Za-z0-9-])";
     KNOWLEDGE_EXTENSIONS = [".md", ".html", ".htm"];
@@ -37869,10 +38114,10 @@ function resolveUserFacingSkillPaths(changedFiles, cwd) {
   const skillFiles = changedFiles.filter((f) => f.endsWith("SKILL.md"));
   const result2 = [];
   for (const rel2 of skillFiles) {
-    const abs = path62.resolve(cwd, rel2);
-    if (!fs52.existsSync(abs)) continue;
+    const abs = path63.resolve(cwd, rel2);
+    if (!fs53.existsSync(abs)) continue;
     try {
-      const contents = fs52.readFileSync(abs, "utf8");
+      const contents = fs53.readFileSync(abs, "utf8");
       if (isUserFacingSkill(rel2, contents)) {
         result2.push(rel2);
       }
@@ -37939,18 +38184,18 @@ function parseArgs5(argv) {
 function main2(argv = process.argv.slice(2)) {
   const args = parseArgs5(argv);
   const { strict, workspaceRoot: workspaceRoot2 } = args;
-  if (!fs52.existsSync(workspaceRoot2) || !fs52.statSync(workspaceRoot2).isDirectory()) {
+  if (!fs53.existsSync(workspaceRoot2) || !fs53.statSync(workspaceRoot2).isDirectory()) {
     process.stderr.write(
       `[check-doc-sync] ERROR: --workspace-root "${workspaceRoot2}" is not a directory
 `
     );
     process.exit(2);
   }
-  const pluginRepo = args.pluginRepo ?? path62.join(workspaceRoot2, "plugin");
+  const pluginRepo = args.pluginRepo ?? path63.join(workspaceRoot2, "plugin");
   const rootRepo = args.rootRepo ?? workspaceRoot2;
   const effectiveRootRange = args.rootRange ?? args.pluginRange;
-  const pluginRepoExists = fs52.existsSync(pluginRepo) && fs52.statSync(pluginRepo).isDirectory();
-  const rootRepoExists = fs52.existsSync(rootRepo) && fs52.statSync(rootRepo).isDirectory();
+  const pluginRepoExists = fs53.existsSync(pluginRepo) && fs53.statSync(pluginRepo).isDirectory();
+  const rootRepoExists = fs53.existsSync(rootRepo) && fs53.statSync(rootRepo).isDirectory();
   if (!rootRepoExists) {
     process.stderr.write(
       `[check-doc-sync] ERROR: root-repo "${rootRepo}" is not a directory
@@ -37991,11 +38236,11 @@ function main2(argv = process.argv.slice(2)) {
     );
   }
 }
-var fs52, path62, import_child_process2;
+var fs53, path63, import_child_process2;
 var init_check_doc_sync = __esm({
   "src/domains/distribution/check-doc-sync.ts"() {
-    fs52 = __toESM(require("fs"));
-    path62 = __toESM(require("path"));
+    fs53 = __toESM(require("fs"));
+    path63 = __toESM(require("path"));
     import_child_process2 = require("child_process");
     init_state();
     if (typeof module !== "undefined" && require.main === module && /^check-doc-sync\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
@@ -38006,11 +38251,11 @@ var init_check_doc_sync = __esm({
 
 // src/domains/distribution/wiki-lint-checks.ts
 function readLabelTaxonomy(root) {
-  const p = path63.join(durableGuildDir(root), "project.yaml");
-  if (!fs53.existsSync(p)) return null;
+  const p = path64.join(durableGuildDir(root), "project.yaml");
+  if (!fs54.existsSync(p)) return null;
   let parsed;
   try {
-    parsed = yaml2.load(fs53.readFileSync(p, "utf8"));
+    parsed = yaml2.load(fs54.readFileSync(p, "utf8"));
   } catch {
     return null;
   }
@@ -38061,28 +38306,28 @@ function lintLabels(rel2, fmText, tax) {
 }
 function parseArgs6(argv) {
   let root = process.cwd();
-  let json = false;
+  let json2 = false;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--root" && argv[i + 1]) root = path63.resolve(argv[++i]);
-    else if (argv[i] === "--json") json = true;
+    if (argv[i] === "--root" && argv[i + 1]) root = path64.resolve(argv[++i]);
+    else if (argv[i] === "--json") json2 = true;
   }
-  return { root, json };
+  return { root, json: json2 };
 }
 function lintWiki(root) {
-  const wiki = path63.join(durableGuildDir(root), "wiki");
+  const wiki = path64.join(durableGuildDir(root), "wiki");
   const findings = [];
   const taxonomy = readLabelTaxonomy(root);
-  if (fs53.existsSync(wiki)) {
-    const walk = (dir) => fs53.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-      const p = path63.join(dir, e.name);
+  if (fs54.existsSync(wiki)) {
+    const walk = (dir) => fs54.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const p = path64.join(dir, e.name);
       return e.isDirectory() ? walk(p) : e.name.endsWith(".md") ? [p] : [];
     });
     for (const f of walk(wiki)) {
-      const rel2 = path63.relative(root, f);
-      const relInWiki = path63.relative(wiki, f);
-      const base = path63.basename(f).toLowerCase();
+      const rel2 = path64.relative(root, f);
+      const relInWiki = path64.relative(wiki, f);
+      const base = path64.basename(f).toLowerCase();
       if (base.startsWith("lint-")) continue;
-      const { fmLines } = splitFrontmatter2(fs53.readFileSync(f, "utf8"));
+      const { fmLines } = splitFrontmatter2(fs54.readFileSync(f, "utf8"));
       const frontmatterLines = fmLines ?? [];
       const importance = fmValue(frontmatterLines, "importance");
       const durable = !STRUCTURAL_BASENAMES.has(base) && !isProvenance(relInWiki, frontmatterLines);
@@ -38108,10 +38353,10 @@ function lintWiki(root) {
       }
     }
   }
-  const kgPath = path63.join(durableGuildDir(root), "indexes", "knowledge-graph.json");
-  if (fs53.existsSync(kgPath)) {
+  const kgPath = path64.join(durableGuildDir(root), "indexes", "knowledge-graph.json");
+  if (fs54.existsSync(kgPath)) {
     try {
-      const kg = JSON.parse(fs53.readFileSync(kgPath, "utf8"));
+      const kg = JSON.parse(fs54.readFileSync(kgPath, "utf8"));
       const nodes = Array.isArray(kg.nodes) ? kg.nodes : [];
       for (const kf of lintKnowledgeNodes(nodes)) {
         findings.push({
@@ -38128,9 +38373,9 @@ function lintWiki(root) {
   return findings;
 }
 function main3(argv = process.argv.slice(2)) {
-  const { root, json } = parseArgs6(argv);
+  const { root, json: json2 } = parseArgs6(argv);
   const findings = lintWiki(root);
-  if (json) {
+  if (json2) {
     console.log(JSON.stringify({ root, findings }, null, 2));
   } else if (findings.length === 0) {
     console.log("wiki-lint-checks: clean (0 mechanical findings)");
@@ -38141,11 +38386,11 @@ function main3(argv = process.argv.slice(2)) {
   }
   process.exit(findings.length ? 2 : 0);
 }
-var fs53, path63, yaml2, DEFAULT_CONCERN_ENUM;
+var fs54, path64, yaml2, DEFAULT_CONCERN_ENUM;
 var init_wiki_lint_checks = __esm({
   "src/domains/distribution/wiki-lint-checks.ts"() {
-    fs53 = __toESM(require("fs"));
-    path63 = __toESM(require("path"));
+    fs54 = __toESM(require("fs"));
+    path64 = __toESM(require("path"));
     init_state();
     init_knowledge();
     init_kernel();
@@ -38207,6 +38452,8 @@ var init_distribution = __esm({
     init_release_conformance_integration();
     init_result_contracts();
     init_review_result();
+    init_review_gate_pass();
+    init_review_invocation();
     init_release_distribution_contract();
     init_surface_manifest();
     init_verify_host_packages();
@@ -38221,12 +38468,38 @@ var init_distribution = __esm({
   }
 });
 
+// src/domains/dispatch/task-cell-controller.ts
+var REQUIRED_INDEPENDENCE;
+var init_task_cell_controller = __esm({
+  "src/domains/dispatch/task-cell-controller.ts"() {
+    init_artifact_bus();
+    init_task_assignment_v2();
+    init_task_cell_contract();
+    init_task_cell_acceptance();
+    init_task_cell_artifact_join();
+    init_task_cell_cleanup_check();
+    init_progress_ledger();
+    init_instance_cap();
+    init_task_cell_runtime();
+    init_principal_provider();
+    init_distribution();
+    init_config2();
+    init_kernel();
+    init_lifecycle();
+    init_security();
+    init_state();
+    init_telemetry();
+    init_teams();
+    REQUIRED_INDEPENDENCE = Object.freeze({ reviewer_cross_host: "cross_family" });
+  }
+});
+
 // src/domains/dispatch/comms-format-lint.ts
 function normalisePath(p) {
-  return path64.normalize(p).replace(/\\/g, "/");
+  return path65.normalize(p).replace(/\\/g, "/");
 }
 function loadInventoryAllowList() {
-  const inventoryPath = path64.resolve(
+  const inventoryPath = path65.resolve(
     __dirname,
     // __dirname = <repo>/src/domains/dispatch; three `..` reach the repo root:
     // dispatch → domains → src → <repo>. Overshooting lands on the umbrella
@@ -38236,8 +38509,8 @@ function loadInventoryAllowList() {
     ".guild/initiatives/active/communication-format-standardization/yaml-reader-inventory.json"
   );
   try {
-    if (!fs54.existsSync(inventoryPath)) return /* @__PURE__ */ new Set();
-    const raw = fs54.readFileSync(inventoryPath, "utf8");
+    if (!fs55.existsSync(inventoryPath)) return /* @__PURE__ */ new Set();
+    const raw = fs55.readFileSync(inventoryPath, "utf8");
     const data = JSON.parse(raw);
     const files = /* @__PURE__ */ new Set();
     for (const reader of data.readers ?? []) {
@@ -38423,7 +38696,7 @@ function checkAmbiguousReceipt(filePath, content) {
   return [];
 }
 function checkNewHandRolledYaml(filePath, content, allowList) {
-  const ext = path64.extname(filePath).toLowerCase();
+  const ext = path65.extname(filePath).toLowerCase();
   if (![".ts", ".js", ".tsx", ".jsx"].includes(ext)) return [];
   const normalised = normalisePath(filePath);
   if (SELF_EXEMPT_SUFFIXES.some((s) => normalised.endsWith(s))) return [];
@@ -38485,10 +38758,10 @@ function checkUndeclaredCategory(filePath, content) {
   ];
 }
 function readRunStartedAt(runDir3) {
-  const runYamlPath2 = path64.join(runDir3, "run.yaml");
+  const runYamlPath2 = path65.join(runDir3, "run.yaml");
   try {
-    if (!fs54.existsSync(runYamlPath2)) return null;
-    const raw = fs54.readFileSync(runYamlPath2, "utf8");
+    if (!fs55.existsSync(runYamlPath2)) return null;
+    const raw = fs55.readFileSync(runYamlPath2, "utf8");
     const m = raw.match(/^started_at:[ \t]*(.*)$/m);
     if (!m || !m[1] || m[1].trim() === "") return null;
     const d = new Date(m[1].trim());
@@ -38509,7 +38782,7 @@ function resolvePathsFromDiffRange(diffRange) {
       encoding: "utf8",
       timeout: 1e4
     });
-    return output.trim().split("\n").filter(Boolean).map((p) => path64.resolve(p));
+    return output.trim().split("\n").filter(Boolean).map((p) => path65.resolve(p));
   } catch {
     return [];
   }
@@ -38528,8 +38801,8 @@ function lintCommsFormat(opts = {}) {
     if (isBuildArtifactExempt(filePath)) continue;
     let content;
     try {
-      if (!fs54.existsSync(filePath)) continue;
-      content = fs54.readFileSync(filePath, "utf8");
+      if (!fs55.existsSync(filePath)) continue;
+      content = fs55.readFileSync(filePath, "utf8");
     } catch {
       continue;
     }
@@ -38541,19 +38814,19 @@ function lintCommsFormat(opts = {}) {
   }
   if (opts.runsDir) {
     try {
-      if (!fs54.existsSync(opts.runsDir)) return findings;
-      const runDirs = fs54.readdirSync(opts.runsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path64.join(opts.runsDir, d.name));
+      if (!fs55.existsSync(opts.runsDir)) return findings;
+      const runDirs = fs55.readdirSync(opts.runsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path65.join(opts.runsDir, d.name));
       for (const runDir3 of runDirs) {
         if (!isRunInScope(runDir3)) continue;
-        const handoffsDir = path64.join(runDir3, "handoffs");
-        if (!fs54.existsSync(handoffsDir)) continue;
-        const receiptFiles = fs54.readdirSync(handoffsDir, { withFileTypes: true }).filter((f) => f.isFile() && f.name.endsWith(".md")).map((f) => path64.join(handoffsDir, f.name));
+        const handoffsDir = path65.join(runDir3, "handoffs");
+        if (!fs55.existsSync(handoffsDir)) continue;
+        const receiptFiles = fs55.readdirSync(handoffsDir, { withFileTypes: true }).filter((f) => f.isFile() && f.name.endsWith(".md")).map((f) => path65.join(handoffsDir, f.name));
         for (const receiptPath of receiptFiles) {
           if (isLegacyExempt(receiptPath)) continue;
           if (inScopePaths.has(receiptPath)) continue;
           let content;
           try {
-            content = fs54.readFileSync(receiptPath, "utf8");
+            content = fs55.readFileSync(receiptPath, "utf8");
           } catch {
             continue;
           }
@@ -38587,22 +38860,22 @@ function parseArgs7(args) {
   const opts = {};
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--paths" && args[i + 1]) {
-      opts.paths = args[++i].split(",").map((p) => path64.resolve(p));
+      opts.paths = args[++i].split(",").map((p) => path65.resolve(p));
     } else if (args[i] === "--diff-range" && args[i + 1]) {
       opts.diffRange = args[++i];
     } else if (args[i] === "--runs-dir" && args[i + 1]) {
-      opts.runsDir = path64.resolve(args[++i]);
+      opts.runsDir = path65.resolve(args[++i]);
     } else if (args[i] === "--enforce") {
       opts.enforce = true;
     }
   }
   return opts;
 }
-var fs54, path64, yaml3, POLICY_EFFECTIVE_DATE, ALLOWED_ENVELOPE_KEYS, VALID_ENVELOPE_TIERS, VALID_ENVELOPE_STATUSES, ENVELOPE_SUMMARY_MAX, ENVELOPE_NOTES_MAX, HAND_ROLLED_PATTERN_SOURCES, HAND_ROLLED_PATTERNS, SELF_EXEMPT_SUFFIXES, COMM_ARTIFACT_TYPES;
+var fs55, path65, yaml3, POLICY_EFFECTIVE_DATE, ALLOWED_ENVELOPE_KEYS, VALID_ENVELOPE_TIERS, VALID_ENVELOPE_STATUSES, ENVELOPE_SUMMARY_MAX, ENVELOPE_NOTES_MAX, HAND_ROLLED_PATTERN_SOURCES, HAND_ROLLED_PATTERNS, SELF_EXEMPT_SUFFIXES, COMM_ARTIFACT_TYPES;
 var init_comms_format_lint = __esm({
   "src/domains/dispatch/comms-format-lint.ts"() {
-    fs54 = __toESM(require("fs"));
-    path64 = __toESM(require("path"));
+    fs55 = __toESM(require("fs"));
+    path65 = __toESM(require("path"));
     init_distribution();
     init_kernel();
     yaml3 = loadYamlApi();
@@ -38712,7 +38985,7 @@ var init_comms_format_lint = __esm({
 
 // src/domains/dispatch/no-accidental-write.ts
 function normPath(p) {
-  return path65.normalize(p).replace(/\\/g, "/");
+  return path66.normalize(p).replace(/\\/g, "/");
 }
 function isSettingsJson(filePath) {
   const n = normPath(filePath);
@@ -38948,7 +39221,7 @@ function resolvePathsFromDiffRange2(diffRange) {
       encoding: "utf8",
       timeout: 1e4
     });
-    return output.trim().split("\n").filter(Boolean).map((p) => path65.resolve(p));
+    return output.trim().split("\n").filter(Boolean).map((p) => path66.resolve(p));
   } catch {
     return [];
   }
@@ -38956,7 +39229,7 @@ function resolvePathsFromDiffRange2(diffRange) {
 function checkAccidentalWrite(opts = {}) {
   const violations = [];
   const pathSet = new Set(
-    (opts.paths ?? []).map((p) => path65.resolve(p))
+    (opts.paths ?? []).map((p) => path66.resolve(p))
   );
   if (opts.diffRange) {
     for (const p of resolvePathsFromDiffRange2(opts.diffRange)) {
@@ -38967,8 +39240,8 @@ function checkAccidentalWrite(opts = {}) {
     if (isExemptFixture(filePath)) continue;
     let content;
     try {
-      if (!fs55.existsSync(filePath)) continue;
-      content = fs55.readFileSync(filePath, "utf8");
+      if (!fs56.existsSync(filePath)) continue;
+      content = fs56.readFileSync(filePath, "utf8");
     } catch {
       continue;
     }
@@ -38989,11 +39262,11 @@ function checkAccidentalWrite(opts = {}) {
     hasViolations: violations.length > 0
   };
 }
-var fs55, path65, yaml4, SETTINGS_JSON_REQUIRED_KEYS, SETTINGS_JSON_KNOWN_KEYS, WORKSPACE_JSON_REQUIRED_KEYS, PROVENANCE_JSON_REQUIRED_KEYS, TRACE_JSONL_REQUIRED_KEYS, DOCS_KNOWLEDGE_FRONTMATTER_REQUIRED_KEYS, KNOWN_PROVENANCE_SCHEMA_VERSIONS;
+var fs56, path66, yaml4, SETTINGS_JSON_REQUIRED_KEYS, SETTINGS_JSON_KNOWN_KEYS, WORKSPACE_JSON_REQUIRED_KEYS, PROVENANCE_JSON_REQUIRED_KEYS, TRACE_JSONL_REQUIRED_KEYS, DOCS_KNOWLEDGE_FRONTMATTER_REQUIRED_KEYS, KNOWN_PROVENANCE_SCHEMA_VERSIONS;
 var init_no_accidental_write = __esm({
   "src/domains/dispatch/no-accidental-write.ts"() {
-    fs55 = __toESM(require("fs"));
-    path65 = __toESM(require("path"));
+    fs56 = __toESM(require("fs"));
+    path66 = __toESM(require("path"));
     init_kernel();
     yaml4 = loadYamlApi();
     SETTINGS_JSON_REQUIRED_KEYS = Object.freeze([
@@ -39082,7 +39355,7 @@ function parseArgs8(args) {
   const opts = { paths: [], enforce: false };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--paths" && args[i + 1]) {
-      opts.paths = args[++i].split(",").map((p) => p.trim()).filter(Boolean).map((p) => path66.resolve(p));
+      opts.paths = args[++i].split(",").map((p) => p.trim()).filter(Boolean).map((p) => path67.resolve(p));
     } else if (args[i] === "--diff-range" && args[i + 1]) {
       opts.diffRange = args[++i];
     } else if (args[i] === "--enforce") {
@@ -39131,10 +39404,10 @@ function main5(args = process.argv.slice(2)) {
     process.exit(0);
   }
 }
-var path66;
+var path67;
 var init_no_accidental_write_cli = __esm({
   "src/domains/dispatch/no-accidental-write.cli.ts"() {
-    path66 = __toESM(require("path"));
+    path67 = __toESM(require("path"));
     init_no_accidental_write();
     if (typeof module !== "undefined" && require.main === module && /^no-accidental-write\.cli\.[cm]?[jt]s$/.test((process.argv[1] ?? "").split(/[\\/]/).pop() ?? "")) {
       main5();
@@ -39169,6 +39442,8 @@ var init_dispatch = __esm({
     init_adapter_rungs();
     init_advisor_budget();
     init_assignment_binding();
+    init_task_cell_controller();
+    init_principal_provider();
     init_comms_format_lint();
     init_no_accidental_write();
     init_artifact_bus();
@@ -39842,9 +40117,9 @@ function evaluateTaskCellPolicyPromotion(input) {
   if (input.baseline.length === 0 || input.candidate.length === 0) reasons.push("baseline and candidate observations are required");
   const seen = /* @__PURE__ */ new Set();
   for (const observation of input.baseline) {
-    const issue2 = validateObservation(observation, "single_agent_baseline");
-    if (issue2) {
-      reasons.push(`baseline scenario ${observation?.scenario_id ?? "unknown"}: ${issue2}`);
+    const issue3 = validateObservation(observation, "single_agent_baseline");
+    if (issue3) {
+      reasons.push(`baseline scenario ${observation?.scenario_id ?? "unknown"}: ${issue3}`);
       continue;
     }
     if (seen.has(`baseline:${observation.scenario_id}`)) reasons.push(`duplicate baseline scenario ${observation.scenario_id}`);
@@ -39852,9 +40127,9 @@ function evaluateTaskCellPolicyPromotion(input) {
     if (observation.evidence_refs.length === 0) reasons.push(`baseline scenario ${observation.scenario_id} has no evidence refs`);
   }
   for (const observation of input.candidate) {
-    const issue2 = validateObservation(observation, "multi_agent_candidate");
-    if (issue2) {
-      reasons.push(`candidate scenario ${observation?.scenario_id ?? "unknown"}: ${issue2}`);
+    const issue3 = validateObservation(observation, "multi_agent_candidate");
+    if (issue3) {
+      reasons.push(`candidate scenario ${observation?.scenario_id ?? "unknown"}: ${issue3}`);
       continue;
     }
     if (seen.has(`candidate:${observation.scenario_id}`)) reasons.push(`duplicate candidate scenario ${observation.scenario_id}`);
@@ -40253,12 +40528,12 @@ function compactHistoryPath(storage, key) {
 function readCompactHistory(key, opts = {}) {
   const storage = storageFor3(opts);
   const p = compactHistoryPath(storage, key);
-  if (!fs56.existsSync(p)) {
+  if (!fs57.existsSync(p)) {
     return { schema_version: EVOLVE_HISTORY_SCHEMA, key: safeKey(key), entries: [] };
   }
   let parsed = null;
   try {
-    parsed = JSON.parse(fs56.readFileSync(p, "utf8"));
+    parsed = JSON.parse(fs57.readFileSync(p, "utf8"));
   } catch (err) {
     throw new EvolveTargetRefusal(
       `compact history at ${p} exists but will not parse (${err.message}); refusing to treat it as an empty stack \u2014 that would overwrite every recorded inverse. Repair or move the file, then re-run`,
@@ -40275,7 +40550,7 @@ function readCompactHistory(key, opts = {}) {
 }
 function writeHistory(storage, history) {
   const p = compactHistoryPath(storage, history.key);
-  fs56.mkdirSync(path67.dirname(p), { recursive: true });
+  fs57.mkdirSync(path68.dirname(p), { recursive: true });
   atomicWriteDurable(p, `${JSON.stringify(history, null, 2)}
 `);
   return p;
@@ -40283,7 +40558,7 @@ function writeHistory(storage, history) {
 function recordEvolveDelta(key, plan, opts = {}) {
   const storage = storageFor3(opts);
   const cwd = opts.cwd ?? storage.activeRoot;
-  assertNotRuntimeTree(path67.dirname(path67.resolve(plan.delta.path)), opts.pluginRoot ?? cwd, cwd);
+  assertNotRuntimeTree(path68.dirname(path68.resolve(plan.delta.path)), opts.pluginRoot ?? cwd, cwd);
   const now = (opts.now ?? (() => /* @__PURE__ */ new Date()))();
   const history = readCompactHistory(key, opts);
   const entry = {
@@ -40291,7 +40566,7 @@ function recordEvolveDelta(key, plan, opts = {}) {
     at: now.toISOString(),
     run_id: opts.runId ?? "",
     target: plan.delta.target,
-    path: path67.resolve(plan.delta.path),
+    path: path68.resolve(plan.delta.path),
     span: plan.delta.span,
     anchor: plan.anchor,
     inverse_span: plan.before_span,
@@ -40350,7 +40625,7 @@ function restoreOne(entry, cwd, pluginRoot) {
     question
   });
   try {
-    assertNotRuntimeTree(path67.dirname(entry.path), pluginRoot, cwd);
+    assertNotRuntimeTree(path68.dirname(entry.path), pluginRoot, cwd);
   } catch (err) {
     return block(
       `refusing to restore into a runtime tree: ${err.message}`,
@@ -40359,7 +40634,7 @@ function restoreOne(entry, cwd, pluginRoot) {
   }
   let text;
   try {
-    text = fs56.readFileSync(entry.path, "utf8");
+    text = fs57.readFileSync(entry.path, "utf8");
   } catch {
     return block(
       "the file this entry describes is gone",
@@ -40482,11 +40757,11 @@ function allIndexesOf(text, needle) {
   }
   return out;
 }
-var fs56, path67, EVOLVE_HISTORY_SCHEMA, REMOVAL_CONTEXT_BYTES;
+var fs57, path68, EVOLVE_HISTORY_SCHEMA, REMOVAL_CONTEXT_BYTES;
 var init_compact_history = __esm({
   "src/domains/evolve/compact-history.ts"() {
-    fs56 = __toESM(require("node:fs"));
-    path67 = __toESM(require("node:path"));
+    fs57 = __toESM(require("node:fs"));
+    path68 = __toESM(require("node:path"));
     init_state();
     init_kernel();
     init_security();
@@ -40551,11 +40826,11 @@ function screenDeltaContent(delta, ctx, storage) {
 function projectTargetRoot(storage, target) {
   switch (target) {
     case "skill":
-      return path68.resolve(storage.definition("skills"));
+      return path69.resolve(storage.definition("skills"));
     case "playbook":
-      return path68.resolve(storage.definition("playbooks"));
+      return path69.resolve(storage.definition("playbooks"));
     case "profile":
-      return path68.resolve(storage.definition("agents"));
+      return path69.resolve(storage.definition("agents"));
     case "glossary": {
       const scope = storage.project ?? storage.workspace;
       if (!scope) {
@@ -40564,7 +40839,7 @@ function projectTargetRoot(storage, target) {
           "scope"
         );
       }
-      return path68.resolve(scope.knowledge());
+      return path69.resolve(scope.knowledge());
     }
     default:
       throw new EvolveTargetRefusal(
@@ -40575,11 +40850,11 @@ function projectTargetRoot(storage, target) {
 }
 function assertProjectHome(storage, target, absTarget) {
   const root = projectTargetRoot(storage, target);
-  fs57.mkdirSync(root, { recursive: true });
-  const contained = checkContained(root, path68.resolve(absTarget), { policy: "resolve" });
+  fs58.mkdirSync(root, { recursive: true });
+  const contained = checkContained(root, path69.resolve(absTarget), { policy: "resolve" });
   if (contained === null || isRefused(contained)) {
     throw new EvolveTargetRefusal(
-      `project RSI writes under this repo's own .guild/ only; '${path68.resolve(absTarget)}' is outside '${root}'${contained && isRefused(contained) ? ` [${contained.code}]` : ""} (DH-3/R32)`,
+      `project RSI writes under this repo's own .guild/ only; '${path69.resolve(absTarget)}' is outside '${root}'${contained && isRefused(contained) ? ` [${contained.code}]` : ""} (DH-3/R32)`,
       "scope"
     );
   }
@@ -40590,7 +40865,7 @@ function candidatePath(storage, delta, id) {
 function pluginStorage(ctx, fallback) {
   if (ctx.plugin_storage) return ctx.plugin_storage;
   const root = ctx.pluginRoot;
-  if (!root || path68.resolve(root) === path68.resolve(fallback.activeRoot)) return fallback;
+  if (!root || path69.resolve(root) === path69.resolve(fallback.activeRoot)) return fallback;
   return createGuildStorage(root, { activeRoot: root, profile: "standalone" });
 }
 function writeCandidate(storage, delta, ctx, reason) {
@@ -40620,10 +40895,10 @@ function writeCandidate(storage, delta, ctx, reason) {
   for (let attempt = 0; attempt < 64; attempt++) {
     const suffix = attempt === 0 ? `${stamp}-${digest}` : `${stamp}-${digest}-${attempt}`;
     const p = candidatePath(storage, delta, suffix);
-    assertNotRuntimeTree(path68.dirname(p), ctx.pluginRoot ?? cwd, cwd);
-    fs57.mkdirSync(path68.dirname(p), { recursive: true });
+    assertNotRuntimeTree(path69.dirname(p), ctx.pluginRoot ?? cwd, cwd);
+    fs58.mkdirSync(path69.dirname(p), { recursive: true });
     try {
-      fs57.writeFileSync(p, body, { encoding: "utf8", flag: "wx" });
+      fs58.writeFileSync(p, body, { encoding: "utf8", flag: "wx" });
       return p;
     } catch (err) {
       if (err.code !== "EEXIST") throw err;
@@ -40651,8 +40926,8 @@ function applyEvolveDelta(delta, ctx = {}) {
   const storage = storageFor4(ctx);
   screenDeltaContent(delta, ctx, storage);
   const cwd = ctx.cwd ?? storage.activeRoot;
-  const abs = path68.resolve(cwd, delta.path);
-  const current = fs57.existsSync(abs) ? fs57.readFileSync(abs, "utf8") : "";
+  const abs = path69.resolve(cwd, delta.path);
+  const current = fs58.existsSync(abs) ? fs58.readFileSync(abs, "utf8") : "";
   const located = current === "" ? null : locatePlaybookSpan(current, delta.span);
   const d5 = classifyPermissionContent({
     span: delta.span,
@@ -40682,11 +40957,11 @@ function applyEvolveDelta(delta, ctx = {}) {
     );
   }
   assertProjectHome(storage, delta.target, abs);
-  assertNotRuntimeTree(path68.dirname(abs), ctx.pluginRoot ?? cwd, cwd);
-  if (delta.target === "profile" && !fs57.existsSync(abs)) {
+  assertNotRuntimeTree(path69.dirname(abs), ctx.pluginRoot ?? cwd, cwd);
+  if (delta.target === "profile" && !fs58.existsSync(abs)) {
     const gate = gateProfileCreation({
       workflow_class: null,
-      role: path68.basename(abs, path68.extname(abs)),
+      role: path69.basename(abs, path69.extname(abs)),
       writer: "evolve.apply"
     });
     if (!gate.ok) throw new EvolveTargetRefusal(gate.reason, "scope");
@@ -40698,7 +40973,7 @@ function applyEvolveDelta(delta, ctx = {}) {
       ctx,
       storage,
       "plugin",
-      `${fileClass.detail}; '${path68.basename(abs)}' is ${fileClass.reclassified_as} class whatever the token said, so it is human-only (KTD63)`
+      `${fileClass.detail}; '${path69.basename(abs)}' is ${fileClass.reclassified_as} class whatever the token said, so it is human-only (KTD63)`
     );
   }
   if (ctx.auto || delta.proposer === "curator") {
@@ -40713,16 +40988,16 @@ function applyEvolveDelta(delta, ctx = {}) {
     );
   }
   if (carriesSecret(plan.next, storage)) {
-    refuseScreened(ctx, storage, "secret", `the scrub would change '${path68.basename(abs)}'; nothing was written`);
+    refuseScreened(ctx, storage, "secret", `the scrub would change '${path69.basename(abs)}'; nothing was written`);
   }
-  const history = recordEvolveDelta(ctx.historyKey ?? path68.basename(abs, path68.extname(abs)), plan, {
+  const history = recordEvolveDelta(ctx.historyKey ?? path69.basename(abs, path69.extname(abs)), plan, {
     cwd,
     storage,
     runId: ctx.runId,
     pluginRoot: ctx.pluginRoot,
     now: ctx.now
   });
-  fs57.mkdirSync(path68.dirname(abs), { recursive: true });
+  fs58.mkdirSync(path69.dirname(abs), { recursive: true });
   const writer = assertScrubbedWriter(ctx.writer ?? GLOSSARY_WRITER);
   const wrote = writer(abs, plan.next, { runDir: runDir3, runId: ctx.runId ?? "" });
   if (!wrote.written) {
@@ -40745,11 +41020,11 @@ function applyEvolveDelta(delta, ctx = {}) {
     detail: `replaced the span '${delta.span}' under this repo's own durable tree`
   };
 }
-var fs57, path68, GLOSSARY_WRITER;
+var fs58, path69, GLOSSARY_WRITER;
 var init_evolve_apply = __esm({
   "src/domains/evolve/evolve-apply.ts"() {
-    fs57 = __toESM(require("node:fs"));
-    path68 = __toESM(require("node:path"));
+    fs58 = __toESM(require("node:fs"));
+    path69 = __toESM(require("node:path"));
     init_state();
     init_kernel();
     init_knowledge();
@@ -41414,12 +41689,12 @@ var init_teams = __esm({
 // src/domains/lifecycle/resume-lanes.ts
 function parseResumeLanesArgs(argv) {
   const positionals = [];
-  let json = false;
+  let json2 = false;
   let cwd;
   let slug;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--json") json = true;
+    if (arg === "--json") json2 = true;
     else if (arg === "--cwd" && argv[i + 1] !== void 0) cwd = argv[++i];
     else if (arg.startsWith("--cwd=")) cwd = arg.slice("--cwd=".length);
     else if (arg === "--slug" && argv[i + 1] !== void 0) slug = argv[++i];
@@ -41430,20 +41705,20 @@ function parseResumeLanesArgs(argv) {
   if (!runDir3) {
     return { error: "usage: resume-lanes.ts <runDir> [--json] [--cwd <repo-root>] [--slug <slug>]" };
   }
-  return { runDir: runDir3, json, cwd, slug };
+  return { runDir: runDir3, json: json2, cwd, slug };
 }
 function repoRootFromRunDir2(runDir3) {
-  return path69.resolve(runDir3, "..", "..", "..");
+  return path70.resolve(runDir3, "..", "..", "..");
 }
 function scanResumableLanes(runDir3, cwd, slug) {
   const repoRoot = cwd ?? repoRootFromRunDir2(runDir3);
   if (!readResumeEnabled(repoRoot)) {
     return [];
   }
-  const lanesDir = path69.join(runDir3, "lanes");
+  const lanesDir = path70.join(runDir3, "lanes");
   let entries;
   try {
-    entries = fs58.readdirSync(lanesDir, { withFileTypes: true });
+    entries = fs59.readdirSync(lanesDir, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -41507,11 +41782,11 @@ function runResumeLanesCli() {
   }
   process.exit(0);
 }
-var fs58, path69;
+var fs59, path70;
 var init_resume_lanes = __esm({
   "src/domains/lifecycle/resume-lanes.ts"() {
-    fs58 = __toESM(require("fs"));
-    path69 = __toESM(require("path"));
+    fs59 = __toESM(require("fs"));
+    path70 = __toESM(require("path"));
     init_run_state();
     init_teams();
     if (require.main === module && new RegExp("[\\\\/]resume-lanes\\.[cm]?[jt]s$").test(process.argv[1] ?? "")) {
@@ -41535,7 +41810,7 @@ function calcDelayMs(attempt, strategy, baseMs) {
 }
 function realSleep(ms) {
   if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve44) => setTimeout(resolve44, ms));
+  return new Promise((resolve45) => setTimeout(resolve45, ms));
 }
 async function runWithRetry(dispatchFn, opts) {
   const maxAttempts = Math.max(1, Math.floor(opts.maxAttempts));
@@ -41605,7 +41880,10 @@ var init_retry_lane = __esm({
 function realBindingFs() {
   return {
     mkdirp: (p) => fsReal2.mkdirSync(p, { recursive: true }),
-    writeFile: (p, c) => fsReal2.writeFileSync(p, c, "utf8"),
+    writeFile: (p, c) => {
+      fsReal2.writeFileSync(p, c, { encoding: "utf8", mode: PRIVATE_BINDING_MODE });
+      fsReal2.chmodSync(p, PRIVATE_BINDING_MODE);
+    },
     writeFileAtomicContained: (root, p, c) => {
       const result2 = writeContainedFile(root, p, Buffer.from(c, "utf8"), { policy: "physical" });
       if (!result2.written) {
@@ -41613,9 +41891,10 @@ function realBindingFs() {
       }
     },
     writeFileExclusive: (p, c) => {
-      fsReal2.mkdirSync(path70.dirname(p), { recursive: true });
+      fsReal2.mkdirSync(path71.dirname(p), { recursive: true });
       try {
-        fsReal2.writeFileSync(p, c, { encoding: "utf8", flag: "wx" });
+        fsReal2.writeFileSync(p, c, { encoding: "utf8", flag: "wx", mode: PRIVATE_BINDING_MODE });
+        fsReal2.chmodSync(p, PRIVATE_BINDING_MODE);
         return true;
       } catch (error) {
         if (error.code === "EEXIST") return false;
@@ -41627,13 +41906,13 @@ function realBindingFs() {
   };
 }
 function runBindingPath(root, runId) {
-  return path70.join(durableGuildDir(root), "runs", runId, "binding.json");
+  return path71.join(durableGuildDir(root), "runs", runId, "binding.json");
 }
 function pendingSubstantiveOperationPath(root, runId) {
-  return path70.join(durableGuildDir(root), "runs", runId, "capability", "pending-substantive-operation.json");
+  return path71.join(durableGuildDir(root), "runs", runId, "capability", "pending-substantive-operation.json");
 }
-function readPendingSubstantiveOperation(root, runId, fs79 = realBindingFs()) {
-  const raw = fs79.readFile(pendingSubstantiveOperationPath(root, runId));
+function readPendingSubstantiveOperation(root, runId, fs84 = realBindingFs()) {
+  const raw = fs84.readFile(pendingSubstantiveOperationPath(root, runId));
   if (raw === null) return null;
   let value;
   try {
@@ -41648,20 +41927,20 @@ function readPendingSubstantiveOperation(root, runId, fs79 = realBindingFs()) {
   }
   return record;
 }
-function writePendingSubstantiveOperation(root, record, fs79) {
+function writePendingSubstantiveOperation(root, record, fs84) {
   const target = pendingSubstantiveOperationPath(root, record.run_id);
   const serialized = `${JSON.stringify(record, null, 2)}
 `;
-  if (fs79.writeFileAtomicContained) {
-    fs79.writeFileAtomicContained(root, target, serialized);
+  if (fs84.writeFileAtomicContained) {
+    fs84.writeFileAtomicContained(root, target, serialized);
     return;
   }
-  fs79.mkdirp(path70.dirname(target));
-  fs79.writeFile(target, serialized);
+  fs84.mkdirp(path71.dirname(target));
+  fs84.writeFile(target, serialized);
 }
 function stagePendingSubstantiveOperation(opts) {
-  const fs79 = opts.fs ?? realBindingFs();
-  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs79);
+  const fs84 = opts.fs ?? realBindingFs();
+  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs84);
   if (prior?.state === "pending" && prior.task_id !== opts.task_id) {
     throw new Error(`pending substantive operation for ${prior.task_id} must be recovered before ${opts.task_id}`);
   }
@@ -41671,14 +41950,14 @@ function stagePendingSubstantiveOperation(opts) {
     state: "pending",
     run_id: opts.run_id,
     task_id: opts.task_id
-  }, fs79);
+  }, fs84);
 }
 function completePendingSubstantiveOperation(opts) {
-  const fs79 = opts.fs ?? realBindingFs();
-  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs79);
+  const fs84 = opts.fs ?? realBindingFs();
+  const prior = readPendingSubstantiveOperation(opts.root, opts.run_id, fs84);
   if (!prior || prior.task_id !== opts.task_id) throw new Error("pending substantive operation completion has no matching transaction");
   if (prior.state === "complete") return;
-  writePendingSubstantiveOperation(opts.root, { ...prior, state: "complete" }, fs79);
+  writePendingSubstantiveOperation(opts.root, { ...prior, state: "complete" }, fs84);
 }
 function assertNoPendingSubstantiveOperation(opts) {
   const record = readPendingSubstantiveOperation(opts.root, opts.run_id, opts.fs ?? realBindingFs());
@@ -41693,18 +41972,19 @@ function withRunBindingExclusion(root, runId, fn) {
   const persisted = readRunBindingRecord({ root, run_id: runId });
   if (persisted.status === "absent") throw new BindingRejectedError("binding_not_minted", runId);
   if (persisted.status === "malformed") throw new BindingRejectedError("binding_malformed", runId);
-  return withStableLock(path70.join(durableGuildDir(root), "runs", runId), fn);
+  return withStableLock(path71.join(durableGuildDir(root), "runs", runId), fn);
 }
 function initializeRunBindingExclusion(root, runId) {
   if (!/^run-[A-Za-z0-9][A-Za-z0-9._-]{0,191}$/.test(runId)) {
     throw new Error(`run-binding exclusion: invalid run id ${JSON.stringify(runId)}`);
   }
-  initStableLockfile(path70.join(durableGuildDir(root), "runs", runId));
+  initStableLockfile(path71.join(durableGuildDir(root), "runs", runId));
 }
 function mintRunBinding(opts) {
-  const fs79 = opts.fs ?? realBindingFs();
+  if (opts.reserved_binding_ref !== void 0 && !/^rb-[a-f0-9]{32}$/.test(opts.reserved_binding_ref)) throw new Error("run-binding: invalid private reserved binding");
+  const fs84 = opts.fs ?? realBindingFs();
   const p = runBindingPath(opts.root, opts.run_id);
-  if (fs79.exists(p)) {
+  if (fs84.exists(p)) {
     throw new Error(
       `run-binding: a binding for ${opts.run_id} is already minted \u2014 resume restores it (loadRunBinding); it is never re-minted`
     );
@@ -41712,12 +41992,12 @@ function mintRunBinding(opts) {
   const record = {
     schema_version: "guild.run_binding.v1",
     run_id: opts.run_id,
-    binding_ref: `rb-${crypto20.randomBytes(16).toString("hex")}`,
+    binding_ref: opts.reserved_binding_ref ?? `rb-${crypto20.randomBytes(16).toString("hex")}`,
     state: "open"
   };
-  fs79.mkdirp(path70.dirname(p));
+  fs84.mkdirp(path71.dirname(p));
   const contents = JSON.stringify(record, null, 2) + "\n";
-  const created = fs79.writeFileExclusive ? fs79.writeFileExclusive(p, contents) : !fs79.exists(p) && (fs79.writeFile(p, contents), true);
+  const created = fs84.writeFileExclusive ? fs84.writeFileExclusive(p, contents) : !fs84.exists(p) && (fs84.writeFile(p, contents), true);
   if (!created) {
     throw new Error(
       `run-binding: a binding for ${opts.run_id} is already minted \u2014 resume restores it (loadRunBinding); it is never re-minted`
@@ -41741,8 +42021,8 @@ function validateRunBindingRecord(parsed, expectedRunId) {
   };
 }
 function readRunBindingRecord(opts) {
-  const fs79 = opts.fs ?? realBindingFs();
-  const raw = fs79.readFile(runBindingPath(opts.root, opts.run_id));
+  const fs84 = opts.fs ?? realBindingFs();
+  const raw = fs84.readFile(runBindingPath(opts.root, opts.run_id));
   if (raw === null) return { status: "absent" };
   let parsed;
   try {
@@ -41759,10 +42039,10 @@ function loadRunBinding(opts) {
   return read.status === "ok" ? read.record : null;
 }
 function closeRunBinding(opts) {
-  const fs79 = opts.fs ?? realBindingFs();
+  const fs84 = opts.fs ?? realBindingFs();
   const record = loadRunBinding(opts);
   if (record === null || record.state === "closed") return;
-  fs79.writeFile(
+  fs84.writeFile(
     runBindingPath(opts.root, opts.run_id),
     JSON.stringify({ ...record, state: "closed" }, null, 2) + "\n"
   );
@@ -41771,7 +42051,7 @@ function reopenRunBinding(opts, binding_ref) {
   return withRunBindingExclusion(opts.root, opts.run_id, () => reopenRunBindingUnderExclusion(opts, binding_ref));
 }
 function reopenRunBindingUnderExclusion(opts, binding_ref) {
-  const fs79 = opts.fs ?? realBindingFs();
+  const fs84 = opts.fs ?? realBindingFs();
   const read = readRunBindingRecord(opts);
   if (read.status === "absent") throw new BindingRejectedError("binding_not_minted", opts.run_id);
   if (read.status === "malformed") throw new BindingRejectedError("binding_malformed", opts.run_id);
@@ -41781,7 +42061,7 @@ function reopenRunBindingUnderExclusion(opts, binding_ref) {
   }
   if (record.state === "open") return record;
   const reopened = { ...record, state: "open" };
-  fs79.writeFile(runBindingPath(opts.root, opts.run_id), JSON.stringify(reopened, null, 2) + "\n");
+  fs84.writeFile(runBindingPath(opts.root, opts.run_id), JSON.stringify(reopened, null, 2) + "\n");
   return reopened;
 }
 function verifyRunBinding(input) {
@@ -41807,11 +42087,11 @@ function assertWritableBinding(input) {
   if (verdict.ok === false) throw new BindingRejectedError(verdict.reason, input.run_id);
   return verdict.binding;
 }
-function locateCandidateRunId(root, fs79) {
-  const f = fs79 ?? realBindingFs();
+function locateCandidateRunId(root, fs84) {
+  const f = fs84 ?? realBindingFs();
   const candidates = [
-    [path70.join(durableGuildDir(root), "runs", "current-run-id"), "sentinel-legacy"],
-    [path70.join(durableGuildDir(root), "current-run-id"), "sentinel-b2"]
+    [path71.join(durableGuildDir(root), "runs", "current-run-id"), "sentinel-legacy"],
+    [path71.join(durableGuildDir(root), "current-run-id"), "sentinel-b2"]
   ];
   for (const [p, source] of candidates) {
     const raw = f.readFile(p);
@@ -41826,12 +42106,12 @@ function readHookBindingEnvelope(env) {
   if (!run_id || !binding_ref) return null;
   return { run_id, binding_ref };
 }
-var crypto20, fsReal2, path70, BindingRejectedError, PENDING_SUBSTANTIVE_OPERATION_SCHEMA, HOOK_BINDING_ENV_RUN_ID, HOOK_BINDING_ENV_BINDING_REF;
+var crypto20, fsReal2, path71, BindingRejectedError, PRIVATE_BINDING_MODE, PENDING_SUBSTANTIVE_OPERATION_SCHEMA, HOOK_BINDING_ENV_RUN_ID, HOOK_BINDING_ENV_BINDING_REF;
 var init_run_binding = __esm({
   "src/domains/lifecycle/run-binding.ts"() {
     crypto20 = __toESM(require("crypto"));
     fsReal2 = __toESM(require("fs"));
-    path70 = __toESM(require("path"));
+    path71 = __toESM(require("path"));
     init_kernel();
     init_stable_lock();
     init_state();
@@ -41846,6 +42126,7 @@ var init_run_binding = __esm({
       run_id;
       diagnostic = "binding_rejected";
     };
+    PRIVATE_BINDING_MODE = 384;
     PENDING_SUBSTANTIVE_OPERATION_SCHEMA = "guild.pending_substantive_operation.v1";
     HOOK_BINDING_ENV_RUN_ID = "GUILD_RUN_ID";
     HOOK_BINDING_ENV_BINDING_REF = "GUILD_RUN_BINDING_REF";
@@ -41865,32 +42146,85 @@ function capabilityRunStartIdentityHash(runId, startedAt, snapshotHash) {
   });
   return `sha256:${crypto21.createHash("sha256").update(body).digest("hex")}`;
 }
+function stagedStartDigest(plan) {
+  const { digest: _digest, ...value } = plan;
+  return "sha256:" + crypto21.createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+function captureRunStart(env, opts, identity, createdAt, detached) {
+  if (env.captureCapabilityBaseline || env.recordCapabilityBaselineCapture) throw new Error("staged run start requires a stage-aware capability capture adapter");
+  const writes = /* @__PURE__ */ new Map(), reads = /* @__PURE__ */ new Map(), dirs = /* @__PURE__ */ new Set();
+  const own = runDir2(opts.root, identity.run_id);
+  const contained = (abs) => {
+    const rel2 = path72.relative(opts.root, abs);
+    if (path72.isAbsolute(rel2) || rel2 === ".." || rel2.startsWith(".." + path72.sep)) throw new Error("staged start escaped source");
+    if (fsNode.existsSync(opts.root) && isRefused(checkContained(opts.root, abs, { policy: "physical" }))) throw new Error("staged start physical path refused");
+    return rel2;
+  };
+  const read = (abs) => {
+    contained(abs);
+    if (writes.has(abs)) return writes.get(abs);
+    const value = env.fs.readFile(abs);
+    reads.set(abs, value);
+    return value;
+  };
+  const write2 = (abs, bytes) => {
+    contained(abs);
+    if (detached && abs !== own && !abs.startsWith(own + path72.sep)) return;
+    writes.set(abs, bytes);
+  };
+  const fs84 = {
+    mkdirp: (abs) => {
+      contained(abs);
+      dirs.add(abs);
+    },
+    readFile: read,
+    writeFile: write2,
+    writeFileExclusive: (abs, bytes) => {
+      if (writes.has(abs) || env.fs.exists(abs)) return false;
+      write2(abs, bytes);
+      return true;
+    },
+    exists: (abs) => writes.has(abs) || dirs.has(abs) || env.fs.exists(abs),
+    removeTree: (abs) => {
+      for (const key of writes.keys()) if (key === abs || key.startsWith(abs + path72.sep)) writes.delete(key);
+    },
+    scrubbedWriteDurable: (abs, bytes) => {
+      write2(abs, bytes);
+      return { written: true, blocked: false };
+    }
+  };
+  const stagedEnv = { ...env, now: () => createdAt, fs: fs84, reservedStart: identity, initializeRunBindingExclusion: void 0, emitAnalysisEvent: void 0 };
+  const runId = createRunLifecycle(stagedEnv).startRun(opts);
+  const plan = { schema_version: "guild.run_start_plan.v1", root: opts.root, run_id: runId, created_at: createdAt, detached, options: JSON.parse(JSON.stringify(opts)), private_binding_ref: identity.binding_ref, files: [...writes].map(([abs, bytes]) => ({ path: contained(abs), bytes })), directories: [...dirs].filter((abs) => !detached || abs === own || abs.startsWith(own + path72.sep)).map(contained), read_set: [...reads].map(([abs, bytes]) => ({ path: contained(abs), bytes })), digest: "" };
+  plan.digest = stagedStartDigest(plan);
+  return plan;
+}
 function runDir2(root, runId) {
-  return path71.join(durableGuildDir(root), "runs", runId);
+  return path72.join(durableGuildDir(root), "runs", runId);
 }
 function runYamlPath(root, runId) {
-  return path71.join(runDir2(root, runId), "run.yaml");
+  return path72.join(runDir2(root, runId), "run.yaml");
 }
 function provenancePath(root, runId) {
-  return path71.join(runDir2(root, runId), "provenance.json");
+  return path72.join(runDir2(root, runId), "provenance.json");
 }
 function logsDir(root, runId) {
-  return path71.join(runDir2(root, runId), "logs");
+  return path72.join(runDir2(root, runId), "logs");
 }
 function resolvedSettingsPath(root, runId) {
-  return path71.join(runDir2(root, runId), "resolved-settings.json");
+  return path72.join(runDir2(root, runId), "resolved-settings.json");
 }
 function resolvedSettingsDigestPath(root, runId) {
-  return path71.join(runDir2(root, runId), RESOLVED_SETTINGS_DIGEST_FILE);
+  return path72.join(runDir2(root, runId), RESOLVED_SETTINGS_DIGEST_FILE);
 }
 function pluginConfigSnapshotPath(root, runId) {
-  return path71.join(runDir2(root, runId), "plugin-config-snapshot.json");
+  return path72.join(runDir2(root, runId), "plugin-config-snapshot.json");
 }
 function capabilityRunStartSnapshotPath(root, runId) {
-  return path71.join(runDir2(root, runId), "capability", "run-start-snapshot.json");
+  return path72.join(runDir2(root, runId), "capability", "run-start-snapshot.json");
 }
 function sentinelPath(root) {
-  return path71.join(durableGuildDir(root), "runs", "current-run-id");
+  return path72.join(durableGuildDir(root), "runs", "current-run-id");
 }
 function logRefFor(runId) {
   return `.guild/runs/${runId}/logs/v1.4-events.jsonl`;
@@ -41994,7 +42328,7 @@ function serializeRunYaml(rec) {
 }
 function bindRunSession(env, root, runId) {
   const dir = runDir2(root, runId);
-  const errorPath = path71.join(dir, "session-binding.error");
+  const errorPath = path72.join(dir, "session-binding.error");
   const fail = (message, cause) => {
     const detail = cause instanceof Error ? `
 ${cause.message}` : "";
@@ -42024,6 +42358,7 @@ ${cause.message}` : "";
     result2 = bindSessionForRun({
       runDir: dir,
       runId,
+      now: () => new Date(env.now()),
       promptCompose: composed,
       models,
       fs: {
@@ -42250,7 +42585,9 @@ function createRunLifecycle(env) {
       const nowIso = env.now();
       const preferredRunId = makeRunId(opts, nowIso);
       const root = opts.root;
-      const runId = env.fs.exists(runDir2(root, preferredRunId)) ? makeCanonicalRunId(nowIso, `${deriveRunSlug(opts)}-${crypto21.randomUUID()}`) : preferredRunId;
+      const runId = env.reservedStart?.run_id ?? (env.fs.exists(runDir2(root, preferredRunId)) ? makeCanonicalRunId(nowIso, `${deriveRunSlug(opts)}-${crypto21.randomUUID()}`) : preferredRunId);
+      assertCanonicalRunId(runId);
+      if (env.reservedStart && env.fs.exists(runDir2(root, runId))) throw new Error("reserved run identity is occupied");
       const runClass = opts.run_class ?? "full";
       const capabilityBaseline = runClass === "full" ? env.captureCapabilityBaseline?.(root, runId) ?? null : null;
       if (runClass === "full" && env.captureCapabilityBaseline && (!capabilityBaseline || capabilityBaseline.bound_run_id !== runId)) {
@@ -42283,7 +42620,7 @@ function createRunLifecycle(env) {
         throw new Error(rollbackFailures.length === 0 ? reason : `${reason}; rollback of ${runId} also failed: ${rollbackFailures.join("; ")}`);
       };
       try {
-        const binding = mintRunBinding({ root, run_id: runId, fs: env.fs });
+        const binding = mintRunBinding({ root, run_id: runId, fs: env.fs, reserved_binding_ref: env.reservedStart?.binding_ref });
         ownedBindingRef = binding.binding_ref;
         ownsBaselineRunTransaction = capabilityBaseline !== null;
         env.initializeRunBindingExclusion?.(root, runId);
@@ -42413,6 +42750,44 @@ function createRunLifecycle(env) {
         throw error;
       }
     },
+    stageRunStart(opts, options = {}) {
+      const createdAt = env.now();
+      const runId = makeCanonicalRunId(createdAt, `${deriveRunSlug(opts)}-${crypto21.randomUUID().slice(0, 8)}`);
+      return captureRunStart(env, opts, { run_id: runId, binding_ref: `rb-${crypto21.randomBytes(16).toString("hex")}` }, createdAt, options.detached === true);
+    },
+    materializeRunStart(plan) {
+      const rootHint = env.__rootHint;
+      if (!path72.isAbsolute(plan.root) || rootHint !== void 0 && plan.root !== rootHint) throw new Error("staged start belongs to another source");
+      const safeRelative = (relative25) => {
+        if (typeof relative25 !== "string" || !relative25 || path72.isAbsolute(relative25) || /[\\%\x00-\x1f]/.test(relative25) || relative25.split("/").some((v) => !v || v === "." || v === "..")) throw new Error("staged start path escaped source");
+        const abs = path72.join(plan.root, relative25);
+        if (fsNode.existsSync(plan.root) && isRefused(checkContained(plan.root, abs, { policy: "physical" }))) throw new Error("staged start physical path refused");
+        return abs;
+      };
+      for (const file of [...plan.files, ...plan.read_set]) safeRelative(file.path);
+      for (const dir of plan.directories) safeRelative(dir);
+      const ownPrefix = path72.relative(plan.root, runDir2(plan.root, assertCanonicalRunId(plan.run_id))) + "/";
+      if (plan.detached && plan.files.some((file) => !file.path.startsWith(ownPrefix))) throw new Error("detached start writes outside owned run");
+      if (plan.schema_version !== "guild.run_start_plan.v1" || plan.root !== plan.options.root || plan.digest !== stagedStartDigest(plan)) throw new Error("staged start digest invalid");
+      for (const input of plan.read_set) if (env.fs.readFile(path72.join(plan.root, input.path)) !== input.bytes) throw new Error("staged start input changed");
+      const replay = captureRunStart(env, plan.options, { run_id: plan.run_id, binding_ref: plan.private_binding_ref }, plan.created_at, plan.detached);
+      if (JSON.stringify(replay) !== JSON.stringify(plan)) throw new Error("staged start differs from lifecycle replay");
+      const own = runDir2(plan.root, plan.run_id);
+      if (env.fs.exists(own)) throw new Error("reserved run identity is occupied");
+      env.fs.mkdirp(path72.dirname(own));
+      if (env.fs.mkdirExclusive ? !env.fs.mkdirExclusive(own) : env.fs.exists(own)) throw new Error("reserved run identity is occupied");
+      if (!env.fs.mkdirExclusive) env.fs.mkdirp(own);
+      for (const dir of plan.directories) env.fs.mkdirp(path72.join(plan.root, dir));
+      for (const file of plan.files) {
+        const abs = path72.join(plan.root, file.path);
+        if (env.fs.exists(abs)) throw new Error("staged target is occupied");
+        if (env.fs.writeFileExclusive) {
+          if (!env.fs.writeFileExclusive(abs, file.bytes)) throw new Error("staged target is occupied");
+        } else env.fs.writeFile(abs, file.bytes);
+      }
+      env.initializeRunBindingExclusion?.(plan.root, plan.run_id);
+      return plan.run_id;
+    },
     closeRun(runId, opts) {
       const root = resolveCloseRoot(env);
       env.withRunBindingExclusion(root, runId, () => {
@@ -42449,7 +42824,7 @@ function createRunLifecycle(env) {
         const provPath = provenancePath(root, runId);
         const provenanceContent = JSON.stringify(provenance, null, 2) + "\n";
         if (env.fs.scrubbedWriteDurable) {
-          const runDir3 = path71.join(durableGuildDir(root), "runs", runId);
+          const runDir3 = path72.join(durableGuildDir(root), "runs", runId);
           const result2 = env.fs.scrubbedWriteDurable(provPath, provenanceContent, "provenance", runDir3, runId);
           if (result2.blocked) {
             process.stderr.write(
@@ -42511,12 +42886,21 @@ function createRealEnv(root, resolveHost, captureCapabilityBaseline, recordCapab
       mkdirp(absPath) {
         fsNode.mkdirSync(absPath, { recursive: true });
       },
+      mkdirExclusive(absPath) {
+        try {
+          fsNode.mkdirSync(absPath);
+          return true;
+        } catch (error) {
+          if (error.code === "EEXIST") return false;
+          throw error;
+        }
+      },
       writeFile(absPath, contents) {
-        fsNode.mkdirSync(path71.dirname(absPath), { recursive: true });
+        fsNode.mkdirSync(path72.dirname(absPath), { recursive: true });
         fsNode.writeFileSync(absPath, contents, "utf8");
       },
       writeFileExclusive(absPath, contents) {
-        fsNode.mkdirSync(path71.dirname(absPath), { recursive: true });
+        fsNode.mkdirSync(path72.dirname(absPath), { recursive: true });
         try {
           fsNode.writeFileSync(absPath, contents, { encoding: "utf8", flag: "wx" });
           return true;
@@ -42567,11 +42951,11 @@ function assertContained(target, cwd, label) {
   const r = checkContained(cwd, target, { policy: "physical" });
   if (isRefused(r)) {
     throw new Error(
-      `[run-lifecycle] ${label}: resolved path "${path71.resolve(target)}" escapes the project root "${path71.resolve(cwd)}" [${r.code}] \u2014 ${r.detail}`
+      `[run-lifecycle] ${label}: resolved path "${path72.resolve(target)}" escapes the project root "${path72.resolve(cwd)}" [${r.code}] \u2014 ${r.detail}`
     );
   }
-  const runsBase = path71.resolve(durableGuildDir(cwd), "runs");
-  const resolvedTarget = path71.resolve(target);
+  const runsBase = path72.resolve(durableGuildDir(cwd), "runs");
+  const resolvedTarget = path72.resolve(target);
   if (resolvedTarget === runsBase || !isWithin(resolvedTarget, runsBase)) {
     throw new Error(
       `[run-lifecycle] ${label}: resolved path "${resolvedTarget}" is not a strict subdirectory of the runs base "${runsBase}"`
@@ -42581,7 +42965,7 @@ function assertContained(target, cwd, label) {
 function realProvenanceFsSeam() {
   return {
     writeFile(absPath, contents) {
-      fsNode.mkdirSync(path71.dirname(absPath), { recursive: true });
+      fsNode.mkdirSync(path72.dirname(absPath), { recursive: true });
       fsNode.writeFileSync(absPath, contents, "utf8");
     },
     readFile(absPath) {
@@ -42604,18 +42988,18 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
     );
   }
   const { cwd, fs: fsSeam, resolvedAtRef } = opts;
-  const fs79 = fsSeam ?? realProvenanceFsSeam();
+  const fs84 = fsSeam ?? realProvenanceFsSeam();
   const outPath = resolvedSettingsPath(cwd, runId);
-  const runsBase = path71.resolve(durableGuildDir(cwd), "runs");
+  const runsBase = path72.resolve(durableGuildDir(cwd), "runs");
   assertContained(outPath, cwd, "writeResolvedSettingsSnapshot");
   const onDisk = {
     ...snapshot,
     resolved_at_ref: resolvedAtRef ?? runId
   };
   const serialized = JSON.stringify(onDisk, null, 2) + "\n";
-  if (fs79.scrubbedWriteDurable) {
-    const runDir3 = path71.join(durableGuildDir(cwd), "runs", runId);
-    const result2 = fs79.scrubbedWriteDurable(outPath, serialized, "config", runDir3, runId);
+  if (fs84.scrubbedWriteDurable) {
+    const runDir3 = path72.join(durableGuildDir(cwd), "runs", runId);
+    const result2 = fs84.scrubbedWriteDurable(outPath, serialized, "config", runDir3, runId);
     if (result2.blocked) {
       process.stderr.write(
         `[run-lifecycle] WARN: resolved-settings.json write BLOCKED by secret scrub (fail-CLOSED) for run ${runId}. Security event emitted.
@@ -42623,11 +43007,11 @@ function writeResolvedSettingsSnapshot(runId, snapshot, opts) {
       );
     }
   } else {
-    fs79.writeFile(outPath, serialized);
+    fs84.writeFile(outPath, serialized);
   }
-  const landed = fs79.readFile(outPath);
+  const landed = fs84.readFile(outPath);
   if (landed !== null) {
-    fs79.writeFile(resolvedSettingsDigestPath(cwd, runId), resolvedSettingsDigestRecord(landed));
+    fs84.writeFile(resolvedSettingsDigestPath(cwd, runId), resolvedSettingsDigestRecord(landed));
   } else if (presentOnDisk(outPath)) {
     throw new ResolvedSettingsIntegrityError(runId);
   }
@@ -42638,7 +43022,7 @@ function hashOptionalFile(env, file) {
   return raw === null ? null : crypto21.createHash("sha256").update(raw).digest("hex");
 }
 function derivePluginIdentity(start, env) {
-  const pluginManifestPath = path71.join(start.root, ".claude-plugin", "plugin.json");
+  const pluginManifestPath = path72.join(start.root, ".claude-plugin", "plugin.json");
   const pluginManifest = env.fs.readFile(pluginManifestPath);
   let manifestVersion = null;
   if (pluginManifest !== null) {
@@ -42649,7 +43033,7 @@ function derivePluginIdentity(start, env) {
     }
   }
   const manifestHash = pluginManifest === null ? null : crypto21.createHash("sha256").update(pluginManifest).digest("hex");
-  const commandSurfaceHash = hashOptionalFile(env, path71.join(start.root, "command-src", "command-registry.json"));
+  const commandSurfaceHash = hashOptionalFile(env, path72.join(start.root, "command-src", "command-registry.json"));
   return {
     version: start.plugin_identity?.version ?? manifestVersion ?? "unknown",
     ref: start.plugin_identity?.ref ?? (manifestHash ? `sha256:${manifestHash}` : "unknown"),
@@ -42686,8 +43070,8 @@ function writePluginConfigSnapshot(runId, snapshot, start, env) {
       capabilities_ref: host.capabilities_ref ?? null
     },
     registry_hashes: {
-      skills: hashOptionalFile(env, path71.join(durableGuildDir(start.root), "skills", "registry.yaml")),
-      agents: hashOptionalFile(env, path71.join(durableGuildDir(start.root), "agents", "registry.yaml"))
+      skills: hashOptionalFile(env, path72.join(durableGuildDir(start.root), "skills", "registry.yaml")),
+      agents: hashOptionalFile(env, path72.join(durableGuildDir(start.root), "agents", "registry.yaml"))
     },
     command_surface_version: pluginIdentity.commandSurfaceVersion,
     redaction_policy: "scrubbed-config-v1",
@@ -42727,18 +43111,18 @@ function writePluginConfigSnapshot(runId, snapshot, start, env) {
 function readResolvedSettingsSnapshot(runId, opts) {
   if (!validateRunId2(runId)) return null;
   const { cwd, fs: fsSeam } = opts;
-  const fs79 = fsSeam ?? realProvenanceFsSeam();
+  const fs84 = fsSeam ?? realProvenanceFsSeam();
   const filePath = resolvedSettingsPath(cwd, runId);
-  const runsBase = path71.resolve(durableGuildDir(cwd), "runs");
+  const runsBase = path72.resolve(durableGuildDir(cwd), "runs");
   try {
     assertContained(filePath, cwd, "readResolvedSettingsSnapshot");
   } catch {
     return null;
   }
   const sidecarPath2 = resolvedSettingsDigestPath(cwd, runId);
-  const sidecarRead = fs79.readFile(sidecarPath2);
+  const sidecarRead = fs84.readFile(sidecarPath2);
   const sidecar = sidecarRead ?? (presentOnDisk(sidecarPath2) ? "" : null);
-  const raw = fs79.readFile(filePath);
+  const raw = fs84.readFile(filePath);
   if (raw === null) {
     if (sidecar !== null || presentOnDisk(filePath)) throw new ResolvedSettingsIntegrityError(runId);
     return null;
@@ -42755,7 +43139,7 @@ function readResolvedSettingsSnapshot(runId, opts) {
 function readWorkspaceKnowledgeConfig(root) {
   let parsed = {};
   try {
-    const raw = fsNode.readFileSync(path71.join(durableGuildDir(root), "workspace.json"), "utf8");
+    const raw = fsNode.readFileSync(path72.join(durableGuildDir(root), "workspace.json"), "utf8");
     const obj = JSON.parse(raw);
     if (obj && typeof obj === "object") parsed = obj;
   } catch {
@@ -42803,17 +43187,17 @@ function writeGateBlock(raw, gate, rec) {
   lines.splice(end, 0, gateKeyLine, ...entryLines);
   return lines.join("\n");
 }
-function appendGateOutcome(fs79, root, runId, gate, record, trace = {}) {
+function appendGateOutcome(fs84, root, runId, gate, record, trace = {}) {
   if (!GATE_TOKEN.test(gate)) return false;
   const p = runYamlPath(root, runId);
-  const raw = fs79.readFile(p);
+  const raw = fs84.readFile(p);
   if (raw === null) return false;
   const next = writeGateBlock(raw, gate, record);
   if (next === null) return false;
-  fs79.writeFile(p, next);
+  fs84.writeFile(p, next);
   const ts = (trace.now ?? (() => (/* @__PURE__ */ new Date()).toISOString()))();
   const emit = trace.emitAnalysisEvent === void 0 ? emitToExistingRunLog : trace.emitAnalysisEvent;
-  emitLifecycleEvent(emit, root, runId, fs79.readFile(pluginConfigSnapshotPath(root, runId)) !== null, {
+  emitLifecycleEvent(emit, root, runId, fs84.readFile(pluginConfigSnapshotPath(root, runId)) !== null, {
     ts,
     event_class: "gate_concluded",
     status: record.outcome === "pass" ? "ok" : record.outcome === "fail" ? "error" : "unknown",
@@ -42823,7 +43207,7 @@ function appendGateOutcome(fs79, root, runId, gate, record, trace = {}) {
   return true;
 }
 function emitToExistingRunLog(event, activeRunDir) {
-  return fsNode.existsSync(path71.join(activeRunDir, "logs")) && emitTraceEvent(event, activeRunDir);
+  return fsNode.existsSync(path72.join(activeRunDir, "logs")) && emitTraceEvent(event, activeRunDir);
 }
 function readRunStartedAt2(runDir3, readFile = (p) => {
   try {
@@ -42832,7 +43216,7 @@ function readRunStartedAt2(runDir3, readFile = (p) => {
     return null;
   }
 }) {
-  const p = path71.join(runDir3, "run.yaml");
+  const p = path72.join(runDir3, "run.yaml");
   const raw = readFile(p);
   if (raw === null) return null;
   const doc = parseYaml(raw);
@@ -42841,7 +43225,31 @@ function readRunStartedAt2(runDir3, readFile = (p) => {
   if (v === void 0 || v === null) return null;
   return String(v).trim() || null;
 }
-var crypto21, fsNode, path71, CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, CANONICAL_RUN_ID_RE, HOST_FAMILY_TO_KIND, CANONICAL_PHASES, ResolvedSettingsIntegrityError, WORKSPACE_KNOWLEDGE_DEFAULTS, GATE_TOKEN;
+function updateRunAttachment(manifest, provenance, initiativeId) {
+  const scope = initiativeId === null ? "independent" : "initiative";
+  const group = initiativeId === null ? manifest.independent_run_group || manifest.run_id || manifest.id : null;
+  if (initiativeId === null && (typeof group !== "string" || group.length === 0))
+    throw new Error("Run requires a stable independent grouping identity");
+  const resolution = {
+    ...manifest.attachment_resolution,
+    scope,
+    initiative_id: initiativeId,
+    independent_group_id: group,
+    source: initiativeId === null ? "independent" : "user_selected",
+    confidence: "high"
+  };
+  return {
+    manifest: {
+      ...manifest,
+      run_scope: scope,
+      initiative_attachment: initiativeId,
+      independent_run_group: group,
+      attachment_resolution: resolution
+    },
+    provenance: provenance === null ? null : { ...provenance, initiative: initiativeId, run_scope: scope }
+  };
+}
+var crypto21, fsNode, path72, CAPABILITY_RUN_START_SNAPSHOT_SCHEMA, CANONICAL_RUN_ID_RE, HOST_FAMILY_TO_KIND, CANONICAL_PHASES, ResolvedSettingsIntegrityError, WORKSPACE_KNOWLEDGE_DEFAULTS, GATE_TOKEN;
 var init_run_lifecycle = __esm({
   "src/domains/lifecycle/run-lifecycle.ts"() {
     crypto21 = __toESM(require("crypto"));
@@ -42849,7 +43257,7 @@ var init_run_lifecycle = __esm({
     init_config2();
     init_config2();
     fsNode = __toESM(require("fs"));
-    path71 = __toESM(require("path"));
+    path72 = __toESM(require("path"));
     init_kernel();
     init_config2();
     init_config2();
@@ -42888,11 +43296,11 @@ var init_run_lifecycle = __esm({
 
 // src/domains/lifecycle/write-run-manifest.ts
 function manifestPathFor(cwd, slug) {
-  return path72.join(durableGuildDir(cwd), "programs", slug, "manifest.json");
+  return path73.join(durableGuildDir(cwd), "programs", slug, "manifest.json");
 }
 function readRunManifest(cwd, slug) {
   try {
-    const raw = fs59.readFileSync(manifestPathFor(cwd, slug), "utf8");
+    const raw = fs60.readFileSync(manifestPathFor(cwd, slug), "utf8");
     return JSON.parse(raw);
   } catch {
     return null;
@@ -43003,7 +43411,7 @@ function runWriteRunManifestCli(argv = process.argv.slice(2)) {
     process.stderr.write("[write-run-manifest] ERROR: --slug <slug> is required.\n");
     process.exit(1);
   }
-  if (!fs59.existsSync(args.cwd) || !fs59.statSync(args.cwd).isDirectory()) {
+  if (!fs60.existsSync(args.cwd) || !fs60.statSync(args.cwd).isDirectory()) {
     process.stderr.write(`[write-run-manifest] ERROR: --cwd "${args.cwd}" is not a directory
 `);
     process.exit(1);
@@ -43046,11 +43454,11 @@ function runWriteRunManifestCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var fs59, path72, WAVE_STATUSES, PROGRAM_STATUSES;
+var fs60, path73, WAVE_STATUSES, PROGRAM_STATUSES;
 var init_write_run_manifest = __esm({
   "src/domains/lifecycle/write-run-manifest.ts"() {
-    fs59 = __toESM(require("fs"));
-    path72 = __toESM(require("path"));
+    fs60 = __toESM(require("fs"));
+    path73 = __toESM(require("path"));
     init_state();
     init_state();
     WAVE_STATUSES = /* @__PURE__ */ new Set(["pending", "active", "completed", "failed"]);
@@ -43516,12 +43924,12 @@ var init_runstart_preflight = __esm({
 
 // src/domains/lifecycle/write-task-run.ts
 function taskRunPath(cwd, runId, taskId) {
-  return path73.join(durableGuildDir(cwd), "runs", runId, "task-runs", `${taskId}.yaml`);
+  return path74.join(durableGuildDir(cwd), "runs", runId, "task-runs", `${taskId}.yaml`);
 }
 function readTaskRunCapReqs(cwd, runId, taskId) {
   try {
     const p = taskRunPath(cwd, runId, taskId);
-    const raw = fs60.readFileSync(p, "utf8");
+    const raw = fs61.readFileSync(p, "utf8");
     const doc = loadYamlApi().load(raw);
     const cr = doc?.task_run?.host?.capability_requirements;
     if (!cr) return void 0;
@@ -43607,7 +44015,7 @@ function writeTaskRun(cwd, runId, taskId, params) {
   });
   atomicWrite(outPath, yamlStr);
   try {
-    const _traceRunDir = path73.join(durableGuildDir(cwd), "runs", runId);
+    const _traceRunDir = path74.join(durableGuildDir(cwd), "runs", runId);
     const _traceTs = (/* @__PURE__ */ new Date()).toISOString();
     const _traceBackend = "unknown";
     emitTraceEvent(
@@ -43785,11 +44193,11 @@ function runWriteTaskRunCli(argv = process.argv.slice(2)) {
     process.exit(2);
   }
 }
-var fs60, path73;
+var fs61, path74;
 var init_write_task_run = __esm({
   "src/domains/lifecycle/write-task-run.ts"() {
-    fs60 = __toESM(require("fs"));
-    path73 = __toESM(require("path"));
+    fs61 = __toESM(require("fs"));
+    path74 = __toESM(require("path"));
     init_telemetry();
     init_kernel();
     init_state();
@@ -44308,7 +44716,7 @@ function pluginRootFor(explicit) {
 function readYamlGraph(file) {
   let text;
   try {
-    text = fs61.readFileSync(file, "utf8");
+    text = fs62.readFileSync(file, "utf8");
   } catch (err) {
     throw new WorkflowGraphLoadError(`cannot read class graph at ${file}: ${err.message}`);
   }
@@ -44327,8 +44735,8 @@ function pluginGraphPath(klass, pluginRoot) {
   const root = pluginRootFor(pluginRoot);
   for (const dir of PLUGIN_GRAPH_DIRS) {
     for (const ext of [".yaml", ".yml"]) {
-      const p = path74.join(root, dir, `${klass}${ext}`);
-      if (fs61.existsSync(p)) return p;
+      const p = path75.join(root, dir, `${klass}${ext}`);
+      if (fs62.existsSync(p)) return p;
     }
   }
   return null;
@@ -44342,7 +44750,7 @@ function overlayGraphPath(klass, opts = {}) {
   }
   for (const ext of [".yaml", ".yml"]) {
     const p = storage.definition(OVERLAY_GRAPH_SEGMENT, `${klass}${ext}`);
-    if (fs61.existsSync(p)) return p;
+    if (fs62.existsSync(p)) return p;
   }
   return null;
 }
@@ -44382,16 +44790,16 @@ function loadAllClassGraphs(opts = {}) {
   }
   return out;
 }
-var fs61, path74, PLUGIN_GRAPH_DIRS, OVERLAY_GRAPH_SEGMENT, WorkflowGraphLoadError;
+var fs62, path75, PLUGIN_GRAPH_DIRS, OVERLAY_GRAPH_SEGMENT, WorkflowGraphLoadError;
 var init_workflow_graph_load = __esm({
   "src/domains/lifecycle/workflow-graph-load.ts"() {
-    fs61 = __toESM(require("node:fs"));
-    path74 = __toESM(require("node:path"));
+    fs62 = __toESM(require("node:fs"));
+    path75 = __toESM(require("node:path"));
     init_kernel();
     init_state();
     init_workflow_graph_overlay();
     PLUGIN_GRAPH_DIRS = Object.freeze([
-      path74.join("src", "surfaces", "graphs"),
+      path75.join("src", "surfaces", "graphs"),
       "graphs"
     ]);
     OVERLAY_GRAPH_SEGMENT = "graphs";
@@ -44402,21 +44810,21 @@ var init_workflow_graph_load = __esm({
 
 // src/domains/lifecycle/workflow-router.ts
 function workflowCursorPath(runDir3) {
-  return path75.join(runDir3, "workflow-cursor.json");
+  return path76.join(runDir3, "workflow-cursor.json");
 }
 function readWorkflowCursor(runDir3) {
   const p = workflowCursorPath(runDir3);
   try {
-    if (!fs62.existsSync(p)) return null;
-    const parsed = JSON.parse(fs62.readFileSync(p, "utf8"));
+    if (!fs63.existsSync(p)) return null;
+    const parsed = JSON.parse(fs63.readFileSync(p, "utf8"));
     return parsed && parsed.schema_version === WORKFLOW_CURSOR_SCHEMA ? parsed : null;
   } catch {
     return null;
   }
 }
 function writeWorkflowCursor(runDir3, cursor) {
-  fs62.mkdirSync(runDir3, { recursive: true });
-  fs62.writeFileSync(workflowCursorPath(runDir3), JSON.stringify(cursor, null, 2) + "\n", "utf8");
+  fs63.mkdirSync(runDir3, { recursive: true });
+  fs63.writeFileSync(workflowCursorPath(runDir3), JSON.stringify(cursor, null, 2) + "\n", "utf8");
 }
 function bindWorkflowCursor(input) {
   const entry = typeof input.graph.entry === "string" && input.graph.entry !== "" ? input.graph.entry : CLASS_DEFAULT_ENTRIES[input.class];
@@ -44566,11 +44974,11 @@ function routeWorkflowDecisionAtRun(runDir3, input) {
 function currentNode(graph, cursor) {
   return (graph.nodes ?? []).find((n) => n?.id === cursor.node_id);
 }
-var fs62, path75, WORKFLOW_CURSOR_SCHEMA, WORKFLOW_DECISION_SCHEMA;
+var fs63, path76, WORKFLOW_CURSOR_SCHEMA, WORKFLOW_DECISION_SCHEMA;
 var init_workflow_router = __esm({
   "src/domains/lifecycle/workflow-router.ts"() {
-    fs62 = __toESM(require("node:fs"));
-    path75 = __toESM(require("node:path"));
+    fs63 = __toESM(require("node:fs"));
+    path76 = __toESM(require("node:path"));
     init_workflow_graph_overlay();
     WORKFLOW_CURSOR_SCHEMA = "guild.workflow_cursor.v1";
     WORKFLOW_DECISION_SCHEMA = "guild.workflow_decision.v1";
@@ -44595,9 +45003,9 @@ function assertIds(kind, runId, id) {
   if (typeof id !== "string" || !SAFE_ID2.test(id)) throw new T0QueueError("unsafe request id");
 }
 function assertGuildRoot(root) {
-  if (typeof root !== "string" || !path76.isAbsolute(root)) throw new T0QueueError("request root must be absolute");
+  if (typeof root !== "string" || !path77.isAbsolute(root)) throw new T0QueueError("request root must be absolute");
   const resolved = resolveGuildRoot(root);
-  if (path76.resolve(resolved) !== path76.resolve(root)) throw new T0QueueError(`${root} is not a Guild root`);
+  if (path77.resolve(resolved) !== path77.resolve(root)) throw new T0QueueError(`${root} is not a Guild root`);
   return root;
 }
 function enqueueT0Request(input) {
@@ -44617,8 +45025,8 @@ function enqueueT0Request(input) {
   const bytes = `${JSON.stringify(req, null, 2)}
 `;
   const file = requestPath(storage, input.kind, input.runId, request_id);
-  storage.ensureDir(path76.dirname(file));
-  fs63.writeFileSync(file, bytes, { encoding: "utf8", flag: "wx" });
+  storage.ensureDir(path77.dirname(file));
+  fs64.writeFileSync(file, bytes, { encoding: "utf8", flag: "wx" });
   return {
     t0_queue: T0_REQUEST_SCHEMA,
     queued: true,
@@ -44647,7 +45055,7 @@ function parseT0Receipts(stdout) {
 }
 function readT0Request(receipt2, storage) {
   const file = requestPath(storage, receipt2.kind, receipt2.run_id, receipt2.request_id);
-  const bytes = fs63.readFileSync(file, "utf8");
+  const bytes = fs64.readFileSync(file, "utf8");
   if (sha2567(bytes) !== receipt2.sha256) {
     throw new T0QueueError(`request ${receipt2.request_id} does not match the enqueued bytes (sha256 mismatch)`);
   }
@@ -44727,7 +45135,7 @@ function drainT0Request(receipt2, opts) {
   const storage = createGuildStorage(root);
   const req = readT0Request(receipt2, storage);
   try {
-    fs63.writeFileSync(requestPath(storage, req.kind, req.run_id, req.request_id, ".claim"), (/* @__PURE__ */ new Date()).toISOString(), {
+    fs64.writeFileSync(requestPath(storage, req.kind, req.run_id, req.request_id, ".claim"), (/* @__PURE__ */ new Date()).toISOString(), {
       encoding: "utf8",
       flag: "wx"
     });
@@ -44737,7 +45145,7 @@ function drainT0Request(receipt2, opts) {
   }
   const { code, out } = req.kind === "harvest" ? drainHarvest(req, storage) : drainEvolve(req, storage, opts.pluginRoot);
   const outcome = { kind: req.kind, request_id: req.request_id, run_id: req.run_id, code, out };
-  fs63.writeFileSync(
+  fs64.writeFileSync(
     requestPath(storage, req.kind, req.run_id, req.request_id, ".result.json"),
     `${JSON.stringify(outcome, null, 2)}
 `,
@@ -44745,12 +45153,12 @@ function drainT0Request(receipt2, opts) {
   );
   return outcome;
 }
-var crypto22, fs63, path76, T0_REQUEST_SCHEMA, T0_QUEUE_KINDS, SAFE_ID2, T0QueueError;
+var crypto22, fs64, path77, T0_REQUEST_SCHEMA, T0_QUEUE_KINDS, SAFE_ID2, T0QueueError;
 var init_t0_queue = __esm({
   "src/domains/lifecycle/t0-queue.ts"() {
     crypto22 = __toESM(require("node:crypto"));
-    fs63 = __toESM(require("node:fs"));
-    path76 = __toESM(require("node:path"));
+    fs64 = __toESM(require("node:fs"));
+    path77 = __toESM(require("node:path"));
     init_state();
     init_workflow_graph_load();
     init_workflow_router();
@@ -45254,12 +45662,12 @@ function documentRoundTripEvidence(input) {
     ok: revalidated.ok && revalidated.hash === hash,
     detail: revalidated.ok ? revalidated.hash : "revalidation failed"
   });
-  const canonical = canonicalDocumentJson(record);
+  const canonical2 = canonicalDocumentJson(record);
   let jsonOk = false;
   let jsonDetail = "canonicalization failed";
-  if (canonical.ok) {
+  if (canonical2.ok) {
     try {
-      const reparsed = JSON.parse(canonical.json);
+      const reparsed = JSON.parse(canonical2.json);
       const again = documentContentHash(reparsed);
       jsonOk = again.ok && again.hash === hash;
       jsonDetail = again.ok ? again.hash : "reparsed record did not validate";
@@ -45730,13 +46138,13 @@ function appendActivity(activityFile, row) {
   if (!isValidActivityRow(row)) {
     throw new Error(`[initiative-activity] refusing to append an invalid ${ACTIVITY_SCHEMA} row`);
   }
-  fs64.mkdirSync(path77.dirname(activityFile), { recursive: true });
-  fs64.appendFileSync(activityFile, JSON.stringify(row) + "\n", "utf8");
+  fs65.mkdirSync(path78.dirname(activityFile), { recursive: true });
+  fs65.appendFileSync(activityFile, JSON.stringify(row) + "\n", "utf8");
 }
 function readActivity(activityFile) {
   let raw = "";
   try {
-    raw = fs64.readFileSync(activityFile, "utf8");
+    raw = fs65.readFileSync(activityFile, "utf8");
   } catch {
     return [];
   }
@@ -45751,11 +46159,11 @@ function readActivity(activityFile) {
   }
   return rows;
 }
-var fs64, path77, ACTIVITY_SCHEMA, ACTIVITY_EVENTS, SET2;
+var fs65, path78, ACTIVITY_SCHEMA, ACTIVITY_EVENTS, SET2;
 var init_initiative_activity = __esm({
   "src/domains/lifecycle/initiative-activity.ts"() {
-    fs64 = __toESM(require("fs"));
-    path77 = __toESM(require("path"));
+    fs65 = __toESM(require("fs"));
+    path78 = __toESM(require("path"));
     ACTIVITY_SCHEMA = "guild.initiative_activity.v1";
     ACTIVITY_EVENTS = Object.freeze([
       "created",
@@ -46521,7 +46929,7 @@ var init_operations_catalog = __esm({
 // src/domains/lifecycle/run-record-validate.ts
 function isRegularFile(p) {
   try {
-    const stat = fs65.lstatSync(p);
+    const stat = fs66.lstatSync(p);
     return stat.isFile() && !stat.isSymbolicLink();
   } catch {
     return false;
@@ -46529,7 +46937,7 @@ function isRegularFile(p) {
 }
 function isNonEmptyFile(p) {
   try {
-    const stat = fs65.lstatSync(p);
+    const stat = fs66.lstatSync(p);
     return stat.isFile() && !stat.isSymbolicLink() && stat.size > 0;
   } catch {
     return false;
@@ -46599,26 +47007,26 @@ function isCanonicalLaneReceipt(content, receiptName) {
   return canonicalLaneReceiptIdentity(content, receiptName) !== null;
 }
 function taskCellBindings(runDir3) {
-  const root = path78.join(runDir3, "task-cells");
-  if (!fs65.existsSync(root)) return null;
+  const root = path79.join(runDir3, "task-cells");
+  if (!fs66.existsSync(root)) return null;
   const bindings = /* @__PURE__ */ new Set();
-  const runId = path78.basename(runDir3);
+  const runId = path79.basename(runDir3);
   const walk = (dir) => {
     let entries;
     try {
-      entries = fs65.readdirSync(dir, { withFileTypes: true });
+      entries = fs66.readdirSync(dir, { withFileTypes: true });
     } catch {
       return;
     }
     for (const entry of entries) {
-      const abs = path78.join(dir, entry.name);
+      const abs = path79.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(abs);
         continue;
       }
       if (!entry.isFile() || entry.name !== "assignment.json") continue;
       try {
-        const assignment = validateTaskAssignmentV2(JSON.parse(fs65.readFileSync(abs, "utf8")));
+        const assignment = validateTaskAssignmentV2(JSON.parse(fs66.readFileSync(abs, "utf8")));
         if (assignment !== null && assignment.run_id === runId) {
           bindings.add(`${assignment.worker_role}\0${assignment.logical_task_id}`);
         }
@@ -46630,21 +47038,21 @@ function taskCellBindings(runDir3) {
   return bindings;
 }
 function hasValidLaneHandoff(runDir3) {
-  const handoffsDir = path78.join(runDir3, "handoffs");
+  const handoffsDir = path79.join(runDir3, "handoffs");
   let entries;
   try {
-    entries = fs65.readdirSync(handoffsDir, { withFileTypes: true });
+    entries = fs66.readdirSync(handoffsDir, { withFileTypes: true });
   } catch {
     return false;
   }
   const bindings = taskCellBindings(runDir3);
   return entries.some((entry) => {
     if (!entry.isFile() || !HANDOFF_NAME_RE.test(entry.name)) return false;
-    const abs = path78.join(handoffsDir, entry.name);
+    const abs = path79.join(handoffsDir, entry.name);
     if (!isNonEmptyFile(abs)) return false;
     let content;
     try {
-      content = fs65.readFileSync(abs, "utf8");
+      content = fs66.readFileSync(abs, "utf8");
     } catch {
       return false;
     }
@@ -46655,10 +47063,10 @@ function hasValidLaneHandoff(runDir3) {
 }
 function validateRunRecordDir(runDir3) {
   const findings = [];
-  const name = path78.basename(runDir3);
+  const name = path79.basename(runDir3);
   let isDir = false;
   try {
-    isDir = fs65.lstatSync(runDir3).isDirectory();
+    isDir = fs66.lstatSync(runDir3).isDirectory();
   } catch {
     isDir = false;
   }
@@ -46676,9 +47084,9 @@ function validateRunRecordDir(runDir3) {
       ]
     };
   }
-  const canonical = isCanonicalRunId(name);
-  const hasRunYaml = isRegularFile(path78.join(runDir3, "run.yaml"));
-  if (!canonical && !hasRunYaml) {
+  const canonical2 = isCanonicalRunId(name);
+  const hasRunYaml = isRegularFile(path79.join(runDir3, "run.yaml"));
+  if (!canonical2 && !hasRunYaml) {
     return {
       schema_version: RUN_RECORD_VALIDATION_SCHEMA,
       target: runDir3,
@@ -46692,7 +47100,7 @@ function validateRunRecordDir(runDir3) {
       ]
     };
   }
-  if (!canonical) {
+  if (!canonical2) {
     findings.push({
       code: "non_canonical_name",
       path: runDir3,
@@ -46702,28 +47110,28 @@ function validateRunRecordDir(runDir3) {
   if (!hasRunYaml) {
     findings.push({
       code: "missing_run_yaml",
-      path: path78.join(runDir3, "run.yaml"),
+      path: path79.join(runDir3, "run.yaml"),
       detail: "run.yaml is required for a shareable run (run identity)"
     });
   }
-  if (!isRegularFile(path78.join(runDir3, "provenance.json"))) {
+  if (!isRegularFile(path79.join(runDir3, "provenance.json"))) {
     findings.push({
       code: "missing_provenance",
-      path: path78.join(runDir3, "provenance.json"),
+      path: path79.join(runDir3, "provenance.json"),
       detail: "provenance.json is required for a shareable run (what produced it)"
     });
   }
-  if (!isRegularFile(path78.join(runDir3, "logs", "v1.4-events.jsonl"))) {
+  if (!isRegularFile(path79.join(runDir3, "logs", "v1.4-events.jsonl"))) {
     findings.push({
       code: "missing_events_log",
-      path: path78.join(runDir3, "logs", "v1.4-events.jsonl"),
+      path: path79.join(runDir3, "logs", "v1.4-events.jsonl"),
       detail: "logs/v1.4-events.jsonl is required for a shareable run (trace events)"
     });
   }
   if (!hasValidLaneHandoff(runDir3)) {
     findings.push({
       code: "no_valid_handoff",
-      path: path78.join(runDir3, "handoffs"),
+      path: path79.join(runDir3, "handoffs"),
       detail: "at least one CANONICAL handoffs/<specialist>-<task-id>.md lane receipt is required: a guild.handoff_receipt.v1 wrapper embedding exactly ONE fenced guild.handoff.v2 JSON block (strict-validated) plus the five \xA78.2 sections (changed_files, opens_for, assumptions, evidence, followups)"
     });
   }
@@ -46735,11 +47143,11 @@ function validateRunRecordDir(runDir3) {
   };
 }
 function scanRunsRoot(root) {
-  const runsRoot = path78.join(durableGuildDir(root), "runs");
+  const runsRoot = path79.join(durableGuildDir(root), "runs");
   const findings = [];
   let entries;
   try {
-    entries = fs65.readdirSync(runsRoot, { withFileTypes: true });
+    entries = fs66.readdirSync(runsRoot, { withFileTypes: true });
   } catch {
     return {
       schema_version: RUN_RECORD_VALIDATION_SCHEMA,
@@ -46756,7 +47164,7 @@ function scanRunsRoot(root) {
   }
   for (const entry of entries) {
     if (LIFECYCLE_OWNED_ENTRIES.has(entry.name) || entry.name.startsWith(".")) continue;
-    const abs = path78.join(runsRoot, entry.name);
+    const abs = path79.join(runsRoot, entry.name);
     if (!entry.isDirectory()) {
       findings.push({
         code: "document_dump",
@@ -46774,11 +47182,11 @@ function scanRunsRoot(root) {
     findings
   };
 }
-var fs65, path78, RUN_RECORD_VALIDATION_SCHEMA, RUN_RECORD_FINDING_CODES, LIFECYCLE_OWNED_ENTRIES, HANDOFF_NAME_RE, V2_FENCE_RE;
+var fs66, path79, RUN_RECORD_VALIDATION_SCHEMA, RUN_RECORD_FINDING_CODES, LIFECYCLE_OWNED_ENTRIES, HANDOFF_NAME_RE, V2_FENCE_RE;
 var init_run_record_validate = __esm({
   "src/domains/lifecycle/run-record-validate.ts"() {
-    fs65 = __toESM(require("fs"));
-    path78 = __toESM(require("path"));
+    fs66 = __toESM(require("fs"));
+    path79 = __toESM(require("path"));
     init_run_lifecycle();
     init_distribution();
     init_document_receipts();
@@ -46798,6 +47206,12032 @@ var init_run_record_validate = __esm({
     LIFECYCLE_OWNED_ENTRIES = /* @__PURE__ */ new Set(["_archive", "current-run-id"]);
     HANDOFF_NAME_RE = /^[A-Za-z0-9_.]+(?:[A-Za-z0-9_.-]*)-[A-Za-z0-9_.-]+\.md$/;
     V2_FENCE_RE = /```guild\.handoff\.v2\s*\n([\s\S]*?)```/g;
+  }
+});
+
+// src/domains/lifecycle/stack-contracts.generated.json
+var stack_contracts_generated_default;
+var init_stack_contracts_generated = __esm({
+  "src/domains/lifecycle/stack-contracts.generated.json"() {
+    stack_contracts_generated_default = {
+      contract_bundle: {
+        schema_version: "guild.stack.contract_bundle.v1",
+        protocol_major: 1,
+        status: "P01_baseline_not_runtime_availability",
+        canonicalization: "RFC8785",
+        hash_algorithm: "SHA-256",
+        contracts: [
+          {
+            id: "C5 approval-record",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/approval-record.schema.json",
+            file: "schemas/approval-record.schema.json",
+            sha256: "sha256:204b7ee082f01dbd6c706ae983f02275e3eafc18c1c1deea1c01ca8b4a6b8d02"
+          },
+          {
+            id: null,
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json",
+            file: "schemas/arguments.schema.json",
+            sha256: "sha256:a9a5fd2bdb53f9177df170841113f512b690bdc3aca0c78fb40f013fa8087823"
+          },
+          {
+            id: "C7 capability-manifest",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/capability-manifest.schema.json",
+            file: "schemas/capability-manifest.schema.json",
+            sha256: "sha256:8687065280b02512e66b2f36453022079281922aefcdb2a65ff7356e87ad60a2"
+          },
+          {
+            id: null,
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json",
+            file: "schemas/common.schema.json",
+            sha256: "sha256:39c2fbc6188196bbe8d99249dc96c76752853b99e4d79fb4b8714378f720222b"
+          },
+          {
+            id: "C2 entity-evidence",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/entity-evidence.schema.json",
+            file: "schemas/entity-evidence.schema.json",
+            sha256: "sha256:640f79bfcfcab35b0edcba157fd1722a65240013865e82d8914ae3c9f6cb5467"
+          },
+          {
+            id: "C10 evaluation-manifest",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/evaluation-manifest.schema.json",
+            file: "schemas/evaluation-manifest.schema.json",
+            sha256: "sha256:74883a1f2063be67c86bb7b25e947a985ed46ae20e84b9119d36a32e83d1ee96"
+          },
+          {
+            id: "C9 metric-series",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/metric-series.schema.json",
+            file: "schemas/metric-series.schema.json",
+            sha256: "sha256:05e9b9f528f4bca64574297699f66c676aec3197f26d4f2a4c2542987f941d92"
+          },
+          {
+            id: "C4 operation-preview",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/operation-preview.schema.json",
+            file: "schemas/operation-preview.schema.json",
+            sha256: "sha256:459d164426d5a2d6c8e0c3ca3c0d3628c7454336b9b80a7db5fb5ac456fa52d6"
+          },
+          {
+            id: "C6 operation-receipt",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            file: "schemas/operation-receipt.schema.json",
+            sha256: "sha256:0bd007f90dda39ae696b8a8e63708135c87443e080b703ebba080ba725659b32"
+          },
+          {
+            id: "C3 read-projection",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            file: "schemas/read-projection.schema.json",
+            sha256: "sha256:44fd2e0deecbfed99baecea7cb9eeb0feaf6af1b552b178d4e0c87ce48625818"
+          },
+          {
+            id: "C11 report-manifest",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/report-manifest.schema.json",
+            file: "schemas/report-manifest.schema.json",
+            sha256: "sha256:520b0b8eef1e49712edce8532882c71c16554fe4fdab54c8243027eddd409ec0"
+          },
+          {
+            id: "C1 scope-session",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/scope-session.schema.json",
+            file: "schemas/scope-session.schema.json",
+            sha256: "sha256:8ca1174b9cff81e82912cd16022f68e9652921ef13f1a62761423a33854cf76f"
+          },
+          {
+            id: null,
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/transport.schema.json",
+            file: "schemas/transport.schema.json",
+            sha256: "sha256:19fbb7ea09e3b2e989bffa1c3bf5c4e96fcf2ba6e8e555ee9d294ae3fc5143ad"
+          },
+          {
+            id: "C8 workflow-projection",
+            schema_id: "https://guildstack.dev/contracts/guild-stack/v1/workflow-projection.schema.json",
+            file: "schemas/workflow-projection.schema.json",
+            sha256: "sha256:a7adb255cfe7bdefc689b9131467b25e2833a60d6c92e987fd5561e4f03e0409"
+          }
+        ],
+        operation_catalog_sha256: "sha256:dc0153904a8b368602570c38e525dfa84a3c9efb0c896b8697866f47c1738cd9"
+      },
+      schemas: {
+        "approval-record.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/approval-record.schema.json",
+          title: "C5 approval-record",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.approval-record.v1"
+            },
+            approval_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            operation_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            session_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            preview_hash: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            },
+            actor: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            decision: {
+              enum: [
+                "approved",
+                "rejected",
+                "returned"
+              ]
+            },
+            rationale: {
+              type: "string",
+              maxLength: 4096
+            },
+            decided_at: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+            }
+          },
+          required: [
+            "schema_version",
+            "approval_id",
+            "operation_id",
+            "source_id",
+            "session_id",
+            "preview_hash",
+            "actor",
+            "decision",
+            "rationale",
+            "decided_at"
+          ],
+          additionalProperties: false
+        },
+        "arguments.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json",
+          $defs: {
+            inspect: {
+              type: "object",
+              properties: {
+                target: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                query: {
+                  type: "string",
+                  maxLength: 1024
+                },
+                cursor: {
+                  type: [
+                    "string",
+                    "null"
+                  ],
+                  maxLength: 2048
+                },
+                limit: {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 200
+                }
+              },
+              required: [],
+              additionalProperties: false
+            },
+            create: {
+              type: "object",
+              properties: {
+                title: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                body: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                acceptance: {
+                  type: "array",
+                  items: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 65536
+                  }
+                },
+                owner: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                }
+              },
+              required: [
+                "title",
+                "body",
+                "acceptance",
+                "owner"
+              ],
+              additionalProperties: false
+            },
+            revise: {
+              type: "object",
+              properties: {
+                target: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                content: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                format: {
+                  enum: [
+                    "json",
+                    "yaml",
+                    "markdown"
+                  ]
+                }
+              },
+              required: [
+                "target",
+                "content",
+                "format"
+              ],
+              additionalProperties: false
+            },
+            action: {
+              type: "object",
+              properties: {
+                target: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                rationale: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                }
+              },
+              required: [
+                "target",
+                "rationale"
+              ],
+              additionalProperties: false
+            },
+            link: {
+              type: "object",
+              properties: {
+                target: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                related: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                rationale: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                }
+              },
+              required: [
+                "target",
+                "related",
+                "rationale"
+              ],
+              additionalProperties: false
+            },
+            launch: {
+              type: "object",
+              properties: {
+                brief: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                workflow: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                initiative: {
+                  oneOf: [
+                    {
+                      type: "null"
+                    },
+                    {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                    }
+                  ]
+                },
+                host_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                model: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                config_hash: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                },
+                max_usd: {
+                  type: "number",
+                  minimum: 0
+                },
+                max_duration_ms: {
+                  type: "integer",
+                  minimum: 1
+                }
+              },
+              required: [
+                "brief",
+                "workflow",
+                "initiative",
+                "host_id",
+                "model",
+                "config_hash",
+                "max_usd",
+                "max_duration_ms"
+              ],
+              additionalProperties: false
+            },
+            config: {
+              type: "object",
+              properties: {
+                target: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                layer: {
+                  enum: [
+                    "workspace",
+                    "project",
+                    "workspace_local",
+                    "project_local"
+                  ]
+                },
+                key: {
+                  type: "string",
+                  pattern: "^[a-zA-Z][a-zA-Z0-9_.-]{0,127}$"
+                },
+                value: {},
+                reset: {
+                  type: "boolean"
+                }
+              },
+              required: [
+                "target",
+                "layer",
+                "key",
+                "value",
+                "reset"
+              ],
+              additionalProperties: false
+            },
+            evaluation: {
+              type: "object",
+              properties: {
+                case: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                inputs: {
+                  type: "array",
+                  items: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                  },
+                  minItems: 1
+                },
+                baseline: {
+                  oneOf: [
+                    {
+                      type: "null"
+                    },
+                    {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                    }
+                  ]
+                },
+                candidate: {
+                  oneOf: [
+                    {
+                      type: "null"
+                    },
+                    {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                    }
+                  ]
+                },
+                host_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                model: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                max_usd: {
+                  type: "number",
+                  minimum: 0
+                },
+                max_duration_ms: {
+                  type: "integer",
+                  minimum: 1
+                },
+                repetitions: {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 1e3
+                }
+              },
+              required: [
+                "case",
+                "inputs",
+                "baseline",
+                "candidate",
+                "host_id",
+                "model",
+                "max_usd",
+                "max_duration_ms",
+                "repetitions"
+              ],
+              additionalProperties: false
+            },
+            import: {
+              type: "object",
+              properties: {
+                manifest: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/evaluation-manifest.schema.json"
+                },
+                artifacts: {
+                  type: "array",
+                  items: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                  },
+                  minItems: 1
+                }
+              },
+              required: [
+                "manifest",
+                "artifacts"
+              ],
+              additionalProperties: false
+            },
+            report: {
+              type: "object",
+              properties: {
+                template_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                template_version: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                input_source_ids: {
+                  type: "array",
+                  items: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                  },
+                  minItems: 1,
+                  uniqueItems: true
+                },
+                inputs: {
+                  type: "array",
+                  items: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                  },
+                  minItems: 1
+                },
+                formats: {
+                  type: "array",
+                  items: {
+                    enum: [
+                      "html",
+                      "json"
+                    ]
+                  },
+                  minItems: 1,
+                  uniqueItems: true
+                },
+                redaction_policy_revision: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                }
+              },
+              required: [
+                "template_id",
+                "template_version",
+                "input_source_ids",
+                "inputs",
+                "formats",
+                "redaction_policy_revision"
+              ],
+              additionalProperties: false
+            },
+            recommendation: {
+              type: "object",
+              properties: {
+                source_analysis_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                source_input_hash: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                },
+                recommendation_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                decision: {
+                  enum: [
+                    "accept",
+                    "reject"
+                  ]
+                }
+              },
+              required: [
+                "source_analysis_id",
+                "source_input_hash",
+                "recommendation_id",
+                "decision"
+              ],
+              additionalProperties: false
+            },
+            analysis: {
+              type: "object",
+              properties: {
+                targets: {
+                  type: "array",
+                  items: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                  },
+                  minItems: 1,
+                  maxItems: 100
+                }
+              },
+              required: [
+                "targets"
+              ],
+              additionalProperties: false
+            },
+            analysis_compare: {
+              type: "object",
+              properties: {
+                targets: {
+                  type: "array",
+                  items: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                  },
+                  minItems: 2,
+                  maxItems: 100
+                }
+              },
+              required: [
+                "targets"
+              ],
+              additionalProperties: false
+            }
+          }
+        },
+        "capability-manifest.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/capability-manifest.schema.json",
+          title: "C7 capability-manifest",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.capability-manifest.v1"
+            },
+            package: {
+              type: "object",
+              properties: {
+                name: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                version: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                inventory_schema: {
+                  const: "guild.inventory.v1"
+                },
+                entry_hash: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                }
+              },
+              required: [
+                "name",
+                "version",
+                "inventory_schema",
+                "entry_hash"
+              ],
+              additionalProperties: false
+            },
+            protocol_major: {
+              const: 1
+            },
+            operations: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  input_schema: {
+                    type: "string",
+                    format: "uri"
+                  },
+                  output_schema: {
+                    type: "string",
+                    format: "uri"
+                  },
+                  producer: {
+                    enum: [
+                      "plugin",
+                      "benchmark",
+                      "reporter"
+                    ]
+                  },
+                  effect: {
+                    enum: [
+                      "read",
+                      "canonical_write",
+                      "derived_write",
+                      "host_execution"
+                    ]
+                  },
+                  approval: {
+                    enum: [
+                      "required",
+                      "policy",
+                      "none"
+                    ]
+                  },
+                  availability: {
+                    enum: [
+                      "available",
+                      "unavailable"
+                    ]
+                  },
+                  reason: {
+                    type: [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  target_kinds: {
+                    type: "array",
+                    items: {
+                      enum: [
+                        "initiative",
+                        "run",
+                        "decision",
+                        "workflow",
+                        "memory",
+                        "knowledge",
+                        "candidate",
+                        "agent",
+                        "skill",
+                        "tool",
+                        "loop",
+                        "team",
+                        "config",
+                        "evaluation",
+                        "report",
+                        "benchmark_case"
+                      ]
+                    },
+                    uniqueItems: true
+                  },
+                  entry_id: {
+                    type: [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                required: [
+                  "id",
+                  "input_schema",
+                  "output_schema",
+                  "producer",
+                  "effect",
+                  "approval",
+                  "availability",
+                  "reason",
+                  "target_kinds",
+                  "entry_id"
+                ],
+                additionalProperties: false
+              },
+              uniqueItems: true
+            },
+            host_requirements: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  host_id: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  capability: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  evidence: {
+                    enum: [
+                      "verified",
+                      "inferred",
+                      "unavailable"
+                    ]
+                  },
+                  proof: {
+                    type: [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                required: [
+                  "host_id",
+                  "capability",
+                  "evidence",
+                  "proof"
+                ],
+                additionalProperties: false
+              }
+            }
+          },
+          required: [
+            "schema_version",
+            "package",
+            "protocol_major",
+            "operations",
+            "host_requirements"
+          ],
+          additionalProperties: false
+        },
+        "common.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json",
+          $defs: {
+            id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            relative_path: {
+              type: "string",
+              maxLength: 1024,
+              pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\%\\x00-\\x1f])[^:]+$"
+            },
+            entity: {
+              type: "object",
+              properties: {
+                source_id: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                kind: {
+                  enum: [
+                    "initiative",
+                    "run",
+                    "decision",
+                    "workflow",
+                    "memory",
+                    "knowledge",
+                    "candidate",
+                    "agent",
+                    "skill",
+                    "tool",
+                    "loop",
+                    "team",
+                    "config",
+                    "evaluation",
+                    "report",
+                    "benchmark_case"
+                  ]
+                },
+                id: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                revision: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              required: [
+                "source_id",
+                "kind",
+                "id",
+                "revision"
+              ],
+              additionalProperties: false
+            },
+            evidence: {
+              type: "object",
+              properties: {
+                source_id: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                path: {
+                  type: "string",
+                  maxLength: 1024,
+                  pattern: "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[\\\\%\\x00-\\x1f])[^:]+$"
+                },
+                sha256: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                },
+                schema_version: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                observed_at: {
+                  type: "string",
+                  format: "date-time"
+                },
+                freshness: {
+                  enum: [
+                    "current",
+                    "stale",
+                    "unknown"
+                  ]
+                }
+              },
+              required: [
+                "source_id",
+                "path",
+                "sha256",
+                "schema_version",
+                "observed_at",
+                "freshness"
+              ],
+              additionalProperties: false
+            },
+            time: {
+              type: "string",
+              format: "date-time"
+            },
+            count: {
+              type: "integer",
+              minimum: 0
+            },
+            error: {
+              type: "object",
+              properties: {
+                code: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                message: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                retryable: {
+                  type: "boolean"
+                },
+                details: {
+                  type: "object"
+                }
+              },
+              required: [
+                "code",
+                "message",
+                "retryable"
+              ],
+              additionalProperties: false
+            }
+          }
+        },
+        "entity-evidence.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/entity-evidence.schema.json",
+          title: "C2 entity-evidence",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.entity-evidence.v1"
+            },
+            entity: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+            },
+            evidence: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              }
+            }
+          },
+          required: [
+            "schema_version",
+            "entity",
+            "evidence"
+          ],
+          additionalProperties: false
+        },
+        "evaluation-manifest.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/evaluation-manifest.schema.json",
+          title: "C10 evaluation-manifest",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.evaluation-manifest.v1"
+            },
+            evaluation: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+            },
+            case_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            case_version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            scorer_version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            inputs: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+              },
+              minItems: 1
+            },
+            config_hash: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            },
+            model: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            host_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            repetitions: {
+              type: "integer",
+              minimum: 1,
+              maximum: 1e3
+            },
+            seed: {
+              type: [
+                "integer",
+                "null"
+              ]
+            },
+            state: {
+              enum: [
+                "succeeded",
+                "failed",
+                "cancelled",
+                "timed_out",
+                "partial"
+              ]
+            },
+            metric_series: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              }
+            },
+            artifacts: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              },
+              minItems: 1
+            },
+            receipt: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+            },
+            created_at: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+            }
+          },
+          required: [
+            "schema_version",
+            "evaluation",
+            "case_id",
+            "case_version",
+            "scorer_version",
+            "inputs",
+            "config_hash",
+            "model",
+            "host_id",
+            "repetitions",
+            "seed",
+            "state",
+            "metric_series",
+            "artifacts",
+            "receipt",
+            "created_at"
+          ],
+          additionalProperties: false
+        },
+        "metric-series.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/metric-series.schema.json",
+          title: "C9 metric-series",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.metric-series.v1"
+            },
+            metric: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            formula_version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            unit: {
+              enum: [
+                "ms",
+                "usd",
+                "tokens",
+                "count",
+                "ratio",
+                "percent"
+              ]
+            },
+            source_ids: {
+              type: "array",
+              items: {
+                type: "string",
+                pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              minItems: 1,
+              uniqueItems: true
+            },
+            cohort: {
+              type: "object",
+              properties: {
+                from: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+                },
+                to: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+                },
+                case_version: {
+                  type: [
+                    "string",
+                    "null"
+                  ]
+                },
+                model: {
+                  type: [
+                    "string",
+                    "null"
+                  ]
+                },
+                config_hash: {
+                  oneOf: [
+                    {
+                      type: "null"
+                    },
+                    {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                    }
+                  ]
+                }
+              },
+              required: [
+                "from",
+                "to",
+                "case_version",
+                "model",
+                "config_hash"
+              ],
+              additionalProperties: false
+            },
+            sample_count: {
+              type: "integer",
+              minimum: 0
+            },
+            covered_samples: {
+              type: "integer",
+              minimum: 0
+            },
+            status: {
+              enum: [
+                "measured",
+                "partial",
+                "unavailable"
+              ]
+            },
+            points: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  key: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096
+                  },
+                  value: {
+                    type: [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  status: {
+                    enum: [
+                      "measured",
+                      "partial",
+                      "unavailable"
+                    ]
+                  },
+                  reason: {
+                    type: [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  numerator: {
+                    type: [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  denominator: {
+                    type: [
+                      "number",
+                      "null"
+                    ],
+                    minimum: 0
+                  },
+                  evidence: {
+                    type: "array",
+                    items: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                    }
+                  }
+                },
+                required: [
+                  "key",
+                  "value",
+                  "status",
+                  "reason",
+                  "numerator",
+                  "denominator",
+                  "evidence"
+                ],
+                additionalProperties: false
+              },
+              maxItems: 1e3
+            },
+            token_semantics: {
+              enum: [
+                "provider_declared",
+                "not_applicable",
+                "unknown"
+              ]
+            },
+            cost_basis: {
+              enum: [
+                "measured",
+                "estimated",
+                "unavailable",
+                "not_applicable"
+              ]
+            }
+          },
+          required: [
+            "schema_version",
+            "metric",
+            "formula_version",
+            "unit",
+            "source_ids",
+            "cohort",
+            "sample_count",
+            "covered_samples",
+            "status",
+            "points",
+            "token_semantics",
+            "cost_basis"
+          ],
+          additionalProperties: false
+        },
+        "operation-preview.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/operation-preview.schema.json",
+          title: "C4 operation-preview",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.operation-preview.v1"
+            },
+            operation_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            operation: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            session_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            targets: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+              }
+            },
+            dependencies: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+              }
+            },
+            arguments: {
+              type: "object"
+            },
+            diff: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  target: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                  },
+                  before_hash: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                  },
+                  after_hash: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                  },
+                  patch: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096
+                  }
+                },
+                required: [
+                  "target",
+                  "before_hash",
+                  "after_hash",
+                  "patch"
+                ],
+                additionalProperties: false
+              }
+            },
+            policy: {
+              type: "object",
+              properties: {
+                decision: {
+                  enum: [
+                    "allowed",
+                    "refused"
+                  ]
+                },
+                revision: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                },
+                reason: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                }
+              },
+              required: [
+                "decision",
+                "revision",
+                "reason"
+              ],
+              additionalProperties: false
+            },
+            approval_required: {
+              type: "boolean"
+            },
+            preview_hash: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            },
+            expires_at: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+            },
+            rollback: {
+              enum: [
+                "inverse",
+                "handoff",
+                "not_available"
+              ]
+            },
+            budget: {
+              type: "object",
+              properties: {
+                max_usd: {
+                  type: [
+                    "number",
+                    "null"
+                  ],
+                  minimum: 0
+                },
+                max_duration_ms: {
+                  type: "integer",
+                  minimum: 1
+                }
+              },
+              required: [
+                "max_usd",
+                "max_duration_ms"
+              ],
+              additionalProperties: false
+            },
+            scope_revision: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            },
+            capability_revision: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            }
+          },
+          required: [
+            "schema_version",
+            "operation_id",
+            "operation",
+            "session_id",
+            "source_id",
+            "targets",
+            "dependencies",
+            "arguments",
+            "diff",
+            "policy",
+            "approval_required",
+            "preview_hash",
+            "expires_at",
+            "rollback",
+            "budget",
+            "scope_revision",
+            "capability_revision"
+          ],
+          additionalProperties: false
+        },
+        "operation-receipt.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+          title: "C6 operation-receipt",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.operation-receipt.v1"
+            },
+            operation_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            operation: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            idempotency_key: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            preview_hash: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            },
+            producer: {
+              type: "object",
+              properties: {
+                id: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                version: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                }
+              },
+              required: [
+                "id",
+                "version"
+              ],
+              additionalProperties: false
+            },
+            state: {
+              enum: [
+                "applied",
+                "verified",
+                "failed",
+                "cancelled",
+                "timed_out",
+                "recovery_needed",
+                "handoff"
+              ]
+            },
+            before: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+              }
+            },
+            after: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+              }
+            },
+            touched: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              }
+            },
+            validation: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              }
+            },
+            error: {
+              oneOf: [
+                {
+                  type: "null"
+                },
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/error"
+                }
+              ]
+            },
+            inverse_ref: {
+              oneOf: [
+                {
+                  type: "null"
+                },
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                }
+              ]
+            },
+            closed_at: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+            }
+          },
+          required: [
+            "schema_version",
+            "operation_id",
+            "operation",
+            "source_id",
+            "idempotency_key",
+            "preview_hash",
+            "producer",
+            "state",
+            "before",
+            "after",
+            "touched",
+            "validation",
+            "error",
+            "inverse_ref",
+            "closed_at"
+          ],
+          additionalProperties: false
+        },
+        "read-projection.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+          title: "C3 read-projection",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.read-projection.v1"
+            },
+            session_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            generation: {
+              type: "integer",
+              minimum: 0
+            },
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  ref: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                  },
+                  data: {
+                    type: "object"
+                  }
+                },
+                required: [
+                  "ref",
+                  "data"
+                ],
+                additionalProperties: false
+              },
+              maxItems: 200
+            },
+            next_cursor: {
+              type: [
+                "string",
+                "null"
+              ],
+              maxLength: 2048
+            },
+            total: {
+              type: [
+                "integer",
+                "null"
+              ],
+              minimum: 0
+            },
+            partial: {
+              type: "boolean"
+            },
+            source_errors: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  source_id: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  error: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/error"
+                  }
+                },
+                required: [
+                  "source_id",
+                  "error"
+                ],
+                additionalProperties: false
+              }
+            }
+          },
+          required: [
+            "schema_version",
+            "session_id",
+            "generation",
+            "items",
+            "next_cursor",
+            "total",
+            "partial",
+            "source_errors"
+          ],
+          additionalProperties: false
+        },
+        "report-manifest.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/report-manifest.schema.json",
+          title: "C11 report-manifest",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.report-manifest.v1"
+            },
+            report: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+            },
+            owner_source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            input_source_ids: {
+              type: "array",
+              items: {
+                type: "string",
+                pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              minItems: 1,
+              uniqueItems: true
+            },
+            inputs: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+              },
+              minItems: 1
+            },
+            template_version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            generator_version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            metric_formula_versions: {
+              type: "array",
+              items: {
+                type: "string",
+                minLength: 1,
+                maxLength: 4096
+              }
+            },
+            created_at: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+            },
+            coverage: {
+              enum: [
+                "complete",
+                "partial",
+                "unavailable"
+              ]
+            },
+            omissions: {
+              type: "array",
+              items: {
+                type: "string",
+                minLength: 1,
+                maxLength: 4096
+              }
+            },
+            outputs: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  evidence: {
+                    $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                  },
+                  media_type: {
+                    enum: [
+                      "text/html",
+                      "application/json"
+                    ]
+                  }
+                },
+                required: [
+                  "evidence",
+                  "media_type"
+                ],
+                additionalProperties: false
+              },
+              minItems: 1
+            },
+            receipt: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+            },
+            redaction_policy_revision: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            },
+            regenerates: {
+              oneOf: [
+                {
+                  type: "null"
+                },
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                }
+              ]
+            }
+          },
+          required: [
+            "schema_version",
+            "report",
+            "owner_source_id",
+            "input_source_ids",
+            "inputs",
+            "template_version",
+            "generator_version",
+            "metric_formula_versions",
+            "created_at",
+            "coverage",
+            "omissions",
+            "outputs",
+            "receipt",
+            "redaction_policy_revision",
+            "regenerates"
+          ],
+          additionalProperties: false
+        },
+        "scope-session.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/scope-session.schema.json",
+          title: "C1 scope-session",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.scope-session.v1"
+            },
+            session_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            mode: {
+              enum: [
+                "workspace",
+                "project"
+              ]
+            },
+            root: {
+              type: "object",
+              properties: {
+                source_id: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                root_id: {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                kind: {
+                  enum: [
+                    "workspace",
+                    "project"
+                  ]
+                },
+                realpath: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 4096
+                },
+                layout_version: {
+                  type: "integer",
+                  minimum: 1
+                },
+                revision: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                },
+                health: {
+                  enum: [
+                    "healthy",
+                    "unavailable",
+                    "unsupported"
+                  ]
+                },
+                read_only_reason: {
+                  type: [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              required: [
+                "source_id",
+                "root_id",
+                "kind",
+                "realpath",
+                "layout_version",
+                "revision",
+                "health",
+                "read_only_reason"
+              ],
+              additionalProperties: false
+            },
+            children: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  source_id: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  root_id: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  kind: {
+                    enum: [
+                      "workspace",
+                      "project"
+                    ]
+                  },
+                  realpath: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096
+                  },
+                  layout_version: {
+                    type: "integer",
+                    minimum: 1
+                  },
+                  revision: {
+                    type: "string",
+                    pattern: "^sha256:[a-f0-9]{64}$"
+                  },
+                  health: {
+                    enum: [
+                      "healthy",
+                      "unavailable",
+                      "unsupported"
+                    ]
+                  },
+                  read_only_reason: {
+                    type: [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                required: [
+                  "source_id",
+                  "root_id",
+                  "kind",
+                  "realpath",
+                  "layout_version",
+                  "revision",
+                  "health",
+                  "read_only_reason"
+                ],
+                additionalProperties: false
+              },
+              maxItems: 100
+            },
+            package_version: {
+              type: "string",
+              minLength: 1,
+              maxLength: 4096
+            },
+            generation: {
+              type: "integer",
+              minimum: 0
+            },
+            expires_at: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/time"
+            }
+          },
+          required: [
+            "schema_version",
+            "session_id",
+            "mode",
+            "root",
+            "children",
+            "package_version",
+            "generation",
+            "expires_at"
+          ],
+          additionalProperties: false
+        },
+        "transport.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/transport.schema.json",
+          $defs: {
+            preview_request: {
+              oneOf: [
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "session.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "session.sources"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.list"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.create"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.revise"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.link"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/link"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.unlink"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/link"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.pause"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.resume"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.close_check"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.close"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.archive"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "initiative.restore"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "decision.list"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "decision.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "decision.propose"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "decision.approve"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "decision.reject"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "decision.supersede"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/link"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.list"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.trace"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.artifacts"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.start"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.resume"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.cancel"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.rerun"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "run.analyze"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "workflow.list"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "workflow.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "workflow.validate"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "workflow.overlay_preview"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "workflow.overlay_publish"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "workflow.start"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.search"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.read"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.ingest"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.learn"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.candidates"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.revise"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.reject"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.approve"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.promote"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.revert"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.reindex"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.graph"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "knowledge.neighborhood"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "memory.list"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "memory.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "memory.correct"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "memory.archive"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "memory.restore"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "memory.promote"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "memory.reindex"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.list"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.prepare"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.evaluate"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.shadow"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.approve"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.reject"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.apply"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.verify"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.revert"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evolution.handoff"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.list"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.create"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.override"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.revise"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.validate"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.enable"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.disable"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "component.usage"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "config.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "config.validate"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "config.preview"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/config"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "config.set"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/config"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "config.reset"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/config"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "analysis.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "analysis.run"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/analysis"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "analysis.compare"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/analysis_compare"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "analysis.recommendation_decide"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/recommendation"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.cases"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.case_create"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.case_revise"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.prepare"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/evaluation"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.run"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/evaluation"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.cancel"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.import"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/import"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.compare"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/evaluation"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "evaluation.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "report.templates"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "report.preview"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "report.generate"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "report.inspect"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "report.regenerate"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "object",
+                  properties: {
+                    operation: {
+                      const: "report.export"
+                    },
+                    session_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    targets: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                      }
+                    },
+                    arguments: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report"
+                    },
+                    idempotency_key: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    }
+                  },
+                  required: [
+                    "operation",
+                    "session_id",
+                    "source_id",
+                    "targets",
+                    "arguments",
+                    "idempotency_key"
+                  ],
+                  additionalProperties: false
+                }
+              ]
+            },
+            apply_request: {
+              type: "object",
+              properties: {
+                session_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                preview_hash: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                },
+                idempotency_key: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                }
+              },
+              required: [
+                "session_id",
+                "preview_hash",
+                "idempotency_key"
+              ],
+              additionalProperties: false
+            },
+            decision_request: {
+              type: "object",
+              properties: {
+                session_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                preview_hash: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                },
+                decision: {
+                  enum: [
+                    "approved",
+                    "rejected",
+                    "returned"
+                  ]
+                },
+                rationale: {
+                  type: "string",
+                  maxLength: 4096
+                }
+              },
+              required: [
+                "session_id",
+                "preview_hash",
+                "decision",
+                "rationale"
+              ],
+              additionalProperties: false
+            },
+            cancel_request: {
+              type: "object",
+              properties: {
+                session_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                idempotency_key: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                }
+              },
+              required: [
+                "session_id",
+                "idempotency_key"
+              ],
+              additionalProperties: false
+            },
+            operation_status: {
+              type: "object",
+              properties: {
+                schema_version: {
+                  const: "guild.stack.operation_status.v1"
+                },
+                operation_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                source_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                state: {
+                  enum: [
+                    "queued",
+                    "running",
+                    "cancel_requested",
+                    "succeeded",
+                    "failed",
+                    "cancelled",
+                    "timed_out",
+                    "recovery_needed"
+                  ]
+                },
+                receipt: {
+                  oneOf: [
+                    {
+                      type: "null"
+                    },
+                    {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json"
+                    }
+                  ]
+                },
+                generation: {
+                  type: "integer",
+                  minimum: 0
+                }
+              },
+              required: [
+                "schema_version",
+                "operation_id",
+                "source_id",
+                "state",
+                "receipt",
+                "generation"
+              ],
+              additionalProperties: false
+            },
+            error: {
+              type: "object",
+              properties: {
+                error: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/error"
+                }
+              },
+              required: [
+                "error"
+              ],
+              additionalProperties: false
+            }
+          }
+        },
+        "workflow-projection.schema.json": {
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          $id: "https://guildstack.dev/contracts/guild-stack/v1/workflow-projection.schema.json",
+          title: "C8 workflow-projection",
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.workflow-projection.v1"
+            },
+            definition: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+            },
+            class: {
+              enum: [
+                "product",
+                "research",
+                "debug",
+                "ops",
+                "init"
+              ]
+            },
+            origin: {
+              enum: [
+                "packaged_graph",
+                "project_overlay",
+                "workspace_overlay"
+              ]
+            },
+            entry: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            nodes: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  station: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  required: {
+                    type: "boolean"
+                  },
+                  owner: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 4096
+                  },
+                  inputs: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096
+                    }
+                  },
+                  outputs: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      minLength: 1,
+                      maxLength: 4096
+                    }
+                  },
+                  terminal_outcome: {
+                    enum: [
+                      "success",
+                      "blocked",
+                      "failed",
+                      "escalate",
+                      null
+                    ]
+                  }
+                },
+                required: [
+                  "id",
+                  "station",
+                  "required",
+                  "owner",
+                  "inputs",
+                  "outputs"
+                ],
+                additionalProperties: false
+              },
+              minItems: 1,
+              maxItems: 200
+            },
+            edges: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  from: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  to: {
+                    type: "string",
+                    pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  outcome: {
+                    enum: [
+                      "next",
+                      "retry",
+                      "blocked",
+                      "escalate",
+                      "change_class",
+                      "done"
+                    ]
+                  },
+                  to_class: {
+                    type: [
+                      "string",
+                      "null"
+                    ],
+                    enum: [
+                      "product",
+                      "research",
+                      "debug",
+                      "ops",
+                      "init",
+                      null
+                    ]
+                  }
+                },
+                required: [
+                  "from",
+                  "to",
+                  "outcome",
+                  "to_class"
+                ],
+                additionalProperties: false
+              },
+              maxItems: 600
+            },
+            overlay_policy: {
+              const: "reorder_or_skip_optional_only"
+            },
+            execution: {
+              oneOf: [
+                {
+                  type: "null"
+                },
+                {
+                  type: "object",
+                  properties: {
+                    run: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                    },
+                    cursor_node: {
+                      type: "string",
+                      pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                    },
+                    events: {
+                      type: "array",
+                      items: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                      }
+                    }
+                  },
+                  required: [
+                    "run",
+                    "cursor_node",
+                    "events"
+                  ],
+                  additionalProperties: false
+                }
+              ]
+            }
+          },
+          required: [
+            "schema_version",
+            "definition",
+            "class",
+            "origin",
+            "entry",
+            "nodes",
+            "edges",
+            "overlay_policy",
+            "execution"
+          ],
+          additionalProperties: false
+        }
+      },
+      catalog: {
+        schema_version: "guild.stack.operation_catalog.v1",
+        protocol_major: 1,
+        status: "contract_baseline_not_runtime_manifest",
+        operations: [
+          {
+            id: "session.inspect",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P03",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: []
+          },
+          {
+            id: "session.sources",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P03",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: []
+          },
+          {
+            id: "initiative.list",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.inspect",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.create",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.revise",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.link",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/link",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.unlink",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/link",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.pause",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.resume",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.close_check",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.close",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.archive",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "initiative.restore",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/initiative.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "initiative"
+            ]
+          },
+          {
+            id: "decision.list",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/document-decisions.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "decision"
+            ]
+          },
+          {
+            id: "decision.inspect",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/document-decisions.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "decision"
+            ]
+          },
+          {
+            id: "decision.propose",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/document-decisions.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "decision"
+            ]
+          },
+          {
+            id: "decision.approve",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/document-decisions.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "decision"
+            ]
+          },
+          {
+            id: "decision.reject",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/document-decisions.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "decision"
+            ]
+          },
+          {
+            id: "decision.supersede",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/link",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/document-decisions.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "decision"
+            ]
+          },
+          {
+            id: "run.list",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.inspect",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.trace",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.artifacts",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.start",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.resume",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.cancel",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.rerun",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "run.analyze",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-router.ts",
+            owner_package: "P05",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "run"
+            ]
+          },
+          {
+            id: "workflow.list",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-graph-overlay.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "workflow"
+            ]
+          },
+          {
+            id: "workflow.inspect",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-graph-overlay.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "workflow"
+            ]
+          },
+          {
+            id: "workflow.validate",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-graph-overlay.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "workflow"
+            ]
+          },
+          {
+            id: "workflow.overlay_preview",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-graph-overlay.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "workflow"
+            ]
+          },
+          {
+            id: "workflow.overlay_publish",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-graph-overlay.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "workflow"
+            ]
+          },
+          {
+            id: "workflow.start",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/lifecycle/workflow-graph-overlay.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "workflow"
+            ]
+          },
+          {
+            id: "knowledge.search",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.read",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.ingest",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.learn",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.candidates",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.revise",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.reject",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.approve",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.promote",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.revert",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.reindex",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.graph",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "knowledge.neighborhood",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/knowledge/harvest.ts",
+            owner_package: "P07",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "knowledge",
+              "candidate"
+            ]
+          },
+          {
+            id: "memory.list",
+            producer: "plugin",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/knowledge/memory-adapter.ts",
+            owner_package: "P07",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "memory"
+            ]
+          },
+          {
+            id: "memory.inspect",
+            producer: "plugin",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/knowledge/memory-adapter.ts",
+            owner_package: "P07",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "memory"
+            ]
+          },
+          {
+            id: "memory.correct",
+            producer: "plugin",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/memory-adapter.ts",
+            owner_package: "P07",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "memory"
+            ]
+          },
+          {
+            id: "memory.archive",
+            producer: "plugin",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/memory-adapter.ts",
+            owner_package: "P07",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "memory"
+            ]
+          },
+          {
+            id: "memory.restore",
+            producer: "plugin",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/memory-adapter.ts",
+            owner_package: "P07",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "memory"
+            ]
+          },
+          {
+            id: "memory.promote",
+            producer: "plugin",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/memory-adapter.ts",
+            owner_package: "P07",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "memory"
+            ]
+          },
+          {
+            id: "memory.reindex",
+            producer: "plugin",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/knowledge/memory-adapter.ts",
+            owner_package: "P07",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "memory"
+            ]
+          },
+          {
+            id: "evolution.list",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.inspect",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.prepare",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.evaluate",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.shadow",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "host_execution",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.approve",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.reject",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.apply",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.verify",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.revert",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "evolution.handoff",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/evolve/evolve-apply.ts",
+            owner_package: "P08",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "candidate",
+              "skill",
+              "agent",
+              "knowledge",
+              "workflow",
+              "config"
+            ]
+          },
+          {
+            id: "component.list",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.inspect",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.create",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.override",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.revise",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.validate",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.enable",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.disable",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "component.usage",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/teams/index.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "agent",
+              "skill",
+              "tool",
+              "workflow",
+              "loop",
+              "team"
+            ]
+          },
+          {
+            id: "config.inspect",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "plugin/src/domains/config/settings-resolver.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "config"
+            ]
+          },
+          {
+            id: "config.validate",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/config/settings-resolver.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "config"
+            ]
+          },
+          {
+            id: "config.preview",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/config",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/config/settings-resolver.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "config"
+            ]
+          },
+          {
+            id: "config.set",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/config",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/config/settings-resolver.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "config"
+            ]
+          },
+          {
+            id: "config.reset",
+            producer: "plugin",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/config",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "canonical_write",
+            approval: "required",
+            source_anchor: "plugin/src/domains/config/settings-resolver.ts",
+            owner_package: "P06",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "config"
+            ]
+          },
+          {
+            id: "analysis.inspect",
+            producer: "plugin",
+            implementation: "existing_packaged",
+            ui_contract_available: false,
+            existing_entry_id: "run-analysis",
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "benchmark/src/analysis-jobs.ts",
+            owner_package: "P02",
+            reason: "Existing analysis transport requires a C1-C7 adapter; a declared script is not a negotiated management operation.",
+            target_kinds: [
+              "run",
+              "initiative",
+              "evaluation"
+            ]
+          },
+          {
+            id: "analysis.run",
+            producer: "plugin",
+            implementation: "existing_packaged",
+            ui_contract_available: false,
+            existing_entry_id: "run-analysis",
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/analysis",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/analysis-jobs.ts",
+            owner_package: "P02",
+            reason: "Existing analysis transport requires a C1-C7 adapter; a declared script is not a negotiated management operation.",
+            target_kinds: [
+              "run",
+              "initiative",
+              "evaluation"
+            ]
+          },
+          {
+            id: "analysis.compare",
+            producer: "plugin",
+            implementation: "existing_packaged",
+            ui_contract_available: false,
+            existing_entry_id: "run-analysis",
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/analysis_compare",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/analysis-jobs.ts",
+            owner_package: "P02",
+            reason: "Existing analysis transport requires a C1-C7 adapter; a declared script is not a negotiated management operation.",
+            target_kinds: [
+              "run",
+              "initiative",
+              "evaluation"
+            ]
+          },
+          {
+            id: "analysis.recommendation_decide",
+            producer: "plugin",
+            implementation: "existing_packaged",
+            ui_contract_available: false,
+            existing_entry_id: "run-analysis",
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/recommendation",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/analysis-jobs.ts",
+            owner_package: "P02",
+            reason: "Existing analysis transport requires a C1-C7 adapter; a declared script is not a negotiated management operation.",
+            target_kinds: [
+              "run",
+              "initiative",
+              "evaluation"
+            ]
+          },
+          {
+            id: "evaluation.cases",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.case_create",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/create",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.case_revise",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/revise",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.prepare",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/evaluation",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.run",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/evaluation",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.cancel",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/action",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.import",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/import",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.compare",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/evaluation",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "evaluation.inspect",
+            producer: "benchmark",
+            implementation: "adapter",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "benchmark/src/runner.ts",
+            owner_package: "P10",
+            reason: "Domain source exists; packaged management operation and contract integration required.",
+            target_kinds: [
+              "evaluation",
+              "benchmark_case",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "report.templates",
+            producer: "reporter",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P11",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "report",
+              "evaluation",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "report.preview",
+            producer: "reporter",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P11",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "report",
+              "evaluation",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "report.generate",
+            producer: "reporter",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P11",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "report",
+              "evaluation",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "report.inspect",
+            producer: "reporter",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/read-projection.schema.json",
+            effect: "read",
+            approval: "none",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P11",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "report",
+              "evaluation",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "report.regenerate",
+            producer: "reporter",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P11",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "report",
+              "evaluation",
+              "run",
+              "initiative"
+            ]
+          },
+          {
+            id: "report.export",
+            producer: "reporter",
+            implementation: "new_producer",
+            ui_contract_available: false,
+            existing_entry_id: null,
+            input_schema: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/report",
+            output_schema: "https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json",
+            effect: "derived_write",
+            approval: "policy",
+            source_anchor: "benchmark/src/server.ts",
+            owner_package: "P11",
+            reason: "New typed producer needed; no management availability claimed.",
+            target_kinds: [
+              "report",
+              "evaluation",
+              "run",
+              "initiative"
+            ]
+          }
+        ],
+        forbidden_operations: [
+          {
+            id: "workflow.create_class",
+            reason: "Closed five-class graph model; overlays cannot add classes or remove mandatory gates."
+          },
+          {
+            id: "evolution.install_patch",
+            reason: "Plugin machinery is handoff-only."
+          },
+          {
+            id: "operation.shell",
+            reason: "No arbitrary executable, argv, root or shell transport."
+          }
+        ]
+      },
+      transport: {
+        schema_version: "guild.stack.facade_transport.v1",
+        entry: "runtime/scripts/stack-operations.js",
+        protocol: "one bounded JSON request on stdin; one JSON response on stdout; exit 0 success, exit 1 error envelope",
+        args: [
+          "--cwd",
+          "server_bound_absolute_root"
+        ],
+        actions: {
+          bind: {},
+          session: {
+            session_id: "id"
+          },
+          capabilities: {
+            session_id: "id"
+          },
+          list: {
+            session_id: "id",
+            source_id: "id",
+            collection: "run|initiative|knowledge|memory|workflow|component|config",
+            limit: "1..200 optional default50",
+            cursor: "opaque optional"
+          },
+          inspect: {
+            session_id: "id",
+            source_id: "id",
+            collection: "same",
+            entity_id: "id"
+          },
+          preview: {
+            request: "P01 transport.preview_request"
+          },
+          decide: {
+            operation_id: "id",
+            request: "P01 transport.decision_request"
+          },
+          apply: {
+            operation_id: "id",
+            request: "P01 transport.apply_request"
+          },
+          status: {
+            operation_id: "id",
+            session_id: "id"
+          },
+          cancel: {
+            operation_id: "id",
+            request: "P01 transport.cancel_request"
+          }
+        },
+        responses: {
+          bind: "C1",
+          session: "C1",
+          capabilities: "C7",
+          list: "C3",
+          inspect: "C3",
+          preview: "C4",
+          decide: "C5",
+          apply: "operation_status or C6",
+          status: "operation_status",
+          cancel: "operation_status"
+        },
+        errors: "P01 transport.error; no raw exception/path/stack in HTTP response",
+        limits: {
+          request_bytes: 65536,
+          response_bytes: 1048576,
+          timeout_ms: 3e4
+        }
+      }
+    };
+  }
+});
+
+// src/domains/lifecycle/initiative-evidence.ts
+function loadInitiativeManifest(root, id) {
+  for (const bucket of ["active", "archived"]) {
+    const p = path80.join(durableGuildDir(root), "initiatives", bucket, id, "initiative.yaml");
+    if (!fs67.existsSync(p)) continue;
+    let text;
+    try {
+      text = fs67.readFileSync(p, "utf8");
+    } catch {
+      return null;
+    }
+    const parsed = parseYaml(text);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const obj = parsed;
+    const inner = obj["initiative"];
+    if (inner === null || typeof inner !== "object" || Array.isArray(inner)) return null;
+    return { path: p, raw: inner };
+  }
+  return null;
+}
+function mapStatus(field, raw, canonical2, aliases) {
+  if (typeof raw !== "string" || raw.length === 0) {
+    return { value: null, warning: `${field}: missing \u2014 leg treated as unresolved` };
+  }
+  if (canonical2.includes(raw)) return { value: raw };
+  const aliased = aliases[raw];
+  if (aliased !== void 0) {
+    return {
+      value: aliased,
+      warning: `${field}: legacy value "${raw}" mapped to "${aliased}"`
+    };
+  }
+  return {
+    value: null,
+    warning: `${field}: unrecognized value "${raw}" (not in ${canonical2.join("|")}) \u2014 leg treated as unresolved`
+  };
+}
+function buildD8Input(raw, execVerified) {
+  const warnings = [];
+  const exec = mapStatus("execution_status", raw["execution_status"], EXECUTION_STATUS, EXECUTION_STATUS_ALIASES);
+  const release = mapStatus("release_status", raw["release_status"], RELEASE_STATUS, RELEASE_STATUS_ALIASES);
+  const docs = mapStatus(
+    "documentation_status",
+    raw["documentation_status"],
+    DOCUMENTATION_STATUS,
+    DOCUMENTATION_STATUS_ALIASES
+  );
+  for (const m of [exec, release, docs]) if (m.warning) warnings.push(m.warning);
+  const input = {
+    execVerified,
+    execution_status: exec.value ?? "not_started",
+    release_status: release.value ?? "not_released",
+    documentation_status: docs.value ?? "not_assessed"
+  };
+  return { input, warnings };
+}
+function isPathContained(rootPath, candidatePath2) {
+  return candidatePath2 === rootPath || candidatePath2.startsWith(rootPath + path80.sep);
+}
+function evidencePathToken(rawRef) {
+  if (/[\u0000-\u001f\u007f]/.test(rawRef)) return null;
+  if (!/\s/.test(rawRef)) return rawRef;
+  const legacy = /^(?:receipt|deliverable):\s+(\S+)(?:\s+\(branch [A-Za-z0-9._/-]+\))?$/i.exec(rawRef);
+  return legacy?.[1] ?? null;
+}
+function classifyEvidenceRef(root, source, rawRef) {
+  if (typeof rawRef !== "string" || rawRef.length === 0) {
+    return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be a non-empty string" } };
+  }
+  const normalizedRef = evidencePathToken(rawRef);
+  if (normalizedRef === null) {
+    return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be a path, not prose/control text" } };
+  }
+  const fileRef = normalizedRef.split("#", 1)[0];
+  if (!fileRef || path80.isAbsolute(fileRef)) {
+    return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be repository-relative" } };
+  }
+  const segments = fileRef.split(/[\\/]/);
+  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+    return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref must be a canonical contained path" } };
+  }
+  const rootAbs = path80.resolve(root);
+  const resolved = path80.resolve(rootAbs, fileRef);
+  if (!isPathContained(rootAbs, resolved)) {
+    return { kind: "invalid", record: { ref: rawRef, source, reason: "evidence ref escapes repository root" } };
+  }
+  return {
+    kind: "valid",
+    record: { ref: rawRef, source, resolved_path: resolved }
+  };
+}
+function checkInitiativeEvidenceRefs(root, initiativeDir, manifest) {
+  const checked = [];
+  const missing = [];
+  const invalid = [];
+  const consume = (source, rawRefs) => {
+    if (rawRefs === void 0) return;
+    if (!Array.isArray(rawRefs)) {
+      invalid.push({ ref: rawRefs, source, reason: "evidence refs must be an array" });
+      return;
+    }
+    for (const rawRef of rawRefs) {
+      const classified = classifyEvidenceRef(root, source, rawRef);
+      if (classified.kind === "invalid") {
+        invalid.push(classified.record);
+        continue;
+      }
+      if (!fs67.existsSync(classified.record.resolved_path)) {
+        checked.push(classified.record);
+        missing.push(classified.record);
+        continue;
+      }
+      try {
+        const rootReal = fs67.realpathSync.native(path80.resolve(root));
+        const evidenceReal = fs67.realpathSync.native(classified.record.resolved_path);
+        if (!isPathContained(rootReal, evidenceReal)) {
+          invalid.push({
+            ref: classified.record.ref,
+            source,
+            reason: "evidence ref resolves outside repository root"
+          });
+          continue;
+        }
+        if (!fs67.statSync(evidenceReal).isFile()) {
+          invalid.push({
+            ref: classified.record.ref,
+            source,
+            reason: "evidence ref must resolve to a regular file"
+          });
+          continue;
+        }
+      } catch {
+        invalid.push({
+          ref: classified.record.ref,
+          source,
+          reason: "evidence ref cannot be resolved or read"
+        });
+        continue;
+      }
+      checked.push(classified.record);
+    }
+  };
+  const closeGate = manifest["close_gate"];
+  if (closeGate !== void 0) {
+    if (!closeGate || typeof closeGate !== "object" || Array.isArray(closeGate)) {
+      invalid.push({ ref: closeGate, source: "initiative.yaml#close_gate", reason: "close_gate must be an object" });
+    } else {
+      consume("initiative.yaml#close_gate.evidence", closeGate["evidence"]);
+    }
+  }
+  const workItemsDir = path80.join(initiativeDir, "work-items");
+  if (fs67.existsSync(workItemsDir)) {
+    let names;
+    try {
+      const entries = fs67.readdirSync(workItemsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+      names = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".yaml")).map((entry) => entry.name).sort();
+      for (const entry of entries) {
+        if (entry.name.endsWith(".yaml") && !entry.isFile()) {
+          invalid.push({
+            ref: entry.name,
+            source: `work-items/${entry.name}`,
+            reason: "work-item YAML entries must be regular files"
+          });
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        if (/\.ya?ml$/i.test(entry.name) && !entry.name.endsWith(".yaml")) {
+          invalid.push({
+            ref: entry.name,
+            source: `work-items/${entry.name}`,
+            reason: "work-item files must use the canonical .yaml extension"
+          });
+        }
+      }
+    } catch {
+      invalid.push({ ref: "work-items/", source: "work-items/", reason: "work-items directory is unreadable" });
+      names = [];
+    }
+    for (const name of names) {
+      const source = `work-items/${name}`;
+      let parsed;
+      try {
+        parsed = parseYaml(fs67.readFileSync(path80.join(workItemsDir, name), "utf8"));
+      } catch {
+        invalid.push({ ref: name, source, reason: "work item is unreadable or malformed YAML" });
+        continue;
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        invalid.push({ ref: name, source, reason: "work item must parse to an object" });
+        continue;
+      }
+      consume(source, parsed["evidence_refs"]);
+    }
+  }
+  return { valid: missing.length === 0 && invalid.length === 0, checked, missing, invalid };
+}
+var fs67, path80, EXECUTION_STATUS_ALIASES, DOCUMENTATION_STATUS_ALIASES, RELEASE_STATUS_ALIASES;
+var init_initiative_evidence = __esm({
+  "src/domains/lifecycle/initiative-evidence.ts"() {
+    fs67 = __toESM(require("node:fs"));
+    path80 = __toESM(require("node:path"));
+    init_state();
+    init_state();
+    init_initiative();
+    EXECUTION_STATUS_ALIASES = {
+      in_progress: "active",
+      "in-progress": "active",
+      completed: "done",
+      complete: "done"
+    };
+    DOCUMENTATION_STATUS_ALIASES = {
+      pending: "update_required",
+      "in-sync": "no_update_required",
+      in_sync: "no_update_required",
+      "not-assessed": "not_assessed",
+      // real archived-corpus spelling (host-adapter-migration): docs shipped
+      done: "updated"
+    };
+    RELEASE_STATUS_ALIASES = {
+      // real archived-corpus spelling (settings-control-and-tmux)
+      released_to_canon: "released",
+      "released-to-canon": "released"
+    };
+  }
+});
+
+// src/domains/lifecycle/stack-p05.ts
+function p05CredentialKey(key, value) {
+  const normalized = key.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  return /password|credential|secret|authorization|apikey/.test(normalized) || typeof value !== "number" && /^(?:(?:access|refresh|id|session|auth|authentication|api|bearer)?token|bearer)$/.test(normalized);
+}
+function p05Redact(v) {
+  if (typeof v === "string")
+    return redactKeyValueSecrets(redactTokenShapes(v));
+  if (Array.isArray(v))
+    return v.map(p05Redact);
+  if (v && typeof v === "object")
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => {
+      return [k, p05CredentialKey(k, x) ? "[redacted]" : p05Redact(x)];
+    }));
+  return v;
+}
+function p05ArtifactText(bytes, relative25) {
+  const structured = (value) => {
+    const seen = /* @__PURE__ */ new Set();
+    let nodes = 0;
+    const visit = (item, depth = 0) => {
+      if (++nodes > 1e4 || depth > 64) throw new Error("complex artifact");
+      if (item && typeof item === "object") {
+        if (seen.has(item)) throw new Error("aliased artifact");
+        seen.add(item);
+        for (const child of Object.values(item)) visit(child, depth + 1);
+      }
+    };
+    visit(value);
+    return JSON.stringify(p05Redact(value));
+  };
+  const yaml5 = (text) => {
+    const value = parseYaml(text);
+    if (value === null && text.trim() !== "" && !/^(?:null|~)$/i.test(text.trim())) throw new Error("invalid YAML");
+    return value;
+  };
+  try {
+    if (/\.json$/i.test(relative25)) return structured(JSON.parse(bytes));
+    if (/\.jsonl$/i.test(relative25)) return bytes.split(/\r?\n/).map((line) => line.trim() ? structured(JSON.parse(line)) : line).join("\n");
+    if (/\.ya?ml$/i.test(relative25)) return structured(yaml5(bytes));
+    try {
+      return structured(JSON.parse(bytes));
+    } catch {
+    }
+    const lines = bytes.split(/\r?\n/);
+    if (lines.some((line) => line.trim()) && lines.every((line) => !line.trim() || /^[\[{]/.test(line.trim())))
+      return lines.map((line) => line.trim() ? structured(JSON.parse(line)) : line).join("\n");
+    const credentialField = [...bytes.matchAll(/["']?([A-Za-z][A-Za-z0-9_. -]{0,63})["']?\s*[:=,\t]/g)].some((match) => {
+      const words = match[1].trim().split(/\s+/);
+      return words.some((_, n) => p05CredentialKey(words.slice(n).join(" "), null));
+    }) || [...bytes.matchAll(/["']([^"'\r\n]{1,64})["']/g)].some((match) => p05CredentialKey(match[1], null));
+    if (credentialField) return null;
+    return p05Redact(bytes);
+  } catch {
+    return null;
+  }
+}
+var fs68, path81, import_node_crypto4, P05_READS, P05_WRITES, EMPTY2, json, issue2, StackP05;
+var init_stack_p05 = __esm({
+  "src/domains/lifecycle/stack-p05.ts"() {
+    fs68 = __toESM(require("node:fs"));
+    path81 = __toESM(require("node:path"));
+    import_node_crypto4 = require("node:crypto");
+    init_state();
+    init_security();
+    init_initiative();
+    init_initiative_workitems();
+    init_run_lifecycle();
+    init_initiative_evidence();
+    P05_READS = /* @__PURE__ */ new Set(["initiative.list", "initiative.inspect", "initiative.close_check", "decision.list", "decision.inspect", "run.list", "run.inspect", "run.trace", "run.artifacts"]);
+    P05_WRITES = /* @__PURE__ */ new Set(["initiative.create", "initiative.revise", "initiative.link", "initiative.unlink", "initiative.pause", "initiative.close", "initiative.archive", "initiative.restore", "decision.propose", "decision.approve", "decision.reject", "decision.supersede"]);
+    EMPTY2 = /* @__PURE__ */ stackHash("");
+    json = (v) => JSON.stringify(v, null, 2) + "\n";
+    issue2 = (code, message) => ({ code, message, evidence: [] });
+    StackP05 = class _StackP05 {
+      constructor(source, canonical2, now, overlays = /* @__PURE__ */ new Map(), snapshotOnly = false, validateSchema) {
+        this.source = source;
+        this.canonical = canonical2;
+        this.now = now;
+        this.overlays = overlays;
+        this.snapshotOnly = snapshotOnly;
+        this.validateSchema = validateSchema;
+      }
+      source;
+      canonical;
+      now;
+      overlays;
+      snapshotOnly;
+      validateSchema;
+      read(rel2, optional = true) {
+        if (this.overlays.has(rel2))
+          return this.overlays.get(rel2);
+        return this.snapshotOnly ? null : stackRead(this.source.realpath, rel2, optional);
+      }
+      parse(rel2, optional = true) {
+        const b = this.read(rel2, optional);
+        return b === null ? null : rel2.endsWith(".yaml") ? parseYaml(b) : JSON.parse(b);
+      }
+      names(rel2) {
+        let names = [];
+        try {
+          if (!this.snapshotOnly)
+            names = fs68.readdirSync(stackContained(this.source.realpath, rel2)).sort();
+        } catch (e) {
+          if (e.code !== "ENOENT")
+            throw e;
+        }
+        for (const [p, b] of this.overlays)
+          if (b !== null && p.startsWith(rel2 + "/"))
+            names.push(p.slice(rel2.length + 1).split("/")[0]);
+        return [...new Set(names)].sort();
+      }
+      directory(rel2) {
+        if ([...this.overlays].some(([p, b]) => b !== null && p.startsWith(rel2 + "/"))) return true;
+        if (this.snapshotOnly) return false;
+        try {
+          return fs68.lstatSync(stackContained(this.source.realpath, rel2)).isDirectory();
+        } catch (e) {
+          if (e.code === "ENOENT" || e.code === "ENOTDIR") return false;
+          throw e;
+        }
+      }
+      files(rel2, depth = 0, counter = { n: 0 }) {
+        if (depth > 8)
+          throw new StackError("collection_limit", "Artifact depth exceeds eight", 413);
+        const out = [];
+        for (const n of this.names(rel2)) {
+          if (++counter.n > 1e4)
+            throw new StackError("collection_limit", "Snapshot exceeds 10000 entries", 413);
+          if (n.startsWith(".") || /^(?:node_modules|runtime|secrets)$/.test(n))
+            continue;
+          const p = rel2 + "/" + n;
+          let st;
+          try {
+            if (this.snapshotOnly) {
+              const children = [...this.overlays].some(([k, v]) => v !== null && k.startsWith(p + "/"));
+              if (children) {
+                out.push(...this.files(p, depth + 1, counter));
+                continue;
+              }
+              if (this.read(p) !== null)
+                out.push(p);
+              continue;
+            }
+            st = fs68.lstatSync(stackContained(this.source.realpath, p));
+          } catch (e) {
+            if ([...this.overlays].some(([k, v]) => v !== null && k.startsWith(p + "/"))) {
+              out.push(...this.files(p, depth + 1, counter));
+              continue;
+            }
+            if (this.overlays.has(p)) {
+              if (this.overlays.get(p) !== null)
+                out.push(p);
+              continue;
+            }
+            throw e;
+          }
+          if (st.isSymbolicLink())
+            throw new StackError("unsafe_path", "Symlink is not permitted in canonical aggregate", 403);
+          if (st.isDirectory())
+            out.push(...this.files(p, depth + 1, counter));
+          else if (st.isFile() && (!this.overlays.has(p) || this.overlays.get(p) !== null))
+            out.push(p);
+        }
+        return out.sort();
+      }
+      digest(files) {
+        return stackHash(this.canonical([...new Set(files)].sort().map((p) => [p, this.read(p) === null ? null : stackHash(this.read(p))])));
+      }
+      evidence(rel2) {
+        return { source_id: this.source.source_id, path: rel2.startsWith(".guild/") ? rel2.slice(7) : rel2, sha256: stackHash(this.read(rel2, false)), schema_version: "guild.stack.raw-evidence.v1", observed_at: this.now().toISOString(), freshness: "current" };
+      }
+      entity(kind, id, revision) {
+        return { source_id: this.source.source_id, kind, id, revision };
+      }
+      runs() {
+        const out = [];
+        for (const id of this.names(".guild/runs")) {
+          if (id.startsWith(".") || id.startsWith("_"))
+            continue;
+          stackId(id);
+          const rel2 = ".guild/runs/" + id;
+          if (!this.directory(rel2)) continue;
+          if (this.read(rel2 + "/run.yaml") === null && this.read(rel2 + "/provenance.json") === null)
+            continue;
+          out.push(this.run(id));
+          if (out.length > 2e3)
+            throw new StackError("collection_limit", "Run attachment snapshot exceeds limit", 413);
+        }
+        return out;
+      }
+      run(id) {
+        stackId(id);
+        const rel2 = ".guild/runs/" + id;
+        const files = ["run.yaml", "provenance.json", "workflow-cursor.json", "attempt.json", "resolved-settings.json", "resolved-settings.sha256", "plugin-config-snapshot.json", "session-context.json", "launch.json", "host-dispatch.json"].map((p) => rel2 + "/" + p);
+        const issues = [];
+        const get = (n) => {
+          try {
+            const value = this.parse(rel2 + "/" + n);
+            if (this.read(rel2 + "/" + n) !== null && (!value || typeof value !== "object" || Array.isArray(value))) throw new Error("Malformed object");
+            return value;
+          } catch {
+            return issues.push(issue2("malformed_record", n + " is malformed")), null;
+          }
+        };
+        const manifest = get("run.yaml"), provenance = get("provenance.json");
+        if (this.read(rel2 + "/run.yaml") === null && this.read(rel2 + "/provenance.json") === null)
+          throw new StackError("not_found", "Run not found", 404);
+        const proof = get("host-dispatch.json");
+        const data = { schema_version: "guild.stack.run_view.v1", path: rel2.slice(7), manifest, provenance, workflow_cursor: get("workflow-cursor.json"), attempt: get("attempt.json"), configuration: { effective: get("resolved-settings.json"), config_hash: get("launch.json")?.config_hash ?? null, evidence: files.filter((p) => this.read(p) !== null && /settings|snapshot/.test(p)).map((p) => this.evidence(p)) }, host: { host_id: typeof proof?.host_id === "string" ? proof.host_id : typeof manifest?.host?.resolved === "string" ? manifest.host.resolved : typeof manifest?.host_resolved === "string" ? manifest.host_resolved : null, model: proof?.model ?? null, dispatch_state: proof?.state ?? "unknown", proof: proof ? [this.evidence(rel2 + "/host-dispatch.json")] : [] }, controls: ["run.start", "run.resume", "run.cancel", "run.rerun"].map((operation) => ({ operation, available: false, reason: "Installed host execution and monetary budget enforcement are not qualified", qualification: "unavailable" })), evidence: files.filter((p) => this.read(p) !== null).map((p) => this.evidence(p)), issues };
+        return { ref: this.entity("run", id, this.digest(files)), data: p05Redact(data) };
+      }
+      locate(id) {
+        stackId(id);
+        const found = ["active", "archived"].map((b) => ".guild/initiatives/" + b + "/" + id).filter((p) => this.read(p + "/initiative.yaml") !== null);
+        if (found.length !== 1)
+          throw new StackError(found.length ? "ambiguous_entity" : "not_found", "Initiative ownership is missing or ambiguous", 409);
+        return found[0];
+      }
+      attachmentFiles() {
+        return this.runs().flatMap((r) => ["run.yaml", "provenance.json"].map((n) => ".guild/" + r.data.path + "/" + n));
+      }
+      initiatives() {
+        const ids = [...new Set(["active", "archived"].flatMap((b) => this.names(".guild/initiatives/" + b).filter((id) => this.directory(".guild/initiatives/" + b + "/" + id))))].filter((id) => !id.startsWith(".") && ["active", "archived"].some((b) => this.read(".guild/initiatives/" + b + "/" + id + "/initiative.yaml") !== null));
+        return ids.map((id) => this.initiative(id));
+      }
+      canonicalInitiativeFiles(rel2) {
+        const paths = ["initiative.yaml", "summary.md", "definition-ledger.json", "definition-ledger.md", "decisions.md", "lifecycle.json"].map((n) => rel2 + "/" + n).filter((p) => this.read(p) !== null);
+        for (const name of this.names(rel2 + "/work-items")) if (/\.(?:json|ya?ml)$/.test(name)) paths.push(rel2 + "/work-items/" + name);
+        paths.push(...this.files(rel2 + "/decisions").filter((p) => p.endsWith(".json")));
+        return paths.sort();
+      }
+      initiative(id) {
+        const rel2 = this.locate(id), issues = [];
+        let outer = null;
+        try {
+          outer = this.parse(rel2 + "/initiative.yaml");
+        } catch {
+          issues.push(issue2("malformed_record", "Initiative YAML is malformed"));
+        }
+        const nested = outer?.initiative;
+        const m = nested ?? outer;
+        if (!m || typeof m !== "object" || Array.isArray(m) || Object.keys(m).length === 0)
+          issues.push(issue2("malformed_record", "Initiative must contain a manifest object"));
+        else if (!validateInitiativeManifest(m).valid)
+          issues.push(issue2("invalid_manifest", "Manifest has missing or unsupported fields"));
+        let compatibility = !m || typeof m !== "object" ? "malformed" : !nested ? "legacy" : validateInitiativeManifest(m).valid ? "canonical" : "legacy";
+        if (m?.schema_version && m.schema_version !== "guild.initiative.v1")
+          compatibility = "unsupported";
+        let defs = [], works = [], life = null;
+        try {
+          const d = this.parse(rel2 + "/definition-ledger.json");
+          if (d && d.schema_version === "guild.initiative_definition_ledger.v1" && Array.isArray(d.items) && d.items.length <= 200 && d.items.every((v) => validateDefinitionItem(v).valid && v.initiative_id === id))
+            defs = d.items;
+          else if (d)
+            issues.push(issue2("invalid_definition", "Definition ledger is invalid"));
+        } catch {
+          issues.push(issue2("invalid_definition", "Definition ledger is malformed"));
+        }
+        for (const n of this.names(rel2 + "/work-items")) {
+          if (!n.endsWith(".json")) {
+            issues.push(issue2("legacy_work_item", "Legacy work item remains read-only"));
+            continue;
+          }
+          try {
+            const w = this.parse(rel2 + "/work-items/" + n);
+            if (w?.schema_version !== "guild.initiative_work_item.v1" || !validateWorkItem(w.item).valid || w.item.initiative_id !== id)
+              throw Error();
+            works.push(w.item);
+          } catch {
+            issues.push(issue2("invalid_work_item", "Work item is malformed or unsupported"));
+          }
+        }
+        if (works.length > 200)
+          throw new StackError("collection_limit", "Work items exceed 200", 413);
+        try {
+          life = this.parse(rel2 + "/lifecycle.json");
+          if (life && (life.schema_version !== "guild.initiative_lifecycle.v1" || typeof life.paused !== "boolean"))
+            throw Error();
+        } catch {
+          life = null;
+          issues.push(issue2("invalid_lifecycle", "Lifecycle is invalid"));
+        }
+        const runs = this.runs(), linked = runs.filter((r) => r.data.manifest?.initiative_attachment === id || r.data.provenance?.initiative === id);
+        const dependencies = this.dependencies(works);
+        const axes = {};
+        const enums = { definition: DEFINITION_STATUS, execution: EXECUTION_STATUS, release: RELEASE_STATUS, documentation: DOCUMENTATION_STATUS };
+        const mapped = buildD8Input(m ?? {}, false).input;
+        for (const a of Object.keys(enums)) {
+          const raw = m?.[a + "_status"] ?? null;
+          const val = enums[a].includes(raw) ? raw : a === "definition" ? null : mapped[a + "_status"];
+          const known2 = raw !== null && (a === "execution" && ["in_progress", "in-progress", "completed", "complete"].includes(raw) || a === "release" && ["released_to_canon", "released-to-canon"].includes(raw) || a === "documentation" && ["pending", "in-sync", "in_sync", "not-assessed", "done"].includes(raw));
+          axes[a] = { raw: typeof raw === "string" ? raw : null, value: enums[a].includes(raw) ? raw : known2 ? val : null, normalization: raw === null ? "missing" : enums[a].includes(raw) ? "canonical" : known2 ? "documented_alias" : "unsupported" };
+        }
+        const closeGate = m?.close_gate === void 0 ? { evidence: [] } : m.close_gate;
+        let validCloseGate = closeGate && typeof closeGate === "object" && !Array.isArray(closeGate) && Object.keys(closeGate).join(",") === "evidence" && Array.isArray(closeGate.evidence) && closeGate.evidence.every((x) => typeof x === "string");
+        if (validCloseGate) try {
+          this.validateSchema?.("https://guildstack.dev/contracts/guild-stack/p05/v1/domain.schema.json#/$defs/close_gate_input", closeGate);
+        } catch {
+          validCloseGate = false;
+        }
+        if (!validCloseGate)
+          issues.push(issue2("invalid_close_gate", "Close gate must contain only repository-relative evidence"));
+        const decisionIds = this.names(rel2 + "/decisions");
+        const decisions = decisionIds.map((d) => this.decision(id, d));
+        const files = this.canonicalInitiativeFiles(rel2);
+        const evidencePaths = /* @__PURE__ */ new Set();
+        const closeErrors = [];
+        const evidenceResult = checkInitiativeEvidenceRefs(this.source.realpath, path81.join(this.source.realpath, rel2), m ?? {});
+        for (const rec of evidenceResult.checked) {
+          const p = path81.relative(this.source.realpath, rec.resolved_path);
+          try {
+            stackContained(this.source.realpath, p);
+            if (this.read(p) !== null)
+              evidencePaths.add(p);
+            else
+              closeErrors.push(issue2("missing_evidence", "Required evidence is missing"));
+          } catch {
+            closeErrors.push(issue2("invalid_evidence", "Required evidence is unsafe"));
+          }
+        }
+        if (!evidenceResult.valid)
+          closeErrors.push(issue2("invalid_evidence", "Close gate has missing or invalid evidence"));
+        for (const w of [...defs, ...works])
+          for (const ref2 of w.evidence_refs ?? []) {
+            try {
+              if (typeof ref2 !== "string" || path81.isAbsolute(ref2))
+                throw Error();
+              const p = ref2.split("#")[0];
+              stackContained(this.source.realpath, p);
+              if (this.read(p) === null)
+                throw Error();
+              evidencePaths.add(p);
+            } catch {
+              closeErrors.push(issue2("invalid_evidence", "Work item evidence is missing or unsafe"));
+            }
+          }
+        let execVerified = linked.length > 0;
+        for (const r of linked) {
+          const p = ".guild/" + r.data.path + "/verify.md";
+          const bytes = this.read(p);
+          if (bytes === null || !this.verifyRunPass(r.ref.id, bytes))
+            execVerified = false;
+          if (bytes !== null)
+            evidencePaths.add(p);
+        }
+        if (!ledgerReady(defs) || dependencies.some((d) => d.state !== "satisfied") || works.some((w) => !["done", "cancelled", "deferred"].includes(w.status)))
+          closeErrors.push(issue2("unresolved_dependencies", "Blocking definition or work remains"));
+        if (issues.length)
+          closeErrors.push(...issues);
+        const inputs = buildD8Input(m ?? {}, execVerified).input;
+        const result2 = d8CloseGate(inputs);
+        const revision = this.digest([...files, ...this.attachmentFiles(), ...evidencePaths]);
+        const ref = this.entity("initiative", id, revision);
+        const close = { schema_version: "guild.stack.initiative_close_check.v1", initiative: ref, inputs, result: result2, evidence: [...evidencePaths].map((p) => this.evidence(p)), evidence_errors: closeErrors, pass: compatibility === "canonical" && result2.canClose && closeErrors.length === 0, required_work_items: populateReleaseDocsWorkItems(id, result2, inputs.documentation_status) };
+        const page = (total) => ({ next_cursor: null, total, partial: false });
+        return { ref, data: p05Redact({ schema_version: "guild.stack.initiative_view.v1", path: rel2.slice(7), title: typeof m?.title === "string" ? m.title : id, manifest: m && typeof m === "object" && !Array.isArray(m) ? m : null, close_gate: validCloseGate ? closeGate : null, bucket: rel2.split("/")[2], compatibility, axes, derived_status: compatibility === "canonical" ? deriveInitiativeStatus(m, { paused: life?.paused ?? false, archived: rel2.includes("/archived/") }) : null, definition_items: defs, work_items: works, dependencies, linked_runs: linked.map((r) => r.ref), decisions: decisions.map((d) => d.ref), lifecycle: life, close_check: close, evidence: files.map((p) => this.evidence(p)), issues, sections: { definition: page(defs.length), work_items: page(works.length), runs: page(linked.length), decisions: page(decisions.length) } }) };
+      }
+      verifyRunPass(id, bytes) {
+        const lines = bytes.split(/\r?\n/).filter((l) => l.trim() !== "");
+        if (lines[0] !== "# Verify \u2014 " + id || lines[1] !== "Overall status: pass" || bytes.includes("\u2717") || /^Overall status: (?!pass$)/m.test(bytes))
+          return false;
+        return [1, 2, 3, 4, 5, 6].every((n) => lines.some((l) => new RegExp("^" + n + "\\. ").test(l) && (/\bpass\b/.test(l) || l.includes("\u2713"))));
+      }
+      dependencies(works) {
+        const ids = new Set(works.map((w) => w.id));
+        if (ids.size !== works.length)
+          throw new StackError("invalid_dependencies", "Duplicate work item IDs", 422);
+        const out = [];
+        const visit = (id, stack) => {
+          if (stack.includes(id))
+            return true;
+          const w = works.find((w2) => w2.id === id);
+          return (w?.depends_on ?? []).some((to) => visit(to, [...stack, id]));
+        };
+        for (const w of works) {
+          if (w.depends_on !== void 0 && !Array.isArray(w.depends_on))
+            throw new StackError("invalid_dependencies", "Work dependencies must be arrays", 422);
+          for (const to of w.depends_on ?? []) {
+            const t = works.find((x) => x.id === to);
+            out.push({ from: w.id, to, state: !ids.has(to) ? "missing" : visit(w.id, []) ? "cycle" : t.status === "done" ? "satisfied" : "blocked" });
+          }
+        }
+        return out;
+      }
+      decision(initiativeId, id) {
+        stackId(id);
+        const rel2 = this.locate(initiativeId) + "/decisions/" + id;
+        const files = this.files(rel2);
+        if (!files.length)
+          throw new StackError("not_found", "Decision not found", 404);
+        const history = [], issues = [];
+        let previous = null;
+        for (const [idx, p] of files.entries()) {
+          try {
+            const e = this.parse(p, false);
+            this.validateSchema?.("https://guildstack.dev/contracts/guild-stack/p05/v1/domain.schema.json#/$defs/decision_event", e);
+            const transition = idx === 0 ? e.event === "proposed" : history[idx - 1]?.event === "proposed" ? ["approved", "rejected"].includes(e.event) : history[idx - 1]?.event === "approved" ? e.event === "superseded" : false;
+            if (e.schema_version !== "guild.initiative_decision_event.v1" || e.sequence !== idx + 1 || e.previous_event_hash !== previous || e.initiative_id !== initiativeId || e.decision_id !== id || !transition)
+              throw Error();
+            history.push(e);
+            previous = stackHash(this.read(p, false));
+          } catch {
+            issues.push(issue2("invalid_history", "Decision event chain is invalid"));
+          }
+        }
+        if (history.length > 200)
+          throw new StackError("collection_limit", "Decision history exceeds 200", 413);
+        const head = history.at(-1) ?? null;
+        const authority = this.decisionAuthority(head, this.entity("decision", id, stackHash(this.canonical(files.map((p) => [p.slice(rel2.length + 1), stackHash(this.read(p, false))])))), issues);
+        return { ref: this.entity("decision", id, stackHash(this.canonical(files.map((p) => [p.slice(rel2.length + 1), stackHash(this.read(p, false))])))), data: p05Redact({ authority, schema_version: "guild.stack.decision_view.v1", initiative: this.entity("initiative", initiativeId, EMPTY2), decision_id: id, state: issues.length ? "invalid" : head?.event ?? "invalid", head, history, evidence: files.map((p) => this.evidence(p)), issues }) };
+      }
+      decisionAuthority(head, ref, issues) {
+        if (!head)
+          return null;
+        const result2 = { status: "missing", actor: null, approval: null, receipt: null };
+        try {
+          const op = head.operation, id = stackId(op.operation_id);
+          if (op.approval.source_id !== this.source.source_id || op.receipt.source_id !== this.source.source_id || op.approval.path !== "artifacts/operations/" + id + "/approval.json" || op.receipt.path !== "artifacts/operations/" + id + "/receipt.json")
+            throw Error();
+          const ap = ".guild/" + op.approval.path, rp = ".guild/" + op.receipt.path, ab = this.read(ap), rb = this.read(rp);
+          if (ab === null) {
+            issues.push(issue2("missing_authority", "Decision approval is missing"));
+            return result2;
+          }
+          const a = JSON.parse(ab);
+          this.validateSchema?.("https://guildstack.dev/contracts/guild-stack/v1/approval-record.schema.json", a);
+          if (a.operation_id !== id || a.source_id !== this.source.source_id || a.decision !== "approved" || a.actor !== "local operator")
+            throw Error();
+          result2.approval = this.evidence(ap);
+          if (rb === null) {
+            result2.status = "pending";
+            issues.push(issue2("pending_authority", "Decision receipt is pending"));
+            return result2;
+          }
+          const r = JSON.parse(rb);
+          this.validateSchema?.("https://guildstack.dev/contracts/guild-stack/v1/operation-receipt.schema.json", r);
+          if (r.operation_id !== id || r.source_id !== this.source.source_id || r.preview_hash !== a.preview_hash || r.state !== "applied" || !r.after.some((x) => this.canonical(x) === this.canonical(ref)))
+            throw Error();
+          result2.receipt = this.evidence(rp);
+          result2.status = "verified";
+          result2.actor = a.actor;
+          return result2;
+        } catch {
+          issues.push(issue2("invalid_authority", "Decision operation authority is invalid"));
+          return { status: "invalid", actor: null, approval: null, receipt: null };
+        }
+      }
+      resolve(ref) {
+        if (!ref || ref.source_id !== this.source.source_id)
+          throw new StackError("stale_target", "Target source does not match", 409);
+        let item;
+        if (ref.kind === "initiative")
+          item = this.initiative(stackId(ref.id));
+        else if (ref.kind === "run")
+          item = this.run(stackId(ref.id));
+        else if (ref.kind === "decision") {
+          const matches = this.initiatives().filter((i) => i.data.decisions.some((d) => d.id === ref.id));
+          if (matches.length !== 1)
+            throw new StackError("not_found", "Decision ownership missing or ambiguous", 404);
+          item = this.decision(matches[0].ref.id, ref.id);
+          item.data.initiative = matches[0].ref;
+        } else
+          throw new StackError("invalid_target", "Unsupported target kind", 422);
+        if (this.canonical(item.ref) !== this.canonical(ref))
+          throw new StackError("stale_target", "Canonical aggregate changed", 409);
+        return item;
+      }
+      plan(operation, args, targets, id, allocated, at) {
+        const writes = [], moves = [], dependencies = [];
+        let finalTargets = [], afterKeys = [];
+        const write2 = (p, bytes) => {
+          if (writes.some((w) => w.path === p))
+            throw new StackError("invalid_plan", "Duplicate planned path");
+          const before = this.read(p);
+          writes.push({ path: p, before_exists: before !== null, before_bytes: before, before_hash: stackHash(before ?? ""), after_exists: bytes !== null, after_bytes: bytes, after_hash: stackHash(bytes ?? "") });
+        };
+        const exact = (expected) => {
+          if (this.canonical(targets) !== this.canonical(expected))
+            throw new StackError("invalid_target", "Writable targets do not match operation", 422);
+        };
+        const event = (initiativeId, decisionId, type, head, sequence, previous, replacement = null) => ({ schema_version: "guild.initiative_decision_event.v1", event_id: allocated, decision_id: decisionId, initiative_id: initiativeId, sequence, previous_event_hash: previous, event: type, created_at: at, title: head.title, rationale: head.rationale, alternatives: head.alternatives, evidence: head.evidence, supersedes: null, replacement, operation: { operation_id: id, approval: { source_id: this.source.source_id, path: "artifacts/operations/" + id + "/approval.json" }, receipt: { source_id: this.source.source_id, path: "artifacts/operations/" + id + "/receipt.json" } } });
+        if (operation === "initiative.create") {
+          exact([]);
+          const rel2 = ".guild/initiatives/active/" + allocated;
+          if (this.read(rel2 + "/initiative.yaml") !== null)
+            throw new StackError("creation_collision", "Allocated initiative exists", 409);
+          finalTargets = [this.entity("initiative", allocated, EMPTY2)];
+          afterKeys = finalTargets;
+          const m = { schema_version: "guild.initiative.v1", id: allocated, title: args.title, summary_ref: rel2 + "/summary.md", created_at: at, updated_at: at, owner: args.owner, definition_status: "incomplete", execution_status: "not_started", release_status: "not_released", documentation_status: "not_assessed" };
+          write2(rel2 + "/summary.md", args.body + "\n");
+          write2(rel2 + "/definition-ledger.json", json({ schema_version: "guild.initiative_definition_ledger.v1", items: args.acceptance.map((statement, n) => ({ id: "acceptance-" + (n + 1), initiative_id: allocated, category: "acceptance", statement, status: "defined", blocking: true, updated_at: at })) }));
+          write2(rel2 + "/lifecycle.json", json({ schema_version: "guild.initiative_lifecycle.v1", paused: false, closed_at: null, close_operation_id: null }));
+          write2(rel2 + "/initiative.yaml", json({ initiative: m }));
+        } else if (operation.startsWith("initiative.")) {
+          const current = this.resolve(args.target);
+          if (current.ref.kind !== "initiative")
+            throw new StackError("invalid_target", "Initiative target required");
+          exact([args.target]);
+          finalTargets = targets;
+          afterKeys = targets;
+          const rel2 = ".guild/" + current.data.path, m = current.data.manifest;
+          if ((current.data.compatibility !== "canonical" || current.data.close_gate === null) && operation !== "initiative.revise")
+            throw new StackError("unsupported_schema", "Explicit canonical adoption required", 422);
+          if (operation === "initiative.revise") {
+            if (args.format !== "json")
+              throw new StackError("invalid_revision", "Initiative revision requires JSON");
+            let body;
+            try {
+              body = JSON.parse(args.content);
+            } catch {
+              throw new StackError("invalid_revision", "Revision must be JSON");
+            }
+            if (body.schema_version !== "guild.stack.initiative_revision.v1" || Object.keys(body).sort().join(",") !== "close_gate,definition_items,manifest,schema_version,work_items" || !validateInitiativeManifest(body.manifest).valid || !Array.isArray(body.definition_items) || !Array.isArray(body.work_items) || body.definition_items.length > 200 || body.work_items.length > 200)
+              throw new StackError("invalid_revision", "Revision contract is invalid", 422);
+            if (body.manifest.id !== m.id || body.manifest.created_at !== m.created_at || body.manifest.scope !== m.scope || body.manifest.project_id !== m.project_id)
+              throw new StackError("immutable_identity", "Initiative identity cannot change", 422);
+            const allowed = /* @__PURE__ */ new Set([...Object.keys(m), "schema_version", "id", "title", "summary_ref", "created_at", "updated_at", "owner", "definition_status", "execution_status", "release_status", "documentation_status"]);
+            if (Object.keys(body.manifest).some((k) => !allowed.has(k)) || Object.keys(m).some((k) => !allowed.has(k) || !(k in body.manifest)))
+              throw new StackError("invalid_revision", "Unknown manifest fields cannot be introduced or removed");
+            if (body.definition_items.some((v) => !validateDefinitionItem(v).valid || v.initiative_id !== m.id) || new Set(body.definition_items.map((v) => v.id)).size !== body.definition_items.length || body.work_items.some((v) => !validateWorkItem(v).valid || v.initiative_id !== m.id))
+              throw new StackError("invalid_revision", "Invalid definition or work item");
+            for (const item of [...body.definition_items, ...body.work_items]) for (const field of ["depends_on", "acceptance", "evidence_refs"]) if (item[field] !== void 0 && (!Array.isArray(item[field]) || item[field].some((v) => typeof v !== "string" || v.length === 0))) throw new StackError("invalid_revision", "Optional item collections must contain strings");
+            for (const item of [...body.definition_items, ...body.work_items]) for (const ref of item.evidence_refs ?? []) {
+              const rel3 = ref.split("#")[0];
+              stackContained(this.source.realpath, rel3);
+              if (this.read(rel3) === null) throw new StackError("missing_evidence", "Item evidence is missing");
+            }
+            const deps = this.dependencies(body.work_items);
+            if (deps.some((d) => ["missing", "cycle"].includes(d.state)) || body.work_items.some((w) => ["ready", "in_progress", "done"].includes(w.status) && deps.some((d) => d.from === w.id && d.state !== "satisfied")))
+              throw new StackError("invalid_dependencies", "Unresolved work dependencies");
+            if ((body.manifest.definition_status !== "incomplete" || body.work_items.some((w) => ["ready", "in_progress", "done"].includes(w.status))) && !ledgerReady(body.definition_items))
+              throw new StackError("definition_unresolved", "Blocking definition is unresolved");
+            try {
+              this.validateSchema?.("https://guildstack.dev/contracts/guild-stack/p05/v1/domain.schema.json#/$defs/close_gate_input", body.close_gate);
+            } catch {
+              throw new StackError("invalid_close_gate", "Close gate evidence contract invalid");
+            }
+            if (!body.close_gate || Object.keys(body.close_gate).join(",") !== "evidence" || !Array.isArray(body.close_gate.evidence))
+              throw new StackError("invalid_close_gate", "Close gate accepts only evidence paths");
+            const changed = ["execution", "release", "documentation"].some((a) => body.manifest[a + "_status"] !== m[a + "_status"]);
+            if (changed && (!body.close_gate || !Array.isArray(body.close_gate.evidence) || body.close_gate.evidence.length === 0))
+              throw new StackError("evidence_required", "Axis changes require cited evidence");
+            for (const p of body.close_gate.evidence ?? []) {
+              if (typeof p !== "string" || path81.isAbsolute(p))
+                throw new StackError("invalid_evidence", "Evidence must be repository-relative");
+              stackContained(this.source.realpath, p.split("#")[0]);
+              if (this.read(p.split("#")[0]) === null)
+                throw new StackError("missing_evidence", "Revision evidence is missing");
+            }
+            write2(rel2 + "/definition-ledger.json", json({ schema_version: "guild.initiative_definition_ledger.v1", items: body.definition_items }));
+            const nextIds = new Set(body.work_items.map((w) => w.id));
+            for (const n of this.names(rel2 + "/work-items"))
+              if (n.endsWith(".json") && !nextIds.has(n.slice(0, -5)))
+                write2(rel2 + "/work-items/" + n, null);
+            for (const w of body.work_items) {
+              stackId(w.id);
+              write2(rel2 + "/work-items/" + w.id + ".json", json({ schema_version: "guild.initiative_work_item.v1", item: w }));
+            }
+            write2(rel2 + "/initiative.yaml", json({ initiative: { ...body.manifest, close_gate: body.close_gate } }));
+          } else if (operation === "initiative.link" || operation === "initiative.unlink") {
+            const run = this.resolve(args.related);
+            if (run.ref.kind !== "run")
+              throw new StackError("invalid_target", "Related run required");
+            dependencies.push(run.ref);
+            const rm = run.data.manifest;
+            if (!rm)
+              throw new StackError("invalid_run", "Canonical run manifest required");
+            const linked = rm.initiative_attachment ?? null;
+            if (operation === "initiative.link" && linked !== null && linked !== m.id || operation === "initiative.unlink" && linked !== m.id)
+              throw new StackError("attachment_conflict", "Run belongs to a different initiative");
+            const next = operation === "initiative.link" ? m.id : null;
+            const rrel = ".guild/" + run.data.path;
+            const patched = updateRunAttachment(rm, this.parse(rrel + "/provenance.json"), next);
+            write2(rrel + "/run.yaml", json(patched.manifest));
+            if (patched.provenance) write2(rrel + "/provenance.json", json(patched.provenance));
+          } else if (operation === "initiative.pause")
+            write2(rel2 + "/lifecycle.json", json({ ...current.data.lifecycle, schema_version: "guild.initiative_lifecycle.v1", paused: true, closed_at: current.data.lifecycle?.closed_at ?? null, close_operation_id: current.data.lifecycle?.close_operation_id ?? null }));
+          else if (["initiative.close", "initiative.archive", "initiative.restore"].includes(operation)) {
+            const bucket = current.data.bucket, to = operation === "initiative.restore" ? "active" : "archived";
+            if (bucket === to)
+              throw new StackError("invalid_transition", "Initiative already in destination");
+            if (operation === "initiative.close") {
+              if (!current.data.close_check.pass)
+                throw new StackError("close_gate_refused", "D8 evidence or dependencies unresolved", 422);
+              write2(rel2 + "/lifecycle.json", json({ schema_version: "guild.initiative_lifecycle.v1", paused: false, closed_at: at, close_operation_id: id }));
+            } else if (operation === "initiative.archive" && !current.data.lifecycle?.closed_at)
+              throw new StackError("close_gate_refused", "Only a closed initiative can be archived");
+            const dest = ".guild/initiatives/" + to + "/" + m.id;
+            if (this.snapshotOnly) {
+              if (this.names(dest).length)
+                throw new StackError("destination_collision", "Archive destination exists");
+            } else {
+              try {
+                stackContained(this.source.realpath, dest);
+                throw new StackError("destination_collision", "Archive destination exists");
+              } catch (e) {
+                if (e.code !== "ENOENT")
+                  throw e;
+              }
+            }
+            if (typeof m.summary_ref === "string" && m.summary_ref.startsWith(rel2 + "/")) write2(rel2 + "/initiative.yaml", json({ initiative: { ...m, summary_ref: dest + m.summary_ref.slice(rel2.length) } }));
+            moves.push({ from: rel2, to: dest, before_tree_hash: this.digest(this.files(rel2)) });
+          } else
+            throw new StackError("operation_unavailable", "Initiative host control is unavailable", 503);
+        } else if (operation.startsWith("decision.")) {
+          let initiativeId, decisionId, head, sequence = 1, previous = null, type = operation.split(".")[1], rel2, current;
+          if (operation === "decision.propose") {
+            exact([]);
+            let body;
+            try {
+              body = JSON.parse(args.body);
+            } catch {
+              throw new StackError("invalid_proposal", "Decision proposal must be JSON");
+            }
+            if (body.schema_version !== "guild.initiative_decision_proposal.v1" || Object.keys(body).sort().join(",") !== "alternatives,evidence,initiative,rationale,schema_version" || args.acceptance.length !== 0 || !Array.isArray(body.alternatives) || !Array.isArray(body.evidence))
+              throw new StackError("invalid_proposal", "Decision proposal contract invalid");
+            const i = this.resolve(body.initiative);
+            if (i.ref.kind !== "initiative" || i.data.compatibility !== "canonical")
+              throw new StackError("invalid_target", "Canonical initiative required");
+            dependencies.push(i.ref);
+            initiativeId = i.ref.id;
+            decisionId = allocated;
+            head = { title: args.title, rationale: body.rationale, alternatives: body.alternatives, evidence: body.evidence };
+            finalTargets = [this.entity("decision", decisionId, EMPTY2)];
+            afterKeys = finalTargets;
+            type = "proposed";
+            rel2 = this.locate(initiativeId) + "/decisions/" + decisionId;
+          } else {
+            current = this.resolve(args.target);
+            if (current.ref.kind !== "decision" || current.data.state === "invalid" || current.data.authority?.status !== "verified")
+              throw new StackError("invalid_history", "Valid decision target required");
+            initiativeId = current.data.head.initiative_id;
+            decisionId = current.ref.id;
+            head = { ...current.data.head, rationale: args.rationale };
+            rel2 = this.locate(initiativeId) + "/decisions/" + decisionId;
+            sequence = current.data.history.length + 1;
+            previous = stackHash(this.read(this.files(rel2).at(-1), false));
+            finalTargets = [args.target];
+            afterKeys = finalTargets;
+            exact(operation === "decision.supersede" ? [args.target, args.related] : [args.target]);
+            if (operation === "decision.supersede") {
+              const replacement = this.resolve(args.related);
+              if (current.data.state !== "approved" || replacement.data.state !== "approved" || replacement.data.head.initiative_id !== initiativeId || replacement.ref.id === decisionId)
+                throw new StackError("invalid_transition", "Supersede requires two approved decisions in same initiative");
+              finalTargets = [args.target, args.related];
+              afterKeys = finalTargets;
+              type = "superseded";
+              head = { ...head, replacement: { decision_id: replacement.ref.id, event_hash: stackHash(this.read(this.files(this.locate(initiativeId) + "/decisions/" + replacement.ref.id).at(-1), false)) } };
+            } else {
+              if (current.data.state !== "proposed")
+                throw new StackError("invalid_transition", "Only proposed decision can approve or reject");
+              type = operation === "decision.approve" ? "approved" : "rejected";
+            }
+          }
+          for (const evidence of head.evidence ?? []) {
+            if (evidence.source_id !== this.source.source_id || evidence.sha256 !== stackHash(this.read(".guild/" + evidence.path, false))) throw new StackError("invalid_evidence", "Decision evidence changed or belongs to another source");
+          }
+          const e = event(initiativeId, decisionId, type, head, sequence, previous, head.replacement ?? null);
+          write2(rel2 + "/" + String(sequence).padStart(6, "0") + "-" + allocated + ".json", json(e));
+        } else
+          throw new StackError("operation_unavailable", "Unqualified host or unsupported operation", 503);
+        const overlay = new Map(this.overlays);
+        for (const w of writes)
+          overlay.set(w.path, w.after_bytes);
+        for (const move of moves) {
+          for (const p of this.files(move.from)) {
+            overlay.set(move.to + p.slice(move.from.length), overlay.has(p) ? overlay.get(p) : this.read(p));
+            overlay.set(p, null);
+          }
+          for (const w of writes)
+            if (w.path.startsWith(move.from + "/")) {
+              overlay.set(move.to + w.path.slice(move.from.length), w.after_bytes);
+              overlay.set(w.path, null);
+            }
+        }
+        const simulated = new _StackP05(this.source, this.canonical, this.now, overlay, this.snapshotOnly, this.validateSchema);
+        const after = afterKeys.map((ref) => {
+          if (ref.kind === "initiative")
+            return simulated.initiative(ref.id).ref;
+          if (ref.kind === "decision") {
+            const wi = writes.find((w) => w.path.includes("/decisions/" + ref.id + "/"));
+            if (wi)
+              return simulated.decision(JSON.parse(wi.after_bytes).initiative_id, ref.id).ref;
+            return this.resolve(ref).ref;
+          }
+          return ref;
+        });
+        const diffs = finalTargets.filter((t) => writes.some((w) => t.kind === "initiative" || w.path.includes("/decisions/" + t.id + "/")) || moves.length).map((t) => ({ target: t, before_hash: t.revision, after_hash: after.find((a) => a.kind === t.kind && a.id === t.id).revision, patch: json({ writes: writes.map((w) => ({ path: w.path.slice(7), before_hash: w.before_hash, after_hash: w.after_hash, after_exists: w.after_exists })), moves }) }));
+        return { writes, moves, targets: finalTargets, dependencies, after, diff: diffs };
+      }
+      readProjection(input, secret) {
+        const a = input.arguments, op = input.operation, target = a.target;
+        let items = [];
+        if (op === "initiative.list")
+          items = this.initiatives();
+        else if (op === "run.list")
+          items = this.runs();
+        else if (op === "decision.list") {
+          const i = this.resolve(target);
+          if (i.ref.kind !== "initiative")
+            throw new StackError("invalid_target", "Initiative target required");
+          items = i.data.decisions.map((d) => {
+            const item = this.decision(i.ref.id, d.id);
+            item.data.initiative = i.ref;
+            return item;
+          });
+        } else {
+          const item = this.resolve(target);
+          const expected = op.startsWith("initiative.") ? "initiative" : op.startsWith("decision.") ? "decision" : "run";
+          if (item.ref.kind !== expected)
+            throw new StackError("invalid_target", "Read target kind does not match");
+          items = [op === "initiative.close_check" ? { ref: item.ref, data: item.data.close_check } : item];
+        }
+        if (a.query && !["run.trace", "run.artifacts"].includes(op))
+          items = items.filter((i) => this.canonical(i.data).toLowerCase().includes(a.query.toLowerCase()));
+        let snapshot = stackHash(this.canonical(items.map((i) => i.ref))), offset = 0;
+        const bind = { session_id: input.session_id, source_id: this.source.source_id, operation: op, target: target ?? null, query: a.query ?? "", snapshot };
+        if (op === "run.trace") {
+          const r = items[0], rel2 = ".guild/" + r.data.path;
+          const files = this.files(rel2).filter((p) => /\.(?:jsonl|ndjson)$/.test(p));
+          const events = [], issues = [];
+          for (const p of files) {
+            const st = fs68.statSync(stackContained(this.source.realpath, p));
+            if (st.size > 1048576) {
+              issues.push(issue2("trace_limit", "Trace file exceeds bounded snapshot"));
+              continue;
+            }
+            const bytes = this.read(p, false);
+            for (const line of bytes.split("\n")) {
+              if (!line)
+                continue;
+              if (Buffer.byteLength(line) > 65536) {
+                issues.push(issue2("event_limit", "Trace event exceeds 64KiB"));
+                continue;
+              }
+              try {
+                const event = JSON.parse(line);
+                if (!event || typeof event !== "object" || Array.isArray(event))
+                  throw Error();
+                events.push({ index: events.length, event: p05Redact(event), evidence: this.evidence(p) });
+              } catch {
+                issues.push(issue2("malformed_event", "Trace contains malformed event"));
+              }
+            }
+          }
+          snapshot = this.metadataDigest(files);
+          bind.snapshot = snapshot;
+          items = [{ ref: r.ref, data: { schema_version: "guild.stack.run_trace_page.v1", events, snapshot_hash: snapshot, issues } }];
+        }
+        if (op === "run.artifacts") {
+          const r = items[0], rel2 = ".guild/" + r.data.path;
+          const files = this.files(rel2).filter((p) => !["binding.json", "session-context.json"].includes(path81.basename(p).toLowerCase()) && !/(?:^|[\/._-])(?:secret|secrets|credential|credentials|auth|token|env)(?:[\/._-]|$)/i.test(p));
+          const entries = [], issues = [];
+          if (a.query && !files.some((p) => p.slice(7) === a.query))
+            throw new StackError("invalid_artifact", "Artifact selector must be exact listed run path");
+          for (const p of files) {
+            if (a.query && p.slice(7) !== a.query)
+              continue;
+            const physical = stackContained(this.source.realpath, p);
+            const stat = fs68.statSync(physical);
+            const text = /\.(?:json|jsonl|md|txt|yaml|yml|html|csv|log)$/.test(p);
+            let preview = null, truncated = false;
+            if (a.query && text) {
+              if (stat.size > 1048576) {
+                issues.push(issue2("artifact_limit", "Artifact exceeds bounded read"));
+                truncated = true;
+              } else {
+                const bytes = this.read(p, false);
+                preview = p05ArtifactText(bytes, p);
+                if (preview === null)
+                  issues.push(issue2("artifact_content_refused", "Artifact content cannot be safely redacted"));
+                else preview = this.utf8Prefix(preview, 65536);
+                truncated = Buffer.byteLength(bytes) > 65536;
+              }
+            }
+            let sha;
+            if (stat.size <= 1048576)
+              sha = stackHash(fs68.readFileSync(physical));
+            else {
+              const crypto26 = require("node:crypto");
+              const h = crypto26.createHash("sha256"), fd = fs68.openSync(physical, "r"), buffer = Buffer.alloc(65536);
+              try {
+                let n;
+                while ((n = fs68.readSync(fd, buffer, 0, buffer.length, null)) > 0)
+                  h.update(buffer.subarray(0, n));
+              } finally {
+                fs68.closeSync(fd);
+              }
+              sha = "sha256:" + h.digest("hex");
+            }
+            entries.push({ evidence: { ...this.evidenceMetadata(p, sha) }, media_type: text ? "text/plain" : "application/octet-stream", size_bytes: stat.size, preview, truncated });
+          }
+          snapshot = stackHash(this.canonical(entries.map((e) => [e.evidence.path, e.evidence.sha256])));
+          bind.snapshot = snapshot;
+          items = [{ ref: r.ref, data: { schema_version: "guild.stack.run_artifact_page.v1", entries, issues } }];
+        }
+        const mac = (v) => (0, import_node_crypto4.createHmac)("sha256", secret).update(v).digest("base64url");
+        if (a.cursor) {
+          try {
+            const [body, sig] = a.cursor.split(".");
+            if (sig !== mac(body))
+              throw Error();
+            const c = JSON.parse(Buffer.from(body, "base64url").toString());
+            if (this.canonical(c.bind) !== this.canonical(bind) || !Number.isSafeInteger(c.offset) || c.offset < 0)
+              throw Error();
+            offset = c.offset;
+          } catch {
+            throw new StackError("stale_cursor", "Cursor authority or snapshot changed", 409);
+          }
+        }
+        const limit = a.limit ?? 50;
+        let total = items.length;
+        const field = op === "run.trace" ? "events" : op === "run.artifacts" ? "entries" : null;
+        if (field) {
+          total = items[0].data[field].length;
+          items[0].data[field] = items[0].data[field].slice(offset, offset + limit);
+        } else
+          items = items.slice(offset, offset + limit);
+        let next_cursor = null;
+        if (offset + limit < total) {
+          const body = Buffer.from(json({ bind, offset: offset + limit })).toString("base64url");
+          next_cursor = body + "." + mac(body);
+        }
+        const result2 = { schema_version: "guild.stack.read-projection.v1", session_id: input.session_id, generation: 0, items, next_cursor, total, partial: false, source_errors: [] };
+        if (Buffer.byteLength(json(result2)) > 1048576)
+          throw new StackError("response_too_large", "Narrow the projection", 413);
+        return result2;
+      }
+      utf8Prefix(value, limit) {
+        const b = Buffer.from(value);
+        if (b.length <= limit)
+          return value;
+        let end = limit;
+        const decode = new TextDecoder("utf-8", { fatal: true });
+        while (end > limit - 4) {
+          try {
+            return decode.decode(b.subarray(0, end));
+          } catch {
+            end--;
+          }
+        }
+        return "";
+      }
+      metadataDigest(files) {
+        return stackHash(this.canonical(files.map((p) => {
+          const s = fs68.statSync(stackContained(this.source.realpath, p));
+          return [p, s.size, s.mtimeMs, s.ctimeMs];
+        })));
+      }
+      evidenceMetadata(rel2, sha) {
+        return { source_id: this.source.source_id, path: rel2.slice(7), sha256: sha, schema_version: "guild.stack.raw-evidence.v1", observed_at: this.now().toISOString(), freshness: "current" };
+      }
+    };
+  }
+});
+
+// src/domains/lifecycle/managed-run.ts
+function canonical(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
+  return "{" + Object.keys(value).sort().map((k) => JSON.stringify(k) + ":" + canonical(value[k])).join(",") + "}";
+}
+function managedLaunchHash(spec) {
+  return stackHash(canonical(spec));
+}
+function runtimeRoot(root) {
+  if (!path82.isAbsolute(root)) throw new StackError("invalid_runtime", "Absolute managed runtime required");
+  fs69.mkdirSync(root, { recursive: true, mode: 448 });
+  if (fs69.lstatSync(root).isSymbolicLink()) throw new StackError("unsafe_runtime", "Linked managed runtime refused");
+  fs69.chmodSync(root, 448);
+  return fs69.realpathSync(root);
+}
+function claimPath(root, id) {
+  return stackContained(runtimeRoot(root), stackId(id) + ".json", true);
+}
+function syncDirectory(dir) {
+  const fd = fs69.openSync(dir, "r");
+  try {
+    fs69.fsyncSync(fd);
+  } finally {
+    fs69.closeSync(fd);
+  }
+}
+function publish2(file, value, exclusive = false) {
+  const bytes = JSON.stringify(value, null, 2) + "\n";
+  const temp = file + "." + (0, import_node_crypto5.randomBytes)(8).toString("hex") + ".tmp";
+  const fd = fs69.openSync(temp, "wx", 384);
+  try {
+    fs69.writeFileSync(fd, bytes);
+    fs69.fsyncSync(fd);
+  } finally {
+    fs69.closeSync(fd);
+  }
+  try {
+    if (exclusive) {
+      fs69.linkSync(temp, file);
+      fs69.unlinkSync(temp);
+    } else fs69.renameSync(temp, file);
+    syncDirectory(path82.dirname(file));
+  } finally {
+    fs69.rmSync(temp, { force: true });
+  }
+}
+function exactKeys(value, keys) {
+  return value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+}
+function assertManagedIdentity(value) {
+  if (!exactKeys(value, ["source_id", "operation_id", "run_id", "attempt_id", "launch_hash", "max_duration_ms", "nonce_hash"])) throw new StackError("invalid_state", "Managed identity fields invalid");
+  for (const key of ["source_id", "operation_id", "attempt_id"]) stackId(value[key]);
+  assertCanonicalRunId(value.run_id);
+  if (!/^sha256:[a-f0-9]{64}$/.test(value.launch_hash) || !/^sha256:[a-f0-9]{64}$/.test(value.nonce_hash) || !Number.isSafeInteger(value.max_duration_ms) || value.max_duration_ms < 1) throw new StackError("invalid_state", "Managed identity pins invalid");
+}
+function readManagedAttempt(root, attemptId) {
+  const file = claimPath(root, attemptId);
+  if (fs69.statSync(file).size > 1048576) throw new StackError("invalid_state", "Managed record too large");
+  const value = JSON.parse(fs69.readFileSync(file, "utf8"));
+  assertManagedIdentity(value.identity);
+  if (!exactKeys(value, ["schema_version", "identity", "worker_nonce", "admitted_at", "deadline_at", "state", "worker", "host", "outcome"]) || !["claimed", "running", "recovery_needed", "exited", "cancelled", "timed_out"].includes(value.state) || !/^[a-f0-9]{64}$/.test(value.worker_nonce) || [value.admitted_at, value.deadline_at].some((date) => date !== null && (typeof date !== "string" || !Number.isFinite(Date.parse(date)))) || value.schema_version !== "guild.stack.managed_private_claim.v1" || value.identity?.attempt_id !== attemptId || typeof value.worker_nonce !== "string" || stackHash(value.worker_nonce) !== value.identity.nonce_hash) throw new StackError("invalid_state", "Managed claim identity invalid");
+  if (value.outcome && (value.outcome.schema_version !== "guild.stack.managed_run_outcome.v1" || value.outcome.source_id !== value.identity.source_id || value.outcome.run_id !== value.identity.run_id || value.outcome.attempt_id !== value.identity.attempt_id || !["exited", "cancelled", "timed_out", "recovery_needed"].includes(value.outcome.state))) throw new StackError("invalid_state", "Managed outcome identity invalid");
+  return value;
+}
+function claimManagedAttempt(root, input) {
+  if (!exactKeys(input, ["source_id", "operation_id", "run_id", "attempt_id", "launch_hash", "max_duration_ms"])) throw new StackError("invalid_intent", "Managed input fields invalid");
+  for (const value2 of [input.source_id, input.operation_id, input.attempt_id]) stackId(value2);
+  assertCanonicalRunId(input.run_id);
+  if (!/^sha256:[a-f0-9]{64}$/.test(input.launch_hash) || !Number.isSafeInteger(input.max_duration_ms) || input.max_duration_ms < 1) throw new StackError("invalid_intent", "Managed launch pin/duration invalid");
+  const file = claimPath(root, input.attempt_id), nonce = (0, import_node_crypto5.randomBytes)(32).toString("hex");
+  const value = { schema_version: "guild.stack.managed_private_claim.v1", identity: { ...input, nonce_hash: stackHash(nonce) }, worker_nonce: nonce, admitted_at: null, deadline_at: null, state: "claimed", worker: null, host: null, outcome: null };
+  try {
+    publish2(file, value, true);
+    return { created: true, identity: value.identity };
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+    const prior = readManagedAttempt(root, input.attempt_id);
+    const { nonce_hash, ...owned } = prior.identity;
+    if (canonical(owned) !== canonical(input)) throw new StackError("idempotency_conflict", "Managed attempt already belongs to another intent");
+    return { created: false, identity: prior.identity };
+  }
+}
+function reconcileManagedAttempt(root, identity, port) {
+  const claim = readManagedAttempt(root, identity.attempt_id);
+  if (canonical(claim.identity) !== canonical(identity)) throw new StackError("invalid_state", "Managed source/attempt mismatch");
+  if (claim.outcome) return { state: claim.outcome.state, can_relaunch: false, outcome: claim.outcome };
+  return { state: port.verifyOwnedWorker(claim) ? claim.state : "recovery_needed", can_relaunch: false, outcome: null };
+}
+function assertManagedBudgetAdmission(input) {
+  if (!Number.isFinite(input.max_usd) || input.max_usd <= 0) throw new StackError("budget_refused", "Positive enforceable budget required before dispatch", 403);
+  if (!["strict", "native_estimated_spend_threshold"].includes(input.mode) || input.qualified !== true) throw new StackError("budget_unqualified", "Strict USD admission is not qualified for this host", 503);
+}
+function managedNonceMatches(actual, expected) {
+  const a = Buffer.from(actual), b = Buffer.from(expected);
+  return a.length === b.length && (0, import_node_crypto5.timingSafeEqual)(a, b);
+}
+function updateClaim(root, claim) {
+  publish2(claimPath(root, claim.identity.attempt_id), claim);
+}
+function canonicalAttemptDir(sourceRoot, identity) {
+  const base = createGuildStorage(sourceRoot).root.durable;
+  const rel2 = "runs/" + identity.run_id + "/attempts/" + stackId(identity.attempt_id);
+  const out = stackContained(base, rel2, true);
+  fs69.mkdirSync(out, { recursive: true, mode: 448 });
+  return out;
+}
+async function runManagedWorker(input) {
+  const { runtimeDir, sourceRoot, identity, launch } = input;
+  let claim = readManagedAttempt(runtimeDir, identity.attempt_id);
+  if (canonical(claim.identity) !== canonical(identity) || managedLaunchHash(launch) !== identity.launch_hash || launch.max_duration_ms !== identity.max_duration_ms) throw new StackError("invalid_intent", "Managed launch differs from claim");
+  if (launch.classification !== "local_process_test") assertManagedBudgetAdmission({ max_usd: launch.max_usd, mode: launch.budget_mode ?? "strict", qualified: launch.budget_mode === "native_estimated_spend_threshold" ? launch.native_threshold_qualified === true : launch.strict_usd_qualified });
+  if (new StackScope(sourceRoot).discover().root.source_id !== identity.source_id) throw new StackError("source_mismatch", "Managed attempt belongs to another source", 403);
+  if (claim.state !== "claimed" || claim.admitted_at !== null) throw new StackError("already_admitted", "Managed attempt cannot launch twice", 409);
+  const owner = claimPath(runtimeDir, identity.attempt_id) + ".worker";
+  try {
+    const fd = fs69.openSync(owner, "wx", 384);
+    fs69.writeFileSync(fd, identity.nonce_hash);
+    fs69.fsyncSync(fd);
+    fs69.closeSync(fd);
+    syncDirectory(path82.dirname(owner));
+  } catch (error) {
+    if (error.code === "EEXIST") throw new StackError("already_admitted", "Managed worker claim consumed", 409);
+    throw error;
+  }
+  const binding = loadRunBinding({ root: sourceRoot, run_id: identity.run_id });
+  if (!binding || binding.state !== "open") throw new StackError("binding_refused", "Managed source run has no open lifecycle binding", 403);
+  const dir = canonicalAttemptDir(sourceRoot, identity);
+  let sequence = 0;
+  const runDir3 = path82.dirname(path82.dirname(dir));
+  const pointer = (state) => publish2(path82.join(runDir3, "attempt.json"), { schema_version: "guild.stack.managed_run_attempt.v1", source_id: identity.source_id, run_id: identity.run_id, attempt_id: identity.attempt_id, state, intent_ref: "attempts/" + identity.attempt_id + "/intent.json", events_ref: "attempts/" + identity.attempt_id + "/events.jsonl", outcome_ref: claim.outcome ? "attempts/" + identity.attempt_id + "/outcome.json" : null });
+  const hostProof = (state) => publish2(path82.join(runDir3, "host-dispatch.json"), { schema_version: "guild.stack.managed_host_dispatch.v1", source_id: identity.source_id, run_id: identity.run_id, attempt_id: identity.attempt_id, host_id: launch.host_id, model: claim.outcome?.usage.model ?? null, requested_model: launch.model, state, classification: launch.classification, admitted_at: claim.admitted_at, deadline_at: claim.deadline_at, launch_hash: identity.launch_hash, host: claim.host });
+  publish2(path82.join(dir, "intent.json"), { schema_version: "guild.stack.managed_run_intent.v1", ...identity, max_duration_ms: launch.max_duration_ms, deadline_derivation: "admitted_at + max_duration_ms", classification: launch.classification, host_id: launch.host_id, model: launch.model, native_session_id: launch.native_session_id ?? null, policy_sha256: launch.policy_sha256 ?? null, binary_sha256: launch.binary_sha256, budget: { mode: launch.classification === "local_process_test" ? "no_model_test" : launch.budget_mode ?? "strict", max_usd: launch.max_usd, cost_basis: launch.budget_mode === "native_estimated_spend_threshold" ? "api_equivalent_native_estimate" : "unknown", in_flight_overshoot_possible: launch.budget_mode === "native_estimated_spend_threshold", strict_actual_billing_ceiling: launch.budget_mode !== "native_estimated_spend_threshold" && launch.classification !== "local_process_test" } }, true);
+  const event = (name, data = {}) => {
+    const record = { schema_version: "guild.stack.managed_run_event.v1", source_id: identity.source_id, run_id: identity.run_id, attempt_id: identity.attempt_id, sequence: ++sequence, event: name, at: (/* @__PURE__ */ new Date()).toISOString(), ...data };
+    const file = path82.join(dir, "events.jsonl");
+    const fd = fs69.openSync(file, "a", 384);
+    try {
+      fs69.writeSync(fd, JSON.stringify(record) + "\n");
+      fs69.fsyncSync(fd);
+    } finally {
+      fs69.closeSync(fd);
+    }
+  };
+  let requested = false, child;
+  const stop = (why) => {
+    if (!requested) requested = why;
+    if (child?.verifyOwnership()) child.signalGroup("SIGINT");
+  };
+  const closeControl = await input.control.open({ identity, nonce: claim.worker_nonce, status: () => readManagedAttempt(runtimeDir, identity.attempt_id), cancel: () => stop("cancelled") });
+  let deadline, killTimer;
+  try {
+    const admittedAt = (/* @__PURE__ */ new Date()).toISOString();
+    claim = { ...claim, admitted_at: admittedAt, deadline_at: new Date(Date.parse(admittedAt) + launch.max_duration_ms).toISOString() };
+    updateClaim(runtimeDir, claim);
+    event("admitted", { deadline_at: claim.deadline_at, duration_ms: launch.max_duration_ms, classification: launch.classification });
+    input.onAdmitted?.(claim);
+    deadline = setTimeout(() => stop("timed_out"), launch.max_duration_ms);
+    child = await input.process.start(launch, { admitted_at: claim.admitted_at, deadline_at: claim.deadline_at, grace_ms: input.graceMs ?? 250 });
+    claim = { ...claim, state: "running", host: child.identity };
+    updateClaim(runtimeDir, claim);
+    event("started", { host_identity: child.identity });
+    pointer("running");
+    hostProof("started");
+    if (requested) stop(requested);
+    const poll = setInterval(() => {
+      if (requested && !killTimer) {
+        killTimer = setTimeout(() => {
+          if (child?.verifyOwnership()) child.signalGroup("SIGKILL");
+        }, input.graceMs ?? 250);
+      }
+    }, 10);
+    let exit;
+    try {
+      exit = await child.exited;
+    } finally {
+      clearInterval(poll);
+    }
+    const gone = child.groupGone();
+    const state = gone ? requested || "exited" : "recovery_needed";
+    const outcome = { schema_version: "guild.stack.managed_run_outcome.v1", source_id: identity.source_id, run_id: identity.run_id, attempt_id: identity.attempt_id, state, exit_code: exit.exit_code, signal: exit.signal, admitted_at: claim.admitted_at, ended_at: (/* @__PURE__ */ new Date()).toISOString(), deadline_at: claim.deadline_at, classification: launch.classification, output: child.outputSummary?.() ?? { bytes: 0, hashed_bytes: 0, retained_bytes: 0, prefix_sha256: stackHash("") }, usage: child.observation?.() ?? { state: "unknown", cost_usd: null, basis: "no trusted provider billing observation" } };
+    publish2(path82.join(dir, "outcome.json"), outcome, true);
+    claim = { ...claim, state, outcome };
+    updateClaim(runtimeDir, claim);
+    event(state, { exit_code: exit.exit_code, signal: exit.signal });
+    pointer(state);
+    if (gone) hostProof("exited");
+    if (gone) {
+      const lifecycle = createRunLifecycle(createRealEnv(sourceRoot, () => {
+        throw new StackError("host_resolution_refused", "Managed run close never resolves a host", 500);
+      }));
+      lifecycle.closeRun(identity.run_id, { binding_ref: binding.binding_ref, status: state === "exited" && exit.exit_code === 0 && !launch.leave_resumable ? "closed" : "resumable" });
+    }
+    return outcome;
+  } catch (error) {
+    claim = { ...claim, state: "recovery_needed" };
+    updateClaim(runtimeDir, claim);
+    event("recovery_needed");
+    throw error;
+  } finally {
+    if (deadline) clearTimeout(deadline);
+    if (killTimer) clearTimeout(killTimer);
+    await closeControl();
+  }
+}
+function prepareManagedWorker(runtime, input) {
+  const claim = readManagedAttempt(runtime, input.identity.attempt_id);
+  if (canonical(claim.identity) !== canonical(input.identity) || claim.state !== "claimed" || managedLaunchHash(input.launch) !== input.identity.launch_hash || new StackScope(input.sourceRoot).discover().root.source_id !== input.identity.source_id) throw new StackError("invalid_intent", "Managed worker request does not own this claim");
+  for (const file of [input.worker.node_binary, input.worker.entry]) if (!path82.isAbsolute(file) || fs69.realpathSync(file) !== file) throw new StackError("invalid_worker", "Fixed worker package path required");
+  if (stackHash(fs69.readFileSync(input.worker.node_binary)) !== input.worker.node_sha256 || stackHash(fs69.readFileSync(input.worker.entry)) !== input.worker.entry_sha256) throw new StackError("invalid_worker", "Worker executable pin changed");
+  const target = claimPath(runtime, input.identity.attempt_id) + ".request";
+  const request = { schema_version: "guild.stack.managed_private_request.v1", ...input };
+  if (fs69.existsSync(target)) {
+    if (canonical(JSON.parse(fs69.readFileSync(target, "utf8"))) !== canonical(request)) throw new StackError("idempotency_conflict", "Managed worker request changed");
+    return;
+  }
+  publish2(target, request, true);
+}
+function readManagedWorkerRequest(runtime, attemptId) {
+  const target = claimPath(runtime, attemptId) + ".request";
+  if (fs69.lstatSync(target).isSymbolicLink() || fs69.statSync(target).size > 1048576) throw new StackError("invalid_worker", "Managed worker request refused");
+  const request = JSON.parse(fs69.readFileSync(target, "utf8"));
+  if (request.schema_version !== "guild.stack.managed_private_request.v1" || request.identity?.attempt_id !== attemptId || canonical(readManagedAttempt(runtime, attemptId).identity) !== canonical(request.identity) || managedLaunchHash(request.launch) !== request.identity.launch_hash) throw new StackError("invalid_worker", "Managed worker request identity changed");
+  return request;
+}
+function recordManagedWorkerAcceptance(runtime, identity, worker, pid, start) {
+  const request = readManagedWorkerRequest(runtime, identity.attempt_id);
+  if (canonical(request.identity) !== canonical(identity) || canonical(request.worker) !== canonical(worker) || !Number.isSafeInteger(pid) || pid < 1 || start !== null && typeof start !== "string") throw new StackError("invalid_worker", "Worker acceptance differs from reserved request");
+  const accepted = { schema_version: "guild.stack.managed_private_acceptance.v1", identity, accepted_at: (/* @__PURE__ */ new Date()).toISOString(), worker_pid: pid, worker_start_identity: start, worker };
+  publish2(claimPath(runtime, identity.attempt_id) + ".accepted.json", accepted, true);
+}
+function readManagedWorkerAcceptance(runtime, identity) {
+  const file = claimPath(runtime, identity.attempt_id) + ".accepted.json";
+  if (fs69.lstatSync(file).isSymbolicLink() || fs69.statSync(file).size > 16384) throw new StackError("invalid_worker", "Worker acceptance refused");
+  const value = JSON.parse(fs69.readFileSync(file, "utf8")), request = readManagedWorkerRequest(runtime, identity.attempt_id);
+  if (!exactKeys(value, ["schema_version", "identity", "accepted_at", "worker_pid", "worker_start_identity", "worker"]) || value.schema_version !== "guild.stack.managed_private_acceptance.v1" || canonical(value.identity) !== canonical(identity) || canonical(value.worker) !== canonical(request.worker) || !Number.isSafeInteger(value.worker_pid) || value.worker_pid < 1 || !Number.isFinite(Date.parse(value.accepted_at)) || value.worker_start_identity !== null && typeof value.worker_start_identity !== "string") throw new StackError("invalid_worker", "Worker acceptance identity invalid");
+  return value;
+}
+function markManagedAttemptUncertain(runtime, identity) {
+  const claim = readManagedAttempt(runtime, identity.attempt_id);
+  if (canonical(claim.identity) !== canonical(identity)) throw new StackError("invalid_worker", "Uncertain worker identity differs");
+  if (!claim.outcome && claim.state !== "recovery_needed") updateClaim(runtime, { ...claim, state: "recovery_needed" });
+}
+var fs69, path82, import_node_crypto5;
+var init_managed_run = __esm({
+  "src/domains/lifecycle/managed-run.ts"() {
+    fs69 = __toESM(require("node:fs"));
+    path82 = __toESM(require("node:path"));
+    import_node_crypto5 = require("node:crypto");
+    init_state();
+    init_run_lifecycle();
+    init_run_binding();
+  }
+});
+
+// src/domains/lifecycle/stack-operations.ts
+function stackCanonical(value) {
+  if (value === null) return "null";
+  if (typeof value === "string") {
+    if (/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(
+      value
+    ))
+      throw new StackError("invalid_json", "Invalid Unicode");
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || Number.isInteger(value) && !Number.isSafeInteger(value))
+      throw new StackError("invalid_json", "Number is not interoperable JSON");
+    return JSON.stringify(value);
+  }
+  if (typeof value === "boolean") return String(value);
+  if (Array.isArray(value))
+    return "[" + value.map(stackCanonical).join(",") + "]";
+  if (value && typeof value === "object" && [Object.prototype, null].includes(Object.getPrototypeOf(value)))
+    return "{" + Object.keys(value).sort().map((k) => stackCanonical(k) + ":" + stackCanonical(value[k])).join(",") + "}";
+  throw new StackError("invalid_json", "Unsupported JSON value");
+}
+function redacted(value) {
+  if (typeof value === "string")
+    return redactKeyValueSecrets(redactTokenShapes(value)).slice(0, 8192);
+  if (Array.isArray(value)) return value.slice(0, 100).map(redacted);
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value).slice(0, 100).map(([k, v]) => [
+        k,
+        /password|credential|secret|authorization|api[_-]?key/i.test(k) ? "[redacted]" : redacted(v)
+      ])
+    );
+  return value;
+}
+function plain(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function stackManagedReview(record, reason) {
+  return { native_session_id: record.native_session_id, budget_mode: record.launch.budget_mode ?? (record.launch.classification === "local_process_test" ? "no_model_test" : "strict"), cost_basis: record.launch.budget_mode === "native_estimated_spend_threshold" ? "api_equivalent_native_estimate" : "unknown", policy_sha256: record.launch.policy_sha256 ?? null, stage_hash: stackHash(stackCanonical(record.stage)), launch_hash: managedLaunchHash(record.launch), worker: record.worker, attempt_id: record.attempt_id, parent: record.parent, parent_attempt_id: record.parent_attempt_id ?? null, deadline_derivation: "admitted_at + max_duration_ms", budget_reason: reason };
+}
+var fs70, path83, import_node_crypto6, PREFIX, readOps, writeOps, stackPreviewHash, StackFacade;
+var init_stack_operations = __esm({
+  "src/domains/lifecycle/stack-operations.ts"() {
+    fs70 = __toESM(require("node:fs"));
+    path83 = __toESM(require("node:path"));
+    import_node_crypto6 = require("node:crypto");
+    init_state();
+    init_config2();
+    init_security();
+    init_workflow_graph_overlay();
+    init_stack_contracts_generated();
+    init_stack_p05();
+    init_run_lifecycle();
+    init_managed_run();
+    PREFIX = "https://guildstack.dev/contracts/guild-stack/v1/";
+    readOps = /* @__PURE__ */ new Set([
+      "session.inspect",
+      "session.sources",
+      "initiative.list",
+      "initiative.inspect",
+      "run.list",
+      "run.inspect",
+      "knowledge.read",
+      "memory.list",
+      "memory.inspect",
+      "workflow.list",
+      "workflow.inspect",
+      "component.list",
+      "component.inspect",
+      "config.inspect"
+    ]);
+    writeOps = /* @__PURE__ */ new Set(["config.set", "config.reset"]);
+    stackPreviewHash = (preview) => stackHash(
+      stackCanonical(
+        Object.fromEntries(
+          Object.entries(preview).filter(([k]) => k !== "preview_hash")
+        )
+      )
+    );
+    StackFacade = class {
+      scope;
+      packageRoot;
+      validateSchema;
+      now;
+      managed;
+      constructor(opts) {
+        this.managed = opts.managed;
+        this.scope = new StackScope(opts.root);
+        this.packageRoot = fs70.realpathSync(opts.packageRoot);
+        this.validateSchema = opts.validate;
+        this.now = opts.now ?? (() => /* @__PURE__ */ new Date());
+      }
+      validate(name, value) {
+        try {
+          this.validateSchema(PREFIX + name + ".schema.json", value);
+        } catch {
+          throw new StackError(
+            "invalid_contract",
+            "Request or result violates " + name,
+            422
+          );
+        }
+        return value;
+      }
+      transport(name, value) {
+        try {
+          this.validateSchema(
+            PREFIX + "transport.schema.json#/$defs/" + name,
+            value
+          );
+        } catch {
+          throw new StackError("invalid_request", "Request violates " + name, 400);
+        }
+      }
+      storage(source) {
+        const s = source ?? this.scope.discover().root;
+        return createGuildStorage(s.realpath, {
+          activeRoot: s.realpath,
+          profile: s.kind === "workspace" ? "hybrid" : "standalone"
+        });
+      }
+      runtime(relative25, source) {
+        const storage = this.storage(source);
+        fs70.mkdirSync(storage.root.state, { recursive: true });
+        const base = fs70.realpathSync(storage.root.state);
+        return stackContained(
+          base,
+          "roots/" + storage.rootId + "/stack/" + relative25,
+          true
+        );
+      }
+      saveRuntime(relative25, value, source) {
+        const target = this.runtime(relative25, source);
+        fs70.mkdirSync(path83.dirname(target), { recursive: true, mode: 448 });
+        const temp = target + ".tmp-" + (0, import_node_crypto6.randomUUID)();
+        const fd = fs70.openSync(temp, "wx", 384);
+        try {
+          fs70.writeFileSync(fd, JSON.stringify(value) + "\n");
+          fs70.fsyncSync(fd);
+        } finally {
+          fs70.closeSync(fd);
+        }
+        try {
+          fs70.renameSync(temp, target);
+          const parent = fs70.openSync(path83.dirname(target), "r");
+          try {
+            fs70.fsyncSync(parent);
+          } finally {
+            fs70.closeSync(parent);
+          }
+        } finally {
+          fs70.rmSync(temp, { force: true });
+        }
+      }
+      loadRuntime(relative25, source) {
+        const p = this.runtime(relative25, source);
+        try {
+          return JSON.parse(fs70.readFileSync(p, "utf8"));
+        } catch (e) {
+          if (e.code === "ENOENT")
+            throw new StackError(
+              "not_found",
+              "Operation or session not found",
+              404
+            );
+          throw new StackError(
+            "invalid_state",
+            "Stored operation state is invalid",
+            409
+          );
+        }
+      }
+      discover() {
+        return this.scope.discover();
+      }
+      bind() {
+        const { root, children } = this.discover();
+        const s = {
+          schema_version: "guild.stack.scope-session.v1",
+          session_id: (0, import_node_crypto6.randomUUID)(),
+          mode: root.kind,
+          root,
+          children,
+          package_version: this.packageIdentity().version,
+          generation: 0,
+          expires_at: new Date(this.now().getTime() + 36e5).toISOString()
+        };
+        this.validate("scope-session", s);
+        this.saveRuntime("sessions/" + s.session_id + ".json", s);
+        return s;
+      }
+      session(id) {
+        stackId(id);
+        const saved = this.loadRuntime("sessions/" + id + ".json");
+        this.validate("scope-session", saved);
+        if (Date.parse(saved.expires_at) <= this.now().getTime())
+          throw new StackError(
+            "session_expired",
+            "Bind a fresh local session",
+            410
+          );
+        const fresh = this.discover();
+        if (stackCanonical([saved.root, ...saved.children]) !== stackCanonical([fresh.root, ...fresh.children]))
+          throw new StackError(
+            "scope_changed",
+            "Root authority changed; bind a fresh session",
+            409
+          );
+        return saved;
+      }
+      source(session, id) {
+        stackId(id);
+        const s = [session.root, ...session.children].find(
+          (x) => x.source_id === id
+        );
+        if (!s)
+          throw new StackError(
+            "unknown_source",
+            "Source is not in this bound session",
+            403
+          );
+        if (s.health !== "healthy")
+          throw new StackError(
+            "source_unavailable",
+            "Registered source is unavailable",
+            503
+          );
+        return s;
+      }
+      packageIdentity() {
+        const manifests = [
+          ".claude-plugin/plugin.json",
+          ".codex-plugin/plugin.json"
+        ].map((relative25) => stackRead(this.packageRoot, relative25, true)).filter((x) => x !== null).map((x) => JSON.parse(x));
+        if (!manifests.length || manifests.some(
+          (x) => x.name !== manifests[0].name || x.version !== manifests[0].version
+        ))
+          throw new StackError(
+            "package_invalid",
+            "Missing or conflicting packaged identity",
+            503
+          );
+        const manifest = manifests[0];
+        const inventory = JSON.parse(
+          stackRead(this.packageRoot, "guild.inventory.json")
+        );
+        if (inventory.schema_version !== "guild.inventory.v1" || manifest.name !== inventory.manifest?.name || manifest.version !== inventory.manifest?.version || manifest.version !== inventory.plugin_version || !inventory.scripts?.some(
+          (x) => x.id === "stack-operations" && x.kind === "cli"
+        ))
+          throw new StackError(
+            "package_invalid",
+            "Packaged Stack entry is not declared consistently",
+            503
+          );
+        return {
+          name: manifest.name,
+          version: manifest.version,
+          inventory_schema: "guild.inventory.v1",
+          entry_hash: this.entryHash()
+        };
+      }
+      entryHash() {
+        const file = stackContained(
+          this.packageRoot,
+          "runtime/scripts/stack-operations.js"
+        );
+        const stat = fs70.statSync(file);
+        if (!stat.isFile() || stat.size > 16777216)
+          throw new StackError(
+            "package_invalid",
+            "Packaged entry exceeds executable limit",
+            503
+          );
+        return stackHash(fs70.readFileSync(file));
+      }
+      capabilities() {
+        const catalog = stack_contracts_generated_default.catalog.operations;
+        return this.validate("capability-manifest", {
+          schema_version: "guild.stack.capability-manifest.v1",
+          package: this.packageIdentity(),
+          protocol_major: 1,
+          operations: catalog.map((o) => ({
+            id: o.id,
+            input_schema: o.input_schema,
+            output_schema: o.output_schema,
+            producer: o.producer,
+            effect: o.effect,
+            approval: o.approval,
+            availability: readOps.has(o.id) || writeOps.has(o.id) || P05_READS.has(o.id) || P05_WRITES.has(o.id) || this.managed?.availability.includes(o.id) ? "available" : "unavailable",
+            reason: this.managed?.availability.includes(o.id) ? this.managed.policy_reason : readOps.has(o.id) || writeOps.has(o.id) || P05_READS.has(o.id) || P05_WRITES.has(o.id) || this.managed?.availability.includes(o.id) ? null : ["run.start", "run.rerun", "run.resume", "run.cancel", "initiative.resume"].includes(o.id) ? "Installed Codex CLI lacks a verified measured-USD budget source and host dispatch qualification" : "Domain handler requires " + o.owner_package,
+            entry_id: P05_READS.has(o.id) ? "stack.p05.read.v1" : readOps.has(o.id) || writeOps.has(o.id) || P05_READS.has(o.id) || P05_WRITES.has(o.id) || this.managed?.availability.includes(o.id) ? "stack-operations" : null,
+            target_kinds: o.target_kinds
+          })),
+          host_requirements: this.managed?.host_requirements ?? [
+            {
+              host_id: "codex-cli",
+              capability: "spawn",
+              evidence: "inferred",
+              proof: null
+            }
+          ]
+        });
+      }
+      policy(source) {
+        const all = this.discover();
+        for (const owner of [
+          source,
+          ...all.root.kind === "workspace" && source.realpath !== all.root.realpath ? [all.root] : []
+        ])
+          for (const name of [
+            "project.json",
+            "project.local.json",
+            "workspace.json",
+            "workspace.local.json"
+          ])
+            stackContained(owner.realpath, ".guild/config/" + name, true);
+        const result2 = resolvePolicy({
+          cwd: source.realpath,
+          ...all.root.kind === "workspace" ? { workspaceRoot: all.root.realpath } : {}
+        });
+        const revision = stackHash(
+          stackCanonical({
+            policy: result2.policy,
+            sources: result2.sources,
+            files: result2.files.map((x) => ({
+              layer: x.layer,
+              bytes: fs70.readFileSync(x.file, "utf8")
+            }))
+          })
+        );
+        return {
+          revision,
+          decision: "allowed",
+          reason: "Closed policy keys; exact source-owned file",
+          effective: result2.policy
+        };
+      }
+      configPath(source) {
+        return ".guild/config/" + source.kind + ".json";
+      }
+      config(source) {
+        const rel2 = this.configPath(source);
+        const bytes = stackRead(source.realpath, rel2, true);
+        let local = {};
+        if (bytes) {
+          try {
+            local = JSON.parse(bytes);
+          } catch {
+            throw new StackError(
+              "invalid_config",
+              "Existing policy JSON is malformed",
+              422
+            );
+          }
+          if (!plain(local))
+            throw new StackError(
+              "invalid_config",
+              "Policy file must be an object",
+              422
+            );
+        }
+        return {
+          ref: {
+            source_id: source.source_id,
+            kind: "config",
+            id: "policy." + source.kind,
+            revision: stackHash(bytes ?? "")
+          },
+          data: {
+            local: redacted(local),
+            effective: redacted(this.policy(source).effective),
+            effective_hash: this.policy(source).revision,
+            path: rel2.slice(7)
+          },
+          bytes,
+          local,
+          relative: rel2
+        };
+      }
+      records(source, collection) {
+        if (collection === "initiative") return this.domain(source).initiatives();
+        if (collection === "run") return this.domain(source).runs();
+        if (collection === "config") {
+          const c = this.config(source);
+          return [{ ref: c.ref, data: c.data }];
+        }
+        const dirs = {
+          run: [".guild/runs"],
+          initiative: [".guild/initiatives/active", ".guild/initiatives/archived"],
+          knowledge: [".guild/wiki"],
+          memory: [".guild/memory"],
+          component: [".guild/agents", ".guild/skills", ".guild/teams"]
+        };
+        if (collection === "workflow") return this.workflows(source);
+        if (!dirs[collection])
+          throw new StackError(
+            "unknown_collection",
+            "Collection is not supported",
+            404
+          );
+        const out = [];
+        let seen = 0;
+        const walk = (relative25, depth) => {
+          if (depth > 8 || seen > 1e4)
+            throw new StackError(
+              "collection_limit",
+              "Collection requires narrower indexing before it can be read",
+              413
+            );
+          let names;
+          try {
+            const p = stackContained(source.realpath, relative25);
+            names = fs70.readdirSync(p).sort();
+          } catch (e) {
+            if (e.code === "ENOENT") return;
+            throw e;
+          }
+          for (const name of names) {
+            seen++;
+            const rel2 = relative25 + "/" + name;
+            const p = stackContained(source.realpath, rel2);
+            const st = fs70.statSync(p);
+            if (st.isDirectory()) {
+              if (collection === "run" || collection === "initiative") {
+                if (name.startsWith("_") || name.startsWith(".")) continue;
+                const files = collection === "run" ? ["run.yaml", "provenance.json", "run-state.json"] : ["initiative.yaml"];
+                const contents = files.map((file) => ({
+                  file,
+                  body: stackRead(source.realpath, rel2 + "/" + file, true)
+                })).filter((x) => x.body !== null);
+                if (!contents.length) continue;
+                const data = { path: rel2.slice(7) };
+                for (const c of contents) {
+                  try {
+                    data[c.file] = c.file.endsWith(".json") ? JSON.parse(c.body) : parseYaml(c.body);
+                  } catch {
+                    data[c.file] = { state: "malformed" };
+                  }
+                }
+                out.push({
+                  ref: {
+                    source_id: source.source_id,
+                    kind: collection,
+                    id: stackId(name),
+                    revision: stackHash(stackCanonical(contents))
+                  },
+                  data: redacted(data)
+                });
+              } else walk(rel2, depth + 1);
+            } else if (st.isFile() && [".md", ".json", ".yaml", ".yml"].includes(path83.extname(name)) && name !== "registry.yaml") {
+              const text = stackRead(source.realpath, rel2);
+              const id = (collection === "component" ? "component:" : "") + stackHash(rel2).slice(7, 39);
+              const kind = collection === "component" ? rel2.includes("/agents/") ? "agent" : rel2.includes("/teams/") ? "team" : "skill" : collection;
+              out.push({
+                ref: {
+                  source_id: source.source_id,
+                  kind,
+                  id,
+                  revision: stackHash(text)
+                },
+                data: { path: rel2.slice(7), content: redacted(text) }
+              });
+            }
+          }
+        };
+        for (const dir of dirs[collection]) walk(dir, 0);
+        return out.sort((a, b) => a.ref.id.localeCompare(b.ref.id));
+      }
+      workflows(source) {
+        const items = [];
+        for (const cls of ["product", "research", "debug", "ops", "init"]) {
+          const base = stackRead(
+            this.packageRoot,
+            "src/surfaces/graphs/" + cls + ".yaml",
+            true
+          );
+          if (!base) continue;
+          const raw = parseYaml(base);
+          const checked = validateWorkflowGraphDocument(raw);
+          if (!checked.valid)
+            throw new StackError(
+              "invalid_workflow",
+              "Packaged workflow is invalid",
+              422
+            );
+          const overlay = stackRead(
+            source.realpath,
+            ".guild/graphs/" + cls + ".yaml",
+            true
+          );
+          let effective = raw;
+          if (overlay) {
+            const parsed = parseYaml(overlay);
+            effective = applyWorkflowGraphOverlay(raw, parsed);
+          }
+          items.push({
+            ref: {
+              source_id: source.source_id,
+              kind: "workflow",
+              id: cls,
+              revision: stackHash(base + "\n" + (overlay ?? ""))
+            },
+            data: redacted({
+              origin: overlay ? "project_overlay" : "packaged_graph",
+              definition: effective
+            })
+          });
+        }
+        return items;
+      }
+      projection(input, detail = false) {
+        const session = this.session(input.session_id), source = this.source(session, input.source_id);
+        const collection = String(input.collection);
+        const records = this.records(source, collection);
+        if (detail) {
+          const found = records.find((x) => x.ref.id === stackId(input.entity_id));
+          if (!found)
+            throw new StackError(
+              "not_found",
+              "Record not found in owning source",
+              404
+            );
+          return this.validate("read-projection", {
+            schema_version: "guild.stack.read-projection.v1",
+            session_id: session.session_id,
+            generation: 0,
+            items: [found],
+            next_cursor: null,
+            total: 1,
+            partial: false,
+            source_errors: []
+          });
+        }
+        const limit = input.limit ?? 50;
+        if (!Number.isInteger(limit) || limit < 1 || limit > 200)
+          throw new StackError("invalid_limit", "Limit must be 1..200");
+        let offset = 0;
+        if (input.cursor !== void 0) {
+          try {
+            const c = JSON.parse(Buffer.from(input.cursor, "base64url").toString());
+            if (c.source !== source.source_id || c.collection !== collection || c.revision !== stackHash(stackCanonical(records)) || !Number.isInteger(c.offset) || c.offset < 0)
+              throw Error();
+            offset = c.offset;
+          } catch {
+            throw new StackError(
+              "stale_cursor",
+              "Cursor is invalid or source records changed",
+              409
+            );
+          }
+        }
+        const next = offset + limit < records.length ? Buffer.from(
+          JSON.stringify({
+            source: source.source_id,
+            collection,
+            revision: stackHash(stackCanonical(records)),
+            offset: offset + limit
+          })
+        ).toString("base64url") : null;
+        return this.validate("read-projection", {
+          schema_version: "guild.stack.read-projection.v1",
+          session_id: session.session_id,
+          generation: 0,
+          items: records.slice(offset, offset + limit),
+          next_cursor: next,
+          total: records.length,
+          partial: false,
+          source_errors: []
+        });
+      }
+      lock(source, fn) {
+        const p = this.runtime("writer.lock", source);
+        fs70.mkdirSync(path83.dirname(p), { recursive: true, mode: 448 });
+        try {
+          fs70.mkdirSync(p, { mode: 448 });
+        } catch (e) {
+          if (e.code !== "EEXIST") throw e;
+          const reaper = p + ".reclaim";
+          try {
+            fs70.mkdirSync(reaper, { mode: 448 });
+          } catch {
+            throw new StackError(
+              "operation_locked",
+              "Writer recovery is already owned",
+              409
+            );
+          }
+          try {
+            let dead = false;
+            try {
+              const owner = JSON.parse(
+                fs70.readFileSync(path83.join(p, "owner.json"), "utf8")
+              );
+              if (Number.isInteger(owner.pid) && owner.pid > 0) {
+                try {
+                  process.kill(owner.pid, 0);
+                } catch (x) {
+                  dead = x.code === "ESRCH";
+                }
+              }
+            } catch {
+            }
+            if (!dead)
+              throw new StackError(
+                "operation_locked",
+                "Another operation or unresolved writer lease owns this root",
+                409
+              );
+            const retired = p + ".retired-" + (0, import_node_crypto6.randomUUID)();
+            fs70.renameSync(p, retired);
+            fs70.rmSync(retired, { recursive: true, force: true });
+            try {
+              fs70.mkdirSync(p, { mode: 448 });
+            } catch {
+              throw new StackError(
+                "operation_locked",
+                "Writer lease was claimed concurrently",
+                409
+              );
+            }
+          } finally {
+            fs70.rmSync(reaper, { recursive: true, force: true });
+          }
+        }
+        try {
+          atomicWriteDurable(
+            path83.join(p, "owner.json"),
+            JSON.stringify({ pid: process.pid })
+          );
+          return fn();
+        } finally {
+          fs70.rmSync(p, { recursive: true, force: true });
+        }
+      }
+      evidence(source, relative25) {
+        const bytes = stackRead(source.realpath, relative25);
+        return {
+          source_id: source.source_id,
+          path: relative25.slice(7),
+          sha256: stackHash(bytes),
+          schema_version: "guild.policy.v1",
+          observed_at: this.now().toISOString(),
+          freshness: "current"
+        };
+      }
+      artifactPath(id, name) {
+        return ".guild/artifacts/operations/" + stackId(id) + "/" + name + ".json";
+      }
+      screenedWrite(source, target, bytes, id, relativeToRoot = false, typed = false) {
+        const storage = this.storage(source);
+        const audit = (storage.project ?? storage.workspace).artifact(
+          "operations"
+        );
+        const staged = this.runtime(
+          "staging/" + stackId(id) + "-" + (0, import_node_crypto6.randomUUID)() + ".json",
+          source
+        );
+        fs70.mkdirSync(path83.dirname(staged), { recursive: true, mode: 448 });
+        try {
+          const screened = typed ? this.screenP05Bytes(source, bytes) : bytes;
+          const result2 = scrubbedWrite(staged, screened, {
+            surface: "config",
+            runDir: audit,
+            runId: id
+          });
+          if (!result2.written || result2.blocked || fs70.readFileSync(staged, "utf8") !== screened)
+            throw new StackError(
+              "content_refused",
+              "Durable content changed or was blocked by the security writer",
+              403
+            );
+          const checked = relativeToRoot ? stackContained(source.realpath, target, true) : target;
+          atomicWriteDurable(checked, bytes);
+          let directory = path83.dirname(checked);
+          while (directory.startsWith(source.realpath + path83.sep) || directory === source.realpath) {
+            const fd = fs70.openSync(directory, "r");
+            try {
+              fs70.fsyncSync(fd);
+            } finally {
+              fs70.closeSync(fd);
+            }
+            if (directory === source.realpath) break;
+            directory = path83.dirname(directory);
+          }
+        } finally {
+          try {
+            fs70.unlinkSync(staged);
+          } catch {
+          }
+        }
+      }
+      verifyJournal(source, record) {
+        const p = record.preview;
+        if (record.schema_version === "guild.stack.managed_operation_journal.v1") {
+          this.verifyManagedJournal(source, record);
+          return;
+        }
+        if (record.schema_version === "guild.stack.operation_journal.v2") {
+          this.verifyP05Journal(source, record);
+          return;
+        }
+        if (!writeOps.has(p.operation) || p.preview_hash !== stackPreviewHash(p) || record.relative !== this.configPath(source) || p.diff.length !== 1 || stackHash(record.after) !== p.diff[0].after_hash || stackHash(record.before) !== p.targets[0].revision || stackCanonical(p.diff[0].target) !== stackCanonical(p.targets[0]))
+          throw new StackError(
+            "invalid_state",
+            "Stored writer content does not match reviewed preview",
+            409
+          );
+      }
+      verifyReceipt(source, record, value) {
+        this.validate("operation-receipt", value);
+        if (record.schema_version === "guild.stack.operation_journal.v2") {
+          if (stackCanonical(value.before) !== stackCanonical(record.preview.targets) || stackCanonical(value.after) !== stackCanonical(record.expected_after)) throw new StackError("invalid_state", "Domain receipt references differ from reviewed outcome", 409);
+          const expected = /* @__PURE__ */ new Map();
+          for (const w of record.writes) {
+            let rel2 = w.path;
+            for (const m of record.moves) if (rel2.startsWith(m.from + "/")) rel2 = m.to + rel2.slice(m.from.length);
+            if (w.after_exists) expected.set(rel2.slice(7), w.after_hash);
+          }
+          for (const m of record.moves) for (const f of record.snapshot) if (f.path.startsWith(m.from + "/")) {
+            const rel2 = m.to + f.path.slice(m.from.length);
+            if (!record.writes.some((w) => w.path === f.path)) expected.set(rel2.slice(7), f.sha256);
+          }
+          if (value.touched.length !== expected.size || value.touched.some((e) => e.source_id !== source.source_id || expected.get(e.path) !== e.sha256)) throw new StackError("invalid_state", "Domain receipt evidence differs from journal", 409);
+        }
+        if (value.operation_id !== record.preview.operation_id || value.source_id !== source.source_id || value.operation !== record.preview.operation || value.preview_hash !== record.preview.preview_hash || value.idempotency_key !== record.apply_key || value.state !== "applied")
+          throw new StackError(
+            "invalid_state",
+            "Receipt does not match this operation",
+            409
+          );
+      }
+      operation(session, id) {
+        stackId(id);
+        for (const source of [session.root, ...session.children]) {
+          if (source.health !== "healthy") continue;
+          try {
+            const record = this.loadRuntime("operations/" + id + ".json", source);
+            this.validate("operation-preview", record.preview);
+            if (record.preview.operation_id !== id || record.preview.source_id !== source.source_id)
+              throw new StackError(
+                "invalid_state",
+                "Operation ownership is inconsistent",
+                409
+              );
+            this.verifyJournal(source, record);
+            return { source, record };
+          } catch (e) {
+            if (e instanceof StackError && e.code === "not_found") continue;
+            throw e;
+          }
+        }
+        throw new StackError(
+          "not_found",
+          "Operation not found in bound sources",
+          404
+        );
+      }
+      preview(request) {
+        this.transport("preview_request", request);
+        const session = this.session(request.session_id), source = this.source(session, request.source_id);
+        if (source.read_only_reason)
+          throw new StackError(
+            "read_only",
+            "Source requires activation before management writes",
+            403
+          );
+        if (this.managed?.availability.includes(request.operation)) return this.previewManaged(session, source, request);
+        if (!writeOps.has(request.operation) && !P05_WRITES.has(request.operation))
+          throw new StackError(
+            "operation_unavailable",
+            "Operation has no packaged management handler yet",
+            503
+          );
+        if (P05_WRITES.has(request.operation)) return this.previewP05(session, source, request);
+        return this.lock(source, () => {
+          const config = this.config(source), args = request.arguments;
+          if (request.targets.length !== 1 || stackCanonical(request.targets[0]) !== stackCanonical(config.ref) || stackCanonical(args.target) !== stackCanonical(config.ref))
+            throw new StackError(
+              "stale_target",
+              "Configuration target/revision does not match owning source",
+              409
+            );
+          if (args.layer !== source.kind || args.reset !== (request.operation === "config.reset"))
+            throw new StackError(
+              "invalid_layer",
+              "Operation and editable policy layer do not agree",
+              422
+            );
+          const spec = policyKeySpec(args.key);
+          if (!spec)
+            throw new StackError("policy_refused", "Unknown policy key", 403);
+          const key = assertPolicyWrite(
+            args.key,
+            args.reset ? spec.default : args.value,
+            { where: "Guild Stack preview" }
+          );
+          let beforeValue = config.local;
+          for (const part of key.split("."))
+            beforeValue = plain(beforeValue) ? beforeValue[part] : void 0;
+          const next = structuredClone(config.local);
+          let parent = next;
+          const parts = key.split(".");
+          for (const part of parts.slice(0, -1)) {
+            if (parent[part] === void 0) parent[part] = {};
+            if (!plain(parent[part]))
+              throw new StackError(
+                "invalid_config",
+                "Existing policy path is not an object",
+                422
+              );
+            parent = parent[part];
+          }
+          if (args.reset) delete parent[parts.at(-1)];
+          else parent[parts.at(-1)] = args.value;
+          const after = JSON.stringify(next, null, 2) + "\n";
+          const currentPolicy = this.policy(source);
+          const capabilities = this.capabilities();
+          const fingerprint2 = stackHash(stackCanonical(request));
+          const keyPath = "idempotency/" + stackHash(request.idempotency_key).slice(7) + ".json";
+          try {
+            const previous = this.loadRuntime(keyPath, source);
+            if (previous.fingerprint !== fingerprint2)
+              throw new StackError(
+                "idempotency_conflict",
+                "Idempotency key was used for different content",
+                409
+              );
+            return this.loadRuntime(
+              "operations/" + previous.operation_id + ".json",
+              source
+            ).preview;
+          } catch (e) {
+            if (!(e instanceof StackError && e.code === "not_found")) throw e;
+          }
+          const id = "op:" + (0, import_node_crypto6.randomUUID)();
+          const result2 = {
+            schema_version: "guild.stack.operation-preview.v1",
+            operation_id: id,
+            operation: request.operation,
+            session_id: session.session_id,
+            source_id: source.source_id,
+            targets: [config.ref],
+            dependencies: [],
+            arguments: args,
+            diff: [
+              {
+                target: config.ref,
+                before_hash: config.ref.revision,
+                after_hash: stackHash(after),
+                patch: JSON.stringify({
+                  key,
+                  before: beforeValue ?? null,
+                  proposed: args.reset ? null : args.value
+                })
+              }
+            ],
+            policy: {
+              decision: "allowed",
+              revision: currentPolicy.revision,
+              reason: currentPolicy.reason
+            },
+            approval_required: true,
+            preview_hash: "",
+            scope_revision: source.revision,
+            capability_revision: stackHash(stackCanonical(capabilities)),
+            expires_at: new Date(
+              Math.min(
+                this.now().getTime() + 6e5,
+                Date.parse(session.expires_at)
+              )
+            ).toISOString(),
+            rollback: "not_available",
+            budget: { max_usd: null, max_duration_ms: 3e4 }
+          };
+          result2.preview_hash = stackPreviewHash(result2);
+          this.validate("operation-preview", result2);
+          this.saveRuntime(
+            "operations/" + id + ".json",
+            {
+              preview: result2,
+              before: config.bytes ?? "",
+              after,
+              relative: config.relative,
+              state: "previewed",
+              pid: null,
+              apply_key: null
+            },
+            source
+          );
+          this.saveRuntime(keyPath, { fingerprint: fingerprint2, operation_id: id }, source);
+          return result2;
+        });
+      }
+      fresh(session, source, record, hash) {
+        const p = record.preview;
+        if (p.preview_hash !== hash || p.preview_hash !== stackPreviewHash(p))
+          throw new StackError(
+            "preview_changed",
+            "Preview identity does not match exact content",
+            409
+          );
+        if (p.session_id !== session.session_id || p.scope_revision !== source.revision || source.read_only_reason)
+          throw new StackError(
+            "stale_scope",
+            "Preview belongs to stale scope/session authority",
+            409
+          );
+        if (Date.parse(p.expires_at) <= this.now().getTime())
+          throw new StackError(
+            "preview_expired",
+            "Review a fresh preview before deciding",
+            410
+          );
+        if (p.capability_revision !== stackHash(stackCanonical(this.capabilities())) || p.policy.revision !== this.policy(source).revision || !["guild.stack.operation_journal.v2", "guild.stack.managed_operation_journal.v1"].includes(record.schema_version) && this.config(source).ref.revision !== p.targets[0].revision)
+          throw new StackError(
+            "stale_preview",
+            "Target, policy or package changed since preview",
+            409
+          );
+        if (record.schema_version === "guild.stack.managed_operation_journal.v1") {
+          this.freshManaged(source, record);
+          return;
+        }
+        if (record.schema_version === "guild.stack.operation_journal.v2") {
+          this.freshP05(source, record);
+          return;
+        }
+        const current = this.config(source).ref;
+        if (stackCanonical(current) !== stackCanonical(p.arguments.target))
+          throw new StackError(
+            "stale_target",
+            "Operation argument target is outside current authority",
+            409
+          );
+      }
+      decide(input) {
+        this.transport("decision_request", input.request);
+        const session = this.session(input.request.session_id);
+        const { source, record } = this.operation(session, input.operation_id);
+        return this.lock(source, () => {
+          const { record: record2 } = this.operation(session, input.operation_id);
+          if (record2.state === "cancelled")
+            throw new StackError(
+              "cancelled",
+              "Cancelled operation cannot be decided",
+              409
+            );
+          this.fresh(session, source, record2, input.request.preview_hash);
+          if (!["approved", "rejected", "returned"].includes(
+            input.request.decision
+          ) || input.request.decision !== "approved" && !input.request.rationale.trim())
+            throw new StackError(
+              "rationale_required",
+              "A rejection or return requires rationale",
+              422
+            );
+          const relative25 = this.artifactPath(input.operation_id, "approval");
+          const existing = stackRead(source.realpath, relative25, true);
+          const approval = {
+            schema_version: "guild.stack.approval-record.v1",
+            approval_id: input.operation_id,
+            operation_id: input.operation_id,
+            source_id: source.source_id,
+            session_id: session.session_id,
+            preview_hash: record2.preview.preview_hash,
+            actor: "local operator",
+            decision: input.request.decision,
+            rationale: input.request.rationale,
+            decided_at: this.now().toISOString()
+          };
+          this.validate("approval-record", approval);
+          if (existing) {
+            const old = JSON.parse(existing);
+            if (old.decision !== approval.decision || old.preview_hash !== approval.preview_hash || old.rationale !== approval.rationale)
+              throw new StackError(
+                "decision_immutable",
+                "A recorded decision cannot be changed; create a new preview",
+                409
+              );
+            return old;
+          }
+          this.screenedWrite(
+            source,
+            relative25,
+            JSON.stringify(approval, null, 2) + "\n",
+            input.operation_id,
+            true
+          );
+          return approval;
+        });
+      }
+      receipt(source, record, id, state = "applied", error = null) {
+        if (record.schema_version === "guild.stack.operation_journal.v2") return this.receiptP05(source, record, id, state, error);
+        const after = this.config(source).ref;
+        const ref = this.evidence(source, record.relative);
+        const value = {
+          schema_version: "guild.stack.operation-receipt.v1",
+          operation_id: id,
+          operation: record.preview.operation,
+          source_id: source.source_id,
+          idempotency_key: record.apply_key,
+          preview_hash: record.preview.preview_hash,
+          producer: { id: "guild", version: this.packageIdentity().version },
+          state,
+          before: record.preview.targets,
+          after: [after],
+          touched: [ref],
+          validation: [],
+          error,
+          inverse_ref: null,
+          closed_at: this.now().toISOString()
+        };
+        this.validate("operation-receipt", value);
+        this.screenedWrite(
+          source,
+          this.artifactPath(id, "receipt"),
+          JSON.stringify(value, null, 2) + "\n",
+          id,
+          true
+        );
+        record.state = state === "applied" ? "succeeded" : "recovery_needed";
+        record.pid = null;
+        this.saveRuntime("operations/" + id + ".json", record, source);
+        return value;
+      }
+      apply(input) {
+        this.transport("apply_request", input.request);
+        const session = this.session(input.request.session_id);
+        const { source, record } = this.operation(session, input.operation_id);
+        return this.lock(source, () => {
+          const { record: record2 } = this.operation(session, input.operation_id);
+          const existing = stackRead(
+            source.realpath,
+            this.artifactPath(input.operation_id, "receipt"),
+            true
+          );
+          if (existing) {
+            const receipt2 = JSON.parse(existing);
+            this.verifyReceipt(source, record2, receipt2);
+            if (receipt2.idempotency_key !== input.request.idempotency_key || receipt2.preview_hash !== input.request.preview_hash)
+              throw new StackError(
+                "idempotency_conflict",
+                "Applied operation cannot be reused for new content",
+                409
+              );
+            return receipt2;
+          }
+          if (record2.schema_version === "guild.stack.managed_operation_journal.v1" && record2.state !== "previewed" && record2.apply_key) {
+            if (record2.apply_key !== input.request.idempotency_key || record2.preview.preview_hash !== input.request.preview_hash) throw new StackError("idempotency_conflict", "Managed Apply replay differs", 409);
+            return this.statusManaged(source, record2);
+          }
+          if (record2.state === "running" || record2.state === "recovery_needed")
+            throw new StackError(
+              "recovery_required",
+              "Reconcile the operation before retrying a write",
+              409
+            );
+          if (record2.state === "cancelled")
+            throw new StackError(
+              "cancelled",
+              "Cancelled operation cannot apply",
+              409
+            );
+          this.fresh(session, source, record2, input.request.preview_hash);
+          const raw = stackRead(
+            source.realpath,
+            this.artifactPath(input.operation_id, "approval"),
+            true
+          );
+          if (!raw)
+            throw new StackError(
+              "approval_required",
+              "Exact producer approval is required",
+              403
+            );
+          const approval = JSON.parse(raw);
+          this.validate("approval-record", approval);
+          if (approval.decision !== "approved" || approval.operation_id !== record2.preview.operation_id || approval.source_id !== source.source_id || approval.session_id !== session.session_id || approval.preview_hash !== record2.preview.preview_hash)
+            throw new StackError(
+              "approval_required",
+              "Approval is not valid for this exact operation",
+              403
+            );
+          record2.apply_key = input.request.idempotency_key;
+          record2.state = "running";
+          record2.pid = process.pid;
+          this.saveRuntime(
+            "operations/" + input.operation_id + ".json",
+            record2,
+            source
+          );
+          try {
+            if (record2.schema_version === "guild.stack.managed_operation_journal.v1") return this.applyManaged(source, record2);
+            if (record2.schema_version === "guild.stack.operation_journal.v2") {
+              this.applyP05(source, record2, input.operation_id);
+              return this.receiptP05(source, record2, input.operation_id);
+            }
+            this.screenedWrite(
+              source,
+              record2.relative,
+              record2.after,
+              input.operation_id,
+              true
+            );
+            return this.receipt(source, record2, input.operation_id);
+          } catch (error) {
+            record2.state = "recovery_needed";
+            record2.pid = null;
+            this.saveRuntime(
+              "operations/" + input.operation_id + ".json",
+              record2,
+              source
+            );
+            throw error;
+          }
+        });
+      }
+      status(input, cancel = false) {
+        if (cancel) this.transport("cancel_request", input.request);
+        const session = this.session(
+          cancel ? input.request.session_id : input.session_id
+        );
+        const { source, record } = this.operation(session, input.operation_id);
+        if (record.schema_version === "guild.stack.managed_operation_journal.v1") {
+          if (cancel) {
+            if (record.apply_key) throw new StackError("cancel_requires_review", "Review run.cancel for an admitted host attempt", 409);
+            record.state = "cancelled";
+            this.saveRuntime("operations/" + input.operation_id + ".json", record, source);
+          }
+          return this.lock(source, () => {
+            const current = this.operation(session, input.operation_id).record;
+            return this.statusManaged(source, current);
+          });
+        }
+        let receipt2 = null;
+        const raw = stackRead(
+          source.realpath,
+          this.artifactPath(input.operation_id, "receipt"),
+          true
+        );
+        if (raw) {
+          receipt2 = JSON.parse(raw);
+          this.verifyReceipt(source, record, receipt2);
+        }
+        if (!receipt2 && ["running", "recovery_needed"].includes(record.state)) {
+          let alive = false;
+          try {
+            if (record.pid) {
+              process.kill(record.pid, 0);
+              alive = true;
+            }
+          } catch {
+          }
+          if (!alive) {
+            receipt2 = this.lock(source, () => {
+              const { record: current } = this.operation(
+                session,
+                input.operation_id
+              );
+              const existing = stackRead(
+                source.realpath,
+                this.artifactPath(input.operation_id, "receipt"),
+                true
+              );
+              if (existing) {
+                const found = JSON.parse(existing);
+                this.verifyReceipt(source, current, found);
+                return found;
+              }
+              let currentAlive = false;
+              try {
+                if (current.pid) {
+                  process.kill(current.pid, 0);
+                  currentAlive = true;
+                }
+              } catch {
+              }
+              if (!["running", "recovery_needed"].includes(current.state) || currentAlive) {
+                Object.assign(record, current);
+                return null;
+              }
+              const approvalBytes = stackRead(
+                source.realpath,
+                this.artifactPath(input.operation_id, "approval"),
+                true
+              );
+              let approved = false;
+              if (approvalBytes) {
+                const approval = JSON.parse(approvalBytes);
+                this.validate("approval-record", approval);
+                approved = approval.operation_id === current.preview.operation_id && approval.source_id === source.source_id && approval.preview_hash === current.preview.preview_hash && approval.session_id === current.preview.session_id && approval.decision === "approved";
+              }
+              if (current.schema_version === "guild.stack.operation_journal.v2") {
+                if (approved && this.p05Outcome(source, current)) return this.receiptP05(source, current, input.operation_id);
+                current.state = "recovery_needed";
+                current.pid = null;
+                this.saveRuntime("operations/" + input.operation_id + ".json", current, source);
+                Object.assign(record, current);
+                return null;
+              }
+              const content = stackRead(source.realpath, current.relative, true) ?? "";
+              if (approved && stackHash(content) === current.preview.diff[0].after_hash)
+                return this.receipt(source, current, input.operation_id);
+              current.state = "recovery_needed";
+              current.pid = null;
+              this.saveRuntime(
+                "operations/" + input.operation_id + ".json",
+                current,
+                source
+              );
+              Object.assign(record, current);
+              return null;
+            });
+          }
+        }
+        if (cancel && !receipt2)
+          return this.lock(source, () => {
+            const { record: current } = this.operation(session, input.operation_id);
+            if (current.state === "running" || current.state === "recovery_needed" || current.state === "succeeded")
+              throw new StackError(
+                "cancel_not_supported",
+                "Atomic policy writer cannot be interrupted; reconcile its receipt",
+                409
+              );
+            current.state = "cancelled";
+            this.saveRuntime(
+              "operations/" + input.operation_id + ".json",
+              current,
+              source
+            );
+            return this.validateStatus({
+              schema_version: "guild.stack.operation_status.v1",
+              operation_id: input.operation_id,
+              source_id: source.source_id,
+              state: "cancelled",
+              receipt: null,
+              generation: 0
+            });
+          });
+        return this.validateStatus({
+          schema_version: "guild.stack.operation_status.v1",
+          operation_id: input.operation_id,
+          source_id: source.source_id,
+          state: receipt2 ? "succeeded" : record.state === "previewed" ? "queued" : record.state,
+          receipt: receipt2,
+          generation: 0
+        });
+      }
+      screenP05Bytes(source, bytes) {
+        let value;
+        try {
+          value = JSON.parse(bytes);
+        } catch {
+          return bytes;
+        }
+        let seq = 0;
+        const mask = (object2, key) => {
+          object2[key] = "path-" + ++seq;
+        };
+        const refs = (items) => {
+          if (items === void 0) return;
+          if (!Array.isArray(items)) throw new StackError("invalid_evidence", "Evidence references must be arrays");
+          for (let n = 0; n < items.length; n++) {
+            const rel2 = items[n];
+            if (typeof rel2 !== "string" || path83.isAbsolute(rel2)) throw new StackError("invalid_evidence", "Evidence path must be relative");
+            stackContained(source.realpath, rel2.split("#")[0]);
+            if (stackRead(source.realpath, rel2.split("#")[0]) === null) throw new StackError("missing_evidence", "Evidence is missing");
+            items[n] = "path-" + ++seq;
+          }
+        };
+        const evidence = (items) => {
+          if (!Array.isArray(items)) return;
+          for (const e of items) {
+            if (e.source_id !== source.source_id || typeof e.path !== "string" || e.sha256 !== stackHash(stackRead(source.realpath, ".guild/" + e.path))) throw new StackError("invalid_evidence", "Evidence does not match current source bytes");
+            mask(e, "path");
+          }
+        };
+        if (value.initiative && typeof value.initiative === "object") {
+          const m = value.initiative, expected = new RegExp("^\\.guild/initiatives/(?:active|archived)/" + stackId(m.id) + "/summary\\.md$");
+          if (typeof m.summary_ref === "string" && expected.test(m.summary_ref)) mask(m, "summary_ref");
+          if (m.close_gate) refs(m.close_gate.evidence);
+        }
+        if (value.schema_version === "guild.initiative_definition_ledger.v1") for (const item of value.items) refs(item.evidence_refs);
+        if (value.schema_version === "guild.initiative_work_item.v1") refs(value.item.evidence_refs);
+        if (value.schema_version === "guild.initiative_decision_event.v1") {
+          const id = stackId(value.operation.operation_id);
+          for (const kind of ["approval", "receipt"]) {
+            const pointer = value.operation[kind];
+            if (pointer.source_id !== source.source_id || pointer.path !== "artifacts/operations/" + id + "/" + kind + ".json") throw new StackError("invalid_evidence", "Decision operation pointer is not canonical");
+            mask(pointer, "path");
+          }
+          evidence(value.evidence);
+        }
+        if (value.schema_version === "guild.stack.operation-receipt.v1") evidence(value.touched);
+        return JSON.stringify(value, null, 2) + "\n";
+      }
+      domain(source) {
+        return new StackP05(source, stackCanonical, this.now, /* @__PURE__ */ new Map(), false, this.validateSchema);
+      }
+      readP05(input) {
+        try {
+          this.validateSchema("https://guildstack.dev/contracts/guild-stack/p05/v1/domain.schema.json#/$defs/read_request", input);
+        } catch {
+          throw new StackError("invalid_request", "P05 read contract invalid", 400);
+        }
+        const session = this.session(input.session_id), source = this.source(session, input.source_id);
+        let secret;
+        try {
+          secret = this.loadRuntime("cursor-secret.json", source).secret;
+        } catch (e) {
+          if (!(e instanceof StackError && e.code === "not_found"))
+            throw e;
+          secret = (0, import_node_crypto6.randomUUID)() + (0, import_node_crypto6.randomUUID)();
+          this.saveRuntime("cursor-secret.json", { secret }, source);
+        }
+        return this.validate("read-projection", this.domain(source).readProjection(input, secret));
+      }
+      snapshotP05(source, domain) {
+        const paths = /* @__PURE__ */ new Set();
+        for (const item of domain.initiatives()) for (const p of domain.canonicalInitiativeFiles(".guild/" + item.data.path)) paths.add(p);
+        for (const run of domain.runs()) for (const name of ["run.yaml", "provenance.json", "workflow-cursor.json", "attempt.json", "resolved-settings.json", "resolved-settings.sha256", "plugin-config-snapshot.json", "session-context.json", "launch.json", "host-dispatch.json", "verify.md"]) {
+          const p = ".guild/" + run.data.path + "/" + name;
+          if (domain.read(p) !== null) paths.add(p);
+        }
+        for (const item of domain.initiatives()) {
+          for (const rel2 of item.data.close_gate?.evidence ?? []) paths.add(rel2.split("#")[0]);
+          for (const work of [...item.data.definition_items, ...item.data.work_items]) for (const rel2 of work.evidence_refs ?? []) paths.add(rel2.split("#")[0]);
+          for (const ref of item.data.decisions) {
+            const decision = domain.decision(item.ref.id, ref.id);
+            for (const event of decision.data.history)
+              for (const kind of ["approval", "receipt"]) {
+                const pointer = event.operation?.[kind];
+                if (pointer?.source_id === source.source_id && domain.read(".guild/" + pointer.path) !== null)
+                  paths.add(".guild/" + pointer.path);
+              }
+          }
+        }
+        return [...paths].sort().map((p) => ({ path: p, bytes: domain.read(p), sha256: stackHash(domain.read(p) ?? "") }));
+      }
+      verifyP05Journal(source, record) {
+        const p = record.preview;
+        if (record.handler !== p.operation || !P05_WRITES.has(p.operation) || p.preview_hash !== stackPreviewHash(p) || !Array.isArray(record.writes) || !Array.isArray(record.moves) || !Array.isArray(record.snapshot))
+          throw new StackError("invalid_state", "Invalid P05 journal", 409);
+        if (new Set(record.snapshot.map((s) => s.path)).size !== record.snapshot.length || stackCanonical(record.read_set) !== stackCanonical(record.snapshot.map((s) => ({ source_id: source.source_id, path: s.path, exists: s.bytes !== null, sha256: s.sha256 }))))
+          throw new StackError("invalid_state", "Snapshot read authority differs from source", 409);
+        for (const s of record.snapshot) {
+          stackContained(source.realpath, s.path, true);
+          if (stackHash(s.bytes ?? "") !== s.sha256)
+            throw new StackError("invalid_state", "Snapshot bytes corrupted", 409);
+        }
+        const domain = new StackP05(source, stackCanonical, this.now, new Map(record.snapshot.map((s) => [s.path, s.bytes])), true, this.validateSchema);
+        let plan;
+        try {
+          plan = domain.plan(p.operation, p.arguments, record.request_targets, p.operation_id, record.allocated, record.planned_at);
+        } catch (e) {
+          throw new StackError("invalid_state", "Journal cannot reproduce handler plan: " + (e instanceof StackError ? e.code : "invalid_inputs"), 409);
+        }
+        for (const key of ["writes", "moves", "targets", "dependencies", "diff", "after"])
+          if (stackCanonical(plan[key]) !== stackCanonical(key === "targets" ? p.targets : key === "dependencies" ? p.dependencies : key === "diff" ? p.diff : key === "after" ? record.expected_after : record[key]))
+            throw new StackError("invalid_state", "Journal differs from reviewed handler plan", 409);
+      }
+      previewP05(session, source, request) {
+        return this.lock(source, () => {
+          const keyPath = "idempotency/" + stackHash(request.idempotency_key).slice(7) + ".json", fingerprint2 = stackHash(stackCanonical(request));
+          try {
+            const previous = this.loadRuntime(keyPath, source);
+            if (previous.fingerprint !== fingerprint2)
+              throw new StackError("idempotency_conflict", "Key already used", 409);
+            return this.loadRuntime("operations/" + previous.operation_id + ".json", source).preview;
+          } catch (e) {
+            if (!(e instanceof StackError && e.code === "not_found"))
+              throw e;
+          }
+          const operations = this.runtime("operations", source);
+          if (fs70.existsSync(operations))
+            for (const name of fs70.readdirSync(operations)) {
+              const old = JSON.parse(fs70.readFileSync(path83.join(operations, name), "utf8"));
+              if (["running", "recovery_needed"].includes(old.state))
+                throw new StackError("recovery_required", "Source has an unresolved writer", 409);
+            }
+          const id = "op-" + (0, import_node_crypto6.randomUUID)(), allocated = (request.operation === "initiative.create" ? "initiative-" : request.operation === "decision.propose" ? "decision-" : "event-") + (0, import_node_crypto6.randomUUID)(), at = this.now().toISOString();
+          const domain = this.domain(source), snapshot = this.snapshotP05(source, domain), plan = domain.plan(request.operation, request.arguments, request.targets, id, allocated, at);
+          const addEvidence = (relative25, expectedHash) => {
+            stackContained(source.realpath, relative25);
+            const bytes = domain.read(relative25, false), sha2568 = stackHash(bytes);
+            if (expectedHash !== void 0 && expectedHash !== sha2568)
+              throw new StackError("invalid_evidence", "Evidence changed before preview", 409);
+            const existing = snapshot.find((s) => s.path === relative25);
+            if (existing && existing.sha256 !== sha2568)
+              throw new StackError("stale_preview", "Evidence changed while planning", 409);
+            if (!existing) snapshot.push({ path: relative25, bytes, sha256: sha2568 });
+          };
+          for (const w of plan.writes) {
+            if (!w.after_bytes || !/\.(json|yaml)$/.test(w.path)) continue;
+            const value = w.path.endsWith(".yaml") ? parseYaml(w.after_bytes) : JSON.parse(w.after_bytes);
+            for (const ref of value?.initiative?.close_gate?.evidence ?? []) addEvidence(ref.split("#")[0]);
+            const items = value?.schema_version === "guild.initiative_definition_ledger.v1" ? value.items : value?.schema_version === "guild.initiative_work_item.v1" ? [value.item] : [];
+            for (const item of items) for (const ref of item.evidence_refs ?? []) addEvidence(ref.split("#")[0]);
+            if (value?.schema_version === "guild.initiative_decision_event.v1")
+              for (const ref of value.evidence ?? []) {
+                if (ref.source_id !== source.source_id)
+                  throw new StackError("invalid_evidence", "Evidence belongs to another source", 409);
+                addEvidence(".guild/" + ref.path, ref.sha256);
+              }
+          }
+          for (const move of plan.moves) for (const p2 of domain.files(move.from)) if (!snapshot.some((s) => s.path === p2)) {
+            const bytes = domain.read(p2, false);
+            snapshot.push({ path: p2, bytes, sha256: stackHash(bytes ?? "") });
+          }
+          const policy = this.policy(source), capabilities = this.capabilities();
+          const p = { schema_version: "guild.stack.operation-preview.v1", operation_id: id, operation: request.operation, session_id: session.session_id, source_id: source.source_id, targets: plan.targets, dependencies: plan.dependencies, arguments: request.arguments, diff: plan.diff, policy: { decision: "allowed", revision: policy.revision, reason: "Exact canonical domain handler and source-owned write set" }, approval_required: true, preview_hash: "", scope_revision: source.revision, capability_revision: stackHash(stackCanonical(capabilities)), expires_at: new Date(Math.min(this.now().getTime() + 6e5, Date.parse(session.expires_at))).toISOString(), rollback: "handoff", budget: { max_usd: null, max_duration_ms: 3e4 } };
+          p.preview_hash = stackPreviewHash(p);
+          this.validate("operation-preview", p);
+          const record = { schema_version: "guild.stack.operation_journal.v2", handler: request.operation, preview: p, writes: plan.writes, moves: plan.moves, expected_after: plan.after, snapshot, read_set: snapshot.map((s) => ({ source_id: source.source_id, path: s.path, exists: s.bytes !== null, sha256: s.sha256 })), allocated, planned_at: at, request_targets: request.targets, state: "previewed", pid: null, apply_key: null, host_intent: null };
+          this.verifyP05Journal(source, record);
+          this.saveRuntime("operations/" + id + ".json", record, source);
+          this.saveRuntime(keyPath, { fingerprint: fingerprint2, operation_id: id }, source);
+          return p;
+        });
+      }
+      freshP05(source, record) {
+        const p = record.preview, domain = this.domain(source);
+        for (const input of record.read_set) {
+          if (input.source_id !== source.source_id)
+            throw new StackError("invalid_state", "Evidence read belongs to another source", 409);
+          const bytes = stackRead(source.realpath, input.path, true);
+          if (bytes !== null !== input.exists || stackHash(bytes ?? "") !== input.sha256)
+            throw new StackError("stale_preview", "Reviewed evidence bytes changed", 409);
+        }
+        const plan = domain.plan(p.operation, p.arguments, record.request_targets, p.operation_id, record.allocated, record.planned_at);
+        for (const key of ["writes", "moves", "targets", "dependencies", "diff", "after"])
+          if (stackCanonical(plan[key]) !== stackCanonical(key === "targets" ? p.targets : key === "dependencies" ? p.dependencies : key === "diff" ? p.diff : key === "after" ? record.expected_after : record[key]))
+            throw new StackError("stale_preview", "Domain handler inputs or evidence changed", 409);
+      }
+      applyP05(source, record, id) {
+        for (const w of record.writes) {
+          const before = stackRead(source.realpath, w.path, true);
+          if (before !== null !== w.before_exists || stackHash(before ?? "") !== w.before_hash)
+            throw new StackError("stale_preview", "Planned file changed before apply", 409);
+        }
+        for (const w of record.writes)
+          if (w.after_exists) {
+            const staged = this.runtime("staging/" + (0, import_node_crypto6.randomUUID)() + ".json", source);
+            fs70.mkdirSync(path83.dirname(staged), { recursive: true, mode: 448 });
+            try {
+              const result2 = scrubbedWrite(staged, this.screenP05Bytes(source, w.after_bytes), { surface: "config", runDir: (this.storage(source).project ?? this.storage(source).workspace).artifact("operations"), runId: id });
+              if (!result2.written || result2.blocked || fs70.readFileSync(staged, "utf8") !== this.screenP05Bytes(source, w.after_bytes))
+                throw new StackError("content_refused", "Reviewed bytes failed security writer: " + w.path, 403);
+            } finally {
+              fs70.rmSync(staged, { force: true });
+            }
+          }
+        for (const w of record.writes) {
+          if (w.after_exists)
+            this.screenedWrite(source, w.path, w.after_bytes, id, true, true);
+          else
+            fs70.unlinkSync(stackContained(source.realpath, w.path));
+        }
+        for (const move of record.moves) {
+          const from = stackContained(source.realpath, move.from), to = stackContained(source.realpath, move.to, true);
+          if (fs70.existsSync(to))
+            throw new StackError("destination_collision", "Move destination exists", 409);
+          fs70.mkdirSync(path83.dirname(to), { recursive: true });
+          fs70.renameSync(from, to);
+          for (const dir of /* @__PURE__ */ new Set([path83.dirname(from), path83.dirname(to)])) {
+            const fd = fs70.openSync(dir, "r");
+            try {
+              fs70.fsyncSync(fd);
+            } finally {
+              fs70.closeSync(fd);
+            }
+          }
+        }
+        if (!this.p05Outcome(source, record))
+          throw new StackError("recovery_required", "Actual bytes differ from reviewed outcome", 409);
+      }
+      p05Outcome(source, record) {
+        try {
+          for (const w of record.writes) {
+            let rel2 = w.path;
+            for (const m of record.moves)
+              if (rel2.startsWith(m.from + "/"))
+                rel2 = m.to + rel2.slice(m.from.length);
+            const b = stackRead(source.realpath, rel2, true);
+            if (b !== null !== w.after_exists || stackHash(b ?? "") !== w.after_hash)
+              return false;
+          }
+          for (const m of record.moves) {
+            if (fs70.existsSync(stackContained(source.realpath, m.from, true)) || !fs70.existsSync(stackContained(source.realpath, m.to)))
+              return false;
+          }
+          const domain = this.domain(source);
+          for (const ref of record.expected_after)
+            domain.resolve(ref);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+      receiptP05(source, record, id, state = "applied", error = null) {
+        if (state === "applied" && !this.p05Outcome(source, record))
+          throw new StackError("recovery_required", "Cannot attest incomplete domain write", 409);
+        const domain = this.domain(source), touched = [];
+        for (const w of record.writes) {
+          let rel2 = w.path;
+          for (const m of record.moves)
+            if (rel2.startsWith(m.from + "/"))
+              rel2 = m.to + rel2.slice(m.from.length);
+          if (w.after_exists)
+            touched.push(domain.evidence(rel2));
+        }
+        for (const m of record.moves)
+          for (const rel2 of domain.files(m.to))
+            if (!touched.some((e) => e.path === rel2.slice(7)))
+              touched.push(domain.evidence(rel2));
+        const value = { schema_version: "guild.stack.operation-receipt.v1", operation_id: id, operation: record.preview.operation, source_id: source.source_id, idempotency_key: record.apply_key, preview_hash: record.preview.preview_hash, producer: { id: "guild", version: this.packageIdentity().version }, state, before: record.preview.targets, after: record.expected_after, touched, validation: [], error, inverse_ref: null, closed_at: this.now().toISOString() };
+        this.validate("operation-receipt", value);
+        this.screenedWrite(source, this.artifactPath(id, "receipt"), JSON.stringify(value, null, 2) + "\n", id, true, true);
+        record.state = state === "applied" ? "succeeded" : "recovery_needed";
+        record.pid = null;
+        this.saveRuntime("operations/" + id + ".json", record, source);
+        return value;
+      }
+      validateStatus(value) {
+        this.transport("operation_status", value);
+        return value;
+      }
+      managedRuntime(source) {
+        return this.runtime("managed", source);
+      }
+      managedReview(record) {
+        return stackManagedReview(record, this.managed.policy_reason);
+      }
+      verifyManagedJournal(source, record) {
+        const p = record.preview;
+        if (!this.managed || p.source_id !== source.source_id || !this.managed.availability.includes(p.operation) || p.preview_hash !== stackPreviewHash(p) || record.stage.root !== source.realpath || p.diff.length !== 1 || p.diff[0].after_hash !== stackHash(stackCanonical(this.managedReview(record))) || record.launch.max_duration_ms !== p.budget.max_duration_ms || record.launch.max_usd !== p.budget.max_usd) throw new StackError("invalid_state", "Managed journal differs from reviewed authority", 409);
+      }
+      previewManaged(session, source, request) {
+        try {
+          this.validateSchema(stack_contracts_generated_default.catalog.operations.find((op) => op.id === request.operation).input_schema, request.arguments);
+        } catch {
+          throw new StackError("invalid_contract", "Managed arguments violate frozen P01 contract", 422);
+        }
+        return this.lock(source, () => {
+          if (!["run.start", "run.rerun"].includes(request.operation)) throw new StackError("operation_unavailable", "Managed control requires recorded session/attempt qualification", 503);
+          const key = "idempotency/" + stackHash(request.idempotency_key).slice(7) + ".json", fingerprint2 = stackHash(stackCanonical(request));
+          try {
+            const prior = this.loadRuntime(key, source);
+            if (prior.fingerprint !== fingerprint2) throw new StackError("idempotency_conflict", "Key already used", 409);
+            return this.loadRuntime("operations/" + prior.operation_id + ".json", source).preview;
+          } catch (error) {
+            if (!(error instanceof StackError && error.code === "not_found")) throw error;
+          }
+          const args = request.arguments, config = this.config(source), workflow = this.workflows(source).find((row) => stackCanonical(row.ref) === stackCanonical(args.workflow));
+          if (!workflow || args.workflow.source_id !== source.source_id || args.config_hash !== config.data.effective_hash) throw new StackError("stale_preview", "Exact current workflow and effective configuration required", 409);
+          const parent = request.operation === "run.rerun" ? request.targets.length === 1 ? this.domain(source).run(request.targets[0].id) : null : null;
+          if (request.operation === "run.start" && request.targets.length || request.operation === "run.rerun" && (!parent || stackCanonical(parent.ref) !== stackCanonical(request.targets[0]))) throw new StackError("stale_target", "Exact source-qualified parent required", 409);
+          const initiative = args.initiative === null ? null : this.domain(source).initiative(args.initiative.id);
+          if (initiative && stackCanonical(initiative.ref) !== stackCanonical(args.initiative)) throw new StackError("stale_target", "Exact source-qualified initiative required", 409);
+          const native_session_id = (0, import_node_crypto6.randomUUID)();
+          const resolved = this.managed.resolve({ source, operation: request.operation, arguments: args, native_session_id });
+          if (resolved.launch.cwd !== source.realpath || resolved.launch.max_duration_ms !== args.max_duration_ms || resolved.launch.max_usd !== args.max_usd || resolved.launch.host_id !== args.host_id || resolved.launch.model !== args.model) throw new StackError("invalid_host_plan", "Host plan differs from reviewed arguments", 409);
+          const env = createRealEnv(source.realpath, (requested) => ({ requested, resolved: resolved.launch.host_id.startsWith("claude") ? "claude" : "codex" }));
+          env.now = () => this.now().toISOString();
+          const stage = createRunLifecycle(env).stageRunStart({ command: "/guild:build", arguments: { brief: args.brief, workflow: args.workflow.id }, cwd: source.realpath, root: source.realpath, target_kind: "existing_guild_project", workspace: { is_workspace: source.kind === "workspace", root: source.realpath }, project: path83.basename(source.realpath), host_requested: resolved.launch.host_id.startsWith("claude") ? "claude" : "codex", model_tier_policy: "explicit", ignore_policy: "project", scan_policy: "none", initiative: initiative?.ref.id ?? null, session_identity: { envelope_host: resolved.launch.host_id.startsWith("claude") ? "claude" : "codex", active_model: resolved.launch.model } }, { detached: true });
+          const id = "op-" + (0, import_node_crypto6.randomUUID)(), record = { schema_version: "guild.stack.managed_operation_journal.v1", native_session_id, stage, launch: resolved.launch, worker: resolved.worker, attempt_id: "attempt-" + (0, import_node_crypto6.randomUUID)(), parent: parent?.ref ?? null, parent_attempt_id: parent?.data.attempt?.attempt_id ?? null, state: "previewed", pid: null, apply_key: null, identity: null };
+          const target = { source_id: source.source_id, kind: "run", id: stage.run_id, revision: stackHash("") }, review = this.managedReview(record);
+          const p = { schema_version: "guild.stack.operation-preview.v1", operation_id: id, operation: request.operation, session_id: session.session_id, source_id: source.source_id, targets: parent ? [parent.ref] : [target], dependencies: [workflow.ref, config.ref, ...initiative ? [initiative.ref] : []], arguments: args, diff: [{ target, before_hash: stackHash(""), after_hash: stackHash(stackCanonical(review)), patch: JSON.stringify(review) }], policy: { decision: "allowed", revision: this.policy(source).revision, reason: this.managed.policy_reason }, approval_required: true, preview_hash: "", scope_revision: source.revision, capability_revision: stackHash(stackCanonical(this.capabilities())), expires_at: new Date(Math.min(this.now().getTime() + 6e5, Date.parse(session.expires_at))).toISOString(), rollback: "handoff", budget: { max_usd: args.max_usd, max_duration_ms: args.max_duration_ms } };
+          p.preview_hash = stackPreviewHash(p);
+          this.validate("operation-preview", p);
+          record.preview = p;
+          this.verifyManagedJournal(source, record);
+          this.saveRuntime("operations/" + id + ".json", record, source);
+          this.saveRuntime(key, { fingerprint: fingerprint2, operation_id: id }, source);
+          return p;
+        });
+      }
+      freshManaged(source, record) {
+        this.verifyManagedJournal(source, record);
+        const p = record.preview;
+        const deps = [...this.workflows(source).map((row) => row.ref), this.config(source).ref, ...this.domain(source).initiatives().map((row) => row.ref)];
+        if (p.dependencies.some((ref) => !deps.some((current2) => stackCanonical(ref) === stackCanonical(current2)))) throw new StackError("stale_preview", "Managed dependency changed", 409);
+        if (record.parent && stackCanonical(this.domain(source).run(record.parent.id).ref) !== stackCanonical(record.parent)) throw new StackError("stale_target", "Rerun parent changed", 409);
+        for (const read of record.stage.read_set) if (stackRead(source.realpath, read.path, true) !== read.bytes) throw new StackError("stale_preview", "Lifecycle read set changed", 409);
+        const current = this.managed.resolve({ source, operation: p.operation, arguments: p.arguments, native_session_id: record.native_session_id });
+        if (stackCanonical(current) !== stackCanonical({ launch: record.launch, worker: record.worker })) throw new StackError("stale_preview", "Host binary/package/launch changed", 409);
+      }
+      applyManaged(source, record) {
+        const runtime = this.managedRuntime(source), p = record.preview;
+        this.managed.checkAdmission?.(runtime, record.launch);
+        const claim = claimManagedAttempt(runtime, { source_id: source.source_id, operation_id: p.operation_id, run_id: record.stage.run_id, attempt_id: record.attempt_id, launch_hash: managedLaunchHash(record.launch), max_duration_ms: record.launch.max_duration_ms });
+        record.identity = claim.identity;
+        record.pid = null;
+        this.saveRuntime("operations/" + p.operation_id + ".json", record, source);
+        if (!claim.created) throw new StackError("recovery_required", "Managed claim already exists; never automatically dispatch again", 409);
+        createRunLifecycle(createRealEnv(source.realpath, (requested) => ({ requested, resolved: record.launch.host_id.startsWith("claude") ? "claude" : "codex" }))).materializeRunStart(record.stage);
+        const launch = { schema_version: "guild.stack.managed_launch.v1", source_id: source.source_id, run_id: record.stage.run_id, operation_id: p.operation_id, operation: p.operation, attempt_id: record.attempt_id, classification: record.launch.classification, profile: record.launch.profile ?? null, host_binary_sha256: record.launch.binary_sha256, policy_sha256: record.launch.policy_sha256 ?? null, budget_mode: record.launch.budget_mode ?? "strict", cost_basis: record.launch.budget_mode === "native_estimated_spend_threshold" ? "api_equivalent_native_estimate" : "unknown", preview_hash: p.preview_hash, arguments: p.arguments, native_session_id: record.native_session_id, parent_run: record.parent, parent_attempt_id: record.parent_attempt_id ?? null, launch_hash: record.identity.launch_hash, worker: { node_sha256: record.worker.node_sha256, entry_sha256: record.worker.entry_sha256 }, budget_semantics: p.policy.reason };
+        this.screenedWrite(source, ".guild/runs/" + record.stage.run_id + "/launch.json", JSON.stringify(launch, null, 2) + "\n", p.operation_id, true);
+        prepareManagedWorker(runtime, { sourceRoot: source.realpath, identity: claim.identity, launch: record.launch, worker: record.worker });
+        this.managed.launch(runtime, claim.identity, record.worker);
+        return this.validateStatus({ schema_version: "guild.stack.operation_status.v1", operation_id: p.operation_id, source_id: source.source_id, state: "running", receipt: null, generation: 0 });
+      }
+      statusManaged(source, record) {
+        const p = record.preview;
+        let receipt2 = null, state = record.state === "previewed" ? "queued" : record.state;
+        const bytes = stackRead(source.realpath, this.artifactPath(p.operation_id, "receipt"), true);
+        if (bytes) {
+          receipt2 = JSON.parse(bytes);
+          this.verifyReceipt(source, record, receipt2);
+          state = "succeeded";
+        } else if (record.identity) {
+          const claim = readManagedAttempt(this.managedRuntime(source), record.identity.attempt_id);
+          if (stackCanonical(claim.identity) !== stackCanonical(record.identity)) throw new StackError("invalid_state", "Managed claim changed", 409);
+          if (claim.host) {
+            receipt2 = { schema_version: "guild.stack.operation-receipt.v1", operation_id: p.operation_id, operation: p.operation, source_id: source.source_id, idempotency_key: record.apply_key, preview_hash: p.preview_hash, producer: { id: "guild", version: this.packageIdentity().version }, state: "applied", before: p.targets, after: [this.domain(source).run(record.stage.run_id).ref], touched: [this.evidence(source, ".guild/runs/" + record.stage.run_id + "/attempts/" + record.attempt_id + "/intent.json")], validation: [], error: null, inverse_ref: null, closed_at: this.now().toISOString() };
+            this.validate("operation-receipt", receipt2);
+            this.screenedWrite(source, this.artifactPath(p.operation_id, "receipt"), JSON.stringify(receipt2, null, 2) + "\n", p.operation_id, true, true);
+            record.state = "succeeded";
+            this.saveRuntime("operations/" + p.operation_id + ".json", record, source);
+            state = "succeeded";
+          } else {
+            let owned = false;
+            try {
+              owned = this.managed?.workerStatus?.(this.managedRuntime(source), record.identity) === "alive";
+            } catch {
+            }
+            const reconciled = reconcileManagedAttempt(this.managedRuntime(source), record.identity, { verifyOwnedWorker: () => owned });
+            if (reconciled.state === "recovery_needed") {
+              markManagedAttemptUncertain(this.managedRuntime(source), record.identity);
+              record.state = "recovery_needed";
+              record.pid = null;
+              this.saveRuntime("operations/" + p.operation_id + ".json", record, source);
+              state = "recovery_needed";
+            }
+          }
+        }
+        return this.validateStatus({ schema_version: "guild.stack.operation_status.v1", operation_id: p.operation_id, source_id: source.source_id, state, receipt: receipt2, generation: 0 });
+      }
+      dispatch(input) {
+        if (!plain(input) || typeof input.action !== "string")
+          throw new StackError("invalid_request", "Expected a typed Stack action");
+        if (input.action === "read") return this.readP05(input);
+        const shape = stack_contracts_generated_default.transport.actions[input.action];
+        if (!shape)
+          throw new StackError(
+            "unknown_action",
+            "Action is not in the packaged facade",
+            404
+          );
+        const permitted = /* @__PURE__ */ new Set(["action", ...Object.keys(shape)]);
+        if (Object.keys(input).some((k) => !permitted.has(k)))
+          throw new StackError("invalid_request", "Unknown action field");
+        switch (input.action) {
+          case "bind":
+            return this.bind();
+          case "session":
+            return this.session(input.session_id);
+          case "capabilities":
+            this.session(input.session_id);
+            return this.capabilities();
+          case "list":
+            return this.projection(input);
+          case "inspect":
+            return this.projection(input, true);
+          case "preview":
+            return this.preview(input.request);
+          case "decide":
+            return this.decide(input);
+          case "apply":
+            return this.apply(input);
+          case "status":
+            return this.status(input);
+          case "cancel":
+            return this.status(input, true);
+          default:
+            throw new StackError("unknown_action", "Unsupported action");
+        }
+      }
+    };
+  }
+});
+
+// src/domains/lifecycle/stack-p05.schemas.json
+var stack_p05_schemas_default;
+var init_stack_p05_schemas = __esm({
+  "src/domains/lifecycle/stack-p05.schemas.json"() {
+    stack_p05_schemas_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/p05/v1/domain.schema.json",
+      $defs: {
+        read_request: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.p05.read_request.v1"
+            },
+            action: {
+              const: "read"
+            },
+            session_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+            },
+            source_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+            },
+            operation: {
+              enum: [
+                "initiative.list",
+                "initiative.inspect",
+                "initiative.close_check",
+                "decision.list",
+                "decision.inspect",
+                "run.list",
+                "run.inspect",
+                "run.trace",
+                "run.artifacts"
+              ]
+            },
+            arguments: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+            }
+          },
+          required: [
+            "schema_version",
+            "action",
+            "session_id",
+            "source_id",
+            "operation",
+            "arguments"
+          ],
+          additionalProperties: false
+        },
+        decision_event: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.initiative_decision_event.v1"
+            },
+            event_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+            },
+            decision_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+            },
+            initiative_id: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+            },
+            sequence: {
+              type: "integer",
+              minimum: 1
+            },
+            previous_event_hash: {
+              oneOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            event: {
+              enum: [
+                "proposed",
+                "approved",
+                "rejected",
+                "superseded"
+              ]
+            },
+            created_at: {
+              type: "string",
+              format: "date-time"
+            },
+            title: {
+              type: "string",
+              minLength: 1,
+              maxLength: 65536
+            },
+            rationale: {
+              type: "string",
+              minLength: 1,
+              maxLength: 65536
+            },
+            alternatives: {
+              type: "array",
+              items: {
+                type: "string",
+                minLength: 1,
+                maxLength: 65536
+              },
+              maxItems: 200
+            },
+            evidence: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              },
+              maxItems: 200
+            },
+            supersedes: {
+              oneOf: [
+                {
+                  type: "object",
+                  properties: {
+                    decision_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    event_hash: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                    }
+                  },
+                  required: [
+                    "decision_id",
+                    "event_hash"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            replacement: {
+              oneOf: [
+                {
+                  type: "object",
+                  properties: {
+                    decision_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    event_hash: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                    }
+                  },
+                  required: [
+                    "decision_id",
+                    "event_hash"
+                  ],
+                  additionalProperties: false
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            operation: {
+              type: "object",
+              properties: {
+                operation_id: {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                approval: {
+                  type: "object",
+                  properties: {
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    path: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/relative_path"
+                    }
+                  },
+                  required: [
+                    "source_id",
+                    "path"
+                  ],
+                  additionalProperties: false
+                },
+                receipt: {
+                  type: "object",
+                  properties: {
+                    source_id: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                    },
+                    path: {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/relative_path"
+                    }
+                  },
+                  required: [
+                    "source_id",
+                    "path"
+                  ],
+                  additionalProperties: false
+                }
+              },
+              required: [
+                "operation_id",
+                "approval",
+                "receipt"
+              ],
+              additionalProperties: false
+            }
+          },
+          required: [
+            "schema_version",
+            "event_id",
+            "decision_id",
+            "initiative_id",
+            "sequence",
+            "previous_event_hash",
+            "event",
+            "created_at",
+            "title",
+            "rationale",
+            "alternatives",
+            "evidence",
+            "supersedes",
+            "replacement",
+            "operation"
+          ],
+          additionalProperties: false
+        },
+        decision_proposal_body: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.initiative_decision_proposal.v1"
+            },
+            initiative: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+            },
+            rationale: {
+              type: "string",
+              minLength: 1,
+              maxLength: 65536
+            },
+            alternatives: {
+              type: "array",
+              items: {
+                type: "string",
+                minLength: 1,
+                maxLength: 65536
+              },
+              maxItems: 200
+            },
+            evidence: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              },
+              maxItems: 200
+            }
+          },
+          required: [
+            "schema_version",
+            "initiative",
+            "rationale",
+            "alternatives",
+            "evidence"
+          ],
+          additionalProperties: false
+        },
+        initiative_revision_body: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.initiative_revision.v1"
+            },
+            manifest: {
+              type: "object"
+            },
+            definition_items: {
+              type: "array",
+              items: {
+                type: "object"
+              },
+              maxItems: 200
+            },
+            work_items: {
+              type: "array",
+              items: {
+                type: "object"
+              },
+              maxItems: 200
+            },
+            close_gate: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/p05/v1/domain.schema.json#/$defs/close_gate_input"
+            }
+          },
+          required: [
+            "schema_version",
+            "manifest",
+            "definition_items",
+            "work_items",
+            "close_gate"
+          ],
+          additionalProperties: false
+        },
+        axes: {
+          type: "object",
+          properties: {
+            definition: {
+              type: "object",
+              properties: {
+                raw: {
+                  type: [
+                    "string",
+                    "null"
+                  ],
+                  maxLength: 4096
+                },
+                value: {
+                  enum: [
+                    "incomplete",
+                    "assumed",
+                    "complete",
+                    null
+                  ]
+                },
+                normalization: {
+                  enum: [
+                    "canonical",
+                    "documented_alias",
+                    "unsupported",
+                    "missing"
+                  ]
+                }
+              },
+              required: [
+                "raw",
+                "value",
+                "normalization"
+              ],
+              additionalProperties: false
+            },
+            execution: {
+              type: "object",
+              properties: {
+                raw: {
+                  type: [
+                    "string",
+                    "null"
+                  ],
+                  maxLength: 4096
+                },
+                value: {
+                  enum: [
+                    "not_started",
+                    "active",
+                    "blocked",
+                    "done",
+                    null
+                  ]
+                },
+                normalization: {
+                  enum: [
+                    "canonical",
+                    "documented_alias",
+                    "unsupported",
+                    "missing"
+                  ]
+                }
+              },
+              required: [
+                "raw",
+                "value",
+                "normalization"
+              ],
+              additionalProperties: false
+            },
+            release: {
+              type: "object",
+              properties: {
+                raw: {
+                  type: [
+                    "string",
+                    "null"
+                  ],
+                  maxLength: 4096
+                },
+                value: {
+                  enum: [
+                    "not_released",
+                    "release_candidate",
+                    "released",
+                    "rollback_required",
+                    null
+                  ]
+                },
+                normalization: {
+                  enum: [
+                    "canonical",
+                    "documented_alias",
+                    "unsupported",
+                    "missing"
+                  ]
+                }
+              },
+              required: [
+                "raw",
+                "value",
+                "normalization"
+              ],
+              additionalProperties: false
+            },
+            documentation: {
+              type: "object",
+              properties: {
+                raw: {
+                  type: [
+                    "string",
+                    "null"
+                  ],
+                  maxLength: 4096
+                },
+                value: {
+                  enum: [
+                    "not_assessed",
+                    "no_update_required",
+                    "update_required",
+                    "updated",
+                    "stale",
+                    null
+                  ]
+                },
+                normalization: {
+                  enum: [
+                    "canonical",
+                    "documented_alias",
+                    "unsupported",
+                    "missing"
+                  ]
+                }
+              },
+              required: [
+                "raw",
+                "value",
+                "normalization"
+              ],
+              additionalProperties: false
+            }
+          },
+          required: [
+            "definition",
+            "execution",
+            "release",
+            "documentation"
+          ],
+          additionalProperties: false
+        },
+        issue: {
+          type: "object",
+          properties: {
+            code: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+            },
+            message: {
+              type: "string",
+              minLength: 1,
+              maxLength: 65536
+            },
+            evidence: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+              },
+              maxItems: 200
+            }
+          },
+          required: [
+            "code",
+            "message",
+            "evidence"
+          ],
+          additionalProperties: false
+        },
+        page: {
+          type: "object",
+          properties: {
+            next_cursor: {
+              type: [
+                "string",
+                "null"
+              ],
+              maxLength: 2048
+            },
+            total: {
+              type: [
+                "integer",
+                "null"
+              ],
+              minimum: 0
+            },
+            partial: {
+              type: "boolean"
+            }
+          },
+          required: [
+            "next_cursor",
+            "total",
+            "partial"
+          ],
+          additionalProperties: false
+        },
+        decision_authority: {
+          oneOf: [
+            {
+              type: "null"
+            },
+            {
+              type: "object",
+              properties: {
+                status: {
+                  enum: [
+                    "verified",
+                    "pending",
+                    "missing",
+                    "invalid"
+                  ]
+                },
+                actor: {
+                  type: [
+                    "string",
+                    "null"
+                  ],
+                  minLength: 1,
+                  maxLength: 65536
+                },
+                approval: {
+                  oneOf: [
+                    {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                    },
+                    {
+                      type: "null"
+                    }
+                  ]
+                },
+                receipt: {
+                  oneOf: [
+                    {
+                      $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                    },
+                    {
+                      type: "null"
+                    }
+                  ]
+                }
+              },
+              required: [
+                "status",
+                "actor",
+                "approval",
+                "receipt"
+              ],
+              additionalProperties: false,
+              allOf: [
+                {
+                  if: {
+                    properties: {
+                      status: {
+                        const: "verified"
+                      }
+                    }
+                  },
+                  then: {
+                    properties: {
+                      actor: {
+                        type: "string",
+                        minLength: 1
+                      },
+                      approval: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                      },
+                      receipt: {
+                        $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                      }
+                    }
+                  },
+                  else: {
+                    properties: {
+                      actor: {
+                        type: "null"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        close_gate_input: {
+          type: "object",
+          properties: {
+            evidence: {
+              type: "array",
+              items: {
+                $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/relative_path"
+              },
+              maxItems: 200,
+              uniqueItems: true
+            }
+          },
+          required: [
+            "evidence"
+          ],
+          additionalProperties: false
+        }
+      }
+    };
+  }
+});
+
+// src/domains/lifecycle/managed-run.schemas.json
+var managed_run_schemas_default;
+var init_managed_run_schemas = __esm({
+  "src/domains/lifecycle/managed-run.schemas.json"() {
+    managed_run_schemas_default = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: "https://guildstack.dev/contracts/guild-stack/p05/v1/managed-run.schema.json",
+      $defs: {
+        identity: {
+          type: "object",
+          properties: {
+            source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            operation_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            run_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            attempt_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            launch_hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            max_duration_ms: {
+              type: "integer",
+              minimum: 1
+            },
+            nonce_hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          required: [
+            "source_id",
+            "operation_id",
+            "run_id",
+            "attempt_id",
+            "launch_hash",
+            "max_duration_ms",
+            "nonce_hash"
+          ],
+          additionalProperties: false
+        },
+        usage: {
+          type: "object",
+          properties: {
+            state: {
+              enum: [
+                "unknown",
+                "observed_native_estimate"
+              ]
+            },
+            cost_usd: {
+              type: [
+                "number",
+                "null"
+              ],
+              minimum: 0
+            },
+            basis: {
+              type: "string"
+            },
+            native_session_id: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            model: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            result_subtype: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            cumulative_estimate_usd: {
+              type: [
+                "number",
+                "null"
+              ],
+              minimum: 0
+            },
+            usage: {
+              type: "object",
+              additionalProperties: {
+                type: "integer",
+                minimum: 0
+              }
+            },
+            result_sha256: {
+              anyOf: [
+                {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            parser: {
+              type: "string"
+            },
+            reason: {
+              type: "string"
+            }
+          },
+          required: [
+            "state",
+            "cost_usd",
+            "basis"
+          ],
+          additionalProperties: false
+        },
+        outcome: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.managed_run_outcome.v1"
+            },
+            source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            run_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            attempt_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            state: {
+              enum: [
+                "exited",
+                "cancelled",
+                "timed_out",
+                "recovery_needed"
+              ]
+            },
+            exit_code: {
+              type: [
+                "integer",
+                "null"
+              ]
+            },
+            signal: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            admitted_at: {
+              type: "string"
+            },
+            ended_at: {
+              type: "string"
+            },
+            deadline_at: {
+              type: "string"
+            },
+            classification: {
+              enum: [
+                "local_process_test",
+                "qualification_probe",
+                "qualified_host"
+              ]
+            },
+            output: {
+              type: "object",
+              properties: {
+                bytes: {
+                  type: "integer",
+                  minimum: 0
+                },
+                hashed_bytes: {
+                  type: "integer",
+                  minimum: 0,
+                  maximum: 1048576
+                },
+                retained_bytes: {
+                  const: 0
+                },
+                prefix_sha256: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              required: [
+                "bytes",
+                "hashed_bytes",
+                "retained_bytes",
+                "prefix_sha256"
+              ],
+              additionalProperties: false
+            },
+            usage: {
+              type: "object",
+              properties: {
+                state: {
+                  enum: [
+                    "unknown",
+                    "observed_native_estimate"
+                  ]
+                },
+                cost_usd: {
+                  type: [
+                    "number",
+                    "null"
+                  ],
+                  minimum: 0
+                },
+                basis: {
+                  type: "string"
+                },
+                native_session_id: {
+                  type: [
+                    "string",
+                    "null"
+                  ]
+                },
+                model: {
+                  type: [
+                    "string",
+                    "null"
+                  ]
+                },
+                result_subtype: {
+                  type: [
+                    "string",
+                    "null"
+                  ]
+                },
+                cumulative_estimate_usd: {
+                  type: [
+                    "number",
+                    "null"
+                  ],
+                  minimum: 0
+                },
+                usage: {
+                  type: "object",
+                  additionalProperties: {
+                    type: "integer",
+                    minimum: 0
+                  }
+                },
+                result_sha256: {
+                  anyOf: [
+                    {
+                      type: "string",
+                      pattern: "^sha256:[a-f0-9]{64}$"
+                    },
+                    {
+                      type: "null"
+                    }
+                  ]
+                },
+                parser: {
+                  type: "string"
+                },
+                reason: {
+                  type: "string"
+                }
+              },
+              required: [
+                "state",
+                "cost_usd",
+                "basis"
+              ],
+              additionalProperties: false
+            }
+          },
+          required: [
+            "schema_version",
+            "source_id",
+            "run_id",
+            "attempt_id",
+            "state",
+            "exit_code",
+            "signal",
+            "admitted_at",
+            "ended_at",
+            "deadline_at",
+            "classification",
+            "output",
+            "usage"
+          ],
+          additionalProperties: false
+        },
+        intent: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.managed_run_intent.v1"
+            },
+            source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            operation_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            run_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            attempt_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            launch_hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            max_duration_ms: {
+              type: "integer",
+              minimum: 1
+            },
+            nonce_hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            deadline_derivation: {
+              const: "admitted_at + max_duration_ms"
+            },
+            classification: {
+              enum: [
+                "local_process_test",
+                "qualification_probe",
+                "qualified_host"
+              ]
+            },
+            host_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            model: {
+              type: "string"
+            },
+            binary_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            budget: {
+              type: "object",
+              properties: {
+                mode: {
+                  enum: [
+                    "no_model_test",
+                    "strict",
+                    "native_estimated_spend_threshold"
+                  ]
+                },
+                max_usd: {
+                  type: "number",
+                  minimum: 0
+                },
+                cost_basis: {
+                  type: "string"
+                },
+                in_flight_overshoot_possible: {
+                  type: "boolean"
+                },
+                strict_actual_billing_ceiling: {
+                  type: "boolean"
+                }
+              },
+              required: [
+                "mode",
+                "max_usd",
+                "cost_basis",
+                "in_flight_overshoot_possible",
+                "strict_actual_billing_ceiling"
+              ],
+              additionalProperties: false
+            },
+            native_session_id: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            policy_sha256: {
+              anyOf: [
+                {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            }
+          },
+          required: [
+            "schema_version",
+            "source_id",
+            "operation_id",
+            "run_id",
+            "attempt_id",
+            "launch_hash",
+            "max_duration_ms",
+            "nonce_hash",
+            "deadline_derivation",
+            "classification",
+            "host_id",
+            "model",
+            "binary_sha256",
+            "budget",
+            "native_session_id",
+            "policy_sha256"
+          ],
+          additionalProperties: false
+        },
+        private_claim: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.managed_private_claim.v1"
+            },
+            identity: {
+              $ref: "#/$defs/identity"
+            },
+            worker_nonce: {
+              type: "string",
+              pattern: "^[a-f0-9]{64}$"
+            },
+            admitted_at: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            deadline_at: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            state: {
+              enum: [
+                "claimed",
+                "running",
+                "recovery_needed",
+                "exited",
+                "cancelled",
+                "timed_out"
+              ]
+            },
+            worker: {
+              type: [
+                "object",
+                "null"
+              ]
+            },
+            host: {
+              type: [
+                "object",
+                "null"
+              ]
+            },
+            outcome: {
+              anyOf: [
+                {
+                  $ref: "#/$defs/outcome"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            }
+          },
+          required: [
+            "schema_version",
+            "identity",
+            "worker_nonce",
+            "admitted_at",
+            "deadline_at",
+            "state",
+            "worker",
+            "host",
+            "outcome"
+          ],
+          additionalProperties: false
+        },
+        private_acceptance: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.managed_private_acceptance.v1"
+            },
+            identity: {
+              $ref: "#/$defs/identity"
+            },
+            accepted_at: {
+              type: "string",
+              format: "date-time"
+            },
+            worker_pid: {
+              type: "integer",
+              minimum: 1
+            },
+            worker_start_identity: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            worker: {
+              type: "object",
+              properties: {
+                node_binary: {
+                  type: "string"
+                },
+                node_sha256: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                },
+                entry: {
+                  type: "string"
+                },
+                entry_sha256: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              required: [
+                "node_binary",
+                "node_sha256",
+                "entry",
+                "entry_sha256"
+              ],
+              additionalProperties: false
+            }
+          },
+          required: [
+            "schema_version",
+            "identity",
+            "accepted_at",
+            "worker_pid",
+            "worker_start_identity",
+            "worker"
+          ],
+          additionalProperties: false
+        },
+        launch: {
+          type: "object",
+          properties: {
+            schema_version: {
+              const: "guild.stack.managed_launch.v1"
+            },
+            source_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            run_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            operation_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            operation: {
+              enum: [
+                "run.start",
+                "run.rerun"
+              ]
+            },
+            attempt_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            classification: {
+              enum: [
+                "local_process_test",
+                "qualification_probe",
+                "qualified_host"
+              ]
+            },
+            profile: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+            host_binary_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            policy_sha256: {
+              anyOf: [
+                {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            budget_mode: {
+              enum: [
+                "strict",
+                "native_estimated_spend_threshold"
+              ]
+            },
+            cost_basis: {
+              enum: [
+                "unknown",
+                "api_equivalent_native_estimate"
+              ]
+            },
+            preview_hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            arguments: {
+              $ref: "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/launch"
+            },
+            native_session_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            parent_run: {
+              anyOf: [
+                {
+                  $ref: "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            parent_attempt_id: {
+              anyOf: [
+                {
+                  type: "string",
+                  pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                {
+                  type: "null"
+                }
+              ]
+            },
+            launch_hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            worker: {
+              type: "object",
+              properties: {
+                node_sha256: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                },
+                entry_sha256: {
+                  type: "string",
+                  pattern: "^sha256:[a-f0-9]{64}$"
+                }
+              },
+              required: [
+                "node_sha256",
+                "entry_sha256"
+              ],
+              additionalProperties: false
+            },
+            budget_semantics: {
+              type: "string"
+            }
+          },
+          required: [
+            "schema_version",
+            "source_id",
+            "run_id",
+            "operation_id",
+            "operation",
+            "attempt_id",
+            "classification",
+            "profile",
+            "host_binary_sha256",
+            "policy_sha256",
+            "budget_mode",
+            "cost_basis",
+            "preview_hash",
+            "arguments",
+            "native_session_id",
+            "parent_run",
+            "parent_attempt_id",
+            "launch_hash",
+            "worker",
+            "budget_semantics"
+          ],
+          additionalProperties: false
+        },
+        observed_proof: {
+          type: "object",
+          properties: {
+            operation: {
+              enum: [
+                "run.start",
+                "run.rerun"
+              ]
+            },
+            operation_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            run_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            attempt_id: {
+              type: "string",
+              pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            preview_hash: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            launch_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            outcome_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            intent_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            approval_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            receipt_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            },
+            admission_sha256: {
+              type: "string",
+              pattern: "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          required: [
+            "operation",
+            "operation_id",
+            "run_id",
+            "attempt_id",
+            "preview_hash",
+            "launch_sha256",
+            "outcome_sha256",
+            "intent_sha256",
+            "approval_sha256",
+            "receipt_sha256",
+            "admission_sha256"
+          ],
+          additionalProperties: false
+        }
+      }
+    };
   }
 });
 
@@ -46978,6 +59412,7 @@ __export(lifecycle_exports, {
   ResolvedSettingsIntegrityError: () => ResolvedSettingsIntegrityError,
   SPEC_REQUIREMENT_PRIORITIES: () => SPEC_REQUIREMENT_PRIORITIES,
   SUPPORTED_DOCUMENT_SCHEMA_VERSIONS: () => SUPPORTED_DOCUMENT_SCHEMA_VERSIONS,
+  StackFacade: () => StackFacade,
   THRESHOLD: () => THRESHOLD,
   TOOL_CALL_TOOL_VALUES: () => TOOL_CALL_TOOL_VALUES,
   TRACE_EVENT_SCHEMA: () => TRACE_EVENT_SCHEMA,
@@ -47012,6 +59447,7 @@ __export(lifecycle_exports, {
   archivePath: () => archivePath,
   assembleNeutralConformanceEvidence: () => assembleNeutralConformanceEvidence,
   assertCanonicalRunId: () => assertCanonicalRunId,
+  assertManagedBudgetAdmission: () => assertManagedBudgetAdmission,
   assertNoPendingSubstantiveOperation: () => assertNoPendingSubstantiveOperation,
   assertSafeLaneId: () => assertSafeLaneId,
   assertSafeRunId: () => assertSafeRunId,
@@ -47019,6 +59455,7 @@ __export(lifecycle_exports, {
   bindWorkClass: () => bindWorkClass,
   bindWorkflowCursor: () => bindWorkflowCursor,
   blockingUnresolved: () => blockingUnresolved,
+  buildD8Input: () => buildD8Input,
   buildMultiWaveProgram: () => buildMultiWaveProgram,
   buildOrphanedToolCall: () => buildOrphanedToolCall,
   buildToolCallFromPair: () => buildToolCallFromPair,
@@ -47026,9 +59463,11 @@ __export(lifecycle_exports, {
   calcDelayMs: () => calcDelayMs,
   canonicalDocumentJson: () => canonicalDocumentJson,
   capabilityRunStartIdentityHash: () => capabilityRunStartIdentityHash,
+  checkInitiativeEvidenceRefs: () => checkInitiativeEvidenceRefs,
   checkMalformedStreak: () => checkMalformedStreak,
   checkRestartCap: () => checkRestartCap,
   checkRoundCap: () => checkRoundCap,
+  claimManagedAttempt: () => claimManagedAttempt,
   classifyIntake: () => classifyIntake,
   classifyProposal: () => classifyProposal,
   classifyWorkClass: () => classifyWorkClass,
@@ -47117,6 +59556,7 @@ __export(lifecycle_exports, {
   liveLogPath: () => liveLogPath2,
   loadAllClassGraphs: () => loadAllClassGraphs,
   loadClassGraph: () => loadClassGraph,
+  loadInitiativeManifest: () => loadInitiativeManifest,
   loadLaneResumeCheckpoint: () => loadLaneResumeCheckpoint,
   loadRetryOpts: () => loadRetryOpts,
   loadRunBinding: () => loadRunBinding,
@@ -47128,11 +59568,14 @@ __export(lifecycle_exports, {
   makeActivityRow: () => makeActivityRow,
   makeCanonicalRunId: () => makeCanonicalRunId,
   makeRoundState: () => makeRoundState,
+  managedLaunchHash: () => managedLaunchHash,
+  managedNonceMatches: () => managedNonceMatches,
   manifestPathFor: () => manifestPathFor,
   mapLegacyNeutralEventName: () => mapLegacyNeutralEventName,
   markLaneDead: () => markLaneDead,
   markLaneDeadFromArgs: () => markLaneDeadFromArgs,
   markLaneInProgress: () => markLaneInProgress,
+  markManagedAttemptUncertain: () => markManagedAttemptUncertain,
   mh07ScanDependencyGraph: () => mh07ScanDependencyGraph,
   mh07UnclassifiedSources: () => mh07UnclassifiedSources,
   migrateDocumentRecord: () => migrateDocumentRecord,
@@ -47174,6 +59617,7 @@ __export(lifecycle_exports, {
   persistTmuxTeamArgv: () => persistTmuxTeamArgv,
   pluginGraphPath: () => pluginGraphPath,
   populateReleaseDocsWorkItems: () => populateReleaseDocsWorkItems,
+  prepareManagedWorker: () => prepareManagedWorker,
   projectDocumentRecord: () => projectDocumentRecord,
   projectValidatedRecord: () => projectValidatedRecord,
   pruneUndefined: () => pruneUndefined,
@@ -47183,6 +59627,9 @@ __export(lifecycle_exports, {
   readArchive: () => readArchive,
   readHeartbeatAges: () => readHeartbeatAges,
   readHookBindingEnvelope: () => readHookBindingEnvelope,
+  readManagedAttempt: () => readManagedAttempt,
+  readManagedWorkerAcceptance: () => readManagedWorkerAcceptance,
+  readManagedWorkerRequest: () => readManagedWorkerRequest,
   readMigrationJournal: () => readMigrationJournal,
   readPendingSubstantiveOperation: () => readPendingSubstantiveOperation,
   readReceiptEvidence: () => readReceiptEvidence,
@@ -47199,6 +59646,8 @@ __export(lifecycle_exports, {
   readTaskRunCapReqs: () => readTaskRunCapReqs,
   readWorkflowCursor: () => readWorkflowCursor,
   readWorkspaceKnowledgeConfig: () => readWorkspaceKnowledgeConfig,
+  reconcileManagedAttempt: () => reconcileManagedAttempt,
+  recordManagedWorkerAcceptance: () => recordManagedWorkerAcceptance,
   renderDocumentHtml: () => renderDocumentHtml,
   renderValidatedRecordHtml: () => renderValidatedRecordHtml,
   reopenRunBinding: () => reopenRunBinding,
@@ -47217,6 +59666,7 @@ __export(lifecycle_exports, {
   runClassifyProposalCli: () => runClassifyProposalCli,
   runEmitLoopEventCli: () => runEmitLoopEventCli,
   runIntakeSmoke: () => runIntakeSmoke,
+  runManagedWorker: () => runManagedWorker,
   runMarkLaneDeadCli: () => runMarkLaneDeadCli,
   runNeutralAssemblyControls: () => runNeutralAssemblyControls,
   runOwnerArchitectLoopCli: () => runOwnerArchitectLoopCli,
@@ -47242,6 +59692,12 @@ __export(lifecycle_exports, {
   snapshotLiveLog: () => snapshotLiveLog,
   sortIssues: () => sortIssues,
   stableLockPath: () => stableLockPath,
+  stackCanonical: () => stackCanonical,
+  stackContractBundle: () => stack_contracts_generated_default,
+  stackManagedReview: () => stackManagedReview,
+  stackManagedSchemas: () => managed_run_schemas_default,
+  stackP05Schemas: () => stack_p05_schemas_default,
+  stackPreviewHash: () => stackPreviewHash,
   stagePendingSubstantiveOperation: () => stagePendingSubstantiveOperation,
   summaryPath: () => summaryPath,
   sweepLaneLiveness: () => sweepLaneLiveness,
@@ -47255,6 +59711,7 @@ __export(lifecycle_exports, {
   unescapeHtmlStrict: () => unescapeHtmlStrict,
   unrecognizedNeutralHostFields: () => unrecognizedNeutralHostFields,
   unrecognizedNeutralIdentityFields: () => unrecognizedNeutralIdentityFields,
+  updateRunAttachment: () => updateRunAttachment,
   upsertLane: () => upsertLane,
   upsertWave: () => upsertWave,
   validateDefinitionItem: () => validateDefinitionItem,
@@ -47341,6 +59798,12 @@ var init_lifecycle = __esm({
     init_run_record_validate();
     init_run_state();
     init_trace_v2();
+    init_stack_operations();
+    init_stack_contracts_generated();
+    init_initiative_evidence();
+    init_stack_p05_schemas();
+    init_managed_run();
+    init_managed_run_schemas();
   }
 });
 
@@ -47367,9 +59830,9 @@ function guardWikiWrite(writerId, target) {
 }
 function assertThisCwdWiki(storage, absTarget) {
   const scope = storage.project ?? storage.workspace;
-  const wikiRoot2 = scope ? path79.resolve(scope.knowledge()) : null;
-  const resolved = path79.resolve(absTarget);
-  if (wikiRoot2) fs66.mkdirSync(wikiRoot2, { recursive: true });
+  const wikiRoot2 = scope ? path84.resolve(scope.knowledge()) : null;
+  const resolved = path84.resolve(absTarget);
+  if (wikiRoot2) fs71.mkdirSync(wikiRoot2, { recursive: true });
   const contained = wikiRoot2 ? checkContained(wikiRoot2, resolved, { policy: "resolve" }) : null;
   if (!wikiRoot2 || contained === null || isRefused(contained)) {
     throw new HarvestRefusal(
@@ -47379,12 +59842,12 @@ function assertThisCwdWiki(storage, absTarget) {
   }
 }
 function playbooksRoot(storage) {
-  return path79.resolve(storage.definition("playbooks"));
+  return path84.resolve(storage.definition("playbooks"));
 }
 function assertThisCwdPlaybook(storage, absTarget) {
   const root = playbooksRoot(storage);
-  const resolved = path79.resolve(absTarget);
-  fs66.mkdirSync(root, { recursive: true });
+  const resolved = path84.resolve(absTarget);
+  fs71.mkdirSync(root, { recursive: true });
   const contained = checkContained(root, resolved, { policy: "resolve" });
   if (contained === null || isRefused(contained)) {
     throw new HarvestRefusal(
@@ -47492,7 +59955,7 @@ function blockResume(input, op, step, detail) {
 }
 function readFileOrNull(absPath) {
   try {
-    return fs66.readFileSync(absPath, "utf8");
+    return fs71.readFileSync(absPath, "utf8");
   } catch {
     return null;
   }
@@ -47502,7 +59965,7 @@ function recordInverseOnce(runId, inverse, opts) {
   recordInverse(runId, inverse, opts);
 }
 function harvestCasLockDir(storage, absPath) {
-  return storage.runtime("harvest-cas", sha2563(path79.resolve(absPath)).slice(0, 16));
+  return storage.runtime("harvest-cas", sha2563(path84.resolve(absPath)).slice(0, 16));
 }
 function harvestDecision(input) {
   const storeOpts = { storage: input.storage, cwd: input.cwd };
@@ -47638,7 +60101,7 @@ function harvestDecision(input) {
   }
   const lockDir = harvestCasLockDir(storage, wikiAbs);
   const cas = lifecycleApi4().withStableLock(lockDir, () => {
-    const before = fs66.existsSync(wikiAbs) ? fs66.readFileSync(wikiAbs, "utf8") : null;
+    const before = fs71.existsSync(wikiAbs) ? fs71.readFileSync(wikiAbs, "utf8") : null;
     const beforeHash = before === null ? "" : sha2563(before);
     const expected = input.expect_before_hash !== void 0 ? input.expect_before_hash === null ? "" : input.expect_before_hash : existing?.before_hash;
     if (expected !== void 0 && expected !== beforeHash) {
@@ -47681,7 +60144,7 @@ function harvestDecision(input) {
     ];
     recordInverseOnce(input.run_id, { op_id: op.op_id, files: inverseFiles }, storeOpts);
     const writer = assertScrubbedWriter(input.writer ?? scrubbedWikiWriter);
-    storage.ensureDir(path79.dirname(wikiAbs));
+    storage.ensureDir(path84.dirname(wikiAbs));
     const wrote = writer(wikiAbs, page, { runDir: input.runDir, runId: input.run_id });
     if (!wrote.written) {
       return refuse6(
@@ -47717,7 +60180,7 @@ function harvestDecision(input) {
 }
 function stageDecisionCandidate(input, op, storage, scope, decisionId, now, storeOpts) {
   let candidateAbs = scope.definitions("knowledge", "candidates", "decisions", `${input.slug}.md`);
-  if (fs66.existsSync(candidateAbs)) {
+  if (fs71.existsSync(candidateAbs)) {
     candidateAbs = scope.definitions("knowledge", "candidates", "decisions", `${input.slug}.${op.op_id}.md`);
   }
   const page = renderDecisionPage({
@@ -47734,13 +60197,13 @@ function stageDecisionCandidate(input, op, storage, scope, decisionId, now, stor
     ...input.glossary_term ? { glossary_term: input.glossary_term } : {}
   });
   const writer = assertScrubbedWriter(input.writer ?? scrubbedWikiWriter);
-  storage.ensureDir(path79.dirname(candidateAbs));
-  const realDir = fs66.realpathSync(path79.dirname(candidateAbs));
-  const realWiki = fs66.existsSync(scope.knowledge()) ? fs66.realpathSync(scope.knowledge()) : path79.resolve(scope.knowledge());
-  const realGuild = fs66.realpathSync(path79.resolve(scope.knowledge(), ".."));
+  storage.ensureDir(path84.dirname(candidateAbs));
+  const realDir = fs71.realpathSync(path84.dirname(candidateAbs));
+  const realWiki = fs71.existsSync(scope.knowledge()) ? fs71.realpathSync(scope.knowledge()) : path84.resolve(scope.knowledge());
+  const realGuild = fs71.realpathSync(path84.resolve(scope.knowledge(), ".."));
   let fileIsLink = false;
   try {
-    fileIsLink = fs66.lstatSync(candidateAbs).isSymbolicLink();
+    fileIsLink = fs71.lstatSync(candidateAbs).isSymbolicLink();
   } catch {
   }
   if (isWithin(realDir, realWiki) || !isWithin(realDir, realGuild) || fileIsLink) {
@@ -47773,9 +60236,9 @@ function stageDecisionCandidate(input, op, storage, scope, decisionId, now, stor
 }
 function finishHarvest(input, op, storage, wikiRoot2, decisionId, now, storeOpts) {
   const wikiAbs = op.wiki_path;
-  refreshWikiIndexPaths([path79.relative(wikiRoot2, wikiAbs).split(path79.sep).join("/")], { storage });
+  refreshWikiIndexPaths([path84.relative(wikiRoot2, wikiAbs).split(path84.sep).join("/")], { storage });
   const catalogFailed = lifecycleApi4().withStableLock(
-    harvestCasLockDir(storage, path79.join(wikiRoot2, "index.md")),
+    harvestCasLockDir(storage, path84.join(wikiRoot2, "index.md")),
     () => recordDecisionPromotion(
       wikiRoot2,
       { slug: input.slug, title: input.title, date: now.slice(0, 10) },
@@ -48093,8 +60556,8 @@ function planRevertFile(f, mustHaveSpan) {
   if (f.before !== null && typeof f.before !== "string") {
     return { block: { path: f.path, reason: "inverse-tampered", detail: "the recorded `before` is malformed" } };
   }
-  const exists = fs66.existsSync(f.path);
-  const current = exists ? fs66.readFileSync(f.path, "utf8") : null;
+  const exists = fs71.existsSync(f.path);
+  const current = exists ? fs71.readFileSync(f.path, "utf8") : null;
   const restoring = f.span ? f.span.before_span : f.before;
   const recorded = f.span ? f.span.before_sha256 : f.before_sha256;
   if (restoring !== null && (recorded === void 0 || sha2563(restoring) !== recorded)) {
@@ -48165,7 +60628,7 @@ function revertHarvest(runId, opId, opts = {}) {
   const opRecord = findOp(runId, opId, opts);
   const scopeForSpan = storage.project ?? storage.workspace;
   const wikiRootForSpan = scopeForSpan ? scopeForSpan.knowledge() : null;
-  const spanOnly = (p) => opRecord?.playbook_path !== void 0 && path79.resolve(opRecord.playbook_path) === path79.resolve(p) || wikiRootForSpan === null || !isWithin(path79.resolve(p), wikiRootForSpan);
+  const spanOnly = (p) => opRecord?.playbook_path !== void 0 && path84.resolve(opRecord.playbook_path) === path84.resolve(p) || wikiRootForSpan === null || !isWithin(path84.resolve(p), wikiRootForSpan);
   const files = Array.isArray(inverse.files) ? inverse.files : [];
   for (const f of files) {
     if (typeof f?.path !== "string" || f.path.length === 0) {
@@ -48184,7 +60647,7 @@ function revertHarvest(runId, opId, opts = {}) {
   if (blocked.length > 0) {
     const detail = `revert refused: ` + blocked.map((b) => `${b.path} (${b.reason}: ${b.detail})`).join("; ") + `. The operator must resolve this \u2014 revert never clobbers a later edit.`;
     const gated = blocked.some((b) => b.reason === "content-refused" || b.reason === "inverse-tampered");
-    if (gated && fs66.existsSync(runDir3)) {
+    if (gated && fs71.existsSync(runDir3)) {
       emitSecurity(runDir3, runId, "harvest_refused", "blocked", `revert of '${opId}' refused: ${detail}`);
     }
     return {
@@ -48203,11 +60666,11 @@ function revertHarvest(runId, opId, opts = {}) {
     const wikiRoot2 = scope2 ? scope2.knowledge() : null;
     for (const { file, write: write2 } of plans) {
       if (write2 !== null || wikiRoot2 === null) continue;
-      const relPath = path79.relative(wikiRoot2, file.path).split(path79.sep).join("/");
+      const relPath = path84.relative(wikiRoot2, file.path).split(path84.sep).join("/");
       const m = /^decisions\/([^/]+)\.md$/.exec(relPath);
       if (!m) continue;
       const catalogFailed = lifecycleApi4().withStableLock(
-        harvestCasLockDir(storage, path79.join(wikiRoot2, "index.md")),
+        harvestCasLockDir(storage, path84.join(wikiRoot2, "index.md")),
         () => recordDecisionRevert(
           wikiRoot2,
           { slug: m[1], date: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) },
@@ -48230,9 +60693,9 @@ function revertHarvest(runId, opId, opts = {}) {
   for (const { file, write: write2 } of plans) {
     try {
       if (write2 === null) {
-        if (fs66.existsSync(file.path)) fs66.rmSync(file.path);
+        if (fs71.existsSync(file.path)) fs71.rmSync(file.path);
       } else {
-        storage.ensureDir(path79.dirname(file.path));
+        storage.ensureDir(path84.dirname(file.path));
         const wrote = writer(file.path, write2, { runDir: runDir3, runId });
         if (!wrote.written) {
           return { op_id: opId, restored, ok: false, detail: `scrubbed write refused ${file.path}` };
@@ -48266,7 +60729,7 @@ function revertHarvest(runId, opId, opts = {}) {
   const scope = storage.project ?? storage.workspace;
   if (scope) {
     const wikiRoot2 = scope.knowledge();
-    const rel2 = restored.filter((p) => isWithin(p, wikiRoot2)).map((p) => path79.relative(wikiRoot2, p).split(path79.sep).join("/"));
+    const rel2 = restored.filter((p) => isWithin(p, wikiRoot2)).map((p) => path84.relative(wikiRoot2, p).split(path84.sep).join("/"));
     if (rel2.length > 0) refreshWikiIndexPaths(rel2, { storage });
   }
   const prior = findOp(runId, opId, opts);
@@ -48275,16 +60738,16 @@ function revertHarvest(runId, opId, opts = {}) {
     { ...prior ?? { op_id: opId, trigger: "manual" }, op_id: opId, status: "reverted" },
     opts
   );
-  if (fs66.existsSync(runDir3)) {
+  if (fs71.existsSync(runDir3)) {
     emitSecurity(runDir3, runId, "harvest_reverted", "allow", `harvest op '${opId}' reverted (${restored.length} file(s))`);
   }
   return { op_id: opId, restored, ok: true };
 }
-var fs66, path79, DECISION_SCHEMA, HARVEST_WRITER_ID, SCRUBBED_WRITER_BRAND, scrubbedWikiWriter, HarvestRefusal, HARVEST_SLUG_RE, FORBIDDEN_HARVEST_KEYS;
+var fs71, path84, DECISION_SCHEMA, HARVEST_WRITER_ID, SCRUBBED_WRITER_BRAND, scrubbedWikiWriter, HarvestRefusal, HARVEST_SLUG_RE, FORBIDDEN_HARVEST_KEYS;
 var init_harvest = __esm({
   "src/domains/knowledge/harvest.ts"() {
-    fs66 = __toESM(require("node:fs"));
-    path79 = __toESM(require("node:path"));
+    fs71 = __toESM(require("node:fs"));
+    path84 = __toESM(require("node:path"));
     init_security();
     init_recall_protect();
     init_security();
@@ -48322,18 +60785,18 @@ function newestMtime(dir) {
   const walk = (d) => {
     let entries;
     try {
-      entries = fs67.readdirSync(d, { withFileTypes: true });
+      entries = fs72.readdirSync(d, { withFileTypes: true });
     } catch {
       return;
     }
     for (const e of entries) {
-      const p = path80.join(d, e.name);
+      const p = path85.join(d, e.name);
       if (e.isDirectory()) {
         walk(p);
         continue;
       }
       try {
-        const m = fs67.statSync(p).mtimeMs;
+        const m = fs72.statSync(p).mtimeMs;
         if (m > newest) newest = m;
       } catch {
       }
@@ -48344,12 +60807,12 @@ function newestMtime(dir) {
 }
 function readGitHead(root) {
   try {
-    const headFile = path80.join(root, ".git", "HEAD");
-    const head = fs67.readFileSync(headFile, "utf8").trim();
+    const headFile = path85.join(root, ".git", "HEAD");
+    const head = fs72.readFileSync(headFile, "utf8").trim();
     if (!head.startsWith("ref:")) return head;
     const ref = head.slice(4).trim();
-    const refFile = path80.join(root, ".git", ref);
-    if (fs67.existsSync(refFile)) return fs67.readFileSync(refFile, "utf8").trim();
+    const refFile = path85.join(root, ".git", ref);
+    if (fs72.existsSync(refFile)) return fs72.readFileSync(refFile, "utf8").trim();
     return ref;
   } catch {
     return "";
@@ -48370,7 +60833,7 @@ function computeFingerprint(opts = {}) {
   const storage = storageFor5(opts);
   const wiki = wikiDir(storage);
   return {
-    wiki_mtime: wiki && fs67.existsSync(wiki) ? newestMtime(wiki) : 0,
+    wiki_mtime: wiki && fs72.existsSync(wiki) ? newestMtime(wiki) : 0,
     git_head: readGitHead(storage.activeRoot),
     open_questions_hash: hashOpenQuestions(opts.open_question_ids ?? [])
   };
@@ -48385,8 +60848,8 @@ function workingSetCardPath(storage, phase) {
 function readWorkingSet(storage, phase) {
   const p = workingSetCardPath(storage, phase);
   try {
-    if (!fs67.existsSync(p)) return null;
-    const parsed = JSON.parse(fs67.readFileSync(p, "utf8"));
+    if (!fs72.existsSync(p)) return null;
+    const parsed = JSON.parse(fs72.readFileSync(p, "utf8"));
     return parsed && parsed.schema_version === WORKING_SET_SCHEMA ? parsed : null;
   } catch {
     return null;
@@ -48394,8 +60857,8 @@ function readWorkingSet(storage, phase) {
 }
 function writeWorkingSet(storage, card) {
   const p = workingSetCardPath(storage, card.phase);
-  storage.ensureDir(path80.dirname(p));
-  fs67.writeFileSync(p, JSON.stringify(card, null, 2) + "\n", "utf8");
+  storage.ensureDir(path85.dirname(p));
+  fs72.writeFileSync(p, JSON.stringify(card, null, 2) + "\n", "utf8");
   return p;
 }
 function loadWorkingSet(input) {
@@ -48431,12 +60894,12 @@ function buildWorkingSetCard(input) {
   }
   return card;
 }
-var crypto23, fs67, path80, WORKING_SET_SCHEMA, WORKING_SET_TOKEN_CAP;
+var crypto23, fs72, path85, WORKING_SET_SCHEMA, WORKING_SET_TOKEN_CAP;
 var init_working_set = __esm({
   "src/domains/knowledge/working-set.ts"() {
     crypto23 = __toESM(require("node:crypto"));
-    fs67 = __toESM(require("node:fs"));
-    path80 = __toESM(require("node:path"));
+    fs72 = __toESM(require("node:fs"));
+    path85 = __toESM(require("node:path"));
     init_state();
     WORKING_SET_SCHEMA = "guild.working_set.v1";
     WORKING_SET_TOKEN_CAP = 400;
@@ -48559,8 +61022,8 @@ function readRedirectLedger(runId, opts = {}) {
   const storage = storageFor6(opts);
   const p = redirectLedgerPath(storage, runId);
   try {
-    if (fs68.existsSync(p)) {
-      const parsed = JSON.parse(fs68.readFileSync(p, "utf8"));
+    if (fs73.existsSync(p)) {
+      const parsed = JSON.parse(fs73.readFileSync(p, "utf8"));
       if (parsed && parsed.schema_version === REDIRECT_LEDGER_SCHEMA && Array.isArray(parsed.entries)) {
         return parsed;
       }
@@ -48572,8 +61035,8 @@ function readRedirectLedger(runId, opts = {}) {
 function writeRedirectLedger(ledger, opts = {}) {
   const storage = storageFor6(opts);
   const p = redirectLedgerPath(storage, ledger.run_id);
-  storage.ensureDir(path81.dirname(p));
-  fs68.writeFileSync(p, JSON.stringify(ledger, null, 2) + "\n", "utf8");
+  storage.ensureDir(path86.dirname(p));
+  fs73.writeFileSync(p, JSON.stringify(ledger, null, 2) + "\n", "utf8");
   return p;
 }
 function recordRedirect(input, opts = {}) {
@@ -48606,11 +61069,11 @@ function recordRedirect(input, opts = {}) {
   writeRedirectLedger(ledger, opts);
   return { entry, fires_harvest: entry.count === REDIRECT_HARVEST_THRESHOLD, ledger };
 }
-var fs68, path81, REDIRECT_LEDGER_SCHEMA, REDIRECT_HARVEST_THRESHOLD, TOPIC_KEY_RE, CORRECTION_MAX_CHARS, RedirectLedgerError;
+var fs73, path86, REDIRECT_LEDGER_SCHEMA, REDIRECT_HARVEST_THRESHOLD, TOPIC_KEY_RE, CORRECTION_MAX_CHARS, RedirectLedgerError;
 var init_redirect_ledger = __esm({
   "src/domains/knowledge/redirect-ledger.ts"() {
-    fs68 = __toESM(require("node:fs"));
-    path81 = __toESM(require("node:path"));
+    fs73 = __toESM(require("node:fs"));
+    path86 = __toESM(require("node:path"));
     init_state();
     REDIRECT_LEDGER_SCHEMA = "guild.redirect_ledger.v1";
     REDIRECT_HARVEST_THRESHOLD = 3;
@@ -48693,8 +61156,8 @@ function knowledgeLinksPath(storage) {
 function readEdges(storage) {
   const p = knowledgeLinksPath(storage);
   try {
-    if (!fs69.existsSync(p)) return { schema_version: KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION, links: [] };
-    const parsed = JSON.parse(fs69.readFileSync(p, "utf8"));
+    if (!fs74.existsSync(p)) return { schema_version: KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION, links: [] };
+    const parsed = JSON.parse(fs74.readFileSync(p, "utf8"));
     return parsed && Array.isArray(parsed.links) ? parsed : { schema_version: KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION, links: [] };
   } catch {
     return { schema_version: KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION, links: [] };
@@ -48715,8 +61178,8 @@ function pruneTouchedEdges(storage, touched) {
   });
   if (dropped.length === 0) return [];
   const p = knowledgeLinksPath(storage);
-  storage.ensureDir(path82.dirname(p));
-  fs69.writeFileSync(
+  storage.ensureDir(path87.dirname(p));
+  fs74.writeFileSync(
     p,
     JSON.stringify({ ...doc, schema_version: doc.schema_version ?? KNOWLEDGE_LINKS_EDGE_SCHEMA_VERSION, links: kept }),
     "utf8"
@@ -48730,17 +61193,17 @@ function refreshTouched(paths, opts = {}) {
   const wikiRel = [];
   for (const p of paths ?? []) {
     if (typeof p !== "string" || p === "") continue;
-    const abs = path82.isAbsolute(p) ? p : path82.resolve(storage.activeRoot, p);
-    if (wikiAbs && abs.startsWith(wikiAbs + path82.sep) && abs.endsWith(".md")) {
-      wikiRel.push(path82.relative(wikiAbs, abs).split(path82.sep).join("/"));
+    const abs = path87.isAbsolute(p) ? p : path87.resolve(storage.activeRoot, p);
+    if (wikiAbs && abs.startsWith(wikiAbs + path87.sep) && abs.endsWith(".md")) {
+      wikiRel.push(path87.relative(wikiAbs, abs).split(path87.sep).join("/"));
     }
   }
   if (wikiRel.length > 0) refreshWikiIndexPaths(wikiRel, { storage });
   const citationKeys = [...wikiRel];
   for (const p of paths ?? []) {
     if (typeof p !== "string" || p === "") continue;
-    const abs = path82.isAbsolute(p) ? p : path82.resolve(storage.activeRoot, p);
-    citationKeys.push(path82.relative(storage.activeRoot, abs).split(path82.sep).join("/"));
+    const abs = path87.isAbsolute(p) ? p : path87.resolve(storage.activeRoot, p);
+    citationKeys.push(path87.relative(storage.activeRoot, abs).split(path87.sep).join("/"));
   }
   const relinked = pruneTouchedEdges(storage, citationKeys);
   const phase = opts.phase ?? "after-edit";
@@ -48754,11 +61217,11 @@ function refreshTouched(paths, opts = {}) {
   const card_path = writeWorkingSet(storage, card);
   return { reindexed: wikiRel, relinked, card, card_path };
 }
-var fs69, path82;
+var fs74, path87;
 var init_refresh_touched = __esm({
   "src/domains/knowledge/refresh-touched.ts"() {
-    fs69 = __toESM(require("node:fs"));
-    path82 = __toESM(require("node:path"));
+    fs74 = __toESM(require("node:fs"));
+    path87 = __toESM(require("node:path"));
     init_state();
     init_knowledge_links_contract();
     init_wiki_index();
@@ -48801,16 +61264,16 @@ function writeResearchPacket(input, opts = {}) {
   const storage = storageFor7(opts);
   const packet = buildResearchPacket(input);
   const p = researchPacketPath(storage, input.run_id, input.packet_id);
-  storage.ensureDir(path83.dirname(p));
-  fs70.writeFileSync(p, JSON.stringify(packet, null, 2) + "\n", "utf8");
+  storage.ensureDir(path88.dirname(p));
+  fs75.writeFileSync(p, JSON.stringify(packet, null, 2) + "\n", "utf8");
   return { packet, path: p };
 }
 function readResearchPacket(runId, packetId, opts = {}) {
   const storage = storageFor7(opts);
   try {
     const p = researchPacketPath(storage, runId, packetId);
-    if (!fs70.existsSync(p)) return null;
-    const parsed = JSON.parse(fs70.readFileSync(p, "utf8"));
+    if (!fs75.existsSync(p)) return null;
+    const parsed = JSON.parse(fs75.readFileSync(p, "utf8"));
     return parsed && parsed.schema_version === RESEARCH_PACKET_SCHEMA ? parsed : null;
   } catch {
     return null;
@@ -48819,15 +61282,15 @@ function readResearchPacket(runId, packetId, opts = {}) {
 function storeResearchSource(sourceId, content, opts = {}) {
   const storage = storageFor7(opts);
   const p = storage.definition("sources", sourceId);
-  storage.ensureDir(path83.dirname(p));
-  fs70.writeFileSync(p, content, "utf8");
+  storage.ensureDir(path88.dirname(p));
+  fs75.writeFileSync(p, content, "utf8");
   return { source_ref: `source:${sourceId}`, path: p };
 }
-var fs70, path83, RESEARCH_PACKET_SCHEMA, MAX_QUESTIONS, MAX_CONCLUSIONS;
+var fs75, path88, RESEARCH_PACKET_SCHEMA, MAX_QUESTIONS, MAX_CONCLUSIONS;
 var init_research_packet = __esm({
   "src/domains/knowledge/research-packet.ts"() {
-    fs70 = __toESM(require("node:fs"));
-    path83 = __toESM(require("node:path"));
+    fs75 = __toESM(require("node:fs"));
+    path88 = __toESM(require("node:path"));
     init_state();
     RESEARCH_PACKET_SCHEMA = "guild.research_packet.v1";
     MAX_QUESTIONS = 12;
@@ -48839,12 +61302,12 @@ var init_research_packet = __esm({
 function walkMd(dir, out) {
   let entries;
   try {
-    entries = fs71.readdirSync(dir, { withFileTypes: true });
+    entries = fs76.readdirSync(dir, { withFileTypes: true });
   } catch {
     return;
   }
   for (const e of entries) {
-    const full = path84.join(dir, e.name);
+    const full = path89.join(dir, e.name);
     if (e.isDirectory()) walkMd(full, out);
     else if (e.isFile() && e.name.endsWith(".md")) out.push(full);
   }
@@ -48861,13 +61324,13 @@ function supersededWikiPages(wikiDir2) {
   const byRel = /* @__PURE__ */ new Map();
   const bySlug = /* @__PURE__ */ new Map();
   for (const abs of files) {
-    const rel2 = path84.relative(wikiDir2, abs).split(path84.sep).join("/");
+    const rel2 = path89.relative(wikiDir2, abs).split(path89.sep).join("/");
     byRel.set(rel2, abs);
     byRel.set(rel2.slice(0, -3), abs);
-    const slug = path84.basename(abs, ".md");
+    const slug = path89.basename(abs, ".md");
     bySlug.set(slug, [...bySlug.get(slug) ?? [], abs]);
   }
-  const resolve44 = (ref) => {
+  const resolve45 = (ref) => {
     let r = ref.replace(/\\/g, "/");
     if (r.startsWith("decision:")) r = r.slice("decision:".length);
     if (r.startsWith("./")) r = r.slice(2);
@@ -48881,7 +61344,7 @@ function supersededWikiPages(wikiDir2) {
   for (const abs of files) {
     let content;
     try {
-      content = fs71.readFileSync(abs, "utf8");
+      content = fs76.readFileSync(abs, "utf8");
     } catch {
       continue;
     }
@@ -48891,17 +61354,17 @@ function supersededWikiPages(wikiDir2) {
       superseded.add(abs);
     }
     for (const ref of refsOf(fm["supersedes"])) {
-      const target = resolve44(ref);
+      const target = resolve45(ref);
       if (target && target !== abs) superseded.add(target);
     }
   }
   return superseded;
 }
-var fs71, path84;
+var fs76, path89;
 var init_wiki_supersede = __esm({
   "src/domains/knowledge/wiki-supersede.ts"() {
-    fs71 = __toESM(require("node:fs"));
-    path84 = __toESM(require("node:path"));
+    fs76 = __toESM(require("node:fs"));
+    path89 = __toESM(require("node:path"));
     init_state();
   }
 });
@@ -48909,16 +61372,16 @@ var init_wiki_supersede = __esm({
 // src/domains/knowledge/fs-scanner.ts
 function safeReadDir(dir) {
   try {
-    return fs72.readdirSync(dir, { withFileTypes: true });
+    return fs77.readdirSync(dir, { withFileTypes: true });
   } catch {
     return [];
   }
 }
 function safeReadFile(p) {
   try {
-    const stat = fs72.statSync(p);
+    const stat = fs77.statSync(p);
     if (stat.size > MAX_FILE_BYTES) return null;
-    return fs72.readFileSync(p, "utf8");
+    return fs77.readFileSync(p, "utf8");
   } catch {
     return null;
   }
@@ -48926,11 +61389,11 @@ function safeReadFile(p) {
 function walkFiles(dir, extensions) {
   const out = [];
   for (const entry of safeReadDir(dir)) {
-    const full = path85.join(dir, entry.name);
+    const full = path90.join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...walkFiles(full, extensions));
     } else if (entry.isFile()) {
-      const ext = path85.extname(entry.name).toLowerCase();
+      const ext = path90.extname(entry.name).toLowerCase();
       if (extensions.includes(ext)) out.push(full);
     }
   }
@@ -48942,7 +61405,7 @@ function extractTitle2(content, filePath) {
     const m = line.match(/^#\s+(.+?)\s*$/);
     if (m) return m[1].trim();
   }
-  return path85.basename(filePath, path85.extname(filePath));
+  return path90.basename(filePath, path90.extname(filePath));
 }
 function queryTerms(query) {
   return query.toLowerCase().split(/\s+/).map((t) => t.trim()).filter((t) => t.length > 0);
@@ -48975,9 +61438,9 @@ function fsScan(query, guildRoot, opts = {}) {
   const guildDir = durableGuildDir(guildRoot);
   const existingDirs = [];
   for (const rel2 of dirs) {
-    const abs = path85.join(guildDir, rel2);
+    const abs = path90.join(guildDir, rel2);
     try {
-      if (fs72.statSync(abs).isDirectory()) existingDirs.push(abs);
+      if (fs77.statSync(abs).isDirectory()) existingDirs.push(abs);
     } catch {
     }
   }
@@ -48985,7 +61448,7 @@ function fsScan(query, guildRoot, opts = {}) {
   if (terms.length === 0) {
     return { source: "fs-scanner", hits: [], scannedDirs: existingDirs };
   }
-  const superseded = supersededWikiPages(path85.join(guildDir, "wiki"));
+  const superseded = supersededWikiPages(path90.join(guildDir, "wiki"));
   const scored = [];
   for (const dir of existingDirs) {
     for (const file of walkFiles(dir, extensions)) {
@@ -49050,11 +61513,11 @@ function runFsScannerCli() {
   }
   process.stdout.write(JSON.stringify(result2, null, 2) + "\n");
 }
-var fs72, path85, DEFAULT_LIMIT, DEFAULT_DIRS, DEFAULT_EXTENSIONS, MAX_FILE_BYTES;
+var fs77, path90, DEFAULT_LIMIT, DEFAULT_DIRS, DEFAULT_EXTENSIONS, MAX_FILE_BYTES;
 var init_fs_scanner = __esm({
   "src/domains/knowledge/fs-scanner.ts"() {
-    fs72 = __toESM(require("fs"));
-    path85 = __toESM(require("path"));
+    fs77 = __toESM(require("fs"));
+    path90 = __toESM(require("path"));
     init_state();
     init_wiki_supersede();
     DEFAULT_LIMIT = 10;
@@ -49082,7 +61545,7 @@ function wikiRecall(query, cwd, config, opts = {}) {
   }
   const { dbPath } = ensureResult;
   const repoRoot = resolveMainRepoRoot(cwd);
-  const superseded = supersededWikiPages(path86.join(durableGuildDir(repoRoot), "wiki"));
+  const superseded = supersededWikiPages(path91.join(durableGuildDir(repoRoot), "wiki"));
   let db;
   try {
     db = openDatabase3(dbPath);
@@ -49097,7 +61560,7 @@ function wikiRecall(query, cwd, config, opts = {}) {
            WHERE  wiki_fts MATCH ?
            ORDER  BY rank   -- bm25() is negative; ASC = most relevant first
            LIMIT  ?`
-      ).all(safeQuery, limit + superseded.size).filter((r) => !superseded.has(path86.join(repoRoot, typeof r["path"] === "string" ? r["path"] : ""))).slice(0, limit);
+      ).all(safeQuery, limit + superseded.size).filter((r) => !superseded.has(path91.join(repoRoot, typeof r["path"] === "string" ? r["path"] : ""))).slice(0, limit);
     } catch {
       db.close();
       return null;
@@ -49106,10 +61569,10 @@ function wikiRecall(query, cwd, config, opts = {}) {
     const rawHits = [];
     for (const r of rows) {
       const relPath = typeof r["path"] === "string" ? r["path"] : "";
-      const absPath = path86.join(cwd, relPath);
+      const absPath = path91.join(cwd, relPath);
       let content;
       try {
-        content = fs73.readFileSync(absPath, "utf8");
+        content = fs78.readFileSync(absPath, "utf8");
       } catch {
         content = typeof r["snippet"] === "string" ? r["snippet"] : "";
       }
@@ -49181,7 +61644,7 @@ function runWikiRecallCli() {
     process.exit(1);
   }
   if (runId && !runDir3) {
-    runDir3 = path86.join(durableGuildDir(cwd), "runs", runId);
+    runDir3 = path91.join(durableGuildDir(cwd), "runs", runId);
   }
   const indexOff = (process.env["GUILD_INDEX"] ?? "auto") === "off";
   const thresholdOverride = parseInt(process.env["GUILD_WIKI_THRESHOLD"] ?? "", 10);
@@ -49204,11 +61667,11 @@ function runWikiRecallCli() {
   };
   process.stdout.write(JSON.stringify(safeResult, null, 2) + "\n");
 }
-var fs73, path86, DEFAULT_LIMIT2;
+var fs78, path91, DEFAULT_LIMIT2;
 var init_wiki_recall = __esm({
   "src/domains/knowledge/wiki-recall.ts"() {
-    fs73 = __toESM(require("node:fs"));
-    path86 = __toESM(require("node:path"));
+    fs78 = __toESM(require("node:fs"));
+    path91 = __toESM(require("node:path"));
     init_state();
     init_wiki_supersede();
     init_recall_protect();
@@ -49421,7 +61884,7 @@ function collectExports(node, out) {
 function manifestEntryPoints(repoRoot, read) {
   let pkg;
   try {
-    pkg = JSON.parse(read(path87.join(repoRoot, "package.json")));
+    pkg = JSON.parse(read(path92.join(repoRoot, "package.json")));
   } catch {
     return [];
   }
@@ -49439,7 +61902,7 @@ function manifestEntryPoints(repoRoot, read) {
 }
 function settingsEntryPoints(guildDir, read) {
   try {
-    const s = JSON.parse(read(path87.join(guildDir, "settings.json")));
+    const s = JSON.parse(read(path92.join(guildDir, "settings.json")));
     const ep = s.models?.entryPoints;
     return Array.isArray(ep) ? ep.filter((x) => typeof x === "string") : [];
   } catch {
@@ -49448,7 +61911,7 @@ function settingsEntryPoints(guildDir, read) {
 }
 function indexEntryPoints(indexesDir, read) {
   try {
-    const j = JSON.parse(read(path87.join(indexesDir, "entry_points.json")));
+    const j = JSON.parse(read(path92.join(indexesDir, "entry_points.json")));
     const arr = Array.isArray(j) ? j : j && typeof j === "object" && Array.isArray(j.entryPoints) ? j.entryPoints : [];
     return arr.filter((x) => typeof x === "string");
   } catch {
@@ -49457,8 +61920,8 @@ function indexEntryPoints(indexesDir, read) {
 }
 function resolveEntryPointConfig(src) {
   const guildDir = src.guildDir ?? durableGuildDir(src.repoRoot);
-  const indexesDir = src.indexesDir ?? path87.join(guildDir, "indexes");
-  const read = src.readFile ?? ((p) => fs74.readFileSync(p, "utf8"));
+  const indexesDir = src.indexesDir ?? path92.join(guildDir, "indexes");
+  const read = src.readFile ?? ((p) => fs79.readFileSync(p, "utf8"));
   const all = /* @__PURE__ */ new Set();
   for (const m of manifestEntryPoints(src.repoRoot, read)) all.add(normRel(m));
   for (const m of settingsEntryPoints(guildDir, read)) all.add(normRel(m));
@@ -49466,12 +61929,12 @@ function resolveEntryPointConfig(src) {
   for (const m of src.explicit ?? []) if (typeof m === "string" && m.length > 0) all.add(normRel(m));
   return [...all].sort();
 }
-var fs74, path87, EVIDENCE_TIER, LINE_REF_RE, ENTRY_POINT_NAMES;
+var fs79, path92, EVIDENCE_TIER, LINE_REF_RE, ENTRY_POINT_NAMES;
 var init_graph_query = __esm({
   "src/domains/knowledge/graph-query.ts"() {
-    fs74 = __toESM(require("fs"));
+    fs79 = __toESM(require("fs"));
     init_kernel();
-    path87 = __toESM(require("path"));
+    path92 = __toESM(require("path"));
     init_state();
     EVIDENCE_TIER = "trusted";
     LINE_REF_RE = /#L\d+-L\d+$/;
@@ -49505,11 +61968,11 @@ function protectLine(line, probe, opts) {
 function pageText(storage, rel2) {
   const root = (storage.project ?? storage.workspace)?.knowledge();
   if (!root) return "";
-  const abs = path88.resolve(root, rel2);
-  const back = path88.relative(root, abs);
-  if (back.startsWith("..") || path88.isAbsolute(back)) return "";
+  const abs = path93.resolve(root, rel2);
+  const back = path93.relative(root, abs);
+  if (back.startsWith("..") || path93.isAbsolute(back)) return "";
   try {
-    return fs75.readFileSync(abs, "utf8");
+    return fs80.readFileSync(abs, "utf8");
   } catch {
     return "";
   }
@@ -49573,11 +62036,11 @@ ${pageText(storage, h.rel)}` }, protect),
     lane_bundle
   };
 }
-var fs75, path88;
+var fs80, path93;
 var init_phase_start = __esm({
   "src/domains/knowledge/phase-start.ts"() {
-    fs75 = __toESM(require("node:fs"));
-    path88 = __toESM(require("node:path"));
+    fs80 = __toESM(require("node:fs"));
+    path93 = __toESM(require("node:path"));
     init_state();
     init_glossary();
     init_recall_protect();
@@ -49642,26 +62105,26 @@ function rankWikiDocs(docs, wikiBase, limit, composite) {
     const importance = resolveRecallImportance(d.content, wikiPageCategory(d.path, wikiBase));
     let ageMs = 0;
     try {
-      ageMs = now - fs76.statSync(d.path).mtimeMs;
+      ageMs = now - fs81.statSync(d.path).mtimeMs;
     } catch {
     }
     return { d, importance, comp: compositeScore(d.score, importance, ageMs, composite.halfLifeDays) };
   }).filter((x) => x.importance >= composite.importanceGate).sort((a, b) => b.comp - a.comp).slice(0, limit).map((x) => x.d);
 }
 function walkMdFiles(dir) {
-  if (!fs76.existsSync(dir)) return [];
+  if (!fs81.existsSync(dir)) return [];
   const result2 = [];
   const stack = [dir];
   while (stack.length > 0) {
     const cur = stack.pop();
     let entries;
     try {
-      entries = fs76.readdirSync(cur, { withFileTypes: true });
+      entries = fs81.readdirSync(cur, { withFileTypes: true });
     } catch {
       continue;
     }
     for (const ent of entries) {
-      const full = path89.join(cur, ent.name);
+      const full = path94.join(cur, ent.name);
       if (ent.isDirectory()) {
         stack.push(full);
       } else if (ent.isFile() && ent.name.endsWith(".md")) {
@@ -49684,8 +62147,8 @@ function sqliteBranch(query, cwd, indexConfig, limit, runDir3, runId) {
   return { source: "sqlite", chunks, directive: result2.directive };
 }
 function fileBm25Branch(query, cwd, category, limit, runDir3, runId, composite) {
-  const wikiBase = path89.join(durableGuildDir(cwd), "wiki");
-  const scanDir = category ? path89.join(wikiBase, category) : wikiBase;
+  const wikiBase = path94.join(durableGuildDir(cwd), "wiki");
+  const scanDir = category ? path94.join(wikiBase, category) : wikiBase;
   const superseded = supersededWikiPages(wikiBase);
   const files = walkMdFiles(scanDir).filter((f) => !superseded.has(f));
   if (files.length === 0) return null;
@@ -49694,7 +62157,7 @@ function fileBm25Branch(query, cwd, category, limit, runDir3, runId, composite) 
   const docs = files.map((f) => {
     let content = "";
     try {
-      content = fs76.readFileSync(f, "utf8");
+      content = fs81.readFileSync(f, "utf8");
     } catch {
     }
     return { path: f, content, tokens: tokenizeIdentifierAware(content) };
@@ -49709,7 +62172,7 @@ function fileBm25Branch(query, cwd, category, limit, runDir3, runId, composite) 
   );
   if (ranked.length === 0) return null;
   const rawHits = ranked.map((d) => ({
-    source_path: path89.relative(cwd, d.path),
+    source_path: path94.relative(cwd, d.path),
     content: d.content
   }));
   const { chunks, directive } = protectChunks(rawHits, {
@@ -49731,10 +62194,10 @@ function fsScanBranch(query, cwd, category, limit, runDir3, runId) {
   }
   const rawHits = scanResult.hits.map((hit) => {
     const absPath = hit.path;
-    const relPath = path89.relative(cwd, absPath);
+    const relPath = path94.relative(cwd, absPath);
     let content;
     try {
-      content = fs76.readFileSync(absPath, "utf8");
+      content = fs81.readFileSync(absPath, "utf8");
     } catch {
       content = hit.snippet;
     }
@@ -49748,11 +62211,11 @@ function fsScanBranch(query, cwd, category, limit, runDir3, runId) {
   return { source: "fs-scan", chunks, directive };
 }
 function kgQueryBranch(query, cwd, limit, runDir3, runId, category) {
-  const projPath = path89.join(durableGuildDir(cwd), "indexes", "knowledge-recall.json");
-  if (!fs76.existsSync(projPath)) return null;
+  const projPath = path94.join(durableGuildDir(cwd), "indexes", "knowledge-recall.json");
+  if (!fs81.existsSync(projPath)) return null;
   let proj = null;
   try {
-    proj = JSON.parse(fs76.readFileSync(projPath, "utf8"));
+    proj = JSON.parse(fs81.readFileSync(projPath, "utf8"));
   } catch {
     return null;
   }
@@ -49837,11 +62300,11 @@ structural node (hop ${n.depth}) \u2014 no line provenance, untrusted
 function structuralBranch(query, cwd, category, limit, runDir3, runId) {
   const intent = classifyStructuralIntent(query);
   if (!intent) return null;
-  const graphPath = path89.join(durableGuildDir(cwd), "indexes", "knowledge-graph.json");
-  if (!fs76.existsSync(graphPath)) return null;
+  const graphPath = path94.join(durableGuildDir(cwd), "indexes", "knowledge-graph.json");
+  if (!fs81.existsSync(graphPath)) return null;
   let doc = null;
   try {
-    doc = JSON.parse(fs76.readFileSync(graphPath, "utf8"));
+    doc = JSON.parse(fs81.readFileSync(graphPath, "utf8"));
   } catch {
     return null;
   }
@@ -49882,16 +62345,16 @@ function structuralBranch(query, cwd, category, limit, runDir3, runId) {
   return { source: "structural", chunks, directive };
 }
 function corpusForcesIdentifierBypass(query, cwd, category, wikiFileThreshold) {
-  const globalWikiBase = path89.join(durableGuildDir(resolveMainRepoRoot(cwd)), "wiki");
+  const globalWikiBase = path94.join(durableGuildDir(resolveMainRepoRoot(cwd)), "wiki");
   if (walkMdFiles(globalWikiBase).length <= wikiFileThreshold) return false;
   const querySet = new Set(tokenizeIdentifierAware(query));
   if (querySet.size === 0) return false;
-  const wikiBase = path89.join(durableGuildDir(cwd), "wiki");
-  const scanDir = category ? path89.join(wikiBase, category) : wikiBase;
+  const wikiBase = path94.join(durableGuildDir(cwd), "wiki");
+  const scanDir = category ? path94.join(wikiBase, category) : wikiBase;
   for (const f of walkMdFiles(scanDir)) {
     let content;
     try {
-      content = fs76.readFileSync(f, "utf8");
+      content = fs81.readFileSync(f, "utf8");
     } catch {
       continue;
     }
@@ -49922,7 +62385,7 @@ function recall(query, opts) {
     laneOutcome = "unknown"
   } = opts;
   const _traceStart = Date.now();
-  const runDir3 = rawRunDir ?? (runId ? path89.join(durableGuildDir(cwd), "runs", runId) : void 0);
+  const runDir3 = rawRunDir ?? (runId ? path94.join(durableGuildDir(cwd), "runs", runId) : void 0);
   const indexConfig = { ...DEFAULT_INDEX_BLOCK, ..._indexConfig };
   const structuralResult = structuralBranch(
     query,
@@ -50129,11 +62592,11 @@ function runRecallCli() {
   }
   process.stdout.write(JSON.stringify(result2) + "\n");
 }
-var fs76, path89, crypto25, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
+var fs81, path94, crypto25, DEFAULT_RECALL_HALF_LIFE_DAYS, DEFAULT_RECALL_SCORE_THRESHOLD, STRUCT_SYMBOL, CAMEL_OR_ACRONYM_BOUNDARY;
 var init_recall = __esm({
   "src/domains/knowledge/recall.ts"() {
-    fs76 = __toESM(require("node:fs"));
-    path89 = __toESM(require("node:path"));
+    fs81 = __toESM(require("node:fs"));
+    path94 = __toESM(require("node:path"));
     crypto25 = __toESM(require("node:crypto"));
     init_state();
     init_wiki_recall();
@@ -50235,12 +62698,12 @@ function runProtectChunksCli() {
     }
   }
   if (runId && !runDir3) {
-    runDir3 = path90.join(durableGuildDir(cwd), "runs", runId);
+    runDir3 = path95.join(durableGuildDir(cwd), "runs", runId);
   }
   let rawJson;
   if (hitsFile) {
     try {
-      rawJson = fs77.readFileSync(hitsFile, "utf8");
+      rawJson = fs82.readFileSync(hitsFile, "utf8");
     } catch (e) {
       process.stderr.write(
         `[protect-chunks] ERROR: cannot read --hits-file "${hitsFile}": ${String(e)}
@@ -50250,7 +62713,7 @@ function runProtectChunksCli() {
     }
   } else {
     try {
-      rawJson = fs77.readFileSync(0, "utf8");
+      rawJson = fs82.readFileSync(0, "utf8");
     } catch (e) {
       process.stderr.write(
         `[protect-chunks] ERROR: cannot read stdin: ${String(e)}
@@ -50277,11 +62740,11 @@ function runProtectChunksCli() {
   });
   process.stdout.write(JSON.stringify(result2) + "\n");
 }
-var fs77, path90;
+var fs82, path95;
 var init_protect_chunks_cli = __esm({
   "src/domains/knowledge/protect-chunks-cli.ts"() {
-    fs77 = __toESM(require("node:fs"));
-    path90 = __toESM(require("node:path"));
+    fs82 = __toESM(require("node:fs"));
+    path95 = __toESM(require("node:path"));
     init_recall_protect();
     init_state();
   }
@@ -50498,11 +62961,11 @@ function lintKnowledgeNodes(nodes) {
   }
   return findings;
 }
-var fs78, path91, KNOWLEDGE_NODE_TYPES, IMPORTANCE_LINTABLE_TYPES, VALID_IMPORTANCE;
+var fs83, path96, KNOWLEDGE_NODE_TYPES, IMPORTANCE_LINTABLE_TYPES, VALID_IMPORTANCE;
 var init_wiki_lint_knowledge = __esm({
   "src/domains/knowledge/wiki-lint-knowledge.ts"() {
-    fs78 = __toESM(require("fs"));
-    path91 = __toESM(require("path"));
+    fs83 = __toESM(require("fs"));
+    path96 = __toESM(require("path"));
     init_knowledge_graph_contract();
     KNOWLEDGE_NODE_TYPES = /* @__PURE__ */ new Set([
       "topic",
@@ -50526,7 +62989,7 @@ var init_wiki_lint_knowledge = __esm({
       const useJson = argv.includes("--json");
       let graph;
       try {
-        graph = JSON.parse(fs78.readFileSync(path91.resolve(graphPath), "utf8"));
+        graph = JSON.parse(fs83.readFileSync(path96.resolve(graphPath), "utf8"));
       } catch (err) {
         process.stderr.write(`[wiki-lint-knowledge] ERROR reading graph: ${err}
 `);

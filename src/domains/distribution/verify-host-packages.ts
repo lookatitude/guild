@@ -9,6 +9,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 
 import { PLUGIN_ROOT } from "./build-inventory";
 import { HOST_REGISTRY_ROWS } from "../config";
@@ -250,6 +251,41 @@ function verifyManifestPathResolution(
   }
 }
 
+/**
+ * E00 controller surface (CD14/EAT06): the controller CLI, the worker ack CLI and
+ * the facade-only library chunk. Each must ship in every package that carries the
+ * compiled runtime, with bytes identical to the compiled source output, so a
+ * missing or tampered chunk fails here rather than at controller start.
+ */
+const E00_CONTROLLER_CHUNKS = ["task-cell-controller.js", "task-cell-ack.js", "task-cell-api.js"] as const;
+const E00_RUNTIME_PACKAGES = ["claude-code", "codex"] as const;
+
+function verifyControllerChunks(root: string, distRoot: string, checks: string[], errors: string[]): void {
+  for (const chunk of E00_CONTROLLER_CHUNKS) {
+    const source = path.join(root, "runtime", "scripts", chunk);
+    if (!existsFile(source)) {
+      errors.push(`runtime/scripts/${chunk} is not compiled in the source tree`);
+      continue;
+    }
+    const sourceSha = sha256Of(fs.readFileSync(source));
+    for (const pkg of E00_RUNTIME_PACKAGES) {
+      const rel = `${pkg}/runtime/scripts/${chunk}`;
+      const abs = path.join(distRoot, rel);
+      if (!existsFile(abs)) {
+        errors.push(`missing generated package file: ${rel}`);
+      } else if (sha256Of(fs.readFileSync(abs)) !== sourceSha) {
+        errors.push(`${rel}: digest differs from the compiled runtime/scripts/${chunk}`);
+      } else {
+        checks.push(`${rel} (sha256 ${sourceSha.slice(0, 12)})`);
+      }
+    }
+  }
+}
+
+function sha256Of(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
 function verifyJsonField(
   root: string,
   rel: string,
@@ -358,6 +394,8 @@ export function verifyGeneratedHostPackages(options: VerifyOptions = {}): HostPa
   ]) {
     requireFile(distRoot, rel, checks, errors);
   }
+
+  verifyControllerChunks(root, distRoot, checks, errors);
 
   verifyJsonField(distRoot, "claude-code/.claude-plugin/plugin.json", "name", "guild", checks, errors);
   verifyJsonField(distRoot, "codex/.codex-plugin/plugin.json", "name", "guild", checks, errors);

@@ -74,9 +74,12 @@ import { createGuildStorage } from "../state";
 export interface RunLifecycleEnv {
   /** Returns the run's clock value as an RFC3339 UTC string. */
   now(): string;
+  /** Private staged-start identity; never browser or shareable record authority. */
+  reservedStart?: { run_id: string; binding_ref: string };
   /** Minimal fs surface the wrapper needs; a real-fs adapter is the default. */
   fs: {
     mkdirp(absPath: string): void;
+    mkdirExclusive?(absPath: string): boolean;
     writeFile(absPath: string, contents: string): void;
     /** Atomic create used to establish unique run ownership. */
     writeFileExclusive?(absPath: string, contents: string): boolean;
@@ -293,6 +296,8 @@ export interface RunLifecycle {
    * MUST NOT create any .guild/initiatives/ directory (NN#5).
    */
   startRun(opts: StartRunOpts): string;
+  stageRunStart(opts: StartRunOpts, options?: { detached?: boolean }): StagedRunStart;
+  materializeRunStart(plan: StagedRunStart): string;
 
   /**
    * Writes provenance.json (guild.provenance.v1), references the terminal
@@ -300,6 +305,45 @@ export interface RunLifecycle {
    * checkpoint, and sets run.yaml.status.
    */
   closeRun(runId: string, opts: CloseRunOpts): void;
+}
+
+export interface StagedRunStart {
+  schema_version: "guild.run_start_plan.v1";
+  root: string;
+  run_id: string;
+  created_at: string;
+  detached: boolean;
+  options: StartRunOpts;
+  private_binding_ref: string;
+  files: Array<{ path: string; bytes: string }>;
+  directories: string[];
+  read_set: Array<{ path: string; bytes: string | null }>;
+  digest: string;
+}
+function stagedStartDigest(plan: Omit<StagedRunStart, "digest"> | StagedRunStart): string {
+  const { digest: _digest, ...value } = plan as StagedRunStart;
+  return "sha256:" + crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+function captureRunStart(env: RunLifecycleEnv, opts: StartRunOpts, identity: {run_id:string;binding_ref:string}, createdAt:string, detached:boolean): StagedRunStart {
+  if (env.captureCapabilityBaseline || env.recordCapabilityBaselineCapture) throw new Error("staged run start requires a stage-aware capability capture adapter");
+  const writes = new Map<string,string>(), reads = new Map<string,string|null>(), dirs = new Set<string>();
+  const own = runDir(opts.root, identity.run_id);
+  const contained = (abs:string) => { const rel=path.relative(opts.root,abs); if(path.isAbsolute(rel)||rel==='..'||rel.startsWith('..'+path.sep))throw new Error("staged start escaped source"); if(fsNode.existsSync(opts.root)&&isRefused(checkContained(opts.root,abs,{policy:'physical'})))throw new Error("staged start physical path refused"); return rel; };
+  const read=(abs:string) => { contained(abs); if(writes.has(abs))return writes.get(abs)!; const value=env.fs.readFile(abs); reads.set(abs,value); return value; };
+  const write=(abs:string,bytes:string) => { contained(abs); if(detached && abs!==own && !abs.startsWith(own+path.sep))return; writes.set(abs,bytes); };
+  const fs:RunLifecycleEnv['fs']={
+    mkdirp:abs=>{contained(abs);dirs.add(abs);},
+    readFile:read,
+    writeFile:write,
+    writeFileExclusive:(abs,bytes)=>{if(writes.has(abs)||env.fs.exists(abs))return false;write(abs,bytes);return true;},
+    exists:abs=>writes.has(abs)||dirs.has(abs)||env.fs.exists(abs),
+    removeTree:abs=>{for(const key of writes.keys())if(key===abs||key.startsWith(abs+path.sep))writes.delete(key);},
+    scrubbedWriteDurable:(abs,bytes)=>{write(abs,bytes);return {written:true,blocked:false} as ScrubbedWriteResult;},
+  };
+  const stagedEnv:RunLifecycleEnv={...env,now:()=>createdAt,fs,reservedStart:identity,initializeRunBindingExclusion:undefined,emitAnalysisEvent:undefined};
+  const runId=createRunLifecycle(stagedEnv).startRun(opts);
+  const plan:StagedRunStart={schema_version:'guild.run_start_plan.v1',root:opts.root,run_id:runId,created_at:createdAt,detached,options:JSON.parse(JSON.stringify(opts)),private_binding_ref:identity.binding_ref,files:[...writes].map(([abs,bytes])=>({path:contained(abs),bytes})),directories:[...dirs].filter(abs=>!detached||abs===own||abs.startsWith(own+path.sep)).map(contained),read_set:[...reads].map(([abs,bytes])=>({path:contained(abs),bytes})),digest:''};
+  plan.digest=stagedStartDigest(plan);return plan;
 }
 
 // ── Schema-shaped close records (internal) ───────────────────────────────────
@@ -583,6 +627,7 @@ function bindRunSession(env: RunLifecycleEnv, root: string, runId: string): void
     result = bindSessionForRun({
       runDir: dir,
       runId,
+      now: () => new Date(env.now()),
       promptCompose: composed,
       models,
       fs: {
@@ -950,9 +995,11 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       // Canonical IDs are second-granularity by contract. Concurrent/repeated
       // starts with the same semantic slug must never collide or rebind an
       // existing run, so a UUID tail is used only for this last-resort case.
-      const runId = env.fs.exists(runDir(root, preferredRunId))
+      const runId = env.reservedStart?.run_id ?? (env.fs.exists(runDir(root, preferredRunId))
         ? makeCanonicalRunId(nowIso, `${deriveRunSlug(opts)}-${crypto.randomUUID()}`)
-        : preferredRunId;
+        : preferredRunId);
+      assertCanonicalRunId(runId);
+      if (env.reservedStart && env.fs.exists(runDir(root, runId))) throw new Error("reserved run identity is occupied");
       const runClass: RunClass = opts.run_class ?? "full";
 
       // Full runs capture before the first run write. Lightweight status runs
@@ -1008,7 +1055,7 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       // before ANY other write lands under the run dir. Run start mints the
       // binding before any write; there is no window in which run records
       // exist without a verifiable binding. The nonce is revoked at close.
-      const binding = mintRunBinding({ root, run_id: runId, fs: env.fs });
+      const binding = mintRunBinding({ root, run_id: runId, fs: env.fs, reserved_binding_ref: env.reservedStart?.binding_ref });
       ownedBindingRef = binding.binding_ref;
       ownsBaselineRunTransaction = capabilityBaseline !== null;
       env.initializeRunBindingExclusion?.(root, runId);
@@ -1176,6 +1223,38 @@ export function createRunLifecycle(env: RunLifecycleEnv): RunLifecycle {
       }
     },
 
+    stageRunStart(opts: StartRunOpts, options = {}): StagedRunStart {
+      const createdAt=env.now();
+      const runId=makeCanonicalRunId(createdAt, `${deriveRunSlug(opts)}-${crypto.randomUUID().slice(0,8)}`);
+      return captureRunStart(env,opts,{run_id:runId,binding_ref:`rb-${crypto.randomBytes(16).toString('hex')}`},createdAt,options.detached===true);
+    },
+    materializeRunStart(plan: StagedRunStart): string {
+      const rootHint=(env as RunLifecycleEnv & {__rootHint?:string}).__rootHint;
+      if(!path.isAbsolute(plan.root)||(rootHint!==undefined&&plan.root!==rootHint))throw new Error("staged start belongs to another source");
+      const safeRelative=(relative:string)=>{
+        if(typeof relative!=='string'||!relative||path.isAbsolute(relative)||/[\\%\x00-\x1f]/.test(relative)||relative.split('/').some(v=>!v||v==='.'||v==='..'))throw new Error("staged start path escaped source");
+        const abs=path.join(plan.root,relative);
+        if(fsNode.existsSync(plan.root)&&isRefused(checkContained(plan.root,abs,{policy:'physical'})))throw new Error("staged start physical path refused");
+        return abs;
+      };
+      for(const file of [...plan.files,...plan.read_set])safeRelative(file.path);
+      for(const dir of plan.directories)safeRelative(dir);
+      const ownPrefix=path.relative(plan.root,runDir(plan.root,assertCanonicalRunId(plan.run_id)))+'/';
+      if(plan.detached&&plan.files.some(file=>!file.path.startsWith(ownPrefix)))throw new Error("detached start writes outside owned run");
+      if(plan.schema_version!=='guild.run_start_plan.v1'||plan.root!==plan.options.root||plan.digest!==stagedStartDigest(plan))throw new Error("staged start digest invalid");
+      for(const input of plan.read_set)if(env.fs.readFile(path.join(plan.root,input.path))!==input.bytes)throw new Error("staged start input changed");
+      const replay=captureRunStart(env,plan.options,{run_id:plan.run_id,binding_ref:plan.private_binding_ref},plan.created_at,plan.detached);
+      if(JSON.stringify(replay)!==JSON.stringify(plan))throw new Error("staged start differs from lifecycle replay");
+      const own=runDir(plan.root,plan.run_id);
+      if(env.fs.exists(own))throw new Error("reserved run identity is occupied");
+      env.fs.mkdirp(path.dirname(own));
+      if(env.fs.mkdirExclusive ? !env.fs.mkdirExclusive(own) : env.fs.exists(own))throw new Error("reserved run identity is occupied");
+      if(!env.fs.mkdirExclusive)env.fs.mkdirp(own);
+      for(const dir of plan.directories)env.fs.mkdirp(path.join(plan.root,dir));
+      for(const file of plan.files){const abs=path.join(plan.root,file.path);if(env.fs.exists(abs))throw new Error("staged target is occupied");if(env.fs.writeFileExclusive){if(!env.fs.writeFileExclusive(abs,file.bytes))throw new Error("staged target is occupied");}else env.fs.writeFile(abs,file.bytes);}
+      env.initializeRunBindingExclusion?.(plan.root,plan.run_id);
+      return plan.run_id;
+    },
     closeRun(runId: string, opts: CloseRunOpts): void {
       // The .guild/ base is inferred from cwd: closeRun is called from the run's
       // root, so resolve runs/<id> relative to process cwd's nearest .guild base.
@@ -1352,6 +1431,9 @@ export function createRealEnv(
     fs: {
       mkdirp(absPath: string): void {
         fsNode.mkdirSync(absPath, { recursive: true });
+      },
+      mkdirExclusive(absPath: string): boolean {
+        try { fsNode.mkdirSync(absPath); return true; } catch(error) { if((error as NodeJS.ErrnoException).code==='EEXIST')return false; throw error; }
       },
       writeFile(absPath: string, contents: string): void {
         fsNode.mkdirSync(path.dirname(absPath), { recursive: true });
@@ -2027,4 +2109,36 @@ export function readRunStartedAt(
   const v = obj["started_at"];
   if (v === undefined || v === null) return null;
   return String(v).trim() || null;
+}
+
+/** Update only the lifecycle-owned attachment fields of an existing run. */
+export function updateRunAttachment(
+  manifest: Record<string, any>,
+  provenance: Record<string, any> | null,
+  initiativeId: string | null,
+): { manifest: Record<string, any>; provenance: Record<string, any> | null } {
+  const scope = initiativeId === null ? "independent" : "initiative";
+  const group = initiativeId === null
+    ? manifest.independent_run_group || manifest.run_id || manifest.id
+    : null;
+  if (initiativeId === null && (typeof group !== "string" || group.length === 0))
+    throw new Error("Run requires a stable independent grouping identity");
+  const resolution = {
+    ...manifest.attachment_resolution,
+    scope,
+    initiative_id: initiativeId,
+    independent_group_id: group,
+    source: initiativeId === null ? "independent" : "user_selected",
+    confidence: "high",
+  };
+  return {
+    manifest: {
+      ...manifest,
+      run_scope: scope,
+      initiative_attachment: initiativeId,
+      independent_run_group: group,
+      attachment_resolution: resolution,
+    },
+    provenance: provenance === null ? null : { ...provenance, initiative: initiativeId, run_scope: scope },
+  };
 }

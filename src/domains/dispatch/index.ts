@@ -40,6 +40,38 @@ export * from "./adapter-rungs";
 export * from "./advisor-budget";
 export * from "./assignment-binding";
 
+// E00 TaskCell controller facade (CD14). Named exports only: the source-only
+// controller composition stays out of the public surface.
+export {
+  approveOraclePlan,
+  classifyControllerOwner,
+  ControllerRefusal,
+  deriveReviewerCellAuthority,
+  findQualifiedRunAcceptances,
+  isQualifiedDownstreamRelease,
+  locateAssignment,
+  readApprovedOraclePlan,
+  readControllerStatus,
+  readRootIdentity,
+  recordAuthorityDecision,
+  recordControllerLoss,
+  reviewPacketId,
+  startTaskCellController,
+  submitObservedHandoff,
+  TASK_CELL_CONTROLLER_STATUS_VIEW,
+  writeAckClaim,
+  type ConsumerSpec,
+  type ExpectedPaneIdentity,
+  type LossTeardownPort,
+  type ReleaseConsumerContext,
+  type ReviewedBasisInput,
+  type PaneIdentityPort,
+  type QualificationVerdict,
+  type ReviewerAuthority,
+  type TaskCellController,
+} from "./task-cell-controller";
+export * from "./principal-provider";
+
 // ── from src/modules/communication ──────────────────────────────────────────
 export * from "./comms-format-lint";
 export * from "./no-accidental-write";
@@ -75,6 +107,15 @@ export {
 } from "./task-assignment";
 export {
   buildAcceptance,
+  classifyPersistedAcceptance,
+  classifyPersistedTerminal,
+  classifyPersistedValidation,
+  type IntendedAcceptance,
+  type IntendedTerminal,
+  type PersistedLifecycleKind,
+  type PersistedPublication,
+  type PersistedRecordClass,
+  publishPersistedLifecycleRecord,
   findOrphanedAttempts,
   findRunAcceptances,
   findRunTaskCells,

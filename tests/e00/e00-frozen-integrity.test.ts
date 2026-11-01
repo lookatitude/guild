@@ -1,0 +1,37 @@
+/**
+ * E00-T0 · EAT07 / CD15 — frozen guild-stack v1/v2 contracts and the old
+ * closeout run (task-cells + evidence) stay byte-identical across E00.
+ * Pins were recorded at T0 release in fixtures/frozen-pins.json (digests only).
+ *
+ * These trees live in the umbrella workspace, outside the plugin checkout. In a
+ * plugin-only checkout (CI) the root is absent and the suite is skipped with
+ * that reason; set E00_UMBRELLA_ROOT to run it elsewhere.
+ * Positive control: green at release, must stay green after E00-C/L/H.
+ */
+import { describe, it, expect } from "bun:test";
+import * as fs from "fs";
+import * as path from "path";
+
+import { PLUGIN, sha256, walkFiles } from "./support/e00-harness";
+
+const pins = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "frozen-pins.json"), "utf8")) as {
+  pins: Array<{ tree: string; files: number; digest: string }>;
+};
+const UMBRELLA = process.env["E00_UMBRELLA_ROOT"] ?? path.resolve(PLUGIN, "..", "..", "..");
+const present = fs.existsSync(path.join(UMBRELLA, "contracts", "guild-stack"));
+
+function digest(base: string): { files: number; digest: string } {
+  const lines = walkFiles(base)
+    .filter((f) => !fs.lstatSync(f).isSymbolicLink())
+    .map((f) => `${path.relative(base, f).split(path.sep).join("/")}:${sha256(fs.readFileSync(f))}`)
+    .sort();
+  return { files: lines.length, digest: sha256(lines.join("\n")) };
+}
+
+describe.skipIf(!present)("EAT07 no old-run or frozen-contract mutation", () => {
+  for (const pin of pins.pins) {
+    it(`${pin.tree} is byte-identical to its release pin`, () => {
+      expect(digest(path.join(UMBRELLA, pin.tree))).toEqual({ files: pin.files, digest: pin.digest });
+    });
+  }
+});

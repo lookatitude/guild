@@ -835,6 +835,7 @@ function readQualifyingCompatibilityReceipts(projectRoot: string, runId: string)
     payloads.set(sha256(bytes), payload);
   }
   const qualifying = compatibilityRecords.flatMap((receipt): QualifyingCompatibilityReceipt[] => {
+    if (receipt.output_hash === null) return [];
     const payload = payloads.get(receipt.output_hash);
     return payload?.synthetic === false
       ? [{ receipt, payload }]

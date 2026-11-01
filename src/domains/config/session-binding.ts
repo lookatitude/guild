@@ -287,6 +287,7 @@ export interface BindFsSeam {
 }
 
 export interface BindForRunOptions {
+  now?: () => Date;
   runDir: string;
   runId: string;
   env?: NodeJS.ProcessEnv;
@@ -304,7 +305,7 @@ export function bindSessionForRun(opts: BindForRunOptions): BindResult {
 
   // No seam → the real filesystem, and the exclusive create with it.
   if (seam === undefined) {
-    return bindSession({ runDir: opts.runDir, runId: opts.runId, detected, promptCompose, models: opts.models });
+    return bindSession({ runDir: opts.runDir, runId: opts.runId, detected, promptCompose, models: opts.models, now: opts.now });
   }
 
   const file = sessionBindingPath(opts.runDir);
@@ -330,7 +331,7 @@ export function bindSessionForRun(opts: BindForRunOptions): BindResult {
     run_id: opts.runId,
     host_family: detected.host_family,
     surface: detected.surface,
-    detected_at: new Date().toISOString(),
+    detected_at: (opts.now ?? (() => new Date()))().toISOString(),
     models: isUnknownHost(detected) ? {} : (opts.models ?? {}),
     model_family: detected.model_family,
     prompt_compose: promptCompose,

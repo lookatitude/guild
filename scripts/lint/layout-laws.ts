@@ -2361,6 +2361,46 @@ const CHECKS: Check[] = [
     },
   },
   {
+    id: "e00-no-legacy-release-primitives",
+    ktd: "KTD21",
+    title: "E00 controller modules reach release only through the qualified CD17b facade",
+    run(ctx) {
+      // Legacy release primitives keep their semantics for legacy callers; E00
+      // gates must never consume an unqualified acceptance (fixture_non_authority).
+      const e00 = [
+        "src/domains/dispatch/task-cell-controller.ts",
+        "src/domains/dispatch/principal-provider.ts",
+        "scripts/task-cell-controller.ts",
+        "scripts/task-cell-ack.ts",
+      ];
+      const banned = ["isDownstreamReleased", "gateDependencies", "releasedLogicalTasks", "dependencyGate"];
+      const v: Violation[] = [];
+      for (const f of e00) {
+        const abs = path.join(ctx.root, f);
+        if (!fs.existsSync(abs)) continue;
+        const body = read(abs);
+        for (const name of banned) {
+          if (new RegExp(`\\b${name}\\b`).test(body)) {
+            v.push({ check: "e00-no-legacy-release-primitives", path: f, detail: `E00 module references ${name}` });
+          }
+        }
+        // findRunAcceptances is legal only inside the findQualifiedRunAcceptances wrapper.
+        const decl = /function\s+findQualifiedRunAcceptances\b[^{]*\{/.exec(body);
+        let outside = body;
+        if (decl) {
+          let depth = 1;
+          let i = decl.index + decl[0].length;
+          for (; i < body.length && depth > 0; i++) depth += body[i] === "{" ? 1 : body[i] === "}" ? -1 : 0;
+          outside = body.slice(0, decl.index) + body.slice(i);
+        }
+        if (/\bfindRunAcceptances\s*\(/.test(outside)) {
+          v.push({ check: "e00-no-legacy-release-primitives", path: f, detail: "raw findRunAcceptances outside the qualified wrapper" });
+        }
+      }
+      return v;
+    },
+  },
+  {
     id: "learning-checkpoint-not-indexed",
     ktd: "KTD57",
     title: "learning-checkpoint is a domain function, not an indexed skill",

@@ -1050,6 +1050,7 @@ describe("W6 acceptance binds the ledger to the assignment's own done_when", () 
     const init = initProgressLedger({
       cwd,
       run_id: RUN_ID,
+      binding: { binding_ref: bindingRefFor(cwd) },
       logical_task_id: "T1-backend",
       cell_id: "cell-T1-backend",
       assignment_id: "some-other-assignment",
@@ -1060,6 +1061,7 @@ describe("W6 acceptance binds the ledger to the assignment's own done_when", () 
     recordOracleOutcome({
       cwd,
       run_id: RUN_ID,
+      binding: { binding_ref: bindingRefFor(cwd) },
       logical_task_id: "T1-backend",
       item_id: "unit",
       state: "pass",
@@ -1078,6 +1080,7 @@ describe("W6 acceptance binds the ledger to the assignment's own done_when", () 
     initProgressLedger({
       cwd,
       run_id: RUN_ID,
+      binding: { binding_ref: bindingRefFor(cwd) },
       logical_task_id: "T1-backend",
       cell_id: "cell-T1-backend",
       assignment_id: "T1-backend.tr0:1:someone-else",
@@ -1087,6 +1090,7 @@ describe("W6 acceptance binds the ledger to the assignment's own done_when", () 
     recordOracleOutcome({
       cwd,
       run_id: RUN_ID,
+      binding: { binding_ref: bindingRefFor(cwd) },
       logical_task_id: "T1-backend",
       item_id: "unit",
       state: "pass",
@@ -1105,6 +1109,7 @@ describe("W6 acceptance binds the ledger to the assignment's own done_when", () 
     initProgressLedger({
       cwd,
       run_id: RUN_ID,
+      binding: { binding_ref: bindingRefFor(cwd) },
       logical_task_id: "T1-backend",
       cell_id: "cell-T1-backend",
       assignment_id: assignmentId(mine),
@@ -1126,6 +1131,7 @@ describe("W6 acceptance binds the ledger to the assignment's own done_when", () 
     initProgressLedger({
       cwd,
       run_id: RUN_ID,
+      binding: { binding_ref: bindingRefFor(cwd) },
       logical_task_id: "T1-backend",
       cell_id: "cell-T1-backend",
       done_when: oracles,
@@ -1134,6 +1140,7 @@ describe("W6 acceptance binds the ledger to the assignment's own done_when", () 
     recordOracleOutcome({
       cwd,
       run_id: RUN_ID,
+      binding: { binding_ref: bindingRefFor(cwd) },
       logical_task_id: "T1-backend",
       item_id: "unit",
       state: "pass",
@@ -1158,6 +1165,7 @@ describe("W6 acceptance binds the ledger to the assignment's own done_when", () 
     initProgressLedger({
       cwd,
       run_id: RUN_ID,
+      binding: { binding_ref: bindingRefFor(cwd) },
       logical_task_id: "T1-backend",
       cell_id: "cell-T1-backend",
       assignment_id: assignmentId(mine),
@@ -1178,6 +1186,7 @@ describe("W6 acceptance binds the ledger to the assignment's own done_when", () 
     initProgressLedger({
       cwd,
       run_id: RUN_ID,
+      binding: { binding_ref: bindingRefFor(cwd) },
       logical_task_id: "T1-backend",
       cell_id: "cell-T1-backend",
       assignment_id: assignmentId(mine),
@@ -1204,6 +1213,7 @@ describe("W6 acceptance binds the ledger to the assignment's own done_when", () 
     initProgressLedger({
       cwd,
       run_id: RUN_ID,
+      binding: { binding_ref: bindingRefFor(cwd) },
       logical_task_id: "T1-backend",
       cell_id: "cell-T1-backend",
       assignment_id: "a-different-attempt",
@@ -1213,6 +1223,7 @@ describe("W6 acceptance binds the ledger to the assignment's own done_when", () 
     recordOracleOutcome({
       cwd,
       run_id: RUN_ID,
+      binding: { binding_ref: bindingRefFor(cwd) },
       logical_task_id: "T1-backend",
       item_id: "unit",
       state: "pass",

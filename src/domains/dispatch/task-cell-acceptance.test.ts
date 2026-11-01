@@ -192,6 +192,7 @@ describe("runDeterministicFloor", () => {
       cwd,
       assignment,
       submittedAt: FIXED_NOW(),
+      binding: bindFor(cwd, assignment.run_id),
     });
     expect(submitted).not.toBeNull();
     expect(submitted).toMatchObject({
@@ -210,6 +211,7 @@ describe("runDeterministicFloor", () => {
       cwd,
       assignment,
       submittedAt: "2026-07-15T00:00:01.000Z",
+      binding: bindFor(cwd, assignment.run_id),
     })).toEqual(submitted);
   });
 
@@ -234,6 +236,7 @@ describe("runDeterministicFloor", () => {
       cwd,
       assignment,
       submittedAt: FIXED_NOW(),
+      binding: bindFor(cwd, assignment.run_id),
     })).toBeNull();
     expect(fs.existsSync(path.join(cwd, assignment.handoff_path))).toBe(false);
   });
@@ -268,6 +271,7 @@ describe("runDeterministicFloor", () => {
       cwd,
       assignment,
       submittedAt: FIXED_NOW(),
+      binding: bindFor(cwd, assignment.run_id),
     })).toBeNull();
   });
 
@@ -480,7 +484,7 @@ describe("shutdown — a valid accepted receipt releases downstream + seals a te
       validationResultId: "val-1",
       now: FIXED_NOW,
     });
-    writeValidationRecord(cwd, validation);
+    writeValidationRecord(cwd, validation, bindFor(cwd, validation.run_id));
 
     const acceptance = buildAcceptance({
       validation,
@@ -489,7 +493,7 @@ describe("shutdown — a valid accepted receipt releases downstream + seals a te
       authoritiesObserved: OBSERVED_ACCEPT,
       now: FIXED_NOW,
     });
-    writeAcceptanceRecord(cwd, acceptance);
+    writeAcceptanceRecord(cwd, acceptance, bindFor(cwd, acceptance.run_id));
 
     expect(isDownstreamReleased(acceptance)).toBe(true);
     expect(isTerminationAuthorized(acceptance)).toBe(true);
@@ -516,6 +520,7 @@ describe("shutdown — a valid accepted receipt releases downstream + seals a te
     const sealed = sealTerminalAttempt({
       cwd,
       ids,
+      binding: bindFor(cwd, ids.run_id),
       terminal_state: "terminated",
       reason: null,
       now: FIXED_NOW,
@@ -535,9 +540,9 @@ describe("shutdown — a valid accepted receipt releases downstream + seals a te
     const { assignment } = buildTaskCell(dispatch());
     writeTaskCell(cwd, buildTaskCell(dispatch()), bindFor(cwd, "run-g4"));
     const ids = idsOf(assignment);
-    sealTerminalAttempt({ cwd, ids, terminal_state: "terminated", reason: null, now: FIXED_NOW });
+    sealTerminalAttempt({ cwd, ids, binding: bindFor(cwd, ids.run_id), terminal_state: "terminated", reason: null, now: FIXED_NOW });
     expect(() =>
-      sealTerminalAttempt({ cwd, ids, terminal_state: "failed", reason: "x", now: FIXED_NOW })
+      sealTerminalAttempt({ cwd, ids, binding: bindFor(cwd, ids.run_id), terminal_state: "failed", reason: "x", now: FIXED_NOW })
     ).toThrow(/immutable|retry mints a new attempt/i);
   });
 });
@@ -551,7 +556,7 @@ describe("AT6 — a failed teardown parks the attempt orphaned; a reaper retry s
     writeTaskCell(cwd, buildTaskCell(dispatch()), bindFor(cwd, "run-g4"));
     const ids = idsOf(assignment);
 
-    const orphaned = markAttemptOrphaned(cwd, ids);
+    const orphaned = markAttemptOrphaned(cwd, ids, bindFor(cwd, ids.run_id));
     expect(orphaned.orphaned).toBe(true);
     expect(orphaned.terminal_state).toBeNull(); // still non-terminal — not yet reaped
     expect(orphaned.reap_attempts).toBe(1);
@@ -561,6 +566,7 @@ describe("AT6 — a failed teardown parks the attempt orphaned; a reaper retry s
     const sealed = sealTerminalAttempt({
       cwd,
       ids,
+      binding: bindFor(cwd, ids.run_id),
       terminal_state: "terminated",
       reason: null,
       orphaned: true,
@@ -596,7 +602,7 @@ describe("rejection — a rejected receipt writes a DURABLE record, never a sile
       reason: "quality",
       now: FIXED_NOW,
     });
-    writeAcceptanceRecord(cwd, rejection);
+    writeAcceptanceRecord(cwd, rejection, bindFor(cwd, rejection.run_id));
 
     expect(isDownstreamReleased(rejection)).toBe(false); // dependents stay blocked
     expect(isTerminationAuthorized(rejection)).toBe(true); // but teardown IS authorized
@@ -606,6 +612,7 @@ describe("rejection — a rejected receipt writes a DURABLE record, never a sile
     const sealed = sealTerminalAttempt({
       cwd,
       ids: idsOf(assignment),
+      binding: bindFor(cwd, assignment.run_id),
       terminal_state: "rejected",
       reason: "quality",
       now: FIXED_NOW,
@@ -644,7 +651,8 @@ describe("findRunAcceptances — walks the run tree; only authorized records gat
         authoritiesRequired: AUTHORITIES,
         authoritiesObserved: OBSERVED_ACCEPT,
         now: FIXED_NOW,
-      })
+      }),
+      bindFor(cwd, "run-g4")
     );
 
     const found = findRunAcceptances(cwd, "run-g4");

@@ -69,7 +69,12 @@ import {
 import { sliceMintedRosterForGoal, sliceRosterForGoal, type GoalV1 } from "../../src/domains/teams";
 import { resolveTeamFile } from "../../src/domains/teams";
 import { mintFromTemplate, resolveRoster } from "./roster";
-import { mintRunBinding, readAllEvents } from "../../src/domains/lifecycle";
+import { loadRunBinding, mintRunBinding, readAllEvents } from "../../src/domains/lifecycle";
+
+/** The fixture root's own run binding (mint once, then load): ledger and ack writers require it. */
+function bindFor(cwd: string, runId: string): { binding_ref: string } {
+  return { binding_ref: (loadRunBinding({ root: cwd, run_id: runId }) ?? mintRunBinding({ root: cwd, run_id: runId })).binding_ref };
+}
 import { validateEvent } from "../v1.4-log-validator";
 import { taskCellPaths } from "./core/contracts/task-cell-backend";
 import { rungPlanForFamily } from "../../src/adapters";
@@ -120,13 +125,13 @@ async function driveToValidated(input: {
   doneWhen?: readonly { id: string; oracle: "named_check" | "verify.after_edit"; target?: string | null }[];
 }): Promise<{ runtime: FilesystemTaskCellRuntime; instance: InstanceHandle; assignment: TaskAssignmentV2 }> {
   const { cwd, runId, logicalTaskId } = input;
-  const binding = mintRunBinding({ root: cwd, run_id: runId });
+  const binding = bindFor(cwd, runId);
   let notifyCwd = cwd;
   const worker: TaskCellWorkerPort = {
     ...okWorker(),
     notifyAssignment: ({ assignment_path }) => {
       const persisted = JSON.parse(fs.readFileSync(path.join(notifyCwd, assignment_path), "utf8"));
-      acknowledgeAssignment(notifyCwd, persisted, FIXED_NOW);
+      acknowledgeAssignment(notifyCwd, persisted, FIXED_NOW, binding);
       return { ok: true, reason: null };
     },
   };
@@ -197,7 +202,7 @@ async function driveToValidated(input: {
   fs.mkdirSync(path.dirname(path.join(cwd, receiptPath)), { recursive: true });
   fs.writeFileSync(path.join(cwd, receiptPath), receiptBytes(runId, logicalTaskId), "utf8");
   expect(
-    publishSubmittedHandoffPointer({ cwd, assignment: built.assignment, submittedAt: FIXED_NOW() }),
+    publishSubmittedHandoffPointer({ cwd, assignment: built.assignment, submittedAt: FIXED_NOW(), binding }),
   ).not.toBeNull();
   const collected = await runtime.collectHandoff(instance);
   expect(collected.ok).toBe(true);
@@ -677,6 +682,7 @@ describe("F06 a cell without oracles cannot go done (R46)", () => {
     const init = initProgressLedger({
       cwd,
       run_id: "run-t08",
+      binding: bindFor(cwd, "run-t08"),
       logical_task_id: "T1-backend",
       cell_id: "cell-T1-backend",
       done_when: (assignment as { done_when?: unknown }).done_when,
@@ -704,13 +710,14 @@ describe("F06 a cell without oracles cannot go done (R46)", () => {
     const init = initProgressLedger({
       cwd,
       run_id: "run-t08",
+      binding: bindFor(cwd, "run-t08"),
       logical_task_id: "T1-backend",
       cell_id: "cell-T1-backend",
       done_when: (assignment as { done_when?: unknown }).done_when,
       now: FIXED_NOW,
     });
     expect(init.ok).toBe(true);
-    const ids = { cwd, run_id: "run-t08", logical_task_id: "T1-backend" };
+    const ids = { cwd, run_id: "run-t08", logical_task_id: "T1-backend", binding: bindFor(cwd, "run-t08") };
 
     expect(cellCanGoDone(readProgressLedger(ids)).ok).toBe(false);
     expect(recordOracleOutcome({ ...ids, item_id: "unit", state: "pass" }).ok).toBe(true);
@@ -760,7 +767,7 @@ describe("F06 a cell without oracles cannot go done (R46)", () => {
         { id: "verify", oracle: "verify.after_edit", target: null },
       ],
     });
-    const ids = { cwd, run_id: "run-t08", logical_task_id: "T2-backend" };
+    const ids = { cwd, run_id: "run-t08", logical_task_id: "T2-backend", binding: bindFor(cwd, "run-t08") };
     expect(
       initProgressLedger({
         ...ids,
@@ -791,7 +798,7 @@ describe("R40 the ledger's closed failure enum is enforced on the runtime's acce
       logicalTaskId: task,
       doneWhen: [{ id: "unit", oracle: "named_check", target: "npm test -- api" }],
     });
-    const ids = { cwd, run_id: "run-t08", logical_task_id: task };
+    const ids = { cwd, run_id: "run-t08", logical_task_id: task, binding: bindFor(cwd, "run-t08") };
     const init = initProgressLedger({
       ...ids,
       cell_id: `cell-${task}`,
@@ -1258,7 +1265,7 @@ describe("R70 one review gate: a cell never reviews itself, and the round lands 
       logicalTaskId,
       doneWhen: [{ id: "unit", oracle: "named_check", target: "npm test -- api" }],
     });
-    const ids = { cwd, run_id: RUN, logical_task_id: logicalTaskId };
+    const ids = { cwd, run_id: RUN, logical_task_id: logicalTaskId, binding: bindFor(cwd, RUN) };
     initProgressLedger({
       ...ids,
       cell_id: `cell-${logicalTaskId}`,

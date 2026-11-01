@@ -146,7 +146,7 @@ describe("TaskCell production record-runtime scale proof", () => {
         { id: "floor", oracle: "named_check", target: "deterministic_floor" },
       ];
       expect((await runtime.deliverAssignment(instance, assignment)).ok).toBe(true);
-      acknowledgeAssignment(cwd, assignment, NOW);
+      acknowledgeAssignment(cwd, assignment, NOW, { binding_ref: binding.binding_ref });
       expect((await runtime.awaitAssignmentAck(instance)).ok).toBe(true);
       const paths = taskCellPaths({ run_id: runId, logical_task_id: cell.logical_task_id, attempt, instance_id: instance.instance_id });
       const receiptPath = `.guild/runs/${runId}/handoffs/backend-${cell.logical_task_id}.md`;
@@ -213,7 +213,7 @@ describe("TaskCell production record-runtime scale proof", () => {
       ].join("\n");
       fs.mkdirSync(path.dirname(path.join(cwd, receiptPath)), { recursive: true });
       fs.writeFileSync(path.join(cwd, receiptPath), receiptBytes);
-      expect(publishSubmittedHandoffPointer({ cwd, assignment, submittedAt: NOW() })).not.toBeNull();
+      expect(publishSubmittedHandoffPointer({ cwd, assignment, submittedAt: NOW(), binding: { binding_ref: binding.binding_ref } })).not.toBeNull();
       expect((await runtime.collectHandoff(instance)).ok).toBe(true);
       // R46 (T08): acceptance reads the cell's done_when ledger, so every cell in
       // the scale proof declares and settles one oracle.
@@ -229,9 +229,10 @@ describe("TaskCell production record-runtime scale proof", () => {
           assignment_id: boundAssignmentId,
           done_when: [{ id: "floor", oracle: "named_check", target: "deterministic_floor" }],
           now: NOW,
+          binding: { binding_ref: binding.binding_ref },
         });
       }
-      recordOracleOutcome({ ...ledgerIds, item_id: "floor", state: "pass", now: NOW });
+      recordOracleOutcome({ ...ledgerIds, item_id: "floor", state: "pass", now: NOW, binding: { binding_ref: binding.binding_ref } });
       const authorities = [
         { authority: "deterministic_floor" as const, decision: "accepted" as const, at: NOW(), reason: null },
         { authority: "team_lead" as const, decision: reject ? "rejected" as const : "accepted" as const, at: NOW(), reason: reject ? "retry" : null },

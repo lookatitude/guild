@@ -22,6 +22,8 @@ export * from "./release-conformance-evaluator";
 export * from "./release-conformance-integration";
 export * from "./result-contracts";
 export * from "./review-result";
+export * from "./review-gate-pass";
+export * from "./review-invocation";
 export * from "./release-distribution-contract";
 export * as SurfaceManifestApi from "./surface-manifest";
 export * from "./verify-host-packages";

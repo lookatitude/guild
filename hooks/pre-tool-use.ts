@@ -152,6 +152,7 @@ import {
 import { evaluateCompatibilitySkillUse } from "./lib/compatibility-skill-guard.js";
 import { runDirOverride } from "./lib/run-dir-override.js";
 import { laneWikiWriteTarget } from "./lib/security/lane-wiki-guard.js";
+import { BINDING_GUARD_LIMITS, laneBindingPathTarget } from "./lib/security/binding-path-guard.js";
 import { createGuildStorage } from "../src/domains/state";
 import {
   describeProseRefusal,
@@ -995,6 +996,51 @@ function runIngestPauseGate(payload: GuildHookEvent, cwd: string): boolean {
     const clearPause = tool === "Bash" && /--clear-pause/.test(String(ti["command"] ?? ""));
     traceToolDenial(payload, cwd, "ingest_pause", clearPause ? "unavailable_observation" : "permission_denied");
   }
+  return true;
+}
+
+/**
+ * CD21: a lane worker's Read / Grep / Glob / Edit / Write / Bash naming a run
+ * binding.json is denied (binding_path_refused). Accident prevention only; the
+ * lead / T0 session is untouched.
+ */
+function runLaneBindingPathGate(payload: GuildHookEvent, cwd: string): boolean {
+  const tool = payload.tool_name ?? "";
+  const ti = (payload.tool_input ?? {}) as Record<string, unknown>;
+  const target = laneBindingPathTarget(process.env, tool, ti);
+  if (target === null) return false;
+  const reason =
+    `a lane worker may not access a run binding (${tool} input names or can resolve to .guild/runs/<run>/binding.json); ` +
+    `the controller holds the binding (CD21, accident prevention; ${BINDING_GUARD_LIMITS})`;
+  const runId = resolveRunId(cwd);
+  if (runId !== undefined && isSafeRunId(runId)) {
+    try {
+      const laneEnv = process.env["GUILD_LANE_ID"];
+      appendSecurityEvent(
+        runDirOverride() ?? resolveRunDir(cwd, runId),
+        buildSecurityEvent({
+          run_id: runId,
+          lane_id: typeof laneEnv === "string" && isSafeLaneId(laneEnv) ? laneEnv : undefined,
+          event_type: "capability_scope_violation",
+          decision: "deny",
+          tool,
+          detail: `binding_path_refused: ${reason}`,
+        }),
+      );
+    } catch {
+      /* observability only */
+    }
+  }
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: `Guild security (binding_path_refused): ${reason}`,
+      },
+    }),
+  );
+  traceToolDenial(payload, cwd, "binding_path", "permission_denied");
   return true;
 }
 
@@ -1959,6 +2005,9 @@ export async function main(): Promise<void> {
   // approving the ask must never run a tool the worker was not granted (the same
   // reason PCL-09 runs first).
   if (runProjectionGate(payload, cwd)) return;
+
+  // CD21 — a lane worker naming a run binding.json is a hard deny.
+  if (runLaneBindingPathGate(payload, cwd)) return;
 
   // D-PROBE ingest pause — a hard deny on a paused candidate, before any gate
   // that could answer an approvable `ask` for the same write.

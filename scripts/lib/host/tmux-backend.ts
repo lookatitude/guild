@@ -7,7 +7,7 @@
  * Layer: host/ — imports from core/contracts + shared/, no upward imports.
  */
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { hostKindToRegistryId, getRegistryEntry } from "../host-registry";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -60,6 +60,11 @@ import { ownPluginRoot } from "../../../src/domains/kernel";
 import {
   claimIsolatedLaunches,
   assertLaneInstanceExported,
+  TmuxExecutionTransport,
+  taskCellPaths,
+  type TaskCellWorkerPort,
+  type TaskCellMechanicsResult,
+  type TaskCellSpawnResult,
 } from "../../../src/domains/dispatch";
 
 // ── Pure command composition helpers ─────────────────────────────────────────
@@ -757,21 +762,25 @@ export function composeTmuxCommands(opts: {
 
   const orchestratorCmd = commandFor(null);
 
+  // F3: the creating command prints the identity of what it created (unique
+  // session/window ids + the server's pid and start_time), so cleanup and pane
+  // capture bind to this launch's own target, never to the reusable name.
+  const createFmt = CREATE_IDENTITY_FORMAT;
   if (mode === "new-session") {
     cmds.push({
       argv: [
-        "tmux", "new-session", "-d", "-s", targetName, "-n", "orchestrator", "-c", cwd, orchestratorCmd,
+        "tmux", "new-session", "-d", "-P", "-F", createFmt, "-s", targetName, "-n", "orchestrator", "-c", cwd, orchestratorCmd,
       ],
       display:
-        `tmux new-session -d -s ${shellQuote(targetName)} ` +
+        `tmux new-session -d -P -F ${shellQuote(createFmt)} -s ${shellQuote(targetName)} ` +
         `-n orchestrator -c ${shellQuote(cwd)} ` +
         shellQuote(orchestratorCmd),
     });
   } else {
     cmds.push({
-      argv: ["tmux", "new-window", "-n", targetName, "-c", cwd, orchestratorCmd],
+      argv: ["tmux", "new-window", "-P", "-F", createFmt, "-n", targetName, "-c", cwd, orchestratorCmd],
       display:
-        `tmux new-window -n ${shellQuote(targetName)} ` +
+        `tmux new-window -P -F ${shellQuote(createFmt)} -n ${shellQuote(targetName)} ` +
         `-c ${shellQuote(cwd)} ${shellQuote(orchestratorCmd)}`,
     });
   }
@@ -814,7 +823,16 @@ export function composeTmuxCommands(opts: {
   return cmds;
 }
 
-export function probeTmuxAvailable(run: RunFn = defaultRun): boolean {
+/**
+ * This file's default subprocess runner: the shared core defaultRun with a sanitized
+ * CLONE of the env the child would otherwise get (an explicit per-call env, else the
+ * inherited process env), so no run binding reaches a tmux client, server or pane.
+ * The parent and every supplied env/options object are left untouched.
+ */
+const safeDefaultRun: RunFn = (cmd, args, opts = {}) =>
+  defaultRun(cmd, args, { ...opts, env: sanitizedWorkerEnv((opts["env"] as NodeJS.ProcessEnv | undefined) ?? process.env) });
+
+export function probeTmuxAvailable(run: RunFn = safeDefaultRun): boolean {
   return run("tmux", ["-V"]).status === 0;
 }
 
@@ -829,7 +847,7 @@ export function probeTmuxAvailable(run: RunFn = defaultRun): boolean {
 // a silent success.
 
 /** The set of live tmux pane ids, or null when tmux is unavailable / errored. */
-export function livePaneIds(run: RunFn = defaultRun): Set<string> | null {
+export function livePaneIds(run: RunFn = safeDefaultRun): Set<string> | null {
   const r = run("tmux", ["list-panes", "-a", "-F", "#{pane_id}"]);
   if (r.status !== 0) return null;
   return new Set(
@@ -841,7 +859,7 @@ export function livePaneIds(run: RunFn = defaultRun): Set<string> | null {
 }
 
 /** True when `paneId` is present in the live pane listing. Fail-closed: unknown tmux state → not alive. */
-export function isPaneAlive(paneId: string, run: RunFn = defaultRun): boolean {
+export function isPaneAlive(paneId: string, run: RunFn = safeDefaultRun): boolean {
   const ids = livePaneIds(run);
   return ids !== null && ids.has(paneId);
 }
@@ -876,7 +894,7 @@ export function terminatePane(
   paneId: string,
   opts: { run?: RunFn; pollAttempts?: number } = {},
 ): TerminatePaneOutcome {
-  const run = opts.run ?? defaultRun;
+  const run = opts.run ?? safeDefaultRun;
   const pollAttempts = opts.pollAttempts ?? 5;
   const base = { mechanism: "tmux kill-pane" as const, paneId };
 
@@ -1117,11 +1135,22 @@ function commandCarriesAndConsumesDefinitionRef(
   spec: Specialist,
   runId?: string,
 ): boolean {
+  const payload = tmuxSpecialistPayload(argv);
+  return payload !== null && paneCommandCarriesDefinitionRef(payload, spec, runId);
+}
+
+/**
+ * The same carriage proof over one generated pane payload (the shell string tmux
+ * executes), for launch paths that do not use the split-window plan shape.
+ */
+export function paneCommandCarriesDefinitionRef(
+  payload: string,
+  spec: Specialist,
+  runId?: string,
+): boolean {
   const ref = spec.definition_ref;
   if (ref === undefined) return false;
   try {
-    const payload = tmuxSpecialistPayload(argv);
-    if (payload === null) return false;
     const quoted = shellQuote(JSON.stringify(ref));
     const exported = `export GUILD_DEFINITION_REF=${quoted};`;
     const consumed = `test "$GUILD_DEFINITION_REF" = ${quoted} ||`;
@@ -1136,12 +1165,228 @@ function commandCarriesAndConsumesDefinitionRef(
   }
 }
 
+// ── Launch-owned identity (L1-F3, carrier capture) ───────────────────────────
+
+/** What a creating command prints about the target it created. */
+export const CREATE_IDENTITY_FORMAT = "#{session_id} #{window_id} #{pid} #{start_time}";
+
+export interface TmuxCreateIdentity {
+  verb: "new-session" | "new-window";
+  session_id: string;
+  window_id: string;
+  server_pid: number;
+  server_process_start: string;
+}
+
+export interface TmuxCapturedPane {
+  pane_id: string;
+  pane_pid: number;
+  pane_process_start: string;
+  window_id: string;
+  title: string;
+}
+
+export interface TmuxCleanupResult {
+  attempted: true;
+  confirmed_gone: boolean;
+  identity_check: "verified" | "mismatch" | "unavailable";
+  error: string | null;
+}
+
+/** Everything one spawn(plan) observed; nothing in it is synthesized. */
+export interface TmuxSpawnCapture {
+  creating: TmuxCreateIdentity | null;
+  panes: TmuxCapturedPane[];
+  cleanup: TmuxCleanupResult | null;
+  error: string | null;
+}
+
+function parseCreateIdentity(verb: TmuxCreateIdentity["verb"], stdout: string): TmuxCreateIdentity | null {
+  const [sessionId, windowId, pid, start] = fields(stdout);
+  if (!/^\$\d+$/.test(sessionId ?? "") || !/^@\d+$/.test(windowId ?? "")) return null;
+  const server = parseServerFields(pid, start);
+  if (!server) return null;
+  return { verb, session_id: sessionId!, window_id: windowId!, server_pid: server.pid, server_process_start: server.process_start };
+}
+
+/**
+ * The panes of the created window, from one answer of the creating server. Any
+ * line from another server or window, an unparseable line, an unreadable pane
+ * process or a duplicate title records nothing at all.
+ */
+function captureLaunchPanes(c: TmuxCreateIdentity, run: RunFn): TmuxCapturedPane[] {
+  const r = run("tmux", ["list-panes", "-t", c.window_id, "-F", "#{pid} #{start_time} #{window_id} #{pane_id} #{pane_pid} #{pane_title}"]);
+  if (r.status !== 0) return [];
+  const panes: TmuxCapturedPane[] = [];
+  const titles = new Set<string>();
+  for (const line of r.stdout.split("\n")) {
+    if (line.trim().length === 0) continue;
+    const [pid, start, windowId, paneId, panePid, ...titleParts] = fields(line);
+    const server = parseServerFields(pid, start);
+    const title = titleParts.join(" ");
+    const pp = Number(panePid);
+    if (!server || server.pid !== c.server_pid || server.process_start !== c.server_process_start ||
+        windowId !== c.window_id || !/^%\d+$/.test(paneId ?? "") || !Number.isInteger(pp) || pp <= 0 ||
+        title.length === 0 || titles.has(title)) {
+      return [];
+    }
+    const paneStart = processStartOf(pp, run);
+    if (paneStart === null) return [];
+    titles.add(title);
+    panes.push({ pane_id: paneId!, pane_pid: pp, pane_process_start: paneStart, window_id: windowId!, title });
+  }
+  return panes;
+}
+
+/**
+ * Remove only the captured target, through the server-side identity check, and
+ * confirm from the creating server (or, with no server answering, from the
+ * captured pane processes). A mismatch or unreadable state leaves it untouched.
+ */
+function cleanupCapturedTarget(
+  c: TmuxCreateIdentity,
+  mode: LaunchMode,
+  panes: readonly TmuxCapturedPane[],
+  run: RunFn,
+): TmuxCleanupResult {
+  const target = mode === "in-session" ? c.window_id : c.session_id;
+  const verb = mode === "in-session" ? "kill-window" : "kill-session";
+  const startDigits = c.server_process_start.slice(TMUX_SERVER_START_PREFIX.length);
+  const result = (confirmed_gone: boolean, identity_check: TmuxCleanupResult["identity_check"], error: string | null): TmuxCleanupResult =>
+    ({ attempted: true, confirmed_gone, identity_check, error });
+  const action = run("tmux", ["if-shell", "-F", "-t", target, `#{==:#{pid}/#{start_time},${c.server_pid}/${startDigits}}`, `${verb} -t ${target}`]);
+  if (action.status === null) return result(false, "unavailable", "tmux unavailable at cleanup");
+  const listed = run("tmux", ["list-panes", "-a", "-F", "#{pid} #{start_time} #{window_id}"]);
+  if (listed.status === 0) {
+    let sameServer = true;
+    let stillThere = false;
+    for (const line of listed.stdout.split("\n")) {
+      if (line.trim().length === 0) continue;
+      const [pid, start, windowId] = fields(line);
+      const server = parseServerFields(pid, start);
+      if (!server) return result(false, "unavailable", "pane listing did not parse");
+      if (server.pid !== c.server_pid || server.process_start !== c.server_process_start) sameServer = false;
+      if (windowId === c.window_id) stillThere = true;
+    }
+    if (!sameServer) return result(false, "mismatch", "a different tmux server answers this socket");
+    return stillThere ? result(false, "verified", `${target} still present after cleanup`) : result(true, "verified", null);
+  }
+  if (listed.status !== null && isNoServer(listed)) {
+    if (panes.length === 0) return result(false, "unavailable", "no server answers and no pane process was captured to check");
+    const gone = panes.map((p) => recordedProcessGone(p.pane_pid, p.pane_process_start, run));
+    if (gone.every((g) => g === true)) return result(true, "verified", null);
+    return result(false, "unavailable", "no server answers and a captured pane process is alive or unreadable");
+  }
+  return result(false, "unavailable", `pane listing failed: ${(listed.stderr ?? "").trim()}`);
+}
+
+// ── Per-instance pane identity carrier (approved r1, l-pane-carrier-approved-r1) ──
+
+export const PANE_IDENTITY_SCHEMA = "guild.task_cell_pane_identity.v1" as const;
+
+export interface PaneCarrierIds { run_id: string; logical_task_id: string; attempt: number; instance_id: string }
+
+export interface PaneIdentityCarrierV1 extends PaneCarrierIds {
+  schema_version: typeof PANE_IDENTITY_SCHEMA;
+  launch_id: string;
+  created_at: string;
+  creating_command: TmuxCreateIdentity;
+  pane: Omit<TmuxCapturedPane, never>;
+  shared_members: Array<{ logical_task_id: string; attempt: number; instance_id: string; dispatch_key: string; specialist: string }>;
+}
+
+/** The carrier's one exact location: beside the instance record. */
+export function paneIdentityCarrierPath(cwd: string, ids: PaneCarrierIds): string {
+  return path.join(path.resolve(cwd, taskCellPaths(ids).instance_dir), "pane-identity.json");
+}
+
+/** Exclusive create, then re-read: a fault or any byte difference is an error. */
+export function writePaneIdentityCarrier(cwd: string, carrier: PaneIdentityCarrierV1): void {
+  const abs = paneIdentityCarrierPath(cwd, carrier);
+  const text = JSON.stringify(carrier, null, 2) + "\n";
+  fs.writeFileSync(abs, text, { encoding: "utf8", flag: "wx", mode: 0o600 });
+  if (fs.readFileSync(abs, "utf8") !== text) throw new Error(`pane identity carrier ${abs} did not read back exactly`);
+}
+
+/** A required carrier string: holds a non-whitespace character; never trimmed or rewritten. */
+const nonEmpty = (v: unknown): v is string => typeof v === "string" && /\S/u.test(v);
+const positiveInt = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) > 0;
+
+/** The writer's `new Date().toISOString()`: exact form and a real instant. */
+const isIsoTimestamp = (v: unknown): boolean =>
+  typeof v === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(v) &&
+  !Number.isNaN(Date.parse(v)) && new Date(v).toISOString() === v;
+
+/** Every member of one pane carries the captured pane title as its dispatch key (the writer's mapping). */
+const isMember = (m: unknown, title: string): m is PaneIdentityCarrierV1["shared_members"][number] => {
+  const r = m as Record<string, unknown> | null;
+  return !!r && nonEmpty(r["logical_task_id"]) && positiveInt(r["attempt"]) &&
+    nonEmpty(r["instance_id"]) && r["dispatch_key"] === title && nonEmpty(r["specialist"]);
+};
+
+/** The validated carrier for exactly these ids, or why there is none. */
+export function readPaneIdentityCarrier(cwd: string, ids: PaneCarrierIds): { ok: true; carrier: PaneIdentityCarrierV1 } | { ok: false; reason: string } {
+  let raw: unknown;
+  try {
+    const abs = paneIdentityCarrierPath(cwd, ids);
+    const stat = fs.lstatSync(abs);
+    if (!stat.isFile() || stat.isSymbolicLink()) return { ok: false, reason: "identity_metadata_invalid: not a regular file" };
+    raw = JSON.parse(fs.readFileSync(abs, "utf8"));
+  } catch (error) {
+    return { ok: false, reason: (error as NodeJS.ErrnoException).code === "ENOENT" ? "identity_metadata_missing" : "identity_metadata_invalid: unreadable" };
+  }
+  const c = raw as PaneIdentityCarrierV1;
+  const cc = c?.creating_command;
+  const p = c?.pane;
+  const valid = !!c && c.schema_version === PANE_IDENTITY_SCHEMA &&
+    c.run_id === ids.run_id && c.logical_task_id === ids.logical_task_id && c.attempt === ids.attempt && c.instance_id === ids.instance_id &&
+    nonEmpty(c.launch_id) && isIsoTimestamp(c.created_at) &&
+    !!cc && (cc.verb === "new-session" || cc.verb === "new-window") &&
+    typeof cc.session_id === "string" && /^\$\d+$/.test(cc.session_id) && typeof cc.window_id === "string" && /^@\d+$/.test(cc.window_id) &&
+    positiveInt(cc.server_pid) && typeof cc.server_process_start === "string" &&
+    new RegExp(`^${TMUX_SERVER_START_PREFIX}\\d+$`).test(cc.server_process_start) &&
+    !!p && typeof p.pane_id === "string" && /^%\d+$/.test(p.pane_id) && positiveInt(p.pane_pid) &&
+    // The writer stores processStartOf's normalized form, so the raw value must already be canonical.
+    typeof p.pane_process_start === "string" && isCLocaleStart(p.pane_process_start) &&
+    p.window_id === cc.window_id && nonEmpty(p.title) &&
+    Array.isArray(c.shared_members) && c.shared_members.every((m) => isMember(m, p.title)) &&
+    c.shared_members.filter((m) => m.instance_id === ids.instance_id && m.logical_task_id === ids.logical_task_id && m.attempt === ids.attempt).length === 1 &&
+    new Set(c.shared_members.map((m) => `${m.logical_task_id}/${m.attempt}/${m.instance_id}`)).size === c.shared_members.length;
+  return valid ? { ok: true, carrier: c } : { ok: false, reason: "identity_metadata_invalid: schema or identity mismatch" };
+}
+
+/** The bound teardown identity a carrier proves. */
+export function boundIdentityOf(c: PaneIdentityCarrierV1): BoundPaneIdentity {
+  return {
+    pane_id: c.pane.pane_id, pane_pid: c.pane.pane_pid, pane_process_start: c.pane.pane_process_start,
+    server_pid: c.creating_command.server_pid, server_process_start: c.creating_command.server_process_start,
+  };
+}
+
+/**
+ * Every shared peer's own carrier must exist, validate, and agree on launch_id,
+ * creating provenance, pane tuple and the complete member set. Anything else defers.
+ */
+export function sharedPeersAgree(cwd: string, c: PaneIdentityCarrierV1): { ok: true } | { ok: false; reason: string } {
+  const key = (x: PaneIdentityCarrierV1) =>
+    JSON.stringify([x.launch_id, x.creating_command, x.pane, [...x.shared_members].sort((a, b) =>
+      `${a.logical_task_id}/${a.attempt}/${a.instance_id}`.localeCompare(`${b.logical_task_id}/${b.attempt}/${b.instance_id}`))]);
+  const mine = key(c);
+  for (const m of c.shared_members) {
+    const peer = readPaneIdentityCarrier(cwd, { run_id: c.run_id, logical_task_id: m.logical_task_id, attempt: m.attempt, instance_id: m.instance_id });
+    if (!peer.ok) return { ok: false, reason: `shared peer ${m.instance_id}: ${peer.reason}` };
+    if (key(peer.carrier) !== mine) return { ok: false, reason: `shared peer ${m.instance_id} disagrees` };
+  }
+  return { ok: true };
+}
+
 export class TmuxTeamBackend implements TeamBackend {
   readonly kind = "tmux" as const;
   private run: RunFn;
   private resolveAdapter?: AdapterResolver;
   private env: NodeJS.ProcessEnv;
   private pluginOwnerRoot: string;
+  private readonly captures = new Map<string, TmuxSpawnCapture>();
 
   constructor(opts: {
     run?: RunFn;
@@ -1149,7 +1394,11 @@ export class TmuxTeamBackend implements TeamBackend {
     env?: NodeJS.ProcessEnv;
     pluginOwnerRoot?: string;
   } = {}) {
-    this.run = opts.run ?? defaultRun;
+    // Every physical subprocess of this backend, injected or default, gets a sanitized
+    // clone of its effective env (explicit per-call env first, else the inherited one).
+    const base = opts.run ?? defaultRun;
+    this.run = (cmd, args, o = {}) =>
+      base(cmd, args, { ...o, env: sanitizedWorkerEnv((o["env"] as NodeJS.ProcessEnv | undefined) ?? process.env) });
     this.resolveAdapter = opts.resolveAdapter;
     this.env = opts.env ?? process.env;
     this.pluginOwnerRoot = opts.pluginOwnerRoot ?? ownPluginRoot(__dirname);
@@ -1265,43 +1514,63 @@ export class TmuxTeamBackend implements TeamBackend {
     return { ok: failures.length === 0, failures };
   }
 
+  /**
+   * Execute the plan. The first command creates the target and prints its own
+   * identity; everything this launch later captures or cleans is bound to that
+   * identity. What was observed is kept for the owning launcher
+   * (takeSpawnCapture), also when a later step fails or throws.
+   */
   spawn(plan: TmuxPlan): TmuxSpawnOutcome {
-    for (const c of plan.commands) {
-      const r = this.run(c.argv[0], c.argv.slice(1));
-      if (r.status !== 0) {
-        if (plan.mode === "in-session") {
-          this.run("tmux", ["kill-window", "-t", plan.targetName]);
-        } else {
-          this.run("tmux", ["kill-session", "-t", plan.targetName]);
-        }
-        return {
-          ok: false,
-          failedCommand: c,
-          stderr: r.stderr,
-          orchestratorPaneId: "",
-          teammatePaneIds: {},
-        };
+    const capture: TmuxSpawnCapture = { creating: null, panes: [], cleanup: null, error: null };
+    this.captures.set(plan.targetName, capture);
+    const [first, ...rest] = plan.commands;
+    const fail = (c: ParsedTmuxCommand, stderr: string): TmuxSpawnOutcome => {
+      // Nothing proven created means nothing is cleaned up; otherwise only the
+      // captured target, through the server-side identity check.
+      if (capture.creating) capture.cleanup = cleanupCapturedTarget(capture.creating, plan.mode, capture.panes, this.run);
+      return { ok: false, failedCommand: c, stderr, orchestratorPaneId: "", teammatePaneIds: {} };
+    };
+    if (!first) return { ok: false, failedCommand: null, stderr: "empty plan", orchestratorPaneId: "", teammatePaneIds: {} };
+    // A client-side env cannot remove a key an existing server already holds: verify
+    // absence (or no server) before any create. The server is never cleared or killed.
+    const before = probeServerCredential(this.run);
+    if (before.state === "present" || before.state === "unverifiable") {
+      capture.error = `refused before create: credential_env_${before.state === "present" ? "present_in_tmux_server" : "unverifiable"}: ${before.detail}`;
+      return { ok: false, failedCommand: null, stderr: capture.error, orchestratorPaneId: "", teammatePaneIds: {} };
+    }
+    try {
+      const created = this.run(first.argv[0], first.argv.slice(1));
+      if (created.status !== 0) {
+        capture.error = `create exited ${created.status === null ? "without a status" : created.status}`;
+        return fail(first, created.stderr);
       }
+      capture.creating = parseCreateIdentity(first.argv[1] === "new-session" ? "new-session" : "new-window", created.stdout);
+      if (!capture.creating) {
+        capture.error = `create identity did not parse: ${JSON.stringify(created.stdout.trim())}`;
+        return fail(first, capture.error);
+      }
+      for (const c of rest) {
+        const r = this.run(c.argv[0], c.argv.slice(1));
+        if (r.status !== 0) return fail(c, r.stderr);
+      }
+      capture.panes = captureLaunchPanes(capture.creating, this.run);
+      // After the create only an observed absence verifies; anything else is a failure
+      // through the identity-bound cleanup of the captured target, never a success.
+      const after = probeServerCredential(this.run);
+      if (after.state !== "absent") {
+        capture.error = `post-create credential check: ${after.state}${"detail" in after ? ` (${after.detail})` : ""}`;
+        return fail(first, capture.error);
+      }
+    } catch (error) {
+      capture.error = `spawn threw: ${error instanceof Error ? error.message : String(error)}`;
+      throw error;
     }
 
-    // Scoped to THIS session's window (no `-a`, which lists panes SERVER-WIDE
-    // across every other session too — a correctness bug, not just a broader
-    // scope: a concurrent guild-team session with a same-named specialist pane
-    // title could silently clobber this collection).
-    const paneArgs = ["list-panes", "-t", plan.targetName, "-F", "#{pane_index}\t#{pane_id}\t#{pane_title}"];
-    const panesR = this.run("tmux", paneArgs);
     const teammates: Record<string, string> = {};
     let orchestratorPaneId = "";
-    if (panesR.status === 0) {
-      for (const line of panesR.stdout.split("\n")) {
-        const [, id, title] = line.split("\t");
-        if (!id) continue;
-        if (title === "orchestrator") {
-          orchestratorPaneId = id;
-        } else if (title && title in teammates === false) {
-          teammates[title] = id;
-        }
-      }
+    for (const p of capture.panes) {
+      if (p.title === "orchestrator") orchestratorPaneId = p.pane_id;
+      else if (p.title && !(p.title in teammates)) teammates[p.title] = p.pane_id;
     }
     return {
       ok: true,
@@ -1310,6 +1579,13 @@ export class TmuxTeamBackend implements TeamBackend {
       orchestratorPaneId,
       teammatePaneIds: teammates,
     };
+  }
+
+  /** The identity this backend observed for the named launch, consumed once. */
+  takeSpawnCapture(targetName: string): TmuxSpawnCapture | null {
+    const c = this.captures.get(targetName) ?? null;
+    this.captures.delete(targetName);
+    return c;
   }
 
   launch(req: TeamLaunchRequest): TeamLaunchResult {
@@ -1424,4 +1700,705 @@ export function binaryForHostKind(hostKind: HostKind): string {
   const id = hostKindToRegistryId(hostKind);
   const bin = id ? getRegistryEntry(id)?.detection.bin : null;
   return bin ?? "claude";
+}
+
+// ── Identity-bound teardown (E00 L4, CD6) ────────────────────────────────────
+//
+// A pane id is unique only within one server lifetime, and the tmux socket can
+// name a replacement server between any client-side read and a later kill. The
+// kill is therefore ONE server-side command: `if-shell -F` evaluates the captured
+// server pid, server start_time and pane_pid inside whichever server receives it,
+// and only a server whose identity matches runs `kill-pane`. Client-side reads
+// only classify the outcome; they never authorize a kill.
+
+/** server_process_start values this backend records carry tmux's own #{start_time}. */
+export const TMUX_SERVER_START_PREFIX = "tmux-start_time:";
+
+/** The recorded pane identity a bound teardown must find (never a fresh replacement). */
+export interface BoundPaneIdentity {
+  pane_id: string;
+  pane_pid: number;
+  pane_process_start: string;
+  server_pid: number;
+  server_process_start: string;
+}
+
+export interface BoundTerminateOutcome extends TerminatePaneOutcome {
+  identity_check: "verified" | "mismatch" | "unavailable";
+}
+
+const normalizedStart = (s: string | null): string | null => (s === null ? null : s.trim().replace(/\s+/g, " "));
+
+/**
+ * Identity formats use an ASCII space, never a tab: a server started under the C
+ * locale prints a tab in `-F` output as `_`. No identity field (pane id, pids,
+ * start_time) can contain a space.
+ */
+const fields = (text: string): string[] => text.trim().split(" ");
+
+/** `ps` runs under the C locale so lstart text compares across processes and sessions. */
+const PS_LOCALE = { LC_ALL: "C", LANG: "C" } as const;
+const psRun = (run: RunFn, args: string[]) =>
+  run("ps", args, { env: sanitizedWorkerEnv({ ...process.env, ...PS_LOCALE }) });
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+/** A whitespace-normalized C-locale `lstart` ("Tue Oct 27 10:00:00 2026") naming a real date and its weekday. */
+function isCLocaleStart(s: string | null): boolean {
+  const m = s === null ? null : /^([A-Z][a-z]{2}) ([A-Z][a-z]{2}) (\d{1,2}) (\d{2}):(\d{2}):(\d{2}) (\d{4})$/.exec(s);
+  if (!m) return false;
+  const month = (MONTHS as readonly string[]).indexOf(m[2]!);
+  const [day, hh, mm, ss, year] = [m[3], m[4], m[5], m[6], m[7]].map(Number) as [number, number, number, number, number];
+  if (month < 0 || hh > 23 || mm > 59 || ss > 59) return false;
+  const date = new Date(Date.UTC(year, month, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day && WEEKDAYS[date.getUTCDay()] === m[1];
+}
+
+/**
+ * One authoritative process observation. The whole table is read (`ps -A`) and every
+ * row must validate (pid, C-locale start, no duplicate pid) before any pid is looked
+ * up, so a pid missing from a clean table is proven absent; a failed, noisy,
+ * unparseable or ambiguous read is unavailable and never proves absence.
+ */
+export type ProcessObservation =
+  | { kind: "observed"; start: string }
+  | { kind: "absent" }
+  | { kind: "unavailable"; detail: string };
+
+export function observeProcessStart(pid: number, run: RunFn = safeDefaultRun): ProcessObservation {
+  let r: ReturnType<RunFn>;
+  try {
+    r = psRun(run, ["-A", "-o", "pid=,lstart="]);
+  } catch (error) {
+    return { kind: "unavailable", detail: `ps threw: ${error instanceof Error ? error.message : String(error)}` };
+  }
+  if (r.status !== 0) return { kind: "unavailable", detail: `ps exited ${r.status === null ? "without a status" : r.status}` };
+  if ((r.stderr ?? "").trim().length > 0) return { kind: "unavailable", detail: `ps reported: ${(r.stderr ?? "").trim()}` };
+  const lines = (r.stdout ?? "").split("\n");
+  if (lines[lines.length - 1] === "") lines.pop();
+  const starts = new Map<number, string>();
+  for (const line of lines) {
+    // Right-aligned pid, ASCII spaces, lstart; pid 0 is a real row on some systems. Only
+    // ASCII spaces separate fields, so no control or other whitespace is normalized away.
+    const m = /^ *(\d+) +([A-Za-z0-9: ]+)$/.exec(line);
+    if (!m) return { kind: "unavailable", detail: "ps table line did not parse" };
+    const rowPid = Number(m[1]);
+    const start = normalizedStart(m[2]!);
+    if (!Number.isSafeInteger(rowPid) || !isCLocaleStart(start)) return { kind: "unavailable", detail: "ps table row is not a C-locale pid/start" };
+    if (starts.has(rowPid)) return { kind: "unavailable", detail: `ps table lists pid ${rowPid} twice` };
+    starts.set(rowPid, start!);
+  }
+  if (starts.size === 0) return { kind: "unavailable", detail: "empty ps table" };
+  const start = starts.get(pid);
+  return start === undefined ? { kind: "absent" } : { kind: "observed", start };
+}
+
+/** The observed start, or null when absent OR unavailable; capture paths fail closed on null. */
+export function processStartOf(pid: number, run: RunFn = safeDefaultRun): string | null {
+  const o = observeProcessStart(pid, run);
+  return o.kind === "observed" ? o.start : null;
+}
+
+/** true: the recorded process (pid + start) is gone; false: it is alive; null: unavailable. */
+function recordedProcessGone(pid: number, start: string, run: RunFn): boolean | null {
+  const o = observeProcessStart(pid, run);
+  if (o.kind === "unavailable") return null;
+  if (o.kind === "absent") return true;
+  return o.start !== normalizedStart(start);
+}
+
+/**
+ * Authoritative "no server" (l-enoent-absence-scope-decision.json, l-r2-parser-scope-decisions.json):
+ * a nonzero exit with empty stdout whose whole stderr is exactly one line, either
+ * tmux's own "no server running on <socket>" or a connect that failed because the
+ * socket path does not exist (ENOENT; tmux 3.8 prints this for a fresh -S/-L socket).
+ * The socket must be an absolute printable path without whitespace or parentheses, so
+ * a socket path containing either fails closed (a recorded support limit). Any other
+ * errno, suffix, CR, extra line or mixed output stays unavailable. Callers that
+ * confirm a death still need the original pid + start proven gone.
+ */
+const isNoServer = (r: { status: number | null; stdout?: string; stderr?: string }): boolean => {
+  // A finite nonzero integer status and two real streams; a missing stream is unknown, not empty.
+  if (!Number.isInteger(r.status) || r.status === 0 || r.stdout !== "" || typeof r.stderr !== "string") return false;
+  // At most one final LF is stripped; the anchored patterns admit nothing else. The
+  // socket path is printable (no whitespace, parentheses, control or format character).
+  const err = r.stderr.replace(/\n$/, "");
+  return /^no server running on \/[^\s()\p{C}]+$/u.test(err) || /^error connecting to \/[^\s()\p{C}]+ \(No such file or directory\)$/u.test(err);
+};
+
+/**
+ * Whether the reachable tmux server's global env holds the run credential, from one exact
+ * answer (shared by the team backend and the worker port). Verified absence is only
+ * `-KEY` or `unknown variable: KEY`; an exact isNoServer answer is no_server (a fresh
+ * server starts from the sanitized env). Everything else is unverifiable.
+ */
+function probeServerCredential(run: RunFn): { state: "absent" | "no_server" } | { state: "present" | "unverifiable"; detail: string } {
+  const key = "GUILD_RUN_BINDING_REF";
+  let r: ReturnType<RunFn>;
+  try {
+    r = run("tmux", ["show-environment", "-g", key]);
+  } catch {
+    // Never the exception's message or code: either may carry environment bytes.
+    return { state: "unverifiable", detail: "show-environment threw" };
+  }
+  // Raw streams, never trimmed; a missing stream or a non-integer status is unknown, not empty.
+  const status: unknown = r.status;
+  const out: unknown = r.stdout;
+  const err: unknown = r.stderr;
+  const bytes = (s: unknown) => (typeof s === "string" ? `${Buffer.byteLength(s)} bytes` : "unavailable");
+  // Safe shape only: an integer status and observed byte counts, never stream content.
+  const unverifiable = (what: string) => ({
+    state: "unverifiable" as const,
+    detail: `show-environment ${what} (status ${Number.isInteger(status) ? status : "invalid"}, stdout ${bytes(out)}, stderr ${bytes(err)})`,
+  });
+  if (!Number.isInteger(status) || typeof out !== "string" || typeof err !== "string") return unverifiable("answer is incomplete");
+  const oneLine = (s: string, text: string) => s === text || s === `${text}\n`;
+  if (status === 0) {
+    if (err === "" && oneLine(out, `-${key}`)) return { state: "absent" };
+    if (err === "" && new RegExp(`^${key}=[^\\p{C}]*\\n?$`, "u").test(out)) return { state: "present", detail: key };
+    return unverifiable("printed a noncanonical answer");
+  }
+  if (out === "" && oneLine(err, `unknown variable: ${key}`)) return { state: "absent" };
+  if (isNoServer(r)) return { state: "no_server" };
+  return unverifiable("exited with a noncanonical answer");
+}
+
+function parseServerFields(pid: string | undefined, start: string | undefined): { pid: number; process_start: string } | null {
+  const n = Number(pid);
+  if (!Number.isInteger(n) || n <= 0 || !/^\d+$/.test(start ?? "")) return null;
+  return { pid: n, process_start: `${TMUX_SERVER_START_PREFIX}${start}` };
+}
+
+/** The identity tmux reports for the server the default socket reaches now. */
+export function tmuxServerIdentity(run: RunFn = safeDefaultRun): { pid: number; process_start: string } | null {
+  const r = run("tmux", ["display-message", "-p", "#{pid} #{start_time}"]);
+  if (r.status !== 0) return null;
+  const [pid, start] = fields(r.stdout);
+  return parseServerFields(pid, start);
+}
+
+/** The pane's pane_pid as the reachable server reports it, or null. */
+export function tmuxPanePid(paneId: string, run: RunFn = safeDefaultRun): number | null {
+  const r = run("tmux", ["display-message", "-p", "-t", paneId, "#{pane_pid}"]);
+  const pid = Number(r.stdout.trim());
+  return r.status === 0 && Number.isInteger(pid) && pid > 0 ? pid : null;
+}
+
+/**
+ * One answering server's view of a pane. `absent` means that server listed all its
+ * panes and this id was not among them; it is absence only on THAT server.
+ */
+type PaneServerView =
+  | { kind: "present"; server_pid: number; server_process_start: string; pane_pid: number }
+  | { kind: "absent"; server_pid: number; server_process_start: string }
+  | { kind: "no_server" }
+  | { kind: "unavailable"; degraded: boolean };
+
+/**
+ * `list-panes -a` carries the answering server's pid + start_time on every line, so
+ * presence and server identity come from one answer of one server. A targeted
+ * `display-message -t <gone pane>` exits 0 with empty pane fields while a sibling
+ * pane lives, which is why it is not used for presence.
+ */
+function paneServerView(paneId: string, run: RunFn): PaneServerView {
+  const r = run("tmux", ["list-panes", "-a", "-F", "#{pid} #{start_time} #{pane_id} #{pane_pid}"]);
+  if (r.status === null) return { kind: "unavailable", degraded: true };
+  if (r.status !== 0) {
+    // Only tmux's own "no server running on <socket>" is authoritative; "error
+    // connecting to" (EACCES and others) and any other failure are unavailable.
+    return isNoServer(r) ? { kind: "no_server" } : { kind: "unavailable", degraded: false };
+  }
+  const lines = r.stdout.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+  if (lines.length === 0) return { kind: "unavailable", degraded: false };
+  let server: { pid: number; process_start: string } | null = null;
+  let panePid: number | null = null;
+  for (const line of lines) {
+    const [pid, start, id, pp] = fields(line);
+    const s = parseServerFields(pid, start);
+    const n = Number(pp);
+    if (!s || !/^%\d+$/.test(id ?? "") || !Number.isInteger(n) || n <= 0) return { kind: "unavailable", degraded: false };
+    if (server && (server.pid !== s.pid || server.process_start !== s.process_start)) return { kind: "unavailable", degraded: false };
+    server = s;
+    if (id === paneId) panePid = n;
+  }
+  return panePid === null
+    ? { kind: "absent", server_pid: server!.pid, server_process_start: server!.process_start }
+    : { kind: "present", server_pid: server!.pid, server_process_start: server!.process_start, pane_pid: panePid };
+}
+
+const boundKillCondition = (serverPid: number, serverStart: string, panePid: number): string =>
+  `#{==:#{pid}/#{start_time}/#{pane_pid},${serverPid}/${serverStart}/${panePid}}`;
+
+/**
+ * Kill exactly the recorded pane and confirm it is gone.
+ *
+ * `identity_check`: verified (the recorded server answered and the server-side
+ * check bound the kill), mismatch (another pane or server answers for this id;
+ * nothing was killed by this call there), unavailable (no tmux-bound identity, or
+ * tmux could not be read). Only `ok && confirmed` with `verified` is a teardown.
+ */
+export function terminateBoundPane(
+  paneId: string,
+  expected: BoundPaneIdentity,
+  opts: { run?: RunFn; pollAttempts?: number } = {},
+): BoundTerminateOutcome {
+  const run = opts.run ?? safeDefaultRun;
+  const pollAttempts = Math.max(1, opts.pollAttempts ?? 5);
+  const out = (o: Omit<BoundTerminateOutcome, "mechanism" | "paneId">): BoundTerminateOutcome =>
+    ({ mechanism: "tmux kill-pane", paneId, ...o });
+  const refused = (identity_check: "mismatch" | "unavailable", error: string, degraded = false, polls = 0) =>
+    out({ ok: false, confirmed: false, polls, degraded, identity_check, error });
+
+  if (!/^%\d+$/.test(paneId) || expected.pane_id !== paneId) return refused("mismatch", "pane id is not the recorded pane");
+  if (typeof expected.server_process_start !== "string" || !expected.server_process_start.startsWith(TMUX_SERVER_START_PREFIX)) {
+    return refused("unavailable", "recorded server identity is not tmux-bound; no server-side check is possible");
+  }
+  const serverStart = expected.server_process_start.slice(TMUX_SERVER_START_PREFIX.length);
+  if (!/^\d+$/.test(serverStart) || !Number.isInteger(expected.pane_pid) || !Number.isInteger(expected.server_pid)) {
+    return refused("unavailable", "recorded identity is malformed");
+  }
+  const fromRecordedServer = (v: { server_pid: number; server_process_start: string }): boolean =>
+    v.server_pid === expected.server_pid && v.server_process_start === expected.server_process_start;
+  const isRecorded = (v: PaneServerView): boolean =>
+    v.kind === "present" && fromRecordedServer(v) && v.pane_pid === expected.pane_pid;
+  // Gone only on evidence: the recorded server itself lists its panes without this
+  // one (siblings may live), or no server answers at all (the recorded one exits with
+  // its last pane) and the recorded pane process (pid + start) is physically gone.
+  const absent = (v: Extract<PaneServerView, { kind: "absent" }>, polls: number): BoundTerminateOutcome =>
+    fromRecordedServer(v)
+      ? out({ ok: true, confirmed: true, polls, degraded: false, identity_check: "verified" })
+      : refused("mismatch", "a different tmux server answers this socket; the recorded pane's fate is not observable", false, polls);
+  const noServer = (polls: number): BoundTerminateOutcome => {
+    const gone = recordedProcessGone(expected.pane_pid, expected.pane_process_start, run);
+    if (gone === true) return out({ ok: true, confirmed: true, polls, degraded: false, identity_check: "verified" });
+    return refused(
+      "unavailable",
+      gone === false
+        ? "no tmux server answers but the recorded pane process is still alive"
+        : "no tmux server answers and the pane process table is unreadable",
+      false,
+      polls,
+    );
+  };
+
+  const pre = paneServerView(paneId, run);
+  if (pre.kind === "unavailable") return refused("unavailable", pre.degraded ? "tmux unavailable" : "tmux pane listing unreadable", pre.degraded);
+  if (pre.kind === "no_server") return noServer(0);
+  if (pre.kind === "absent") return absent(pre, 0);
+  if (!isRecorded(pre)) return refused("mismatch", "the live pane's server or pane_pid differs from the record; no kill issued");
+  const start = processStartOf(expected.pane_pid, run);
+  if (start === null || start !== normalizedStart(expected.pane_process_start)) {
+    return refused("mismatch", "the pane process start differs from the record; no kill issued");
+  }
+
+  const action = run("tmux", [
+    "if-shell", "-F", "-t", paneId, boundKillCondition(expected.server_pid, serverStart, expected.pane_pid), `kill-pane -t ${paneId}`,
+  ]);
+  if (action.status === null) return refused("unavailable", "tmux unavailable at the bound kill", true);
+
+  let polls = 0;
+  for (let i = 0; i < pollAttempts; i++) {
+    polls++;
+    const now = paneServerView(paneId, run);
+    if (now.kind === "unavailable") {
+      return refused("unavailable", now.degraded ? "tmux unavailable during confirm" : "tmux pane listing unreadable during confirm", now.degraded, polls);
+    }
+    if (now.kind === "no_server") return noServer(polls);
+    if (now.kind === "absent") return absent(now, polls);
+    if (!isRecorded(now)) {
+      return refused("mismatch", "a replacement server or pane answers for this id after the bound kill; not confirmed", false, polls);
+    }
+  }
+  return out({
+    ok: false, confirmed: false, polls, degraded: false, identity_check: "verified",
+    error: `pane ${paneId} still live after ${polls} confirmation poll(s)`,
+  });
+}
+
+// ── E00 controller worker port (CD11, CD21) ──────────────────────────────────
+
+type TaskCellSpawnInput = Parameters<TaskCellWorkerPort["spawn"]>[0];
+type TaskCellInstance = TaskCellSpawnInput["instance"];
+
+/** The resolved, hash-checked definition a TaskCell pane must carry. */
+export interface TaskCellPaneDefinition {
+  ref: ProjectDefinitionRefV1;
+  /** Absolute path of the definition bytes `ref.content_hash` covers. */
+  definition_abs: string;
+}
+
+export interface TmuxTaskCellWorkerPortOpts {
+  /** Absolute Guild root; every pane starts here. */
+  cwd: string;
+  /** Dedicated tmux session that holds this controller's worker windows. */
+  sessionName: string;
+  /**
+   * Absolute controller-owned directory for the per-instance definition snapshot
+   * Claude receives through --append-system-prompt-file (the declared injection).
+   */
+  snapshotDir: string;
+  resolveDefinition(instance: TaskCellInstance): TaskCellPaneDefinition | { error: string };
+  /** Absolute path of the lane receipt the controller polls for this instance. */
+  receiptPath(instance: TaskCellInstance): string;
+  /** argv prefix of the packaged ack CLI; the port appends `--assignment <abs>`. */
+  ackArgv: readonly string[];
+  /** Launch-plan forwarding evidence for one spawned instance. */
+  recordLaunch?(instanceId: string, evidence: Record<string, unknown>): void;
+  run?: RunFn;
+  env?: NodeJS.ProcessEnv;
+  pluginOwnerRoot?: string;
+  /** Package activation for the pane; defaults to the verified resolveClaudePluginActivation. */
+  activate?: (env: NodeJS.ProcessEnv, ownerRoot: string) => ClaudePluginActivation;
+  nudge?: TmuxExecutionTransport;
+}
+
+/** Keys that hold a run credential and never reach a tmux client, server or pane. */
+export function isBindingEnvKey(key: string): boolean {
+  return key === "GUILD_RUN_BINDING_REF" || /BINDING_REF$/.test(key);
+}
+
+export function sanitizedWorkerEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(env)) if (!isBindingEnvKey(k)) out[k] = v;
+  return out;
+}
+
+const bareHash = (h: string | null | undefined): string | null => (h ? h.replace(/^sha256:/, "") : null);
+
+/** Shells that run the generated launch prefix before the host process starts. */
+const LAUNCH_SHELLS: ReadonlySet<string> = new Set(["sh", "bash", "zsh", "dash", "fish", "ksh", "login"]);
+
+function isClaudeHostId(hostId: string): boolean {
+  const id = getRegistryEntry(hostId as never) ? hostId : hostKindToRegistryId(hostId as HostKind);
+  return !!id && getRegistryEntry(id as never)?.detection.bin === "claude";
+}
+
+export function taskCellWorkerPrompt(i: {
+  role: string; runId: string; taskId: string; instanceId: string; root: string;
+  definitionAbs: string; contentHash: string; assignmentAbs: string; receiptAbs: string; ackArgv: readonly string[];
+}): string {
+  const ack = [...i.ackArgv, "--assignment", i.assignmentAbs].map(shellQuote).join(" ");
+  return [
+    `You are the \`${i.role}\` worker for TaskCell ${i.taskId} (instance ${i.instanceId}) in run ${i.runId}.`,
+    `Read your role definition at ${i.definitionAbs} first (content_hash ${i.contentHash}) and adopt it fully.`,
+    `The controller writes your assignment at ${i.assignmentAbs}. Wait until that file exists, then read and validate it (guild.task_assignment.v2). Never edit it.`,
+    `Claim the assignment only by running: ${ack}`,
+    "Never write ack, instance, attempt, ledger, acceptance, handoff.json or bus files, and never read a run's binding.json.",
+    `Read the context bundle named by the assignment's context_bundle_id (relative to ${i.root}) and work only inside its scope_paths.`,
+    `When done, write your receipt at ${i.receiptAbs} with the sections changed_files, opens_for, assumptions, evidence and followups plus exactly one fenced guild.handoff.v2 block.`,
+    "Use absolute paths; do not change the shell working directory.",
+  ].join("\n");
+}
+
+/**
+ * The controller-owned tmux TaskCell worker port. One Claude pane per admitted
+ * instance, launched through the generated paneCommand grammar with the
+ * exact-carriage definition guard; credential env never reaches tmux; the
+ * captured server/pane identity drives every later readiness, nudge and kill.
+ */
+export class TmuxTaskCellWorkerPort implements TaskCellWorkerPort {
+  readonly mode = "native" as const;
+  readonly losses: readonly string[] = Object.freeze([]);
+  private readonly run: RunFn;
+  private readonly env: NodeJS.ProcessEnv;
+  private readonly pluginOwnerRoot: string;
+  private readonly nudge: TmuxExecutionTransport;
+  private readonly panes = new Map<string, BoundPaneIdentity>();
+  /** The exact declared-injection argument only this instance's host process carries. */
+  private readonly hostArgs = new Map<string, string>();
+
+  constructor(private readonly opts: TmuxTaskCellWorkerPortOpts) {
+    this.env = sanitizedWorkerEnv(opts.env ?? process.env);
+    const base = opts.run ?? defaultRun;
+    this.run = (cmd, args, o = {}) => base(cmd, args, { ...o, env: cmd === "ps" ? { ...this.env, ...PS_LOCALE } : this.env });
+    this.pluginOwnerRoot = opts.pluginOwnerRoot ?? ownPluginRoot(__dirname);
+    this.nudge = opts.nudge ?? new TmuxExecutionTransport({ run: this.run });
+  }
+
+  isAvailable(): boolean {
+    return probeTmuxAvailable(this.run);
+  }
+
+  paneIdentity(instanceId: string): BoundPaneIdentity | null {
+    return this.panes.get(instanceId) ?? null;
+  }
+
+  /**
+   * Whether the reachable server's global env holds the credential. Only these are
+   * verified absence: tmux's `-KEY` (removed) or `unknown variable: KEY`. An exact
+   * `isNoServer` answer is no_server (a fresh server starts from the sanitized env;
+   * accepted before the create only). Everything else is unverifiable.
+   */
+  private credentialProbe(): { state: "absent" | "no_server" } | { state: "present" | "unverifiable"; detail: string } {
+    return probeServerCredential(this.run);
+  }
+
+  private matchesRecorded(id: BoundPaneIdentity): PaneServerView["kind"] | "mismatch" {
+    const view = paneServerView(id.pane_id, this.run);
+    if (view.kind !== "present") return view.kind;
+    return view.server_pid === id.server_pid && view.server_process_start === id.server_process_start &&
+      view.pane_pid === id.pane_pid ? "present" : "mismatch";
+  }
+
+  /**
+   * Every refusal before the create command is issued is proven no-action
+   * (`spawn_effect: "none"`). Once `new-session`/`new-window` has been issued, any
+   * failure, lost or invalid identity, or throw is `"unknown"`: a pane may be live.
+   */
+  spawn(input: TaskCellSpawnInput): TaskCellSpawnResult {
+    const inst = input.instance;
+    const refuse = (reason: string): TaskCellSpawnResult => ({ ok: false, reason, spawn_effect: "none" });
+    if (!isClaudeHostId(inst.host_id)) return refuse(`host_unsupported:${inst.host_id} (this port launches Claude panes only)`);
+    const def = this.opts.resolveDefinition(inst);
+    if ("error" in def) return refuse(`definition_unresolved:${def.error}`);
+    const ref = def.ref;
+    if (ref.kind !== "agent" || ref.id !== inst.worker_role ||
+        bareHash(ref.specialist_profile_hash) !== bareHash(inst.specialist_profile_hash) ||
+        bareHash(ref.specialist_type_hash) !== bareHash(inst.specialist_type_hash)) {
+      return refuse("definition_hash_mismatch");
+    }
+    let definitionBytes: Buffer;
+    try {
+      definitionBytes = fs.readFileSync(def.definition_abs);
+    } catch (error) {
+      return refuse(`definition_unreadable:${error instanceof Error ? error.message : String(error)}`);
+    }
+    const definitionSha = createHash("sha256").update(definitionBytes).digest("hex");
+    if (definitionSha !== bareHash(ref.content_hash)) return refuse("definition_bytes_mismatch");
+    // The hash-checked bytes themselves are what Claude reads: an exclusive,
+    // read-only snapshot passed by --append-system-prompt-file, re-hashed after write.
+    const snapshot = path.join(this.opts.snapshotDir, `${inst.instance_id}.definition.md`);
+    try {
+      fs.mkdirSync(this.opts.snapshotDir, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(snapshot, definitionBytes, { flag: "wx", mode: 0o444 });
+      if (createHash("sha256").update(fs.readFileSync(snapshot)).digest("hex") !== definitionSha) {
+        return refuse("definition_snapshot_mismatch");
+      }
+    } catch (error) {
+      return refuse(`definition_snapshot_failed:${error instanceof Error ? error.message : String(error)}`);
+    }
+    const credential = this.credentialProbe();
+    if (credential.state === "present") return refuse(`credential_env_present_in_tmux_server:${credential.detail}`);
+    if (credential.state === "unverifiable") return refuse(`credential_env_unverifiable: ${credential.detail}`);
+
+    const root = path.resolve(this.opts.cwd);
+    const assignmentAbs = path.resolve(root, input.assignment_path);
+    const receiptAbs = this.opts.receiptPath(inst);
+    let activation: ClaudePluginActivation;
+    try {
+      activation = (this.opts.activate ?? resolveClaudePluginActivation)(this.env, this.pluginOwnerRoot);
+    } catch (error) {
+      return refuse(`plugin_activation_failed:${error instanceof Error ? error.message : String(error)}`);
+    }
+    const prompt = taskCellWorkerPrompt({
+      role: inst.worker_role, runId: inst.run_id, taskId: inst.logical_task_id, instanceId: inst.instance_id, root,
+      definitionAbs: def.definition_abs, contentHash: ref.content_hash, assignmentAbs, receiptAbs, ackArgv: this.opts.ackArgv,
+    });
+    const scope = [...inst.projection.tools];
+    const command = paneCommand(
+      prompt, inst.run_id, scope, inst.logical_task_id, inst.worker_role, false,
+      [
+        ...activation.args,
+        ...resolveClaudeTeamLaunchArgs(readRuntimePermissionConfig(root)),
+        "--append-system-prompt-file", snapshot,
+      ],
+      inst.model_id ?? undefined, assignmentAbs, inst.instance_id, ref, activation.pluginRoot,
+    );
+    const proofSpec = {
+      name: inst.worker_role, scope: "", dependsOn: [], taskId: inst.logical_task_id,
+      task_cell_assignment_path: assignmentAbs, task_cell_instance_id: inst.instance_id, definition_ref: ref,
+    } as unknown as Specialist;
+    if (!paneCommandCarriesDefinitionRef(command, proofSpec, inst.run_id)) return refuse("definition_carriage_unproven");
+
+    const fmt = "#{pane_id} #{pane_pid} #{pid} #{start_time}";
+    const session = this.opts.sessionName;
+    const probe = this.run("tmux", ["has-session", "-t", session]);
+    if (probe.status === null) return refuse("spawn_failed:tmux did not run (no create issued)");
+    const exists = probe.status === 0;
+
+    // From here the create has been issued: nothing proves the absence of a live pane.
+    const unknown = (reason: string): TaskCellSpawnResult => ({ ok: false, reason, spawn_effect: "unknown" });
+    // Without the full identity nothing may kill or re-adopt the pane: record the
+    // observation durably (best effort; the unknown result stands either way).
+    const recordUnknown = (observed: Record<string, unknown>): string | null => {
+      try {
+        this.opts.recordLaunch?.(inst.instance_id, {
+          schema_version: "guild.task_cell_launch_evidence.v1",
+          instance_id: inst.instance_id,
+          state: "identity_unknown",
+          session,
+          ...observed,
+          live_pane_may_remain: true,
+        });
+        return null;
+      } catch (error) {
+        return `; launch record failed: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    };
+    let created: ReturnType<RunFn>;
+    try {
+      created = exists
+        ? this.run("tmux", ["new-window", "-d", "-P", "-F", fmt, "-t", `${session}:`, "-n", inst.instance_id, "-c", root, command])
+        : this.run("tmux", ["new-session", "-d", "-P", "-F", fmt, "-s", session, "-n", inst.instance_id, "-c", root, command]);
+    } catch (error) {
+      const note = recordUnknown({ observed_spawn_error: error instanceof Error ? error.message : String(error) });
+      return unknown(`spawn_outcome_unknown: create threw after it was issued${note ?? ""}`);
+    }
+    if (created.status !== 0) {
+      const note = recordUnknown({ observed_spawn_status: created.status, observed_spawn_stderr: (created.stderr ?? "").trim() });
+      return unknown(
+        `spawn_outcome_unknown: create ${created.status === null ? "did not return a status" : `exited ${created.status}`}` +
+          ` after it was issued (${(created.stderr ?? "").trim()})${note ?? ""}`,
+      );
+    }
+    let paneId: string | undefined;
+    let pid = NaN;
+    let server: { pid: number; process_start: string } | null = null;
+    let paneStart: string | null = null;
+    try {
+      const [p, pp, serverPid, serverStart] = fields(created.stdout);
+      paneId = p;
+      server = parseServerFields(serverPid, serverStart);
+      pid = Number(pp);
+      paneStart = Number.isInteger(pid) && pid > 0 ? processStartOf(pid, this.run) : null;
+    } catch (error) {
+      const note = recordUnknown({ observed_spawn_output: created.stdout.trim(), observed_error: error instanceof Error ? error.message : String(error) });
+      return unknown(`spawn_outcome_unknown: identity capture threw (${JSON.stringify(created.stdout.trim())})${note ?? ""}`);
+    }
+    if (!/^%\d+$/.test(paneId ?? "") || !server || paneStart === null) {
+      const note = recordUnknown({
+        observed_spawn_output: created.stdout.trim(),
+        observed: { pane_id: paneId ?? null, pane_pid: Number.isInteger(pid) && pid > 0 ? pid : null, server, pane_process_start: paneStart },
+      });
+      return unknown(`spawn_identity_unavailable: a created pane may remain live and untracked (${JSON.stringify(created.stdout.trim())})${note ?? ""}`);
+    }
+    const identity: BoundPaneIdentity = {
+      pane_id: paneId!, pane_pid: pid, pane_process_start: paneStart,
+      server_pid: server.pid, server_process_start: server.process_start,
+    };
+    // The verified identity is retained before any further bookkeeping, so a later
+    // failure below still leaves the pane terminable by its exact identity.
+    this.panes.set(inst.instance_id, identity);
+    this.hostArgs.set(inst.instance_id, `--append-system-prompt-file ${snapshot}`);
+    // R1: the server that now holds the pane may have started (or changed) after the
+    // pre-create probe. Re-check it; the pane is kept by identity, never used.
+    // After the create, only an observed absent variable on the reachable server
+    // verifies the pane's env; "no server running" no longer observes the server
+    // that holds the pane. Anything else is unknown, identity retained, never used.
+    const after = this.credentialProbe();
+    if (after.state !== "absent") {
+      return unknown(
+        `spawn_outcome_unknown: verified pane ${identity.pane_id} spawned but its server env was ` +
+          `${"detail" in after ? `${after.state} (${after.detail})` : "not observable (no server running)"}; identity retained`,
+      );
+    }
+    try {
+      this.recordVerifiedLaunch(inst, identity, session, command, ref, def.definition_abs, definitionSha, snapshot, assignmentAbs, scope, activation);
+    } catch (error) {
+      return unknown(
+        `spawn_outcome_unknown: verified pane ${identity.pane_id} spawned but launch evidence was not recorded ` +
+          `(${error instanceof Error ? error.message : String(error)}); identity retained`,
+      );
+    }
+    return { ok: true, reason: null };
+  }
+
+  private recordVerifiedLaunch(
+    inst: TaskCellInstance, identity: BoundPaneIdentity, session: string, command: string, ref: ProjectDefinitionRefV1,
+    definitionAbs: string, definitionSha: string, snapshot: string, assignmentAbs: string, scope: string[],
+    activation: ClaudePluginActivation,
+  ): void {
+    const def = { definition_abs: definitionAbs };
+    this.opts.recordLaunch?.(inst.instance_id, {
+      schema_version: "guild.task_cell_launch_evidence.v1",
+      instance_id: inst.instance_id,
+      pane: identity,
+      session,
+      pane_command: command,
+      pane_command_sha256: createHash("sha256").update(command).digest("hex"),
+      definition_ref: ref,
+      definition_path: def.definition_abs,
+      definition_sha256: definitionSha,
+      definition_injection: { flag: "--append-system-prompt-file", path: snapshot, sha256: definitionSha },
+      definition_carriage_verified: true,
+      assignment_path: assignmentAbs,
+      capability_scope: scope,
+      requested_model: inst.model_id ?? null,
+      plugin_root: activation.pluginRoot ?? null,
+      credential_env_removed: Object.keys(this.opts.env ?? process.env).filter(isBindingEnvKey),
+    });
+  }
+
+  ready(input: { instance_id: string; run_id: string }): TaskCellMechanicsResult {
+    const id = this.panes.get(input.instance_id);
+    if (!id) return { ok: false, reason: "no recorded pane for this instance" };
+    const state = this.matchesRecorded(id);
+    if (state !== "present") return { ok: false, reason: `recorded pane not present (${state})` };
+    // Ready means the declared host process exists: a non-shell process at or under the
+    // recorded pane_pid whose argv carries this instance's own declared-injection
+    // argument. The launch shell's -c string also contains it, so shells never count;
+    // guards and helpers do not carry it. Host or model qualification is never
+    // inferred, and acknowledgement is observed separately via the ack claim.
+    const hostArg = this.hostArgs.get(input.instance_id);
+    if (!hostArg) return { ok: false, reason: "no declared host argument recorded" };
+    const host = this.declaredHostProcess(id.pane_pid, hostArg);
+    if (host === null) return { ok: false, reason: "process table unreadable" };
+    if (host === "absent") return { ok: false, reason: "declared host process not started under the recorded pane" };
+    return { ok: true, reason: `declared host process observed (pid ${host.pid}, ${host.comm})` };
+  }
+
+  /** The declared host under `panePid`, "absent", or null when ps cannot run. */
+  private declaredHostProcess(panePid: number, hostArg: string): { pid: number; comm: string } | "absent" | null {
+    const table = psRun(this.run, ["-axww", "-o", "pid=,ppid="]);
+    if (table.status !== 0) return null;
+    const children = new Map<number, number[]>();
+    for (const line of table.stdout.split("\n")) {
+      const [pid, ppid] = fields(line.replace(/\s+/g, " ")).map(Number);
+      if (!Number.isInteger(pid) || !Number.isInteger(ppid)) continue;
+      children.set(ppid!, [...(children.get(ppid!) ?? []), pid!]);
+    }
+    const queue = [panePid];
+    const seen = new Set<number>();
+    while (queue.length > 0) {
+      const pid = queue.shift()!;
+      if (seen.has(pid)) continue;
+      seen.add(pid);
+      queue.push(...(children.get(pid) ?? []));
+      const comm = psRun(this.run, ["-ww", "-o", "comm=", "-p", String(pid)]);
+      const args = psRun(this.run, ["-ww", "-o", "args=", "-p", String(pid)]);
+      if (comm.status !== 0 || args.status !== 0) continue;
+      const name = path.basename(comm.stdout.trim()).replace(/^-/, "");
+      const argv = args.stdout.trim();
+      const at = argv.indexOf(` ${hostArg}`);
+      const bounded = at >= 0 && (argv.length === at + hostArg.length + 1 || /\s/.test(argv[at + hostArg.length + 1]!));
+      if (bounded && name.length > 0 && !LAUNCH_SHELLS.has(name)) return { pid, comm: name };
+    }
+    return "absent";
+  }
+
+  notifyAssignment(input: { instance_id: string; run_id: string; assignment_path: string }): TaskCellMechanicsResult {
+    const id = this.panes.get(input.instance_id);
+    if (!id) return { ok: false, reason: "no recorded pane for this instance" };
+    const assignmentAbs = path.resolve(this.opts.cwd, input.assignment_path);
+    if (!fs.existsSync(assignmentAbs)) return { ok: false, reason: "assignment not on disk" };
+    const state = this.matchesRecorded(id);
+    if (state !== "present") return { ok: false, reason: `recorded pane not present (${state})` };
+    const ack = [...this.opts.ackArgv, "--assignment", assignmentAbs].map(shellQuote).join(" ");
+    const sent = this.nudge.send(
+      { transport_id: "tmux", handle_id: id.pane_id, host_id: null, host_kind: "claude", invocation: null },
+      `Your assignment is at ${assignmentAbs}. Validate it, then claim it with: ${ack}`,
+    );
+    // The launch prompt already names the absolute assignment path, so delivery does
+    // not depend on the nudge; a held nudge is reported, never hidden.
+    return { ok: true, reason: sent.status === "succeeded" ? null : `nudge not delivered: ${sent.detail ?? sent.reason_code}` };
+  }
+
+  terminate(input: { instance_id: string; run_id: string; reason: string }): TaskCellMechanicsResult {
+    const id = this.panes.get(input.instance_id);
+    if (!id) return { ok: false, reason: "no recorded pane for this instance" };
+    const out = terminateBoundPane(id.pane_id, id, { run: this.run });
+    if (out.ok && out.confirmed && out.identity_check === "verified") return { ok: true, reason: null };
+    return { ok: false, reason: `${out.degraded ? "degraded" : "unconfirmed"} (${out.identity_check}): ${out.error ?? "not confirmed"}` };
+  }
 }

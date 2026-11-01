@@ -427,6 +427,7 @@ const stableJson = (v: unknown): string => JSON.stringify(v, null, 2) + "\n";
  * under runtime/ (KTD11), so nothing on the user path imports a domain file.
  */
 function copyModuleRuntime(root: string, dest: string): void {
+  fs.writeFileSync(path.join(dest, "guild.inventory.json"), serializeInventory(buildInventory(root)));
   copyDirExcludingNodeModules(path.join(root, "src", "surfaces"), path.join(dest, "src", "surfaces"));
   for (const { path: abs } of moduleManifestFiles(root)) {
     const to = path.join(dest, path.relative(root, abs));

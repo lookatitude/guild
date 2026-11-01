@@ -7809,6 +7809,14 @@ var init_write_manifest = __esm({
   }
 });
 
+// src/domains/state/stack-scope.ts
+var init_stack_scope = __esm({
+  "src/domains/state/stack-scope.ts"() {
+    init_frontmatter();
+    init_storage_roots();
+  }
+});
+
 // src/domains/state/index.ts
 var init_state = __esm({
   "src/domains/state/index.ts"() {
@@ -7837,6 +7845,7 @@ var init_state = __esm({
     init_promote_upstream();
     init_write_manifest();
     init_plugin_install_guard();
+    init_stack_scope();
   }
 });
 
@@ -17010,7 +17019,7 @@ function bindSessionForRun(opts) {
   const promptCompose = opts.promptCompose ?? { dialect_id: "dialect:none", overlay_ids: [], hash: "" };
   const seam = opts.fs;
   if (seam === void 0) {
-    return bindSession({ runDir: opts.runDir, runId: opts.runId, detected, promptCompose, models: opts.models });
+    return bindSession({ runDir: opts.runDir, runId: opts.runId, detected, promptCompose, models: opts.models, now: opts.now });
   }
   const file = sessionBindingPath(opts.runDir);
   if (seam.exists(file)) {
@@ -17032,7 +17041,7 @@ function bindSessionForRun(opts) {
     run_id: opts.runId,
     host_family: detected.host_family,
     surface: detected.surface,
-    detected_at: (/* @__PURE__ */ new Date()).toISOString(),
+    detected_at: (opts.now ?? (() => /* @__PURE__ */ new Date()))().toISOString(),
     models: isUnknownHost(detected) ? {} : opts.models ?? {},
     model_family: detected.model_family,
     prompt_compose: promptCompose,

@@ -46,6 +46,8 @@ import {
 } from "../../scripts/lib/state/ensure-storage-layout.js";
 
 export type { LayoutStatus, LayoutState };
+// Read-only names for a caller that must classify the marker without the bootstrap.
+export { CURRENT_LAYOUT_VERSION, markerPath } from "../../scripts/lib/state/ensure-storage-layout.js";
 
 /**
  * The gate a hook entry acts on.

@@ -251,7 +251,7 @@ describe("D5 ack primitive", () => {
     // No ack yet — running is not authorized.
     expect(readAssignmentAck(cwd, ids)).toBeNull();
 
-    const ackPath = acknowledgeAssignment(cwd, cell.assignment, FIXED_NOW);
+    const ackPath = acknowledgeAssignment(cwd, cell.assignment, FIXED_NOW, bindFor(cwd, "run-g3"));
     expect(path.resolve(cwd, assignmentAckPath(ids))).toBe(ackPath);
     const ack = readAssignmentAck(cwd, ids);
     expect(ack).not.toBeNull();

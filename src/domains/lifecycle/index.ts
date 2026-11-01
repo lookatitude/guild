@@ -267,3 +267,14 @@ export {
   type TraceV2Fields,
   writePayloadSidecar,
 } from "./trace-v2";
+
+export * from "./stack-operations";
+
+export {default as stackContractBundle} from './stack-contracts.generated.json';
+
+export { loadInitiativeManifest, buildD8Input, checkInitiativeEvidenceRefs, type InitiativeEvidenceCheck, type LoadedManifest, type BuiltD8Input } from "./initiative-evidence";
+export { default as stackP05Schemas } from "./stack-p05.schemas.json";
+
+export * from "./managed-run";
+
+export { default as stackManagedSchemas } from "./managed-run.schemas.json";

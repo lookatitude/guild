@@ -96,8 +96,16 @@ import {
   taskAssignmentPath,
 } from "../../src/domains/dispatch/index.js";
 import { publishSubmittedHandoffPointer } from "../../src/domains/dispatch/index.js";
+import { readVerifiedReleasePackageIdentity } from "../../src/domains/distribution/index.js";
 // T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
 import { ensureStorageLayout } from "../lib/ensure-layout.js";
+import {
+  checkUnboundLayout,
+  receiptIsSecretClean,
+  writeExclusiveNotice,
+  type NoticeRefusal,
+  type PackageIdentity,
+} from "../lib/task-completed-notice.js";
 import { durableGuildDir } from "../../src/domains/state";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -147,19 +155,19 @@ function die(reason: string): never {
  * id. Run-record WRITES are separately binding-gated in main(); this derived
  * id alone never authorizes them.
  */
-function deriveRunId(sessionId: string, guildRoot: string): string {
+function deriveRunId(sessionId: string, guildRoot: string, warn = true): string {
   const bound = resolveRunIdForTrace(guildRoot, { GUILD_RUN_ID: process.env["GUILD_RUN_ID"] });
   if (bound) return bound;
   const legacy = `run-${sessionId}`;
   if (fs.existsSync(path.join(durableGuildDir(guildRoot), "runs", legacy))) {
-    process.stderr.write(
+    if (warn) process.stderr.write(
       `[task-completed] WARN: legacy read-only fallback run id used: ${legacy}; ` +
         "start/inherit the lifecycle run id to remove this compatibility read.\n",
     );
     return legacy;
   }
   const fallback = makeCanonicalRunId(new Date().toISOString(), sessionId);
-  process.stderr.write(
+  if (warn) process.stderr.write(
     `[task-completed] WARN: read-only fallback run id used: ${fallback}; ` +
       "no run-record write is authorized without the lifecycle binding envelope.\n",
   );
@@ -336,6 +344,35 @@ function portableAssignmentRef(value: string): string {
   return value.replace(/\\/g, "/");
 }
 
+/**
+ * The root-relative form of an absolute v2 assignment ref: the path below the shortest
+ * ancestor that is physically this root (logical, physical or whole-root alias spelling).
+ * Relative and non-normalized refs come back as given, so they never gain a binding; the
+ * contained reader still checks every in-root segment of the result.
+ */
+function canonicalAssignmentRef(guildRoot: string, raw: string): string {
+  const portable = portableAssignmentRef(raw);
+  if (!path.isAbsolute(raw) || path.normalize(raw) !== raw) return portable;
+  let physicalRoot: string;
+  try {
+    physicalRoot = fs.realpathSync(guildRoot);
+  } catch {
+    return portable;
+  }
+  const parts = raw.split(path.sep);
+  for (let i = 1; i < parts.length; i++) {
+    const ancestor = parts.slice(0, i).join(path.sep) || path.sep;
+    let real: string;
+    try {
+      real = fs.realpathSync(ancestor);
+    } catch {
+      continue;
+    }
+    if (real === physicalRoot) return portableAssignmentRef(path.relative(ancestor, raw));
+  }
+  return portable;
+}
+
 function nativeTaskCellAssignments(input: {
   guildRoot: string;
   runId: string;
@@ -378,18 +415,44 @@ function nativeTaskCellAssignments(input: {
   });
 }
 
-function publishTaskCellSubmission(input: {
+/** The executing package root: this file lives at hooks/agent-team/ (source) or hooks/agent-team/dist/ (bundle). */
+function executingPackageRoot(): string {
+  return path.basename(__dirname) === "dist"
+    ? path.resolve(__dirname, "..", "..", "..")
+    : path.resolve(__dirname, "..", "..");
+}
+
+/** CD22 identity of the executing package, or null when it cannot be verified. Never guessed. */
+function executingPackageIdentity(): PackageIdentity {
+  try {
+    const identity = readVerifiedReleasePackageIdentity(executingPackageRoot());
+    const digest = identity.package_digests[identity.current_package];
+    return typeof digest === "string" ? { id: identity.release_id, sha256: digest } : null;
+  } catch {
+    return null;
+  }
+}
+
+type TaskCellResolution =
+  | { kind: "legacy" }
+  | { kind: "none" }
+  | { kind: "ambiguous"; count: number; candidates: TaskCellAssignment[] }
+  | { kind: "assignment"; assignment: TaskCellAssignment | null; bindsThisLane: boolean };
+
+/** Read-only: which assignment this TaskCompleted names (explicit ref or native discovery). */
+function resolveTaskCellAssignment(input: {
   guildRoot: string;
   runId: string;
   taskId: string;
   specialist: string;
-  writeAuthorized: boolean;
-}): void {
+}): TaskCellResolution {
   const rawAssignmentRef = process.env["GUILD_TASK_ASSIGNMENT"];
   const assignmentRef = rawAssignmentRef === undefined
     ? undefined
     : portableAssignmentRef(rawAssignmentRef);
   let assignment: TaskCellAssignment | null = null;
+  // Legacy matching stays on the raw relative spelling; only v2 binding accepts the canonical absolute form.
+  let v2Ref = assignmentRef;
   if (assignmentRef) {
     const legacyRunDir = path.join(durableGuildDir(input.guildRoot), "runs", input.runId);
     const legacyRef = portableAssignmentRef(
@@ -405,32 +468,148 @@ function publishTaskCellSubmission(input: {
       legacyAssignment.run_id === input.runId &&
       legacyAssignment.specialist === input.specialist &&
       (legacyAssignment.task_id === null || legacyAssignment.task_id === input.taskId)
-    ) return;
-    assignment = readTaskAssignmentV2(input.guildRoot, assignmentRef);
+    ) return { kind: "legacy" };
+    v2Ref = canonicalAssignmentRef(input.guildRoot, rawAssignmentRef as string);
+    assignment = readTaskAssignmentV2(input.guildRoot, v2Ref);
   } else {
     const nativeAssignments = nativeTaskCellAssignments(input);
-    if (nativeAssignments.length === 0) return;
+    if (nativeAssignments.length === 0) return { kind: "none" };
     if (nativeAssignments.length !== 1) {
-      die(
-        `TaskCell submitted-handoff pointer refused for task "${input.taskId}" — ` +
-          `native assignment discovery is ambiguous (${nativeAssignments.length} active matches).`,
-      );
+      return { kind: "ambiguous", count: nativeAssignments.length, candidates: nativeAssignments };
     }
     assignment = nativeAssignments[0];
   }
-  if (!input.writeAuthorized) {
+  const bindsThisLane =
+    assignment !== null &&
+    (v2Ref === undefined || assignment.assignment_path === v2Ref) &&
+    assignment.run_id === input.runId &&
+    assignment.logical_task_id === input.taskId &&
+    assignment.worker_role === input.specialist;
+  return { kind: "assignment", assignment, bindsThisLane };
+}
+
+const isE00Assignment = (a: TaskCellAssignment): boolean => Object.prototype.hasOwnProperty.call(a, "done_when_ref");
+
+type UnboundE00Decision = { kind: "notice"; assignment: TaskCellAssignment } | { kind: "refuse" } | { kind: "none" };
+
+/**
+ * What an unbound TaskCompleted does on the CD4 branch. E00 is field presence. A binding E00
+ * assignment gets the notice; a known E00 lane that cannot bind (non-binding ref, or native
+ * ambiguity) refuses before any write; legacy and non-E00 lanes fall through unchanged.
+ */
+function unboundE00Decision(input: {
+  guildRoot: string;
+  runId: string;
+  taskId: string;
+  specialist: string;
+}): UnboundE00Decision {
+  const r = resolveTaskCellAssignment(input);
+  if (r.kind === "assignment" && r.bindsThisLane && r.assignment !== null) {
+    return isE00Assignment(r.assignment) ? { kind: "notice", assignment: r.assignment } : { kind: "none" };
+  }
+  if (r.kind === "ambiguous") return r.candidates.some(isE00Assignment) ? { kind: "refuse" } : { kind: "none" };
+  if (r.kind !== "assignment") return { kind: "none" };
+  if (r.assignment !== null && isE00Assignment(r.assignment)) return { kind: "refuse" };
+  return nativeTaskCellAssignments(input).some(isE00Assignment) ? { kind: "refuse" } : { kind: "none" };
+}
+
+/**
+ * CD4 unbound E00 path. Runs BEFORE the layout bootstrap, the receipt scrub and every
+ * run-record writer, and its only write is the exclusive outbox notice. The notice is
+ * an untrusted claim the controller classifies; this path never reads binding.json,
+ * publishes a pointer, writes handoff origin, a checkpoint, a bus event or a learning.
+ */
+function runUnboundE00TaskCompleted(input: {
+  guildRoot: string;
+  runId: string;
+  taskId: string;
+  specialist: string;
+  assignment: TaskCellAssignment;
+}): void {
+  const { taskId, specialist, assignment } = input;
+  const refuse = (reason: NoticeRefusal): never =>
+    die(`TaskCell task-completed notice refused for task "${taskId}" — ${reason} (no write performed).`);
+
+  const layout = checkUnboundLayout(input.guildRoot, assignment);
+  if (layout.ok === false) refuse(layout.reason);
+  const realRoot = (layout as { realRoot: string }).realRoot;
+
+  const rPath = receiptPath(input.guildRoot, input.runId, specialist, taskId);
+  if (!fs.existsSync(rPath)) {
+    die(
+      `Task "${taskId}" (specialist: "${specialist}") has no handoff receipt. ` +
+        `Expected at: ${rPath}\n` +
+        `Write the receipt with sections: ${REQUIRED_FIELDS.join(", ")} before marking complete.`
+    );
+  }
+  const content = fs.readFileSync(rPath, "utf8");
+  // Q1: never scrub in place here; a receipt the policy would change refuses, naming nothing from it.
+  if (!receiptIsSecretClean(input.guildRoot, content)) refuse("secret_scrub_required");
+  const missing = missingFields(content);
+  if (missing.length > 0) {
+    die(
+      `Task "${taskId}" receipt at "${rPath}" is missing required §8.2 fields: ` +
+        `[${missing.join(", ")}]. ` +
+        `Add the missing sections before marking complete.`
+    );
+  }
+  const rawEnvelope = extractHandoffEnvelope(content);
+  if (rawEnvelope !== null) {
+    const { valid, errors } = validateHandoffV2(rawEnvelope);
+    if (!valid) {
+      const rendered = errors.map((e) => `  - ${e}`).join("\n");
+      if (!receiptIsSecretClean(input.guildRoot, rendered)) refuse("secret_scrub_required");
+      die(
+        `Task "${taskId}" receipt at "${rPath}" contains an invalid guild.handoff.v2 envelope.\n` +
+          `Validation errors (SC-7 lint):\n` +
+          rendered
+      );
+    }
+  } else if (isRunInScope(path.join(durableGuildDir(input.guildRoot), "runs", input.runId), taskId).inscope) {
+    die(
+      `Task "${taskId}" receipt at "${rPath}" is missing a guild.handoff.v2 envelope.\n` +
+        `This run is in-scope for enforcement (run started_at >= policy_effective_date ` +
+        `${POLICY_EFFECTIVE_DATE.toISOString().slice(0, 10)}).\n` +
+        `Add a fenced \`\`\`guild.handoff.v2 { ... } \`\`\` JSON block to the receipt ` +
+        `before marking complete. A frontmatter-only receipt is not a valid machine receipt ` +
+        `(communication-format-policy.md §"Handoff contract", OD-2).`
+    );
+  }
+
+  const written = writeExclusiveNotice(realRoot, assignment, executingPackageIdentity());
+  if (written.ok === false) refuse(written.reason);
+  const notice = written as { created: boolean; path: string };
+  process.stderr.write(
+    notice.created
+      ? `[task-completed] OK: unbound E00 TaskCompleted recorded as an untrusted notice at "${notice.path}".\n`
+      : `[task-completed] OK: unbound E00 TaskCompleted notice already recorded at "${notice.path}" (unchanged).\n`,
+  );
+}
+
+/** Bound path: publish the submitted-handoff pointer with the verified binding. */
+function publishTaskCellSubmission(input: {
+  guildRoot: string;
+  runId: string;
+  taskId: string;
+  specialist: string;
+  bindingRef: string | null;
+}): void {
+  const resolution = resolveTaskCellAssignment(input);
+  if (resolution.kind === "legacy" || resolution.kind === "none") return;
+  if (resolution.kind === "ambiguous") {
+    die(
+      `TaskCell submitted-handoff pointer refused for task "${input.taskId}" — ` +
+        `native assignment discovery is ambiguous (${resolution.count} active matches).`,
+    );
+  }
+  const { assignment, bindsThisLane } = resolution as Extract<TaskCellResolution, { kind: "assignment" }>;
+  if (input.bindingRef === null) {
     die(
       `TaskCell submitted-handoff pointer refused for task "${input.taskId}" — ` +
         `the run binding did not authorize this TaskCompleted write.`,
     );
   }
-  if (
-    assignment === null ||
-    (assignmentRef !== undefined && assignment.assignment_path !== assignmentRef) ||
-    assignment.run_id !== input.runId ||
-    assignment.logical_task_id !== input.taskId ||
-    assignment.worker_role !== input.specialist
-  ) {
+  if (!bindsThisLane || assignment === null) {
     die(
       `TaskCell submitted-handoff pointer refused for task "${input.taskId}" — ` +
         `GUILD_TASK_ASSIGNMENT is missing, malformed, or does not bind this run/task/worker.`,
@@ -440,6 +619,7 @@ function publishTaskCellSubmission(input: {
     cwd: input.guildRoot,
     assignment,
     submittedAt: new Date().toISOString(),
+    binding: { binding_ref: input.bindingRef },
   });
   if (submitted === null) {
     die(
@@ -672,6 +852,23 @@ async function main(): Promise<void> {
 
   const guildRoot = resolveGuildRoot(cwd);
 
+  // CD4: decide the unbound E00 path before anything write-capable runs. Both reads
+  // here are side-effect free (no presented binding ref means binding.json is never read).
+  {
+    const earlyRunId = deriveRunId(sessionId, guildRoot, false);
+    if (authorizeHookWrite(guildRoot, { runId: earlyRunId }).ok === false) {
+      const lane = { guildRoot, runId: earlyRunId, taskId, specialist };
+      const decision = unboundE00Decision(lane);
+      if (decision.kind === "notice") {
+        runUnboundE00TaskCompleted({ ...lane, assignment: decision.assignment });
+        return;
+      }
+      if (decision.kind === "refuse") {
+        die(`TaskCell task-completed notice refused for task "${taskId}" — assignment_not_bound (no write performed).`);
+      }
+    }
+  }
+
   // T10 (KTD23): layout bootstrap on a write-capable entry. A hook can be the
   // first thing to touch a root after an upgrade landed, so it runs the
   // bootstrap itself; on a current root this is a stat plus one marker read.
@@ -850,7 +1047,7 @@ async function main(): Promise<void> {
     runId,
     taskId,
     specialist,
-    writeAuthorized: writeAuth.ok,
+    bindingRef: writeAuth.ok ? writeAuth.binding_ref : null,
   });
 
   // ── Persist run-state checkpoint (ADR-RE-1) — lane has terminated ─────────

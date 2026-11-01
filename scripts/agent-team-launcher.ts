@@ -48,7 +48,7 @@
  */
 
 import { spawnSync } from "child_process";
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -123,7 +123,19 @@ import {
 } from "./lib/reaping";
 // task-cell-runtime G4: real, confirmed pane termination (replaces signal-only
 // [DISMISS]) + the acceptance gate that authorizes it.
-import { terminatePane } from "./lib/host/tmux-backend";
+import {
+  boundIdentityOf,
+  paneIdentityCarrierPath,
+  PANE_IDENTITY_SCHEMA,
+  readPaneIdentityCarrier,
+  sharedPeersAgree,
+  terminateBoundPane,
+  terminatePane,
+  writePaneIdentityCarrier,
+  type PaneIdentityCarrierV1,
+  type TmuxSpawnCapture,
+} from "./lib/host/tmux-backend";
+import { claimIsolatedLaunches } from "../src/domains/dispatch/index";
 import { cmuxLaneStatusKey, terminateCmuxSurface } from "./lib/host/cmux-backend";
 // #76 — pane-path dispatch receipts into the orchestrating run's trace.
 import { emitPaneDispatchEvents } from "./lib/host/pane-dispatch-trace";
@@ -304,6 +316,8 @@ export function sealTerminalAttemptWithSubstantiveEvidence(
       reason: input.reason,
       ...(input.orphaned === undefined ? {} : { orphaned: input.orphaned }),
       now: input.now,
+      // The open record read under the exclusion is the verified binding.
+      binding: { binding_ref: binding.record.binding_ref },
     });
     const emitted = input.accepted
       ? deps.recordUnderExclusion({
@@ -1529,6 +1543,7 @@ export function settleFailedCmuxTaskCells(input: {
   let failed = 0;
   let orphaned = 0;
   const errors: string[] = [];
+  const binding = launchBindingEnvelope(input.cwd, input.runId);
   for (const lane of input.lanes) {
     const logicalTaskId = lane.taskId ?? lane.name;
     const instanceId = lane.task_cell_instance_id;
@@ -1544,7 +1559,7 @@ export function settleFailedCmuxTaskCells(input: {
     };
     try {
       if (input.unconfirmedPaneIds[specialistDispatchKey(lane)]) {
-        markAttemptOrphaned(input.cwd, ids);
+        markAttemptOrphaned(input.cwd, ids, binding);
         orphaned += 1;
       } else {
         sealTerminalAttempt({
@@ -1553,6 +1568,7 @@ export function settleFailedCmuxTaskCells(input: {
           terminal_state: "failed",
           reason: input.reason,
           now,
+          binding,
         });
         failed += 1;
       }
@@ -1561,6 +1577,218 @@ export function settleFailedCmuxTaskCells(input: {
     }
   }
   return { failed, orphaned, errors };
+}
+
+// ── L1 tmux launch ownership, settlement and carriers (BR-04) ────────────────
+
+/** A TaskCell lane this invocation emitted: the only ids it may seal or park. */
+export interface OwnedTmuxLane {
+  ids: TaskCellInstanceIds;
+  lane: TaskCellLaunchLane;
+}
+
+/** This invocation's lanes whose attempt-1 record names exactly the emitted instance. */
+export function ownedTmuxLanes(cwd: string, runId: string, lanes: readonly TaskCellLaunchLane[]): OwnedTmuxLane[] {
+  const owned: OwnedTmuxLane[] = [];
+  for (const lane of lanes) {
+    const instanceId = lane.task_cell_instance_id;
+    const logicalTaskId = lane.taskId;
+    if (!instanceId || !logicalTaskId) continue;
+    const ids: TaskCellInstanceIds = { run_id: runId, logical_task_id: logicalTaskId, attempt: 1, instance_id: instanceId };
+    if (readAttemptForInstance(cwd, ids)?.instance_id === instanceId) owned.push({ ids, lane });
+  }
+  return owned;
+}
+
+export interface TmuxSettlement { failed: number; orphaned: number; errors: string[] }
+
+/** Seal or park each owned lane; already-terminal attempts are never touched. */
+export function settleOwnedTmuxLanes(
+  cwd: string,
+  runId: string,
+  owned: readonly OwnedTmuxLane[],
+  decide: (o: OwnedTmuxLane) => "seal_failed" | "orphan",
+  reason: string,
+  now: () => string = () => new Date().toISOString(),
+): TmuxSettlement {
+  const binding = launchBindingEnvelope(cwd, runId);
+  const out: TmuxSettlement = { failed: 0, orphaned: 0, errors: [] };
+  for (const o of owned) {
+    try {
+      if (readAttemptForInstance(cwd, o.ids)?.terminal_state) continue;
+      if (decide(o) === "seal_failed") {
+        sealTerminalAttempt({ cwd, ids: o.ids, terminal_state: "failed", reason, now, binding });
+        out.failed++;
+      } else {
+        markAttemptOrphaned(cwd, o.ids, binding);
+        out.orphaned++;
+      }
+    } catch (error) {
+      out.errors.push(`${o.ids.logical_task_id}/${o.ids.instance_id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return out;
+}
+
+/**
+ * A pane may be torn down only when every carrier in the run that names it (same
+ * pane id under the same creating server) is one of its listed shared members and
+ * all of them agree. An unlisted, unparseable or disagreeing claimant defers.
+ */
+export function runCarriersAgreeOnPane(cwd: string, runId: string, c: PaneIdentityCarrierV1): { ok: true } | { ok: false; reason: string } {
+  const memberKey = (x: { logical_task_id: string; attempt: number; instance_id: string }) => `${x.logical_task_id}/${x.attempt}/${x.instance_id}`;
+  const members = new Set(c.shared_members.map(memberKey));
+  for (const cell of findRunTaskCells(cwd, runId)) {
+    const read = readPaneIdentityCarrier(cwd, cell.ids);
+    let names: boolean;
+    if (read.ok) {
+      names = read.carrier.pane.pane_id === c.pane.pane_id &&
+        read.carrier.creating_command.server_pid === c.creating_command.server_pid &&
+        read.carrier.creating_command.server_process_start === c.creating_command.server_process_start;
+    } else if (read.reason === "identity_metadata_missing") {
+      continue;
+    } else {
+      // A carrier exists but does not validate: if it names this pane, defer.
+      let raw: { pane?: { pane_id?: unknown } } | null = null;
+      try { raw = JSON.parse(fs.readFileSync(paneIdentityCarrierPath(cwd, cell.ids), "utf8")); } catch { raw = null; }
+      names = raw === null || raw?.pane?.pane_id === c.pane.pane_id;
+    }
+    if (names && !members.has(memberKey(cell.ids))) {
+      return { ok: false, reason: `carrier of ${cell.ids.instance_id} names pane ${c.pane.pane_id} but is not a listed shared member` };
+    }
+  }
+  return sharedPeersAgree(cwd, c);
+}
+
+/**
+ * What --reap may do with one parked tmux orphan, from its own carrier only.
+ * sealable needs a verified, confirmed identity-bound teardown; a shared pane
+ * with a member still live (neither terminal nor orphaned) defers untouched.
+ */
+export function reapTmuxOrphanByCarrier(
+  cwd: string,
+  ids: TaskCellInstanceIds,
+  teardown: typeof terminateBoundPane = terminateBoundPane,
+): { kind: "sealable" | "orphan" | "degraded" | "defer"; detail: string } {
+  const read = readPaneIdentityCarrier(cwd, ids);
+  if (!read.ok) return { kind: "orphan", detail: read.reason };
+  const peers = runCarriersAgreeOnPane(cwd, ids.run_id, read.carrier);
+  if (!peers.ok) return { kind: "orphan", detail: peers.reason };
+  for (const m of read.carrier.shared_members) {
+    if (m.instance_id === ids.instance_id) continue;
+    const a = readAttemptForInstance(cwd, { run_id: ids.run_id, logical_task_id: m.logical_task_id, attempt: m.attempt, instance_id: m.instance_id });
+    if (!a || (a.terminal_state === null && !a.orphaned)) return { kind: "defer", detail: `shared pane member ${m.instance_id} is still live` };
+  }
+  const out = teardown(read.carrier.pane.pane_id, boundIdentityOf(read.carrier));
+  if (out.ok && out.confirmed && out.identity_check === "verified") return { kind: "sealable", detail: "identity-bound teardown confirmed" };
+  if (out.degraded) return { kind: "degraded", detail: out.error ?? "tmux unavailable" };
+  return { kind: "orphan", detail: `${out.identity_check}: ${out.error ?? "not confirmed"}` };
+}
+
+function reportTmuxSettlement(s: TmuxSettlement): void {
+  process.stderr.write(
+    `[agent-team-launcher] tmux launch failure lifecycle: ${s.failed} failed, ${s.orphaned} orphaned` +
+      `${s.errors.length ? `; errors: ${s.errors.join("; ")}` : ""}\n`,
+  );
+}
+
+/** The approved r1 carrier for each owned lane whose pane the creating server reported. */
+function carriersFromCapture(
+  owned: readonly OwnedTmuxLane[],
+  launchId: string,
+  capture: TmuxSpawnCapture | null,
+): { carriers: PaneIdentityCarrierV1[]; missing: OwnedTmuxLane[] } {
+  const carriers: PaneIdentityCarrierV1[] = [];
+  const missing: OwnedTmuxLane[] = [];
+  const createdAt = new Date().toISOString();
+  for (const o of owned) {
+    const key = specialistDispatchKey(o.lane);
+    const pane = capture?.creating ? capture.panes.find((p) => p.title === key) : undefined;
+    if (!capture?.creating || !pane) {
+      missing.push(o);
+      continue;
+    }
+    carriers.push({
+      schema_version: PANE_IDENTITY_SCHEMA,
+      ...o.ids,
+      launch_id: launchId,
+      created_at: createdAt,
+      creating_command: capture.creating,
+      pane,
+      shared_members: owned
+        .filter((m) => specialistDispatchKey(m.lane) === key)
+        .map((m) => ({ ...m.ids, dispatch_key: key, specialist: m.lane.name }))
+        .map(({ logical_task_id, attempt, instance_id, dispatch_key, specialist }) => ({ logical_task_id, attempt, instance_id, dispatch_key, specialist })),
+    });
+  }
+  return { carriers, missing };
+}
+
+/** Write and verify every owned lane's carrier; any fault means the launch was not observed. */
+export function recordTmuxLaunchCarriers(input: {
+  cwd: string;
+  runId: string;
+  owned: readonly OwnedTmuxLane[];
+  launchId: string;
+  capture: TmuxSpawnCapture | null;
+}): { ok: boolean; faults: string[] } {
+  const faults: string[] = [];
+  if (input.capture?.error) faults.push(`capture: ${input.capture.error}`);
+  const { carriers, missing } = carriersFromCapture(input.owned, input.launchId, input.capture);
+  for (const m of missing) faults.push(`${m.ids.instance_id}: pane not captured from the creating server`);
+  for (const c of carriers) {
+    try {
+      writePaneIdentityCarrier(input.cwd, c);
+    } catch (error) {
+      faults.push(`${c.instance_id}: carrier not recorded (${error instanceof Error ? error.message : String(error)})`);
+    }
+  }
+  for (const c of carriers) {
+    const read = readPaneIdentityCarrier(input.cwd, c);
+    if (!read.ok) {
+      faults.push(`${c.instance_id}: ${read.reason}`);
+      continue;
+    }
+    if (JSON.stringify(read.carrier) !== JSON.stringify(c)) faults.push(`${c.instance_id}: carrier on disk differs from this launch`);
+    const peers = sharedPeersAgree(input.cwd, read.carrier);
+    if (!peers.ok) faults.push(`${c.instance_id}: ${peers.reason}`);
+  }
+  return { ok: faults.length === 0, faults };
+}
+
+/**
+ * A failed tmux launch: seal only on proof. Known pre-action (substrate_spawned
+ * false) seals the owned lanes failed. Otherwise a confirmed, identity-verified
+ * cleanup of the captured target seals the lanes whose pane it captured, and every
+ * other owned lane is parked orphaned (with its carrier recorded when captured).
+ */
+function settleFailedTmuxLaunch(input: {
+  cwd: string;
+  runId: string;
+  owned: readonly OwnedTmuxLane[];
+  launchId: string;
+  capture: TmuxSpawnCapture | null;
+  preAction: boolean;
+  reason: string;
+}): void {
+  if (input.owned.length === 0) return;
+  if (input.preAction) {
+    reportTmuxSettlement(settleOwnedTmuxLanes(input.cwd, input.runId, input.owned, () => "seal_failed", input.reason));
+    return;
+  }
+  const { carriers } = carriersFromCapture(input.owned, input.launchId, input.capture);
+  const captured = new Set(carriers.map((c) => c.instance_id));
+  const confirmedGone = input.capture?.cleanup?.confirmed_gone === true && input.capture.cleanup.identity_check === "verified";
+  if (!confirmedGone) {
+    for (const c of carriers) {
+      try { writePaneIdentityCarrier(input.cwd, c); } catch { /* an existing or unwritable carrier stays as it is; the lane is parked below */ }
+    }
+  }
+  reportTmuxSettlement(settleOwnedTmuxLanes(
+    input.cwd, input.runId, input.owned,
+    (o) => (confirmedGone && captured.has(o.ids.instance_id) ? "seal_failed" : "orphan"),
+    input.reason,
+  ));
 }
 
 /**
@@ -1610,6 +1838,22 @@ function resolveLaunchBindingRef(cwd: string, runId: string): string | null {
   const record = loadRunBinding({ root: cwd, run_id: runId });
   if (record) return record.binding_ref;
   return null;
+}
+
+/**
+ * The explicit envelope for the orphan/seal writers. Undefined when no binding
+ * resolves, so the writers refuse (binding_absent) instead of guessing one.
+ */
+function launchBindingEnvelope(cwd: string, runId: string): { binding_ref: string } | undefined {
+  const ref = resolveLaunchBindingRef(cwd, runId);
+  return ref === null ? undefined : { binding_ref: ref };
+}
+
+function reportOrphanParkFailure(where: string, ids: TaskCellInstanceIds, error: unknown): void {
+  process.stderr.write(
+    `[agent-team-launcher] ${where}: could not park ${ids.logical_task_id}/${ids.instance_id} orphaned: ` +
+      `${error instanceof Error ? error.message : String(error)}\n`,
+  );
 }
 
 /**
@@ -1861,11 +2105,13 @@ function remoteTransportPort(opts: {
  * injected twice: once as the launch backend, once as the session seam that
  * carries availability, collision, preflight and session identity.
  */
-function tmuxTransportPort(adapterBacked: boolean): ExecutionTransportPort {
+function tmuxTransportPort(adapterBacked: boolean): { port: ExecutionTransportPort; backend: TmuxTeamBackend } {
   const backend = new TmuxTeamBackend(
     adapterBacked ? { resolveAdapter: resolveAdapter() } : {}
   );
-  return new TeamDispatchExecutionTransport({
+  // The launcher keeps the backend only to READ what its spawn observed
+  // (takeSpawnCapture); every dispatch still goes through the resolved port.
+  const port = new TeamDispatchExecutionTransport({
     transport_id: "tmux",
     backend,
     session: backend,
@@ -1878,6 +2124,7 @@ function tmuxTransportPort(adapterBacked: boolean): ExecutionTransportPort {
     // substrate demonstrably carries the exact ref").
     supports_definition_injection: true,
   });
+  return { port, backend };
 }
 
 /** First-class cmux surface substrate behind the same run-scoped port. */
@@ -2191,6 +2438,33 @@ async function main(): Promise<void> {
         const nowIso = () => new Date().toISOString();
         for (const ids of orphans) {
           const specialist = readAssignmentForInstance(cwd, ids)?.worker_role ?? null;
+          if (manifestBackend === "tmux") {
+            // L1-F1/F2: tmux teardown only through this attempt's own carrier; a
+            // missing/invalid carrier or disagreeing peer stays parked, never sealed.
+            const accepted = acceptedKeys.has(`${ids.logical_task_id}/${ids.attempt}/${ids.instance_id}`);
+            const verdict = reapTmuxOrphanByCarrier(cwd, ids);
+            if (verdict.kind === "sealable") {
+              try {
+                sealTerminalAttemptWithSubstantiveEvidence({
+                  cwd, runId, ids, terminalState: "terminated", reason: `reaper: ${verdict.detail}`,
+                  orphaned: true, accepted, now: nowIso,
+                });
+                totalOrphansReaped++;
+                process.stdout.write(
+                  `[REAPED] run "${runId}" specialist="${specialist ?? "unknown"}" logical_task="${ids.logical_task_id}" ` +
+                    `instance="${ids.instance_id}" — orphan sealed terminated (${verdict.detail})\n`,
+                );
+              } catch (error) { reportOrphanParkFailure("--reap", ids, error); }
+            } else if (verdict.kind === "orphan") {
+              try { markAttemptOrphaned(cwd, ids, launchBindingEnvelope(cwd, runId)); } catch (error) { reportOrphanParkFailure("--reap", ids, error); }
+              process.stdout.write(
+                `[ORPHAN] run "${runId}" specialist="${specialist ?? "unknown"}" instance="${ids.instance_id}" — ` +
+                  `${verdict.detail}; still parked (reap_attempts bumped)\n`,
+              );
+            }
+            // degraded (tmux unavailable): leave parked, no bump; retried next --reap.
+            continue;
+          }
           const paneId = paneByTask.get(ids.logical_task_id) ?? (specialist ? paneBySpec.get(specialist) : undefined);
           const hasRealPane = !!paneId && !paneId.startsWith("(");
           // No live pane (pruned/gone) → the pane died; confirm the orphan terminal.
@@ -2230,7 +2504,7 @@ async function main(): Promise<void> {
               );
             } catch { /* best-effort */ }
           } else if (!outcome.degraded) {
-            try { markAttemptOrphaned(cwd, ids); } catch { /* best-effort */ }
+            try { markAttemptOrphaned(cwd, ids, launchBindingEnvelope(cwd, runId)); } catch (error) { reportOrphanParkFailure("--reap", ids, error); }
             process.stdout.write(
               `[ORPHAN] run "${runId}" specialist="${specialist}" ` +
                 `instance="${ids.instance_id}" — reaper retry did not confirm; still parked (reap_attempts bumped)\n`
@@ -2468,12 +2742,79 @@ async function main(): Promise<void> {
                 `reason="${outcome.error ?? "cmux unavailable"}" — termination deferred\n`,
             );
           } else {
-            try { markAttemptOrphaned(cwd, ra.ids); } catch { /* best effort */ }
+            try { markAttemptOrphaned(cwd, ra.ids, launchBindingEnvelope(cwd, runId)); } catch (error) { reportOrphanParkFailure("--dismiss-completed", ra.ids, error); }
             orphanedCount++;
             process.stdout.write(
               `[ORPHAN] specialist="${specialist}" logical_task="${ra.ids.logical_task_id}" ` +
                 `instance="${ra.ids.instance_id}" surface="${surfaceId}" ` +
                 `reason="${outcome.error ?? "surface survived close"}"\n`,
+            );
+          }
+        }
+      }
+    } else if (sessionManifest.backend !== "in-process") {
+      // L1-F1/F2 (tmux): a pane is killed only through the carriers of the attempts
+      // it holds, once every shared member is terminal or authorized now. A missing
+      // or disagreeing carrier parks the attempt; it is never sealed on absence.
+      const pendingAll = authorized.filter((ra) => !isAttemptTerminal(ra.ids));
+      const byPane = new Map<string, { carrier: PaneIdentityCarrierV1; accs: RunAcceptance[] }>();
+      for (const ra of pendingAll) {
+        const specialist = readAssignmentForInstance(cwd, ra.ids)?.worker_role ?? "unknown";
+        const read = readPaneIdentityCarrier(cwd, ra.ids);
+        const peers = read.ok ? runCarriersAgreeOnPane(cwd, runId, read.carrier) : null;
+        if (!read.ok || !peers?.ok) {
+          const why = !read.ok ? read.reason : (peers as { ok: false; reason: string }).reason;
+          try { markAttemptOrphaned(cwd, ra.ids, launchBindingEnvelope(cwd, runId)); } catch (error) { reportOrphanParkFailure("--dismiss-completed", ra.ids, error); }
+          orphanedCount++;
+          process.stdout.write(
+            `[ORPHAN] specialist="${specialist}" logical_task="${ra.ids.logical_task_id}" instance="${ra.ids.instance_id}" ` +
+              `reason="${why}" — no verified pane identity; parked, not sealed\n`,
+          );
+          continue;
+        }
+        const k = `${read.carrier.launch_id} ${read.carrier.pane.pane_id}`;
+        const group = byPane.get(k) ?? { carrier: read.carrier, accs: [] };
+        group.accs.push(ra);
+        byPane.set(k, group);
+      }
+      const authKeysAll = new Set(authorized.map((a) => keyOf(a.ids)));
+      for (const { carrier, accs } of byPane.values()) {
+        const specialist = carrier.shared_members[0]?.specialist ?? "unknown";
+        const members = carrier.shared_members.map((m) => ({ run_id: runId, logical_task_id: m.logical_task_id, attempt: m.attempt, instance_id: m.instance_id }));
+        // Re-check the pane's claimants as a whole: a peer parked above for a
+        // conflicting carrier still names this pane, so the pane is not killed.
+        const agree = runCarriersAgreeOnPane(cwd, runId, carrier);
+        if (!agree.ok) {
+          deferredCount += accs.length;
+          process.stdout.write(
+            `[DEFER] specialist="${specialist}" pane="${carrier.pane.pane_id}" reason="${agree.reason}" — pane kept ALIVE\n`,
+          );
+          continue;
+        }
+        const allMembersDone = members.every((ids) => authKeysAll.has(keyOf(ids)) || isAttemptTerminal(ids));
+        if (!allMembersDone) {
+          deferredCount += accs.length;
+          process.stdout.write(
+            `[DEFER] specialist="${specialist}" pane="${carrier.pane.pane_id}" — ${accs.length}/${members.length} ` +
+              `shared member(s) authorized; pane kept ALIVE until ALL are terminal (G4 M2)\n`,
+          );
+          continue;
+        }
+        const outcome = terminateBoundPane(carrier.pane.pane_id, boundIdentityOf(carrier));
+        if (outcome.ok && outcome.confirmed && outcome.identity_check === "verified") {
+          for (const ra of accs) sealOne(specialist, ra, `${outcome.mechanism} (identity verified)`, carrier.pane.pane_id);
+        } else if (outcome.degraded) {
+          process.stdout.write(
+            `[DEGRADED] specialist="${specialist}" pane="${carrier.pane.pane_id}" reason="${outcome.error ?? "tmux unavailable"}" ` +
+              `— host-unavailable, termination deferred (recorded degradation)\n`,
+          );
+        } else {
+          for (const ra of accs) {
+            try { markAttemptOrphaned(cwd, ra.ids, launchBindingEnvelope(cwd, runId)); } catch (error) { reportOrphanParkFailure("--dismiss-completed", ra.ids, error); }
+            orphanedCount++;
+            process.stdout.write(
+              `[ORPHAN] specialist="${specialist}" logical_task="${ra.ids.logical_task_id}" instance="${ra.ids.instance_id}" ` +
+                `pane="${carrier.pane.pane_id}" reason="${outcome.identity_check}: ${outcome.error ?? "not confirmed"}" — parked for reaper retry\n`,
             );
           }
         }
@@ -2523,7 +2864,7 @@ async function main(): Promise<void> {
       } else {
         // Kill did not confirm — park EVERY pending attempt orphaned; --reap retries.
         for (const ra of pendingAccs) {
-          try { markAttemptOrphaned(cwd, ra.ids); } catch { /* best-effort */ }
+          try { markAttemptOrphaned(cwd, ra.ids, launchBindingEnvelope(cwd, runId)); } catch (error) { reportOrphanParkFailure("--dismiss-completed", ra.ids, error); }
           orphanedCount++;
           process.stdout.write(
             `[ORPHAN] specialist="${specialist}" logical_task="${ra.ids.logical_task_id}" ` +
@@ -3774,8 +4115,9 @@ async function main(): Promise<void> {
   // collision, preflight), the run-scoped launch, and session identity through
   // the resolved port. The launcher keeps the CLI-specific UX (exact error
   // messages, exit codes, manifest, attach).
+  const tmuxTransport = tmuxTransportPort(adapterBacked);
   const tmuxRuntime = createHostExecutionRuntime({
-    transports: { tmux: tmuxTransportPort(adapterBacked) },
+    transports: { tmux: tmuxTransport.port },
   });
   const resolvedTmux = resolveDispatchPort(tmuxRuntime, "tmux");
   if (!resolvedTmux.port) {
@@ -3898,9 +4240,10 @@ async function main(): Promise<void> {
   // records are persisted ONLY now — after availability, collision, mixed-host
   // preflight and injection-support gates all passed. A dry run persists
   // nothing (emitTaskCellsV2 returns before any write).
+  let localCellsWritten = 0;
   {
     const phaseId = phaseFromTeamPath(args.team) ?? "build";
-    const localCellsWritten = emitTaskCellsV2(
+    localCellsWritten = emitTaskCellsV2(
       cwd,
       runId,
       slug,
@@ -3918,52 +4261,75 @@ async function main(): Promise<void> {
     }
   }
 
+  // L1 (BR-04): this invocation owns, and may settle, only the TaskCells it just
+  // emitted; admission consumes their per-attempt launch claim exactly once,
+  // before any tmux call. A dry run claims nothing and stays a pure plan.
+  // args.runId is resolved before this point (lifecycle run or explicit), so a real
+  // launch always emits its lanes; it must own every lane it launches, and a
+  // missing emitted lane refuses before any tmux call (l-no-runid-premise-correction).
+  const explicitRealRun = !args.dryRun;
+  const ownedLanes = explicitRealRun ? ownedTmuxLanes(cwd, runId, team.specialists as TaskCellLaunchLane[]) : [];
+  const launchId = `tmux:${targetName}:${process.pid}:${randomUUID()}`;
+  // An admission refusal proves only that THIS call created nothing. Another
+  // claimant may already run the same emitted instance, so nothing is sealed or
+  // parked: every attempt, assignment, carrier and claim stays exactly as it is,
+  // and this call's unlaunched reservations stay nonterminal with a diagnostic
+  // (l-claim-refusal-preservation-decision.json).
+  const refuseAdmission = (reason: string): never => {
+    process.stderr.write(
+      `[agent-team-launcher] ${reason}\n` +
+        `[agent-team-launcher] no tmux call was made and no TaskCell record was changed; ` +
+        `unlaunched reservation(s) left nonterminal: ${ownedLanes.map((o) => `${o.ids.logical_task_id}/${o.ids.instance_id}`).join(", ") || "(none)"}\n`,
+    );
+    process.exit(2);
+  };
+  if (explicitRealRun && ownedLanes.length !== team.specialists.length) {
+    refuseAdmission(`tmux launch refused before any tmux call: ${ownedLanes.length}/${team.specialists.length} lanes have an emitted TaskCell for this run`);
+  }
+  if (explicitRealRun) {
+    try {
+      claimIsolatedLaunches({
+        cwd,
+        runId,
+        launchId,
+        lanes: ownedLanes.map((o) => ({ logicalTaskId: o.ids.logical_task_id, instanceId: o.ids.instance_id, attempt: o.ids.attempt })),
+      });
+    } catch (error) {
+      refuseAdmission(`tmux launch admission refused: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   // MH-04 BF-2: ONE run-scoped launch through the resolved port. A dry run asks
   // the port for the launch it WOULD perform (the substrate is planned, never
   // invoked); a real run asks it to perform one. Either way the launcher reads a
   // closed typed outcome and owns only the UX.
-  const launched = tmuxPort.launch(launchRequest);
-  const launchResult = launched.value;
-  if (!launchResult) {
+  let launched: ReturnType<typeof tmuxPort.launch>;
+  try {
+    launched = tmuxPort.launch(launchRequest);
+  } catch (error) {
+    // A thrown port is opaque post-action evidence: never success, never sealed.
     if (!args.dryRun) {
-      const settled = settleFailedCmuxTaskCells({
-        cwd,
-        runId,
-        lanes: team.specialists as TaskCellLaunchLane[],
-        unconfirmedPaneIds: {},
-        reason: `tmux final plan refused before pane spawn: ${launched.detail ?? launched.status}`,
-      });
-      process.stderr.write(
-        `[agent-team-launcher] tmux no-pane failure lifecycle: ${settled.failed} failed, ` +
-          `${settled.orphaned} orphaned${settled.errors.length ? `; errors: ${settled.errors.join("; ")}` : ""}\n`,
-      );
+      settleFailedTmuxLaunch({ cwd, runId, owned: ownedLanes, launchId, capture: tmuxTransport.backend.takeSpawnCapture(targetName), preAction: false,
+        reason: `tmux launch threw: ${error instanceof Error ? error.message : String(error)}` });
     }
-    process.stderr.write(
-      `[agent-team-launcher] tmux dispatch failed: ${launched.detail ?? launched.status}\n`
-    );
+    process.stderr.write(`[agent-team-launcher] tmux dispatch failed: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exit(2);
   }
-
-  // A failed plan is a failed dispatch even in preview mode. Check this before
-  // the dry-run success path so invalid exact-package activation cannot be
-  // presented as a completed preview with an empty command list.
-  if (!launchResult.ok) {
-    if (!args.dryRun && launchResult.planned_commands.length === 0) {
-      const settled = settleFailedCmuxTaskCells({
-        cwd,
-        runId,
-        lanes: team.specialists as TaskCellLaunchLane[],
-        unconfirmedPaneIds: {},
-        reason: `tmux final plan refused before pane spawn: ${launchResult.failure_detail ?? launchResult.notes.join(" | ")}`,
-      });
-      process.stderr.write(
-        `[agent-team-launcher] tmux no-pane failure lifecycle: ${settled.failed} failed, ` +
-          `${settled.orphaned} orphaned${settled.errors.length ? `; errors: ${settled.errors.join("; ")}` : ""}\n`,
-      );
+  const launchResult = launched.value;
+  const launchSucceeded = launched.status === "succeeded" && !!launchResult && launchResult.ok;
+  if (!launchSucceeded || !launchResult) {
+    // Only the existing substrate_spawned=false fact proves nothing was invoked.
+    // Every other failure, including a "failed" status whose value says ok and a
+    // missing value, is post-action or unknown.
+    const detail = launchResult?.failure_detail ?? launched.detail ?? launchResult?.notes.join(" | ") ?? launched.status;
+    if (!args.dryRun) {
+      settleFailedTmuxLaunch({ cwd, runId, owned: ownedLanes, launchId, capture: tmuxTransport.backend.takeSpawnCapture(targetName),
+        preAction: launched.facts["substrate_spawned"] === false, reason: `tmux launch failed: ${detail}` });
     }
     process.stderr.write(
-      `[agent-team-launcher] tmux command failed: ${launchResult.failed_command ?? "(unknown)"}\n` +
-        `  stderr: ${launchResult.failure_detail ?? launchResult.notes.join(" | ")}\n`
+      launchResult
+        ? `[agent-team-launcher] tmux command failed: ${launchResult.failed_command ?? "(unknown)"}\n  stderr: ${detail}\n`
+        : `[agent-team-launcher] tmux dispatch failed: ${detail}\n`,
     );
     process.exit(2);
   }
@@ -4005,6 +4371,22 @@ async function main(): Promise<void> {
         "\n[agent-team-launcher] dry-run complete — no state written.\n",
     );
     process.exit(0);
+  }
+
+  // L1 success definition: a succeeded outcome is not yet a launch success. Every
+  // lane this invocation owns needs a captured pane on the creating server and a
+  // durably written per-instance carrier whose shared peers agree. Otherwise the
+  // launch is reported failed and every owned lane stays nonterminal (orphaned).
+  if (ownedLanes.length > 0) {
+    const recorded = recordTmuxLaunchCarriers({
+      cwd, runId, owned: ownedLanes, launchId, capture: tmuxTransport.backend.takeSpawnCapture(targetName),
+    });
+    if (!recorded.ok) {
+      const reason = `tmux launch not observed: ${recorded.faults.join("; ")}`;
+      reportTmuxSettlement(settleOwnedTmuxLanes(cwd, runId, ownedLanes, () => "orphan", reason));
+      process.stderr.write(`[agent-team-launcher] ${reason}\n`);
+      process.exit(2);
+    }
   }
 
   const lifecycle = reconcileTaskCellLifecycleTelemetry({

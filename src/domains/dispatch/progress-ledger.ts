@@ -21,6 +21,8 @@ import * as fs from "fs";
 import * as path from "path";
 
 import { deepFreeze, frozenList } from "../kernel";
+import { assertWritableBinding } from "../lifecycle";
+import type { DispatchBindingEnvelope } from "./task-assignment";
 import { assignmentId, taskCellPaths, type TaskAssignmentV2 } from "./task-cell-contract";
 
 export const PROGRESS_LEDGER_SCHEMA = "guild.progress_ledger.v1" as const;
@@ -229,6 +231,8 @@ export interface InitLedgerInput {
   assignment_id?: string;
   now?: () => string;
   guildDir?: string;
+  /** The caller's verified run binding (CD9); absent or invalid throws BindingRejectedError. */
+  binding?: DispatchBindingEnvelope;
 }
 
 export type InitLedgerResult =
@@ -237,6 +241,7 @@ export type InitLedgerResult =
 
 /** Create the cell's ledger from its oracle list. Refuses an oracle-less cell. */
 export function initProgressLedger(input: InitLedgerInput): InitLedgerResult {
+  assertWritableBinding({ root: input.cwd, run_id: input.run_id, binding_ref: input.binding?.binding_ref });
   const check = validateDoneWhen(input.done_when);
   if (doneWhenRefused(check)) return { ok: false, reason: check.reason };
   const now = (input.now ?? (() => new Date().toISOString()))();
@@ -283,6 +288,8 @@ export interface RecordOracleInput {
   last_failure?: CellLastFailure;
   now?: () => string;
   guildDir?: string;
+  /** The caller's verified run binding (CD9); absent or invalid throws BindingRejectedError. */
+  binding?: DispatchBindingEnvelope;
 }
 
 export type RecordOracleResult =
@@ -291,6 +298,7 @@ export type RecordOracleResult =
 
 /** Settle one oracle. Unknown item ids fail closed rather than being appended. */
 export function recordOracleOutcome(input: RecordOracleInput): RecordOracleResult {
+  assertWritableBinding({ root: input.cwd, run_id: input.run_id, binding_ref: input.binding?.binding_ref });
   const ledger = readProgressLedger(input);
   if (!ledger) return { ok: false, reason: "no readable guild.progress_ledger.v1 for this cell" };
   const item = ledger.items.find((i) => i.id === input.item_id);
@@ -430,6 +438,154 @@ export const PROGRESS_LEDGER_CONTRACT = deepFreeze({
   item_states: LEDGER_ITEM_STATES,
   last_failures: CELL_LAST_FAILURES,
 });
+
+// ── CD9 · typed executable oracles over the unchanged ledger path ────────────
+//
+// A typed target travels in the existing `target` string as the CANONICAL JSON
+// encoding of its object (keys sorted, no insignificant whitespace). The legacy
+// readers above compare id + kind only, so they accept these strings unchanged.
+
+/** Upper bound on a `command` oracle's runtime (ms). */
+export const EXECUTABLE_COMMAND_TIMEOUT_MAX_MS = 600_000;
+
+/** The oracle kinds an E00 controller can settle from its own evidence. */
+export const EXECUTABLE_ORACLE_KINDS = frozenList(["command", "artifact_exists", "acceptance_record"] as const);
+export type ExecutableOracleKind = (typeof EXECUTABLE_ORACLE_KINDS)[number];
+
+export interface CommandOracleTarget { argv: string[]; cwd: string; timeout_ms: number }
+export interface ArtifactExistsOracleTarget { path: string; sha256: string | null }
+export interface AcceptanceRecordOracleTarget { logical_task_id: string }
+
+export type ExecutableTargetValue = CommandOracleTarget | ArtifactExistsOracleTarget | AcceptanceRecordOracleTarget;
+
+export type DecodeExecutableTargetResult =
+  | { ok: true; kind: ExecutableOracleKind; value: ExecutableTargetValue }
+  | { ok: false; reason: string };
+
+/** CD9 canonical encoding: sorted keys, no insignificant whitespace, UTF-8. */
+export function canonicalOracleJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalOracleJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${canonicalOracleJson(o[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function exactKeys(o: Record<string, unknown>, keys: readonly string[]): boolean {
+  const own = Object.keys(o);
+  return own.length === keys.length && keys.every((k) => Object.prototype.hasOwnProperty.call(o, k));
+}
+
+/** A normalized, relative, non-escaping POSIX path (no `..`, no leading `/`, no `.`-only). */
+function isSafeRelativePath(p: unknown): p is string {
+  if (typeof p !== "string" || p.length === 0 || p.includes("\0") || p.includes("\\")) return false;
+  if (path.posix.isAbsolute(p)) return false;
+  const normalized = path.posix.normalize(p);
+  if (normalized !== p || normalized === "." || normalized === ".." || normalized.startsWith("../")) return false;
+  return true;
+}
+
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
+/**
+ * Parse one typed target. The string must be JSON whose canonical re-encoding
+ * reproduces it byte-for-byte, with the exact closed key set and types of its
+ * kind. Scope and dependency membership are checked by validateExecutableDoneWhen.
+ */
+export function decodeExecutableTarget(kind: string, target: unknown): DecodeExecutableTargetResult {
+  if (!(EXECUTABLE_ORACLE_KINDS as readonly string[]).includes(kind)) {
+    return { ok: false, reason: "oracle_kind_unsupported_in_e00" };
+  }
+  if (typeof target !== "string" || target.length === 0) return { ok: false, reason: "oracle_target_missing" };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(target);
+  } catch {
+    return { ok: false, reason: "oracle_target_not_json" };
+  }
+  if (canonicalOracleJson(parsed) !== target) return { ok: false, reason: "oracle_target_not_canonical" };
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { ok: false, reason: "oracle_target_not_object" };
+  }
+  const o = parsed as Record<string, unknown>;
+  const bad = (reason: string): DecodeExecutableTargetResult => ({ ok: false, reason });
+  if (kind === "command") {
+    if (!exactKeys(o, ["argv", "cwd", "timeout_ms"])) return bad("command_target_keys");
+    const argv = o["argv"];
+    if (!Array.isArray(argv) || argv.length === 0 || !argv.every((a) => typeof a === "string" && a.length > 0)) {
+      return bad("command_argv_invalid");
+    }
+    if (!isSafeRelativePath(o["cwd"])) return bad("command_cwd_invalid");
+    const timeout = o["timeout_ms"];
+    if (!Number.isInteger(timeout) || (timeout as number) <= 0 || (timeout as number) > EXECUTABLE_COMMAND_TIMEOUT_MAX_MS) {
+      return bad("command_timeout_invalid");
+    }
+    return { ok: true, kind, value: { argv: [...argv] as string[], cwd: o["cwd"] as string, timeout_ms: timeout as number } };
+  }
+  if (kind === "artifact_exists") {
+    if (!exactKeys(o, ["path", "sha256"])) return bad("artifact_target_keys");
+    if (!isSafeRelativePath(o["path"])) return bad("artifact_path_invalid");
+    const digest = o["sha256"];
+    if (digest !== null && (typeof digest !== "string" || !SHA256_HEX.test(digest))) return bad("artifact_sha256_invalid");
+    return { ok: true, kind, value: { path: o["path"] as string, sha256: digest as string | null } };
+  }
+  if (!exactKeys(o, ["logical_task_id"])) return bad("acceptance_target_keys");
+  const id = o["logical_task_id"];
+  if (typeof id !== "string" || id.length === 0) return bad("acceptance_logical_task_id_invalid");
+  return { ok: true, kind: "acceptance_record", value: { logical_task_id: id } };
+}
+
+/** True when `rel` equals a scope path or lies under it (both safe relative paths). */
+function insideScope(rel: string, scopePaths: readonly string[]): boolean {
+  return scopePaths.some((scope) => {
+    if (!isSafeRelativePath(scope)) return false;
+    return rel === scope || rel.startsWith(`${scope}/`);
+  });
+}
+
+export interface ExecutableDoneWhenContext {
+  scope_paths: readonly string[];
+  dependencies: ReadonlyArray<{ logical_task_id: string }>;
+}
+
+export type ExecutableDoneWhenCheck =
+  | { ok: true; items: ReadonlyArray<DoneWhenItem & { target: string; value: ExecutableTargetValue }> }
+  | { ok: false; reason: string; item_id?: string };
+
+/**
+ * The E00 admission check (CD9): the legacy validateDoneWhen floor, then every
+ * item decoded as a typed executable oracle. named_check and verify.after_edit
+ * refuse with oracle_kind_unsupported_in_e00 (the controller has no runner for
+ * them). command cwd and artifact path must lie inside scope_paths;
+ * acceptance_record must name one of the assignment's dependencies.
+ */
+export function validateExecutableDoneWhen(doneWhen: unknown, ctx: ExecutableDoneWhenContext): ExecutableDoneWhenCheck {
+  const floor = validateDoneWhen(doneWhen);
+  if (doneWhenRefused(floor)) return { ok: false, reason: floor.reason };
+  const out: Array<DoneWhenItem & { target: string; value: ExecutableTargetValue }> = [];
+  for (const item of floor.items) {
+    if (!(EXECUTABLE_ORACLE_KINDS as readonly string[]).includes(item.oracle)) {
+      return { ok: false, reason: "oracle_kind_unsupported_in_e00", item_id: item.id };
+    }
+    const decoded = decodeExecutableTarget(item.oracle, item.target);
+    if (!decoded.ok) return { ok: false, reason: decoded.reason, item_id: item.id };
+    if (decoded.kind === "command" && !insideScope((decoded.value as CommandOracleTarget).cwd, ctx.scope_paths)) {
+      return { ok: false, reason: "command_cwd_outside_scope", item_id: item.id };
+    }
+    if (decoded.kind === "artifact_exists" && !insideScope((decoded.value as ArtifactExistsOracleTarget).path, ctx.scope_paths)) {
+      return { ok: false, reason: "artifact_path_outside_scope", item_id: item.id };
+    }
+    if (
+      decoded.kind === "acceptance_record" &&
+      !ctx.dependencies.some((d) => d.logical_task_id === (decoded.value as AcceptanceRecordOracleTarget).logical_task_id)
+    ) {
+      return { ok: false, reason: "acceptance_record_not_a_dependency", item_id: item.id };
+    }
+    out.push({ ...item, target: item.target as string, value: decoded.value });
+  }
+  return { ok: true, items: frozenList(out) };
+}
 
 /**
  * Read `done_when[]` off an assignment.

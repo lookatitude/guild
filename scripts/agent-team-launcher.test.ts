@@ -84,6 +84,7 @@ import {
   settleFailedCmuxTaskCells,
 } from "./agent-team-launcher";
 import { createExactClaudePluginFixture } from "../tests/fixtures/exact-claude-plugin-fixture";
+import { PANE_IDENTITY_SCHEMA, TMUX_SERVER_START_PREFIX, processStartOf, writePaneIdentityCarrier } from "./lib/host/tmux-backend";
 // FU20 controls seed a genuinely COMMITTED adoption manifest so the launcher's
 // project-definition resolver returns a real `guild.project_definition_ref.v1`.
 import {
@@ -108,14 +109,168 @@ import {
   COMPATIBILITY_USAGE_SCHEMA,
   DEPENDENCE_COMPATIBILITY_READ_REASONS,
 } from "../src/domains/config";
-import { NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE, NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA, computePhysicalNativeClaudePayloadDigest } from "../src/domains/distribution/index";
+import { NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE, NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA, RELEASE_PACKAGE_IDENTITY_FILE, computePhysicalNativeClaudePayloadDigest } from "../src/domains/distribution/index";
 
 const FIXTURES = path.resolve(__dirname, "fixtures");
 const INHERITED_RUN_ID = "run-20260811-000000-launcher-test";
-const EXACT_CLAUDE_PLUGIN_ROOT = createExactClaudePluginFixture();
-const SCRIPT = path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
 
-afterAll(() => fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true }));
+/**
+ * Launcher under test. "committed-head" (default) runs a git archive of HEAD as TS
+ * through tsx, so it never exercises uncommitted work. "current" is selected by
+ * LAUNCHER_TEST_CURRENT_PACKAGE (a canonically rendered claude-code package): the
+ * package is copied into owned temp and its compiled runtime/scripts/agent-team-launcher.js
+ * runs under Node, bound to the working tree's compiled entry. The L gate runs "current".
+ */
+const LAUNCHER_ENTRY = path.join("runtime", "scripts", "agent-team-launcher.js");
+const CURRENT_PACKAGE_INPUT = process.env["LAUNCHER_TEST_CURRENT_PACKAGE"]?.trim() || null;
+const LAUNCHER_MODE: "current" | "committed-head" = CURRENT_PACKAGE_INPUT ? "current" : "committed-head";
+const NODE_BIN = (globalThis as { Bun?: { which(n: string): string | null } }).Bun?.which("node") ?? "node";
+const fileSha256 = (file: string): string => createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+
+/** Copy the input package into owned temp (the input is never written) and bind it to the working tree. */
+function materializeCurrentPackage(input: string): string {
+  if (!path.isAbsolute(input) || !fs.existsSync(path.join(input, ".claude-plugin", "plugin.json"))) {
+    throw new Error(`LAUNCHER_TEST_CURRENT_PACKAGE is not an absolute claude-code package: ${input}`);
+  }
+  const expected = fileSha256(path.resolve(__dirname, "..", LAUNCHER_ENTRY));
+  const inputEntry = fileSha256(path.join(input, LAUNCHER_ENTRY));
+  if (inputEntry !== expected) {
+    throw new Error(`current package entry sha256 ${inputEntry} differs from the working-tree compiled entry ${expected}`);
+  }
+  const inputPayload = computePhysicalNativeClaudePayloadDigest(input);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-launcher-current-"));
+  fs.cpSync(input, root, { recursive: true, preserveTimestamps: true, verbatimSymlinks: true });
+  const copyEntry = fileSha256(path.join(root, LAUNCHER_ENTRY));
+  const copyPayload = computePhysicalNativeClaudePayloadDigest(root);
+  if (copyEntry !== expected || copyPayload !== inputPayload) {
+    fs.rmSync(root, { recursive: true, force: true });
+    throw new Error(`owned copy diverged from the input package (entry ${copyEntry}, payload ${copyPayload} vs ${inputPayload})`);
+  }
+  const release = JSON.parse(fs.readFileSync(path.join(root, RELEASE_PACKAGE_IDENTITY_FILE), "utf8")) as Record<string, unknown>;
+  const node = spawnSync(NODE_BIN, ["--version"], { encoding: "utf8" });
+  const context = {
+    schema_version: "guild.launcher_test_package_context.v1",
+    recorded_at: new Date().toISOString(),
+    mode: LAUNCHER_MODE,
+    input_package: input,
+    owned_copy: root,
+    entry: LAUNCHER_ENTRY,
+    entry_sha256: expected,
+    physical_payload_digest: copyPayload,
+    release_identity: {
+      release_version: release["release_version"], release_id: release["release_id"],
+      source_commit: release["source_commit"], native_claude_payload_digest: release["native_claude_payload_digest"],
+    },
+    plugin_version: JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin", "plugin.json"), "utf8")).version,
+    node: node.status === 0 ? node.stdout.trim() : null,
+  };
+  const recordFile = process.env["LAUNCHER_TEST_CURRENT_RECORD"];
+  if (recordFile) fs.writeFileSync(recordFile, `${JSON.stringify(context, null, 2)}\n`, { flag: "wx" });
+  else process.stderr.write(`${JSON.stringify(context)}\n`);
+  return root;
+}
+
+const EXACT_CLAUDE_PLUGIN_ROOT = CURRENT_PACKAGE_INPUT
+  ? materializeCurrentPackage(CURRENT_PACKAGE_INPUT)
+  : createExactClaudePluginFixture();
+const SCRIPT = LAUNCHER_MODE === "current"
+  ? path.join(EXACT_CLAUDE_PLUGIN_ROOT, LAUNCHER_ENTRY)
+  : path.join(EXACT_CLAUDE_PLUGIN_ROOT, "scripts", "agent-team-launcher.ts");
+/**
+ * Env pseudo-key (never forwarded) for the module-graph probes. They intercept
+ * Module._load, which a bundled entry never reaches, so in current mode they run
+ * as a separate source-structural layer: raw current TS from an owned copy of the
+ * root-supplied current-source snapshot (LAUNCHER_TEST_CURRENT_SOURCE_SNAPSHOT +
+ * _MANIFEST), never the compiled package. Every other case runs the compiled entry.
+ */
+const MODULE_GRAPH_PROBE = "__GUILD_TEST_MODULE_GRAPH_PROBE";
+const SOURCE_STRUCTURAL_CASES = Object.freeze([
+  "the spawned launcher reaches the port-authored selector (not a launcher-local ladder)",
+  "agent rung: in-process dispatch resolves and executes through transportFor",
+  "remote path: remote dispatch resolves and executes through transportFor",
+  "tmux team path: tmux dispatch resolves and executes through transportFor",
+  "collision + availability UX still refuses through the port (no direct backend probe)",
+]);
+/** Frozen production sources the snapshot must carry byte-identical to this working tree. */
+const SOURCE_CRITICAL = Object.freeze([
+  "scripts/agent-team-launcher.ts", "scripts/lib/host/tmux-backend.ts", "scripts/task-cell-controller.ts",
+  "runtime/scripts/agent-team-launcher.js", "runtime/scripts/task-cell-controller.js", "runtime/scripts/task-cell-api.js",
+  "runtime/scripts/resolve-specialist-capability-scope.js", "scripts/dist/activated-host-conformance.js",
+]);
+const TSX_BIN = path.join(__dirname, "node_modules", ".bin", "tsx");
+const DEPENDENCY_ROOT = path.join(__dirname, "node_modules");
+
+/** Append one spawn's layer to LAUNCHER_TEST_LAYER_RECORD (JSONL) when set. */
+function recordLayer(layer: "compiled-package" | "current-source-structural", entry: string): void {
+  const file = process.env["LAUNCHER_TEST_LAYER_RECORD"];
+  if (file) fs.appendFileSync(file, `${JSON.stringify({ layer, entry_sha256: fileSha256(entry) })}\n`);
+}
+
+let sourceStructuralRoot: string | null = null;
+/**
+ * Owned copy of the current-source snapshot, verified file-by-file against its
+ * manifest and, for the frozen sources, against this working tree. The only
+ * controlled change is the existing fixture-native identity stamp, inside this copy.
+ */
+function currentSourceStructuralRoot(): string {
+  if (sourceStructuralRoot) return sourceStructuralRoot;
+  const snapshot = process.env["LAUNCHER_TEST_CURRENT_SOURCE_SNAPSHOT"]?.trim();
+  const manifestFile = process.env["LAUNCHER_TEST_CURRENT_SOURCE_MANIFEST"]?.trim();
+  if (!snapshot || !manifestFile || !path.isAbsolute(snapshot) || !path.isAbsolute(manifestFile)) {
+    throw new Error("source-structural probe needs absolute LAUNCHER_TEST_CURRENT_SOURCE_SNAPSHOT and _MANIFEST in current mode");
+  }
+  if (!fs.existsSync(TSX_BIN)) throw new Error(`installed tsx not found at ${TSX_BIN}; no install is attempted`);
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8")) as {
+    source_snapshot_root: string; source_commit: unknown; files: Array<{ relative_path: string; kind: string; sha256?: string }>;
+  };
+  if (path.resolve(manifest.source_snapshot_root) !== path.resolve(snapshot) || manifest.source_commit !== null) {
+    throw new Error("current-source manifest does not describe this snapshot as source_commit=null");
+  }
+  const byPath = new Map(manifest.files.filter((f) => f.kind === "file").map((f) => [f.relative_path, f.sha256]));
+  for (const rel of SOURCE_CRITICAL) {
+    const worktree = fileSha256(path.resolve(__dirname, "..", rel));
+    if (byPath.get(rel) !== worktree || fileSha256(path.join(snapshot, rel)) !== worktree) {
+      throw new Error(`current-source snapshot ${rel} does not match the frozen working-tree bytes`);
+    }
+  }
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "guild-launcher-source-"));
+  fs.cpSync(snapshot, root, { recursive: true, preserveTimestamps: true, verbatimSymlinks: true });
+  const mismatched = [...byPath].filter(([rel, sha]) => fileSha256(path.join(root, rel)) !== sha).map(([rel]) => rel);
+  if (mismatched.length > 0) {
+    fs.rmSync(root, { recursive: true, force: true });
+    throw new Error(`owned source copy differs from its manifest: ${mismatched.slice(0, 5).join(", ")}`);
+  }
+  const stampFile = path.join(root, NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE);
+  const stampBefore = fs.existsSync(stampFile) ? fileSha256(stampFile) : null;
+  fs.writeFileSync(stampFile, `${JSON.stringify({
+    schema_version: NATIVE_CLAUDE_PACKAGE_IDENTITY_SCHEMA,
+    release_version: JSON.parse(fs.readFileSync(path.join(root, ".claude-plugin", "plugin.json"), "utf8")).version,
+    payload_digest: computePhysicalNativeClaudePayloadDigest(root),
+  }, null, 2)}\n`, { mode: 0o644 });
+  const context = {
+    schema_version: "guild.launcher_test_source_structural_context.v1",
+    recorded_at: new Date().toISOString(),
+    layer: "current-source-structural",
+    source_only: true, source_commit: null, qualified: false,
+    snapshot, manifest: { path: manifestFile, sha256: fileSha256(manifestFile), files_verified: byPath.size },
+    critical_verified: SOURCE_CRITICAL.map((rel) => ({ path: rel, sha256: fileSha256(path.join(root, rel)) })),
+    owned_copy: root,
+    instrumentation_diff: [{ path: NATIVE_CLAUDE_PACKAGE_IDENTITY_FILE, change: "fixture-native identity stamp (owned copy only)", sha256_before: stampBefore, sha256_after: fileSha256(stampFile) }],
+    probe_mechanism: "NODE_OPTIONS --require Module._load hook; no source byte instrumented",
+    runner: { tsx: TSX_BIN, node_path: DEPENDENCY_ROOT },
+    cases: SOURCE_STRUCTURAL_CASES,
+  };
+  const recordFile = process.env["LAUNCHER_TEST_SOURCE_RECORD"];
+  if (recordFile) fs.writeFileSync(recordFile, `${JSON.stringify(context, null, 2)}\n`, { flag: "wx" });
+  else process.stderr.write(`${JSON.stringify(context)}\n`);
+  sourceStructuralRoot = root;
+  return root;
+}
+
+afterAll(() => {
+  fs.rmSync(EXACT_CLAUDE_PLUGIN_ROOT, { recursive: true, force: true });
+  if (sourceStructuralRoot) fs.rmSync(sourceStructuralRoot, { recursive: true, force: true });
+});
 
 function runScript(
   args: string[],
@@ -179,9 +334,27 @@ function runScript(
   // The gate's own pins live in __tests__/t7-h1-dispatch-approval.test.ts.
   baseEnv.GUILD_DISPATCH_APPROVAL_OVERRIDE =
     "launcher unit fixture: no team-plan trail; approval verification is pinned separately";
+  const moduleGraphProbe = env[MODULE_GRAPH_PROBE] === "1";
   const finalEnv: Record<string, string> = {};
   for (const [k, v] of Object.entries({ ...baseEnv, ...env })) {
-    if (v !== undefined) finalEnv[k] = v;
+    if (v !== undefined && k !== MODULE_GRAPH_PROBE) finalEnv[k] = v;
+  }
+  if (LAUNCHER_MODE === "current") {
+    let result;
+    if (moduleGraphProbe) {
+      const sourceRoot = currentSourceStructuralRoot();
+      const entry = path.join(sourceRoot, "scripts", "agent-team-launcher.ts");
+      const inherited = finalEnv["NODE_PATH"];
+      recordLayer("current-source-structural", entry);
+      result = spawnSync(TSX_BIN, [entry, ...args], {
+        encoding: "utf8", timeout: 120_000,
+        env: { ...finalEnv, GUILD_PLUGIN_ROOT: sourceRoot, NODE_PATH: inherited ? `${DEPENDENCY_ROOT}${path.delimiter}${inherited}` : DEPENDENCY_ROOT },
+      });
+    } else {
+      recordLayer("compiled-package", SCRIPT);
+      result = spawnSync(NODE_BIN, [SCRIPT, ...args], { encoding: "utf8", env: finalEnv, timeout: 120_000 });
+    }
+    return { exitCode: result.status ?? 1, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
   }
   // GUILD_TSX_BIN pins the TypeScript runner for the spawned launcher. When it is
   // unset the default `npx tsx` path is used, so the repository's own `npm test`
@@ -289,11 +462,91 @@ function manifestPreviewFromStdout(stdout: string): Record<string, unknown> {
   return JSON.parse(stdout.slice(jsonStart, end)) as Record<string, unknown>;
 }
 
+/**
+ * Stateful create/capture cases shared by the fake tmux bins. The launcher binds a
+ * real launch to the creating command's `-P -F` identity and one `list-panes`
+ * answer from that server, so a positive fake reports the window it created and
+ * each pane's title. Every pane runs as this test process: a live pid whose start
+ * `ps` can read. Server start digits are fixed.
+ */
+const FAKE_TMUX_SERVER_START = "1793000000";
+function fakeTmuxCreateCases(binDir: string): string[] {
+  const s = path.join(binDir, ".tmux-state");
+  const pid = String(process.pid);
+  return [
+    // The backend verifies the server holds no run credential before and after the create.
+    "  show-environment) echo 'unknown variable: GUILD_RUN_BINDING_REF' >&2; exit 1;;",
+    "  new-session|new-window)",
+    `    mkdir -p '${s}'; w=$(( $(cat '${s}/w' 2>/dev/null || echo 0) + 1 )); echo "$w" > '${s}/w'`,
+    `    p=$(( $(cat '${s}/p' 2>/dev/null || echo 0) + 1 )); echo "$p" > '${s}/p'; echo "%$p -" > '${s}/panes'`,
+    `    case " $* " in *" -P "*) echo "\\$$w @$w ${pid} ${FAKE_TMUX_SERVER_START}";; esac; exit 0;;`,
+    "  split-window)",
+    `    [ -f '${s}/panes' ] || exit 0; p=$(( $(cat '${s}/p') + 1 )); echo "$p" > '${s}/p'; echo "%$p -" >> '${s}/panes'; exit 0;;`,
+    "  select-pane)",
+    `    t=""; while [ $# -gt 0 ]; do [ "$1" = "-T" ] && t="$2"; shift; done`,
+    `    if [ -n "$t" ] && [ -f '${s}/panes' ]; then last=$(tail -n 1 '${s}/panes' | cut -d" " -f1); sed '$d' '${s}/panes' > '${s}/panes.tmp'; echo "$last $t" >> '${s}/panes.tmp'; mv '${s}/panes.tmp' '${s}/panes'; fi; exit 0;;`,
+    "  list-panes)",
+    `    f=""; while [ $# -gt 0 ]; do [ "$1" = "-F" ] && f="$2"; shift; done; w=$(cat '${s}/w' 2>/dev/null) || exit 0`,
+    `    while read -r id title; do printf '%s\\n' "$f" | sed -e "s/#{pid}/${pid}/g" -e "s/#{start_time}/${FAKE_TMUX_SERVER_START}/g" -e "s/#{session_id}/\\$$w/g" -e "s/#{window_id}/@$w/g" -e "s/#{pane_id}/$id/g" -e "s/#{pane_pid}/${pid}/g" -e "s/#{pane_title}/$title/g"; done < '${s}/panes'; exit 0;;`,
+    // The server-side bound kill: kill-pane runs only when the condition holds for THIS server and pane.
+    "  if-shell)",
+    `    e=$(printf '%s' "$5" | sed -e 's/^#{==:#{pid}\\/#{start_time}\\/#{pane_pid},//' -e 's/}$//')`,
+    `    if [ "$6" = "kill-pane -t $4" ] && [ "$e" = "${pid}/${FAKE_TMUX_SERVER_START}/${pid}" ] && grep -q "^$4 " '${s}/panes'; then grep -v "^$4 " '${s}/panes' > '${s}/panes.tmp'; mv '${s}/panes.tmp' '${s}/panes'; fi; exit 0;;`,
+  ];
+}
+
+/** Pane ids the fake server currently lists. */
+function fakeTmuxPanes(binDir: string): string[] {
+  const file = path.join(binDir, ".tmux-state", "panes");
+  return fs.existsSync(file) ? fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => l.split(" ")[0]!) : [];
+}
+
+/**
+ * A fake tmux server already holding `paneId` (beside a holder pane, so the server
+ * outlives a kill) and the approved r1 carrier of every member sharing it, written
+ * through the production writer. Pane and server identities are this process's.
+ */
+function seedCarrierPane(
+  cwd: string,
+  runId: string,
+  paneId: string,
+  members: Array<{ logicalTaskId: string; specialist: string }>,
+): string {
+  const binDir = makeFakeTmuxBin(cwd, []);
+  const state = path.join(binDir, ".tmux-state");
+  fs.mkdirSync(state, { recursive: true });
+  // The launcher's mapping: every member of one pane carries the captured pane title as its dispatch key.
+  const title = `${members[0]!.specialist}--${members[0]!.logicalTaskId}--a1`;
+  fs.writeFileSync(path.join(state, "w"), "1\n");
+  fs.writeFileSync(path.join(state, "p"), `${paneId.slice(1)}\n`);
+  fs.writeFileSync(path.join(state, "panes"), `%0 holder\n${paneId} ${title}\n`);
+  const shared = members.map((m) => ({
+    logical_task_id: m.logicalTaskId, attempt: 1, instance_id: `${m.logicalTaskId}.a1.i1`, dispatch_key: title, specialist: m.specialist,
+  }));
+  const paneStart = processStartOf(process.pid);
+  if (paneStart === null) throw new Error("fixture: this process's start time is unreadable");
+  for (const m of members) {
+    writePaneIdentityCarrier(cwd, {
+      schema_version: PANE_IDENTITY_SCHEMA,
+      run_id: runId, logical_task_id: m.logicalTaskId, attempt: 1, instance_id: `${m.logicalTaskId}.a1.i1`,
+      launch_id: `tmux:fixture:${process.pid}:${runId}`,
+      created_at: new Date().toISOString(),
+      creating_command: {
+        verb: "new-session", session_id: "$1", window_id: "@1",
+        server_pid: process.pid, server_process_start: `${TMUX_SERVER_START_PREFIX}${FAKE_TMUX_SERVER_START}`,
+      },
+      pane: { pane_id: paneId, pane_pid: process.pid, pane_process_start: paneStart, window_id: "@1", title },
+      shared_members: shared,
+    });
+  }
+  return binDir;
+}
+
 // Writes a stub `tmux` executable into a temp bin dir and returns that dir so
 // callers can prepend it to PATH. This lets the in-session collision guard be
 // exercised deterministically without spawning real tmux: `-V` reports a
-// version (tmux "available"), `list-windows` reports a window list, and every
-// other subcommand is a successful no-op.
+// version (tmux "available"), `list-windows` reports a window list, creates
+// report their identity, and every other subcommand is a successful no-op.
 function makeFakeTmuxBin(tmpDir: string, existingWindows: string[]): string {
   const binDir = path.join(tmpDir, "fakebin");
   fs.mkdirSync(binDir, { recursive: true });
@@ -306,6 +559,7 @@ function makeFakeTmuxBin(tmpDir: string, existingWindows: string[]): string {
       'case "$1" in',
       '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
       `  list-windows) printf '${windowList}\\n'; exit 0;;`,
+      ...fakeTmuxCreateCases(binDir),
       "  *) exit 0;;",
       "esac",
       "",
@@ -329,6 +583,7 @@ function makeLaunchableTmuxBin(tmpDir: string): string {
       '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
       "  has-session) exit 1;;",
       "  list-windows) exit 0;;",
+      ...fakeTmuxCreateCases(binDir),
       "  *) exit 0;;",
       "esac",
       "",
@@ -408,6 +663,7 @@ function makeFakeMixedBin(
       'case "$1" in',
       '  -V) echo "tmux 3.4 (fake)"; exit 0;;',
       `  list-windows) printf '${windowList}\\n'; exit 0;;`,
+      ...fakeTmuxCreateCases(binDir),
       "  *) exit 0;;",
       "esac",
       "",
@@ -1108,8 +1364,9 @@ describe("agent-team-launcher.ts", () => {
         ["--team", teamPath, "--cwd", tmpDir, "--dry-run"],
         { TMUX: "/tmp/tmux-1000/default,12345,0" }
       );
-      // Window name defaults to guild-<slug> (no timestamp) in in-session mode.
-      expect(stdout).toMatch(/tmux\s+new-window\s+-n\s+guild-test-slug/);
+      // Window name defaults to guild-<slug> (no timestamp) in in-session mode;
+      // the create reports its identity (-P -F) for the launch binding.
+      expect(stdout).toMatch(/tmux\s+new-window\s+-P\s+-F\s+'#\{session_id\} #\{window_id\} #\{pid\} #\{start_time\}'\s+-n\s+guild-test-slug/);
       expect(stdout).toMatch(/tmux\s+split-window\s+-t\s+guild-test-slug/);
       expect(stdout).toMatch(/tmux\s+select-window\s+-t\s+guild-test-slug/);
     });
@@ -1429,7 +1686,7 @@ describe("agent-team-launcher.ts", () => {
           { authority: "team_lead", decision: "accepted", at: acceptedAt, reason: null },
         ],
         now: () => acceptedAt,
-      }));
+      }), launcherTestBindFor(tmpDir, runId));
 
       const dismissed = runScript(["--dismiss-completed", "--run-id", runId, "--cwd", tmpDir]);
       expect(dismissed.exitCode).toBe(0);
@@ -1558,6 +1815,7 @@ describe("agent-team-launcher.ts", () => {
           GUILD_INDEPENDENT_AGENTS_SUPPORTED: "1",
           GUILD_SELECTOR_PROBE_FILE: recordPath,
           NODE_OPTIONS: `--require "${hookPath}"`,
+          [MODULE_GRAPH_PROBE]: "1",
         }
       );
 
@@ -2213,7 +2471,8 @@ describe("agent-team-launcher.ts", () => {
             { authority: "team_lead", decision: "accepted", at: SEED_NOW(), reason: null },
           ],
           now: SEED_NOW,
-        })
+        }),
+        launcherTestBindFor(cwd, cell.assignment.run_id)
       );
     }
 
@@ -2238,18 +2497,19 @@ describe("agent-team-launcher.ts", () => {
 
     it("G4 D5: a durable acceptance record drives a real termination + terminal record", () => {
       const runId = "run-dismiss-accept-001";
-      writeSessionJson(tmpDir, runId, ["backend"]); // pane_id is a dry-run placeholder
+      writeSessionJson(tmpDir, runId, ["backend"]);
       seedAcceptance(tmpDir, runId, "lt-backend", "backend");
+      const bin = seedCarrierPane(tmpDir, runId, "%2", [{ logicalTaskId: "lt-backend", specialist: "backend" }]);
 
-      const { exitCode, stdout } = runScript([
-        "--dismiss-completed",
-        "--run-id", runId,
-        "--cwd", tmpDir,
-      ]);
+      const { exitCode, stdout } = runScript(
+        ["--dismiss-completed", "--run-id", runId, "--cwd", tmpDir],
+        { PATH: `${bin}:${process.env.PATH ?? ""}` },
+      );
 
       expect(exitCode).toBe(0);
-      // Acceptance-gated termination fires (placeholder pane → seal terminal, no kill).
+      // Acceptance-gated termination fires: the carrier-bound pane is killed and confirmed.
       expect(stdout).toMatch(/\[TERMINATED\]/);
+      expect(fakeTmuxPanes(bin)).toEqual(["%0"]);
       expect(stdout).toMatch(/specialist="backend"/);
       expect(stdout).toMatch(/logical_task="lt-backend"/);
       // The terminal guild.task_attempt.v1 record was sealed.
@@ -2336,12 +2596,19 @@ describe("agent-team-launcher.ts", () => {
       writeSessionJsonRealPane(tmpDir, runId, "backend", "%77"); // real-looking pane id
       seedAcceptance(tmpDir, runId, "lt-a", "backend"); // task A accepted
       seedCellOnly(tmpDir, runId, "lt-b", "backend");   // task B still running, NOT accepted
+      const bin = seedCarrierPane(tmpDir, runId, "%77", [
+        { logicalTaskId: "lt-a", specialist: "backend" }, { logicalTaskId: "lt-b", specialist: "backend" },
+      ]);
 
-      const { exitCode, stdout } = runScript(["--dismiss-completed", "--run-id", runId, "--cwd", tmpDir]);
+      const { exitCode, stdout } = runScript(
+        ["--dismiss-completed", "--run-id", runId, "--cwd", tmpDir],
+        { PATH: `${bin}:${process.env.PATH ?? ""}` },
+      );
       expect(exitCode).toBe(0);
       // The guard defers the kill — the shared pane must NOT be terminated while B runs.
       expect(stdout).toMatch(/\[DEFER\]/);
       expect(stdout).not.toMatch(/\[TERMINATED\]/);
+      expect(fakeTmuxPanes(bin)).toEqual(["%0", "%77"]);
       // Task A's accepted attempt is NOT sealed terminal yet (waits for the whole pane).
       const attemptA = readAttemptForInstance(tmpDir, { run_id: runId, logical_task_id: "lt-a", attempt: 1, instance_id: "lt-a.a1.i1" });
       expect(attemptA?.terminal_state).toBeNull();
@@ -2349,17 +2616,22 @@ describe("agent-team-launcher.ts", () => {
 
     it("G4 M1: --reap retries a parked orphan to a sealed `terminated` record (production end-to-end)", () => {
       const runId = "run-m1-reap-001";
-      writeSessionJson(tmpDir, runId, ["backend"]); // placeholder pane → 'already gone'
+      writeSessionJson(tmpDir, runId, ["backend"]);
       seedAcceptance(tmpDir, runId, "lt-x", "backend");
       const ids: TaskCellInstanceIds = { run_id: runId, logical_task_id: "lt-x", attempt: 1, instance_id: "lt-x.a1.i1" };
+      const bin = seedCarrierPane(tmpDir, runId, "%2", [{ logicalTaskId: "lt-x", specialist: "backend" }]);
       // Simulate a prior dismiss whose kill did not confirm: park the attempt orphaned.
-      markAttemptOrphaned(tmpDir, ids);
+      markAttemptOrphaned(tmpDir, ids, launcherTestBindFor(tmpDir, ids.run_id));
       expect(readAttemptForInstance(tmpDir, ids)?.orphaned).toBe(true);
       expect(readAttemptForInstance(tmpDir, ids)?.terminal_state).toBeNull();
 
-      const { exitCode, stdout } = runScript(["--reap", "--run-id", runId, "--cwd", tmpDir]);
+      const { exitCode, stdout } = runScript(
+        ["--reap", "--run-id", runId, "--cwd", tmpDir],
+        { PATH: `${bin}:${process.env.PATH ?? ""}` },
+      );
       expect(exitCode).toBe(0);
       expect(stdout).toMatch(/\[REAPED\]/);
+      expect(fakeTmuxPanes(bin)).toEqual(["%0"]);
       // The PRODUCTION reaper sweep sealed the orphan terminal — not a manual simulation.
       const sealed = readAttemptForInstance(tmpDir, ids);
       expect(sealed?.terminal_state).toBe("terminated");
@@ -2384,7 +2656,7 @@ describe("agent-team-launcher.ts", () => {
       seedAcceptance(tmpDir, runId, "lt-live", "backend"); // not orphaned
       seedAcceptance(tmpDir, runId, "lt-orph", "backend");
       const orphIds: TaskCellInstanceIds = { run_id: runId, logical_task_id: "lt-orph", attempt: 1, instance_id: "lt-orph.a1.i1" };
-      markAttemptOrphaned(tmpDir, orphIds);
+      markAttemptOrphaned(tmpDir, orphIds, launcherTestBindFor(tmpDir, orphIds.run_id));
       const orphans = findOrphanedAttempts(tmpDir, runId);
       expect(orphans).toHaveLength(1);
       expect(orphans[0].logical_task_id).toBe("lt-orph");
@@ -2392,17 +2664,19 @@ describe("agent-team-launcher.ts", () => {
 
     it("G4 round-2: --dismiss-completed is idempotent — a second pass re-seals nothing", () => {
       const runId = "run-idempotent-001";
-      writeSessionJson(tmpDir, runId, ["backend"]); // placeholder pane → seal directly
+      writeSessionJson(tmpDir, runId, ["backend"]);
       seedAcceptance(tmpDir, runId, "lt-idem", "backend");
+      const bin = seedCarrierPane(tmpDir, runId, "%2", [{ logicalTaskId: "lt-idem", specialist: "backend" }]);
+      const env = { PATH: `${bin}:${process.env.PATH ?? ""}` };
 
-      const first = runScript(["--dismiss-completed", "--run-id", runId, "--cwd", tmpDir]);
+      const first = runScript(["--dismiss-completed", "--run-id", runId, "--cwd", tmpDir], env);
       expect(first.exitCode).toBe(0);
       expect(first.stdout).toMatch(/\[TERMINATED\]/);
       const afterFirst = readAttemptForInstance(tmpDir, { run_id: runId, logical_task_id: "lt-idem", attempt: 1, instance_id: "lt-idem.a1.i1" });
       expect(afterFirst?.terminal_state).toBe("terminated");
 
       // Second pass: the attempt is already terminal → no re-seal, no [TERMINATED].
-      const second = runScript(["--dismiss-completed", "--run-id", runId, "--cwd", tmpDir]);
+      const second = runScript(["--dismiss-completed", "--run-id", runId, "--cwd", tmpDir], env);
       expect(second.exitCode).toBe(0);
       expect(second.stdout).not.toMatch(/\[TERMINATED\]/);
       expect(second.stdout).toMatch(/no acceptance-authorized lanes to terminate/);
@@ -3753,7 +4027,7 @@ describe("agent-team-launcher.ts", () => {
     function probeEnv(dir: string): { file: string; env: Record<string, string | undefined> } {
       const file = path.join(dir, `runtime-probe-${Math.random().toString(36).slice(2)}.jsonl`);
       const hook = writeRuntimeProbe(dir);
-      return { file, env: { GUILD_RUNTIME_PROBE_FILE: file, NODE_OPTIONS: `--require "${hook}"` } };
+      return { file, env: { GUILD_RUNTIME_PROBE_FILE: file, NODE_OPTIONS: `--require "${hook}"`, [MODULE_GRAPH_PROBE]: "1" } };
     }
 
     /** The control every migrated path must satisfy. */
@@ -4242,7 +4516,9 @@ describe("FU20 — compatibility read under a complete project definition ref", 
   // with the bytes it actually carries. The identity file is excluded from its
   // own digest, so this is a fixed point. Production and the shared fixture
   // helper are untouched; only this temp directory is re-stamped.
+  // Current mode never re-stamps: the canonically rendered package is used as built.
   beforeAll(() => {
+    if (LAUNCHER_MODE === "current") return;
     const version = JSON.parse(
       fs.readFileSync(
         path.join(EXACT_CLAUDE_PLUGIN_ROOT, ".claude-plugin", "plugin.json"), "utf8",

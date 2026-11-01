@@ -54,3 +54,5 @@ export * from "./write-manifest";
 export {
   assertNotUnderPluginInstall,
 } from "./plugin-install-guard";
+
+export * from "./stack-scope";

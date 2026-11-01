@@ -1,0 +1,613 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guildstack.dev/contracts/guild-stack/p05/v1/domain.schema.json",
+  "$defs": {
+    "read_request": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "guild.stack.p05.read_request.v1"
+        },
+        "action": {
+          "const": "read"
+        },
+        "session_id": {
+          "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+        },
+        "source_id": {
+          "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+        },
+        "operation": {
+          "enum": [
+            "initiative.list",
+            "initiative.inspect",
+            "initiative.close_check",
+            "decision.list",
+            "decision.inspect",
+            "run.list",
+            "run.inspect",
+            "run.trace",
+            "run.artifacts"
+          ]
+        },
+        "arguments": {
+          "$ref": "https://guildstack.dev/contracts/guild-stack/v1/arguments.schema.json#/$defs/inspect"
+        }
+      },
+      "required": [
+        "schema_version",
+        "action",
+        "session_id",
+        "source_id",
+        "operation",
+        "arguments"
+      ],
+      "additionalProperties": false
+    },
+    "decision_event": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "guild.initiative_decision_event.v1"
+        },
+        "event_id": {
+          "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+        },
+        "decision_id": {
+          "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+        },
+        "initiative_id": {
+          "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "previous_event_hash": {
+          "oneOf": [
+            {
+              "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "event": {
+          "enum": [
+            "proposed",
+            "approved",
+            "rejected",
+            "superseded"
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "maxItems": 200
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+          },
+          "maxItems": 200
+        },
+        "supersedes": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "decision_id": {
+                  "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                "event_hash": {
+                  "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                }
+              },
+              "required": [
+                "decision_id",
+                "event_hash"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "replacement": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "decision_id": {
+                  "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                "event_hash": {
+                  "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/hash"
+                }
+              },
+              "required": [
+                "decision_id",
+                "event_hash"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "operation": {
+          "type": "object",
+          "properties": {
+            "operation_id": {
+              "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+            },
+            "approval": {
+              "type": "object",
+              "properties": {
+                "source_id": {
+                  "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                "path": {
+                  "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/relative_path"
+                }
+              },
+              "required": [
+                "source_id",
+                "path"
+              ],
+              "additionalProperties": false
+            },
+            "receipt": {
+              "type": "object",
+              "properties": {
+                "source_id": {
+                  "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+                },
+                "path": {
+                  "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/relative_path"
+                }
+              },
+              "required": [
+                "source_id",
+                "path"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "operation_id",
+            "approval",
+            "receipt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "event_id",
+        "decision_id",
+        "initiative_id",
+        "sequence",
+        "previous_event_hash",
+        "event",
+        "created_at",
+        "title",
+        "rationale",
+        "alternatives",
+        "evidence",
+        "supersedes",
+        "replacement",
+        "operation"
+      ],
+      "additionalProperties": false
+    },
+    "decision_proposal_body": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "guild.initiative_decision_proposal.v1"
+        },
+        "initiative": {
+          "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/entity"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "maxItems": 200
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+          },
+          "maxItems": 200
+        }
+      },
+      "required": [
+        "schema_version",
+        "initiative",
+        "rationale",
+        "alternatives",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "initiative_revision_body": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "guild.stack.initiative_revision.v1"
+        },
+        "manifest": {
+          "type": "object"
+        },
+        "definition_items": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "maxItems": 200
+        },
+        "work_items": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "maxItems": 200
+        },
+        "close_gate": {
+          "$ref": "https://guildstack.dev/contracts/guild-stack/p05/v1/domain.schema.json#/$defs/close_gate_input"
+        }
+      },
+      "required": [
+        "schema_version",
+        "manifest",
+        "definition_items",
+        "work_items",
+        "close_gate"
+      ],
+      "additionalProperties": false
+    },
+    "axes": {
+      "type": "object",
+      "properties": {
+        "definition": {
+          "type": "object",
+          "properties": {
+            "raw": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 4096
+            },
+            "value": {
+              "enum": [
+                "incomplete",
+                "assumed",
+                "complete",
+                null
+              ]
+            },
+            "normalization": {
+              "enum": [
+                "canonical",
+                "documented_alias",
+                "unsupported",
+                "missing"
+              ]
+            }
+          },
+          "required": [
+            "raw",
+            "value",
+            "normalization"
+          ],
+          "additionalProperties": false
+        },
+        "execution": {
+          "type": "object",
+          "properties": {
+            "raw": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 4096
+            },
+            "value": {
+              "enum": [
+                "not_started",
+                "active",
+                "blocked",
+                "done",
+                null
+              ]
+            },
+            "normalization": {
+              "enum": [
+                "canonical",
+                "documented_alias",
+                "unsupported",
+                "missing"
+              ]
+            }
+          },
+          "required": [
+            "raw",
+            "value",
+            "normalization"
+          ],
+          "additionalProperties": false
+        },
+        "release": {
+          "type": "object",
+          "properties": {
+            "raw": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 4096
+            },
+            "value": {
+              "enum": [
+                "not_released",
+                "release_candidate",
+                "released",
+                "rollback_required",
+                null
+              ]
+            },
+            "normalization": {
+              "enum": [
+                "canonical",
+                "documented_alias",
+                "unsupported",
+                "missing"
+              ]
+            }
+          },
+          "required": [
+            "raw",
+            "value",
+            "normalization"
+          ],
+          "additionalProperties": false
+        },
+        "documentation": {
+          "type": "object",
+          "properties": {
+            "raw": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 4096
+            },
+            "value": {
+              "enum": [
+                "not_assessed",
+                "no_update_required",
+                "update_required",
+                "updated",
+                "stale",
+                null
+              ]
+            },
+            "normalization": {
+              "enum": [
+                "canonical",
+                "documented_alias",
+                "unsupported",
+                "missing"
+              ]
+            }
+          },
+          "required": [
+            "raw",
+            "value",
+            "normalization"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "definition",
+        "execution",
+        "release",
+        "documentation"
+      ],
+      "additionalProperties": false
+    },
+    "issue": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/id"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+          },
+          "maxItems": 200
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "page": {
+      "type": "object",
+      "properties": {
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2048
+        },
+        "total": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "partial": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "next_cursor",
+        "total",
+        "partial"
+      ],
+      "additionalProperties": false
+    },
+    "decision_authority": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "verified",
+                "pending",
+                "missing",
+                "invalid"
+              ]
+            },
+            "actor": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 1,
+              "maxLength": 65536
+            },
+            "approval": {
+              "oneOf": [
+                {
+                  "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "receipt": {
+              "oneOf": [
+                {
+                  "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "status",
+            "actor",
+            "approval",
+            "receipt"
+          ],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "verified"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "actor": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "approval": {
+                    "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                  },
+                  "receipt": {
+                    "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/evidence"
+                  }
+                }
+              },
+              "else": {
+                "properties": {
+                  "actor": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "close_gate_input": {
+      "type": "object",
+      "properties": {
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "https://guildstack.dev/contracts/guild-stack/v1/common.schema.json#/$defs/relative_path"
+          },
+          "maxItems": 200,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "evidence"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

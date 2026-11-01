@@ -5123,8 +5123,8 @@ function assertClassPlacement(storageClass, absPath, guildDir) {
     );
   }
 }
-function assertSafeSegments(segments) {
-  for (const raw of segments) {
+function assertSafeSegments(segments2) {
+  for (const raw of segments2) {
     if (typeof raw !== "string" || raw.trim() === "") {
       throw new Error("guild storage: empty path segment");
     }
@@ -5455,8 +5455,8 @@ var init_storage_fs = __esm({
 
 // src/domains/state/storage-layout.ts
 function scopedPaths(guildDir, _scope, configFile) {
-  const durable = (cls, ...segments) => {
-    const parts = segments.filter((s) => s !== "");
+  const durable = (cls, ...segments2) => {
+    const parts = segments2.filter((s) => s !== "");
     assertSafeSegments(parts);
     const abs = path14.join(guildDir, ...parts);
     assertClassPlacement(cls, abs, guildDir);
@@ -5464,17 +5464,17 @@ function scopedPaths(guildDir, _scope, configFile) {
   };
   return {
     config: () => durable("canonical", configFile),
-    knowledge: (...segments) => durable("canonical", DURABLE_SUBTREES.knowledge, ...segments),
-    definitions: (...segments) => {
-      assertSafeSegments(segments);
-      const parts = segments.flatMap((seg) => seg.split(/[\\/]+/)).filter((p) => p !== "");
+    knowledge: (...segments2) => durable("canonical", DURABLE_SUBTREES.knowledge, ...segments2),
+    definitions: (...segments2) => {
+      assertSafeSegments(segments2);
+      const parts = segments2.flatMap((seg) => seg.split(/[\\/]+/)).filter((p) => p !== "");
       const [head, ...rest] = parts;
       if (head === "sources") return durable("durable-record", DURABLE_SUBTREES.sources, ...rest);
       return durable("canonical", DURABLE_SUBTREES.definitionsRoot, ...parts);
     },
     initiative: (status, id) => durable("durable-record", DURABLE_SUBTREES.initiatives, status, id),
-    runRecord: (runId, ...segments) => durable("durable-record", DURABLE_SUBTREES.runs, runId, ...segments),
-    artifact: (...segments) => durable("durable-record", DURABLE_SUBTREES.artifacts, ...segments)
+    runRecord: (runId, ...segments2) => durable("durable-record", DURABLE_SUBTREES.runs, runId, ...segments2),
+    artifact: (...segments2) => durable("durable-record", DURABLE_SUBTREES.artifacts, ...segments2)
   };
 }
 function detectProfile(cwd, activeRoot) {
@@ -5497,9 +5497,9 @@ function createGuildStorage(cwd = process.cwd(), opts = {}) {
   const guildDir = roots.durable;
   const rootId = guildRootId(activeRoot);
   const profile = opts.profile ?? detectProfile(cwd, activeRoot);
-  const external = (cls, base, ...segments) => {
-    assertSafeSegments(segments);
-    const abs = path14.join(base, ...segments);
+  const external = (cls, base, ...segments2) => {
+    assertSafeSegments(segments2);
+    const abs = path14.join(base, ...segments2);
     assertClassPlacement(cls, abs, guildDir);
     return abs;
   };
@@ -5516,17 +5516,17 @@ function createGuildStorage(cwd = process.cwd(), opts = {}) {
     root: roots,
     project,
     workspace,
-    definition: (...segments) => activeScope.definitions(...segments),
-    runtime: (...segments) => external("runtime", runtimeBase, ...segments),
-    cache: (...segments) => external("cache", cacheBase, ...segments),
+    definition: (...segments2) => activeScope.definitions(...segments2),
+    runtime: (...segments2) => external("runtime", runtimeBase, ...segments2),
+    cache: (...segments2) => external("cache", cacheBase, ...segments2),
     worktree: (runId, laneId2) => {
       assertSafeSegments([runId, laneId2]);
       return external("managed-resource", roots.worktrees, rootId, runId, laneId2);
     },
-    temporary: (runId, ...segments) => {
-      if (runId === void 0) return external("temporary", tempBase, "session", ...segments);
+    temporary: (runId, ...segments2) => {
+      if (runId === void 0) return external("temporary", tempBase, "session", ...segments2);
       assertSafeSegments([runId]);
-      return external("temporary", tempBase, "runs", runId, ...segments);
+      return external("temporary", tempBase, "runs", runId, ...segments2);
     },
     ensureDir(absPath) {
       fs11.mkdirSync(absPath, { recursive: true });
@@ -5677,10 +5677,10 @@ function classifyPath(relToGuild) {
 function rel(ctx, abs) {
   return path15.relative(ctx.root, abs).split(path15.sep).join("/");
 }
-function knowledgeDir(ctx, ...segments) {
+function knowledgeDir(ctx, ...segments2) {
   const scope = ctx.storage.project ?? ctx.storage.workspace;
   if (!scope) throw new Error("root owns no durable scope: cannot name the knowledge tree");
-  return scope.knowledge(...segments);
+  return scope.knowledge(...segments2);
 }
 function readIfFile(abs) {
   const st = lstatSafe(abs);
@@ -6515,8 +6515,8 @@ function fmValue(lines, key) {
   return value === void 0 || value === null ? null : String(value);
 }
 function isProvenance(relInWiki, lines) {
-  const segments = relInWiki.split(path16.sep).slice(0, -1).map((value) => value.toLowerCase());
-  if (segments.some((value) => PROVENANCE_SEGMENTS.has(value))) return true;
+  const segments2 = relInWiki.split(path16.sep).slice(0, -1).map((value) => value.toLowerCase());
+  if (segments2.some((value) => PROVENANCE_SEGMENTS.has(value))) return true;
   return ["type", "category"].some((key) => {
     const value = fmValue(lines, key)?.toLowerCase();
     return value !== void 0 && value !== null && PROVENANCE_VALUES.has(value);
@@ -6867,6 +6867,14 @@ var init_write_manifest = __esm({
   }
 });
 
+// src/domains/state/stack-scope.ts
+var init_stack_scope = __esm({
+  "src/domains/state/stack-scope.ts"() {
+    init_frontmatter();
+    init_storage_roots();
+  }
+});
+
 // src/domains/state/index.ts
 var init_state = __esm({
   "src/domains/state/index.ts"() {
@@ -6895,6 +6903,7 @@ var init_state = __esm({
     init_promote_upstream();
     init_write_manifest();
     init_plugin_install_guard();
+    init_stack_scope();
   }
 });
 
@@ -20540,7 +20549,7 @@ function parseLiteralString(c) {
   }
 }
 function parseKeyPath(c) {
-  const segments = [];
+  const segments2 = [];
   for (; ; ) {
     skipInlineWs(c);
     let seg;
@@ -20559,13 +20568,13 @@ function parseKeyPath(c) {
     if (UNSAFE_KEYS.has(seg)) {
       throw new NativeConfigParseError("toml-unsafe-key", `refusing unsafe key "${seg}"`);
     }
-    segments.push(seg);
+    segments2.push(seg);
     skipInlineWs(c);
     if (c.peek() === ".") {
       c.pos++;
       continue;
     }
-    return segments;
+    return segments2;
   }
 }
 function parseScalarToken(c) {
@@ -20664,9 +20673,9 @@ function newTable() {
 function isTable(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
-function descend(table, segments, ctx, mode) {
+function descend(table, segments2, ctx, mode) {
   let current = table;
-  for (const seg of segments) {
+  for (const seg of segments2) {
     const existing = current[seg];
     if (existing === void 0) {
       const child = newTable();
@@ -21235,8 +21244,8 @@ function findHostIdentity(key, value, knownHostIds = []) {
   for (const re of INVENTORY_KEY_PATTERNS) {
     if (re.test(key)) return { kind: "model-inventory", key, token: key };
   }
-  const segments = key.split(".");
-  for (const seg of segments) {
+  const segments2 = key.split(".");
+  for (const seg of segments2) {
     if (MODEL_FAMILY_TOKENS.includes(seg.toLowerCase())) continue;
     const fam = matchesHostFamily(seg);
     if (fam) return { kind: "host-family", key, token: fam };
@@ -21863,7 +21872,7 @@ function bindSessionForRun(opts) {
   const promptCompose = opts.promptCompose ?? { dialect_id: "dialect:none", overlay_ids: [], hash: "" };
   const seam = opts.fs;
   if (seam === void 0) {
-    return bindSession({ runDir: opts.runDir, runId: opts.runId, detected, promptCompose, models: opts.models });
+    return bindSession({ runDir: opts.runDir, runId: opts.runId, detected, promptCompose, models: opts.models, now: opts.now });
   }
   const file = sessionBindingPath(opts.runDir);
   if (seam.exists(file)) {
@@ -21885,7 +21894,7 @@ function bindSessionForRun(opts) {
     run_id: opts.runId,
     host_family: detected.host_family,
     surface: detected.surface,
-    detected_at: (/* @__PURE__ */ new Date()).toISOString(),
+    detected_at: (opts.now ?? (() => /* @__PURE__ */ new Date()))().toISOString(),
     models: isUnknownHost(detected) ? {} : opts.models ?? {},
     model_family: detected.model_family,
     prompt_compose: promptCompose,
@@ -29122,8 +29131,8 @@ function safeExistsForEntry(absPath, kind) {
   return kind === "dir" ? s.isDirectory() : s.isFile();
 }
 function resolveEntryPath(root, entry) {
-  const segments = entry.path.replace(/\/+$/, "").split("/");
-  return path50.join(root, ...segments);
+  const segments2 = entry.path.replace(/\/+$/, "").split("/");
+  return path50.join(root, ...segments2);
 }
 function verifyFloor(cwd, mode, workspaceRoot2, evidence) {
   const checkedRequired = requiredEntriesFor(mode);
@@ -30047,16 +30056,6 @@ var init_artifact_bus = __esm({
   }
 });
 
-// src/domains/dispatch/task-cell-artifact-join.ts
-var init_task_cell_artifact_join = __esm({
-  "src/domains/dispatch/task-cell-artifact-join.ts"() {
-    init_artifact_bus();
-    init_task_cell_contract();
-    init_teams();
-    init_state();
-  }
-});
-
 // src/domains/telemetry/receipt-journal.ts
 function makeReceiptInput(input) {
   return {
@@ -30086,7 +30085,7 @@ function canonicalJson(value) {
   const keys = Object.keys(obj).sort();
   return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(",")}}`;
 }
-function sha2563(text) {
+function sha2562(text) {
   return `sha256:${crypto16.createHash("sha256").update(text, "utf8").digest("hex")}`;
 }
 function sealReceiptRecord(input) {
@@ -30095,11 +30094,11 @@ function sealReceiptRecord(input) {
     schema_version: "guild.receipt_record.v1",
     sequence: input.sequence
   };
-  return { ...body, record_hash: sha2563(canonicalJson(body)) };
+  return { ...body, record_hash: sha2562(canonicalJson(body)) };
 }
 function verifyReceiptRecord(record) {
   const { record_hash, ...body } = record;
-  return typeof record_hash === "string" && sha2563(canonicalJson(body)) === record_hash;
+  return typeof record_hash === "string" && sha2562(canonicalJson(body)) === record_hash;
 }
 function isValidCheckpointShape(value) {
   if (!value || typeof value !== "object") return false;
@@ -33132,6 +33131,27 @@ var init_telemetry = __esm({
   }
 });
 
+// src/domains/dispatch/task-cell-cleanup-check.ts
+var init_task_cell_cleanup_check = __esm({
+  "src/domains/dispatch/task-cell-cleanup-check.ts"() {
+    init_artifact_bus();
+    init_state();
+    init_telemetry();
+  }
+});
+
+// src/domains/dispatch/task-cell-artifact-join.ts
+var init_task_cell_artifact_join = __esm({
+  "src/domains/dispatch/task-cell-artifact-join.ts"() {
+    init_artifact_bus();
+    init_task_cell_contract();
+    init_task_cell_cleanup_check();
+    init_teams();
+    init_state();
+    init_lifecycle();
+  }
+});
+
 // src/domains/dispatch/confirmation-gate.ts
 var init_confirmation_gate = __esm({
   "src/domains/dispatch/confirmation-gate.ts"() {
@@ -33185,14 +33205,16 @@ var init_task_cell_acceptance = __esm({
     init_task_cell_contract();
     init_task_cell_artifact_join();
     init_state();
+    init_artifact_bus();
   }
 });
 
 // src/domains/dispatch/progress-ledger.ts
-var PROGRESS_LEDGER_SCHEMA, DONE_WHEN_ORACLE_KINDS, LEDGER_ITEM_STATES, CELL_LAST_FAILURES, PROGRESS_LEDGER_CONTRACT;
+var PROGRESS_LEDGER_SCHEMA, DONE_WHEN_ORACLE_KINDS, LEDGER_ITEM_STATES, CELL_LAST_FAILURES, PROGRESS_LEDGER_CONTRACT, EXECUTABLE_ORACLE_KINDS;
 var init_progress_ledger = __esm({
   "src/domains/dispatch/progress-ledger.ts"() {
     init_kernel();
+    init_lifecycle();
     init_task_cell_contract();
     PROGRESS_LEDGER_SCHEMA = "guild.progress_ledger.v1";
     DONE_WHEN_ORACLE_KINDS = frozenList([
@@ -33226,6 +33248,7 @@ var init_progress_ledger = __esm({
       item_states: LEDGER_ITEM_STATES,
       last_failures: CELL_LAST_FAILURES
     });
+    EXECUTABLE_ORACLE_KINDS = frozenList(["command", "artifact_exists", "acceptance_record"]);
   }
 });
 
@@ -33360,68 +33383,6 @@ var init_advisor_budget = __esm({
   }
 });
 
-// src/domains/dispatch/task-cell-runtime.ts
-var IN_SESSION_PORT;
-var init_task_cell_runtime = __esm({
-  "src/domains/dispatch/task-cell-runtime.ts"() {
-    init_artifact_bus();
-    init_teams();
-    init_telemetry();
-    init_task_cell_contract();
-    init_task_assignment_v2();
-    init_task_cell_acceptance();
-    init_task_cell_artifact_join();
-    init_progress_ledger();
-    init_instance_cap();
-    init_isolation_guard();
-    init_adapter_rungs();
-    init_advisor_budget();
-    init_state();
-    IN_SESSION_PORT = Object.freeze({
-      mode: "degraded",
-      losses: Object.freeze([
-        "no_isolation: lead_only binds the parent session; no worker process, no transport"
-      ]),
-      isAvailable: () => true,
-      spawn: () => ({ ok: true, reason: null }),
-      ready: () => ({ ok: true, reason: null }),
-      notifyAssignment: () => ({ ok: true, reason: null }),
-      terminate: () => ({ ok: true, reason: null })
-    });
-  }
-});
-
-// src/domains/dispatch/task-cell-scale-audit.ts
-var init_task_cell_scale_audit = __esm({
-  "src/domains/dispatch/task-cell-scale-audit.ts"() {
-    init_task_cell_contract();
-  }
-});
-
-// src/domains/dispatch/task-cell-telemetry-reconcile.ts
-var init_task_cell_telemetry_reconcile = __esm({
-  "src/domains/dispatch/task-cell-telemetry-reconcile.ts"() {
-    init_telemetry();
-    init_task_cell_contract();
-    init_task_assignment_v2();
-    init_state();
-  }
-});
-
-// src/domains/dispatch/task-cell-host-conformance.ts
-var init_task_cell_host_conformance = __esm({
-  "src/domains/dispatch/task-cell-host-conformance.ts"() {
-    init_artifact_bus();
-    init_lifecycle();
-    init_telemetry();
-    init_task_cell_artifact_join();
-    init_task_cell_contract();
-    init_task_assignment_v2();
-    init_progress_ledger();
-    init_task_cell_runtime();
-  }
-});
-
 // src/domains/dispatch/execution-transport-ports.ts
 var EXECUTION_OPERATIONS, EXECUTION_OUTCOME_STATUSES, EXECUTION_REASON_CODES, EXECUTION_TRANSPORT_IDS, EXECUTION_STATUS_TO_NEUTRAL_DISPOSITION, EXECUTION_REASON_TO_NEUTRAL_REASON, TEAM_DISPATCH_SCOPES, EXECUTION_DISPATCH_MODES;
 var init_execution_transport_ports = __esm({
@@ -33496,6 +33457,69 @@ var init_execution_transport_ports = __esm({
   }
 });
 
+// src/domains/dispatch/task-cell-runtime.ts
+var IN_SESSION_PORT;
+var init_task_cell_runtime = __esm({
+  "src/domains/dispatch/task-cell-runtime.ts"() {
+    init_artifact_bus();
+    init_teams();
+    init_telemetry();
+    init_task_cell_contract();
+    init_task_assignment_v2();
+    init_task_cell_acceptance();
+    init_task_cell_artifact_join();
+    init_progress_ledger();
+    init_instance_cap();
+    init_isolation_guard();
+    init_adapter_rungs();
+    init_advisor_budget();
+    init_execution_transport_ports();
+    init_state();
+    IN_SESSION_PORT = Object.freeze({
+      mode: "degraded",
+      losses: Object.freeze([
+        "no_isolation: lead_only binds the parent session; no worker process, no transport"
+      ]),
+      isAvailable: () => true,
+      spawn: () => ({ ok: true, reason: null }),
+      ready: () => ({ ok: true, reason: null }),
+      notifyAssignment: () => ({ ok: true, reason: null }),
+      terminate: () => ({ ok: true, reason: null })
+    });
+  }
+});
+
+// src/domains/dispatch/task-cell-scale-audit.ts
+var init_task_cell_scale_audit = __esm({
+  "src/domains/dispatch/task-cell-scale-audit.ts"() {
+    init_task_cell_contract();
+  }
+});
+
+// src/domains/dispatch/task-cell-telemetry-reconcile.ts
+var init_task_cell_telemetry_reconcile = __esm({
+  "src/domains/dispatch/task-cell-telemetry-reconcile.ts"() {
+    init_telemetry();
+    init_task_cell_contract();
+    init_task_assignment_v2();
+    init_state();
+  }
+});
+
+// src/domains/dispatch/task-cell-host-conformance.ts
+var init_task_cell_host_conformance = __esm({
+  "src/domains/dispatch/task-cell-host-conformance.ts"() {
+    init_artifact_bus();
+    init_lifecycle();
+    init_telemetry();
+    init_task_cell_artifact_join();
+    init_task_cell_contract();
+    init_task_assignment_v2();
+    init_progress_ledger();
+    init_task_cell_runtime();
+  }
+});
+
 // src/domains/dispatch/execution-transport-adapters.ts
 var TMUX_AGENT_PANE_PROFILES, GENERATED_PRE_GUARD_EXPORTS, DEFINITION_REF_KEYS, PINNED_SKILL_KEYS;
 var init_execution_transport_adapters = __esm({
@@ -33564,6 +33588,23 @@ var init_assignment_binding = __esm({
       source: "guild.session_binding.v1",
       blocks: ["no_binding", "unknown_host", "no_model_for_tier"],
       never: "config, initiative inventory, or a host default"
+    });
+  }
+});
+
+// src/domains/dispatch/principal-provider.ts
+var WORKER_TRUST_POLICIES, COOPERATIVE_LOCAL_PROVIDER;
+var init_principal_provider = __esm({
+  "src/domains/dispatch/principal-provider.ts"() {
+    WORKER_TRUST_POLICIES = Object.freeze(["cooperative_local", "isolated_worker"]);
+    COOPERATIVE_LOCAL_PROVIDER = Object.freeze({
+      id: "cooperative_local",
+      worker_trust_policy: "cooperative_local",
+      mode: "cooperative_same_uid",
+      operatorUid: () => typeof process.getuid === "function" ? process.getuid() : -1,
+      workerUid: () => typeof process.getuid === "function" ? process.getuid() : -1,
+      // cooperative_local never satisfies isolated_worker; nothing upgrades it.
+      satisfies: (required) => required === "cooperative_local"
     });
   }
 });
@@ -35688,6 +35729,19 @@ var init_release_conformance_integration = __esm({
     RELEASE_INTEGRATION_CONTROLS = neutralFreeze(
       RELEASE_INTEGRATION_CONTROL_BATTERY.map((control) => ({ id: control.id, title: control.title }))
     );
+  }
+});
+
+// src/domains/distribution/review-gate-pass.ts
+var init_review_gate_pass = __esm({
+  "src/domains/distribution/review-gate-pass.ts"() {
+    init_review_result();
+  }
+});
+
+// src/domains/distribution/review-invocation.ts
+var init_review_invocation = __esm({
+  "src/domains/distribution/review-invocation.ts"() {
   }
 });
 
@@ -39030,6 +39084,8 @@ var init_distribution = __esm({
     init_release_conformance_integration();
     init_result_contracts();
     init_review_result();
+    init_review_gate_pass();
+    init_review_invocation();
     init_release_distribution_contract();
     init_surface_manifest();
     init_verify_host_packages();
@@ -39041,6 +39097,32 @@ var init_distribution = __esm({
     init_per_host_packaging();
     init_release_package_identity();
     init_surface_manifest();
+  }
+});
+
+// src/domains/dispatch/task-cell-controller.ts
+var REQUIRED_INDEPENDENCE;
+var init_task_cell_controller = __esm({
+  "src/domains/dispatch/task-cell-controller.ts"() {
+    init_artifact_bus();
+    init_task_assignment_v2();
+    init_task_cell_contract();
+    init_task_cell_acceptance();
+    init_task_cell_artifact_join();
+    init_task_cell_cleanup_check();
+    init_progress_ledger();
+    init_instance_cap();
+    init_task_cell_runtime();
+    init_principal_provider();
+    init_distribution();
+    init_config2();
+    init_kernel();
+    init_lifecycle();
+    init_security();
+    init_state();
+    init_telemetry();
+    init_teams();
+    REQUIRED_INDEPENDENCE = Object.freeze({ reviewer_cross_host: "cross_family" });
   }
 });
 
@@ -39992,6 +40074,8 @@ var init_dispatch = __esm({
     init_adapter_rungs();
     init_advisor_budget();
     init_assignment_binding();
+    init_task_cell_controller();
+    init_principal_provider();
     init_comms_format_lint();
     init_no_accidental_write();
     init_artifact_bus();
@@ -40649,7 +40733,10 @@ var init_retry_lane = __esm({
 function realBindingFs() {
   return {
     mkdirp: (p) => fsReal2.mkdirSync(p, { recursive: true }),
-    writeFile: (p, c) => fsReal2.writeFileSync(p, c, "utf8"),
+    writeFile: (p, c) => {
+      fsReal2.writeFileSync(p, c, { encoding: "utf8", mode: PRIVATE_BINDING_MODE });
+      fsReal2.chmodSync(p, PRIVATE_BINDING_MODE);
+    },
     writeFileAtomicContained: (root, p, c) => {
       const result2 = writeContainedFile(root, p, Buffer.from(c, "utf8"), { policy: "physical" });
       if (!result2.written) {
@@ -40659,7 +40746,8 @@ function realBindingFs() {
     writeFileExclusive: (p, c) => {
       fsReal2.mkdirSync(path77.dirname(p), { recursive: true });
       try {
-        fsReal2.writeFileSync(p, c, { encoding: "utf8", flag: "wx" });
+        fsReal2.writeFileSync(p, c, { encoding: "utf8", flag: "wx", mode: PRIVATE_BINDING_MODE });
+        fsReal2.chmodSync(p, PRIVATE_BINDING_MODE);
         return true;
       } catch (error) {
         if (error.code === "EEXIST") return false;
@@ -40740,7 +40828,7 @@ function readHookBindingEnvelope(env) {
   if (!run_id || !binding_ref) return null;
   return { run_id, binding_ref };
 }
-var fsReal2, path77, BindingRejectedError, HOOK_BINDING_ENV_RUN_ID, HOOK_BINDING_ENV_BINDING_REF;
+var fsReal2, path77, BindingRejectedError, PRIVATE_BINDING_MODE, HOOK_BINDING_ENV_RUN_ID, HOOK_BINDING_ENV_BINDING_REF;
 var init_run_binding = __esm({
   "src/domains/lifecycle/run-binding.ts"() {
     fsReal2 = __toESM(require("fs"));
@@ -40759,6 +40847,7 @@ var init_run_binding = __esm({
       run_id;
       diagnostic = "binding_rejected";
     };
+    PRIVATE_BINDING_MODE = 384;
     HOOK_BINDING_ENV_RUN_ID = "GUILD_RUN_ID";
     HOOK_BINDING_ENV_BINDING_REF = "GUILD_RUN_BINDING_REF";
   }
@@ -42137,6 +42226,49 @@ var init_run_record_validate = __esm({
   }
 });
 
+// src/domains/lifecycle/initiative-evidence.ts
+var init_initiative_evidence = __esm({
+  "src/domains/lifecycle/initiative-evidence.ts"() {
+    init_state();
+    init_state();
+    init_initiative();
+  }
+});
+
+// src/domains/lifecycle/stack-p05.ts
+var init_stack_p05 = __esm({
+  "src/domains/lifecycle/stack-p05.ts"() {
+    init_state();
+    init_security();
+    init_initiative();
+    init_initiative_workitems();
+    init_run_lifecycle();
+    init_initiative_evidence();
+  }
+});
+
+// src/domains/lifecycle/managed-run.ts
+var init_managed_run = __esm({
+  "src/domains/lifecycle/managed-run.ts"() {
+    init_state();
+    init_run_lifecycle();
+    init_run_binding();
+  }
+});
+
+// src/domains/lifecycle/stack-operations.ts
+var init_stack_operations = __esm({
+  "src/domains/lifecycle/stack-operations.ts"() {
+    init_state();
+    init_config2();
+    init_security();
+    init_workflow_graph_overlay();
+    init_stack_p05();
+    init_run_lifecycle();
+    init_managed_run();
+  }
+});
+
 // src/domains/lifecycle/index.ts
 var init_lifecycle = __esm({
   "src/domains/lifecycle/index.ts"() {
@@ -42189,6 +42321,9 @@ var init_lifecycle = __esm({
     init_run_record_validate();
     init_run_state();
     init_trace_v2();
+    init_stack_operations();
+    init_initiative_evidence();
+    init_managed_run();
   }
 });
 
@@ -44121,6 +44256,186 @@ function laneWikiWriteTarget(env, tool, input, wikiRoots, cwd) {
   return toolWriteTargets(tool, input).find(inWiki) ?? null;
 }
 
+// hooks/lib/security/binding-path-guard.ts
+var BINDING_GUARDED_TOOLS = /* @__PURE__ */ new Set(["Read", "Grep", "Glob", "Edit", "Write", "Bash"]);
+var BINDING_GUARD_LIMITS = "cooperative_local lexical guard; variable/command substitution, interpreters and symlink or hard-link aliases are not covered";
+var BINDING_PATH = /(^|[\\/\s"'=:])\.guild[\\/]runs[\\/][^\\/\s"']+[\\/]binding\.json(?![\w.-])/;
+var TARGET = [".guild", "runs", null, "binding.json"];
+var MAX_BRACE_EXPANSIONS = 256;
+function expandBraces(pattern) {
+  const out = [];
+  const queue = [pattern];
+  while (queue.length > 0) {
+    const s = queue.shift();
+    const set = firstBraceSet(s);
+    if (set === null) {
+      out.push(s);
+      continue;
+    }
+    if (out.length + queue.length + set.alternatives.length > MAX_BRACE_EXPANSIONS) {
+      out.push(s.replace(/\{[^{}]*\}/g, "*"));
+      continue;
+    }
+    for (const alt of set.alternatives) queue.push(s.slice(0, set.start) + alt + s.slice(set.end + 1));
+  }
+  return out;
+}
+function firstBraceSet(s) {
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === "\\") {
+      i++;
+      continue;
+    }
+    if (s[i] !== "{") continue;
+    let depth = 0;
+    const commas = [];
+    for (let j = i; j < s.length; j++) {
+      if (s[j] === "\\") {
+        j++;
+        continue;
+      }
+      if (s[j] === "{") depth++;
+      else if (s[j] === "}" && --depth === 0) {
+        if (commas.length === 0) break;
+        const cuts = [i, ...commas, j];
+        return { start: i, end: j, alternatives: cuts.slice(0, -1).map((c, k) => s.slice(c + 1, cuts[k + 1])) };
+      } else if (s[j] === "," && depth === 1) commas.push(j);
+    }
+  }
+  return null;
+}
+function segmentRegex(seg) {
+  let re = "";
+  for (let i = 0; i < seg.length; i++) {
+    const c = seg[i];
+    if (c === "\\" && i + 1 < seg.length) re += escapeRe2(seg[++i]);
+    else if (c === "*") re += ".*";
+    else if (c === "?") re += ".";
+    else if (c === "[") {
+      const close = seg.indexOf("]", i + 2);
+      if (close === -1) {
+        re += "\\[";
+        continue;
+      }
+      let body = seg.slice(i + 1, close);
+      const negate = body.startsWith("!") || body.startsWith("^");
+      if (negate) body = body.slice(1);
+      re += `[${negate ? "^" : ""}${body.replace(/[\\\]^]/g, "\\$&")}]`;
+      i = close;
+    } else re += escapeRe2(c);
+  }
+  return new RegExp(`^${re}$`, "i");
+}
+function escapeRe2(c) {
+  return c.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+}
+function segments(p, glob) {
+  const parts = (glob ? p : p.replace(/\\/g, "/")).split("/");
+  const out = [];
+  for (const part of parts) {
+    if (part === "" || part === ".") continue;
+    if (part === ".." && out.length > 0 && out[out.length - 1] !== ".." && out[out.length - 1] !== "**") out.pop();
+    else out.push(part);
+  }
+  return out;
+}
+function segmentCanBe(seg, slot) {
+  if (slot === null) return seg !== "..";
+  return segmentRegex(seg).test(slot);
+}
+function canNameBinding(segs) {
+  const from = (gi, ti) => {
+    if (ti === TARGET.length) return segs.slice(gi).every((s) => s === "**");
+    if (gi === segs.length) return false;
+    const g = segs[gi];
+    if (g === "**") return from(gi + 1, ti) || from(gi, ti + 1);
+    return segmentCanBe(g, TARGET[ti]) && from(gi + 1, ti + 1);
+  };
+  for (let i = 0; i <= segs.length; i++) if (from(i, 0)) return true;
+  return false;
+}
+function pathCanNameBinding(p, glob) {
+  return expandBraces(p).some((e) => canNameBinding(segments(e, glob)));
+}
+function joinBase(base, rel2) {
+  return rel2.startsWith("/") || /^[A-Za-z]:[\\/]/.test(rel2) || base.length === 0 ? rel2 : `${base}/${rel2}`;
+}
+function shellWords(command) {
+  const words = [];
+  let cur = "";
+  let has = false;
+  const flush = () => {
+    if (has) words.push(cur);
+    cur = "";
+    has = false;
+  };
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i];
+    if (c === "'") {
+      const end = command.indexOf("'", i + 1);
+      cur += command.slice(i + 1, end === -1 ? command.length : end);
+      has = true;
+      i = end === -1 ? command.length : end;
+    } else if (c === '"') {
+      has = true;
+      for (i++; i < command.length && command[i] !== '"'; i++) {
+        if (command[i] === "\\" && i + 1 < command.length && '"\\$`'.includes(command[i + 1])) i++;
+        cur += command[i];
+      }
+    } else if (c === "\\" && i + 1 < command.length) {
+      if (command[i + 1] !== "\n") {
+        cur += command[i + 1];
+        has = true;
+      }
+      i++;
+    } else if (/[\s;&|<>()]/.test(c)) flush();
+    else {
+      cur += c;
+      has = true;
+    }
+  }
+  flush();
+  return words.flatMap((w) => [w, ...w.split("=").slice(1)]);
+}
+function bashCanNameBinding(command) {
+  const words = shellWords(command);
+  if (words.some((w) => pathCanNameBinding(w, true))) return true;
+  const runsWord = (w) => expandBraces(w).some((e) => {
+    const s = segments(e, true);
+    return s.some((g, i) => (g === "**" || segmentCanBe(g, ".guild")) && i + 1 < s.length && (s[i + 1] === "**" || segmentCanBe(s[i + 1], "runs")));
+  });
+  const bindingWord = (w) => expandBraces(w).some((e) => {
+    const s = segments(e, true);
+    const last = s[s.length - 1];
+    return last !== void 0 && last !== "**" && segmentCanBe(last, "binding.json");
+  });
+  return words.some((r, i) => runsWord(r) && words.some((b, j) => j !== i && bindingWord(b)));
+}
+function laneBindingPathTarget(env, tool, input) {
+  if (!isLaneWorker(env) || !BINDING_GUARDED_TOOLS.has(tool)) return null;
+  const str2 = (k) => typeof input[k] === "string" ? input[k] : "";
+  const strings = Object.values(input).filter((v) => typeof v === "string");
+  const base = str2("path");
+  const legacy = [...strings];
+  for (const key of ["pattern", "glob"]) if (str2(key) && base) legacy.push(`${base}/${str2(key)}`);
+  const literal = legacy.find((s) => BINDING_PATH.test(s));
+  if (literal !== void 0) return literal;
+  for (const key of ["file_path", "notebook_path", "path"]) {
+    if (str2(key) && pathCanNameBinding(str2(key), false)) return str2(key);
+  }
+  if (tool === "Glob" && str2("pattern")) {
+    const joined = joinBase(base, str2("pattern"));
+    if (pathCanNameBinding(joined, true)) return joined;
+  }
+  if (tool === "Grep" && str2("glob")) {
+    const g = str2("glob");
+    const joined = joinBase(base, g.includes("/") ? g : `**/${g}`);
+    if (pathCanNameBinding(joined, true)) return joined;
+  }
+  if (tool === "Bash" && str2("command") && bashCanNameBinding(str2("command"))) return str2("command");
+  return null;
+}
+
 // hooks/pre-tool-use.ts
 init_state();
 init_security();
@@ -44714,6 +45029,42 @@ function runIngestPauseGate(payload, cwd) {
   }
   return true;
 }
+function runLaneBindingPathGate(payload, cwd) {
+  const tool = payload.tool_name ?? "";
+  const ti = payload.tool_input ?? {};
+  const target = laneBindingPathTarget(process.env, tool, ti);
+  if (target === null) return false;
+  const reason = `a lane worker may not access a run binding (${tool} input names or can resolve to .guild/runs/<run>/binding.json); the controller holds the binding (CD21, accident prevention; ${BINDING_GUARD_LIMITS})`;
+  const runId = resolveRunId(cwd);
+  if (runId !== void 0 && isSafeRunId(runId)) {
+    try {
+      const laneEnv = process.env["GUILD_LANE_ID"];
+      appendSecurityEvent(
+        runDirOverride() ?? resolveRunDir(cwd, runId),
+        buildSecurityEvent({
+          run_id: runId,
+          lane_id: typeof laneEnv === "string" && isSafeLaneId(laneEnv) ? laneEnv : void 0,
+          event_type: "capability_scope_violation",
+          decision: "deny",
+          tool,
+          detail: `binding_path_refused: ${reason}`
+        })
+      );
+    } catch {
+    }
+  }
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: `Guild security (binding_path_refused): ${reason}`
+      }
+    })
+  );
+  traceToolDenial(payload, cwd, "binding_path", "permission_denied");
+  return true;
+}
 function runLaneWikiWriteGate(payload, cwd) {
   const tool = payload.tool_name ?? "";
   const ti = payload.tool_input ?? {};
@@ -45268,6 +45619,7 @@ async function main6() {
     return;
   }
   if (runProjectionGate(payload, cwd)) return;
+  if (runLaneBindingPathGate(payload, cwd)) return;
   if (runIngestPauseGate(payload, cwd)) return;
   if (runLaneWikiWriteGate(payload, cwd)) return;
   if (runProseCredentialGate(payload, cwd)) return;

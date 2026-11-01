@@ -34,7 +34,9 @@
     "lint:layout": "npx tsx lint/layout-laws.ts"
   },
   "dependencies": {
-    "js-yaml": "^4.3.2"
+    "js-yaml": "^4.3.2",
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

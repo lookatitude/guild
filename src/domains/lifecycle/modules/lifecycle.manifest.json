@@ -67,7 +67,11 @@
       "lib/run-lifecycle",
       "lib/run-manifest-wiring",
       "lib/run-record-validate",
-      "lib/runstart-preflight"
+      "lib/runstart-preflight",
+      "stack-operations",
+      "lib/stack-contract-validator",
+      "stack-run-worker",
+      "stack-qualify-host"
     ]
   }
 }

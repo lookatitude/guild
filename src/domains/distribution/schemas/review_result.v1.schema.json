@@ -1,0 +1,83 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "review_result.v1"
+    },
+    "packet_id": {
+      "type": "string"
+    },
+    "artifact_sha256_reviewed": {
+      "type": "string"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "satisfied",
+        "issues"
+      ]
+    },
+    "blocking_findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "string"
+          },
+          "required": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "path",
+          "line",
+          "title",
+          "trigger",
+          "impact",
+          "required"
+        ]
+      }
+    },
+    "verification": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limits": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "packet_id",
+    "artifact_sha256_reviewed",
+    "verdict",
+    "blocking_findings",
+    "verification",
+    "limits"
+  ]
+}

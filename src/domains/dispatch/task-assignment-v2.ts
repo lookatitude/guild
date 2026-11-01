@@ -568,7 +568,8 @@ export function assignmentAckPath(ids: {
 export function acknowledgeAssignment(
   cwd: string,
   assignment: TaskAssignmentV2,
-  now: () => string
+  now: () => string,
+  binding?: DispatchBindingEnvelope
 ): string {
   const valid = validateTaskAssignmentV2(assignment);
   if (!valid) {
@@ -577,6 +578,9 @@ export function acknowledgeAssignment(
         "requires a validated assignment (D5)"
     );
   }
+  // CD10: the controller records the ack with its own verified binding. A worker
+  // holds no binding, so it writes an ack CLAIM (writeAckClaim), never this record.
+  assertDispatchBinding(cwd, valid.run_id, binding as DispatchBindingEnvelope);
   const ack: AssignmentAckV1 = {
     schema_version: ASSIGNMENT_ACK_SCHEMA,
     run_id: valid.run_id,
@@ -634,6 +638,7 @@ export function acknowledgeAssignment(
       relativePath,
       hostId: valid.host_id,
       role: "task-cell-runtime",
+      bindingRef: (binding as DispatchBindingEnvelope).binding_ref,
       now: () => ack.acknowledged_at,
     });
     if (published === null) throw new Error(`artifact-bus publish failed for ${kind}:${relativePath}`);

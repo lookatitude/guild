@@ -75,6 +75,9 @@ import {
   findRunAcceptances,
   readAssignmentForInstance,
   isTerminationAuthorized,
+  isQualifiedDownstreamRelease,
+  type ConsumerSpec,
+  type RunAcceptance,
 } from "../../src/domains/dispatch/index.js";
 // T10 (KTD23/R45): the layout bootstrap, fail-open wrapper for hook entries.
 import { ensureStorageLayout } from "../lib/ensure-layout.js";
@@ -125,8 +128,26 @@ interface NudgeContext {
 interface AcceptedLane {
   logical_task_id: string;
   instance_id: string;
-  /** Downstream is released only when the acceptance carries a release timestamp. */
-  released: boolean;
+  /**
+   * Legacy lanes: released iff the acceptance carries a release timestamp.
+   * E00 lanes (done_when_ref present): the canonical qualified-release predicate;
+   * unknown when it cannot be evaluated. Termination is decided separately.
+   */
+  downstream: "released" | "blocked" | "unknown";
+}
+
+const E00_CONSUMER: ConsumerSpec = { policy: "cooperative_local", context: { mode: "same_run" } };
+
+function downstreamOf(guildRoot: string, run: RunAcceptance, assignment: object): AcceptedLane["downstream"] {
+  // E00 is field presence (the C cleanup discriminator): a malformed ref never falls back to legacy.
+  if (!Object.prototype.hasOwnProperty.call(assignment, "done_when_ref")) {
+    return run.acceptance.downstream_release_at !== null ? "released" : "blocked";
+  }
+  try {
+    return isQualifiedDownstreamRelease(guildRoot, run, E00_CONSUMER).qualified_release === true ? "released" : "blocked";
+  } catch {
+    return "unknown";
+  }
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -258,14 +279,15 @@ function findAssignedTaskIds(cwd: string, teammate: string): string[] {
  */
 function resolveAcceptedLanes(guildRoot: string, runId: string, teammate: string): AcceptedLane[] {
   const out: AcceptedLane[] = [];
-  for (const { ids, acceptance } of findRunAcceptances(guildRoot, runId)) {
+  for (const run of findRunAcceptances(guildRoot, runId)) {
+    const { ids, acceptance } = run;
     if (!isTerminationAuthorized(acceptance)) continue;
     const assignment = readAssignmentForInstance(guildRoot, ids);
     if (!assignment || assignment.worker_role !== teammate) continue;
     out.push({
       logical_task_id: ids.logical_task_id,
       instance_id: ids.instance_id,
-      released: acceptance.downstream_release_at !== null,
+      downstream: downstreamOf(guildRoot, run, assignment),
     });
   }
   return out;
@@ -338,7 +360,7 @@ function composeNudge(ctx: NudgeContext): string {
         (a) =>
           `[TERMINATE-AUTHORIZED] teammate="${ctx.teammate}" team="${ctx.teamName}" ` +
           `logical_task=${a.logical_task_id} instance=${a.instance_id} ` +
-          `downstream=${a.released ? "released" : "blocked"}`
+          `downstream=${a.downstream}`
       )
       .join("\n");
     return (

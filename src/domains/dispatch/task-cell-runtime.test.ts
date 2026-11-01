@@ -60,7 +60,7 @@ function setup() {
     now: NOW,
     idFactory: (kind) => `${kind}-${++seq}`,
   });
-  return { cwd, runId, worker, runtime };
+  return { cwd, runId, worker, runtime, binding: { binding_ref: binding.binding_ref } };
 }
 
 /** A verified all-native host: these cases exercise isolation, so no rung is lost. */
@@ -76,7 +76,7 @@ const FULL_RUNGS = resolveRungPlan(
 
 describe("FilesystemTaskCellRuntime production seam", () => {
   it("drives the production lifecycle and leaves a reconstructable bus join", async () => {
-    const { cwd, runId, worker, runtime } = setup();
+    const { cwd, runId, worker, runtime, binding } = setup();
     const contextRel = `.guild/context/${runId}/backend-T1.md`;
     const context = "# context\n";
     fs.mkdirSync(path.dirname(path.join(cwd, contextRel)), { recursive: true });
@@ -162,7 +162,7 @@ describe("FilesystemTaskCellRuntime production seam", () => {
     ];
     worker.onNotify = ({ assignment_path }) => {
       const persisted = JSON.parse(fs.readFileSync(path.join(cwd, assignment_path), "utf8"));
-      acknowledgeAssignment(cwd, persisted, () => "2026-08-10T16:59:59.000Z");
+      acknowledgeAssignment(cwd, persisted, () => "2026-08-10T16:59:59.000Z", binding);
     };
     const delivered = await runtime.deliverAssignment((ready as { ok: true; instance: typeof instance }).instance, assignment);
     expect(delivered.ok).toBe(true);
@@ -227,7 +227,7 @@ describe("FilesystemTaskCellRuntime production seam", () => {
       "",
     ].join("\n");
     fs.writeFileSync(path.join(cwd, receiptPath), receiptBytes);
-    expect(publishSubmittedHandoffPointer({ cwd, assignment, submittedAt: NOW() })).not.toBeNull();
+    expect(publishSubmittedHandoffPointer({ cwd, assignment, submittedAt: NOW(), binding })).not.toBeNull();
     const collected = await runtime.collectHandoff(instance);
     expect(collected.ok).toBe(true);
     expect(fs.readFileSync(path.join(cwd, paths.receipt_path))).toEqual(Buffer.from(receiptBytes));
@@ -243,9 +243,10 @@ describe("FilesystemTaskCellRuntime production seam", () => {
         assignment_id: assignmentId(assignment),
         done_when: [{ id: "api", oracle: "named_check", target: "npm test -- api" }],
         now: NOW,
+        binding,
       }).ok,
     ).toBe(true);
-    recordOracleOutcome({ ...ledgerIds, item_id: "api", state: "pass", now: NOW });
+    recordOracleOutcome({ ...ledgerIds, item_id: "api", state: "pass", now: NOW, binding });
     const accepted = await runtime.acceptHandoff(instance, {
       acceptance_policy_version: "1",
       authorities_required: ["deterministic_floor", "team_lead"],
@@ -263,7 +264,7 @@ describe("FilesystemTaskCellRuntime production seam", () => {
       schema_version: "guild.team_result.v1",
       station: "build",
       team_plan_ref: `.guild/runs/${runId}/team-plan/build.json`,
-      lanes: [{ role: "backend", instance_id: instance.instance_id, handoff_ref: null, acceptance_ref: null }],
+      lanes: [{ role: "backend", instance_id: instance.instance_id, handoff_ref: paths.handoff_path, acceptance_ref: paths.acceptance_path }],
     }, { now: NOW });
     expect(auditTaskCellArtifactJoin({ cwd, runId, requireClosed: true }).ok).toBe(true);
     const lifecycle = readTaskCellLifecycleEvents({ cwd, runId });
@@ -322,8 +323,9 @@ describe("FilesystemTaskCellRuntime production seam", () => {
 
   it("records filesystem assignment emulation and refuses to fake termination", () => {
     const transport = {
+      transport_id: "in-process",
       supports: (operation: string) => operation === "spawn",
-      spawn: () => ({ status: "succeeded", value: {
+      spawn: () => ({ transport_id: "in-process", status: "succeeded", value: {
         transport_id: "in-process", handle_id: "h1", host_id: "claude", host_kind: "claude", invocation: null,
       } }),
     } as unknown as ExecutionTransportPort;
