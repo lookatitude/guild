@@ -50216,7 +50216,6 @@ var index_exports = {};
 __export(index_exports, {
   ACTIVITY_EVENTS: () => ACTIVITY_EVENTS,
   ACTIVITY_SCHEMA: () => ACTIVITY_SCHEMA,
-  ACTOR_ID_PATTERN: () => ACTOR_ID_PATTERN,
   BindingRejectedError: () => BindingRejectedError,
   CANONICAL_PHASES: () => CANONICAL_PHASES,
   CANONICAL_RECEIPT_SECTIONS: () => CANONICAL_RECEIPT_SECTIONS,
@@ -50760,7 +50759,6 @@ init_index();
 0 && (module.exports = {
   ACTIVITY_EVENTS,
   ACTIVITY_SCHEMA,
-  ACTOR_ID_PATTERN,
   BindingRejectedError,
   CANONICAL_PHASES,
   CANONICAL_RECEIPT_SECTIONS,

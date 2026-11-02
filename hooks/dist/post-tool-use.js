@@ -52006,7 +52006,6 @@ var lifecycle_exports = {};
 __export(lifecycle_exports, {
   ACTIVITY_EVENTS: () => ACTIVITY_EVENTS,
   ACTIVITY_SCHEMA: () => ACTIVITY_SCHEMA,
-  ACTOR_ID_PATTERN: () => ACTOR_ID_PATTERN,
   BindingRejectedError: () => BindingRejectedError,
   CANONICAL_PHASES: () => CANONICAL_PHASES,
   CANONICAL_RECEIPT_SECTIONS: () => CANONICAL_RECEIPT_SECTIONS,

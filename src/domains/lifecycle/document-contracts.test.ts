@@ -21,9 +21,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import {
-  ACTOR_ID_PATTERN,
   DOCUMENTS_MODULE_SOURCE_FILES,
-  DOCUMENT_ID_PATTERN,
   DOCUMENT_KINDS,
   canonicalDocumentJson,
   decideFromDocumentSources,
@@ -1515,11 +1513,6 @@ describe("qa-receipt-identity actor id", () => {
   const authorValid = (value: unknown): boolean =>
     validateDocumentRecord(withProvenance("author_id", value)).valid;
 
-  it("pins the two patterns", () => {
-    expect(ACTOR_ID_PATTERN.source).toBe("^[a-z0-9][a-z0-9._-]{1,63}$");
-    expect(DOCUMENT_ID_PATTERN.source).toBe("^[a-z0-9][a-z0-9._-]{2,63}$");
-  });
-
   it("accepts qa and ab and keeps the value byte-for-byte", () => {
     for (const id of ["qa", "ab"]) {
       const result = validateDocumentRecord(withProvenance("author_id", id));
@@ -1531,7 +1524,10 @@ describe("qa-receipt-identity actor id", () => {
   it("accepts a 64-character id and every previously valid 3+ character id", () => {
     expect(authorValid("a".repeat(64))).toBe(true);
     for (const id of ["abc", "artifact-services", "a.b_c-d", "0ab", "a--", "a.."]) {
-      expect(DOCUMENT_ID_PATTERN.test(id)).toBe(true);
+      // Previously valid: the same value is still a valid record id and author id.
+      const asRecordId = verifyRecord();
+      asRecordId["id"] = id;
+      expect(validateDocumentRecord(asRecordId).valid).toBe(true);
       expect(authorValid(id)).toBe(true);
     }
   });
@@ -1556,7 +1552,8 @@ describe("qa-receipt-identity actor id", () => {
     const record = verifyRecord();
     record["id"] = "qa";
     expect(validateDocumentRecord(record).valid).toBe(false);
-    expect(DOCUMENT_ID_PATTERN.test("qa")).toBe(false);
+    // The same value stays valid as an author id: only the record id grammar differs.
+    expect(authorValid("qa")).toBe(true);
   });
 
   const qaFrozen = (specialist: string): string =>
