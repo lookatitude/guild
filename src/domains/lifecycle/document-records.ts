@@ -91,6 +91,8 @@ export type VerifyCheckResult = (typeof VERIFY_CHECK_RESULTS)[number];
 
 /** Stable document / item identifier shape. */
 export const DOCUMENT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{2,63}$/;
+/** Actor id (provenance.author_id): a specialist key such as `qa` is 2 characters. */
+export const ACTOR_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{1,63}$/;
 /** Item ids inside a body are shorter-lived but still stable and slug-like. */
 export const DOCUMENT_ITEM_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 /** Strict RFC3339 UTC with milliseconds — no local offsets, no coercion. */
@@ -459,7 +461,7 @@ function readProvenance(
 
   const source = read.value;
   const authorId = readString(issues, source, provenancePath, "author_id", {
-    pattern: DOCUMENT_ID_PATTERN,
+    pattern: ACTOR_ID_PATTERN,
   });
   const authorFamily = readString(issues, source, provenancePath, "author_family", {
     pattern: DOCUMENT_ID_PATTERN,

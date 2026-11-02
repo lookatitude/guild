@@ -39,6 +39,7 @@ import {
   isDownstreamReleased,
   isTerminationAuthorized,
   markAttemptOrphaned,
+  publishSubmittedHandoffPointer,
   readAcceptanceForInstance,
   readAssignmentForInstance,
   readAttemptForInstance,
@@ -654,5 +655,119 @@ describe("findRunAcceptances — walks the run tree; only authorized records gat
     expect(sib?.worker_role).toBe("backend");
     // The record is readable back through the single-instance reader too.
     expect(readAcceptanceForInstance(cwd, found[0].ids)).not.toBeNull();
+  });
+});
+
+// ── qa-receipt-identity: the specialist key `qa` joins exactly, no alias ─────
+
+describe("qa specialist receipt join", () => {
+  const qaDispatch = (): TaskCellDispatchInput =>
+    dispatch({
+      workerRole: "qa",
+      specialistTypeId: "qa",
+      specialistProfileId: "qa",
+      contextBundleId: ".guild/context/run-g4/qa-lt-api.md",
+    });
+
+  const sha = (text: string): string =>
+    `handoff-sha256:${createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex")}`;
+
+  const writeReceipt = (cwd: string, assignment: TaskAssignmentV2, text: string): string => {
+    const receiptPath = `.guild/runs/${assignment.run_id}/handoffs/${assignment.worker_role}-${assignment.logical_task_id}.md`;
+    fs.mkdirSync(path.dirname(path.join(cwd, receiptPath)), { recursive: true });
+    fs.writeFileSync(path.join(cwd, receiptPath), text);
+    return receiptPath;
+  };
+
+  const submittedFor = (receiptPath: string, text: string): SubmittedHandoff => ({
+    receipt_id: sha(text),
+    receipt_path: receiptPath,
+    schema_valid: true,
+    claimed_changed_files: ["src/api/routes.ts"],
+    acceptance_tests_passed: ["npm test -- api"],
+    submitted_at: FIXED_NOW(),
+  });
+
+  it("a valid qa baseline validates and publishes the six-field pointer", () => {
+    const cwd = tmpCwd();
+    const { assignment } = buildTaskCell(qaDispatch());
+    expect(assignment.worker_role).toBe("qa");
+    const text = canonicalFrozenReceipt(assignment);
+    expect(text).toContain("specialist: qa\n");
+    const receiptPath = writeReceipt(cwd, assignment, text);
+
+    expect(validateSubmittedHandoffReceipt({
+      cwd, assignment, submitted: submittedFor(receiptPath, text),
+    })).toBe(true);
+
+    const published = publishSubmittedHandoffPointer({ cwd, assignment, submittedAt: FIXED_NOW() });
+    expect(published).not.toBeNull();
+    const onDisk = JSON.parse(fs.readFileSync(path.join(cwd, assignment.handoff_path), "utf8"));
+    expect(Object.keys(onDisk).sort()).toEqual([
+      "acceptance_tests_passed", "claimed_changed_files", "receipt_id", "receipt_path",
+      "schema_valid", "submitted_at",
+    ]);
+    expect(onDisk.schema_valid).toBe(true);
+    expect(onDisk.receipt_id).toBe(sha(text));
+  });
+
+  // Each case changes exactly one joined field and keeps the receipt internally
+  // consistent: it still parses as a frozen receipt with its canonical wrapper, and
+  // the submitted pointer carries the recomputed raw-byte hash and lane path. The
+  // only remaining reason to reject is the receipt-vs-assignment join on that field.
+  // task_id lives twice in a receipt (frontmatter ids.task_id and the embedded
+  // handoff envelope); both are changed together, or the frozen validator would
+  // reject it as conflicting_identity before the join is reached.
+  const swap = (text: string, from: string, to: string): string => {
+    expect(text).toContain(from);
+    return text.split(from).join(to);
+  };
+  const mismatches: Array<[string, (text: string) => string]> = [
+    ["specialist vs worker_role", (t) => swap(t, "specialist: qa\n", "specialist: backend\n")],
+    ["run_id", (t) => swap(t, "  run_id: run-g4\n", "  run_id: run-other\n")],
+    ["task_id", (t) => swap(
+      swap(t, "  task_id: lt-api\n", "  task_id: lt-other\n"),
+      "\"task_id\":\"lt-api\"",
+      "\"task_id\":\"lt-other\"",
+    )],
+    ["task_run_id", (t) => swap(t, "  task_run_id: lt-api.tr1\n", "  task_run_id: lt-api.tr9\n")],
+    ["host.selected", (t) => swap(t, "  selected: claude-code-cli\n", "  selected: codex\n")],
+  ];
+  for (const [name, mutate] of mismatches) {
+    it(`rejects a single ${name} mismatch and publishes no pointer`, () => {
+      const cwd = tmpCwd();
+      const { assignment } = buildTaskCell(qaDispatch());
+      const good = canonicalFrozenReceipt(assignment);
+      const text = mutate(good);
+      expect(text).not.toBe(good);
+      const receiptPath = writeReceipt(cwd, assignment, text);
+
+      // Not a frozen-schema or wrapper refusal: the receipt is valid on its own.
+      expect(runBindingMod.validateFrozenReceiptDocument(text).status).toBe("parsed");
+      expect(runBindingMod.hasCanonicalReceiptWrapper(text)).toBe(true);
+      // The pointer is otherwise exact: lane path and hash of the mutated bytes.
+      const submitted = submittedFor(receiptPath, text);
+      expect(submitted.receipt_id).toBe(sha(text));
+      expect(submitted.receipt_path).toBe(
+        `.guild/runs/${assignment.run_id}/handoffs/${assignment.worker_role}-${assignment.logical_task_id}.md`,
+      );
+
+      // So the assignment join on this one field is the only thing left to refuse it.
+      expect(validateSubmittedHandoffReceipt({
+        cwd, assignment, submitted: submittedFor(receiptPath, text),
+      })).toBe(false);
+      expect(publishSubmittedHandoffPointer({ cwd, assignment, submittedAt: FIXED_NOW() })).toBeNull();
+      expect(fs.existsSync(path.join(cwd, assignment.handoff_path))).toBe(false);
+    });
+  }
+
+  it("does not alias a differently cased or prefixed specialist to qa", () => {
+    for (const alias of ["QA", "qa-engineer", "quality"]) {
+      const cwd = tmpCwd();
+      const { assignment } = buildTaskCell(qaDispatch());
+      const text = canonicalFrozenReceipt(assignment).replace("specialist: qa\n", `specialist: ${alias}\n`);
+      writeReceipt(cwd, assignment, text);
+      expect(publishSubmittedHandoffPointer({ cwd, assignment, submittedAt: FIXED_NOW() })).toBeNull();
+    }
   });
 });

@@ -27149,7 +27149,7 @@ function readProvenance(issues, parent, path75) {
   if (!readShape(issues, read.value, provenancePath, PROVENANCE_KEYS)) return null;
   const source = read.value;
   const authorId = readString(issues, source, provenancePath, "author_id", {
-    pattern: DOCUMENT_ID_PATTERN
+    pattern: ACTOR_ID_PATTERN
   });
   const authorFamily = readString(issues, source, provenancePath, "author_family", {
     pattern: DOCUMENT_ID_PATTERN
@@ -27324,7 +27324,7 @@ function validateDocumentRecord(input) {
     return failure(errors);
   }
 }
-var DOCUMENT_SCHEMA_VERSION, DOCUMENT_KINDS, DOCUMENT_PROVENANCE_SOURCES, PLAN_STEP_STATUSES, SPEC_REQUIREMENT_PRIORITIES, HANDOFF_STATUSES, REVIEW_VERDICTS, REVIEW_SEVERITIES, VERIFY_OUTCOMES, VERIFY_CHECK_RESULTS, DOCUMENT_ID_PATTERN, DOCUMENT_ITEM_ID_PATTERN, DOCUMENT_TIMESTAMP_PATTERN, TOP_LEVEL_KEYS, PROVENANCE_KEYS;
+var DOCUMENT_SCHEMA_VERSION, DOCUMENT_KINDS, DOCUMENT_PROVENANCE_SOURCES, PLAN_STEP_STATUSES, SPEC_REQUIREMENT_PRIORITIES, HANDOFF_STATUSES, REVIEW_VERDICTS, REVIEW_SEVERITIES, VERIFY_OUTCOMES, VERIFY_CHECK_RESULTS, DOCUMENT_ID_PATTERN, ACTOR_ID_PATTERN, DOCUMENT_ITEM_ID_PATTERN, DOCUMENT_TIMESTAMP_PATTERN, TOP_LEVEL_KEYS, PROVENANCE_KEYS;
 var init_document_records = __esm({
   "src/domains/lifecycle/document-records.ts"() {
     init_document_safe();
@@ -27364,6 +27364,7 @@ var init_document_records = __esm({
     VERIFY_OUTCOMES = Object.freeze(["pass", "fail", "inconclusive"]);
     VERIFY_CHECK_RESULTS = Object.freeze(["pass", "fail", "skip"]);
     DOCUMENT_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{2,63}$/;
+    ACTOR_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{1,63}$/;
     DOCUMENT_ITEM_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
     DOCUMENT_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
     TOP_LEVEL_KEYS = Object.freeze([

@@ -21,7 +21,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import {
+  ACTOR_ID_PATTERN,
   DOCUMENTS_MODULE_SOURCE_FILES,
+  DOCUMENT_ID_PATTERN,
   DOCUMENT_KINDS,
   canonicalDocumentJson,
   decideFromDocumentSources,
@@ -39,6 +41,7 @@ import {
   resolveDocumentAuthority,
   scanHtmlForActivePayloads,
   validateDocumentRecord,
+  validateFrozenReceiptDocument,
   verifyRenderedDocumentBinding,
 } from ".";
 
@@ -1496,5 +1499,144 @@ describe("receipt bridge", () => {
       expect(() => decideFromReceiptDocument(input)).not.toThrow();
       expect(decideFromReceiptDocument(input).gate_signal).toBe("refuse");
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// qa-receipt-identity: provenance.author_id uses the actor-ID grammar
+// ---------------------------------------------------------------------------
+
+describe("qa-receipt-identity actor id", () => {
+  const withProvenance = (field: string, value: unknown): Record<string, unknown> => {
+    const record = verifyRecord();
+    (record["provenance"] as Record<string, unknown>)[field] = value;
+    return record;
+  };
+  const authorValid = (value: unknown): boolean =>
+    validateDocumentRecord(withProvenance("author_id", value)).valid;
+
+  it("pins the two patterns", () => {
+    expect(ACTOR_ID_PATTERN.source).toBe("^[a-z0-9][a-z0-9._-]{1,63}$");
+    expect(DOCUMENT_ID_PATTERN.source).toBe("^[a-z0-9][a-z0-9._-]{2,63}$");
+  });
+
+  it("accepts qa and ab and keeps the value byte-for-byte", () => {
+    for (const id of ["qa", "ab"]) {
+      const result = validateDocumentRecord(withProvenance("author_id", id));
+      expect(result.valid).toBe(true);
+      expect(result.record!.provenance.author_id).toBe(id);
+    }
+  });
+
+  it("accepts a 64-character id and every previously valid 3+ character id", () => {
+    expect(authorValid("a".repeat(64))).toBe(true);
+    for (const id of ["abc", "artifact-services", "a.b_c-d", "0ab", "a--", "a.."]) {
+      expect(DOCUMENT_ID_PATTERN.test(id)).toBe(true);
+      expect(authorValid(id)).toBe(true);
+    }
+  });
+
+  it("rejects 65 characters, 1 character, empty, uppercase, bad lead, bad characters and non-strings", () => {
+    for (const bad of [
+      "a".repeat(65), "q", "", "QA", "Qa", ".qa", "_qa", "-qa", "q a", "q/a", "qa\n", " qa", "qa ", "qä",
+      null, undefined, 2, true, {}, [],
+    ]) {
+      expect(authorValid(bad)).toBe(false);
+    }
+  });
+
+  it("leaves author_family and host_id on the 3-character minimum", () => {
+    expect(validateDocumentRecord(withProvenance("author_family", "qa")).valid).toBe(false);
+    expect(validateDocumentRecord(withProvenance("host_id", "qa")).valid).toBe(false);
+    expect(validateDocumentRecord(withProvenance("author_family", "abc")).valid).toBe(true);
+    expect(validateDocumentRecord(withProvenance("host_id", "a".repeat(65))).valid).toBe(false);
+  });
+
+  it("keeps a record id of qa invalid", () => {
+    const record = verifyRecord();
+    record["id"] = "qa";
+    expect(validateDocumentRecord(record).valid).toBe(false);
+    expect(DOCUMENT_ID_PATTERN.test("qa")).toBe(false);
+  });
+
+  const qaFrozen = (specialist: string): string =>
+    [
+      "---",
+      "schema_version: guild.handoff_receipt.v1",
+      "ids:",
+      "  initiative_id: null",
+      "  run_id: run-20260727-000000-document-contracts",
+      "  task_id: MH-05",
+      "  task_run_id: trun-mh-05-001",
+      `specialist: ${specialist}`,
+      "host:",
+      "  selected: claude-code",
+      "  degraded: false",
+      "  native_ref: null",
+      "  independence: strong",
+      "scope:",
+      "  objective: Prove the qa receipt identity",
+      "  in_scope: []",
+      "  out_of_scope_touched: []",
+      "status: completed",
+      "changed_files: []",
+      "evidence: []",
+      "assumptions: []",
+      "open_risks: []",
+      "followups: []",
+      "produced_at: 2026-07-27T00:00:00.000Z",
+      "---",
+      "",
+      "## changed_files", "- none", "",
+      "## opens_for", "- lead", "",
+      "## assumptions", "- none", "",
+      "## evidence", "- fixture", "",
+      "## followups", "- none", "",
+      "```guild.handoff.v2",
+      JSON.stringify({
+        schema_version: "guild.handoff.v2", task_id: "MH-05", tier: "mid", status: "done",
+        summary: "qa", artifacts: [], issues: [], learnings: [],
+      }),
+      "```",
+      "",
+    ].join("\n");
+
+  it("parses the frozen receipt with specialist qa through the frozen validator and the canonical record", () => {
+    for (const parse of [validateFrozenReceiptDocument, parseReceiptDocument]) {
+      const parsed = parse(qaFrozen("qa"));
+      expect(parsed.status).toBe("parsed");
+      expect(parsed.errors).toEqual([]);
+      expect(parsed.record!.provenance.author_id).toBe("qa");
+    }
+  });
+
+  it("still refuses a frozen receipt whose specialist is not an actor id", () => {
+    for (const bad of ["q", "QA", ".qa"]) {
+      expect(validateFrozenReceiptDocument(qaFrozen(bad)).status).toBe("unparsable");
+    }
+  });
+
+  it("parses the legacy agent form with agent qa", () => {
+    const legacy = [
+      "---",
+      "schema_version: guild.handoff_receipt.v1",
+      "agent: qa",
+      "model_family: claude",
+      "host: claude-code-cli",
+      "generated_at: 2026-07-27T00:00:00.000Z",
+      "task: qa lane",
+      "---",
+      "",
+      "```guild.handoff.v2",
+      JSON.stringify({
+        schema_version: "guild.handoff.v2", task_id: "MH-05", tier: "mid", status: "done",
+        summary: "qa", artifacts: [], issues: [], learnings: [],
+      }),
+      "```",
+      "",
+    ].join("\n");
+    const parsed = parseReceiptDocument(legacy);
+    expect(parsed.status).toBe("parsed");
+    expect(parsed.record!.provenance.author_id).toBe("qa");
   });
 });
