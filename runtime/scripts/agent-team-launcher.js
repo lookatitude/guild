@@ -44110,6 +44110,18 @@ var init_workflow_component_compiler = __esm({
   }
 });
 
+// src/domains/lifecycle/phase-composition.ts
+var QA_POLICY_KINDS, MAX_INPUT_FILE_BYTES;
+var init_phase_composition = __esm({
+  "src/domains/lifecycle/phase-composition.ts"() {
+    init_kernel();
+    init_teams();
+    init_workflow_component_compiler();
+    QA_POLICY_KINDS = Object.freeze(["security", "adversarial_security", "ui", "ux", "quality", "project_specific"]);
+    MAX_INPUT_FILE_BYTES = 1024 * 1024;
+  }
+});
+
 // src/domains/lifecycle/learning-checkpoint-5.ts
 var CHECKPOINT_VERDICTS, VERDICT_ROUTE;
 var init_learning_checkpoint_5 = __esm({
@@ -44873,6 +44885,7 @@ var init_lifecycle = __esm({
     init_workflow_graph_overlay();
     init_workflow_component_compiler();
     init_workflow_protected_paths();
+    init_phase_composition();
     init_stable_lock();
     init_learning_checkpoint_5();
     init_workflow_graph_load();

@@ -126,6 +126,7 @@ export * from "./workflow-graph-overlay";
 // W01/W02: component compiler and post-expansion protected-path verifier (C8 v2).
 export * from "./workflow-component-compiler";
 export * from "./workflow-protected-paths";
+export * from "./phase-composition";
 // U-TIER (T08 rework-r2): the per-run stable lock. Exported so the dispatch
 // instance cap can make "count the run's slots" and "claim one" a single atomic
 // step rather than an observation followed by a hopeful write.
