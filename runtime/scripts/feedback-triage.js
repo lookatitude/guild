@@ -5689,31 +5689,10 @@ var PROSE_CREDENTIAL_PATTERNS = deepFreeze([
 var PROSE_WRITE_TOOLS = sealSet(["Write", "Edit", "MultiEdit"]);
 
 // src/domains/security/privileged-actions.ts
-var RELEASE_LIKE_TOKENS = Object.freeze([
-  "release",
-  "releases",
-  "publish",
-  "deploy",
-  "deployment",
-  "ship",
-  "merge",
-  "promote",
-  "rollout"
-]);
-var PRIVILEGED_TOKENS = Object.freeze([
-  "permission",
-  "permissions",
-  "grant",
-  "grants",
-  "secret",
-  "secrets",
-  "credential",
-  "credentials",
-  "admin",
-  "sudo",
-  "privilege",
-  "privileged"
-]);
+var RELEASE_LIKE_ROOTS = Object.freeze(["release", "publish", "deploy", "rollout"]);
+var RELEASE_LIKE_TOKENS = Object.freeze(["ship", "merge", "promote"]);
+var PRIVILEGED_ROOTS = Object.freeze(["permission", "credential", "secret", "privilege", "sudo"]);
+var PRIVILEGED_TOKENS = Object.freeze(["grant", "grants", "admin"]);
 
 // scripts/docs-hygiene/scan.ts
 var args = process.argv.slice(2);

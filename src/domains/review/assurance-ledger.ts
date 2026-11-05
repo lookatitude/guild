@@ -13,7 +13,8 @@
  * artifacts moved; a change that is unknown, or larger than declared,
  * invalidates every obligation. Every open invocation is superseded, so a
  * verdict can only land on an invocation started under the current subject.
- * Evidence bytes already spent on one scope cannot be spent again on another.
+ * Evidence bytes cited by any decided round (accept or reject) on one scope
+ * cannot be cited again on another; the index is derived from round history.
  *
  * Restart: `restoreLedger` re-validates the serialized bytes (shape, hash and
  * internal consistency) and treats a subject that moved since the last write
@@ -30,7 +31,7 @@ export const ASSURANCE_KINDS = Object.freeze(["security", "adversarial_security"
 export type AssuranceKind = (typeof ASSURANCE_KINDS)[number];
 const QA_KINDS: readonly string[] = ["security", "adversarial_security", "ui", "ux"];
 
-const LIMITS = { obligations: 200, invocations: 1000, artifacts: 1000, scope: 100, evidence: 50, spent: 10_000, maxRounds: 10, bytes: 4_000_000 };
+const LIMITS = { obligations: 200, invocations: 1000, artifacts: 1000, scope: 100, evidence: 50, maxRounds: 10, bytes: 4_000_000 };
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const HASH = /^sha256:[a-f0-9]{64}$/;
 const PATH = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[^\0]{1,1024}$/;
@@ -69,7 +70,7 @@ export type ObligationStatus = "pending" | "accepted" | "rejected" | "invalidate
 export type InvalidationCause = "mutation" | "unknown-mutation" | "restart-subject-mismatch";
 export interface ObligationState extends ObligationSpec { status: ObligationStatus; round: number; accepted: Binding | null; invalidated_by: InvalidationCause | null }
 export type InvocationStatus = "active" | "accepted" | "rejected" | "superseded";
-export interface InvocationState { id: string; obligation_id: string; node_id: string; round: number; subject_hash: string; scope_hash: string; state: InvocationStatus }
+export interface InvocationState { id: string; obligation_id: string; node_id: string; round: number; subject_hash: string; scope_hash: string; state: InvocationStatus; /** Evidence sha256s the round's verdict cited; empty until decided. */ evidence: string[] }
 
 export interface AssuranceLedger {
   schema_version: typeof ASSURANCE_LEDGER_SCHEMA_VERSION;
@@ -80,7 +81,6 @@ export interface AssuranceLedger {
   epoch: number;
   obligations: ObligationState[];
   invocations: InvocationState[];
-  spent_evidence: Array<{ sha256: string; scope_hash: string }>;
   ledger_hash: string;
 }
 
@@ -285,7 +285,14 @@ function seal(input: Body): AssuranceLedger {
     obligations: [...body.obligations].sort((a, b) => (a.id < b.id ? -1 : 1)),
     invocations: [...body.invocations].sort((a, b) => (a.id < b.id ? -1 : 1)),
   };
-  return deepFreeze({ ...sorted, ledger_hash: assuranceLedgerHash(sorted) });
+  const sealed = { ...sorted, ledger_hash: assuranceLedgerHash(sorted) };
+  if (canonical(sealed).length > LIMITS.bytes) bad("invalid-ledger", `ledger would serialize past ${LIMITS.bytes} bytes and could not be restored`);
+  return deepFreeze(sealed);
+}
+
+/** Every evidence hash a decided round cited, with the scope it was cited for. */
+function spentIndex(body: Body): Array<{ sha256: string; scope_hash: string }> {
+  return body.invocations.flatMap((i) => i.evidence.map((sha256) => ({ sha256, scope_hash: i.scope_hash })));
 }
 
 function clone<T>(v: T): T {
@@ -361,7 +368,7 @@ export function createAssuranceLedger(input: CreateLedgerInput): AssuranceResult
     const { workflow, specs } = resolveDefinition({ projection: inp.projection, obligations: inp.obligations }, new Set(subject.artifacts.map((a) => a.name)));
     if (subject.source_id !== workflow.source_id) bad("foreign-source", `subject source ${subject.source_id} is not workflow source ${workflow.source_id}`);
     const obligations: ObligationState[] = specs.map((s) => ({ ...s, status: "pending", round: 0, accepted: null, invalidated_by: null }));
-    return seal({ schema_version: ASSURANCE_LEDGER_SCHEMA_VERSION, workflow, subject, subject_hash: subjectHash(workflow, subject), epoch: 0, obligations, invocations: [], spent_evidence: [] });
+    return seal({ schema_version: ASSURANCE_LEDGER_SCHEMA_VERSION, workflow, subject, subject_hash: subjectHash(workflow, subject), epoch: 0, obligations, invocations: [] });
   });
 }
 
@@ -385,7 +392,7 @@ export function beginInvocation(ledger: AssuranceLedger, req: { obligation_id: s
     ob!.status = "pending";
     ob!.accepted = null;
     ob!.invalidated_by = null;
-    body.invocations.push({ id: req.invocation_id, obligation_id: ob!.id, node_id: ob!.node_id, round: ob!.round, subject_hash: body.subject_hash, scope_hash: scopeHash(body.workflow, body.subject, ob!, body.epoch), state: "active" });
+    body.invocations.push({ id: req.invocation_id, obligation_id: ob!.id, node_id: ob!.node_id, round: ob!.round, subject_hash: body.subject_hash, scope_hash: scopeHash(body.workflow, body.subject, ob!, body.epoch), state: "active", evidence: [] });
     return seal(body);
   });
 }
@@ -412,22 +419,18 @@ export function recordVerdict(ledger: AssuranceLedger, rawReceipt: VerdictReceip
       if (r.subject_hash !== body.subject_hash || inv.subject_hash !== body.subject_hash) push("subject-mismatch", `receipt subject ${show(r.subject_hash)} is not the current subject ${body.subject_hash}`);
       if (r.authority !== ob.authority) push("authority-mismatch", `receipt authority ${show(r.authority)} is not ${ob.authority}`);
     }
-    if (verdict === "accept") {
-      if (!evidence.length || !evidence.every((e) => e.availability === "available" && e.source_id === src)) push("missing-evidence", `an accept needs available evidence owned by ${src}`);
-      if (inv) {
-        for (const e of evidence) {
-          if (body.spent_evidence.some((s) => s.sha256 === e.sha256 && s.scope_hash !== inv.scope_hash)) push("evidence-reused", `evidence ${e.sha256} already backed a verdict for a different subject scope`);
-        }
+    if (!evidence.length) push("missing-evidence", "a verdict must cite evidence");
+    if (verdict === "accept" && !evidence.every((e) => e.availability === "available" && e.source_id === src)) push("missing-evidence", `an accept needs available evidence owned by ${src}`);
+    if (inv) {
+      for (const e of evidence) {
+        if (spentIndex(body).some((s) => s.sha256 === e.sha256 && s.scope_hash !== inv.scope_hash)) push("evidence-reused", `evidence ${e.sha256} already backed a verdict for a different subject scope`);
       }
     }
     if (errs.length) throw new Bad(errs[0].rule, errs[0].detail, errs);
     inv!.state = verdict === "accept" ? "accepted" : "rejected";
     ob!.status = verdict === "accept" ? "accepted" : "rejected";
     ob!.accepted = verdict === "accept" ? { invocation_id: inv!.id, round: inv!.round, authority: ob!.authority, subject_hash: inv!.subject_hash, scope_hash: inv!.scope_hash, evidence } : null;
-    if (verdict === "accept") {
-      for (const e of evidence) if (!body.spent_evidence.some((s) => s.sha256 === e.sha256 && s.scope_hash === inv!.scope_hash)) body.spent_evidence.push({ sha256: e.sha256, scope_hash: inv!.scope_hash });
-      if (body.spent_evidence.length > LIMITS.spent) bad("invalid-ledger", `ledger spent-evidence index exceeds ${LIMITS.spent}`);
-    }
+    inv!.evidence = [...new Set(evidence.map((e) => e.sha256))].sort();
     return seal(body);
   });
   return res;
@@ -542,18 +545,20 @@ function verifyBody(body: Body): void {
       if (b.authority !== ob.authority || b.subject_hash !== inv!.subject_hash || b.scope_hash !== inv!.scope_hash) fail(`${ob.id} binding fields differ from its invocation`);
       if (b.scope_hash !== scopeHash(body.workflow, body.subject, ob, body.epoch)) fail(`${ob.id} binding does not match the current subject scope`);
       if (!b.evidence.length || !b.evidence.every((e) => e.availability === "available" && e.source_id === body.subject.source_id)) fail(`${ob.id} binding lacks available evidence`);
-      for (const e of b.evidence) if (!body.spent_evidence.some((s) => s.sha256 === e.sha256 && s.scope_hash === b.scope_hash)) fail(`${ob.id} evidence is not indexed`);
+      if (canonical([...new Set(b.evidence.map((e) => e.sha256))].sort()) !== canonical(inv!.evidence)) fail(`${ob.id} binding evidence differs from its round's recorded evidence`);
     }
   }
   for (const i of body.invocations) {
     if (!obs.has(i.obligation_id)) fail(`invocation ${i.id} names unknown obligation`);
     if (i.state === "active" && i.subject_hash !== body.subject_hash) fail(`open invocation ${i.id} is not on the current subject`);
+    const decided = i.state === "accepted" || i.state === "rejected";
+    if (decided !== i.evidence.length > 0) fail(`invocation ${i.id} evidence is inconsistent with its state`);
   }
 }
 
 function readLedger(v: unknown): Body & { ledger_hash: string } {
   const R: AssuranceRule = "ledger-corrupt";
-  const o = exact(v, ["schema_version", "workflow", "subject", "subject_hash", "epoch", "obligations", "invocations", "spent_evidence", "ledger_hash"], R, "ledger");
+  const o = exact(v, ["schema_version", "workflow", "subject", "subject_hash", "epoch", "obligations", "invocations", "ledger_hash"], R, "ledger");
   if (o.schema_version !== ASSURANCE_LEDGER_SCHEMA_VERSION) bad(R, `schema_version is not ${ASSURANCE_LEDGER_SCHEMA_VERSION}`);
   const w = exact(o.workflow, ["source_id", "id", "definition_hash", "compiler_hash", "policy_hash", "expanded_hash"], R, "workflow");
   const workflow: WorkflowBasis = {
@@ -587,7 +592,7 @@ function readLedger(v: unknown): Body & { ledger_hash: string } {
     };
   });
   const invocations = arr(o.invocations, LIMITS.invocations, R, "invocations").map((x, i): InvocationState => {
-    const v2 = exact(x, ["id", "obligation_id", "node_id", "round", "subject_hash", "scope_hash", "state"], R, `invocations[${i}]`);
+    const v2 = exact(x, ["id", "obligation_id", "node_id", "round", "subject_hash", "scope_hash", "state", "evidence"], R, `invocations[${i}]`);
     return {
       id: str(v2.id, ID, R, "invocation.id"),
       obligation_id: str(v2.obligation_id, ID, R, "invocation.obligation_id"),
@@ -596,11 +601,12 @@ function readLedger(v: unknown): Body & { ledger_hash: string } {
       subject_hash: str(v2.subject_hash, HASH, R, "invocation.subject_hash"),
       scope_hash: str(v2.scope_hash, HASH, R, "invocation.scope_hash"),
       state: oneOf(v2.state, ["active", "accepted", "rejected", "superseded"] as const, R, "invocation.state"),
+      evidence: (() => {
+        const e = arr(v2.evidence, LIMITS.evidence, R, "invocation.evidence").map((h, k) => str(h, HASH, R, `invocation.evidence[${k}]`));
+        if (canonical(e) !== canonical([...new Set(e)].sort())) bad(R, "invocation.evidence must be sorted and unique");
+        return e;
+      })(),
     };
-  });
-  const spent_evidence = arr(o.spent_evidence, LIMITS.spent, R, "spent_evidence").map((x, i) => {
-    const s = exact(x, ["sha256", "scope_hash"], R, `spent_evidence[${i}]`);
-    return { sha256: str(s.sha256, HASH, R, "spent.sha256"), scope_hash: str(s.scope_hash, HASH, R, "spent.scope_hash") };
   });
   return {
     schema_version: ASSURANCE_LEDGER_SCHEMA_VERSION,
@@ -610,7 +616,6 @@ function readLedger(v: unknown): Body & { ledger_hash: string } {
     epoch: int(o.epoch, 0, 1_000_000, R, "epoch"),
     obligations,
     invocations,
-    spent_evidence,
     ledger_hash: str(o.ledger_hash, HASH, R, "ledger_hash"),
   };
 }

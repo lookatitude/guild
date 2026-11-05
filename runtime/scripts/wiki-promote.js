@@ -7543,11 +7543,11 @@ function termMatches(text, t) {
 }
 function matchTerms(assignmentText, glossary, cap = GLOSSARY_TERM_TOKEN_CAP) {
   const text = typeof assignmentText === "string" ? assignmentText.toLowerCase() : "";
-  const hits = glossary.terms.filter((t) => termMatches(text, t)).sort((a, b) => b.term.length - a.term.length || a.term.localeCompare(b.term));
+  const hits2 = glossary.terms.filter((t) => termMatches(text, t)).sort((a, b) => b.term.length - a.term.length || a.term.localeCompare(b.term));
   const out = [];
   const dropped = [];
   let tokens2 = 0;
-  for (const t of hits) {
+  for (const t of hits2) {
     const entry = { term: t.term, definition: t.definition };
     const cost = Math.ceil(`${t.term}: ${t.definition}`.length / 4);
     if (tokens2 + cost > cap) {
@@ -8162,7 +8162,7 @@ function locate(starts, offset) {
   }
   return { line: lo + 1, column: offset - starts[lo] + 1 };
 }
-function collect(content, source, flags, category, hits, starts) {
+function collect(content, source, flags, category, hits2, starts) {
   const re = new RegExp(source, flags.includes("g") ? flags : flags + "g");
   let m;
   while ((m = re.exec(content)) !== null) {
@@ -8170,13 +8170,13 @@ function collect(content, source, flags, category, hits, starts) {
       re.lastIndex++;
       continue;
     }
-    if (!hits.has(m.index)) hits.set(m.index, { ...locate(starts, m.index), length: m[0].length, category });
+    if (!hits2.has(m.index)) hits2.set(m.index, { ...locate(starts, m.index), length: m[0].length, category });
   }
 }
 function evaluateProseContent(content, policy) {
   const starts = lineStarts(content);
-  const hits = /* @__PURE__ */ new Map();
-  for (const [re, label] of PROSE_CREDENTIAL_PATTERNS) collect(content, re.source, re.flags, label, hits, starts);
+  const hits2 = /* @__PURE__ */ new Map();
+  for (const [re, label] of PROSE_CREDENTIAL_PATTERNS) collect(content, re.source, re.flags, label, hits2, starts);
   const failures = [];
   policy.redaction_patterns.forEach((pat, i) => {
     try {
@@ -8185,9 +8185,9 @@ function evaluateProseContent(content, policy) {
       failures.push(`redaction_patterns[${i}] is not a valid regular expression`);
       return;
     }
-    collect(content, pat, "g", `secrets_policy.redaction_patterns[${i}]`, hits, starts);
+    collect(content, pat, "g", `secrets_policy.redaction_patterns[${i}]`, hits2, starts);
   });
-  const spans = [...hits.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s);
+  const spans = [...hits2.entries()].sort((a, b) => a[0] - b[0]).map(([, s]) => s);
   return { ok: spans.length === 0 && failures.length === 0, spans, failures };
 }
 function describeProseRefusal(verdict, fileLabel) {
@@ -8674,47 +8674,29 @@ var init_ingest_pause = __esm({
 
 // src/domains/security/privileged-actions.ts
 function tokens(value) {
-  return value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  return value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+function hits(value, roots, whole) {
+  const flat = value.toLowerCase();
+  return roots.some((r) => flat.includes(r)) || tokens(value).some((t) => whole.includes(t));
 }
 function classifyActionTokens(values) {
   const release = /* @__PURE__ */ new Set();
   const privileged = /* @__PURE__ */ new Set();
   for (const v of values) {
     if (typeof v !== "string") continue;
-    const t = tokens(v);
-    if (t.some((x) => RELEASE_LIKE_TOKENS.includes(x))) release.add(v);
-    if (t.some((x) => PRIVILEGED_TOKENS.includes(x))) privileged.add(v);
+    if (hits(v, RELEASE_LIKE_ROOTS, RELEASE_LIKE_TOKENS)) release.add(v);
+    if (hits(v, PRIVILEGED_ROOTS, PRIVILEGED_TOKENS)) privileged.add(v);
   }
   return { release: [...release].sort(), privileged: [...privileged].sort() };
 }
-var RELEASE_LIKE_TOKENS, PRIVILEGED_TOKENS;
+var RELEASE_LIKE_ROOTS, RELEASE_LIKE_TOKENS, PRIVILEGED_ROOTS, PRIVILEGED_TOKENS;
 var init_privileged_actions = __esm({
   "src/domains/security/privileged-actions.ts"() {
-    RELEASE_LIKE_TOKENS = Object.freeze([
-      "release",
-      "releases",
-      "publish",
-      "deploy",
-      "deployment",
-      "ship",
-      "merge",
-      "promote",
-      "rollout"
-    ]);
-    PRIVILEGED_TOKENS = Object.freeze([
-      "permission",
-      "permissions",
-      "grant",
-      "grants",
-      "secret",
-      "secrets",
-      "credential",
-      "credentials",
-      "admin",
-      "sudo",
-      "privilege",
-      "privileged"
-    ]);
+    RELEASE_LIKE_ROOTS = Object.freeze(["release", "publish", "deploy", "rollout"]);
+    RELEASE_LIKE_TOKENS = Object.freeze(["ship", "merge", "promote"]);
+    PRIVILEGED_ROOTS = Object.freeze(["permission", "credential", "secret", "privilege", "sudo"]);
+    PRIVILEGED_TOKENS = Object.freeze(["grant", "grants", "admin"]);
   }
 });
 
@@ -40773,13 +40755,13 @@ function locateRemoval(text, entry) {
     attempts.push({ needle: afterCtx, insertOffset: 0, label: "the text following the removal" });
   }
   for (const { needle, insertOffset, label } of attempts) {
-    const hits = allIndexesOf(text, needle);
-    if (hits.length === 0) continue;
-    if (hits.length === 1) return { ok: true, start: hits[0] + insertOffset };
+    const hits2 = allIndexesOf(text, needle);
+    if (hits2.length === 0) continue;
+    if (hits2.length === 1) return { ok: true, start: hits2[0] + insertOffset };
     return {
       ok: false,
-      detail: `${label} appears ${hits.length} times; the re-insertion point is ambiguous`,
-      question: `rollback cannot place '${entry.span}' unambiguously in ${entry.path} \u2014 the surrounding text now appears ${hits.length} times. Review it by hand, then re-run rollback.`
+      detail: `${label} appears ${hits2.length} times; the re-insertion point is ambiguous`,
+      question: `rollback cannot place '${entry.span}' unambiguously in ${entry.path} \u2014 the surrounding text now appears ${hits2.length} times. Review it by hand, then re-run rollback.`
     };
   }
   return {
@@ -62404,12 +62386,12 @@ function fsScan(query, guildRoot, opts = {}) {
     if (b._score !== a._score) return b._score - a._score;
     return a.path.localeCompare(b.path);
   });
-  const hits = scored.slice(0, limit).map((s) => ({
+  const hits2 = scored.slice(0, limit).map((s) => ({
     path: s.path,
     title: s.title,
     snippet: s.snippet
   }));
-  return { source: "fs-scanner", hits, scannedDirs: existingDirs };
+  return { source: "fs-scanner", hits: hits2, scannedDirs: existingDirs };
 }
 function runFsScannerCli() {
   const argv = process.argv.slice(2);
@@ -62690,11 +62672,11 @@ function buildUndirectedAdjacency(edges) {
 function resolveSeeds(graph, query) {
   const byId = new Set(graph.nodes.map((n) => n.id));
   if (byId.has(query)) return [query];
-  const hits = /* @__PURE__ */ new Set();
+  const hits2 = /* @__PURE__ */ new Set();
   for (const n of graph.nodes) {
-    if (simpleName(n.id) === query || n.name === query) hits.add(n.id);
+    if (simpleName(n.id) === query || n.name === query) hits2.add(n.id);
   }
-  return [...hits].sort();
+  return [...hits2].sort();
 }
 function toEvidence(node, depth) {
   const refs = lineRefs(node.source_refs);

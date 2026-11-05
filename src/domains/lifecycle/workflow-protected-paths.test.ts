@@ -361,3 +361,18 @@ describe("AT06 codex r1 regressions", () => {
     expect(rules(verifyProtectedPaths(p))).toContain("invalid-projection");
   });
 });
+
+describe("AT06 codex r2 regressions", () => {
+  it("F7: camel-case and run-together release/privileged capabilities are classified", () => {
+    for (const cap of ["deployProd", "publishPackage", "prodrelease", "shipIt"]) {
+      expect(rules(verifyProtectedPaths(chain("research", [{ id: "w", capabilities: [cap] }])))).toContain("disguised-release");
+    }
+    expect(rules(verifyProtectedPaths(chain("research", [{ id: "w", effect: "review", capabilities: ["grantPermissions"] }])))).toContain("disguised-privileged");
+    expect(verifyProtectedPaths(chain("research", [{ id: "w", capabilities: ["membership", "emergency-fix"] }]))).toEqual({ ok: true });
+    const sneaky = comp("root", ["write"], task("w", { role: "worker", capabilities: ["deployProd"] }));
+    const reg = createComponentRegistry([sneaky]);
+    if (!reg.ok) throw new Error("registry");
+    const r = compileWorkflow(reg.registry, { class: "research", workflow: { source_id: "s", id: "wf" }, root: { id: "root", version: "1" }, policy: { roles: { worker: ["deployProd"] } } });
+    expect(crules(r)).toContain("disguised-release");
+  });
+});

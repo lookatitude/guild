@@ -288,3 +288,41 @@ describe("AT07 codex r1 regressions", () => {
     expect(restoreLedger(serializeLedger(l), gone, DEF).ok).toBe(true);
   });
 });
+
+describe("AT07 codex r2 regressions", () => {
+  it("F8: erasing the round evidence history from serialized bytes is refused on restore", () => {
+    const parsed = JSON.parse(serializeLedger(ok(applyMutation(reviewedA(), { subject: B, changed: "unknown" }))));
+    for (const i of parsed.invocations) i.evidence = [];
+    const { ledger_hash: _h, ...body } = parsed;
+    expect(rules(restoreLedger(JSON.stringify({ ...body, ledger_hash: review.assuranceLedgerHash(body) }), B, DEF))).toContain("ledger-corrupt");
+  });
+
+  it("F9: evidence cited by a rejected A round cannot accept B", () => {
+    let l = ok(createAssuranceLedger({ projection: PROJECTION, subject: A, obligations: [OBLIGATIONS[0]] }));
+    l = ok(beginInvocation(l, { obligation_id: "ob-sec", invocation_id: "i1" }));
+    l = ok(recordVerdict(l, { ...receipt(l, "ob-sec", "i1", "c"), verdict: "reject" }));
+    l = ok(applyMutation(l, { subject: B, changed: "unknown" }));
+    l = ok(restoreLedger(serializeLedger(l), B, { projection: PROJECTION, obligations: [OBLIGATIONS[0]] }));
+    l = ok(beginInvocation(l, { obligation_id: "ob-sec", invocation_id: "i2" }));
+    expect(rules(recordVerdict(l, receipt(l, "ob-sec", "i2", "c")))).toContain("evidence-reused");
+  });
+
+  it("F10: a transition that would exceed the restore size limit is refused", () => {
+    const many: ObligationSpec[] = Array.from({ length: 12 }, (_, i) => ({ ...OBLIGATIONS[2], id: `ob-${i}` }));
+    let l = ok(createAssuranceLedger({ projection: PROJECTION, subject: A, obligations: many }));
+    const long = "x".repeat(4096);
+    let refused = false;
+    for (let i = 0; i < 12 && !refused; i++) {
+      l = ok(beginInvocation(l, { obligation_id: `ob-${i}`, invocation_id: `inv-${i}` }));
+      const ev = Array.from({ length: 50 }, (_, k) => ({ ...evidence("c")[0], path: `${"p".repeat(1000)}/${i}-${k}`, sha256: `sha256:${(i * 50 + k).toString(16).padStart(64, "0")}`, schema_version: long, reason: long }));
+      const r = recordVerdict(l, { ...receipt(l, `ob-${i}`, `inv-${i}`, "c"), evidence: ev });
+      if (r.ok) l = r.value;
+      else {
+        expect(rules(r)).toContain("invalid-ledger");
+        refused = true;
+      }
+    }
+    expect(refused).toBe(true);
+    expect(restoreLedger(serializeLedger(l), A, { projection: PROJECTION, obligations: many }).ok).toBe(true);
+  });
+});
