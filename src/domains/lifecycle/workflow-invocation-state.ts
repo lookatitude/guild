@@ -35,15 +35,16 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { checkContained, isRefused, writeContainedFile } from "../kernel";
+import { checkContained, isRefused, prepareContainedWrite, writeContainedFile } from "../kernel";
 import type { CompileManifest, ComponentCondition, WorkflowProjectionV2 } from "./workflow-component-compiler";
 
 export const WORKFLOW_INVOCATION_STATE_SCHEMA = "guild.workflow_invocation_state.v1" as const;
 export const WORKFLOW_INVOCATION_HEAD_SCHEMA = "guild.workflow_invocation_head.v1" as const;
 export const INVOCATION_STATE_FILE = "workflow-invocations.json" as const;
 export const INVOCATION_HEAD_FILE = "workflow-invocations.head.json" as const;
+export const INVOCATION_LOCK_FILE = "workflow-invocations.lock" as const;
 
-const LIMITS = Object.freeze({ fileBytes: 1 << 20, headBytes: 4096, invocations: 1000, questions: 64, evidence: 64, artifacts: 64, reason: 500, depth: 16 });
+const LIMITS = Object.freeze({ fileBytes: 4 << 20, headBytes: 4096, lockBytes: 256, invocations: 1000, questions: 64, evidence: 64, artifacts: 64, reason: 500, depth: 16 });
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const HASH = /^sha256:[a-f0-9]{64}$/;
 
@@ -117,12 +118,14 @@ export interface InvocationStateV1 {
   state_hash: string;
 }
 
-interface HeadV1 { schema_version: typeof WORKFLOW_INVOCATION_HEAD_SCHEMA; run_id: string; seq: number; state_hash: string }
+interface HeadV1 { schema_version: typeof WORKFLOW_INVOCATION_HEAD_SCHEMA; run_id: string; seq: number; state_hash: string; prev_state_hash: string | null }
 
 export type StoreRule =
   | "invalid-input"
   | "path-not-contained"
   | "write-failed"
+  | "state-locked"
+  | "capacity-exceeded"
   | "no-state"
   | "state-exists"
   | "state-missing"
@@ -153,7 +156,12 @@ export interface StoreContext {
 }
 
 /** Crash injection for tests; the production path passes nothing. */
-export interface StoreOptions { faults?: { beforeSnapshot?: () => void; afterSnapshot?: () => void } }
+export interface StoreOptions {
+  /** Crash injection for tests: after the head names the pending snapshot, and after both writes landed. */
+  faults?: { afterHead?: () => void; afterSnapshot?: () => void };
+  /** Lower the snapshot size cap (tests); can never raise it. */
+  maxStateBytes?: number;
+}
 
 export type ResumeAction =
   | { kind: "idle" }
@@ -456,14 +464,14 @@ function checkState(raw: unknown, runId: string): InvocationStateV1 {
 
 // ---------------------------------------------------------------- io
 
-function paths(ctx: StoreContext): { snap: string; head: string } {
+function paths(ctx: StoreContext): { snap: string; head: string; lock: string } {
   if (!isPlain(ctx) || typeof ctx.root !== "string" || typeof ctx.runDir !== "string" || !isId(ctx.run_id)) refuse("invalid-input", "context needs root, runDir and an id run_id");
   if (!path.isAbsolute(ctx.root) || !path.isAbsolute(ctx.runDir)) refuse("invalid-input", "root and runDir must be absolute");
   const rel = path.relative(ctx.root, ctx.runDir);
   if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) refuse("path-not-contained", `run dir ${ctx.runDir} is not inside ${ctx.root}`);
   const c = checkContained(ctx.root, rel);
   if (isRefused(c)) refuse("path-not-contained", `run dir ${ctx.runDir} [${c.code}]`);
-  return { snap: path.join(rel, INVOCATION_STATE_FILE), head: path.join(rel, INVOCATION_HEAD_FILE) };
+  return { snap: path.join(rel, INVOCATION_STATE_FILE), head: path.join(rel, INVOCATION_HEAD_FILE), lock: path.join(rel, INVOCATION_LOCK_FILE) };
 }
 
 function readContained(root: string, rel: string, max: number): string | null {
@@ -477,7 +485,20 @@ function readContained(root: string, rel: string, max: number): string | null {
   }
   if (!st.isFile()) refuse("path-not-contained", `${rel} is not a regular file`);
   if (st.size > max) refuse(C, `${rel} exceeds ${max} bytes`);
-  return fs.readFileSync(c.realPath, "utf8");
+  let fd: number;
+  try {
+    fd = fs.openSync(c.realPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  } catch {
+    refuse("path-not-contained", `${rel} could not be opened without following a link`);
+  }
+  try {
+    const fst = fs.fstatSync(fd);
+    if (!fst.isFile() || fst.ino !== st.ino || fst.dev !== st.dev) refuse("path-not-contained", `${rel} changed while it was read`);
+    if (fst.size > max) refuse(C, `${rel} exceeds ${max} bytes`);
+    return fs.readFileSync(fd, "utf8");
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 function parseJson(text: string, what: string): unknown {
@@ -489,29 +510,36 @@ function parseJson(text: string, what: string): unknown {
   }
 }
 
-interface Loaded { state: InvocationStateV1; headCurrent: boolean }
-
-/** Read and verify the files; `null` when no state was ever written. */
-function readState(ctx: StoreContext): Loaded | null {
+/**
+ * Read and verify the files; `null` when no state was ever written.
+ *
+ * Write order is head first, then snapshot: the head names the exact hash of
+ * the snapshot about to land. So the snapshot either equals the head, or is
+ * the head's named predecessor (the crash fell between the two writes and the
+ * pending change never landed; the caller saw no success). A snapshot the head
+ * does not name is refused, whatever its own chain says.
+ */
+function readState(ctx: StoreContext): InvocationStateV1 | null {
   const p = paths(ctx);
   const headText = readContained(ctx.root, p.head, LIMITS.headBytes);
   const snapText = readContained(ctx.root, p.snap, LIMITS.fileBytes);
   if (snapText === null && headText === null) return null;
-  if (snapText === null) refuse("state-missing", "the head names a snapshot that is gone; refusing to restart the loop budget");
-  const state = checkState(parseJson(snapText, "snapshot"), ctx.run_id);
-  if (headText === null) {
-    // Crash between the very first snapshot and head writes.
-    if (state.seq === 1) return { state, headCurrent: false };
-    refuse("state-missing", "the head file is gone; refusing to trust an unanchored snapshot");
-  }
+  if (headText === null) refuse("state-missing", "the head file is gone; refusing to trust an unanchored snapshot");
   const h = parseJson(headText, "head");
   if (!isPlain(h)) refuse(C, "head is not an object");
-  exactKeys(h, ["schema_version", "run_id", "seq", "state_hash"], C, "head");
+  exactKeys(h, ["schema_version", "run_id", "seq", "state_hash", "prev_state_hash"], C, "head");
   if (h.schema_version !== WORKFLOW_INVOCATION_HEAD_SCHEMA || h.run_id !== ctx.run_id || !isInt(h.seq, 1) || !isHash(h.state_hash)) refuse(C, "head malformed");
-  if (h.seq === state.seq && h.state_hash === state.state_hash) return { state, headCurrent: true };
-  // Torn write: the snapshot was renamed into place, the head was not. Exactly one step ahead, chained.
-  if (state.seq === h.seq + 1 && state.prev_state_hash === h.state_hash) return { state, headCurrent: false };
-  refuse("state-stale", `snapshot seq ${state.seq} does not match head seq ${String(h.seq)}`);
+  if (h.prev_state_hash !== null && !isHash(h.prev_state_hash)) refuse(C, "head malformed");
+  if ((h.seq === 1) !== (h.prev_state_hash === null)) refuse(C, "only the first head has no predecessor");
+  if (snapText === null) {
+    // The very first write crashed after its head: nothing ever landed.
+    if (h.seq === 1) return null;
+    refuse("state-missing", "the head names a snapshot that is gone; refusing to restart the loop budget");
+  }
+  const state = checkState(parseJson(snapText, "snapshot"), ctx.run_id);
+  if (h.seq === state.seq && h.state_hash === state.state_hash && h.prev_state_hash === state.prev_state_hash) return state;
+  if (h.seq === state.seq + 1 && h.prev_state_hash === state.state_hash) return state;
+  refuse("state-stale", `snapshot seq ${state.seq} is not the one the head (seq ${String(h.seq)}) names`);
 }
 
 function persist(ctx: StoreContext, prev: InvocationStateV1 | null, next: Omit<InvocationStateV1, "seq" | "prev_state_hash" | "state_hash">, opts: StoreOptions): InvocationStateV1 {
@@ -519,25 +547,82 @@ function persist(ctx: StoreContext, prev: InvocationStateV1 | null, next: Omit<I
   const full = { ...next, seq: (prev?.seq ?? 0) + 1, prev_state_hash: prev?.state_hash ?? null, state_hash: "" } as InvocationStateV1;
   full.state_hash = invocationStateHash(full);
   checkState(JSON.parse(JSON.stringify(full)), ctx.run_id);
-  const head: HeadV1 = { schema_version: WORKFLOW_INVOCATION_HEAD_SCHEMA, run_id: ctx.run_id, seq: full.seq, state_hash: full.state_hash };
-  opts.faults?.beforeSnapshot?.();
-  const w1 = writeContainedFile(ctx.root, p.snap, Buffer.from(JSON.stringify(full, null, 2) + "\n", "utf8"));
-  if (!w1.written) refuse(w1.code === "write-failed" ? "write-failed" : "path-not-contained", `snapshot: ${w1.detail ?? w1.code}`);
+  const bytes = Buffer.from(JSON.stringify(full, null, 2) + "\n", "utf8");
+  const cap = Math.min(LIMITS.fileBytes, isInt(opts.maxStateBytes, 1) ? opts.maxStateBytes : LIMITS.fileBytes);
+  if (bytes.length > cap) refuse("capacity-exceeded", `the next snapshot is ${bytes.length} bytes; the cap is ${cap}. Nothing was written — escalate or replan`);
+  const head: HeadV1 = { schema_version: WORKFLOW_INVOCATION_HEAD_SCHEMA, run_id: ctx.run_id, seq: full.seq, state_hash: full.state_hash, prev_state_hash: full.prev_state_hash };
+  const w1 = writeContainedFile(ctx.root, p.head, Buffer.from(JSON.stringify(head, null, 2) + "\n", "utf8"));
+  if (!w1.written) refuse(w1.code === "write-failed" ? "write-failed" : "path-not-contained", `head: ${w1.detail ?? w1.code}`);
+  opts.faults?.afterHead?.();
+  const w2 = writeContainedFile(ctx.root, p.snap, bytes);
+  if (!w2.written) refuse(w2.code === "write-failed" ? "write-failed" : "path-not-contained", `snapshot: ${w2.detail ?? w2.code}`);
   opts.faults?.afterSnapshot?.();
-  const w2 = writeContainedFile(ctx.root, p.head, Buffer.from(JSON.stringify(head, null, 2) + "\n", "utf8"));
-  if (!w2.written) refuse(w2.code === "write-failed" ? "write-failed" : "path-not-contained", `head: ${w2.detail ?? w2.code}`);
   return full;
+}
+
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/**
+ * One controller at a time per run: an exclusive-create lock file holding
+ * `<pid>:<nonce>`. A lock whose pid is dead is a crashed holder and is taken
+ * over; a live holder refuses with `state-locked`.
+ */
+function withLock<T>(ctx: StoreContext, fn: () => T): T {
+  const p = paths(ctx);
+  const prep = prepareContainedWrite(ctx.root, p.lock, { requireRegularFileLeaf: true });
+  if (isRefused(prep)) refuse("path-not-contained", `lock: [${prep.code}]`);
+  const token = `${process.pid}:${crypto.randomBytes(8).toString("hex")}`;
+  let held = false;
+  for (let attempt = 0; attempt < 2 && !held; attempt++) {
+    try {
+      const fd = fs.openSync(prep.realPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
+      try {
+        fs.writeSync(fd, token);
+      } finally {
+        fs.closeSync(fd);
+      }
+      held = true;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") refuse("write-failed", `lock: ${(err as Error).message}`);
+      const text = readContained(ctx.root, p.lock, LIMITS.lockBytes) ?? "";
+      const pid = Number(/^(\d+):/.exec(text)?.[1]);
+      if (Number.isInteger(pid) && pid > 0 && pidAlive(pid)) refuse("state-locked", `run ${ctx.run_id} is held by live controller pid ${pid}`);
+      if (attempt === 1) break;
+      try {
+        fs.unlinkSync(prep.realPath);
+      } catch {
+        // Another controller took it over first; the retry decides.
+      }
+    }
+  }
+  if (!held) refuse("state-locked", `run ${ctx.run_id} lock could not be taken`);
+  try {
+    return fn();
+  } finally {
+    try {
+      if (fs.readFileSync(prep.realPath, "utf8") === token) fs.unlinkSync(prep.realPath);
+    } catch {
+      // Already gone.
+    }
+  }
 }
 
 /** Load, verify and require the state to be bound to exactly this basis. */
 function loadBound(ctx: StoreContext, raw: InvocationBasis): { state: InvocationStateV1; basis: StateBasis } {
   const basis = basisOf(raw);
-  const loaded = readState(ctx);
-  if (!loaded) refuse("no-state", "no invocation state on this run; call initInvocationState first");
-  if (loaded.state.basis_hash !== sha256Of(basis)) {
-    refuse("replan-required", `run state is bound to definition ${loaded.state.basis.definition_hash}; the current basis is ${basis.definition_hash} — replan explicitly`);
+  const state = readState(ctx);
+  if (!state) refuse("no-state", "no invocation state on this run; call initInvocationState first");
+  if (state.basis_hash !== sha256Of(basis)) {
+    refuse("replan-required", `run state is bound to definition ${state.basis.definition_hash}; the current basis is ${basis.definition_hash} — replan explicitly`);
   }
-  return { state: loaded.state, basis };
+  return { state, basis };
 }
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
@@ -571,15 +656,15 @@ function input(raw: unknown, keys: readonly string[], optional: readonly string[
 
 /** Create the run's invocation state, bound to this compile basis. */
 export function initInvocationState(ctx: StoreContext, raw: InvocationBasis, opts: StoreOptions = {}): StoreResult<InvocationStateV1> {
-  return guard(() => {
+  return guard(() => withLock(ctx, () => {
     const basis = basisOf(raw);
     const existing = readState(ctx);
     if (existing) {
-      if (existing.state.basis_hash !== sha256Of(basis)) refuse("replan-required", "the run already holds state for another definition");
+      if (existing.basis_hash !== sha256Of(basis)) refuse("replan-required", "the run already holds state for another definition");
       refuse("state-exists", "the run already holds invocation state; resume it");
     }
     return persist(ctx, null, { schema_version: WORKFLOW_INVOCATION_STATE_SCHEMA, run_id: ctx.run_id, basis, basis_hash: sha256Of(basis), stack: [], invocations: [], previous: null }, opts);
-  });
+  }));
 }
 
 /** Verified state for this basis. Never writes. */
@@ -609,7 +694,7 @@ export interface OpenInvocationInput { loop_id: string; subject_hash: string; pa
  * invocation with its spent budget — never a fresh one.
  */
 export function openInvocation(ctx: StoreContext, raw: InvocationBasis, rawIn: OpenInvocationInput, opts: StoreOptions = {}): StoreResult<InvocationRecord> {
-  return guard(() => {
+  return guard(() => withLock(ctx, () => {
     const { state } = loadBound(ctx, raw);
     const inp = input(rawIn, ["loop_id", "subject_hash"], ["parent"]);
     if (!isId(inp.loop_id) || !isHash(inp.subject_hash)) refuse("invalid-input", "loop_id must be an id and subject_hash a sha256:<hex> digest");
@@ -659,7 +744,7 @@ export function openInvocation(ctx: StoreContext, raw: InvocationBasis, rawIn: O
     next.stack.push(id);
     persist(ctx, state, next, opts);
     return inv;
-  });
+  }));
 }
 
 /**
@@ -668,7 +753,7 @@ export function openInvocation(ctx: StoreContext, raw: InvocationBasis, rawIn: O
  * of skipping or repeating a round.
  */
 export function beginRound(ctx: StoreContext, raw: InvocationBasis, rawIn: { invocation_id: string; expected_round: number }, opts: StoreOptions = {}): StoreResult<{ invocation_id: string; round: number }> {
-  return guard(() => {
+  return guard(() => withLock(ctx, () => {
     const { state } = loadBound(ctx, raw);
     const inp = input(rawIn, ["invocation_id", "expected_round"]);
     if (!isInt(inp.expected_round, 1)) refuse("invalid-input", "expected_round must be a positive integer");
@@ -686,7 +771,7 @@ export function beginRound(ctx: StoreContext, raw: InvocationBasis, rawIn: { inv
     target.rounds.push({ round: n, status: "started", outcome: null, unresolved_questions: [], evidence: [], obligations_accepted: false, artifacts: [] });
     persist(ctx, state, next, opts);
     return { invocation_id: inv.id, round: n };
-  });
+  }));
 }
 
 export interface CompleteRoundInput {
@@ -701,7 +786,7 @@ export interface CompleteRoundInput {
 
 /** Record the in-flight round's result; derive accepted / active / blocked. Idempotent for an identical replay. */
 export function completeRound(ctx: StoreContext, raw: InvocationBasis, rawIn: CompleteRoundInput, opts: StoreOptions = {}): StoreResult<{ state: InvocationStatus; escalation: Escalation | null; replayed: boolean }> {
-  return guard(() => {
+  return guard(() => withLock(ctx, () => {
     const { state } = loadBound(ctx, raw);
     const inp = input(rawIn, ["invocation_id", "round", "outcome", "unresolved_questions", "evidence"], ["obligations_accepted", "artifacts"]);
     if (!isInt(inp.round, 1) || !isId(inp.outcome)) refuse("invalid-input", "round must be a positive integer and outcome an id");
@@ -734,12 +819,12 @@ export function completeRound(ctx: StoreContext, raw: InvocationBasis, rawIn: Co
     if (d.state === "accepted") next.stack.pop();
     persist(ctx, state, next, opts);
     return { state: d.state, escalation: d.escalation, replayed: false };
-  });
+  }));
 }
 
 /** Operator/controller cancel of the innermost open invocation (the way past an exhausted loop short of a replan). */
 export function cancelInvocation(ctx: StoreContext, raw: InvocationBasis, rawIn: { invocation_id: string; reason: string }, opts: StoreOptions = {}): StoreResult<InvocationRecord> {
-  return guard(() => {
+  return guard(() => withLock(ctx, () => {
     const { state } = loadBound(ctx, raw);
     const inp = input(rawIn, ["invocation_id", "reason"]);
     if (typeof inp.reason !== "string" || inp.reason.trim() === "" || inp.reason.length > LIMITS.reason) refuse("invalid-input", `reason must be 1..${LIMITS.reason} chars`);
@@ -754,7 +839,7 @@ export function cancelInvocation(ctx: StoreContext, raw: InvocationBasis, rawIn:
     next.stack.pop();
     persist(ctx, state, next, opts);
     return target;
-  });
+  }));
 }
 
 /**
@@ -765,13 +850,12 @@ export function cancelInvocation(ctx: StoreContext, raw: InvocationBasis, rawIn:
  * definition still needs W03's recomposition and renewed team approval.
  */
 export function replanInvocationState(ctx: StoreContext, raw: InvocationBasis, rawIn: { reason: string }, opts: StoreOptions = {}): StoreResult<InvocationStateV1> {
-  return guard(() => {
+  return guard(() => withLock(ctx, () => {
     const basis = basisOf(raw);
     const inp = input(rawIn, ["reason"]);
     if (typeof inp.reason !== "string" || inp.reason.trim() === "" || inp.reason.length > LIMITS.reason) refuse("invalid-input", `reason must be 1..${LIMITS.reason} chars`);
-    const loaded = readState(ctx);
-    if (!loaded) refuse("no-state", "nothing to replan; initialise instead");
-    const old = loaded.state;
+    const old = readState(ctx);
+    if (!old) refuse("no-state", "nothing to replan; initialise instead");
     const basisHash = sha256Of(basis);
     if (old.basis_hash === basisHash) refuse("replan-unchanged", "the basis is unchanged; resume the existing invocations");
     const openInv = old.invocations.filter((i) => i.state === "active" || i.state === "blocked");
@@ -786,7 +870,7 @@ export function replanInvocationState(ctx: StoreContext, raw: InvocationBasis, r
       cancelled_invocations: openInv.map((i) => i.id).sort(),
     };
     return persist(ctx, old, { schema_version: WORKFLOW_INVOCATION_STATE_SCHEMA, run_id: ctx.run_id, basis, basis_hash: basisHash, stack: [], invocations: [], previous }, opts);
-  });
+  }));
 }
 
 function lastCompleted(inv: InvocationRecord): string[] {

@@ -69,7 +69,9 @@ import { proposalHashOf, writeProposal, type TeamProposalV2 } from "../src/domai
 import type { TeamScheduleV1 } from "../src/domains/teams/index";
 import { recordDecision, writeDecision, type TeamDecisionV1 } from "../src/domains/teams/index";
 import { ensureStorageLayout } from "./lib/state/ensure-storage-layout";
-import { loadComponentRegistry, loadPhaseCompositionInputs, phaseBinding, type WorkflowClass } from "../src/domains/lifecycle";
+import { COMPONENT_DEFINITION_SEGMENT, loadComponentRegistry, loadPhaseCompositionInputs, phaseBinding, type WorkflowClass } from "../src/domains/lifecycle";
+import { checkContained, isRefused } from "../src/domains/kernel";
+import { createGuildStorage } from "../src/domains/state";
 
 const USAGE = [
   "usage: team-decide.ts <review|restructure|gate|persist|record|bind> [flags]",
@@ -295,7 +297,22 @@ export function main(argv: string[] = process.argv.slice(2)): number {
       };
       const loaded = loadPhaseCompositionInputs({ root: cwd, proposal: f["proposal"] as string, plan: f["plan"] as string, qa_policy: f["qa_policy"] as string });
       if (!loaded.ok) return refused(loaded.violations);
-      const reg = loadComponentRegistry({ cwd });
+      // The registry loader reads every *.yaml under the component tree; prove the
+      // tree and each file resolve inside the project root before it does.
+      const storage = createGuildStorage(cwd);
+      const compDir = storage.definition(COMPONENT_DEFINITION_SEGMENT);
+      const escapes: Array<{ rule: string; detail: string }> = [];
+      const relDir = path.relative(cwd, compDir);
+      const dirCheck = checkContained(cwd, relDir);
+      if (isRefused(dirCheck)) escapes.push({ rule: "path-not-contained", detail: `${relDir} [${dirCheck.code}]` });
+      else if (fs.existsSync(compDir)) {
+        for (const name of fs.readdirSync(compDir).filter((n) => /\.ya?ml$/.test(n))) {
+          const c = checkContained(cwd, path.join(relDir, name), { policy: "physical", requireRegularFileLeaf: true });
+          if (isRefused(c)) escapes.push({ rule: "path-not-contained", detail: `${path.join(relDir, name)} [${c.code}]` });
+        }
+      }
+      if (escapes.length) return refused(escapes);
+      const reg = loadComponentRegistry({ cwd, storage });
       if (!reg.ok) return refused(reg.violations);
       const b = phaseBinding(reg.registry, {
         phase: f["phase"] as string,

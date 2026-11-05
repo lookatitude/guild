@@ -42474,7 +42474,7 @@ var LIMITS;
 var init_workflow_invocation_state = __esm({
   "src/domains/lifecycle/workflow-invocation-state.ts"() {
     init_kernel();
-    LIMITS = Object.freeze({ fileBytes: 1 << 20, headBytes: 4096, invocations: 1e3, questions: 64, evidence: 64, artifacts: 64, reason: 500, depth: 16 });
+    LIMITS = Object.freeze({ fileBytes: 4 << 20, headBytes: 4096, lockBytes: 256, invocations: 1e3, questions: 64, evidence: 64, artifacts: 64, reason: 500, depth: 16 });
   }
 });
 

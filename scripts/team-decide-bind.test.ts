@@ -96,6 +96,13 @@ describe("team-decide bind", () => {
     expect(main(ARGS({ component: "nope@1" }))).toBe(3);
     expect(err).toContain("unknown-component");
     expect(main(ARGS({ component: "research-short" }))).toBe(1);
+    // A component file symlinked out of the project is refused, not read.
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "w04-bind-out-"));
+    fs.writeFileSync(path.join(outside, "ext.yaml"), COMPONENT.replace("research-short", "external"));
+    fs.symlinkSync(path.join(outside, "ext.yaml"), path.join(root, ".guild/components/external.yaml"));
+    err = "";
+    expect(main(ARGS())).toBe(3);
+    expect(err).toContain("path-not-contained");
     const noPhase = ARGS().filter((a, i, all) => a !== "--phase" && all[i - 1] !== "--phase");
     expect(main(noPhase)).toBe(1);
   });

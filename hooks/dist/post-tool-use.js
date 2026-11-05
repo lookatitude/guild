@@ -52039,7 +52039,7 @@ function paths(ctx) {
   if (rel2 === "" || rel2.startsWith("..") || path100.isAbsolute(rel2)) refuse7("path-not-contained", `run dir ${ctx.runDir} is not inside ${ctx.root}`);
   const c = checkContained(ctx.root, rel2);
   if (isRefused(c)) refuse7("path-not-contained", `run dir ${ctx.runDir} [${c.code}]`);
-  return { snap: path100.join(rel2, INVOCATION_STATE_FILE), head: path100.join(rel2, INVOCATION_HEAD_FILE) };
+  return { snap: path100.join(rel2, INVOCATION_STATE_FILE), head: path100.join(rel2, INVOCATION_HEAD_FILE), lock: path100.join(rel2, INVOCATION_LOCK_FILE) };
 }
 function readContained2(root, rel2, max) {
   const c = checkContained(root, rel2, { requireRegularFileLeaf: true });
@@ -52052,7 +52052,20 @@ function readContained2(root, rel2, max) {
   }
   if (!st.isFile()) refuse7("path-not-contained", `${rel2} is not a regular file`);
   if (st.size > max) refuse7(C, `${rel2} exceeds ${max} bytes`);
-  return fs86.readFileSync(c.realPath, "utf8");
+  let fd;
+  try {
+    fd = fs86.openSync(c.realPath, fs86.constants.O_RDONLY | fs86.constants.O_NOFOLLOW);
+  } catch {
+    refuse7("path-not-contained", `${rel2} could not be opened without following a link`);
+  }
+  try {
+    const fst = fs86.fstatSync(fd);
+    if (!fst.isFile() || fst.ino !== st.ino || fst.dev !== st.dev) refuse7("path-not-contained", `${rel2} changed while it was read`);
+    if (fst.size > max) refuse7(C, `${rel2} exceeds ${max} bytes`);
+    return fs86.readFileSync(fd, "utf8");
+  } finally {
+    fs86.closeSync(fd);
+  }
 }
 function parseJson(text, what) {
   try {
@@ -52067,42 +52080,92 @@ function readState(ctx) {
   const headText = readContained2(ctx.root, p.head, LIMITS2.headBytes);
   const snapText = readContained2(ctx.root, p.snap, LIMITS2.fileBytes);
   if (snapText === null && headText === null) return null;
-  if (snapText === null) refuse7("state-missing", "the head names a snapshot that is gone; refusing to restart the loop budget");
-  const state = checkState(parseJson(snapText, "snapshot"), ctx.run_id);
-  if (headText === null) {
-    if (state.seq === 1) return { state, headCurrent: false };
-    refuse7("state-missing", "the head file is gone; refusing to trust an unanchored snapshot");
-  }
+  if (headText === null) refuse7("state-missing", "the head file is gone; refusing to trust an unanchored snapshot");
   const h = parseJson(headText, "head");
   if (!isPlain3(h)) refuse7(C, "head is not an object");
-  exactKeys3(h, ["schema_version", "run_id", "seq", "state_hash"], C, "head");
+  exactKeys3(h, ["schema_version", "run_id", "seq", "state_hash", "prev_state_hash"], C, "head");
   if (h.schema_version !== WORKFLOW_INVOCATION_HEAD_SCHEMA || h.run_id !== ctx.run_id || !isInt(h.seq, 1) || !isHash(h.state_hash)) refuse7(C, "head malformed");
-  if (h.seq === state.seq && h.state_hash === state.state_hash) return { state, headCurrent: true };
-  if (state.seq === h.seq + 1 && state.prev_state_hash === h.state_hash) return { state, headCurrent: false };
-  refuse7("state-stale", `snapshot seq ${state.seq} does not match head seq ${String(h.seq)}`);
+  if (h.prev_state_hash !== null && !isHash(h.prev_state_hash)) refuse7(C, "head malformed");
+  if (h.seq === 1 !== (h.prev_state_hash === null)) refuse7(C, "only the first head has no predecessor");
+  if (snapText === null) {
+    if (h.seq === 1) return null;
+    refuse7("state-missing", "the head names a snapshot that is gone; refusing to restart the loop budget");
+  }
+  const state = checkState(parseJson(snapText, "snapshot"), ctx.run_id);
+  if (h.seq === state.seq && h.state_hash === state.state_hash && h.prev_state_hash === state.prev_state_hash) return state;
+  if (h.seq === state.seq + 1 && h.prev_state_hash === state.state_hash) return state;
+  refuse7("state-stale", `snapshot seq ${state.seq} is not the one the head (seq ${String(h.seq)}) names`);
 }
 function persist(ctx, prev, next, opts) {
   const p = paths(ctx);
   const full = { ...next, seq: (prev?.seq ?? 0) + 1, prev_state_hash: prev?.state_hash ?? null, state_hash: "" };
   full.state_hash = invocationStateHash(full);
   checkState(JSON.parse(JSON.stringify(full)), ctx.run_id);
-  const head = { schema_version: WORKFLOW_INVOCATION_HEAD_SCHEMA, run_id: ctx.run_id, seq: full.seq, state_hash: full.state_hash };
-  opts.faults?.beforeSnapshot?.();
-  const w1 = writeContainedFile(ctx.root, p.snap, Buffer.from(JSON.stringify(full, null, 2) + "\n", "utf8"));
-  if (!w1.written) refuse7(w1.code === "write-failed" ? "write-failed" : "path-not-contained", `snapshot: ${w1.detail ?? w1.code}`);
+  const bytes = Buffer.from(JSON.stringify(full, null, 2) + "\n", "utf8");
+  const cap = Math.min(LIMITS2.fileBytes, isInt(opts.maxStateBytes, 1) ? opts.maxStateBytes : LIMITS2.fileBytes);
+  if (bytes.length > cap) refuse7("capacity-exceeded", `the next snapshot is ${bytes.length} bytes; the cap is ${cap}. Nothing was written \u2014 escalate or replan`);
+  const head = { schema_version: WORKFLOW_INVOCATION_HEAD_SCHEMA, run_id: ctx.run_id, seq: full.seq, state_hash: full.state_hash, prev_state_hash: full.prev_state_hash };
+  const w1 = writeContainedFile(ctx.root, p.head, Buffer.from(JSON.stringify(head, null, 2) + "\n", "utf8"));
+  if (!w1.written) refuse7(w1.code === "write-failed" ? "write-failed" : "path-not-contained", `head: ${w1.detail ?? w1.code}`);
+  opts.faults?.afterHead?.();
+  const w2 = writeContainedFile(ctx.root, p.snap, bytes);
+  if (!w2.written) refuse7(w2.code === "write-failed" ? "write-failed" : "path-not-contained", `snapshot: ${w2.detail ?? w2.code}`);
   opts.faults?.afterSnapshot?.();
-  const w2 = writeContainedFile(ctx.root, p.head, Buffer.from(JSON.stringify(head, null, 2) + "\n", "utf8"));
-  if (!w2.written) refuse7(w2.code === "write-failed" ? "write-failed" : "path-not-contained", `head: ${w2.detail ?? w2.code}`);
   return full;
+}
+function pidAlive2(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === "EPERM";
+  }
+}
+function withLock(ctx, fn) {
+  const p = paths(ctx);
+  const prep = prepareContainedWrite(ctx.root, p.lock, { requireRegularFileLeaf: true });
+  if (isRefused(prep)) refuse7("path-not-contained", `lock: [${prep.code}]`);
+  const token = `${process.pid}:${crypto30.randomBytes(8).toString("hex")}`;
+  let held = false;
+  for (let attempt = 0; attempt < 2 && !held; attempt++) {
+    try {
+      const fd = fs86.openSync(prep.realPath, fs86.constants.O_WRONLY | fs86.constants.O_CREAT | fs86.constants.O_EXCL | fs86.constants.O_NOFOLLOW, 384);
+      try {
+        fs86.writeSync(fd, token);
+      } finally {
+        fs86.closeSync(fd);
+      }
+      held = true;
+    } catch (err) {
+      if (err.code !== "EEXIST") refuse7("write-failed", `lock: ${err.message}`);
+      const text = readContained2(ctx.root, p.lock, LIMITS2.lockBytes) ?? "";
+      const pid = Number(/^(\d+):/.exec(text)?.[1]);
+      if (Number.isInteger(pid) && pid > 0 && pidAlive2(pid)) refuse7("state-locked", `run ${ctx.run_id} is held by live controller pid ${pid}`);
+      if (attempt === 1) break;
+      try {
+        fs86.unlinkSync(prep.realPath);
+      } catch {
+      }
+    }
+  }
+  if (!held) refuse7("state-locked", `run ${ctx.run_id} lock could not be taken`);
+  try {
+    return fn();
+  } finally {
+    try {
+      if (fs86.readFileSync(prep.realPath, "utf8") === token) fs86.unlinkSync(prep.realPath);
+    } catch {
+    }
+  }
 }
 function loadBound(ctx, raw) {
   const basis = basisOf(raw);
-  const loaded = readState(ctx);
-  if (!loaded) refuse7("no-state", "no invocation state on this run; call initInvocationState first");
-  if (loaded.state.basis_hash !== sha256Of4(basis)) {
-    refuse7("replan-required", `run state is bound to definition ${loaded.state.basis.definition_hash}; the current basis is ${basis.definition_hash} \u2014 replan explicitly`);
+  const state = readState(ctx);
+  if (!state) refuse7("no-state", "no invocation state on this run; call initInvocationState first");
+  if (state.basis_hash !== sha256Of4(basis)) {
+    refuse7("replan-required", `run state is bound to definition ${state.basis.definition_hash}; the current basis is ${basis.definition_hash} \u2014 replan explicitly`);
   }
-  return { state: loaded.state, basis };
+  return { state, basis };
 }
 function body(s) {
   return clone({ schema_version: s.schema_version, run_id: s.run_id, basis: s.basis, basis_hash: s.basis_hash, stack: s.stack, invocations: s.invocations, previous: s.previous });
@@ -52130,15 +52193,15 @@ function input(raw, keys, optional = []) {
   return v;
 }
 function initInvocationState(ctx, raw, opts = {}) {
-  return guard(() => {
+  return guard(() => withLock(ctx, () => {
     const basis = basisOf(raw);
     const existing = readState(ctx);
     if (existing) {
-      if (existing.state.basis_hash !== sha256Of4(basis)) refuse7("replan-required", "the run already holds state for another definition");
+      if (existing.basis_hash !== sha256Of4(basis)) refuse7("replan-required", "the run already holds state for another definition");
       refuse7("state-exists", "the run already holds invocation state; resume it");
     }
     return persist(ctx, null, { schema_version: WORKFLOW_INVOCATION_STATE_SCHEMA, run_id: ctx.run_id, basis, basis_hash: sha256Of4(basis), stack: [], invocations: [], previous: null }, opts);
-  });
+  }));
 }
 function loadInvocationState(ctx, raw) {
   return guard(() => loadBound(ctx, raw).state);
@@ -52156,7 +52219,7 @@ function resumeInvocations(ctx, raw) {
   });
 }
 function openInvocation(ctx, raw, rawIn, opts = {}) {
-  return guard(() => {
+  return guard(() => withLock(ctx, () => {
     const { state } = loadBound(ctx, raw);
     const inp = input(rawIn, ["loop_id", "subject_hash"], ["parent"]);
     if (!isId(inp.loop_id) || !isHash(inp.subject_hash)) refuse7("invalid-input", "loop_id must be an id and subject_hash a sha256:<hex> digest");
@@ -52206,10 +52269,10 @@ function openInvocation(ctx, raw, rawIn, opts = {}) {
     next.stack.push(id);
     persist(ctx, state, next, opts);
     return inv;
-  });
+  }));
 }
 function beginRound(ctx, raw, rawIn, opts = {}) {
-  return guard(() => {
+  return guard(() => withLock(ctx, () => {
     const { state } = loadBound(ctx, raw);
     const inp = input(rawIn, ["invocation_id", "expected_round"]);
     if (!isInt(inp.expected_round, 1)) refuse7("invalid-input", "expected_round must be a positive integer");
@@ -52227,10 +52290,10 @@ function beginRound(ctx, raw, rawIn, opts = {}) {
     target.rounds.push({ round: n, status: "started", outcome: null, unresolved_questions: [], evidence: [], obligations_accepted: false, artifacts: [] });
     persist(ctx, state, next, opts);
     return { invocation_id: inv.id, round: n };
-  });
+  }));
 }
 function completeRound(ctx, raw, rawIn, opts = {}) {
-  return guard(() => {
+  return guard(() => withLock(ctx, () => {
     const { state } = loadBound(ctx, raw);
     const inp = input(rawIn, ["invocation_id", "round", "outcome", "unresolved_questions", "evidence"], ["obligations_accepted", "artifacts"]);
     if (!isInt(inp.round, 1) || !isId(inp.outcome)) refuse7("invalid-input", "round must be a positive integer and outcome an id");
@@ -52263,10 +52326,10 @@ function completeRound(ctx, raw, rawIn, opts = {}) {
     if (d.state === "accepted") next.stack.pop();
     persist(ctx, state, next, opts);
     return { state: d.state, escalation: d.escalation, replayed: false };
-  });
+  }));
 }
 function cancelInvocation(ctx, raw, rawIn, opts = {}) {
-  return guard(() => {
+  return guard(() => withLock(ctx, () => {
     const { state } = loadBound(ctx, raw);
     const inp = input(rawIn, ["invocation_id", "reason"]);
     if (typeof inp.reason !== "string" || inp.reason.trim() === "" || inp.reason.length > LIMITS2.reason) refuse7("invalid-input", `reason must be 1..${LIMITS2.reason} chars`);
@@ -52281,16 +52344,15 @@ function cancelInvocation(ctx, raw, rawIn, opts = {}) {
     next.stack.pop();
     persist(ctx, state, next, opts);
     return target;
-  });
+  }));
 }
 function replanInvocationState(ctx, raw, rawIn, opts = {}) {
-  return guard(() => {
+  return guard(() => withLock(ctx, () => {
     const basis = basisOf(raw);
     const inp = input(rawIn, ["reason"]);
     if (typeof inp.reason !== "string" || inp.reason.trim() === "" || inp.reason.length > LIMITS2.reason) refuse7("invalid-input", `reason must be 1..${LIMITS2.reason} chars`);
-    const loaded = readState(ctx);
-    if (!loaded) refuse7("no-state", "nothing to replan; initialise instead");
-    const old = loaded.state;
+    const old = readState(ctx);
+    if (!old) refuse7("no-state", "nothing to replan; initialise instead");
     const basisHash = sha256Of4(basis);
     if (old.basis_hash === basisHash) refuse7("replan-unchanged", "the basis is unchanged; resume the existing invocations");
     const openInv = old.invocations.filter((i) => i.state === "active" || i.state === "blocked");
@@ -52305,7 +52367,7 @@ function replanInvocationState(ctx, raw, rawIn, opts = {}) {
       cancelled_invocations: openInv.map((i) => i.id).sort()
     };
     return persist(ctx, old, { schema_version: WORKFLOW_INVOCATION_STATE_SCHEMA, run_id: ctx.run_id, basis, basis_hash: basisHash, stack: [], invocations: [], previous }, opts);
-  });
+  }));
 }
 function lastCompleted(inv) {
   for (let k = inv.rounds.length - 1; k >= 0; k--) if (inv.rounds[k].status === "completed") return inv.rounds[k].unresolved_questions;
@@ -52327,7 +52389,7 @@ function overlayInvocations(projection, state) {
   }));
   return { ...clone(projection), invocations };
 }
-var crypto30, fs86, path100, WORKFLOW_INVOCATION_STATE_SCHEMA, WORKFLOW_INVOCATION_HEAD_SCHEMA, INVOCATION_STATE_FILE, INVOCATION_HEAD_FILE, LIMITS2, ID3, HASH, Refusal, isId, isHash, isInt, STATE_KEYS, INV_KEYS, ROUND_KEYS, C, clone;
+var crypto30, fs86, path100, WORKFLOW_INVOCATION_STATE_SCHEMA, WORKFLOW_INVOCATION_HEAD_SCHEMA, INVOCATION_STATE_FILE, INVOCATION_HEAD_FILE, INVOCATION_LOCK_FILE, LIMITS2, ID3, HASH, Refusal, isId, isHash, isInt, STATE_KEYS, INV_KEYS, ROUND_KEYS, C, clone;
 var init_workflow_invocation_state = __esm({
   "src/domains/lifecycle/workflow-invocation-state.ts"() {
     crypto30 = __toESM(require("node:crypto"));
@@ -52338,7 +52400,8 @@ var init_workflow_invocation_state = __esm({
     WORKFLOW_INVOCATION_HEAD_SCHEMA = "guild.workflow_invocation_head.v1";
     INVOCATION_STATE_FILE = "workflow-invocations.json";
     INVOCATION_HEAD_FILE = "workflow-invocations.head.json";
-    LIMITS2 = Object.freeze({ fileBytes: 1 << 20, headBytes: 4096, invocations: 1e3, questions: 64, evidence: 64, artifacts: 64, reason: 500, depth: 16 });
+    INVOCATION_LOCK_FILE = "workflow-invocations.lock";
+    LIMITS2 = Object.freeze({ fileBytes: 4 << 20, headBytes: 4096, lockBytes: 256, invocations: 1e3, questions: 64, evidence: 64, artifacts: 64, reason: 500, depth: 16 });
     ID3 = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
     HASH = /^sha256:[a-f0-9]{64}$/;
     Refusal = class extends Error {
@@ -67014,6 +67077,7 @@ __export(lifecycle_exports, {
   INITIATIVE_SCHEMA: () => INITIATIVE_SCHEMA,
   INTAKE_SMOKE_FIXTURE: () => INTAKE_SMOKE_FIXTURE,
   INVOCATION_HEAD_FILE: () => INVOCATION_HEAD_FILE,
+  INVOCATION_LOCK_FILE: () => INVOCATION_LOCK_FILE,
   INVOCATION_STATE_FILE: () => INVOCATION_STATE_FILE,
   LANE_ID_RE: () => LANE_ID_RE,
   LANE_RESUME_SCHEMA_VERSION: () => LANE_RESUME_SCHEMA_VERSION,

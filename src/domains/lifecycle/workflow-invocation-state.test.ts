@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "bun:test";
+import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -17,6 +18,7 @@ import * as path from "node:path";
 import { compileWorkflow, createComponentRegistry, type CompileManifest, type WorkflowProjectionV2 } from "./workflow-component-compiler";
 import {
   INVOCATION_HEAD_FILE,
+  INVOCATION_LOCK_FILE,
   INVOCATION_STATE_FILE,
   WORKFLOW_INVOCATION_STATE_SCHEMA,
   beginRound,
@@ -208,32 +210,68 @@ describe("crash points: resume exactly once, never double-run a round", () => {
     expect(s.invocations[0].rounds.length).toBe(3);
   });
 
-  it("crash between snapshot and head rename rolls forward exactly once", () => {
+  it("crash after the round is written: restart sees it in flight, never round 2 done", () => {
     const basis = compile();
     const inv = runTwoRounds(basis);
-    const crash = () => {
-      throw new Error("crash after snapshot");
-    };
-    expect(() => beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }, { faults: { afterSnapshot: crash } })).toThrow("crash after snapshot");
-    // The round was persisted write-ahead: restart sees it in flight, not round 2 done.
-    const r1 = must(resumeInvocations(ctx, compile()));
-    expect(r1.next).toEqual({ kind: "await-round", invocation_id: inv, round: 3 });
+    expect(() => beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }, { faults: { afterSnapshot: () => { throw new Error("crash after snapshot"); } } })).toThrow("crash after snapshot");
+    expect(must(resumeInvocations(ctx, compile())).next).toEqual({ kind: "await-round", invocation_id: inv, round: 3 });
     expect(refused(beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }))).toBe("round-in-flight");
-    // The next write repairs the head; the chain stays linear.
-    const done = must(completeRound(ctx, basis, { invocation_id: inv, round: 3, outcome: "approve", unresolved_questions: [], evidence: [EV3] }));
-    expect(done.state).toBe("accepted");
-    const s = must(loadInvocationState(ctx, basis));
-    expect(JSON.parse(read(head())).seq).toBe(s.seq);
+    expect(must(completeRound(ctx, basis, { invocation_id: inv, round: 3, outcome: "approve", unresolved_questions: [], evidence: [EV3] })).state).toBe("accepted");
   });
 
-  it("crash before the snapshot rename leaves the previous state; the round was never begun", () => {
+  it("crash between head and snapshot: the change never landed, and repeated crashes still recover", () => {
     const basis = compile();
     const inv = runTwoRounds(basis);
     const s0 = read(snap());
-    expect(() => beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }, { faults: { beforeSnapshot: () => { throw new Error("crash before snapshot"); } } })).toThrow();
-    expect(read(snap())).toBe(s0);
-    expect(must(resumeInvocations(ctx, basis)).next).toEqual({ kind: "begin-round", invocation_id: inv, round: 3 });
+    const crash = { faults: { afterHead: () => { throw new Error("crash after head"); } } };
+    for (let k = 0; k < 3; k++) {
+      expect(() => beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }, crash)).toThrow("crash after head");
+      expect(read(snap())).toBe(s0);
+      expect(must(resumeInvocations(ctx, compile())).next).toEqual({ kind: "begin-round", invocation_id: inv, round: 3 });
+    }
     must(beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }));
+    expect(() => completeRound(ctx, basis, { invocation_id: inv, round: 3, outcome: "approve", unresolved_questions: [], evidence: [EV3] }, crash)).toThrow();
+    expect(() => completeRound(ctx, basis, { invocation_id: inv, round: 3, outcome: "approve", unresolved_questions: [], evidence: [EV3] }, crash)).toThrow();
+    expect(must(resumeInvocations(ctx, basis)).next).toEqual({ kind: "await-round", invocation_id: inv, round: 3 });
+    expect(must(completeRound(ctx, basis, { invocation_id: inv, round: 3, outcome: "approve", unresolved_questions: [], evidence: [EV3] })).state).toBe("accepted");
+  });
+
+  it("a crash during the very first write leaves no state and init can be retried", () => {
+    const basis = compile();
+    expect(() => initInvocationState(ctx, basis, { faults: { afterHead: () => { throw new Error("crash"); } } })).toThrow();
+    expect(refused(loadInvocationState(ctx, basis))).toBe("no-state");
+    must(initInvocationState(ctx, basis));
+  });
+
+  it("a second controller cannot mutate while one holds the run; a dead holder's lock is taken over", () => {
+    const basis = compile();
+    const inv = runTwoRounds(basis);
+    let inner = "";
+    must(beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }, { faults: { afterHead: () => { inner = refused(beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 })); } } }));
+    expect(inner).toBe("state-locked");
+    expect(must(loadInvocationState(ctx, basis)).invocations[0].rounds.length).toBe(3);
+    const lock = path.join(runDir, INVOCATION_LOCK_FILE);
+    fs.writeFileSync(lock, `${process.pid}:live`);
+    expect(refused(completeRound(ctx, basis, { invocation_id: inv, round: 3, outcome: "approve", unresolved_questions: [], evidence: [] }))).toBe("state-locked");
+    const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+    fs.writeFileSync(lock, `${dead}:crashed`);
+    expect(must(completeRound(ctx, basis, { invocation_id: inv, round: 3, outcome: "approve", unresolved_questions: [], evidence: [] })).state).toBe("accepted");
+    expect(fs.existsSync(lock)).toBe(false);
+  });
+
+  it("a write that would exceed the snapshot cap is refused before anything is written", () => {
+    const basis = compile();
+    const inv = runTwoRounds(basis);
+    const s0 = read(snap());
+    const h0 = read(head());
+    must(beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }));
+    const s1 = read(snap());
+    const big = Array.from({ length: 64 }, (_, i) => `question-${i}-${"x".repeat(100)}`);
+    expect(refused(completeRound(ctx, basis, { invocation_id: inv, round: 3, outcome: "revise", unresolved_questions: big, evidence: [] }, { maxStateBytes: s1.length + 1000 }))).toBe("capacity-exceeded");
+    expect(read(snap())).toBe(s1);
+    expect(s0).not.toBe(s1);
+    expect(h0).not.toBe(read(head()));
+    expect(must(resumeInvocations(ctx, basis)).next).toEqual({ kind: "await-round", invocation_id: inv, round: 3 });
   });
 
   it("completing a round twice is idempotent for the same result and refused for a different one", () => {
@@ -288,6 +326,24 @@ describe("negative control: restart cannot reset the budget or turn exhaustion i
     runTwoRounds(basis);
     fs.rmSync(head());
     expect(refused(loadInvocationState(ctx, basis))).toBe("state-missing");
+  });
+
+  it("a snapshot-only forgery chained to the head is refused (cannot reset an exhausted budget)", () => {
+    const basis = compile();
+    const inv = runTwoRounds(basis);
+    must(beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }));
+    must(completeRound(ctx, basis, { invocation_id: inv, round: 3, outcome: "revise", unresolved_questions: ["q-auth"], evidence: [EV3] }));
+    const h = JSON.parse(read(head()));
+    const s = JSON.parse(read(snap())) as InvocationStateV1;
+    s.seq = h.seq + 1;
+    s.prev_state_hash = h.state_hash;
+    s.invocations[0].rounds = [];
+    s.invocations[0].state = "active";
+    s.invocations[0].escalation = null;
+    s.state_hash = invocationStateHash(s);
+    fs.writeFileSync(snap(), JSON.stringify(s, null, 2) + "\n");
+    expect(refused(loadInvocationState(ctx, basis))).toBe("state-stale");
+    expect(refused(beginRound(ctx, basis, { invocation_id: inv, expected_round: 1 }))).toBe("state-stale");
   });
 
   it("restoring an older snapshot is refused as stale", () => {

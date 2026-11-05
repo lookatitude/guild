@@ -20346,17 +20346,17 @@ function parseNativeToml(raw) {
   }
 }
 function claudeConfigRoots(opts) {
-  const join73 = opts.joiner ?? ((...parts) => parts.join("/"));
+  const join74 = opts.joiner ?? ((...parts) => parts.join("/"));
   const roots = [];
   const override = opts.claudeConfigDir?.trim();
   if (override) roots.push(override);
-  roots.push(join73(opts.homedir, ".claude"), join73(opts.homedir, ".config", "claude"));
+  roots.push(join74(opts.homedir, ".claude"), join74(opts.homedir, ".config", "claude"));
   return roots;
 }
 function codexConfigHome(opts) {
-  const join73 = opts.joiner ?? ((...parts) => parts.join("/"));
+  const join74 = opts.joiner ?? ((...parts) => parts.join("/"));
   const override = opts.codexHome?.trim();
-  return override ? override : join73(opts.homedir, ".codex");
+  return override ? override : join74(opts.homedir, ".codex");
 }
 function classifyEntry(alias, entry) {
   let present2 = 0;
@@ -34350,7 +34350,7 @@ var LIMITS2;
 var init_workflow_invocation_state = __esm({
   "src/domains/lifecycle/workflow-invocation-state.ts"() {
     init_kernel();
-    LIMITS2 = Object.freeze({ fileBytes: 1 << 20, headBytes: 4096, invocations: 1e3, questions: 64, evidence: 64, artifacts: 64, reason: 500, depth: 16 });
+    LIMITS2 = Object.freeze({ fileBytes: 4 << 20, headBytes: 4096, lockBytes: 256, invocations: 1e3, questions: 64, evidence: 64, artifacts: 64, reason: 500, depth: 16 });
   }
 });
 
@@ -53386,6 +53386,8 @@ if (isProcessEntry()) {
 
 // scripts/team-decide.ts
 init_lifecycle();
+init_kernel();
+init_state();
 var USAGE2 = [
   "usage: team-decide.ts <review|restructure|gate|persist|record|bind> [flags]",
   "  review      --proposal <f> [--previous <f>] [--schedule <f>] [--decision <f>] [--json]",
@@ -53557,7 +53559,20 @@ function main6(argv = process.argv.slice(2)) {
       };
       const loaded = loadPhaseCompositionInputs({ root: cwd, proposal: f["proposal"], plan: f["plan"], qa_policy: f["qa_policy"] });
       if (!loaded.ok) return refused(loaded.violations);
-      const reg = loadComponentRegistry({ cwd });
+      const storage = createGuildStorage(cwd);
+      const compDir = storage.definition(COMPONENT_DEFINITION_SEGMENT);
+      const escapes2 = [];
+      const relDir = path81.relative(cwd, compDir);
+      const dirCheck = checkContained(cwd, relDir);
+      if (isRefused(dirCheck)) escapes2.push({ rule: "path-not-contained", detail: `${relDir} [${dirCheck.code}]` });
+      else if (fs68.existsSync(compDir)) {
+        for (const name of fs68.readdirSync(compDir).filter((n) => /\.ya?ml$/.test(n))) {
+          const c = checkContained(cwd, path81.join(relDir, name), { policy: "physical", requireRegularFileLeaf: true });
+          if (isRefused(c)) escapes2.push({ rule: "path-not-contained", detail: `${path81.join(relDir, name)} [${c.code}]` });
+        }
+      }
+      if (escapes2.length) return refused(escapes2);
+      const reg = loadComponentRegistry({ cwd, storage });
       if (!reg.ok) return refused(reg.violations);
       const b = phaseBinding(reg.registry, {
         phase: f["phase"],
