@@ -259,6 +259,34 @@ describe("crash points: resume exactly once, never double-run a round", () => {
     expect(fs.existsSync(lock)).toBe(false);
   });
 
+  it("a controller that lost the lock mid-write stops before the next write", () => {
+    const basis = compile();
+    const inv = runTwoRounds(basis);
+    const lock = path.join(runDir, INVOCATION_LOCK_FILE);
+    const steal = { faults: { afterHead: () => fs.writeFileSync(lock, `${process.pid}:other-controller`) } };
+    expect(refused(beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }, steal))).toBe("state-locked");
+    fs.rmSync(lock);
+    // The pending head never landed its snapshot: round 3 was not begun.
+    expect(must(resumeInvocations(ctx, basis)).next).toEqual({ kind: "begin-round", invocation_id: inv, round: 3 });
+  });
+
+  it("directly nested repeats (identical bodies) open outer-first", () => {
+    const reg = createComponentRegistry([
+      component("nest", ["write"], { kind: "repeat", id: "outer", max_rounds: 2, until: { kind: "outcome", equals: "ok" }, body: { kind: "repeat", id: "inner", max_rounds: 2, until: { kind: "outcome", equals: "ok" }, body: task("work") } }),
+    ]);
+    if (!reg.ok) throw new Error("fixture");
+    const r = compileWorkflow(reg.registry, { class: "research", workflow: { source_id: "proj-a", id: "nest" }, root: { id: "nest", version: "1" }, policy: { roles: { developer: ["code"] } } });
+    if (!r.ok) throw new Error(JSON.stringify(r.violations));
+    const basis = { projection: r.projection, manifest: r.manifest };
+    must(initInvocationState(ctx, basis));
+    expect(refused(openInvocation(ctx, basis, { loop_id: "inner", subject_hash: SUBJECT }))).toBe("parent-required");
+    const outer = must(openInvocation(ctx, basis, { loop_id: "outer", subject_hash: SUBJECT })).id;
+    must(beginRound(ctx, basis, { invocation_id: outer, expected_round: 1 }));
+    const inner = must(openInvocation(ctx, basis, { loop_id: "inner", subject_hash: SUBJECT, parent: { invocation_id: outer, round: 1 } }));
+    expect(inner.max_rounds).toBe(2);
+    expect(must(loadInvocationState(ctx, basis)).stack).toEqual([outer, inner.id]);
+  });
+
   it("a write that would exceed the snapshot cap is refused before anything is written", () => {
     const basis = compile();
     const inv = runTwoRounds(basis);
@@ -346,6 +374,16 @@ describe("negative control: restart cannot reset the budget or turn exhaustion i
     expect(refused(beginRound(ctx, basis, { invocation_id: inv, expected_round: 1 }))).toBe("state-stale");
   });
 
+  it("replaying the pre-round snapshot after a committed begin is refused (no second round 3)", () => {
+    const basis = compile();
+    const inv = runTwoRounds(basis);
+    const before = read(snap());
+    must(beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }));
+    fs.writeFileSync(snap(), before);
+    expect(refused(resumeInvocations(ctx, basis))).toBe("state-stale");
+    expect(refused(beginRound(ctx, basis, { invocation_id: inv, expected_round: 3 }))).toBe("state-stale");
+  });
+
   it("restoring an older snapshot is refused as stale", () => {
     const basis = compile();
     must(initInvocationState(ctx, basis));
@@ -385,6 +423,17 @@ describe("negative control: restart cannot reset the budget or turn exhaustion i
     tamper((s) => {
       s.invocations[0].state = "accepted";
       s.stack = [];
+    });
+    expect(refused(loadInvocationState(ctx, basis))).toBe("state-corrupt");
+  });
+
+  it("a forged root-level invocation of a nested loop is refused", () => {
+    const basis = compile();
+    must(initInvocationState(ctx, basis));
+    tamper((s) => {
+      const l = s.basis.loops.find((x) => x.id === "r.fix")!;
+      s.invocations.push({ id: "inv:r.fix", loop_id: "r.fix", node_id: l.entry, parent: null, max_rounds: l.max_rounds, definition_hash: s.basis.definition_hash, subject_hash: SUBJECT, state: "active", escalation: null, cancel_reason: null, rounds: [] });
+      s.stack = ["inv:r.fix"];
     });
     expect(refused(loadInvocationState(ctx, basis))).toBe("state-corrupt");
   });

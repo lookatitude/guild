@@ -9351,8 +9351,8 @@ function acquireJournalAuthority(journalPath2, io = defaultJournalIo, lockOption
       }
     }
     if (grant.fd !== null) {
-      const heldLock = fstatOrNull(grant.fd);
-      if (heldLock === null || heldLock.dev !== grant.device || heldLock.ino !== grant.inode) {
+      const heldLock2 = fstatOrNull(grant.fd);
+      if (heldLock2 === null || heldLock2.dev !== grant.device || heldLock2.ino !== grant.inode) {
         return unstable(
           `the lock object this writer acquired at "${identity.lock}" can no longer be inspected ${stage}`
         );
@@ -46692,9 +46692,18 @@ function basisOf(raw) {
   const nodeIds2 = new Set(p.nodes.map((n) => n.id));
   const loops = m.loops.map((l) => {
     if (!isId(l.id) || !nodeIds2.has(l.entry) || !nodeIds2.has(l.exit) || !isInt(l.max_rounds, 1)) refuse6("invalid-input", `manifest loop ${String(l?.id)} is malformed`);
-    return { id: l.id, entry: l.entry, exit: l.exit, max_rounds: l.max_rounds, until: l.until, body: loopBody(p, l.entry, l.exit) };
+    return { id: l.id, entry: l.entry, exit: l.exit, max_rounds: l.max_rounds, until: l.until, body: loopBody(p, l.entry, l.exit), parent: null };
   });
   if (new Set(loops.map((l) => l.id)).size !== loops.length) refuse6("invalid-input", "manifest repeats a loop id");
+  loops.forEach((b2, i) => {
+    let best = null;
+    loops.forEach((a, j) => {
+      if (j === i || !b2.body.every((n) => a.body.includes(n))) return;
+      if (a.body.length === b2.body.length && j < i) return;
+      if (!best || a.body.length < best.size || a.body.length === best.size && j < best.j) best = { j, size: a.body.length };
+    });
+    b2.parent = best ? loops[best.j].id : null;
+  });
   return {
     workflow: { source_id: p.workflow.source_id, id: p.workflow.id },
     class: p.class,
@@ -46794,12 +46803,12 @@ function checkState(raw, runId) {
     inv.rounds.forEach((r, k) => checkRound(r, k + 1, k === inv.rounds.length - 1, `${where}.rounds[${k}]`));
     const d = derive(inv, loop);
     if (inv.state !== d.state || canonicalJson4(inv.escalation) !== canonicalJson4(d.escalation)) refuse6(C, `${where} records ${String(inv.state)} but its rounds say ${d.state}`);
+    if (inv.parent === null && loop.parent !== null) refuse6(C, `${where} opens nested loop ${loop.id} without a parent`);
     if (inv.parent !== null) {
       const parent = byId.get(inv.parent.invocation_id);
       if (!parent) refuse6(C, `${where} parent ${inv.parent.invocation_id} is not an earlier invocation`);
       if (inv.parent.round > parent.rounds.length) refuse6(C, `${where} parent round was never begun`);
-      const pl = loops.get(parent.loop_id);
-      if (!pl.body.includes(loop.entry)) refuse6(C, `${where} loop is not inside its parent loop`);
+      if (loop.parent !== parent.loop_id) refuse6(C, `${where} loop's structural parent is ${String(loop.parent)}, not ${parent.loop_id}`);
     }
     byId.set(inv.id, inv);
   });
@@ -46872,17 +46881,18 @@ function readState(ctx) {
   if (headText === null) refuse6("state-missing", "the head file is gone; refusing to trust an unanchored snapshot");
   const h = parseJson(headText, "head");
   if (!isPlain3(h)) refuse6(C, "head is not an object");
-  exactKeys3(h, ["schema_version", "run_id", "seq", "state_hash", "prev_state_hash"], C, "head");
+  exactKeys3(h, ["schema_version", "run_id", "seq", "state_hash", "prev_state_hash", "phase"], C, "head");
+  if (h.phase !== "pending" && h.phase !== "committed") refuse6(C, "head phase malformed");
   if (h.schema_version !== WORKFLOW_INVOCATION_HEAD_SCHEMA || h.run_id !== ctx.run_id || !isInt(h.seq, 1) || !isHash(h.state_hash)) refuse6(C, "head malformed");
   if (h.prev_state_hash !== null && !isHash(h.prev_state_hash)) refuse6(C, "head malformed");
   if (h.seq === 1 !== (h.prev_state_hash === null)) refuse6(C, "only the first head has no predecessor");
   if (snapText === null) {
-    if (h.seq === 1) return null;
+    if (h.seq === 1 && h.phase === "pending") return null;
     refuse6("state-missing", "the head names a snapshot that is gone; refusing to restart the loop budget");
   }
   const state = checkState(parseJson(snapText, "snapshot"), ctx.run_id);
   if (h.seq === state.seq && h.state_hash === state.state_hash && h.prev_state_hash === state.prev_state_hash) return state;
-  if (h.seq === state.seq + 1 && h.prev_state_hash === state.state_hash) return state;
+  if (h.phase === "pending" && h.seq === state.seq + 1 && h.prev_state_hash === state.state_hash) return state;
   refuse6("state-stale", `snapshot seq ${state.seq} is not the one the head (seq ${String(h.seq)}) names`);
 }
 function persist(ctx, prev, next, opts) {
@@ -46893,13 +46903,17 @@ function persist(ctx, prev, next, opts) {
   const bytes = Buffer.from(JSON.stringify(full, null, 2) + "\n", "utf8");
   const cap = Math.min(LIMITS2.fileBytes, isInt(opts.maxStateBytes, 1) ? opts.maxStateBytes : LIMITS2.fileBytes);
   if (bytes.length > cap) refuse6("capacity-exceeded", `the next snapshot is ${bytes.length} bytes; the cap is ${cap}. Nothing was written \u2014 escalate or replan`);
-  const head = { schema_version: WORKFLOW_INVOCATION_HEAD_SCHEMA, run_id: ctx.run_id, seq: full.seq, state_hash: full.state_hash, prev_state_hash: full.prev_state_hash };
-  const w1 = writeContainedFile(ctx.root, p.head, Buffer.from(JSON.stringify(head, null, 2) + "\n", "utf8"));
-  if (!w1.written) refuse6(w1.code === "write-failed" ? "write-failed" : "path-not-contained", `head: ${w1.detail ?? w1.code}`);
+  const head = (phase) => Buffer.from(JSON.stringify({ schema_version: WORKFLOW_INVOCATION_HEAD_SCHEMA, run_id: ctx.run_id, seq: full.seq, state_hash: full.state_hash, prev_state_hash: full.prev_state_hash, phase }, null, 2) + "\n", "utf8");
+  const write2 = (rel2, b, what) => {
+    assertLockHeld(ctx);
+    const w = writeContainedFile(ctx.root, rel2, b);
+    if (!w.written) refuse6(w.code === "write-failed" ? "write-failed" : "path-not-contained", `${what}: ${w.detail ?? w.code}`);
+  };
+  write2(p.head, head("pending"), "head");
   opts.faults?.afterHead?.();
-  const w2 = writeContainedFile(ctx.root, p.snap, bytes);
-  if (!w2.written) refuse6(w2.code === "write-failed" ? "write-failed" : "path-not-contained", `snapshot: ${w2.detail ?? w2.code}`);
+  write2(p.snap, bytes, "snapshot");
   opts.faults?.afterSnapshot?.();
+  write2(p.head, head("committed"), "head commit");
   return full;
 }
 function pidAlive(pid) {
@@ -46910,37 +46924,58 @@ function pidAlive(pid) {
     return err.code === "EPERM";
   }
 }
+function assertLockHeld(ctx) {
+  const lock = paths(ctx).lock;
+  let text = null;
+  try {
+    text = readContained2(ctx.root, lock, LIMITS2.lockBytes);
+  } catch {
+    text = null;
+  }
+  if (!heldLock || text !== heldLock.token) refuse6("state-locked", `run ${ctx.run_id} lock is not held by this controller`);
+}
 function withLock(ctx, fn) {
   const p = paths(ctx);
   const prep = prepareContainedWrite(ctx.root, p.lock, { requireRegularFileLeaf: true });
   if (isRefused(prep)) refuse6("path-not-contained", `lock: [${prep.code}]`);
   const token = `${process.pid}:${crypto25.randomBytes(8).toString("hex")}`;
+  const tmp = `${prep.realPath}.${token.replace(":", "-")}.tmp`;
+  const fd = fs65.openSync(tmp, fs65.constants.O_WRONLY | fs65.constants.O_CREAT | fs65.constants.O_EXCL | fs65.constants.O_NOFOLLOW, 384);
+  try {
+    fs65.writeSync(fd, token);
+    fs65.fsyncSync(fd);
+  } finally {
+    fs65.closeSync(fd);
+  }
   let held = false;
-  for (let attempt = 0; attempt < 2 && !held; attempt++) {
-    try {
-      const fd = fs65.openSync(prep.realPath, fs65.constants.O_WRONLY | fs65.constants.O_CREAT | fs65.constants.O_EXCL | fs65.constants.O_NOFOLLOW, 384);
+  try {
+    for (let attempt = 0; attempt < 2 && !held; attempt++) {
       try {
-        fs65.writeSync(fd, token);
-      } finally {
-        fs65.closeSync(fd);
-      }
-      held = true;
-    } catch (err) {
-      if (err.code !== "EEXIST") refuse6("write-failed", `lock: ${err.message}`);
-      const text = readContained2(ctx.root, p.lock, LIMITS2.lockBytes) ?? "";
-      const pid = Number(/^(\d+):/.exec(text)?.[1]);
-      if (Number.isInteger(pid) && pid > 0 && pidAlive(pid)) refuse6("state-locked", `run ${ctx.run_id} is held by live controller pid ${pid}`);
-      if (attempt === 1) break;
-      try {
-        fs65.unlinkSync(prep.realPath);
-      } catch {
+        fs65.linkSync(tmp, prep.realPath);
+        held = true;
+      } catch (err) {
+        if (err.code !== "EEXIST") refuse6("write-failed", `lock: ${err.message}`);
+        const text = readContained2(ctx.root, p.lock, LIMITS2.lockBytes) ?? "";
+        const pid = Number(/^(\d+):/.exec(text)?.[1]);
+        if (Number.isInteger(pid) && pid > 0 && pidAlive(pid)) refuse6("state-locked", `run ${ctx.run_id} is held by live controller pid ${pid}`);
+        if (attempt === 1) break;
+        try {
+          fs65.unlinkSync(prep.realPath);
+        } catch {
+        }
       }
     }
+  } finally {
+    fs65.rmSync(tmp, { force: true });
   }
   if (!held) refuse6("state-locked", `run ${ctx.run_id} lock could not be taken`);
+  const outer = heldLock;
+  heldLock = { path: prep.realPath, token };
   try {
+    assertLockHeld(ctx);
     return fn();
   } finally {
+    heldLock = outer;
     try {
       if (fs65.readFileSync(prep.realPath, "utf8") === token) fs65.unlinkSync(prep.realPath);
     } catch {
@@ -47029,12 +47064,10 @@ function openInvocation(ctx, raw, rawIn, opts = {}) {
     }
     if (parent === null) {
       if (state.stack.length) refuse6("parent-required", `${loop.id} opens inside ${state.stack[state.stack.length - 1]}; name it as parent`);
-      const enclosing = state.basis.loops.find((l) => l.id !== loop.id && l.body.includes(loop.entry));
-      if (enclosing) refuse6("parent-required", `${loop.id} sits inside loop ${enclosing.id}`);
+      if (loop.parent !== null) refuse6("parent-required", `${loop.id} sits inside loop ${loop.parent}`);
     } else {
       const p = findInv(state, parent.invocation_id);
-      const pl = loopOf(state.basis, p.loop_id);
-      if (!pl.body.includes(loop.entry)) refuse6("invalid-input", `${loop.id} is not inside loop ${pl.id}`);
+      if (loop.parent !== p.loop_id) refuse6("invalid-input", `${loop.id} is not directly inside loop ${p.loop_id}`);
       requireTop(state, p.id);
       const last = p.rounds[p.rounds.length - 1];
       if (p.state !== "active" || !last || last.status !== "started" || last.round !== parent.round) refuse6("no-round-in-flight", `${p.id} round ${parent.round} is not in flight`);
@@ -47178,7 +47211,7 @@ function overlayInvocations(projection, state) {
   }));
   return { ...clone(projection), invocations };
 }
-var crypto25, fs65, path78, WORKFLOW_INVOCATION_STATE_SCHEMA, WORKFLOW_INVOCATION_HEAD_SCHEMA, INVOCATION_STATE_FILE, INVOCATION_HEAD_FILE, INVOCATION_LOCK_FILE, LIMITS2, ID3, HASH, Refusal, isId, isHash, isInt, STATE_KEYS, INV_KEYS, ROUND_KEYS, C, clone;
+var crypto25, fs65, path78, WORKFLOW_INVOCATION_STATE_SCHEMA, WORKFLOW_INVOCATION_HEAD_SCHEMA, INVOCATION_STATE_FILE, INVOCATION_HEAD_FILE, INVOCATION_LOCK_FILE, LIMITS2, ID3, HASH, Refusal, isId, isHash, isInt, STATE_KEYS, INV_KEYS, ROUND_KEYS, C, heldLock, clone;
 var init_workflow_invocation_state = __esm({
   "src/domains/lifecycle/workflow-invocation-state.ts"() {
     crypto25 = __toESM(require("node:crypto"));
@@ -47209,6 +47242,7 @@ var init_workflow_invocation_state = __esm({
     INV_KEYS = ["id", "loop_id", "node_id", "parent", "max_rounds", "definition_hash", "subject_hash", "state", "escalation", "cancel_reason", "rounds"];
     ROUND_KEYS = ["round", "status", "outcome", "unresolved_questions", "evidence", "obligations_accepted", "artifacts"];
     C = "state-corrupt";
+    heldLock = null;
     clone = (v) => JSON.parse(JSON.stringify(v));
   }
 });

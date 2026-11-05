@@ -55,7 +55,7 @@ export interface InvocationBasis {
   manifest: CompileManifest;
 }
 
-export interface BasisLoop { id: string; entry: string; exit: string; max_rounds: number; until: ComponentCondition; body: string[] }
+export interface BasisLoop { id: string; entry: string; exit: string; max_rounds: number; until: ComponentCondition; body: string[]; parent: string | null }
 
 export interface StateBasis {
   workflow: { source_id: string; id: string };
@@ -118,7 +118,7 @@ export interface InvocationStateV1 {
   state_hash: string;
 }
 
-interface HeadV1 { schema_version: typeof WORKFLOW_INVOCATION_HEAD_SCHEMA; run_id: string; seq: number; state_hash: string; prev_state_hash: string | null }
+interface HeadV1 { schema_version: typeof WORKFLOW_INVOCATION_HEAD_SCHEMA; run_id: string; seq: number; state_hash: string; prev_state_hash: string | null; phase: "pending" | "committed" }
 
 export type StoreRule =
   | "invalid-input"
@@ -314,9 +314,21 @@ function basisOf(raw: InvocationBasis): StateBasis {
   const nodeIds = new Set(p.nodes.map((n) => n.id));
   const loops: BasisLoop[] = m.loops.map((l) => {
     if (!isId(l.id) || !nodeIds.has(l.entry) || !nodeIds.has(l.exit) || !isInt(l.max_rounds, 1)) refuse("invalid-input", `manifest loop ${String(l?.id)} is malformed`);
-    return { id: l.id, entry: l.entry, exit: l.exit, max_rounds: l.max_rounds, until: l.until, body: loopBody(p, l.entry, l.exit) };
+    return { id: l.id, entry: l.entry, exit: l.exit, max_rounds: l.max_rounds, until: l.until, body: loopBody(p, l.entry, l.exit), parent: null as string | null };
   });
   if (new Set(loops.map((l) => l.id)).size !== loops.length) refuse("invalid-input", "manifest repeats a loop id");
+  // Structural parent: the smallest loop whose body contains this one's. The
+  // compiler lists loops inner-first, so for identical bodies
+  // (repeat(repeat(task))) the later entry encloses the earlier.
+  loops.forEach((b, i) => {
+    let best: { j: number; size: number } | null = null;
+    loops.forEach((a, j) => {
+      if (j === i || !b.body.every((n) => a.body.includes(n))) return;
+      if (a.body.length === b.body.length && j < i) return;
+      if (!best || a.body.length < best.size || (a.body.length === best.size && j < best.j)) best = { j, size: a.body.length };
+    });
+    b.parent = best ? loops[(best as { j: number }).j].id : null;
+  });
   return {
     workflow: { source_id: p.workflow.source_id, id: p.workflow.id },
     class: p.class,
@@ -433,12 +445,12 @@ function checkState(raw: unknown, runId: string): InvocationStateV1 {
     inv.rounds.forEach((r, k) => checkRound(r, k + 1, k === inv.rounds.length - 1, `${where}.rounds[${k}]`));
     const d = derive(inv, loop);
     if (inv.state !== d.state || canonicalJson(inv.escalation) !== canonicalJson(d.escalation)) refuse(C, `${where} records ${String(inv.state)} but its rounds say ${d.state}`);
+    if (inv.parent === null && loop.parent !== null) refuse(C, `${where} opens nested loop ${loop.id} without a parent`);
     if (inv.parent !== null) {
       const parent = byId.get(inv.parent.invocation_id);
       if (!parent) refuse(C, `${where} parent ${inv.parent.invocation_id} is not an earlier invocation`);
       if (inv.parent.round > parent.rounds.length) refuse(C, `${where} parent round was never begun`);
-      const pl = loops.get(parent.loop_id)!;
-      if (!pl.body.includes(loop.entry)) refuse(C, `${where} loop is not inside its parent loop`);
+      if (loop.parent !== parent.loop_id) refuse(C, `${where} loop's structural parent is ${String(loop.parent)}, not ${parent.loop_id}`);
     }
     byId.set(inv.id, inv);
   });
@@ -513,11 +525,11 @@ function parseJson(text: string, what: string): unknown {
 /**
  * Read and verify the files; `null` when no state was ever written.
  *
- * Write order is head first, then snapshot: the head names the exact hash of
- * the snapshot about to land. So the snapshot either equals the head, or is
- * the head's named predecessor (the crash fell between the two writes and the
- * pending change never landed; the caller saw no success). A snapshot the head
- * does not name is refused, whatever its own chain says.
+ * Write order: head `pending` naming the exact next snapshot, then the
+ * snapshot, then head `committed`. Success is returned only after the commit.
+ * A committed head must equal the snapshot. A pending head (the call never
+ * returned success) accepts its target or its named predecessor. Any other
+ * snapshot is refused, whatever its own chain says.
  */
 function readState(ctx: StoreContext): InvocationStateV1 | null {
   const p = paths(ctx);
@@ -527,18 +539,20 @@ function readState(ctx: StoreContext): InvocationStateV1 | null {
   if (headText === null) refuse("state-missing", "the head file is gone; refusing to trust an unanchored snapshot");
   const h = parseJson(headText, "head");
   if (!isPlain(h)) refuse(C, "head is not an object");
-  exactKeys(h, ["schema_version", "run_id", "seq", "state_hash", "prev_state_hash"], C, "head");
+  exactKeys(h, ["schema_version", "run_id", "seq", "state_hash", "prev_state_hash", "phase"], C, "head");
+  if (h.phase !== "pending" && h.phase !== "committed") refuse(C, "head phase malformed");
   if (h.schema_version !== WORKFLOW_INVOCATION_HEAD_SCHEMA || h.run_id !== ctx.run_id || !isInt(h.seq, 1) || !isHash(h.state_hash)) refuse(C, "head malformed");
   if (h.prev_state_hash !== null && !isHash(h.prev_state_hash)) refuse(C, "head malformed");
   if ((h.seq === 1) !== (h.prev_state_hash === null)) refuse(C, "only the first head has no predecessor");
   if (snapText === null) {
     // The very first write crashed after its head: nothing ever landed.
-    if (h.seq === 1) return null;
+    if (h.seq === 1 && h.phase === "pending") return null;
     refuse("state-missing", "the head names a snapshot that is gone; refusing to restart the loop budget");
   }
   const state = checkState(parseJson(snapText, "snapshot"), ctx.run_id);
   if (h.seq === state.seq && h.state_hash === state.state_hash && h.prev_state_hash === state.prev_state_hash) return state;
-  if (h.seq === state.seq + 1 && h.prev_state_hash === state.state_hash) return state;
+  // Only a PENDING head (the write never returned success) may fall back to its predecessor.
+  if (h.phase === "pending" && h.seq === state.seq + 1 && h.prev_state_hash === state.state_hash) return state;
   refuse("state-stale", `snapshot seq ${state.seq} is not the one the head (seq ${String(h.seq)}) names`);
 }
 
@@ -550,13 +564,18 @@ function persist(ctx: StoreContext, prev: InvocationStateV1 | null, next: Omit<I
   const bytes = Buffer.from(JSON.stringify(full, null, 2) + "\n", "utf8");
   const cap = Math.min(LIMITS.fileBytes, isInt(opts.maxStateBytes, 1) ? opts.maxStateBytes : LIMITS.fileBytes);
   if (bytes.length > cap) refuse("capacity-exceeded", `the next snapshot is ${bytes.length} bytes; the cap is ${cap}. Nothing was written — escalate or replan`);
-  const head: HeadV1 = { schema_version: WORKFLOW_INVOCATION_HEAD_SCHEMA, run_id: ctx.run_id, seq: full.seq, state_hash: full.state_hash, prev_state_hash: full.prev_state_hash };
-  const w1 = writeContainedFile(ctx.root, p.head, Buffer.from(JSON.stringify(head, null, 2) + "\n", "utf8"));
-  if (!w1.written) refuse(w1.code === "write-failed" ? "write-failed" : "path-not-contained", `head: ${w1.detail ?? w1.code}`);
+  const head = (phase: HeadV1["phase"]): Buffer =>
+    Buffer.from(JSON.stringify({ schema_version: WORKFLOW_INVOCATION_HEAD_SCHEMA, run_id: ctx.run_id, seq: full.seq, state_hash: full.state_hash, prev_state_hash: full.prev_state_hash, phase } satisfies HeadV1, null, 2) + "\n", "utf8");
+  const write = (rel: string, b: Buffer, what: string): void => {
+    assertLockHeld(ctx);
+    const w = writeContainedFile(ctx.root, rel, b);
+    if (!w.written) refuse(w.code === "write-failed" ? "write-failed" : "path-not-contained", `${what}: ${w.detail ?? w.code}`);
+  };
+  write(p.head, head("pending"), "head");
   opts.faults?.afterHead?.();
-  const w2 = writeContainedFile(ctx.root, p.snap, bytes);
-  if (!w2.written) refuse(w2.code === "write-failed" ? "write-failed" : "path-not-contained", `snapshot: ${w2.detail ?? w2.code}`);
+  write(p.snap, bytes, "snapshot");
   opts.faults?.afterSnapshot?.();
+  write(p.head, head("committed"), "head commit");
   return full;
 }
 
@@ -574,38 +593,66 @@ function pidAlive(pid: number): boolean {
  * `<pid>:<nonce>`. A lock whose pid is dead is a crashed holder and is taken
  * over; a live holder refuses with `state-locked`.
  */
+let heldLock: { path: string; token: string } | null = null;
+
+/** Every state write re-proves this process still owns the run lock. */
+function assertLockHeld(ctx: StoreContext): void {
+  const lock = paths(ctx).lock;
+  let text: string | null = null;
+  try {
+    text = readContained(ctx.root, lock, LIMITS.lockBytes);
+  } catch {
+    text = null;
+  }
+  if (!heldLock || text !== heldLock.token) refuse("state-locked", `run ${ctx.run_id} lock is not held by this controller`);
+}
+
 function withLock<T>(ctx: StoreContext, fn: () => T): T {
   const p = paths(ctx);
   const prep = prepareContainedWrite(ctx.root, p.lock, { requireRegularFileLeaf: true });
   if (isRefused(prep)) refuse("path-not-contained", `lock: [${prep.code}]`);
   const token = `${process.pid}:${crypto.randomBytes(8).toString("hex")}`;
+  // Publish a fully written owner record atomically: write a private temp, then
+  // link() it to the lock name (fails if the name exists). No reader ever sees
+  // an empty lock.
+  const tmp = `${prep.realPath}.${token.replace(":", "-")}.tmp`;
+  const fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
+  try {
+    fs.writeSync(fd, token);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
   let held = false;
-  for (let attempt = 0; attempt < 2 && !held; attempt++) {
-    try {
-      const fd = fs.openSync(prep.realPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
+  try {
+    for (let attempt = 0; attempt < 2 && !held; attempt++) {
       try {
-        fs.writeSync(fd, token);
-      } finally {
-        fs.closeSync(fd);
-      }
-      held = true;
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") refuse("write-failed", `lock: ${(err as Error).message}`);
-      const text = readContained(ctx.root, p.lock, LIMITS.lockBytes) ?? "";
-      const pid = Number(/^(\d+):/.exec(text)?.[1]);
-      if (Number.isInteger(pid) && pid > 0 && pidAlive(pid)) refuse("state-locked", `run ${ctx.run_id} is held by live controller pid ${pid}`);
-      if (attempt === 1) break;
-      try {
-        fs.unlinkSync(prep.realPath);
-      } catch {
-        // Another controller took it over first; the retry decides.
+        fs.linkSync(tmp, prep.realPath);
+        held = true;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "EEXIST") refuse("write-failed", `lock: ${(err as Error).message}`);
+        const text = readContained(ctx.root, p.lock, LIMITS.lockBytes) ?? "";
+        const pid = Number(/^(\d+):/.exec(text)?.[1]);
+        if (Number.isInteger(pid) && pid > 0 && pidAlive(pid)) refuse("state-locked", `run ${ctx.run_id} is held by live controller pid ${pid}`);
+        if (attempt === 1) break;
+        try {
+          fs.unlinkSync(prep.realPath);
+        } catch {
+          // Another controller took it over first; the retry decides.
+        }
       }
     }
+  } finally {
+    fs.rmSync(tmp, { force: true });
   }
   if (!held) refuse("state-locked", `run ${ctx.run_id} lock could not be taken`);
+  const outer = heldLock;
+  heldLock = { path: prep.realPath, token };
   try {
+    assertLockHeld(ctx);
     return fn();
   } finally {
+    heldLock = outer;
     try {
       if (fs.readFileSync(prep.realPath, "utf8") === token) fs.unlinkSync(prep.realPath);
     } catch {
@@ -715,12 +762,10 @@ export function openInvocation(ctx: StoreContext, raw: InvocationBasis, rawIn: O
     }
     if (parent === null) {
       if (state.stack.length) refuse("parent-required", `${loop.id} opens inside ${state.stack[state.stack.length - 1]}; name it as parent`);
-      const enclosing = state.basis.loops.find((l) => l.id !== loop.id && l.body.includes(loop.entry));
-      if (enclosing) refuse("parent-required", `${loop.id} sits inside loop ${enclosing.id}`);
+      if (loop.parent !== null) refuse("parent-required", `${loop.id} sits inside loop ${loop.parent}`);
     } else {
       const p = findInv(state, parent.invocation_id);
-      const pl = loopOf(state.basis, p.loop_id);
-      if (!pl.body.includes(loop.entry)) refuse("invalid-input", `${loop.id} is not inside loop ${pl.id}`);
+      if (loop.parent !== p.loop_id) refuse("invalid-input", `${loop.id} is not directly inside loop ${p.loop_id}`);
       requireTop(state, p.id);
       const last = p.rounds[p.rounds.length - 1];
       if (p.state !== "active" || !last || last.status !== "started" || last.round !== parent.round) refuse("no-round-in-flight", `${p.id} round ${parent.round} is not in flight`);
